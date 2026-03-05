@@ -147,6 +147,26 @@ export function VencimientosModule() {
   const [showVehiculoDropdown, setShowVehiculoDropdown] = useState(false)
 
   const [showModal, setShowModal] = useState(false)
+
+  function getFilterLabel(filter: string): string {
+    switch (filter) {
+      case 'proximos': return 'Próximas a vencer'
+      case 'vencidos': return 'Vencidos'
+      case 'alta': return 'Prioridad alta'
+      case 'media': return 'Prioridad media'
+      case 'baja': return 'Prioridad baja'
+      default: return filter
+    }
+  }
+
+  const activeFiltersList = useMemo(() => {
+    if (activeFilter === 'all') return []
+    return [{
+      id: 'kpi-filter',
+      label: getFilterLabel(activeFilter),
+      onClear: () => setActiveFilter('all')
+    }]
+  }, [activeFilter])
   const [modalMode, setModalMode] = useState<ModalMode>('create')
   const [selectedItem, setSelectedItem] = useState<Vencimiento | null>(null)
   const [formData, setFormData] = useState<VencimientoFormData>({
@@ -184,7 +204,7 @@ export function VencimientosModule() {
         fecha_entrega: row.fecha_entrega ?? null,
         fecha_vencimiento: row.fecha_vencimiento,
         fecha_iniciar_gestion: row.fecha_iniciar_gestion ?? null,
-        prioridad: (row.prioridad || 'MEDIO') as 'ALTO' | 'MEDIO' | 'BAJO',
+        prioridad: calculatePriority(row.fecha_vencimiento, row.documento),
         solicitado: !!row.solicitado,
         observacion: row.observacion ?? null,
         created_at: row.created_at
@@ -581,11 +601,13 @@ export function VencimientosModule() {
       enableSorting: true
     },
     {
-      accessorKey: 'solicitado',
+      id: 'solicitado',
+      accessorFn: (row) => (row.solicitado ? 'Sí' : 'No'),
       header: 'Solicitado',
       cell: ({ row, getValue }) => {
-        const value = !!getValue()
-        const cls = value ? 'solicitado-badge solicitado-si' : 'solicitado-badge solicitado-no'
+        const value = getValue() as string
+        const isSolicitado = value === 'Sí'
+        const cls = isSolicitado ? 'solicitado-badge solicitado-si' : 'solicitado-badge solicitado-no'
         return (
           <button
             type="button"
@@ -593,7 +615,7 @@ export function VencimientosModule() {
             onClick={() => handleToggleSolicitado(row.original)}
             title="Cambiar estado"
           >
-            {value ? 'Sí' : 'No'}
+            {value}
           </button>
         )
       },
@@ -677,6 +699,8 @@ export function VencimientosModule() {
       </div>
     )
   }
+
+
 
   return (
     <div className="vencimientos-module">
@@ -831,6 +855,8 @@ export function VencimientosModule() {
           emptyIcon={<Shield size={40} />}
           emptyTitle="No hay vencimientos para mostrar"
           emptyDescription="Los vencimientos aparecerán aquí cuando se registren."
+          externalFilters={activeFiltersList}
+          onClearAllFilters={() => setActiveFilter('all')}
         />
       </div>
 

@@ -18,6 +18,29 @@ import './CobroTeoricoVsReal.css'
 
 type Granularity = 'semana' | 'mes' | 'ano'
 
+// Estructura de detalle de día trabajado por conductor
+interface DiaDetalle {
+  fecha: string        // "dd/MM/yyyy"
+  fechaKey: string     // "yyyy-MM-dd" (para lookup interno)
+  diaSemana: string    // "Lunes", "Martes", etc.
+  horario: string      // "DIURNO" | "NOCTURNO" | "CARGO" | "-"
+  trabajado: boolean
+  alquilerDia: number  // Monto de alquiler para ese día
+}
+
+// Estructura de conductor filtrado (garantía 50k)
+/*
+interface ConductorFiltrado {
+  id: string
+  nombre: string
+  dni: string
+  diasTotal: number
+  alquiler: number
+  garantia: number
+  diasDetalle: DiaDetalle[]
+}
+*/
+
 // Helpers de fecha para consistencia con Facturación (Timezone Argentina)
 const ARG_TZ = 'America/Argentina/Buenos_Aires'
 const argDateFmt = new Intl.DateTimeFormat('en-CA', { timeZone: ARG_TZ, year: 'numeric', month: '2-digit', day: '2-digit' })
@@ -46,8 +69,8 @@ const formatCurrencyFull = (value: number) => {
   return new Intl.NumberFormat('es-AR', {
     style: 'currency',
     currency: 'ARS',
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 0
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2
   }).format(value)
 }
 
@@ -111,6 +134,7 @@ export function CobroTeoricoVsReal() {
   })
   const [chartData, setChartData] = useState(INITIAL_DATA)
   const [loading, setLoading] = useState(false)
+  // const [conductoresFiltrados, setConductoresFiltrados] = useState<ConductorFiltrado[]>([])
 
   // Cargar datos cuando cambia el periodo específico
   useEffect(() => {
@@ -186,254 +210,439 @@ export function CobroTeoricoVsReal() {
         })
 
         // ---------------------------------------------------------
-        // 1. OBTENER CONCEPTOS + ASIGNACIONES EN PARALELO
+        // 1. OBTENER CONDUCTORES Y ASIGNACIONES (Lógica Reporte Facturación)
+        // Flujo de 2 pasos: 1a) Descubrimiento generoso → 1.1) Cálculo detallado
         // ---------------------------------------------------------
-        
-        let qAsignaciones = supabase
-          .from('asignaciones_conductores')
-          .select(`
-            conductor_id, horario, fecha_inicio, fecha_fin, estado,
-            asignaciones!inner(horario, estado, fecha_fin, vehiculo_id),
-            conductores!inner(id, nombres, apellidos, numero_dni, sede_id)
-          `)
-          .in('estado', ['asignado', 'activo', 'activa', 'finalizado', 'finalizada', 'completado', 'cancelado', 'cancelada'])
 
-        if (sedeActualId) {
-           qAsignaciones = qAsignaciones.eq('conductores.sede_id', sedeActualId)
-        }
+        // Nombres de días de la semana para el mapeo
+        const diasNombres = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado']
 
-        const [{ data: conceptos }, { data: asignacionesSemana }] = await Promise.all([
+        // 1.1 Obtener precios: historial + nomina (fallback) — misma lógica que Facturación
+        const fechaInicioStr = format(startDate, 'yyyy-MM-dd')
+        const fechaFinStr = format(endDate, 'yyyy-MM-dd')
+
+        const [historialResult, nominaResult] = await Promise.all([
+          (supabase.from('conceptos_facturacion_historial') as any)
+            .select('codigo, precio_base, precio_final, fecha_vigencia_desde, fecha_vigencia_hasta')
+            .in('codigo', ['P001', 'P002', 'P003', 'P013'])
+            .lte('fecha_vigencia_desde', fechaFinStr)
+            .gte('fecha_vigencia_hasta', fechaInicioStr),
           supabase
             .from('conceptos_nomina')
             .select('codigo, precio_base, precio_final')
-            .in('codigo', ['P001', 'P002', 'P013'])
-            .eq('activo', true),
-          qAsignaciones
+            .eq('activo', true)
+            .in('codigo', ['P001', 'P002', 'P003', 'P013']),
         ])
+        const historialPrecios = historialResult.data
+        const conceptosNomina = nominaResult.data
 
+        // Fallback: precios actuales de conceptos_nomina
         const preciosMap = new Map<string, number>()
-        conceptos?.forEach((c: any) => {
-            preciosMap.set(c.codigo, c.precio_final || c.precio_base || 0)
+        ;(conceptosNomina || []).forEach((c: any) => {
+          preciosMap.set(c.codigo, c.precio_final ?? c.precio_base ?? 0)
         })
-        
-        // Mapa de días trabajados por conductor
-        // Map<conductor_id, Set<fecha_str>>
-        const diasTrabajadosPorConductor = new Map<string, Set<string>>()
-        const alquilerPorConductor = new Map<string, number>() // Alquiler acumulado
+
+        // Pre-indexar historial por código para O(1) lookup
+        const historialPorCodigo = new Map<string, any[]>()
+        for (const h of (historialPrecios || [])) {
+          const arr = historialPorCodigo.get(h.codigo) || []
+          arr.push(h)
+          historialPorCodigo.set(h.codigo, arr)
+        }
+
+        // Helper: obtener precio vigente en una fecha específica (réplica de getPrecioEnFechaVP)
+        const getPrecioEnFecha = (codigo: string, fecha: Date): number => {
+          const fechaStr = fecha.toISOString().split('T')[0]
+          const registros = historialPorCodigo.get(codigo)
+          if (registros) {
+            for (const h of registros) {
+              if (h.fecha_vigencia_desde <= fechaStr && h.fecha_vigencia_hasta >= fechaStr) {
+                return h.precio_final ?? h.precio_base
+              }
+            }
+          }
+          return preciosMap.get(codigo) || 0
+        }
+
+        // =====================================================
+        // PASO 1a: DESCUBRIMIENTO DE CONDUCTORES (overlap generoso)
+        // Misma lógica que Facturación paso 1a — defaults 2020/2099
+        // =====================================================
+        const { data: asignacionesDescubrimiento } = await (supabase
+          .from('asignaciones_conductores') as any)
+          .select(`
+            conductor_id, horario, fecha_inicio, fecha_fin, estado,
+            asignaciones!inner(horario, estado, fecha_fin, vehiculo_id, vehiculos(patente)),
+            conductores!inner(numero_dni, sede_id)
+          `)
+          .in('estado', ['asignado', 'activo', 'activa', 'finalizado', 'finalizada', 'completado', 'cancelado', 'cancelada'])
+
+        const dnisDescubiertos = new Set<string>()
+
+        for (const ac of (asignacionesDescubrimiento || []) as any[]) {
+          const cond = ac.conductores
+          const asig = ac.asignaciones
+          if (!cond || !asig) continue
+
+          // Filtro de sede EN MEMORIA (igual que Facturación)
+          if (sedeActualId && cond.sede_id !== sedeActualId) continue
+
+          // Skip programadas y huérfanos
+          const estadoPadre = (asig.estado || '').toLowerCase()
+          if (['programado', 'programada'].includes(estadoPadre)) continue
+          if (['finalizada', 'cancelada', 'finalizado', 'cancelado'].includes(estadoPadre) && !asig.fecha_fin) continue
+
+          // Overlap GENEROSO (mismos defaults que Facturación: 2020 / 2099)
+          const acInicioGen = ac.fecha_inicio ? parseISO(toArgDate(ac.fecha_inicio)) : new Date('2020-01-01')
+          const acFinGen = ac.fecha_fin ? parseISO(toArgDate(ac.fecha_fin))
+            : (asig.fecha_fin ? parseISO(toArgDate(asig.fecha_fin)) : new Date('2099-12-31'))
+
+          if (acFinGen < startDate || acInicioGen > endDate) continue
+
+          dnisDescubiertos.add(cond.numero_dni)
+        }
+
+        // Obtener datos completos de los conductores descubiertos
+        if (dnisDescubiertos.size === 0) {
+          // setConductoresFiltrados([])
+          setChartData(Array.from(diasMap.values()).map(d => ({
+            dia: d.dia, teorico: 0, real: 0, garantia: 0, alquiler: 0
+          })))
+          setLoading(false)
+          return
+        }
+
+        const dnisList = Array.from(dnisDescubiertos)
+        let qConductores = supabase
+          .from('conductores')
+          .select('id, nombres, apellidos, numero_dni, fecha_terminacion')
+          .in('numero_dni', dnisList)
+        if (sedeActualId) qConductores = qConductores.eq('sede_id', sedeActualId)
+        const { data: conductoresData } = await qConductores
+
         const conductorInfoMap = new Map<string, any>()
-        // Nuevo: Log detallado por conductor (días trabajados y montos)
-        const logsPorConductor = new Map<string, any>()
+        const fechaTermMap = new Map<string, Date>()
+        for (const c of (conductoresData || []) as any[]) {
+          conductorInfoMap.set(c.id, {
+            id: c.id,
+            nombres: c.nombres,
+            apellidos: c.apellidos,
+            dni: c.numero_dni,
+          })
+          if (c.fecha_terminacion) {
+            fechaTermMap.set(c.id, parseISO(c.fecha_terminacion))
+          }
+        }
 
-        asignacionesSemana?.forEach((ac: any) => {
-           const cond = ac.conductores
-           const asig = ac.asignaciones
-           if (!cond || !asig) return
-           
-           if (sedeActualId && cond.sede_id !== sedeActualId) return
+        // =====================================================
+        // PASO 1.1: CÁLCULO DETALLADO DE DÍAS (lógica estricta)
+        // Segunda query con conductor_ids conocidos
+        // =====================================================
+        const conductorIds = Array.from(conductorInfoMap.keys())
 
-           const estado = (asig.estado || '').toLowerCase()
-           
-           // Filtros: Ignorar Programadas y Huérfanos
-           if (['programado', 'programada'].includes(estado)) return
-           if (['finalizado', 'finalizada', 'cancelado', 'cancelada'].includes(estado) && !asig.fecha_fin) return 
+        const { data: asignacionesDetalle } = await (supabase
+          .from('asignaciones_conductores') as any)
+          .select(`
+            id, conductor_id, horario, fecha_inicio, fecha_fin, estado,
+            asignaciones!inner(id, horario, estado, fecha_inicio, fecha_fin)
+          `)
+          .in('conductor_id', conductorIds)
+          .in('estado', ['asignado', 'activo', 'activa', 'finalizado', 'finalizada', 'completado', 'cancelado', 'cancelada'])
 
-           // Verificar Intersección
-           const acInicio = ac.fecha_inicio ? parseISO(toArgDate(ac.fecha_inicio)) : null
-           const padInicio = asig.fecha_inicio ? parseISO(toArgDate(asig.fecha_inicio)) : null
-           
-           const inicioReal = acInicio && padInicio 
-             ? (acInicio > padInicio ? acInicio : padInicio) 
-             : (acInicio || padInicio || startDate)
+        // Map<conductor_id, Map<fecha_str, horario>> — guarda fecha Y horario (deduplicado)
+        const diasTrabajadosPorConductor = new Map<string, Map<string, string>>()
+        const alquilerPorConductor = new Map<string, number>()
 
-           const acFin = ac.fecha_fin ? parseISO(toArgDate(ac.fecha_fin)) : null
-           const padFin = asig.fecha_fin ? parseISO(toArgDate(asig.fecha_fin)) : null
-           
-           const finReal = acFin && padFin
-             ? (acFin < padFin ? acFin : padFin)
-             : (acFin || padFin || endDate)
+        // Prorrateo por modalidad (réplica exacta de ProrrateoVistaPrevia de Facturación)
+        interface Prorrateo {
+          CARGO: number; TURNO_DIURNO: number; TURNO_NOCTURNO: number;
+          monto_CARGO: number; monto_TURNO_DIURNO: number; monto_TURNO_NOCTURNO: number;
+        }
+        const prorrateoMap = new Map<string, Prorrateo>()
 
-           // Intersección con la semana
-           const efInicio = inicioReal < startDate ? startDate : inicioReal
-           const efFin = finReal > endDate ? endDate : finReal
+        // Guardar asignaciones procesadas por conductor para segundo pase de montos
+        const asignacionesPorConductor = new Map<string, Array<{
+          modalidad: 'CARGO' | 'TURNO_DIURNO' | 'TURNO_NOCTURNO';
+          codigoConcepto: string;
+          fechaInicio: Date;
+          fechaFin: Date;
+        }>>()
 
-           if (efInicio <= efFin) {
-             // Guardar info conductor
-             if (!conductorInfoMap.has(cond.id)) {
-               conductorInfoMap.set(cond.id, {
-                 id: cond.id,
-                 nombres: cond.nombres,
-                 apellidos: cond.apellidos,
-                 dni: cond.numero_dni,
-                 // Debug: guardar fechas de asignación para log
-                 debug_inicio_asignacion: ac.fecha_inicio,
-                 debug_fin_asignacion: ac.fecha_fin || asig.fecha_fin || 'Sin fin'
-               })
-             }
-             if (!diasTrabajadosPorConductor.has(cond.id)) {
-               diasTrabajadosPorConductor.set(cond.id, new Set())
-             }
-
-             // Inicializar log detallado si no existe
-             if (!logsPorConductor.has(cond.id)) {
-                 const diasObj: any = {}
-                 // Inicializar todos los días del periodo en 0
-                 daysInterval.forEach(d => {
-                     const dayKey = format(d, 'yyyy-MM-dd') // Usar fecha completa como key interna
-                     diasObj[dayKey] = 0
-                 })
-                 logsPorConductor.set(cond.id, {
-                     ID: cond.id,
-                     Conductor: `${cond.nombres} ${cond.apellidos}`,
-                     ...diasObj,
-                     Total: 0
-                 })
-             }
-
-             // Determinar precio diario según modalidad
-             let codigoConcepto = 'P002' // Default CARGO
-             const modalidadAsignacion = asig.horario // 'TURNO' o 'CARGO'
-             const horarioConductor = ac.horario // 'diurno', 'nocturno', 'todo_dia'
-             const horarioLower = (horarioConductor || '').toLowerCase().trim()
-             
-             if (modalidadAsignacion === 'CARGO' || horarioLower === 'todo_dia') {
-                 codigoConcepto = 'P002'
-             } else if (modalidadAsignacion === 'TURNO') {
-                 if (horarioLower === 'nocturno' || horarioLower === 'n') {
-                     codigoConcepto = 'P013'
-                 } else {
-                     codigoConcepto = 'P001'
-                 }
-             }
-             const precioDiario = preciosMap.get(codigoConcepto) || 0
-
-             const diasSet = diasTrabajadosPorConductor.get(cond.id)!
-             const logEntry = logsPorConductor.get(cond.id)
-
-             let current = new Date(efInicio)
-             while (current <= efFin) {
-               const diaStr = format(current, 'yyyy-MM-dd')
-
-               if (!diasSet.has(diaStr)) {
-                 diasSet.add(diaStr)
-                 
-                 // Acumular alquiler por conductor (para tabla log)
-                 const currentAlquiler = alquilerPorConductor.get(cond.id) || 0
-                 alquilerPorConductor.set(cond.id, currentAlquiler + precioDiario)
-                 
-                 // Actualizar log detallado
-                 if (logEntry) {
-                     // Usar key de fecha YYYY-MM-DD
-                     if (logEntry[diaStr] !== undefined) {
-                         logEntry[diaStr] += precioDiario
-                         logEntry.Total += precioDiario
-                     }
-                 }
-
-                 // Acumular alquiler por día (para gráfico)
-                 if (diasMap.has(diaStr)) {
-                    diasMap.get(diaStr)!.alquiler += precioDiario
-                 }
-               }
-               current = addDays(current, 1)
-             }
-           }
+        // Inicializar estructuras para todos los conductores
+        conductorIds.forEach(id => {
+          diasTrabajadosPorConductor.set(id, new Map())
+          alquilerPorConductor.set(id, 0)
+          prorrateoMap.set(id, {
+            CARGO: 0, TURNO_DIURNO: 0, TURNO_NOCTURNO: 0,
+            monto_CARGO: 0, monto_TURNO_DIURNO: 0, monto_TURNO_NOCTURNO: 0
+          })
+          asignacionesPorConductor.set(id, [])
         })
 
-        const conductoresActivos = Array.from(conductorInfoMap.values())
+        // -------------------------------------------------------
+        // PASE 1: Contar días DEDUPLICANDO por fecha (para diasTotal)
+        // Réplica de Facturación líneas 1188-1256
+        // -------------------------------------------------------
+        for (const ac of (asignacionesDetalle || []) as any[]) {
+          const asignacion = ac.asignaciones
+          if (!asignacion) continue
+
+          const estadoPadre = (asignacion.estado || '').toLowerCase()
+          if (['programado', 'programada'].includes(estadoPadre)) continue
+          if (['finalizada', 'cancelada', 'finalizado', 'cancelado'].includes(estadoPadre) && !asignacion.fecha_fin) continue
+
+          // Inicio: MAX entre conductor y padre (normalizar a TZ Argentina)
+          const conductorInicioD = ac.fecha_inicio ? parseISO(toArgDate(ac.fecha_inicio)) : null
+          const padreInicioD = asignacion.fecha_inicio ? parseISO(toArgDate(asignacion.fecha_inicio)) : null
+          const acInicio = conductorInicioD && padreInicioD
+            ? (conductorInicioD > padreInicioD ? conductorInicioD : padreInicioD)
+            : (conductorInicioD || padreInicioD || startDate)
+
+          // Fin: MIN entre conductor y padre
+          const conductorFinD = ac.fecha_fin ? parseISO(toArgDate(ac.fecha_fin)) : null
+          const padreFinD = asignacion.fecha_fin ? parseISO(toArgDate(asignacion.fecha_fin)) : null
+          const acFin = conductorFinD && padreFinD
+            ? (conductorFinD < padreFinD ? conductorFinD : padreFinD)
+            : (conductorFinD || padreFinD || endDate)
+
+          // Rango efectivo dentro del período
+          const efInicio = acInicio < startDate ? startDate : acInicio
+          let efFin = acFin > endDate ? endDate : acFin
+
+          // Tope por fecha_terminacion (solo si la asignación no tiene fin propio)
+          const tieneFinPropio = ac.fecha_fin || asignacion.fecha_fin
+          const fechaTerm = fechaTermMap.get(ac.conductor_id)
+          if (fechaTerm && !tieneFinPropio && efFin > fechaTerm) {
+            efFin = fechaTerm
+          }
+
+          if (efInicio > efFin) continue
+
+          // Determinar modalidad
+          const modalidadAsignacion = asignacion.horario
+          const horarioConductor = ac.horario
+          const horarioLower = (horarioConductor || '').toLowerCase().trim()
+
+          let modalidad: 'CARGO' | 'TURNO_DIURNO' | 'TURNO_NOCTURNO' = 'CARGO'
+          let codigoConcepto = 'P002'
+          let horarioLabel = 'CARGO'
+
+          if (modalidadAsignacion === 'CARGO' || horarioLower === 'todo_dia') {
+            modalidad = 'CARGO'
+            codigoConcepto = 'P002'
+            horarioLabel = 'CARGO'
+          } else if (modalidadAsignacion === 'TURNO') {
+            if (horarioLower === 'nocturno' || horarioLower === 'n') {
+              modalidad = 'TURNO_NOCTURNO'
+              codigoConcepto = 'P013'
+              horarioLabel = 'NOCTURNO'
+            } else {
+              modalidad = 'TURNO_DIURNO'
+              codigoConcepto = 'P001'
+              horarioLabel = 'DIURNO'
+            }
+          }
+
+          // Contar días DEDUPLICANDO (para diasTotal y horarioLabel)
+          const diasMap2 = diasTrabajadosPorConductor.get(ac.conductor_id)!
+          const prorrateo = prorrateoMap.get(ac.conductor_id)!
+          let diasReales = 0
+
+          let current = new Date(efInicio)
+          while (current <= efFin) {
+            const diaStr = format(current, 'yyyy-MM-dd')
+            if (!diasMap2.has(diaStr)) {
+              diasMap2.set(diaStr, horarioLabel)
+              if (modalidad === 'CARGO') prorrateo.CARGO++
+              else if (modalidad === 'TURNO_NOCTURNO') prorrateo.TURNO_NOCTURNO++
+              else prorrateo.TURNO_DIURNO++
+              diasReales++
+            }
+            current = addDays(current, 1)
+          }
+
+          if (diasReales <= 0) continue
+
+          // Guardar asignación para el segundo pase de montos
+          asignacionesPorConductor.get(ac.conductor_id)!.push({
+            modalidad,
+            codigoConcepto,
+            fechaInicio: efInicio,
+            fechaFin: efFin,
+          })
+        }
+
+        // -------------------------------------------------------
+        // PASE 2: Calcular MONTOS con precios históricos SIN deduplicar
+        // Réplica exacta de Facturación líneas 1335-1355
+        // -------------------------------------------------------
+        const codigosPorModalidad: Record<string, string> = {
+          'CARGO': 'P002',
+          'TURNO_DIURNO': 'P001',
+          'TURNO_NOCTURNO': 'P013'
+        }
+
+        for (const [conductorId, asignaciones] of asignacionesPorConductor.entries()) {
+          const prorrateo = prorrateoMap.get(conductorId)
+          if (!prorrateo) continue
+
+          for (const asig of asignaciones) {
+            const codigo = codigosPorModalidad[asig.modalidad]
+            const montoKey = `monto_${asig.modalidad}` as keyof Prorrateo
+
+            const currentDate = new Date(asig.fechaInicio)
+            while (currentDate <= asig.fechaFin) {
+              const precioDiario = getPrecioEnFecha(codigo, currentDate)
+              ;(prorrateo as any)[montoKey] += precioDiario
+              currentDate.setDate(currentDate.getDate() + 1)
+            }
+          }
+
+          // Redondear montos (igual que Facturación)
+          prorrateo.monto_CARGO = Math.round(prorrateo.monto_CARGO)
+          prorrateo.monto_TURNO_DIURNO = Math.round(prorrateo.monto_TURNO_DIURNO)
+          prorrateo.monto_TURNO_NOCTURNO = Math.round(prorrateo.monto_TURNO_NOCTURNO)
+
+          // subtotalAlquiler = monto_CARGO + monto_TURNO_DIURNO + monto_TURNO_NOCTURNO
+          const subtotalAlquiler = prorrateo.monto_CARGO + prorrateo.monto_TURNO_DIURNO + prorrateo.monto_TURNO_NOCTURNO
+          alquilerPorConductor.set(conductorId, subtotalAlquiler)
+        }
+
+        // -------------------------------------------------------
+        // OVERRIDE: Si existe período guardado, usar subtotal_alquiler de BD
+        // Facturación muestra datos guardados en facturacion_conductores,
+        // que pueden diferir de los precios actuales de conceptos_nomina
+        // -------------------------------------------------------
+        // let alquilerGuardadoInfo = ''
+        // if (granularity === 'semana') {
+        //   const matchPeriodo = selectedPeriod.match(/Sem (\d+) (\d{4})/)
+        //   if (matchPeriodo) {
+        //     const semanaNum = parseInt(matchPeriodo[1])
+        //     const anioQuery = parseInt(matchPeriodo[2])
+        //     // Buscar período guardado
+        //     const { data: periodoData } = await (supabase.from('periodos_facturacion') as any)
+        //       .select('id')
+        //       .eq('semana', semanaNum)
+        //       .eq('anio', anioQuery)
+        //       .order('created_at', { ascending: false })
+        //       .limit(1)
+
+        //     const periodoGuardado = periodoData?.[0]
+        //     if (periodoGuardado) {
+        //       // Cargar subtotal_alquiler guardado por conductor_id
+        //       const { data: factGuardadas } = await (supabase
+        //         .from('facturacion_conductores') as any)
+        //         .select('conductor_id, subtotal_alquiler')
+        //         .eq('periodo_id', periodoGuardado.id)
+
+        //       if (factGuardadas && factGuardadas.length > 0) {
+        //         let overrideCount = 0
+        //         for (const fg of factGuardadas) {
+        //           if (alquilerPorConductor.has(fg.conductor_id) && fg.subtotal_alquiler != null) {
+        //             alquilerPorConductor.set(fg.conductor_id, fg.subtotal_alquiler)
+        //             overrideCount++
+        //           }
+        //         }
+        //         alquilerGuardadoInfo = `OVERRIDE: ${overrideCount} conductores con alquiler de BD (periodo ${periodoGuardado.id})`
+        //       }
+        //     }
+        //   }
+        // }
+
+        // Calcular alquiler por día para el gráfico (usando prorrateo por día)
+        // Aquí distribuimos el subtotalAlquiler proporcionalmente por día trabajado
+        conductorIds.forEach(id => {
+          const dias = diasTrabajadosPorConductor.get(id)
+          if (!dias || dias.size === 0) return
+          for (const [diaStr, horarioLabel] of dias.entries()) {
+            const codigo = horarioLabel === 'CARGO' ? 'P002'
+              : horarioLabel === 'NOCTURNO' ? 'P013' : 'P001'
+            const precioDia = getPrecioEnFecha(codigo, parseISO(diaStr))
+            if (diasMap.has(diaStr)) {
+              diasMap.get(diaStr)!.alquiler += precioDia
+            }
+          }
+        })
+
+        // Filtrar conductores con 0 días (no aportan a facturación)
+        const conductoresActivos = Array.from(conductorInfoMap.values()).filter(c => {
+          const dias = diasTrabajadosPorConductor.get(c.id)
+          return dias && dias.size > 0
+        })
 
         // ---------------------------------------------------------
-        // 2. CÁLCULO DE GARANTÍA
+        // 2. CÁLCULO DE GARANTÍA (Misma lógica que Facturación)
         // ---------------------------------------------------------
-        
+
         // Obtener garantías configuradas (SIN FILTRO de estado para replicar lógica de Reporte)
         const { data: garantiasData } = await supabase
           .from('garantias_conductores')
           .select('conductor_id, monto_cuota_semanal, estado, cuotas_pagadas, cuotas_totales')
-          .in('conductor_id', Array.from(conductorInfoMap.keys()))
+          .in('conductor_id', conductorIds)
 
         const garantiaMap = new Map<string, any>()
         garantiasData?.forEach((g: any) => garantiaMap.set(g.conductor_id, g))
 
-        // A) GARANTÍA TEÓRICA (Green): Filtro estricto 50000 (Calculado)
-        const conductoresConGarantia50k = conductoresActivos.filter(c => {
+        // Obtener P003 para cuota de garantía default (igual que Facturación)
+        const { data: conceptoP003 } = await supabase
+          .from('conceptos_nomina')
+          .select('codigo, precio_base, precio_final')
+          .eq('codigo', 'P003')
+          .eq('activo', true)
+          .maybeSingle()
+
+        const precioP003 = conceptoP003?.precio_final ?? conceptoP003?.precio_base ?? 7143
+        const cuotaGarantiaSemanalDefault = Math.round(precioP003 * 7)
+
+        // Calcular subtotalGarantia por conductor (misma fórmula que Facturación)
+        // y filtrar los que tienen exactamente 50000
+        const garantiaCalculadaMap = new Map<string, number>()
+
+        conductoresActivos.forEach(c => {
           const g = garantiaMap.get(c.id)
-          
-          // 1. Caso: Sin registro de garantía -> Asumir 50000 (Lógica Reporte)
-          if (!g) return true 
+          let subtotalGarantia = 0
 
-          // 2. Caso: Con registro -> Validar que NO esté completada/cancelada
-          const completada = g.estado === 'completada' || g.estado === 'cancelada' || (g.cuotas_pagadas >= g.cuotas_totales && g.cuotas_totales > 0)
-          if (completada) return false
+          if (g) {
+            const completada = g.estado === 'completada' || g.estado === 'cancelada'
+              || (g.cuotas_pagadas >= g.cuotas_totales && g.cuotas_totales > 0)
+            if (completada) {
+              subtotalGarantia = 0
+            } else {
+              subtotalGarantia = g.monto_cuota_semanal || cuotaGarantiaSemanalDefault
+            }
+          } else {
+            subtotalGarantia = cuotaGarantiaSemanalDefault
+          }
 
-          // 3. Caso: Activa -> Validar monto exacto
-          const monto = g.monto_cuota_semanal || 0
-          
-          // Debug específico para Sergio
-          // if (c.nombres.toUpperCase().includes('SERGIO') && c.apellidos.toUpperCase().includes('FROENER')) {
-          //    console.log(`[Debug Garantía Sergio] ID: ${c.id}, Garantía encontrada:`, g, `Monto: ${monto}, Completada: ${completada}`)
-          // }
-
-          return monto === 50000
+          garantiaCalculadaMap.set(c.id, subtotalGarantia)
         })
-        
+
+        // Filtro: conductores cuya garantía calculada es 50000
+        const conductoresConGarantia50k = conductoresActivos.filter(c => {
+          return garantiaCalculadaMap.get(c.id) === 50000
+        })
+
         const totalGarantiaTeoricaSemanal = 50000 * conductoresConGarantia50k.length
-        const garantiaTeoricaDiaria = totalGarantiaTeoricaSemanal / 7 // Mantener base semanal de 50k / 7
-
-        // console.log(`[Garantía TEÓRICA - Green] Conductores con 50k: ${conductoresConGarantia50k.length}`)
-        // console.log(`[Garantía TEÓRICA - Green] Total Semanal: ${totalGarantiaTeoricaSemanal} / 7 = ${garantiaTeoricaDiaria.toFixed(2)} por día`)
-
-        // console.group('[DETALLE ALQUILER POR DÍA] - Conductores con Garantía 50K')
-        const logsFiltrados = conductoresConGarantia50k
-            .map(c => logsPorConductor.get(c.id))
-            .filter(Boolean)
-        // console.table(logsFiltrados)
-        // console.groupEnd()
+        const garantiaTeoricaDiaria = totalGarantiaTeoricaSemanal / 7
 
         // C) ALQUILER TEÓRICO (Green): Suma de alquileres SOLO de conductores 50k
+        // Calcular alquiler teórico por día sumando contribución de cada conductor 50k
         const alquilerTeoricoPorDia = new Map<string, number>()
-        const debugSumaDiaria: any[] = []
-        
-        // Mapear nombres de días a fechas para sumar desde los logs
         daysInterval.forEach(d => {
-             const dayName = format(d, 'EEEE', { locale: es }).replace(/^\w/, c => c.toUpperCase())
-             const diaStr = format(d, 'yyyy-MM-dd')
-             alquilerTeoricoPorDia.set(diaStr, 0)
-             
-             debugSumaDiaria.push({
-                 Dia: dayName,
-                 Fecha: diaStr,
-                 'Conductores que suman': [],
-                 Total: 0
-             })
+          alquilerTeoricoPorDia.set(format(d, 'yyyy-MM-dd'), 0)
         })
 
-        // Map por fecha para O(1) en vez de .find() O(7) dentro del loop doble
-        const debugSumaDiariaMap = new Map(debugSumaDiaria.map(x => [x.Fecha, x]))
-
-        logsFiltrados.forEach((log: any) => {
-             daysInterval.forEach(d => {
-                 const diaStr = format(d, 'yyyy-MM-dd')
-                 const monto = log[diaStr] || 0
-
-                 const current = alquilerTeoricoPorDia.get(diaStr) || 0
-                 alquilerTeoricoPorDia.set(diaStr, current + monto)
-
-                 if (monto > 0) {
-                     const debugItem = debugSumaDiariaMap.get(diaStr)
-                     if (debugItem) {
-                         debugItem['Conductores que suman'].push(`[${log.ID}] ${log.Conductor}: $${monto}`)
-                         debugItem.Total += monto
-                     }
-                 }
-             })
+        conductoresConGarantia50k.forEach(c => {
+          const alquilerTotal = alquilerPorConductor.get(c.id) || 0
+          const dias = diasTrabajadosPorConductor.get(c.id)
+          if (!dias || dias.size === 0) return
+          // Distribuir alquiler proporcionalmente entre días trabajados
+          const alquilerDiaProporcional = alquilerTotal / dias.size
+          for (const [diaStr] of dias.entries()) {
+            const current = alquilerTeoricoPorDia.get(diaStr) || 0
+            alquilerTeoricoPorDia.set(diaStr, current + alquilerDiaProporcional)
+          }
         })
-
-        // console.group('[DETALLE SUMA DIARIA - ALQUILER TEÓRICO]')
-        // console.table(debugSumaDiaria.map(d => ({
-        //    ...d,
-        //    'Conductores que suman': d['Conductores que suman'].join(' | ')
-        // })))
-        // console.groupEnd()
 
         // B) GARANTÍA REAL (Blue): Suma real de garantías configuradas
         // REEMPLAZADO POR NUEVA LÓGICA DE COBRO APP (SOLICITUD USUARIO)
@@ -452,6 +661,51 @@ export function CobroTeoricoVsReal() {
           d.garantiaReal += garantiaRealDiaria
         })
         */
+
+        // ---------------------------------------------------------
+        // CONSTRUIR ESTRUCTURA ConductorFiltrado[] (conductores 50k)
+        // ---------------------------------------------------------
+        // const conductoresFiltradosResult: ConductorFiltrado[] = conductoresConGarantia50k.map(c => {
+        // const conductoresFiltradosResult = conductoresConGarantia50k.map(c => {
+        conductoresConGarantia50k.map(c => {
+          const diasMap2 = diasTrabajadosPorConductor.get(c.id) || new Map<string, string>()
+          const alquiler = alquilerPorConductor.get(c.id) || 0
+          const garantiaMonto = garantiaCalculadaMap.get(c.id) || 50000
+
+          // Construir diasDetalle
+          // Distribuir alquiler (potencialmente overrideado desde BD) proporcionalmente por día
+          const diasTrabajados = Array.from(diasMap2.entries()).filter(([, h]) => !!h)
+          const alquilerDiaProrrateo = diasTrabajados.length > 0 ? alquiler / diasTrabajados.length : 0
+
+          const diasDetalle: DiaDetalle[] = daysInterval.map(d => {
+            const key = format(d, 'yyyy-MM-dd')
+            const horarioDia = diasMap2.get(key)
+            let alquilerDia = 0
+            if (horarioDia) {
+              alquilerDia = alquilerDiaProrrateo
+            }
+            return {
+              fecha: format(d, 'dd/MM/yyyy'),
+              fechaKey: key,
+              diaSemana: diasNombres[d.getDay()],
+              horario: horarioDia || '-',
+              trabajado: !!horarioDia,
+              alquilerDia,
+            }
+          })
+
+          return {
+            id: c.id,
+            nombre: `${c.nombres} ${c.apellidos}`.trim(),
+            dni: c.dni,
+            diasTotal: diasMap2.size,
+            alquiler,
+            garantia: garantiaMonto,
+            diasDetalle,
+          }
+        }).sort((a, b) => a.nombre.localeCompare(b.nombre))
+
+        // setConductoresFiltrados(conductoresFiltradosResult)
 
         // ---------------------------------------------------------
         // NUEVA LÓGICA BLUE LINE: COBRO APP DE CONDUCTORES 50K
@@ -763,6 +1017,8 @@ export function CobroTeoricoVsReal() {
           </ResponsiveContainer>
         )}
       </div>
+
+
     </div>
   )
 }

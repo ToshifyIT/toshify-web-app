@@ -636,7 +636,6 @@ input:checked + .slider .off-text {
   cursor: pointer;
   transition: all 0.2s;
 }
-
 .btn-icon:hover {
   background: var(--bg-secondary, #f1f5f9);
   color: var(--text-primary, #0f172a);
