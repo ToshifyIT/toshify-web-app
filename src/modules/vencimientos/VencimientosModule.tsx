@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { Eye, Edit2, Trash2, FileText, AlertTriangle, Plus, Shield } from 'lucide-react'
 import Swal from 'sweetalert2'
 import { supabase } from '../../lib/supabase'
+import { useSede } from '../../contexts/SedeContext'
 import { showSuccess } from '../../utils/toast'
 import { DataTable } from '../../components/ui/DataTable'
 import { LoadingOverlay } from '../../components/ui/LoadingOverlay'
@@ -16,7 +17,7 @@ interface Vencimiento {
   fecha_entrega?: string | null
   fecha_vencimiento: string
   fecha_iniciar_gestion?: string | null
-  prioridad: 'ALTO' | 'MEDIO' | 'BAJO'
+  prioridad: 'ALTO' | 'MEDIO' | 'BAJO' | 'N/A' | 'VENCIDO'
   solicitado: boolean
   observacion?: string | null
   created_at: string
@@ -79,34 +80,75 @@ function addDays(base: Date, days: number): Date {
   return copy
 }
 
-function prioridadFromFecha(fecha: string | null | undefined): 'ALTO' | 'MEDIO' | 'BAJO' {
-  const d = parseDate(fecha)
-  if (!d) return 'BAJO'
+function calculatePriority(fechaVencimiento: string | null | undefined, documento: string | null | undefined): 'ALTO' | 'MEDIO' | 'BAJO' | 'N/A' | 'VENCIDO' {
+  const d = parseDate(fechaVencimiento)
+  if (!d) return 'BAJO' // Default fallback
+
   const today = normalizeToday()
   const target = new Date(d)
   target.setHours(0, 0, 0, 0)
+  
+  // Diferencia en días: (Fecha Vencimiento - Hoy)
+  // Si target < today, diffDays será negativo (Vencido)
   const diffDays = Math.ceil((target.getTime() - today.getTime()) / (1000 * 60 * 60 * 24))
-  if (diffDays <= 14) return 'ALTO'
-  if (diffDays <= 45) return 'MEDIO'
+
+  // 1. Regla VENCIDO
+  if (diffDays < 0) return 'VENCIDO'
+
+  // 2. Regla N/A (Más de 6 meses ~ 180 días)
+  if (diffDays > 180) return 'N/A'
+
+  const doc = (documento || '').toLowerCase().trim()
+
+  // 3. Reglas específicas por documento
+  if (doc === 'matafuegos') {
+    // Matafuegos: <= 15 días MEDIA, > 15 días BAJA
+    if (diffDays <= 15) return 'MEDIO'
+    return 'BAJO'
+  }
+
+  // Grupo 1: Umbral 15 días (ALTA)
+  // Constancia de cédula, GNC, Patente provisoria
+  if (
+    doc === 'constancia de cédula' ||
+    doc === 'gnc' ||
+    doc === 'tarjeta gnc' ||
+    doc === 'patente provisoria'
+  ) {
+    if (diffDays <= 15) return 'ALTO'
+    return 'BAJO'
+  }
+
+  // Grupo 2: Umbral 30 días (ALTA)
+  // VTV, Habilitacion remis, Seguro
+  if (
+    doc === 'vtv' ||
+    doc === 'habilitacion remis' ||
+    doc === 'seguro'
+  ) {
+    if (diffDays <= 30) return 'ALTO'
+    return 'BAJO'
+  }
+
+  // Default para otros documentos no especificados
+  if (diffDays <= 30) return 'ALTO'
   return 'BAJO'
 }
 
-function isProximoAVencerEn5Dias(item: Vencimiento): boolean {
-  const fecha = parseDate(item.fecha_vencimiento)
-  if (!fecha) return false
-  const hoy = normalizeToday()
-  const limite = addDays(hoy, 5)
-  const d = new Date(fecha)
-  d.setHours(0, 0, 0, 0)
-  return d >= hoy && d <= limite
+function isProximoAVencer(item: Vencimiento): boolean {
+  const p = calculatePriority(item.fecha_vencimiento, item.documento)
+  return p === 'ALTO' || p === 'MEDIO'
 }
 
 export function VencimientosModule() {
+  const { sedeActual } = useSede()
   const [loading, setLoading] = useState(true)
   const [items, setItems] = useState<Vencimiento[]>([])
   const [search, setSearch] = useState('')
+  const [activeFilter, setActiveFilter] = useState<'all' | 'proximos' | 'vencidos' | 'alta' | 'media' | 'baja'>('all')
 
   const [vehiculos, setVehiculos] = useState<Array<{ id: string; patente: string; marca: string; modelo: string; titular: string }>>([])
+  const [patenteSedeMap, setPatenteSedeMap] = useState<Map<string, string>>(new Map())
   const [vehiculoSearch, setVehiculoSearch] = useState('')
   const [showVehiculoDropdown, setShowVehiculoDropdown] = useState(false)
 
@@ -167,7 +209,7 @@ export function VencimientosModule() {
     try {
       const { data, error } = await supabase
         .from('vehiculos' as any)
-        .select('id, patente, marca, modelo, titular')
+        .select('id, patente, marca, modelo, titular, sede_id, sedes(nombre)')
         .order('patente', { ascending: true })
 
       if (error) throw error
@@ -177,10 +219,20 @@ export function VencimientosModule() {
         patente: (v.patente || '') as string,
         marca: (v.marca || '') as string,
         modelo: (v.modelo || '') as string,
-        titular: (v.titular || '') as string
+        titular: (v.titular || '') as string,
+        sedeNombre: v.sedes?.nombre as string
       }))
 
       setVehiculos(mapped)
+
+      // Crear mapa patente -> sede
+      const map = new Map<string, string>()
+      mapped.forEach((v: any) => {
+        if (v.patente && v.sedeNombre) {
+          map.set(v.patente, v.sedeNombre)
+        }
+      })
+      setPatenteSedeMap(map)
     } catch (error) {
       console.error('Error cargando vehiculos para vencimientos:', error)
     }
@@ -188,7 +240,7 @@ export function VencimientosModule() {
 
   const filteredVehiculos = useMemo(() => {
     const term = vehiculoSearch.toLowerCase().trim()
-    if (!term) return vehiculos.slice(0, 10)
+    if (!term) return []
     return vehiculos.filter(v =>
       v.patente.toLowerCase().includes(term) ||
       v.marca.toLowerCase().includes(term) ||
@@ -198,22 +250,34 @@ export function VencimientosModule() {
 
   const totalRegistros = useMemo(() => items.length, [items])
 
-  const proximosAVencerEn5Dias = useMemo(
-    () => items.filter(isProximoAVencerEn5Dias).length,
-    [items]
-  )
+  const totalProximosAVencer = useMemo(() => {
+    return items.filter(i => {
+      const p = calculatePriority(i.fecha_vencimiento, i.documento)
+      return p === 'ALTO' || p === 'MEDIO'
+    }).length
+  }, [items])
 
   const totalPrioridadAlta = useMemo(() => {
-    return items.filter(item => prioridadFromFecha(item.fecha_iniciar_gestion)).filter(i => prioridadFromFecha(i.fecha_iniciar_gestion) === 'ALTO').length
+    return items.filter(i => calculatePriority(i.fecha_vencimiento, i.documento) === 'ALTO').length
   }, [items])
 
   const totalPrioridadMedia = useMemo(() => {
-    return items.filter(item => prioridadFromFecha(item.fecha_iniciar_gestion)).filter(i => prioridadFromFecha(i.fecha_iniciar_gestion) === 'MEDIO').length
+    return items.filter(i => calculatePriority(i.fecha_vencimiento, i.documento) === 'MEDIO').length
   }, [items])
 
   const totalPrioridadBaja = useMemo(() => {
-    return items.filter(item => prioridadFromFecha(item.fecha_iniciar_gestion)).filter(i => prioridadFromFecha(i.fecha_iniciar_gestion) === 'BAJO').length
+    return items.filter(i => calculatePriority(i.fecha_vencimiento, i.documento) === 'BAJO').length
   }, [items])
+
+  const totalVencidos = useMemo(
+    () => items.filter(i => calculatePriority(i.fecha_vencimiento, i.documento) === 'VENCIDO').length,
+    [items]
+  )
+
+  const totalNA = useMemo(
+    () => items.filter(i => calculatePriority(i.fecha_vencimiento, i.documento) === 'N/A').length,
+    [items]
+  )
 
   const totalSolicitadosSi = useMemo(
     () => items.filter(item => item.solicitado).length,
@@ -226,9 +290,52 @@ export function VencimientosModule() {
   )
 
   const filteredItems = useMemo(() => {
-    if (!search.trim()) return [...items]
+    let res = [...items]
+
+    // 1. Aplicar filtro por KPI
+    if (activeFilter === 'proximos') {
+      res = res.filter(i => {
+        const p = calculatePriority(i.fecha_vencimiento, i.documento)
+        return p === 'ALTO' || p === 'MEDIO'
+      })
+    } else if (activeFilter === 'vencidos') {
+      res = res.filter(i => calculatePriority(i.fecha_vencimiento, i.documento) === 'VENCIDO')
+    } else if (activeFilter === 'alta') {
+      res = res.filter(i => calculatePriority(i.fecha_vencimiento, i.documento) === 'ALTO')
+    } else if (activeFilter === 'media') {
+      res = res.filter(i => calculatePriority(i.fecha_vencimiento, i.documento) === 'MEDIO')
+    } else if (activeFilter === 'baja') {
+      res = res.filter(i => calculatePriority(i.fecha_vencimiento, i.documento) === 'BAJO')
+    }
+
+    // 2. Aplicar filtro de Sede (si existe)
+    if (sedeActual && sedeActual.id) {
+      res = res.filter(item => {
+        const sedeNombre = patenteSedeMap.get(item.patente)
+        // Comparamos nombre de sede porque el mapa guarda nombres
+        // Pero sedeActual tiene id y nombre.
+        // Lo ideal sería guardar ID en el mapa si sedeActual usa ID para filtrar.
+        // Pero sedeActual viene del contexto, y loadVehiculos trae nombre.
+        // Vamos a asumir que filtramos por nombre de sede para consistencia visual,
+        // O mejor, guardar el ID en el mapa también si fuera necesario.
+        // Pero el contexto SedeContext suele filtrar por ID en base de datos.
+        // Aquí estamos filtrando en memoria.
+        // Revisemos SedeContext: usa sedeActual.id normalmente.
+        // Pero aquí no tenemos sede_id en vencimientos.
+        // Así que usamos el mapa.
+        // El mapa debería guardar el ID de la sede también si queremos ser precisos.
+        // Pero user pidió cruce con Patente.
+        // Modifiquemos loadVehiculos para guardar sede_id en el mapa también si es necesario?
+        // No, el filtro visual suele ser por lo que ve el usuario.
+        // Pero sedeActual.nombre es lo que tenemos seguro.
+        return sedeNombre === sedeActual.nombre
+      })
+    }
+
+    // 3. Aplicar filtro de búsqueda
+    if (!search.trim()) return res
     const searchLower = search.toLowerCase().trim()
-    return items.filter(item => {
+    return res.filter(item => {
       const text = [
         item.titular,
         item.patente,
@@ -236,7 +343,7 @@ export function VencimientosModule() {
       ].join(' ').toLowerCase()
       return text.includes(searchLower)
     })
-  }, [items, search])
+  }, [items, search, activeFilter, sedeActual, patenteSedeMap])
 
   function openCreateModal() {
     setModalMode('create')
@@ -245,7 +352,7 @@ export function VencimientosModule() {
       titular: '',
       patente: '',
       documento: '',
-      fecha_entrega: '',
+      fecha_entrega: formatDateInput(new Date()),
       fecha_vencimiento: '',
       fecha_iniciar_gestion: '',
       solicitado: false,
@@ -335,7 +442,7 @@ export function VencimientosModule() {
   }
 
   async function handleSubmit() {
-    if (!formData.titular.trim() || !formData.patente.trim() || !formData.fecha_vencimiento) {
+    if (!formData.titular.trim() || !formData.patente.trim() || !formData.fecha_vencimiento || !formData.documento?.trim()) {
       Swal.fire('Campos incompletos', 'Completa los campos obligatorios', 'warning')
       return
     }
@@ -443,9 +550,10 @@ export function VencimientosModule() {
     {
       accessorKey: 'patente',
       header: 'Patente',
-      cell: ({ getValue }) => (
-        <span className="venc-patente">{(getValue() as string) || '-'}</span>
-      ),
+      cell: ({ getValue }) => {
+        const val = getValue() as string
+        return <span className="venc-patente">{val || '-'}</span>
+      },
       enableSorting: true
     },
     {
@@ -456,17 +564,17 @@ export function VencimientosModule() {
     },
     {
       accessorKey: 'fecha_entrega',
-      header: 'Fecha de Entrega',
+      header: 'F.ENTREGA',
       cell: ({ getValue }) => formatDate(getValue() as string | null | undefined),
       enableSorting: true
     },
     {
       accessorKey: 'fecha_vencimiento',
-      header: 'Fecha de Vencimiento',
+      header: 'F.VENCIMIENTO',
       cell: ({ row, getValue }) => {
         const raw = getValue() as string | null | undefined
         const label = formatDate(raw)
-        const isProximo = isProximoAVencerEn5Dias(row.original)
+        const isProximo = isProximoAVencer(row.original)
         const cls = isProximo ? 'venc-fecha-vencimiento-proxima' : ''
         return <span className={cls}>{label}</span>
       },
@@ -474,7 +582,7 @@ export function VencimientosModule() {
     },
     {
       accessorKey: 'fecha_iniciar_gestion',
-      header: 'Fecha para Iniciar Gestión',
+      header: 'F.INICIO GESTIÓN',
       cell: ({ getValue }) => formatDate(getValue() as string | null | undefined),
       enableSorting: true
     },
@@ -482,11 +590,13 @@ export function VencimientosModule() {
       accessorKey: 'prioridad',
       header: 'Prioridad',
       cell: ({ row }) => {
-        const pr = prioridadFromFecha(row.original.fecha_iniciar_gestion)
+        const pr = calculatePriority(row.original.fecha_vencimiento, row.original.documento)
         const upper = pr.toUpperCase()
         let cls = 'prioridad-badge prioridad-baja'
         if (upper === 'ALTO') cls = 'prioridad-badge prioridad-alta'
         else if (upper === 'MEDIO') cls = 'prioridad-badge prioridad-media'
+        else if (upper === 'VENCIDO') cls = 'prioridad-badge prioridad-vencido'
+        else if (upper === 'N/A') cls = 'prioridad-badge prioridad-na'
         return <span className={cls}>{upper}</span>
       },
       enableSorting: true
@@ -553,7 +663,7 @@ export function VencimientosModule() {
       ),
       enableSorting: false
     }
-  ], [])
+  ], [patenteSedeMap])
 
   const exportToExcel = async () => {
     try {
@@ -565,7 +675,7 @@ export function VencimientosModule() {
         Fecha_entrega: formatDate(item.fecha_entrega),
         Fecha_vencimiento: formatDate(item.fecha_vencimiento),
         Fecha_iniciar_gestion: formatDate(item.fecha_iniciar_gestion),
-        Prioridad: prioridadFromFecha(item.fecha_iniciar_gestion),
+        Prioridad: calculatePriority(item.fecha_vencimiento, item.documento),
         Solicitado: item.solicitado ? 'Sí' : 'No',
         Observaciones: item.observacion || ''
       }))
@@ -593,53 +703,70 @@ export function VencimientosModule() {
     <div className="vencimientos-module">
       <div className="vencimientos-stats">
         <div className="stats-grid">
-          <div className="stat-card">
+          <div
+            className={`stat-card ${activeFilter === 'all' ? 'active' : ''}`}
+            onClick={() => setActiveFilter('all')}
+            style={{ cursor: 'pointer' }}
+          >
             <FileText size={20} className="stat-icon" />
             <div className="stat-content">
               <span className="stat-value">{totalRegistros}</span>
               <span className="stat-label">Total registros</span>
             </div>
           </div>
-          <div className="stat-card">
+          <div
+            className={`stat-card ${activeFilter === 'proximos' ? 'active' : ''}`}
+            onClick={() => setActiveFilter('proximos')}
+            style={{ cursor: 'pointer' }}
+          >
             <AlertTriangle size={20} className="stat-icon" />
             <div className="stat-content">
-              <span className="stat-value">{proximosAVencerEn5Dias}</span>
+              <span className="stat-value">{totalProximosAVencer}</span>
               <span className="stat-label">Próximas a vencer</span>
             </div>
           </div>
-          <div className="stat-card">
+          <div
+            className={`stat-card ${activeFilter === 'vencidos' ? 'active' : ''}`}
+            onClick={() => setActiveFilter('vencidos')}
+            style={{ cursor: 'pointer' }}
+          >
+            <AlertTriangle size={20} className="stat-icon" />
+            <div className="stat-content">
+              <span className="stat-value">{totalVencidos}</span>
+              <span className="stat-label">Vencidos</span>
+            </div>
+          </div>
+          <div
+            className={`stat-card ${activeFilter === 'alta' ? 'active' : ''}`}
+            onClick={() => setActiveFilter('alta')}
+            style={{ cursor: 'pointer' }}
+          >
             <AlertTriangle size={20} className="stat-icon" />
             <div className="stat-content">
               <span className="stat-value">{totalPrioridadAlta}</span>
               <span className="stat-label">Prioridad alta</span>
             </div>
           </div>
-          <div className="stat-card">
+          <div
+            className={`stat-card ${activeFilter === 'media' ? 'active' : ''}`}
+            onClick={() => setActiveFilter('media')}
+            style={{ cursor: 'pointer' }}
+          >
             <AlertTriangle size={20} className="stat-icon" />
             <div className="stat-content">
               <span className="stat-value">{totalPrioridadMedia}</span>
               <span className="stat-label">Prioridad media</span>
             </div>
           </div>
-          <div className="stat-card">
-            <AlertTriangle size={20} className="stat-icon" />
+          <div
+            className={`stat-card ${activeFilter === 'baja' ? 'active' : ''}`}
+            onClick={() => setActiveFilter('baja')}
+            style={{ cursor: 'pointer' }}
+          >
+            <Shield size={20} className="stat-icon" />
             <div className="stat-content">
               <span className="stat-value">{totalPrioridadBaja}</span>
               <span className="stat-label">Prioridad baja</span>
-            </div>
-          </div>
-          <div className="stat-card">
-            <FileText size={20} className="stat-icon" />
-            <div className="stat-content">
-              <span className="stat-value">{totalSolicitadosSi}</span>
-              <span className="stat-label">Solicitado "Sí"</span>
-            </div>
-          </div>
-          <div className="stat-card">
-            <FileText size={20} className="stat-icon" />
-            <div className="stat-content">
-              <span className="stat-value">{totalSolicitadosNo}</span>
-              <span className="stat-label">Solicitado "No"</span>
             </div>
           </div>
         </div>
@@ -678,12 +805,12 @@ export function VencimientosModule() {
         </div>
       </div>
 
-      {proximosAVencerEn5Dias > 0 && (
+      {totalProximosAVencer > 0 && (
         <div className="vencimientos-alert">
           <div className="vencimientos-alert-item">
             <AlertTriangle size={16} />
             <span>
-              <strong>Atención:</strong> hay {proximosAVencerEn5Dias} operación(es) que están próximas a vencer
+              <strong>Atención:</strong> hay {totalProximosAVencer} operación(es) que están próximas a vencer
             </span>
           </div>
         </div>
@@ -766,26 +893,31 @@ export function VencimientosModule() {
                           setFormData(prev => ({ ...prev, patente: value }))
                           setShowVehiculoDropdown(true)
                         }}
-                        onFocus={() => setShowVehiculoDropdown(true)}
                         onBlur={() => setTimeout(() => setShowVehiculoDropdown(false), 200)}
                         placeholder="Buscar por patente..."
                         disabled={modalMode === 'view' || saving}
                       />
-                      {showVehiculoDropdown && filteredVehiculos.length > 0 && (
-                        <div className="searchable-dropdown">
-                          {filteredVehiculos.map(v => (
-                            <div
-                              key={v.id}
-                              className="searchable-option"
-                              onClick={() => {
-                                setFormData(prev => ({ ...prev, patente: v.patente, titular: v.titular }))
-                                setVehiculoSearch('')
-                                setShowVehiculoDropdown(false)
-                              }}
-                            >
-                              <strong>{v.patente}</strong> - {v.marca} {v.modelo}
+                      {showVehiculoDropdown && vehiculoSearch && (
+                        <div className="search-results">
+                          {filteredVehiculos.length > 0 ? (
+                            filteredVehiculos.map(v => (
+                              <div
+                                key={v.id}
+                                className="search-result-item"
+                                onClick={() => {
+                                  setFormData(prev => ({ ...prev, patente: v.patente, titular: v.titular }))
+                                  setVehiculoSearch('')
+                                  setShowVehiculoDropdown(false)
+                                }}
+                              >
+                                <strong>{v.patente}</strong> - {v.marca} {v.modelo}
+                              </div>
+                            ))
+                          ) : (
+                            <div className="search-result-item" style={{ cursor: 'default', color: '#64748b' }}>
+                              Sin resultados
                             </div>
-                          ))}
+                          )}
                         </div>
                       )}
                     </div>
@@ -804,7 +936,10 @@ export function VencimientosModule() {
                 </div>
                 <div className="form-row">
                   <div className="form-group">
-                    <label>Documento</label>
+                    <label>
+                      Documento
+                      <span className="required">*</span>
+                    </label>
                     <select
                       value={formData.documento || ''}
                       onChange={e => setFormData(prev => ({ ...prev, documento: e.target.value || undefined }))}
@@ -816,19 +951,24 @@ export function VencimientosModule() {
                       <option value="VTV">VTV</option>
                       <option value="GNC">GNC</option>
                       <option value="Habilitacion remis">Habilitacion remis</option>
+                      <option value="Matafuegos">Matafuegos</option>
+                      <option value="Seguro">Seguro</option>
                     </select>
                   </div>
                   <div className="form-group">
                     <label>Solicitado</label>
-                    <div className="checkbox-option">
+                    <label className="toggle-switch">
                       <input
                         type="checkbox"
                         checked={formData.solicitado}
                         onChange={e => setFormData(prev => ({ ...prev, solicitado: e.target.checked }))}
                         disabled={modalMode === 'view' || saving}
                       />
-                      <span>{formData.solicitado ? 'Sí' : 'No'}</span>
-                    </div>
+                      <span className="slider round">
+                        <span className="on-text">YES</span>
+                        <span className="off-text">NO</span>
+                      </span>
+                    </label>
                   </div>
                 </div>
                 <div className="form-row">
@@ -837,38 +977,7 @@ export function VencimientosModule() {
                     <input
                       type="date"
                       value={formData.fecha_entrega || ''}
-                      onChange={e => {
-                        const value = e.target.value
-                        setFormData(prev => {
-                          let fechaVencimiento = prev.fecha_vencimiento
-                          let fechaIniciarGestion = prev.fecha_iniciar_gestion
-
-                          if (modalMode === 'create') {
-                            if (value) {
-                              const baseDate = parseDate(value)
-                              if (baseDate) {
-                                const vencimientoDate = addDays(baseDate, 60)
-                                const iniciarGestionDate = addDays(vencimientoDate, -14)
-                                fechaVencimiento = formatDateInput(vencimientoDate)
-                                fechaIniciarGestion = formatDateInput(iniciarGestionDate)
-                              } else {
-                                fechaVencimiento = ''
-                                fechaIniciarGestion = ''
-                              }
-                            } else {
-                              fechaVencimiento = ''
-                              fechaIniciarGestion = ''
-                            }
-                          }
-
-                          return { 
-                            ...prev, 
-                            fecha_entrega: value, 
-                            fecha_vencimiento: fechaVencimiento, 
-                            fecha_iniciar_gestion: fechaIniciarGestion 
-                          }
-                        })
-                      }}
+                      onChange={e => setFormData(prev => ({ ...prev, fecha_entrega: e.target.value }))}
                       disabled={modalMode === 'view' || saving}
                     />
                   </div>
@@ -880,7 +989,17 @@ export function VencimientosModule() {
                     <input
                       type="date"
                       value={formData.fecha_vencimiento}
-                      onChange={e => setFormData(prev => ({ ...prev, fecha_vencimiento: e.target.value }))}
+                      onChange={e => {
+                        const newVal = e.target.value
+                        setFormData(prev => {
+                          const next = { ...prev, fecha_vencimiento: newVal }
+                          // Si estamos editando, limpiar fecha_iniciar_gestion al cambiar fecha_vencimiento
+                          if (modalMode === 'edit') {
+                            next.fecha_iniciar_gestion = ''
+                          }
+                          return next
+                        })
+                      }}
                       disabled={modalMode === 'view' || saving}
                     />
                   </div>
