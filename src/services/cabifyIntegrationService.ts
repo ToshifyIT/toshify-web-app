@@ -2,6 +2,7 @@
 import { supabase } from '../lib/supabase'
 import { cabifyService } from './cabifyService'
 import type { CabifyDriverEnriched, CabifyPeriod, CabifyMetrics } from '../types/cabify.types'
+import { normalizeDni } from '../utils/normalizeDocuments'
 
 /**
  * Tipo para los resultados de las funciones RPC de rankings
@@ -76,7 +77,7 @@ class CabifyIntegrationService {
         for (const asignacion of asignaciones) {
           if (asignacion.conductores && asignacion.conductores.numero_dni) {
             asignacionesPorDNI.set(
-              asignacion.conductores.numero_dni.trim().toLowerCase(),
+              normalizeDni(asignacion.conductores.numero_dni),
               asignacion
             )
           }
@@ -87,7 +88,7 @@ class CabifyIntegrationService {
       const enrichedDrivers: CabifyDriverEnriched[] = []
 
       for (const cabifyDriver of cabifyDrivers) {
-        const dni = cabifyDriver.dni.trim().toLowerCase()
+        const dni = normalizeDni(cabifyDriver.dni)
         const asignacion = asignacionesPorDNI.get(dni)
 
         // Calcular monto de alquiler según modalidad

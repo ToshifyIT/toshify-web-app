@@ -42,9 +42,12 @@ import { useAuth } from '../../../contexts/AuthContext'
 import { usePermissions } from '../../../contexts/PermissionsContext'
 import { useSede } from '../../../contexts/SedeContext'
 import { formatCurrency, formatDate, FACTURACION_CONFIG } from '../../../types/facturacion.types'
+import { normalizeDni, normalizePatente } from '../../../utils/normalizeDocuments'
 import { format, startOfWeek, endOfWeek, addWeeks, subWeeks, getWeek, getYear, parseISO } from 'date-fns'
 import { es } from 'date-fns/locale'
 import { RITPreviewTable, type RITPreviewRow } from '../components/RITPreviewTable'
+import { DiscrepancyReportModal } from '../../../components/ui/DiscrepancyReportModal'
+import { DiscrepancyBadge } from '../../../components/ui/DiscrepancyBadge'
 import logoToshifyUrl from '../../../assets/logo-toshify.png'
 
 // Pre-cargar logo como base64 para jsPDF (mejor calidad que URL directo)
@@ -85,6 +88,16 @@ const argDateFmt = new Intl.DateTimeFormat('en-CA', { timeZone: ARG_TZ, year: 'n
 function toArgDate(timestamp: string | null | undefined): string {
   if (!timestamp) return '-'
   return argDateFmt.format(new Date(timestamp))
+}
+// Helper: extraer hora (0-23) en timezone Argentina desde un timestamp
+const argHourFmt = new Intl.DateTimeFormat('en-US', { timeZone: ARG_TZ, hour: 'numeric', hour12: false })
+function getArgHour(timestamp: string): number {
+  return parseInt(argHourFmt.format(new Date(timestamp)))
+}
+// Helper: formatear hora HH:MM en timezone Argentina
+const argTimeFmt = new Intl.DateTimeFormat('es-AR', { timeZone: ARG_TZ, hour: '2-digit', minute: '2-digit', hour12: false })
+function toArgTime(timestamp: string): string {
+  return argTimeFmt.format(new Date(timestamp))
 }
 // Reformatea "YYYY-MM-DD" a "DD/MM/YYYY" sin pasar por new Date() (evita doble shift de timezone)
 function displayArgDate(d: string | null | undefined): string {
@@ -158,6 +171,15 @@ interface FacturacionConductor {
   estado_billing?: 'Activo' | 'Pausa' | 'De baja'
   // Alerta: fecha_terminacion del conductor no coincide con fecha_fin de asignación
   fecha_baja_no_coincide?: boolean
+  // Discrepancia de formato DNI entre conductores y cabify_historico
+  dni_discrepancy?: { conductorRaw: string; cabifyRaw: string } | null
+  // Alerta: conductor diurno con entrega nueva en la semana requiere prorrateo (incidencia a favor)
+  alerta_prorrateo_ingreso?: {
+    tipo: 'medio_turno' | 'dia_completo'
+    hora_entrega: string
+    fecha_entrega: string
+    descuento_turnos: number
+  } | null
 }
 
 interface FacturacionDetalle {
@@ -275,6 +297,9 @@ export function ReporteFacturacionTab() {
     const hoy = new Date()
     return getSemanaArgentina(hoy)
   })
+
+  // Modal de discrepancias de formato
+  const [showDiscrepancyModal, setShowDiscrepancyModal] = useState(false)
 
   // Modal de desglose de días
   const [showDiasModal, setShowDiasModal] = useState(false)
@@ -481,11 +506,9 @@ export function ReporteFacturacionTab() {
       const semanaInicio = parseISO(fechaInicio)
       const semanaFin = parseISO(fechaFin)
 
-      // En Vista Previa de la semana actual: cortar en HOY (no contar días futuros)
-      const hoyDesglose = new Date()
-      hoyDesglose.setHours(23, 59, 59, 999)
-      const esVistaPreviewActual = modoVistaPrevia && hoyDesglose >= semanaInicio && hoyDesglose <= semanaFin
-      const limiteConteo = esVistaPreviewActual ? hoyDesglose : semanaFin
+      // Solo contar días hasta hoy (no proyectar días futuros)
+      const hoyDesglose = parseISO(toArgDate(new Date().toISOString()))
+      const limiteConteo = hoyDesglose < semanaFin ? hoyDesglose : semanaFin
 
       const [{ data: asignacionesCond }, { data: conductorDesglose }] = await Promise.all([
         (supabase
@@ -555,9 +578,11 @@ export function ReporteFacturacionTab() {
 
         const efectivoInicio = acInicio < semanaInicio ? semanaInicio : acInicio
         let efectivoFin = acFin > limiteConteo ? limiteConteo : acFin
-        // Solo aplicar fecha_terminacion como tope si la asignación NO tiene fecha_fin propia
+        // Solo aplicar fecha_terminacion como tope si:
+        // - La asignación NO tiene fecha_fin propia
+        // - La asignación empezó ANTES de la fecha_terminacion (no es re-contratación)
         const tieneFinPropioD = ac.fecha_fin || asignacion.fecha_fin
-        if (fechaTermDesglose && !tieneFinPropioD && efectivoFin > fechaTermDesglose) {
+        if (fechaTermDesglose && !tieneFinPropioD && efectivoFin > fechaTermDesglose && acInicio <= fechaTermDesglose) {
           efectivoFin = fechaTermDesglose
         }
         let diasContados = 0
@@ -575,18 +600,17 @@ export function ReporteFacturacionTab() {
       }
 
       // Generar los 7 días de la semana con su estado
-      // Días futuros (después de HOY en Vista Previa) se muestran pero NO como trabajados
+      // Solo días hasta hoy se marcan como trabajados, futuros quedan como pendientes
       const diasSemana: { fecha: string; diaSemana: string; horario: string; trabajado: boolean }[] = []
       const cursor = new Date(semanaInicio)
       while (cursor <= semanaFin) {
         const key = format(cursor, 'yyyy-MM-dd')
         const cubierto = diasCubiertos.get(key)
-        const esFuturo = esVistaPreviewActual && cursor > hoyDesglose
         diasSemana.push({
           fecha: format(cursor, 'dd/MM/yyyy'),
           diaSemana: diasNombres[cursor.getDay()],
-          horario: esFuturo ? '-' : (cubierto || '-'),
-          trabajado: esFuturo ? false : !!cubierto,
+          horario: cubierto || '-',
+          trabajado: !!cubierto,
         })
         cursor.setDate(cursor.getDate() + 1)
       }
@@ -888,7 +912,7 @@ export function ReporteFacturacionTab() {
       const cobroAppPorDni = new Map<string, number>()
       ;(cabifyGanancias || []).forEach((c: any) => {
         if (c.dni) {
-          const dniNorm = String(c.dni).replace(/^0+/, '')
+          const dniNorm = normalizeDni(c.dni)
           cobroAppPorDni.set(dniNorm, (cobroAppPorDni.get(dniNorm) || 0) + (parseFloat(c.cobro_app) || 0))
         }
       })
@@ -898,7 +922,7 @@ export function ReporteFacturacionTab() {
       const peajesDetalleMap = new Map<string, Array<{ fecha: string; monto: number }>>()
       ;(cabifyPeajes || []).forEach((c: any) => {
         if (c.dni && c.peajes) {
-          const dniNorm = String(c.dni).replace(/^0+/, '')
+          const dniNorm = normalizeDni(c.dni)
           const monto = parseFloat(String(c.peajes)) || 0
           peajesPorDni.set(dniNorm, (peajesPorDni.get(dniNorm) || 0) + monto)
           
@@ -911,7 +935,7 @@ export function ReporteFacturacionTab() {
 
       // Agregar cobro_app de Cabify a cada facturación (para barras de cobertura)
       facturacionesTransformadas = facturacionesTransformadas.map((f: any) => {
-        const dniNorm = f.conductor_dni ? String(f.conductor_dni).replace(/^0+/, '') : ''
+        const dniNorm = normalizeDni(f.conductor_dni)
         const cobroApp = dniNorm ? (cobroAppPorDni.get(dniNorm) || 0) : 0
         const cuotaFija = f.subtotal_alquiler + f.subtotal_garantia
         return {
@@ -987,7 +1011,7 @@ export function ReporteFacturacionTab() {
         const pago = pagosMap.get(f.id)
         const detalle = detallesMap.get(f.id)
         // Fallback: si no hay P005 en facturacion_detalle, buscar en cabify_historico por DNI (normalizado)
-        const dniNormPeaje = f.conductor_dni ? String(f.conductor_dni).replace(/^0+/, '') : ''
+        const dniNormPeaje = normalizeDni(f.conductor_dni)
         const peajesDetalle = detalle?.monto_peajes || 0
         const peajesCabify = dniNormPeaje ? (peajesPorDni.get(dniNormPeaje) || 0) : 0
         const peajesDetalleList = peajesDetalleMap.get(dniNormPeaje) || []
@@ -1026,11 +1050,9 @@ export function ReporteFacturacionTab() {
 
     try {
       const fechaInicio = format(semanaActual.inicio, 'yyyy-MM-dd')
-      // Para Vista Previa: usar HOY como fecha fin si estamos en la semana actual
-      const hoy = new Date()
-      const esSemanaActual = hoy >= semanaActual.inicio && hoy <= semanaActual.fin
-      const fechaFinEfectiva = esSemanaActual ? hoy : semanaActual.fin
-      const fechaFin = format(fechaFinEfectiva, 'yyyy-MM-dd')
+      // Facturación siempre cobra la semana completa (lunes a domingo)
+      // Las deducciones se hacen vía incidencias/bajas, no por días transcurridos
+      const fechaFin = format(semanaActual.fin, 'yyyy-MM-dd')
       // Semana y año del período (para queries)
       const semanaDelPeriodo = getWeek(parseISO(fechaInicio), { weekStartsOn: 1 })
       const anioDelPeriodo = getYear(parseISO(fechaInicio))
@@ -1040,8 +1062,8 @@ export function ReporteFacturacionTab() {
       const conductoresControl: { numero_dni: string; estado: string; patente: string; modalidad: string; valor_alquiler: number | null }[] = []
       const dnisAgregadosVP = new Set<string>()
 
-      // 1a + 1b en paralelo (son independientes entre sí)
-      const [{ data: asignacionesSemanaVP }, { data: penalidadesPendientesVP }] = await Promise.all([
+      // 1a + 1b + 1c en paralelo (son independientes entre sí)
+      const [{ data: asignacionesSemanaVP }, { data: penalidadesPendientesVP }, { data: penalidadesAplicadasSemanaVP }] = await Promise.all([
         (supabase.from('asignaciones_conductores') as any)
           .select(`
             conductor_id, horario, fecha_inicio, fecha_fin, estado,
@@ -1055,6 +1077,12 @@ export function ReporteFacturacionTab() {
           .lte('fecha', format(semanaActual.fin, 'yyyy-MM-dd'))
           .eq('aplicado', false)
           .neq('rechazado', true),
+        // 1c: penalidades ya aplicadas a ESTA semana (para incluir conductores con cobros ya cerrados)
+        (supabase.from('penalidades') as any)
+          .select('conductor_id, conductores!inner(numero_dni, sede_id)')
+          .eq('semana_aplicacion', semanaDelPeriodo)
+          .eq('anio_aplicacion', anioDelPeriodo)
+          .eq('aplicado', true),
       ])
 
       // Procesar 1a: asignaciones
@@ -1093,16 +1121,21 @@ export function ReporteFacturacionTab() {
         }
       }
 
-      // Procesar 1b: penalidades pendientes
+      // Procesar 1b + 1c: penalidades pendientes + aplicadas a esta semana
       const dnisConPenalidadesVP = new Set<string>()
       {
-        for (const p of (penalidadesPendientesVP || []) as any[]) {
+        // Combinar pendientes + aplicadas a esta semana (sin duplicados)
+        const todasPenalidadesVP = [
+          ...(penalidadesPendientesVP || []),
+          ...(penalidadesAplicadasSemanaVP || []),
+        ]
+        for (const p of todasPenalidadesVP as any[]) {
           const cond = p.conductores
           if (!cond || !cond.numero_dni) continue
           if (sedeParaVP && cond.sede_id !== sedeParaVP) continue
+          dnisConPenalidadesVP.add(cond.numero_dni)
           if (dnisAgregadosVP.has(cond.numero_dni)) continue
           dnisAgregadosVP.add(cond.numero_dni)
-          dnisConPenalidadesVP.add(cond.numero_dni)
           conductoresControl.push({
             numero_dni: cond.numero_dni,
             estado: 'Activo',
@@ -1161,8 +1194,9 @@ export function ReporteFacturacionTab() {
 
       // Calcular días por modalidad/horario para cada conductor
       const fechaInicioSemana = semanaActual.inicio
-      // Para semana actual: usar HOY como fin (no contar días futuros)
-      const fechaFinSemana = esSemanaActual ? fechaFinEfectiva : semanaActual.fin
+      // Solo contar días hasta hoy (no proyectar días futuros)
+      const hoyVP = parseISO(toArgDate(new Date().toISOString()))
+      const fechaFinSemana = hoyVP < semanaActual.fin ? hoyVP : semanaActual.fin
 
       // Map de conductor_id → fecha_terminacion (tope de días para conductores de baja)
       const fechaTermMapVP = new Map<string, Date>()
@@ -1184,6 +1218,9 @@ export function ReporteFacturacionTab() {
       // Set de fechas ya contadas por conductor para deduplicar registros duplicados
       const diasContadosVP = new Map<string, Set<string>>()
       conductorIds.forEach((id: string) => diasContadosVP.set(id, new Set()))
+
+      // Alertas de prorrateo por ingreso: conductor diurno con entrega nueva en la semana
+      const alertasProrrateoVP = new Map<string, { tipo: 'medio_turno' | 'dia_completo'; hora: string; fecha: string; descuento: number }>()
       
       ;(asignacionesConductores || []).forEach((ac: any) => {
         const asignacion = ac.asignaciones
@@ -1218,10 +1255,12 @@ export function ReporteFacturacionTab() {
         const efectivoInicio = acInicio < fechaInicioSemana ? fechaInicioSemana : acInicio
         let efectivoFin = acFin > fechaFinSemana ? fechaFinSemana : acFin
 
-        // Solo aplicar fecha_terminacion como tope si la asignación NO tiene fecha_fin propia
+        // Solo aplicar fecha_terminacion como tope si:
+        // - La asignación NO tiene fecha_fin propia
+        // - La asignación empezó ANTES de la fecha_terminacion (no es re-contratación)
         const tieneFinPropioVP = ac.fecha_fin || asignacion.fecha_fin
         const fechaTermVP = fechaTermMapVP.get(ac.conductor_id)
-        if (fechaTermVP && !tieneFinPropioVP && efectivoFin > fechaTermVP) efectivoFin = fechaTermVP
+        if (fechaTermVP && !tieneFinPropioVP && efectivoFin > fechaTermVP && acInicio <= fechaTermVP) efectivoFin = fechaTermVP
         
         const prorrateo = prorrateoMap.get(ac.conductor_id)
         if (!prorrateo) return
@@ -1256,6 +1295,24 @@ export function ReporteFacturacionTab() {
         }
         
         if (diasReales <= 0) return
+
+        // Detectar prorrateo de ingreso para conductores DIURNOS
+        // Solo aplica si la asignación es NUEVA en esta semana (acInicio >= inicio de semana)
+        if (modalidad === 'TURNO_DIURNO' && acInicio >= fechaInicioSemana && !alertasProrrateoVP.has(ac.conductor_id)) {
+          const rawTimestamp = ac.fecha_inicio || asignacion.fecha_inicio
+          if (rawTimestamp) {
+            const hora = getArgHour(rawTimestamp)
+            const horaStr = toArgTime(rawTimestamp)
+            const fechaStr = displayArgDate(toArgDate(rawTimestamp))
+            if (hora < 12) {
+              // Entrega en la mañana: cobrar medio turno (descuento 0.5)
+              alertasProrrateoVP.set(ac.conductor_id, { tipo: 'medio_turno', hora: horaStr, fecha: fechaStr, descuento: 0.5 })
+            } else {
+              // Entrega en la tarde: no cobrar ese día (descuento 1 turno completo)
+              alertasProrrateoVP.set(ac.conductor_id, { tipo: 'dia_completo', hora: horaStr, fecha: fechaStr, descuento: 1 })
+            }
+          }
+        }
         
         // Guardar asignación para cálculo de montos
         const asigs = asignacionesPorConductorVP.get(ac.conductor_id)
@@ -1369,7 +1426,7 @@ export function ReporteFacturacionTab() {
           .select('conductor_id, saldo_actual')
           .in('conductor_id', conductorIds),
         (supabase.from('garantias_conductores') as any)
-          .select('conductor_id, conductor_nombre, estado, cuotas_pagadas, cuotas_totales, tipo_alquiler, monto_cuota_semanal')
+          .select('conductor_id, conductor_nombre, estado, cuotas_pagadas, cuotas_totales, tipo_alquiler, monto_cuota_semanal, monto_pagado, monto_total')
           .in('conductor_id', conductorIds),
         Promise.all([
           supabase.from('cabify_historico')
@@ -1404,16 +1461,20 @@ export function ReporteFacturacionTab() {
         cuotas_totales: number;
         tipo_alquiler: string;
         monto_cuota_semanal: number | null;
+        monto_pagado: number;
+        monto_total: number;
       }>((garantias || []).filter((g: any) => g.conductor_id).map((g: any) => [g.conductor_id, g]))
 
-      // Crear mapa de cobro_app Cabify por DNI
+      // Crear mapa de cobro_app Cabify por DNI + trackear raw para discrepancias
       const cabifyMap = new Map<string, number>()
+      const cabifyRawDniMap = new Map<string, string>() // normalized -> raw cabify DNI
       ;(cabifyData || []).forEach((record: any) => {
         if (record.dni) {
-          const dniNorm = String(record.dni).replace(/^0+/, '')
+          const dniNorm = normalizeDni(record.dni)
           const actual = cabifyMap.get(dniNorm) || 0
           const cobroApp = parseFloat(String(record.cobro_app)) || 0
           cabifyMap.set(dniNorm, actual + cobroApp)
+          if (!cabifyRawDniMap.has(dniNorm)) cabifyRawDniMap.set(dniNorm, String(record.dni))
         }
       })
       // Crear mapa de peajes Cabify por DNI (P005) - semana anterior, SIN redondeo
@@ -1421,7 +1482,7 @@ export function ReporteFacturacionTab() {
       const peajesDetalleMap = new Map<string, Array<{ fecha: string; monto: number }>>()
       ;(cabifyPeajesData || []).forEach((record: any) => {
         if (record.dni && record.peajes) {
-          const dniNorm = String(record.dni).replace(/^0+/, '')
+          const dniNorm = normalizeDni(record.dni)
           const actualPeajes = peajesMap.get(dniNorm) || 0
           const peajes = parseFloat(String(record.peajes)) || 0
           peajesMap.set(dniNorm, actualPeajes + peajes)
@@ -1462,7 +1523,7 @@ export function ReporteFacturacionTab() {
       // a) Penalidades aplicadas completas en esta semana
       const { data: penalidadesCompletas } = await (supabase
         .from('penalidades') as any)
-        .select('id, conductor_id, monto, detalle, observaciones, tipos_cobro_descuento(categoria, es_a_favor, nombre)')
+        .select('id, conductor_id, monto, detalle, observaciones, incidencia_id, tipos_cobro_descuento(categoria, es_a_favor, nombre), incidencias(descripcion)')
         .eq('aplicado', true)
         .eq('fraccionado', false)
         .neq('rechazado', true)
@@ -1550,11 +1611,15 @@ export function ReporteFacturacionTab() {
             penalidadesMap.set(p.conductor_id, actual + (p.monto || 0))
           }
           
-          // Guardar detalle
+          // Guardar detalle (incluir descripción de incidencia si existe)
           const detalles = detalleMap.get(p.conductor_id) || []
+          const incDesc = (p as any).incidencias?.descripcion
+          const tipoNombre = p.tipos_cobro_descuento?.nombre || ''
+          let detalleTexto = tipoNombre || p.detalle || p.observaciones || 'Cobro por incidencia'
+          if (incDesc) detalleTexto += ` - ${incDesc}`
           detalles.push({
             monto: p.monto || 0,
-            detalle: p.detalle || p.observaciones || 'Cobro por incidencia',
+            detalle: detalleTexto,
             tipo: 'completa'
           })
           detalleMap.set(p.conductor_id, detalles)
@@ -1636,11 +1701,14 @@ export function ReporteFacturacionTab() {
           : FACTURACION_CONFIG.GARANTIA_CUOTAS_TURNO
 
         if (garantia) {
-          if (garantia.estado === 'completada' || garantia.cuotas_pagadas >= garantia.cuotas_totales) {
+          if (garantia.estado === 'completada' || garantia.monto_pagado >= garantia.monto_total) {
             subtotalGarantia = 0
             cuotaGarantiaNumero = 'NA'
           } else {
-            subtotalGarantia = garantia.monto_cuota_semanal || cuotaGarantiaSemanalVP
+            const cuotaNormal = garantia.monto_cuota_semanal || cuotaGarantiaSemanalVP
+            const pendiente = garantia.monto_total - garantia.monto_pagado
+            // Si el pendiente es menor que la cuota normal, cobrar solo el restante
+            subtotalGarantia = Math.min(cuotaNormal, pendiente)
             const cuotaActual = garantia.cuotas_pagadas + 1
             cuotaGarantiaNumero = `${cuotaActual} de ${garantia.cuotas_totales}`
           }
@@ -1655,8 +1723,8 @@ export function ReporteFacturacionTab() {
           cuotaGarantiaNumero = 'NA'
         }
 
-        // Datos por DNI del conductor (normalizado sin ceros adelante)
-        const dniConductor = (conductor.numero_dni || '').replace(/^0+/, '')
+        // Datos por DNI del conductor (normalizado)
+        const dniConductor = normalizeDni(conductor.numero_dni)
 
         // Excesos de KM (P006) - no aplica si tiene 0 días
         const exceso = excesosMap.get(conductorId)
@@ -1686,6 +1754,11 @@ export function ReporteFacturacionTab() {
         // Total a pagar
         const subtotalNeto = subtotalCargos - subtotalDescuentos
         const totalAPagar = subtotalNeto + saldoAnterior
+
+        // Detectar discrepancia de formato DNI (conductor vs cabify)
+        const cabifyRawDni = cabifyRawDniMap.get(dniConductor) || ''
+        const conductorRawDni = String(conductor.numero_dni || '').trim()
+        const dniDiscrepancy = cabifyRawDni && conductorRawDni && cabifyRawDni !== conductorRawDni
 
         // Datos de Cabify - cobro_app semanal del conductor (para barras de cobertura)
         const cobroAppCabify = cabifyMap.get(dniConductor) || 0
@@ -1747,6 +1820,8 @@ export function ReporteFacturacionTab() {
               const tieneAsignacionCierre = conductoresConAsignacionAlCierreVP.has(conductorId)
               return (diasTotales >= 7 || tieneAsignacionCierre) ? 'Activo' : 'Pausa'
             })(),
+            // Discrepancia de formato DNI
+            dni_discrepancy: dniDiscrepancy ? { conductorRaw: conductorRawDni, cabifyRaw: cabifyRawDni } : null,
             // Detectar si fecha_terminacion no coincide con fecha_fin de asignación
             fecha_baja_no_coincide: (() => {
               if (!conductor.fecha_terminacion) return false
@@ -1754,6 +1829,17 @@ export function ReporteFacturacionTab() {
               const maxFinAsig = maxAsigFinVP.get(conductorId)
               if (!maxFinAsig) return false
               return ftStr !== maxFinAsig
+            })(),
+            // Alerta de prorrateo por ingreso diurno
+            alerta_prorrateo_ingreso: (() => {
+              const alerta = alertasProrrateoVP.get(conductorId)
+              if (!alerta) return null
+              return {
+                tipo: alerta.tipo,
+                hora_entrega: alerta.hora,
+                fecha_entrega: alerta.fecha,
+                descuento_turnos: alerta.descuento,
+              }
             })(),
           })
        }
@@ -2073,7 +2159,10 @@ export function ReporteFacturacionTab() {
       conductorIdsTemp.forEach((id: string) => diasContadosRecalc.set(id, new Set()))
 
       const fechaInicioSemanaRecalc = parseISO(fechaInicio)
-      const fechaFinSemanaRecalc = parseISO(fechaFin)
+      // Solo contar días hasta hoy (no proyectar días futuros)
+      const hoyRecalc = parseISO(toArgDate(new Date().toISOString()))
+      const finSemanaRecalcReal = parseISO(fechaFin)
+      const fechaFinSemanaRecalc = hoyRecalc < finSemanaRecalcReal ? hoyRecalc : finSemanaRecalcReal
 
       // Map de conductor_id → fecha_terminacion (tope de días para conductores de baja)
       const fechaTerminacionMap = new Map<string, Date>()
@@ -2112,10 +2201,12 @@ export function ReporteFacturacionTab() {
         const efectivoInicio = acInicio < fechaInicioSemanaRecalc ? fechaInicioSemanaRecalc : acInicio
         let efectivoFin = acFin > fechaFinSemanaRecalc ? fechaFinSemanaRecalc : acFin
 
-        // Solo aplicar fecha_terminacion como tope si la asignación NO tiene fecha_fin propia
+        // Solo aplicar fecha_terminacion como tope si:
+        // - La asignación NO tiene fecha_fin propia
+        // - La asignación empezó ANTES de la fecha_terminacion (no es re-contratación)
         const tieneFinPropioR = ac.fecha_fin || asignacion.fecha_fin
         const fechaTerm = fechaTerminacionMap.get(ac.conductor_id)
-        if (fechaTerm && !tieneFinPropioR && efectivoFin > fechaTerm) {
+        if (fechaTerm && !tieneFinPropioR && efectivoFin > fechaTerm && acInicio <= fechaTerm) {
           efectivoFin = fechaTerm
         }
         const prorrateo = prorrateoRecalcMap.get(ac.conductor_id)
@@ -2250,7 +2341,7 @@ export function ReporteFacturacionTab() {
       // NOTA: multas_historico DESACTIVADO temporalmente — reactivar cuando se defina el flujo
       const MULTAS_HABILITADAS = false
       const [penalidadesRes, ticketsRes, saldosRes, excesosRes, cabifyRes, garantiasRes, cobrosRes, multasRes] = await Promise.all([
-        (supabase.from('penalidades') as any).select('*, tipos_cobro_descuento(categoria, es_a_favor, nombre)').in('conductor_id', conductorIds).gte('fecha', fechaInicio).lte('fecha', fechaFin).eq('aplicado', false).eq('fraccionado', false).neq('rechazado', true),
+        (supabase.from('penalidades') as any).select('*, tipos_cobro_descuento(categoria, es_a_favor, nombre), incidencias(descripcion)').in('conductor_id', conductorIds).gte('fecha', fechaInicio).lte('fecha', fechaFin).eq('aplicado', false).eq('fraccionado', false).neq('rechazado', true),
         (supabase.from('tickets_favor') as any).select('*').in('conductor_id', conductorIds).eq('estado', 'aprobado'),
         (supabase.from('saldos_conductores') as any).select('conductor_id, saldo_actual').in('conductor_id', conductorIds),
         (supabase.from('excesos_kilometraje') as any).select('*').in('conductor_id', conductorIds).eq('aplicado', false),
@@ -2358,11 +2449,11 @@ export function ReporteFacturacionTab() {
       )
       // ─────────────────────────────────────────────────────────────────────────────
 
-      // Mapear peajes por DNI (normalizado sin ceros adelante)
+      // Mapear peajes por DNI (normalizado)
       const peajesMap = new Map<string, number>()
       ;((cabifyRes.data || []) as any[]).forEach((r: any) => {
         if (r.dni && r.peajes) {
-          const dniNorm = String(r.dni).replace(/^0+/, '')
+          const dniNorm = normalizeDni(r.dni)
           peajesMap.set(dniNorm, (peajesMap.get(dniNorm) || 0) + (parseFloat(String(r.peajes)) || 0))
         }
       })
@@ -2371,7 +2462,7 @@ export function ReporteFacturacionTab() {
       const multasMap = new Map<string, { monto: number; cantidad: number }>()
       ;((multasRes.data || []) as any[]).forEach((m: any) => {
         if (m.patente) {
-          const p = m.patente.toUpperCase().replace(/\s+/g, '')
+          const p = normalizePatente(m.patente)
           const actual = multasMap.get(p) || { monto: 0, cantidad: 0 }
           const importe = typeof m.importe === 'string' ? parseImporteMulta(m.importe) : parseFloat(m.importe) || 0
           multasMap.set(p, { monto: actual.monto + importe, cantidad: actual.cantidad + 1 })
@@ -2431,10 +2522,12 @@ export function ReporteFacturacionTab() {
         const factorProporcional = conductor.total_dias / 7
         const garantiaConductor = garantiasMapById.get(conductor.conductor_id)
         const garantiaCompletada = garantiaConductor?.estado === 'completada' || 
-          (garantiaConductor && garantiaConductor.cuotas_pagadas >= garantiaConductor.cuotas_totales)
+          (garantiaConductor && garantiaConductor.monto_pagado >= garantiaConductor.monto_total)
+        const cuotaNormalRecalc = garantiaConductor?.monto_cuota_semanal || cuotaGarantia
+        const pendienteRecalc = garantiaConductor ? (garantiaConductor.monto_total - garantiaConductor.monto_pagado) : cuotaNormalRecalc
         const cuotaGarantiaProporcional = conductor.total_dias === 0 || garantiaCompletada
           ? 0 
-          : (garantiaConductor?.monto_cuota_semanal || cuotaGarantia)
+          : Math.min(cuotaNormalRecalc, pendienteRecalc)
         const cuotaActual = garantiaCompletada ? 0 : (garantiaConductor?.cuotas_pagadas || 0) + 1
         const totalCuotas = garantiaConductor?.cuotas_totales || 16
 
@@ -2462,7 +2555,7 @@ export function ReporteFacturacionTab() {
         const totalExcesos = conductor.total_dias === 0 ? 0 : excesosConductor.reduce((sum: number, e: any) => sum + (e.monto_total || 0), 0)
 
         // Peajes (P005) - no aplica si tiene 0 días
-        const totalPeajes = conductor.total_dias === 0 ? 0 : (conductor.conductor_dni ? (peajesMap.get(String(conductor.conductor_dni).replace(/^0+/, '')) || 0) : 0)
+        const totalPeajes = conductor.total_dias === 0 ? 0 : (conductor.conductor_dni ? (peajesMap.get(normalizeDni(conductor.conductor_dni)) || 0) : 0)
 
         // Cobros fraccionados (P010) - calcular monto real de la cuota
         const cobrosConductor = cobrosGrouped.get(conductor.conductor_id) || []
@@ -2481,7 +2574,7 @@ export function ReporteFacturacionTab() {
         const totalCuotasPenalidades = cuotasConductor.reduce((sum: number, pc: any) => sum + (pc.monto_cuota || 0), 0)
 
         // Multas (P008)
-        const patenteNorm = (conductor.vehiculo_patente || '').toUpperCase().replace(/\s+/g, '')
+        const patenteNorm = normalizePatente(conductor.vehiculo_patente)
         // Multas: desactivado temporalmente (MULTAS_HABILITADAS = false)
         const multasVehiculo = MULTAS_HABILITADAS ? multasMap.get(patenteNorm) : undefined
         const montoMultas = multasVehiculo?.monto || 0
@@ -2576,7 +2669,7 @@ export function ReporteFacturacionTab() {
         await (supabase.from('facturacion_detalle') as any).insert({
           facturacion_id: facturacionId,
           concepto_codigo: 'P003', concepto_descripcion: descripcionGarantia,
-          cantidad: conductor.total_dias, precio_unitario: cuotaGarantiaProporcional / 7,
+          cantidad: 1, precio_unitario: cuotaGarantiaProporcional,
           subtotal: cuotaGarantiaProporcional, total: cuotaGarantiaProporcional, es_descuento: false
         })
 
@@ -2590,11 +2683,13 @@ export function ReporteFacturacionTab() {
         for (const grupo of gruposPenalidades) {
           for (const pen of grupo.pens) {
             const tipoNombre = (pen as any).tipos_cobro_descuento?.nombre || 'Sin detalle'
+            const incDescSave = (pen as any).incidencias?.descripcion
+            const detalleCompleto = incDescSave ? `${tipoNombre} - ${incDescSave}` : tipoNombre
             const descripcion = grupo.codigo === 'P004'
-              ? `Ticket: ${tipoNombre}`
+              ? `Ticket: ${detalleCompleto}`
               : grupo.codigo === 'P006'
-                ? `Exceso KM: ${tipoNombre}`
-                : `Penalidad: ${tipoNombre}`
+                ? `Exceso KM: ${detalleCompleto}`
+                : `Penalidad: ${detalleCompleto}`
             await (supabase.from('facturacion_detalle') as any).insert({
               facturacion_id: facturacionId,
               concepto_codigo: grupo.codigo,
@@ -3111,7 +3206,7 @@ export function ReporteFacturacionTab() {
 
       // P008 - Multas de tránsito (por patente del conductor)
       if (facturacion.vehiculo_patente) {
-        const patenteNorm = facturacion.vehiculo_patente.toUpperCase().replace(/\s+/g, '')
+        const patenteNorm = normalizePatente(facturacion.vehiculo_patente)
         const fechaInicioMul = periodo?.fecha_inicio || format(semanaActual.inicio, 'yyyy-MM-dd')
         const fechaFinMul = periodo?.fecha_fin || format(semanaActual.fin, 'yyyy-MM-dd')
         const { data: multasDet } = await (supabase
@@ -3922,9 +4017,8 @@ export function ReporteFacturacionTab() {
 
       for (let i = 1; i < rows.length; i++) {
         const row = rows[i]
-        const dniRaw = String(row[7] || '').replace(/[.,\s]/g, '').trim()
-        if (!dniRaw || dniRaw === '0' || dniRaw === '') continue
-        const dni = dniRaw
+        const dni = normalizeDni(row[7])
+        if (!dni || dni === '0') continue
 
         const disponible = parseFloat(row[15]) || 0
         const importeDescontar = parseFloat(row[16]) || 0
@@ -3955,7 +4049,7 @@ export function ReporteFacturacionTab() {
       const facturacionesPorDNI = new Map<string, typeof facturaciones[0]>(
         facturaciones
           .filter(f => f.conductor_dni)
-          .map(f => [String(f.conductor_dni || '').replace(/[.,\s]/g, '').trim(), f])
+          .map(f => [normalizeDni(f.conductor_dni), f])
       )
 
       for (const exRow of excelData) {
@@ -4512,7 +4606,7 @@ export function ReporteFacturacionTab() {
         .select('numero_dni, email')
         .in('numero_dni', dnis)
       
-      const emailMap = new Map((conductoresData || []).map((c: any) => [c.numero_dni, c.email]))
+      const emailMap = new Map((conductoresData || []).map((c: any) => [normalizeDni(c.numero_dni), c.email]))
 
       // Obtener IDs de detalles ya insertados (para comparar)
       const detallesReferencias = new Set(
@@ -4761,7 +4855,7 @@ export function ReporteFacturacionTab() {
         const tieneCuit = fact.conductor_cuit && fact.conductor_cuit.length >= 11
         const tipoFactura = tieneCuit ? 'FACTURA_A' : 'FACTURA_B'
         const condicionIva = tieneCuit ? 'RESPONSABLE_INSCRIPTO' : 'CONSUMIDOR_FINAL'
-        const email = emailMap.get(fact.conductor_dni) || ''
+        const email = emailMap.get(normalizeDni(fact.conductor_dni)) || ''
         
         // NUMERO CUIL = DNI, NUMERO DNI = CUIT
         const numeroCuil = fact.conductor_dni || ''
@@ -4938,38 +5032,38 @@ export function ReporteFacturacionTab() {
     try {
       const wb = XLSX.utils.book_new()
 
-      // Headers exactos de SiFactura
+      // Headers SiFactura (sin descripciones)
       const headers = [
         'N°',
-        'FECHA EMISION. Debe ser con formato dd/mm/aaaa',
-        'FECHA VENCIMIENTO. Debe ser con formato dd/mm/aaaa',
+        'FECHA EMISION',
+        'FECHA VENCIMIENTO',
         'PUNTO DE VENTA',
-        "TIPO FACTURA. Ver valores permiido en la solapa 'Tablas de ayuda'",
-        "TIPO DOCUMENTO. Ver valores permiido en la solapa 'Tablas de ayuda'",
-        'NUMERO CUIL ',
-        'NUMERO DNI ',
-        'TOTAL. Importe total de su comprobante',
-        'COBRADO. Importe total cobrado para este comprobante, valor entre 0 y TOTAL, en caso de ser mayor el sistema lo seteará en el valor igual al TOTAL',
-        "CONDICION IVA. Ver valores permitido en la solapa 'Tablas de ayuda'",
-        "CONDICION DE VENTA. Ver valores permiido en la solapa 'Tablas de ayuda'",
-        'RAZON SOCIAL. Indicar la razón social del receptor del comprobante, si éste existe detro de Sifactura,  se tomará dicha razón social para el comprobante generado, sino el software creará un nuevo cliente con el tipo de documento, número y razón social aquí indicada.',
+        'TIPO FACTURA',
+        'TIPO DOCUMENTO',
+        'NUMERO CUIL',
+        'NUMERO DNI',
+        'TOTAL',
+        'COBRADO',
+        'CONDICION IVA',
+        'CONDICION DE VENTA',
+        'RAZON SOCIAL',
         'DOMICILIO',
-        "CODIGO PRODUCTO. Este código debe existir en la sección de Base de datos->Producto (el tipo de sección del producto debe ser VENTAS)",
-        'DESCRIPCION ADICIONAL. Esta descripción se concatenará al final de la descripción del producto previamente creado dentro de Sifactura',
-        'EMAIL. Correo electrónico al que se enviará el comprobante de venta',
-        'NOTA. Puede o no existir, si este campo s completa, se imprimirá al pie del comprobante y se verá en la impresión',
+        'CODIGO PRODUCTO',
+        'DESCRIPCION ADICIONAL',
+        'EMAIL',
+        'NOTA',
         'MONEDA',
-        'TIPO DE CAMBIO. Debe ser igual a 1 para la moneda PES',
-        'NETO GRAVADO. Si el tipo decomprobante enviado es RECIBO y/o FACTURA C este valor debe ser cero',
-        'Imp IVA al 21%',
-        'EXENTO. Si el tipo decomprobante enviado es RECIBO y/o FACTURA C este valor debe ser cero',
+        'TIPO DE CAMBIO',
+        'NETO GRAVADO',
+        'IMP IVA 21%',
+        'EXENTO',
         'TOTAL ',
-        'IVA PORCENTAJE. Debe utilizar el valor IVA_EXENTO si el tipo de factura es RECIBO_C, RECIBO_X y/o FACTURA_X',
-        "Generar asiento contable. Ver valores permiido en la solapa 'Tablas de ayuda'",
-        'Contabilidad. ID del plan de cuenta de la cuenta debito (de la sección Contabilidad->Plan de Cuenta) sin puntos, solo números',
-        'Contabilidad. ID del plan de cuenta de la cuenta crédito (de la sección Contabilidad->Plan de Cuenta) sin puntos, solo números',
-        'REFERENCIA. En caso de ND o NC puede indicar el comprobante referenciado',
-        'CHECK '
+        'IVA PORCENTAJE',
+        'GENERAR ASIENTO',
+        'CTA DEBITO',
+        'CTA CREDITO',
+        'REFERENCIA',
+        'CHECK'
       ]
 
       // Convertir preview data a formato array para Excel
@@ -5053,7 +5147,7 @@ export function ReporteFacturacionTab() {
         .select('id, numero_dni, email')
         .in('numero_dni', dnis)
       
-      const emailMap = new Map((conductoresData || []).map((c: any) => [c.numero_dni, c.email]))
+      const emailMap = new Map((conductoresData || []).map((c: any) => [normalizeDni(c.numero_dni), c.email]))
 
       // 2. Cargar garantías activas
       const { data: garantiasData } = await supabase
@@ -5083,7 +5177,7 @@ export function ReporteFacturacionTab() {
       // Penalidades se filtran por el campo 'semana' (número de semana del período)
       const { data: todasPenalidadesData } = await (supabase
         .from('penalidades') as any)
-        .select('*, tipos_cobro_descuento(nombre, categoria, es_a_favor), conductor:conductores(nombres, apellidos)')
+        .select('*, tipos_cobro_descuento(nombre, categoria, es_a_favor), conductor:conductores(nombres, apellidos), incidencias(descripcion)')
         .eq('aplicado', false)
         .eq('rechazado', false)
         .eq('fraccionado', false) // Solo NO fraccionadas (las fraccionadas van por penalidades_cuotas)
@@ -5320,7 +5414,7 @@ export function ReporteFacturacionTab() {
         const tieneCuit = fact.conductor_cuit && fact.conductor_cuit.length >= 11
         const tipoFactura = tieneCuit ? 'FACTURA_A' : 'FACTURA_B'
         const condicionIva = tieneCuit ? 'RESPONSABLE_INSCRIPTO' : 'CONSUMIDOR_FINAL'
-        const email = emailMap.get(fact.conductor_dni) || ''
+        const email = emailMap.get(normalizeDni(fact.conductor_dni)) || ''
         
         const numeroCuil = fact.conductor_dni || ''
         const numeroDni = fact.conductor_cuit || ''
@@ -5466,11 +5560,13 @@ export function ReporteFacturacionTab() {
             continue
           }
           const tipoNombre = penalidad.tipos_cobro_descuento?.nombre || penalidad.detalle || 'Sin detalle'
+          const incDescVP = penalidad.incidencias?.descripcion
+          const detalleConcat = incDescVP ? `${tipoNombre} - ${incDescVP}` : tipoNombre
           const descripcion = categoria === 'P004'
-            ? `Ticket: ${tipoNombre}`
+            ? `Ticket: ${detalleConcat}`
             : categoria === 'P006'
-              ? `Exceso KM: ${tipoNombre}`
-              : `Penalidad: ${tipoNombre}`
+              ? `Exceso KM: ${detalleConcat}`
+              : `Penalidad: ${detalleConcat}`
           
           filasPreview.push(crearFilaPreview(
             numeroFactura++,
@@ -5586,9 +5682,9 @@ export function ReporteFacturacionTab() {
       // Nota: conductor_id puede ser NULL (importado desde histórico), usamos conductor_nombre como clave
       const { data: garantias } = await supabase
         .from('garantias_conductores')
-        .select('conductor_id, conductor_nombre, cuotas_pagadas, cuotas_totales, estado')
+        .select('conductor_id, conductor_nombre, cuotas_pagadas, cuotas_totales, estado, monto_pagado, monto_total')
 
-      const garantiasMap = new Map<string, { cuotas_pagadas: number; cuotas_totales: number; estado: string }>(
+      const garantiasMap = new Map<string, { cuotas_pagadas: number; cuotas_totales: number; estado: string; monto_pagado: number; monto_total: number }>(
         (garantias || []).map((g: any) => [g.conductor_nombre?.toLowerCase().trim() || '', g])
       )
 
@@ -5634,7 +5730,7 @@ export function ReporteFacturacionTab() {
         if (fc.subtotal_garantia > 0) {
           if (garantia) {
             // Si garantía completada, mostrar NA
-            if (garantia.estado === 'completada' || garantia.cuotas_pagadas >= garantia.cuotas_totales) {
+            if (garantia.estado === 'completada' || garantia.monto_pagado >= garantia.monto_total) {
               numeroCuota = 'NA'
             } else {
               // Conductor con registro de garantía: mostrar siguiente cuota a pagar
@@ -5911,16 +6007,18 @@ export function ReporteFacturacionTab() {
             const conductorNombreKey = row.conductor.toLowerCase().trim()
             const { data: garantiaExistente } = await (supabase
               .from('garantias_conductores') as any)
-              .select('id, cuotas_pagadas')
+              .select('id, cuotas_pagadas, monto_total, monto_pagado')
               .ilike('conductor_nombre', `%${conductorNombreKey.split(' ')[0]}%`)
               .single()
 
             if (garantiaExistente) {
+              const nuevoMontoPagado = cuotasPagadas * row.cuotaGarantia
+              const montoTotal = garantiaExistente.monto_total || (cuotasTotales * row.cuotaGarantia)
               await (supabase.from('garantias_conductores') as any)
                 .update({
                   cuotas_pagadas: cuotasPagadas,
-                  monto_pagado: cuotasPagadas * row.cuotaGarantia,
-                  estado: cuotasPagadas >= cuotasTotales ? 'completada' : 'en_curso'
+                  monto_pagado: nuevoMontoPagado,
+                  estado: nuevoMontoPagado >= montoTotal ? 'completada' : 'en_curso'
                 })
                 .eq('id', garantiaExistente.id)
             }
@@ -6404,7 +6502,7 @@ export function ReporteFacturacionTab() {
         .select('numero_dni, email')
         .in('numero_dni', dnis)
       
-      const emailMap = new Map((conductoresData || []).map((c: { numero_dni: string; email: string | null }) => [c.numero_dni, c.email]))
+      const emailMap = new Map((conductoresData || []).map((c: { numero_dni: string; email: string | null }) => [normalizeDni(c.numero_dni), c.email]))
 
       // Cargar datos de Cabify desde cabify_historico
       const fechaInicio = format(semanaActual.inicio, 'yyyy-MM-dd')
@@ -6416,12 +6514,13 @@ export function ReporteFacturacionTab() {
         .gte('fecha_inicio', fechaInicio + 'T00:00:00')
         .lte('fecha_inicio', fechaFin + 'T23:59:59')
 
-      // Agrupar datos de Cabify por DNI (sumar si hay múltiples registros)
+      // Agrupar datos de Cabify por DNI normalizado (sumar si hay múltiples registros)
       const cabifyMap = new Map<string, { horas: number; ganancia: number; cobroApp: number; efectivo: number }>()
       ;(cabifyData || []).forEach((record: { dni: string; horas_conectadas: number; ganancia_total: number; cobro_app: number; cobro_efectivo: number }) => {
         if (record.dni) {
-          const existing = cabifyMap.get(record.dni) || { horas: 0, ganancia: 0, cobroApp: 0, efectivo: 0 }
-          cabifyMap.set(record.dni, {
+          const dniKey = normalizeDni(record.dni)
+          const existing = cabifyMap.get(dniKey) || { horas: 0, ganancia: 0, cobroApp: 0, efectivo: 0 }
+          cabifyMap.set(dniKey, {
             horas: existing.horas + (Number(record.horas_conectadas) || 0),
             ganancia: existing.ganancia + (Number(record.ganancia_total) || 0),
             cobroApp: existing.cobroApp + (Number(record.cobro_app) || 0),
@@ -6435,8 +6534,8 @@ export function ReporteFacturacionTab() {
 
       // Generar filas para el preview
       const previewRows: CabifyPreviewRow[] = dataToExport.map(f => {
-        const email = emailMap.get(f.conductor_dni || '') || ''
-        const cabifyInfo = cabifyMap.get(f.conductor_dni || '') || { horas: 0, ganancia: 0, cobroApp: 0, efectivo: 0 }
+        const email = emailMap.get(normalizeDni(f.conductor_dni)) || ''
+        const cabifyInfo = cabifyMap.get(normalizeDni(f.conductor_dni)) || { horas: 0, ganancia: 0, cobroApp: 0, efectivo: 0 }
         
         // Importe Contrato = Solo alquiler (P001/P002/P013)
         const importeContrato = f.subtotal_alquiler || 0
@@ -6510,7 +6609,7 @@ export function ReporteFacturacionTab() {
         .select('numero_dni, email')
         .in('numero_dni', dnis)
       
-      const emailMap = new Map((conductoresData || []).map((c: { numero_dni: string; email: string | null }) => [c.numero_dni, c.email]))
+      const emailMap = new Map((conductoresData || []).map((c: { numero_dni: string; email: string | null }) => [normalizeDni(c.numero_dni), c.email]))
 
       // Cargar datos guardados de facturacion_cabify (si existen)
       const { data: savedCabifyData } = await (supabase
@@ -6533,12 +6632,13 @@ export function ReporteFacturacionTab() {
         .gte('fecha_inicio', periodo.fecha_inicio + 'T00:00:00')
         .lte('fecha_inicio', periodo.fecha_fin + 'T23:59:59')
 
-      // Agrupar datos de Cabify por DNI (sumar si hay múltiples registros)
+      // Agrupar datos de Cabify por DNI normalizado (sumar si hay múltiples registros)
       const cabifyMap = new Map<string, { horas: number; ganancia: number; cobroApp: number; efectivo: number }>()
       ;(cabifyData || []).forEach((record: { dni: string; horas_conectadas: number; ganancia_total: number; cobro_app: number; cobro_efectivo: number }) => {
         if (record.dni) {
-          const existing = cabifyMap.get(record.dni) || { horas: 0, ganancia: 0, cobroApp: 0, efectivo: 0 }
-          cabifyMap.set(record.dni, {
+          const dniKey = normalizeDni(record.dni)
+          const existing = cabifyMap.get(dniKey) || { horas: 0, ganancia: 0, cobroApp: 0, efectivo: 0 }
+          cabifyMap.set(dniKey, {
             horas: existing.horas + (Number(record.horas_conectadas) || 0),
             ganancia: existing.ganancia + (Number(record.ganancia_total) || 0),
             cobroApp: existing.cobroApp + (Number(record.cobro_app) || 0),
@@ -6552,8 +6652,8 @@ export function ReporteFacturacionTab() {
 
       // Generar filas para el preview
       const previewRows: CabifyPreviewRow[] = facturaciones.map(f => {
-        const email = emailMap.get(f.conductor_dni || '') || ''
-        const cabifyInfo = cabifyMap.get(f.conductor_dni || '') || { horas: 0, ganancia: 0, cobroApp: 0, efectivo: 0 }
+        const email = emailMap.get(normalizeDni(f.conductor_dni)) || ''
+        const cabifyInfo = cabifyMap.get(normalizeDni(f.conductor_dni)) || { horas: 0, ganancia: 0, cobroApp: 0, efectivo: 0 }
         const savedData = savedDataMap.get(f.conductor_id)
         
         // Si hay datos guardados, usarlos; sino usar los calculados
@@ -6863,16 +6963,28 @@ export function ReporteFacturacionTab() {
       ),
       cell: ({ row }) => (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-          <strong
-            style={{ fontSize: '11px', textTransform: 'uppercase', cursor: 'pointer', color: 'var(--color-primary)' }}
-            onClick={() => cargarHistorialAsignaciones(
-              row.original.conductor_id,
-              row.original.conductor_nombre,
-              row.original.conductor_dni || ''
+          <div style={{ display: 'flex', alignItems: 'center' }}>
+            <strong
+              style={{ fontSize: '11px', textTransform: 'uppercase', cursor: 'pointer', color: 'var(--color-primary)' }}
+              onClick={() => cargarHistorialAsignaciones(
+                row.original.conductor_id,
+                row.original.conductor_nombre,
+                row.original.conductor_dni || ''
+              )}
+            >
+              {row.original.conductor_nombre}
+            </strong>
+            {row.original.dni_discrepancy && (
+              <DiscrepancyBadge
+                details={[
+                  { source: 'Conductores', rawValue: row.original.dni_discrepancy.conductorRaw },
+                  { source: 'Cabify', rawValue: row.original.dni_discrepancy.cabifyRaw },
+                ]}
+                normalizedValue={row.original.conductor_dni || ''}
+                size={11}
+              />
             )}
-          >
-            {row.original.conductor_nombre}
-          </strong>
+          </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
             <span style={{ fontSize: '11px', color: 'var(--text-tertiary)' }}>
               {row.original.vehiculo_patente || '-'}
@@ -6891,7 +7003,7 @@ export function ReporteFacturacionTab() {
               else if (diurno > 0 && nocturno > 0) label = 'D+N'
               return <span className="dt-badge dt-badge-solid-gray" style={{ fontSize: '9px', padding: '1px 5px' }}>{label}</span>
             })()}
-            {['AG558DZ', 'AG304XD'].includes((row.original.vehiculo_patente || '').replace(/\s/g, '').toUpperCase()) && (
+            {['AG558DZ', 'AG304XD'].includes(normalizePatente(row.original.vehiculo_patente)) && (
               <span className="dt-badge dt-badge-orange" style={{ fontSize: '9px', padding: '1px 5px' }}>Sin GNC</span>
             )}
           </div>
@@ -6905,21 +7017,45 @@ export function ReporteFacturacionTab() {
       accessorFn: (row) => row.turnos_cobrados,
       header: 'Días',
       enableSorting: true,
-      size: 45,
+      size: 55,
       cell: ({ row }) => {
         const cobrados = row.original.turnos_cobrados ?? 0
+        const alerta = row.original.alerta_prorrateo_ingreso
         return (
-          <span
-            style={{ fontSize: '11px', fontWeight: 500, color: 'var(--color-primary)', cursor: 'pointer', textDecoration: 'underline' }}
-            onClick={() => cargarDesgloseDias(
-              row.original.conductor_id,
-              row.original.conductor_nombre,
-              row.original.conductor_dni || '',
-              cobrados
+          <div style={{ display: 'flex', alignItems: 'center', gap: '3px' }}>
+            <span
+              style={{ fontSize: '11px', fontWeight: 500, color: 'var(--color-primary)', cursor: 'pointer', textDecoration: 'underline' }}
+              onClick={() => cargarDesgloseDias(
+                row.original.conductor_id,
+                row.original.conductor_nombre,
+                row.original.conductor_dni || '',
+                cobrados
+              )}
+            >
+              {cobrados}
+            </span>
+            {alerta && (
+              <span
+                title={`Ingreso diurno ${alerta.fecha_entrega} a las ${alerta.hora_entrega} — Requiere incidencia a favor (${alerta.descuento_turnos === 0.5 ? 'medio turno' : '1 turno completo'})`}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  width: '14px',
+                  height: '14px',
+                  borderRadius: '50%',
+                  background: 'var(--color-warning)',
+                  color: '#fff',
+                  fontSize: '9px',
+                  fontWeight: 700,
+                  cursor: 'help',
+                  flexShrink: 0,
+                }}
+              >
+                !
+              </span>
             )}
-          >
-            {cobrados}
-          </span>
+          </div>
         )
       }
     },
@@ -7721,9 +7857,24 @@ export function ReporteFacturacionTab() {
               <Unlock size={14} />
               Reabrir Período
             </button>
-          )}
+           )}
+          {/* Botón Discrepancias - siempre visible */}
+          <button
+            className="fact-btn-primary"
+            onClick={() => setShowDiscrepancyModal(true)}
+            title="Ver discrepancias de formato entre fuentes de datos"
+            style={{ background: 'var(--color-warning)', borderColor: 'var(--color-warning)' }}
+          >
+            <AlertTriangle size={14} />
+            Discrepancias
+          </button>
         </div>
       </div>
+
+      {/* Modal de Discrepancias */}
+      {showDiscrepancyModal && (
+        <DiscrepancyReportModal onClose={() => setShowDiscrepancyModal(false)} />
+      )}
 
       {/* Estado del período */}
       {periodo && (

@@ -22,7 +22,7 @@ interface ActionsMenuProps {
   maxVisible?: number // Cuantos botones mostrar antes de agrupar (default: 2)
 }
 
-export function ActionsMenu({ actions, maxVisible = 99 }: ActionsMenuProps) {
+export function ActionsMenu({ actions, maxVisible = 3 }: ActionsMenuProps) {
   const [isOpen, setIsOpen] = useState(false)
   const [position, setPosition] = useState({ top: 0, left: 0 })
   const buttonRef = useRef<HTMLButtonElement>(null)

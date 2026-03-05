@@ -2199,6 +2199,7 @@ export function AsignacionesModule() {
       accessorFn: (row) => row.vehiculos?.patente || '',
       id: 'vehiculo',
       header: 'Vehículo',
+      size: 120,
       cell: ({ row }) => (
         <div className="asig-vehiculo-cell">
           <span className="asig-vehiculo-patente">{row.original.vehiculos?.patente || 'N/A'}</span>
@@ -2211,6 +2212,7 @@ export function AsignacionesModule() {
     {
       accessorKey: 'horario',
       header: 'Modalidad',
+      size: 90,
       cell: ({ row }) => {
         if (row.original.esDevolucion) {
           return <span className="dt-badge" style={{ background: '#F3F4F6', color: '#4B5563' }}>DEVOLUCIÓN</span>
@@ -2225,6 +2227,7 @@ export function AsignacionesModule() {
     {
       id: 'motivo',
       header: 'Motivo',
+      size: 120,
       accessorFn: (row) => {
         const labels: Record<string, string> = {
           entrega_auto: 'Entrega de auto',
@@ -2264,6 +2267,7 @@ export function AsignacionesModule() {
     {
       id: 'asignados',
       header: 'Asignados',
+      meta: { expand: true },
       accessorFn: (row) => {
         if (row.esDevolucion) return row.conductorCargo?.nombre || ''
         if (row.horario === 'CARGO' || !row.horario) {
@@ -2327,6 +2331,7 @@ export function AsignacionesModule() {
     {
       id: 'cita_programada',
       header: 'Cita Programada',
+      size: 110,
       accessorFn: (row) => {
         if (!row.fecha_programada) return '-'
         const fecha = new Date(row.fecha_programada)
@@ -2356,6 +2361,7 @@ export function AsignacionesModule() {
     {
       id: 'entrega_real',
       header: 'Entrega Real',
+      size: 110,
       accessorFn: (row) => {
         if (!row.fecha_inicio) return '-'
         const fecha = new Date(row.fecha_inicio)
@@ -2380,6 +2386,7 @@ export function AsignacionesModule() {
     {
       id: 'tipo_documento',
       header: 'Documento',
+      size: 100,
       accessorFn: (row) => {
         const conductores = row.asignaciones_conductores || []
         const documentos = [...new Set(conductores.map((c: any) => c.documento).filter(Boolean))]
@@ -2415,6 +2422,7 @@ export function AsignacionesModule() {
     {
       accessorKey: 'fecha_fin',
       header: 'Fecha Fin',
+      size: 100,
       cell: ({ row }) => (
         <span>
           {row.original.fecha_fin
@@ -2426,6 +2434,7 @@ export function AsignacionesModule() {
     {
       accessorKey: 'estado',
       header: 'Estado',
+      size: 110,
       cell: ({ row }) => {
         if (row.original.esDevolucion) {
           return <span className="dt-badge" style={{ background: '#FEF3C7', color: '#92400E' }}>Pend. Devolución</span>
@@ -2440,6 +2449,7 @@ export function AsignacionesModule() {
     {
       id: 'acciones',
       header: 'Acciones',
+      size: 80,
       enableSorting: false,
       cell: ({ row }) => {
         // Acciones especiales para devoluciones

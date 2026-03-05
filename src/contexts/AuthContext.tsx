@@ -1,5 +1,5 @@
 // src/contexts/AuthContext.tsx
-import { createContext, useContext, useEffect, useState, useRef } from 'react'
+import { createContext, useContext, useEffect, useState, useRef, useCallback, useMemo } from 'react'
 import type { User, Session } from '@supabase/supabase-js'
 import { supabase } from '../lib/supabase'
 import type { UserWithRole } from '../types/database.types'
@@ -135,10 +135,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       const { data, error } = await supabase
         .from('user_profiles')
-        .select(`
-          *,
-          roles (*)
-        `)
+        .select('*, roles(*)')
         .eq('id', userId)
         .single()
 
@@ -152,37 +149,37 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }
 
-  const signIn = async (email: string, password: string) => {
+  const signIn = useCallback(async (email: string, password: string) => {
     const { error } = await supabase.auth.signInWithPassword({
       email,
       password,
     })
     return { error }
-  }
+  }, [])
 
-  const signInWithGoogle = async () => {
+  const signInWithGoogle = useCallback(async () => {
     await supabase.auth.signInWithOAuth({
       provider: 'google',
       options: {
         redirectTo: window.location.origin + '/estado-de-flota'
       }
     })
-  }
+  }, [])
 
-  const signOut = async () => {
+  const signOut = useCallback(async () => {
     intentionalSignOut = true
     await supabase.auth.signOut()
     setProfile(null)
     setMustChangePassword(false)
-  }
+  }, [])
 
-  const refreshProfile = async () => {
+  const refreshProfile = useCallback(async () => {
     if (user) {
       await loadProfile(user.id)
     }
-  }
+  }, [user])
 
-  const markPasswordChanged = async () => {
+  const markPasswordChanged = useCallback(async () => {
     try {
       const { error: rpcError } = await (supabase.rpc as any)('mark_password_changed')
 
@@ -199,9 +196,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     } catch (error) {
       throw error
     }
-  }
+  }, [user])
 
-  const value = {
+  const value = useMemo(() => ({
     user,
     profile,
     session,
@@ -212,7 +209,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     signOut,
     refreshProfile,
     markPasswordChanged,
-  }
+  }), [user, profile, session, loading, mustChangePassword, signIn, signInWithGoogle, signOut, refreshProfile, markPasswordChanged])
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
 }

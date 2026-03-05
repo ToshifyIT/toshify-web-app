@@ -133,20 +133,26 @@ export function SiniestroSeguimiento({ siniestro, onReload }: SiniestroSeguimien
 
   async function cargarDatosParaIncidencia() {
     try {
-      // Cargar tipos de cobro/descuento (tipos de incidencia)
-      const { data: tiposData } = await (supabase
-        .from('tipos_cobro_descuento' as any) as any)
-        .select('*')
-        .eq('is_active', true)
-        .order('orden')
-      setTiposCobroDescuento(tiposData || [])
+      // Cargar todos los catálogos en paralelo
+      const [
+        { data: tiposData },
+        { data: estadosData },
+        { data: vehData },
+        { data: condData },
+      ] = await Promise.all([
+        (supabase.from('tipos_cobro_descuento' as any) as any)
+          .select('*').eq('is_active', true).order('orden'),
+        (supabase.from('incidencias_estados' as any) as any)
+          .select('*').eq('is_active', true).order('orden'),
+        aplicarFiltroSede(supabase.from('vehiculos')
+          .select('id, patente, marca, modelo').is('deleted_at', null))
+          .order('patente'),
+        aplicarFiltroSede(supabase.from('conductores')
+          .select('id, nombres, apellidos'))
+          .order('apellidos'),
+      ])
 
-      // Cargar estados de incidencia
-      const { data: estadosData } = await (supabase
-        .from('incidencias_estados' as any) as any)
-        .select('*')
-        .eq('is_active', true)
-        .order('orden')
+      setTiposCobroDescuento(tiposData || [])
       setIncidenciasEstados(estadosData || [])
 
       // Pre-seleccionar estado "Pendiente" si existe
@@ -156,13 +162,6 @@ export function SiniestroSeguimiento({ siniestro, onReload }: SiniestroSeguimien
       if (estadoPendiente) {
         setIncidenciaForm(prev => ({ ...prev, estado_id: estadoPendiente.id }))
       }
-
-      // Cargar vehiculos
-      const { data: vehData } = await aplicarFiltroSede(supabase
-        .from('vehiculos')
-        .select('id, patente, marca, modelo')
-        .is('deleted_at', null))
-        .order('patente')
 
       let vehiculosList: VehiculoSimple[] = (vehData || []) as VehiculoSimple[]
       if (siniestro.vehiculo_id && !vehiculosList.find(v => v.id === siniestro.vehiculo_id)) {
@@ -174,12 +173,6 @@ export function SiniestroSeguimiento({ siniestro, onReload }: SiniestroSeguimien
         }, ...vehiculosList]
       }
       setVehiculos(vehiculosList)
-
-      // Cargar conductores
-      const { data: condData } = await aplicarFiltroSede(supabase
-        .from('conductores')
-        .select('id, nombres, apellidos'))
-        .order('apellidos')
 
       let conductoresFormatted: ConductorSimple[] = (condData || []).map((c: any) => ({
         id: c.id,

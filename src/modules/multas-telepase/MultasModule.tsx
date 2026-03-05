@@ -162,7 +162,7 @@ export default function MultasModule() {
     setLoading(true)
     try {
       const [multasRes, vehiculosRes] = await Promise.all([
-        aplicarFiltroSede(supabase.from('multas_historico').select('*')).order('fecha_infraccion', { ascending: false }),
+        aplicarFiltroSede(supabase.from('multas_historico').select('*')).order('fecha_infraccion', { ascending: false }).limit(5000),
         aplicarFiltroSede(supabase.from('vehiculos').select('id, patente').is('deleted_at', null))
       ])
 

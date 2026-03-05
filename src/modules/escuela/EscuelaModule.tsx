@@ -12,6 +12,7 @@ import { format, addHours, previousSunday, subWeeks, nextSunday, addWeeks, start
 import { DataTable } from '../../components/ui/DataTable';
 import { type ColumnDef } from '@tanstack/react-table';
 import { useSede } from '../../contexts/SedeContext';
+import { normalizeDni } from '../../utils/normalizeDocuments';
 import { DateFilterPill } from './DateFilterPill';
 import './EscuelaModule.css';
 
@@ -98,39 +99,24 @@ export function EscuelaModule() {
                const endDateISO = endOfDay(targetDate).toISOString();
                const startDateISO = startOfDay(subWeeks(targetDate, 9)).toISOString(); // ~63 días atrás
 
-               const dniOriginal = d.numero_dni ? String(d.numero_dni).trim() : '';
-               const cleanDni = dniOriginal.replace(/\./g, '');
+                const dniNorm = normalizeDni(d.numero_dni);
 
-               let metrics = null;
+                let metrics = null;
 
-               // 1. Búsqueda optimizada por DNI (Rango completo)
-               if (dniOriginal) {
-                   let { data: dataDni } = await supabase
-                       .from('cabify_historico')
-                       .select('ganancia_total, horas_conectadas, tasa_ocupacion, tasa_aceptacion, fecha_inicio')
-                       .eq('dni', dniOriginal)
-                       .gte('fecha_inicio', startDateISO)
-                       .lte('fecha_inicio', endDateISO)
-                       .order('fecha_inicio', { ascending: false }) // El más reciente primero
-                       .limit(1)
-                       .maybeSingle();
+                // Búsqueda por DNI normalizado (sin puntos, sin ceros iniciales)
+                if (dniNorm) {
+                    const { data: dataDni } = await supabase
+                        .from('cabify_historico')
+                        .select('ganancia_total, horas_conectadas, tasa_ocupacion, tasa_aceptacion, fecha_inicio')
+                        .eq('dni', dniNorm)
+                        .gte('fecha_inicio', startDateISO)
+                        .lte('fecha_inicio', endDateISO)
+                        .order('fecha_inicio', { ascending: false })
+                        .limit(1)
+                        .maybeSingle();
 
-                   // 1b. Retry con DNI limpio
-                   if (!dataDni && cleanDni && cleanDni !== dniOriginal) {
-                        const { data: dataDniClean } = await supabase
-                           .from('cabify_historico')
-                           .select('ganancia_total, horas_conectadas, tasa_ocupacion, tasa_aceptacion, fecha_inicio')
-                           .eq('dni', cleanDni)
-                           .gte('fecha_inicio', startDateISO)
-                           .lte('fecha_inicio', endDateISO)
-                           .order('fecha_inicio', { ascending: false })
-                           .limit(1)
-                           .maybeSingle();
-                        
-                        if (dataDniClean) dataDni = dataDniClean;
-                   }
-                   metrics = dataDni;
-               }
+                    metrics = dataDni;
+                }
 
                if (!metrics) {
                    // 2. Fallback búsqueda por Nombre (Rango completo)

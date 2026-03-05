@@ -119,62 +119,31 @@ export function CobrosFraccionadosTab({ periodoActual }: CobrosFraccionadosTabPr
   const cargarCobrosFraccionados = async () => {
     setLoading(true)
     try {
-      // 1. Obtener penalidades fraccionadas con sus cuotas
-      const { data: penalidades, error: penError } = await aplicarFiltroSede(supabase
-        .from('penalidades')
-        .select(`
-          id,
-          monto,
-          fraccionado,
-          cantidad_cuotas,
-          conductor_id,
-          conductor_nombre,
-          vehiculo_patente,
-          fecha,
-          observaciones,
+      // Cargar penalidades, cuotas, cobros fraccionados y pagos en paralelo
+      const [
+        { data: penalidades, error: penError },
+        { data: cuotas, error: cuotasError },
+        { data: cobrosSaldos, error: saldosError },
+        { data: pagos },
+      ] = await Promise.all([
+        aplicarFiltroSede(supabase.from('penalidades').select(`
+          id, monto, fraccionado, cantidad_cuotas, conductor_id, conductor_nombre,
+          vehiculo_patente, fecha, observaciones, conductor:conductores(id, nombres, apellidos)
+        `)).eq('fraccionado', true).order('fecha', { ascending: false }),
+        supabase.from('penalidades_cuotas').select('*').order('numero_cuota', { ascending: true }),
+        aplicarFiltroSede(supabase.from('cobros_fraccionados').select(`
+          id, conductor_id, monto_total, monto_cuota, numero_cuota, semana, anio,
+          descripcion, aplicado, fecha_aplicacion, total_cuotas, created_at,
           conductor:conductores(id, nombres, apellidos)
-        `))
-        .eq('fraccionado', true)
-        .order('fecha', { ascending: false })
+        `)).order('created_at', { ascending: false }),
+        aplicarFiltroSede((supabase.from('pagos_conductores') as any).select('*'))
+          .in('tipo_cobro', ['cobro_fraccionado', 'penalidad_cuota'])
+          .order('fecha_pago', { ascending: false }),
+      ])
 
       if (penError) throw penError
-
-      // Obtener todas las cuotas de penalidades
-      const { data: cuotas, error: cuotasError } = await supabase
-        .from('penalidades_cuotas')
-        .select('*')
-        .order('numero_cuota', { ascending: true })
-
       if (cuotasError) throw cuotasError
-
-      // 2. Obtener cobros fraccionados de saldos iniciales
-      const { data: cobrosSaldos, error: saldosError } = await aplicarFiltroSede(supabase
-        .from('cobros_fraccionados')
-        .select(`
-          id,
-          conductor_id,
-          monto_total,
-          monto_cuota,
-          numero_cuota,
-          semana,
-          anio,
-          descripcion,
-          aplicado,
-          fecha_aplicacion,
-          total_cuotas,
-          created_at,
-          conductor:conductores(id, nombres, apellidos)
-        `))
-        .order('created_at', { ascending: false })
-
       if (saldosError) throw saldosError
-
-      // 3. Cargar pagos registrados
-      const { data: pagos } = await aplicarFiltroSede((supabase
-        .from('pagos_conductores') as any)
-        .select('*'))
-        .in('tipo_cobro', ['cobro_fraccionado', 'penalidad_cuota'])
-        .order('fecha_pago', { ascending: false })
 
       const pagosData = (pagos || []) as PagoConductorRow[]
       setAllPagos(pagosData)

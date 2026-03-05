@@ -35,6 +35,7 @@ import type {
   SiniestroNomina
 } from '../../types/nominas.types'
 import { useSede } from '../../contexts/SedeContext'
+import { normalizeDni } from '../../utils/normalizeDocuments'
 import { format, startOfWeek, endOfWeek, addWeeks, subWeeks, getWeek, getYear, eachDayOfInterval, parseISO } from 'date-fns'
 import { es } from 'date-fns/locale'
 
@@ -270,9 +271,10 @@ export function ReporteNominasTab() {
       })
       const cabifyPorDNI = new Map<string, CabifyDB[]>()
       ;(cabifyData || []).forEach(c => {
-        const arr = cabifyPorDNI.get(c.dni) || []
+        const dniKey = normalizeDni(c.dni)
+        const arr = cabifyPorDNI.get(dniKey) || []
         arr.push(c)
-        cabifyPorDNI.set(c.dni, arr)
+        cabifyPorDNI.set(dniKey, arr)
       })
       // ─────────────────────────────────────────────────────────────────────────────
 
@@ -301,7 +303,7 @@ export function ReporteNominasTab() {
         }, 0)
 
         // Datos de Cabify
-        const cabConductor = cabifyPorDNI.get(conductor.numero_dni) || []
+        const cabConductor = cabifyPorDNI.get(normalizeDni(conductor.numero_dni)) || []
         const efectivoCabify = cabConductor.reduce((sum, c) => sum + (parseFloat(String(c.cobro_efectivo)) || 0), 0)
         const peajesCabify = cabConductor.reduce((sum, c) => sum + (parseFloat(String(c.peajes)) || 0), 0)
 

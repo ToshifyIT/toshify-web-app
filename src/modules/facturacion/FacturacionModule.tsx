@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { lazy, Suspense, useState } from 'react'
 import {
   FileText,
   // Calendar, // Oculto - Períodos movido al tab Reporte
@@ -13,17 +13,21 @@ import {
   CreditCard
 } from 'lucide-react'
 import { usePermissions } from '../../contexts/PermissionsContext'
-import { ReporteFacturacionTab } from './tabs/ReporteFacturacionTab'
-// import { PeriodosTab } from './tabs/PeriodosTab' // Funcionalidad movida al tab Reporte
-import { GarantiasTab } from './tabs/GarantiasTab'
-import { SaldosAbonosTab } from './tabs/SaldosAbonosTab'
-import { TicketsFavorTab } from './tabs/TicketsFavorTab'
-// import { ConceptosFacturacionTab } from './tabs/ConceptosFacturacionTab' // Movido a menú Parámetros
-import { ExcesosKmTab } from './tabs/ExcesosKmTab'
-import { BloqueosConductoresTab } from './tabs/BloqueosConductoresTab'
-// import { LiquidacionConductoresTab } from './tabs/LiquidacionConductoresTab' // Sin tabla en BD
-// import { MultasTab } from './tabs/MultasTab' // Movido a modulo Multas/Telepase
-import { CobrosFraccionadosTab } from './tabs/CobrosFraccionadosTab'
+import { Spinner } from '../../components/ui/LoadingOverlay'
+
+// Lazy-load tabs — solo se carga el JS del tab activo
+const ReporteFacturacionTab = lazy(() => import('./tabs/ReporteFacturacionTab').then(m => ({ default: m.ReporteFacturacionTab })))
+// const PeriodosTab = lazy(() => import('./tabs/PeriodosTab').then(m => ({ default: m.PeriodosTab }))) // Funcionalidad movida al tab Reporte
+const GarantiasTab = lazy(() => import('./tabs/GarantiasTab').then(m => ({ default: m.GarantiasTab })))
+const SaldosAbonosTab = lazy(() => import('./tabs/SaldosAbonosTab').then(m => ({ default: m.SaldosAbonosTab })))
+const TicketsFavorTab = lazy(() => import('./tabs/TicketsFavorTab').then(m => ({ default: m.TicketsFavorTab })))
+// const ConceptosFacturacionTab = lazy(() => import('./tabs/ConceptosFacturacionTab').then(m => ({ default: m.ConceptosFacturacionTab }))) // Movido a menú Parámetros
+const ExcesosKmTab = lazy(() => import('./tabs/ExcesosKmTab').then(m => ({ default: m.ExcesosKmTab })))
+const BloqueosConductoresTab = lazy(() => import('./tabs/BloqueosConductoresTab').then(m => ({ default: m.BloqueosConductoresTab })))
+// const LiquidacionConductoresTab = lazy(() => import('./tabs/LiquidacionConductoresTab').then(m => ({ default: m.LiquidacionConductoresTab }))) // Sin tabla en BD
+// const MultasTab = lazy(() => import('./tabs/MultasTab').then(m => ({ default: m.MultasTab }))) // Movido a modulo Multas/Telepase
+const CobrosFraccionadosTab = lazy(() => import('./tabs/CobrosFraccionadosTab').then(m => ({ default: m.CobrosFraccionadosTab })))
+
 import './FacturacionModule.css'
 
 type TabType = 'reporte' | 'periodos' | 'garantias' | 'saldos' | 'tickets' | 'excesos' | 'bloqueos' | 'conceptos' | 'cobros_fraccionados'
@@ -70,17 +74,19 @@ export function FacturacionModule() {
 
        {/* Contenido */}
        <div className="fact-tab-content">
-         {activeTab === 'reporte' && <ReporteFacturacionTab />}
-         {/* {activeTab === 'periodos' && <PeriodosTab />} */}{/* Funcionalidad movida al tab Reporte */}
-         {activeTab === 'garantias' && <GarantiasTab />}
-         {activeTab === 'saldos' && <SaldosAbonosTab />}
-         {activeTab === 'tickets' && <TicketsFavorTab />}
-         {activeTab === 'excesos' && <ExcesosKmTab />}
-         {/* Multas movido a modulo Multas/Telepase */}
-         {activeTab === 'bloqueos' && <BloqueosConductoresTab />}
-         {/* Liquidacion - sin tabla en BD */}
-         {activeTab === 'cobros_fraccionados' && <CobrosFraccionadosTab />}
-         {/* {activeTab === 'conceptos' && <ConceptosFacturacionTab />} */}{/* Movido a menú Parámetros */}
+         <Suspense fallback={<Spinner size="lg" />}>
+           {activeTab === 'reporte' && <ReporteFacturacionTab />}
+           {/* {activeTab === 'periodos' && <PeriodosTab />} */}{/* Funcionalidad movida al tab Reporte */}
+           {activeTab === 'garantias' && <GarantiasTab />}
+           {activeTab === 'saldos' && <SaldosAbonosTab />}
+           {activeTab === 'tickets' && <TicketsFavorTab />}
+           {activeTab === 'excesos' && <ExcesosKmTab />}
+           {/* Multas movido a modulo Multas/Telepase */}
+           {activeTab === 'bloqueos' && <BloqueosConductoresTab />}
+           {/* Liquidacion - sin tabla en BD */}
+           {activeTab === 'cobros_fraccionados' && <CobrosFraccionadosTab />}
+           {/* {activeTab === 'conceptos' && <ConceptosFacturacionTab />} */}{/* Movido a menú Parámetros */}
+         </Suspense>
        </div>
     </div>
   )

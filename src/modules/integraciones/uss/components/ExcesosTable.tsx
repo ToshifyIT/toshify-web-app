@@ -9,6 +9,7 @@ import { DataTable } from '../../../../components/ui/DataTable/DataTable'
 import { ExcelColumnFilter, useExcelFilters } from '../../../../components/ui/DataTable/ExcelColumnFilter'
 import { Search, MapPin, Gauge, ChevronsLeft, ChevronLeft, ChevronRight, ChevronsRight } from 'lucide-react'
 import type { ExcesoVelocidad } from '../types/uss.types'
+import { normalizePatente } from '../../../../utils/normalizeDocuments'
 import {
   formatDateTime,
   formatDuration,
@@ -92,7 +93,7 @@ export function ExcesosTable({
       ),
       cell: ({ row }) => (
         <span style={{ fontWeight: 600, color: 'var(--color-primary)' }}>
-          {row.original.patente.replace(/\s/g, '')}
+          {normalizePatente(row.original.patente)}
         </span>
       ),
       enableSorting: false,

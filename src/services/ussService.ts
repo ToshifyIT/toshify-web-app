@@ -8,6 +8,7 @@
  */
 
 import { supabase } from '../lib/supabase'
+import { normalizePatente } from '../utils/normalizeDocuments'
 import type {
   ExcesoVelocidad,
   ExcesoStats,
@@ -198,7 +199,8 @@ export const ussService = {
       .from('uss_excesos_velocidad')
       .select('velocidad_maxima, exceso, duracion_segundos, patente, conductor_wialon')
       .gte('fecha_evento', `${startDate}T00:00:00`)
-      .lte('fecha_evento', `${endDate}T23:59:59`) as { data: Pick<USSExcesoRow, 'velocidad_maxima' | 'exceso' | 'duracion_segundos' | 'patente' | 'conductor_wialon'>[] | null; error: unknown }
+      .lte('fecha_evento', `${endDate}T23:59:59`)
+      .limit(5000) as { data: Pick<USSExcesoRow, 'velocidad_maxima' | 'exceso' | 'duracion_segundos' | 'patente' | 'conductor_wialon'>[] | null; error: unknown }
 
     if (error || !data) {
       return {
@@ -243,7 +245,8 @@ export const ussService = {
       .from('uss_excesos_velocidad')
       .select('patente, vehiculo_id, velocidad_maxima, exceso, duracion_segundos')
       .gte('fecha_evento', `${startDate}T00:00:00`)
-      .lte('fecha_evento', `${endDate}T23:59:59`) as { data: Pick<USSExcesoRow, 'patente' | 'vehiculo_id' | 'velocidad_maxima' | 'exceso' | 'duracion_segundos'>[] | null; error: unknown }
+      .lte('fecha_evento', `${endDate}T23:59:59`)
+      .limit(1000) as { data: Pick<USSExcesoRow, 'patente' | 'vehiculo_id' | 'velocidad_maxima' | 'exceso' | 'duracion_segundos'>[] | null; error: unknown }
 
     if (error || !data) {
       return []
@@ -259,7 +262,8 @@ export const ussService = {
     }>()
 
     for (const row of data) {
-      const existing = vehiculosMap.get(row.patente) || {
+      const patenteKey = normalizePatente(row.patente)
+      const existing = vehiculosMap.get(patenteKey) || {
         patente: row.patente,
         vehiculo_id: row.vehiculo_id,
         excesos: [],
@@ -269,7 +273,7 @@ export const ussService = {
       existing.excesos.push(row.exceso || 0)
       existing.velocidades.push(row.velocidad_maxima || 0)
       existing.duraciones.push(row.duracion_segundos || 0)
-      vehiculosMap.set(row.patente, existing)
+      vehiculosMap.set(patenteKey, existing)
     }
 
     // Convertir a ranking
@@ -300,7 +304,8 @@ export const ussService = {
       .from('uss_excesos_velocidad')
       .select('conductor_wialon, conductor_id, velocidad_maxima, patente')
       .gte('fecha_evento', `${startDate}T00:00:00`)
-      .lte('fecha_evento', `${endDate}T23:59:59`) as { data: Pick<USSExcesoRow, 'conductor_wialon' | 'conductor_id' | 'velocidad_maxima' | 'patente'>[] | null; error: unknown }
+      .lte('fecha_evento', `${endDate}T23:59:59`)
+      .limit(1000) as { data: Pick<USSExcesoRow, 'conductor_wialon' | 'conductor_id' | 'velocidad_maxima' | 'patente'>[] | null; error: unknown }
 
     if (error || !data) {
       return []

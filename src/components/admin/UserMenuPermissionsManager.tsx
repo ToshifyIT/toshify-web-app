@@ -118,30 +118,19 @@ export function UserMenuPermissionsManager() {
 
     setLoading(true)
     try {
-      // Cargar usuarios
-      const { data: usersData, error: usersError } = await supabase
-        .from('user_profiles')
-        .select('*, roles(*)')
-        .order('full_name')
+      // Cargar usuarios, menús y submenús en paralelo
+      const [
+        { data: usersData, error: usersError },
+        { data: menusData, error: menusError },
+        { data: submenusData, error: submenusError },
+      ] = await Promise.all([
+        supabase.from('user_profiles').select('*, roles(*)').order('full_name'),
+        supabase.from('menus').select('*').eq('is_active', true).order('order_index'),
+        supabase.from('submenus').select('*, menus(name)').eq('is_active', true).order('order_index'),
+      ])
 
       if (usersError) throw usersError
-
-      // Cargar menús
-      const { data: menusData, error: menusError } = await supabase
-        .from('menus')
-        .select('*')
-        .eq('is_active', true)
-        .order('order_index')
-
       if (menusError) throw menusError
-
-      // Cargar submenús
-      const { data: submenusData, error: submenusError } = await supabase
-        .from('submenus')
-        .select('*, menus(name)')
-        .eq('is_active', true)
-        .order('order_index')
-
       if (submenusError) throw submenusError
 
       // =====================================================

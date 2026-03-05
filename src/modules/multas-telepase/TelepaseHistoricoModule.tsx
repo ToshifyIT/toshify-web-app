@@ -151,6 +151,7 @@ export default function TelepaseHistoricoModule() {
         .gte('fecha', '2026-01-01'))
         .order('fecha', { ascending: false })
         .order('hora', { ascending: false })
+        .limit(5000)
 
       if (error) throw error
       

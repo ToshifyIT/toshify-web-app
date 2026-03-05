@@ -4,6 +4,7 @@ import { supabase } from '../../../lib/supabase'
 import { useSede } from '../../../contexts/SedeContext'
 import Swal from 'sweetalert2'
 import { showSuccess } from '../../../utils/toast'
+import { normalizePatente } from '../../../utils/normalizeDocuments'
 import {
   AlertTriangle,
   Car,
@@ -102,6 +103,7 @@ export function MultasTab() {
         .from('multas_historico') as any)
         .select('*'))
         .order('fecha_infraccion', { ascending: false })
+        .limit(5000)
 
       if (multasError) throw multasError
 
@@ -115,10 +117,10 @@ export function MultasTab() {
       setVehiculos(vehiculosList)
 
       // Mapear multas con vehiculo_id
-      const vehiculosMap = new Map(vehiculosList.map(v => [v.patente?.toUpperCase().replace(/\s+/g, ''), v.id]))
+      const vehiculosMap = new Map(vehiculosList.map(v => [normalizePatente(v.patente), v.id]))
 
       const multasMapeadas = (multasData || []).map((m: any) => {
-        const patenteNorm = m.patente?.toUpperCase().replace(/\s+/g, '') || ''
+        const patenteNorm = normalizePatente(m.patente)
         return {
           ...m,
           vehiculo_id: vehiculosMap.get(patenteNorm) || null

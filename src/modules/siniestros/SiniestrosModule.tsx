@@ -140,32 +140,30 @@ export function SiniestrosModule() {
   async function cargarDatos() {
     setLoading(true)
     try {
-      // Cargar catálogos en paralelo
-      // Primero obtener el ID del estado activo de conductores
-      const { data: estadosCond } = await supabase
-        .from('conductores_estados')
-        .select('id, codigo') as { data: { id: string; codigo: string }[] | null }
-      const estadoActivoId = estadosCond?.find(e => e.codigo.toLowerCase() === 'activo')?.id
-
+      // Cargar catálogos en paralelo (incluyendo estados de conductores)
       const [
         categoriasRes,
         estadosRes,
         segurosRes,
         vehiculosRes,
-        conductoresRes,
+        estadosCondRes,
         siniestrosRes,
         vehiculosEstadosRes
       ] = await Promise.all([
-        supabase.from('siniestros_categorias' as any).select('*').eq('is_active', true).order('orden'),
-        supabase.from('siniestros_estados' as any).select('*').eq('is_active', true).order('orden'),
-        supabase.from('seguros' as any).select('*').eq('is_active', true).order('nombre'),
+        supabase.from('siniestros_categorias' as any).select('id, codigo, nombre, descripcion, es_robo, orden').eq('is_active', true).order('orden'),
+        supabase.from('siniestros_estados' as any).select('id, codigo, nombre, color, orden').eq('is_active', true).order('orden'),
+        supabase.from('seguros' as any).select('id, nombre').eq('is_active', true).order('nombre'),
         aplicarFiltroSede(supabase.from('vehiculos').select('id, patente, marca, modelo')).order('patente'),
-        estadoActivoId
-          ? aplicarFiltroSede(supabase.from('conductores').select('id, nombres, apellidos').eq('estado_id', estadoActivoId)).order('apellidos')
-          : aplicarFiltroSede(supabase.from('conductores').select('id, nombres, apellidos')).order('apellidos'),
-        aplicarFiltroSede(supabase.from('v_siniestros_completos' as any).select('*')).order('fecha_siniestro', { ascending: false }),
+        supabase.from('conductores_estados').select('id, codigo') as unknown as Promise<{ data: { id: string; codigo: string }[] | null; error: any }>,
+        aplicarFiltroSede(supabase.from('v_siniestros_completos' as any).select('*')).order('fecha_siniestro', { ascending: false }).limit(2000),
         supabase.from('vehiculos_estados').select('id, codigo, descripcion').eq('activo', true).order('descripcion')
       ])
+
+      // Use estados result to query conductors with active state filter
+      const estadoActivoId = estadosCondRes.data?.find(e => e.codigo.toLowerCase() === 'activo')?.id
+      const conductoresRes = estadoActivoId
+        ? await aplicarFiltroSede(supabase.from('conductores').select('id, nombres, apellidos').eq('estado_id', estadoActivoId)).order('apellidos')
+        : await aplicarFiltroSede(supabase.from('conductores').select('id, nombres, apellidos')).order('apellidos')
 
       const categoriasData = categoriasRes.data as SiniestroCategoria[] | null
       const estadosData = estadosRes.data as SiniestroEstado[] | null

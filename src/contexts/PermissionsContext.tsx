@@ -170,7 +170,7 @@ export function PermissionsProvider({ children }: { children: React.ReactNode })
   // Fallback cuando el edge function no está disponible
   const loadPermissionsFallback = async () => {
     try {
-      // Cargar perfil del usuario
+      // Cargar perfil del usuario con su rol
       const { data: profileData, error: profileError } = await supabase
         .from('user_profiles')
         .select('*, roles(*)')
@@ -188,24 +188,28 @@ export function PermissionsProvider({ children }: { children: React.ReactNode })
       let tabsData: TabPermission[] = []
 
       if (isUserAdmin) {
-        // Si es admin, cargar TODOS los menús de la base de datos
-        const { data: allMenus } = await supabase
-          .from('menus')
-          .select('*')
-          .eq('is_active', true)
-          .order('order_index')
+        // Si es admin, cargar TODOS los menús de la base de datos en paralelo
+        const [menusResult, submenusResult, tabsResult] = await Promise.all([
+          supabase
+            .from('menus')
+            .select('id, name, label, route, order_index')
+            .eq('is_active', true)
+            .order('order_index'),
+          supabase
+            .from('submenus')
+            .select('id, name, label, route, order_index, menu_id, parent_id, level')
+            .eq('is_active', true)
+            .order('order_index'),
+          supabase
+            .from('tabs')
+            .select('id, name, label, order_index, menu_id, submenu_id')
+            .eq('is_active', true)
+            .order('order_index'),
+        ])
 
-        const { data: allSubmenus } = await supabase
-          .from('submenus')
-          .select('*, parent_id, level')
-          .eq('is_active', true)
-          .order('order_index')
-
-        const { data: allTabs } = await supabase
-          .from('tabs')
-          .select('*')
-          .eq('is_active', true)
-          .order('order_index')
+        const allMenus = menusResult.data
+        const allSubmenus = submenusResult.data
+        const allTabs = tabsResult.data
 
         // Convertir a formato de permisos con acceso completo
         menusData = (allMenus || []).map((menu: any) => ({
@@ -545,7 +549,7 @@ export function PermissionsProvider({ children }: { children: React.ReactNode })
     return globalPermissions.canDelete
   }, [globalPermissions.canDelete])
 
-  const value = {
+  const value = useMemo(() => ({
     userPermissions,
     loading,
     canViewMenu,
@@ -569,7 +573,31 @@ export function PermissionsProvider({ children }: { children: React.ReactNode })
     canCreate,
     canUpdate,
     canDelete,
-  }
+  }), [
+    userPermissions,
+    loading,
+    canViewMenu,
+    canCreateInMenu,
+    canEditInMenu,
+    canDeleteInMenu,
+    canViewSubmenu,
+    canCreateInSubmenu,
+    canEditInSubmenu,
+    canDeleteInSubmenu,
+    canViewTab,
+    canCreateInTab,
+    canEditInTab,
+    canDeleteInTab,
+    getVisibleTabs,
+    canAccess,
+    isAdmin,
+    isAdministrativo,
+    getVisibleMenus,
+    getVisibleSubmenus,
+    canCreate,
+    canUpdate,
+    canDelete,
+  ])
 
   return (
     <PermissionsContext.Provider value={value}>

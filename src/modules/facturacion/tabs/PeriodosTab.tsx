@@ -25,6 +25,7 @@ import { DataTable } from '../../../components/ui/DataTable'
 import { formatCurrency } from '../../../types/facturacion.types'
 import { format, startOfWeek, endOfWeek, subWeeks, getWeek, getYear, parseISO } from 'date-fns'
 import { es } from 'date-fns/locale'
+import { normalizeDni } from '../../../utils/normalizeDocuments'
 
 // Tipo para conductor procesado con sus días por modalidad
 interface ConductorProcesado {
@@ -328,15 +329,15 @@ export function PeriodosTab() {
         .select('id, nombres, apellidos, numero_dni, numero_cuit, estado_id, fecha_terminacion'))
         .in('numero_dni', todosLosDnis)
 
-      // Crear mapa de conductores por DNI
-      const conductoresMap = new Map((conductoresData || []).map((c: any) => [c.numero_dni, c]))
+      // Crear mapa de conductores por DNI normalizado
+      const conductoresMap = new Map((conductoresData || []).map((c: any) => [normalizeDni(c.numero_dni), c]))
 
       // 7. Procesar conductores - solo ACTIVOS en la BD, 7 días fijos
       const ESTADO_ACTIVO_ID_GEN = '57e9de5f-e6fc-4ff7-8d14-cf8e13e9dbe2'
       const conductoresProcesados: ConductorProcesado[] = []
 
       for (const [_conductorId, { conductor, modalidad, patente, horarioConductor }] of conductoresAsignados.entries()) {
-        const conductorData = conductoresMap.get(conductor.numero_dni)
+        const conductorData = conductoresMap.get(normalizeDni(conductor.numero_dni))
         if (!conductorData) continue
 
         // Incluir conductores activos + inactivos con fecha_terminacion dentro de la semana
@@ -500,12 +501,13 @@ export function PeriodosTab() {
         (todasCuotasPenIdsRes.data || []).map((pc: any) => pc.penalidad_id).filter(Boolean)
       )
 
-      // Mapear peajes por DNI
+      // Mapear peajes por DNI normalizado
       const peajesMap = new Map<string, number>()
       ;((cabifyRes.data || []) as any[]).forEach((record: any) => {
         if (record.dni && record.peajes) {
-          const actual = peajesMap.get(String(record.dni)) || 0
-          peajesMap.set(String(record.dni), actual + (parseFloat(String(record.peajes)) || 0))
+          const dniKey = normalizeDni(record.dni)
+          const actual = peajesMap.get(dniKey) || 0
+          peajesMap.set(dniKey, actual + (parseFloat(String(record.peajes)) || 0))
         }
       })
 
@@ -585,11 +587,12 @@ export function PeriodosTab() {
         // Obtener número de cuota de garantía y verificar si ya está completada
         const garantiaConductor = (garantias as any[]).find((g: any) => g.conductor_id === conductor.conductor_id)
         const garantiaCompletada = garantiaConductor?.estado === 'completada' || 
-          (garantiaConductor?.cuotas_pagadas >= garantiaConductor?.cuotas_totales)
+          (garantiaConductor?.monto_pagado >= garantiaConductor?.monto_total)
         
         // Si la garantía está completada, no cobrar más cuotas
-        // Garantía es valor fijo semanal (no proporcional a días trabajados)
-        const cuotaGarantiaProporcional = garantiaCompletada ? 0 : cuotaGarantia
+        // Si el pendiente es menor que la cuota normal, cobrar solo el restante
+        const pendienteGarantia = garantiaConductor ? (garantiaConductor.monto_total - garantiaConductor.monto_pagado) : cuotaGarantia
+        const cuotaGarantiaProporcional = garantiaCompletada ? 0 : Math.min(cuotaGarantia, pendienteGarantia)
         const cuotaActual = garantiaCompletada ? garantiaConductor?.cuotas_totales : (garantiaConductor?.cuotas_pagadas || 0) + 1
         const totalCuotas = garantiaConductor?.cuotas_totales || 16
 
@@ -618,7 +621,7 @@ export function PeriodosTab() {
         const totalExcesos = excesosConductor.reduce((sum: number, e: any) => sum + (e.monto_total || 0), 0)
 
         // Peajes del conductor desde Cabify (P005)
-        const totalPeajes = conductor.conductor_dni ? (peajesMap.get(String(conductor.conductor_dni)) || 0) : 0
+        const totalPeajes = conductor.conductor_dni ? (peajesMap.get(normalizeDni(conductor.conductor_dni)) || 0) : 0
 
         // Cobros fraccionados del conductor (P010)
         const cobrosConductor = (cobros as any[]).filter((c: any) => c.conductor_id === conductor.conductor_id)

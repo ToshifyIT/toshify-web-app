@@ -44,6 +44,7 @@ import './GuiasModule.css'
 import './GuiasToolbar.css'
 import iconNotas from './Iconos/notas.png'
 import { getEstadoConductorDisplay } from '../../utils/conductorUtils'
+import { normalizeDni } from '../../utils/normalizeDocuments'
 
 const getCurrentWeek = () => {
   return format(new Date(), "R-'W'II");
@@ -154,128 +155,206 @@ export function GuiasModule() {
     try {
       const emptyMetrics = { promGan: 0, horas: '0', porcOcup: '0%', acept: '-' };
 
-      const updatedData = await Promise.all(conductoresEscuela.map(async (d) => {
+      // --- BATCH OPTIMIZATION (replaces N+1 per-conductor queries) ---
+      // Before: 4-12 Supabase queries PER conductor = 80-240 total queries
+      // After: 1-2 batch queries total, results distributed in JavaScript
+
+      // Step 1: Compute per-conductor target dates and the global date range
+      let globalMinDate: Date | null = null;
+      let globalMaxDate: Date | null = null;
+
+      interface ConductorDateInfo {
+        conductorId: string;
+        prevDates: Date[];
+        postDates: Date[];
+      }
+      const conductorDateInfos: ConductorDateInfo[] = [];
+
+      for (const d of conductoresEscuela) {
+        if (!d.fecha_escuela || !d.numero_dni) continue;
+
+        const fechaEscuelaDate = addHours(new Date(d.fecha_escuela), 12);
+        const sundayPrev1 = previousSunday(fechaEscuelaDate);
+        const sundayPrev2 = subWeeks(sundayPrev1, 1);
+        const sundayPost1 = nextSunday(fechaEscuelaDate);
+        const sundayPost2 = addWeeks(sundayPost1, 1);
+
+        const allTargetDates = [sundayPrev1, sundayPrev2, sundayPost1, sundayPost2];
+
+        for (const targetDate of allTargetDates) {
+          const rangeStart = startOfDay(subWeeks(targetDate, 9)); // ~63 days back
+          const rangeEnd = endOfDay(targetDate);
+          if (!globalMinDate || rangeStart < globalMinDate) globalMinDate = rangeStart;
+          if (!globalMaxDate || rangeEnd > globalMaxDate) globalMaxDate = rangeEnd;
+        }
+
+        conductorDateInfos.push({
+          conductorId: d.id,
+          prevDates: [sundayPrev1, sundayPrev2],
+          postDates: [sundayPost1, sundayPost2],
+        });
+      }
+
+      // Step 2: Collect all DNIs (normalized)
+      const allDnisSet = new Set<string>();
+      for (const d of conductoresEscuela) {
+        if (!d.fecha_escuela || !d.numero_dni) continue;
+        const dniNorm = normalizeDni(d.numero_dni);
+        if (dniNorm) allDnisSet.add(dniNorm);
+      }
+      const allDnis = Array.from(allDnisSet);
+
+      // Step 3: ONE batch query by DNI for ALL conductors
+      type CabifyRow = { dni: string; nombre: string; apellido: string; ganancia_total: number; horas_conectadas: number; tasa_ocupacion: number; tasa_aceptacion: number; fecha_inicio: string };
+      let allCabifyRows: CabifyRow[] = [];
+
+      if (globalMinDate && globalMaxDate && allDnis.length > 0) {
+        const { data: batchData } = await supabase
+          .from('cabify_historico')
+          .select('dni, nombre, apellido, ganancia_total, horas_conectadas, tasa_ocupacion, tasa_aceptacion, fecha_inicio')
+          .in('dni', allDnis)
+          .gte('fecha_inicio', globalMinDate.toISOString())
+          .lte('fecha_inicio', globalMaxDate.toISOString());
+
+        if (batchData) allCabifyRows = batchData;
+      }
+
+      // Build lookup: normalizedDni -> rows sorted by fecha_inicio desc
+      const cabifyByDni = new Map<string, CabifyRow[]>();
+      for (const row of allCabifyRows) {
+        const key = normalizeDni(row.dni);
+        if (!key) continue;
+        const arr = cabifyByDni.get(key) || [];
+        arr.push(row);
+        cabifyByDni.set(key, arr);
+      }
+      for (const [, arr] of cabifyByDni) {
+        arr.sort((a, b) => new Date(b.fecha_inicio).getTime() - new Date(a.fecha_inicio).getTime());
+      }
+
+      // Step 4: Identify conductors not found by DNI for name-based fallback
+      const conductorsNeedingNameFallback: string[] = [];
+      for (const d of conductoresEscuela) {
+        if (!d.fecha_escuela || !d.numero_dni) continue;
+        const dniNorm = normalizeDni(d.numero_dni);
+        if (!cabifyByDni.has(dniNorm)) {
+          conductorsNeedingNameFallback.push(d.id);
+        }
+      }
+
+      // Fallback: ONE broad query for name matching (only if needed)
+      const cabifyByName = new Map<string, CabifyRow[]>();
+      if (conductorsNeedingNameFallback.length > 0 && globalMinDate && globalMaxDate) {
+        const { data: nameData } = await supabase
+          .from('cabify_historico')
+          .select('dni, nombre, apellido, ganancia_total, horas_conectadas, tasa_ocupacion, tasa_aceptacion, fecha_inicio')
+          .gte('fecha_inicio', globalMinDate.toISOString())
+          .lte('fecha_inicio', globalMaxDate.toISOString());
+
+        if (nameData) {
+          for (const row of nameData) {
+            const fullName = `${row.nombre || ''} ${row.apellido || ''}`.trim().toLowerCase();
+            if (!fullName) continue;
+            const arr = cabifyByName.get(fullName) || [];
+            arr.push(row);
+            cabifyByName.set(fullName, arr);
+          }
+          for (const [, arr] of cabifyByName) {
+            arr.sort((a, b) => new Date(b.fecha_inicio).getTime() - new Date(a.fecha_inicio).getTime());
+          }
+        }
+      }
+
+      // Step 5: Distribute results to each conductor in JavaScript
+      const findMetricForDate = (rows: CabifyRow[] | undefined, targetDate: Date) => {
+        if (!rows || rows.length === 0) return null;
+        const rangeEnd = endOfDay(targetDate).getTime();
+        const rangeStart = startOfDay(subWeeks(targetDate, 9)).getTime();
+        // rows are sorted desc, first match in range is the most recent
+        for (const row of rows) {
+          const t = new Date(row.fecha_inicio).getTime();
+          if (t >= rangeStart && t <= rangeEnd) return row;
+        }
+        return null;
+      };
+
+      const getMetricsFromRows = (rows: CabifyRow[] | undefined, datesToQuery: Date[]) => {
+        let totalGanancia = 0;
+        let totalHoras = 0;
+        let totalOcupacion = 0;
+        let totalAceptacion = 0;
+        let count = 0;
+
+        for (const targetDate of datesToQuery) {
+          const metrics = findMetricForDate(rows, targetDate);
+          if (metrics) {
+            totalGanancia += Number(metrics.ganancia_total || 0);
+            totalHoras += Number(metrics.horas_conectadas || 0);
+            totalOcupacion += Number(metrics.tasa_ocupacion || 0);
+            totalAceptacion += Number(metrics.tasa_aceptacion || 0);
+            count++;
+          }
+        }
+
+        return {
+          promGan: count > 0 ? totalGanancia / count : 0,
+          horas: count > 0 ? totalHoras / count : 0,
+          porcOcup: count > 0 ? totalOcupacion / count : 0,
+          acept: count > 0 ? totalAceptacion / count : 0,
+        };
+      };
+
+      const formatM = (m: { promGan: number; horas: number; porcOcup: number; acept: number }) => ({
+        promGan: m.promGan,
+        horas: m.horas.toFixed(1),
+        porcOcup: m.porcOcup.toFixed(0) + '%',
+        acept: m.acept.toFixed(0) + '%',
+      });
+
+      const updatedData = conductoresEscuela.map((d) => {
         const baseData = {
-            id: d.id,
-            nombre: `${d.nombres} ${d.apellidos}`,
-            fechaCap: d.fecha_escuela ? format(addHours(new Date(d.fecha_escuela), 12), 'dd/MM/yyyy') : '-',
-            semanas2: { ...emptyMetrics },
-            semanas4: { ...emptyMetrics }
+          id: d.id,
+          nombre: `${d.nombres} ${d.apellidos}`,
+          fechaCap: d.fecha_escuela ? format(addHours(new Date(d.fecha_escuela), 12), 'dd/MM/yyyy') : '-',
+          semanas2: { ...emptyMetrics },
+          semanas4: { ...emptyMetrics },
         };
 
         if (!d.fecha_escuela || !d.numero_dni) {
-             return {
-                 ...baseData,
-                 previo: { ...emptyMetrics },
-                 semanas2: { ...emptyMetrics }
-             };
+          return { ...baseData, previo: { ...emptyMetrics }, semanas2: { ...emptyMetrics } };
         }
 
-        // Función optimizada para buscar métricas (Rango de 60 días en una sola query)
-        const getMetricsOptimized = async (datesToQuery: Date[]) => {
-            let totalGanancia = 0;
-            let totalHoras = 0;
-            let totalOcupacion = 0;
-            let totalAceptacion = 0;
-            let count = 0;
+        const info = conductorDateInfos.find(ci => ci.conductorId === d.id);
+        if (!info) {
+          return { ...baseData, previo: { ...emptyMetrics }, semanas2: { ...emptyMetrics } };
+        }
 
-            for (const targetDate of datesToQuery) {
-                // Rango de búsqueda: desde 60 días antes hasta el final del día objetivo
-                // Esto reemplaza el bucle while día por día
-                const endDateISO = endOfDay(targetDate).toISOString();
-                const startDateISO = startOfDay(subWeeks(targetDate, 9)).toISOString(); // ~63 días atrás
+        // Resolve rows: try DNI first, then name fallback
+        const dniNorm = normalizeDni(d.numero_dni);
+        let conductorRows = cabifyByDni.get(dniNorm);
 
-                const dniOriginal = d.numero_dni ? String(d.numero_dni).trim() : '';
-                const cleanDni = dniOriginal.replace(/\./g, '');
-
-                let metrics = null;
-
-                // 1. Búsqueda optimizada por DNI (Rango completo)
-                let { data: dataDni } = await supabase
-                    .from('cabify_historico')
-                    .select('ganancia_total, horas_conectadas, tasa_ocupacion, tasa_aceptacion, fecha_inicio')
-                    .eq('dni', dniOriginal)
-                    .gte('fecha_inicio', startDateISO)
-                    .lte('fecha_inicio', endDateISO)
-                    .order('fecha_inicio', { ascending: false }) // El más reciente primero
-                    .limit(1)
-                    .maybeSingle();
-
-                // 1b. Retry con DNI limpio
-                if (!dataDni && cleanDni && cleanDni !== dniOriginal) {
-                     const { data: dataDniClean } = await supabase
-                        .from('cabify_historico')
-                        .select('ganancia_total, horas_conectadas, tasa_ocupacion, tasa_aceptacion, fecha_inicio')
-                        .eq('dni', cleanDni)
-                        .gte('fecha_inicio', startDateISO)
-                        .lte('fecha_inicio', endDateISO)
-                        .order('fecha_inicio', { ascending: false })
-                        .limit(1)
-                        .maybeSingle();
-                     
-                     if (dataDniClean) dataDni = dataDniClean;
-                }
-
-                if (dataDni) {
-                    metrics = dataDni;
-                } else {
-                    // 2. Fallback búsqueda por Nombre (Rango completo)
-                    const { data: dataName } = await supabase
-                        .from('cabify_historico')
-                        .select('ganancia_total, horas_conectadas, tasa_ocupacion, tasa_aceptacion, fecha_inicio')
-                        .ilike('nombre', `%${d.nombres}%`) 
-                        .ilike('apellido', `%${d.apellidos}%`)
-                        .gte('fecha_inicio', startDateISO)
-                        .lte('fecha_inicio', endDateISO)
-                        .order('fecha_inicio', { ascending: false })
-                        .limit(1)
-                        .maybeSingle();
-                    
-                    if (dataName) metrics = dataName;
-                }
-
-                if (metrics) {
-                    totalGanancia += Number(metrics.ganancia_total || 0);
-                    totalHoras += Number(metrics.horas_conectadas || 0);
-                    totalOcupacion += Number(metrics.tasa_ocupacion || 0);
-                    totalAceptacion += Number(metrics.tasa_aceptacion || 0);
-                    count++;
-                }
+        if (!conductorRows || conductorRows.length === 0) {
+          const nombres = (d.nombres || '').trim().toLowerCase();
+          const apellidos = (d.apellidos || '').trim().toLowerCase();
+          if (nombres && apellidos) {
+            for (const [key, rows] of cabifyByName) {
+              if (key.includes(nombres) && key.includes(apellidos)) {
+                conductorRows = rows;
+                break;
+              }
             }
+          }
+        }
 
-            return {
-                promGan: count > 0 ? totalGanancia / count : 0,
-                horas: count > 0 ? totalHoras / count : 0,
-                porcOcup: count > 0 ? totalOcupacion / count : 0,
-                acept: count > 0 ? totalAceptacion / count : 0
-            };
-        };
-
-        const fechaEscuelaDate = addHours(new Date(d.fecha_escuela), 12);
-        
-        // 1. PREVIO A CAPACITACIÓN
-        const sundayPrev1 = previousSunday(fechaEscuelaDate);
-        const sundayPrev2 = subWeeks(sundayPrev1, 1);
-        const metricsPrev = await getMetricsOptimized([sundayPrev1, sundayPrev2]);
-
-        // 2. 2 SEMANAS DESDE CAPACITACIÓN
-        const sundayPost1 = nextSunday(fechaEscuelaDate);
-        const sundayPost2 = addWeeks(sundayPost1, 1);
-        const metricsPost = await getMetricsOptimized([sundayPost1, sundayPost2]);
-
-        const formatM = (m: any) => ({
-            promGan: m.promGan,
-            horas: m.horas.toFixed(1),
-            porcOcup: m.porcOcup.toFixed(0) + '%',
-            acept: m.acept.toFixed(0) + '%'
-        });
+        const metricsPrev = getMetricsFromRows(conductorRows, info.prevDates);
+        const metricsPost = getMetricsFromRows(conductorRows, info.postDates);
 
         return {
-            ...baseData,
-            previo: formatM(metricsPrev),
-            semanas2: formatM(metricsPost)
+          ...baseData,
+          previo: formatM(metricsPrev),
+          semanas2: formatM(metricsPost),
         };
-      }));
+      });
 
       setPrecalculatedSchoolReport(updatedData);
       setIsSchoolReportCalculated(true);
@@ -486,7 +565,7 @@ export function GuiasModule() {
       // 1. Get history rows from guias_historial_semanal
       const { data: historyData, error: historyError } = await supabase
         .from('guias_historial_semanal')
-        .select('*')
+        .select('semana, app, efectivo, total, seguimiento, id_accion_imp, fecha_llamada, anotaciones_extra')
         .eq('id_conductor', driver.id)
         .order('semana', { ascending: false });
 
@@ -545,7 +624,7 @@ export function GuiasModule() {
 
   const loadAccionesImplementadas = async () => {
     try {
-      const { data, error } = await supabase.from('guias_acciones_implementadas').select('*').order('id', { ascending: true });
+      const { data, error } = await supabase.from('guias_acciones_implementadas').select('id, nombre').order('id', { ascending: true });
       if (error) throw error;
       if (data) setAccionesImplementadas(data);
     } catch {
@@ -557,7 +636,7 @@ export function GuiasModule() {
     try {
       const { data, error } = await supabase
         .from('guias_seguimiento')
-        .select('*')
+        .select('id, rango_nombre, sub_rango_nombre, desde, hasta, color')
         .order('desde', { ascending: true });
       if (error) throw error;
       if (data) setSeguimientoRules(data);
@@ -703,7 +782,7 @@ export function GuiasModule() {
                 const cobroApp = Number(d.cobro_app) || 0;
                 const cobroEfectivo = Number(d.cobro_efectivo) || 0;
                 if (d.dni) {
-                  const dni = d.dni.replace(/\./g, '').trim();
+                  const dni = normalizeDni(d.dni);
                   if (!dniMap.has(dni)) dniMap.set(dni, { cobroApp: 0, cobroEfectivo: 0 });
                   const entry = dniMap.get(dni);
                   entry.cobroApp += cobroApp;
@@ -1045,7 +1124,7 @@ export function GuiasModule() {
           let facturacionTotal = parseCustomCurrency(historial.total);
           let cabifyData = null;
 
-          const dni = baseConductor.numero_dni?.replace(/\./g, '').trim();
+          const dni = normalizeDni(baseConductor.numero_dni);
           const nombreCompleto = `${baseConductor.nombres || ''} ${baseConductor.apellidos || ''}`.trim().toLowerCase();
 
           // Solo buscamos datos frescos de Cabify si estamos en la semana actual
@@ -2661,7 +2740,7 @@ export function GuiasModule() {
         // 3a. Buscar datos del conductor
         const { data: driverData, error: driverError } = await supabase
           .from('conductores')
-          .select('*')
+          .select('id, nombres, apellidos, numero_dni')
           .eq('id', driverId)
           .single();
 
@@ -2673,7 +2752,7 @@ export function GuiasModule() {
         // Reutilizamos la lógica de filtro: id_conductor = driverId AND semana != currentWeek
         const { data: driverHistory, error: driverHistoryError } = await supabase
           .from('guias_historial_semanal')
-          .select('*')
+          .select('id, semana, id_conductor, app, efectivo, total')
           .eq('id_conductor', driverId)
           .neq('semana', currentWeek);
 
@@ -2707,15 +2786,14 @@ export function GuiasModule() {
 
           // 6. Filtro en cabify_historico por fecha_fin y conductor
           let cabifyRecord = null;
-          const dniOriginal = driverData?.numero_dni ? String(driverData.numero_dni).trim() : '';
-          const dniClean = dniOriginal.replace(/\./g, '');
+          const dniNorm = normalizeDni(driverData?.numero_dni);
 
           // Búsqueda por DNI
-          if (dniClean) {
+          if (dniNorm) {
             const { data: dataDni } = await supabase
               .from('cabify_historico')
               .select('ganancia_total, cobro_app, cobro_efectivo, fecha_fin')
-              .eq('dni', dniClean)
+              .eq('dni', dniNorm)
               .eq('fecha_fin', endDateUTC)
               .maybeSingle();
             

@@ -59,18 +59,16 @@ export function MenuHierarchyManager() {
     setLoading(true)
     setError(null)
     try {
-      const { data: menusData, error: menusError } = await supabase
-        .from('menus')
-        .select('*')
-        .order('order_index')
+      // Cargar menús y submenús en paralelo
+      const [
+        { data: menusData, error: menusError },
+        { data: submenusData, error: submenusError },
+      ] = await Promise.all([
+        supabase.from('menus').select('*').order('order_index'),
+        supabase.from('submenus').select('*').order('order_index'),
+      ])
 
       if (menusError) throw menusError
-
-      const { data: submenusData, error: submenusError } = await supabase
-        .from('submenus')
-        .select('*')
-        .order('order_index')
-
       if (submenusError) throw submenusError
 
       setMenus(menusData || [])

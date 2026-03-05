@@ -104,7 +104,7 @@ export function useDashboardStats() {
           ),
           aplicarFiltroSede(
             supabase.from('v_siniestros_completos' as any).select('fecha_siniestro, categoria_nombre')
-          ).order('fecha_siniestro', { ascending: false }),
+          ).order('fecha_siniestro', { ascending: false }).limit(2000),
           aplicarFiltroSede(
             supabase
               .from('garantias_conductores')

@@ -6,6 +6,7 @@ import { format, parseISO } from 'date-fns'
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts'
 import { supabase } from '../../lib/supabase'
 import { formatCurrency } from '../../types/facturacion.types'
+import { normalizeDni, normalizeCuit } from '../../utils/normalizeDocuments'
 import logoToshifyUrl from '../../assets/logo-toshify.png'
 import './PortalPage.css'
 
@@ -132,12 +133,13 @@ export function PortalPage() {
 
     try {
       // Normalizar: quitar guiones, puntos y espacios
-      const normalized = input.replace(/[-.\s]/g, '')
+      const normalizedDni = normalizeDni(input)
+      const normalizedCuit = normalizeCuit(input)
 
       const { data, error } = await supabase
         .from('conductores')
         .select('id, nombres, apellidos, numero_dni, numero_cuit')
-        .or(`numero_dni.eq.${normalized},numero_cuit.eq.${normalized},numero_cuit.eq.${input}`)
+        .or(`numero_dni.eq.${normalizedDni},numero_cuit.eq.${normalizedCuit},numero_cuit.eq.${input}`)
         .limit(1)
 
       if (error) throw error

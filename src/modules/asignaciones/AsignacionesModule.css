@@ -504,6 +504,8 @@ input[type="date"].asig-status-select {
 .asig-vehiculo-cell {
   display: flex;
   flex-direction: column;
+  min-width: 0;
+  overflow: hidden;
 }
 
 .asig-vehiculo-patente {
@@ -515,6 +517,9 @@ input[type="date"].asig-status-select {
 .asig-vehiculo-info {
   font-size: 11px;
   color: var(--text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /* Lista de conductores en celda */
@@ -557,11 +562,17 @@ input[type="date"].asig-status-select {
   display: flex;
   flex-direction: column;
   gap: 4px;
+  min-width: 0;
+  overflow: hidden;
 }
 
 .asig-conductor-compacto {
   font-size: 13px;
   color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 100%;
 }
 
 .asig-conductor-turno {
@@ -570,6 +581,10 @@ input[type="date"].asig-status-select {
   gap: 6px;
   font-size: 12px;
   color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
 }
 
 .asig-turno-label {

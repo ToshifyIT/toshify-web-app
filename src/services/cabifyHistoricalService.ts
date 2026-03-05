@@ -8,6 +8,7 @@
  */
 
 import { supabase } from '../lib/supabase'
+import { normalizeDni } from '../utils/normalizeDocuments'
 
 // =====================================================
 // TIPOS
@@ -246,10 +247,11 @@ class CabifyHistoricalService {
     // endDate ya tiene T02:59:59Z del día siguiente (23:59:59 Argentina del día anterior)
     const { data, error } = await supabase
       .from('cabify_historico')
-      .select('*')
+      .select('cabify_driver_id, cabify_company_id, nombre, apellido, email, dni, telefono_numero, telefono_codigo, licencia, vehiculo_id, vehiculo_marca, vehiculo_modelo, vehiculo_patente, vehiculo_completo, score, viajes_aceptados, viajes_perdidos, viajes_ofrecidos, viajes_finalizados, viajes_rechazados, tasa_aceptacion, horas_conectadas, tasa_ocupacion, cobro_efectivo, cobro_app, ganancia_total, peajes, permiso_efectivo, estado_conductor, fecha_inicio, fecha_guardado')
       .gte('fecha_inicio', startDate)
       .lte('fecha_inicio', endDate)
       .order('ganancia_total', { ascending: false })
+      .limit(5000)
 
     if (error) {
       return []
@@ -293,8 +295,9 @@ class CabifyHistoricalService {
     const driverMap = new Map<string, any>()
 
     for (const record of uniqueRecords) {
-      const dni = record.dni || record.cabify_driver_id
-      if (!dni) continue
+      const dniRaw = record.dni || record.cabify_driver_id
+      if (!dniRaw) continue
+      const dni = normalizeDni(dniRaw)
 
       const existing = driverMap.get(dni)
 
