@@ -89,6 +89,16 @@ function toArgDate(timestamp: string | null | undefined): string {
   if (!timestamp) return '-'
   return argDateFmt.format(new Date(timestamp))
 }
+// Helper: extraer hora (0-23) en timezone Argentina desde un timestamp
+const argHourFmt = new Intl.DateTimeFormat('en-US', { timeZone: ARG_TZ, hour: 'numeric', hour12: false })
+function getArgHour(timestamp: string): number {
+  return parseInt(argHourFmt.format(new Date(timestamp)))
+}
+// Helper: formatear hora HH:MM en timezone Argentina
+const argTimeFmt = new Intl.DateTimeFormat('es-AR', { timeZone: ARG_TZ, hour: '2-digit', minute: '2-digit', hour12: false })
+function toArgTime(timestamp: string): string {
+  return argTimeFmt.format(new Date(timestamp))
+}
 // Reformatea "YYYY-MM-DD" a "DD/MM/YYYY" sin pasar por new Date() (evita doble shift de timezone)
 function displayArgDate(d: string | null | undefined): string {
   if (!d || d === '-') return '-'
@@ -163,6 +173,13 @@ interface FacturacionConductor {
   fecha_baja_no_coincide?: boolean
   // Discrepancia de formato DNI entre conductores y cabify_historico
   dni_discrepancy?: { conductorRaw: string; cabifyRaw: string } | null
+  // Alerta: conductor diurno con entrega nueva en la semana requiere prorrateo (incidencia a favor)
+  alerta_prorrateo_ingreso?: {
+    tipo: 'medio_turno' | 'dia_completo'
+    hora_entrega: string
+    fecha_entrega: string
+    descuento_turnos: number
+  } | null
 }
 
 interface FacturacionDetalle {
@@ -1199,6 +1216,9 @@ export function ReporteFacturacionTab() {
       // Set de fechas ya contadas por conductor para deduplicar registros duplicados
       const diasContadosVP = new Map<string, Set<string>>()
       conductorIds.forEach((id: string) => diasContadosVP.set(id, new Set()))
+
+      // Alertas de prorrateo por ingreso: conductor diurno con entrega nueva en la semana
+      const alertasProrrateoVP = new Map<string, { tipo: 'medio_turno' | 'dia_completo'; hora: string; fecha: string; descuento: number }>()
       
       ;(asignacionesConductores || []).forEach((ac: any) => {
         const asignacion = ac.asignaciones
@@ -1273,6 +1293,24 @@ export function ReporteFacturacionTab() {
         }
         
         if (diasReales <= 0) return
+
+        // Detectar prorrateo de ingreso para conductores DIURNOS
+        // Solo aplica si la asignación es NUEVA en esta semana (acInicio >= inicio de semana)
+        if (modalidad === 'TURNO_DIURNO' && acInicio >= fechaInicioSemana && !alertasProrrateoVP.has(ac.conductor_id)) {
+          const rawTimestamp = ac.fecha_inicio || asignacion.fecha_inicio
+          if (rawTimestamp) {
+            const hora = getArgHour(rawTimestamp)
+            const horaStr = toArgTime(rawTimestamp)
+            const fechaStr = displayArgDate(toArgDate(rawTimestamp))
+            if (hora < 12) {
+              // Entrega en la mañana: cobrar medio turno (descuento 0.5)
+              alertasProrrateoVP.set(ac.conductor_id, { tipo: 'medio_turno', hora: horaStr, fecha: fechaStr, descuento: 0.5 })
+            } else {
+              // Entrega en la tarde: no cobrar ese día (descuento 1 turno completo)
+              alertasProrrateoVP.set(ac.conductor_id, { tipo: 'dia_completo', hora: horaStr, fecha: fechaStr, descuento: 1 })
+            }
+          }
+        }
         
         // Guardar asignación para cálculo de montos
         const asigs = asignacionesPorConductorVP.get(ac.conductor_id)
@@ -1789,6 +1827,17 @@ export function ReporteFacturacionTab() {
               const maxFinAsig = maxAsigFinVP.get(conductorId)
               if (!maxFinAsig) return false
               return ftStr !== maxFinAsig
+            })(),
+            // Alerta de prorrateo por ingreso diurno
+            alerta_prorrateo_ingreso: (() => {
+              const alerta = alertasProrrateoVP.get(conductorId)
+              if (!alerta) return null
+              return {
+                tipo: alerta.tipo,
+                hora_entrega: alerta.hora,
+                fecha_entrega: alerta.fecha,
+                descuento_turnos: alerta.descuento,
+              }
             })(),
           })
        }
@@ -6963,21 +7012,45 @@ export function ReporteFacturacionTab() {
       accessorFn: (row) => row.turnos_cobrados,
       header: 'Días',
       enableSorting: true,
-      size: 45,
+      size: 55,
       cell: ({ row }) => {
         const cobrados = row.original.turnos_cobrados ?? 0
+        const alerta = row.original.alerta_prorrateo_ingreso
         return (
-          <span
-            style={{ fontSize: '11px', fontWeight: 500, color: 'var(--color-primary)', cursor: 'pointer', textDecoration: 'underline' }}
-            onClick={() => cargarDesgloseDias(
-              row.original.conductor_id,
-              row.original.conductor_nombre,
-              row.original.conductor_dni || '',
-              cobrados
+          <div style={{ display: 'flex', alignItems: 'center', gap: '3px' }}>
+            <span
+              style={{ fontSize: '11px', fontWeight: 500, color: 'var(--color-primary)', cursor: 'pointer', textDecoration: 'underline' }}
+              onClick={() => cargarDesgloseDias(
+                row.original.conductor_id,
+                row.original.conductor_nombre,
+                row.original.conductor_dni || '',
+                cobrados
+              )}
+            >
+              {cobrados}
+            </span>
+            {alerta && (
+              <span
+                title={`Ingreso diurno ${alerta.fecha_entrega} a las ${alerta.hora_entrega} — Requiere incidencia a favor (${alerta.descuento_turnos === 0.5 ? 'medio turno' : '1 turno completo'})`}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  width: '14px',
+                  height: '14px',
+                  borderRadius: '50%',
+                  background: 'var(--color-warning)',
+                  color: '#fff',
+                  fontSize: '9px',
+                  fontWeight: 700,
+                  cursor: 'help',
+                  flexShrink: 0,
+                }}
+              >
+                !
+              </span>
             )}
-          >
-            {cobrados}
-          </span>
+          </div>
         )
       }
     },

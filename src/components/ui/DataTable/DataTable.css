@@ -420,6 +420,7 @@
   background: var(--bg-primary);
   z-index: 2;
   box-shadow: -4px 0 8px rgba(0, 0, 0, 0.06);
+  text-align: center;
 }
 
 .dt-table thead .dt-sticky-col {
@@ -477,7 +478,7 @@
 .dt-table th {
   background: var(--table-header-bg);
   padding: 10px 12px;
-  text-align: center;
+  text-align: left;
   font-size: 10px;
   font-weight: 700;
   color: var(--text-tertiary);
@@ -508,7 +509,6 @@
 .dt-header-content {
   display: flex;
   align-items: center;
-  justify-content: center;
   gap: 4px;
 }
 
@@ -528,17 +528,7 @@
   color: var(--text-primary);
   font-size: 13px;
   vertical-align: middle;
-  text-align: center;
-}
-
-.dt-table td:last-child {
-  text-align: center;
-}
-
-/* Center block/flex children inside cells (text-align only works for inline content) */
-.dt-table td > div {
-  margin-inline: auto;
-  width: fit-content;
+  text-align: left;
 }
 
 .dt-table tbody tr {
