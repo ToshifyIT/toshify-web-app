@@ -585,11 +585,12 @@ export function PeriodosTab() {
         // Obtener número de cuota de garantía y verificar si ya está completada
         const garantiaConductor = (garantias as any[]).find((g: any) => g.conductor_id === conductor.conductor_id)
         const garantiaCompletada = garantiaConductor?.estado === 'completada' || 
-          (garantiaConductor?.cuotas_pagadas >= garantiaConductor?.cuotas_totales)
+          (garantiaConductor?.monto_pagado >= garantiaConductor?.monto_total)
         
         // Si la garantía está completada, no cobrar más cuotas
-        // Garantía es valor fijo semanal (no proporcional a días trabajados)
-        const cuotaGarantiaProporcional = garantiaCompletada ? 0 : cuotaGarantia
+        // Si el pendiente es menor que la cuota normal, cobrar solo el restante
+        const pendienteGarantia = garantiaConductor ? (garantiaConductor.monto_total - garantiaConductor.monto_pagado) : cuotaGarantia
+        const cuotaGarantiaProporcional = garantiaCompletada ? 0 : Math.min(cuotaGarantia, pendienteGarantia)
         const cuotaActual = garantiaCompletada ? garantiaConductor?.cuotas_totales : (garantiaConductor?.cuotas_pagadas || 0) + 1
         const totalCuotas = garantiaConductor?.cuotas_totales || 16
 

@@ -457,7 +457,7 @@ export function GarantiasTab() {
 
     try {
       let nuevoEstado = garantia.estado
-      if (formValues.montoPagado >= formValues.montoTotal || formValues.cuotasPagadas >= formValues.cuotasTotales) {
+      if (formValues.montoPagado >= formValues.montoTotal) {
         nuevoEstado = 'completada'
       } else if (formValues.montoPagado > 0 || formValues.cuotasPagadas > 0) {
         nuevoEstado = 'en_curso'

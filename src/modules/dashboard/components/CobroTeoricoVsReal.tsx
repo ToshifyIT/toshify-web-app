@@ -362,7 +362,7 @@ export function CobroTeoricoVsReal() {
           if (!g) return true 
 
           // 2. Caso: Con registro -> Validar que NO esté completada/cancelada
-          const completada = g.estado === 'completada' || g.estado === 'cancelada' || (g.cuotas_pagadas >= g.cuotas_totales && g.cuotas_totales > 0)
+          const completada = g.estado === 'completada' || g.estado === 'cancelada' || (g.monto_pagado >= g.monto_total && g.monto_total > 0)
           if (completada) return false
 
           // 3. Caso: Activa -> Validar monto exacto

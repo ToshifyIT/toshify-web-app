@@ -481,11 +481,8 @@ export function ReporteFacturacionTab() {
       const semanaInicio = parseISO(fechaInicio)
       const semanaFin = parseISO(fechaFin)
 
-      // En Vista Previa de la semana actual: cortar en HOY (no contar días futuros)
-      const hoyDesglose = new Date()
-      hoyDesglose.setHours(23, 59, 59, 999)
-      const esVistaPreviewActual = modoVistaPrevia && hoyDesglose >= semanaInicio && hoyDesglose <= semanaFin
-      const limiteConteo = esVistaPreviewActual ? hoyDesglose : semanaFin
+      // Facturación cobra semana completa - usar fin de semana como límite siempre
+      const limiteConteo = semanaFin
 
       const [{ data: asignacionesCond }, { data: conductorDesglose }] = await Promise.all([
         (supabase
@@ -555,9 +552,11 @@ export function ReporteFacturacionTab() {
 
         const efectivoInicio = acInicio < semanaInicio ? semanaInicio : acInicio
         let efectivoFin = acFin > limiteConteo ? limiteConteo : acFin
-        // Solo aplicar fecha_terminacion como tope si la asignación NO tiene fecha_fin propia
+        // Solo aplicar fecha_terminacion como tope si:
+        // - La asignación NO tiene fecha_fin propia
+        // - La asignación empezó ANTES de la fecha_terminacion (no es re-contratación)
         const tieneFinPropioD = ac.fecha_fin || asignacion.fecha_fin
-        if (fechaTermDesglose && !tieneFinPropioD && efectivoFin > fechaTermDesglose) {
+        if (fechaTermDesglose && !tieneFinPropioD && efectivoFin > fechaTermDesglose && acInicio <= fechaTermDesglose) {
           efectivoFin = fechaTermDesglose
         }
         let diasContados = 0
@@ -575,18 +574,17 @@ export function ReporteFacturacionTab() {
       }
 
       // Generar los 7 días de la semana con su estado
-      // Días futuros (después de HOY en Vista Previa) se muestran pero NO como trabajados
+      // Facturación cobra semana completa - días futuros se asumen trabajados si tienen asignación
       const diasSemana: { fecha: string; diaSemana: string; horario: string; trabajado: boolean }[] = []
       const cursor = new Date(semanaInicio)
       while (cursor <= semanaFin) {
         const key = format(cursor, 'yyyy-MM-dd')
         const cubierto = diasCubiertos.get(key)
-        const esFuturo = esVistaPreviewActual && cursor > hoyDesglose
         diasSemana.push({
           fecha: format(cursor, 'dd/MM/yyyy'),
           diaSemana: diasNombres[cursor.getDay()],
-          horario: esFuturo ? '-' : (cubierto || '-'),
-          trabajado: esFuturo ? false : !!cubierto,
+          horario: cubierto || '-',
+          trabajado: !!cubierto,
         })
         cursor.setDate(cursor.getDate() + 1)
       }
@@ -1026,11 +1024,9 @@ export function ReporteFacturacionTab() {
 
     try {
       const fechaInicio = format(semanaActual.inicio, 'yyyy-MM-dd')
-      // Para Vista Previa: usar HOY como fecha fin si estamos en la semana actual
-      const hoy = new Date()
-      const esSemanaActual = hoy >= semanaActual.inicio && hoy <= semanaActual.fin
-      const fechaFinEfectiva = esSemanaActual ? hoy : semanaActual.fin
-      const fechaFin = format(fechaFinEfectiva, 'yyyy-MM-dd')
+      // Facturación siempre cobra la semana completa (lunes a domingo)
+      // Las deducciones se hacen vía incidencias/bajas, no por días transcurridos
+      const fechaFin = format(semanaActual.fin, 'yyyy-MM-dd')
       // Semana y año del período (para queries)
       const semanaDelPeriodo = getWeek(parseISO(fechaInicio), { weekStartsOn: 1 })
       const anioDelPeriodo = getYear(parseISO(fechaInicio))
@@ -1040,8 +1036,8 @@ export function ReporteFacturacionTab() {
       const conductoresControl: { numero_dni: string; estado: string; patente: string; modalidad: string; valor_alquiler: number | null }[] = []
       const dnisAgregadosVP = new Set<string>()
 
-      // 1a + 1b en paralelo (son independientes entre sí)
-      const [{ data: asignacionesSemanaVP }, { data: penalidadesPendientesVP }] = await Promise.all([
+      // 1a + 1b + 1c en paralelo (son independientes entre sí)
+      const [{ data: asignacionesSemanaVP }, { data: penalidadesPendientesVP }, { data: penalidadesAplicadasSemanaVP }] = await Promise.all([
         (supabase.from('asignaciones_conductores') as any)
           .select(`
             conductor_id, horario, fecha_inicio, fecha_fin, estado,
@@ -1055,6 +1051,12 @@ export function ReporteFacturacionTab() {
           .lte('fecha', format(semanaActual.fin, 'yyyy-MM-dd'))
           .eq('aplicado', false)
           .neq('rechazado', true),
+        // 1c: penalidades ya aplicadas a ESTA semana (para incluir conductores con cobros ya cerrados)
+        (supabase.from('penalidades') as any)
+          .select('conductor_id, conductores!inner(numero_dni, sede_id)')
+          .eq('semana_aplicacion', semanaDelPeriodo)
+          .eq('anio_aplicacion', anioDelPeriodo)
+          .eq('aplicado', true),
       ])
 
       // Procesar 1a: asignaciones
@@ -1093,16 +1095,21 @@ export function ReporteFacturacionTab() {
         }
       }
 
-      // Procesar 1b: penalidades pendientes
+      // Procesar 1b + 1c: penalidades pendientes + aplicadas a esta semana
       const dnisConPenalidadesVP = new Set<string>()
       {
-        for (const p of (penalidadesPendientesVP || []) as any[]) {
+        // Combinar pendientes + aplicadas a esta semana (sin duplicados)
+        const todasPenalidadesVP = [
+          ...(penalidadesPendientesVP || []),
+          ...(penalidadesAplicadasSemanaVP || []),
+        ]
+        for (const p of todasPenalidadesVP as any[]) {
           const cond = p.conductores
           if (!cond || !cond.numero_dni) continue
           if (sedeParaVP && cond.sede_id !== sedeParaVP) continue
+          dnisConPenalidadesVP.add(cond.numero_dni)
           if (dnisAgregadosVP.has(cond.numero_dni)) continue
           dnisAgregadosVP.add(cond.numero_dni)
-          dnisConPenalidadesVP.add(cond.numero_dni)
           conductoresControl.push({
             numero_dni: cond.numero_dni,
             estado: 'Activo',
@@ -1161,8 +1168,8 @@ export function ReporteFacturacionTab() {
 
       // Calcular días por modalidad/horario para cada conductor
       const fechaInicioSemana = semanaActual.inicio
-      // Para semana actual: usar HOY como fin (no contar días futuros)
-      const fechaFinSemana = esSemanaActual ? fechaFinEfectiva : semanaActual.fin
+      // Facturación siempre usa semana completa (deducciones vía incidencias)
+      const fechaFinSemana = semanaActual.fin
 
       // Map de conductor_id → fecha_terminacion (tope de días para conductores de baja)
       const fechaTermMapVP = new Map<string, Date>()
@@ -1218,10 +1225,12 @@ export function ReporteFacturacionTab() {
         const efectivoInicio = acInicio < fechaInicioSemana ? fechaInicioSemana : acInicio
         let efectivoFin = acFin > fechaFinSemana ? fechaFinSemana : acFin
 
-        // Solo aplicar fecha_terminacion como tope si la asignación NO tiene fecha_fin propia
+        // Solo aplicar fecha_terminacion como tope si:
+        // - La asignación NO tiene fecha_fin propia
+        // - La asignación empezó ANTES de la fecha_terminacion (no es re-contratación)
         const tieneFinPropioVP = ac.fecha_fin || asignacion.fecha_fin
         const fechaTermVP = fechaTermMapVP.get(ac.conductor_id)
-        if (fechaTermVP && !tieneFinPropioVP && efectivoFin > fechaTermVP) efectivoFin = fechaTermVP
+        if (fechaTermVP && !tieneFinPropioVP && efectivoFin > fechaTermVP && acInicio <= fechaTermVP) efectivoFin = fechaTermVP
         
         const prorrateo = prorrateoMap.get(ac.conductor_id)
         if (!prorrateo) return
@@ -1369,7 +1378,7 @@ export function ReporteFacturacionTab() {
           .select('conductor_id, saldo_actual')
           .in('conductor_id', conductorIds),
         (supabase.from('garantias_conductores') as any)
-          .select('conductor_id, conductor_nombre, estado, cuotas_pagadas, cuotas_totales, tipo_alquiler, monto_cuota_semanal')
+          .select('conductor_id, conductor_nombre, estado, cuotas_pagadas, cuotas_totales, tipo_alquiler, monto_cuota_semanal, monto_pagado, monto_total')
           .in('conductor_id', conductorIds),
         Promise.all([
           supabase.from('cabify_historico')
@@ -1404,6 +1413,8 @@ export function ReporteFacturacionTab() {
         cuotas_totales: number;
         tipo_alquiler: string;
         monto_cuota_semanal: number | null;
+        monto_pagado: number;
+        monto_total: number;
       }>((garantias || []).filter((g: any) => g.conductor_id).map((g: any) => [g.conductor_id, g]))
 
       // Crear mapa de cobro_app Cabify por DNI
@@ -1636,11 +1647,14 @@ export function ReporteFacturacionTab() {
           : FACTURACION_CONFIG.GARANTIA_CUOTAS_TURNO
 
         if (garantia) {
-          if (garantia.estado === 'completada' || garantia.cuotas_pagadas >= garantia.cuotas_totales) {
+          if (garantia.estado === 'completada' || garantia.monto_pagado >= garantia.monto_total) {
             subtotalGarantia = 0
             cuotaGarantiaNumero = 'NA'
           } else {
-            subtotalGarantia = garantia.monto_cuota_semanal || cuotaGarantiaSemanalVP
+            const cuotaNormal = garantia.monto_cuota_semanal || cuotaGarantiaSemanalVP
+            const pendiente = garantia.monto_total - garantia.monto_pagado
+            // Si el pendiente es menor que la cuota normal, cobrar solo el restante
+            subtotalGarantia = Math.min(cuotaNormal, pendiente)
             const cuotaActual = garantia.cuotas_pagadas + 1
             cuotaGarantiaNumero = `${cuotaActual} de ${garantia.cuotas_totales}`
           }
@@ -2112,10 +2126,12 @@ export function ReporteFacturacionTab() {
         const efectivoInicio = acInicio < fechaInicioSemanaRecalc ? fechaInicioSemanaRecalc : acInicio
         let efectivoFin = acFin > fechaFinSemanaRecalc ? fechaFinSemanaRecalc : acFin
 
-        // Solo aplicar fecha_terminacion como tope si la asignación NO tiene fecha_fin propia
+        // Solo aplicar fecha_terminacion como tope si:
+        // - La asignación NO tiene fecha_fin propia
+        // - La asignación empezó ANTES de la fecha_terminacion (no es re-contratación)
         const tieneFinPropioR = ac.fecha_fin || asignacion.fecha_fin
         const fechaTerm = fechaTerminacionMap.get(ac.conductor_id)
-        if (fechaTerm && !tieneFinPropioR && efectivoFin > fechaTerm) {
+        if (fechaTerm && !tieneFinPropioR && efectivoFin > fechaTerm && acInicio <= fechaTerm) {
           efectivoFin = fechaTerm
         }
         const prorrateo = prorrateoRecalcMap.get(ac.conductor_id)
@@ -2431,10 +2447,12 @@ export function ReporteFacturacionTab() {
         const factorProporcional = conductor.total_dias / 7
         const garantiaConductor = garantiasMapById.get(conductor.conductor_id)
         const garantiaCompletada = garantiaConductor?.estado === 'completada' || 
-          (garantiaConductor && garantiaConductor.cuotas_pagadas >= garantiaConductor.cuotas_totales)
+          (garantiaConductor && garantiaConductor.monto_pagado >= garantiaConductor.monto_total)
+        const cuotaNormalRecalc = garantiaConductor?.monto_cuota_semanal || cuotaGarantia
+        const pendienteRecalc = garantiaConductor ? (garantiaConductor.monto_total - garantiaConductor.monto_pagado) : cuotaNormalRecalc
         const cuotaGarantiaProporcional = conductor.total_dias === 0 || garantiaCompletada
           ? 0 
-          : (garantiaConductor?.monto_cuota_semanal || cuotaGarantia)
+          : Math.min(cuotaNormalRecalc, pendienteRecalc)
         const cuotaActual = garantiaCompletada ? 0 : (garantiaConductor?.cuotas_pagadas || 0) + 1
         const totalCuotas = garantiaConductor?.cuotas_totales || 16
 
@@ -5586,9 +5604,9 @@ export function ReporteFacturacionTab() {
       // Nota: conductor_id puede ser NULL (importado desde histórico), usamos conductor_nombre como clave
       const { data: garantias } = await supabase
         .from('garantias_conductores')
-        .select('conductor_id, conductor_nombre, cuotas_pagadas, cuotas_totales, estado')
+        .select('conductor_id, conductor_nombre, cuotas_pagadas, cuotas_totales, estado, monto_pagado, monto_total')
 
-      const garantiasMap = new Map<string, { cuotas_pagadas: number; cuotas_totales: number; estado: string }>(
+      const garantiasMap = new Map<string, { cuotas_pagadas: number; cuotas_totales: number; estado: string; monto_pagado: number; monto_total: number }>(
         (garantias || []).map((g: any) => [g.conductor_nombre?.toLowerCase().trim() || '', g])
       )
 
@@ -5634,7 +5652,7 @@ export function ReporteFacturacionTab() {
         if (fc.subtotal_garantia > 0) {
           if (garantia) {
             // Si garantía completada, mostrar NA
-            if (garantia.estado === 'completada' || garantia.cuotas_pagadas >= garantia.cuotas_totales) {
+            if (garantia.estado === 'completada' || garantia.monto_pagado >= garantia.monto_total) {
               numeroCuota = 'NA'
             } else {
               // Conductor con registro de garantía: mostrar siguiente cuota a pagar
@@ -5911,16 +5929,18 @@ export function ReporteFacturacionTab() {
             const conductorNombreKey = row.conductor.toLowerCase().trim()
             const { data: garantiaExistente } = await (supabase
               .from('garantias_conductores') as any)
-              .select('id, cuotas_pagadas')
+              .select('id, cuotas_pagadas, monto_total, monto_pagado')
               .ilike('conductor_nombre', `%${conductorNombreKey.split(' ')[0]}%`)
               .single()
 
             if (garantiaExistente) {
+              const nuevoMontoPagado = cuotasPagadas * row.cuotaGarantia
+              const montoTotal = garantiaExistente.monto_total || (cuotasTotales * row.cuotaGarantia)
               await (supabase.from('garantias_conductores') as any)
                 .update({
                   cuotas_pagadas: cuotasPagadas,
-                  monto_pagado: cuotasPagadas * row.cuotaGarantia,
-                  estado: cuotasPagadas >= cuotasTotales ? 'completada' : 'en_curso'
+                  monto_pagado: nuevoMontoPagado,
+                  estado: nuevoMontoPagado >= montoTotal ? 'completada' : 'en_curso'
                 })
                 .eq('id', garantiaExistente.id)
             }
