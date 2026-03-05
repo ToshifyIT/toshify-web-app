@@ -8,6 +8,7 @@
  */
 
 import { supabase } from '../lib/supabase'
+import { normalizeDni } from '../utils/normalizeDocuments'
 
 // =====================================================
 // TIPOS
@@ -294,8 +295,9 @@ class CabifyHistoricalService {
     const driverMap = new Map<string, any>()
 
     for (const record of uniqueRecords) {
-      const dni = record.dni || record.cabify_driver_id
-      if (!dni) continue
+      const dniRaw = record.dni || record.cabify_driver_id
+      if (!dniRaw) continue
+      const dni = normalizeDni(dniRaw)
 
       const existing = driverMap.get(dni)
 

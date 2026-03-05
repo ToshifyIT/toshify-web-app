@@ -4,6 +4,7 @@
  */
 
 import { supabase } from '../lib/supabase'
+import { normalizeDni } from '../utils/normalizeDocuments'
 
 export interface AsignacionActiva {
   dni: string
@@ -68,8 +69,8 @@ class AsignacionesService {
             for (const ac of record.asignaciones_conductores) {
               const conductor = ac.conductores
 
-              if (conductor && conductor.numero_dni && dnis.includes(conductor.numero_dni)) {
-                asignacionesMap.set(conductor.numero_dni, {
+              if (conductor && conductor.numero_dni && dnis.includes(normalizeDni(conductor.numero_dni))) {
+                asignacionesMap.set(normalizeDni(conductor.numero_dni), {
                   dni: conductor.numero_dni,
                   horario: record.horario as 'TURNO' | 'CARGO' | null,
                   estado: record.estado as 'activa' | 'programado' | null,
@@ -97,7 +98,7 @@ class AsignacionesService {
    */
   async getAsignacionByDNI(dni: string): Promise<AsignacionActiva | null> {
     const result = await this.getAsignacionesByDNIs([dni])
-    return result.get(dni) || null
+    return result.get(normalizeDni(dni)) || null
   }
 }
 

@@ -10,6 +10,7 @@ import { ExcelColumnFilter, useExcelFilters } from '../../../../../components/ui
 import { Search, ChevronsLeft, ChevronLeft, ChevronRight, ChevronsRight, ClipboardList } from 'lucide-react'
 import type { BitacoraRegistroTransformado } from '../../../../../services/wialonBitacoraService'
 import { BITACORA_CONSTANTS } from '../constants/bitacora.constants'
+import { normalizePatente } from '../../../../../utils/normalizeDocuments'
 
 interface BitacoraTableProps {
   registros: BitacoraRegistroTransformado[]
@@ -62,7 +63,7 @@ export function BitacoraTable({
 
   // Listas únicas para filtros
   const patentesUnicas = useMemo(() =>
-    [...new Set(registros.map(r => r.patente.replace(/\s/g, '')))].filter(Boolean).sort()
+    [...new Set(registros.map(r => normalizePatente(r.patente)))].filter(Boolean).sort()
   , [registros])
 
   const ibuttonsUnicos = useMemo(() =>
@@ -104,7 +105,7 @@ export function BitacoraTable({
   // Datos filtrados
   const registrosFiltrados = useMemo(() => {
     return registros.filter(r => {
-      if (patenteFilter.length > 0 && !patenteFilter.includes(r.patente.replace(/\s/g, ''))) return false
+      if (patenteFilter.length > 0 && !patenteFilter.includes(normalizePatente(r.patente))) return false
       if (ibuttonFilter.length > 0 && !ibuttonFilter.includes(r.ibutton || '-')) return false
       if (conductorFilter.length > 0 && !conductorFilter.includes(r.conductor_wialon || '-')) return false
       if (tipoFilter.length > 0 && !tipoFilter.includes(r.tipo_turno || '-')) return false
@@ -167,7 +168,7 @@ export function BitacoraTable({
       ),
       cell: ({ row }) => (
         <span style={{ fontWeight: 600, color: 'var(--color-primary)' }}>
-          {row.original.patente.replace(/\s/g, '')}
+          {normalizePatente(row.original.patente)}
         </span>
       ),
       enableSorting: false,

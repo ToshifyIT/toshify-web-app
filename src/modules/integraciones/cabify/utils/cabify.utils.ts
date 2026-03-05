@@ -6,6 +6,7 @@
  */
 
 import type { AsignacionActiva } from '../../../../services/asignacionesService'
+import { normalizeDni } from '../../../../utils/normalizeDocuments'
 import type {
   CabifyDriver,
   RatingLevel,
@@ -116,7 +117,7 @@ export function getDriverPatente(
 ): string {
   // Early return: Priorizar patente del sistema
   const asignacion = driver.nationalIdNumber
-    ? asignaciones.get(driver.nationalIdNumber)
+    ? asignaciones.get(normalizeDni(driver.nationalIdNumber))
     : null
 
   if (asignacion?.patente) {
@@ -146,7 +147,7 @@ export function filterDriversWithAssignment(
 ): CabifyDriver[] {
   return drivers.filter((driver) => {
     if (!driver.nationalIdNumber) return false
-    return asignaciones.has(driver.nationalIdNumber)
+    return asignaciones.has(normalizeDni(driver.nationalIdNumber))
   })
 }
 
@@ -237,7 +238,7 @@ function countDriversByModalidad(
 
   for (const driver of drivers) {
     const asig = driver.nationalIdNumber
-      ? asignaciones.get(driver.nationalIdNumber)
+      ? asignaciones.get(normalizeDni(driver.nationalIdNumber))
       : null
 
     if (asig?.horario === 'CARGO') conductoresCargo++

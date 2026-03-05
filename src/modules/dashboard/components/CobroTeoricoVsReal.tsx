@@ -13,6 +13,7 @@ import { startOfWeek, endOfWeek, addDays, format, setWeek, startOfMonth, endOfMo
 import { es } from 'date-fns/locale'
 import { supabase } from '../../../lib/supabase'
 import { useSede } from '../../../contexts/SedeContext'
+import { normalizeDni } from '../../../utils/normalizeDocuments'
 import { PeriodPicker } from './PeriodPicker'
 import './CobroTeoricoVsReal.css'
 
@@ -456,7 +457,7 @@ export function CobroTeoricoVsReal() {
         // ---------------------------------------------------------
         // NUEVA LÓGICA BLUE LINE: COBRO APP DE CONDUCTORES 50K
         // ---------------------------------------------------------
-        const dnis50k = conductoresConGarantia50k.map(c => c.dni).filter(Boolean)
+        const dnis50k = conductoresConGarantia50k.map(c => normalizeDni(c.dni)).filter(Boolean)
         const cobroRealPorDia = new Map<string, number>()
         
         // Inicializar mapa de cobro real por día
@@ -513,7 +514,7 @@ export function CobroTeoricoVsReal() {
                         diasObj[diaStr] = 0
                     })
                     
-                    cobroAppPorConductor.set(c.dni, {
+                    cobroAppPorConductor.set(normalizeDni(c.dni), {
                         ID: c.id,
                         Conductor: `${c.nombres} ${c.apellidos}`,
                         DNI: c.dni,
@@ -534,7 +535,7 @@ export function CobroTeoricoVsReal() {
                     }
 
                     // Actualizar log por conductor
-                    const logEntry = cobroAppPorConductor.get(record.dni)
+                    const logEntry = cobroAppPorConductor.get(normalizeDni(record.dni))
                     if (logEntry) {
                         if (logEntry[fechaDia] !== undefined) {
                             logEntry[fechaDia] += monto

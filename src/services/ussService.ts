@@ -8,6 +8,7 @@
  */
 
 import { supabase } from '../lib/supabase'
+import { normalizePatente } from '../utils/normalizeDocuments'
 import type {
   ExcesoVelocidad,
   ExcesoStats,
@@ -261,7 +262,8 @@ export const ussService = {
     }>()
 
     for (const row of data) {
-      const existing = vehiculosMap.get(row.patente) || {
+      const patenteKey = normalizePatente(row.patente)
+      const existing = vehiculosMap.get(patenteKey) || {
         patente: row.patente,
         vehiculo_id: row.vehiculo_id,
         excesos: [],
@@ -271,7 +273,7 @@ export const ussService = {
       existing.excesos.push(row.exceso || 0)
       existing.velocidades.push(row.velocidad_maxima || 0)
       existing.duraciones.push(row.duracion_segundos || 0)
-      vehiculosMap.set(row.patente, existing)
+      vehiculosMap.set(patenteKey, existing)
     }
 
     // Convertir a ranking

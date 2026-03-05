@@ -33,6 +33,7 @@ import { createConductorDriveFolder } from "../../services/driveService";
 import { AddressAutocomplete } from "../../components/ui/AddressAutocomplete";
 import { registrarHistorialConductor, registrarHistorialVehiculo } from "../../services/historialService";
 import { getEstadoConductorDisplay, getEstadoConductorBadgeStyle } from "../../utils/conductorUtils";
+import { normalizeDni } from "../../utils/normalizeDocuments";
 
 // Umbral configurable: días para considerar una licencia "por vencer"
 const DIAS_LICENCIA_POR_VENCER = 10;
@@ -2422,11 +2423,11 @@ function ModalEditar({
     try {
       const cabifyDrivers = await cabifyService.getAllDriversWithoutCompanyFilter();
 
-      const dni = formData.numero_dni?.trim();
+      const dni = normalizeDni(formData.numero_dni);
       const nombreCompleto = `${formData.nombres} ${formData.apellidos}`.trim().toUpperCase();
 
       let match = dni
-        ? cabifyDrivers.find((d: any) => d.nationalIdNumber?.trim() === dni)
+        ? cabifyDrivers.find((d: any) => normalizeDni(d.nationalIdNumber) === dni)
         : null;
 
       if (!match && nombreCompleto) {
@@ -3210,12 +3211,12 @@ function ModalDetalles({
     try {
       const cabifyDrivers = await cabifyService.getAllDriversWithoutCompanyFilter();
 
-      const dni = selectedConductor.numero_dni?.trim();
+      const dni = normalizeDni(selectedConductor.numero_dni);
       const nombreCompleto = `${selectedConductor.nombres || ''} ${selectedConductor.apellidos || ''}`.trim().toUpperCase();
 
       // Match by DNI first, then by name
       let match = dni
-        ? cabifyDrivers.find((d: any) => d.nationalIdNumber?.trim() === dni)
+        ? cabifyDrivers.find((d: any) => normalizeDni(d.nationalIdNumber) === dni)
         : null;
 
       if (!match && nombreCompleto) {

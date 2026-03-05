@@ -44,6 +44,7 @@ import './GuiasModule.css'
 import './GuiasToolbar.css'
 import iconNotas from './Iconos/notas.png'
 import { getEstadoConductorDisplay } from '../../utils/conductorUtils'
+import { normalizeDni } from '../../utils/normalizeDocuments'
 
 const getCurrentWeek = () => {
   return format(new Date(), "R-'W'II");
@@ -194,14 +195,12 @@ export function GuiasModule() {
         });
       }
 
-      // Step 2: Collect all DNIs (original + clean variants)
+      // Step 2: Collect all DNIs (normalized)
       const allDnisSet = new Set<string>();
       for (const d of conductoresEscuela) {
         if (!d.fecha_escuela || !d.numero_dni) continue;
-        const dniOriginal = String(d.numero_dni).trim();
-        const cleanDni = dniOriginal.replace(/\./g, '');
-        if (dniOriginal) allDnisSet.add(dniOriginal);
-        if (cleanDni && cleanDni !== dniOriginal) allDnisSet.add(cleanDni);
+        const dniNorm = normalizeDni(d.numero_dni);
+        if (dniNorm) allDnisSet.add(dniNorm);
       }
       const allDnis = Array.from(allDnisSet);
 
@@ -220,10 +219,10 @@ export function GuiasModule() {
         if (batchData) allCabifyRows = batchData;
       }
 
-      // Build lookup: cleanDni -> rows sorted by fecha_inicio desc
+      // Build lookup: normalizedDni -> rows sorted by fecha_inicio desc
       const cabifyByDni = new Map<string, CabifyRow[]>();
       for (const row of allCabifyRows) {
-        const key = row.dni ? row.dni.replace(/\./g, '').trim() : '';
+        const key = normalizeDni(row.dni);
         if (!key) continue;
         const arr = cabifyByDni.get(key) || [];
         arr.push(row);
@@ -237,9 +236,8 @@ export function GuiasModule() {
       const conductorsNeedingNameFallback: string[] = [];
       for (const d of conductoresEscuela) {
         if (!d.fecha_escuela || !d.numero_dni) continue;
-        const dniOriginal = String(d.numero_dni).trim();
-        const cleanDni = dniOriginal.replace(/\./g, '');
-        if (!cabifyByDni.has(cleanDni) && !cabifyByDni.has(dniOriginal)) {
+        const dniNorm = normalizeDni(d.numero_dni);
+        if (!cabifyByDni.has(dniNorm)) {
           conductorsNeedingNameFallback.push(d.id);
         }
       }
@@ -332,9 +330,8 @@ export function GuiasModule() {
         }
 
         // Resolve rows: try DNI first, then name fallback
-        const dniOriginal = String(d.numero_dni).trim();
-        const cleanDni = dniOriginal.replace(/\./g, '');
-        let conductorRows = cabifyByDni.get(cleanDni) || cabifyByDni.get(dniOriginal);
+        const dniNorm = normalizeDni(d.numero_dni);
+        let conductorRows = cabifyByDni.get(dniNorm);
 
         if (!conductorRows || conductorRows.length === 0) {
           const nombres = (d.nombres || '').trim().toLowerCase();
@@ -785,7 +782,7 @@ export function GuiasModule() {
                 const cobroApp = Number(d.cobro_app) || 0;
                 const cobroEfectivo = Number(d.cobro_efectivo) || 0;
                 if (d.dni) {
-                  const dni = d.dni.replace(/\./g, '').trim();
+                  const dni = normalizeDni(d.dni);
                   if (!dniMap.has(dni)) dniMap.set(dni, { cobroApp: 0, cobroEfectivo: 0 });
                   const entry = dniMap.get(dni);
                   entry.cobroApp += cobroApp;
@@ -1127,7 +1124,7 @@ export function GuiasModule() {
           let facturacionTotal = parseCustomCurrency(historial.total);
           let cabifyData = null;
 
-          const dni = baseConductor.numero_dni?.replace(/\./g, '').trim();
+          const dni = normalizeDni(baseConductor.numero_dni);
           const nombreCompleto = `${baseConductor.nombres || ''} ${baseConductor.apellidos || ''}`.trim().toLowerCase();
 
           // Solo buscamos datos frescos de Cabify si estamos en la semana actual
@@ -2789,15 +2786,14 @@ export function GuiasModule() {
 
           // 6. Filtro en cabify_historico por fecha_fin y conductor
           let cabifyRecord = null;
-          const dniOriginal = driverData?.numero_dni ? String(driverData.numero_dni).trim() : '';
-          const dniClean = dniOriginal.replace(/\./g, '');
+          const dniNorm = normalizeDni(driverData?.numero_dni);
 
           // Búsqueda por DNI
-          if (dniClean) {
+          if (dniNorm) {
             const { data: dataDni } = await supabase
               .from('cabify_historico')
               .select('ganancia_total, cobro_app, cobro_efectivo, fecha_fin')
-              .eq('dni', dniClean)
+              .eq('dni', dniNorm)
               .eq('fecha_fin', endDateUTC)
               .maybeSingle();
             

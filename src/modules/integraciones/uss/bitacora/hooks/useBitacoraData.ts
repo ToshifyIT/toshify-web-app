@@ -11,6 +11,7 @@ import type {
   BitacoraQueryState,
 } from '../types/bitacora.types'
 import { BITACORA_CONSTANTS } from '../constants/bitacora.constants'
+import { normalizePatente } from '../../../../../utils/normalizeDocuments'
 
 // Intervalo de auto-refresh en ms (30 segundos)
 const AUTO_REFRESH_INTERVAL = 30000
@@ -140,7 +141,7 @@ export function useBitacoraData() {
       for (const asig of asignacionesData) {
         const vehiculo = asig.vehiculos
         if (vehiculo) {
-          const patenteNorm = vehiculo.patente.replace(/\s/g, '').toUpperCase()
+          const patenteNorm = normalizePatente(vehiculo.patente)
           const conductores = conductoresPorAsignacion.get(asig.id) || []
 
           map.set(patenteNorm, {

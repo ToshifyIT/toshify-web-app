@@ -42,9 +42,12 @@ import { useAuth } from '../../../contexts/AuthContext'
 import { usePermissions } from '../../../contexts/PermissionsContext'
 import { useSede } from '../../../contexts/SedeContext'
 import { formatCurrency, formatDate, FACTURACION_CONFIG } from '../../../types/facturacion.types'
+import { normalizeDni, normalizePatente } from '../../../utils/normalizeDocuments'
 import { format, startOfWeek, endOfWeek, addWeeks, subWeeks, getWeek, getYear, parseISO } from 'date-fns'
 import { es } from 'date-fns/locale'
 import { RITPreviewTable, type RITPreviewRow } from '../components/RITPreviewTable'
+import { DiscrepancyReportModal } from '../../../components/ui/DiscrepancyReportModal'
+import { DiscrepancyBadge } from '../../../components/ui/DiscrepancyBadge'
 import logoToshifyUrl from '../../../assets/logo-toshify.png'
 
 // Pre-cargar logo como base64 para jsPDF (mejor calidad que URL directo)
@@ -158,6 +161,8 @@ interface FacturacionConductor {
   estado_billing?: 'Activo' | 'Pausa' | 'De baja'
   // Alerta: fecha_terminacion del conductor no coincide con fecha_fin de asignación
   fecha_baja_no_coincide?: boolean
+  // Discrepancia de formato DNI entre conductores y cabify_historico
+  dni_discrepancy?: { conductorRaw: string; cabifyRaw: string } | null
 }
 
 interface FacturacionDetalle {
@@ -275,6 +280,9 @@ export function ReporteFacturacionTab() {
     const hoy = new Date()
     return getSemanaArgentina(hoy)
   })
+
+  // Modal de discrepancias de formato
+  const [showDiscrepancyModal, setShowDiscrepancyModal] = useState(false)
 
   // Modal de desglose de días
   const [showDiasModal, setShowDiasModal] = useState(false)
@@ -886,7 +894,7 @@ export function ReporteFacturacionTab() {
       const cobroAppPorDni = new Map<string, number>()
       ;(cabifyGanancias || []).forEach((c: any) => {
         if (c.dni) {
-          const dniNorm = String(c.dni).replace(/^0+/, '')
+          const dniNorm = normalizeDni(c.dni)
           cobroAppPorDni.set(dniNorm, (cobroAppPorDni.get(dniNorm) || 0) + (parseFloat(c.cobro_app) || 0))
         }
       })
@@ -896,7 +904,7 @@ export function ReporteFacturacionTab() {
       const peajesDetalleMap = new Map<string, Array<{ fecha: string; monto: number }>>()
       ;(cabifyPeajes || []).forEach((c: any) => {
         if (c.dni && c.peajes) {
-          const dniNorm = String(c.dni).replace(/^0+/, '')
+          const dniNorm = normalizeDni(c.dni)
           const monto = parseFloat(String(c.peajes)) || 0
           peajesPorDni.set(dniNorm, (peajesPorDni.get(dniNorm) || 0) + monto)
           
@@ -909,7 +917,7 @@ export function ReporteFacturacionTab() {
 
       // Agregar cobro_app de Cabify a cada facturación (para barras de cobertura)
       facturacionesTransformadas = facturacionesTransformadas.map((f: any) => {
-        const dniNorm = f.conductor_dni ? String(f.conductor_dni).replace(/^0+/, '') : ''
+        const dniNorm = normalizeDni(f.conductor_dni)
         const cobroApp = dniNorm ? (cobroAppPorDni.get(dniNorm) || 0) : 0
         const cuotaFija = f.subtotal_alquiler + f.subtotal_garantia
         return {
@@ -985,7 +993,7 @@ export function ReporteFacturacionTab() {
         const pago = pagosMap.get(f.id)
         const detalle = detallesMap.get(f.id)
         // Fallback: si no hay P005 en facturacion_detalle, buscar en cabify_historico por DNI (normalizado)
-        const dniNormPeaje = f.conductor_dni ? String(f.conductor_dni).replace(/^0+/, '') : ''
+        const dniNormPeaje = normalizeDni(f.conductor_dni)
         const peajesDetalle = detalle?.monto_peajes || 0
         const peajesCabify = dniNormPeaje ? (peajesPorDni.get(dniNormPeaje) || 0) : 0
         const peajesDetalleList = peajesDetalleMap.get(dniNormPeaje) || []
@@ -1417,14 +1425,16 @@ export function ReporteFacturacionTab() {
         monto_total: number;
       }>((garantias || []).filter((g: any) => g.conductor_id).map((g: any) => [g.conductor_id, g]))
 
-      // Crear mapa de cobro_app Cabify por DNI
+      // Crear mapa de cobro_app Cabify por DNI + trackear raw para discrepancias
       const cabifyMap = new Map<string, number>()
+      const cabifyRawDniMap = new Map<string, string>() // normalized -> raw cabify DNI
       ;(cabifyData || []).forEach((record: any) => {
         if (record.dni) {
-          const dniNorm = String(record.dni).replace(/^0+/, '')
+          const dniNorm = normalizeDni(record.dni)
           const actual = cabifyMap.get(dniNorm) || 0
           const cobroApp = parseFloat(String(record.cobro_app)) || 0
           cabifyMap.set(dniNorm, actual + cobroApp)
+          if (!cabifyRawDniMap.has(dniNorm)) cabifyRawDniMap.set(dniNorm, String(record.dni))
         }
       })
       // Crear mapa de peajes Cabify por DNI (P005) - semana anterior, SIN redondeo
@@ -1432,7 +1442,7 @@ export function ReporteFacturacionTab() {
       const peajesDetalleMap = new Map<string, Array<{ fecha: string; monto: number }>>()
       ;(cabifyPeajesData || []).forEach((record: any) => {
         if (record.dni && record.peajes) {
-          const dniNorm = String(record.dni).replace(/^0+/, '')
+          const dniNorm = normalizeDni(record.dni)
           const actualPeajes = peajesMap.get(dniNorm) || 0
           const peajes = parseFloat(String(record.peajes)) || 0
           peajesMap.set(dniNorm, actualPeajes + peajes)
@@ -1673,8 +1683,8 @@ export function ReporteFacturacionTab() {
           cuotaGarantiaNumero = 'NA'
         }
 
-        // Datos por DNI del conductor (normalizado sin ceros adelante)
-        const dniConductor = (conductor.numero_dni || '').replace(/^0+/, '')
+        // Datos por DNI del conductor (normalizado)
+        const dniConductor = normalizeDni(conductor.numero_dni)
 
         // Excesos de KM (P006) - no aplica si tiene 0 días
         const exceso = excesosMap.get(conductorId)
@@ -1704,6 +1714,11 @@ export function ReporteFacturacionTab() {
         // Total a pagar
         const subtotalNeto = subtotalCargos - subtotalDescuentos
         const totalAPagar = subtotalNeto + saldoAnterior
+
+        // Detectar discrepancia de formato DNI (conductor vs cabify)
+        const cabifyRawDni = cabifyRawDniMap.get(dniConductor) || ''
+        const conductorRawDni = String(conductor.numero_dni || '').trim()
+        const dniDiscrepancy = cabifyRawDni && conductorRawDni && cabifyRawDni !== conductorRawDni
 
         // Datos de Cabify - cobro_app semanal del conductor (para barras de cobertura)
         const cobroAppCabify = cabifyMap.get(dniConductor) || 0
@@ -1765,6 +1780,8 @@ export function ReporteFacturacionTab() {
               const tieneAsignacionCierre = conductoresConAsignacionAlCierreVP.has(conductorId)
               return (diasTotales >= 7 || tieneAsignacionCierre) ? 'Activo' : 'Pausa'
             })(),
+            // Discrepancia de formato DNI
+            dni_discrepancy: dniDiscrepancy ? { conductorRaw: conductorRawDni, cabifyRaw: cabifyRawDni } : null,
             // Detectar si fecha_terminacion no coincide con fecha_fin de asignación
             fecha_baja_no_coincide: (() => {
               if (!conductor.fecha_terminacion) return false
@@ -2378,11 +2395,11 @@ export function ReporteFacturacionTab() {
       )
       // ─────────────────────────────────────────────────────────────────────────────
 
-      // Mapear peajes por DNI (normalizado sin ceros adelante)
+      // Mapear peajes por DNI (normalizado)
       const peajesMap = new Map<string, number>()
       ;((cabifyRes.data || []) as any[]).forEach((r: any) => {
         if (r.dni && r.peajes) {
-          const dniNorm = String(r.dni).replace(/^0+/, '')
+          const dniNorm = normalizeDni(r.dni)
           peajesMap.set(dniNorm, (peajesMap.get(dniNorm) || 0) + (parseFloat(String(r.peajes)) || 0))
         }
       })
@@ -2391,7 +2408,7 @@ export function ReporteFacturacionTab() {
       const multasMap = new Map<string, { monto: number; cantidad: number }>()
       ;((multasRes.data || []) as any[]).forEach((m: any) => {
         if (m.patente) {
-          const p = m.patente.toUpperCase().replace(/\s+/g, '')
+          const p = normalizePatente(m.patente)
           const actual = multasMap.get(p) || { monto: 0, cantidad: 0 }
           const importe = typeof m.importe === 'string' ? parseImporteMulta(m.importe) : parseFloat(m.importe) || 0
           multasMap.set(p, { monto: actual.monto + importe, cantidad: actual.cantidad + 1 })
@@ -2484,7 +2501,7 @@ export function ReporteFacturacionTab() {
         const totalExcesos = conductor.total_dias === 0 ? 0 : excesosConductor.reduce((sum: number, e: any) => sum + (e.monto_total || 0), 0)
 
         // Peajes (P005) - no aplica si tiene 0 días
-        const totalPeajes = conductor.total_dias === 0 ? 0 : (conductor.conductor_dni ? (peajesMap.get(String(conductor.conductor_dni).replace(/^0+/, '')) || 0) : 0)
+        const totalPeajes = conductor.total_dias === 0 ? 0 : (conductor.conductor_dni ? (peajesMap.get(normalizeDni(conductor.conductor_dni)) || 0) : 0)
 
         // Cobros fraccionados (P010) - calcular monto real de la cuota
         const cobrosConductor = cobrosGrouped.get(conductor.conductor_id) || []
@@ -2503,7 +2520,7 @@ export function ReporteFacturacionTab() {
         const totalCuotasPenalidades = cuotasConductor.reduce((sum: number, pc: any) => sum + (pc.monto_cuota || 0), 0)
 
         // Multas (P008)
-        const patenteNorm = (conductor.vehiculo_patente || '').toUpperCase().replace(/\s+/g, '')
+        const patenteNorm = normalizePatente(conductor.vehiculo_patente)
         // Multas: desactivado temporalmente (MULTAS_HABILITADAS = false)
         const multasVehiculo = MULTAS_HABILITADAS ? multasMap.get(patenteNorm) : undefined
         const montoMultas = multasVehiculo?.monto || 0
@@ -3135,7 +3152,7 @@ export function ReporteFacturacionTab() {
 
       // P008 - Multas de tránsito (por patente del conductor)
       if (facturacion.vehiculo_patente) {
-        const patenteNorm = facturacion.vehiculo_patente.toUpperCase().replace(/\s+/g, '')
+        const patenteNorm = normalizePatente(facturacion.vehiculo_patente)
         const fechaInicioMul = periodo?.fecha_inicio || format(semanaActual.inicio, 'yyyy-MM-dd')
         const fechaFinMul = periodo?.fecha_fin || format(semanaActual.fin, 'yyyy-MM-dd')
         const { data: multasDet } = await (supabase
@@ -3946,9 +3963,8 @@ export function ReporteFacturacionTab() {
 
       for (let i = 1; i < rows.length; i++) {
         const row = rows[i]
-        const dniRaw = String(row[7] || '').replace(/[.,\s]/g, '').trim()
-        if (!dniRaw || dniRaw === '0' || dniRaw === '') continue
-        const dni = dniRaw
+        const dni = normalizeDni(row[7])
+        if (!dni || dni === '0') continue
 
         const disponible = parseFloat(row[15]) || 0
         const importeDescontar = parseFloat(row[16]) || 0
@@ -3979,7 +3995,7 @@ export function ReporteFacturacionTab() {
       const facturacionesPorDNI = new Map<string, typeof facturaciones[0]>(
         facturaciones
           .filter(f => f.conductor_dni)
-          .map(f => [String(f.conductor_dni || '').replace(/[.,\s]/g, '').trim(), f])
+          .map(f => [normalizeDni(f.conductor_dni), f])
       )
 
       for (const exRow of excelData) {
@@ -4536,7 +4552,7 @@ export function ReporteFacturacionTab() {
         .select('numero_dni, email')
         .in('numero_dni', dnis)
       
-      const emailMap = new Map((conductoresData || []).map((c: any) => [c.numero_dni, c.email]))
+      const emailMap = new Map((conductoresData || []).map((c: any) => [normalizeDni(c.numero_dni), c.email]))
 
       // Obtener IDs de detalles ya insertados (para comparar)
       const detallesReferencias = new Set(
@@ -4785,7 +4801,7 @@ export function ReporteFacturacionTab() {
         const tieneCuit = fact.conductor_cuit && fact.conductor_cuit.length >= 11
         const tipoFactura = tieneCuit ? 'FACTURA_A' : 'FACTURA_B'
         const condicionIva = tieneCuit ? 'RESPONSABLE_INSCRIPTO' : 'CONSUMIDOR_FINAL'
-        const email = emailMap.get(fact.conductor_dni) || ''
+        const email = emailMap.get(normalizeDni(fact.conductor_dni)) || ''
         
         // NUMERO CUIL = DNI, NUMERO DNI = CUIT
         const numeroCuil = fact.conductor_dni || ''
@@ -5077,7 +5093,7 @@ export function ReporteFacturacionTab() {
         .select('id, numero_dni, email')
         .in('numero_dni', dnis)
       
-      const emailMap = new Map((conductoresData || []).map((c: any) => [c.numero_dni, c.email]))
+      const emailMap = new Map((conductoresData || []).map((c: any) => [normalizeDni(c.numero_dni), c.email]))
 
       // 2. Cargar garantías activas
       const { data: garantiasData } = await supabase
@@ -5344,7 +5360,7 @@ export function ReporteFacturacionTab() {
         const tieneCuit = fact.conductor_cuit && fact.conductor_cuit.length >= 11
         const tipoFactura = tieneCuit ? 'FACTURA_A' : 'FACTURA_B'
         const condicionIva = tieneCuit ? 'RESPONSABLE_INSCRIPTO' : 'CONSUMIDOR_FINAL'
-        const email = emailMap.get(fact.conductor_dni) || ''
+        const email = emailMap.get(normalizeDni(fact.conductor_dni)) || ''
         
         const numeroCuil = fact.conductor_dni || ''
         const numeroDni = fact.conductor_cuit || ''
@@ -6432,7 +6448,7 @@ export function ReporteFacturacionTab() {
         .select('numero_dni, email')
         .in('numero_dni', dnis)
       
-      const emailMap = new Map((conductoresData || []).map((c: { numero_dni: string; email: string | null }) => [c.numero_dni, c.email]))
+      const emailMap = new Map((conductoresData || []).map((c: { numero_dni: string; email: string | null }) => [normalizeDni(c.numero_dni), c.email]))
 
       // Cargar datos de Cabify desde cabify_historico
       const fechaInicio = format(semanaActual.inicio, 'yyyy-MM-dd')
@@ -6444,12 +6460,13 @@ export function ReporteFacturacionTab() {
         .gte('fecha_inicio', fechaInicio + 'T00:00:00')
         .lte('fecha_inicio', fechaFin + 'T23:59:59')
 
-      // Agrupar datos de Cabify por DNI (sumar si hay múltiples registros)
+      // Agrupar datos de Cabify por DNI normalizado (sumar si hay múltiples registros)
       const cabifyMap = new Map<string, { horas: number; ganancia: number; cobroApp: number; efectivo: number }>()
       ;(cabifyData || []).forEach((record: { dni: string; horas_conectadas: number; ganancia_total: number; cobro_app: number; cobro_efectivo: number }) => {
         if (record.dni) {
-          const existing = cabifyMap.get(record.dni) || { horas: 0, ganancia: 0, cobroApp: 0, efectivo: 0 }
-          cabifyMap.set(record.dni, {
+          const dniKey = normalizeDni(record.dni)
+          const existing = cabifyMap.get(dniKey) || { horas: 0, ganancia: 0, cobroApp: 0, efectivo: 0 }
+          cabifyMap.set(dniKey, {
             horas: existing.horas + (Number(record.horas_conectadas) || 0),
             ganancia: existing.ganancia + (Number(record.ganancia_total) || 0),
             cobroApp: existing.cobroApp + (Number(record.cobro_app) || 0),
@@ -6463,8 +6480,8 @@ export function ReporteFacturacionTab() {
 
       // Generar filas para el preview
       const previewRows: CabifyPreviewRow[] = dataToExport.map(f => {
-        const email = emailMap.get(f.conductor_dni || '') || ''
-        const cabifyInfo = cabifyMap.get(f.conductor_dni || '') || { horas: 0, ganancia: 0, cobroApp: 0, efectivo: 0 }
+        const email = emailMap.get(normalizeDni(f.conductor_dni)) || ''
+        const cabifyInfo = cabifyMap.get(normalizeDni(f.conductor_dni)) || { horas: 0, ganancia: 0, cobroApp: 0, efectivo: 0 }
         
         // Importe Contrato = Solo alquiler (P001/P002/P013)
         const importeContrato = f.subtotal_alquiler || 0
@@ -6538,7 +6555,7 @@ export function ReporteFacturacionTab() {
         .select('numero_dni, email')
         .in('numero_dni', dnis)
       
-      const emailMap = new Map((conductoresData || []).map((c: { numero_dni: string; email: string | null }) => [c.numero_dni, c.email]))
+      const emailMap = new Map((conductoresData || []).map((c: { numero_dni: string; email: string | null }) => [normalizeDni(c.numero_dni), c.email]))
 
       // Cargar datos guardados de facturacion_cabify (si existen)
       const { data: savedCabifyData } = await (supabase
@@ -6561,12 +6578,13 @@ export function ReporteFacturacionTab() {
         .gte('fecha_inicio', periodo.fecha_inicio + 'T00:00:00')
         .lte('fecha_inicio', periodo.fecha_fin + 'T23:59:59')
 
-      // Agrupar datos de Cabify por DNI (sumar si hay múltiples registros)
+      // Agrupar datos de Cabify por DNI normalizado (sumar si hay múltiples registros)
       const cabifyMap = new Map<string, { horas: number; ganancia: number; cobroApp: number; efectivo: number }>()
       ;(cabifyData || []).forEach((record: { dni: string; horas_conectadas: number; ganancia_total: number; cobro_app: number; cobro_efectivo: number }) => {
         if (record.dni) {
-          const existing = cabifyMap.get(record.dni) || { horas: 0, ganancia: 0, cobroApp: 0, efectivo: 0 }
-          cabifyMap.set(record.dni, {
+          const dniKey = normalizeDni(record.dni)
+          const existing = cabifyMap.get(dniKey) || { horas: 0, ganancia: 0, cobroApp: 0, efectivo: 0 }
+          cabifyMap.set(dniKey, {
             horas: existing.horas + (Number(record.horas_conectadas) || 0),
             ganancia: existing.ganancia + (Number(record.ganancia_total) || 0),
             cobroApp: existing.cobroApp + (Number(record.cobro_app) || 0),
@@ -6580,8 +6598,8 @@ export function ReporteFacturacionTab() {
 
       // Generar filas para el preview
       const previewRows: CabifyPreviewRow[] = facturaciones.map(f => {
-        const email = emailMap.get(f.conductor_dni || '') || ''
-        const cabifyInfo = cabifyMap.get(f.conductor_dni || '') || { horas: 0, ganancia: 0, cobroApp: 0, efectivo: 0 }
+        const email = emailMap.get(normalizeDni(f.conductor_dni)) || ''
+        const cabifyInfo = cabifyMap.get(normalizeDni(f.conductor_dni)) || { horas: 0, ganancia: 0, cobroApp: 0, efectivo: 0 }
         const savedData = savedDataMap.get(f.conductor_id)
         
         // Si hay datos guardados, usarlos; sino usar los calculados
@@ -6891,16 +6909,28 @@ export function ReporteFacturacionTab() {
       ),
       cell: ({ row }) => (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-          <strong
-            style={{ fontSize: '11px', textTransform: 'uppercase', cursor: 'pointer', color: 'var(--color-primary)' }}
-            onClick={() => cargarHistorialAsignaciones(
-              row.original.conductor_id,
-              row.original.conductor_nombre,
-              row.original.conductor_dni || ''
+          <div style={{ display: 'flex', alignItems: 'center' }}>
+            <strong
+              style={{ fontSize: '11px', textTransform: 'uppercase', cursor: 'pointer', color: 'var(--color-primary)' }}
+              onClick={() => cargarHistorialAsignaciones(
+                row.original.conductor_id,
+                row.original.conductor_nombre,
+                row.original.conductor_dni || ''
+              )}
+            >
+              {row.original.conductor_nombre}
+            </strong>
+            {row.original.dni_discrepancy && (
+              <DiscrepancyBadge
+                details={[
+                  { source: 'Conductores', rawValue: row.original.dni_discrepancy.conductorRaw },
+                  { source: 'Cabify', rawValue: row.original.dni_discrepancy.cabifyRaw },
+                ]}
+                normalizedValue={row.original.conductor_dni || ''}
+                size={11}
+              />
             )}
-          >
-            {row.original.conductor_nombre}
-          </strong>
+          </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
             <span style={{ fontSize: '11px', color: 'var(--text-tertiary)' }}>
               {row.original.vehiculo_patente || '-'}
@@ -6919,7 +6949,7 @@ export function ReporteFacturacionTab() {
               else if (diurno > 0 && nocturno > 0) label = 'D+N'
               return <span className="dt-badge dt-badge-solid-gray" style={{ fontSize: '9px', padding: '1px 5px' }}>{label}</span>
             })()}
-            {['AG558DZ', 'AG304XD'].includes((row.original.vehiculo_patente || '').replace(/\s/g, '').toUpperCase()) && (
+            {['AG558DZ', 'AG304XD'].includes(normalizePatente(row.original.vehiculo_patente)) && (
               <span className="dt-badge dt-badge-orange" style={{ fontSize: '9px', padding: '1px 5px' }}>Sin GNC</span>
             )}
           </div>
@@ -7749,9 +7779,24 @@ export function ReporteFacturacionTab() {
               <Unlock size={14} />
               Reabrir Período
             </button>
-          )}
+           )}
+          {/* Botón Discrepancias - siempre visible */}
+          <button
+            className="fact-btn-primary"
+            onClick={() => setShowDiscrepancyModal(true)}
+            title="Ver discrepancias de formato entre fuentes de datos"
+            style={{ background: 'var(--color-warning)', borderColor: 'var(--color-warning)' }}
+          >
+            <AlertTriangle size={14} />
+            Discrepancias
+          </button>
         </div>
       </div>
+
+      {/* Modal de Discrepancias */}
+      {showDiscrepancyModal && (
+        <DiscrepancyReportModal onClose={() => setShowDiscrepancyModal(false)} />
+      )}
 
       {/* Estado del período */}
       {periodo && (

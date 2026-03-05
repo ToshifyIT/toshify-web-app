@@ -7,6 +7,7 @@ import { showSuccess } from '../../utils/toast'
 import { DataTable } from '../../components/ui/DataTable'
 import { LoadingOverlay } from '../../components/ui/LoadingOverlay'
 import type { ColumnDef } from '@tanstack/react-table'
+import { normalizePatente } from '../../utils/normalizeDocuments'
 import './VencimientosModule.css'
 
 interface Vencimiento {
@@ -220,11 +221,11 @@ export function VencimientosModule() {
 
       setVehiculos(mapped)
 
-      // Crear mapa patente -> sede
+      // Crear mapa patente -> sede (normalizado)
       const map = new Map<string, string>()
       mapped.forEach((v: any) => {
         if (v.patente && v.sedeNombre) {
-          map.set(v.patente, v.sedeNombre)
+          map.set(normalizePatente(v.patente), v.sedeNombre)
         }
       })
       setPatenteSedeMap(map)
@@ -291,7 +292,7 @@ export function VencimientosModule() {
     // 2. Aplicar filtro de Sede (si existe)
     if (sedeActual && sedeActual.id) {
       res = res.filter(item => {
-        const sedeNombre = patenteSedeMap.get(item.patente)
+        const sedeNombre = patenteSedeMap.get(normalizePatente(item.patente))
         // Comparamos nombre de sede porque el mapa guarda nombres
         // Pero sedeActual tiene id y nombre.
         // Lo ideal sería guardar ID en el mapa si sedeActual usa ID para filtrar.
