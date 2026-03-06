@@ -211,7 +211,7 @@ async function fetchTollsForDriver(token: string, companyId: string, driverId: s
           const paginated = movData.data?.paginatedBalanceMovements;
           for (const mov of (paginated?.movements || [])) {
             for (const b of (mov.breakdown || [])) {
-              if (b.name === "supplement:toll") totalTolls += Math.abs(b.value || 0);
+              if (b.name === "supplement:toll") totalTolls += (b.value || 0);
             }
           }
           if (!paginated || page >= (paginated.pages || 0) || paginated.pages === 0) break;

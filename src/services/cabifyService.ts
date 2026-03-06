@@ -676,7 +676,7 @@ class CabifyService {
           if (movement.breakdown) {
             for (const b of movement.breakdown) {
               if (b.name === 'supplement:toll') {
-                tolls += Math.abs(b.value || 0)
+                tolls += (b.value || 0)
               }
             }
           }
