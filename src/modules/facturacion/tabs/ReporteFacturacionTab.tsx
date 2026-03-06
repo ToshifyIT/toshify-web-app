@@ -6853,6 +6853,11 @@ export function ReporteFacturacionTab() {
       const fechaInicio = parseISO(periodo.fecha_inicio)
       const fechaFin = parseISO(periodo.fecha_fin)
 
+      // Proyección: si estamos dentro de la semana del período, proyectar a semana completa
+      const hoyPeriodo = startOfDay(new Date())
+      const daysSoFarPeriodo = Math.min(differenceInCalendarDays(hoyPeriodo, fechaInicio) + 1, 7)
+      const necesitaProyeccionPeriodo = hoyPeriodo < fechaFin && daysSoFarPeriodo > 0 && daysSoFarPeriodo < 7
+
       // Generar filas para el preview
       const previewRows: CabifyPreviewRow[] = facturaciones.map(f => {
         const email = emailMap.get(normalizeDni(f.conductor_dni)) || ''
@@ -6881,12 +6886,17 @@ export function ReporteFacturacionTab() {
           }
         }
         
-        // Importe Contrato = Solo alquiler (P001/P002/P013)
-        const importeContrato = f.subtotal_alquiler || 0
+        const actualAlquiler = f.subtotal_alquiler || 0
+
+        // Proyectar alquiler a semana completa: escalar proporcionalmente por días transcurridos
+        let importeContrato = actualAlquiler
+        if (necesitaProyeccionPeriodo && f.estado_billing !== 'De baja' && actualAlquiler > 0) {
+          importeContrato = (actualAlquiler / daysSoFarPeriodo) * 7
+        }
         
         // EXCEDENTES = resto de productos (sin alquiler) + saldo pendiente
         const saldoPendiente = f.saldo_anterior || 0
-        const excedentes = (f.subtotal_cargos || 0) - (f.subtotal_descuentos || 0) - importeContrato + saldoPendiente
+        const excedentes = (f.subtotal_cargos || 0) - (f.subtotal_descuentos || 0) - actualAlquiler + saldoPendiente
 
         return {
           anio: periodo.anio,
@@ -6905,24 +6915,24 @@ export function ReporteFacturacionTab() {
           importeGeneradoConBonos: cabifyInfo.cobroApp,
           generadoEfectivo: cabifyInfo.efectivo,
           detalle: {
-            diasTrabajados: Math.min(7, (f.prorrateo_cargo_dias || 0) + (f.prorrateo_diurno_dias || 0) + (f.prorrateo_nocturno_dias || 0)),
+            diasTrabajados: 7,
             prorrateoCargoDias: f.prorrateo_cargo_dias || 0,
             prorrateoCargoMonto: f.prorrateo_cargo_monto || 0,
             prorrateoDiurnoDias: f.prorrateo_diurno_dias || 0,
             prorrateoDiurnoMonto: f.prorrateo_diurno_monto || 0,
             prorrateoNocturnoDias: f.prorrateo_nocturno_dias || 0,
             prorrateoNocturnoMonto: f.prorrateo_nocturno_monto || 0,
-            subtotalAlquiler: f.subtotal_alquiler || 0,
+            subtotalAlquiler: importeContrato,
             subtotalGarantia: f.subtotal_garantia || 0,
             cuotaGarantia: f.cuota_garantia_numero || '',
             montoPeajes: f.monto_peajes || 0,
             montoExcesos: f.monto_excesos || 0,
             montoPenalidades: f.monto_penalidades || 0,
             ticketsFavor: f.monto_tickets_favor || 0,
-            subtotalCargos: f.subtotal_cargos || 0,
+            subtotalCargos: (f.subtotal_cargos || 0) - actualAlquiler + importeContrato,
             subtotalDescuentos: f.subtotal_descuentos || 0,
             saldoAnterior: f.saldo_anterior || 0,
-            totalAPagar: f.total_a_pagar || 0,
+            totalAPagar: (f.total_a_pagar || 0) - actualAlquiler + importeContrato,
           }
         }
       })
@@ -7963,8 +7973,9 @@ export function ReporteFacturacionTab() {
       ? format(parseISO(periodo.fecha_fin), 'dd/MM/yyyy')
       : format(semanaActual.fin, 'dd/MM/yyyy')
     
-    // Detectar si es proyección (Vista Previa sin período y hoy < fin de semana)
-    const esProyeccionCabify = !periodo && startOfDay(new Date()) < semanaActual.fin
+    // Detectar si es proyección (hoy < fin de semana/período)
+    const finSemanaRef = periodo ? parseISO(periodo.fecha_fin) : semanaActual.fin
+    const esProyeccionCabify = startOfDay(new Date()) < finSemanaRef
 
     return (
       <CabifyPreviewTable
