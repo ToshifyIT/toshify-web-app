@@ -301,6 +301,9 @@ export function ReporteFacturacionTab() {
   // Modal de discrepancias de formato
   const [showDiscrepancyModal, setShowDiscrepancyModal] = useState(false)
 
+  // Filtros rápidos de alertas (toggle)
+  const [filtroAlerta, setFiltroAlerta] = useState<'ingreso' | 'baja' | 'sin_gnc' | 'pausa' | null>(null)
+
   // Modal de desglose de días
   const [showDiasModal, setShowDiasModal] = useState(false)
 
@@ -866,9 +869,8 @@ export function ReporteFacturacionTab() {
       // Usar nombre de tabla conductores en formato "Nombres Apellidos"
       let facturacionesTransformadas = (facturacionesData || []).map((f: any) => {
         const conductorEstadoId = f.conductor?.estado_id
-        const fechaTermLoad = f.conductor?.fecha_terminacion ? parseISO(f.conductor.fecha_terminacion) : null
+        // Priorizar estado_id: si el conductor está ACTIVO, no importa fecha_terminacion vieja
         const esDeBajaLoad = conductorEstadoId !== ESTADO_ACTIVO_ID_LOAD
-          || (fechaTermLoad && fechaTermLoad <= fechaFinPeriodoLoad)
         const tieneAsignacionCierreLoad = conductoresConAsignacionAlCierreLoad.has(f.conductor_id)
         const estadoBilling = esDeBajaLoad ? 'De baja'
           : ((f.turnos_cobrados >= 7 || tieneAsignacionCierreLoad) ? 'Activo' : 'Pausa')
@@ -1194,9 +1196,8 @@ export function ReporteFacturacionTab() {
 
       // Calcular días por modalidad/horario para cada conductor
       const fechaInicioSemana = semanaActual.inicio
-      // Solo contar días hasta hoy (no proyectar días futuros)
-      const hoyVP = parseISO(toArgDate(new Date().toISOString()))
-      const fechaFinSemana = hoyVP < semanaActual.fin ? hoyVP : semanaActual.fin
+      // Facturación cobra semana COMPLETA (Lun-Dom = 7 días). Bajas e incidencias restan turnos.
+      const fechaFinSemana = semanaActual.fin
 
       // Map de conductor_id → fecha_terminacion (tope de días para conductores de baja)
       const fechaTermMapVP = new Map<string, Date>()
@@ -1834,9 +1835,8 @@ export function ReporteFacturacionTab() {
             // Estado: De baja si tiene fecha_terminacion o no está activo
            // Activo si tiene 7 días O tiene asignación vigente al cierre de la semana
             estado_billing: (() => {
-              const ftVP = conductor.fecha_terminacion ? parseISO(conductor.fecha_terminacion) : null
-              const esBajaVP = conductor.estado_id !== ESTADO_ACTIVO_ID || (ftVP && ftVP <= semanaActual.fin)
-              if (esBajaVP) return 'De baja'
+              // Priorizar estado_id: si el conductor está ACTIVO, no importa fecha_terminacion vieja
+              if (conductor.estado_id !== ESTADO_ACTIVO_ID) return 'De baja'
               const tieneAsignacionCierre = conductoresConAsignacionAlCierreVP.has(conductorId)
               return (diasTotales >= 7 || tieneAsignacionCierre) ? 'Activo' : 'Pausa'
             })(),
@@ -2179,10 +2179,8 @@ export function ReporteFacturacionTab() {
       conductorIdsTemp.forEach((id: string) => diasContadosRecalc.set(id, new Set()))
 
       const fechaInicioSemanaRecalc = parseISO(fechaInicio)
-      // Solo contar días hasta hoy (no proyectar días futuros)
-      const hoyRecalc = parseISO(toArgDate(new Date().toISOString()))
-      const finSemanaRecalcReal = parseISO(fechaFin)
-      const fechaFinSemanaRecalc = hoyRecalc < finSemanaRecalcReal ? hoyRecalc : finSemanaRecalcReal
+      // Facturación cobra semana COMPLETA (Lun-Dom = 7 días). Bajas e incidencias restan turnos.
+      const fechaFinSemanaRecalc = parseISO(fechaFin)
 
       // Map de conductor_id → fecha_terminacion (tope de días para conductores de baja)
       const fechaTerminacionMap = new Map<string, Date>()
@@ -2303,11 +2301,8 @@ export function ReporteFacturacionTab() {
         // Excluir conductores con 0 días, SALVO que tengan penalidades pendientes
         if (totalDias === 0 && !dnisConPenalidadesRecalc.has(control.numero_dni)) continue
 
-        // Estado: De baja si tiene fecha_terminacion o no está activo
-        // Activo si tiene 7 días O tiene asignación vigente al cierre de la semana
-        const fechaTermCond = conductorData.fecha_terminacion ? parseISO(conductorData.fecha_terminacion) : null
+        // Priorizar estado_id: si el conductor está ACTIVO, no importa fecha_terminacion vieja
         const esDeBaja = conductorData.estado_id !== ESTADO_ACTIVO_ID_RECALC
-          || (fechaTermCond && fechaTermCond <= fechaFinSemanaRecalc)
         const tieneAsignacionCierreRecalc = conductoresConAsignacionAlCierreRecalc.has(conductorData.id)
         const estadoBilling: 'Activo' | 'Pausa' | 'De baja' = esDeBaja
           ? 'De baja'
@@ -8270,6 +8265,58 @@ export function ReporteFacturacionTab() {
             </div>
           </div>
 
+          {/* Filtros rápidos de alertas */}
+          {(() => {
+            const countIngreso = vistaPreviaData.filter(f => f.alerta_prorrateo_ingreso).length
+            const countBaja = vistaPreviaData.filter(f => f.estado_billing === 'De baja').length
+            const countPausa = vistaPreviaData.filter(f => f.estado_billing === 'Pausa').length
+            const countSinGnc = vistaPreviaData.filter(f => f.vehiculo_patente && ['AG558DZ', 'AG304XD'].includes(normalizePatente(f.vehiculo_patente))).length
+            const hayAlertas = countIngreso > 0 || countBaja > 0 || countPausa > 0 || countSinGnc > 0
+            if (!hayAlertas) return null
+            const btnStyle = (active: boolean, bg: string, color: string) => ({
+              display: 'inline-flex', alignItems: 'center', gap: '5px',
+              padding: '4px 10px', borderRadius: '14px', fontSize: '11px', fontWeight: 600 as const,
+              border: active ? `2px solid ${color}` : '1px solid var(--border-primary)',
+              background: active ? bg : 'var(--bg-secondary)',
+              color: active ? color : 'var(--text-secondary)',
+              cursor: 'pointer', transition: 'all 0.15s',
+            })
+            return (
+              <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginBottom: '8px' }}>
+                {countIngreso > 0 && (
+                  <button style={btnStyle(filtroAlerta === 'ingreso', 'rgba(245,158,11,0.12)', '#d97706')}
+                    onClick={() => setFiltroAlerta(filtroAlerta === 'ingreso' ? null : 'ingreso')}>
+                    <AlertTriangle size={12} /> Alerta Ingreso <span style={{ opacity: 0.7 }}>{countIngreso}</span>
+                  </button>
+                )}
+                {countBaja > 0 && (
+                  <button style={btnStyle(filtroAlerta === 'baja', 'rgba(239,68,68,0.12)', '#dc2626')}
+                    onClick={() => setFiltroAlerta(filtroAlerta === 'baja' ? null : 'baja')}>
+                    <AlertCircle size={12} /> De Baja <span style={{ opacity: 0.7 }}>{countBaja}</span>
+                  </button>
+                )}
+                {countPausa > 0 && (
+                  <button style={btnStyle(filtroAlerta === 'pausa', 'rgba(107,114,128,0.12)', '#6b7280')}
+                    onClick={() => setFiltroAlerta(filtroAlerta === 'pausa' ? null : 'pausa')}>
+                    <AlertCircle size={12} /> Pausa <span style={{ opacity: 0.7 }}>{countPausa}</span>
+                  </button>
+                )}
+                {countSinGnc > 0 && (
+                  <button style={btnStyle(filtroAlerta === 'sin_gnc', 'rgba(249,115,22,0.12)', '#ea580c')}
+                    onClick={() => setFiltroAlerta(filtroAlerta === 'sin_gnc' ? null : 'sin_gnc')}>
+                    <AlertTriangle size={12} /> Sin GNC <span style={{ opacity: 0.7 }}>{countSinGnc}</span>
+                  </button>
+                )}
+                {filtroAlerta && (
+                  <button style={{ ...btnStyle(false, '', ''), fontSize: '10px', padding: '3px 8px' }}
+                    onClick={() => setFiltroAlerta(null)}>
+                    <X size={10} /> Limpiar
+                  </button>
+                )}
+              </div>
+            )
+          })()}
+
           {/* DataTable con Vista Previa */}
           <DataTable
             data={vistaPreviaData.filter(f => {
@@ -8282,6 +8329,11 @@ export function ReporteFacturacionTab() {
                   return false
                 }
               }
+              // Filtro por alerta
+              if (filtroAlerta === 'ingreso' && !f.alerta_prorrateo_ingreso) return false
+              if (filtroAlerta === 'baja' && f.estado_billing !== 'De baja') return false
+              if (filtroAlerta === 'pausa' && f.estado_billing !== 'Pausa') return false
+              if (filtroAlerta === 'sin_gnc' && !(f.vehiculo_patente && ['AG558DZ', 'AG304XD'].includes(normalizePatente(f.vehiculo_patente)))) return false
               return true
             })}
             columns={columns}
@@ -8430,8 +8482,66 @@ export function ReporteFacturacionTab() {
                 )}
               </div>
             )}
+            {/* Filtros rápidos de alertas (período) */}
+            {(() => {
+              const src = facturacionesFiltradas
+              const countIngreso = src.filter(f => f.alerta_prorrateo_ingreso).length
+              const countBaja = src.filter(f => f.estado_billing === 'De baja').length
+              const countPausa = src.filter(f => f.estado_billing === 'Pausa').length
+              const countSinGnc = src.filter(f => f.vehiculo_patente && ['AG558DZ', 'AG304XD'].includes(normalizePatente(f.vehiculo_patente))).length
+              const hayAlertas = countIngreso > 0 || countBaja > 0 || countPausa > 0 || countSinGnc > 0
+              if (!hayAlertas) return null
+              const btnStyle = (active: boolean, bg: string, color: string) => ({
+                display: 'inline-flex', alignItems: 'center', gap: '5px',
+                padding: '4px 10px', borderRadius: '14px', fontSize: '11px', fontWeight: 600 as const,
+                border: active ? `2px solid ${color}` : '1px solid var(--border-primary)',
+                background: active ? bg : 'var(--bg-secondary)',
+                color: active ? color : 'var(--text-secondary)',
+                cursor: 'pointer', transition: 'all 0.15s',
+              })
+              return (
+                <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginBottom: '8px' }}>
+                  {countIngreso > 0 && (
+                    <button style={btnStyle(filtroAlerta === 'ingreso', 'rgba(245,158,11,0.12)', '#d97706')}
+                      onClick={() => setFiltroAlerta(filtroAlerta === 'ingreso' ? null : 'ingreso')}>
+                      <AlertTriangle size={12} /> Alerta Ingreso <span style={{ opacity: 0.7 }}>{countIngreso}</span>
+                    </button>
+                  )}
+                  {countBaja > 0 && (
+                    <button style={btnStyle(filtroAlerta === 'baja', 'rgba(239,68,68,0.12)', '#dc2626')}
+                      onClick={() => setFiltroAlerta(filtroAlerta === 'baja' ? null : 'baja')}>
+                      <AlertCircle size={12} /> De Baja <span style={{ opacity: 0.7 }}>{countBaja}</span>
+                    </button>
+                  )}
+                  {countPausa > 0 && (
+                    <button style={btnStyle(filtroAlerta === 'pausa', 'rgba(107,114,128,0.12)', '#6b7280')}
+                      onClick={() => setFiltroAlerta(filtroAlerta === 'pausa' ? null : 'pausa')}>
+                      <AlertCircle size={12} /> Pausa <span style={{ opacity: 0.7 }}>{countPausa}</span>
+                    </button>
+                  )}
+                  {countSinGnc > 0 && (
+                    <button style={btnStyle(filtroAlerta === 'sin_gnc', 'rgba(249,115,22,0.12)', '#ea580c')}
+                      onClick={() => setFiltroAlerta(filtroAlerta === 'sin_gnc' ? null : 'sin_gnc')}>
+                      <AlertTriangle size={12} /> Sin GNC <span style={{ opacity: 0.7 }}>{countSinGnc}</span>
+                    </button>
+                  )}
+                  {filtroAlerta && (
+                    <button style={{ ...btnStyle(false, '', ''), fontSize: '10px', padding: '3px 8px' }}
+                      onClick={() => setFiltroAlerta(null)}>
+                      <X size={10} /> Limpiar
+                    </button>
+                  )}
+                </div>
+              )
+            })()}
             <DataTable
-              data={facturacionesFiltradas}
+              data={filtroAlerta ? facturacionesFiltradas.filter(f => {
+                if (filtroAlerta === 'ingreso') return !!f.alerta_prorrateo_ingreso
+                if (filtroAlerta === 'baja') return f.estado_billing === 'De baja'
+                if (filtroAlerta === 'pausa') return f.estado_billing === 'Pausa'
+                if (filtroAlerta === 'sin_gnc') return f.vehiculo_patente && ['AG558DZ', 'AG304XD'].includes(normalizePatente(f.vehiculo_patente))
+                return true
+              }) : facturacionesFiltradas}
               columns={columns}
               loading={loading}
               searchPlaceholder="Buscar por conductor, DNI, patente..."
