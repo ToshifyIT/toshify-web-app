@@ -76,6 +76,7 @@ interface CabifyPreviewTableProps {
   fechaInicio: string
   fechaFin: string
   periodoId?: string
+  proyectadoA?: string // Fecha hasta la cual se proyectan importes (solo Vista Previa)
   onClose: () => void
   onExport: () => void
   exporting: boolean
@@ -89,6 +90,7 @@ export function CabifyPreviewTable({
   fechaInicio,
   fechaFin,
   periodoId,
+  proyectadoA,
   onClose,
   onExport,
   exporting,
@@ -574,6 +576,20 @@ export function CabifyPreviewTable({
             </div>
             <span className="fact-preview-subtitle">
               Semana {semana}/{anio} - {fechaInicio} al {fechaFin}
+              {proyectadoA && (
+                <span style={{
+                  marginLeft: '10px',
+                  padding: '2px 8px',
+                  borderRadius: '4px',
+                  background: 'rgba(245, 158, 11, 0.15)',
+                  color: 'var(--color-warning, #f59e0b)',
+                  fontSize: '11px',
+                  fontWeight: 600,
+                  border: '1px solid rgba(245, 158, 11, 0.3)',
+                }}>
+                  Proyectado a {proyectadoA}
+                </span>
+              )}
             </span>
           </div>
           {/* Stats inline */}
