@@ -999,7 +999,7 @@ export function ReporteFacturacionTab() {
           entry.tickets_detalle.push({ monto: Math.abs(parseFloat(d.total) || 0), detalle: d.concepto_descripcion || 'Ticket' })
         } else if (d.concepto_codigo === 'P005') {
           entry.monto_peajes += parseFloat(d.total) || 0
-        } else if (d.concepto_codigo === 'P007') {
+        } else if (d.concepto_codigo === 'P006' || d.concepto_codigo === 'P007') {
           entry.monto_penalidades += parseFloat(d.total) || 0
           entry.penalidades_count += 1
           entry.penalidades_detalle.push({ monto: parseFloat(d.total) || 0, detalle: d.concepto_descripcion || 'Penalidad' })
