@@ -392,7 +392,7 @@ export function ReporteFacturacionTab() {
 
   // Recalcular período abierto
   const [recalculando, setRecalculando] = useState(false)
-  const [recalculandoProgreso, setRecalculandoProgreso] = useState({ actual: 0, total: 0 })
+  const [recalculandoProgreso, setRecalculandoProgreso] = useState({ actual: 0, total: 0, nombre: '' })
 
   // Cerrar período
   const [cerrando, setCerrando] = useState(false)
@@ -2508,9 +2508,12 @@ export function ReporteFacturacionTab() {
       let erroresConsecutivos = 0
       let totalErrores = 0
       let primerError = ''
-      setRecalculandoProgreso({ actual: 0, total: conductoresProcesados.length })
+      setRecalculandoProgreso({ actual: 0, total: conductoresProcesados.length, nombre: '' })
 
       for (const conductor of conductoresProcesados) {
+        // Mostrar progreso con nombre del conductor actual
+        setRecalculandoProgreso({ actual: conductoresProcesadosCount + 1, total: conductoresProcesados.length, nombre: conductor.conductor_nombre })
+
         // Calcular alquiler con precio diario × días
         let alquilerTotal = 0
         const detallesAlquiler: { codigo: string; descripcion: string; dias: number; monto: number }[] = []
@@ -2676,21 +2679,23 @@ export function ReporteFacturacionTab() {
         // Limpiar detalle viejo antes de insertar el nuevo
         await supabase.from('facturacion_detalle').delete().eq('facturacion_id', facturacionId)
 
-        // INSERT detalles de alquiler (P001/P002/P013)
+        // ═══ BATCH: Recopilar todos los detalles en un array, insertar de una sola vez ═══
+        const todosDetalles: any[] = []
+        const penIdsAplicar: string[] = []
+        const ticketIdsAplicar: string[] = []
+        const excesoIdsAplicar: string[] = []
+        const cobroIdsAplicar: string[] = []
+
+        // Alquiler detalles (P001/P002/P013)
         for (const detalle of detallesAlquiler) {
-          // Determinar precio unitario según código
           let precioUnitario = 0
           if (detalle.codigo === 'P001') precioUnitario = precioTurnoDiurno / 7
           else if (detalle.codigo === 'P013') precioUnitario = precioTurnoNocturno / 7
           else if (detalle.codigo === 'P002') precioUnitario = precioCargo / 7
-          
-          await (supabase.from('facturacion_detalle') as any).insert({
-            facturacion_id: facturacionId,
-            concepto_codigo: detalle.codigo,
-            concepto_descripcion: detalle.descripcion,
-            cantidad: detalle.dias,
-            precio_unitario: precioUnitario,
-            subtotal: detalle.monto, total: detalle.monto, es_descuento: false
+          todosDetalles.push({
+            facturacion_id: facturacionId, concepto_codigo: detalle.codigo,
+            concepto_descripcion: detalle.descripcion, cantidad: detalle.dias,
+            precio_unitario: precioUnitario, subtotal: detalle.monto, total: detalle.monto, es_descuento: false
           })
         }
 
@@ -2698,15 +2703,13 @@ export function ReporteFacturacionTab() {
         const descripcionGarantia = garantiaCompletada
           ? 'Garantía completada'
           : `Cuota de Garantía ${cuotaActual} de ${totalCuotas}`
-        await (supabase.from('facturacion_detalle') as any).insert({
-          facturacion_id: facturacionId,
-          concepto_codigo: 'P003', concepto_descripcion: descripcionGarantia,
+        todosDetalles.push({
+          facturacion_id: facturacionId, concepto_codigo: 'P003', concepto_descripcion: descripcionGarantia,
           cantidad: 1, precio_unitario: cuotaGarantiaProporcional,
           subtotal: cuotaGarantiaProporcional, total: cuotaGarantiaProporcional, es_descuento: false
         })
 
         // Penalidades segmentadas por categoría (P004 descuento, P006 cargo, P007 cargo)
-        // NULL categoria = pendiente, NO se inserta ni se marca aplicada
         const gruposPenalidades: { pens: any[]; codigo: string; esDescuento: boolean }[] = [
           { pens: pensP004, codigo: 'P004', esDescuento: true },
           { pens: pensP006, codigo: 'P006', esDescuento: false },
@@ -2722,45 +2725,33 @@ export function ReporteFacturacionTab() {
               : grupo.codigo === 'P006'
                 ? `Exceso KM: ${detalleCompleto}`
                 : `Penalidad: ${detalleCompleto}`
-            await (supabase.from('facturacion_detalle') as any).insert({
-              facturacion_id: facturacionId,
-              concepto_codigo: grupo.codigo,
+            todosDetalles.push({
+              facturacion_id: facturacionId, concepto_codigo: grupo.codigo,
               concepto_descripcion: descripcion,
               cantidad: 1, precio_unitario: (pen as any).monto,
               subtotal: (pen as any).monto, total: (pen as any).monto, es_descuento: grupo.esDescuento,
               referencia_id: (pen as any).id, referencia_tipo: 'penalidad'
             })
-            // Marcar como aplicada con semana/anio para trazabilidad
-            await (supabase.from('penalidades') as any).update({ 
-              aplicado: true, 
-              fecha_aplicacion: new Date().toISOString(),
-              semana_aplicacion: semanaNum,
-              anio_aplicacion: anioNum
-            }).eq('id', (pen as any).id)
+            penIdsAplicar.push((pen as any).id)
           }
         }
 
         // P004 - Tickets a Favor (descuentos)
         for (const ticket of ticketsConductor) {
-          await (supabase.from('facturacion_detalle') as any).insert({
-            facturacion_id: facturacionId,
-            concepto_codigo: 'P004',
+          todosDetalles.push({
+            facturacion_id: facturacionId, concepto_codigo: 'P004',
             concepto_descripcion: `Ticket: ${(ticket as any).descripcion || (ticket as any).tipo}`,
             cantidad: 1, precio_unitario: (ticket as any).monto,
             subtotal: (ticket as any).monto, total: (ticket as any).monto, es_descuento: true,
             referencia_id: (ticket as any).id, referencia_tipo: 'ticket'
           })
-          // Marcar como aplicado
-          await (supabase.from('tickets_favor') as any)
-            .update({ estado: 'aplicado', periodo_aplicado_id: periodoId, fecha_aplicacion: new Date().toISOString() })
-            .eq('id', (ticket as any).id)
+          ticketIdsAplicar.push((ticket as any).id)
         }
 
         // P006 - Excesos de kilometraje
         for (const exceso of excesosConductor) {
-          await (supabase.from('facturacion_detalle') as any).insert({
-            facturacion_id: facturacionId,
-            concepto_codigo: 'P006',
+          todosDetalles.push({
+            facturacion_id: facturacionId, concepto_codigo: 'P006',
             concepto_descripcion: `Exceso KM: ${(exceso as any).km_exceso || 0} km`,
             cantidad: 1, precio_unitario: (exceso as any).monto_base || 0,
             iva_porcentaje: (exceso as any).iva_porcentaje || 21,
@@ -2769,18 +2760,13 @@ export function ReporteFacturacionTab() {
             total: (exceso as any).monto_total || 0, es_descuento: false,
             referencia_id: (exceso as any).id, referencia_tipo: 'exceso_km'
           })
-          // Marcar como aplicado
-          await (supabase.from('excesos_kilometraje') as any)
-            .update({ aplicado: true, fecha_aplicacion: new Date().toISOString(), periodo_id: periodoId })
-            .eq('id', (exceso as any).id)
+          excesoIdsAplicar.push((exceso as any).id)
         }
 
         // P005 - Peajes de Cabify
         if (totalPeajes > 0) {
-          const descPeaje = 'Peajes'
-          await (supabase.from('facturacion_detalle') as any).insert({
-            facturacion_id: facturacionId,
-            concepto_codigo: 'P005', concepto_descripcion: descPeaje,
+          todosDetalles.push({
+            facturacion_id: facturacionId, concepto_codigo: 'P005', concepto_descripcion: 'Peajes',
             cantidad: 1, precio_unitario: totalPeajes,
             subtotal: totalPeajes, total: totalPeajes, es_descuento: false,
             referencia_tipo: 'cabify_peajes'
@@ -2789,12 +2775,10 @@ export function ReporteFacturacionTab() {
 
         // P008 - Multas de tránsito
         if (montoMultas > 0) {
-          await (supabase.from('facturacion_detalle') as any).insert({
-            facturacion_id: facturacionId,
-            concepto_codigo: 'P008',
+          todosDetalles.push({
+            facturacion_id: facturacionId, concepto_codigo: 'P008',
             concepto_descripcion: `Multas de Tránsito (${cantidadMultas})`,
-            cantidad: cantidadMultas,
-            precio_unitario: Math.round(montoMultas / cantidadMultas),
+            cantidad: cantidadMultas, precio_unitario: Math.round(montoMultas / cantidadMultas),
             subtotal: montoMultas, total: montoMultas, es_descuento: false,
             referencia_tipo: 'multa_transito'
           })
@@ -2802,12 +2786,10 @@ export function ReporteFacturacionTab() {
 
         // P009 - Mora
         if (montoMora > 0) {
-          await (supabase.from('facturacion_detalle') as any).insert({
-            facturacion_id: facturacionId,
-            concepto_codigo: 'P009',
+          todosDetalles.push({
+            facturacion_id: facturacionId, concepto_codigo: 'P009',
             concepto_descripcion: `Mora (${diasMora} días al 1%)`,
-            cantidad: diasMora,
-            precio_unitario: Math.round(saldoAnterior * 0.01),
+            cantidad: diasMora, precio_unitario: Math.round(saldoAnterior * 0.01),
             subtotal: montoMora, total: montoMora, es_descuento: false
           })
         }
@@ -2816,17 +2798,13 @@ export function ReporteFacturacionTab() {
         for (const cobro of cobrosConductor) {
           const montoCuotaReal = calcularMontoCuota(cobro)
           const descripcionCobro = (cobro as any).descripcion || `Cuota ${(cobro as any).numero_cuota} de ${(cobro as any).total_cuotas}`
-          await (supabase.from('facturacion_detalle') as any).insert({
-            facturacion_id: facturacionId,
-            concepto_codigo: 'P010', concepto_descripcion: descripcionCobro,
+          todosDetalles.push({
+            facturacion_id: facturacionId, concepto_codigo: 'P010', concepto_descripcion: descripcionCobro,
             cantidad: 1, precio_unitario: montoCuotaReal,
             subtotal: montoCuotaReal, total: montoCuotaReal, es_descuento: false,
             referencia_id: (cobro as any).id, referencia_tipo: 'cobro_fraccionado'
           })
-          // Marcar como aplicado
-          await (supabase.from('cobros_fraccionados') as any)
-            .update({ aplicado: true, fecha_aplicacion: new Date().toISOString() })
-            .eq('id', (cobro as any).id)
+          cobroIdsAplicar.push((cobro as any).id)
         }
 
         // Penalidades cuotas (cuotas de penalidades fraccionadas no pagadas hasta esta semana)
@@ -2836,7 +2814,7 @@ export function ReporteFacturacionTab() {
           const esDescuento = penPadre?.tipos_cobro_descuento?.es_a_favor === true
           const tipoNombre = penPadre?.tipos_cobro_descuento?.nombre || penPadre?.detalle || 'Penalidad fraccionada'
           const descripcionCuota = `Cuota ${cuota.numero_cuota} - ${tipoNombre} (Total: ${penPadre?.cantidad_cuotas || '?'} cuotas)`
-          await (supabase.from('facturacion_detalle') as any).insert({
+          todosDetalles.push({
             facturacion_id: facturacionId,
             concepto_codigo: esDescuento ? 'P004' : categoria,
             concepto_descripcion: descripcionCuota,
@@ -2847,8 +2825,48 @@ export function ReporteFacturacionTab() {
           // NO marcar como aplicado — eso se hace cuando se PAGA, no cuando se factura
         }
 
+        // ═══ EJECUTAR: 1 batch insert + updates en paralelo (reduce ~20 calls a 3-5) ═══
+        if (todosDetalles.length > 0) {
+          await (supabase.from('facturacion_detalle') as any).insert(todosDetalles)
+        }
+
+        // Marcar registros como aplicados en paralelo
+        const batchUpdates: Promise<any>[] = []
+        if (penIdsAplicar.length > 0) {
+          batchUpdates.push(
+            (supabase.from('penalidades') as any).update({
+              aplicado: true, fecha_aplicacion: new Date().toISOString(),
+              semana_aplicacion: semanaNum, anio_aplicacion: anioNum
+            }).in('id', penIdsAplicar)
+          )
+        }
+        if (ticketIdsAplicar.length > 0) {
+          batchUpdates.push(
+            (supabase.from('tickets_favor') as any)
+              .update({ estado: 'aplicado', periodo_aplicado_id: periodoId, fecha_aplicacion: new Date().toISOString() })
+              .in('id', ticketIdsAplicar)
+          )
+        }
+        if (excesoIdsAplicar.length > 0) {
+          batchUpdates.push(
+            (supabase.from('excesos_kilometraje') as any)
+              .update({ aplicado: true, fecha_aplicacion: new Date().toISOString(), periodo_id: periodoId })
+              .in('id', excesoIdsAplicar)
+          )
+        }
+        if (cobroIdsAplicar.length > 0) {
+          batchUpdates.push(
+            (supabase.from('cobros_fraccionados') as any)
+              .update({ aplicado: true, fecha_aplicacion: new Date().toISOString() })
+              .in('id', cobroIdsAplicar)
+          )
+        }
+        if (batchUpdates.length > 0) {
+          await Promise.all(batchUpdates)
+        }
+
         conductoresProcesadosCount++
-        setRecalculandoProgreso({ actual: conductoresProcesadosCount, total: conductoresProcesados.length })
+        setRecalculandoProgreso({ actual: conductoresProcesadosCount, total: conductoresProcesados.length, nombre: '' })
       }
 
       // 7. Validar que se procesó al menos un conductor
@@ -2892,7 +2910,7 @@ export function ReporteFacturacionTab() {
       Swal.fire('Error', error?.message || 'No se pudo recalcular el período', 'error')
     } finally {
       setRecalculando(false)
-      setRecalculandoProgreso({ actual: 0, total: 0 })
+      setRecalculandoProgreso({ actual: 0, total: 0, nombre: '' })
     }
   }
 
@@ -7858,7 +7876,7 @@ export function ReporteFacturacionTab() {
             >
               <Calculator size={14} className={recalculando || periodo?.estado === 'procesando' ? 'spinning' : ''} />
               {recalculando && recalculandoProgreso.total > 0
-                ? `Recalculando ${recalculandoProgreso.actual}/${recalculandoProgreso.total}...`
+                ? `${recalculandoProgreso.actual}/${recalculandoProgreso.total}`
                 : recalculando || periodo?.estado === 'procesando'
                   ? 'Recalculando...'
                   : 'Recalcular'}
@@ -8249,8 +8267,13 @@ export function ReporteFacturacionTab() {
                 <span style={{ fontSize: '14px', fontWeight: 500, color: 'var(--text-secondary)' }}>
                   {recalculandoProgreso.total > 0
                     ? `Recalculando ${recalculandoProgreso.actual} de ${recalculandoProgreso.total} conductores...`
-                    : 'Recalculando facturacion...'}
+                    : 'Recalculando facturación...'}
                 </span>
+                {recalculandoProgreso.nombre && (
+                  <span style={{ fontSize: '12px', color: 'var(--text-tertiary)' }}>
+                    {recalculandoProgreso.nombre}
+                  </span>
+                )}
               </div>
             )}
             <DataTable
