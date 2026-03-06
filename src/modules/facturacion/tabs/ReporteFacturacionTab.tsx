@@ -7061,6 +7061,7 @@ export function ReporteFacturacionTab() {
       ),
       enableSorting: true,
       size: 140,
+      meta: { expand: true },
     },
     {
       id: 'dias_trabajados',
@@ -7554,6 +7555,8 @@ export function ReporteFacturacionTab() {
     {
       id: 'acciones',
       header: '',
+      size: 50,
+      maxSize: 170,
       cell: ({ row }) => (
         <div style={{ display: 'flex', gap: '4px', justifyContent: 'center' }}>
           <button
