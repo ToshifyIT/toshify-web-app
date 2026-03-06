@@ -7131,6 +7131,109 @@ export function ReporteFacturacionTab() {
     }
   }, [periodo, facturaciones, modoVistaPrevia, vistaPreviaData])
 
+  // Info modal para stat cards
+  function showStatInfo(stat: string) {
+    const src = modoVistaPrevia ? vistaPreviaData : facturaciones
+    const descriptions: Record<string, { title: string; html: string }> = {
+      conductores: {
+        title: 'Conductores',
+        html: `<div style="text-align:left;font-size:13px;">
+          <p>Total de conductores incluidos en la facturación del período.</p>
+          <p><b>${src.length}</b> conductores</p>
+        </div>`
+      },
+      cargos: {
+        title: 'Total Cargos',
+        html: (() => {
+          const alquiler = src.reduce((s, f) => s + (f.subtotal_alquiler || 0), 0)
+          const garantia = src.reduce((s, f) => s + (f.subtotal_garantia || 0), 0)
+          const peajes = src.reduce((s, f) => s + (f.monto_peajes || 0), 0)
+          const excesosKm = src.reduce((s, f) => s + (f.monto_excesos || 0), 0)
+          const penalidades = src.reduce((s, f) => s + (f.monto_penalidades || 0), 0)
+          const saldos = src.reduce((s, f) => s + Math.max(0, f.saldo_anterior || 0), 0)
+          const total = alquiler + garantia + peajes + excesosKm + penalidades + saldos
+          return `<div style="text-align:left;font-size:13px;">
+            <p>Suma de todos los cobros a conductores:</p>
+            <table style="width:100%;border-collapse:collapse;">
+              <tr><td>P001/P002/P013 - Alquiler</td><td style="text-align:right"><b>${formatCurrency(alquiler)}</b></td></tr>
+              <tr><td>P003 - Garantía</td><td style="text-align:right"><b>${formatCurrency(garantia)}</b></td></tr>
+              <tr><td>P005 - Peajes</td><td style="text-align:right"><b>${formatCurrency(peajes)}</b></td></tr>
+              <tr><td>P006 - Exceso KM</td><td style="text-align:right"><b>${formatCurrency(excesosKm)}</b></td></tr>
+              <tr><td>P007 - Penalidades</td><td style="text-align:right"><b>${formatCurrency(penalidades)}</b></td></tr>
+              <tr><td>Saldos pendientes (+)</td><td style="text-align:right"><b>${formatCurrency(saldos)}</b></td></tr>
+              <tr style="border-top:2px solid #ccc;"><td><b>TOTAL CARGOS</b></td><td style="text-align:right"><b>${formatCurrency(total)}</b></td></tr>
+            </table>
+          </div>`
+        })()
+      },
+      descuentos: {
+        title: 'Total Descuentos',
+        html: (() => {
+          const tickets = src.reduce((s, f) => s + (f.monto_tickets_favor || 0), 0)
+          const otrosDesc = src.reduce((s, f) => s + (f.subtotal_descuentos || 0) - (f.monto_tickets_favor || 0), 0)
+          const total = src.reduce((s, f) => s + (f.subtotal_descuentos || 0), 0)
+          return `<div style="text-align:left;font-size:13px;">
+            <p>Suma de todos los descuentos/créditos:</p>
+            <table style="width:100%;border-collapse:collapse;">
+              <tr><td>P004 - Tickets a favor</td><td style="text-align:right"><b>${formatCurrency(tickets)}</b></td></tr>
+              <tr><td>Otros descuentos</td><td style="text-align:right"><b>${formatCurrency(otrosDesc)}</b></td></tr>
+              <tr style="border-top:2px solid #ccc;"><td><b>TOTAL DESCUENTOS</b></td><td style="text-align:right"><b>${formatCurrency(total)}</b></td></tr>
+            </table>
+          </div>`
+        })()
+      },
+      neto: {
+        title: 'Total Neto',
+        html: (() => {
+          const totalCargos = src.reduce((s, f) => s + f.subtotal_cargos + Math.max(0, f.saldo_anterior || 0), 0)
+          const totalDesc = src.reduce((s, f) => s + (f.subtotal_descuentos || 0), 0)
+          const neto = src.reduce((s, f) => s + (f.total_a_pagar || 0), 0)
+          return `<div style="text-align:left;font-size:13px;">
+            <p>Resultado neto de la facturación:</p>
+            <table style="width:100%;border-collapse:collapse;">
+              <tr><td>Total Cargos</td><td style="text-align:right">${formatCurrency(totalCargos)}</td></tr>
+              <tr><td>Total Descuentos</td><td style="text-align:right">- ${formatCurrency(totalDesc)}</td></tr>
+              <tr style="border-top:2px solid #ccc;"><td><b>TOTAL NETO</b></td><td style="text-align:right"><b>${formatCurrency(neto)}</b></td></tr>
+            </table>
+          </div>`
+        })()
+      },
+      deben: {
+        title: 'Conductores que Deben',
+        html: (() => {
+          const deben = src.filter(f => f.total_a_pagar > 0)
+            .sort((a, b) => b.total_a_pagar - a.total_a_pagar)
+          const top5 = deben.slice(0, 5)
+          return `<div style="text-align:left;font-size:13px;">
+            <p><b>${deben.length}</b> conductores con saldo a pagar (total_a_pagar &gt; 0)</p>
+            ${top5.length > 0 ? `<p style="margin-top:8px;font-size:11px;color:#888;">Top 5:</p>
+            <table style="width:100%;border-collapse:collapse;font-size:12px;">
+              ${top5.map(f => `<tr><td style="padding:2px 0;">${f.conductor_nombre}</td><td style="text-align:right;padding:2px 0;"><b>${formatCurrency(f.total_a_pagar)}</b></td></tr>`).join('')}
+            </table>` : ''}
+          </div>`
+        })()
+      },
+      favor: {
+        title: 'Conductores a Favor',
+        html: (() => {
+          const favor = src.filter(f => f.total_a_pagar <= 0)
+            .sort((a, b) => a.total_a_pagar - b.total_a_pagar)
+          const top5 = favor.slice(0, 5)
+          return `<div style="text-align:left;font-size:13px;">
+            <p><b>${favor.length}</b> conductores con saldo a favor o $0 (total_a_pagar &le; 0)</p>
+            ${top5.length > 0 ? `<p style="margin-top:8px;font-size:11px;color:#888;">Top 5:</p>
+            <table style="width:100%;border-collapse:collapse;font-size:12px;">
+              ${top5.map(f => `<tr><td style="padding:2px 0;">${f.conductor_nombre}</td><td style="text-align:right;padding:2px 0;color:#059669;"><b>${formatCurrency(f.total_a_pagar)}</b></td></tr>`).join('')}
+            </table>` : ''}
+          </div>`
+        })()
+      }
+    }
+    const info = descriptions[stat]
+    if (!info) return
+    Swal.fire({ title: info.title, html: info.html, icon: 'info', width: 420, confirmButtonText: 'Cerrar' })
+  }
+
   // Helper para obtener excesos de un conductor
   const getExcesosConductor = (conductorId: string) => {
     return excesos.filter(e => e.conductor_id === conductorId)
@@ -8194,42 +8297,42 @@ export function ReporteFacturacionTab() {
           {stats && (
             <div className="fact-stats">
               <div className="fact-stats-grid">
-                <div className="fact-stat-card">
+                <div className="fact-stat-card" onClick={() => showStatInfo('conductores')} style={{ cursor: 'pointer' }}>
                   <Users size={18} className="stat-icon" />
                   <div className="stat-content">
                     <span className="stat-value">{stats.total_conductores}</span>
                     <span className="stat-label">Conductores</span>
                   </div>
                 </div>
-                <div className="fact-stat-card">
+                <div className="fact-stat-card" onClick={() => showStatInfo('cargos')} style={{ cursor: 'pointer' }}>
                   <TrendingUp size={18} className="stat-icon" />
                   <div className="stat-content">
                     <span className="stat-value">{formatCurrency(stats.total_cargos)}</span>
                     <span className="stat-label">Total Cargos</span>
                   </div>
                 </div>
-                <div className="fact-stat-card">
+                <div className="fact-stat-card" onClick={() => showStatInfo('descuentos')} style={{ cursor: 'pointer' }}>
                   <TrendingDown size={18} className="stat-icon" />
                   <div className="stat-content">
                     <span className="stat-value">{formatCurrency(stats.total_descuentos)}</span>
                     <span className="stat-label">Total Descuentos</span>
                   </div>
                 </div>
-                <div className="fact-stat-card">
+                <div className="fact-stat-card" onClick={() => showStatInfo('neto')} style={{ cursor: 'pointer' }}>
                   <DollarSign size={18} className="stat-icon" />
                   <div className="stat-content">
                     <span className="stat-value">{formatCurrency(stats.total_neto)}</span>
                     <span className="stat-label">Total Proyectado</span>
                   </div>
                 </div>
-                <div className="fact-stat-card">
+                <div className="fact-stat-card" onClick={() => showStatInfo('deben')} style={{ cursor: 'pointer' }}>
                   <TrendingUp size={18} className="stat-icon red" />
                   <div className="stat-content">
                     <span className="stat-value">{stats.conductores_deben}</span>
                     <span className="stat-label">Deben</span>
                   </div>
                 </div>
-                <div className="fact-stat-card">
+                <div className="fact-stat-card" onClick={() => showStatInfo('favor')} style={{ cursor: 'pointer' }}>
                   <TrendingDown size={18} className="stat-icon green" />
                   <div className="stat-content">
                     <span className="stat-value">{stats.conductores_favor}</span>
@@ -8389,42 +8492,42 @@ export function ReporteFacturacionTab() {
           {stats && (
             <div className="fact-stats">
               <div className="fact-stats-grid">
-                <div className="fact-stat-card">
+                <div className="fact-stat-card" onClick={() => showStatInfo('conductores')} style={{ cursor: 'pointer' }}>
                   <Users size={18} className="stat-icon" />
                   <div className="stat-content">
                     <span className="stat-value">{stats.total_conductores}</span>
                     <span className="stat-label">Conductores</span>
                   </div>
                 </div>
-                <div className="fact-stat-card">
+                <div className="fact-stat-card" onClick={() => showStatInfo('cargos')} style={{ cursor: 'pointer' }}>
                   <TrendingUp size={18} className="stat-icon" />
                   <div className="stat-content">
                     <span className="stat-value">{formatCurrency(stats.total_cargos)}</span>
                     <span className="stat-label">Total Cargos</span>
                   </div>
                 </div>
-                <div className="fact-stat-card">
+                <div className="fact-stat-card" onClick={() => showStatInfo('descuentos')} style={{ cursor: 'pointer' }}>
                   <TrendingDown size={18} className="stat-icon" />
                   <div className="stat-content">
                     <span className="stat-value">{formatCurrency(stats.total_descuentos)}</span>
                     <span className="stat-label">Total Descuentos</span>
                   </div>
                 </div>
-                <div className="fact-stat-card">
+                <div className="fact-stat-card" onClick={() => showStatInfo('neto')} style={{ cursor: 'pointer' }}>
                   <DollarSign size={18} className="stat-icon" />
                   <div className="stat-content">
                     <span className="stat-value">{formatCurrency(stats.total_neto)}</span>
                     <span className="stat-label">Total Neto</span>
                   </div>
                 </div>
-                <div className="fact-stat-card">
+                <div className="fact-stat-card" onClick={() => showStatInfo('deben')} style={{ cursor: 'pointer' }}>
                   <TrendingUp size={18} className="stat-icon red" />
                   <div className="stat-content">
                     <span className="stat-value">{stats.conductores_deben}</span>
                     <span className="stat-label">Deben</span>
                   </div>
                 </div>
-                <div className="fact-stat-card">
+                <div className="fact-stat-card" onClick={() => showStatInfo('favor')} style={{ cursor: 'pointer' }}>
                   <TrendingDown size={18} className="stat-icon green" />
                   <div className="stat-content">
                     <span className="stat-value">{stats.conductores_favor}</span>
