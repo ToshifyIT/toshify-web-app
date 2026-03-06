@@ -32,7 +32,8 @@ import {
   Upload,
   Lock,
   Unlock,
-  Info
+  Info,
+  Target
 } from 'lucide-react'
 import { type ColumnDef, type Table } from '@tanstack/react-table'
 import { DataTable } from '../../../components/ui/DataTable'
@@ -7172,6 +7173,7 @@ export function ReporteFacturacionTab() {
     if (modoVistaPrevia && vistaPreviaData.length > 0) {
       return {
         total_conductores: vistaPreviaData.length,
+        total_proyectado: vistaPreviaData.reduce((sum, f) => sum + (f.proyectado_alquiler || 0), 0),
         total_cargos: vistaPreviaData.reduce((sum, f) => sum + f.subtotal_cargos + Math.max(0, f.saldo_anterior), 0),
         total_descuentos: vistaPreviaData.reduce((sum, f) => sum + f.subtotal_descuentos, 0),
         total_neto: vistaPreviaData.reduce((sum, f) => sum + f.total_a_pagar, 0),
@@ -7183,9 +7185,10 @@ export function ReporteFacturacionTab() {
     if (!periodo) return null
     return {
       total_conductores: periodo.total_conductores,
-      total_cargos: periodo.total_cargos,
-      total_descuentos: periodo.total_descuentos,
-      total_neto: periodo.total_neto,
+      total_proyectado: facturaciones.reduce((sum, f) => sum + (f.proyectado_alquiler || 0), 0),
+      total_cargos: facturaciones.reduce((sum, f) => sum + (f.subtotal_cargos || 0) + Math.max(0, f.saldo_anterior || 0), 0),
+      total_descuentos: facturaciones.reduce((sum, f) => sum + (f.subtotal_descuentos || 0), 0),
+      total_neto: facturaciones.reduce((sum, f) => sum + (f.total_a_pagar || 0), 0),
       conductores_deben: facturaciones.filter(f => f.total_a_pagar > 0).length,
       conductores_favor: facturaciones.filter(f => f.total_a_pagar <= 0).length
     }
@@ -7201,6 +7204,24 @@ export function ReporteFacturacionTab() {
           <p>Total de conductores incluidos en la facturación del período.</p>
           <p><b>${src.length}</b> conductores</p>
         </div>`
+      },
+      proyectado: {
+        title: 'Total Proyectado',
+        html: (() => {
+          const conductoresConProyectado = src.filter(f => (f.proyectado_alquiler || 0) > 0)
+          const totalProyectado = src.reduce((s, f) => s + (f.proyectado_alquiler || 0), 0)
+          const totalAlquilerActual = src.reduce((s, f) => s + (f.subtotal_alquiler || 0), 0)
+          const porcentaje = totalProyectado > 0 ? Math.round(totalAlquilerActual / totalProyectado * 100) : 0
+          return `<div style="text-align:left;font-size:13px;">
+            <p>Alquiler semanal proyectado (precio_unitario × 49):</p>
+            <table style="width:100%;border-collapse:collapse;">
+              <tr><td>Conductores con alquiler</td><td style="text-align:right"><b>${conductoresConProyectado.length}</b></td></tr>
+              <tr><td>Proyectado semanal</td><td style="text-align:right"><b>${formatCurrency(totalProyectado)}</b></td></tr>
+              <tr><td>Alquiler actual</td><td style="text-align:right"><b>${formatCurrency(totalAlquilerActual)}</b></td></tr>
+              <tr style="border-top:2px solid #ccc;"><td><b>Cobertura</b></td><td style="text-align:right"><b>${porcentaje}%</b></td></tr>
+            </table>
+          </div>`
+        })()
       },
       cargos: {
         title: 'Total Cargos',
@@ -8395,6 +8416,13 @@ export function ReporteFacturacionTab() {
                     <span className="stat-label">Conductores</span>
                   </div>
                 </div>
+                <div className="fact-stat-card" onClick={() => showStatInfo('proyectado')} style={{ cursor: 'pointer' }}>
+                  <Target size={18} className="stat-icon" />
+                  <div className="stat-content">
+                    <span className="stat-value" style={{ color: 'var(--color-primary)' }}>{formatCurrency(stats.total_proyectado)}</span>
+                    <span className="stat-label">Total Proyectado</span>
+                  </div>
+                </div>
                 <div className="fact-stat-card" onClick={() => showStatInfo('cargos')} style={{ cursor: 'pointer' }}>
                   <TrendingUp size={18} className="stat-icon" />
                   <div className="stat-content">
@@ -8413,7 +8441,7 @@ export function ReporteFacturacionTab() {
                   <DollarSign size={18} className="stat-icon" />
                   <div className="stat-content">
                     <span className="stat-value">{formatCurrency(stats.total_neto)}</span>
-                    <span className="stat-label">Total Proyectado</span>
+                    <span className="stat-label">Total Neto</span>
                   </div>
                 </div>
                 <div className="fact-stat-card" onClick={() => showStatInfo('deben')} style={{ cursor: 'pointer' }}>
@@ -8421,13 +8449,6 @@ export function ReporteFacturacionTab() {
                   <div className="stat-content">
                     <span className="stat-value">{stats.conductores_deben}</span>
                     <span className="stat-label">Deben</span>
-                  </div>
-                </div>
-                <div className="fact-stat-card" onClick={() => showStatInfo('favor')} style={{ cursor: 'pointer' }}>
-                  <TrendingDown size={18} className="stat-icon green" />
-                  <div className="stat-content">
-                    <span className="stat-value">{stats.conductores_favor}</span>
-                    <span className="stat-label">A Favor</span>
                   </div>
                 </div>
               </div>
@@ -8590,6 +8611,13 @@ export function ReporteFacturacionTab() {
                     <span className="stat-label">Conductores</span>
                   </div>
                 </div>
+                <div className="fact-stat-card" onClick={() => showStatInfo('proyectado')} style={{ cursor: 'pointer' }}>
+                  <Target size={18} className="stat-icon" />
+                  <div className="stat-content">
+                    <span className="stat-value" style={{ color: 'var(--color-primary)' }}>{formatCurrency(stats.total_proyectado)}</span>
+                    <span className="stat-label">Total Proyectado</span>
+                  </div>
+                </div>
                 <div className="fact-stat-card" onClick={() => showStatInfo('cargos')} style={{ cursor: 'pointer' }}>
                   <TrendingUp size={18} className="stat-icon" />
                   <div className="stat-content">
@@ -8616,13 +8644,6 @@ export function ReporteFacturacionTab() {
                   <div className="stat-content">
                     <span className="stat-value">{stats.conductores_deben}</span>
                     <span className="stat-label">Deben</span>
-                  </div>
-                </div>
-                <div className="fact-stat-card" onClick={() => showStatInfo('favor')} style={{ cursor: 'pointer' }}>
-                  <TrendingDown size={18} className="stat-icon green" />
-                  <div className="stat-content">
-                    <span className="stat-value">{stats.conductores_favor}</span>
-                    <span className="stat-label">A Favor</span>
                   </div>
                 </div>
               </div>
