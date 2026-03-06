@@ -1421,6 +1421,7 @@ export function ReporteFacturacionTab() {
         [{ data: cabifyData }, { data: cabifyPeajesData }],
         { data: tickets },
         { data: excesosData },
+        { data: dniMapeoData },
       ] = await Promise.all([
         (supabase.from('saldos_conductores') as any)
           .select('conductor_id, saldo_actual')
@@ -1446,7 +1447,14 @@ export function ReporteFacturacionTab() {
           .select('conductor_id, km_exceso, monto_total, aplicado')
           .eq('aplicado', false)
           .in('conductor_id', conductorIds),
+        supabase.from('cabify_dni_mapeo')
+          .select('cabify_hash, dni_real'),
       ])
+
+      // Mapa de CABIFY_hash → DNI real para resolver hashes de Cabify
+      const cabifyHashMap = new Map<string, string>(
+        (dniMapeoData || []).map((m: any) => [m.cabify_hash, m.dni_real])
+      )
 
       // Construir mapas
       const saldosMap = new Map<string, { conductor_id: string; saldo_actual: number }>(
@@ -1470,7 +1478,13 @@ export function ReporteFacturacionTab() {
       const cabifyRawDniMap = new Map<string, string>() // normalized -> raw cabify DNI
       ;(cabifyData || []).forEach((record: any) => {
         if (record.dni) {
-          const dniNorm = normalizeDni(record.dni)
+          let dniKey = String(record.dni)
+          if (dniKey.startsWith('CABIFY_')) {
+            const resolved = cabifyHashMap.get(dniKey)
+            if (resolved) dniKey = resolved
+            else return // Hash desconocido, skip
+          }
+          const dniNorm = normalizeDni(dniKey)
           const actual = cabifyMap.get(dniNorm) || 0
           const cobroApp = parseFloat(String(record.cobro_app)) || 0
           cabifyMap.set(dniNorm, actual + cobroApp)
@@ -1482,7 +1496,13 @@ export function ReporteFacturacionTab() {
       const peajesDetalleMap = new Map<string, Array<{ fecha: string; monto: number }>>()
       ;(cabifyPeajesData || []).forEach((record: any) => {
         if (record.dni && record.peajes) {
-          const dniNorm = normalizeDni(record.dni)
+          let dniKey = String(record.dni)
+          if (dniKey.startsWith('CABIFY_')) {
+            const resolved = cabifyHashMap.get(dniKey)
+            if (resolved) dniKey = resolved
+            else return // Hash desconocido, skip
+          }
+          const dniNorm = normalizeDni(dniKey)
           const actualPeajes = peajesMap.get(dniNorm) || 0
           const peajes = parseFloat(String(record.peajes)) || 0
           peajesMap.set(dniNorm, actualPeajes + peajes)
@@ -2340,7 +2360,7 @@ export function ReporteFacturacionTab() {
       // 5. Obtener datos adicionales en paralelo
       // NOTA: multas_historico DESACTIVADO temporalmente — reactivar cuando se defina el flujo
       const MULTAS_HABILITADAS = false
-      const [penalidadesRes, ticketsRes, saldosRes, excesosRes, cabifyRes, garantiasRes, cobrosRes, multasRes] = await Promise.all([
+      const [penalidadesRes, ticketsRes, saldosRes, excesosRes, cabifyRes, garantiasRes, cobrosRes, multasRes, dniMapeoResRecalc] = await Promise.all([
         (supabase.from('penalidades') as any).select('*, tipos_cobro_descuento(categoria, es_a_favor, nombre), incidencias(descripcion)').in('conductor_id', conductorIds).gte('fecha', fechaInicio).lte('fecha', fechaFin).eq('aplicado', false).eq('fraccionado', false).neq('rechazado', true),
         (supabase.from('tickets_favor') as any).select('*').in('conductor_id', conductorIds).eq('estado', 'aprobado'),
         (supabase.from('saldos_conductores') as any).select('conductor_id, saldo_actual').in('conductor_id', conductorIds),
@@ -2357,6 +2377,7 @@ export function ReporteFacturacionTab() {
         MULTAS_HABILITADAS
           ? (supabase.from('multas_historico') as any).select('patente, importe, fecha_infraccion').gte('fecha_infraccion', fechaInicio).lte('fecha_infraccion', fechaFin)
           : Promise.resolve({ data: [] }),
+        supabase.from('cabify_dni_mapeo').select('cabify_hash, dni_real'),
       ])
 
       // 5b. Cargar penalidades_cuotas (cuotas de penalidades fraccionadas) hasta esta semana + pagos para cruzar
@@ -2449,11 +2470,22 @@ export function ReporteFacturacionTab() {
       )
       // ─────────────────────────────────────────────────────────────────────────────
 
+      // Mapa de CABIFY_hash → DNI real para resolver hashes de Cabify
+      const cabifyHashMapRecalc = new Map<string, string>(
+        (dniMapeoResRecalc.data || []).map((m: any) => [m.cabify_hash, m.dni_real])
+      )
+
       // Mapear peajes por DNI (normalizado)
       const peajesMap = new Map<string, number>()
       ;((cabifyRes.data || []) as any[]).forEach((r: any) => {
         if (r.dni && r.peajes) {
-          const dniNorm = normalizeDni(r.dni)
+          let dniKey = String(r.dni)
+          if (dniKey.startsWith('CABIFY_')) {
+            const resolved = cabifyHashMapRecalc.get(dniKey)
+            if (resolved) dniKey = resolved
+            else return // Hash desconocido, skip
+          }
+          const dniNorm = normalizeDni(dniKey)
           peajesMap.set(dniNorm, (peajesMap.get(dniNorm) || 0) + (parseFloat(String(r.peajes)) || 0))
         }
       })
