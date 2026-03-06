@@ -3134,19 +3134,27 @@ export function ReporteFacturacionTab() {
         })
       }
 
-      // Penalidades completas - Filtrar por semana de aplicación
+      // Penalidades completas - En Vista Previa buscar pendientes, en período buscar aplicadas
       const semDetalle = periodo?.semana || getWeek(semanaActual.inicio, { weekStartsOn: 1 })
       const anioDetalle = periodo?.anio || getYear(semanaActual.inicio)
+      const esPreview = modoVistaPrevia || facturacion.id.startsWith('preview-')
+      const fechaInicioDetalle = periodo?.fecha_inicio || format(semanaActual.inicio, 'yyyy-MM-dd')
+      const fechaFinDetalle = periodo?.fecha_fin || format(semanaActual.fin, 'yyyy-MM-dd')
 
-      const { data: penalidades } = await (supabase
+      let qPenalidades = (supabase
         .from('penalidades') as any)
-        .select('id, monto, observaciones, fraccionado, cantidad_cuotas, semana_aplicacion, anio_aplicacion, fecha, created_at, tipos_cobro_descuento(categoria, es_a_favor, nombre)')
+        .select('id, monto, observaciones, fraccionado, cantidad_cuotas, semana_aplicacion, anio_aplicacion, fecha, created_at, incidencias(descripcion), tipos_cobro_descuento(categoria, es_a_favor, nombre)')
         .eq('conductor_id', facturacion.conductor_id)
-        .eq('aplicado', true)
         .eq('fraccionado', false)
         .neq('rechazado', true)
-        .eq('semana_aplicacion', semDetalle)
-        .eq('anio_aplicacion', anioDetalle)
+      if (esPreview) {
+        // Vista Previa: penalidades pendientes en el rango de la semana
+        qPenalidades = qPenalidades.eq('aplicado', false).gte('fecha', fechaInicioDetalle).lte('fecha', fechaFinDetalle)
+      } else {
+        // Período generado: penalidades ya aplicadas en esta semana
+        qPenalidades = qPenalidades.eq('aplicado', true).eq('semana_aplicacion', semDetalle).eq('anio_aplicacion', anioDetalle)
+      }
+      const { data: penalidades } = await qPenalidades
 
       // Penalidades que tienen cuotas (excluir del listado completo)
       const { data: penIdsConCuotasDet } = await (supabase
@@ -3170,8 +3178,10 @@ export function ReporteFacturacionTab() {
           return
         }
         const tipoNombre = p.tipos_cobro_descuento?.nombre || p.observaciones || 'Sin detalle'
+        const incDesc = p.incidencias?.descripcion
+        const detalleCompleto = incDesc ? `${tipoNombre} - ${incDesc}` : tipoNombre
         const esDescuento = categoria === 'P004'
-        const descripcion = esDescuento ? `Ticket: ${tipoNombre}` : `Penalidad: ${tipoNombre}`
+        const descripcion = esDescuento ? `Ticket: ${detalleCompleto}` : `Penalidad: ${detalleCompleto}`
         detallesSimulados.push({
           id: `det-pen-${facturacion.conductor_id}-${idx}`,
           facturacion_id: facturacion.id,
@@ -3571,6 +3581,136 @@ export function ReporteFacturacionTab() {
     } catch (error: any) {
       Swal.fire('Error', error.message || 'No se pudo cargar el detalle', 'error')
     }
+  }
+
+  // ==========================================
+  // VER DETALLE GENÉRICO DE ÍTEM DE FACTURACIÓN
+  // ==========================================
+  async function verDetalleItem(item: FacturacionDetalle) {
+    const codigo = item.concepto_codigo
+    const desc = item.concepto_descripcion
+    const qty = item.cantidad
+    const unitario = item.precio_unitario
+    const total = item.total
+
+    // Desglose básico que siempre se muestra
+    let htmlBasico = `
+      <div style="display:grid; grid-template-columns:120px 1fr; gap:4px 12px; font-size:13px; line-height:1.8">
+        <strong>Código:</strong> <span>${codigo}</span>
+        <strong>Concepto:</strong> <span>${desc}</span>
+        <strong>Cantidad:</strong> <span>${qty}</span>
+        <strong>Precio unit.:</strong> <span>${formatCurrency(unitario)}</span>
+        <strong>Total:</strong> <span style="font-weight:700; color:#ff0033">${formatCurrency(total)}</span>
+      </div>
+    `
+
+    let htmlExtra = ''
+    let titleExtra = 'Detalle del Concepto'
+
+    try {
+      // P003 - Garantía: buscar progreso de cuotas
+      if (codigo === 'P003' && detalleFacturacion) {
+        titleExtra = 'Detalle de Garantía'
+        const { data: garantia } = await (supabase.from('garantias') as any)
+          .select('monto_total, monto_pagado, cantidad_cuotas, monto_cuota, estado, created_at')
+          .eq('conductor_id', detalleFacturacion.conductor_id)
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .single()
+        if (garantia) {
+          const pagado = garantia.monto_pagado || 0
+          const totalG = garantia.monto_total || 0
+          const pct = totalG > 0 ? Math.round((pagado / totalG) * 100) : 0
+          const estado = garantia.estado === 'completada' ? '<span style="color:#10b981;font-weight:600">Completada</span>' : '<span style="color:#f59e0b;font-weight:600">En curso</span>'
+          htmlExtra = `
+            <hr style="margin:10px 0; border:none; border-top:1px solid #e5e7eb">
+            <div style="display:grid; grid-template-columns:120px 1fr; gap:4px 12px; font-size:13px; line-height:1.8">
+              <strong>Monto total:</strong> <span>${formatCurrency(totalG)}</span>
+              <strong>Pagado:</strong> <span>${formatCurrency(pagado)} (${pct}%)</span>
+              <strong>Cuotas:</strong> <span>${garantia.cantidad_cuotas || '-'} x ${formatCurrency(garantia.monto_cuota || 0)}</span>
+              <strong>Estado:</strong> ${estado}
+            </div>
+            <div style="margin-top:8px; height:8px; background:#e5e7eb; border-radius:4px; overflow:hidden">
+              <div style="width:${pct}%; height:100%; background:${pct >= 100 ? '#10b981' : '#7C3AED'}; border-radius:4px"></div>
+            </div>
+          `
+        }
+      }
+
+      // P005 - Peajes: mostrar detalle de peajes individuales
+      if (codigo === 'P005' && detalleFacturacion) {
+        titleExtra = 'Detalle de Peajes'
+        const peajesDetalle = detalleFacturacion.peajes_detalle
+        if (peajesDetalle && peajesDetalle.length > 0) {
+          const rows = peajesDetalle.map(p => {
+            const fecha = p.fecha ? format(parseISO(p.fecha), 'dd/MM/yy') : '-'
+            return `<tr><td style="padding:4px 8px;font-size:12px;border-bottom:1px solid #e5e7eb">${fecha}</td><td style="padding:4px 8px;font-size:12px;border-bottom:1px solid #e5e7eb;text-align:right;font-family:monospace;font-weight:600">${formatCurrency(p.monto)}</td></tr>`
+          }).join('')
+          htmlExtra = `
+            <hr style="margin:10px 0; border:none; border-top:1px solid #e5e7eb">
+            <div style="font-size:11px;font-weight:600;color:#666;margin-bottom:6px">${peajesDetalle.length} peaje${peajesDetalle.length > 1 ? 's' : ''} (semana anterior)</div>
+            <div style="max-height:200px;overflow-y:auto">
+              <table style="width:100%;border-collapse:collapse">
+                <thead><tr style="background:#f9fafb"><th style="padding:4px 8px;font-size:10px;text-align:left;color:#666">Fecha</th><th style="padding:4px 8px;font-size:10px;text-align:right;color:#666">Monto</th></tr></thead>
+                <tbody>${rows}</tbody>
+              </table>
+            </div>
+          `
+        }
+      }
+
+      // P001/P002/P013 - Alquiler: mostrar desglose por días
+      if ((codigo === 'P001' || codigo === 'P002' || codigo === 'P013') && detalleFacturacion) {
+        titleExtra = 'Detalle de Alquiler'
+        const tipoLabel = codigo === 'P001' ? 'Turno Diurno' : codigo === 'P013' ? 'Turno Nocturno' : 'A Cargo'
+        htmlExtra = `
+          <hr style="margin:10px 0; border:none; border-top:1px solid #e5e7eb">
+          <div style="display:grid; grid-template-columns:120px 1fr; gap:4px 12px; font-size:13px; line-height:1.8">
+            <strong>Modalidad:</strong> <span>${tipoLabel}</span>
+            <strong>Días cobrados:</strong> <span>${qty} de 7</span>
+            <strong>Valor por día:</strong> <span>${formatCurrency(unitario)}</span>
+            <strong>Subtotal:</strong> <span style="font-weight:600">${formatCurrency(total)}</span>
+          </div>
+        `
+      }
+
+      // P006 - Exceso KM
+      if (codigo === 'P006') {
+        titleExtra = 'Detalle de Exceso de KM'
+      }
+
+      // P004 - Tickets a favor
+      if (codigo === 'P004' && item.referencia_id) {
+        titleExtra = 'Detalle de Ticket a Favor'
+        const { data: ticket } = await (supabase.from('tickets_favor') as any)
+          .select('monto, descripcion, estado, created_at, tipo')
+          .eq('id', item.referencia_id)
+          .single()
+        if (ticket) {
+          htmlExtra = `
+            <hr style="margin:10px 0; border:none; border-top:1px solid #e5e7eb">
+            <div style="display:grid; grid-template-columns:120px 1fr; gap:4px 12px; font-size:13px; line-height:1.8">
+              <strong>Tipo:</strong> <span>${ticket.tipo || '-'}</span>
+              <strong>Descripción:</strong> <span>${ticket.descripcion || '-'}</span>
+              <strong>Monto:</strong> <span style="color:#059669;font-weight:600">${formatCurrency(ticket.monto || 0)}</span>
+              <strong>Estado:</strong> <span>${ticket.estado || '-'}</span>
+              ${ticket.created_at ? `<strong>Creado:</strong> <span>${format(parseISO(ticket.created_at), 'dd/MM/yyyy HH:mm')}</span>` : ''}
+            </div>
+          `
+        }
+      }
+    } catch {
+      // Si falla la consulta extra, solo mostrar el básico
+    }
+
+    await Swal.fire({
+      title: titleExtra,
+      html: `<div style="text-align:left">${htmlBasico}${htmlExtra}</div>`,
+      width: 480,
+      confirmButtonText: 'Cerrar',
+      confirmButtonColor: '#ff0033',
+      customClass: { popup: 'fact-modal', title: 'fact-modal-title' }
+    })
   }
 
   // ==========================================
@@ -7012,15 +7152,16 @@ export function ReporteFacturacionTab() {
         </div>
       ),
       cell: ({ row }) => (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-          <div style={{ display: 'flex', alignItems: 'center' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', overflow: 'hidden' }}>
+          <div style={{ display: 'flex', alignItems: 'center', minWidth: 0 }}>
             <strong
-              style={{ fontSize: '11px', textTransform: 'uppercase', cursor: 'pointer', color: 'var(--color-primary)' }}
+              style={{ fontSize: '11px', textTransform: 'uppercase', cursor: 'pointer', color: 'var(--color-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
               onClick={() => cargarHistorialAsignaciones(
                 row.original.conductor_id,
                 row.original.conductor_nombre,
                 row.original.conductor_dni || ''
               )}
+              title={row.original.conductor_nombre}
             >
               {row.original.conductor_nombre}
             </strong>
@@ -7069,6 +7210,8 @@ export function ReporteFacturacionTab() {
       header: 'Días',
       enableSorting: true,
       size: 55,
+      minSize: 45,
+      maxSize: 65,
       cell: ({ row }) => {
         const cobrados = row.original.turnos_cobrados ?? 0
         const alerta = row.original.alerta_prorrateo_ingreso
@@ -7341,7 +7484,8 @@ export function ReporteFacturacionTab() {
     {
       id: 'incidencias',
       header: 'Incidencias',
-      size: 75,
+      size: 80,
+      minSize: 70,
       accessorFn: (row) => row.monto_penalidades || 0,
       cell: ({ row }) => {
         const penalidades = row.original.penalidades_detalle || []
@@ -7384,22 +7528,25 @@ export function ReporteFacturacionTab() {
             onClick={handleClick}
             style={{
               display: 'flex',
+              flexDirection: 'column',
               alignItems: 'center',
-              gap: '4px',
-              padding: '3px 8px',
-              borderRadius: '12px',
+              gap: '1px',
+              padding: '3px 6px',
+              borderRadius: '6px',
               border: 'none',
               cursor: 'pointer',
               fontSize: '11px',
               fontWeight: 600,
               background: 'var(--color-danger-light)',
               color: 'var(--color-danger)',
+              width: '100%',
+              maxWidth: '70px',
             }}
-            title="Ver detalle de incidencias"
+            title={`${count} incidencia${count > 1 ? 's' : ''} — ${formatCurrency(montoPen)}`}
           >
-            {count}
-            <span style={{ fontSize: '10px', fontWeight: 400 }}>
-              ({formatCurrency(montoPen)})
+            <span>{count}</span>
+            <span style={{ fontSize: '9px', fontWeight: 500, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '100%' }}>
+              {formatCurrency(montoPen)}
             </span>
           </button>
         )
@@ -7409,7 +7556,8 @@ export function ReporteFacturacionTab() {
     {
       id: 'tickets_favor',
       header: 'Tickets Fav.',
-      size: 75,
+      size: 80,
+      minSize: 70,
       accessorFn: (row) => row.monto_tickets_favor || 0,
       cell: ({ row }) => {
         const tickets = row.original.tickets_detalle || []
@@ -7452,22 +7600,25 @@ export function ReporteFacturacionTab() {
             onClick={handleClick}
             style={{
               display: 'flex',
+              flexDirection: 'column',
               alignItems: 'center',
-              gap: '4px',
-              padding: '3px 8px',
-              borderRadius: '12px',
+              gap: '1px',
+              padding: '3px 6px',
+              borderRadius: '6px',
               border: 'none',
               cursor: 'pointer',
               fontSize: '11px',
               fontWeight: 600,
               background: 'rgba(5, 150, 105, 0.1)',
               color: '#059669',
+              width: '100%',
+              maxWidth: '70px',
             }}
-            title="Ver detalle de tickets a favor"
+            title={`${count} ticket${count > 1 ? 's' : ''} — ${formatCurrency(montoTickets)}`}
           >
-            {count}
-            <span style={{ fontSize: '10px', fontWeight: 400 }}>
-              ({formatCurrency(montoTickets)})
+            <span>{count}</span>
+            <span style={{ fontSize: '9px', fontWeight: 500, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '100%' }}>
+              -{formatCurrency(montoTickets)}
             </span>
           </button>
         )
@@ -8735,16 +8886,11 @@ export function ReporteFacturacionTab() {
                     </div>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
                       {detalleCargos.map(item => {
-                        const conceptoLabels: Record<string, string> = {
-                          'P001': 'Alquiler a Cargo',
-                          'P002': 'Alquiler Turno',
-                          'P003': 'Cuota de Garantía',
-                          'P005': 'Peajes',
-                        };
-                        const label = conceptoLabels[item.concepto_codigo];
                         let desc = item.concepto_descripcion;
-                        if (label && !desc.includes('Alquiler') && !desc.includes('Garantía') && !desc.includes('Peaje')) {
-                          desc = desc ? `${label} (${desc})` : label;
+                        // Prefijo con código de producto
+                        const codigo = item.concepto_codigo
+                        if (codigo && codigo !== 'PEND') {
+                          desc = `${codigo} - ${desc}`
                         }
                         const esPenalidad = item.referencia_id && (item.referencia_tipo === 'penalidad' || item.referencia_tipo === 'penalidad_cuota')
                         const esMulta = item.concepto_codigo === 'P008' || item.referencia_tipo === 'multa_transito'
@@ -8768,30 +8914,24 @@ export function ReporteFacturacionTab() {
                                   {fechaStr}
                                 </span>
                               )}
-                              {esPenalidad && (
-                                <button
-                                  onClick={() => verDetallePenalidad(item.referencia_id!, item.referencia_tipo!)}
-                                  style={{
-                                    background: 'none', border: 'none', cursor: 'pointer', padding: '2px',
-                                    color: 'var(--text-secondary)', flexShrink: 0, display: 'flex', alignItems: 'center',
-                                  }}
-                                  title="Ver detalle de penalidad"
-                                >
-                                  <Info size={14} />
-                                </button>
-                              )}
-                              {esMulta && detalleFacturacion?.vehiculo_patente && periodo && (
-                                <button
-                                  onClick={() => verDetalleMultas(detalleFacturacion.vehiculo_patente!, periodo.fecha_inicio, periodo.fecha_fin)}
-                                  style={{
-                                    background: 'none', border: 'none', cursor: 'pointer', padding: '2px',
-                                    color: 'var(--text-secondary)', flexShrink: 0, display: 'flex', alignItems: 'center',
-                                  }}
-                                  title="Ver detalle de multas"
-                                >
-                                  <Info size={14} />
-                                </button>
-                              )}
+                              <button
+                                onClick={() => {
+                                  if (esPenalidad) {
+                                    verDetallePenalidad(item.referencia_id!, item.referencia_tipo!)
+                                  } else if (esMulta && detalleFacturacion?.vehiculo_patente && periodo) {
+                                    verDetalleMultas(detalleFacturacion.vehiculo_patente!, periodo.fecha_inicio, periodo.fecha_fin)
+                                  } else {
+                                    verDetalleItem(item)
+                                  }
+                                }}
+                                style={{
+                                  background: 'none', border: 'none', cursor: 'pointer', padding: '2px',
+                                  color: 'var(--text-secondary)', flexShrink: 0, display: 'flex', alignItems: 'center',
+                                }}
+                                title="Ver detalle"
+                              >
+                                <Info size={14} />
+                              </button>
                             </div>
                             <span style={{ fontSize: '12px', fontWeight: 600, fontFamily: 'monospace', color: 'var(--text-primary)', flexShrink: 0, marginLeft: '8px' }}>
                               {formatCurrency(item.total)}
@@ -8829,13 +8969,10 @@ export function ReporteFacturacionTab() {
                       </div>
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
                         {detalleDescuentos.map(item => {
-                          const conceptoLabels: Record<string, string> = {
-                            'P004': 'Tickets/Descuentos',
-                          };
-                          const label = conceptoLabels[item.concepto_codigo];
                           let desc = item.concepto_descripcion;
-                          if (label && !desc.includes('Ticket') && !desc.includes('Descuento') && !desc.includes('Comisión')) {
-                            desc = desc ? `${label} (${desc})` : label;
+                          const codigo = item.concepto_codigo
+                          if (codigo && codigo !== 'PEND') {
+                            desc = `${codigo} - ${desc}`
                           }
                           return (
                             <div key={item.id} style={{
@@ -8843,11 +8980,21 @@ export function ReporteFacturacionTab() {
                               padding: '7px 12px', borderRadius: '6px',
                               background: 'rgba(16, 185, 129, 0.04)', border: '1px solid rgba(16, 185, 129, 0.12)',
                             }}>
-                              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flex: 1, minWidth: 0 }}>
                                 <div style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#10b981', flexShrink: 0 }} />
-                                <span style={{ fontSize: '12px', color: 'var(--text-primary)' }}>{desc}</span>
+                                <span style={{ fontSize: '12px', color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{desc}</span>
+                                <button
+                                  onClick={() => verDetalleItem(item)}
+                                  style={{
+                                    background: 'none', border: 'none', cursor: 'pointer', padding: '2px',
+                                    color: 'var(--text-secondary)', flexShrink: 0, display: 'flex', alignItems: 'center',
+                                  }}
+                                  title="Ver detalle"
+                                >
+                                  <Info size={14} />
+                                </button>
                               </div>
-                              <span style={{ fontSize: '12px', fontWeight: 600, fontFamily: 'monospace', color: '#059669' }}>
+                              <span style={{ fontSize: '12px', fontWeight: 600, fontFamily: 'monospace', color: '#059669', flexShrink: 0, marginLeft: '8px' }}>
                                 -{formatCurrency(item.total)}
                               </span>
                             </div>
