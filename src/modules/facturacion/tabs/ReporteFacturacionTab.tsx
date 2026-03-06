@@ -43,7 +43,7 @@ import { usePermissions } from '../../../contexts/PermissionsContext'
 import { useSede } from '../../../contexts/SedeContext'
 import { formatCurrency, formatDate, FACTURACION_CONFIG } from '../../../types/facturacion.types'
 import { normalizeDni, normalizePatente } from '../../../utils/normalizeDocuments'
-import { format, startOfWeek, endOfWeek, addWeeks, subWeeks, getWeek, getYear, parseISO } from 'date-fns'
+import { format, startOfWeek, endOfWeek, addWeeks, subWeeks, getWeek, getYear, parseISO, startOfDay } from 'date-fns'
 import { es } from 'date-fns/locale'
 import { RITPreviewTable, type RITPreviewRow } from '../components/RITPreviewTable'
 import { DiscrepancyReportModal } from '../../../components/ui/DiscrepancyReportModal'
@@ -1196,8 +1196,9 @@ export function ReporteFacturacionTab() {
 
       // Calcular días por modalidad/horario para cada conductor
       const fechaInicioSemana = semanaActual.inicio
-      // Facturación cobra semana COMPLETA (Lun-Dom = 7 días). Bajas e incidencias restan turnos.
-      const fechaFinSemana = semanaActual.fin
+      // Vista Previa capa los días hasta HOY (no proyecta). El Preview Cabify sí proyecta semana completa.
+      const hoyVP = startOfDay(new Date())
+      const fechaFinSemana = hoyVP < semanaActual.fin ? hoyVP : semanaActual.fin
 
       // Map de conductor_id → fecha_terminacion (tope de días para conductores de baja)
       const fechaTermMapVP = new Map<string, Date>()
@@ -2179,8 +2180,10 @@ export function ReporteFacturacionTab() {
       conductorIdsTemp.forEach((id: string) => diasContadosRecalc.set(id, new Set()))
 
       const fechaInicioSemanaRecalc = parseISO(fechaInicio)
-      // Facturación cobra semana COMPLETA (Lun-Dom = 7 días). Bajas e incidencias restan turnos.
-      const fechaFinSemanaRecalc = parseISO(fechaFin)
+      // Recalcular capa los días hasta HOY (no proyecta). El Preview Cabify sí proyecta semana completa.
+      const hoyRecalc = startOfDay(new Date())
+      const finSemanaRecalc = parseISO(fechaFin)
+      const fechaFinSemanaRecalc = hoyRecalc < finSemanaRecalc ? hoyRecalc : finSemanaRecalc
 
       // Map de conductor_id → fecha_terminacion (tope de días para conductores de baja)
       const fechaTerminacionMap = new Map<string, Date>()
