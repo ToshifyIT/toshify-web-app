@@ -127,6 +127,8 @@ interface FacturacionPreviewTableProps {
   onExport: () => void
   exporting: boolean
   onSync?: (data: FacturacionPreviewRow[]) => Promise<boolean>
+  // Mapa conductor_id → alquiler semanal proyectado (precio_unitario * 49)
+  proyectadoAlquilerMap?: Map<string, number>
 }
 
 export function FacturacionPreviewTable({
@@ -142,7 +144,8 @@ export function FacturacionPreviewTable({
   onClose,
   onExport,
   exporting,
-  onSync
+  onSync,
+  proyectadoAlquilerMap
 }: FacturacionPreviewTableProps) {
   const { aplicarFiltroSede } = useSede()
   const [data, setData] = useState<FacturacionPreviewRow[]>(initialData)
@@ -156,6 +159,7 @@ export function FacturacionPreviewTable({
   const [syncing, setSyncing] = useState(false)
   const [showPendientes, setShowPendientes] = useState(false)
   const [enlazando, setEnlazando] = useState(false)
+  const [mostrarProyectado, setMostrarProyectado] = useState(false)
 
   // Formateador de números: separador de miles y 2 decimales
   const fmtNum = (n: number) => new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n)
@@ -196,15 +200,26 @@ export function FacturacionPreviewTable({
     return m
   }, [data])
 
+  // Códigos de alquiler que se proyectan
+  const CODIGOS_ALQUILER = ['P001', 'P002', 'P013']
+
+  // Obtener el total de una fila (proyectado si aplica)
+  const getRowTotal = useCallback((row: FacturacionPreviewRow) => {
+    if (mostrarProyectado && CODIGOS_ALQUILER.includes(row.codigoProducto) && proyectadoAlquilerMap) {
+      return proyectadoAlquilerMap.get(row.conductorId) ?? row.total
+    }
+    return row.total
+  }, [mostrarProyectado, proyectadoAlquilerMap])
+
   // Totales
   const totales = useMemo(() => {
     return filteredData.reduce((acc, row) => ({
-      total: acc.total + row.total,
+      total: acc.total + getRowTotal(row),
       netoGravado: acc.netoGravado + row.netoGravado,
       ivaAmount: acc.ivaAmount + row.ivaAmount,
       exento: acc.exento + row.exento
     }), { total: 0, netoGravado: 0, ivaAmount: 0, exento: 0 })
-  }, [filteredData])
+  }, [filteredData, getRowTotal])
 
   // Stats
   const stats = useMemo(() => {
@@ -849,6 +864,16 @@ export function FacturacionPreviewTable({
               {syncing ? 'Sincronizando...' : 'Sincronizar BD'}
             </button>
           )}
+          {proyectadoAlquilerMap && proyectadoAlquilerMap.size > 0 && (
+            <button
+              className={`fact-preview-btn ${mostrarProyectado ? 'active' : 'secondary'}`}
+              onClick={() => setMostrarProyectado(!mostrarProyectado)}
+              title="Proyectar alquileres a semana completa (7 días)"
+            >
+              <Eye size={14} />
+              {mostrarProyectado ? 'Proyectado ON' : 'Mostrar Proyectado'}
+            </button>
+          )}
           <button
             className="fact-preview-btn primary"
             onClick={onExport}
@@ -1087,7 +1112,11 @@ export function FacturacionPreviewTable({
                   <td>{row.tipoDocumento}</td>
                   <td className="col-mono">{row.numeroCuil || ''}</td>
                   <td className="col-mono">{row.numeroDni || ''}</td>
-                  <td className="col-money">{renderEditableCell(row, realIdx, 'total', row.total)}</td>
+                  <td className="col-money">
+                    {mostrarProyectado && CODIGOS_ALQUILER.includes(row.codigoProducto) && proyectadoAlquilerMap?.get(row.conductorId)
+                      ? <span style={{ color: '#7c3aed', fontWeight: 600 }}>{fmtNum(proyectadoAlquilerMap.get(row.conductorId)!)}</span>
+                      : renderEditableCell(row, realIdx, 'total', row.total)}
+                  </td>
                   <td>{row.cobrado}</td>
                   <td className="col-small">{row.condicionIva === 'RESPONSABLE_INSCRIPTO' ? 'Responsable Inscripto' : 'Consumidor Final'}</td>
                   <td className="col-small">{row.condicionVenta === 'CTA_CTE' ? 'CC' : row.condicionVenta}</td>
@@ -1102,7 +1131,11 @@ export function FacturacionPreviewTable({
                   <td className="col-money">{renderEditableCell(row, realIdx, 'netoGravado', row.netoGravado || 0)}</td>
                   <td className="col-money">{row.ivaAmount ? fmtNum(row.ivaAmount) : ''}</td>
                   <td className="col-money">{renderEditableCell(row, realIdx, 'exento', row.exento || 0)}</td>
-                  <td className="col-money col-total">{fmtNum(row.total)}</td>
+                  <td className="col-money col-total">
+                    {mostrarProyectado && CODIGOS_ALQUILER.includes(row.codigoProducto) && proyectadoAlquilerMap?.get(row.conductorId)
+                      ? <span style={{ color: '#7c3aed', fontWeight: 600 }}>{fmtNum(proyectadoAlquilerMap.get(row.conductorId)!)}</span>
+                      : fmtNum(row.total)}
+                  </td>
                   <td><span className={`badge-iva ${row.ivaPorcentaje !== 'IVA_EXENTO' ? 'iva-21' : 'iva-ex'}`}>{row.ivaPorcentaje !== 'IVA_EXENTO' ? row.ivaPorcentaje.replace('IVA_', '') + '%' : 'EX'}</span></td>
                   <td>{row.generarAsiento}</td>
                   <td className="col-mono">{row.cuentaDebito}</td>
@@ -1163,6 +1196,7 @@ export function FacturacionPreviewTable({
         .fact-preview-btn.primary { background: var(--color-primary); color: white; }
         .fact-preview-btn.secondary { background: var(--bg-secondary); color: var(--text-primary); border: 1px solid var(--border-color); }
         .fact-preview-btn.sync { background: #059669; color: white; }
+        .fact-preview-btn.active { background: #7c3aed; color: white; }
         .fact-preview-btn:disabled { opacity: 0.6; cursor: not-allowed; }
         .fact-preview-edit-hint { padding: 6px 12px; background: #ecfdf5; border: 1px solid #a7f3d0; border-radius: 6px; margin-bottom: 8px; font-size: 11px; color: #065f46; }
         

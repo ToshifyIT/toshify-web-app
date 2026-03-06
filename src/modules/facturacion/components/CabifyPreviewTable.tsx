@@ -469,14 +469,14 @@ export function CabifyPreviewTable({
         <div style="text-align: left; font-size: 13px; line-height: 1.7; color: var(--text-primary, #333);">
           <p style="margin-bottom: 12px;">Cada fila muestra dos valores principales:</p>
           <div style="background: rgba(124,58,237,0.08); border-left: 3px solid #7C3AED; padding: 10px 14px; border-radius: 4px; margin-bottom: 12px;">
-            <strong>Importe Contrato</strong> = Suma de alquileres según los días trabajados en cada turno (Diurno, Nocturno, Cargo).
+            <strong>Importe Contrato</strong> = Alquiler proyectado a semana completa (7 días). Si la semana está en curso, se escala proporcionalmente el valor actual.
           </div>
           <div style="background: rgba(124,58,237,0.08); border-left: 3px solid #7C3AED; padding: 10px 14px; border-radius: 4px; margin-bottom: 12px;">
             <strong>Excedentes</strong> = Garantía + Peajes + Excesos KM + Penalidades − Tickets a favor + Saldo anterior.
           </div>
           <p style="margin-bottom: 8px; font-size: 12px; color: #666;">Detalle de componentes:</p>
           <ul style="font-size: 12px; color: #555; padding-left: 18px; margin: 0;">
-            <li><strong>Alquiler</strong>: precio diario × días trabajados por turno</li>
+            <li><strong>Alquiler</strong>: precio diario × 7 días (proyectado a semana completa)</li>
             <li><strong>Garantía</strong>: cuota semanal fija ($50.000)</li>
             <li><strong>Peajes</strong>: telepeajes de la semana anterior</li>
             <li><strong>Excesos KM</strong>: km excedidos sobre el límite</li>

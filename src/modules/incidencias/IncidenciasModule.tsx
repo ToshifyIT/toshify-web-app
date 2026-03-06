@@ -3920,6 +3920,14 @@ interface ConductorAsignado {
   turno: string // diurno, nocturno, todo_dia (de asignaciones_conductores)
 }
 
+interface PatenteAsignada {
+  vehiculoId: string
+  patente: string
+  semanas: string // ej: "S9, S10"
+  fechaDesde: string
+  fechaHasta: string
+}
+
 function IncidenciaForm({ formData, setFormData, estados, vehiculos, conductores, tiposCobroDescuento, conceptosNomina = [], disabled, esCobro = false, sedes }: IncidenciaFormProps) {
   const [vehiculoSearch, setVehiculoSearch] = useState('')
   const [conductorSearch, setConductorSearch] = useState('')
@@ -3930,6 +3938,10 @@ function IncidenciaForm({ formData, setFormData, estados, vehiculos, conductores
   const [showConductorSelectModal, setShowConductorSelectModal] = useState(false)
   const [conductoresAsignados, setConductoresAsignados] = useState<ConductorAsignado[]>([])
   const [loadingConductores, setLoadingConductores] = useState(false)
+
+  // Estado para modal de selección de patente (cuando conductor tiene múltiples)
+  const [showPatenteSelectModal, setShowPatenteSelectModal] = useState(false)
+  const [patentesAsignadas, setPatentesAsignadas] = useState<PatenteAsignada[]>([])
 
   const selectedVehiculo = vehiculos.find(v => v.id === formData.vehiculo_id)
   const selectedConductor = conductores.find(c => c.id === formData.conductor_id)
@@ -4057,6 +4069,68 @@ function IncidenciaForm({ formData, setFormData, estados, vehiculos, conductores
     setConductoresAsignados([])
   }
 
+  // Buscar patentes asignadas al conductor (inverso de buscarConductoresAsignados)
+  async function buscarPatentesPorConductor(conductorId: string) {
+    try {
+      const { data, error } = await supabase
+        .from('asignaciones_conductores')
+        .select(`
+          fecha_inicio, fecha_fin,
+          asignaciones!inner(
+            id, estado, fecha_inicio, fecha_fin,
+            vehiculos(id, patente)
+          )
+        `)
+        .eq('conductor_id', conductorId)
+
+      if (error) throw error
+
+      // Extraer patentes únicas con sus períodos
+      const patenteMap = new Map<string, PatenteAsignada>()
+      for (const ac of (data || [])) {
+        const asig = (ac as any).asignaciones
+        if (!asig?.vehiculos?.patente) continue
+        const estado = (asig.estado || '').toLowerCase()
+        if (['programado', 'programada', 'cancelado', 'cancelada'].includes(estado)) continue
+
+        const vehiculoId = asig.vehiculos.id
+        const patente = asig.vehiculos.patente
+        const fechaDesde = ac.fecha_inicio || asig.fecha_inicio || ''
+        const fechaHasta = ac.fecha_fin || asig.fecha_fin || ''
+
+        if (patenteMap.has(vehiculoId)) {
+          const existing = patenteMap.get(vehiculoId)!
+          if (fechaDesde && (!existing.fechaDesde || fechaDesde < existing.fechaDesde)) existing.fechaDesde = fechaDesde
+          if (fechaHasta && (!existing.fechaHasta || fechaHasta > existing.fechaHasta)) existing.fechaHasta = fechaHasta
+        } else {
+          patenteMap.set(vehiculoId, { vehiculoId, patente, semanas: '', fechaDesde, fechaHasta })
+        }
+      }
+
+      const patentes = Array.from(patenteMap.values())
+
+      if (patentes.length === 1) {
+        // Una sola patente: auto-seleccionar
+        const p = patentes[0]
+        setFormData(prev => ({ ...prev, vehiculo_id: p.vehiculoId }))
+        setVehiculoSearch('')
+      } else if (patentes.length > 1) {
+        // Múltiples patentes: mostrar modal
+        setPatentesAsignadas(patentes)
+        setShowPatenteSelectModal(true)
+      }
+    } catch {
+      // Error silencioso
+    }
+  }
+
+  function handleSelectPatenteFromModal(p: PatenteAsignada) {
+    setFormData(prev => ({ ...prev, vehiculo_id: p.vehiculoId }))
+    setVehiculoSearch('')
+    setShowPatenteSelectModal(false)
+    setPatentesAsignadas([])
+  }
+
   // Calcular número de semana ISO 8601
   const getWeekNumber = (dateStr: string): number => {
     if (!dateStr) return 0
@@ -4154,6 +4228,10 @@ function IncidenciaForm({ formData, setFormData, estados, vehiculos, conductores
                       setFormData(prev => ({ ...prev, conductor_id: c.id, conductor_nombre: undefined }))
                       setConductorSearch('')
                       setShowConductorDropdown(false)
+                      // Auto-buscar patente si no hay vehículo seleccionado
+                      if (!formData.vehiculo_id) {
+                        buscarPatentesPorConductor(c.id)
+                      }
                     }}>
                       {c.nombre_completo}
                     </div>
@@ -4462,6 +4540,40 @@ function IncidenciaForm({ formData, setFormData, estados, vehiculos, conductores
               type="button"
               className="conductor-select-skip"
               onClick={() => setShowConductorSelectModal(false)}
+            >
+              Omitir selección
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de selección de patente (cuando conductor tiene múltiples vehículos) */}
+      {showPatenteSelectModal && (
+        <div className="conductor-select-modal-overlay" onClick={() => setShowPatenteSelectModal(false)}>
+          <div className="conductor-select-modal" onClick={e => e.stopPropagation()}>
+            <div className="conductor-select-modal-header">
+              <h4>Seleccionar Patente</h4>
+              <p>Este conductor tuvo múltiples vehículos asignados</p>
+            </div>
+            <div className="conductor-select-modal-list">
+              {patentesAsignadas.map(p => (
+                <button
+                  key={p.vehiculoId}
+                  type="button"
+                  className="conductor-select-option"
+                  onClick={() => handleSelectPatenteFromModal(p)}
+                >
+                  <span className="conductor-select-name" style={{ fontFamily: 'monospace', fontWeight: 700 }}>{p.patente}</span>
+                  <span style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>
+                    {p.fechaDesde ? p.fechaDesde.substring(0, 10) : '?'} — {p.fechaHasta ? p.fechaHasta.substring(0, 10) : 'actual'}
+                  </span>
+                </button>
+              ))}
+            </div>
+            <button
+              type="button"
+              className="conductor-select-skip"
+              onClick={() => setShowPatenteSelectModal(false)}
             >
               Omitir selección
             </button>

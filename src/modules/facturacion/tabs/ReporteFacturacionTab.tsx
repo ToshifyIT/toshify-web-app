@@ -169,6 +169,8 @@ interface FacturacionConductor {
   fecha_pago?: string | null
   // Estado de facturación semanal (Activo, Pausa, De baja)
   estado_billing?: 'Activo' | 'Pausa' | 'De baja'
+  // Alquiler proyectado a semana completa (precio_unitario * 49)
+  proyectado_alquiler?: number
   // Alerta: fecha_terminacion del conductor no coincide con fecha_fin de asignación
   fecha_baja_no_coincide?: boolean
   // Discrepancia de formato DNI entre conductores y cabify_historico
@@ -953,6 +955,7 @@ export function ReporteFacturacionTab() {
         { data: pagosData },
         { data: detallesData },
         { data: excesosData },
+        { data: alquilerDetalleData },
       ] = await Promise.all([
         (supabase.from('pagos_conductores') as any)
           .select('referencia_id, monto, fecha_pago')
@@ -965,6 +968,10 @@ export function ReporteFacturacionTab() {
         (supabase.from('excesos_kilometraje') as any)
           .select('id, conductor_id, km_exceso, monto_total, aplicado')
           .eq('periodo_id', (periodoData as any).id),
+        (supabase.from('facturacion_detalle') as any)
+          .select('facturacion_id, precio_unitario')
+          .in('facturacion_id', facIds)
+          .in('concepto_codigo', ['P001', 'P002', 'P013']),
       ])
 
       // Agrupar pagos por referencia_id (puede haber pagos parciales)
@@ -1029,6 +1036,21 @@ export function ReporteFacturacionTab() {
           tickets_detalle: detalle?.tickets_detalle || [],
         }
       })
+
+      // Construir mapa de alquiler proyectado: facturacion_id → Math.round(precio_unitario * 49)
+      const proyectadoMap = new Map<string, number>()
+      ;(alquilerDetalleData || []).forEach((d: any) => {
+        const pu = Number(d.precio_unitario) || 0
+        if (pu > 0) {
+          proyectadoMap.set(d.facturacion_id, Math.round(pu * 49))
+        }
+      })
+
+      // Agregar proyectado_alquiler a cada facturación
+      facturacionesTransformadas = facturacionesTransformadas.map((f: any) => ({
+        ...f,
+        proyectado_alquiler: proyectadoMap.get(f.id) || f.subtotal_alquiler || 0,
+      }))
 
       // Ordenar por nombre
       facturacionesTransformadas.sort((a: any, b: any) => 
@@ -1800,7 +1822,10 @@ export function ReporteFacturacionTab() {
           turnos_base: 7,
           turnos_cobrados: Math.round(factorProporcional * 7),
           factor_proporcional: factorProporcional,
-          subtotal_alquiler: subtotalAlquiler,
+           subtotal_alquiler: subtotalAlquiler,
+          proyectado_alquiler: diasTotales > 0 && diasTotales < 7
+            ? Math.round((subtotalAlquiler / diasTotales) * 7)
+            : subtotalAlquiler,
           subtotal_garantia: subtotalGarantia,
           subtotal_cargos: subtotalCargos,
           subtotal_descuentos: subtotalDescuentos,
@@ -6740,7 +6765,7 @@ export function ReporteFacturacionTab() {
         if (necesitaProyeccion && f.estado_billing === 'Activo' && actualDias > 0) {
           const daysRemaining = 7 - daysSoFar
           diasProyectados = Math.min(actualDias + daysRemaining, 7)
-          importeContrato = (actualAlquiler / actualDias) * diasProyectados
+          importeContrato = Math.round((actualAlquiler / actualDias) * diasProyectados)
         }
         
         // EXCEDENTES = resto de productos (sin alquiler) + saldo pendiente
@@ -6856,7 +6881,37 @@ export function ReporteFacturacionTab() {
       // Proyección: si estamos dentro de la semana del período, proyectar a semana completa
       const hoyPeriodo = startOfDay(new Date())
       const daysSoFarPeriodo = Math.min(differenceInCalendarDays(hoyPeriodo, fechaInicio) + 1, 7)
-      const necesitaProyeccionPeriodo = hoyPeriodo < fechaFin && daysSoFarPeriodo > 0 && daysSoFarPeriodo < 7
+      const necesitaProyeccionPeriodo = daysSoFarPeriodo > 0 && daysSoFarPeriodo < 7
+
+      // Obtener precio semanal exacto por conductor desde facturacion_detalle
+      // Query fresca por periodo_id (no depende de IDs en estado que pueden ser preview-xxx)
+      const precioSemanalByConductor = new Map<string, number>()
+      if (necesitaProyeccionPeriodo) {
+        const { data: fcFromDb } = await supabase
+          .from('facturacion_conductores')
+          .select('id, conductor_id')
+          .eq('periodo_id', periodo.id)
+        const dbIdToConId = new Map<string, string>()
+        const dbIds: string[] = []
+        ;(fcFromDb || []).forEach((r: { id: string; conductor_id: string }) => {
+          dbIdToConId.set(r.id, r.conductor_id)
+          dbIds.push(r.id)
+        })
+        if (dbIds.length > 0) {
+          const { data: detallesAlquiler } = await supabase
+            .from('facturacion_detalle')
+            .select('facturacion_id, precio_unitario')
+            .in('facturacion_id', dbIds)
+            .in('concepto_codigo', ['P001', 'P002', 'P013'])
+          ;(detallesAlquiler || []).forEach((d: { facturacion_id: string; precio_unitario: number }) => {
+            const conductorId = dbIdToConId.get(d.facturacion_id)
+            const pu = Number(d.precio_unitario) || 0
+            if (conductorId && pu > 0) {
+              precioSemanalByConductor.set(conductorId, Math.round(pu * 49))
+            }
+          })
+        }
+      }
 
       // Generar filas para el preview
       const previewRows: CabifyPreviewRow[] = facturaciones.map(f => {
@@ -6888,10 +6943,15 @@ export function ReporteFacturacionTab() {
         
         const actualAlquiler = f.subtotal_alquiler || 0
 
-        // Proyectar alquiler a semana completa: escalar proporcionalmente por días transcurridos
+        // Proyectar alquiler a semana completa usando precio exacto del detalle
         let importeContrato = actualAlquiler
         if (necesitaProyeccionPeriodo && f.estado_billing !== 'De baja' && actualAlquiler > 0) {
-          importeContrato = (actualAlquiler / daysSoFarPeriodo) * 7
+          const precioSemanal = precioSemanalByConductor.get(f.conductor_id)
+          if (precioSemanal) {
+            importeContrato = precioSemanal
+          } else {
+            importeContrato = Math.round((actualAlquiler / daysSoFarPeriodo) * 7)
+          }
         }
         
         // EXCEDENTES = resto de productos (sin alquiler) + saldo pendiente
@@ -7518,37 +7578,55 @@ export function ReporteFacturacionTab() {
       }
     },
     {
-      id: 'monto_cobrado',
-      accessorFn: (row) => row.monto_cobrado || 0,
-      header: 'Cobrado',
+      id: 'proyectado_alquiler',
+      accessorFn: (row) => row.proyectado_alquiler || 0,
+      header: 'Proyectado',
       enableSorting: true,
-      size: 80,
+      size: 100,
       cell: ({ row }) => {
-        const cobrado = row.original.monto_cobrado || 0
-        const total = Math.abs(row.original.total_a_pagar || 0)
+        const proyectado = row.original.proyectado_alquiler || 0
+        const alquiler = row.original.subtotal_alquiler || 0
 
-        if (modoVistaPrevia) {
+        if (proyectado === 0) {
           return <span style={{ color: 'var(--text-muted)', fontSize: '11px' }}>-</span>
         }
 
-        if (cobrado === 0) {
-          return <span style={{ color: 'var(--text-muted)', fontSize: '11px' }}>-</span>
-        }
+        const porcentaje = proyectado > 0 ? Math.min(100, Math.round((alquiler / proyectado) * 100)) : 0
+        const completo = alquiler >= proyectado && alquiler > 0
 
-        const esPagoCompleto = cobrado >= total
         return (
-          <div style={{ fontSize: '11px' }}>
-            <span style={{
-              fontWeight: 600,
-              color: esPagoCompleto ? '#10b981' : '#f59e0b'
+          <div style={{ fontSize: '11px', minWidth: '80px' }}>
+            <div style={{ fontWeight: 600, color: 'var(--text-primary)', marginBottom: '4px' }}>
+              {formatCurrency(proyectado)}
+            </div>
+            <div style={{ 
+              width: '100%', 
+              height: '8px', 
+              backgroundColor: '#e5e7eb', 
+              borderRadius: '4px',
+              overflow: 'hidden',
+              border: '1px solid #d1d5db'
             }}>
-              {formatCurrency(cobrado)}
-            </span>
-            {!esPagoCompleto && total > 0 && (
-              <div style={{ fontSize: '9px', color: '#6b7280', marginTop: '2px' }}>
-                {Math.round((cobrado / total) * 100)}% del total
-              </div>
-            )}
+              <div style={{ 
+                width: `${Math.max(porcentaje, 0)}%`, 
+                height: '100%', 
+                backgroundColor: completo ? '#10b981' : porcentaje >= 70 ? '#f59e0b' : '#ef4444',
+                borderRadius: '3px',
+                transition: 'width 0.3s ease',
+                minWidth: porcentaje > 0 ? '4px' : '0'
+              }} />
+            </div>
+            <div style={{ 
+              fontSize: '9px', 
+              color: completo ? '#10b981' : '#6b7280', 
+              marginTop: '3px',
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center'
+            }}>
+              <span>{porcentaje}%</span>
+              {completo && <span style={{ color: '#10b981', fontWeight: 600 }}>✓</span>}
+            </div>
           </div>
         )
       }
@@ -7859,6 +7937,18 @@ export function ReporteFacturacionTab() {
     return { semana, anio, inicio, fin }
   }, [semanaActual])
 
+  // Mapa de alquiler proyectado por conductor_id para Preview Facturación
+  const proyectadoAlquilerMap = useMemo(() => {
+    const m = new Map<string, number>()
+    const src = modoVistaPrevia ? vistaPreviaData : facturaciones
+    src.forEach(f => {
+      if ((f.proyectado_alquiler || 0) > 0) {
+        m.set(f.conductor_id, f.proyectado_alquiler!)
+      }
+    })
+    return m
+  }, [facturaciones, vistaPreviaData, modoVistaPrevia])
+
   // Si estamos en modo Preview Facturación, mostrar el componente de preview
   if (showSiFacturaPreview && siFacturaPreviewData.length > 0) {
     // Usar datos del período si existe, sino de semanaActual (Vista Previa)
@@ -7890,6 +7980,7 @@ export function ReporteFacturacionTab() {
         onExport={exportarSiFacturaExcel}
         exporting={exportingSiFactura}
         onSync={undefined}
+        proyectadoAlquilerMap={proyectadoAlquilerMap}
       />
     )
   }

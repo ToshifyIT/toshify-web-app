@@ -189,25 +189,33 @@ async function fetchTollsForDriver(token: string, companyId: string, driverId: s
     if (balances.length === 0) return 0;
 
     let totalTolls = 0;
-    for (const balance of balances.slice(0, 3)) {
+    for (const balance of balances) {
       try {
-        const movRes = await fetch(CABIFY_GRAPHQL_URL, {
-          method: "POST",
-          headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-          body: JSON.stringify({
-            query: `query ($balanceId: String!, $companyId: String, $driverId: String, $startAt: DateTime!, $endAt: DateTime!) {
-              paginatedBalanceMovements(balanceId: $balanceId, companyId: $companyId, driverId: $driverId, startAt: $startAt, endAt: $endAt, page: 1, perPage: 500) {
-                movements { breakdown { name value } }
-              }
-            }`,
-            variables: { balanceId: balance.id, companyId, driverId, startAt, endAt },
-          }),
-        });
-        const movData = await movRes.json();
-        for (const mov of (movData.data?.paginatedBalanceMovements?.movements || [])) {
-          for (const b of (mov.breakdown || [])) {
-            if (b.name === "supplement:toll") totalTolls += Math.abs(b.value || 0);
+        let page = 1;
+        const perPage = 500;
+        while (true) {
+          const movRes = await fetch(CABIFY_GRAPHQL_URL, {
+            method: "POST",
+            headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+            body: JSON.stringify({
+              query: `query ($balanceId: String!, $companyId: String, $driverId: String, $startAt: DateTime!, $endAt: DateTime!, $page: Int, $perPage: Int) {
+                paginatedBalanceMovements(balanceId: $balanceId, companyId: $companyId, driverId: $driverId, startAt: $startAt, endAt: $endAt, page: $page, perPage: $perPage) {
+                  movements { breakdown { name value } }
+                  pages
+                }
+              }`,
+              variables: { balanceId: balance.id, companyId, driverId, startAt, endAt, page, perPage },
+            }),
+          });
+          const movData = await movRes.json();
+          const paginated = movData.data?.paginatedBalanceMovements;
+          for (const mov of (paginated?.movements || [])) {
+            for (const b of (mov.breakdown || [])) {
+              if (b.name === "supplement:toll") totalTolls += Math.abs(b.value || 0);
+            }
           }
+          if (!paginated || page >= (paginated.pages || 0) || paginated.pages === 0) break;
+          page++;
         }
       } catch (_e) { /* skip */ }
     }
