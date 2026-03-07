@@ -1,5 +1,5 @@
 // ============================================================
-// Sub-tab ABM: Atendedores (personas que atienden visitas)
+// Sub-tab ABM: Anfitriones (personas que atienden visitas)
 // CRUD con DataTable + modal inline, filtrado por sede
 // ============================================================
 
@@ -10,10 +10,9 @@ import { showSuccess } from '../../../utils/toast';
 import { useSede } from '../../../contexts/SedeContext';
 import { DataTable } from '../../../components/ui/DataTable';
 import type { ColumnDef } from '@tanstack/react-table';
-import type { VisitaArea, VisitaAtendedorConArea, VisitaHorario } from '../../../types/visitas.types';
+import type { VisitaAtendedor, VisitaHorario } from '../../../types/visitas.types';
 import {
   fetchAllAtendedores,
-  fetchAllAreas,
   createAtendedor,
   updateAtendedor,
   deleteAtendedor,
@@ -25,14 +24,12 @@ const DIAS_SEMANA = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sáb
 
 interface AtendedorFormData {
   nombre: string;
-  area_id: string;
   user_id: string;
   activo: boolean;
 }
 
 const INITIAL_FORM: AtendedorFormData = {
   nombre: '',
-  area_id: '',
   user_id: '',
   activo: true,
 };
@@ -46,20 +43,19 @@ interface HorarioRow {
 
 export function AtendedoresSubTab() {
   const { sedeActualId } = useSede();
-  const [data, setData] = useState<VisitaAtendedorConArea[]>([]);
-  const [areas, setAreas] = useState<VisitaArea[]>([]);
+  const [data, setData] = useState<VisitaAtendedor[]>([]);
   const [loading, setLoading] = useState(true);
 
   // Modal CRUD
   const [showModal, setShowModal] = useState(false);
   const [modalMode, setModalMode] = useState<'create' | 'edit'>('create');
-  const [selected, setSelected] = useState<VisitaAtendedorConArea | null>(null);
+  const [selected, setSelected] = useState<VisitaAtendedor | null>(null);
   const [form, setForm] = useState<AtendedorFormData>(INITIAL_FORM);
   const [saving, setSaving] = useState(false);
 
   // Modal Horarios
   const [showHorariosModal, setShowHorariosModal] = useState(false);
-  const [horariosAtendedor, setHorariosAtendedor] = useState<VisitaAtendedorConArea | null>(null);
+  const [horariosAtendedor, setHorariosAtendedor] = useState<VisitaAtendedor | null>(null);
   const [horarios, setHorarios] = useState<HorarioRow[]>([]);
   const [savingHorarios, setSavingHorarios] = useState(false);
 
@@ -68,14 +64,9 @@ export function AtendedoresSubTab() {
   async function cargar() {
     setLoading(true);
     try {
-      const [atends, areasData] = await Promise.all([
-        fetchAllAtendedores(sedeActualId),
-        fetchAllAreas(sedeActualId),
-      ]);
-      setData(atends);
-      setAreas(areasData);
+      setData(await fetchAllAtendedores(sedeActualId));
     } catch {
-      Swal.fire('Error', 'No se pudieron cargar los atendedores', 'error');
+      Swal.fire('Error', 'No se pudieron cargar los anfitriones', 'error');
     } finally {
       setLoading(false);
     }
@@ -88,10 +79,9 @@ export function AtendedoresSubTab() {
     setShowModal(true);
   }
 
-  function handleEdit(item: VisitaAtendedorConArea) {
+  function handleEdit(item: VisitaAtendedor) {
     setForm({
       nombre: item.nombre,
-      area_id: item.area_id,
       user_id: item.user_id ?? '',
       activo: item.activo,
     });
@@ -100,9 +90,9 @@ export function AtendedoresSubTab() {
     setShowModal(true);
   }
 
-  async function handleDelete(item: VisitaAtendedorConArea) {
+  async function handleDelete(item: VisitaAtendedor) {
     const res = await Swal.fire({
-      title: 'Eliminar atendedor',
+      title: 'Eliminar anfitrión',
       text: `¿Eliminar "${item.nombre}"? Si tiene citas o horarios asociados, la eliminación fallará.`,
       icon: 'warning',
       showCancelButton: true,
@@ -114,7 +104,7 @@ export function AtendedoresSubTab() {
     if (!res.isConfirmed) return;
     try {
       await deleteAtendedor(item.id);
-      showSuccess('Atendedor eliminado');
+      showSuccess('Anfitrión eliminado');
       cargar();
     } catch {
       Swal.fire('Error', 'No se pudo eliminar. Verifique que no tenga citas asociadas.', 'error');
@@ -126,10 +116,6 @@ export function AtendedoresSubTab() {
       Swal.fire('Error', 'El nombre es requerido', 'error');
       return;
     }
-    if (!form.area_id) {
-      Swal.fire('Error', 'Seleccione un área', 'error');
-      return;
-    }
     if (!sedeActualId) {
       Swal.fire('Error', 'No se pudo determinar la sede', 'error');
       return;
@@ -139,37 +125,34 @@ export function AtendedoresSubTab() {
       if (modalMode === 'create') {
         await createAtendedor({
           nombre: form.nombre.trim(),
-          area_id: form.area_id,
           user_id: form.user_id || null,
           sede_id: sedeActualId,
           activo: form.activo,
         });
-        showSuccess('Atendedor creado');
+        showSuccess('Anfitrión creado');
       } else if (selected) {
         await updateAtendedor(selected.id, {
           nombre: form.nombre.trim(),
-          area_id: form.area_id,
           user_id: form.user_id || null,
           activo: form.activo,
         });
-        showSuccess('Atendedor actualizado');
+        showSuccess('Anfitrión actualizado');
       }
       setShowModal(false);
       cargar();
     } catch {
-      Swal.fire('Error', 'No se pudo guardar el atendedor', 'error');
+      Swal.fire('Error', 'No se pudo guardar el anfitrión', 'error');
     } finally {
       setSaving(false);
     }
   }
 
   // --- Horarios ---
-  async function handleOpenHorarios(item: VisitaAtendedorConArea) {
+  async function handleOpenHorarios(item: VisitaAtendedor) {
     setHorariosAtendedor(item);
     try {
       const existing = await fetchHorariosByAtendedor(item.id);
       if (existing.length > 0) {
-        // Mapear existentes a HorarioRow
         const rows: HorarioRow[] = Array.from({ length: 7 }, (_, i) => {
           const dia = i + 1;
           const found = existing.find((h: VisitaHorario) => h.dia_semana === dia);
@@ -179,7 +162,6 @@ export function AtendedoresSubTab() {
         });
         setHorarios(rows);
       } else {
-        // Default: lunes a viernes 9-18
         setHorarios(
           Array.from({ length: 7 }, (_, i) => ({
             dia_semana: i + 1,
@@ -218,17 +200,10 @@ export function AtendedoresSubTab() {
     }
   }
 
-  const columns = useMemo<ColumnDef<VisitaAtendedorConArea>[]>(() => [
+  const columns = useMemo<ColumnDef<VisitaAtendedor>[]>(() => [
     {
       accessorKey: 'nombre',
       header: 'Nombre',
-    },
-    {
-      accessorKey: 'area_nombre',
-      header: 'Área',
-      cell: ({ getValue }) => (
-        <span className="dt-badge dt-badge-blue">{getValue() as string}</span>
-      ),
     },
     {
       accessorKey: 'activo',
@@ -268,24 +243,24 @@ export function AtendedoresSubTab() {
         data={data}
         columns={columns}
         loading={loading}
-        searchPlaceholder="Buscar atendedores..."
+        searchPlaceholder="Buscar anfitriones..."
         emptyIcon={<Users size={48} />}
-        emptyTitle="No hay atendedores"
-        emptyDescription="Agregue un nuevo atendedor. Primero debe crear al menos un área."
+        emptyTitle="No hay anfitriones"
+        emptyDescription="Agregue un nuevo anfitrión."
         disableAutoFilters
         headerAction={
-          <button className="visitas-btn-primary" onClick={handleCreate} disabled={areas.length === 0}>
-            <Plus size={16} /> Nuevo Atendedor
+          <button className="visitas-btn-primary" onClick={handleCreate}>
+            <Plus size={16} /> Nuevo Anfitrión
           </button>
         }
       />
 
-      {/* Modal CRUD Atendedor */}
+      {/* Modal CRUD Anfitrión */}
       {showModal && (
         <div className="visitas-modal-overlay" onClick={() => setShowModal(false)}>
           <div className="visitas-modal-content" onClick={(e) => e.stopPropagation()}>
             <div className="visitas-modal-header">
-              <h2>{modalMode === 'create' ? 'Nuevo Atendedor' : 'Editar Atendedor'}</h2>
+              <h2>{modalMode === 'create' ? 'Nuevo Anfitrión' : 'Editar Anfitrión'}</h2>
               <button className="visitas-modal-close" onClick={() => setShowModal(false)}><X size={20} /></button>
             </div>
             <div className="visitas-modal-body">
@@ -298,18 +273,6 @@ export function AtendedoresSubTab() {
                     onChange={(e) => setForm((p) => ({ ...p, nombre: e.target.value }))}
                     placeholder="Ej: Josué Martínez"
                   />
-                </div>
-                <div className="visitas-form-group">
-                  <label>Área <span className="required">*</span></label>
-                  <select
-                    value={form.area_id}
-                    onChange={(e) => setForm((p) => ({ ...p, area_id: e.target.value }))}
-                  >
-                    <option value="">Seleccionar...</option>
-                    {areas.filter((a) => a.activo).map((a) => (
-                      <option key={a.id} value={a.id}>{a.nombre}</option>
-                    ))}
-                  </select>
                 </div>
                 <div className="visitas-form-group">
                   <div className="visitas-checkbox-inline">

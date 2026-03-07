@@ -4,12 +4,16 @@
 
 // --- Catálogos ---
 
+export type TipoVisita = 'exclusivo' | 'grupal';
+
 export interface VisitaCategoria {
   id: string;
   nombre: string;
   color: string;
   duracion_default: number;
   requiere_patente: boolean;
+  tipo_visita: TipoVisita;
+  duracion_modificable: boolean;
   orden: number;
   activo: boolean;
   created_at: string;
@@ -23,27 +27,13 @@ export interface VisitaMotivo {
   created_at: string;
 }
 
-export interface VisitaArea {
-  id: string;
-  nombre: string;
-  sede_id: string;
-  orden: number;
-  activo: boolean;
-  created_at: string;
-}
-
 export interface VisitaAtendedor {
   id: string;
   nombre: string;
-  area_id: string;
   user_id: string | null;
   sede_id: string;
   activo: boolean;
   created_at: string;
-}
-
-export interface VisitaAtendedorConArea extends VisitaAtendedor {
-  area_nombre: string;
 }
 
 export interface VisitaMotivoConCategoria extends VisitaMotivo {
@@ -96,7 +86,6 @@ export interface VisitaCompleta extends Visita {
   categoria_color: string;
   motivo_nombre: string | null;
   atendedor_nombre: string;
-  area_nombre: string;
 }
 
 // --- Formulario ---
@@ -141,5 +130,4 @@ export interface VisitaCalendarEvent {
 export interface CalendarResource {
   id: string;
   title: string;
-  area: string;
 }

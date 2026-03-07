@@ -43,9 +43,9 @@ interface VisitasCalendarioProps {
   events: VisitaCalendarEvent[];
   resources: CalendarResource[];
   currentDate: Date;
-  currentView: 'day' | 'week' | 'month';
+  currentView: 'week' | 'month';
   onNavigate: (date: Date) => void;
-  onViewChange: (view: 'day' | 'week' | 'month') => void;
+  onViewChange: (view: 'week' | 'month') => void;
   onSelectSlot: (slotInfo: { start: Date; end: Date; resourceId?: string | number }) => void;
   onSelectEvent: (event: VisitaCalendarEvent) => void;
 }
@@ -69,12 +69,14 @@ export function VisitasCalendario({
     return {
       style: {
         backgroundColor: baseColor,
-        opacity: isDone ? 0.5 : 1,
-        borderRadius: '4px',
+        opacity: isDone ? 0.45 : 0.95,
+        borderRadius: '6px',
         border: 'none',
+        borderLeft: `3px solid ${baseColor}`,
         color: '#fff',
-        fontSize: '12px',
-        padding: '2px 6px',
+        fontSize: '11px',
+        padding: '3px 8px',
+        fontWeight: 500,
       },
     };
   }, []);
@@ -83,7 +85,7 @@ export function VisitasCalendario({
   const tooltipAccessor = useCallback((event: VisitaCalendarEvent) => {
     const v = event.visita;
     const estadoInfo = VISITA_ESTADOS[v.estado];
-    return `${v.nombre_visitante}\n${v.categoria_nombre}${v.motivo_nombre ? ' - ' + v.motivo_nombre : ''}\nAtendedor: ${v.atendedor_nombre}\nEstado: ${estadoInfo.label}\nDuración: ${v.duracion_minutos} min`;
+    return `${v.nombre_visitante}\n${v.categoria_nombre}${v.motivo_nombre ? ' - ' + v.motivo_nombre : ''}\nAnfitrión: ${v.atendedor_nombre}\nEstado: ${estadoInfo.label}\nDuración: ${v.duracion_minutos} min`;
   }, []);
 
   // Horario visible del calendario (8am - 20pm)
@@ -99,8 +101,8 @@ export function VisitasCalendario({
     return d;
   }, []);
 
-  // Vista de recursos solo en vista día
-  const showResources = currentView === 'day';
+  // Recursos no se muestran (vista día removida)
+  const showResources = false;
 
   return (
     <div className="visitas-calendario-wrapper">
@@ -114,7 +116,7 @@ export function VisitasCalendario({
         resourceTitleAccessor="title"
         date={currentDate}
         view={currentView}
-        views={['day', 'week', 'month']}
+        views={['week', 'month']}
         onNavigate={onNavigate}
         onView={onViewChange as (view: string) => void}
         selectable
@@ -122,11 +124,11 @@ export function VisitasCalendario({
         onSelectEvent={onSelectEvent}
         eventPropGetter={eventStyleGetter}
         tooltipAccessor={tooltipAccessor}
-        step={15}
-        timeslots={4}
+        step={60}
+        timeslots={1}
         min={minTime}
         max={maxTime}
-        defaultView="day"
+        defaultView="week"
         popup
         showMultiDayTimes
       />

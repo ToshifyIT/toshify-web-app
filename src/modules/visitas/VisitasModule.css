@@ -7,7 +7,8 @@
   display: flex;
   flex-direction: column;
   gap: 16px;
-  min-height: calc(100vh - 170px);
+  height: calc(100vh - 170px);
+  min-height: 0;
 }
 
 .visitas-tab-content {
@@ -79,7 +80,7 @@
   border-radius: 12px;
   border: 1px solid var(--border-primary);
   box-shadow: var(--shadow-sm);
-  padding: 20px;
+  padding: 24px;
   flex: 1;
   display: flex;
   flex-direction: column;
@@ -87,7 +88,7 @@
 }
 
 /* =====================================================
-   REACT-BIG-CALENDAR: OVERRIDE COMPLETO
+   REACT-BIG-CALENDAR: OVERRIDE COMPLETO (MINIMAL)
    ===================================================== */
 
 .visitas-calendario-wrapper .rbc-calendar {
@@ -101,36 +102,35 @@
 
 /* --- Toolbar --- */
 .visitas-calendario-wrapper .rbc-toolbar {
-  margin-bottom: 16px;
+  margin-bottom: 20px;
   flex-wrap: wrap;
-  gap: 8px;
-  padding-bottom: 16px;
-  border-bottom: 1px solid var(--border-secondary);
+  gap: 12px;
+  padding-bottom: 0;
+  border-bottom: none;
+  align-items: center;
 }
 
 .visitas-calendario-wrapper .rbc-toolbar button {
-  background: var(--bg-primary);
+  background: transparent;
   color: var(--text-secondary);
   border: 1px solid var(--border-primary);
-  padding: 7px 14px;
-  border-radius: 6px;
+  padding: 6px 16px;
+  border-radius: 20px;
   font-size: 13px;
   font-weight: 500;
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: all 0.15s ease;
   line-height: 1.4;
 }
 
 .visitas-calendario-wrapper .rbc-toolbar button:hover {
   background: var(--bg-secondary);
   color: var(--text-primary);
-  border-color: var(--color-gray-300);
+  border-color: var(--border-primary);
 }
 
 .visitas-calendario-wrapper .rbc-toolbar button:focus {
   outline: none;
-  box-shadow: var(--input-focus-shadow);
-  border-color: var(--border-focus);
 }
 
 .visitas-calendario-wrapper .rbc-toolbar button.rbc-active {
@@ -138,7 +138,6 @@
   color: var(--text-inverse);
   border-color: var(--color-primary);
   font-weight: 600;
-  box-shadow: 0 2px 4px var(--color-primary-shadow);
 }
 
 .visitas-calendario-wrapper .rbc-toolbar button.rbc-active:hover {
@@ -148,7 +147,7 @@
 
 .visitas-calendario-wrapper .rbc-btn-group {
   display: flex;
-  gap: 2px;
+  gap: 4px;
 }
 
 .visitas-calendario-wrapper .rbc-btn-group button + button {
@@ -157,49 +156,48 @@
 
 .visitas-calendario-wrapper .rbc-toolbar .rbc-toolbar-label {
   font-weight: 600;
-  font-size: 16px;
+  font-size: 17px;
   color: var(--text-primary);
   text-transform: capitalize;
+  letter-spacing: -0.2px;
 }
 
 /* --- Header (day names) --- */
 .visitas-calendario-wrapper .rbc-header {
-  padding: 10px 4px;
-  font-size: 12px;
+  padding: 12px 4px;
+  font-size: 11px;
   font-weight: 600;
-  color: var(--text-secondary);
-  background: var(--table-header-bg);
-  border-bottom: 1px solid var(--border-primary);
-  text-transform: capitalize;
+  color: var(--text-tertiary);
+  background: transparent;
+  border-bottom: none;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
 }
 
 .visitas-calendario-wrapper .rbc-header + .rbc-header {
-  border-left: 1px solid var(--border-secondary);
+  border-left: none;
 }
 
 /* --- Time gutter (left column) --- */
 .visitas-calendario-wrapper .rbc-time-gutter .rbc-label {
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 500;
   color: var(--text-tertiary);
-  padding: 0 8px;
+  padding: 0 12px;
+  letter-spacing: 0.3px;
 }
 
 .visitas-calendario-wrapper .rbc-time-header-gutter {
-  background: var(--table-header-bg);
+  background: transparent;
 }
 
 /* --- Time slots --- */
 .visitas-calendario-wrapper .rbc-time-slot {
-  border-top: 1px solid var(--border-secondary);
+  border-top: none;
 }
 
 .visitas-calendario-wrapper .rbc-timeslot-group {
-  border-bottom: 1px solid var(--border-primary);
-}
-
-.visitas-calendario-wrapper .rbc-time-content {
-  border-top: 1px solid var(--border-primary);
+  border-bottom: 1px solid var(--border-secondary);
 }
 
 .visitas-calendario-wrapper .rbc-time-content > * + * > * {
@@ -207,7 +205,7 @@
 }
 
 .visitas-calendario-wrapper .rbc-day-slot .rbc-time-slot {
-  border-top: 1px solid var(--border-secondary);
+  border-top: none;
 }
 
 /* --- Today highlight --- */
@@ -217,14 +215,15 @@
 
 /* --- Month view --- */
 .visitas-calendario-wrapper .rbc-month-view {
-  border: 1px solid var(--border-primary);
-  border-radius: 8px;
+  border: 1px solid var(--border-secondary);
+  border-radius: 10px;
   overflow: hidden;
   flex: 1;
+  min-height: 0;
 }
 
 .visitas-calendario-wrapper .rbc-month-row {
-  border-bottom: 1px solid var(--border-primary);
+  border-bottom: 1px solid var(--border-secondary);
 }
 
 .visitas-calendario-wrapper .rbc-month-row + .rbc-month-row {
@@ -244,11 +243,11 @@
 }
 
 .visitas-calendario-wrapper .rbc-date-cell {
-  padding: 4px 8px;
+  padding: 6px 10px;
   text-align: right;
   font-size: 13px;
   font-weight: 500;
-  color: var(--text-primary);
+  color: var(--text-secondary);
 }
 
 .visitas-calendario-wrapper .rbc-date-cell.rbc-now {
@@ -256,16 +255,21 @@
   color: var(--color-primary);
 }
 
-/* --- Week/Day time view --- */
+/* --- Week time view --- */
 .visitas-calendario-wrapper .rbc-time-view {
-  border: 1px solid var(--border-primary);
-  border-radius: 8px;
+  border: 1px solid var(--border-secondary);
+  border-radius: 10px;
   overflow: hidden;
   flex: 1;
+  min-height: 0;
+}
+
+.visitas-calendario-wrapper .rbc-time-content {
+  overflow-y: auto;
 }
 
 .visitas-calendario-wrapper .rbc-time-header {
-  border-bottom: 1px solid var(--border-primary);
+  border-bottom: 1px solid var(--border-secondary);
 }
 
 .visitas-calendario-wrapper .rbc-time-header-content {
@@ -280,8 +284,14 @@
 .visitas-calendario-wrapper .rbc-event {
   border: none !important;
   outline: none !important;
-  border-radius: 4px !important;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.15);
+  border-radius: 6px !important;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  transition: box-shadow 0.15s ease, transform 0.15s ease;
+}
+
+.visitas-calendario-wrapper .rbc-event:hover {
+  box-shadow: 0 3px 8px rgba(0, 0, 0, 0.15);
+  transform: translateY(-1px);
 }
 
 .visitas-calendario-wrapper .rbc-event:focus {
@@ -292,25 +302,26 @@
 .visitas-calendario-wrapper .rbc-event-label {
   font-size: 10px;
   font-weight: 500;
-  opacity: 0.9;
+  opacity: 0.85;
 }
 
 .visitas-calendario-wrapper .rbc-event-content {
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 500;
   line-height: 1.3;
 }
 
 .visitas-calendario-wrapper .rbc-show-more {
   color: var(--color-primary);
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 600;
   padding: 2px 4px;
+  cursor: pointer;
 }
 
-/* --- Resource header (day view with columns) --- */
+/* --- Resource header --- */
 .visitas-calendario-wrapper .rbc-row-resource {
-  border-bottom: 2px solid var(--border-primary);
+  border-bottom: 1px solid var(--border-secondary);
 }
 
 .visitas-calendario-wrapper .rbc-row-resource .rbc-header {
@@ -323,20 +334,39 @@
 /* --- Selected slot --- */
 .visitas-calendario-wrapper .rbc-slot-selection {
   background: var(--color-primary-light);
-  border: 1px solid var(--color-primary);
-  border-radius: 4px;
+  border: 1px dashed var(--color-primary);
+  border-radius: 6px;
 }
 
 /* --- Current time indicator --- */
 .visitas-calendario-wrapper .rbc-current-time-indicator {
   background-color: var(--color-primary);
   height: 2px;
+  z-index: 3;
+}
+
+.visitas-calendario-wrapper .rbc-current-time-indicator::before {
+  content: '';
+  position: absolute;
+  left: -5px;
+  top: -4px;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--color-primary);
+}
+
+/* --- Month event row --- */
+.visitas-calendario-wrapper .rbc-month-view .rbc-event {
+  padding: 2px 6px !important;
+  font-size: 11px !important;
+  border-radius: 4px !important;
 }
 
 /* --- Agenda view --- */
 .visitas-calendario-wrapper .rbc-agenda-view {
-  border: 1px solid var(--border-primary);
-  border-radius: 8px;
+  border: 1px solid var(--border-secondary);
+  border-radius: 10px;
   overflow: hidden;
 }
 
@@ -345,16 +375,18 @@
 }
 
 .visitas-calendario-wrapper .rbc-agenda-view th {
-  background: var(--table-header-bg);
-  color: var(--text-secondary);
-  font-size: 12px;
+  background: var(--bg-secondary);
+  color: var(--text-tertiary);
+  font-size: 11px;
   font-weight: 600;
   padding: 10px 12px;
-  border-bottom: 1px solid var(--border-primary);
+  border-bottom: 1px solid var(--border-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
 }
 
 .visitas-calendario-wrapper .rbc-agenda-view td {
-  padding: 8px 12px;
+  padding: 10px 12px;
   border-bottom: 1px solid var(--border-secondary);
   font-size: 13px;
   color: var(--text-primary);

@@ -32,7 +32,8 @@ import {
   Upload,
   Lock,
   Unlock,
-  Info
+  Info,
+  Target
 } from 'lucide-react'
 import { type ColumnDef, type Table } from '@tanstack/react-table'
 import { DataTable } from '../../../components/ui/DataTable'
@@ -43,7 +44,7 @@ import { usePermissions } from '../../../contexts/PermissionsContext'
 import { useSede } from '../../../contexts/SedeContext'
 import { formatCurrency, formatDate, FACTURACION_CONFIG } from '../../../types/facturacion.types'
 import { normalizeDni, normalizePatente } from '../../../utils/normalizeDocuments'
-import { format, startOfWeek, endOfWeek, addWeeks, subWeeks, getWeek, getYear, parseISO } from 'date-fns'
+import { format, startOfWeek, endOfWeek, addWeeks, subWeeks, getWeek, getYear, parseISO, startOfDay, differenceInCalendarDays } from 'date-fns'
 import { es } from 'date-fns/locale'
 import { RITPreviewTable, type RITPreviewRow } from '../components/RITPreviewTable'
 import { DiscrepancyReportModal } from '../../../components/ui/DiscrepancyReportModal'
@@ -169,6 +170,8 @@ interface FacturacionConductor {
   fecha_pago?: string | null
   // Estado de facturación semanal (Activo, Pausa, De baja)
   estado_billing?: 'Activo' | 'Pausa' | 'De baja'
+  // Alquiler proyectado a semana completa (precio_unitario * 49)
+  proyectado_alquiler?: number
   // Alerta: fecha_terminacion del conductor no coincide con fecha_fin de asignación
   fecha_baja_no_coincide?: boolean
   // Discrepancia de formato DNI entre conductores y cabify_historico
@@ -301,6 +304,9 @@ export function ReporteFacturacionTab() {
   // Modal de discrepancias de formato
   const [showDiscrepancyModal, setShowDiscrepancyModal] = useState(false)
 
+  // Filtros rápidos de alertas (toggle)
+  const [filtroAlerta, setFiltroAlerta] = useState<'ingreso' | 'baja' | 'sin_gnc' | 'pausa' | null>(null)
+
   // Modal de desglose de días
   const [showDiasModal, setShowDiasModal] = useState(false)
 
@@ -392,7 +398,7 @@ export function ReporteFacturacionTab() {
 
   // Recalcular período abierto
   const [recalculando, setRecalculando] = useState(false)
-  const [recalculandoProgreso, setRecalculandoProgreso] = useState({ actual: 0, total: 0 })
+  const [recalculandoProgreso, setRecalculandoProgreso] = useState({ actual: 0, total: 0, nombre: '' })
 
   // Cerrar período
   const [cerrando, setCerrando] = useState(false)
@@ -866,9 +872,8 @@ export function ReporteFacturacionTab() {
       // Usar nombre de tabla conductores en formato "Nombres Apellidos"
       let facturacionesTransformadas = (facturacionesData || []).map((f: any) => {
         const conductorEstadoId = f.conductor?.estado_id
-        const fechaTermLoad = f.conductor?.fecha_terminacion ? parseISO(f.conductor.fecha_terminacion) : null
+        // Priorizar estado_id: si el conductor está ACTIVO, no importa fecha_terminacion vieja
         const esDeBajaLoad = conductorEstadoId !== ESTADO_ACTIVO_ID_LOAD
-          || (fechaTermLoad && fechaTermLoad <= fechaFinPeriodoLoad)
         const tieneAsignacionCierreLoad = conductoresConAsignacionAlCierreLoad.has(f.conductor_id)
         const estadoBilling = esDeBajaLoad ? 'De baja'
           : ((f.turnos_cobrados >= 7 || tieneAsignacionCierreLoad) ? 'Activo' : 'Pausa')
@@ -951,6 +956,7 @@ export function ReporteFacturacionTab() {
         { data: pagosData },
         { data: detallesData },
         { data: excesosData },
+        { data: alquilerDetalleData },
       ] = await Promise.all([
         (supabase.from('pagos_conductores') as any)
           .select('referencia_id, monto, fecha_pago')
@@ -963,6 +969,10 @@ export function ReporteFacturacionTab() {
         (supabase.from('excesos_kilometraje') as any)
           .select('id, conductor_id, km_exceso, monto_total, aplicado')
           .eq('periodo_id', (periodoData as any).id),
+        (supabase.from('facturacion_detalle') as any)
+          .select('facturacion_id, precio_unitario')
+          .in('facturacion_id', facIds)
+          .in('concepto_codigo', ['P001', 'P002', 'P013']),
       ])
 
       // Agrupar pagos por referencia_id (puede haber pagos parciales)
@@ -999,7 +1009,7 @@ export function ReporteFacturacionTab() {
           entry.tickets_detalle.push({ monto: Math.abs(parseFloat(d.total) || 0), detalle: d.concepto_descripcion || 'Ticket' })
         } else if (d.concepto_codigo === 'P005') {
           entry.monto_peajes += parseFloat(d.total) || 0
-        } else if (d.concepto_codigo === 'P007') {
+        } else if (d.concepto_codigo === 'P006' || d.concepto_codigo === 'P007') {
           entry.monto_penalidades += parseFloat(d.total) || 0
           entry.penalidades_count += 1
           entry.penalidades_detalle.push({ monto: parseFloat(d.total) || 0, detalle: d.concepto_descripcion || 'Penalidad' })
@@ -1027,6 +1037,21 @@ export function ReporteFacturacionTab() {
           tickets_detalle: detalle?.tickets_detalle || [],
         }
       })
+
+      // Construir mapa de alquiler proyectado: facturacion_id → Math.round(precio_unitario * 49)
+      const proyectadoMap = new Map<string, number>()
+      ;(alquilerDetalleData || []).forEach((d: any) => {
+        const pu = Number(d.precio_unitario) || 0
+        if (pu > 0) {
+          proyectadoMap.set(d.facturacion_id, Math.round(pu * 49))
+        }
+      })
+
+      // Agregar proyectado_alquiler a cada facturación
+      facturacionesTransformadas = facturacionesTransformadas.map((f: any) => ({
+        ...f,
+        proyectado_alquiler: proyectadoMap.get(f.id) || f.subtotal_alquiler || 0,
+      }))
 
       // Ordenar por nombre
       facturacionesTransformadas.sort((a: any, b: any) => 
@@ -1194,8 +1219,8 @@ export function ReporteFacturacionTab() {
 
       // Calcular días por modalidad/horario para cada conductor
       const fechaInicioSemana = semanaActual.inicio
-      // Solo contar días hasta hoy (no proyectar días futuros)
-      const hoyVP = parseISO(toArgDate(new Date().toISOString()))
+      // Vista Previa capa los días hasta HOY (no proyecta). El Preview Cabify sí proyecta semana completa.
+      const hoyVP = startOfDay(new Date())
       const fechaFinSemana = hoyVP < semanaActual.fin ? hoyVP : semanaActual.fin
 
       // Map de conductor_id → fecha_terminacion (tope de días para conductores de baja)
@@ -1421,6 +1446,7 @@ export function ReporteFacturacionTab() {
         [{ data: cabifyData }, { data: cabifyPeajesData }],
         { data: tickets },
         { data: excesosData },
+        { data: dniMapeoData },
       ] = await Promise.all([
         (supabase.from('saldos_conductores') as any)
           .select('conductor_id, saldo_actual')
@@ -1446,7 +1472,14 @@ export function ReporteFacturacionTab() {
           .select('conductor_id, km_exceso, monto_total, aplicado')
           .eq('aplicado', false)
           .in('conductor_id', conductorIds),
+        supabase.from('cabify_dni_mapeo')
+          .select('cabify_hash, dni_real'),
       ])
+
+      // Mapa de CABIFY_hash → DNI real para resolver hashes de Cabify
+      const cabifyHashMap = new Map<string, string>(
+        (dniMapeoData || []).map((m: any) => [m.cabify_hash, m.dni_real])
+      )
 
       // Construir mapas
       const saldosMap = new Map<string, { conductor_id: string; saldo_actual: number }>(
@@ -1470,7 +1503,13 @@ export function ReporteFacturacionTab() {
       const cabifyRawDniMap = new Map<string, string>() // normalized -> raw cabify DNI
       ;(cabifyData || []).forEach((record: any) => {
         if (record.dni) {
-          const dniNorm = normalizeDni(record.dni)
+          let dniKey = String(record.dni)
+          if (dniKey.startsWith('CABIFY_')) {
+            const resolved = cabifyHashMap.get(dniKey)
+            if (resolved) dniKey = resolved
+            else return // Hash desconocido, skip
+          }
+          const dniNorm = normalizeDni(dniKey)
           const actual = cabifyMap.get(dniNorm) || 0
           const cobroApp = parseFloat(String(record.cobro_app)) || 0
           cabifyMap.set(dniNorm, actual + cobroApp)
@@ -1482,7 +1521,13 @@ export function ReporteFacturacionTab() {
       const peajesDetalleMap = new Map<string, Array<{ fecha: string; monto: number }>>()
       ;(cabifyPeajesData || []).forEach((record: any) => {
         if (record.dni && record.peajes) {
-          const dniNorm = normalizeDni(record.dni)
+          let dniKey = String(record.dni)
+          if (dniKey.startsWith('CABIFY_')) {
+            const resolved = cabifyHashMap.get(dniKey)
+            if (resolved) dniKey = resolved
+            else return // Hash desconocido, skip
+          }
+          const dniNorm = normalizeDni(dniKey)
           const actualPeajes = peajesMap.get(dniNorm) || 0
           const peajes = parseFloat(String(record.peajes)) || 0
           peajesMap.set(dniNorm, actualPeajes + peajes)
@@ -1778,7 +1823,10 @@ export function ReporteFacturacionTab() {
           turnos_base: 7,
           turnos_cobrados: Math.round(factorProporcional * 7),
           factor_proporcional: factorProporcional,
-          subtotal_alquiler: subtotalAlquiler,
+           subtotal_alquiler: subtotalAlquiler,
+          proyectado_alquiler: diasTotales > 0 && diasTotales < 7
+            ? Math.round((subtotalAlquiler / diasTotales) * 7)
+            : subtotalAlquiler,
           subtotal_garantia: subtotalGarantia,
           subtotal_cargos: subtotalCargos,
           subtotal_descuentos: subtotalDescuentos,
@@ -1814,9 +1862,8 @@ export function ReporteFacturacionTab() {
             // Estado: De baja si tiene fecha_terminacion o no está activo
            // Activo si tiene 7 días O tiene asignación vigente al cierre de la semana
             estado_billing: (() => {
-              const ftVP = conductor.fecha_terminacion ? parseISO(conductor.fecha_terminacion) : null
-              const esBajaVP = conductor.estado_id !== ESTADO_ACTIVO_ID || (ftVP && ftVP <= semanaActual.fin)
-              if (esBajaVP) return 'De baja'
+              // Priorizar estado_id: si el conductor está ACTIVO, no importa fecha_terminacion vieja
+              if (conductor.estado_id !== ESTADO_ACTIVO_ID) return 'De baja'
               const tieneAsignacionCierre = conductoresConAsignacionAlCierreVP.has(conductorId)
               return (diasTotales >= 7 || tieneAsignacionCierre) ? 'Activo' : 'Pausa'
             })(),
@@ -2159,10 +2206,10 @@ export function ReporteFacturacionTab() {
       conductorIdsTemp.forEach((id: string) => diasContadosRecalc.set(id, new Set()))
 
       const fechaInicioSemanaRecalc = parseISO(fechaInicio)
-      // Solo contar días hasta hoy (no proyectar días futuros)
-      const hoyRecalc = parseISO(toArgDate(new Date().toISOString()))
-      const finSemanaRecalcReal = parseISO(fechaFin)
-      const fechaFinSemanaRecalc = hoyRecalc < finSemanaRecalcReal ? hoyRecalc : finSemanaRecalcReal
+      // Recalcular capa los días hasta HOY (no proyecta). El Preview Cabify sí proyecta semana completa.
+      const hoyRecalc = startOfDay(new Date())
+      const finSemanaRecalc = parseISO(fechaFin)
+      const fechaFinSemanaRecalc = hoyRecalc < finSemanaRecalc ? hoyRecalc : finSemanaRecalc
 
       // Map de conductor_id → fecha_terminacion (tope de días para conductores de baja)
       const fechaTerminacionMap = new Map<string, Date>()
@@ -2283,11 +2330,8 @@ export function ReporteFacturacionTab() {
         // Excluir conductores con 0 días, SALVO que tengan penalidades pendientes
         if (totalDias === 0 && !dnisConPenalidadesRecalc.has(control.numero_dni)) continue
 
-        // Estado: De baja si tiene fecha_terminacion o no está activo
-        // Activo si tiene 7 días O tiene asignación vigente al cierre de la semana
-        const fechaTermCond = conductorData.fecha_terminacion ? parseISO(conductorData.fecha_terminacion) : null
+        // Priorizar estado_id: si el conductor está ACTIVO, no importa fecha_terminacion vieja
         const esDeBaja = conductorData.estado_id !== ESTADO_ACTIVO_ID_RECALC
-          || (fechaTermCond && fechaTermCond <= fechaFinSemanaRecalc)
         const tieneAsignacionCierreRecalc = conductoresConAsignacionAlCierreRecalc.has(conductorData.id)
         const estadoBilling: 'Activo' | 'Pausa' | 'De baja' = esDeBaja
           ? 'De baja'
@@ -2340,7 +2384,7 @@ export function ReporteFacturacionTab() {
       // 5. Obtener datos adicionales en paralelo
       // NOTA: multas_historico DESACTIVADO temporalmente — reactivar cuando se defina el flujo
       const MULTAS_HABILITADAS = false
-      const [penalidadesRes, ticketsRes, saldosRes, excesosRes, cabifyRes, garantiasRes, cobrosRes, multasRes] = await Promise.all([
+      const [penalidadesRes, ticketsRes, saldosRes, excesosRes, cabifyRes, garantiasRes, cobrosRes, multasRes, dniMapeoResRecalc] = await Promise.all([
         (supabase.from('penalidades') as any).select('*, tipos_cobro_descuento(categoria, es_a_favor, nombre), incidencias(descripcion)').in('conductor_id', conductorIds).gte('fecha', fechaInicio).lte('fecha', fechaFin).eq('aplicado', false).eq('fraccionado', false).neq('rechazado', true),
         (supabase.from('tickets_favor') as any).select('*').in('conductor_id', conductorIds).eq('estado', 'aprobado'),
         (supabase.from('saldos_conductores') as any).select('conductor_id, saldo_actual').in('conductor_id', conductorIds),
@@ -2357,6 +2401,7 @@ export function ReporteFacturacionTab() {
         MULTAS_HABILITADAS
           ? (supabase.from('multas_historico') as any).select('patente, importe, fecha_infraccion').gte('fecha_infraccion', fechaInicio).lte('fecha_infraccion', fechaFin)
           : Promise.resolve({ data: [] }),
+        supabase.from('cabify_dni_mapeo').select('cabify_hash, dni_real'),
       ])
 
       // 5b. Cargar penalidades_cuotas (cuotas de penalidades fraccionadas) hasta esta semana + pagos para cruzar
@@ -2449,11 +2494,22 @@ export function ReporteFacturacionTab() {
       )
       // ─────────────────────────────────────────────────────────────────────────────
 
+      // Mapa de CABIFY_hash → DNI real para resolver hashes de Cabify
+      const cabifyHashMapRecalc = new Map<string, string>(
+        (dniMapeoResRecalc.data || []).map((m: any) => [m.cabify_hash, m.dni_real])
+      )
+
       // Mapear peajes por DNI (normalizado)
       const peajesMap = new Map<string, number>()
       ;((cabifyRes.data || []) as any[]).forEach((r: any) => {
         if (r.dni && r.peajes) {
-          const dniNorm = normalizeDni(r.dni)
+          let dniKey = String(r.dni)
+          if (dniKey.startsWith('CABIFY_')) {
+            const resolved = cabifyHashMapRecalc.get(dniKey)
+            if (resolved) dniKey = resolved
+            else return // Hash desconocido, skip
+          }
+          const dniNorm = normalizeDni(dniKey)
           peajesMap.set(dniNorm, (peajesMap.get(dniNorm) || 0) + (parseFloat(String(r.peajes)) || 0))
         }
       })
@@ -2476,9 +2532,12 @@ export function ReporteFacturacionTab() {
       let erroresConsecutivos = 0
       let totalErrores = 0
       let primerError = ''
-      setRecalculandoProgreso({ actual: 0, total: conductoresProcesados.length })
+      setRecalculandoProgreso({ actual: 0, total: conductoresProcesados.length, nombre: '' })
 
       for (const conductor of conductoresProcesados) {
+        // Mostrar progreso con nombre del conductor actual
+        setRecalculandoProgreso({ actual: conductoresProcesadosCount + 1, total: conductoresProcesados.length, nombre: conductor.conductor_nombre })
+
         // Calcular alquiler con precio diario × días
         let alquilerTotal = 0
         const detallesAlquiler: { codigo: string; descripcion: string; dias: number; monto: number }[] = []
@@ -2644,21 +2703,23 @@ export function ReporteFacturacionTab() {
         // Limpiar detalle viejo antes de insertar el nuevo
         await supabase.from('facturacion_detalle').delete().eq('facturacion_id', facturacionId)
 
-        // INSERT detalles de alquiler (P001/P002/P013)
+        // ═══ BATCH: Recopilar todos los detalles en un array, insertar de una sola vez ═══
+        const todosDetalles: any[] = []
+        const penIdsAplicar: string[] = []
+        const ticketIdsAplicar: string[] = []
+        const excesoIdsAplicar: string[] = []
+        const cobroIdsAplicar: string[] = []
+
+        // Alquiler detalles (P001/P002/P013)
         for (const detalle of detallesAlquiler) {
-          // Determinar precio unitario según código
           let precioUnitario = 0
           if (detalle.codigo === 'P001') precioUnitario = precioTurnoDiurno / 7
           else if (detalle.codigo === 'P013') precioUnitario = precioTurnoNocturno / 7
           else if (detalle.codigo === 'P002') precioUnitario = precioCargo / 7
-          
-          await (supabase.from('facturacion_detalle') as any).insert({
-            facturacion_id: facturacionId,
-            concepto_codigo: detalle.codigo,
-            concepto_descripcion: detalle.descripcion,
-            cantidad: detalle.dias,
-            precio_unitario: precioUnitario,
-            subtotal: detalle.monto, total: detalle.monto, es_descuento: false
+          todosDetalles.push({
+            facturacion_id: facturacionId, concepto_codigo: detalle.codigo,
+            concepto_descripcion: detalle.descripcion, cantidad: detalle.dias,
+            precio_unitario: precioUnitario, subtotal: detalle.monto, total: detalle.monto, es_descuento: false
           })
         }
 
@@ -2666,15 +2727,13 @@ export function ReporteFacturacionTab() {
         const descripcionGarantia = garantiaCompletada
           ? 'Garantía completada'
           : `Cuota de Garantía ${cuotaActual} de ${totalCuotas}`
-        await (supabase.from('facturacion_detalle') as any).insert({
-          facturacion_id: facturacionId,
-          concepto_codigo: 'P003', concepto_descripcion: descripcionGarantia,
+        todosDetalles.push({
+          facturacion_id: facturacionId, concepto_codigo: 'P003', concepto_descripcion: descripcionGarantia,
           cantidad: 1, precio_unitario: cuotaGarantiaProporcional,
           subtotal: cuotaGarantiaProporcional, total: cuotaGarantiaProporcional, es_descuento: false
         })
 
         // Penalidades segmentadas por categoría (P004 descuento, P006 cargo, P007 cargo)
-        // NULL categoria = pendiente, NO se inserta ni se marca aplicada
         const gruposPenalidades: { pens: any[]; codigo: string; esDescuento: boolean }[] = [
           { pens: pensP004, codigo: 'P004', esDescuento: true },
           { pens: pensP006, codigo: 'P006', esDescuento: false },
@@ -2690,45 +2749,33 @@ export function ReporteFacturacionTab() {
               : grupo.codigo === 'P006'
                 ? `Exceso KM: ${detalleCompleto}`
                 : `Penalidad: ${detalleCompleto}`
-            await (supabase.from('facturacion_detalle') as any).insert({
-              facturacion_id: facturacionId,
-              concepto_codigo: grupo.codigo,
+            todosDetalles.push({
+              facturacion_id: facturacionId, concepto_codigo: grupo.codigo,
               concepto_descripcion: descripcion,
               cantidad: 1, precio_unitario: (pen as any).monto,
               subtotal: (pen as any).monto, total: (pen as any).monto, es_descuento: grupo.esDescuento,
               referencia_id: (pen as any).id, referencia_tipo: 'penalidad'
             })
-            // Marcar como aplicada con semana/anio para trazabilidad
-            await (supabase.from('penalidades') as any).update({ 
-              aplicado: true, 
-              fecha_aplicacion: new Date().toISOString(),
-              semana_aplicacion: semanaNum,
-              anio_aplicacion: anioNum
-            }).eq('id', (pen as any).id)
+            penIdsAplicar.push((pen as any).id)
           }
         }
 
         // P004 - Tickets a Favor (descuentos)
         for (const ticket of ticketsConductor) {
-          await (supabase.from('facturacion_detalle') as any).insert({
-            facturacion_id: facturacionId,
-            concepto_codigo: 'P004',
+          todosDetalles.push({
+            facturacion_id: facturacionId, concepto_codigo: 'P004',
             concepto_descripcion: `Ticket: ${(ticket as any).descripcion || (ticket as any).tipo}`,
             cantidad: 1, precio_unitario: (ticket as any).monto,
             subtotal: (ticket as any).monto, total: (ticket as any).monto, es_descuento: true,
             referencia_id: (ticket as any).id, referencia_tipo: 'ticket'
           })
-          // Marcar como aplicado
-          await (supabase.from('tickets_favor') as any)
-            .update({ estado: 'aplicado', periodo_aplicado_id: periodoId, fecha_aplicacion: new Date().toISOString() })
-            .eq('id', (ticket as any).id)
+          ticketIdsAplicar.push((ticket as any).id)
         }
 
         // P006 - Excesos de kilometraje
         for (const exceso of excesosConductor) {
-          await (supabase.from('facturacion_detalle') as any).insert({
-            facturacion_id: facturacionId,
-            concepto_codigo: 'P006',
+          todosDetalles.push({
+            facturacion_id: facturacionId, concepto_codigo: 'P006',
             concepto_descripcion: `Exceso KM: ${(exceso as any).km_exceso || 0} km`,
             cantidad: 1, precio_unitario: (exceso as any).monto_base || 0,
             iva_porcentaje: (exceso as any).iva_porcentaje || 21,
@@ -2737,18 +2784,13 @@ export function ReporteFacturacionTab() {
             total: (exceso as any).monto_total || 0, es_descuento: false,
             referencia_id: (exceso as any).id, referencia_tipo: 'exceso_km'
           })
-          // Marcar como aplicado
-          await (supabase.from('excesos_kilometraje') as any)
-            .update({ aplicado: true, fecha_aplicacion: new Date().toISOString(), periodo_id: periodoId })
-            .eq('id', (exceso as any).id)
+          excesoIdsAplicar.push((exceso as any).id)
         }
 
         // P005 - Peajes de Cabify
         if (totalPeajes > 0) {
-          const descPeaje = 'Peajes'
-          await (supabase.from('facturacion_detalle') as any).insert({
-            facturacion_id: facturacionId,
-            concepto_codigo: 'P005', concepto_descripcion: descPeaje,
+          todosDetalles.push({
+            facturacion_id: facturacionId, concepto_codigo: 'P005', concepto_descripcion: 'Peajes',
             cantidad: 1, precio_unitario: totalPeajes,
             subtotal: totalPeajes, total: totalPeajes, es_descuento: false,
             referencia_tipo: 'cabify_peajes'
@@ -2757,12 +2799,10 @@ export function ReporteFacturacionTab() {
 
         // P008 - Multas de tránsito
         if (montoMultas > 0) {
-          await (supabase.from('facturacion_detalle') as any).insert({
-            facturacion_id: facturacionId,
-            concepto_codigo: 'P008',
+          todosDetalles.push({
+            facturacion_id: facturacionId, concepto_codigo: 'P008',
             concepto_descripcion: `Multas de Tránsito (${cantidadMultas})`,
-            cantidad: cantidadMultas,
-            precio_unitario: Math.round(montoMultas / cantidadMultas),
+            cantidad: cantidadMultas, precio_unitario: Math.round(montoMultas / cantidadMultas),
             subtotal: montoMultas, total: montoMultas, es_descuento: false,
             referencia_tipo: 'multa_transito'
           })
@@ -2770,12 +2810,10 @@ export function ReporteFacturacionTab() {
 
         // P009 - Mora
         if (montoMora > 0) {
-          await (supabase.from('facturacion_detalle') as any).insert({
-            facturacion_id: facturacionId,
-            concepto_codigo: 'P009',
+          todosDetalles.push({
+            facturacion_id: facturacionId, concepto_codigo: 'P009',
             concepto_descripcion: `Mora (${diasMora} días al 1%)`,
-            cantidad: diasMora,
-            precio_unitario: Math.round(saldoAnterior * 0.01),
+            cantidad: diasMora, precio_unitario: Math.round(saldoAnterior * 0.01),
             subtotal: montoMora, total: montoMora, es_descuento: false
           })
         }
@@ -2784,17 +2822,13 @@ export function ReporteFacturacionTab() {
         for (const cobro of cobrosConductor) {
           const montoCuotaReal = calcularMontoCuota(cobro)
           const descripcionCobro = (cobro as any).descripcion || `Cuota ${(cobro as any).numero_cuota} de ${(cobro as any).total_cuotas}`
-          await (supabase.from('facturacion_detalle') as any).insert({
-            facturacion_id: facturacionId,
-            concepto_codigo: 'P010', concepto_descripcion: descripcionCobro,
+          todosDetalles.push({
+            facturacion_id: facturacionId, concepto_codigo: 'P010', concepto_descripcion: descripcionCobro,
             cantidad: 1, precio_unitario: montoCuotaReal,
             subtotal: montoCuotaReal, total: montoCuotaReal, es_descuento: false,
             referencia_id: (cobro as any).id, referencia_tipo: 'cobro_fraccionado'
           })
-          // Marcar como aplicado
-          await (supabase.from('cobros_fraccionados') as any)
-            .update({ aplicado: true, fecha_aplicacion: new Date().toISOString() })
-            .eq('id', (cobro as any).id)
+          cobroIdsAplicar.push((cobro as any).id)
         }
 
         // Penalidades cuotas (cuotas de penalidades fraccionadas no pagadas hasta esta semana)
@@ -2804,7 +2838,7 @@ export function ReporteFacturacionTab() {
           const esDescuento = penPadre?.tipos_cobro_descuento?.es_a_favor === true
           const tipoNombre = penPadre?.tipos_cobro_descuento?.nombre || penPadre?.detalle || 'Penalidad fraccionada'
           const descripcionCuota = `Cuota ${cuota.numero_cuota} - ${tipoNombre} (Total: ${penPadre?.cantidad_cuotas || '?'} cuotas)`
-          await (supabase.from('facturacion_detalle') as any).insert({
+          todosDetalles.push({
             facturacion_id: facturacionId,
             concepto_codigo: esDescuento ? 'P004' : categoria,
             concepto_descripcion: descripcionCuota,
@@ -2815,8 +2849,48 @@ export function ReporteFacturacionTab() {
           // NO marcar como aplicado — eso se hace cuando se PAGA, no cuando se factura
         }
 
+        // ═══ EJECUTAR: 1 batch insert + updates en paralelo (reduce ~20 calls a 3-5) ═══
+        if (todosDetalles.length > 0) {
+          await (supabase.from('facturacion_detalle') as any).insert(todosDetalles)
+        }
+
+        // Marcar registros como aplicados en paralelo
+        const batchUpdates: Promise<any>[] = []
+        if (penIdsAplicar.length > 0) {
+          batchUpdates.push(
+            (supabase.from('penalidades') as any).update({
+              aplicado: true, fecha_aplicacion: new Date().toISOString(),
+              semana_aplicacion: semanaNum, anio_aplicacion: anioNum
+            }).in('id', penIdsAplicar)
+          )
+        }
+        if (ticketIdsAplicar.length > 0) {
+          batchUpdates.push(
+            (supabase.from('tickets_favor') as any)
+              .update({ estado: 'aplicado', periodo_aplicado_id: periodoId, fecha_aplicacion: new Date().toISOString() })
+              .in('id', ticketIdsAplicar)
+          )
+        }
+        if (excesoIdsAplicar.length > 0) {
+          batchUpdates.push(
+            (supabase.from('excesos_kilometraje') as any)
+              .update({ aplicado: true, fecha_aplicacion: new Date().toISOString(), periodo_id: periodoId })
+              .in('id', excesoIdsAplicar)
+          )
+        }
+        if (cobroIdsAplicar.length > 0) {
+          batchUpdates.push(
+            (supabase.from('cobros_fraccionados') as any)
+              .update({ aplicado: true, fecha_aplicacion: new Date().toISOString() })
+              .in('id', cobroIdsAplicar)
+          )
+        }
+        if (batchUpdates.length > 0) {
+          await Promise.all(batchUpdates)
+        }
+
         conductoresProcesadosCount++
-        setRecalculandoProgreso({ actual: conductoresProcesadosCount, total: conductoresProcesados.length })
+        setRecalculandoProgreso({ actual: conductoresProcesadosCount, total: conductoresProcesados.length, nombre: '' })
       }
 
       // 7. Validar que se procesó al menos un conductor
@@ -2860,7 +2934,7 @@ export function ReporteFacturacionTab() {
       Swal.fire('Error', error?.message || 'No se pudo recalcular el período', 'error')
     } finally {
       setRecalculando(false)
-      setRecalculandoProgreso({ actual: 0, total: 0 })
+      setRecalculandoProgreso({ actual: 0, total: 0, nombre: '' })
     }
   }
 
@@ -3084,19 +3158,27 @@ export function ReporteFacturacionTab() {
         })
       }
 
-      // Penalidades completas - Filtrar por semana de aplicación
+      // Penalidades completas - En Vista Previa buscar pendientes, en período buscar aplicadas
       const semDetalle = periodo?.semana || getWeek(semanaActual.inicio, { weekStartsOn: 1 })
       const anioDetalle = periodo?.anio || getYear(semanaActual.inicio)
+      const esPreview = modoVistaPrevia || facturacion.id.startsWith('preview-')
+      const fechaInicioDetalle = periodo?.fecha_inicio || format(semanaActual.inicio, 'yyyy-MM-dd')
+      const fechaFinDetalle = periodo?.fecha_fin || format(semanaActual.fin, 'yyyy-MM-dd')
 
-      const { data: penalidades } = await (supabase
+      let qPenalidades = (supabase
         .from('penalidades') as any)
-        .select('id, monto, observaciones, fraccionado, cantidad_cuotas, semana_aplicacion, anio_aplicacion, fecha, created_at, tipos_cobro_descuento(categoria, es_a_favor, nombre)')
+        .select('id, monto, observaciones, fraccionado, cantidad_cuotas, semana_aplicacion, anio_aplicacion, fecha, created_at, incidencias(descripcion), tipos_cobro_descuento(categoria, es_a_favor, nombre)')
         .eq('conductor_id', facturacion.conductor_id)
-        .eq('aplicado', true)
         .eq('fraccionado', false)
         .neq('rechazado', true)
-        .eq('semana_aplicacion', semDetalle)
-        .eq('anio_aplicacion', anioDetalle)
+      if (esPreview) {
+        // Vista Previa: penalidades pendientes en el rango de la semana
+        qPenalidades = qPenalidades.eq('aplicado', false).gte('fecha', fechaInicioDetalle).lte('fecha', fechaFinDetalle)
+      } else {
+        // Período generado: penalidades ya aplicadas en esta semana
+        qPenalidades = qPenalidades.eq('aplicado', true).eq('semana_aplicacion', semDetalle).eq('anio_aplicacion', anioDetalle)
+      }
+      const { data: penalidades } = await qPenalidades
 
       // Penalidades que tienen cuotas (excluir del listado completo)
       const { data: penIdsConCuotasDet } = await (supabase
@@ -3120,8 +3202,10 @@ export function ReporteFacturacionTab() {
           return
         }
         const tipoNombre = p.tipos_cobro_descuento?.nombre || p.observaciones || 'Sin detalle'
+        const incDesc = p.incidencias?.descripcion
+        const detalleCompleto = incDesc ? `${tipoNombre} - ${incDesc}` : tipoNombre
         const esDescuento = categoria === 'P004'
-        const descripcion = esDescuento ? `Ticket: ${tipoNombre}` : `Penalidad: ${tipoNombre}`
+        const descripcion = esDescuento ? `Ticket: ${detalleCompleto}` : `Penalidad: ${detalleCompleto}`
         detallesSimulados.push({
           id: `det-pen-${facturacion.conductor_id}-${idx}`,
           facturacion_id: facturacion.id,
@@ -3521,6 +3605,136 @@ export function ReporteFacturacionTab() {
     } catch (error: any) {
       Swal.fire('Error', error.message || 'No se pudo cargar el detalle', 'error')
     }
+  }
+
+  // ==========================================
+  // VER DETALLE GENÉRICO DE ÍTEM DE FACTURACIÓN
+  // ==========================================
+  async function verDetalleItem(item: FacturacionDetalle) {
+    const codigo = item.concepto_codigo
+    const desc = item.concepto_descripcion
+    const qty = item.cantidad
+    const unitario = item.precio_unitario
+    const total = item.total
+
+    // Desglose básico que siempre se muestra
+    let htmlBasico = `
+      <div style="display:grid; grid-template-columns:120px 1fr; gap:4px 12px; font-size:13px; line-height:1.8">
+        <strong>Código:</strong> <span>${codigo}</span>
+        <strong>Concepto:</strong> <span>${desc}</span>
+        <strong>Cantidad:</strong> <span>${qty}</span>
+        <strong>Precio unit.:</strong> <span>${formatCurrency(unitario)}</span>
+        <strong>Total:</strong> <span style="font-weight:700; color:#ff0033">${formatCurrency(total)}</span>
+      </div>
+    `
+
+    let htmlExtra = ''
+    let titleExtra = 'Detalle del Concepto'
+
+    try {
+      // P003 - Garantía: buscar progreso de cuotas
+      if (codigo === 'P003' && detalleFacturacion) {
+        titleExtra = 'Detalle de Garantía'
+        const { data: garantia } = await (supabase.from('garantias') as any)
+          .select('monto_total, monto_pagado, cantidad_cuotas, monto_cuota, estado, created_at')
+          .eq('conductor_id', detalleFacturacion.conductor_id)
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .single()
+        if (garantia) {
+          const pagado = garantia.monto_pagado || 0
+          const totalG = garantia.monto_total || 0
+          const pct = totalG > 0 ? Math.round((pagado / totalG) * 100) : 0
+          const estado = garantia.estado === 'completada' ? '<span style="color:#10b981;font-weight:600">Completada</span>' : '<span style="color:#f59e0b;font-weight:600">En curso</span>'
+          htmlExtra = `
+            <hr style="margin:10px 0; border:none; border-top:1px solid #e5e7eb">
+            <div style="display:grid; grid-template-columns:120px 1fr; gap:4px 12px; font-size:13px; line-height:1.8">
+              <strong>Monto total:</strong> <span>${formatCurrency(totalG)}</span>
+              <strong>Pagado:</strong> <span>${formatCurrency(pagado)} (${pct}%)</span>
+              <strong>Cuotas:</strong> <span>${garantia.cantidad_cuotas || '-'} x ${formatCurrency(garantia.monto_cuota || 0)}</span>
+              <strong>Estado:</strong> ${estado}
+            </div>
+            <div style="margin-top:8px; height:8px; background:#e5e7eb; border-radius:4px; overflow:hidden">
+              <div style="width:${pct}%; height:100%; background:${pct >= 100 ? '#10b981' : '#7C3AED'}; border-radius:4px"></div>
+            </div>
+          `
+        }
+      }
+
+      // P005 - Peajes: mostrar detalle de peajes individuales
+      if (codigo === 'P005' && detalleFacturacion) {
+        titleExtra = 'Detalle de Peajes'
+        const peajesDetalle = detalleFacturacion.peajes_detalle
+        if (peajesDetalle && peajesDetalle.length > 0) {
+          const rows = peajesDetalle.map(p => {
+            const fecha = p.fecha ? format(parseISO(p.fecha), 'dd/MM/yy') : '-'
+            return `<tr><td style="padding:4px 8px;font-size:12px;border-bottom:1px solid #e5e7eb">${fecha}</td><td style="padding:4px 8px;font-size:12px;border-bottom:1px solid #e5e7eb;text-align:right;font-family:monospace;font-weight:600">${formatCurrency(p.monto)}</td></tr>`
+          }).join('')
+          htmlExtra = `
+            <hr style="margin:10px 0; border:none; border-top:1px solid #e5e7eb">
+            <div style="font-size:11px;font-weight:600;color:#666;margin-bottom:6px">${peajesDetalle.length} peaje${peajesDetalle.length > 1 ? 's' : ''} (semana anterior)</div>
+            <div style="max-height:200px;overflow-y:auto">
+              <table style="width:100%;border-collapse:collapse">
+                <thead><tr style="background:#f9fafb"><th style="padding:4px 8px;font-size:10px;text-align:left;color:#666">Fecha</th><th style="padding:4px 8px;font-size:10px;text-align:right;color:#666">Monto</th></tr></thead>
+                <tbody>${rows}</tbody>
+              </table>
+            </div>
+          `
+        }
+      }
+
+      // P001/P002/P013 - Alquiler: mostrar desglose por días
+      if ((codigo === 'P001' || codigo === 'P002' || codigo === 'P013') && detalleFacturacion) {
+        titleExtra = 'Detalle de Alquiler'
+        const tipoLabel = codigo === 'P001' ? 'Turno Diurno' : codigo === 'P013' ? 'Turno Nocturno' : 'A Cargo'
+        htmlExtra = `
+          <hr style="margin:10px 0; border:none; border-top:1px solid #e5e7eb">
+          <div style="display:grid; grid-template-columns:120px 1fr; gap:4px 12px; font-size:13px; line-height:1.8">
+            <strong>Modalidad:</strong> <span>${tipoLabel}</span>
+            <strong>Días cobrados:</strong> <span>${qty} de 7</span>
+            <strong>Valor por día:</strong> <span>${formatCurrency(unitario)}</span>
+            <strong>Subtotal:</strong> <span style="font-weight:600">${formatCurrency(total)}</span>
+          </div>
+        `
+      }
+
+      // P006 - Exceso KM
+      if (codigo === 'P006') {
+        titleExtra = 'Detalle de Exceso de KM'
+      }
+
+      // P004 - Tickets a favor
+      if (codigo === 'P004' && item.referencia_id) {
+        titleExtra = 'Detalle de Ticket a Favor'
+        const { data: ticket } = await (supabase.from('tickets_favor') as any)
+          .select('monto, descripcion, estado, created_at, tipo')
+          .eq('id', item.referencia_id)
+          .single()
+        if (ticket) {
+          htmlExtra = `
+            <hr style="margin:10px 0; border:none; border-top:1px solid #e5e7eb">
+            <div style="display:grid; grid-template-columns:120px 1fr; gap:4px 12px; font-size:13px; line-height:1.8">
+              <strong>Tipo:</strong> <span>${ticket.tipo || '-'}</span>
+              <strong>Descripción:</strong> <span>${ticket.descripcion || '-'}</span>
+              <strong>Monto:</strong> <span style="color:#059669;font-weight:600">${formatCurrency(ticket.monto || 0)}</span>
+              <strong>Estado:</strong> <span>${ticket.estado || '-'}</span>
+              ${ticket.created_at ? `<strong>Creado:</strong> <span>${format(parseISO(ticket.created_at), 'dd/MM/yyyy HH:mm')}</span>` : ''}
+            </div>
+          `
+        }
+      }
+    } catch {
+      // Si falla la consulta extra, solo mostrar el básico
+    }
+
+    await Swal.fire({
+      title: titleExtra,
+      html: `<div style="text-align:left">${htmlBasico}${htmlExtra}</div>`,
+      width: 480,
+      confirmButtonText: 'Cerrar',
+      confirmButtonColor: '#ff0033',
+      customClass: { popup: 'fact-modal', title: 'fact-modal-title' }
+    })
   }
 
   // ==========================================
@@ -6532,18 +6746,33 @@ export function ReporteFacturacionTab() {
       const semana = getWeek(semanaActual.inicio, { weekStartsOn: 1 })
       const anio = getYear(semanaActual.inicio)
 
+      // Proyección: calcular días transcurridos para escalar alquiler a semana completa
+      const hoyProyeccion = startOfDay(new Date())
+      const daysSoFar = Math.min(differenceInCalendarDays(hoyProyeccion, semanaActual.inicio) + 1, 7)
+      const necesitaProyeccion = daysSoFar < 7
+
       // Generar filas para el preview
       const previewRows: CabifyPreviewRow[] = dataToExport.map(f => {
         const email = emailMap.get(normalizeDni(f.conductor_dni)) || ''
         const cabifyInfo = cabifyMap.get(normalizeDni(f.conductor_dni)) || { horas: 0, ganancia: 0, cobroApp: 0, efectivo: 0 }
         
-        // Importe Contrato = Solo alquiler (P001/P002/P013)
-        const importeContrato = f.subtotal_alquiler || 0
+        // Días reales del conductor en Vista Previa (capados a hoy)
+        const actualDias = (f.prorrateo_cargo_dias || 0) + (f.prorrateo_diurno_dias || 0) + (f.prorrateo_nocturno_dias || 0)
+        const actualAlquiler = f.subtotal_alquiler || 0
+
+        // Proyectar alquiler a semana completa para conductores activos
+        let importeContrato = actualAlquiler
+        let diasProyectados = actualDias
+        if (necesitaProyeccion && f.estado_billing === 'Activo' && actualDias > 0) {
+          const daysRemaining = 7 - daysSoFar
+          diasProyectados = Math.min(actualDias + daysRemaining, 7)
+          importeContrato = Math.round((actualAlquiler / actualDias) * diasProyectados)
+        }
         
         // EXCEDENTES = resto de productos (sin alquiler) + saldo pendiente
         // Cobros (garantía, peajes, excesos, penalidades) suman, montos a favor (tickets) restan
         const saldoPendiente = f.saldo_anterior || 0
-        const excedentes = (f.subtotal_cargos || 0) - (f.subtotal_descuentos || 0) - importeContrato + saldoPendiente
+        const excedentes = (f.subtotal_cargos || 0) - (f.subtotal_descuentos || 0) - actualAlquiler + saldoPendiente
 
         return {
           anio,
@@ -6562,24 +6791,24 @@ export function ReporteFacturacionTab() {
           importeGeneradoConBonos: cabifyInfo.cobroApp,
           generadoEfectivo: cabifyInfo.efectivo,
           detalle: {
-            diasTrabajados: Math.min(7, (f.prorrateo_cargo_dias || 0) + (f.prorrateo_diurno_dias || 0) + (f.prorrateo_nocturno_dias || 0)),
+            diasTrabajados: diasProyectados,
             prorrateoCargoDias: f.prorrateo_cargo_dias || 0,
             prorrateoCargoMonto: f.prorrateo_cargo_monto || 0,
             prorrateoDiurnoDias: f.prorrateo_diurno_dias || 0,
             prorrateoDiurnoMonto: f.prorrateo_diurno_monto || 0,
             prorrateoNocturnoDias: f.prorrateo_nocturno_dias || 0,
             prorrateoNocturnoMonto: f.prorrateo_nocturno_monto || 0,
-            subtotalAlquiler: f.subtotal_alquiler || 0,
+            subtotalAlquiler: importeContrato,
             subtotalGarantia: f.subtotal_garantia || 0,
             cuotaGarantia: f.cuota_garantia_numero || '',
             montoPeajes: f.monto_peajes || 0,
             montoExcesos: f.monto_excesos || 0,
             montoPenalidades: f.monto_penalidades || 0,
             ticketsFavor: f.monto_tickets_favor || 0,
-            subtotalCargos: f.subtotal_cargos || 0,
+            subtotalCargos: (f.subtotal_cargos || 0) - actualAlquiler + importeContrato,
             subtotalDescuentos: f.subtotal_descuentos || 0,
             saldoAnterior: f.saldo_anterior || 0,
-            totalAPagar: f.total_a_pagar || 0,
+            totalAPagar: (f.total_a_pagar || 0) - actualAlquiler + importeContrato,
           }
         }
       })
@@ -6650,6 +6879,41 @@ export function ReporteFacturacionTab() {
       const fechaInicio = parseISO(periodo.fecha_inicio)
       const fechaFin = parseISO(periodo.fecha_fin)
 
+      // Proyección: si estamos dentro de la semana del período, proyectar a semana completa
+      const hoyPeriodo = startOfDay(new Date())
+      const daysSoFarPeriodo = Math.min(differenceInCalendarDays(hoyPeriodo, fechaInicio) + 1, 7)
+      const necesitaProyeccionPeriodo = daysSoFarPeriodo > 0 && daysSoFarPeriodo < 7
+
+      // Obtener precio semanal exacto por conductor desde facturacion_detalle
+      // Query fresca por periodo_id (no depende de IDs en estado que pueden ser preview-xxx)
+      const precioSemanalByConductor = new Map<string, number>()
+      if (necesitaProyeccionPeriodo) {
+        const { data: fcFromDb } = await supabase
+          .from('facturacion_conductores')
+          .select('id, conductor_id')
+          .eq('periodo_id', periodo.id)
+        const dbIdToConId = new Map<string, string>()
+        const dbIds: string[] = []
+        ;(fcFromDb || []).forEach((r: { id: string; conductor_id: string }) => {
+          dbIdToConId.set(r.id, r.conductor_id)
+          dbIds.push(r.id)
+        })
+        if (dbIds.length > 0) {
+          const { data: detallesAlquiler } = await supabase
+            .from('facturacion_detalle')
+            .select('facturacion_id, precio_unitario')
+            .in('facturacion_id', dbIds)
+            .in('concepto_codigo', ['P001', 'P002', 'P013'])
+          ;(detallesAlquiler || []).forEach((d: { facturacion_id: string; precio_unitario: number }) => {
+            const conductorId = dbIdToConId.get(d.facturacion_id)
+            const pu = Number(d.precio_unitario) || 0
+            if (conductorId && pu > 0) {
+              precioSemanalByConductor.set(conductorId, Math.round(pu * 49))
+            }
+          })
+        }
+      }
+
       // Generar filas para el preview
       const previewRows: CabifyPreviewRow[] = facturaciones.map(f => {
         const email = emailMap.get(normalizeDni(f.conductor_dni)) || ''
@@ -6678,12 +6942,22 @@ export function ReporteFacturacionTab() {
           }
         }
         
-        // Importe Contrato = Solo alquiler (P001/P002/P013)
-        const importeContrato = f.subtotal_alquiler || 0
+        const actualAlquiler = f.subtotal_alquiler || 0
+
+        // Proyectar alquiler a semana completa usando precio exacto del detalle
+        let importeContrato = actualAlquiler
+        if (necesitaProyeccionPeriodo && f.estado_billing !== 'De baja' && actualAlquiler > 0) {
+          const precioSemanal = precioSemanalByConductor.get(f.conductor_id)
+          if (precioSemanal) {
+            importeContrato = precioSemanal
+          } else {
+            importeContrato = Math.round((actualAlquiler / daysSoFarPeriodo) * 7)
+          }
+        }
         
         // EXCEDENTES = resto de productos (sin alquiler) + saldo pendiente
         const saldoPendiente = f.saldo_anterior || 0
-        const excedentes = (f.subtotal_cargos || 0) - (f.subtotal_descuentos || 0) - importeContrato + saldoPendiente
+        const excedentes = (f.subtotal_cargos || 0) - (f.subtotal_descuentos || 0) - actualAlquiler + saldoPendiente
 
         return {
           anio: periodo.anio,
@@ -6702,24 +6976,24 @@ export function ReporteFacturacionTab() {
           importeGeneradoConBonos: cabifyInfo.cobroApp,
           generadoEfectivo: cabifyInfo.efectivo,
           detalle: {
-            diasTrabajados: Math.min(7, (f.prorrateo_cargo_dias || 0) + (f.prorrateo_diurno_dias || 0) + (f.prorrateo_nocturno_dias || 0)),
+            diasTrabajados: 7,
             prorrateoCargoDias: f.prorrateo_cargo_dias || 0,
             prorrateoCargoMonto: f.prorrateo_cargo_monto || 0,
             prorrateoDiurnoDias: f.prorrateo_diurno_dias || 0,
             prorrateoDiurnoMonto: f.prorrateo_diurno_monto || 0,
             prorrateoNocturnoDias: f.prorrateo_nocturno_dias || 0,
             prorrateoNocturnoMonto: f.prorrateo_nocturno_monto || 0,
-            subtotalAlquiler: f.subtotal_alquiler || 0,
+            subtotalAlquiler: importeContrato,
             subtotalGarantia: f.subtotal_garantia || 0,
             cuotaGarantia: f.cuota_garantia_numero || '',
             montoPeajes: f.monto_peajes || 0,
             montoExcesos: f.monto_excesos || 0,
             montoPenalidades: f.monto_penalidades || 0,
             ticketsFavor: f.monto_tickets_favor || 0,
-            subtotalCargos: f.subtotal_cargos || 0,
+            subtotalCargos: (f.subtotal_cargos || 0) - actualAlquiler + importeContrato,
             subtotalDescuentos: f.subtotal_descuentos || 0,
             saldoAnterior: f.saldo_anterior || 0,
-            totalAPagar: f.total_a_pagar || 0,
+            totalAPagar: (f.total_a_pagar || 0) - actualAlquiler + importeContrato,
           }
         }
       })
@@ -6899,6 +7173,7 @@ export function ReporteFacturacionTab() {
     if (modoVistaPrevia && vistaPreviaData.length > 0) {
       return {
         total_conductores: vistaPreviaData.length,
+        total_proyectado: vistaPreviaData.reduce((sum, f) => sum + (f.proyectado_alquiler || 0), 0),
         total_cargos: vistaPreviaData.reduce((sum, f) => sum + f.subtotal_cargos + Math.max(0, f.saldo_anterior), 0),
         total_descuentos: vistaPreviaData.reduce((sum, f) => sum + f.subtotal_descuentos, 0),
         total_neto: vistaPreviaData.reduce((sum, f) => sum + f.total_a_pagar, 0),
@@ -6910,13 +7185,135 @@ export function ReporteFacturacionTab() {
     if (!periodo) return null
     return {
       total_conductores: periodo.total_conductores,
-      total_cargos: periodo.total_cargos,
-      total_descuentos: periodo.total_descuentos,
-      total_neto: periodo.total_neto,
+      total_proyectado: facturaciones.reduce((sum, f) => sum + (f.proyectado_alquiler || 0), 0),
+      total_cargos: facturaciones.reduce((sum, f) => sum + (f.subtotal_cargos || 0) + Math.max(0, f.saldo_anterior || 0), 0),
+      total_descuentos: facturaciones.reduce((sum, f) => sum + (f.subtotal_descuentos || 0), 0),
+      total_neto: facturaciones.reduce((sum, f) => sum + (f.total_a_pagar || 0), 0),
       conductores_deben: facturaciones.filter(f => f.total_a_pagar > 0).length,
       conductores_favor: facturaciones.filter(f => f.total_a_pagar <= 0).length
     }
   }, [periodo, facturaciones, modoVistaPrevia, vistaPreviaData])
+
+  // Info modal para stat cards
+  function showStatInfo(stat: string) {
+    const src = modoVistaPrevia ? vistaPreviaData : facturaciones
+    const descriptions: Record<string, { title: string; html: string }> = {
+      conductores: {
+        title: 'Conductores',
+        html: `<div style="text-align:left;font-size:13px;">
+          <p>Total de conductores incluidos en la facturación del período.</p>
+          <p><b>${src.length}</b> conductores</p>
+        </div>`
+      },
+      proyectado: {
+        title: 'Total Proyectado',
+        html: (() => {
+          const conductoresConProyectado = src.filter(f => (f.proyectado_alquiler || 0) > 0)
+          const totalProyectado = src.reduce((s, f) => s + (f.proyectado_alquiler || 0), 0)
+          const totalAlquilerActual = src.reduce((s, f) => s + (f.subtotal_alquiler || 0), 0)
+          const porcentaje = totalProyectado > 0 ? Math.round(totalAlquilerActual / totalProyectado * 100) : 0
+          return `<div style="text-align:left;font-size:13px;">
+            <p>Alquiler semanal proyectado (precio_unitario × 49):</p>
+            <table style="width:100%;border-collapse:collapse;">
+              <tr><td>Conductores con alquiler</td><td style="text-align:right"><b>${conductoresConProyectado.length}</b></td></tr>
+              <tr><td>Proyectado semanal</td><td style="text-align:right"><b>${formatCurrency(totalProyectado)}</b></td></tr>
+              <tr><td>Alquiler actual</td><td style="text-align:right"><b>${formatCurrency(totalAlquilerActual)}</b></td></tr>
+              <tr style="border-top:2px solid #ccc;"><td><b>Cobertura</b></td><td style="text-align:right"><b>${porcentaje}%</b></td></tr>
+            </table>
+          </div>`
+        })()
+      },
+      cargos: {
+        title: 'Total Cargos',
+        html: (() => {
+          const alquiler = src.reduce((s, f) => s + (f.subtotal_alquiler || 0), 0)
+          const garantia = src.reduce((s, f) => s + (f.subtotal_garantia || 0), 0)
+          const peajes = src.reduce((s, f) => s + (f.monto_peajes || 0), 0)
+          const excesosKm = src.reduce((s, f) => s + (f.monto_excesos || 0), 0)
+          const penalidades = src.reduce((s, f) => s + (f.monto_penalidades || 0), 0)
+          const saldos = src.reduce((s, f) => s + Math.max(0, f.saldo_anterior || 0), 0)
+          const total = alquiler + garantia + peajes + excesosKm + penalidades + saldos
+          return `<div style="text-align:left;font-size:13px;">
+            <p>Suma de todos los cobros a conductores:</p>
+            <table style="width:100%;border-collapse:collapse;">
+              <tr><td>P001/P002/P013 - Alquiler</td><td style="text-align:right"><b>${formatCurrency(alquiler)}</b></td></tr>
+              <tr><td>P003 - Garantía</td><td style="text-align:right"><b>${formatCurrency(garantia)}</b></td></tr>
+              <tr><td>P005 - Peajes</td><td style="text-align:right"><b>${formatCurrency(peajes)}</b></td></tr>
+              <tr><td>P006 - Exceso KM</td><td style="text-align:right"><b>${formatCurrency(excesosKm)}</b></td></tr>
+              <tr><td>P007 - Penalidades</td><td style="text-align:right"><b>${formatCurrency(penalidades)}</b></td></tr>
+              <tr><td>Saldos pendientes (+)</td><td style="text-align:right"><b>${formatCurrency(saldos)}</b></td></tr>
+              <tr style="border-top:2px solid #ccc;"><td><b>TOTAL CARGOS</b></td><td style="text-align:right"><b>${formatCurrency(total)}</b></td></tr>
+            </table>
+          </div>`
+        })()
+      },
+      descuentos: {
+        title: 'Total Descuentos',
+        html: (() => {
+          const tickets = src.reduce((s, f) => s + (f.monto_tickets_favor || 0), 0)
+          const otrosDesc = src.reduce((s, f) => s + (f.subtotal_descuentos || 0) - (f.monto_tickets_favor || 0), 0)
+          const total = src.reduce((s, f) => s + (f.subtotal_descuentos || 0), 0)
+          return `<div style="text-align:left;font-size:13px;">
+            <p>Suma de todos los descuentos/créditos:</p>
+            <table style="width:100%;border-collapse:collapse;">
+              <tr><td>P004 - Tickets a favor</td><td style="text-align:right"><b>${formatCurrency(tickets)}</b></td></tr>
+              <tr><td>Otros descuentos</td><td style="text-align:right"><b>${formatCurrency(otrosDesc)}</b></td></tr>
+              <tr style="border-top:2px solid #ccc;"><td><b>TOTAL DESCUENTOS</b></td><td style="text-align:right"><b>${formatCurrency(total)}</b></td></tr>
+            </table>
+          </div>`
+        })()
+      },
+      neto: {
+        title: 'Total Neto',
+        html: (() => {
+          const totalCargos = src.reduce((s, f) => s + f.subtotal_cargos + Math.max(0, f.saldo_anterior || 0), 0)
+          const totalDesc = src.reduce((s, f) => s + (f.subtotal_descuentos || 0), 0)
+          const neto = src.reduce((s, f) => s + (f.total_a_pagar || 0), 0)
+          return `<div style="text-align:left;font-size:13px;">
+            <p>Resultado neto de la facturación:</p>
+            <table style="width:100%;border-collapse:collapse;">
+              <tr><td>Total Cargos</td><td style="text-align:right">${formatCurrency(totalCargos)}</td></tr>
+              <tr><td>Total Descuentos</td><td style="text-align:right">- ${formatCurrency(totalDesc)}</td></tr>
+              <tr style="border-top:2px solid #ccc;"><td><b>TOTAL NETO</b></td><td style="text-align:right"><b>${formatCurrency(neto)}</b></td></tr>
+            </table>
+          </div>`
+        })()
+      },
+      deben: {
+        title: 'Conductores que Deben',
+        html: (() => {
+          const deben = src.filter(f => f.total_a_pagar > 0)
+            .sort((a, b) => b.total_a_pagar - a.total_a_pagar)
+          const top5 = deben.slice(0, 5)
+          return `<div style="text-align:left;font-size:13px;">
+            <p><b>${deben.length}</b> conductores con saldo a pagar (total_a_pagar &gt; 0)</p>
+            ${top5.length > 0 ? `<p style="margin-top:8px;font-size:11px;color:#888;">Top 5:</p>
+            <table style="width:100%;border-collapse:collapse;font-size:12px;">
+              ${top5.map(f => `<tr><td style="padding:2px 0;">${f.conductor_nombre}</td><td style="text-align:right;padding:2px 0;"><b>${formatCurrency(f.total_a_pagar)}</b></td></tr>`).join('')}
+            </table>` : ''}
+          </div>`
+        })()
+      },
+      favor: {
+        title: 'Conductores a Favor',
+        html: (() => {
+          const favor = src.filter(f => f.total_a_pagar <= 0)
+            .sort((a, b) => a.total_a_pagar - b.total_a_pagar)
+          const top5 = favor.slice(0, 5)
+          return `<div style="text-align:left;font-size:13px;">
+            <p><b>${favor.length}</b> conductores con saldo a favor o $0 (total_a_pagar &le; 0)</p>
+            ${top5.length > 0 ? `<p style="margin-top:8px;font-size:11px;color:#888;">Top 5:</p>
+            <table style="width:100%;border-collapse:collapse;font-size:12px;">
+              ${top5.map(f => `<tr><td style="padding:2px 0;">${f.conductor_nombre}</td><td style="text-align:right;padding:2px 0;color:#059669;"><b>${formatCurrency(f.total_a_pagar)}</b></td></tr>`).join('')}
+            </table>` : ''}
+          </div>`
+        })()
+      }
+    }
+    const info = descriptions[stat]
+    if (!info) return
+    Swal.fire({ title: info.title, html: info.html, icon: 'info', width: 420, confirmButtonText: 'Cerrar' })
+  }
 
   // Helper para obtener excesos de un conductor
   const getExcesosConductor = (conductorId: string) => {
@@ -6962,15 +7359,16 @@ export function ReporteFacturacionTab() {
         </div>
       ),
       cell: ({ row }) => (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-          <div style={{ display: 'flex', alignItems: 'center' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', overflow: 'hidden' }}>
+          <div style={{ display: 'flex', alignItems: 'center', minWidth: 0 }}>
             <strong
-              style={{ fontSize: '11px', textTransform: 'uppercase', cursor: 'pointer', color: 'var(--color-primary)' }}
+              style={{ fontSize: '11px', textTransform: 'uppercase', cursor: 'pointer', color: 'var(--color-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
               onClick={() => cargarHistorialAsignaciones(
                 row.original.conductor_id,
                 row.original.conductor_nombre,
                 row.original.conductor_dni || ''
               )}
+              title={row.original.conductor_nombre}
             >
               {row.original.conductor_nombre}
             </strong>
@@ -7011,6 +7409,7 @@ export function ReporteFacturacionTab() {
       ),
       enableSorting: true,
       size: 140,
+      meta: { expand: true },
     },
     {
       id: 'dias_trabajados',
@@ -7018,6 +7417,8 @@ export function ReporteFacturacionTab() {
       header: 'Días',
       enableSorting: true,
       size: 55,
+      minSize: 45,
+      maxSize: 65,
       cell: ({ row }) => {
         const cobrados = row.original.turnos_cobrados ?? 0
         const alerta = row.original.alerta_prorrateo_ingreso
@@ -7198,37 +7599,55 @@ export function ReporteFacturacionTab() {
       }
     },
     {
-      id: 'monto_cobrado',
-      accessorFn: (row) => row.monto_cobrado || 0,
-      header: 'Cobrado',
+      id: 'proyectado_alquiler',
+      accessorFn: (row) => row.proyectado_alquiler || 0,
+      header: 'Proyectado',
       enableSorting: true,
-      size: 80,
+      size: 100,
       cell: ({ row }) => {
-        const cobrado = row.original.monto_cobrado || 0
-        const total = Math.abs(row.original.total_a_pagar || 0)
+        const proyectado = row.original.proyectado_alquiler || 0
+        const alquiler = row.original.subtotal_alquiler || 0
 
-        if (modoVistaPrevia) {
+        if (proyectado === 0) {
           return <span style={{ color: 'var(--text-muted)', fontSize: '11px' }}>-</span>
         }
 
-        if (cobrado === 0) {
-          return <span style={{ color: 'var(--text-muted)', fontSize: '11px' }}>-</span>
-        }
+        const porcentaje = proyectado > 0 ? Math.min(100, Math.round((alquiler / proyectado) * 100)) : 0
+        const completo = alquiler >= proyectado && alquiler > 0
 
-        const esPagoCompleto = cobrado >= total
         return (
-          <div style={{ fontSize: '11px' }}>
-            <span style={{
-              fontWeight: 600,
-              color: esPagoCompleto ? '#10b981' : '#f59e0b'
+          <div style={{ fontSize: '11px', minWidth: '80px' }}>
+            <div style={{ fontWeight: 600, color: 'var(--text-primary)', marginBottom: '4px' }}>
+              {formatCurrency(proyectado)}
+            </div>
+            <div style={{ 
+              width: '100%', 
+              height: '8px', 
+              backgroundColor: '#e5e7eb', 
+              borderRadius: '4px',
+              overflow: 'hidden',
+              border: '1px solid #d1d5db'
             }}>
-              {formatCurrency(cobrado)}
-            </span>
-            {!esPagoCompleto && total > 0 && (
-              <div style={{ fontSize: '9px', color: '#6b7280', marginTop: '2px' }}>
-                {Math.round((cobrado / total) * 100)}% del total
-              </div>
-            )}
+              <div style={{ 
+                width: `${Math.max(porcentaje, 0)}%`, 
+                height: '100%', 
+                backgroundColor: completo ? '#10b981' : porcentaje >= 70 ? '#f59e0b' : '#ef4444',
+                borderRadius: '3px',
+                transition: 'width 0.3s ease',
+                minWidth: porcentaje > 0 ? '4px' : '0'
+              }} />
+            </div>
+            <div style={{ 
+              fontSize: '9px', 
+              color: completo ? '#10b981' : '#6b7280', 
+              marginTop: '3px',
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center'
+            }}>
+              <span>{porcentaje}%</span>
+              {completo && <span style={{ color: '#10b981', fontWeight: 600 }}>✓</span>}
+            </div>
           </div>
         )
       }
@@ -7290,7 +7709,8 @@ export function ReporteFacturacionTab() {
     {
       id: 'incidencias',
       header: 'Incidencias',
-      size: 75,
+      size: 80,
+      minSize: 70,
       accessorFn: (row) => row.monto_penalidades || 0,
       cell: ({ row }) => {
         const penalidades = row.original.penalidades_detalle || []
@@ -7333,22 +7753,25 @@ export function ReporteFacturacionTab() {
             onClick={handleClick}
             style={{
               display: 'flex',
+              flexDirection: 'column',
               alignItems: 'center',
-              gap: '4px',
-              padding: '3px 8px',
-              borderRadius: '12px',
+              gap: '1px',
+              padding: '3px 6px',
+              borderRadius: '6px',
               border: 'none',
               cursor: 'pointer',
               fontSize: '11px',
               fontWeight: 600,
               background: 'var(--color-danger-light)',
               color: 'var(--color-danger)',
+              width: '100%',
+              maxWidth: '70px',
             }}
-            title="Ver detalle de incidencias"
+            title={`${count} incidencia${count > 1 ? 's' : ''} — ${formatCurrency(montoPen)}`}
           >
-            {count}
-            <span style={{ fontSize: '10px', fontWeight: 400 }}>
-              ({formatCurrency(montoPen)})
+            <span>{count}</span>
+            <span style={{ fontSize: '9px', fontWeight: 500, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '100%' }}>
+              {formatCurrency(montoPen)}
             </span>
           </button>
         )
@@ -7358,7 +7781,8 @@ export function ReporteFacturacionTab() {
     {
       id: 'tickets_favor',
       header: 'Tickets Fav.',
-      size: 75,
+      size: 80,
+      minSize: 70,
       accessorFn: (row) => row.monto_tickets_favor || 0,
       cell: ({ row }) => {
         const tickets = row.original.tickets_detalle || []
@@ -7401,22 +7825,25 @@ export function ReporteFacturacionTab() {
             onClick={handleClick}
             style={{
               display: 'flex',
+              flexDirection: 'column',
               alignItems: 'center',
-              gap: '4px',
-              padding: '3px 8px',
-              borderRadius: '12px',
+              gap: '1px',
+              padding: '3px 6px',
+              borderRadius: '6px',
               border: 'none',
               cursor: 'pointer',
               fontSize: '11px',
               fontWeight: 600,
               background: 'rgba(5, 150, 105, 0.1)',
               color: '#059669',
+              width: '100%',
+              maxWidth: '70px',
             }}
-            title="Ver detalle de tickets a favor"
+            title={`${count} ticket${count > 1 ? 's' : ''} — ${formatCurrency(montoTickets)}`}
           >
-            {count}
-            <span style={{ fontSize: '10px', fontWeight: 400 }}>
-              ({formatCurrency(montoTickets)})
+            <span>{count}</span>
+            <span style={{ fontSize: '9px', fontWeight: 500, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '100%' }}>
+              -{formatCurrency(montoTickets)}
             </span>
           </button>
         )
@@ -7504,6 +7931,8 @@ export function ReporteFacturacionTab() {
     {
       id: 'acciones',
       header: '',
+      size: 50,
+      maxSize: 170,
       cell: ({ row }) => (
         <div style={{ display: 'flex', gap: '4px', justifyContent: 'center' }}>
           <button
@@ -7528,6 +7957,18 @@ export function ReporteFacturacionTab() {
     const fin = format(semanaActual.fin, 'dd/MM', { locale: es })
     return { semana, anio, inicio, fin }
   }, [semanaActual])
+
+  // Mapa de alquiler proyectado por conductor_id para Preview Facturación
+  const proyectadoAlquilerMap = useMemo(() => {
+    const m = new Map<string, number>()
+    const src = modoVistaPrevia ? vistaPreviaData : facturaciones
+    src.forEach(f => {
+      if ((f.proyectado_alquiler || 0) > 0) {
+        m.set(f.conductor_id, f.proyectado_alquiler!)
+      }
+    })
+    return m
+  }, [facturaciones, vistaPreviaData, modoVistaPrevia])
 
   // Si estamos en modo Preview Facturación, mostrar el componente de preview
   if (showSiFacturaPreview && siFacturaPreviewData.length > 0) {
@@ -7560,6 +8001,7 @@ export function ReporteFacturacionTab() {
         onExport={exportarSiFacturaExcel}
         exporting={exportingSiFactura}
         onSync={undefined}
+        proyectadoAlquilerMap={proyectadoAlquilerMap}
       />
     )
   }
@@ -7746,6 +8188,10 @@ export function ReporteFacturacionTab() {
       ? format(parseISO(periodo.fecha_fin), 'dd/MM/yyyy')
       : format(semanaActual.fin, 'dd/MM/yyyy')
     
+    // Detectar si es proyección (hoy < fin de semana/período)
+    const finSemanaRef = periodo ? parseISO(periodo.fecha_fin) : semanaActual.fin
+    const esProyeccionCabify = startOfDay(new Date()) < finSemanaRef
+
     return (
       <CabifyPreviewTable
         data={cabifyPreviewData}
@@ -7754,6 +8200,7 @@ export function ReporteFacturacionTab() {
         fechaInicio={fechaInicioStr}
         fechaFin={fechaFinStr}
         periodoId={undefined}
+        proyectadoA={esProyeccionCabify ? fechaFinStr : undefined}
         onClose={() => {
           setShowCabifyPreview(false)
           setCabifyPreviewData([])
@@ -7826,7 +8273,7 @@ export function ReporteFacturacionTab() {
             >
               <Calculator size={14} className={recalculando || periodo?.estado === 'procesando' ? 'spinning' : ''} />
               {recalculando && recalculandoProgreso.total > 0
-                ? `Recalculando ${recalculandoProgreso.actual}/${recalculandoProgreso.total}...`
+                ? `${recalculandoProgreso.actual}/${recalculandoProgreso.total}`
                 : recalculando || periodo?.estado === 'procesando'
                   ? 'Recalculando...'
                   : 'Recalcular'}
@@ -7962,46 +8409,46 @@ export function ReporteFacturacionTab() {
           {stats && (
             <div className="fact-stats">
               <div className="fact-stats-grid">
-                <div className="fact-stat-card">
+                <div className="fact-stat-card" onClick={() => showStatInfo('conductores')} style={{ cursor: 'pointer' }}>
                   <Users size={18} className="stat-icon" />
                   <div className="stat-content">
                     <span className="stat-value">{stats.total_conductores}</span>
                     <span className="stat-label">Conductores</span>
                   </div>
                 </div>
-                <div className="fact-stat-card">
+                <div className="fact-stat-card" onClick={() => showStatInfo('proyectado')} style={{ cursor: 'pointer' }}>
+                  <Target size={18} className="stat-icon" />
+                  <div className="stat-content">
+                    <span className="stat-value" style={{ color: 'var(--color-primary)' }}>{formatCurrency(stats.total_proyectado)}</span>
+                    <span className="stat-label">Total Proyectado</span>
+                  </div>
+                </div>
+                <div className="fact-stat-card" onClick={() => showStatInfo('cargos')} style={{ cursor: 'pointer' }}>
                   <TrendingUp size={18} className="stat-icon" />
                   <div className="stat-content">
                     <span className="stat-value">{formatCurrency(stats.total_cargos)}</span>
                     <span className="stat-label">Total Cargos</span>
                   </div>
                 </div>
-                <div className="fact-stat-card">
+                <div className="fact-stat-card" onClick={() => showStatInfo('descuentos')} style={{ cursor: 'pointer' }}>
                   <TrendingDown size={18} className="stat-icon" />
                   <div className="stat-content">
                     <span className="stat-value">{formatCurrency(stats.total_descuentos)}</span>
                     <span className="stat-label">Total Descuentos</span>
                   </div>
                 </div>
-                <div className="fact-stat-card">
+                <div className="fact-stat-card" onClick={() => showStatInfo('neto')} style={{ cursor: 'pointer' }}>
                   <DollarSign size={18} className="stat-icon" />
                   <div className="stat-content">
                     <span className="stat-value">{formatCurrency(stats.total_neto)}</span>
-                    <span className="stat-label">Total Proyectado</span>
+                    <span className="stat-label">Total Neto</span>
                   </div>
                 </div>
-                <div className="fact-stat-card">
+                <div className="fact-stat-card" onClick={() => showStatInfo('deben')} style={{ cursor: 'pointer' }}>
                   <TrendingUp size={18} className="stat-icon red" />
                   <div className="stat-content">
                     <span className="stat-value">{stats.conductores_deben}</span>
                     <span className="stat-label">Deben</span>
-                  </div>
-                </div>
-                <div className="fact-stat-card">
-                  <TrendingDown size={18} className="stat-icon green" />
-                  <div className="stat-content">
-                    <span className="stat-value">{stats.conductores_favor}</span>
-                    <span className="stat-label">A Favor</span>
                   </div>
                 </div>
               </div>
@@ -8066,6 +8513,58 @@ export function ReporteFacturacionTab() {
             </div>
           </div>
 
+          {/* Filtros rápidos de alertas */}
+          {(() => {
+            const countIngreso = vistaPreviaData.filter(f => f.alerta_prorrateo_ingreso).length
+            const countBaja = vistaPreviaData.filter(f => f.estado_billing === 'De baja').length
+            const countPausa = vistaPreviaData.filter(f => f.estado_billing === 'Pausa').length
+            const countSinGnc = vistaPreviaData.filter(f => f.vehiculo_patente && ['AG558DZ', 'AG304XD'].includes(normalizePatente(f.vehiculo_patente))).length
+            const hayAlertas = countIngreso > 0 || countBaja > 0 || countPausa > 0 || countSinGnc > 0
+            if (!hayAlertas) return null
+            const btnStyle = (active: boolean, bg: string, color: string) => ({
+              display: 'inline-flex', alignItems: 'center', gap: '5px',
+              padding: '4px 10px', borderRadius: '14px', fontSize: '11px', fontWeight: 600 as const,
+              border: active ? `2px solid ${color}` : '1px solid var(--border-primary)',
+              background: active ? bg : 'var(--bg-secondary)',
+              color: active ? color : 'var(--text-secondary)',
+              cursor: 'pointer', transition: 'all 0.15s',
+            })
+            return (
+              <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginBottom: '8px' }}>
+                {countIngreso > 0 && (
+                  <button style={btnStyle(filtroAlerta === 'ingreso', 'rgba(245,158,11,0.12)', '#d97706')}
+                    onClick={() => setFiltroAlerta(filtroAlerta === 'ingreso' ? null : 'ingreso')}>
+                    <AlertTriangle size={12} /> Alerta Ingreso <span style={{ opacity: 0.7 }}>{countIngreso}</span>
+                  </button>
+                )}
+                {countBaja > 0 && (
+                  <button style={btnStyle(filtroAlerta === 'baja', 'rgba(239,68,68,0.12)', '#dc2626')}
+                    onClick={() => setFiltroAlerta(filtroAlerta === 'baja' ? null : 'baja')}>
+                    <AlertCircle size={12} /> De Baja <span style={{ opacity: 0.7 }}>{countBaja}</span>
+                  </button>
+                )}
+                {countPausa > 0 && (
+                  <button style={btnStyle(filtroAlerta === 'pausa', 'rgba(107,114,128,0.12)', '#6b7280')}
+                    onClick={() => setFiltroAlerta(filtroAlerta === 'pausa' ? null : 'pausa')}>
+                    <AlertCircle size={12} /> Pausa <span style={{ opacity: 0.7 }}>{countPausa}</span>
+                  </button>
+                )}
+                {countSinGnc > 0 && (
+                  <button style={btnStyle(filtroAlerta === 'sin_gnc', 'rgba(249,115,22,0.12)', '#ea580c')}
+                    onClick={() => setFiltroAlerta(filtroAlerta === 'sin_gnc' ? null : 'sin_gnc')}>
+                    <AlertTriangle size={12} /> Sin GNC <span style={{ opacity: 0.7 }}>{countSinGnc}</span>
+                  </button>
+                )}
+                {filtroAlerta && (
+                  <button style={{ ...btnStyle(false, '', ''), fontSize: '10px', padding: '3px 8px' }}
+                    onClick={() => setFiltroAlerta(null)}>
+                    <X size={10} /> Limpiar
+                  </button>
+                )}
+              </div>
+            )
+          })()}
+
           {/* DataTable con Vista Previa */}
           <DataTable
             data={vistaPreviaData.filter(f => {
@@ -8078,6 +8577,11 @@ export function ReporteFacturacionTab() {
                   return false
                 }
               }
+              // Filtro por alerta
+              if (filtroAlerta === 'ingreso' && !f.alerta_prorrateo_ingreso) return false
+              if (filtroAlerta === 'baja' && f.estado_billing !== 'De baja') return false
+              if (filtroAlerta === 'pausa' && f.estado_billing !== 'Pausa') return false
+              if (filtroAlerta === 'sin_gnc' && !(f.vehiculo_patente && ['AG558DZ', 'AG304XD'].includes(normalizePatente(f.vehiculo_patente)))) return false
               return true
             })}
             columns={columns}
@@ -8100,46 +8604,46 @@ export function ReporteFacturacionTab() {
           {stats && (
             <div className="fact-stats">
               <div className="fact-stats-grid">
-                <div className="fact-stat-card">
+                <div className="fact-stat-card" onClick={() => showStatInfo('conductores')} style={{ cursor: 'pointer' }}>
                   <Users size={18} className="stat-icon" />
                   <div className="stat-content">
                     <span className="stat-value">{stats.total_conductores}</span>
                     <span className="stat-label">Conductores</span>
                   </div>
                 </div>
-                <div className="fact-stat-card">
+                <div className="fact-stat-card" onClick={() => showStatInfo('proyectado')} style={{ cursor: 'pointer' }}>
+                  <Target size={18} className="stat-icon" />
+                  <div className="stat-content">
+                    <span className="stat-value" style={{ color: 'var(--color-primary)' }}>{formatCurrency(stats.total_proyectado)}</span>
+                    <span className="stat-label">Total Proyectado</span>
+                  </div>
+                </div>
+                <div className="fact-stat-card" onClick={() => showStatInfo('cargos')} style={{ cursor: 'pointer' }}>
                   <TrendingUp size={18} className="stat-icon" />
                   <div className="stat-content">
                     <span className="stat-value">{formatCurrency(stats.total_cargos)}</span>
                     <span className="stat-label">Total Cargos</span>
                   </div>
                 </div>
-                <div className="fact-stat-card">
+                <div className="fact-stat-card" onClick={() => showStatInfo('descuentos')} style={{ cursor: 'pointer' }}>
                   <TrendingDown size={18} className="stat-icon" />
                   <div className="stat-content">
                     <span className="stat-value">{formatCurrency(stats.total_descuentos)}</span>
                     <span className="stat-label">Total Descuentos</span>
                   </div>
                 </div>
-                <div className="fact-stat-card">
+                <div className="fact-stat-card" onClick={() => showStatInfo('neto')} style={{ cursor: 'pointer' }}>
                   <DollarSign size={18} className="stat-icon" />
                   <div className="stat-content">
                     <span className="stat-value">{formatCurrency(stats.total_neto)}</span>
                     <span className="stat-label">Total Neto</span>
                   </div>
                 </div>
-                <div className="fact-stat-card">
+                <div className="fact-stat-card" onClick={() => showStatInfo('deben')} style={{ cursor: 'pointer' }}>
                   <TrendingUp size={18} className="stat-icon red" />
                   <div className="stat-content">
                     <span className="stat-value">{stats.conductores_deben}</span>
                     <span className="stat-label">Deben</span>
-                  </div>
-                </div>
-                <div className="fact-stat-card">
-                  <TrendingDown size={18} className="stat-icon green" />
-                  <div className="stat-content">
-                    <span className="stat-value">{stats.conductores_favor}</span>
-                    <span className="stat-label">A Favor</span>
                   </div>
                 </div>
               </div>
@@ -8217,12 +8721,75 @@ export function ReporteFacturacionTab() {
                 <span style={{ fontSize: '14px', fontWeight: 500, color: 'var(--text-secondary)' }}>
                   {recalculandoProgreso.total > 0
                     ? `Recalculando ${recalculandoProgreso.actual} de ${recalculandoProgreso.total} conductores...`
-                    : 'Recalculando facturacion...'}
+                    : 'Recalculando facturación...'}
                 </span>
+                {recalculandoProgreso.nombre && (
+                  <span style={{ fontSize: '12px', color: 'var(--text-tertiary)' }}>
+                    {recalculandoProgreso.nombre}
+                  </span>
+                )}
               </div>
             )}
+            {/* Filtros rápidos de alertas (período) */}
+            {(() => {
+              const src = facturacionesFiltradas
+              const countIngreso = src.filter(f => f.alerta_prorrateo_ingreso).length
+              const countBaja = src.filter(f => f.estado_billing === 'De baja').length
+              const countPausa = src.filter(f => f.estado_billing === 'Pausa').length
+              const countSinGnc = src.filter(f => f.vehiculo_patente && ['AG558DZ', 'AG304XD'].includes(normalizePatente(f.vehiculo_patente))).length
+              const hayAlertas = countIngreso > 0 || countBaja > 0 || countPausa > 0 || countSinGnc > 0
+              if (!hayAlertas) return null
+              const btnStyle = (active: boolean, bg: string, color: string) => ({
+                display: 'inline-flex', alignItems: 'center', gap: '5px',
+                padding: '4px 10px', borderRadius: '14px', fontSize: '11px', fontWeight: 600 as const,
+                border: active ? `2px solid ${color}` : '1px solid var(--border-primary)',
+                background: active ? bg : 'var(--bg-secondary)',
+                color: active ? color : 'var(--text-secondary)',
+                cursor: 'pointer', transition: 'all 0.15s',
+              })
+              return (
+                <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginBottom: '8px' }}>
+                  {countIngreso > 0 && (
+                    <button style={btnStyle(filtroAlerta === 'ingreso', 'rgba(245,158,11,0.12)', '#d97706')}
+                      onClick={() => setFiltroAlerta(filtroAlerta === 'ingreso' ? null : 'ingreso')}>
+                      <AlertTriangle size={12} /> Alerta Ingreso <span style={{ opacity: 0.7 }}>{countIngreso}</span>
+                    </button>
+                  )}
+                  {countBaja > 0 && (
+                    <button style={btnStyle(filtroAlerta === 'baja', 'rgba(239,68,68,0.12)', '#dc2626')}
+                      onClick={() => setFiltroAlerta(filtroAlerta === 'baja' ? null : 'baja')}>
+                      <AlertCircle size={12} /> De Baja <span style={{ opacity: 0.7 }}>{countBaja}</span>
+                    </button>
+                  )}
+                  {countPausa > 0 && (
+                    <button style={btnStyle(filtroAlerta === 'pausa', 'rgba(107,114,128,0.12)', '#6b7280')}
+                      onClick={() => setFiltroAlerta(filtroAlerta === 'pausa' ? null : 'pausa')}>
+                      <AlertCircle size={12} /> Pausa <span style={{ opacity: 0.7 }}>{countPausa}</span>
+                    </button>
+                  )}
+                  {countSinGnc > 0 && (
+                    <button style={btnStyle(filtroAlerta === 'sin_gnc', 'rgba(249,115,22,0.12)', '#ea580c')}
+                      onClick={() => setFiltroAlerta(filtroAlerta === 'sin_gnc' ? null : 'sin_gnc')}>
+                      <AlertTriangle size={12} /> Sin GNC <span style={{ opacity: 0.7 }}>{countSinGnc}</span>
+                    </button>
+                  )}
+                  {filtroAlerta && (
+                    <button style={{ ...btnStyle(false, '', ''), fontSize: '10px', padding: '3px 8px' }}
+                      onClick={() => setFiltroAlerta(null)}>
+                      <X size={10} /> Limpiar
+                    </button>
+                  )}
+                </div>
+              )
+            })()}
             <DataTable
-              data={facturacionesFiltradas}
+              data={filtroAlerta ? facturacionesFiltradas.filter(f => {
+                if (filtroAlerta === 'ingreso') return !!f.alerta_prorrateo_ingreso
+                if (filtroAlerta === 'baja') return f.estado_billing === 'De baja'
+                if (filtroAlerta === 'pausa') return f.estado_billing === 'Pausa'
+                if (filtroAlerta === 'sin_gnc') return f.vehiculo_patente && ['AG558DZ', 'AG304XD'].includes(normalizePatente(f.vehiculo_patente))
+                return true
+              }) : facturacionesFiltradas}
               columns={columns}
               loading={loading}
               searchPlaceholder="Buscar por conductor, DNI, patente..."
@@ -8677,16 +9244,11 @@ export function ReporteFacturacionTab() {
                     </div>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
                       {detalleCargos.map(item => {
-                        const conceptoLabels: Record<string, string> = {
-                          'P001': 'Alquiler a Cargo',
-                          'P002': 'Alquiler Turno',
-                          'P003': 'Cuota de Garantía',
-                          'P005': 'Peajes',
-                        };
-                        const label = conceptoLabels[item.concepto_codigo];
                         let desc = item.concepto_descripcion;
-                        if (label && !desc.includes('Alquiler') && !desc.includes('Garantía') && !desc.includes('Peaje')) {
-                          desc = desc ? `${label} (${desc})` : label;
+                        // Prefijo con código de producto
+                        const codigo = item.concepto_codigo
+                        if (codigo && codigo !== 'PEND') {
+                          desc = `${codigo} - ${desc}`
                         }
                         const esPenalidad = item.referencia_id && (item.referencia_tipo === 'penalidad' || item.referencia_tipo === 'penalidad_cuota')
                         const esMulta = item.concepto_codigo === 'P008' || item.referencia_tipo === 'multa_transito'
@@ -8710,30 +9272,24 @@ export function ReporteFacturacionTab() {
                                   {fechaStr}
                                 </span>
                               )}
-                              {esPenalidad && (
-                                <button
-                                  onClick={() => verDetallePenalidad(item.referencia_id!, item.referencia_tipo!)}
-                                  style={{
-                                    background: 'none', border: 'none', cursor: 'pointer', padding: '2px',
-                                    color: 'var(--text-secondary)', flexShrink: 0, display: 'flex', alignItems: 'center',
-                                  }}
-                                  title="Ver detalle de penalidad"
-                                >
-                                  <Info size={14} />
-                                </button>
-                              )}
-                              {esMulta && detalleFacturacion?.vehiculo_patente && periodo && (
-                                <button
-                                  onClick={() => verDetalleMultas(detalleFacturacion.vehiculo_patente!, periodo.fecha_inicio, periodo.fecha_fin)}
-                                  style={{
-                                    background: 'none', border: 'none', cursor: 'pointer', padding: '2px',
-                                    color: 'var(--text-secondary)', flexShrink: 0, display: 'flex', alignItems: 'center',
-                                  }}
-                                  title="Ver detalle de multas"
-                                >
-                                  <Info size={14} />
-                                </button>
-                              )}
+                              <button
+                                onClick={() => {
+                                  if (esPenalidad) {
+                                    verDetallePenalidad(item.referencia_id!, item.referencia_tipo!)
+                                  } else if (esMulta && detalleFacturacion?.vehiculo_patente && periodo) {
+                                    verDetalleMultas(detalleFacturacion.vehiculo_patente!, periodo.fecha_inicio, periodo.fecha_fin)
+                                  } else {
+                                    verDetalleItem(item)
+                                  }
+                                }}
+                                style={{
+                                  background: 'none', border: 'none', cursor: 'pointer', padding: '2px',
+                                  color: 'var(--text-secondary)', flexShrink: 0, display: 'flex', alignItems: 'center',
+                                }}
+                                title="Ver detalle"
+                              >
+                                <Info size={14} />
+                              </button>
                             </div>
                             <span style={{ fontSize: '12px', fontWeight: 600, fontFamily: 'monospace', color: 'var(--text-primary)', flexShrink: 0, marginLeft: '8px' }}>
                               {formatCurrency(item.total)}
@@ -8771,13 +9327,10 @@ export function ReporteFacturacionTab() {
                       </div>
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
                         {detalleDescuentos.map(item => {
-                          const conceptoLabels: Record<string, string> = {
-                            'P004': 'Tickets/Descuentos',
-                          };
-                          const label = conceptoLabels[item.concepto_codigo];
                           let desc = item.concepto_descripcion;
-                          if (label && !desc.includes('Ticket') && !desc.includes('Descuento') && !desc.includes('Comisión')) {
-                            desc = desc ? `${label} (${desc})` : label;
+                          const codigo = item.concepto_codigo
+                          if (codigo && codigo !== 'PEND') {
+                            desc = `${codigo} - ${desc}`
                           }
                           return (
                             <div key={item.id} style={{
@@ -8785,11 +9338,21 @@ export function ReporteFacturacionTab() {
                               padding: '7px 12px', borderRadius: '6px',
                               background: 'rgba(16, 185, 129, 0.04)', border: '1px solid rgba(16, 185, 129, 0.12)',
                             }}>
-                              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flex: 1, minWidth: 0 }}>
                                 <div style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#10b981', flexShrink: 0 }} />
-                                <span style={{ fontSize: '12px', color: 'var(--text-primary)' }}>{desc}</span>
+                                <span style={{ fontSize: '12px', color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{desc}</span>
+                                <button
+                                  onClick={() => verDetalleItem(item)}
+                                  style={{
+                                    background: 'none', border: 'none', cursor: 'pointer', padding: '2px',
+                                    color: 'var(--text-secondary)', flexShrink: 0, display: 'flex', alignItems: 'center',
+                                  }}
+                                  title="Ver detalle"
+                                >
+                                  <Info size={14} />
+                                </button>
                               </div>
-                              <span style={{ fontSize: '12px', fontWeight: 600, fontFamily: 'monospace', color: '#059669' }}>
+                              <span style={{ fontSize: '12px', fontWeight: 600, fontFamily: 'monospace', color: '#059669', flexShrink: 0, marginLeft: '8px' }}>
                                 -{formatCurrency(item.total)}
                               </span>
                             </div>

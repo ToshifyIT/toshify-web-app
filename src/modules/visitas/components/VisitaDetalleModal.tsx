@@ -88,8 +88,7 @@ export function VisitaDetalleModal({
           <div className="visita-detalle-row">
             <Tag size={16} />
             <div>
-              <strong>Atendido por:</strong> {visita.atendedor_nombre}
-              <span className="visita-detalle-sub"> ({visita.area_nombre})</span>
+              <strong>Anfitrión:</strong> {visita.atendedor_nombre}
             </div>
           </div>
 

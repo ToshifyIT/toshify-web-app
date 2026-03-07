@@ -9,7 +9,7 @@ import Swal from 'sweetalert2';
 import { showSuccess } from '../../../utils/toast';
 import { DataTable } from '../../../components/ui/DataTable';
 import type { ColumnDef } from '@tanstack/react-table';
-import type { VisitaCategoria } from '../../../types/visitas.types';
+import type { VisitaCategoria, TipoVisita } from '../../../types/visitas.types';
 import {
   fetchAllCategorias,
   createCategoria,
@@ -24,6 +24,8 @@ interface CategoriaFormData {
   requiere_patente: boolean;
   orden: number;
   activo: boolean;
+  tipo_visita: TipoVisita;
+  duracion_modificable: boolean;
 }
 
 const INITIAL_FORM: CategoriaFormData = {
@@ -33,6 +35,8 @@ const INITIAL_FORM: CategoriaFormData = {
   requiere_patente: false,
   orden: 0,
   activo: true,
+  tipo_visita: 'exclusivo',
+  duracion_modificable: false,
 };
 
 export function CategoriasSubTab() {
@@ -72,6 +76,8 @@ export function CategoriasSubTab() {
       requiere_patente: item.requiere_patente,
       orden: item.orden,
       activo: item.activo,
+      tipo_visita: item.tipo_visita,
+      duracion_modificable: item.duracion_modificable,
     });
     setSelected(item);
     setModalMode('edit');
@@ -114,6 +120,8 @@ export function CategoriasSubTab() {
           requiere_patente: form.requiere_patente,
           orden: form.orden,
           activo: form.activo,
+          tipo_visita: form.tipo_visita,
+          duracion_modificable: form.duracion_modificable,
         });
         showSuccess('Categoría creada');
       } else if (selected) {
@@ -124,6 +132,8 @@ export function CategoriasSubTab() {
           requiere_patente: form.requiere_patente,
           orden: form.orden,
           activo: form.activo,
+          tipo_visita: form.tipo_visita,
+          duracion_modificable: form.duracion_modificable,
         });
         showSuccess('Categoría actualizada');
       }
@@ -161,10 +171,6 @@ export function CategoriasSubTab() {
       accessorKey: 'requiere_patente',
       header: 'Req. Patente',
       cell: ({ getValue }) => getValue() ? 'Sí' : 'No',
-    },
-    {
-      accessorKey: 'orden',
-      header: 'Orden',
     },
     {
       accessorKey: 'activo',
@@ -253,14 +259,17 @@ export function CategoriasSubTab() {
                       <option value={120}>120 min</option>
                     </select>
                   </div>
+                </div>
+                <div className="visitas-form-row">
                   <div className="visitas-form-group">
-                    <label>Orden</label>
-                    <input
-                      type="number"
-                      min={0}
-                      value={form.orden}
-                      onChange={(e) => setForm((p) => ({ ...p, orden: Number(e.target.value) }))}
-                    />
+                    <label>Tipo de visita</label>
+                    <select
+                      value={form.tipo_visita}
+                      onChange={(e) => setForm((p) => ({ ...p, tipo_visita: e.target.value as TipoVisita }))}
+                    >
+                      <option value="exclusivo">Exclusivo (sin superposición)</option>
+                      <option value="grupal">Grupal (permite superposición)</option>
+                    </select>
                   </div>
                 </div>
                 <div className="visitas-form-row">
@@ -272,6 +281,16 @@ export function CategoriasSubTab() {
                         onChange={(e) => setForm((p) => ({ ...p, requiere_patente: e.target.checked }))}
                       />
                       <span>Requiere patente</span>
+                    </div>
+                  </div>
+                  <div className="visitas-form-group">
+                    <div className="visitas-checkbox-inline">
+                      <input
+                        type="checkbox"
+                        checked={form.duracion_modificable}
+                        onChange={(e) => setForm((p) => ({ ...p, duracion_modificable: e.target.checked }))}
+                      />
+                      <span>Duración modificable</span>
                     </div>
                   </div>
                   <div className="visitas-form-group">

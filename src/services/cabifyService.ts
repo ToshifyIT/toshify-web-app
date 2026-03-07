@@ -669,14 +669,62 @@ class CabifyService {
 
       let totalTolls = 0
 
-      // OPTIMIZACIÓN: Procesar hasta 3 balances en paralelo usando aliases
-      // Similar a la optimización sugerida en el documento
-      const balancesToProcess = balances.slice(0, 3)
+      // Función helper para extraer tolls de movements
+      const extractTolls = (movements: any[]): number => {
+        let tolls = 0
+        for (const movement of movements) {
+          if (movement.breakdown) {
+            for (const b of movement.breakdown) {
+              if (b.name === 'supplement:toll') {
+                tolls += (b.value || 0)
+              }
+            }
+          }
+        }
+        return tolls
+      }
 
-      if (balancesToProcess.length > 0) {
+      // Función helper para fetch paginated de un balance individual
+      const fetchPaginatedBalance = async (balanceId: string, startPage: number): Promise<number> => {
+        let tolls = 0
+        let page = startPage
+        const perPage = 500
+        while (true) {
+          const movementsQuery = `
+            query GetBalanceMovements($balanceId: String!, $companyId: String, $driverId: String, $startAt: DateTime!, $endAt: DateTime!, $page: Int, $perPage: Int) {
+              paginatedBalanceMovements(
+                balanceId: $balanceId, companyId: $companyId, driverId: $driverId,
+                startAt: $startAt, endAt: $endAt, page: $page, perPage: $perPage
+              ) {
+                movements { breakdown { name value } }
+                pages
+              }
+            }
+          `
+          const resp = await fetch(this.config.graphqlUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+            body: JSON.stringify({
+              query: movementsQuery,
+              variables: { balanceId, companyId, driverId, startAt, endAt, page, perPage },
+            }),
+          })
+          if (!resp.ok) break
+          const respData = await resp.json()
+          const paginated = respData.data?.paginatedBalanceMovements
+          if (paginated?.movements) {
+            tolls += extractTolls(paginated.movements)
+          }
+          if (!paginated || page >= (paginated.pages || 0) || paginated.pages === 0) break
+          page++
+        }
+        return tolls
+      }
+
+      if (balances.length > 0) {
         try {
-          // Construir query con aliases para consultar múltiples balances en paralelo
-          const balanceQueries = balancesToProcess.map((balance: any, idx: number) =>
+          // OPTIMIZACIÓN: Primera página de todos los balances en paralelo usando aliases
+          const balanceQueries = balances.map((balance: any, idx: number) =>
             `balance${idx}: paginatedBalanceMovements(
               balanceId: "${balance.id}",
               companyId: "${companyId}",
@@ -711,83 +759,29 @@ class CabifyService {
             const data = await response.json()
 
             if (data.data && !data.errors) {
-              // Procesar resultados de todos los balances
-              Object.values(data.data).forEach((result: any) => {
-                if (result && result.movements) {
-                  result.movements.forEach((movement: any) => {
-                    if (movement.breakdown) {
-                      movement.breakdown.forEach((b: any) => {
-                        if (b.name === 'supplement:toll') {
-                          totalTolls += Math.abs(b.value || 0)
-                        }
-                      })
-                    }
-                  })
+              // Procesar página 1 de todos los balances
+              const entries = Object.entries(data.data)
+              for (const [key, result] of entries) {
+                const r = result as any
+                if (r?.movements) {
+                  totalTolls += extractTolls(r.movements)
                 }
-              })
-            }
-          }
-        } catch {
-          // FALLBACK: Si falla la query optimizada, usar método secuencial
-          for (const balance of balancesToProcess) {
-            try {
-              const movementsQuery = `
-                query GetBalanceMovements($balanceId: String!, $companyId: String, $driverId: String, $startAt: DateTime!, $endAt: DateTime!, $page: Int, $perPage: Int) {
-                  paginatedBalanceMovements(
-                    balanceId: $balanceId,
-                    companyId: $companyId,
-                    driverId: $driverId,
-                    startAt: $startAt,
-                    endAt: $endAt,
-                    page: $page,
-                    perPage: $perPage
-                  ) {
-                    movements {
-                      breakdown {
-                        name
-                        value
-                      }
-                    }
-                  }
-                }
-              `
-
-              const movementsResponse = await fetch(this.config.graphqlUrl, {
-                method: 'POST',
-                headers: {
-                  'Content-Type': 'application/json',
-                  'Authorization': `Bearer ${token}`,
-                },
-                body: JSON.stringify({
-                  query: movementsQuery,
-                  variables: {
-                    balanceId: balance.id,
-                    companyId,
-                    driverId,
-                    startAt,
-                    endAt,
-                    page: 1,
-                    perPage: 500,
-                  },
-                }),
-              })
-
-              if (movementsResponse.ok) {
-                const movementsData = await movementsResponse.json()
-                const paginatedData = movementsData.data?.paginatedBalanceMovements
-
-                if (paginatedData && paginatedData.movements) {
-                  for (const movement of paginatedData.movements) {
-                    if (movement.breakdown) {
-                      for (const breakdown of movement.breakdown) {
-                        if (breakdown.name === 'supplement:toll') {
-                          totalTolls += Math.abs(breakdown.value || 0)
-                        }
-                      }
-                    }
+                // Si hay más páginas, fetch secuencial desde página 2
+                if (r?.pages && r.pages > 1) {
+                  const idx = parseInt(key.replace('balance', ''), 10)
+                  const balance = balances[idx]
+                  if (balance) {
+                    totalTolls += await fetchPaginatedBalance(balance.id, 2)
                   }
                 }
               }
+            }
+          }
+        } catch {
+          // FALLBACK: Si falla la query optimizada, usar método secuencial con paginación
+          for (const balance of balances) {
+            try {
+              totalTolls += await fetchPaginatedBalance(balance.id, 1)
             } catch {
               // silently ignored
             }
