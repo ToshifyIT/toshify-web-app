@@ -2045,22 +2045,8 @@ export function ReporteFacturacionTab() {
         .update({ aplicado: false, fecha_aplicacion: null })
         .eq('periodo_id', periodoId)
 
-      // Penalidades: revertir las que fueron aplicadas en esta semana/año
-      // Primero por semana_aplicacion/anio_aplicacion (nuevas), luego fallback por rango de fecha (legacy)
-      await (supabase.from('penalidades') as any)
-        .update({ aplicado: false, fecha_aplicacion: null, semana_aplicacion: null, anio_aplicacion: null })
-        .eq('semana_aplicacion', semanaNum)
-        .eq('anio_aplicacion', anioNum)
-        .eq('aplicado', true)
-        .eq('fraccionado', false)
-      // Fallback: penalidades legacy sin semana_aplicacion (por rango de fecha)
-      await (supabase.from('penalidades') as any)
-        .update({ aplicado: false })
-        .gte('fecha', fechaInicio)
-        .lte('fecha', fechaFin)
-        .eq('aplicado', true)
-        .eq('fraccionado', false)
-        .is('semana_aplicacion', null)
+      // Penalidades: NO se resetean — las aplica otra persona desde incidencias.
+      // Recalcular solo toma las que ya están aplicado=true.
 
       // Cobros fraccionados: por semana/anio (todas las cuotas hasta esta semana)
       await (supabase.from('cobros_fraccionados') as any)
@@ -2130,14 +2116,14 @@ export function ReporteFacturacionTab() {
         }
       }
 
-      // 3b. Conductores con penalidades pendientes (cobros de incidencias) en la semana
+      // 3b. Conductores con penalidades aplicadas (aprobadas desde incidencias) en la semana
       {
         const { data: penalidadesPendientesRecalc } = await (supabase
           .from('penalidades') as any)
           .select('conductor_id, conductores!inner(numero_dni, sede_id)')
           .gte('fecha', fechaInicio)
           .lte('fecha', fechaFin)
-          .eq('aplicado', false)
+          .eq('aplicado', true)
           .neq('rechazado', true)
 
         for (const p of (penalidadesPendientesRecalc || []) as any[]) {
@@ -2385,7 +2371,7 @@ export function ReporteFacturacionTab() {
       // NOTA: multas_historico DESACTIVADO temporalmente — reactivar cuando se defina el flujo
       const MULTAS_HABILITADAS = false
       const [penalidadesRes, ticketsRes, saldosRes, excesosRes, cabifyRes, garantiasRes, cobrosRes, multasRes, dniMapeoResRecalc] = await Promise.all([
-        (supabase.from('penalidades') as any).select('*, tipos_cobro_descuento(categoria, es_a_favor, nombre), incidencias(descripcion)').in('conductor_id', conductorIds).gte('fecha', fechaInicio).lte('fecha', fechaFin).eq('aplicado', false).eq('fraccionado', false).neq('rechazado', true),
+        (supabase.from('penalidades') as any).select('*, tipos_cobro_descuento(categoria, es_a_favor, nombre), incidencias(descripcion)').in('conductor_id', conductorIds).gte('fecha', fechaInicio).lte('fecha', fechaFin).eq('aplicado', true).eq('fraccionado', false).neq('rechazado', true),
         (supabase.from('tickets_favor') as any).select('*').in('conductor_id', conductorIds).eq('estado', 'aprobado'),
         (supabase.from('saldos_conductores') as any).select('conductor_id, saldo_actual').in('conductor_id', conductorIds),
         (supabase.from('excesos_kilometraje') as any).select('*').in('conductor_id', conductorIds).eq('aplicado', false),
@@ -2705,7 +2691,6 @@ export function ReporteFacturacionTab() {
 
         // ═══ BATCH: Recopilar todos los detalles en un array, insertar de una sola vez ═══
         const todosDetalles: any[] = []
-        const penIdsAplicar: string[] = []
         const ticketIdsAplicar: string[] = []
         const excesoIdsAplicar: string[] = []
         const cobroIdsAplicar: string[] = []
@@ -2756,7 +2741,6 @@ export function ReporteFacturacionTab() {
               subtotal: (pen as any).monto, total: (pen as any).monto, es_descuento: grupo.esDescuento,
               referencia_id: (pen as any).id, referencia_tipo: 'penalidad'
             })
-            penIdsAplicar.push((pen as any).id)
           }
         }
 
@@ -2856,14 +2840,7 @@ export function ReporteFacturacionTab() {
 
         // Marcar registros como aplicados en paralelo
         const batchUpdates: Promise<any>[] = []
-        if (penIdsAplicar.length > 0) {
-          batchUpdates.push(
-            (supabase.from('penalidades') as any).update({
-              aplicado: true, fecha_aplicacion: new Date().toISOString(),
-              semana_aplicacion: semanaNum, anio_aplicacion: anioNum
-            }).in('id', penIdsAplicar)
-          )
-        }
+        // Penalidades: ya vienen con aplicado=true, no se necesita marcar
         if (ticketIdsAplicar.length > 0) {
           batchUpdates.push(
             (supabase.from('tickets_favor') as any)

@@ -124,7 +124,7 @@ interface FacturacionPreviewTableProps {
   conceptosPendientes?: ConceptoPendiente[]
   onEnlazarConcepto?: (pendiente: ConceptoPendiente, codigoProducto: string) => Promise<boolean>
   onClose: () => void
-  onExport: () => void
+  onExport: (filteredRows: FacturacionPreviewRow[]) => void
   exporting: boolean
   onSync?: (data: FacturacionPreviewRow[]) => Promise<boolean>
   // Mapa conductor_id → alquiler semanal proyectado (precio_unitario * 49)
@@ -244,7 +244,8 @@ export function FacturacionPreviewTable({
     'P007': 'Penalidades',
     'P009': 'Mora',
     'P010': 'Plan Pagos',
-    'P011': 'Ajuste Manual'
+    'P011': 'Ajuste Manual',
+    'P013': 'Alquiler NOCTURNO'
   }
 
 
@@ -876,7 +877,7 @@ export function FacturacionPreviewTable({
           )}
           <button
             className="fact-preview-btn primary"
-            onClick={onExport}
+            onClick={() => onExport(filteredData.filter(r => !r.isDeleted))}
             disabled={exporting || syncing}
           >
             {exporting ? <Loader2 size={14} className="spinning" /> : <FileSpreadsheet size={14} />}
@@ -1043,7 +1044,7 @@ export function FacturacionPreviewTable({
           <select value={filtroProducto} onChange={(e) => setFiltroProducto(e.target.value)}>
             <option value="todos">Todos</option>
             {productosUnicos.map(p => (
-              <option key={p} value={p}>{p}</option>
+              <option key={p} value={p}>{p} - {nombreProducto[p] || p}</option>
             ))}
           </select>
           <select value={filtroTipoFactura} onChange={(e) => setFiltroTipoFactura(e.target.value)}>
