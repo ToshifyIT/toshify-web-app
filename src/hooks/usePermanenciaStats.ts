@@ -2,6 +2,14 @@ import { useState, useEffect, useRef } from 'react'
 import { supabase } from '../lib/supabase'
 import { getPeriodRange, type Granularity } from '../utils/periodUtils'
 
+/** Formatea Date a 'YYYY-MM-DD' usando componentes locales, sin conversión UTC */
+function formatDateOnly(d: Date): string {
+  const y = d.getFullYear()
+  const m = String(d.getMonth() + 1).padStart(2, '0')
+  const day = String(d.getDate()).padStart(2, '0')
+  return `${y}-${m}-${day}`
+}
+
 export function usePermanenciaStats(granularity: Granularity, periodA: string, periodB: string, sedeId?: string) {
   const [stats, setStats] = useState({
     avgDaysA: 0,
@@ -26,8 +34,8 @@ export function usePermanenciaStats(granularity: Granularity, periodA: string, p
       let query = supabase
         .from('conductores')
         .select('id')
-        .gte('fecha_terminacion', range.start.toISOString())
-        .lte('fecha_terminacion', range.end.toISOString())
+        .gte('fecha_terminacion', formatDateOnly(range.start))
+        .lte('fecha_terminacion', formatDateOnly(range.end))
       
       if (sedeId) {
         query = query.eq('sede_id', sedeId)

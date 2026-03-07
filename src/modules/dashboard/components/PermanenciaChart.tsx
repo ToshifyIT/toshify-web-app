@@ -24,6 +24,14 @@ import { useSede } from '../../../contexts/SedeContext'
 import { PeriodPicker } from './PeriodPicker'
 import './PermanenciaStyles.css'
 
+/** Formatea Date a 'YYYY-MM-DD' usando componentes locales, sin conversión UTC */
+function formatDateOnly(d: Date): string {
+  const y = d.getFullYear()
+  const m = String(d.getMonth() + 1).padStart(2, '0')
+  const day = String(d.getDate()).padStart(2, '0')
+  return `${y}-${m}-${day}`
+}
+
 interface WeeklyData {
   name: string
   value: number
@@ -70,8 +78,8 @@ export function PermanenciaChart() {
         let query = supabase
           .from('conductores')
           .select('id, fecha_terminacion')
-          .gte('fecha_terminacion', intervalStart.toISOString())
-          .lte('fecha_terminacion', intervalEnd.toISOString())
+          .gte('fecha_terminacion', formatDateOnly(intervalStart))
+          .lte('fecha_terminacion', formatDateOnly(intervalEnd))
         
         if (sedeActual?.id) {
           query = query.eq('sede_id', sedeActual.id)
@@ -106,9 +114,13 @@ export function PermanenciaChart() {
           const weekEnd = endOfWeek(weekStart, { weekStartsOn: 1 })
           const weekNumber = getWeek(weekStart, { weekStartsOn: 1 })
 
+          const weekStartStr = formatDateOnly(weekStart)
+          const weekEndStr = formatDateOnly(weekEnd)
           const weekConductors = (allConductors || []).filter(c => {
-            const ft = new Date(c.fecha_terminacion)
-            return ft >= weekStart && ft <= weekEnd
+            const ftStr = typeof c.fecha_terminacion === 'string'
+              ? c.fecha_terminacion.slice(0, 10)
+              : formatDateOnly(new Date(c.fecha_terminacion))
+            return ftStr >= weekStartStr && ftStr <= weekEndStr
           })
 
           if (weekConductors.length === 0) {

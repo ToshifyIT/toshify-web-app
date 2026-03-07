@@ -52,15 +52,18 @@ function toArgDate(timestamp: string | null | undefined): string {
 }
 
 // Datos de ejemplo iniciales
-const INITIAL_DATA = [
-  { dia: 'Lun', teorico: 0, real: 0 },
-  { dia: 'Mar', teorico: 0, real: 0 },
-  { dia: 'Mié', teorico: 0, real: 0 },
-  { dia: 'Jue', teorico: 0, real: 0 },
-  { dia: 'Vie', teorico: 0, real: 0 },
-  { dia: 'Sáb', teorico: 0, real: 0 },
-  { dia: 'Dom', teorico: 0, real: 0 },
-]
+const INITIAL_DATA = (() => {
+  const now = new Date()
+  const weekStart = startOfWeek(now, { weekStartsOn: 1 })
+  return Array.from({ length: 7 }, (_, i) => {
+    const d = addDays(weekStart, i)
+    return {
+      dia: `${format(d, 'EEE', { locale: es }).replace(/^\w/, (c: string) => c.toUpperCase())} ${format(d, 'dd/MM')}`,
+      teorico: 0,
+      real: 0,
+    }
+  })
+})()
 
 const formatCurrencyK = (value: number) => {
   return `$${Math.round(value / 1000)}K`
@@ -203,7 +206,7 @@ export function CobroTeoricoVsReal() {
           const key = format(d, 'yyyy-MM-dd')
           diasMap.set(key, {
             fecha: d,
-            dia: format(d, 'EEE', { locale: es }).replace(/^\w/, (c) => c.toUpperCase()),
+            dia: `${format(d, 'EEE', { locale: es }).replace(/^\w/, (c) => c.toUpperCase())} ${format(d, 'dd/MM')}`,
             garantiaTeorica: 0,
             garantiaReal: 0,
             alquiler: 0

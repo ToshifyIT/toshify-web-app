@@ -49,6 +49,7 @@
     "react-router-dom": "^7.9.4",
     "recharts": "^3.5.1",
     "sweetalert2": "^11.26.3",
+    "tsx": "^4.21.0",
     "zod": "^4.1.13"
   },
   "lint-staged": {
