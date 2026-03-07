@@ -66,6 +66,7 @@ const menuIcons: Record<string, LucideIcon> = {
   'gestion-vehiculos': Car,
   'registro-vencimientos': FileWarning,
   'visitas': CalendarCheck,
+  'integraciones-tokens': Link2,
 }
 
 // Función para obtener icono de un menú
@@ -219,6 +220,7 @@ const MultasPage = lazy(() => import('./multas-telepase/MultasPage').then(m => (
 const ConceptosFacturacionPage = lazy(() => import('./parametros/ConceptosFacturacionPage').then(m => ({ default: m.ConceptosFacturacionPage })))
 const RangoSeguimientoPage = lazy(() => import('./parametros/RangoSeguimientoPage').then(m => ({ default: m.RangoSeguimientoPage })))
 const ParametrosUssPage = lazy(() => import('./parametros/ParametrosUssPage').then(m => ({ default: m.ParametrosUssPage })))
+const IntegracionesTokensPage = lazy(() => import('./administracion/IntegracionesTokensPage').then(m => ({ default: m.IntegracionesTokensPage })))
 const GuiasPage = lazy(() => import('./GuiasPage').then(m => ({ default: m.GuiasPage })))
 const EscuelaPage = lazy(() => import('./EscuelaPage').then(m => ({ default: m.EscuelaPage })))
 import type { Guia } from '../modules/guias/guiasService'
@@ -1963,6 +1965,11 @@ export function HomePage() {
               <Route path="/administracion/sedes" element={
                 <ProtectedRoute submenuName="sedes" action="view">
                   <LazyPage><SedesPage /></LazyPage>
+                </ProtectedRoute>
+              } />
+              <Route path="/administracion/integraciones-tokens" element={
+                <ProtectedRoute submenuName="integraciones-tokens" action="view">
+                  <LazyPage><IntegracionesTokensPage /></LazyPage>
                 </ProtectedRoute>
               } />
 
