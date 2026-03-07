@@ -22,7 +22,7 @@ import type {
   CalendarResource,
   VisitaFormData,
   VisitaEstado,
-  VisitaAtendedorConArea,
+  VisitaAtendedor,
 } from '../../types/visitas.types';
 import { VISITA_ESTADOS } from '../../types/visitas.types';
 import {
@@ -45,7 +45,7 @@ import './VisitasModule.css';
 
 type MainTab = 'calendario' | 'parametros';
 type ViewMode = 'calendario' | 'tabla';
-type CalendarView = 'day' | 'week' | 'month';
+type CalendarView = 'week' | 'month';
 
 export function VisitasModule() {
   // === HOOKS ===
@@ -61,14 +61,14 @@ export function VisitasModule() {
   const [loading, setLoading] = useState(true);
   const [categorias, setCategorias] = useState<VisitaCategoria[]>([]);
   const [motivos, setMotivos] = useState<VisitaMotivo[]>([]);
-  const [atendedores, setAtendedores] = useState<VisitaAtendedorConArea[]>([]);
+  const [atendedores, setAtendedores] = useState<VisitaAtendedor[]>([]);
   const [visitas, setVisitas] = useState<VisitaCompleta[]>([]);
 
   // === STATE: calendar ===
   const [calendarEvents, setCalendarEvents] = useState<VisitaCalendarEvent[]>([]);
   const [calendarResources, setCalendarResources] = useState<CalendarResource[]>([]);
   const [currentDate, setCurrentDate] = useState(new Date());
-  const [currentCalendarView, setCurrentCalendarView] = useState<CalendarView>('day');
+  const [currentCalendarView, setCurrentCalendarView] = useState<CalendarView>('week');
 
   // === STATE: UI ===
   const [viewMode, setViewMode] = useState<ViewMode>('calendario');
@@ -252,8 +252,7 @@ export function VisitasModule() {
       'Visitante': v.nombre_visitante,
       'DNI': v.dni_visitante ?? '',
       'Patente': v.patente ?? '',
-      'Atendedor': v.atendedor_nombre,
-      'Área': v.area_nombre,
+      'Anfitrión': v.atendedor_nombre,
       'Estado': VISITA_ESTADOS[v.estado]?.label ?? v.estado,
       'Citador': v.citador_nombre,
       'Nota': v.nota ?? '',
@@ -262,7 +261,7 @@ export function VisitasModule() {
     const ws = XLSX.utils.json_to_sheet(dataExport);
     ws['!cols'] = [
       { wch: 12 }, { wch: 6 }, { wch: 10 }, { wch: 16 }, { wch: 24 },
-      { wch: 24 }, { wch: 12 }, { wch: 10 }, { wch: 18 }, { wch: 18 },
+      { wch: 24 }, { wch: 12 }, { wch: 10 }, { wch: 18 },
       { wch: 12 }, { wch: 18 }, { wch: 30 },
     ];
     const wb = XLSX.utils.book_new();
@@ -287,8 +286,7 @@ export function VisitasModule() {
     { accessorKey: 'nombre_visitante', header: 'Visitante', size: 180 },
     { accessorKey: 'dni_visitante', header: 'DNI', size: 100, cell: ({ getValue }) => (getValue() as string) || '-' },
     { accessorKey: 'patente', header: 'Patente', size: 90, cell: ({ getValue }) => (getValue() as string) || '-' },
-    { accessorKey: 'atendedor_nombre', header: 'Atendedor', size: 150 },
-    { accessorKey: 'area_nombre', header: 'Área', size: 130 },
+    { accessorKey: 'atendedor_nombre', header: 'Anfitrión', size: 150 },
     {
       accessorKey: 'estado',
       header: 'Estado',

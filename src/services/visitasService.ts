@@ -8,7 +8,6 @@ import type {
   VisitaCategoria,
   VisitaMotivo,
   VisitaMotivoConCategoria,
-  VisitaArea,
   VisitaAtendedor,
   VisitaHorario,
   VisitaCompleta,
@@ -16,7 +15,6 @@ import type {
   VisitaFormData,
   VisitaCalendarEvent,
   CalendarResource,
-  VisitaAtendedorConArea,
 } from '../types/visitas.types';
 
 // --- Catálogos ---
@@ -24,7 +22,7 @@ import type {
 export async function fetchCategorias(): Promise<VisitaCategoria[]> {
   const { data, error } = await supabase
     .from('visitas_categorias')
-    .select('id, nombre, color, duracion_default, requiere_patente, orden, activo, created_at')
+    .select('id, nombre, color, duracion_default, requiere_patente, tipo_visita, duracion_modificable, orden, activo, created_at')
     .eq('activo', true)
     .order('orden');
   if (error) throw error;
@@ -41,31 +39,16 @@ export async function fetchMotivos(): Promise<VisitaMotivo[]> {
   return data ?? [];
 }
 
-export async function fetchAreas(sedeId: string | null): Promise<VisitaArea[]> {
-  let query = supabase
-    .from('visitas_areas')
-    .select('id, nombre, sede_id, orden, activo, created_at')
-    .eq('activo', true)
-    .order('orden');
-  if (sedeId) query = query.eq('sede_id', sedeId);
-  const { data, error } = await query;
-  if (error) throw error;
-  return data ?? [];
-}
-
-export async function fetchAtendedores(sedeId: string | null): Promise<VisitaAtendedorConArea[]> {
+export async function fetchAtendedores(sedeId: string | null): Promise<VisitaAtendedor[]> {
   let query = supabase
     .from('visitas_atendedores')
-    .select('*, area:visitas_areas!inner(nombre)')
+    .select('id, nombre, user_id, sede_id, activo, created_at')
     .eq('activo', true)
     .order('nombre');
   if (sedeId) query = query.eq('sede_id', sedeId);
   const { data, error } = await query;
   if (error) throw error;
-  return (data ?? []).map((a: Record<string, unknown>) => ({
-    ...(a as unknown as VisitaAtendedor),
-    area_nombre: (a.area as { nombre: string })?.nombre ?? '',
-  }));
+  return data ?? [];
 }
 
 export async function fetchHorarios(atendedorIds: string[]): Promise<VisitaHorario[]> {
@@ -92,7 +75,7 @@ export async function fetchVisitas(
       *,
       categoria:visitas_categorias!inner(nombre, color),
       motivo:visitas_motivos(nombre),
-      atendedor:visitas_atendedores!inner(nombre, area:visitas_areas!inner(nombre))
+      atendedor:visitas_atendedores!inner(nombre)
     `)
     .gte('fecha_hora', rangeStart)
     .lte('fecha_hora', rangeEnd)
@@ -106,14 +89,13 @@ export async function fetchVisitas(
   return (data ?? []).map((v: Record<string, unknown>) => {
     const cat = v.categoria as { nombre: string; color: string } | null;
     const mot = v.motivo as { nombre: string } | null;
-    const ate = v.atendedor as { nombre: string; area: { nombre: string } } | null;
+    const ate = v.atendedor as { nombre: string } | null;
     return {
       ...(v as unknown as VisitaCompleta),
       categoria_nombre: cat?.nombre ?? '',
       categoria_color: cat?.color ?? '#3b82f6',
       motivo_nombre: mot?.nombre ?? null,
       atendedor_nombre: ate?.nombre ?? '',
-      area_nombre: ate?.area?.nombre ?? '',
     };
   });
 }
@@ -215,11 +197,10 @@ export function toCalendarEvents(visitas: VisitaCompleta[]): VisitaCalendarEvent
   });
 }
 
-export function toCalendarResources(atendedores: VisitaAtendedorConArea[]): CalendarResource[] {
+export function toCalendarResources(atendedores: VisitaAtendedor[]): CalendarResource[] {
   return atendedores.map((a) => ({
     id: a.id,
     title: a.nombre,
-    area: a.area_nombre,
   }));
 }
 
@@ -235,7 +216,7 @@ export function getMotivosByCategoria(
 export async function fetchAllCategorias(): Promise<VisitaCategoria[]> {
   const { data, error } = await supabase
     .from('visitas_categorias')
-    .select('id, nombre, color, duracion_default, requiere_patente, orden, activo, created_at')
+    .select('id, nombre, color, duracion_default, requiere_patente, orden, activo, created_at, tipo_visita, duracion_modificable')
     .order('orden');
   if (error) throw error;
   return data ?? [];
@@ -295,53 +276,17 @@ export async function deleteMotivo(id: string): Promise<void> {
   if (error) throw error;
 }
 
-// --- ABM Parámetros: Áreas ---
+// --- ABM Parámetros: Anfitriones ---
 
-export async function fetchAllAreas(sedeId: string | null): Promise<VisitaArea[]> {
-  let query = supabase
-    .from('visitas_areas')
-    .select('id, nombre, sede_id, orden, activo, created_at')
-    .order('orden');
-  if (sedeId) query = query.eq('sede_id', sedeId);
-  const { data, error } = await query;
-  if (error) throw error;
-  return data ?? [];
-}
-
-export async function createArea(
-  payload: Omit<VisitaArea, 'id' | 'created_at'>
-): Promise<void> {
-  const { error } = await supabase.from('visitas_areas').insert(payload);
-  if (error) throw error;
-}
-
-export async function updateArea(
-  id: string,
-  payload: Partial<Omit<VisitaArea, 'id' | 'created_at'>>
-): Promise<void> {
-  const { error } = await supabase.from('visitas_areas').update(payload).eq('id', id);
-  if (error) throw error;
-}
-
-export async function deleteArea(id: string): Promise<void> {
-  const { error } = await supabase.from('visitas_areas').delete().eq('id', id);
-  if (error) throw error;
-}
-
-// --- ABM Parámetros: Atendedores ---
-
-export async function fetchAllAtendedores(sedeId: string | null): Promise<VisitaAtendedorConArea[]> {
+export async function fetchAllAtendedores(sedeId: string | null): Promise<VisitaAtendedor[]> {
   let query = supabase
     .from('visitas_atendedores')
-    .select('*, area:visitas_areas!inner(nombre)')
+    .select('id, nombre, user_id, sede_id, activo, created_at')
     .order('nombre');
   if (sedeId) query = query.eq('sede_id', sedeId);
   const { data, error } = await query;
   if (error) throw error;
-  return (data ?? []).map((a: Record<string, unknown>) => ({
-    ...(a as unknown as VisitaAtendedor),
-    area_nombre: (a.area as { nombre: string })?.nombre ?? '',
-  }));
+  return data ?? [];
 }
 
 export async function createAtendedor(

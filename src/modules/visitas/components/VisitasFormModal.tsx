@@ -11,7 +11,7 @@ import type {
   VisitaMotivo,
   VisitaFormData,
   VisitaCompleta,
-  VisitaAtendedorConArea,
+  VisitaAtendedor,
 } from '../../../types/visitas.types';
 import { VISITA_FORM_INITIAL } from '../../../types/visitas.types';
 import { getMotivosByCategoria, checkConflict } from '../../../services/visitasService';
@@ -22,7 +22,7 @@ interface VisitasFormModalProps {
   visita: VisitaCompleta | null;
   categorias: VisitaCategoria[];
   motivos: VisitaMotivo[];
-  atendedores: VisitaAtendedorConArea[];
+  atendedores: VisitaAtendedor[];
   prefillDate?: Date;
   prefillResourceId?: string;
   onSave: (data: VisitaFormData) => Promise<void>;
@@ -82,17 +82,6 @@ export function VisitasFormModal({
     [categorias, formData.categoria_id]
   );
 
-  // Atendedores agrupados por área
-  const atendedoresGrouped = useMemo(() => {
-    const groups = new Map<string, VisitaAtendedorConArea[]>();
-    for (const a of atendedores) {
-      const list = groups.get(a.area_nombre) ?? [];
-      list.push(a);
-      groups.set(a.area_nombre, list);
-    }
-    return groups;
-  }, [atendedores]);
-
   // Al cambiar categoría, actualizar duración default y limpiar motivo
   function handleCategoriaChange(categoriaId: string) {
     const cat = categorias.find((c) => c.id === categoriaId);
@@ -118,7 +107,7 @@ export function VisitasFormModal({
   function validate(): boolean {
     const e: Partial<Record<keyof VisitaFormData, string>> = {};
     if (!formData.categoria_id) e.categoria_id = 'Seleccione una categoría';
-    if (!formData.atendedor_id) e.atendedor_id = 'Seleccione quién atiende';
+    if (!formData.atendedor_id) e.atendedor_id = 'Seleccione un anfitrión';
     if (!formData.nombre_visitante.trim()) e.nombre_visitante = 'Ingrese el nombre del visitante';
     if (!formData.fecha) e.fecha = 'Seleccione la fecha';
     if (!formData.hora) e.hora = 'Seleccione la hora';
@@ -135,23 +124,25 @@ export function VisitasFormModal({
 
     setSaving(true);
     try {
-      // Verificar conflicto de agenda
-      const fechaHora = `${formData.fecha}T${formData.hora}:00`;
-      const hasConflict = await checkConflict(
-        formData.atendedor_id,
-        fechaHora,
-        formData.duracion_minutos,
-        mode === 'edit' ? visita?.id : undefined
-      );
-
-      if (hasConflict) {
-        const atendedor = atendedores.find((a) => a.id === formData.atendedor_id);
-        await Swal.fire(
-          'Conflicto de agenda',
-          `${atendedor?.nombre ?? 'El atendedor'} ya tiene una cita en ese horario.`,
-          'warning'
+      // Verificar conflicto de agenda (skip para categorías grupales)
+      if (categoriaSeleccionada?.tipo_visita !== 'grupal') {
+        const fechaHora = `${formData.fecha}T${formData.hora}:00`;
+        const hasConflict = await checkConflict(
+          formData.atendedor_id,
+          fechaHora,
+          formData.duracion_minutos,
+          mode === 'edit' ? visita?.id : undefined
         );
-        return;
+
+        if (hasConflict) {
+          const atendedor = atendedores.find((a) => a.id === formData.atendedor_id);
+          await Swal.fire(
+            'Conflicto de agenda',
+            `${atendedor?.nombre ?? 'El anfitrión'} ya tiene una cita en ese horario.`,
+            'warning'
+          );
+          return;
+        }
       }
 
       await onSave(formData);
@@ -203,21 +194,17 @@ export function VisitasFormModal({
             </div>
           )}
 
-          {/* Atendedor (agrupado por área) */}
+          {/* Anfitrión */}
           <div className="form-group">
-            <label>Atendido por <span className="required">*</span></label>
+            <label>Anfitrión <span className="required">*</span></label>
             <select
               value={formData.atendedor_id}
               onChange={(e) => handleChange('atendedor_id', e.target.value)}
               className={errors.atendedor_id ? 'input-error' : ''}
             >
               <option value="">Seleccionar...</option>
-              {Array.from(atendedoresGrouped.entries()).map(([area, lista]) => (
-                <optgroup key={area} label={area}>
-                  {lista.map((a) => (
-                    <option key={a.id} value={a.id}>{a.nombre}</option>
-                  ))}
-                </optgroup>
+              {atendedores.map((a) => (
+                <option key={a.id} value={a.id}>{a.nombre}</option>
               ))}
             </select>
             {errors.atendedor_id && <span className="error-message">{errors.atendedor_id}</span>}
@@ -285,18 +272,29 @@ export function VisitasFormModal({
               {errors.hora && <span className="error-message">{errors.hora}</span>}
             </div>
             <div className="form-group">
-              <label>Duración (min)</label>
-              <select
-                value={formData.duracion_minutos}
-                onChange={(e) => handleChange('duracion_minutos', Number(e.target.value))}
-              >
-                <option value={15}>15 min</option>
-                <option value={30}>30 min</option>
-                <option value={45}>45 min</option>
-                <option value={60}>60 min</option>
-                <option value={90}>90 min</option>
-                <option value={120}>120 min</option>
-              </select>
+              <label>Duración</label>
+              {categoriaSeleccionada?.duracion_modificable ? (
+                <select
+                  value={formData.duracion_minutos}
+                  onChange={(e) => handleChange('duracion_minutos', Number(e.target.value))}
+                >
+                  <option value={30}>30 min</option>
+                  <option value={60}>60 min</option>
+                  <option value={90}>90 min</option>
+                  <option value={120}>2 horas</option>
+                  <option value={180}>3 horas</option>
+                  <option value={240}>4 horas</option>
+                  <option value={300}>5 horas</option>
+                  <option value={360}>6 horas</option>
+                </select>
+              ) : (
+                <input
+                  type="text"
+                  value={`${formData.duracion_minutos} min`}
+                  disabled
+                  style={{ backgroundColor: 'var(--color-bg-secondary)', cursor: 'not-allowed' }}
+                />
+              )}
             </div>
           </div>
 
