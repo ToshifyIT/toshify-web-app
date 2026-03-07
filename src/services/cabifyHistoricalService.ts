@@ -10,6 +10,9 @@
 import { supabase } from '../lib/supabase'
 import { normalizeDni } from '../utils/normalizeDocuments'
 
+// IDs de sedes
+const SEDE_BARILOCHE_ID = 'f37193f7-5805-4d87-820d-c4521824860e'
+
 // =====================================================
 // TIPOS
 // =====================================================
@@ -176,10 +179,12 @@ class CabifyHistoricalService {
     options: {
       forceAPI?: boolean // Forzar consulta a API (ignorar caché e histórico)
       onProgress?: (current: number, total: number, message: string) => void
+      sedeId?: string | null // null = todas las sedes
     } = {}
   ): Promise<{ drivers: DriverHistoricalData[]; stats: QueryStats }> {
     const startTime = Date.now()
-    const cacheKey = `drivers_${startDate}_${endDate}`
+    const sedeKey = options.sedeId || 'all'
+    const cacheKey = `drivers_${startDate}_${endDate}_${sedeKey}`
     const isToday = this.includesToday(startDate, endDate)
 
     // 1. Verificar caché en memoria (solo para datos NO de hoy, o con TTL muy corto)
@@ -200,8 +205,8 @@ class CabifyHistoricalService {
       }
     }
 
-    // 2. Consultar histórico en BD
-    const historical = await this.queryHistorical(startDate, endDate)
+    // 2. Consultar histórico en BD (tabla depende de la sede)
+    const historical = await this.queryHistorical(startDate, endDate, options.sedeId)
 
     // 3. Analizar cobertura (para logging/debug)
     this.analyzeCoverage(historical, startDate, endDate)
@@ -230,36 +235,56 @@ class CabifyHistoricalService {
    * Consultar datos históricos de la BD
    * Los datos se almacenan por día, esta función los agrega por conductor
    */
+  /**
+   * Determinar qué tabla(s) consultar según la sede
+   */
+  private getTableNames(sedeId?: string | null): string[] {
+    if (sedeId === SEDE_BARILOCHE_ID) {
+      return ['cabify_historico_bariloche']
+    }
+    if (!sedeId) {
+      // Todas las sedes: consultar ambas tablas
+      return ['cabify_historico', 'cabify_historico_bariloche']
+    }
+    // Buenos Aires u otra sede
+    return ['cabify_historico']
+  }
+
   private async queryHistorical(
     startDate: string,
-    endDate: string
+    endDate: string,
+    sedeId?: string | null
   ): Promise<DriverHistoricalData[]> {
-    // IMPORTANTE: Las fechas ya vienen correctamente calculadas desde cabifyService.getWeekRange()
-    // con la alineación a zona horaria de Argentina (UTC-3):
-    //
-    // - startDate: "2025-12-08T03:00:00Z" = Lunes 08/12 00:00 Argentina
-    // - endDate: "2025-12-15T02:59:59Z" = Domingo 14/12 23:59:59 Argentina (día+1 02:59:59 UTC)
-    //
-    // NO debemos modificar estas fechas, ya tienen el formato correcto de code.txt
+    const selectFields = 'cabify_driver_id, cabify_company_id, nombre, apellido, email, dni, telefono_numero, telefono_codigo, licencia, vehiculo_id, vehiculo_marca, vehiculo_modelo, vehiculo_patente, vehiculo_completo, score, viajes_aceptados, viajes_perdidos, viajes_ofrecidos, viajes_finalizados, viajes_rechazados, tasa_aceptacion, horas_conectadas, tasa_ocupacion, cobro_efectivo, cobro_app, ganancia_total, peajes, permiso_efectivo, estado_conductor, fecha_inicio, fecha_guardado'
 
-    // Consulta usando las fechas originales directamente
-    // startDate ya tiene T03:00:00Z (00:00 Argentina)
-    // endDate ya tiene T02:59:59Z del día siguiente (23:59:59 Argentina del día anterior)
-    const { data, error } = await supabase
-      .from('cabify_historico')
-      .select('cabify_driver_id, cabify_company_id, nombre, apellido, email, dni, telefono_numero, telefono_codigo, licencia, vehiculo_id, vehiculo_marca, vehiculo_modelo, vehiculo_patente, vehiculo_completo, score, viajes_aceptados, viajes_perdidos, viajes_ofrecidos, viajes_finalizados, viajes_rechazados, tasa_aceptacion, horas_conectadas, tasa_ocupacion, cobro_efectivo, cobro_app, ganancia_total, peajes, permiso_efectivo, estado_conductor, fecha_inicio, fecha_guardado')
-      .gte('fecha_inicio', startDate)
-      .lte('fecha_inicio', endDate)
-      .order('ganancia_total', { ascending: false })
-      .limit(5000)
+    const tableNames = this.getTableNames(sedeId)
 
-    if (error) {
+    // Consultar todas las tablas necesarias en paralelo
+    const queryPromises = tableNames.map(tableName =>
+      supabase
+        .from(tableName)
+        .select(selectFields)
+        .gte('fecha_inicio', startDate)
+        .lte('fecha_inicio', endDate)
+        .order('ganancia_total', { ascending: false })
+        .limit(5000)
+    )
+
+    const results = await Promise.all(queryPromises)
+
+    // Combinar datos de todas las tablas
+    const allData: any[] = []
+    for (const result of results) {
+      if (!result.error && result.data) {
+        allData.push(...result.data)
+      }
+    }
+
+    if (allData.length === 0) {
       return []
     }
 
-    if (!data || data.length === 0) {
-      return []
-    }
+    const data = allData
 
     // PASO 1: Eliminar duplicados - quedarse solo con el registro más reciente por (dni, fecha)
     // Esto soluciona el problema de múltiples sincronizaciones por día

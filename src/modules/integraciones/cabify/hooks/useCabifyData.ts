@@ -13,6 +13,7 @@ import { cabifyService } from '../../../../services/cabifyService'
 import { cabifyHistoricalService } from '../../../../services/cabifyHistoricalService'
 import { asignacionesService, type AsignacionActiva } from '../../../../services/asignacionesService'
 import { supabase } from '../../../../lib/supabase'
+import { useSede } from '../../../../contexts/SedeContext'
 import type { CabifyQueryState } from '../../../../types/cabify.types'
 import type {
   CabifyDriver,
@@ -50,6 +51,9 @@ interface UseCabifyDataReturn {
 // =====================================================
 
 export function useCabifyData(): UseCabifyDataReturn {
+  // Sede activa
+  const { sedeActualId } = useSede()
+
   // Estado de datos
   const [drivers, setDrivers] = useState<CabifyDriver[]>([])
   const [asignaciones, setAsignaciones] = useState<Map<string, AsignacionActiva>>(new Map())
@@ -112,11 +116,12 @@ export function useCabifyData(): UseCabifyDataReturn {
       setLoadingProgress(INITIAL_LOADING_PROGRESS)
     }
 
-    // Obtener datos históricos
+    // Obtener datos históricos (filtrando por sede)
     const { drivers: driverData, stats } = await cabifyHistoricalService.getDriversData(
       week.startDate,
       week.endDate,
       {
+        sedeId: sedeActualId,
         onProgress: showLoading ? (current, total, message) => {
           setLoadingProgress({ current, total, message })
         } : undefined,
@@ -155,7 +160,7 @@ export function useCabifyData(): UseCabifyDataReturn {
       lastUpdate: new Date(),
       error: null,
     }))
-  }, [loadAsignaciones])
+  }, [sedeActualId, loadAsignaciones])
 
   // Carga con loading visible (para carga inicial o cambio de semana)
   const loadData = useCallback(async () => {
@@ -169,7 +174,7 @@ export function useCabifyData(): UseCabifyDataReturn {
     } catch (error) {
       handleLoadError(error)
     }
-  }, [selectedWeek, executeDataLoad])
+  }, [selectedWeek, sedeActualId, executeDataLoad])
 
   // Carga silenciosa para tiempo real (sin parpadeo)
   const loadDataSilent = useCallback(async () => {
@@ -192,7 +197,7 @@ export function useCabifyData(): UseCabifyDataReturn {
     if (selectedWeek) {
       loadData()
     }
-  }, [selectedWeek])
+  }, [selectedWeek, sedeActualId])
 
   // =====================================================
   // SUSCRIPCIÓN REALTIME
@@ -201,50 +206,52 @@ export function useCabifyData(): UseCabifyDataReturn {
   useEffect(() => {
     if (!selectedWeek) return
 
-    // Suscribirse a cambios en cabify_historico
-    const channel = supabase
-      .channel('cabify_historico_changes')
-      .on(
-        'postgres_changes',
-        {
-          event: '*', // INSERT, UPDATE, DELETE
-          schema: 'public',
-          table: 'cabify_historico',
-        },
-        (payload) => {
-          // Verificar si el cambio corresponde al período seleccionado
-          const newRecord = payload.new as { fecha_inicio?: string } | undefined
-          const oldRecord = payload.old as { fecha_inicio?: string } | undefined
-          const recordDate = newRecord?.fecha_inicio || oldRecord?.fecha_inicio
+    // Determinar a qué tablas suscribirse según la sede
+    const SEDE_BARILOCHE = 'f37193f7-5805-4d87-820d-c4521824860e'
+    const tables: string[] = sedeActualId === SEDE_BARILOCHE
+      ? ['cabify_historico_bariloche']
+      : !sedeActualId
+        ? ['cabify_historico', 'cabify_historico_bariloche']
+        : ['cabify_historico']
 
-          if (recordDate && selectedWeek) {
-            const recordTime = new Date(recordDate).getTime()
-            const startTime = new Date(selectedWeek.startDate).getTime()
-            const endTime = new Date(selectedWeek.endDate).getTime()
+    const realtimeHandler = (payload: any) => {
+      const newRecord = payload.new as { fecha_inicio?: string } | undefined
+      const oldRecord = payload.old as { fecha_inicio?: string } | undefined
+      const recordDate = newRecord?.fecha_inicio || oldRecord?.fecha_inicio
 
-            // Si el registro está dentro del período seleccionado, recargar SIN parpadeo
-            if (recordTime >= startTime && recordTime <= endTime) {
-              // Evitar múltiples recargas simultáneas
-              if (!isReloadingRef.current) {
-                isReloadingRef.current = true
-                // Pequeño delay para agrupar múltiples cambios
-                setTimeout(() => {
-                  loadDataSilent().finally(() => {
-                    isReloadingRef.current = false
-                  })
-                }, 500)
-              }
-            }
+      if (recordDate && selectedWeek) {
+        const recordTime = new Date(recordDate).getTime()
+        const startTime = new Date(selectedWeek.startDate).getTime()
+        const endTime = new Date(selectedWeek.endDate).getTime()
+
+        if (recordTime >= startTime && recordTime <= endTime) {
+          if (!isReloadingRef.current) {
+            isReloadingRef.current = true
+            setTimeout(() => {
+              loadDataSilent().finally(() => {
+                isReloadingRef.current = false
+              })
+            }, 500)
           }
         }
-      )
-      .subscribe()
+      }
+    }
 
-    // Cleanup: desuscribirse al desmontar o cambiar semana
+    // Crear canal con suscripciones a todas las tablas relevantes
+    let channel = supabase.channel(`cabify_changes_${sedeActualId || 'all'}`)
+    for (const table of tables) {
+      channel = channel.on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table },
+        realtimeHandler
+      )
+    }
+    channel.subscribe()
+
     return () => {
       supabase.removeChannel(channel)
     }
-  }, [selectedWeek, loadDataSilent])
+  }, [selectedWeek, sedeActualId, loadDataSilent])
 
   // Auto-refresh con intervalo como fallback (cada 5 minutos)
   const AUTO_REFRESH_INTERVAL = 5 * 60 * 1000 // 5 minutos

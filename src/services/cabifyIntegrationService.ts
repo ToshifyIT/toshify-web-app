@@ -4,6 +4,8 @@ import { cabifyService } from './cabifyService'
 import type { CabifyDriverEnriched, CabifyPeriod, CabifyMetrics } from '../types/cabify.types'
 import { normalizeDni } from '../utils/normalizeDocuments'
 
+const SEDE_BARILOCHE_ID = 'f37193f7-5805-4d87-820d-c4521824860e'
+
 /**
  * Tipo para los resultados de las funciones RPC de rankings
  */
@@ -208,22 +210,35 @@ class CabifyIntegrationService {
    */
   async getTopMejoresFromHistorico(
     fechaInicio?: string,
-    fechaFin?: string
+    fechaFin?: string,
+    sedeId?: string | null
   ): Promise<CabifyRankingDriver[]> {
-    // Si no se especifica período, usar la semana actual
     const { startDate, endDate } = this.getDefaultPeriod(fechaInicio, fechaFin)
 
+    // Para Bariloche o "todas", consultar directo a la tabla correspondiente
+    if (sedeId === SEDE_BARILOCHE_ID) {
+      return this.getTopFromTable('cabify_historico_bariloche', startDate, endDate, 'desc')
+    }
+
+    // Buenos Aires: usar RPC optimizado
     const { data, error } = await supabase.rpc('get_cabify_top_mejores', {
       p_fecha_inicio: startDate,
       p_fecha_fin: endDate
     }) as { data: RankingRow[] | null; error: Error | null }
 
     if (error) {
-      // Fallback a la vista si la función falla
       return this.getTopMejoresFallback()
     }
 
-    return (data || []).map((row: RankingRow) => this.mapRankingDriver(row))
+    const bsAsResults = (data || []).map((row: RankingRow) => this.mapRankingDriver(row))
+
+    // Si es "todas las sedes", combinar con Bariloche
+    if (!sedeId) {
+      const bariResults = await this.getTopFromTable('cabify_historico_bariloche', startDate, endDate, 'desc')
+      return [...bsAsResults, ...bariResults].sort((a, b) => b.gananciaTotal - a.gananciaTotal).slice(0, 10)
+    }
+
+    return bsAsResults
   }
 
   /**
@@ -231,22 +246,62 @@ class CabifyIntegrationService {
    */
   async getTopPeoresFromHistorico(
     fechaInicio?: string,
-    fechaFin?: string
+    fechaFin?: string,
+    sedeId?: string | null
   ): Promise<CabifyRankingDriver[]> {
-    // Si no se especifica período, usar la semana actual
     const { startDate, endDate } = this.getDefaultPeriod(fechaInicio, fechaFin)
 
+    // Para Bariloche, consultar directo a la tabla correspondiente
+    if (sedeId === SEDE_BARILOCHE_ID) {
+      return this.getTopFromTable('cabify_historico_bariloche', startDate, endDate, 'asc')
+    }
+
+    // Buenos Aires: usar RPC optimizado
     const { data, error } = await supabase.rpc('get_cabify_top_peores', {
       p_fecha_inicio: startDate,
       p_fecha_fin: endDate
     }) as { data: RankingRow[] | null; error: Error | null }
 
     if (error) {
-      // Fallback a la vista si la función falla
       return this.getTopPeoresFallback()
     }
 
-    return (data || []).map((row: RankingRow) => this.mapRankingDriver(row))
+    const bsAsResults = (data || []).map((row: RankingRow) => this.mapRankingDriver(row))
+
+    // Si es "todas las sedes", combinar con Bariloche
+    if (!sedeId) {
+      const bariResults = await this.getTopFromTable('cabify_historico_bariloche', startDate, endDate, 'asc')
+      return [...bsAsResults, ...bariResults].sort((a, b) => a.gananciaTotal - b.gananciaTotal).slice(0, 10)
+    }
+
+    return bsAsResults
+  }
+
+  /**
+   * Consultar top drivers directamente de una tabla (para Bariloche)
+   */
+  private async getTopFromTable(
+    tableName: string,
+    startDate: string,
+    endDate: string,
+    order: 'asc' | 'desc'
+  ): Promise<CabifyRankingDriver[]> {
+    const { data, error } = await supabase
+      .from(tableName)
+      .select('dni, nombre, apellido, vehiculo_patente, viajes_finalizados, ganancia_total, score, horas_conectadas, fecha_guardado')
+      .gte('fecha_inicio', startDate)
+      .lte('fecha_inicio', endDate)
+      .gt('viajes_finalizados', 0)
+      .order('ganancia_total', { ascending: order === 'asc' })
+      .limit(10)
+
+    if (error || !data) return []
+
+    return data.map((row: any) => this.mapRankingDriver({
+      ...row,
+      ganancia_por_hora: row.horas_conectadas > 0 ? row.ganancia_total / row.horas_conectadas : 0,
+      horario: null,
+    }))
   }
 
   /**

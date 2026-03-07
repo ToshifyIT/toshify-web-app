@@ -10,6 +10,7 @@ import { cabifyIntegrationService, type CabifyRankingDriver } from '../../../../
 interface UseCabifyRankingsProps {
   fechaInicio?: string
   fechaFin?: string
+  sedeId?: string | null
 }
 
 interface UseCabifyRankingsReturn {
@@ -34,11 +35,13 @@ export function useCabifyRankings(props?: UseCabifyRankingsProps): UseCabifyRank
       const [mejores, peores] = await Promise.all([
         cabifyIntegrationService.getTopMejoresFromHistorico(
           props?.fechaInicio,
-          props?.fechaFin
+          props?.fechaFin,
+          props?.sedeId
         ),
         cabifyIntegrationService.getTopPeoresFromHistorico(
           props?.fechaInicio,
-          props?.fechaFin
+          props?.fechaFin,
+          props?.sedeId
         )
       ])
 
@@ -55,7 +58,7 @@ export function useCabifyRankings(props?: UseCabifyRankingsProps): UseCabifyRank
     } finally {
       setIsLoading(false)
     }
-  }, [props?.fechaInicio, props?.fechaFin])
+  }, [props?.fechaInicio, props?.fechaFin, props?.sedeId])
 
   useEffect(() => {
     fetchRankings()

@@ -20,6 +20,7 @@ import type { CabifyDriver, AccordionKey, WeekOption } from './types/cabify.type
 // Hooks
 import { useCabifyData, useCabifyStats } from './hooks'
 import { useCabifyRankings } from './hooks/useCabifyRankings'
+import { useSede } from '../../../contexts/SedeContext'
 
 // Componentes
 import { CabifyHeader, type DateRange, StatsAccordion, TopDriversSection } from './components'
@@ -59,6 +60,8 @@ function createInitialDateRange(selectedWeek: WeekOption | null): DateRange | nu
 // =====================================================
 
 export function CabifyModule() {
+  const { sedeActualId } = useSede()
+
   // Custom hooks para datos y estadísticas
   const {
     drivers,
@@ -85,10 +88,11 @@ export function CabifyModule() {
       if (!effectiveDateRange) return undefined
       return {
         fechaInicio: effectiveDateRange.startDate,
-        fechaFin: effectiveDateRange.endDate
+        fechaFin: effectiveDateRange.endDate,
+        sedeId: sedeActualId,
       }
     },
-    [effectiveDateRange]
+    [effectiveDateRange, sedeActualId]
   )
 
   // Rankings desde histórico con filtro de período
