@@ -278,6 +278,198 @@ app.get('/api/admin/tokens', async (req, res) => {
   }
 })
 
+// Admin-only: Health check all Edge Functions
+app.get('/api/admin/function-health', async (req, res) => {
+  try {
+    // Same admin auth as /api/admin/tokens
+    const authHeader = req.headers.authorization
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      return res.status(401).json({ error: 'No autorizado' })
+    }
+
+    const token = authHeader.replace('Bearer ', '')
+    const supabaseUrl = process.env.VITE_SUPABASE_URL
+    const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+
+    if (!supabaseUrl || !serviceKey) {
+      return res.status(500).json({ error: 'Configuracion del servidor incompleta' })
+    }
+
+    // Verify admin
+    const userRes = await fetch(`${supabaseUrl}/auth/v1/user`, {
+      headers: { 'Authorization': `Bearer ${token}`, 'apikey': serviceKey },
+    })
+    if (!userRes.ok) return res.status(401).json({ error: 'Token invalido' })
+
+    const user = await userRes.json()
+    const profileRes = await fetch(
+      `${supabaseUrl}/rest/v1/user_profiles?id=eq.${user.id}&select=role_id,roles(name)`,
+      { headers: { 'apikey': serviceKey, 'Authorization': `Bearer ${serviceKey}` } }
+    )
+    if (!profileRes.ok) return res.status(500).json({ error: 'Error verificando permisos' })
+
+    const profiles = await profileRes.json()
+    if (profiles[0]?.roles?.name !== 'admin') {
+      return res.status(403).json({ error: 'Acceso denegado' })
+    }
+
+    // Get all functions from config table
+    const configRes = await fetch(
+      `${supabaseUrl}/rest/v1/edge_function_config?select=*&order=category,function_name`,
+      { headers: { 'apikey': serviceKey, 'Authorization': `Bearer ${serviceKey}` } }
+    )
+    if (!configRes.ok) return res.status(500).json({ error: 'Error leyendo configuracion' })
+
+    const functions = await configRes.json()
+
+    // Ping each function in parallel (with 5s timeout per function)
+    const results = await Promise.all(
+      functions.map(async (fn) => {
+        const start = Date.now()
+        let status = 'unknown'
+        let responseTime = null
+        let errorMsg = null
+
+        try {
+          const controller = new AbortController()
+          const timeout = setTimeout(() => controller.abort(), 5000)
+
+          const fnRes = await fetch(
+            `${supabaseUrl}/functions/v1/${fn.function_name}`,
+            {
+              method: 'POST',
+              headers: {
+                'Authorization': `Bearer ${serviceKey}`,
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({ healthCheck: true }),
+              signal: controller.signal,
+            }
+          )
+
+          clearTimeout(timeout)
+          responseTime = Date.now() - start
+
+          // Any response (even 400/500) means the function runtime is alive
+          // Only network errors or timeouts mean it's down
+          if (fnRes.status < 500) {
+            status = 'online'
+          } else {
+            status = 'error'
+            errorMsg = `HTTP ${fnRes.status}`
+          }
+        } catch (err) {
+          responseTime = Date.now() - start
+          if (err.name === 'AbortError') {
+            status = 'timeout'
+            errorMsg = 'Timeout (>5s)'
+          } else {
+            status = 'offline'
+            errorMsg = err.message || 'Connection failed'
+          }
+        }
+
+        return {
+          ...fn,
+          health_status: status,
+          response_time_ms: responseTime,
+          health_error: errorMsg,
+          checked_at: new Date().toISOString(),
+        }
+      })
+    )
+
+    // Update last_health_check in DB (fire and forget)
+    for (const r of results) {
+      fetch(
+        `${supabaseUrl}/rest/v1/edge_function_config?id=eq.${r.id}`,
+        {
+          method: 'PATCH',
+          headers: {
+            'apikey': serviceKey,
+            'Authorization': `Bearer ${serviceKey}`,
+            'Content-Type': 'application/json',
+            'Prefer': 'return=minimal',
+          },
+          body: JSON.stringify({
+            last_health_check: r.checked_at,
+            last_health_status: r.health_status,
+            updated_at: r.checked_at,
+          }),
+        }
+      ).catch(() => {})
+    }
+
+    res.json({ success: true, functions: results })
+  } catch (error) {
+    res.status(500).json({ error: 'Error interno del servidor' })
+  }
+})
+
+// Admin-only: Toggle function active/inactive
+app.post('/api/admin/toggle-function', async (req, res) => {
+  try {
+    const authHeader = req.headers.authorization
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      return res.status(401).json({ error: 'No autorizado' })
+    }
+
+    const token = authHeader.replace('Bearer ', '')
+    const supabaseUrl = process.env.VITE_SUPABASE_URL
+    const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+
+    if (!supabaseUrl || !serviceKey) {
+      return res.status(500).json({ error: 'Configuracion del servidor incompleta' })
+    }
+
+    // Verify admin
+    const userRes = await fetch(`${supabaseUrl}/auth/v1/user`, {
+      headers: { 'Authorization': `Bearer ${token}`, 'apikey': serviceKey },
+    })
+    if (!userRes.ok) return res.status(401).json({ error: 'Token invalido' })
+
+    const user = await userRes.json()
+    const profileRes = await fetch(
+      `${supabaseUrl}/rest/v1/user_profiles?id=eq.${user.id}&select=role_id,roles(name)`,
+      { headers: { 'apikey': serviceKey, 'Authorization': `Bearer ${serviceKey}` } }
+    )
+    if (!profileRes.ok) return res.status(500).json({ error: 'Error verificando permisos' })
+
+    const profiles = await profileRes.json()
+    if (profiles[0]?.roles?.name !== 'admin') {
+      return res.status(403).json({ error: 'Acceso denegado' })
+    }
+
+    const { functionId, isActive } = req.body
+    if (!functionId || typeof isActive !== 'boolean') {
+      return res.status(400).json({ error: 'Parametros invalidos: functionId y isActive requeridos' })
+    }
+
+    const updateRes = await fetch(
+      `${supabaseUrl}/rest/v1/edge_function_config?id=eq.${functionId}`,
+      {
+        method: 'PATCH',
+        headers: {
+          'apikey': serviceKey,
+          'Authorization': `Bearer ${serviceKey}`,
+          'Content-Type': 'application/json',
+          'Prefer': 'return=representation',
+        },
+        body: JSON.stringify({ is_active: isActive, updated_at: new Date().toISOString() }),
+      }
+    )
+
+    if (!updateRes.ok) {
+      return res.status(500).json({ error: 'Error actualizando funcion' })
+    }
+
+    const updated = await updateRes.json()
+    res.json({ success: true, function: updated[0] })
+  } catch (error) {
+    res.status(500).json({ error: 'Error interno del servidor' })
+  }
+})
+
 // Health check
 app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() })

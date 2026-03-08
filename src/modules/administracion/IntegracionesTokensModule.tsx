@@ -1,8 +1,8 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import {
   ChevronDown, ChevronRight, Clock, Shield, Globe,
   Server, Radio, MapPin, Car, HardDrive, Mail, Eye, EyeOff,
-  AlertCircle,
+  AlertCircle, RefreshCw, Zap, ZapOff, Activity,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
@@ -841,6 +841,333 @@ function IntegrationCard({ system, serverTokens, tokensLoading, tokensError }: {
 }
 
 // =============================================
+// Edge Functions Monitor
+// =============================================
+
+interface EdgeFunction {
+  id: string;
+  function_name: string;
+  label: string;
+  description: string;
+  category: string;
+  is_active: boolean;
+  health_status: string;
+  response_time_ms: number | null;
+  health_error: string | null;
+  checked_at: string;
+  last_health_check: string | null;
+  last_health_status: string | null;
+}
+
+const CATEGORY_LABELS: Record<string, { label: string; color: string }> = {
+  sistema: { label: 'Sistema', color: 'blue' },
+  cabify: { label: 'Cabify', color: 'purple' },
+  wialon: { label: 'Wialon', color: 'yellow' },
+  google: { label: 'Google', color: 'green' },
+};
+
+function HealthBadge({ status, responseTime }: { status: string; responseTime: number | null }) {
+  const config: Record<string, { bg: string; text: string; label: string }> = {
+    online: { bg: 'var(--badge-green-bg)', text: 'var(--badge-green-text)', label: 'Online' },
+    error: { bg: 'var(--badge-red-bg)', text: 'var(--badge-red-text)', label: 'Error' },
+    timeout: { bg: 'var(--badge-yellow-bg)', text: 'var(--badge-yellow-text)', label: 'Timeout' },
+    offline: { bg: 'var(--badge-red-bg)', text: 'var(--badge-red-text)', label: 'Offline' },
+    unknown: { bg: 'var(--badge-gray-bg)', text: 'var(--badge-gray-text)', label: 'Sin datos' },
+    checking: { bg: 'var(--badge-blue-bg)', text: 'var(--badge-blue-text)', label: 'Verificando...' },
+  };
+  const c = config[status] || config.unknown;
+  return (
+    <span style={{
+      display: 'inline-flex',
+      alignItems: 'center',
+      gap: '6px',
+      padding: '3px 10px',
+      borderRadius: '12px',
+      fontSize: '11px',
+      fontWeight: 600,
+      background: c.bg,
+      color: c.text,
+    }}>
+      <span style={{
+        width: '6px',
+        height: '6px',
+        borderRadius: '50%',
+        background: status === 'online' ? 'var(--color-success)' : status === 'checking' ? 'var(--color-info)' : status === 'timeout' ? 'var(--color-warning)' : status === 'error' || status === 'offline' ? 'var(--color-danger)' : 'var(--text-tertiary)',
+      }} />
+      {c.label}
+      {responseTime !== null && status !== 'checking' && (
+        <span style={{ fontWeight: 400, opacity: 0.8 }}>({responseTime}ms)</span>
+      )}
+    </span>
+  );
+}
+
+function EdgeFunctionsMonitor() {
+  const [functions, setFunctions] = useState<EdgeFunction[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [togglingId, setTogglingId] = useState<string | null>(null);
+
+  const fetchHealth = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.access_token) {
+        setError('Sin sesion activa');
+        return;
+      }
+
+      const res = await fetch('/api/admin/function-health', {
+        headers: { 'Authorization': `Bearer ${session.access_token}` },
+      });
+
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ error: 'Error' }));
+        setError(err.error || `Error ${res.status}`);
+        return;
+      }
+
+      const data = await res.json();
+      if (data.success) {
+        setFunctions(data.functions);
+      }
+    } catch {
+      setError('Error de conexion');
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  const toggleFunction = async (fn: EdgeFunction) => {
+    setTogglingId(fn.id);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.access_token) return;
+
+      const res = await fetch('/api/admin/toggle-function', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${session.access_token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ functionId: fn.id, isActive: !fn.is_active }),
+      });
+
+      if (res.ok) {
+        setFunctions(prev => prev.map(f =>
+          f.id === fn.id ? { ...f, is_active: !f.is_active } : f
+        ));
+      }
+    } catch {
+      // silently fail
+    } finally {
+      setTogglingId(null);
+    }
+  };
+
+  useEffect(() => {
+    fetchHealth();
+  }, [fetchHealth]);
+
+  // Group by category
+  const grouped = functions.reduce<Record<string, EdgeFunction[]>>((acc, fn) => {
+    if (!acc[fn.category]) acc[fn.category] = [];
+    acc[fn.category].push(fn);
+    return acc;
+  }, {});
+
+  const onlineCount = functions.filter(f => f.health_status === 'online').length;
+  const totalCount = functions.length;
+
+  return (
+    <div style={{
+      background: 'var(--card-bg)',
+      border: '1px solid var(--border-primary)',
+      borderRadius: '10px',
+      marginBottom: '20px',
+      overflow: 'hidden',
+    }}>
+      {/* Header */}
+      <div style={{
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        padding: '16px 20px',
+        borderBottom: '1px solid var(--border-primary)',
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+          <Activity size={20} style={{ color: 'var(--color-primary)' }} />
+          <div>
+            <div style={{ fontSize: '15px', fontWeight: 700, color: 'var(--text-primary)' }}>
+              Edge Functions Monitor
+            </div>
+            <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
+              {totalCount > 0 ? `${onlineCount}/${totalCount} online` : 'Cargando...'}
+            </div>
+          </div>
+        </div>
+        <button
+          onClick={fetchHealth}
+          disabled={loading}
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '6px',
+            padding: '8px 14px',
+            background: 'var(--bg-secondary)',
+            border: '1px solid var(--border-primary)',
+            borderRadius: '8px',
+            fontSize: '12px',
+            fontWeight: 600,
+            color: 'var(--text-secondary)',
+            cursor: loading ? 'not-allowed' : 'pointer',
+            opacity: loading ? 0.6 : 1,
+          }}
+        >
+          <RefreshCw size={14} style={loading ? { animation: 'spin 1s linear infinite' } : undefined} />
+          {loading ? 'Verificando...' : 'Verificar'}
+        </button>
+      </div>
+
+      {/* Error */}
+      {error && (
+        <div style={{
+          padding: '12px 20px',
+          fontSize: '13px',
+          color: 'var(--color-danger)',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '6px',
+        }}>
+          <AlertCircle size={14} />
+          {error}
+        </div>
+      )}
+
+      {/* Function list grouped by category */}
+      <div style={{ padding: '0' }}>
+        {Object.entries(grouped).map(([category, fns]) => {
+          const catInfo = CATEGORY_LABELS[category] || { label: category, color: 'gray' };
+          return (
+            <div key={category}>
+              {/* Category header */}
+              <div style={{
+                padding: '10px 20px',
+                background: 'var(--bg-secondary)',
+                borderBottom: '1px solid var(--border-primary)',
+                borderTop: '1px solid var(--border-primary)',
+              }}>
+                <span style={{
+                  fontSize: '11px',
+                  fontWeight: 700,
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.5px',
+                  color: `var(--badge-${catInfo.color}-text)`,
+                }}>
+                  {catInfo.label}
+                </span>
+              </div>
+
+              {/* Functions in category */}
+              {fns.map((fn, i) => (
+                <div key={fn.id} style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '12px',
+                  padding: '12px 20px',
+                  borderBottom: i < fns.length - 1 ? '1px solid var(--border-secondary)' : 'none',
+                }}>
+                  {/* Toggle */}
+                  <button
+                    onClick={() => toggleFunction(fn)}
+                    disabled={togglingId === fn.id}
+                    style={{
+                      background: 'none',
+                      border: 'none',
+                      cursor: togglingId === fn.id ? 'wait' : 'pointer',
+                      padding: '4px',
+                      flexShrink: 0,
+                      color: fn.is_active ? 'var(--color-success)' : 'var(--text-tertiary)',
+                      opacity: togglingId === fn.id ? 0.5 : 1,
+                    }}
+                    title={fn.is_active ? 'Desactivar' : 'Activar'}
+                  >
+                    {fn.is_active ? <Zap size={16} /> : <ZapOff size={16} />}
+                  </button>
+
+                  {/* Info */}
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <code style={{
+                        fontSize: '13px',
+                        fontWeight: 600,
+                        color: fn.is_active ? 'var(--text-primary)' : 'var(--text-tertiary)',
+                      }}>
+                        {fn.function_name}
+                      </code>
+                      {!fn.is_active && (
+                        <span style={{
+                          fontSize: '10px',
+                          fontWeight: 600,
+                          padding: '1px 6px',
+                          borderRadius: '4px',
+                          background: 'var(--badge-gray-bg)',
+                          color: 'var(--badge-gray-text)',
+                          textTransform: 'uppercase',
+                        }}>
+                          Desactivado
+                        </span>
+                      )}
+                    </div>
+                    <div style={{ fontSize: '12px', color: 'var(--text-tertiary)', marginTop: '1px' }}>
+                      {fn.description}
+                    </div>
+                  </div>
+
+                  {/* Health status */}
+                  <div style={{ flexShrink: 0 }}>
+                    <HealthBadge
+                      status={loading ? 'checking' : (fn.health_status || 'unknown')}
+                      responseTime={fn.response_time_ms}
+                    />
+                  </div>
+
+                  {/* Error tooltip */}
+                  {fn.health_error && (
+                    <div style={{
+                      flexShrink: 0,
+                      color: 'var(--color-danger)',
+                    }} title={fn.health_error}>
+                      <AlertCircle size={14} />
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          );
+        })}
+
+        {/* Empty state */}
+        {functions.length === 0 && !loading && !error && (
+          <div style={{
+            padding: '30px',
+            textAlign: 'center',
+            color: 'var(--text-tertiary)',
+            fontSize: '13px',
+          }}>
+            No se encontraron Edge Functions configuradas
+          </div>
+        )}
+      </div>
+
+      {/* Spin keyframe for RefreshCw */}
+      <style>{`@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>
+    </div>
+  );
+}
+
+// =============================================
 // Componente Principal
 // =============================================
 
@@ -947,6 +1274,9 @@ export function IntegracionesTokensModule() {
           y editar env.sh o .env segun corresponda.
         </div>
       </div>
+
+      {/* Edge Functions Monitor */}
+      <EdgeFunctionsMonitor />
 
       {/* Integration cards */}
       {INTEGRATIONS.map(system => (
