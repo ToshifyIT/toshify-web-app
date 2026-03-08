@@ -174,6 +174,110 @@ app.post('/cabify-graphql', async (req, res) => {
   }
 })
 
+// Admin-only: Get integration tokens/credentials
+// Verifies the Supabase JWT and checks the user is admin role
+app.get('/api/admin/tokens', async (req, res) => {
+  try {
+    const authHeader = req.headers.authorization
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      return res.status(401).json({ error: 'No autorizado' })
+    }
+
+    const token = authHeader.replace('Bearer ', '')
+    const supabaseUrl = process.env.VITE_SUPABASE_URL
+    const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+
+    if (!supabaseUrl || !serviceKey) {
+      return res.status(500).json({ error: 'Configuracion del servidor incompleta' })
+    }
+
+    // Verify user via Supabase auth
+    const userRes = await fetch(`${supabaseUrl}/auth/v1/user`, {
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'apikey': serviceKey,
+      },
+    })
+
+    if (!userRes.ok) {
+      return res.status(401).json({ error: 'Token invalido' })
+    }
+
+    const user = await userRes.json()
+
+    // Check user is admin via user_profiles + roles
+    const profileRes = await fetch(
+      `${supabaseUrl}/rest/v1/user_profiles?id=eq.${user.id}&select=role_id,roles(name)`,
+      {
+        headers: {
+          'apikey': serviceKey,
+          'Authorization': `Bearer ${serviceKey}`,
+        },
+      }
+    )
+
+    if (!profileRes.ok) {
+      return res.status(500).json({ error: 'Error verificando permisos' })
+    }
+
+    const profiles = await profileRes.json()
+    const profile = profiles[0]
+    const roleName = profile?.roles?.name
+
+    if (roleName !== 'admin') {
+      return res.status(403).json({ error: 'Acceso denegado - Solo administradores' })
+    }
+
+    // Return tokens from environment variables
+    const env = process.env
+    const tokens = {
+      wialon: {
+        token: env.WIALON_TOKEN || null,
+      },
+      cabify_ba: {
+        username: env.VITE_CABIFY_USERNAME || null,
+        password: env.VITE_CABIFY_PASSWORD || null,
+        client_id: env.VITE_CABIFY_CLIENT_ID || null,
+        client_secret: env.VITE_CABIFY_CLIENT_SECRET || null,
+        company_id: env.VITE_CABIFY_COMPANY_ID || null,
+      },
+      cabify_bari: {
+        username: env.CABIFY_BARI_USERNAME || null,
+        password: env.CABIFY_BARI_PASSWORD || null,
+        company_ids: env.CABIFY_BARI_COMPANY_IDS || null,
+      },
+      google_maps: {
+        api_key: env.VITE_GOOGLE_MAPS_API_KEY || null,
+      },
+      google_drive: {
+        service_account_email: env.GOOGLE_SERVICE_ACCOUNT_EMAIL || null,
+        conductores_folder_id: env.GOOGLE_DRIVE_CONDUCTORES_FOLDER_ID || null,
+        vehiculos_folder_id: env.GOOGLE_DRIVE_VEHICULOS_FOLDER_ID || null,
+        // Private key: only show first/last 20 chars for verification
+        private_key_preview: env.GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY
+          ? `${env.GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY.substring(0, 40)}...${env.GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY.slice(-20)}`
+          : null,
+      },
+      resend: {
+        api_key: env.VITE_RESEND_API_KEY || env.RESEND_API_KEY || null,
+      },
+      supabase: {
+        url: env.VITE_SUPABASE_URL || null,
+        anon_key_preview: env.VITE_SUPABASE_ANON_KEY
+          ? `${env.VITE_SUPABASE_ANON_KEY.substring(0, 30)}...${env.VITE_SUPABASE_ANON_KEY.slice(-10)}`
+          : null,
+        service_role_preview: env.SUPABASE_SERVICE_ROLE_KEY
+          ? `${env.SUPABASE_SERVICE_ROLE_KEY.substring(0, 30)}...${env.SUPABASE_SERVICE_ROLE_KEY.slice(-10)}`
+          : null,
+      },
+    }
+
+    res.json({ success: true, tokens })
+  } catch (error) {
+    res.status(500).json({ error: 'Error interno del servidor' })
+  }
+})
+
 // Health check
 app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() })

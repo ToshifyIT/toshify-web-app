@@ -1,9 +1,11 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
   ChevronDown, ChevronRight, Clock, Shield, Globe,
   Server, Radio, MapPin, Car, HardDrive, Mail, Eye, EyeOff,
+  AlertCircle,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
+import { supabase } from '../../lib/supabase';
 
 // =============================================
 // Tipos
@@ -41,6 +43,14 @@ interface IntegrationSystem {
     location: string;
     rotation: string;
   };
+  /** Keys in the /api/admin/tokens response to display as credentials */
+  credentialKeys?: { systemKey: string; fields: { key: string; label: string }[] };
+}
+
+/** Shape of server response from /api/admin/tokens */
+interface TokensResponse {
+  success: boolean;
+  tokens: Record<string, Record<string, string | null>>;
 }
 
 // =============================================
@@ -81,6 +91,12 @@ const INTEGRATIONS: IntegrationSystem[] = [
       location: 'env.sh en servidor (/opt/toshify-sync/)',
       rotation: 'Manual — solo si se revoca desde panel Wialon',
     },
+    credentialKeys: {
+      systemKey: 'wialon',
+      fields: [
+        { key: 'token', label: 'WIALON_TOKEN' },
+      ],
+    },
   },
   {
     id: 'uss',
@@ -109,6 +125,12 @@ const INTEGRATIONS: IntegrationSystem[] = [
       type: 'Compartido con Wialon',
       location: 'Misma variable WIALON_TOKEN',
       rotation: 'N/A — depende de Wialon',
+    },
+    credentialKeys: {
+      systemKey: 'wialon',
+      fields: [
+        { key: 'token', label: 'WIALON_TOKEN (compartido)' },
+      ],
     },
   },
   {
@@ -143,6 +165,16 @@ const INTEGRATIONS: IntegrationSystem[] = [
       location: '.env (server proxy) + env.sh (scripts Deno)',
       rotation: 'Automatica — se regenera en cada ejecucion',
     },
+    credentialKeys: {
+      systemKey: 'cabify_ba',
+      fields: [
+        { key: 'username', label: 'Username' },
+        { key: 'password', label: 'Password' },
+        { key: 'client_id', label: 'Client ID' },
+        { key: 'client_secret', label: 'Client Secret' },
+        { key: 'company_id', label: 'Company ID' },
+      ],
+    },
   },
   {
     id: 'cabify-bari',
@@ -174,6 +206,14 @@ const INTEGRATIONS: IntegrationSystem[] = [
       location: 'env.sh en servidor unicamente',
       rotation: 'Automatica — se regenera en cada ejecucion',
     },
+    credentialKeys: {
+      systemKey: 'cabify_bari',
+      fields: [
+        { key: 'username', label: 'Username' },
+        { key: 'password', label: 'Password' },
+        { key: 'company_ids', label: 'Company IDs' },
+      ],
+    },
   },
   {
     id: 'google-maps',
@@ -201,6 +241,12 @@ const INTEGRATIONS: IntegrationSystem[] = [
       type: 'API Key (permanente)',
       location: '.env (VITE_GOOGLE_MAPS_API_KEY)',
       rotation: 'No requerida — protegida por restriccion de dominio',
+    },
+    credentialKeys: {
+      systemKey: 'google_maps',
+      fields: [
+        { key: 'api_key', label: 'API Key' },
+      ],
     },
   },
   {
@@ -232,6 +278,15 @@ const INTEGRATIONS: IntegrationSystem[] = [
       location: '.env (GOOGLE_SERVICE_ACCOUNT_EMAIL, GOOGLE_PRIVATE_KEY)',
       rotation: 'No requerida — la clave privada no expira',
     },
+    credentialKeys: {
+      systemKey: 'google_drive',
+      fields: [
+        { key: 'service_account_email', label: 'Service Account Email' },
+        { key: 'conductores_folder_id', label: 'Carpeta Conductores' },
+        { key: 'vehiculos_folder_id', label: 'Carpeta Vehiculos' },
+        { key: 'private_key_preview', label: 'Private Key (preview)' },
+      ],
+    },
   },
   {
     id: 'resend',
@@ -257,6 +312,12 @@ const INTEGRATIONS: IntegrationSystem[] = [
       type: 'API Key (permanente)',
       location: '.env (RESEND_API_KEY)',
       rotation: 'No requerida',
+    },
+    credentialKeys: {
+      systemKey: 'resend',
+      fields: [
+        { key: 'api_key', label: 'API Key' },
+      ],
     },
   },
 ];
@@ -316,8 +377,34 @@ function StatusBadge({ status }: { status: 'active' | 'inactive' }) {
   );
 }
 
-function TokenMasked({ label, value }: { label: string; value: string }) {
+function maskValue(value: string): string {
+  if (!value) return '';
+  if (value.length <= 8) return '*'.repeat(value.length);
+  return value.substring(0, 4) + '*'.repeat(Math.min(value.length - 8, 20)) + value.slice(-4);
+}
+
+function CredentialField({ label, value }: { label: string; value: string | null }) {
   const [visible, setVisible] = useState(false);
+
+  if (!value) {
+    return (
+      <div style={{ marginBottom: '8px' }}>
+        <span style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: '0.3px' }}>
+          {label}
+        </span>
+        <div style={{ marginTop: '2px' }}>
+          <span style={{
+            fontSize: '12px',
+            color: 'var(--text-tertiary)',
+            fontStyle: 'italic',
+          }}>
+            No configurado en servidor
+          </span>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div style={{ marginBottom: '8px' }}>
       <span style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: '0.3px' }}>
@@ -328,12 +415,14 @@ function TokenMasked({ label, value }: { label: string; value: string }) {
           fontSize: '13px',
           color: 'var(--text-primary)',
           fontFamily: 'monospace',
-          background: 'var(--bg-secondary)',
+          background: 'var(--bg-tertiary)',
           padding: '4px 8px',
           borderRadius: '4px',
           wordBreak: 'break-all',
+          flex: 1,
+          minWidth: 0,
         }}>
-          {visible ? value : value}
+          {visible ? value : maskValue(value)}
         </span>
         <button
           onClick={() => setVisible(!visible)}
@@ -342,8 +431,9 @@ function TokenMasked({ label, value }: { label: string; value: string }) {
             border: 'none',
             cursor: 'pointer',
             color: 'var(--text-tertiary)',
-            padding: '2px',
+            padding: '4px',
             flexShrink: 0,
+            borderRadius: '4px',
           }}
           title={visible ? 'Ocultar' : 'Mostrar'}
         >
@@ -354,11 +444,34 @@ function TokenMasked({ label, value }: { label: string; value: string }) {
   );
 }
 
+function TokenInfoField({ label, value }: { label: string; value: string }) {
+  return (
+    <div style={{ marginBottom: '8px' }}>
+      <span style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: '0.3px' }}>
+        {label}
+      </span>
+      <div style={{ marginTop: '2px' }}>
+        <span style={{
+          fontSize: '13px',
+          color: 'var(--text-primary)',
+        }}>
+          {value}
+        </span>
+      </div>
+    </div>
+  );
+}
+
 // =============================================
 // Card de cada integracion
 // =============================================
 
-function IntegrationCard({ system }: { system: IntegrationSystem }) {
+function IntegrationCard({ system, serverTokens, tokensLoading, tokensError }: {
+  system: IntegrationSystem;
+  serverTokens: Record<string, Record<string, string | null>> | null;
+  tokensLoading: boolean;
+  tokensError: string | null;
+}) {
   const [expanded, setExpanded] = useState(false);
   const Icon = system.icon;
 
@@ -491,9 +604,40 @@ function IntegrationCard({ system }: { system: IntegrationSystem }) {
                 <Eye size={14} />
                 Credenciales
               </div>
-              <TokenMasked label="Tipo" value={system.tokenInfo.type} />
-              <TokenMasked label="Ubicacion" value={system.tokenInfo.location} />
-              <TokenMasked label="Rotacion" value={system.tokenInfo.rotation} />
+
+              {/* Server credential values */}
+              {tokensLoading && (
+                <div style={{ fontSize: '12px', color: 'var(--text-tertiary)' }}>
+                  Cargando credenciales...
+                </div>
+              )}
+              {tokensError && (
+                <div style={{ fontSize: '12px', color: 'var(--color-danger)', display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '8px' }}>
+                  <AlertCircle size={12} />
+                  {tokensError}
+                </div>
+              )}
+              {!tokensLoading && !tokensError && system.credentialKeys && serverTokens && (
+                <>
+                  {system.credentialKeys.fields.map(field => {
+                    const systemData = serverTokens[system.credentialKeys!.systemKey];
+                    const value = systemData ? systemData[field.key] : null;
+                    return <CredentialField key={field.key} label={field.label} value={value} />;
+                  })}
+                </>
+              )}
+              {!tokensLoading && !tokensError && !serverTokens && (
+                <div style={{ fontSize: '12px', color: 'var(--text-tertiary)', fontStyle: 'italic' }}>
+                  No se pudieron cargar las credenciales
+                </div>
+              )}
+
+              {/* Static token metadata */}
+              <div style={{ marginTop: '12px', paddingTop: '10px', borderTop: '1px solid var(--border-primary)' }}>
+                <TokenInfoField label="Tipo" value={system.tokenInfo.type} />
+                <TokenInfoField label="Ubicacion" value={system.tokenInfo.location} />
+                <TokenInfoField label="Rotacion" value={system.tokenInfo.rotation} />
+              </div>
             </div>
 
             {/* Entorno */}
@@ -701,6 +845,47 @@ function IntegrationCard({ system }: { system: IntegrationSystem }) {
 // =============================================
 
 export function IntegracionesTokensModule() {
+  const [serverTokens, setServerTokens] = useState<Record<string, Record<string, string | null>> | null>(null);
+  const [tokensLoading, setTokensLoading] = useState(true);
+  const [tokensError, setTokensError] = useState<string | null>(null);
+
+  const fetchTokens = async () => {
+    setTokensLoading(true);
+    setTokensError(null);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.access_token) {
+        setTokensError('Sin sesion activa');
+        return;
+      }
+
+      const res = await fetch('/api/admin/tokens', {
+        headers: {
+          'Authorization': `Bearer ${session.access_token}`,
+        },
+      });
+
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ error: 'Error desconocido' }));
+        setTokensError(err.error || `Error ${res.status}`);
+        return;
+      }
+
+      const data: TokensResponse = await res.json();
+      if (data.success) {
+        setServerTokens(data.tokens);
+      }
+    } catch {
+      setTokensError('Error de conexion al servidor');
+    } finally {
+      setTokensLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchTokens();
+  }, []);
+
   const activeCount = INTEGRATIONS.filter(s => s.status === 'active').length;
   const cronCount = INTEGRATIONS.reduce((acc, s) => acc + s.cronJobs.length, 0);
 
@@ -757,15 +942,21 @@ export function IntegracionesTokensModule() {
       }}>
         <Shield size={18} style={{ flexShrink: 0, marginTop: '1px' }} />
         <div>
-          <strong>Pagina informativa</strong> — Los tokens y credenciales NO se muestran aqui por seguridad.
-          Esta pagina documenta como se conecta cada sistema, su metodo de autenticacion, y donde se configuran las credenciales en el servidor.
-          Para modificar tokens, acceder directamente al servidor via SSH.
+          <strong>Solo para administradores</strong> — Las credenciales se muestran enmascaradas. Usa el icono
+          del ojo para revelar cada valor. Para modificar tokens o credenciales, acceder al servidor via SSH
+          y editar env.sh o .env segun corresponda.
         </div>
       </div>
 
       {/* Integration cards */}
       {INTEGRATIONS.map(system => (
-        <IntegrationCard key={system.id} system={system} />
+        <IntegrationCard
+          key={system.id}
+          system={system}
+          serverTokens={serverTokens}
+          tokensLoading={tokensLoading}
+          tokensError={tokensError}
+        />
       ))}
     </div>
   );
