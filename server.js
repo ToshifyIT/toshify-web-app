@@ -332,7 +332,7 @@ app.get('/api/admin/function-health', async (req, res) => {
 
         try {
           const controller = new AbortController()
-          const timeout = setTimeout(() => controller.abort(), 5000)
+          const timeout = setTimeout(() => controller.abort(), 10000)
 
           const fnRes = await fetch(
             `${supabaseUrl}/functions/v1/${fn.function_name}`,
@@ -350,19 +350,14 @@ app.get('/api/admin/function-health', async (req, res) => {
           clearTimeout(timeout)
           responseTime = Date.now() - start
 
-          // Any response (even 400/500) means the function runtime is alive
-          // Only network errors or timeouts mean it's down
-          if (fnRes.status < 500) {
-            status = 'online'
-          } else {
-            status = 'error'
-            errorMsg = `HTTP ${fnRes.status}`
-          }
+          // Any HTTP response (even 400/500) means the function runtime is alive
+          // Only network errors or timeouts mean it's truly down
+          status = 'online'
         } catch (err) {
           responseTime = Date.now() - start
           if (err.name === 'AbortError') {
             status = 'timeout'
-            errorMsg = 'Timeout (>5s)'
+            errorMsg = 'Timeout (>10s)'
           } else {
             status = 'offline'
             errorMsg = err.message || 'Connection failed'

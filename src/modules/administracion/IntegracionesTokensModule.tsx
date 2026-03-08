@@ -1171,12 +1171,144 @@ function EdgeFunctionsMonitor() {
 // Componente Principal
 // =============================================
 
-export function IntegracionesTokensModule() {
-  const [serverTokens, setServerTokens] = useState<Record<string, Record<string, string | null>> | null>(null);
-  const [tokensLoading, setTokensLoading] = useState(true);
-  const [tokensError, setTokensError] = useState<string | null>(null);
+// =============================================
+// Tab: Credenciales (standalone)
+// =============================================
 
-  const fetchTokens = async () => {
+function CredencialesTab({ serverTokens, tokensLoading, tokensError }: {
+  serverTokens: Record<string, Record<string, string | null>> | null;
+  tokensLoading: boolean;
+  tokensError: string | null;
+}) {
+  return (
+    <div>
+      {/* Info banner */}
+      <div style={{
+        background: 'var(--badge-blue-bg)',
+        border: '1px solid var(--color-info)',
+        borderRadius: '8px',
+        padding: '12px 16px',
+        marginBottom: '16px',
+        display: 'flex',
+        alignItems: 'flex-start',
+        gap: '10px',
+        fontSize: '13px',
+        color: 'var(--badge-blue-text)',
+        lineHeight: '1.5',
+      }}>
+        <Shield size={18} style={{ flexShrink: 0, marginTop: '1px' }} />
+        <div>
+          <strong>Solo para administradores</strong> — Las credenciales se muestran enmascaradas. Usa el icono
+          del ojo para revelar cada valor. Para modificar tokens o credenciales, acceder al servidor via SSH
+          y editar env.sh o .env segun corresponda.
+        </div>
+      </div>
+
+      {tokensLoading && (
+        <div style={{
+          padding: '40px',
+          textAlign: 'center',
+          color: 'var(--text-tertiary)',
+          fontSize: '13px',
+        }}>
+          Cargando credenciales...
+        </div>
+      )}
+
+      {tokensError && (
+        <div style={{
+          padding: '16px',
+          background: 'var(--badge-red-bg)',
+          border: '1px solid var(--color-danger)',
+          borderRadius: '8px',
+          color: 'var(--badge-red-text)',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '8px',
+          fontSize: '13px',
+          marginBottom: '16px',
+        }}>
+          <AlertCircle size={16} />
+          {tokensError}
+        </div>
+      )}
+
+      {!tokensLoading && !tokensError && INTEGRATIONS.filter(s => s.credentialKeys).map(system => {
+        const systemData = serverTokens?.[system.credentialKeys!.systemKey];
+        const Icon = system.icon;
+        return (
+          <div key={system.id} style={{
+            background: 'var(--card-bg)',
+            border: '1px solid var(--border-primary)',
+            borderRadius: '10px',
+            marginBottom: '12px',
+            padding: '16px 20px',
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '14px' }}>
+              <div style={{
+                width: '36px',
+                height: '36px',
+                borderRadius: '8px',
+                background: `color-mix(in srgb, ${system.color} 15%, transparent)`,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                flexShrink: 0,
+              }}>
+                <Icon size={18} style={{ color: system.color }} />
+              </div>
+              <div>
+                <div style={{ fontSize: '14px', fontWeight: 700, color: 'var(--text-primary)' }}>
+                  {system.name}
+                </div>
+                <div style={{ fontSize: '11px', color: 'var(--text-tertiary)' }}>
+                  {system.tokenInfo.type} — {system.tokenInfo.location}
+                </div>
+              </div>
+            </div>
+
+            <div style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
+              gap: '8px',
+            }}>
+              {system.credentialKeys!.fields.map(field => {
+                const value = systemData ? systemData[field.key] : null;
+                return <CredentialField key={field.key} label={field.label} value={value} />;
+              })}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+// =============================================
+// Tab types & config
+// =============================================
+
+type TabId = 'integraciones' | 'monitor' | 'credenciales';
+
+const TABS: { id: TabId; label: string; icon: LucideIcon }[] = [
+  { id: 'integraciones', label: 'Integraciones', icon: Globe },
+  { id: 'monitor', label: 'Monitor', icon: Activity },
+  { id: 'credenciales', label: 'Credenciales', icon: Eye },
+];
+
+// =============================================
+// Componente Principal
+// =============================================
+
+export function IntegracionesTokensModule() {
+  const [activeTab, setActiveTab] = useState<TabId>('integraciones');
+  const [serverTokens, setServerTokens] = useState<Record<string, Record<string, string | null>> | null>(null);
+  const [tokensLoading, setTokensLoading] = useState(false);
+  const [tokensError, setTokensError] = useState<string | null>(null);
+  const [tokensLoaded, setTokensLoaded] = useState(false);
+
+  const fetchTokens = useCallback(async () => {
+    if (tokensLoaded) return;
     setTokensLoading(true);
     setTokensError(null);
     try {
@@ -1201,17 +1333,21 @@ export function IntegracionesTokensModule() {
       const data: TokensResponse = await res.json();
       if (data.success) {
         setServerTokens(data.tokens);
+        setTokensLoaded(true);
       }
     } catch {
       setTokensError('Error de conexion al servidor');
     } finally {
       setTokensLoading(false);
     }
-  };
+  }, [tokensLoaded]);
 
+  // Lazy load tokens only when credenciales tab is selected
   useEffect(() => {
-    fetchTokens();
-  }, []);
+    if (activeTab === 'credenciales' && !tokensLoaded) {
+      fetchTokens();
+    }
+  }, [activeTab, tokensLoaded, fetchTokens]);
 
   const activeCount = INTEGRATIONS.filter(s => s.status === 'active').length;
   const cronCount = INTEGRATIONS.reduce((acc, s) => acc + s.cronJobs.length, 0);
@@ -1253,41 +1389,69 @@ export function IntegracionesTokensModule() {
         </div>
       </div>
 
-      {/* Info banner */}
+      {/* Tabs */}
       <div style={{
-        background: 'var(--badge-blue-bg)',
-        border: '1px solid var(--color-info)',
-        borderRadius: '8px',
-        padding: '12px 16px',
-        marginBottom: '16px',
         display: 'flex',
-        alignItems: 'flex-start',
-        gap: '10px',
-        fontSize: '13px',
-        color: 'var(--badge-blue-text)',
-        lineHeight: '1.5',
+        gap: '0',
+        borderBottom: '2px solid var(--border-primary)',
+        marginBottom: '20px',
       }}>
-        <Shield size={18} style={{ flexShrink: 0, marginTop: '1px' }} />
-        <div>
-          <strong>Solo para administradores</strong> — Las credenciales se muestran enmascaradas. Usa el icono
-          del ojo para revelar cada valor. Para modificar tokens o credenciales, acceder al servidor via SSH
-          y editar env.sh o .env segun corresponda.
-        </div>
+        {TABS.map(tab => {
+          const isActive = activeTab === tab.id;
+          const TabIcon = tab.icon;
+          return (
+            <button
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id)}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+                padding: '10px 20px',
+                background: 'transparent',
+                border: 'none',
+                borderBottom: isActive ? '2px solid var(--color-primary)' : '2px solid transparent',
+                marginBottom: '-2px',
+                fontSize: '13px',
+                fontWeight: isActive ? 700 : 500,
+                color: isActive ? 'var(--color-primary)' : 'var(--text-secondary)',
+                cursor: 'pointer',
+                transition: 'all 0.15s ease',
+              }}
+            >
+              <TabIcon size={16} />
+              {tab.label}
+            </button>
+          );
+        })}
       </div>
 
-      {/* Edge Functions Monitor */}
-      <EdgeFunctionsMonitor />
+      {/* Tab content */}
+      {activeTab === 'integraciones' && (
+        <>
+          {INTEGRATIONS.map(system => (
+            <IntegrationCard
+              key={system.id}
+              system={system}
+              serverTokens={serverTokens}
+              tokensLoading={tokensLoading}
+              tokensError={tokensError}
+            />
+          ))}
+        </>
+      )}
 
-      {/* Integration cards */}
-      {INTEGRATIONS.map(system => (
-        <IntegrationCard
-          key={system.id}
-          system={system}
+      {activeTab === 'monitor' && (
+        <EdgeFunctionsMonitor />
+      )}
+
+      {activeTab === 'credenciales' && (
+        <CredencialesTab
           serverTokens={serverTokens}
           tokensLoading={tokensLoading}
           tokensError={tokensError}
         />
-      ))}
+      )}
     </div>
   );
 }
