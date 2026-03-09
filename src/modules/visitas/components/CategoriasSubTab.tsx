@@ -250,6 +250,8 @@ export function CategoriasSubTab() {
                     <select
                       value={form.duracion_default}
                       onChange={(e) => setForm((p) => ({ ...p, duracion_default: Number(e.target.value) }))}
+                      disabled={form.nombre.trim().toLowerCase() !== 'directivo'}
+                      title={form.nombre.trim().toLowerCase() !== 'directivo' ? 'Solo editable para la categoría Directivo' : ''}
                     >
                       <option value={15}>15 min</option>
                       <option value={30}>30 min</option>

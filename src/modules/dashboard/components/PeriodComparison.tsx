@@ -1,11 +1,12 @@
 import { useMemo, useState, useEffect } from 'react'
-import { ArrowDownRight, ArrowUpRight, Minus } from 'lucide-react'
+import { ArrowDownRight, ArrowUpRight, Minus, Info } from 'lucide-react'
 import { format, subDays, subWeeks, subMonths, subYears, getWeek } from 'date-fns'
 import { es } from 'date-fns/locale'
 import { getMockPeriodData } from '../mockData'
 import { useMultasStats } from '../../../hooks/useMultasStats'
 import { useTelepaseStats } from '../../../hooks/useTelepaseStats'
 import { useIncidenciasStats } from '../../../hooks/useIncidenciasStats'
+import { useIncidenciasSplitStats } from '../../../hooks/useIncidenciasSplitStats'
 import { usePermanenciaStats } from '../../../hooks/usePermanenciaStats'
 import { useKilometrajeStats } from '../../../hooks/useKilometrajeStats'
 import { useVehiculosStats } from '../../../hooks/useVehiculosStats'
@@ -22,6 +23,7 @@ interface MetricView {
   valueB: string | React.ReactNode
   variationLabel: string
   variationSign: 'positive' | 'negative' | 'neutral'
+  tooltipContent?: React.ReactNode
 }
 
 export function PeriodComparison() {
@@ -53,6 +55,7 @@ export function PeriodComparison() {
   const multasStats = useMultasStats(granularity, periodA, periodB, sedeActual?.id)
   const telepaseStats = useTelepaseStats(granularity, periodA, periodB, sedeActual?.id)
   const incidenciasStats = useIncidenciasStats(granularity, periodA, periodB, sedeActual?.id)
+  const incidenciasSplit = useIncidenciasSplitStats(granularity, periodA, periodB, sedeActual?.id)
   const permanenciaStats = usePermanenciaStats(granularity, periodA, periodB, sedeActual?.id)
   const kilometrajeStats = useKilometrajeStats(granularity, periodA, periodB, sedeActual?.id)
   const vehiculosStats = useVehiculosStats(granularity, periodA, periodB, sedeActual?.id)
@@ -245,6 +248,65 @@ export function PeriodComparison() {
       incidenciasStats.totalB
     )
 
+    // KPI: Incidencias a Favor (solo tipos con es_a_favor = true, aplicadas)
+    {
+      const variation = calculateVariation(incidenciasSplit.aFavorA, incidenciasSplit.aFavorB)
+      const tiposTexto = incidenciasSplit.tiposAFavor.length > 0
+        ? incidenciasSplit.tiposAFavor
+        : ['Cargando...']
+      metricList.push({
+        id: 'metric-incidencias-a-favor',
+        name: 'INCIDENCIAS A FAVOR',
+        valueA: currencyFormatter.format(incidenciasSplit.aFavorA),
+        valueB: currencyFormatter.format(incidenciasSplit.aFavorB),
+        variationLabel: variation.label,
+        variationSign: variation.sign,
+        tooltipContent: (
+          <div className="kpi-tooltip-content">
+            <strong>Incidencias a Favor</strong>
+            <p>
+              Total de descuentos y bonificaciones ya aplicados a favor de los conductores.
+            </p>
+            <div className="kpi-tooltip-divider" />
+            <div className="kpi-tooltip-section-title">Incluye</div>
+            <ul>
+              {tiposTexto.map((t, i) => (
+                <li key={i}>{t}</li>
+              ))}
+            </ul>
+          </div>
+        ),
+      })
+    }
+
+    // KPI: Incidencias en Contra (todos los tipos con es_a_favor = false, aplicadas)
+    {
+      const variation = calculateVariation(incidenciasSplit.enContraA, incidenciasSplit.enContraB)
+      metricList.push({
+        id: 'metric-incidencias-en-contra',
+        name: 'INCIDENCIAS EN CONTRA',
+        valueA: currencyFormatter.format(incidenciasSplit.enContraA),
+        valueB: currencyFormatter.format(incidenciasSplit.enContraB),
+        variationLabel: variation.label,
+        variationSign: variation.sign,
+        tooltipContent: (
+          <div className="kpi-tooltip-content">
+            <strong>Incidencias en Contra</strong>
+            <p>
+              Total de cargos y penalidades ya aplicados a los conductores.
+            </p>
+            <div className="kpi-tooltip-divider" />
+            <div className="kpi-tooltip-section-title">Incluye</div>
+            <ul>
+              <li>Exceso de kilómetros</li>
+              <li>Multas y penalidades</li>
+              <li>Otros cargos</li>
+            </ul>
+          </div>
+        ),
+      })
+    }
+
     return metricList
   }, [
     currencyFormatter,
@@ -255,6 +317,7 @@ export function PeriodComparison() {
     multasStats,
     telepaseStats,
     incidenciasStats,
+    incidenciasSplit,
     permanenciaStats,
     vehiculosStats,
     kilometrajeStats
@@ -399,6 +462,12 @@ export function PeriodComparison() {
             >
               <span className="period-comparison-name">
                 {metric.name}
+                {metric.tooltipContent && (
+                  <span className="kpi-info-wrapper">
+                    <Info size={14} className="kpi-info-icon" />
+                    <div className="kpi-tooltip">{metric.tooltipContent}</div>
+                  </span>
+                )}
               </span>
               <div className="period-comparison-values">
                 <div className="period-comparison-value">
