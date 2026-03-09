@@ -1,9 +1,10 @@
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useRef } from 'react'
 import { supabase } from '../../../lib/supabase'
 import { useSede } from '../../../contexts/SedeContext'
 import { usePermissions } from '../../../contexts/PermissionsContext'
 import Swal from 'sweetalert2'
 import { showSuccess } from '../../../utils/toast'
+import * as XLSX from 'xlsx'
 import {
   Wallet,
   Users,
@@ -18,7 +19,9 @@ import {
   // Receipt,
   ArrowUpCircle,
   ArrowDownCircle,
-  Banknote
+  Banknote,
+  Download,
+  Upload
 } from 'lucide-react'
 import { type ColumnDef } from '@tanstack/react-table'
 import { DataTable } from '../../../components/ui/DataTable'
@@ -95,6 +98,7 @@ export function SaldosAbonosTab() {
   const [conductorSearch, setConductorSearch] = useState('')
   const [estadoFilter, setEstadoFilter] = useState<string[]>([])
   const [tasaMoraPct, setTasaMoraPct] = useState(1) // default 1% diario desde P009
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     cargarSaldos()
@@ -1084,65 +1088,399 @@ export function SaldosAbonosTab() {
     }
   }
 
+  // ====== EXPORTAR SALDOS A EXCEL ======
+  function exportarSaldos() {
+    if (saldos.length === 0) {
+      Swal.fire('Sin datos', 'No hay saldos para exportar', 'info')
+      return
+    }
+
+    const data = saldos.map((s) => ({
+      'DNI': s.conductor_dni || '',
+      'Conductor': s.conductor_nombre || '',
+      'Estado': s.conductor_estado || '',
+      'Saldo Actual': s.saldo_actual,
+      'Dias Mora': s.dias_mora || 0,
+      'Mora Acumulada': s.monto_mora_acumulada || 0,
+    }))
+
+    const ws = XLSX.utils.json_to_sheet(data)
+
+    // Anchos de columna
+    ws['!cols'] = [
+      { wch: 14 }, // DNI
+      { wch: 35 }, // Conductor
+      { wch: 12 }, // Estado
+      { wch: 16 }, // Saldo Actual
+      { wch: 12 }, // Dias Mora
+      { wch: 16 }, // Mora Acumulada
+    ]
+
+    const wb = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(wb, ws, 'Saldos')
+
+    // Hoja de instrucciones
+    const instrucciones = [
+      ['INSTRUCCIONES PARA IMPORTAR'],
+      [''],
+      ['1. Edite los valores en la hoja "Saldos"'],
+      ['2. Solo modifique las columnas: Saldo Actual, Dias Mora, Mora Acumulada'],
+      ['3. NO modifique la columna DNI (es la clave para identificar al conductor)'],
+      ['4. Guarde el archivo y use el boton Importar para subirlo'],
+      [''],
+      ['CONVENCIONES:'],
+      ['  Saldo Actual negativo = DEUDA (ej: -500000)'],
+      ['  Saldo Actual positivo = A FAVOR (ej: 30000)'],
+      ['  Saldo Actual 0 = Sin saldo'],
+    ]
+    const wsInstr = XLSX.utils.aoa_to_sheet(instrucciones)
+    wsInstr['!cols'] = [{ wch: 70 }]
+    XLSX.utils.book_append_sheet(wb, wsInstr, 'Instrucciones')
+
+    const fecha = new Date().toISOString().slice(0, 10)
+    XLSX.writeFile(wb, `Saldos_Conductores_${fecha}.xlsx`)
+    showSuccess('Exportado correctamente')
+  }
+
+  // ====== IMPORTAR SALDOS DESDE EXCEL ======
+  async function importarSaldos(file: File) {
+    try {
+      const buffer = await file.arrayBuffer()
+      const wb = XLSX.read(buffer, { type: 'array' })
+
+      // Buscar hoja "Saldos" o usar la primera
+      const sheetName = wb.SheetNames.includes('Saldos') ? 'Saldos' : wb.SheetNames[0]
+      const ws = wb.Sheets[sheetName]
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const rows: any[] = XLSX.utils.sheet_to_json(ws, { raw: false })
+
+      if (rows.length === 0) {
+        Swal.fire('Error', 'El archivo no contiene datos', 'error')
+        return
+      }
+
+      // Validar que tenga DNI
+      const firstRow = rows[0]
+      if (firstRow['DNI'] === undefined && firstRow['dni'] === undefined) {
+        Swal.fire('Error', 'El archivo debe tener la columna "DNI"', 'error')
+        return
+      }
+
+      // Crear mapa DNI -> saldo para buscar conductor_id
+      const dniMap = new Map<string, SaldoConductor>()
+      for (const s of saldos) {
+        if (s.conductor_dni) {
+          // Normalizar: quitar puntos, espacios, ceros a la izquierda
+          const dniNorm = String(s.conductor_dni).replace(/[.\s]/g, '').replace(/^0+/, '')
+          dniMap.set(dniNorm, s)
+        }
+      }
+
+      // Parsear filas
+      interface ImportRow {
+        conductor_id: string
+        dni: string
+        nombre: string
+        saldo_actual: number
+        dias_mora: number
+        monto_mora_acumulada: number
+      }
+
+      const parsed: ImportRow[] = []
+      const errores: string[] = []
+
+      for (let i = 0; i < rows.length; i++) {
+        const r = rows[i]
+        const dniRaw = String(r['DNI'] || r['dni'] || '').trim()
+        const dniNorm = dniRaw.replace(/[.\s]/g, '').replace(/^0+/, '')
+
+        if (!dniNorm || dniNorm.length < 5) {
+          errores.push(`Fila ${i + 2}: DNI invalido "${dniRaw}"`)
+          continue
+        }
+
+        const match = dniMap.get(dniNorm)
+        if (!match) {
+          errores.push(`Fila ${i + 2}: DNI ${dniRaw} no encontrado`)
+          continue
+        }
+
+        const saldo = parseFloat(String(r['Saldo Actual'] || '0').replace(/,/g, ''))
+        if (isNaN(saldo)) {
+          errores.push(`Fila ${i + 2}: Saldo Actual no es un numero`)
+          continue
+        }
+
+        parsed.push({
+          conductor_id: match.conductor_id,
+          dni: dniRaw,
+          nombre: String(r['Conductor'] || match.conductor_nombre || ''),
+          saldo_actual: Math.round(saldo * 100) / 100,
+          dias_mora: parseInt(String(r['Dias Mora'] || '0')) || 0,
+          monto_mora_acumulada: Math.round((parseFloat(String(r['Mora Acumulada'] || '0').replace(/,/g, '')) || 0) * 100) / 100,
+        })
+      }
+
+      if (parsed.length === 0) {
+        Swal.fire('Error', `No se pudo procesar ninguna fila.${errores.length > 0 ? '<br><br>' + errores.slice(0, 10).join('<br>') : ''}`, 'error')
+        return
+      }
+
+      // Detectar cambios
+      const cambios = parsed.filter((p) => {
+        const actual = saldos.find((s) => s.conductor_id === p.conductor_id)
+        return !actual ||
+          Math.abs(actual.saldo_actual - p.saldo_actual) > 0.01 ||
+          (actual.dias_mora || 0) !== p.dias_mora ||
+          Math.abs((actual.monto_mora_acumulada || 0) - p.monto_mora_acumulada) > 0.01
+      })
+
+      if (cambios.length === 0) {
+        Swal.fire('Sin cambios', 'Los valores del archivo son iguales a los actuales', 'info')
+        return
+      }
+
+      // Generar HTML del preview
+      const previewRows = cambios.slice(0, 50).map((c) => {
+        const actual = saldos.find((s) => s.conductor_id === c.conductor_id)
+        const saldoAnt = actual?.saldo_actual ?? 0
+        const diff = c.saldo_actual - saldoAnt
+        const diffColor = diff > 0 ? '#16a34a' : diff < 0 ? '#dc2626' : '#6B7280'
+        const diffSign = diff > 0 ? '+' : ''
+        return `<tr>
+          <td style="padding:4px 8px;border-bottom:1px solid #E5E7EB;white-space:nowrap;">${c.nombre}</td>
+          <td style="padding:4px 6px;border-bottom:1px solid #E5E7EB;text-align:center;color:#6B7280;font-size:10px;">${c.dni}</td>
+          <td style="padding:4px 6px;border-bottom:1px solid #E5E7EB;text-align:right;color:#9CA3AF;text-decoration:line-through;font-size:10px;">${formatCurrency(saldoAnt)}</td>
+          <td style="padding:4px 4px;border-bottom:1px solid #E5E7EB;text-align:center;color:#9CA3AF;font-size:10px;">→</td>
+          <td style="padding:4px 6px;border-bottom:1px solid #E5E7EB;text-align:right;color:${c.saldo_actual < 0 ? '#dc2626' : c.saldo_actual > 0 ? '#16a34a' : '#6B7280'};font-weight:600;">${formatCurrency(c.saldo_actual)}</td>
+          <td style="padding:4px 6px;border-bottom:1px solid #E5E7EB;text-align:right;color:${diffColor};font-size:10px;font-weight:500;">${diffSign}${formatCurrency(diff)}</td>
+        </tr>`
+      }).join('')
+
+      const { isConfirmed } = await Swal.fire({
+        title: '<span style="font-size:16px;font-weight:600;">Preview de Importacion</span>',
+        html: `
+          <div style="text-align:left;font-size:13px;">
+            <div style="display:flex;gap:12px;margin-bottom:10px;">
+              <div style="flex:1;background:#F0FDF4;border:1px solid #BBF7D0;border-radius:6px;padding:8px 10px;text-align:center;">
+                <div style="font-size:18px;font-weight:700;color:#16a34a;">${parsed.length}</div>
+                <div style="font-size:10px;color:#6B7280;">Filas leidas</div>
+              </div>
+              <div style="flex:1;background:#FEF3C7;border:1px solid #FDE68A;border-radius:6px;padding:8px 10px;text-align:center;">
+                <div style="font-size:18px;font-weight:700;color:#D97706;">${cambios.length}</div>
+                <div style="font-size:10px;color:#6B7280;">Con cambios</div>
+              </div>
+              ${errores.length > 0 ? `<div style="flex:1;background:#FEF2F2;border:1px solid #FECACA;border-radius:6px;padding:8px 10px;text-align:center;">
+                <div style="font-size:18px;font-weight:700;color:#dc2626;">${errores.length}</div>
+                <div style="font-size:10px;color:#6B7280;">Errores</div>
+              </div>` : `<div style="flex:1;background:#F0FDF4;border:1px solid #BBF7D0;border-radius:6px;padding:8px 10px;text-align:center;">
+                <div style="font-size:18px;font-weight:700;color:#16a34a;">0</div>
+                <div style="font-size:10px;color:#6B7280;">Errores</div>
+              </div>`}
+            </div>
+            ${errores.length > 0 ? `<details style="margin-bottom:8px;font-size:11px;">
+              <summary style="cursor:pointer;color:#dc2626;font-weight:500;">Ver ${errores.length} errores</summary>
+              <div style="max-height:80px;overflow-y:auto;background:#FEF2F2;padding:6px 8px;border-radius:4px;margin-top:4px;color:#991B1B;">
+                ${errores.slice(0, 20).map(e => `<div>${e}</div>`).join('')}
+                ${errores.length > 20 ? `<div>... y ${errores.length - 20} mas</div>` : ''}
+              </div>
+            </details>` : ''}
+            <div style="max-height:300px;overflow-y:auto;border:1px solid #E5E7EB;border-radius:6px;">
+              <table style="width:100%;border-collapse:collapse;font-size:11px;">
+                <thead>
+                  <tr style="background:#F9FAFB;position:sticky;top:0;">
+                    <th style="padding:5px 8px;text-align:left;font-weight:600;">Conductor</th>
+                    <th style="padding:5px 6px;text-align:center;font-weight:600;">DNI</th>
+                    <th style="padding:5px 6px;text-align:right;font-weight:600;font-size:10px;">Antes</th>
+                    <th style="padding:5px 2px;"></th>
+                    <th style="padding:5px 6px;text-align:right;font-weight:600;font-size:10px;">Despues</th>
+                    <th style="padding:5px 6px;text-align:right;font-weight:600;font-size:10px;">Dif.</th>
+                  </tr>
+                </thead>
+                <tbody>${previewRows}
+                ${cambios.length > 50 ? `<tr><td colspan="6" style="padding:6px;text-align:center;color:#9CA3AF;font-size:11px;">... y ${cambios.length - 50} cambios mas</td></tr>` : ''}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        `,
+        showCancelButton: true,
+        confirmButtonText: `Confirmar ${cambios.length} cambios`,
+        cancelButtonText: 'Cancelar',
+        confirmButtonColor: '#ff0033',
+        width: 640,
+        customClass: {
+          popup: 'swal-compact',
+          title: 'swal-title-compact',
+          htmlContainer: 'swal-html-compact'
+        }
+      })
+
+      if (!isConfirmed) return
+
+      // Ejecutar updates — ahora si mostramos loading
+      setLoading(true)
+      const now = new Date().toISOString()
+      let updated = 0
+      let errors = 0
+
+      for (const c of cambios) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { error } = await (supabase.from('saldos_conductores') as any)
+          .update({
+            saldo_actual: c.saldo_actual,
+            dias_mora: c.dias_mora,
+            monto_mora_acumulada: c.monto_mora_acumulada,
+            ultima_actualizacion: now,
+          })
+          .eq('conductor_id', c.conductor_id)
+
+        if (error) {
+          errors++
+        } else {
+          updated++
+        }
+      }
+
+      if (errors > 0) {
+        Swal.fire('Importacion parcial', `${updated} actualizados, ${errors} errores`, 'warning')
+      } else {
+        Swal.fire('Importacion exitosa', `${updated} saldos actualizados`, 'success')
+      }
+
+      await cargarSaldos()
+    } catch {
+      setLoading(false)
+      Swal.fire('Error', 'No se pudo procesar el archivo', 'error')
+    } finally {
+      if (fileInputRef.current) fileInputRef.current.value = ''
+    }
+  }
+
   async function verHistorial(saldo: SaldoConductor) {
     try {
-      const { data: abonos, error } = await supabase
-        .from('abonos_conductores')
-        .select('*')
+      // 1. Obtener TODOS los periodos
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data: periodos, error: errPer } = await (supabase.from('periodos_facturacion') as any)
+        .select('id, semana, anio')
+        .order('anio', { ascending: true })
+        .order('semana', { ascending: true })
+      if (errPer) throw errPer
+
+      const periodoMap: Record<string, { semana: number; anio: number }> = {}
+      for (const p of (periodos || [])) {
+        periodoMap[p.id] = { semana: p.semana, anio: p.anio }
+      }
+
+      // 2. Obtener TODA la facturacion del conductor
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data: facts, error: errFact } = await (supabase.from('facturacion_conductores') as any)
+        .select('periodo_id, total_a_pagar, saldo_anterior, monto_mora, dias_mora')
         .eq('conductor_id', saldo.conductor_id)
-        .order('fecha_abono', { ascending: false })
-        .limit(20)
+      if (errFact) throw errFact
 
-      if (error) throw error
+      // 3. Obtener TODOS los pagos del conductor
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data: pagos, error: errPag } = await (supabase.from('pagos_conductores') as any)
+        .select('semana, anio, monto')
+        .eq('conductor_id', saldo.conductor_id)
+      if (errPag) throw errPag
 
-      const historialHtml = abonos && abonos.length > 0
-        ? (abonos as AbonoRow[]).map((a) => `
-            <tr>
-              <td style="padding: 6px 8px; border-bottom: 1px solid #E5E7EB;">${formatDate(a.fecha_abono)}</td>
-              <td style="padding: 6px 8px; border-bottom: 1px solid #E5E7EB; text-align: center; color: #6B7280; font-size: 11px;">
-                ${a.semana && a.anio ? `S${a.semana}/${a.anio}` : '-'}
-              </td>
-              <td style="padding: 6px 8px; border-bottom: 1px solid #E5E7EB; text-align: right;">
-                <span style="color: ${a.tipo === 'abono' ? '#16a34a' : '#dc2626'}; font-weight: 600;">${a.tipo === 'abono' ? '+' : '-'}${formatCurrency(a.monto)}</span>
-              </td>
-              <td style="padding: 6px 8px; border-bottom: 1px solid #E5E7EB;">${a.concepto}</td>
-              <td style="padding: 6px 8px; border-bottom: 1px solid #E5E7EB; color: #6B7280;">${a.referencia || '-'}</td>
-            </tr>
-          `).join('')
-        : '<tr><td colspan="5" style="padding: 16px; text-align: center; color: #9CA3AF;">Sin movimientos</td></tr>'
+      // Agrupar pagos por (anio, semana)
+      const pagosMap: Record<string, number> = {}
+      for (const p of (pagos || [])) {
+        const k = `${p.anio}-${p.semana}`
+        pagosMap[k] = (pagosMap[k] || 0) + (p.monto || 0)
+      }
+
+      // 4. Construir kardex semana por semana
+      interface KardexRow {
+        semana: number
+        anio: number
+        total: number
+        pagado: number
+        pendiente: number
+        saldoAcum: number
+      }
+      const rows: KardexRow[] = []
+      let saldoAcum = 0
+
+      const factsBySemKey: Record<string, { anio: number; semana: number; total: number }> = {}
+      for (const f of (facts || [])) {
+        const per = periodoMap[f.periodo_id]
+        if (!per) continue
+        const k = `${per.anio}-${per.semana}`
+        factsBySemKey[k] = {
+          anio: per.anio,
+          semana: per.semana,
+          total: f.total_a_pagar || 0,
+        }
+      }
+
+      // Ordenar por anio + semana
+      const keys = Object.keys(factsBySemKey).sort((a, b) => {
+        const fa = factsBySemKey[a]
+        const fb = factsBySemKey[b]
+        return fa.anio !== fb.anio ? fa.anio - fb.anio : fa.semana - fb.semana
+      })
+      for (const k of keys) {
+        const f = factsBySemKey[k]
+        const pagado = pagosMap[k] || 0
+        const pendiente = f.total - pagado
+        saldoAcum += pendiente
+        rows.push({ semana: f.semana, anio: f.anio, total: f.total, pagado, pendiente, saldoAcum })
+      }
+
+      // 5. Generar HTML del kardex
+      const thStyle = 'padding:6px 6px;text-align:right;font-weight:600;font-size:11px;white-space:nowrap;'
+      const tdStyle = 'padding:5px 6px;border-bottom:1px solid #E5E7EB;text-align:right;font-size:11px;'
+
+      const kardexHtml = rows.length > 0
+        ? rows.map((r) => {
+            const pendColor = r.pendiente > 0 ? '#dc2626' : r.pendiente < 0 ? '#16a34a' : '#6B7280'
+            const saldoColor = r.saldoAcum > 0 ? '#dc2626' : r.saldoAcum < 0 ? '#16a34a' : '#6B7280'
+            const semLabel = `S${String(r.semana).padStart(2, '0')}/${String(r.anio).slice(2)}`
+            return `<tr>
+              <td style="${tdStyle} text-align:center;font-weight:600;">${semLabel}</td>
+              <td style="${tdStyle}">${formatCurrency(r.total)}</td>
+              <td style="${tdStyle} color:#16a34a;">${formatCurrency(r.pagado)}</td>
+              <td style="${tdStyle} color:${pendColor};font-weight:600;">${formatCurrency(r.pendiente)}</td>
+              <td style="${tdStyle} color:${saldoColor};font-weight:700;">${formatCurrency(-r.saldoAcum)}</td>
+            </tr>`
+          }).join('')
+        : '<tr><td colspan="5" style="padding:16px;text-align:center;color:#9CA3AF;">Sin facturaci\u00f3n registrada</td></tr>'
 
       const saldoColor = saldo.saldo_actual >= 0 ? '#16a34a' : '#dc2626'
       const saldoLabel = saldo.saldo_actual >= 0 ? 'A Favor' : 'Deuda'
 
       Swal.fire({
-        title: `<span style="font-size: 16px; font-weight: 600;">Historial de Movimientos</span>`,
+        title: '<span style="font-size:16px;font-weight:600;">Kardex - Saldo Semanal</span>',
         html: `
-          <div style="text-align: left; font-size: 13px;">
-            <div style="background: #F3F4F6; padding: 10px 12px; border-radius: 6px; margin-bottom: 12px;">
-              <div style="font-weight: 600; color: #111827;">${saldo.conductor_nombre}</div>
-              <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 6px;">
-                <span style="color: ${saldoColor}; font-size: 14px; font-weight: 700;">${formatCurrency(saldo.saldo_actual)}</span>
-                <span style="background: ${saldo.saldo_actual >= 0 ? '#DCFCE7' : '#FEE2E2'}; color: ${saldoColor}; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 600;">${saldoLabel}</span>
+          <div style="text-align:left;font-size:13px;">
+            <div style="background:#F3F4F6;padding:10px 12px;border-radius:6px;margin-bottom:12px;">
+              <div style="font-weight:600;color:#111827;">${saldo.conductor_nombre}</div>
+              <div style="display:flex;justify-content:space-between;align-items:center;margin-top:6px;">
+                <span style="color:${saldoColor};font-size:14px;font-weight:700;">${formatCurrency(saldo.saldo_actual)}</span>
+                <span style="background:${saldo.saldo_actual >= 0 ? '#DCFCE7' : '#FEE2E2'};color:${saldoColor};padding:2px 8px;border-radius:4px;font-size:11px;font-weight:600;">${saldoLabel}</span>
               </div>
-              ${saldo.saldo_actual < 0 && saldo.ultima_actualizacion ? (() => { const d = Math.floor((Date.now() - new Date(saldo.ultima_actualizacion).getTime()) / 864e5); return d > 0 ? `<div style="color: #ff0033; font-size: 11px; margin-top: 4px;">En mora: ${d} días (${formatCurrency(Math.round(Math.abs(saldo.saldo_actual) * 0.01 * d * 100) / 100)})</div>` : '' })() : ''}
             </div>
-            <div style="max-height: 220px; overflow-y: auto; border: 1px solid #E5E7EB; border-radius: 6px;">
-              <table style="width: 100%; border-collapse: collapse; font-size: 12px;">
+            <div style="max-height:300px;overflow-y:auto;border:1px solid #E5E7EB;border-radius:6px;">
+              <table style="width:100%;border-collapse:collapse;">
                 <thead>
-                  <tr style="background: #F9FAFB;">
-                    <th style="padding: 6px 8px; text-align: left; font-weight: 600;">Fecha</th>
-                    <th style="padding: 6px 8px; text-align: center; font-weight: 600;">Sem.</th>
-                    <th style="padding: 6px 8px; text-align: right; font-weight: 600;">Monto</th>
-                    <th style="padding: 6px 8px; text-align: left; font-weight: 600;">Concepto</th>
-                    <th style="padding: 6px 8px; text-align: left; font-weight: 600;">Ref.</th>
+                  <tr style="background:#F9FAFB;position:sticky;top:0;">
+                    <th style="${thStyle} text-align:center;">Sem.</th>
+                    <th style="${thStyle}">Total</th>
+                    <th style="${thStyle}">Pagado</th>
+                    <th style="${thStyle}">Pendiente</th>
+                    <th style="${thStyle}">Saldo</th>
                   </tr>
                 </thead>
-                <tbody>${historialHtml}</tbody>
+                <tbody>${kardexHtml}</tbody>
               </table>
             </div>
           </div>
         `,
-        width: 420,
+        width: 520,
         confirmButtonText: 'Cerrar',
         confirmButtonColor: '#6B7280',
         customClass: {
@@ -1152,7 +1490,7 @@ export function SaldosAbonosTab() {
         }
       })
     } catch {
-      // silently ignored
+      Swal.fire('Error', 'No se pudo cargar el kardex', 'error')
     }
   }
 
@@ -1624,8 +1962,39 @@ export function SaldosAbonosTab() {
       <LoadingOverlay show={loading} message="Cargando saldos..." size="lg" />
 
       {/* ===== SALDOS ===== */}
+          {/* Input oculto para importar Excel */}
+          <input
+            type="file"
+            ref={fileInputRef}
+            accept=".xlsx,.xls"
+            style={{ display: 'none' }}
+            onChange={(e) => {
+              const file = e.target.files?.[0]
+              if (file) importarSaldos(file)
+            }}
+          />
+
           <div className="fact-header">
-            <div className="fact-header-left"></div>
+            <div className="fact-header-left">
+              {(isAdmin() || isAdministrativo()) && (
+                <div style={{ display: 'flex', gap: '6px' }}>
+                  <button
+                    className="fact-btn fact-btn-secondary"
+                    onClick={exportarSaldos}
+                    title="Exportar saldos a Excel"
+                  >
+                    <Download size={14} /> Exportar
+                  </button>
+                  <button
+                    className="fact-btn fact-btn-primary"
+                    onClick={() => fileInputRef.current?.click()}
+                    title="Importar saldos desde Excel"
+                  >
+                    <Upload size={14} /> Importar
+                  </button>
+                </div>
+              )}
+            </div>
             <div className="fact-header-right">
               <VerLogsButton tablas={['saldos_conductores', 'abonos_conductores', 'cobros_fraccionados']} label="Saldos" />
             </div>
