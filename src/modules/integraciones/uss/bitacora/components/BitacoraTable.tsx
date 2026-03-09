@@ -3,14 +3,15 @@
  * Tabla de bitácora usando DataTable con filtros Excel
  */
 
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useRef, useEffect } from 'react'
 import { type ColumnDef } from '@tanstack/react-table'
 import { DataTable } from '../../../../../components/ui/DataTable/DataTable'
 import { ExcelColumnFilter, useExcelFilters } from '../../../../../components/ui/DataTable/ExcelColumnFilter'
-import { Search, ChevronsLeft, ChevronLeft, ChevronRight, ChevronsRight, ClipboardList } from 'lucide-react'
+import { Search, ChevronsLeft, ChevronLeft, ChevronRight, ChevronsRight, ClipboardList, Download, ChevronDown } from 'lucide-react'
 import type { BitacoraRegistroTransformado } from '../../../../../services/wialonBitacoraService'
 import { BITACORA_CONSTANTS } from '../constants/bitacora.constants'
 import { normalizePatente } from '../../../../../utils/normalizeDocuments'
+import * as XLSX from 'xlsx'
 
 interface BitacoraTableProps {
   registros: BitacoraRegistroTransformado[]
@@ -460,6 +461,94 @@ export function BitacoraTable({
     </div>
   )
 
+  // ====== EXPORTAR ======
+  const [showExportMenu, setShowExportMenu] = useState(false)
+  const exportRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (!showExportMenu) return
+    const handleClick = (e: MouseEvent) => {
+      if (exportRef.current && !exportRef.current.contains(e.target as Node)) {
+        setShowExportMenu(false)
+      }
+    }
+    document.addEventListener('click', handleClick)
+    return () => document.removeEventListener('click', handleClick)
+  }, [showExportMenu])
+
+  function getExportData() {
+    return registrosFiltrados.map((r) => ({
+      'Patente': normalizePatente(r.patente),
+      'iButton': r.ibutton || '',
+      'Conductor': r.conductor_wialon || '',
+      'Tipo': r.tipo_turno || '',
+      'Turno': r.turno_indicador || '',
+      'Inicio': formatDateTime(r.fecha_turno, r.hora_inicio),
+      'Cierre': formatDateTime(r.fecha_turno, r.hora_cierre),
+      'Km': r.kilometraje,
+      'GNC': r.gnc_cargado ? 'Si' : 'No',
+      'Lavado': r.lavado_realizado ? 'Si' : 'No',
+      'Nafta': r.nafta_cargada ? 'Si' : 'No',
+      'Estado': r.estado,
+    }))
+  }
+
+  function exportarExcel() {
+    const data = getExportData()
+    if (data.length === 0) return
+    const ws = XLSX.utils.json_to_sheet(data)
+    ws['!cols'] = [
+      { wch: 10 }, { wch: 8 }, { wch: 35 }, { wch: 8 }, { wch: 10 },
+      { wch: 14 }, { wch: 14 }, { wch: 8 }, { wch: 6 }, { wch: 8 },
+      { wch: 6 }, { wch: 16 },
+    ]
+    const wb = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(wb, ws, 'Bitacora')
+    const fecha = new Date().toISOString().slice(0, 10)
+    XLSX.writeFile(wb, `Bitacora_${fecha}.xlsx`)
+    setShowExportMenu(false)
+  }
+
+  function exportarCSV() {
+    const data = getExportData()
+    if (data.length === 0) return
+    const ws = XLSX.utils.json_to_sheet(data)
+    const csv = XLSX.utils.sheet_to_csv(ws)
+    const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    const fecha = new Date().toISOString().slice(0, 10)
+    a.href = url
+    a.download = `Bitacora_${fecha}.csv`
+    a.click()
+    URL.revokeObjectURL(url)
+    setShowExportMenu(false)
+  }
+
+  function exportarPDF() {
+    const data = getExportData()
+    if (data.length === 0) return
+    // Crear tabla HTML para imprimir como PDF
+    const headers = Object.keys(data[0])
+    const headerRow = headers.map(h => `<th style="padding:4px 6px;border:1px solid #ddd;background:#f5f5f5;font-size:10px;white-space:nowrap;">${h}</th>`).join('')
+    const bodyRows = data.map(row =>
+      '<tr>' + headers.map(h => `<td style="padding:3px 6px;border:1px solid #ddd;font-size:9px;white-space:nowrap;">${(row as Record<string, unknown>)[h] ?? ''}</td>`).join('') + '</tr>'
+    ).join('')
+    const html = `<html><head><title>Bitacora</title></head><body>
+      <h3 style="font-family:sans-serif;margin-bottom:8px;">Bitacora - ${new Date().toLocaleDateString('es-AR')}</h3>
+      <table style="border-collapse:collapse;font-family:sans-serif;">
+        <thead><tr>${headerRow}</tr></thead>
+        <tbody>${bodyRows}</tbody>
+      </table></body></html>`
+    const win = window.open('', '_blank')
+    if (win) {
+      win.document.write(html)
+      win.document.close()
+      win.print()
+    }
+    setShowExportMenu(false)
+  }
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
       {/* Toolbar con búsqueda y controles */}
@@ -475,6 +564,48 @@ export function BitacoraTable({
           />
         </div>
         {headerControls}
+        <div ref={exportRef} style={{ position: 'relative' }}>
+          <button
+            onClick={() => setShowExportMenu(!showExportMenu)}
+            disabled={registrosFiltrados.length === 0}
+            style={{
+              display: 'flex', alignItems: 'center', gap: '4px',
+              padding: '6px 10px', fontSize: '13px', fontWeight: 500,
+              border: '1px solid var(--border-color)', borderRadius: '6px',
+              background: 'var(--bg-primary)', color: 'var(--text-secondary)',
+              cursor: 'pointer', whiteSpace: 'nowrap',
+            }}
+          >
+            <Download size={14} /> Exportar <ChevronDown size={12} />
+          </button>
+          {showExportMenu && (
+            <div style={{
+              position: 'absolute', top: '100%', right: 0, marginTop: '4px',
+              background: 'var(--bg-primary)', border: '1px solid var(--border-color)',
+              borderRadius: '6px', boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+              zIndex: 50, minWidth: '140px', overflow: 'hidden',
+            }}>
+              <button onClick={exportarExcel} style={{ display: 'flex', alignItems: 'center', gap: '8px', width: '100%', padding: '8px 12px', fontSize: '13px', border: 'none', background: 'none', cursor: 'pointer', color: 'var(--text-primary)' }}
+                onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--bg-secondary)')}
+                onMouseLeave={(e) => (e.currentTarget.style.background = 'none')}
+              >
+                Excel (.xlsx)
+              </button>
+              <button onClick={exportarCSV} style={{ display: 'flex', alignItems: 'center', gap: '8px', width: '100%', padding: '8px 12px', fontSize: '13px', border: 'none', background: 'none', cursor: 'pointer', color: 'var(--text-primary)' }}
+                onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--bg-secondary)')}
+                onMouseLeave={(e) => (e.currentTarget.style.background = 'none')}
+              >
+                CSV (.csv)
+              </button>
+              <button onClick={exportarPDF} style={{ display: 'flex', alignItems: 'center', gap: '8px', width: '100%', padding: '8px 12px', fontSize: '13px', border: 'none', background: 'none', cursor: 'pointer', color: 'var(--text-primary)' }}
+                onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--bg-secondary)')}
+                onMouseLeave={(e) => (e.currentTarget.style.background = 'none')}
+              >
+                PDF (imprimir)
+              </button>
+            </div>
+          )}
+        </div>
         <span style={{ color: 'var(--text-secondary)', fontSize: '13px', whiteSpace: 'nowrap' }}>
           {totalCount.toLocaleString()} registros
         </span>
