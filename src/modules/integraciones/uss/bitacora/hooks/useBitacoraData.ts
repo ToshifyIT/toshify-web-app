@@ -183,26 +183,37 @@ export function useBitacoraData() {
         wialonBitacoraService.getStats(dateRange.startDate, dateRange.endDate),
       ])
 
-      // Enriquecer registros: usar valores de DB como primario, fallback a asignaciones
+      // Enriquecer registros: usar valores de DB como primario, cruzar con asignaciones para completar
       const registrosEnriquecidos = bitacoraResult.data.map((r) => {
-        // Si ya tiene tipo_turno/turno_indicador del DB (nuevo sync), usarlos
-        if (r.tipo_turno || r.turno_indicador) {
-          return r
-        }
-
-        // Fallback: cruzar con asignaciones para registros antiguos sin las columnas
         const asignacion = asignaciones.get(r.patente_normalizada)
+
+        // Buscar conductor en la asignación para obtener turno específico
+        let conductorMatch: ConductorTurno | undefined
         if (asignacion) {
           const conductorWialon = r.conductor_wialon?.toLowerCase() || ''
-
-          let conductorMatch = asignacion.conductores.find(c =>
+          conductorMatch = asignacion.conductores.find(c =>
             conductorWialon && conductorWialon.includes(c.conductor_nombre.toLowerCase())
           )
-
           if (!conductorMatch && asignacion.conductores.length > 0) {
             conductorMatch = asignacion.conductores[0]
           }
+        }
 
+        // Si ya tiene tipo_turno del DB, usarlo pero completar turno_indicador si falta
+        if (r.tipo_turno) {
+          // turno_indicador falta cuando DB tiene horario='todo_dia' - cruzar con asignación
+          if (!r.turno_indicador && asignacion && conductorMatch?.turno) {
+            const turno = conductorMatch.turno
+            return {
+              ...r,
+              turno_indicador: turno === 'diurno' ? 'Diurno' : turno === 'nocturno' ? 'Nocturno' : null,
+            }
+          }
+          return r
+        }
+
+        // Sin tipo_turno del DB: cruzar completamente con asignaciones (registros antiguos)
+        if (asignacion) {
           let turnoIndicador: string | null = null
           if (asignacion.modalidad === 'TURNO' && conductorMatch?.turno) {
             if (conductorMatch.turno === 'diurno') turnoIndicador = 'Diurno'
