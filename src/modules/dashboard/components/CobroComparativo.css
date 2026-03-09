@@ -1,0 +1,270 @@
+/* ===== Cobro Comparativo ===== */
+
+.cobro-comparativo-content {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  width: 100%;
+}
+
+/* Controles: granularidad */
+.cobro-comparativo-controls {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.cobro-comparativo-content .dashboard-granularity-buttons-container {
+  display: flex !important;
+  flex-direction: row !important;
+  flex-wrap: nowrap !important;
+  align-items: stretch;
+  gap: 0 !important;
+  width: auto;
+  min-width: 0;
+  flex: 0 1 auto;
+  border-radius: 6px;
+  overflow: hidden;
+  border: 1px solid var(--border-primary, #e2e8f0);
+  height: 34px;
+}
+
+.cobro-comparativo-content .dashboard-granularity-button {
+  flex: 1 1 0px !important;
+  min-width: 0 !important;
+  padding: 0 14px;
+  border: none;
+  background: var(--bg-secondary, #f8fafc);
+  border-radius: 0;
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--text-secondary, #64748b);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  line-height: 1;
+  text-align: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  white-space: nowrap;
+}
+
+.cobro-comparativo-content .dashboard-granularity-button:not(:last-child) {
+  border-right: 1px solid var(--border-primary, #e2e8f0);
+}
+
+.cobro-comparativo-content .dashboard-granularity-button:hover {
+  color: var(--text-primary, #334155);
+  background: var(--border-primary, #e2e8f0);
+}
+
+.cobro-comparativo-content .dashboard-granularity-button--active {
+  background: #ef4444 !important;
+  color: #ffffff !important;
+  font-weight: 600;
+}
+
+.cobro-comparativo-content .dashboard-granularity-button--active:hover {
+  background: #dc2626 !important;
+  color: #ffffff !important;
+}
+
+/* Selectores de período */
+.cobro-comparativo-periods {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.cobro-comparativo-period-group {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex: 1;
+  min-width: 160px;
+}
+
+.cobro-comparativo-period-label {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+}
+
+.cobro-comparativo-period-label--a {
+  color: #2563eb;
+}
+
+.cobro-comparativo-period-label--b {
+  color: #f97316;
+}
+
+.cobro-comparativo-vs {
+  font-size: 13px;
+  font-weight: 700;
+  color: #9ca3af;
+  padding-top: 18px;
+  flex-shrink: 0;
+}
+
+.cobro-comparativo-picker .period-picker__select {
+  height: 34px;
+  padding: 0 10px;
+  border-radius: 6px;
+  border: 1px solid var(--border-primary, #e0e4ea);
+  font-size: 12.5px;
+  background-color: var(--card-bg, #ffffff);
+  color: var(--text-primary, #1f2937);
+}
+
+/* Gráfico */
+.cobro-comparativo-chart-wrapper {
+  display: block;
+  flex: 1 1 auto;
+  height: 280px;
+  width: 100%;
+  min-width: 0;
+  min-height: 200px;
+  position: relative;
+  overflow: hidden;
+}
+
+/* Tooltip */
+.cobro-comparativo-tooltip {
+  background-color: var(--card-bg, #ffffff);
+  border: 1px solid var(--border-primary, #e5e7eb);
+  border-radius: 8px;
+  padding: 12px;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+  min-width: 200px;
+}
+
+.cobro-comparativo-tooltip-label {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary, #374151);
+  display: block;
+}
+
+/* Tarjetas resumen */
+.cobro-comparativo-summary {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.cobro-comparativo-card {
+  background: var(--bg-secondary, #f8fafc);
+  border: 1px solid var(--border-primary, #e5e7eb);
+  border-radius: 10px;
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.cobro-comparativo-card--a {
+  border-left: 3px solid #2563eb;
+}
+
+.cobro-comparativo-card--b {
+  border-left: 3px solid #f97316;
+}
+
+.cobro-comparativo-card-title {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-secondary, #64748b);
+  letter-spacing: 0.3px;
+  text-transform: uppercase;
+}
+
+.cobro-comparativo-card-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.cobro-comparativo-card-period {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.cobro-comparativo-card-label {
+  font-size: 10px;
+  font-weight: 600;
+  color: #9ca3af;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+
+.cobro-comparativo-card-value {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text-primary, #1f2937);
+}
+
+.cobro-comparativo-card-variation {
+  font-size: 12px;
+  font-weight: 600;
+  text-align: center;
+  padding: 3px 8px;
+  border-radius: 6px;
+  width: fit-content;
+}
+
+.cobro-comparativo-card-variation--up {
+  color: #16a34a;
+  background: #dcfce7;
+}
+
+.cobro-comparativo-card-variation--down {
+  color: #ef4444;
+  background: #fef2f2;
+}
+
+.cobro-comparativo-card-variation--neutral {
+  color: #6b7280;
+  background: #f3f4f6;
+}
+
+/* Fila de variaciones */
+.cobro-comparativo-variations {
+  display: flex;
+  gap: 12px;
+  justify-content: center;
+}
+
+/* Desktop */
+@media (min-width: 1200px) {
+  .cobro-comparativo-chart-wrapper {
+    height: 300px;
+  }
+}
+
+/* Mobile */
+@media (max-width: 640px) {
+  .cobro-comparativo-periods {
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .cobro-comparativo-vs {
+    padding-top: 0;
+  }
+
+  .cobro-comparativo-summary {
+    grid-template-columns: 1fr;
+  }
+
+  .cobro-comparativo-chart-wrapper {
+    height: 220px;
+    min-height: 180px;
+  }
+
+  .cobro-comparativo-card-value {
+    font-size: 13px;
+  }
+}

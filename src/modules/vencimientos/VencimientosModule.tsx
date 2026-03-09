@@ -264,34 +264,44 @@ export function VencimientosModule() {
     ).slice(0, 10)
   }, [vehiculos, vehiculoSearch])
 
-  const totalRegistros = useMemo(() => items.length, [items])
+  // Dataset filtrado por sede (base para KPIs y tabla)
+  const sedeFilteredItems = useMemo(() => {
+    if (!sedeActual || !sedeActual.id) return items
+    return items.filter(item => {
+      const sedeNombre = patenteSedeMap.get(normalizePatente(item.patente))
+      return sedeNombre === sedeActual.nombre
+    })
+  }, [items, sedeActual, patenteSedeMap])
+
+  const totalRegistros = useMemo(() => sedeFilteredItems.length, [sedeFilteredItems])
 
   const totalProximosAVencer = useMemo(() => {
-    return items.filter(i => {
+    return sedeFilteredItems.filter(i => {
       const p = calculatePriority(i.fecha_vencimiento, i.documento)
       return p === 'ALTO' || p === 'MEDIO'
     }).length
-  }, [items])
+  }, [sedeFilteredItems])
 
   const totalPrioridadAlta = useMemo(() => {
-    return items.filter(i => calculatePriority(i.fecha_vencimiento, i.documento) === 'ALTO').length
-  }, [items])
+    return sedeFilteredItems.filter(i => calculatePriority(i.fecha_vencimiento, i.documento) === 'ALTO').length
+  }, [sedeFilteredItems])
 
   const totalPrioridadMedia = useMemo(() => {
-    return items.filter(i => calculatePriority(i.fecha_vencimiento, i.documento) === 'MEDIO').length
-  }, [items])
+    return sedeFilteredItems.filter(i => calculatePriority(i.fecha_vencimiento, i.documento) === 'MEDIO').length
+  }, [sedeFilteredItems])
 
   const totalPrioridadBaja = useMemo(() => {
-    return items.filter(i => calculatePriority(i.fecha_vencimiento, i.documento) === 'BAJO').length
-  }, [items])
+    return sedeFilteredItems.filter(i => calculatePriority(i.fecha_vencimiento, i.documento) === 'BAJO').length
+  }, [sedeFilteredItems])
 
   const totalVencidos = useMemo(
-    () => items.filter(i => calculatePriority(i.fecha_vencimiento, i.documento) === 'VENCIDO').length,
-    [items]
+    () => sedeFilteredItems.filter(i => calculatePriority(i.fecha_vencimiento, i.documento) === 'VENCIDO').length,
+    [sedeFilteredItems]
   )
 
   const filteredItems = useMemo(() => {
-    let res = [...items]
+    // Partimos del dataset ya filtrado por sede
+    let res = [...sedeFilteredItems]
 
     // 1. Aplicar filtro por KPI
     if (activeFilter === 'proximos') {
@@ -309,31 +319,7 @@ export function VencimientosModule() {
       res = res.filter(i => calculatePriority(i.fecha_vencimiento, i.documento) === 'BAJO')
     }
 
-    // 2. Aplicar filtro de Sede (si existe)
-    if (sedeActual && sedeActual.id) {
-      res = res.filter(item => {
-        const sedeNombre = patenteSedeMap.get(normalizePatente(item.patente))
-        // Comparamos nombre de sede porque el mapa guarda nombres
-        // Pero sedeActual tiene id y nombre.
-        // Lo ideal sería guardar ID en el mapa si sedeActual usa ID para filtrar.
-        // Pero sedeActual viene del contexto, y loadVehiculos trae nombre.
-        // Vamos a asumir que filtramos por nombre de sede para consistencia visual,
-        // O mejor, guardar el ID en el mapa también si fuera necesario.
-        // Pero el contexto SedeContext suele filtrar por ID en base de datos.
-        // Aquí estamos filtrando en memoria.
-        // Revisemos SedeContext: usa sedeActual.id normalmente.
-        // Pero aquí no tenemos sede_id en vencimientos.
-        // Así que usamos el mapa.
-        // El mapa debería guardar el ID de la sede también si queremos ser precisos.
-        // Pero user pidió cruce con Patente.
-        // Modifiquemos loadVehiculos para guardar sede_id en el mapa también si es necesario?
-        // No, el filtro visual suele ser por lo que ve el usuario.
-        // Pero sedeActual.nombre es lo que tenemos seguro.
-        return sedeNombre === sedeActual.nombre
-      })
-    }
-
-    // 3. Aplicar filtro de búsqueda
+    // 2. Aplicar filtro de búsqueda
     if (!search.trim()) return res
     const searchLower = search.toLowerCase().trim()
     return res.filter(item => {
@@ -344,7 +330,7 @@ export function VencimientosModule() {
       ].join(' ').toLowerCase()
       return text.includes(searchLower)
     })
-  }, [items, search, activeFilter, sedeActual, patenteSedeMap])
+  }, [sedeFilteredItems, search, activeFilter])
 
   function openCreateModal() {
     setModalMode('create')

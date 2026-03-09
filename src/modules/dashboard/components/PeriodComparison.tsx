@@ -10,6 +10,7 @@ import { useIncidenciasSplitStats } from '../../../hooks/useIncidenciasSplitStat
 import { usePermanenciaStats } from '../../../hooks/usePermanenciaStats'
 import { useKilometrajeStats } from '../../../hooks/useKilometrajeStats'
 import { useVehiculosStats } from '../../../hooks/useVehiculosStats'
+import { useBajasConductoresStats } from '../../../hooks/useBajasConductoresStats'
 import { useSede } from '../../../contexts/SedeContext'
 import { PeriodPicker } from './PeriodPicker'
 import './PeriodComparison.css'
@@ -59,6 +60,7 @@ export function PeriodComparison() {
   const permanenciaStats = usePermanenciaStats(granularity, periodA, periodB, sedeActual?.id)
   const kilometrajeStats = useKilometrajeStats(granularity, periodA, periodB, sedeActual?.id)
   const vehiculosStats = useVehiculosStats(granularity, periodA, periodB, sedeActual?.id)
+  const bajasConductoresStats = useBajasConductoresStats(granularity, periodA, periodB, sedeActual?.id)
 
   const formatCurrency = (value: number) => {
     if (isMobile) {
@@ -203,6 +205,13 @@ export function PeriodComparison() {
     )
 
     addCountMetric(
+      'metric-bajas-conductores',
+      'BAJAS CONDUCTORES',
+      bajasConductoresStats.totalA,
+      bajasConductoresStats.totalB
+    )
+
+    addCountMetric(
       'metric-permanencia',
       'PROM. PERMANENCIA',
       Math.round(permanenciaStats.avgDaysA),
@@ -239,13 +248,6 @@ export function PeriodComparison() {
       'TOTAL TELEPASE',
       telepaseStats.totalA,
       telepaseStats.totalB
-    )
-
-    addCurrencyMetric(
-      'metric-total-incidencias',
-      'TOTAL DE INCIDENCIAS',
-      incidenciasStats.totalA,
-      incidenciasStats.totalB
     )
 
     // KPI: Incidencias a Favor (solo tipos con es_a_favor = true, aplicadas)
@@ -320,6 +322,7 @@ export function PeriodComparison() {
     incidenciasSplit,
     permanenciaStats,
     vehiculosStats,
+    bajasConductoresStats,
     kilometrajeStats
   ])
 

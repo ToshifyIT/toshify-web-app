@@ -15,9 +15,11 @@ import { supabase } from '../../../lib/supabase'
 import { useSede } from '../../../contexts/SedeContext'
 import { normalizeDni } from '../../../utils/normalizeDocuments'
 import { PeriodPicker } from './PeriodPicker'
+import { CobroComparativo } from './CobroComparativo'
 import './CobroTeoricoVsReal.css'
 
 type Granularity = 'semana' | 'mes' | 'ano'
+type ActiveTab = 'datos' | 'comparativo'
 
 // Estructura de detalle de día trabajado por conductor
 interface DiaDetalle {
@@ -138,6 +140,7 @@ export function CobroTeoricoVsReal() {
   })
   const [chartData, setChartData] = useState(INITIAL_DATA)
   const [loading, setLoading] = useState(false)
+  const [activeTab, setActiveTab] = useState<ActiveTab>('datos')
   // const [conductoresFiltrados, setConductoresFiltrados] = useState<ConductorFiltrado[]>([])
 
   // Cargar datos cuando cambia el periodo específico
@@ -925,104 +928,140 @@ export function CobroTeoricoVsReal() {
 
   return (
     <div className="cobro-teorico-container">
-      <div className="cobro-teorico-header">
-        <h2 className="cobro-teorico-title">INGRESO ESPERADO VS PERCIBIDO</h2>
-        
-        <div className="cobro-teorico-controls">
-           <div className="dashboard-granularity-buttons-container">
-            <button
-              type="button"
-              className={granularity === 'semana' ? 'dashboard-granularity-button dashboard-granularity-button--active' : 'dashboard-granularity-button'}
-              onClick={() => handleGranularityChange('semana')}
-            >
-              Semana
-            </button>
-            <button
-              type="button"
-              className={granularity === 'mes' ? 'dashboard-granularity-button dashboard-granularity-button--active' : 'dashboard-granularity-button'}
-              onClick={() => handleGranularityChange('mes')}
-            >
-              Mes
-            </button>
-            <button
-              type="button"
-              className={granularity === 'ano' ? 'dashboard-granularity-button dashboard-granularity-button--active' : 'dashboard-granularity-button'}
-              onClick={() => handleGranularityChange('ano')}
-            >
-              Año
-            </button>
-          </div>
-
-          <PeriodPicker 
-              granularity={granularity}
-              value={selectedPeriod}
-              onChange={setSelectedPeriod}
-              className="cobro-teorico-picker"
-              align="right"
-            />
-        </div>
+      {/* Tabs de navegación */}
+      <div className="cobro-teorico-tabs">
+        <button
+          type="button"
+          className={`cobro-teorico-tab ${activeTab === 'datos' ? 'cobro-teorico-tab--active' : ''}`}
+          onClick={() => setActiveTab('datos')}
+        >
+          Gráfico de Datos
+        </button>
+        <button
+          type="button"
+          className={`cobro-teorico-tab ${activeTab === 'comparativo' ? 'cobro-teorico-tab--active' : ''}`}
+          onClick={() => setActiveTab('comparativo')}
+        >
+          Gráfico Comparativo
+        </button>
       </div>
 
-      <div className="cobro-teorico-chart-wrapper">
-        {loading ? (
-          <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%' }}>
-            Cargando...
+      {activeTab === 'datos' ? (
+        <>
+          <div className="cobro-teorico-header">
+            <h2 className="cobro-teorico-title">INGRESO ESPERADO VS PERCIBIDO</h2>
+
+            <div className="cobro-teorico-controls">
+              <div className="dashboard-granularity-buttons-container">
+                <button
+                  type="button"
+                  className={granularity === 'semana' ? 'dashboard-granularity-button dashboard-granularity-button--active' : 'dashboard-granularity-button'}
+                  onClick={() => handleGranularityChange('semana')}
+                >
+                  Semana
+                </button>
+                <button
+                  type="button"
+                  className={granularity === 'mes' ? 'dashboard-granularity-button dashboard-granularity-button--active' : 'dashboard-granularity-button'}
+                  onClick={() => handleGranularityChange('mes')}
+                >
+                  Mes
+                </button>
+                <button
+                  type="button"
+                  className={granularity === 'ano' ? 'dashboard-granularity-button dashboard-granularity-button--active' : 'dashboard-granularity-button'}
+                  onClick={() => handleGranularityChange('ano')}
+                >
+                  Año
+                </button>
+              </div>
+
+              <PeriodPicker
+                  granularity={granularity}
+                  value={selectedPeriod}
+                  onChange={setSelectedPeriod}
+                  className="cobro-teorico-picker"
+                  align="right"
+                />
+            </div>
           </div>
-        ) : (
-          <ResponsiveContainer width="99%" height="100%">
-            <LineChart
-              data={chartData}
-              margin={{ top: 20, right: 30, left: 20, bottom: 10 }}
-            >
-              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--border-primary, #e5e7eb)" />
-              <XAxis 
-                dataKey="dia" 
-                axisLine={false} 
-                tickLine={false} 
-                tick={{ fill: 'var(--text-tertiary, #6b7280)', fontSize: 12 }}
-                dy={10}
-              />
-              <YAxis 
-                axisLine={false} 
-                tickLine={false} 
-                tick={{ fill: 'var(--text-tertiary, #6b7280)', fontSize: 12 }}
-                tickFormatter={formatCurrencyK}
-                domain={['auto', 'auto']}
-                width={40}
-              />
-              <Tooltip content={<CustomTooltip />} cursor={{ stroke: 'var(--text-tertiary, #9ca3af)', strokeWidth: 1, strokeDasharray: '4 4' }} />
-              <Legend 
-                verticalAlign="top" 
-                height={36}
-                iconType="plainline"
-                wrapperStyle={{ top: 0, right: 0, left: 0 }}
-              />
-              <Line
-                type="linear"
-                dataKey="teorico"
-                name="INGRESO ESPERADO"
-                stroke="#16a34a"
-                strokeWidth={3}
-                dot={false}
-                activeDot={{ r: 6 }}
-                isAnimationActive={false}
-              />
-              <Line
-                type="monotone"
-                dataKey="real"
-                name="INGRESO PERCIBIDO"
-                stroke="#2563eb"
-                strokeWidth={2.5}
-                dot={{ r: 4, fill: 'var(--card-bg, #ffffff)', stroke: '#2563eb', strokeWidth: 2 }}
-                activeDot={{ r: 6, fill: '#2563eb', stroke: 'var(--card-bg, #ffffff)', strokeWidth: 2 }}
-                isAnimationActive={false}
-              />
-            </LineChart>
-          </ResponsiveContainer>
-        )}
-      </div>
 
-
+          <div className="cobro-teorico-chart-wrapper">
+            {loading ? (
+              <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%' }}>
+                Cargando...
+              </div>
+            ) : (
+              <ResponsiveContainer width="99%" height="100%">
+                <LineChart
+                  data={chartData}
+                  margin={{ top: 20, right: 30, left: 20, bottom: 10 }}
+                >
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--border-primary, #e5e7eb)" />
+                  <XAxis
+                    dataKey="dia"
+                    axisLine={false}
+                    tickLine={false}
+                    tick={{ fill: 'var(--text-tertiary, #6b7280)', fontSize: 12 }}
+                    dy={10}
+                  />
+                  <YAxis
+                    axisLine={false}
+                    tickLine={false}
+                    tick={{ fill: 'var(--text-tertiary, #6b7280)', fontSize: 12 }}
+                    tickFormatter={formatCurrencyK}
+                    domain={['auto', 'auto']}
+                    width={40}
+                  />
+                  <Tooltip content={<CustomTooltip />} cursor={{ stroke: 'var(--text-tertiary, #9ca3af)', strokeWidth: 1, strokeDasharray: '4 4' }} />
+                  <Legend
+                    verticalAlign="top"
+                    height={36}
+                    iconType="plainline"
+                    wrapperStyle={{ top: 0, right: 0, left: 0, fontSize: '0.92rem' }}
+                    formatter={(value: string) => {
+                      const match = value.match(/^(.+?)\s*\((.+)\)$/)
+                      if (match) {
+                        return (
+                          <span style={{ color: '#374151', fontWeight: 600 }}>
+                            {match[1]} <span style={{ fontSize: '0.78em', opacity: 0.6 }}>({match[2]})</span>
+                          </span>
+                        )
+                      }
+                      return <span style={{ color: '#374151', fontWeight: 600 }}>{value}</span>
+                    }}
+                  />
+                  <Line
+                    type="linear"
+                    dataKey="teorico"
+                    name={`Ingreso Esperado (${selectedPeriod.replace(/\s+\d{4}$/, '')})`}
+                    stroke="#16a34a"
+                    strokeWidth={3}
+                    dot={false}
+                    activeDot={{ r: 6 }}
+                    isAnimationActive={false}
+                  />
+                  <Line
+                    type="monotone"
+                    dataKey="real"
+                    name={`Ingreso Percibido (${selectedPeriod.replace(/\s+\d{4}$/, '')})`}
+                    stroke="#2563eb"
+                    strokeWidth={2.5}
+                    dot={{ r: 4, fill: 'var(--card-bg, #ffffff)', stroke: '#2563eb', strokeWidth: 2 }}
+                    activeDot={{ r: 6, fill: '#2563eb', stroke: 'var(--card-bg, #ffffff)', strokeWidth: 2 }}
+                    isAnimationActive={false}
+                  />
+                </LineChart>
+              </ResponsiveContainer>
+            )}
+          </div>
+        </>
+      ) : (
+        <CobroComparativo
+          granularity={granularity}
+          onGranularityChange={handleGranularityChange}
+        />
+      )}
     </div>
   )
 }

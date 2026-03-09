@@ -162,7 +162,7 @@ export default function MultasModule() {
     setLoading(true)
     try {
       const [multasRes, vehiculosRes] = await Promise.all([
-        aplicarFiltroSede(supabase.from('multas_historico').select('*')).order('fecha_infraccion', { ascending: false }).limit(5000),
+        aplicarFiltroSede(supabase.from('multas_historico').select('*')).order('created_at', { ascending: false }).limit(5000),
         aplicarFiltroSede(supabase.from('vehiculos').select('id, patente').is('deleted_at', null))
       ])
 
@@ -285,10 +285,10 @@ export default function MultasModule() {
   // Filtrar registros (Resultado final)
   const multasFiltradas = useMemo(() => {
     const data = getFilteredData()
-    // Ordenar por fecha_infraccion descendente (más actual a más antiguo)
+    // Ordenar por fecha de carga (created_at) descendente (más actual a más antiguo)
     return data.sort((a, b) => {
-      const fechaA = a.fecha_infraccion || ''
-      const fechaB = b.fecha_infraccion || ''
+      const fechaA = a.created_at || ''
+      const fechaB = b.created_at || ''
       if (fechaA === fechaB) return 0
       if (!fechaA) return 1 // Nulos al final
       if (!fechaB) return -1
