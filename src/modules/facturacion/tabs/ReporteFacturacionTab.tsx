@@ -931,20 +931,20 @@ export function ReporteFacturacionTab() {
         }
       })
 
-      // Agrupar peajes por DNI (semana anterior)
+      // Agrupar peajes por DNI (semana anterior) - incluir todos los días del rango
       const peajesPorDni = new Map<string, number>()
       const peajesDetalleMap = new Map<string, Array<{ fecha: string; monto: number }>>()
       ;(cabifyPeajes || []).forEach((c: any) => {
-        if (c.dni && c.peajes) {
-          const dniNorm = normalizeDni(c.dni)
-          const monto = parseFloat(String(c.peajes)) || 0
+        if (!c.dni) return
+        const dniNorm = normalizeDni(c.dni)
+        const monto = parseFloat(String(c.peajes)) || 0
+        if (monto > 0) {
           peajesPorDni.set(dniNorm, (peajesPorDni.get(dniNorm) || 0) + monto)
-          
-          // Guardar detalle por fecha para popup
-          const fecha = c.fecha_inicio ? c.fecha_inicio.split('T')[0] : 's/f'
-          if (!peajesDetalleMap.has(dniNorm)) peajesDetalleMap.set(dniNorm, [])
-          peajesDetalleMap.get(dniNorm)!.push({ fecha, monto })
         }
+        // Guardar detalle por fecha para popup (todos los días, incluyendo $0)
+        const fecha = c.fecha_inicio ? c.fecha_inicio.split('T')[0] : 's/f'
+        if (!peajesDetalleMap.has(dniNorm)) peajesDetalleMap.set(dniNorm, [])
+        peajesDetalleMap.get(dniNorm)!.push({ fecha, monto })
       })
 
       // Agregar cobro_app de Cabify a cada facturación (para barras de cobertura)
@@ -1540,23 +1540,22 @@ export function ReporteFacturacionTab() {
       const peajesMap = new Map<string, number>()
       const peajesDetalleMap = new Map<string, Array<{ fecha: string; monto: number }>>()
       ;(cabifyPeajesData || []).forEach((record: any) => {
-        if (record.dni && record.peajes) {
-          let dniKey = String(record.dni)
-          if (dniKey.startsWith('CABIFY_')) {
-            const resolved = cabifyHashMap.get(dniKey)
-            if (resolved) dniKey = resolved
-            else return // Hash desconocido, skip
-          }
-          const dniNorm = normalizeDni(dniKey)
-          const actualPeajes = peajesMap.get(dniNorm) || 0
-          const peajes = parseFloat(String(record.peajes)) || 0
-          peajesMap.set(dniNorm, actualPeajes + peajes)
-          
-          // Guardar detalle por fecha para popup
-          const fecha = record.fecha_inicio ? record.fecha_inicio.split('T')[0] : 's/f'
-          if (!peajesDetalleMap.has(dniNorm)) peajesDetalleMap.set(dniNorm, [])
-          peajesDetalleMap.get(dniNorm)!.push({ fecha, monto: peajes })
+        if (!record.dni) return
+        let dniKey = String(record.dni)
+        if (dniKey.startsWith('CABIFY_')) {
+          const resolved = cabifyHashMap.get(dniKey)
+          if (resolved) dniKey = resolved
+          else return // Hash desconocido, skip
         }
+        const dniNorm = normalizeDni(dniKey)
+        const peajes = parseFloat(String(record.peajes)) || 0
+        if (peajes > 0) {
+          peajesMap.set(dniNorm, (peajesMap.get(dniNorm) || 0) + peajes)
+        }
+        // Guardar detalle por fecha para popup (todos los días, incluyendo $0)
+        const fecha = record.fecha_inicio ? record.fecha_inicio.split('T')[0] : 's/f'
+        if (!peajesDetalleMap.has(dniNorm)) peajesDetalleMap.set(dniNorm, [])
+        peajesDetalleMap.get(dniNorm)!.push({ fecha, monto: peajes })
       })
 
       const ticketsMap = new Map<string, number>()
@@ -2508,19 +2507,26 @@ export function ReporteFacturacionTab() {
         (dniMapeoResRecalc.data || []).map((m: any) => [m.cabify_hash, m.dni_real])
       )
 
-      // Mapear peajes por DNI (normalizado)
+      // Mapear peajes por DNI (normalizado) - incluir todos los días del rango
       const peajesMap = new Map<string, number>()
+      const peajesDetalleMapRecalc = new Map<string, Array<{ fecha: string; monto: number }>>()
       ;((cabifyRes.data || []) as any[]).forEach((r: any) => {
-        if (r.dni && r.peajes) {
-          let dniKey = String(r.dni)
-          if (dniKey.startsWith('CABIFY_')) {
-            const resolved = cabifyHashMapRecalc.get(dniKey)
-            if (resolved) dniKey = resolved
-            else return // Hash desconocido, skip
-          }
-          const dniNorm = normalizeDni(dniKey)
-          peajesMap.set(dniNorm, (peajesMap.get(dniNorm) || 0) + (parseFloat(String(r.peajes)) || 0))
+        if (!r.dni) return
+        let dniKey = String(r.dni)
+        if (dniKey.startsWith('CABIFY_')) {
+          const resolved = cabifyHashMapRecalc.get(dniKey)
+          if (resolved) dniKey = resolved
+          else return // Hash desconocido, skip
         }
+        const dniNorm = normalizeDni(dniKey)
+        const peajes = parseFloat(String(r.peajes)) || 0
+        if (peajes > 0) {
+          peajesMap.set(dniNorm, (peajesMap.get(dniNorm) || 0) + peajes)
+        }
+        // Guardar detalle por fecha para popup (todos los días, incluyendo $0)
+        const fecha = r.fecha_inicio ? r.fecha_inicio.split('T')[0] : 's/f'
+        if (!peajesDetalleMapRecalc.has(dniNorm)) peajesDetalleMapRecalc.set(dniNorm, [])
+        peajesDetalleMapRecalc.get(dniNorm)!.push({ fecha, monto: peajes })
       })
 
       // Mapear multas por patente

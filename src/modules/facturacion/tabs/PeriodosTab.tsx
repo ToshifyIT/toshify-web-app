@@ -507,13 +507,14 @@ export function PeriodosTab() {
         (todasCuotasPenIdsRes.data || []).map((pc: any) => pc.penalidad_id).filter(Boolean)
       )
 
-      // Mapear peajes por DNI normalizado
+      // Mapear peajes por DNI normalizado - incluir todos los días del rango
       const peajesMap = new Map<string, number>()
       ;((cabifyRes.data || []) as any[]).forEach((record: any) => {
-        if (record.dni && record.peajes) {
-          const dniKey = normalizeDni(record.dni)
-          const actual = peajesMap.get(dniKey) || 0
-          peajesMap.set(dniKey, actual + (parseFloat(String(record.peajes)) || 0))
+        if (!record.dni) return
+        const dniKey = normalizeDni(record.dni)
+        const peajes = parseFloat(String(record.peajes)) || 0
+        if (peajes > 0) {
+          peajesMap.set(dniKey, (peajesMap.get(dniKey) || 0) + peajes)
         }
       })
 
