@@ -8,7 +8,7 @@ const swaggerSpec = {
   info: {
     title: 'Toshify API Externa',
     version: '1.0.0',
-    description: `API de **solo lectura** para acceder a los datos de Leads y Hireflix Historico.
+    description: `API para acceder y gestionar los datos de Leads y Hireflix Historico.
 
 ## Autenticacion
 1. Hacer POST a \`/auth/login\` con email y password del usuario con rol **Api**
@@ -17,7 +17,7 @@ const swaggerSpec = {
 4. Todos los endpoints de datos requieren el token
 
 ## Roles permitidos
-- **Api** - Acceso de solo lectura a leads y hireflix_historico
+- **Api** - Lectura de leads y hireflix_historico + actualizacion de leads
 - **admin** - Acceso completo
 
 ## Rate Limits
@@ -35,7 +35,7 @@ const swaggerSpec = {
   ],
   tags: [
     { name: 'Auth', description: 'Autenticacion - Login con email/password y refresh de token' },
-    { name: 'Leads', description: 'Lectura de la tabla de leads (solo lectura)' },
+    { name: 'Leads', description: 'Lectura y actualizacion de leads' },
     { name: 'Hireflix Historico', description: 'Lectura de la tabla de hireflix historico (solo lectura)' },
   ],
   components: {
@@ -167,6 +167,57 @@ const swaggerSpec = {
           'Marca y modelo de vehículo': { type: 'string', nullable: true },
           created_at: { type: 'string', format: 'date-time' },
           updated_at: { type: 'string', format: 'date-time' },
+        },
+      },
+      LeadUpdate: {
+        type: 'object',
+        description: 'Campos actualizables de un lead. Enviar solo los campos que se quieren modificar.',
+        properties: {
+          'Estado de Lead': { type: 'string', example: 'Contactado' },
+          'Agente asignado': { type: 'string', nullable: true },
+          'Entrevistador asignado': { type: 'string', nullable: true },
+          'Especialista Onboarding': { type: 'string', nullable: true },
+          'Administrativo Asignado': { type: 'string', nullable: true },
+          'Dataentry Asignado': { type: 'string', nullable: true },
+          'Agente logistico asignado': { type: 'string', nullable: true },
+          'Guia asignado': { type: 'string', nullable: true },
+          'Asistente Virtual': { type: 'string', nullable: true },
+          'Nombre Completo': { type: 'string', example: 'Juan Perez' },
+          'Apellido': { type: 'string', example: 'Perez' },
+          'Primer nombre': { type: 'string', example: 'Juan' },
+          'Email': { type: 'string', format: 'email' },
+          'Phone': { type: 'string', example: '+5491112345678' },
+          'WhatsApp number': { type: 'string', nullable: true },
+          'DNI': { type: 'string', example: '12345678' },
+          'Edad': { type: 'integer', nullable: true, example: 28 },
+          'Direccion': { type: 'string', nullable: true },
+          'City': { type: 'string', nullable: true },
+          'Region': { type: 'string', nullable: true },
+          'Country': { type: 'string', nullable: true },
+          'Zona': { type: 'string', nullable: true },
+          'Sede': { type: 'string', example: 'Buenos Aires' },
+          'Turno': { type: 'string', nullable: true },
+          'Patente': { type: 'string', nullable: true },
+          'Compañero': { type: 'string', nullable: true },
+          'Tipo': { type: 'string', nullable: true },
+          'Licencia': { type: 'string', nullable: true },
+          'Monotributo': { type: 'string', nullable: true },
+          'Experiencia previa': { type: 'string', nullable: true },
+          'Acepta oferta': { type: 'boolean', nullable: true },
+          'Antecedentes penales': { type: 'string', nullable: true },
+          'Tiempo de antiguedad': { type: 'string', nullable: true },
+          'Fase de Preguntas': { type: 'string', nullable: true },
+          'Documentos pendientes': { type: 'string', nullable: true },
+          'Causal de cierre': { type: 'string', nullable: true },
+          'Contacto de emergencia': { type: 'string', nullable: true },
+          'Link facturacion': { type: 'string', nullable: true },
+          'Ayuda Entrevista': { type: 'string', nullable: true },
+          'Código Referido': { type: 'string', nullable: true },
+          'Año de auto': { type: 'string', nullable: true },
+          'Km de auto': { type: 'string', nullable: true },
+          'Marca y modelo de vehículo': { type: 'string', nullable: true },
+          'Fuente de lead': { type: 'string', nullable: true },
+          'Cerrado timeout wpp': { type: 'boolean', nullable: true },
         },
       },
       HireflixHistorico: {
@@ -336,6 +387,76 @@ const swaggerSpec = {
                 },
               },
             },
+          },
+          401: { description: 'No autorizado', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+          403: { description: 'Rol no permitido', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+          404: { description: 'Lead no encontrado', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+        },
+      },
+      patch: {
+        tags: ['Leads'],
+        summary: 'Actualizar un lead',
+        description: `Actualiza campos de un lead existente. Solo se pueden modificar campos permitidos.
+Enviar un JSON con los campos a actualizar. Los campos no permitidos seran rechazados pero no impiden la actualizacion de los demas.
+
+**Campos actualizables:** Estado de Lead, Agente asignado, Entrevistador asignado, Especialista Onboarding, Administrativo Asignado, Dataentry Asignado, Agente logistico asignado, Guia asignado, Asistente Virtual, Nombre Completo, Apellido, Primer nombre, Email, Phone, WhatsApp number, DNI, Edad, Direccion, City, Region, Country, Zona, Sede, Turno, Patente, Compañero, Tipo, Licencia, Monotributo, Experiencia previa, Acepta oferta, Antecedentes penales, Tiempo de antiguedad, Fase de Preguntas, Documentos pendientes, Causal de cierre, Contacto de emergencia, Link facturacion, Ayuda Entrevista, Código Referido, Año de auto, Km de auto, Marca y modelo de vehículo, Fuente de lead, Cerrado timeout wpp.`,
+        security: [{ BearerAuth: [] }],
+        parameters: [
+          { name: 'id', in: 'path', required: true, schema: { type: 'string', format: 'uuid' }, description: 'ID del lead (UUID)' },
+        ],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: { $ref: '#/components/schemas/LeadUpdate' },
+              examples: {
+                cambiarEstado: {
+                  summary: 'Cambiar estado del lead',
+                  value: { 'Estado de Lead': 'Contactado' },
+                },
+                completarDatos: {
+                  summary: 'Completar datos del lead',
+                  value: {
+                    'Nombre Completo': 'Juan Perez',
+                    'DNI': '12345678',
+                    'Phone': '+5491112345678',
+                    'Sede': 'Buenos Aires',
+                    'Estado de Lead': 'En proceso',
+                  },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          200: {
+            description: 'Lead actualizado exitosamente',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    success: { type: 'boolean', example: true },
+                    data: { $ref: '#/components/schemas/Lead' },
+                    updatedFields: {
+                      type: 'array',
+                      items: { type: 'string' },
+                      description: 'Campos que fueron actualizados',
+                      example: ['Estado de Lead', 'Sede'],
+                    },
+                    rejectedFields: {
+                      type: 'array',
+                      items: { type: 'string' },
+                      description: 'Campos enviados que no son actualizables (solo aparece si hubo rechazados)',
+                    },
+                  },
+                },
+              },
+            },
+          },
+          400: {
+            description: 'Body vacio o ningun campo valido',
+            content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } },
           },
           401: { description: 'No autorizado', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
           403: { description: 'Rol no permitido', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },

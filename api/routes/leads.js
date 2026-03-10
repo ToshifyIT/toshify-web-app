@@ -1,7 +1,8 @@
 /**
- * Rutas de lectura para la tabla leads
+ * Rutas para la tabla leads
  * GET /api/v1/leads - Listar leads con paginacion y filtros
  * GET /api/v1/leads/:id - Obtener un lead por ID
+ * PATCH /api/v1/leads/:id - Actualizar un lead (estado, datos, asignaciones)
  */
 
 import { Router } from 'express';
@@ -129,6 +130,158 @@ router.get('/:id', async (req, res) => {
     res.json({ success: true, data: data[0] });
   } catch (error) {
     console.error('Error en GET /leads/:id:', error);
+    res.status(500).json({ error: 'Error interno del servidor' });
+  }
+});
+
+/**
+ * Campos permitidos para actualizar via API.
+ * Se usa un Set para validar que el chatbot solo pueda modificar estos campos.
+ */
+const UPDATABLE_FIELDS = new Set([
+  'Estado de Lead',
+  'Agente asignado',
+  'Entrevistador asignado',
+  'Especialista Onboarding',
+  'Administrativo Asignado',
+  'Dataentry Asignado',
+  'Agente logistico asignado',
+  'Guia asignado',
+  'Asistente Virtual',
+  'Nombre Completo',
+  'Apellido',
+  'Primer nombre',
+  'Email',
+  'Phone',
+  'WhatsApp number',
+  'DNI',
+  'Edad',
+  'Direccion',
+  'City',
+  'Region',
+  'Country',
+  'Zona',
+  'Sede',
+  'Turno',
+  'Patente',
+  'Compañero',
+  'Tipo',
+  'Licencia',
+  'Monotributo',
+  'Experiencia previa',
+  'Acepta oferta',
+  'Antecedentes penales',
+  'Tiempo de antiguedad',
+  'Fase de Preguntas',
+  'Documentos pendientes',
+  'Causal de cierre',
+  'Contacto de emergencia',
+  'Link facturacion',
+  'Ayuda Entrevista',
+  'Código Referido',
+  'Año de auto',
+  'Km de auto',
+  'Marca y modelo de vehículo',
+  'Fuente de lead',
+  'Cerrado timeout wpp',
+]);
+
+/**
+ * PATCH /api/v1/leads/:id
+ * Actualizar campos de un lead.
+ * Body: objeto con los campos a actualizar (solo campos permitidos).
+ * Ejemplo: { "Estado de Lead": "Contactado", "Sede": "Córdoba" }
+ */
+router.patch('/:id', async (req, res) => {
+  try {
+    const supabaseUrl = process.env.VITE_SUPABASE_URL;
+    const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+    const body = req.body;
+
+    if (!body || typeof body !== 'object' || Object.keys(body).length === 0) {
+      return res.status(400).json({
+        error: 'Body vacio',
+        message: 'Envia un JSON con los campos a actualizar. Ejemplo: { "Estado de Lead": "Contactado" }',
+      });
+    }
+
+    // Filtrar solo campos permitidos
+    const updates = {};
+    const rejected = [];
+
+    for (const [key, value] of Object.entries(body)) {
+      if (UPDATABLE_FIELDS.has(key)) {
+        updates[key] = value;
+      } else {
+        rejected.push(key);
+      }
+    }
+
+    if (Object.keys(updates).length === 0) {
+      return res.status(400).json({
+        error: 'Ningun campo valido',
+        message: 'Los campos enviados no son actualizables.',
+        rejectedFields: rejected,
+        allowedFields: [...UPDATABLE_FIELDS].sort(),
+      });
+    }
+
+    // Verificar que el lead existe
+    const checkRes = await fetch(
+      `${supabaseUrl}/rest/v1/leads?id=eq.${req.params.id}&select=id`,
+      {
+        headers: {
+          'apikey': serviceKey,
+          'Authorization': `Bearer ${serviceKey}`,
+        },
+      }
+    );
+
+    if (!checkRes.ok) {
+      return res.status(500).json({ error: 'Error verificando lead' });
+    }
+
+    const existing = await checkRes.json();
+    if (!existing.length) {
+      return res.status(404).json({ error: 'Lead no encontrado' });
+    }
+
+    // Hacer el update via Supabase REST API
+    const updateRes = await fetch(
+      `${supabaseUrl}/rest/v1/leads?id=eq.${req.params.id}`,
+      {
+        method: 'PATCH',
+        headers: {
+          'apikey': serviceKey,
+          'Authorization': `Bearer ${serviceKey}`,
+          'Content-Type': 'application/json',
+          'Prefer': 'return=representation',
+        },
+        body: JSON.stringify(updates),
+      }
+    );
+
+    if (!updateRes.ok) {
+      const errBody = await updateRes.text();
+      console.error('Supabase update error:', errBody);
+      return res.status(500).json({ error: 'Error actualizando lead' });
+    }
+
+    const updatedData = await updateRes.json();
+
+    const result = {
+      success: true,
+      data: updatedData[0],
+      updatedFields: Object.keys(updates),
+    };
+
+    if (rejected.length > 0) {
+      result.rejectedFields = rejected;
+    }
+
+    res.json(result);
+  } catch (error) {
+    console.error('Error en PATCH /leads/:id:', error);
     res.status(500).json({ error: 'Error interno del servidor' });
   }
 });
