@@ -176,7 +176,7 @@ interface FacturacionConductor {
   fecha_pago?: string | null
   // Estado de facturación semanal (Activo, Pausa, De baja)
   estado_billing?: 'Activo' | 'Pausa' | 'De baja'
-  // Alquiler proyectado a semana completa (precio_unitario * 49)
+  // Alquiler proyectado a semana completa (precio_unitario * 7)
   proyectado_alquiler?: number
   // Alerta: fecha_terminacion del conductor no coincide con fecha_fin de asignación
   fecha_baja_no_coincide?: boolean
@@ -189,6 +189,8 @@ interface FacturacionConductor {
     fecha_entrega: string
     descuento_turnos: number
   } | null
+  // GNC del vehículo asignado (leído de tabla vehiculos)
+  tiene_gnc?: boolean
 }
 
 interface FacturacionDetalle {
@@ -1045,12 +1047,12 @@ export function ReporteFacturacionTab() {
         }
       })
 
-      // Construir mapa de alquiler proyectado: facturacion_id → Math.round(precio_unitario * 49)
+      // Construir mapa de alquiler proyectado: facturacion_id → Math.round(precio_unitario * 7)
       const proyectadoMap = new Map<string, number>()
       ;(alquilerDetalleData || []).forEach((d: any) => {
         const pu = Number(d.precio_unitario) || 0
         if (pu > 0) {
-          proyectadoMap.set(d.facturacion_id, Math.round(pu * 49))
+          proyectadoMap.set(d.facturacion_id, Math.round(pu * 7))
         }
       })
 
@@ -1091,7 +1093,7 @@ export function ReporteFacturacionTab() {
 
       // 1. Cargar conductores desde asignaciones que se solapan con la semana + penalidades pendientes
       const sedeParaVP = sedeActualId || sedeUsuario?.id
-      const conductoresControl: { numero_dni: string; estado: string; patente: string; modalidad: string; valor_alquiler: number | null }[] = []
+      const conductoresControl: { numero_dni: string; estado: string; patente: string; modalidad: string; valor_alquiler: number | null; tiene_gnc: boolean }[] = []
       const dnisAgregadosVP = new Set<string>()
 
       // 1a + 1b + 1c en paralelo (son independientes entre sí)
@@ -1099,7 +1101,7 @@ export function ReporteFacturacionTab() {
         (supabase.from('asignaciones_conductores') as any)
           .select(`
             conductor_id, horario, fecha_inicio, fecha_fin, estado,
-            asignaciones!inner(horario, estado, fecha_fin, vehiculo_id, vehiculos(patente)),
+            asignaciones!inner(horario, estado, fecha_fin, vehiculo_id, vehiculos(patente, gnc)),
             conductores!inner(numero_dni, sede_id)
           `)
           .in('estado', ['asignado', 'activo', 'activa', 'finalizado', 'finalizada', 'completado', 'cancelado', 'cancelada']),
@@ -1147,7 +1149,8 @@ export function ReporteFacturacionTab() {
               estado: 'Activo',
               patente: asig.vehiculos?.patente || '',
               modalidad,
-              valor_alquiler: null
+              valor_alquiler: null,
+              tiene_gnc: asig.vehiculos?.gnc === true,
             })
           }
         }
@@ -1173,7 +1176,8 @@ export function ReporteFacturacionTab() {
             estado: 'Activo',
             patente: '',
             modalidad: 'TURNO',
-            valor_alquiler: null
+            valor_alquiler: null,
+            tiene_gnc: true,
           })
         }
       }
@@ -1882,7 +1886,9 @@ export function ReporteFacturacionTab() {
               const tieneAsignacionCierre = conductoresConAsignacionAlCierreVP.has(conductorId)
               return (diasTotales >= 7 || tieneAsignacionCierre) ? 'Activo' : 'Pausa'
             })(),
-            // Discrepancia de formato DNI
+             // GNC del vehículo (leído de tabla vehiculos)
+             tiene_gnc: control.tiene_gnc,
+             // Discrepancia de formato DNI
             dni_discrepancy: dniDiscrepancy ? { conductorRaw: conductorRawDni, cabifyRaw: cabifyRawDni } : null,
             // Detectar si fecha_terminacion no coincide con fecha_fin de asignación
             fecha_baja_no_coincide: (() => {
@@ -2082,7 +2088,7 @@ export function ReporteFacturacionTab() {
       await supabase.from('facturacion_conductores').delete().eq('periodo_id', periodoId)
 
       // 3. Cargar conductores desde asignaciones que se solapan con la semana + penalidades pendientes
-      const conductoresControl: { numero_dni: string; estado: string; patente: string; modalidad: string; valor_alquiler: number | null }[] = []
+      const conductoresControl: { numero_dni: string; estado: string; patente: string; modalidad: string; valor_alquiler: number | null; tiene_gnc: boolean }[] = []
       const dnisAgregadosRecalc = new Set<string>()
       const dnisConPenalidadesRecalc = new Set<string>()
 
@@ -2092,7 +2098,7 @@ export function ReporteFacturacionTab() {
           .from('asignaciones_conductores') as any)
           .select(`
             conductor_id, horario, fecha_inicio, fecha_fin, estado,
-            asignaciones!inner(horario, estado, fecha_fin, vehiculo_id, vehiculos(patente)),
+            asignaciones!inner(horario, estado, fecha_fin, vehiculo_id, vehiculos(patente, gnc)),
             conductores!inner(numero_dni, sede_id)
           `)
           .in('estado', ['asignado', 'activo', 'activa', 'finalizado', 'finalizada', 'completado', 'cancelado', 'cancelada'])
@@ -2125,7 +2131,8 @@ export function ReporteFacturacionTab() {
               estado: 'Activo',
               patente: asig.vehiculos?.patente || '',
               modalidad,
-              valor_alquiler: null
+              valor_alquiler: null,
+              tiene_gnc: asig.vehiculos?.gnc === true,
             })
           }
         }
@@ -2153,7 +2160,8 @@ export function ReporteFacturacionTab() {
             estado: 'Activo',
             patente: '',
             modalidad: 'TURNO',
-            valor_alquiler: null
+            valor_alquiler: null,
+            tiene_gnc: true,
           })
         }
       }
@@ -6900,7 +6908,7 @@ export function ReporteFacturacionTab() {
             const conductorId = dbIdToConId.get(d.facturacion_id)
             const pu = Number(d.precio_unitario) || 0
             if (conductorId && pu > 0) {
-              precioSemanalByConductor.set(conductorId, Math.round(pu * 49))
+              precioSemanalByConductor.set(conductorId, Math.round(pu * 7))
             }
           })
         }
@@ -7205,7 +7213,7 @@ export function ReporteFacturacionTab() {
           const totalAlquilerActual = src.reduce((s, f) => s + (f.subtotal_alquiler || 0), 0)
           const porcentaje = totalProyectado > 0 ? Math.round(totalAlquilerActual / totalProyectado * 100) : 0
           return `<div style="text-align:left;font-size:13px;">
-            <p>Alquiler semanal proyectado (precio_unitario × 49):</p>
+            <p>Alquiler semanal proyectado (precio_unitario × 7):</p>
             <table style="width:100%;border-collapse:collapse;">
               <tr><td>Conductores con alquiler</td><td style="text-align:right"><b>${conductoresConProyectado.length}</b></td></tr>
               <tr><td>Proyectado semanal</td><td style="text-align:right"><b>${formatCurrency(totalProyectado)}</b></td></tr>
@@ -7393,7 +7401,7 @@ export function ReporteFacturacionTab() {
               else if (diurno > 0 && nocturno > 0) label = 'D+N'
               return <span className="dt-badge dt-badge-solid-gray" style={{ fontSize: '9px', padding: '1px 5px' }}>{label}</span>
             })()}
-            {['AG558DZ', 'AG304XD'].includes(normalizePatente(row.original.vehiculo_patente)) && (
+            {row.original.tiene_gnc === false && row.original.vehiculo_patente && (
               <span className="dt-badge dt-badge-orange" style={{ fontSize: '9px', padding: '1px 5px' }}>Sin GNC</span>
             )}
           </div>
@@ -8510,7 +8518,7 @@ export function ReporteFacturacionTab() {
             const countIngreso = vistaPreviaData.filter(f => f.alerta_prorrateo_ingreso).length
             const countBaja = vistaPreviaData.filter(f => f.estado_billing === 'De baja').length
             const countPausa = vistaPreviaData.filter(f => f.estado_billing === 'Pausa').length
-            const countSinGnc = vistaPreviaData.filter(f => f.vehiculo_patente && ['AG558DZ', 'AG304XD'].includes(normalizePatente(f.vehiculo_patente))).length
+            const countSinGnc = vistaPreviaData.filter(f => f.tiene_gnc === false && f.vehiculo_patente).length
             const hayAlertas = countIngreso > 0 || countBaja > 0 || countPausa > 0 || countSinGnc > 0
             if (!hayAlertas) return null
             const btnStyle = (active: boolean, bg: string, color: string) => ({
@@ -8573,7 +8581,7 @@ export function ReporteFacturacionTab() {
               if (filtroAlerta === 'ingreso' && !f.alerta_prorrateo_ingreso) return false
               if (filtroAlerta === 'baja' && f.estado_billing !== 'De baja') return false
               if (filtroAlerta === 'pausa' && f.estado_billing !== 'Pausa') return false
-              if (filtroAlerta === 'sin_gnc' && !(f.vehiculo_patente && ['AG558DZ', 'AG304XD'].includes(normalizePatente(f.vehiculo_patente)))) return false
+              if (filtroAlerta === 'sin_gnc' && !(f.tiene_gnc === false && f.vehiculo_patente)) return false
               return true
             })}
             columns={columns}
@@ -8728,7 +8736,7 @@ export function ReporteFacturacionTab() {
               const countIngreso = src.filter(f => f.alerta_prorrateo_ingreso).length
               const countBaja = src.filter(f => f.estado_billing === 'De baja').length
               const countPausa = src.filter(f => f.estado_billing === 'Pausa').length
-              const countSinGnc = src.filter(f => f.vehiculo_patente && ['AG558DZ', 'AG304XD'].includes(normalizePatente(f.vehiculo_patente))).length
+              const countSinGnc = src.filter(f => f.tiene_gnc === false && f.vehiculo_patente).length
               const hayAlertas = countIngreso > 0 || countBaja > 0 || countPausa > 0 || countSinGnc > 0
               if (!hayAlertas) return null
               const btnStyle = (active: boolean, bg: string, color: string) => ({
@@ -8779,7 +8787,7 @@ export function ReporteFacturacionTab() {
                 if (filtroAlerta === 'ingreso') return !!f.alerta_prorrateo_ingreso
                 if (filtroAlerta === 'baja') return f.estado_billing === 'De baja'
                 if (filtroAlerta === 'pausa') return f.estado_billing === 'Pausa'
-                if (filtroAlerta === 'sin_gnc') return f.vehiculo_patente && ['AG558DZ', 'AG304XD'].includes(normalizePatente(f.vehiculo_patente))
+                if (filtroAlerta === 'sin_gnc') return f.tiene_gnc === false && f.vehiculo_patente
                 return true
               }) : facturacionesFiltradas}
               columns={columns}
