@@ -89,7 +89,7 @@ export function PermanenciaChart() {
 
         // 2. If we have conductors, fetch ALL their assignments in ONE batched query
         const allIds = allConductors?.map(c => c.id) || []
-        let assignmentsByDriver = new Map<string, number>()
+        const assignmentsByDriver = new Map<string, number>()
 
         if (allIds.length > 0) {
           const { data: allAssignments } = await supabase

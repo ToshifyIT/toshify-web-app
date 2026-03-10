@@ -155,7 +155,7 @@ export function AuditModule() {
       })
     }
     loadCounts()
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+   
   }, [filtroFechaInicio, filtroFechaFin])
 
   // Cargar tablas disponibles dinámicamente (últimos 30 días)
@@ -396,7 +396,7 @@ export function AuditModule() {
         ),
       },
     ],
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
     []
   )
 

@@ -141,7 +141,7 @@ export function GarantiasTab() {
       // Cargar estado y DNI de conductores
       const conductorIds = (data || []).map((g: any) => g.conductor_id)
       const ESTADO_ACTIVO = '57e9de5f-e6fc-4ff7-8d14-cf8e13e9dbe2'
-      let estadoConductorMap = new Map<string, string>()
+      const estadoConductorMap = new Map<string, string>()
       const dniConductorMap = new Map<string, string>()
       if (conductorIds.length > 0) {
         const { data: conductoresData } = await supabase
@@ -1192,7 +1192,7 @@ export function GarantiasTab() {
       let errors = 0
 
       for (const c of cambios) {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+         
         const { error } = await (supabase.from('garantias_conductores') as any)
           .update({
             monto_total: c.monto_total,

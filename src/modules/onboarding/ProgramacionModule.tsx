@@ -308,7 +308,7 @@ export function ProgramacionModule() {
     }
   }
 
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+   
   useEffect(() => {
     loadProgramaciones()
     loadEspecialistas()
@@ -336,7 +336,7 @@ export function ProgramacionModule() {
   }
 
   // Cargar histórico cuando se cambia al tab o sede
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+   
   useEffect(() => {
     if (activeTab === 'historico') {
       loadHistorico()

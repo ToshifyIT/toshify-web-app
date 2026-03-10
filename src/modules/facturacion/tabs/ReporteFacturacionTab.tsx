@@ -426,7 +426,7 @@ export function ReporteFacturacionTab() {
   const [showSiFacturaPreview, setShowSiFacturaPreview] = useState(false)
   const [siFacturaPreviewData, setSiFacturaPreviewData] = useState<FacturacionPreviewRow[]>([])
   const [loadingSiFacturaPreview, setLoadingSiFacturaPreview] = useState(false)
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+   
   const [conceptosPendientes, setConceptosPendientes] = useState<ConceptoPendiente[]>([])
   const [conceptosNomina, setConceptosNomina] = useState<ConceptoNomina[]>([])
 
@@ -475,6 +475,28 @@ export function ReporteFacturacionTab() {
       }
     }
     cargarConceptos()
+  }, [])
+
+  // Realtime: actualizar badge GNC cuando cambia en tabla vehiculos
+  useEffect(() => {
+    const channel = supabase
+      .channel('vehiculos-gnc-changes')
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'vehiculos' }, (payload) => {
+        const updated = payload.new as { patente?: string; gnc?: boolean }
+        if (updated.patente == null) return
+        const patente = updated.patente
+        const gnc = updated.gnc === true
+
+        setVistaPreviaData(prev => prev.map(f =>
+          f.vehiculo_patente === patente ? { ...f, tiene_gnc: gnc } : f
+        ))
+        setFacturaciones(prev => prev.map(f =>
+          f.vehiculo_patente === patente ? { ...f, tiene_gnc: gnc } : f
+        ))
+      })
+      .subscribe()
+
+    return () => { supabase.removeChannel(channel) }
   }, [])
 
   // Cerrar dropdown de filtro al hacer click fuera
@@ -1066,6 +1088,24 @@ export function ReporteFacturacionTab() {
       facturacionesTransformadas.sort((a: any, b: any) => 
         (a.conductor_nombre || '').localeCompare(b.conductor_nombre || '')
       )
+
+      // Cruzar patentes con tabla vehiculos para obtener GNC actual
+      const patentesUnicasLoad = [...new Set(facturacionesTransformadas.map((f: any) => f.vehiculo_patente).filter(Boolean))]
+      if (patentesUnicasLoad.length > 0) {
+        const { data: vehiculosGncLoad } = await supabase
+          .from('vehiculos')
+          .select('patente, gnc')
+          .in('patente', patentesUnicasLoad)
+        if (vehiculosGncLoad) {
+          const gncMapLoad = new Map(vehiculosGncLoad.map((v: any) => [v.patente, v.gnc === true]))
+          facturacionesTransformadas = facturacionesTransformadas.map((f: any) => ({
+            ...f,
+            tiene_gnc: f.vehiculo_patente && gncMapLoad.has(f.vehiculo_patente)
+              ? gncMapLoad.get(f.vehiculo_patente)
+              : undefined,
+          }))
+        }
+      }
 
       setFacturaciones(facturacionesTransformadas as FacturacionConductor[])
       setExcesos((excesosData || []) as ExcesoKm[])
@@ -1746,7 +1786,7 @@ export function ReporteFacturacionTab() {
         if (diasTotales === 0 && !dnisConPenalidadesVP.has(control.numero_dni)) continue
         
         // Calcular alquiler usando montos pre-calculados con precios (precio_final ya incluye IVA)
-        let subtotalAlquiler = prorrateo.monto_CARGO + prorrateo.monto_TURNO_DIURNO + prorrateo.monto_TURNO_NOCTURNO
+        const subtotalAlquiler = prorrateo.monto_CARGO + prorrateo.monto_TURNO_DIURNO + prorrateo.monto_TURNO_NOCTURNO
         // precio_final ya incluye IVA - no se agrega de nuevo
         
         // Determinar tipo de alquiler predominante para garantía
@@ -1914,7 +1954,25 @@ export function ReporteFacturacionTab() {
        // Ordenar por nombre
        facturacionesProyectadas.sort((a, b) => a.conductor_nombre.localeCompare(b.conductor_nombre))
 
-      setVistaPreviaData(facturacionesProyectadas)
+      // Cruzar patentes con tabla vehiculos para obtener GNC actual en tiempo real
+      const patentesUnicas = [...new Set(facturacionesProyectadas.map(f => f.vehiculo_patente).filter(Boolean))]
+      let facturacionesConGnc: FacturacionConductor[] = facturacionesProyectadas
+      if (patentesUnicas.length > 0) {
+        const { data: vehiculosGnc } = await supabase
+          .from('vehiculos')
+          .select('patente, gnc')
+          .in('patente', patentesUnicas)
+        if (vehiculosGnc) {
+          const gncMap = new Map(vehiculosGnc.map((v: any) => [v.patente, v.gnc === true]))
+          facturacionesConGnc = facturacionesProyectadas.map(f =>
+            f.vehiculo_patente && gncMap.has(f.vehiculo_patente)
+              ? { ...f, tiene_gnc: gncMap.get(f.vehiculo_patente)! }
+              : f
+          )
+        }
+      }
+
+      setVistaPreviaData(facturacionesConGnc)
 
     } catch (error) {
       if (showError) {
@@ -3625,7 +3683,7 @@ export function ReporteFacturacionTab() {
     const total = item.total
 
     // Desglose básico que siempre se muestra
-    let htmlBasico = `
+    const htmlBasico = `
       <div style="display:grid; grid-template-columns:120px 1fr; gap:4px 12px; font-size:13px; line-height:1.8">
         <strong>Código:</strong> <span>${codigo}</span>
         <strong>Concepto:</strong> <span>${desc}</span>
@@ -4518,7 +4576,7 @@ export function ReporteFacturacionTab() {
     setVistaPreviaData([])
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+   
   function cerrarDetalle() {
     setShowDetalle(false)
     setDetallePagos([])
