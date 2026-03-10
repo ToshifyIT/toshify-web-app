@@ -7,6 +7,7 @@
     "dev": "vite --mode development",
     "dev:prod": "vite --mode production",
     "dev:api": "PORT=3001 node server.js",
+    "dev:mcp": "MCP_PORT=3002 node mcp/server.js",
     "build": "tsc -b && vite build",
     "build:dev": "tsc -b && vite build --mode development",
     "build:prod": "tsc -b && vite build --mode production",
@@ -31,6 +32,7 @@
     "prepare": "husky"
   },
   "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.27.1",
     "@react-google-maps/api": "^2.20.8",
     "@supabase/supabase-js": "^2.76.1",
     "@tanstack/react-table": "^8.21.3",

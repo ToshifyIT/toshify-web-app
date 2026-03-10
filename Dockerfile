@@ -61,9 +61,8 @@ RUN --mount=type=cache,target=/root/.npm \
 # Copy built assets from builder
 COPY --from=builder /app/dist ./dist
 
-# Copy server file and API routes
+# Copy server file
 COPY server.js ./
-COPY api/ ./api/
 
 # Expose port 80
 EXPOSE 80

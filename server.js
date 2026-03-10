@@ -7,7 +7,7 @@ import express from 'express'
 import { fileURLToPath } from 'url'
 import { dirname, join } from 'path'
 import { google } from 'googleapis'
-import apiV1Router from './api/index.js'
+// API REST removida - reemplazada por MCP Server (mcp/server.js)
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = dirname(__filename)
@@ -470,9 +470,6 @@ app.post('/api/admin/toggle-function', async (req, res) => {
 app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() })
 })
-
-// API externa v1 (leads, hireflix_historico)
-app.use('/api/v1', apiV1Router)
 
 // Serve static files from dist
 app.use(express.static(join(__dirname, 'dist')))
