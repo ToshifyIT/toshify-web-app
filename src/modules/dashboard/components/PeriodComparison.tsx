@@ -197,60 +197,142 @@ export function PeriodComparison() {
       })
     }
 
-    addCountMetric(
-      'metric-vehiculos-ingreso',
-      'INGRESO DE VEHÍCULOS',
-      vehiculosStats.totalA,
-      vehiculosStats.totalB
-    )
+    // --- INGRESO DE VEHÍCULOS ---
+    {
+      const variation = calculateVariation(vehiculosStats.totalA, vehiculosStats.totalB)
+      metricList.push({
+        id: 'metric-vehiculos-ingreso',
+        name: 'INGRESO DE VEHÍCULOS',
+        valueA: vehiculosStats.totalA.toLocaleString('es-AR'),
+        valueB: vehiculosStats.totalB.toLocaleString('es-AR'),
+        variationLabel: variation.label,
+        variationSign: variation.sign,
+        tooltipContent: (
+          <div className="kpi-tooltip-content">
+            <strong>Ingreso de Vehículos</strong>
+            <p>Cantidad de vehículos registrados en el sistema durante el período seleccionado, según su fecha de creación.</p>
+          </div>
+        ),
+      })
+    }
 
-    addCountMetric(
-      'metric-bajas-conductores',
-      'BAJAS CONDUCTORES',
-      bajasConductoresStats.totalA,
-      bajasConductoresStats.totalB
-    )
+    // --- BAJAS CONDUCTORES ---
+    {
+      const variation = calculateVariation(bajasConductoresStats.totalA, bajasConductoresStats.totalB)
+      metricList.push({
+        id: 'metric-bajas-conductores',
+        name: 'BAJAS CONDUCTORES',
+        valueA: bajasConductoresStats.totalA.toLocaleString('es-AR'),
+        valueB: bajasConductoresStats.totalB.toLocaleString('es-AR'),
+        variationLabel: variation.label,
+        variationSign: variation.sign,
+        tooltipContent: (
+          <div className="kpi-tooltip-content">
+            <strong>Bajas Conductores</strong>
+            <p>Cantidad de conductores que pasaron a estado «Baja» durante el período, según su fecha de terminación.</p>
+          </div>
+        ),
+      })
+    }
 
-    addCountMetric(
-      'metric-permanencia',
-      'PROM. PERMANENCIA',
-      Math.round(permanenciaStats.avgDaysA),
-      Math.round(permanenciaStats.avgDaysB),
-      'días'
-    )
+    // --- PROM. PERMANENCIA ---
+    {
+      const variation = calculateVariation(Math.round(permanenciaStats.avgDaysA), Math.round(permanenciaStats.avgDaysB))
+      metricList.push({
+        id: 'metric-permanencia',
+        name: 'PROM. PERMANENCIA',
+        valueA: `${Math.round(permanenciaStats.avgDaysA).toLocaleString('es-AR')} días`,
+        valueB: `${Math.round(permanenciaStats.avgDaysB).toLocaleString('es-AR')} días`,
+        variationLabel: variation.label,
+        variationSign: variation.sign,
+        tooltipContent: (
+          <div className="kpi-tooltip-content">
+            <strong>Promedio de Permanencia</strong>
+            <p>Promedio de días que los conductores dados de baja en el período estuvieron asignados a vehículos. Se calcula sumando los días de todas sus asignaciones y dividiendo por la cantidad de conductores.</p>
+          </div>
+        ),
+      })
+    }
 
-    addKmMetric(
-      'metric-kilometraje',
-      'KILÓMETROS RECORRIDOS',
-      kilometrajeStats.totalA,
-      kilometrajeStats.totalB
-    )
+    // --- KILÓMETROS RECORRIDOS ---
+    {
+      const variation = calculateVariation(kilometrajeStats.totalA, kilometrajeStats.totalB)
+      metricList.push({
+        id: 'metric-kilometraje',
+        name: 'KILÓMETROS RECORRIDOS',
+        valueA: kmFormatter.format(kilometrajeStats.totalA),
+        valueB: kmFormatter.format(kilometrajeStats.totalB),
+        variationLabel: variation.label,
+        variationSign: variation.sign,
+        tooltipContent: (
+          <div className="kpi-tooltip-content">
+            <strong>Kilómetros Recorridos</strong>
+            <p>Suma total de kilómetros registrados por todos los vehículos de la flota durante el período seleccionado.</p>
+          </div>
+        ),
+      })
+    }
 
+    // --- VUELTAS A ARGENTINA ---
     const vueltasA = Math.floor(kilometrajeStats.totalA / 3700)
     const vueltasB = Math.floor(kilometrajeStats.totalB / 3700)
+    {
+      const variation = calculateVariation(vueltasA, vueltasB)
+      metricList.push({
+        id: 'metric-vueltas-argentina',
+        name: 'VUELTAS A ARGENTINA',
+        valueA: vueltasA.toLocaleString('es-AR'),
+        valueB: vueltasB.toLocaleString('es-AR'),
+        variationLabel: variation.label,
+        variationSign: variation.sign,
+        tooltipContent: (
+          <div className="kpi-tooltip-content">
+            <strong>Vueltas a Argentina</strong>
+            <p>Equivalencia de los kilómetros recorridos expresada en «vueltas» al país (1 vuelta = 3.700 km, perímetro aproximado de Argentina).</p>
+          </div>
+        ),
+      })
+    }
 
-    addCountMetric(
-      'metric-vueltas-argentina',
-      'VUELTAS A ARGENTINA',
-      vueltasA,
-      vueltasB
-    )
+    // --- TOTAL MULTAS ---
+    {
+      const variation = calculateVariation(multasStats.totalA, multasStats.totalB)
+      metricList.push({
+        id: 'metric-total-multas',
+        name: 'TOTAL MULTAS',
+        valueA: currencyFormatter.format(multasStats.totalA),
+        valueB: currencyFormatter.format(multasStats.totalB),
+        variationLabel: variation.label,
+        variationSign: variation.sign,
+        tooltipContent: (
+          <div className="kpi-tooltip-content">
+            <strong>Total Multas</strong>
+            <p>Suma de los montos de todas las multas de tránsito registradas durante el período seleccionado.</p>
+          </div>
+        ),
+      })
+    }
 
-    addCurrencyMetric(
-      'metric-total-multas',
-      'TOTAL MULTAS',
-      multasStats.totalA,
-      multasStats.totalB
-    )
+    // --- TOTAL TELEPASE ---
+    {
+      const variation = calculateVariation(telepaseStats.totalA, telepaseStats.totalB)
+      metricList.push({
+        id: 'metric-total-telepase',
+        name: 'TOTAL TELEPASE',
+        valueA: telepaseFormatter.format(telepaseStats.totalA),
+        valueB: telepaseFormatter.format(telepaseStats.totalB),
+        variationLabel: variation.label,
+        variationSign: variation.sign,
+        tooltipContent: (
+          <div className="kpi-tooltip-content">
+            <strong>Total Telepase</strong>
+            <p>Suma de los montos de todos los consumos de peaje (Telepase) registrados durante el período seleccionado.</p>
+          </div>
+        ),
+      })
+    }
 
-    addTelepaseMetric(
-      'metric-total-telepase',
-      'TOTAL TELEPASE',
-      telepaseStats.totalA,
-      telepaseStats.totalB
-    )
-
-    // KPI: Incidencias a Favor (solo tipos con es_a_favor = true, aplicadas)
+    // --- INCIDENCIAS A FAVOR ---
     {
       const variation = calculateVariation(incidenciasSplit.aFavorA, incidenciasSplit.aFavorB)
       const tiposTexto = incidenciasSplit.tiposAFavor.length > 0
@@ -266,9 +348,7 @@ export function PeriodComparison() {
         tooltipContent: (
           <div className="kpi-tooltip-content">
             <strong>Incidencias a Favor</strong>
-            <p>
-              Total de descuentos y bonificaciones ya aplicados a favor de los conductores.
-            </p>
+            <p>Suma de los montos de incidencias aplicadas a favor del conductor (descuentos, bonificaciones y tickets de peajes) durante el período seleccionado.</p>
             <div className="kpi-tooltip-divider" />
             <div className="kpi-tooltip-section-title">Incluye</div>
             <ul>
@@ -281,7 +361,7 @@ export function PeriodComparison() {
       })
     }
 
-    // KPI: Incidencias en Contra (todos los tipos con es_a_favor = false, aplicadas)
+    // --- INCIDENCIAS EN CONTRA ---
     {
       const variation = calculateVariation(incidenciasSplit.enContraA, incidenciasSplit.enContraB)
       metricList.push({
@@ -294,9 +374,7 @@ export function PeriodComparison() {
         tooltipContent: (
           <div className="kpi-tooltip-content">
             <strong>Incidencias en Contra</strong>
-            <p>
-              Total de cargos y penalidades ya aplicados a los conductores.
-            </p>
+            <p>Suma de los montos de cargos y penalidades ya aplicados a los conductores durante el período seleccionado.</p>
             <div className="kpi-tooltip-divider" />
             <div className="kpi-tooltip-section-title">Incluye</div>
             <ul>
