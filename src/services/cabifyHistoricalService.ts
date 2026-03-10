@@ -48,6 +48,8 @@ export interface DriverHistoricalData {
   gananciaTotal: number
   gananciaPorHora: number
   peajes: number
+  promociones: number
+  deducciones: number
   permisoEfectivo: string
   disabled: boolean
   activatedAt: string | null
@@ -255,7 +257,7 @@ class CabifyHistoricalService {
     endDate: string,
     sedeId?: string | null
   ): Promise<DriverHistoricalData[]> {
-    const selectFields = 'cabify_driver_id, cabify_company_id, nombre, apellido, email, dni, telefono_numero, telefono_codigo, licencia, vehiculo_id, vehiculo_marca, vehiculo_modelo, vehiculo_patente, vehiculo_completo, score, viajes_aceptados, viajes_perdidos, viajes_ofrecidos, viajes_finalizados, viajes_rechazados, tasa_aceptacion, horas_conectadas, tasa_ocupacion, cobro_efectivo, cobro_app, ganancia_total, peajes, permiso_efectivo, estado_conductor, fecha_inicio, fecha_guardado'
+    const selectFields = 'cabify_driver_id, cabify_company_id, nombre, apellido, email, dni, telefono_numero, telefono_codigo, licencia, vehiculo_id, vehiculo_marca, vehiculo_modelo, vehiculo_patente, vehiculo_completo, score, viajes_aceptados, viajes_perdidos, viajes_ofrecidos, viajes_finalizados, viajes_rechazados, tasa_aceptacion, horas_conectadas, tasa_ocupacion, cobro_efectivo, cobro_app, ganancia_total, peajes, promociones, deducciones, permiso_efectivo, estado_conductor, fecha_inicio, fecha_guardado'
 
     const tableNames = this.getTableNames(sedeId)
 
@@ -361,6 +363,8 @@ class CabifyHistoricalService {
           cobroApp: Number(record.cobro_app || 0),
           gananciaTotal: Number(record.ganancia_total || 0),
           peajes: Number(record.peajes || 0),
+          promociones: Number(record.promociones || 0),
+          deducciones: Number(record.deducciones || 0),
           permisoEfectivo: record.permiso_efectivo || 'Desactivado',
           disabled: record.estado_conductor === 'Deshabilitado',
         })
@@ -376,6 +380,8 @@ class CabifyHistoricalService {
         existing.cobroApp += Number(record.cobro_app || 0)
         existing.gananciaTotal += Number(record.ganancia_total || 0)
         existing.peajes += Number(record.peajes || 0)
+        existing.promociones += Number(record.promociones || 0)
+        existing.deducciones += Number(record.deducciones || 0)
 
         // Para promedios
         if (record.score) {
@@ -441,6 +447,8 @@ class CabifyHistoricalService {
         gananciaTotal: Number(d.gananciaTotal.toFixed(2)),
         gananciaPorHora: Number(gananciaPorHora.toFixed(2)),
         peajes: Number(d.peajes.toFixed(2)),
+        promociones: Number(d.promociones.toFixed(2)),
+        deducciones: Number(d.deducciones.toFixed(2)),
         permisoEfectivo: d.permisoEfectivo,
         disabled: d.disabled,
         activatedAt: null

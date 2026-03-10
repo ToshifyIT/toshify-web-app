@@ -379,6 +379,8 @@ function useTableColumns(
       { ...createMoneyColumn('cobroEfectivo', 'Efectivo'), size: 110, minSize: 95 },
       { ...createMoneyColumn('cobroApp', 'App'), size: 110, minSize: 95 },
       { ...createMoneyColumn('peajes', 'Peajes', 'cabify-money tolls'), size: 100, minSize: 85 },
+      { ...createMoneyColumn('promociones', 'Promociones', 'cabify-money promos'), size: 115, minSize: 95 },
+      { ...createDeduccionesColumn(), size: 115, minSize: 95 },
       { ...createPermisoEfectivoColumn(), size: 110, minSize: 95 },
     ],
     [asignaciones]
@@ -546,6 +548,21 @@ function createTasaOcupacionColumn(): ColumnDef<CabifyDriver, unknown> {
           {rate ? `${rate}%` : '-'}
         </span>
       )
+    },
+  }
+}
+
+function createDeduccionesColumn(): ColumnDef<CabifyDriver, unknown> {
+  return {
+    accessorKey: 'deducciones',
+    header: 'Deducciones',
+    cell: ({ getValue }) => {
+      const rawValue = getValue() as string | number
+      const numValue = Number(rawValue) || 0
+      const formatted = numValue > 0
+        ? `-${numValue.toLocaleString('es-AR', { style: 'currency', currency: 'ARS', minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+        : numValue.toLocaleString('es-AR', { style: 'currency', currency: 'ARS', minimumFractionDigits: 2, maximumFractionDigits: 2 })
+      return <span className="cabify-money deductions" style={{ color: numValue > 0 ? '#dc2626' : undefined }}>{formatted}</span>
     },
   }
 }

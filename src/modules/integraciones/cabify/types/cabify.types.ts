@@ -32,6 +32,8 @@ export interface CabifyDriver {
   readonly cobroEfectivo?: number | string
   readonly cobroApp?: number | string
   readonly peajes?: number | string
+  readonly promociones?: number | string
+  readonly deducciones?: number | string
   readonly gananciaTotal?: number | string
   readonly gananciaPorHora?: number | string
   readonly permisoEfectivo?: string
