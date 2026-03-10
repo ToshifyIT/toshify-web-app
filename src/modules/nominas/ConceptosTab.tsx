@@ -415,7 +415,8 @@ export function ConceptosTab() {
       )
     },
     {
-      accessorKey: 'es_variable',
+      id: 'es_variable',
+      accessorFn: (row: any) => row.es_variable ? 'Sí' : 'No',
       header: 'Variable',
       cell: ({ row }) => (
         <span className={`nom-bool-badge ${row.original.es_variable ? 'yes' : 'no'}`}>
@@ -424,7 +425,8 @@ export function ConceptosTab() {
       )
     },
     {
-      accessorKey: 'aplica_turno',
+      id: 'aplica_turno',
+      accessorFn: (row: any) => row.aplica_turno ? 'Sí' : 'No',
       header: 'Turno',
       cell: ({ row }) => (
         <span className={`nom-bool-badge ${row.original.aplica_turno ? 'yes' : 'no'}`}>
@@ -433,7 +435,8 @@ export function ConceptosTab() {
       )
     },
     {
-      accessorKey: 'aplica_cargo',
+      id: 'aplica_cargo',
+      accessorFn: (row: any) => row.aplica_cargo ? 'Sí' : 'No',
       header: 'Cargo',
       cell: ({ row }) => (
         <span className={`nom-bool-badge ${row.original.aplica_cargo ? 'yes' : 'no'}`}>
@@ -442,7 +445,8 @@ export function ConceptosTab() {
       )
     },
     {
-      accessorKey: 'activo',
+      id: 'activo',
+      accessorFn: (row: any) => row.activo ? 'Activo' : 'Inactivo',
       header: 'Estado',
       cell: ({ row }) => (
         <span className={`dt-badge ${row.original.activo ? 'dt-badge-solid-green' : 'dt-badge-solid-gray'}`}>

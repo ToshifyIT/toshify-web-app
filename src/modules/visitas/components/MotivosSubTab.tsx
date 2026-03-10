@@ -142,11 +142,12 @@ export function MotivosSubTab() {
       ),
     },
     {
-      accessorKey: 'activo',
+      id: 'activo',
+      accessorFn: (row: any) => row.activo ? 'Activo' : 'Inactivo',
       header: 'Estado',
       cell: ({ getValue }) => (
-        <span className={`dt-badge ${getValue() ? 'dt-badge-solid-green' : 'dt-badge-solid-gray'}`}>
-          {getValue() ? 'Activo' : 'Inactivo'}
+        <span className={`dt-badge ${getValue() === 'Activo' ? 'dt-badge-solid-green' : 'dt-badge-solid-gray'}`}>
+          {getValue() as string}
         </span>
       ),
     },

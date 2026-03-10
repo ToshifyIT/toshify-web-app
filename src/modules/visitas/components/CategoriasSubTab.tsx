@@ -168,16 +168,18 @@ export function CategoriasSubTab() {
       cell: ({ getValue }) => `${getValue()} min`,
     },
     {
-      accessorKey: 'requiere_patente',
+      id: 'requiere_patente',
+      accessorFn: (row: any) => row.requiere_patente ? 'Sí' : 'No',
       header: 'Req. Patente',
-      cell: ({ getValue }) => getValue() ? 'Sí' : 'No',
+      cell: ({ getValue }) => getValue() as string,
     },
     {
-      accessorKey: 'activo',
+      id: 'activo',
+      accessorFn: (row: any) => row.activo ? 'Activo' : 'Inactivo',
       header: 'Estado',
       cell: ({ getValue }) => (
-        <span className={`dt-badge ${getValue() ? 'dt-badge-solid-green' : 'dt-badge-solid-gray'}`}>
-          {getValue() ? 'Activo' : 'Inactivo'}
+        <span className={`dt-badge ${getValue() === 'Activo' ? 'dt-badge-solid-green' : 'dt-badge-solid-gray'}`}>
+          {getValue() as string}
         </span>
       ),
     },

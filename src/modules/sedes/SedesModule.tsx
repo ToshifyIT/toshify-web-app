@@ -328,7 +328,8 @@ export function SedesModule() {
       cell: ({ row }) => row.original.email || '-',
     },
     {
-      accessorKey: 'activa',
+      id: 'activa',
+      accessorFn: (row: any) => row.activa ? 'Activa' : 'Inactiva',
       header: 'Estado',
       cell: ({ row }) => (
         <span style={{

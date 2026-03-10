@@ -4,7 +4,7 @@
  * Soporta filtros por período (semana actual, día anterior, etc.)
  */
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { cabifyIntegrationService, type CabifyRankingDriver } from '../../../../services/cabifyIntegrationService'
 
 interface UseCabifyRankingsProps {
@@ -26,37 +26,50 @@ export function useCabifyRankings(props?: UseCabifyRankingsProps): UseCabifyRank
   const [topPeores, setTopPeores] = useState<CabifyRankingDriver[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const fetchIdRef = useRef(0)
 
   const fetchRankings = useCallback(async () => {
+    // No fetch si no tenemos fecha o sede definida (evita race condition con "todas" al inicio)
+    if (!props?.fechaInicio || !props?.fechaFin) {
+      setIsLoading(false)
+      return
+    }
+
+    const currentFetchId = ++fetchIdRef.current
+
     try {
       setIsLoading(true)
       setError(null)
 
       const [mejores, peores] = await Promise.all([
         cabifyIntegrationService.getTopMejoresFromHistorico(
-          props?.fechaInicio,
-          props?.fechaFin,
-          props?.sedeId
+          props.fechaInicio,
+          props.fechaFin,
+          props.sedeId
         ),
         cabifyIntegrationService.getTopPeoresFromHistorico(
-          props?.fechaInicio,
-          props?.fechaFin,
-          props?.sedeId
+          props.fechaInicio,
+          props.fechaFin,
+          props.sedeId
         )
       ])
 
+      // Solo actualizar si este fetch sigue siendo el más reciente (evita race condition)
+      if (currentFetchId !== fetchIdRef.current) return
+
       // Ordenar en frontend para garantizar el orden correcto
-      // Mejores: de mayor a menor ganancia (DESC)
       const sortedMejores = [...mejores].sort((a, b) => b.gananciaTotal - a.gananciaTotal)
-      // Peores: de menor a mayor ganancia (ASC)
       const sortedPeores = [...peores].sort((a, b) => a.gananciaTotal - b.gananciaTotal)
 
       setTopMejores(sortedMejores)
       setTopPeores(sortedPeores)
     } catch (err) {
+      if (currentFetchId !== fetchIdRef.current) return
       setError(err instanceof Error ? err.message : 'Error desconocido')
     } finally {
-      setIsLoading(false)
+      if (currentFetchId === fetchIdRef.current) {
+        setIsLoading(false)
+      }
     }
   }, [props?.fechaInicio, props?.fechaFin, props?.sedeId])
 

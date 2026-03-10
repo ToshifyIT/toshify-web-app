@@ -421,7 +421,8 @@ export function ZonasManagement() {
       )
     },
     {
-      accessorKey: 'bloquear_asignaciones',
+      id: 'bloquear_asignaciones',
+      accessorFn: (row: any) => row.bloquear_asignaciones ? 'Si' : 'No',
       header: 'Bloquea',
       cell: ({ row }) => (
         <span className={`dt-badge ${row.original.bloquear_asignaciones ? 'dt-badge-red' : 'dt-badge-gray'}`}>
@@ -430,7 +431,8 @@ export function ZonasManagement() {
       )
     },
     {
-      accessorKey: 'mostrar_advertencia',
+      id: 'mostrar_advertencia',
+      accessorFn: (row: any) => row.mostrar_advertencia ? 'Si' : 'No',
       header: 'Advertencia',
       cell: ({ row }) => (
         <span className={`dt-badge ${row.original.mostrar_advertencia ? 'dt-badge-yellow' : 'dt-badge-gray'}`}>
@@ -439,7 +441,8 @@ export function ZonasManagement() {
       )
     },
     {
-      accessorKey: 'activo',
+      id: 'activo',
+      accessorFn: (row: any) => row.activo ? 'Activa' : 'Inactiva',
       header: 'Estado',
       cell: ({ row }) => (
         <span className={`dt-badge ${row.original.activo ? 'dt-badge-green' : 'dt-badge-gray'}`}>

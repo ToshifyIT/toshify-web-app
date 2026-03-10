@@ -28,6 +28,12 @@ import {
 import { format, startOfWeek, endOfWeek } from 'date-fns'
 import * as XLSX from 'xlsx'
 
+// Helper: tabla de cabify según sede (Bariloche usa tabla separada)
+const SEDE_BARILOCHE_ID = 'f37193f7-5805-4d87-820d-c4521824860e'
+function getCabifyTable(sedeId: string | null | undefined): string {
+  return sedeId === SEDE_BARILOCHE_ID ? 'cabify_historico_bariloche' : 'cabify_historico'
+}
+
 interface Liquidacion {
   id: string
   conductor_id: string
@@ -413,7 +419,7 @@ export function LiquidacionConductoresTab() {
 
       // Obtener peajes pendientes (última semana)
       const { data: cabifyData } = await supabase
-        .from('cabify_historico')
+        .from(getCabifyTable(sedeActualId))
         .select('peajes')
         .eq('conductor_id', conductorId)
         .gte('fecha', format(lunesSemana, 'yyyy-MM-dd'))

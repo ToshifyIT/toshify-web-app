@@ -27,6 +27,12 @@ import { format, startOfWeek, endOfWeek, subWeeks, getWeek, getYear, parseISO } 
 import { es } from 'date-fns/locale'
 import { normalizeDni } from '../../../utils/normalizeDocuments'
 
+// Helper: tabla de cabify según sede (Bariloche usa tabla separada)
+const SEDE_BARILOCHE_ID = 'f37193f7-5805-4d87-820d-c4521824860e'
+function getCabifyTable(sedeId: string | null | undefined): string {
+  return sedeId === SEDE_BARILOCHE_ID ? 'cabify_historico_bariloche' : 'cabify_historico'
+}
+
 // Tipo para conductor procesado con sus días por modalidad
 interface ConductorProcesado {
   conductor_id: string
@@ -438,7 +444,7 @@ export function PeriodosTab() {
           const semanaAnteriorInicio = format(subWeeks(parseISO(semana.fecha_inicio), 1), 'yyyy-MM-dd')
           const semanaAnteriorFin = format(subWeeks(parseISO(semana.fecha_fin), 1), 'yyyy-MM-dd')
           return supabase
-            .from('cabify_historico')
+            .from(getCabifyTable(sedeActualId))
             .select('dni, peajes')
             .gte('fecha_inicio', semanaAnteriorInicio + 'T00:00:00')
             .lte('fecha_inicio', semanaAnteriorFin + 'T23:59:59')

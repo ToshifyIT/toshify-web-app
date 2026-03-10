@@ -554,7 +554,8 @@ export function BloqueosConductoresTab() {
       )
     },
     {
-      accessorKey: 'bloqueado',
+      id: 'bloqueado',
+      accessorFn: (row: any) => row.bloqueado ? 'Bloqueado' : (row.saldo_actual >= montoLimite || row.dias_mora >= diasMoraLimite) ? 'Candidato' : 'Normal',
       header: 'Estado',
       cell: ({ row }) => (
         row.original.bloqueado ? (
