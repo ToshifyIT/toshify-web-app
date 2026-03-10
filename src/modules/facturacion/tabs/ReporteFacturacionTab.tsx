@@ -1213,6 +1213,7 @@ export function ReporteFacturacionTab() {
       interface ProrrateoVistaPrevia {
         CARGO: number; TURNO_DIURNO: number; TURNO_NOCTURNO: number;
         monto_CARGO: number; monto_TURNO_DIURNO: number; monto_TURNO_NOCTURNO: number;
+        proyectado_raw: number;
       }
       const prorrateoMap = new Map<string, ProrrateoVistaPrevia>()
       
@@ -1220,7 +1221,8 @@ export function ReporteFacturacionTab() {
       conductorIds.forEach((id: string) => {
         prorrateoMap.set(id, { 
           CARGO: 0, TURNO_DIURNO: 0, TURNO_NOCTURNO: 0,
-          monto_CARGO: 0, monto_TURNO_DIURNO: 0, monto_TURNO_NOCTURNO: 0
+          monto_CARGO: 0, monto_TURNO_DIURNO: 0, monto_TURNO_NOCTURNO: 0,
+          proyectado_raw: 0,
         })
       })
 
@@ -1438,6 +1440,13 @@ export function ReporteFacturacionTab() {
           }
         }
         
+        // Calcular proyectado ANTES de redondear para evitar error de redondeo intermedio
+        const diasRaw = prorrateo.CARGO + prorrateo.TURNO_DIURNO + prorrateo.TURNO_NOCTURNO
+        const subtotalRaw = prorrateo.monto_CARGO + prorrateo.monto_TURNO_DIURNO + prorrateo.monto_TURNO_NOCTURNO
+        prorrateo.proyectado_raw = diasRaw > 0 && diasRaw < 7
+          ? Math.round((subtotalRaw / diasRaw) * 7)
+          : Math.round(subtotalRaw)
+
         prorrateo.monto_CARGO = Math.round(prorrateo.monto_CARGO)
         prorrateo.monto_TURNO_DIURNO = Math.round(prorrateo.monto_TURNO_DIURNO)
         prorrateo.monto_TURNO_NOCTURNO = Math.round(prorrateo.monto_TURNO_NOCTURNO)
@@ -1725,7 +1734,8 @@ export function ReporteFacturacionTab() {
         // Obtener prorrateo de días y montos por modalidad/horario (con precios históricos)
         const prorrateo = prorrateoMap.get(conductorId) || { 
           CARGO: 0, TURNO_DIURNO: 0, TURNO_NOCTURNO: 0,
-          monto_CARGO: 0, monto_TURNO_DIURNO: 0, monto_TURNO_NOCTURNO: 0
+          monto_CARGO: 0, monto_TURNO_DIURNO: 0, monto_TURNO_NOCTURNO: 0,
+          proyectado_raw: 0,
         }
         const diasTotales = Math.min(7, prorrateo.CARGO + prorrateo.TURNO_DIURNO + prorrateo.TURNO_NOCTURNO)
         
@@ -1831,9 +1841,7 @@ export function ReporteFacturacionTab() {
           turnos_cobrados: Math.round(factorProporcional * 7),
           factor_proporcional: factorProporcional,
            subtotal_alquiler: subtotalAlquiler,
-          proyectado_alquiler: diasTotales > 0 && diasTotales < 7
-            ? Math.round((subtotalAlquiler / diasTotales) * 7)
-            : subtotalAlquiler,
+           proyectado_alquiler: prorrateo.proyectado_raw || subtotalAlquiler,
           subtotal_garantia: subtotalGarantia,
           subtotal_cargos: subtotalCargos,
           subtotal_descuentos: subtotalDescuentos,
