@@ -7,8 +7,9 @@ WORKDIR /app
 COPY package*.json ./
 RUN npm ci --omit=dev --ignore-scripts
 
-# Copy MCP server
+# Copy MCP server and docs
 COPY mcp/server.js ./mcp/server.js
+COPY mcp/docs.html ./mcp/docs.html
 
 # Expose MCP port
 EXPOSE 3002

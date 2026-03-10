@@ -3,6 +3,7 @@ import {
   ChevronDown, ChevronRight, Clock, Shield, Globe,
   Server, Radio, MapPin, Car, HardDrive, Mail, Eye, EyeOff,
   AlertCircle, RefreshCw, Zap, ZapOff, Activity,
+  Bot, Key, Plus, Trash2, Copy, Check, Power,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
@@ -1288,12 +1289,459 @@ function CredencialesTab({ serverTokens, tokensLoading, tokensError }: {
 // Tab types & config
 // =============================================
 
-type TabId = 'integraciones' | 'monitor' | 'credenciales';
+// =============================================
+// MCP API Keys Tab
+// =============================================
+
+interface ApiKeyData {
+  id: string;
+  name: string;
+  api_key: string;
+  is_active: boolean;
+  permissions: string[];
+  last_used_at: string | null;
+  created_at: string;
+}
+
+const AVAILABLE_PERMISSIONS = [
+  { value: 'leads:read', label: 'Leads: Lectura', desc: 'Buscar y ver leads' },
+  { value: 'leads:update', label: 'Leads: Escritura', desc: 'Actualizar campos de leads' },
+  { value: 'hireflix:read', label: 'Hireflix: Lectura', desc: 'Buscar registros de Hireflix' },
+];
+
+function McpTab() {
+  const [apiKeys, setApiKeys] = useState<ApiKeyData[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [showCreate, setShowCreate] = useState(false);
+  const [newName, setNewName] = useState('');
+  const [newPermissions, setNewPermissions] = useState<string[]>(['leads:read', 'leads:update', 'hireflix:read']);
+  const [creating, setCreating] = useState(false);
+  const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [revealedKeys, setRevealedKeys] = useState<Set<string>>(new Set());
+
+  const fetchKeys = useCallback(async () => {
+    setLoading(true);
+    try {
+      const { data, error } = await supabase
+        .from('api_keys')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+      setApiKeys(data || []);
+    } catch (err) {
+      console.error('Error fetching API keys:', err);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { fetchKeys(); }, [fetchKeys]);
+
+  const handleCreate = async () => {
+    if (!newName.trim()) return;
+    setCreating(true);
+    try {
+      // Generate a random 64-char hex key
+      const array = new Uint8Array(32);
+      crypto.getRandomValues(array);
+      const apiKey = Array.from(array, b => b.toString(16).padStart(2, '0')).join('');
+
+      const { error } = await supabase
+        .from('api_keys')
+        .insert({
+          name: newName.trim(),
+          api_key: apiKey,
+          permissions: newPermissions,
+        });
+
+      if (error) throw error;
+
+      setNewName('');
+      setShowCreate(false);
+      await fetchKeys();
+    } catch (err) {
+      console.error('Error creating API key:', err);
+    } finally {
+      setCreating(false);
+    }
+  };
+
+  const toggleActive = async (key: ApiKeyData) => {
+    try {
+      const { error } = await supabase
+        .from('api_keys')
+        .update({ is_active: !key.is_active })
+        .eq('id', key.id);
+
+      if (error) throw error;
+      await fetchKeys();
+    } catch (err) {
+      console.error('Error toggling API key:', err);
+    }
+  };
+
+  const deleteKey = async (key: ApiKeyData) => {
+    if (!confirm(`Eliminar la API key "${key.name}"? Esta accion no se puede deshacer.`)) return;
+    try {
+      const { error } = await supabase
+        .from('api_keys')
+        .delete()
+        .eq('id', key.id);
+
+      if (error) throw error;
+      await fetchKeys();
+    } catch (err) {
+      console.error('Error deleting API key:', err);
+    }
+  };
+
+  const copyKey = (key: ApiKeyData) => {
+    navigator.clipboard.writeText(key.api_key);
+    setCopiedId(key.id);
+    setTimeout(() => setCopiedId(null), 2000);
+  };
+
+  const toggleReveal = (id: string) => {
+    setRevealedKeys(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const togglePermission = (perm: string) => {
+    setNewPermissions(prev =>
+      prev.includes(perm) ? prev.filter(p => p !== perm) : [...prev, perm]
+    );
+  };
+
+  const maskKey = (key: string) => `${key.substring(0, 8)}${'*'.repeat(48)}${key.substring(key.length - 8)}`;
+
+  const formatDate = (date: string | null) => {
+    if (!date) return 'Nunca';
+    return new Date(date).toLocaleString('es-AR', {
+      day: '2-digit', month: '2-digit', year: 'numeric',
+      hour: '2-digit', minute: '2-digit',
+    });
+  };
+
+  return (
+    <div>
+      {/* MCP Info header */}
+      <div style={{
+        background: 'var(--bg-card)',
+        border: '1px solid var(--border-primary)',
+        borderRadius: '8px',
+        padding: '16px 20px',
+        marginBottom: '16px',
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '8px' }}>
+          <Bot size={20} style={{ color: 'var(--color-primary)' }} />
+          <span style={{ fontWeight: 700, fontSize: '15px' }}>MCP Server - Model Context Protocol</span>
+        </div>
+        <p style={{ fontSize: '13px', color: 'var(--text-secondary)', margin: 0, lineHeight: '1.5' }}>
+          Servidor MCP para que chatbots accedan a datos de leads y hireflix_historico.
+          Solo tiene acceso a estas dos tablas. Cada API key tiene permisos granulares.
+        </p>
+        <div style={{
+          display: 'flex', gap: '16px', marginTop: '12px', flexWrap: 'wrap',
+        }}>
+          <div style={{
+            background: 'var(--bg-secondary)',
+            padding: '8px 12px',
+            borderRadius: '6px',
+            fontSize: '12px',
+            fontFamily: 'monospace',
+          }}>
+            <span style={{ color: 'var(--text-secondary)' }}>Docs: </span>
+            <a
+              href="https://mcp.toshify.com.ar/docs"
+              target="_blank"
+              rel="noopener noreferrer"
+              style={{ color: 'var(--color-primary)', textDecoration: 'none' }}
+            >
+              mcp.toshify.com.ar/docs
+            </a>
+          </div>
+          <div style={{
+            background: 'var(--bg-secondary)',
+            padding: '8px 12px',
+            borderRadius: '6px',
+            fontSize: '12px',
+            fontFamily: 'monospace',
+          }}>
+            <span style={{ color: 'var(--text-secondary)' }}>SSE: </span>
+            <span style={{ color: 'var(--color-primary)' }}>mcp.toshify.com.ar/sse</span>
+          </div>
+        </div>
+      </div>
+
+      {/* Actions */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+        <h3 style={{ fontSize: '15px', fontWeight: 600, margin: 0 }}>
+          <Key size={16} style={{ marginRight: '6px', verticalAlign: '-2px' }} />
+          API Keys ({apiKeys.length})
+        </h3>
+        <button
+          onClick={() => setShowCreate(!showCreate)}
+          style={{
+            display: 'flex', alignItems: 'center', gap: '6px',
+            padding: '8px 16px',
+            background: 'var(--color-primary)',
+            color: '#fff',
+            border: 'none',
+            borderRadius: '6px',
+            fontSize: '13px',
+            fontWeight: 600,
+            cursor: 'pointer',
+          }}
+        >
+          <Plus size={14} />
+          Nueva API Key
+        </button>
+      </div>
+
+      {/* Create form */}
+      {showCreate && (
+        <div style={{
+          background: 'var(--bg-card)',
+          border: '1px solid var(--color-primary)',
+          borderRadius: '8px',
+          padding: '16px 20px',
+          marginBottom: '16px',
+        }}>
+          <h4 style={{ fontSize: '14px', fontWeight: 600, marginBottom: '12px' }}>Crear nueva API Key</h4>
+
+          <div style={{ marginBottom: '12px' }}>
+            <label style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-secondary)', display: 'block', marginBottom: '4px' }}>
+              Nombre (identificar al chatbot/integracion)
+            </label>
+            <input
+              type="text"
+              value={newName}
+              onChange={e => setNewName(e.target.value)}
+              placeholder="Ej: Chatbot WhatsApp"
+              style={{
+                width: '100%',
+                padding: '8px 12px',
+                background: 'var(--bg-secondary)',
+                border: '1px solid var(--border-primary)',
+                borderRadius: '6px',
+                color: 'var(--text-primary)',
+                fontSize: '13px',
+              }}
+            />
+          </div>
+
+          <div style={{ marginBottom: '16px' }}>
+            <label style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-secondary)', display: 'block', marginBottom: '8px' }}>
+              Permisos
+            </label>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+              {AVAILABLE_PERMISSIONS.map(perm => (
+                <label
+                  key={perm.value}
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: '8px',
+                    padding: '8px 12px',
+                    background: newPermissions.includes(perm.value) ? 'rgba(88, 166, 255, 0.08)' : 'var(--bg-secondary)',
+                    border: `1px solid ${newPermissions.includes(perm.value) ? 'var(--color-primary)' : 'var(--border-primary)'}`,
+                    borderRadius: '6px',
+                    cursor: 'pointer',
+                    fontSize: '13px',
+                  }}
+                >
+                  <input
+                    type="checkbox"
+                    checked={newPermissions.includes(perm.value)}
+                    onChange={() => togglePermission(perm.value)}
+                  />
+                  <div>
+                    <div style={{ fontWeight: 600 }}>{perm.label}</div>
+                    <div style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>{perm.desc}</div>
+                  </div>
+                </label>
+              ))}
+            </div>
+          </div>
+
+          <div style={{ display: 'flex', gap: '8px' }}>
+            <button
+              onClick={handleCreate}
+              disabled={creating || !newName.trim() || newPermissions.length === 0}
+              style={{
+                padding: '8px 20px',
+                background: creating || !newName.trim() ? 'var(--border-primary)' : 'var(--color-primary)',
+                color: '#fff',
+                border: 'none',
+                borderRadius: '6px',
+                fontSize: '13px',
+                fontWeight: 600,
+                cursor: creating || !newName.trim() ? 'not-allowed' : 'pointer',
+              }}
+            >
+              {creating ? 'Creando...' : 'Crear API Key'}
+            </button>
+            <button
+              onClick={() => setShowCreate(false)}
+              style={{
+                padding: '8px 20px',
+                background: 'transparent',
+                color: 'var(--text-secondary)',
+                border: '1px solid var(--border-primary)',
+                borderRadius: '6px',
+                fontSize: '13px',
+                cursor: 'pointer',
+              }}
+            >
+              Cancelar
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* API Keys list */}
+      {loading ? (
+        <div style={{ textAlign: 'center', padding: '40px', color: 'var(--text-secondary)' }}>
+          Cargando API keys...
+        </div>
+      ) : apiKeys.length === 0 ? (
+        <div style={{
+          textAlign: 'center',
+          padding: '40px',
+          color: 'var(--text-secondary)',
+          background: 'var(--bg-card)',
+          borderRadius: '8px',
+          border: '1px solid var(--border-primary)',
+        }}>
+          <Bot size={32} style={{ marginBottom: '8px', opacity: 0.5 }} />
+          <p>No hay API keys creadas</p>
+          <p style={{ fontSize: '12px' }}>Crea una para conectar un chatbot al MCP Server</p>
+        </div>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+          {apiKeys.map(key => (
+            <div
+              key={key.id}
+              style={{
+                background: 'var(--bg-card)',
+                border: `1px solid ${key.is_active ? 'var(--border-primary)' : 'var(--color-error)'}`,
+                borderRadius: '8px',
+                padding: '16px 20px',
+                opacity: key.is_active ? 1 : 0.6,
+              }}
+            >
+              {/* Header row */}
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  <Key size={16} style={{ color: key.is_active ? 'var(--color-primary)' : 'var(--text-secondary)' }} />
+                  <span style={{ fontWeight: 700, fontSize: '14px' }}>{key.name}</span>
+                  <span style={{
+                    fontSize: '11px',
+                    padding: '2px 8px',
+                    borderRadius: '4px',
+                    background: key.is_active ? 'rgba(59, 185, 80, 0.15)' : 'rgba(248, 81, 73, 0.15)',
+                    color: key.is_active ? '#3fb950' : '#f85149',
+                    fontWeight: 600,
+                  }}>
+                    {key.is_active ? 'Activa' : 'Inactiva'}
+                  </span>
+                </div>
+                <div style={{ display: 'flex', gap: '4px' }}>
+                  <button
+                    onClick={() => toggleActive(key)}
+                    title={key.is_active ? 'Desactivar' : 'Activar'}
+                    style={{
+                      padding: '6px', background: 'transparent', border: '1px solid var(--border-primary)',
+                      borderRadius: '4px', cursor: 'pointer', color: 'var(--text-secondary)',
+                    }}
+                  >
+                    <Power size={14} />
+                  </button>
+                  <button
+                    onClick={() => deleteKey(key)}
+                    title="Eliminar"
+                    style={{
+                      padding: '6px', background: 'transparent', border: '1px solid var(--border-primary)',
+                      borderRadius: '4px', cursor: 'pointer', color: '#f85149',
+                    }}
+                  >
+                    <Trash2 size={14} />
+                  </button>
+                </div>
+              </div>
+
+              {/* API Key value */}
+              <div style={{
+                display: 'flex', alignItems: 'center', gap: '8px',
+                background: 'var(--bg-secondary)',
+                padding: '8px 12px',
+                borderRadius: '6px',
+                marginBottom: '8px',
+                fontFamily: 'monospace',
+                fontSize: '12px',
+              }}>
+                <span style={{ flex: 1, wordBreak: 'break-all' }}>
+                  {revealedKeys.has(key.id) ? key.api_key : maskKey(key.api_key)}
+                </span>
+                <button
+                  onClick={() => toggleReveal(key.id)}
+                  style={{ padding: '4px', background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--text-secondary)' }}
+                >
+                  {revealedKeys.has(key.id) ? <EyeOff size={14} /> : <Eye size={14} />}
+                </button>
+                <button
+                  onClick={() => copyKey(key)}
+                  style={{ padding: '4px', background: 'transparent', border: 'none', cursor: 'pointer', color: copiedId === key.id ? '#3fb950' : 'var(--text-secondary)' }}
+                >
+                  {copiedId === key.id ? <Check size={14} /> : <Copy size={14} />}
+                </button>
+              </div>
+
+              {/* Permissions & meta */}
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
+                <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+                  {key.permissions?.map(perm => (
+                    <span
+                      key={perm}
+                      style={{
+                        fontSize: '11px',
+                        padding: '2px 8px',
+                        borderRadius: '4px',
+                        background: perm.includes('update') ? 'rgba(210, 153, 34, 0.15)' : 'rgba(59, 185, 80, 0.15)',
+                        color: perm.includes('update') ? '#d29922' : '#3fb950',
+                        fontFamily: 'monospace',
+                      }}
+                    >
+                      {perm}
+                    </span>
+                  ))}
+                </div>
+                <div style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>
+                  Ultimo uso: {formatDate(key.last_used_at)} &middot; Creada: {formatDate(key.created_at)}
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// =============================================
+// Tab types & config
+// =============================================
+
+type TabId = 'integraciones' | 'monitor' | 'credenciales' | 'mcp';
 
 const TABS: { id: TabId; label: string; icon: LucideIcon }[] = [
   { id: 'integraciones', label: 'Integraciones', icon: Globe },
   { id: 'monitor', label: 'Monitor', icon: Activity },
   { id: 'credenciales', label: 'Credenciales', icon: Eye },
+  { id: 'mcp', label: 'MCP', icon: Bot },
 ];
 
 // =============================================
@@ -1451,6 +1899,10 @@ export function IntegracionesTokensModule() {
           tokensLoading={tokensLoading}
           tokensError={tokensError}
         />
+      )}
+
+      {activeTab === 'mcp' && (
+        <McpTab />
       )}
     </div>
   );

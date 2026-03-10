@@ -1,0 +1,521 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Toshify MCP - Documentacion</title>
+  <style>
+    :root {
+      --bg: #0d1117;
+      --bg-card: #161b22;
+      --bg-code: #1c2128;
+      --border: #30363d;
+      --text: #e6edf3;
+      --text-dim: #8b949e;
+      --primary: #58a6ff;
+      --green: #3fb950;
+      --orange: #d29922;
+      --red: #f85149;
+      --purple: #bc8cff;
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.6;
+    }
+
+    .container { max-width: 960px; margin: 0 auto; padding: 40px 24px; }
+
+    header {
+      border-bottom: 1px solid var(--border);
+      padding-bottom: 24px;
+      margin-bottom: 32px;
+    }
+
+    header h1 {
+      font-size: 28px;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    header h1 .badge {
+      font-size: 12px;
+      background: var(--green);
+      color: #000;
+      padding: 2px 8px;
+      border-radius: 12px;
+      font-weight: 600;
+    }
+
+    header p { color: var(--text-dim); margin-top: 8px; font-size: 15px; }
+
+    .server-url {
+      margin-top: 16px;
+      background: var(--bg-code);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 16px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .server-url label { font-size: 12px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.5px; }
+    .server-url code { font-size: 15px; color: var(--primary); font-family: 'SF Mono', Monaco, monospace; }
+    .copy-btn {
+      background: var(--border);
+      border: none;
+      color: var(--text);
+      padding: 6px 12px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 12px;
+    }
+    .copy-btn:hover { background: var(--primary); color: #000; }
+
+    h2 {
+      font-size: 20px;
+      font-weight: 600;
+      margin: 32px 0 16px;
+      padding-bottom: 8px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    h3 { font-size: 16px; font-weight: 600; margin: 20px 0 8px; }
+
+    .section { margin-bottom: 32px; }
+
+    .card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 20px;
+      margin-bottom: 16px;
+    }
+
+    .card-header {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 12px;
+    }
+
+    .tool-name {
+      font-family: 'SF Mono', Monaco, monospace;
+      font-size: 16px;
+      font-weight: 700;
+      color: var(--primary);
+    }
+
+    .tool-badge {
+      font-size: 11px;
+      padding: 2px 8px;
+      border-radius: 4px;
+      font-weight: 600;
+      text-transform: uppercase;
+    }
+
+    .badge-read { background: rgba(59, 185, 80, 0.15); color: var(--green); }
+    .badge-write { background: rgba(210, 153, 34, 0.15); color: var(--orange); }
+
+    .tool-desc { color: var(--text-dim); font-size: 14px; margin-bottom: 16px; }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+    }
+
+    th {
+      text-align: left;
+      padding: 8px 12px;
+      background: var(--bg);
+      color: var(--text-dim);
+      font-weight: 600;
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    td {
+      padding: 8px 12px;
+      border-top: 1px solid var(--border);
+    }
+
+    td code {
+      font-family: 'SF Mono', Monaco, monospace;
+      font-size: 12px;
+      background: var(--bg);
+      padding: 2px 6px;
+      border-radius: 4px;
+      color: var(--purple);
+    }
+
+    .required { color: var(--red); font-weight: 600; }
+    .optional { color: var(--text-dim); }
+
+    pre {
+      background: var(--bg-code);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 16px;
+      overflow-x: auto;
+      font-family: 'SF Mono', Monaco, monospace;
+      font-size: 13px;
+      line-height: 1.5;
+      margin: 12px 0;
+    }
+
+    .auth-section {
+      background: rgba(88, 166, 255, 0.08);
+      border: 1px solid rgba(88, 166, 255, 0.2);
+      border-radius: 8px;
+      padding: 20px;
+      margin-bottom: 24px;
+    }
+
+    .auth-section h3 { margin-top: 0; color: var(--primary); }
+
+    .step {
+      display: flex;
+      gap: 12px;
+      margin: 12px 0;
+    }
+
+    .step-num {
+      width: 28px;
+      height: 28px;
+      min-width: 28px;
+      background: var(--primary);
+      color: #000;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 700;
+      font-size: 13px;
+    }
+
+    .step-content { flex: 1; }
+
+    .permissions-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 12px;
+      margin: 12px 0;
+    }
+
+    .perm-card {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 12px;
+    }
+
+    .perm-card code { color: var(--green); font-size: 13px; }
+    .perm-card p { font-size: 12px; color: var(--text-dim); margin-top: 4px; }
+
+    .fields-list {
+      columns: 2;
+      column-gap: 24px;
+      font-size: 13px;
+      color: var(--text-dim);
+      list-style: none;
+      margin: 8px 0;
+    }
+
+    .fields-list li {
+      padding: 2px 0;
+      break-inside: avoid;
+    }
+
+    .fields-list li::before {
+      content: "- ";
+      color: var(--border);
+    }
+
+    footer {
+      margin-top: 48px;
+      padding-top: 24px;
+      border-top: 1px solid var(--border);
+      color: var(--text-dim);
+      font-size: 13px;
+      text-align: center;
+    }
+
+    #status-dot {
+      display: inline-block;
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--text-dim);
+      margin-right: 6px;
+    }
+
+    #status-dot.online { background: var(--green); }
+    #status-dot.offline { background: var(--red); }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>
+        Toshify MCP Server
+        <span class="badge" id="status-badge">Checking...</span>
+      </h1>
+      <p>Model Context Protocol server para chatbots. Acceso a <strong>leads</strong> y <strong>hireflix_historico</strong>.</p>
+
+      <div class="server-url">
+        <div>
+          <label>Server URL</label><br>
+          <code id="server-url"></code>
+        </div>
+        <button class="copy-btn" onclick="copyUrl()">Copiar</button>
+      </div>
+    </header>
+
+    <!-- Auth -->
+    <div class="auth-section">
+      <h3>Autenticacion</h3>
+      <p>Este servidor requiere una <strong>API key</strong> para conectarse. Las API keys se gestionan desde la app de Toshify en <em>Administracion > Integraciones > MCP</em>.</p>
+
+      <div class="step">
+        <div class="step-num">1</div>
+        <div class="step-content">
+          <strong>Obtener tu API key</strong><br>
+          <span style="color: var(--text-dim)">Un administrador genera la API key desde la app y te la comparte.</span>
+        </div>
+      </div>
+
+      <div class="step">
+        <div class="step-num">2</div>
+        <div class="step-content">
+          <strong>Conectar via SSE</strong><br>
+          <span style="color: var(--text-dim)">Usar el endpoint <code>/sse</code> con el header <code>x-api-key</code> o query param <code>?apiKey=</code></span>
+        </div>
+      </div>
+
+      <div class="step">
+        <div class="step-num">3</div>
+        <div class="step-content">
+          <strong>Configurar tu cliente MCP</strong><br>
+          <pre>{
+  "mcpServers": {
+    "toshify-leads": {
+      "url": "<span id="config-url"></span>/sse?apiKey=TU_API_KEY"
+    }
+  }
+}</pre>
+        </div>
+      </div>
+    </div>
+
+    <!-- Permissions -->
+    <h2>Permisos</h2>
+    <p style="color: var(--text-dim); font-size: 14px; margin-bottom: 12px;">Cada API key tiene permisos granulares que determinan que herramientas puede usar.</p>
+    <div class="permissions-grid">
+      <div class="perm-card">
+        <code>leads:read</code>
+        <p>Buscar y ver leads</p>
+      </div>
+      <div class="perm-card">
+        <code>leads:update</code>
+        <p>Actualizar campos de leads</p>
+      </div>
+      <div class="perm-card">
+        <code>hireflix:read</code>
+        <p>Buscar registros de Hireflix</p>
+      </div>
+    </div>
+
+    <!-- Tools -->
+    <h2>Herramientas</h2>
+
+    <!-- buscar_leads -->
+    <div class="card">
+      <div class="card-header">
+        <span class="tool-name">buscar_leads</span>
+        <span class="tool-badge badge-read">leads:read</span>
+      </div>
+      <div class="tool-desc">Buscar leads por nombre, DNI, email, estado, sede u otros filtros. Devuelve una lista paginada.</div>
+      <table>
+        <thead>
+          <tr><th>Parametro</th><th>Tipo</th><th>Requerido</th><th>Descripcion</th></tr>
+        </thead>
+        <tbody>
+          <tr><td><code>search</code></td><td>string</td><td class="optional">No</td><td>Buscar en Nombre Completo, Email o DNI</td></tr>
+          <tr><td><code>estado</code></td><td>string</td><td class="optional">No</td><td>Filtrar por Estado de Lead</td></tr>
+          <tr><td><code>agente</code></td><td>string</td><td class="optional">No</td><td>Filtrar por Agente asignado</td></tr>
+          <tr><td><code>sede</code></td><td>string</td><td class="optional">No</td><td>Filtrar por Sede</td></tr>
+          <tr><td><code>desde</code></td><td>string</td><td class="optional">No</td><td>Fecha desde (ISO 8601)</td></tr>
+          <tr><td><code>hasta</code></td><td>string</td><td class="optional">No</td><td>Fecha hasta (ISO 8601)</td></tr>
+          <tr><td><code>page</code></td><td>number</td><td class="optional">No</td><td>Pagina (default: 1)</td></tr>
+          <tr><td><code>limit</code></td><td>number</td><td class="optional">No</td><td>Cantidad por pagina (default: 20, max: 100)</td></tr>
+        </tbody>
+      </table>
+      <h3>Ejemplo</h3>
+      <pre>buscar_leads({ search: "Juan Perez", estado: "Nuevo" })</pre>
+    </div>
+
+    <!-- obtener_lead -->
+    <div class="card">
+      <div class="card-header">
+        <span class="tool-name">obtener_lead</span>
+        <span class="tool-badge badge-read">leads:read</span>
+      </div>
+      <div class="tool-desc">Obtener todos los datos de un lead por su ID (UUID).</div>
+      <table>
+        <thead>
+          <tr><th>Parametro</th><th>Tipo</th><th>Requerido</th><th>Descripcion</th></tr>
+        </thead>
+        <tbody>
+          <tr><td><code>id</code></td><td>string (UUID)</td><td class="required">Si</td><td>ID del lead</td></tr>
+        </tbody>
+      </table>
+      <h3>Ejemplo</h3>
+      <pre>obtener_lead({ id: "550e8400-e29b-41d4-a716-446655440000" })</pre>
+    </div>
+
+    <!-- actualizar_lead -->
+    <div class="card">
+      <div class="card-header">
+        <span class="tool-name">actualizar_lead</span>
+        <span class="tool-badge badge-write">leads:update</span>
+      </div>
+      <div class="tool-desc">Actualizar campos de un lead existente. Solo se pueden modificar campos permitidos.</div>
+      <table>
+        <thead>
+          <tr><th>Parametro</th><th>Tipo</th><th>Requerido</th><th>Descripcion</th></tr>
+        </thead>
+        <tbody>
+          <tr><td><code>id</code></td><td>string (UUID)</td><td class="required">Si</td><td>ID del lead</td></tr>
+          <tr><td><code>campos</code></td><td>object</td><td class="required">Si</td><td>Campos a actualizar</td></tr>
+        </tbody>
+      </table>
+      <h3>Campos actualizables</h3>
+      <ul class="fields-list">
+        <li>Estado de Lead</li>
+        <li>Agente asignado</li>
+        <li>Entrevistador asignado</li>
+        <li>Especialista Onboarding</li>
+        <li>Administrativo Asignado</li>
+        <li>Dataentry Asignado</li>
+        <li>Agente logistico asignado</li>
+        <li>Guia asignado</li>
+        <li>Asistente Virtual</li>
+        <li>Nombre Completo</li>
+        <li>Apellido</li>
+        <li>Primer nombre</li>
+        <li>Email</li>
+        <li>Phone</li>
+        <li>WhatsApp number</li>
+        <li>DNI</li>
+        <li>Edad</li>
+        <li>Direccion</li>
+        <li>City / Region / Country</li>
+        <li>Zona</li>
+        <li>Sede</li>
+        <li>Turno</li>
+        <li>Patente</li>
+        <li>Tipo</li>
+        <li>Licencia</li>
+        <li>Monotributo</li>
+        <li>Experiencia previa</li>
+        <li>Acepta oferta</li>
+        <li>Antecedentes penales</li>
+        <li>Fase de Preguntas</li>
+        <li>Documentos pendientes</li>
+        <li>Causal de cierre</li>
+        <li>Contacto de emergencia</li>
+        <li>Fuente de lead</li>
+        <li>Cerrado timeout wpp</li>
+      </ul>
+      <h3>Ejemplo</h3>
+      <pre>actualizar_lead({
+  id: "550e8400-e29b-41d4-a716-446655440000",
+  campos: {
+    "Estado de Lead": "Contactado",
+    "Sede": "Cordoba",
+    "Phone": "+5491112345678"
+  }
+})</pre>
+    </div>
+
+    <!-- buscar_hireflix -->
+    <div class="card">
+      <div class="card-header">
+        <span class="tool-name">buscar_hireflix</span>
+        <span class="tool-badge badge-read">hireflix:read</span>
+      </div>
+      <div class="tool-desc">Buscar registros historicos de Hireflix (entrevistas).</div>
+      <table>
+        <thead>
+          <tr><th>Parametro</th><th>Tipo</th><th>Requerido</th><th>Descripcion</th></tr>
+        </thead>
+        <tbody>
+          <tr><td><code>search</code></td><td>string</td><td class="optional">No</td><td>Buscar en nombre o email</td></tr>
+          <tr><td><code>desde</code></td><td>string</td><td class="optional">No</td><td>Fecha desde (ISO 8601)</td></tr>
+          <tr><td><code>hasta</code></td><td>string</td><td class="optional">No</td><td>Fecha hasta (ISO 8601)</td></tr>
+          <tr><td><code>page</code></td><td>number</td><td class="optional">No</td><td>Pagina (default: 1)</td></tr>
+          <tr><td><code>limit</code></td><td>number</td><td class="optional">No</td><td>Cantidad por pagina (max: 100)</td></tr>
+        </tbody>
+      </table>
+      <h3>Ejemplo</h3>
+      <pre>buscar_hireflix({ search: "Maria Lopez", desde: "2025-01-01" })</pre>
+    </div>
+
+    <!-- Security -->
+    <h2>Seguridad</h2>
+    <div class="card">
+      <ul style="list-style: none; font-size: 14px;">
+        <li style="margin: 8px 0;">Este servidor <strong>solo</strong> tiene acceso a las tablas <code>leads</code> y <code>hireflix_historico</code>.</li>
+        <li style="margin: 8px 0;">No tiene acceso a conductores, vehiculos, facturacion, ni ninguna otra tabla del sistema.</li>
+        <li style="margin: 8px 0;">Cada API key tiene permisos granulares - se puede crear una key de solo lectura.</li>
+        <li style="margin: 8px 0;">Las API keys se pueden desactivar en cualquier momento desde la app de administracion.</li>
+        <li style="margin: 8px 0;">Se registra la ultima vez que se uso cada API key (<code>last_used_at</code>).</li>
+      </ul>
+    </div>
+
+    <footer>
+      Toshify MCP Server v1.0.0 &middot; <span id="status-dot"></span><span id="status-text">Verificando...</span>
+    </footer>
+  </div>
+
+  <script>
+    const baseUrl = window.location.origin;
+    document.getElementById('server-url').textContent = baseUrl + '/sse';
+    document.getElementById('config-url').textContent = baseUrl;
+
+    function copyUrl() {
+      navigator.clipboard.writeText(baseUrl + '/sse');
+      const btn = document.querySelector('.copy-btn');
+      btn.textContent = 'Copiado!';
+      setTimeout(() => btn.textContent = 'Copiar', 2000);
+    }
+
+    // Health check
+    fetch('/health')
+      .then(r => r.json())
+      .then(data => {
+        if (data.status === 'ok') {
+          document.getElementById('status-badge').textContent = 'Online';
+          document.getElementById('status-badge').style.background = '#3fb950';
+          document.getElementById('status-dot').className = 'online';
+          document.getElementById('status-text').textContent = 'Server online';
+        }
+      })
+      .catch(() => {
+        document.getElementById('status-badge').textContent = 'Offline';
+        document.getElementById('status-badge').style.background = '#f85149';
+        document.getElementById('status-dot').className = 'offline';
+        document.getElementById('status-text').textContent = 'Server offline';
+      });
+  </script>
+</body>
+</html>

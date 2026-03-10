@@ -6,10 +6,15 @@
  */
 
 import { randomUUID } from 'node:crypto';
+import { fileURLToPath } from 'node:url';
+import { dirname, join } from 'node:path';
 import express from 'express';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { SSEServerTransport } from '@modelcontextprotocol/sdk/server/sse.js';
 import { z } from 'zod';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
 
 const PORT = process.env.MCP_PORT || 3002;
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL;
@@ -371,6 +376,11 @@ function createMcpServer(apiKeyData) {
 
 const app = express();
 app.use(express.json());
+
+// Docs page
+app.get('/docs', (req, res) => {
+  res.sendFile(join(__dirname, 'docs.html'));
+});
 
 // Health check
 app.get('/health', (req, res) => {
