@@ -900,8 +900,6 @@ export function GarantiasTab() {
       'Monto Pagado': g.monto_pagado,
       'Cuotas Totales': g.cuotas_totales,
       'Cuotas Pagadas': g.cuotas_pagadas,
-      'Cuota Semanal': g.monto_cuota_semanal,
-      'Estado': g.estado,
     }))
 
     const ws = XLSX.utils.json_to_sheet(data)
@@ -913,28 +911,10 @@ export function GarantiasTab() {
       { wch: 14 }, // Monto Pagado
       { wch: 14 }, // Cuotas Totales
       { wch: 14 }, // Cuotas Pagadas
-      { wch: 14 }, // Cuota Semanal
-      { wch: 16 }, // Estado
     ]
 
     const wb = XLSX.utils.book_new()
     XLSX.utils.book_append_sheet(wb, ws, 'Garantias')
-
-    const instrucciones = [
-      ['INSTRUCCIONES PARA IMPORTAR'],
-      [''],
-      ['1. Edite los valores en la hoja "Garantias"'],
-      ['2. Columnas editables: Monto Total, Monto Pagado, Cuotas Totales, Cuotas Pagadas, Cuota Semanal, Estado'],
-      ['3. NO modifique la columna DNI (es la clave para identificar al conductor)'],
-      ['4. La columna "Conductor" es informativa y no se importa'],
-      ['5. Guarde el archivo y use el boton Importar para subirlo'],
-      [''],
-      ['VALORES DE ESTADO VALIDOS:'],
-      ['  pendiente, en_curso, completada, cancelada, suspendida, en_devolucion'],
-    ]
-    const wsInstr = XLSX.utils.aoa_to_sheet(instrucciones)
-    wsInstr['!cols'] = [{ wch: 80 }]
-    XLSX.utils.book_append_sheet(wb, wsInstr, 'Instrucciones')
 
     const fecha = new Date().toISOString().slice(0, 10)
     XLSX.writeFile(wb, `Garantias_Conductores_${fecha}.xlsx`)
@@ -947,19 +927,48 @@ export function GarantiasTab() {
       const buffer = await file.arrayBuffer()
       const wb = XLSX.read(buffer, { type: 'array' })
 
-      const sheetName = wb.SheetNames.includes('Garantias') ? 'Garantias' : wb.SheetNames[0]
+      // Buscar la hoja correcta: primero "Garantias", sino la primera que tenga columna DNI
+      let sheetName = ''
+      if (wb.SheetNames.includes('Garantias')) {
+        sheetName = 'Garantias'
+      } else {
+        for (const name of wb.SheetNames) {
+          const testWs = wb.Sheets[name]
+          const testRows: any[] = XLSX.utils.sheet_to_json(testWs, { raw: false })
+          if (testRows.length > 0 && (testRows[0]['DNI'] !== undefined || testRows[0]['dni'] !== undefined || testRows[0]['Dni'] !== undefined)) {
+            sheetName = name
+            break
+          }
+        }
+        if (!sheetName) sheetName = wb.SheetNames[0]
+      }
+
       const ws = wb.Sheets[sheetName]
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const rows: any[] = XLSX.utils.sheet_to_json(ws, { raw: false })
 
       if (rows.length === 0) {
-        Swal.fire('Error', 'El archivo no contiene datos', 'error')
+        Swal.fire('Error', 'El archivo no contiene datos en la hoja "' + sheetName + '"', 'error')
         return
       }
 
+      // Buscar columna DNI (case-insensitive)
       const firstRow = rows[0]
-      if (firstRow['DNI'] === undefined && firstRow['dni'] === undefined) {
-        Swal.fire('Error', 'El archivo debe tener la columna "DNI"', 'error')
+      const findCol = (names: string[]) => {
+        for (const key of Object.keys(firstRow)) {
+          if (names.includes(key.trim().toLowerCase())) return key
+        }
+        return null
+      }
+      const colDni = findCol(['dni'])
+      const colMontoTotal = findCol(['monto total', 'montototal', 'total'])
+      const colMontoPagado = findCol(['monto pagado', 'montopagado', 'pagado'])
+      const colCuotasTotales = findCol(['cuotas totales', 'cuotastotales'])
+      const colCuotasPagadas = findCol(['cuotas pagadas', 'cuotaspagadas'])
+      const colCuotaSemanal = findCol(['cuota semanal', 'cuotasemanal'])
+      const colEstado = findCol(['estado'])
+
+      if (!colDni) {
+        Swal.fire('Error', 'El archivo debe tener la columna "DNI".<br><br>Columnas encontradas: ' + Object.keys(firstRow).join(', '), 'error')
         return
       }
 
@@ -991,7 +1000,7 @@ export function GarantiasTab() {
 
       for (let i = 0; i < rows.length; i++) {
         const r = rows[i]
-        const dniRaw = String(r['DNI'] || r['dni'] || '').trim()
+        const dniRaw = String(r[colDni] || '').trim()
         const dniNorm = dniRaw.replace(/[.\s]/g, '').replace(/^0+/, '')
 
         if (!dniNorm || dniNorm.length < 5) {
@@ -1005,12 +1014,42 @@ export function GarantiasTab() {
           continue
         }
 
-        const montoTotal = parseFloat(String(r['Monto Total'] || '0').replace(/,/g, ''))
-        const montoPagado = parseFloat(String(r['Monto Pagado'] || '0').replace(/,/g, ''))
-        const cuotasTotales = parseInt(String(r['Cuotas Totales'] || '0')) || 0
-        const cuotasPagadas = parseInt(String(r['Cuotas Pagadas'] || '0')) || 0
-        const cuotaSemanal = parseFloat(String(r['Cuota Semanal'] || '0').replace(/,/g, ''))
-        const estado = String(r['Estado'] || r['estado'] || match.estado).trim().toLowerCase()
+        // Leer columnas del Excel, si falta usar valor de DB
+        const montoTotal = colMontoTotal
+          ? parseFloat(String(r[colMontoTotal] || '0').replace(/,/g, ''))
+          : match.monto_total
+        const montoPagado = colMontoPagado
+          ? parseFloat(String(r[colMontoPagado] || '0').replace(/,/g, ''))
+          : match.monto_pagado
+        const cuotasTotales = colCuotasTotales
+          ? (parseInt(String(r[colCuotasTotales] || '0')) || 0)
+          : match.cuotas_totales
+        const cuotasPagadas = colCuotasPagadas
+          ? (parseInt(String(r[colCuotasPagadas] || '0')) || 0)
+          : match.cuotas_pagadas
+
+        // Cuota semanal: si viene en el Excel usarla, sino siempre 50000
+        const cuotaSemanal = colCuotaSemanal
+          ? parseFloat(String(r[colCuotaSemanal] || '0').replace(/,/g, ''))
+          : 50000
+
+        // Auto-calcular estado si no viene en el Excel
+        let estado: string
+        if (colEstado) {
+          estado = String(r[colEstado]).trim().toLowerCase()
+        } else {
+          // Mantener en_devolucion si el conductor está de baja
+          const esBaja = (match as any).estado_conductor === 'BAJA'
+          if (esBaja && montoPagado > 0) {
+            estado = 'en_devolucion'
+          } else if (montoPagado >= montoTotal && montoTotal > 0) {
+            estado = 'completada'
+          } else if (montoPagado > 0 || cuotasPagadas > 0) {
+            estado = 'en_curso'
+          } else {
+            estado = 'pendiente'
+          }
+        }
 
         if (isNaN(montoTotal) || isNaN(montoPagado) || isNaN(cuotaSemanal)) {
           errores.push(`Fila ${i + 2}: Valores numericos invalidos`)
@@ -1025,7 +1064,7 @@ export function GarantiasTab() {
         parsed.push({
           garantia_id: match.id,
           dni: dniRaw,
-          nombre: String(r['Conductor'] || match.conductor_nombre || ''),
+          nombre: String(r['Conductor'] || r['conductor'] || match.conductor_nombre || ''),
           monto_total: Math.round(montoTotal * 100) / 100,
           monto_pagado: Math.round(montoPagado * 100) / 100,
           cuotas_totales: cuotasTotales,
@@ -1057,29 +1096,28 @@ export function GarantiasTab() {
         return
       }
 
-      // Preview HTML
+      // Preview HTML - mostrar todos los campos: anterior → nuevo
+      const cellStyle = 'padding:3px 6px;border-bottom:1px solid #E5E7EB;font-size:10px;'
+      const diffCell = (ant: string | number, nuevo: string | number, isNum = true) => {
+        const changed = String(ant) !== String(nuevo)
+        if (!changed) return `<td style="${cellStyle}text-align:right;color:#9CA3AF;">${isNum ? formatCurrency(Number(nuevo)) : nuevo}</td>`
+        return `<td style="${cellStyle}text-align:right;">
+          <span style="color:#9CA3AF;text-decoration:line-through;font-size:9px;">${isNum ? formatCurrency(Number(ant)) : ant}</span>
+          <span style="color:#111;font-weight:600;margin-left:2px;">${isNum ? formatCurrency(Number(nuevo)) : nuevo}</span>
+        </td>`
+      }
+
       const previewRows = cambios.slice(0, 50).map((c) => {
-        const actual = garantias.find((g) => g.id === c.garantia_id)
-        const pagadoAnt = actual?.monto_pagado ?? 0
-        const pagadoDiff = c.monto_pagado - pagadoAnt
-        const diffColor = pagadoDiff > 0 ? '#16a34a' : pagadoDiff < 0 ? '#dc2626' : '#6B7280'
-        const diffSign = pagadoDiff > 0 ? '+' : ''
-        // Highlight what changed
-        const changes: string[] = []
-        if (actual && Math.abs(actual.monto_total - c.monto_total) > 0.01) changes.push('Total')
-        if (actual && Math.abs(actual.monto_pagado - c.monto_pagado) > 0.01) changes.push('Pagado')
-        if (actual && actual.cuotas_totales !== c.cuotas_totales) changes.push('Cuotas Tot.')
-        if (actual && actual.cuotas_pagadas !== c.cuotas_pagadas) changes.push('Cuotas Pag.')
-        if (actual && Math.abs(actual.monto_cuota_semanal - c.monto_cuota_semanal) > 0.01) changes.push('Cuota Sem.')
-        if (actual && actual.estado !== c.estado) changes.push('Estado')
+        const a = garantias.find((g) => g.id === c.garantia_id)
         return `<tr>
-          <td style="padding:4px 8px;border-bottom:1px solid #E5E7EB;white-space:nowrap;">${c.nombre}</td>
-          <td style="padding:4px 6px;border-bottom:1px solid #E5E7EB;text-align:center;color:#6B7280;font-size:10px;">${c.dni}</td>
-          <td style="padding:4px 6px;border-bottom:1px solid #E5E7EB;text-align:right;color:#9CA3AF;text-decoration:line-through;font-size:10px;">${formatCurrency(pagadoAnt)}</td>
-          <td style="padding:4px 4px;border-bottom:1px solid #E5E7EB;text-align:center;color:#9CA3AF;font-size:10px;">→</td>
-          <td style="padding:4px 6px;border-bottom:1px solid #E5E7EB;text-align:right;color:${c.monto_pagado > 0 ? '#16a34a' : '#6B7280'};font-weight:600;">${formatCurrency(c.monto_pagado)}</td>
-          <td style="padding:4px 6px;border-bottom:1px solid #E5E7EB;text-align:right;color:${diffColor};font-size:10px;font-weight:500;">${diffSign}${formatCurrency(pagadoDiff)}</td>
-          <td style="padding:4px 6px;border-bottom:1px solid #E5E7EB;font-size:9px;color:#6B7280;">${changes.join(', ')}</td>
+          <td style="${cellStyle}white-space:nowrap;font-weight:500;">${c.nombre}</td>
+          <td style="${cellStyle}text-align:center;color:#6B7280;">${c.dni}</td>
+          ${diffCell(a?.monto_total ?? 0, c.monto_total)}
+          ${diffCell(a?.monto_pagado ?? 0, c.monto_pagado)}
+          ${diffCell(a?.cuotas_totales ?? 0, c.cuotas_totales)}
+          ${diffCell(a?.cuotas_pagadas ?? 0, c.cuotas_pagadas)}
+          ${diffCell(a?.monto_cuota_semanal ?? 0, c.monto_cuota_semanal)}
+          ${diffCell(a?.estado ?? '', c.estado, false)}
         </tr>`
       }).join('')
 
@@ -1111,31 +1149,33 @@ export function GarantiasTab() {
                 ${errores.length > 20 ? `<div>... y ${errores.length - 20} mas</div>` : ''}
               </div>
             </details>` : ''}
-            <div style="max-height:300px;overflow-y:auto;border:1px solid #E5E7EB;border-radius:6px;">
+            <div style="max-height:350px;overflow:auto;border:1px solid #E5E7EB;border-radius:6px;">
               <table style="width:100%;border-collapse:collapse;font-size:11px;">
                 <thead>
-                  <tr style="background:#F9FAFB;position:sticky;top:0;">
-                    <th style="padding:5px 8px;text-align:left;font-weight:600;">Conductor</th>
+                  <tr style="background:#F9FAFB;position:sticky;top:0;z-index:1;">
+                    <th style="padding:5px 6px;text-align:left;font-weight:600;">Conductor</th>
                     <th style="padding:5px 6px;text-align:center;font-weight:600;">DNI</th>
-                    <th style="padding:5px 6px;text-align:right;font-weight:600;font-size:10px;">Pagado Ant.</th>
-                    <th style="padding:5px 2px;"></th>
-                    <th style="padding:5px 6px;text-align:right;font-weight:600;font-size:10px;">Pagado Nuevo</th>
-                    <th style="padding:5px 6px;text-align:right;font-weight:600;font-size:10px;">Dif.</th>
-                    <th style="padding:5px 6px;text-align:left;font-weight:600;font-size:10px;">Campos</th>
+                    <th style="padding:5px 6px;text-align:right;font-weight:600;font-size:9px;">Monto Total</th>
+                    <th style="padding:5px 6px;text-align:right;font-weight:600;font-size:9px;">Monto Pagado</th>
+                    <th style="padding:5px 6px;text-align:right;font-weight:600;font-size:9px;">Cuotas Tot.</th>
+                    <th style="padding:5px 6px;text-align:right;font-weight:600;font-size:9px;">Cuotas Pag.</th>
+                    <th style="padding:5px 6px;text-align:right;font-weight:600;font-size:9px;">Cuota Sem.</th>
+                    <th style="padding:5px 6px;text-align:right;font-weight:600;font-size:9px;">Estado</th>
                   </tr>
                 </thead>
                 <tbody>${previewRows}
-                ${cambios.length > 50 ? `<tr><td colspan="7" style="padding:6px;text-align:center;color:#9CA3AF;font-size:11px;">... y ${cambios.length - 50} cambios mas</td></tr>` : ''}
+                ${cambios.length > 50 ? `<tr><td colspan="8" style="padding:6px;text-align:center;color:#9CA3AF;font-size:11px;">... y ${cambios.length - 50} cambios mas</td></tr>` : ''}
                 </tbody>
               </table>
             </div>
+            <div style="margin-top:8px;font-size:10px;color:#6B7280;">Los valores <span style="text-decoration:line-through;">tachados</span> son los actuales. Los valores en <strong>negrita</strong> son los nuevos.</div>
           </div>
         `,
         showCancelButton: true,
         confirmButtonText: `Confirmar ${cambios.length} cambios`,
         cancelButtonText: 'Cancelar',
         confirmButtonColor: '#ff0033',
-        width: 700,
+        width: 850,
         customClass: {
           popup: 'swal-compact',
           title: 'swal-title-compact',
