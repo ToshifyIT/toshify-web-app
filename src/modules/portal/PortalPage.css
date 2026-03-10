@@ -805,3 +805,62 @@
     font-size: 24px;
   }
 }
+
+/* =====================================================
+   TOOLTIP & NOTA LEGAL
+   ===================================================== */
+
+.portal-stat-tooltip {
+  position: relative;
+  display: inline-block;
+  margin-left: 4px;
+  font-size: 12px;
+  color: var(--text-quaternary);
+  cursor: help;
+  vertical-align: middle;
+  opacity: 0.7;
+  transition: opacity 0.15s;
+}
+
+.portal-stat-tooltip:hover {
+  opacity: 1;
+  color: var(--text-secondary);
+}
+
+.portal-stat-tooltip::after {
+  content: attr(data-tooltip);
+  position: absolute;
+  left: 50%;
+  top: calc(100% + 6px);
+  transform: translateX(-50%);
+  background: var(--bg-tertiary, #1f2937);
+  color: var(--text-primary, #f9fafb);
+  border: 1px solid var(--border-primary, #374151);
+  border-radius: 6px;
+  padding: 6px 10px;
+  font-size: 11px;
+  font-style: normal;
+  font-weight: 400;
+  text-transform: none;
+  letter-spacing: 0;
+  line-height: 1.4;
+  white-space: nowrap;
+  z-index: 100;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+
+.portal-stat-tooltip:hover::after {
+  opacity: 1;
+}
+
+.portal-nota-legal {
+  margin-top: 24px;
+  padding: 12px 16px;
+  text-align: center;
+  font-size: 11px;
+  color: var(--text-quaternary);
+  font-style: italic;
+  border-top: 1px solid var(--border-primary);
+}

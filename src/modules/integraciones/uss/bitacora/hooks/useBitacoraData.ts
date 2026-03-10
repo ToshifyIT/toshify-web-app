@@ -357,8 +357,8 @@ export function useBitacoraData() {
   }, [])
 
   // Cambiar rango de fecha personalizado
-  const setCustomDateRange = useCallback((startDate: string, endDate: string) => {
-    setDateRange({ startDate, endDate, label: 'Personalizado' })
+  const setCustomDateRange = useCallback((startDate: string, endDate: string, label?: string) => {
+    setDateRange({ startDate, endDate, label: label || 'Personalizado' })
     setPage(1)
   }, [])
 

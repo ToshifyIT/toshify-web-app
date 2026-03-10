@@ -279,6 +279,7 @@ class CabifyIntegrationService {
 
   /**
    * Consultar top drivers directamente de una tabla (para Bariloche)
+   * Agrupa registros diarios por DNI para evitar duplicados
    */
   private async getTopFromTable(
     tableName: string,
@@ -286,18 +287,50 @@ class CabifyIntegrationService {
     endDate: string,
     order: 'asc' | 'desc'
   ): Promise<CabifyRankingDriver[]> {
+    // endDate viene como UTC (ej: 2026-03-09T02:59:59Z = fin domingo ARG)
+    // Truncar al día para no incluir registros del lunes siguiente (fecha_inicio = 2026-03-09T00:00:00Z)
+    const endDay = endDate.split('T')[0] + 'T00:00:00.000Z'
     const { data, error } = await supabase
       .from(tableName)
       .select('dni, nombre, apellido, vehiculo_patente, viajes_finalizados, ganancia_total, score, horas_conectadas, fecha_guardado')
       .gte('fecha_inicio', startDate)
-      .lte('fecha_inicio', endDate)
+      .lt('fecha_inicio', endDay)
       .gt('viajes_finalizados', 0)
-      .order('ganancia_total', { ascending: order === 'asc' })
-      .limit(10)
 
     if (error || !data) return []
 
-    return data.map((row: any) => this.mapRankingDriver({
+    // Agrupar por DNI (los registros diarios se suman)
+    const grouped = new Map<string, { nombre: string; apellido: string; vehiculo_patente: string; viajes_finalizados: number; ganancia_total: number; score: number; horas_conectadas: number; fecha_guardado: string }>()
+    for (const row of data as any[]) {
+      const dniKey = row.dni || ''
+      const existing = grouped.get(dniKey)
+      if (existing) {
+        existing.viajes_finalizados += (row.viajes_finalizados || 0)
+        existing.ganancia_total += (parseFloat(row.ganancia_total) || 0)
+        existing.horas_conectadas += (parseFloat(row.horas_conectadas) || 0)
+        if (row.score > existing.score) existing.score = row.score
+        if (row.fecha_guardado > existing.fecha_guardado) existing.fecha_guardado = row.fecha_guardado
+      } else {
+        grouped.set(dniKey, {
+          nombre: row.nombre,
+          apellido: row.apellido,
+          vehiculo_patente: row.vehiculo_patente || '',
+          viajes_finalizados: row.viajes_finalizados || 0,
+          ganancia_total: parseFloat(row.ganancia_total) || 0,
+          score: parseFloat(row.score) || 0,
+          horas_conectadas: parseFloat(row.horas_conectadas) || 0,
+          fecha_guardado: row.fecha_guardado || '',
+        })
+      }
+    }
+
+    // Ordenar y tomar top 10
+    const sorted = [...grouped.entries()]
+      .sort((a, b) => order === 'desc' ? b[1].ganancia_total - a[1].ganancia_total : a[1].ganancia_total - b[1].ganancia_total)
+      .slice(0, 10)
+
+    return sorted.map(([dni, row]) => this.mapRankingDriver({
+      dni,
       ...row,
       ganancia_por_hora: row.horas_conectadas > 0 ? row.ganancia_total / row.horas_conectadas : 0,
       horario: null,

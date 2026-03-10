@@ -33,9 +33,11 @@ import {
   createVisita,
   updateVisita,
   updateVisitaEstado,
+  cancelarVisitaConMotivo,
   deleteVisita,
   toCalendarEvents,
   toCalendarResources,
+  autoUpdateEstados,
 } from '../../services/visitasService';
 import { VisitasCalendario } from './components/VisitasCalendario';
 import { VisitasFormModal } from './components/VisitasFormModal';
@@ -106,7 +108,9 @@ export function VisitasModule() {
 
   const cargarVisitas = useCallback(async () => {
     const { start, end } = getQueryRange(currentDate);
-    const data = await fetchVisitas(sedeActualId, start, end);
+    const raw = await fetchVisitas(sedeActualId, start, end);
+    // Auto-transicionar estados según hora actual (pendiente→en_curso→completada)
+    const data = await autoUpdateEstados(raw);
     setVisitas(data);
     setCalendarEvents(toCalendarEvents(data));
   }, [sedeActualId, currentDate, getQueryRange]);
@@ -127,6 +131,14 @@ export function VisitasModule() {
     init();
     return () => { cancelled = true; };
   }, [cargarCatalogos, cargarVisitas]);
+
+  // Re-evaluar estados automáticamente cada 60s
+  useEffect(() => {
+    const interval = setInterval(() => {
+      cargarVisitas();
+    }, 60_000);
+    return () => clearInterval(interval);
+  }, [cargarVisitas]);
 
   // === HANDLERS: Calendar ===
   function handleSelectSlot(slotInfo: { start: Date; end: Date; resourceId?: string | number }) {
@@ -179,23 +191,54 @@ export function VisitasModule() {
   async function handleChangeEstado(estado: VisitaEstado) {
     if (!selectedVisita) return;
     const info = VISITA_ESTADOS[estado];
-    const result = await Swal.fire({
-      title: `Cambiar a "${info.label}"`,
-      text: `¿Confirma cambiar el estado de esta cita a "${info.label}"?`,
-      icon: 'question',
-      showCancelButton: true,
-      confirmButtonText: 'Sí, cambiar',
-      cancelButtonText: 'Cancelar',
-    });
-    if (!result.isConfirmed) return;
 
-    try {
-      await updateVisitaEstado(selectedVisita.id, estado);
-      showSuccess(`Estado cambiado a "${info.label}"`);
-      setShowDetalleModal(false);
-      await cargarVisitas();
-    } catch {
-      Swal.fire('Error', 'No se pudo cambiar el estado', 'error');
+    if (estado === 'cancelada') {
+      // Cancelar requiere motivo obligatorio
+      const result = await Swal.fire({
+        title: 'Cancelar cita',
+        text: 'Ingresá el motivo de la cancelación:',
+        input: 'text',
+        inputPlaceholder: 'Ej: No asistió, reprogramada, etc.',
+        inputValidator: (value) => {
+          if (!value || !value.trim()) return 'Debés ingresar un motivo';
+          return null;
+        },
+        icon: 'warning',
+        showCancelButton: true,
+        confirmButtonText: 'Cancelar cita',
+        cancelButtonText: 'Volver',
+        confirmButtonColor: '#6b7280',
+      });
+      if (!result.isConfirmed) return;
+
+      try {
+        const motivoCancelacion = result.value as string;
+        await cancelarVisitaConMotivo(selectedVisita.id, motivoCancelacion, selectedVisita.nota);
+        showSuccess('Cita cancelada');
+        setShowDetalleModal(false);
+        await cargarVisitas();
+      } catch {
+        Swal.fire('Error', 'No se pudo cancelar la cita', 'error');
+      }
+    } else {
+      const result = await Swal.fire({
+        title: `Cambiar a "${info.label}"`,
+        text: `¿Confirma cambiar el estado de esta cita a "${info.label}"?`,
+        icon: 'question',
+        showCancelButton: true,
+        confirmButtonText: 'Sí, cambiar',
+        cancelButtonText: 'Cancelar',
+      });
+      if (!result.isConfirmed) return;
+
+      try {
+        await updateVisitaEstado(selectedVisita.id, estado);
+        showSuccess(`Estado cambiado a "${info.label}"`);
+        setShowDetalleModal(false);
+        await cargarVisitas();
+      } catch {
+        Swal.fire('Error', 'No se pudo cambiar el estado', 'error');
+      }
     }
   }
 
@@ -397,7 +440,6 @@ export function VisitasModule() {
               data={visitas}
               columns={columns}
               searchPlaceholder="Buscar visitas..."
-              disableAutoFilters
             />
           )}
 

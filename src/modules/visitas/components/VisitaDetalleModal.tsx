@@ -11,8 +11,8 @@ import { VISITA_ESTADOS } from '../../../types/visitas.types';
 
 // Transiciones válidas de estado
 const TRANSICIONES: Record<VisitaEstado, VisitaEstado[]> = {
-  pendiente: ['en_curso', 'cancelada', 'no_asistio'],
-  en_curso: ['completada', 'cancelada'],
+  pendiente: ['cancelada'],
+  en_curso: ['cancelada'],
   completada: [],
   no_asistio: [],
   cancelada: [],

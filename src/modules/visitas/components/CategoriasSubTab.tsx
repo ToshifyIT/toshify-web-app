@@ -207,7 +207,6 @@ export function CategoriasSubTab() {
         emptyIcon={<Tag size={48} />}
         emptyTitle="No hay categorías"
         emptyDescription="Agregue una nueva categoría de visita"
-        disableAutoFilters
         headerAction={
           <button className="visitas-btn-primary" onClick={handleCreate}>
             <Plus size={16} /> Nueva Categoría

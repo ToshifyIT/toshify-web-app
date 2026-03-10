@@ -16,12 +16,19 @@ export interface DateRange {
   type: 'day' | 'week' | 'custom' | 'all' | 'year'
 }
 
+export interface DateRangeShortcut {
+  id: string
+  label: string
+  range: DateRange
+}
+
 interface DateRangeSelectorProps {
   selectedRange: DateRange | null
   onRangeChange: (range: DateRange) => void
   disabled?: boolean
   showAllOption?: boolean // Mostrar opción "Todo el historial"
   placeholder?: string
+  extraShortcuts?: DateRangeShortcut[] // Atajos adicionales al inicio de la lista
 }
 
 // Días de la semana (Lunes a Domingo)
@@ -83,7 +90,8 @@ export function DateRangeSelector({
   onRangeChange,
   disabled = false,
   showAllOption = true,
-  placeholder = 'Seleccionar fecha'
+  placeholder = 'Seleccionar fecha',
+  extraShortcuts = [],
 }: DateRangeSelectorProps) {
   const [isOpen, setIsOpen] = useState(false)
   const [viewDate, setViewDate] = useState(new Date())
@@ -390,6 +398,19 @@ export function DateRangeSelector({
 
           {/* Atajos rápidos */}
           <div className="date-range-shortcuts">
+            {extraShortcuts.map(shortcut => (
+              <button
+                key={shortcut.id}
+                type="button"
+                className={`date-range-shortcut ${isShortcutSelected(shortcut.range) ? 'active' : ''}`}
+                onClick={() => {
+                  onRangeChange(shortcut.range)
+                  setIsOpen(false)
+                }}
+              >
+                {shortcut.label}
+              </button>
+            ))}
             {shortcuts.map(shortcut => (
               <button
                 key={shortcut.id}
