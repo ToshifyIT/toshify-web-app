@@ -2719,11 +2719,12 @@ export function ReporteFacturacionTab() {
         const cobroIdsAplicar: string[] = []
 
         // Alquiler detalles (P001/P002/P013)
+        // precio_unitario = precio DIARIO (precio_final de conceptos_nomina ya es diario)
         for (const detalle of detallesAlquiler) {
           let precioUnitario = 0
-          if (detalle.codigo === 'P001') precioUnitario = precioTurnoDiurno / 7
-          else if (detalle.codigo === 'P013') precioUnitario = precioTurnoNocturno / 7
-          else if (detalle.codigo === 'P002') precioUnitario = precioCargo / 7
+          if (detalle.codigo === 'P001') precioUnitario = precioTurnoDiurno
+          else if (detalle.codigo === 'P013') precioUnitario = precioTurnoNocturno
+          else if (detalle.codigo === 'P002') precioUnitario = precioCargo
           todosDetalles.push({
             facturacion_id: facturacionId, concepto_codigo: detalle.codigo,
             concepto_descripcion: detalle.descripcion, cantidad: detalle.dias,

@@ -3,7 +3,7 @@
  * Módulo principal de Bitácora - Control de Turnos Wialon
  */
 
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useCallback, useRef, useEffect } from 'react'
 import { useBitacoraData } from './hooks/useBitacoraData'
 import { BitacoraHeader, BitacoraStats, BitacoraTable } from './components'
 import './styles/bitacora.css'
@@ -22,22 +22,43 @@ export function BitacoraModule() {
     setPage,
     pageSize,
     setPageSize,
+    filterPatente,
+    setFilterPatente,
     updateChecklist,
   } = useBitacoraData()
 
   const [searchTerm, setSearchTerm] = useState('')
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  // Filtrar registros por búsqueda local
+  // Debounce: aplicar búsqueda server-side después de 400ms sin escribir
+  const handleSearchChange = useCallback((value: string) => {
+    setSearchTerm(value)
+    if (debounceRef.current) clearTimeout(debounceRef.current)
+    debounceRef.current = setTimeout(() => {
+      setFilterPatente(value.trim())
+      setPage(1) // Reset a primera página al buscar
+    }, 400)
+  }, [setFilterPatente, setPage])
+
+  // Limpiar timeout al desmontar
+  useEffect(() => {
+    return () => { if (debounceRef.current) clearTimeout(debounceRef.current) }
+  }, [])
+
+  // Filtro local adicional para conductor/ibutton (el server-side solo filtra por patente)
   const filteredRegistros = useMemo(() => {
     if (!searchTerm.trim()) return registros
     const term = searchTerm.toLowerCase()
+    // Si el filtro server-side ya está aplicado por patente, solo filtrar adicionalmente por conductor/ibutton
+    // para cubrir búsquedas que no sean por patente
+    if (filterPatente && registros.length > 0) return registros
     return registros.filter(
       (r) =>
         r.patente?.toLowerCase().includes(term) ||
         r.conductor_wialon?.toLowerCase().includes(term) ||
         r.ibutton?.toLowerCase().includes(term)
     )
-  }, [registros, searchTerm])
+  }, [registros, searchTerm, filterPatente])
 
   return (
     <div className="bitacora-module">
@@ -51,7 +72,7 @@ export function BitacoraModule() {
 
       <BitacoraTable
         registros={filteredRegistros}
-        totalCount={searchTerm.trim() ? filteredRegistros.length : totalCount}
+        totalCount={totalCount}
         isLoading={queryState.loading}
         page={page}
         pageSize={pageSize}
@@ -59,7 +80,7 @@ export function BitacoraModule() {
         onPageSizeChange={setPageSize}
         onChecklistChange={updateChecklist}
         searchTerm={searchTerm}
-        onSearchChange={setSearchTerm}
+        onSearchChange={handleSearchChange}
         headerControls={
           <BitacoraHeader
             dateRange={dateRange}
