@@ -7524,7 +7524,7 @@ export function ReporteFacturacionTab() {
               justifyContent: 'space-between',
               alignItems: 'center'
             }}>
-              <span>{porcentajeCubierto}% cubierto</span>
+              <span>{cobroApp === 0 ? 'Sin datos Cabify' : `${porcentajeCubierto}% cubierto`}</span>
               {cubreCuota && <span style={{ color: '#10b981', fontWeight: 600 }}>✓</span>}
             </div>
           </div>
@@ -8838,6 +8838,15 @@ export function ReporteFacturacionTab() {
                     Pendiente: {formatCurrency(pendiente)}
                   </span>
                 </div>
+                {cobroAppPopup.cobroApp === 0 && (
+                  <div style={{
+                    backgroundColor: '#fef3c7', border: '1px solid #f59e0b', borderRadius: '6px',
+                    padding: '8px 12px', fontSize: '11px', color: '#92400e', marginBottom: '8px',
+                    lineHeight: '1.4'
+                  }}>
+                    No se encontraron datos de cobro en Cabify para este conductor. Esto puede deberse a que el DNI no coincide con el registro en Cabify o a que aun no se sincronizaron los datos de esta semana.
+                  </div>
+                )}
                 {/* Barra de progreso */}
                 <div style={{
                   width: '100%', height: '14px', backgroundColor: '#e5e7eb',
