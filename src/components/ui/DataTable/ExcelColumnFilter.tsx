@@ -91,34 +91,35 @@ export function ExcelColumnFilter({
     if (!buttonRef.current) return { top: 0, left: 0 }
 
     const rect = buttonRef.current.getBoundingClientRect()
+    const dropdownWidth = 260
+    let left = rect.left
+    if (left + dropdownWidth > window.innerWidth - 8) {
+      left = window.innerWidth - dropdownWidth - 8
+    }
+    if (left < 8) left = 8
     return {
       top: rect.bottom + 4,
-      left: rect.left
+      left
     }
   }, [])
 
   // Calcular posición INMEDIATAMENTE cuando se abre (useLayoutEffect para evitar flash)
   useLayoutEffect(() => {
     if (!isOpen || !buttonRef.current) return
+    setPosition(calculatePosition())
+  }, [isOpen, calculatePosition])
 
-    const rect = buttonRef.current.getBoundingClientRect()
-    setPosition({
-      top: rect.bottom + 4,
-      left: rect.left
-    })
-  }, [isOpen])
-
-  // Ajustar posición si se sale de la pantalla (después del primer render)
+  // Ajustar posición después del render si el dropdown real se sale de pantalla
   useLayoutEffect(() => {
     if (!isOpen || !dropdownRef.current || !buttonRef.current) return
-
-    // Usuario solicitó que el filtro SIEMPRE aparezca abajo y no se mueva
-    // Se mantiene la lógica original de posicionamiento estricto
-    const rect = buttonRef.current.getBoundingClientRect()
-    setPosition({
-      top: rect.bottom + 4,
-      left: rect.left
-    })
+    const dropdownRect = dropdownRef.current.getBoundingClientRect()
+    const viewportWidth = window.innerWidth
+    if (dropdownRect.right > viewportWidth - 8) {
+      setPosition(prev => ({
+        ...prev,
+        left: Math.max(8, viewportWidth - dropdownRect.width - 8)
+      }))
+    }
   }, [isOpen])
 
   // Cerrar al hacer click fuera
@@ -158,14 +159,7 @@ export function ExcelColumnFilter({
     if (isOpen) {
       onOpenChange(null)
     } else {
-      // Calcular posición inmediatamente antes de abrir
-      if (buttonRef.current) {
-        const rect = buttonRef.current.getBoundingClientRect()
-        setPosition({
-          top: rect.bottom + 4,
-          left: rect.left
-        })
-      }
+      setPosition(calculatePosition())
       onOpenChange(filterId)
     }
   }

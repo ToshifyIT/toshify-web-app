@@ -1,10 +1,10 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 // src/modules/vehiculos/VehicleManagement.tsx
 import { useState, useEffect, useMemo } from 'react'
-import { AlertTriangle, Eye, Edit, Trash2, Info, Car, Wrench, Briefcase, PaintBucket, Warehouse, FolderOpen, FolderPlus, Loader2, Undo2, History } from 'lucide-react'
+import { AlertTriangle, Eye, Edit, Trash2, Info, Car, Wrench, Briefcase, PaintBucket, Warehouse, FolderOpen, FolderPlus, Undo2, History } from 'lucide-react'
 import { ActionsMenu } from '../../components/ui/ActionsMenu'
 import { VerLogsButton } from '../../components/ui/VerLogsButton'
-import { DriveFilesModal } from '../../components/DriveFilesModal'
+
 import { HistorialModal } from '../../components/ui/HistorialModal'
 import { supabase } from '../../lib/supabase'
 import { ExcelColumnFilter, useExcelFilters } from '../../components/ui/DataTable/ExcelColumnFilter'
@@ -38,25 +38,11 @@ export function VehicleManagement() {
   const [showDetailsModal, setShowDetailsModal] = useState(false)
   const [saving, setSaving] = useState(false)
   const [selectedVehiculo, setSelectedVehiculo] = useState<VehiculoWithRelations | null>(null)
-  const [creatingDriveFolder, setCreatingDriveFolder] = useState<string | null>(null)
+
   const [historialVehiculo, setHistorialVehiculo] = useState<{ id: string; patente: string } | null>(null)
   const [sedes, setSedes] = useState<{ id: string; nombre: string }[]>([])
 
-  // Drive Files Modal
-  const [showDriveModal, setShowDriveModal] = useState(false)
-  const [driveFiles, setDriveFiles] = useState<Array<{
-    id: string
-    name: string
-    mimeType: string
-    size?: string
-    modifiedTime: string
-    webViewLink?: string
-    thumbnailLink?: string
-    iconLink?: string
-  }>>([])
-  const [loadingDriveFiles, setLoadingDriveFiles] = useState(false)
-  const [driveModalTitle, setDriveModalTitle] = useState('')
-  const [driveModalUrl, setDriveModalUrl] = useState('')
+
 
   // Stats calculados desde datos cargados (ver calculatedStats useMemo)
 
@@ -69,6 +55,9 @@ export function VehicleManagement() {
   const [patenteFilter, setPatenteFilter] = useState<string[]>([])
   const [marcaFilter, setMarcaFilter] = useState<string[]>([])
   const [modeloFilter, setModeloFilter] = useState<string[]>([])
+  const [anioFilter, setAnioFilter] = useState<string[]>([])
+  const [colorFilter, setColorFilter] = useState<string[]>([])
+  const [kmFilter, setKmFilter] = useState<string[]>([])
   const [estadoFilter, setEstadoFilter] = useState<string[]>([]) // Filtro de columna Estado
   const [activeStatCard, setActiveStatCard] = useState<string | null>(null)
   const [statCardEstadoFilter, setStatCardEstadoFilter] = useState<string[]>([]) // Filtro separado para stat cards
@@ -719,95 +708,7 @@ export function VehicleManagement() {
     setSelectedVehiculo(null)
   }
 
-  const handleDriveFolderAction = (vehiculo: VehiculoWithRelations) => {
-    const autoUrl = (vehiculo as any).drive_folder_url
-    const manualUrl = (vehiculo as any).url_documentacion
-    if (autoUrl) handleOpenDriveFolder(vehiculo)
-    else if (manualUrl) window.open(manualUrl, '_blank')
-    else handleCreateDriveFolder(vehiculo)
-  }
 
-  // Crear carpeta en Google Drive para vehículo
-  const handleCreateDriveFolder = async (vehiculo: VehiculoWithRelations) => {
-    setCreatingDriveFolder(vehiculo.id)
-    try {
-      const response = await fetch('/api/create-drive-folder', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          tipo: 'vehiculo',
-          vehiculoId: vehiculo.id,
-          vehiculoPatente: vehiculo.patente
-        })
-      })
-
-      const result = await response.json()
-      if (!response.ok) throw new Error(result.error || 'Error al crear carpeta')
-
-      // Guardar URL en la base de datos
-      await (supabase as any)
-        .from('vehiculos')
-        .update({ drive_folder_url: result.folderUrl })
-        .eq('id', vehiculo.id)
-
-      showSuccess('Carpeta creada', `Se creó "${result.folderName}" en Drive`)
-
-      // Recargar datos para mostrar el nuevo link (silencioso)
-      await loadVehiculos(true)
-
-      // Abrir la carpeta en nueva pestaña
-      if (result.folderUrl) {
-        window.open(result.folderUrl, '_blank')
-      }
-    } catch (err: any) {
-      Swal.fire({
-        icon: 'error',
-        title: 'Error',
-        text: err.message || 'No se pudo crear la carpeta en Drive',
-        confirmButtonColor: '#ff0033'
-      })
-    } finally {
-      setCreatingDriveFolder(null)
-    }
-  }
-
-  // Abrir modal con lista de archivos de Drive
-  const handleOpenDriveFolder = async (vehiculo: VehiculoWithRelations) => {
-    const driveUrl = (vehiculo as any).drive_folder_url
-    if (!driveUrl) return
-
-    setDriveModalTitle(`Documentos - ${vehiculo.patente}`)
-    setDriveModalUrl(driveUrl)
-    setShowDriveModal(true)
-    setLoadingDriveFiles(true)
-    setDriveFiles([])
-
-    try {
-      const response = await fetch('/api/list-drive-files', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ folderUrl: driveUrl })
-      })
-
-      const result = await response.json()
-      if (!response.ok) throw new Error(result.error || 'Error al listar archivos')
-
-      setDriveFiles(result.files || [])
-    } catch (err: any) {
-      Swal.fire({
-        icon: 'error',
-        title: 'Error',
-        text: err.message || 'No se pudieron cargar los archivos',
-        confirmButtonColor: '#ff0033'
-      })
-    } finally {
-      setLoadingDriveFiles(false)
-    }
-  }
 
   // Manejar click en stat cards para filtrar
   // IMPORTANTE: NO limpiar filtros de columna - deben funcionar en conjunto con el stat card
@@ -914,6 +815,27 @@ export function VehicleManagement() {
         onClear: () => setModeloFilter([])
       })
     }
+    if (anioFilter.length > 0) {
+      filters.push({
+        id: 'anio',
+        label: `Año: ${anioFilter.length === 1 ? anioFilter[0] : `${anioFilter.length} seleccionados`}`,
+        onClear: () => setAnioFilter([])
+      })
+    }
+    if (colorFilter.length > 0) {
+      filters.push({
+        id: 'color',
+        label: `Color: ${colorFilter.length === 1 ? colorFilter[0] : `${colorFilter.length} seleccionados`}`,
+        onClear: () => setColorFilter([])
+      })
+    }
+    if (kmFilter.length > 0) {
+      filters.push({
+        id: 'km',
+        label: `Km: ${kmFilter.length === 1 ? kmFilter[0] : `${kmFilter.length} seleccionados`}`,
+        onClear: () => setKmFilter([])
+      })
+    }
     if (estadoFilter.length > 0) {
       filters.push({
         id: 'estado',
@@ -923,7 +845,7 @@ export function VehicleManagement() {
     }
 
     return filters
-  }, [activeStatCard, patenteFilter, marcaFilter, modeloFilter, estadoFilter])
+  }, [activeStatCard, patenteFilter, marcaFilter, modeloFilter, anioFilter, colorFilter, kmFilter, estadoFilter])
 
   // Limpiar todos los filtros
   const handleClearAllFilters = () => {
@@ -932,6 +854,9 @@ export function VehicleManagement() {
     setPatenteFilter([])
     setMarcaFilter([])
     setModeloFilter([])
+    setAnioFilter([])
+    setColorFilter([])
+    setKmFilter([])
     setEstadoFilter([])
   }
 
@@ -956,6 +881,22 @@ export function VehicleManagement() {
   const patentesUnicas = useMemo(() => {
     const patentes = vehiculos.map(v => v.patente).filter(Boolean) as string[]
     return [...new Set(patentes)].sort()
+  }, [vehiculos])
+
+  const aniosUnicos = useMemo(() => {
+    const anios = new Set<string>()
+    vehiculos.forEach(v => {
+      if (v.anio) anios.add(String(v.anio))
+    })
+    return Array.from(anios).sort()
+  }, [vehiculos])
+
+  const coloresUnicos = useMemo(() => {
+    const colores = new Set<string>()
+    vehiculos.forEach(v => {
+      if ((v as any).color) colores.add((v as any).color)
+    })
+    return Array.from(colores).sort()
   }, [vehiculos])
 
   // Opciones de estado únicas derivadas de los vehículos reales (no del catálogo completo)
@@ -988,6 +929,32 @@ export function VehicleManagement() {
       result = result.filter(v =>
         modeloFilter.includes(v.modelo || '')
       )
+    }
+
+    if (anioFilter.length > 0) {
+      result = result.filter(v =>
+        anioFilter.includes(String(v.anio || ''))
+      )
+    }
+
+    if (colorFilter.length > 0) {
+      result = result.filter(v =>
+        colorFilter.includes((v as any).color || '')
+      )
+    }
+
+    if (kmFilter.length > 0) {
+      result = result.filter(v => {
+        const km = (v as any).kilometraje_actual || 0
+        return kmFilter.some(rango => {
+          if (rango === '0 - 50,000') return km < 50000
+          if (rango === '50,000 - 100,000') return km >= 50000 && km < 100000
+          if (rango === '100,000 - 150,000') return km >= 100000 && km < 150000
+          if (rango === '150,000 - 200,000') return km >= 150000 && km < 200000
+          if (rango === '200,000+') return km >= 200000
+          return false
+        })
+      })
     }
 
     // Filtro de columna Estado (desde ExcelColumnFilter)
@@ -1026,7 +993,7 @@ export function VehicleManagement() {
     })
 
     return result
-  }, [vehiculos, patenteFilter, marcaFilter, modeloFilter, estadoFilter, statCardEstadoFilter, statCardExcludeMode])
+  }, [vehiculos, patenteFilter, marcaFilter, modeloFilter, anioFilter, colorFilter, kmFilter, estadoFilter, statCardEstadoFilter, statCardExcludeMode])
 
 
   // Definir columnas para TanStack Table
@@ -1084,13 +1051,33 @@ export function VehicleManagement() {
       },
       {
         accessorKey: 'anio',
-        header: 'Año',
+        header: () => (
+          <ExcelColumnFilter
+            label="Año"
+            options={aniosUnicos}
+            selectedValues={anioFilter}
+            onSelectionChange={setAnioFilter}
+            filterId="anio"
+            openFilterId={openFilterId}
+            onOpenChange={setOpenFilterId}
+          />
+        ),
         cell: ({ getValue }) => (getValue() as number) || 'N/A',
         enableSorting: true,
       },
       {
         accessorKey: 'color',
-        header: 'Color',
+        header: () => (
+          <ExcelColumnFilter
+            label="Color"
+            options={coloresUnicos}
+            selectedValues={colorFilter}
+            onSelectionChange={setColorFilter}
+            filterId="color"
+            openFilterId={openFilterId}
+            onOpenChange={setOpenFilterId}
+          />
+        ),
         cell: ({ getValue }) => {
           const color = getValue() as string
           if (!color) return <span style={{ color: 'var(--text-tertiary)' }}>-</span>
@@ -1126,7 +1113,17 @@ export function VehicleManagement() {
       },
       {
         accessorKey: 'kilometraje_actual',
-        header: 'Kilometraje',
+        header: () => (
+          <ExcelColumnFilter
+            label="Kilometraje"
+            options={['0 - 50,000', '50,000 - 100,000', '100,000 - 150,000', '150,000 - 200,000', '200,000+']}
+            selectedValues={kmFilter}
+            onSelectionChange={setKmFilter}
+            filterId="km"
+            openFilterId={openFilterId}
+            onOpenChange={setOpenFilterId}
+          />
+        ),
         cell: ({ getValue }) => `${(getValue() as number).toLocaleString()} km`,
         enableSorting: true,
       },
@@ -1216,15 +1213,11 @@ export function VehicleManagement() {
         id: 'acciones',
         header: 'Acciones',
         cell: ({ row }) => {
-          const autoUrl = (row.original as any).drive_folder_url
-          const manualUrl = (row.original as any).url_documentacion
-          const folderUrl = autoUrl || manualUrl
-          const isCreatingFolder = creatingDriveFolder === row.original.id
+          const folderUrl = (row.original as any).drive_folder_url || (row.original as any).url_documentacion
 
           const handleFolderClick = () => {
-            if (autoUrl) handleOpenDriveFolder(row.original)
-            else if (manualUrl) window.open(manualUrl, '_blank')
-            else handleCreateDriveFolder(row.original)
+            if (folderUrl) window.open(folderUrl, '_blank')
+            else Swal.fire('Sin URL', 'Este vehículo no tiene una URL de documentación configurada', 'info')
           }
           
           return (
@@ -1243,10 +1236,9 @@ export function VehicleManagement() {
                   variant: 'info'
                 },
                 {
-                  icon: folderUrl ? <FolderOpen size={15} /> : (isCreatingFolder ? <Loader2 size={15} className="animate-spin" /> : <FolderPlus size={15} />),
-                  label: folderUrl ? 'Ver documentos' : 'Crear carpeta',
+                  icon: folderUrl ? <FolderOpen size={15} /> : <FolderPlus size={15} />,
+                  label: folderUrl ? 'Ver documentos' : 'Sin carpeta',
                   onClick: handleFolderClick,
-                  disabled: isCreatingFolder,
                   variant: folderUrl ? 'success' : 'default'
                 },
                 {
@@ -1270,7 +1262,7 @@ export function VehicleManagement() {
         enableSorting: false,
       },
     ],
-    [canUpdate, canDelete, patenteFilter, marcaFilter, modeloFilter, estadoFilter, openFilterId, patentesUnicas, marcasExistentes, modelosExistentes, estadosUnicos, creatingDriveFolder]
+    [canUpdate, canDelete, patenteFilter, marcaFilter, modeloFilter, anioFilter, colorFilter, kmFilter, estadoFilter, openFilterId, patentesUnicas, marcasExistentes, modelosExistentes, aniosUnicos, coloresUnicos, estadosUnicos]
   )
 
   return (
@@ -1929,17 +1921,18 @@ export function VehicleManagement() {
             </div>
             {(() => {
               const folderUrl = (selectedVehiculo as any).drive_folder_url || (selectedVehiculo as any).url_documentacion
-              const isCreating = creatingDriveFolder === selectedVehiculo.id
               return (
                 <div className="modal-footer" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <button
                     className={folderUrl ? 'btn-success' : 'btn-secondary'}
-                    onClick={() => handleDriveFolderAction(selectedVehiculo)}
-                    disabled={isCreating}
+                    onClick={() => {
+                      if (folderUrl) window.open(folderUrl, '_blank')
+                      else Swal.fire('Sin URL', 'Este vehículo no tiene una URL de documentación configurada', 'info')
+                    }}
                     style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
                   >
-                    {isCreating ? <Loader2 size={16} className="animate-spin" /> : folderUrl ? <FolderOpen size={16} /> : <FolderPlus size={16} />}
-                    {isCreating ? 'Creando...' : folderUrl ? 'Ver documentos' : 'Crear carpeta'}
+                    {folderUrl ? <FolderOpen size={16} /> : <FolderPlus size={16} />}
+                    {folderUrl ? 'Ver documentos' : 'Sin carpeta'}
                   </button>
                   <button
                     className="btn-secondary"
@@ -2004,15 +1997,7 @@ export function VehicleManagement() {
         </div>
       )}
 
-      {/* Modal Drive Files */}
-      <DriveFilesModal
-        isOpen={showDriveModal}
-        onClose={() => setShowDriveModal(false)}
-        title={driveModalTitle}
-        driveUrl={driveModalUrl}
-        files={driveFiles}
-        loading={loadingDriveFiles}
-      />
+
 
       {/* Modal Historial */}
       {historialVehiculo && (
