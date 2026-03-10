@@ -287,14 +287,13 @@ class CabifyIntegrationService {
     endDate: string,
     order: 'asc' | 'desc'
   ): Promise<CabifyRankingDriver[]> {
-    // endDate viene como UTC (ej: 2026-03-09T02:59:59Z = fin domingo ARG)
-    // Truncar al día para no incluir registros del lunes siguiente (fecha_inicio = 2026-03-09T00:00:00Z)
-    const endDay = endDate.split('T')[0] + 'T00:00:00.000Z'
+    // endDate viene como domingo 23:59:59 UTC del rango de la semana
+    // Los registros tienen fecha_inicio como T00:00:00Z, así que usamos lte para incluir el domingo
     const { data, error } = await supabase
       .from(tableName)
       .select('dni, nombre, apellido, vehiculo_patente, viajes_finalizados, ganancia_total, score, horas_conectadas, fecha_guardado')
       .gte('fecha_inicio', startDate)
-      .lt('fecha_inicio', endDay)
+      .lte('fecha_inicio', endDate)
       .gt('viajes_finalizados', 0)
 
     if (error || !data) return []
