@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useLayoutEffect } from 'react'
+import { useState, useRef, useEffect, useCallback, useLayoutEffect } from 'react'
 import { createPortal } from 'react-dom'
 import { Calendar } from 'lucide-react'
 import './DataTable.css' // Assuming styles are shared or I'll add inline styles for specific layout
@@ -41,18 +41,43 @@ export function ExcelDateRangeFilter({
   const isOpen = openFilterId === filterId
   const hasSelection = !!startDate || !!endDate
 
-  // Calcular posición inmediatamente cuando se abre
-  useLayoutEffect(() => {
-    if (!isOpen || !buttonRef.current) return
+  // Calcular posición del dropdown con viewport bounds checking
+  const calculatePosition = useCallback(() => {
+    if (!buttonRef.current) return { top: 0, left: 0 }
 
     const rect = buttonRef.current.getBoundingClientRect()
-    setPosition({
+    const dropdownWidth = 240
+    let left = rect.left
+    if (left + dropdownWidth > window.innerWidth - 8) {
+      left = window.innerWidth - dropdownWidth - 8
+    }
+    if (left < 8) left = 8
+    return {
       top: rect.bottom + 4,
-      left: rect.left
-    })
+      left
+    }
+  }, [])
+
+  // Calcular posición INMEDIATAMENTE cuando se abre
+  useLayoutEffect(() => {
+    if (!isOpen || !buttonRef.current) return
+    setPosition(calculatePosition())
+  }, [isOpen, calculatePosition])
+
+  // Ajustar posición después del render si el dropdown real se sale de pantalla
+  useLayoutEffect(() => {
+    if (!isOpen || !dropdownRef.current || !buttonRef.current) return
+    const dropdownRect = dropdownRef.current.getBoundingClientRect()
+    const viewportWidth = window.innerWidth
+    if (dropdownRect.right > viewportWidth - 8) {
+      setPosition(prev => ({
+        ...prev,
+        left: Math.max(8, viewportWidth - dropdownRect.width - 8)
+      }))
+    }
   }, [isOpen])
 
-  // Manejar clic fuera para cerrar
+  // Manejar clic fuera para cerrar + reposicionar en scroll/resize
   useEffect(() => {
     if (!isOpen) return
 
@@ -68,21 +93,30 @@ export function ExcelDateRangeFilter({
       }
     }
 
+    const handleReposition = () => {
+      setPosition(calculatePosition())
+    }
+
     document.addEventListener('mousedown', handleClickOutside)
-    window.addEventListener('resize', () => onOpenChange(null))
-    window.addEventListener('scroll', () => onOpenChange(null), true)
+    window.addEventListener('scroll', handleReposition, { capture: true, passive: true })
+    window.addEventListener('resize', handleReposition, { passive: true })
 
     return () => {
       document.removeEventListener('mousedown', handleClickOutside)
-      window.removeEventListener('resize', () => onOpenChange(null))
-      window.removeEventListener('scroll', () => onOpenChange(null), true)
+      window.removeEventListener('scroll', handleReposition, true)
+      window.removeEventListener('resize', handleReposition)
     }
-  }, [isOpen, onOpenChange])
+  }, [isOpen, onOpenChange, calculatePosition])
 
   const handleToggle = (e: React.MouseEvent) => {
     e.stopPropagation()
     e.preventDefault()
-    onOpenChange(isOpen ? null : filterId)
+    if (isOpen) {
+      onOpenChange(null)
+    } else {
+      setPosition(calculatePosition())
+      onOpenChange(filterId)
+    }
   }
 
   const handleClear = () => {
