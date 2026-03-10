@@ -6,7 +6,7 @@
 // ============================================================
 
 import { useState, useEffect, useMemo, useCallback } from 'react';
-import { X, Plus, Trash2, Calendar, Clock, User, Tag, FileText, Car } from 'lucide-react';
+import { X, Plus, Trash2, User } from 'lucide-react';
 import Swal from 'sweetalert2';
 import type {
   VisitaCategoria,
@@ -393,265 +393,247 @@ export function VisitasFormModal({
           <button className="modal-close" onClick={onClose}><X size={18} /></button>
         </div>
 
-        <div className="modal-body">
-          {/* ─── SECCIÓN 1: Tipo de cita ─── */}
-          <div className="vf-section">
-            <div className="vf-section-title">
-              <Tag size={15} />
-              <span>Tipo de cita</span>
+        <div className="modal-body vf-compact">
+          {/* ── Categoría (chips) ── */}
+          <div className="form-group">
+            <label className="vf-label-sm">Categoría <span className="required">*</span></label>
+            <div className="vf-category-grid">
+              {categorias.map((c) => (
+                <button
+                  key={c.id}
+                  type="button"
+                  className={`vf-category-chip ${formData.categoria_id === c.id ? 'active' : ''}`}
+                  style={{
+                    '--chip-color': c.color,
+                    borderColor: formData.categoria_id === c.id ? c.color : undefined,
+                  } as React.CSSProperties}
+                  onClick={() => handleCategoriaChange(c.id)}
+                >
+                  <span className="vf-chip-dot" style={{ background: c.color }} />
+                  {c.nombre}
+                </button>
+              ))}
             </div>
+            {errors.categoria_id && <span className="error-message">{errors.categoria_id}</span>}
+          </div>
 
-            <div className="form-group">
-              <label>Categoría <span className="required">*</span></label>
-              <div className="vf-category-grid">
-                {categorias.map((c) => (
-                  <button
-                    key={c.id}
-                    type="button"
-                    className={`vf-category-chip ${formData.categoria_id === c.id ? 'active' : ''}`}
-                    style={{
-                      '--chip-color': c.color,
-                      borderColor: formData.categoria_id === c.id ? c.color : undefined,
-                    } as React.CSSProperties}
-                    onClick={() => handleCategoriaChange(c.id)}
+          {/* ── Motivo + Anfitrión (fila compacta, solo si hay categoría) ── */}
+          {categoriaSeleccionada && (
+            <div className="vf-motivo-anfitrion-row">
+              {/* Motivo dropdown */}
+              {esAsignaciones ? (
+                <div className="form-group vf-motivo-field">
+                  <label className="vf-label-sm">Motivo</label>
+                  <select
+                    value={formData.motivo_id}
+                    onChange={(e) => handleMotivoChange(e.target.value)}
                   >
-                    <span className="vf-chip-dot" style={{ background: c.color }} />
-                    {c.nombre}
-                  </button>
+                    <option value="">Seleccionar motivo...</option>
+                    {MOTIVOS_ASIGNACIONES.map((m) => (
+                      <option key={m.key} value={m.key}>{m.label}</option>
+                    ))}
+                  </select>
+                </div>
+              ) : motivosFiltrados.length > 0 ? (
+                <div className="form-group vf-motivo-field">
+                  <label className="vf-label-sm">Motivo</label>
+                  <select
+                    value={formData.motivo_id}
+                    onChange={(e) => handleMotivoChange(e.target.value)}
+                  >
+                    <option value="">Seleccionar motivo...</option>
+                    {motivosFiltrados.map((m) => (
+                      <option key={m.id} value={m.id}>{m.nombre}</option>
+                    ))}
+                  </select>
+                </div>
+              ) : null}
+
+              {/* Anfitrión: dropdown solo para Directivo, inline text para auto, warning si falta */}
+              {!anfitrionAutoAsignado ? (
+                <div className="form-group vf-anfitrion-field">
+                  <label className="vf-label-sm">Anfitrión <span className="required">*</span></label>
+                  <select
+                    value={formData.atendedor_id}
+                    onChange={(e) => handleChange('atendedor_id', e.target.value)}
+                    className={errors.atendedor_id ? 'input-error' : ''}
+                  >
+                    <option value="">Seleccionar...</option>
+                    {anfitrionesDisponibles.map((a) => (
+                      <option key={a.id} value={a.id}>{a.nombre}</option>
+                    ))}
+                  </select>
+                  {errors.atendedor_id && <span className="error-message">{errors.atendedor_id}</span>}
+                </div>
+              ) : formData.atendedor_id ? (
+                <div className="vf-anfitrion-inline">
+                  <User size={13} />
+                  <span>Atiende: <strong>{anfitrionNombre}</strong></span>
+                </div>
+              ) : (
+                <div className="vf-anfitrion-warning">
+                  <span>Sin anfitrión para esta categoría</span>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* ── Separador ── */}
+          <div className="vf-divider" />
+
+          {/* ── Visitante ── */}
+          {esInduccion ? (
+            <div className="form-group">
+              <div className="visitantes-header">
+                <label className="vf-label-sm">Visitantes <span className="required">*</span></label>
+                <button
+                  type="button"
+                  className="btn-add-visitante"
+                  onClick={handleAddVisitante}
+                  title="Agregar visitante"
+                >
+                  <Plus size={14} /> Agregar
+                </button>
+              </div>
+              {errors.nombre_visitante && (
+                <span className="error-message">{errors.nombre_visitante}</span>
+              )}
+              <div className="visitantes-list">
+                {visitantes.map((v, index) => (
+                  <div key={index} className="visitante-row">
+                    <div className="visitante-fields">
+                      <input
+                        type="text"
+                        value={v.nombre}
+                        onChange={(e) => handleVisitanteChange(index, 'nombre', e.target.value)}
+                        placeholder={`Nombre completo ${index + 1}`}
+                        className="visitante-nombre"
+                      />
+                      <input
+                        type="text"
+                        value={v.dni}
+                        onChange={(e) => handleVisitanteChange(index, 'dni', e.target.value)}
+                        placeholder="DNI"
+                        className="visitante-dni"
+                      />
+                    </div>
+                    {visitantes.length > 1 && (
+                      <button
+                        type="button"
+                        className="btn-remove-visitante"
+                        onClick={() => handleRemoveVisitante(index)}
+                        title="Eliminar visitante"
+                      >
+                        <Trash2 size={14} />
+                      </button>
+                    )}
+                  </div>
                 ))}
               </div>
-              {errors.categoria_id && <span className="error-message">{errors.categoria_id}</span>}
+              <span className="visitantes-count">
+                {visitantes.filter((v) => v.nombre.trim()).length} visitante(s)
+              </span>
             </div>
-
-            {/* Motivo */}
-            {esAsignaciones ? (
-              <div className="form-group">
-                <label>Motivo</label>
-                <select
-                  value={formData.motivo_id}
-                  onChange={(e) => handleMotivoChange(e.target.value)}
-                >
-                  <option value="">Seleccionar motivo...</option>
-                  {MOTIVOS_ASIGNACIONES.map((m) => (
-                    <option key={m.key} value={m.key}>{m.label}</option>
-                  ))}
-                </select>
-              </div>
-            ) : motivosFiltrados.length > 0 ? (
-              <div className="form-group">
-                <label>Motivo</label>
-                <select
-                  value={formData.motivo_id}
-                  onChange={(e) => handleMotivoChange(e.target.value)}
-                >
-                  <option value="">Seleccionar motivo...</option>
-                  {motivosFiltrados.map((m) => (
-                    <option key={m.id} value={m.id}>{m.nombre}</option>
-                  ))}
-                </select>
-              </div>
-            ) : null}
-
-            {/* Anfitrión - auto-asignado o seleccionable */}
-            {anfitrionAutoAsignado && formData.atendedor_id ? (
-              <div className="form-group">
-                <label>Anfitrión</label>
-                <div className="vf-anfitrion-auto">
-                  <User size={14} />
-                  <span>{anfitrionNombre}</span>
-                  <span className="vf-auto-badge">Asignado</span>
-                </div>
-              </div>
-            ) : (
-              <div className="form-group">
-                <label>Anfitrión <span className="required">*</span></label>
-                <select
-                  value={formData.atendedor_id}
-                  onChange={(e) => handleChange('atendedor_id', e.target.value)}
-                  className={errors.atendedor_id ? 'input-error' : ''}
-                >
-                  <option value="">Seleccionar anfitrión...</option>
-                  {anfitrionesDisponibles.map((a) => (
-                    <option key={a.id} value={a.id}>{a.nombre}</option>
-                  ))}
-                </select>
-                {errors.atendedor_id && <span className="error-message">{errors.atendedor_id}</span>}
-              </div>
-            )}
-          </div>
-
-          {/* ─── SECCIÓN 2: Visitante ─── */}
-          <div className="vf-section">
-            <div className="vf-section-title">
-              <User size={15} />
-              <span>Visitante</span>
-            </div>
-
-            {esInduccion ? (
-              <div className="form-group">
-                <div className="visitantes-header">
-                  <label>Visitantes <span className="required">*</span></label>
-                  <button
-                    type="button"
-                    className="btn-add-visitante"
-                    onClick={handleAddVisitante}
-                    title="Agregar visitante"
-                  >
-                    <Plus size={14} /> Agregar
-                  </button>
-                </div>
-                {errors.nombre_visitante && (
-                  <span className="error-message">{errors.nombre_visitante}</span>
-                )}
-                <div className="visitantes-list">
-                  {visitantes.map((v, index) => (
-                    <div key={index} className="visitante-row">
-                      <div className="visitante-fields">
-                        <input
-                          type="text"
-                          value={v.nombre}
-                          onChange={(e) => handleVisitanteChange(index, 'nombre', e.target.value)}
-                          placeholder={`Nombre completo ${index + 1}`}
-                          className="visitante-nombre"
-                        />
-                        <input
-                          type="text"
-                          value={v.dni}
-                          onChange={(e) => handleVisitanteChange(index, 'dni', e.target.value)}
-                          placeholder="DNI"
-                          className="visitante-dni"
-                        />
-                      </div>
-                      {visitantes.length > 1 && (
-                        <button
-                          type="button"
-                          className="btn-remove-visitante"
-                          onClick={() => handleRemoveVisitante(index)}
-                          title="Eliminar visitante"
-                        >
-                          <Trash2 size={14} />
-                        </button>
-                      )}
-                    </div>
-                  ))}
-                </div>
-                <span className="visitantes-count">
-                  {visitantes.filter((v) => v.nombre.trim()).length} visitante(s)
-                </span>
-              </div>
-            ) : (
-              <div className="form-row">
-                <div className="form-group">
-                  <label>Nombre <span className="required">*</span></label>
-                  <input
-                    type="text"
-                    value={formData.nombre_visitante}
-                    onChange={(e) => handleChange('nombre_visitante', e.target.value)}
-                    className={errors.nombre_visitante ? 'input-error' : ''}
-                    placeholder="Nombre completo"
-                  />
-                  {errors.nombre_visitante && <span className="error-message">{errors.nombre_visitante}</span>}
-                </div>
-                <div className="form-group">
-                  <label>DNI</label>
-                  <input
-                    type="text"
-                    value={formData.dni_visitante}
-                    onChange={(e) => handleChange('dni_visitante', e.target.value)}
-                    placeholder="Documento"
-                    inputMode="numeric"
-                  />
-                </div>
-              </div>
-            )}
-
-            {/* Patente */}
-            {categoriaSeleccionada?.requiere_patente && (
-              <div className="form-group">
-                <label><Car size={13} style={{ marginRight: 4, verticalAlign: -2 }} />Patente <span className="required">*</span></label>
+          ) : (
+            <div className="vf-visitante-row">
+              <div className="form-group vf-visitante-nombre">
+                <label className="vf-label-sm">Visitante <span className="required">*</span></label>
                 <input
                   type="text"
-                  value={formData.patente}
-                  onChange={(e) => handleChange('patente', e.target.value.toUpperCase())}
-                  className={errors.patente ? 'input-error' : ''}
-                  placeholder="Ej: AB123CD"
-                  style={{ textTransform: 'uppercase', letterSpacing: '1px' }}
+                  value={formData.nombre_visitante}
+                  onChange={(e) => handleChange('nombre_visitante', e.target.value)}
+                  className={errors.nombre_visitante ? 'input-error' : ''}
+                  placeholder="Nombre completo"
                 />
-                {errors.patente && <span className="error-message">{errors.patente}</span>}
+                {errors.nombre_visitante && <span className="error-message">{errors.nombre_visitante}</span>}
               </div>
-            )}
-          </div>
-
-          {/* ─── SECCIÓN 3: Programar ─── */}
-          <div className="vf-section">
-            <div className="vf-section-title">
-              <Calendar size={15} />
-              <span>Programar</span>
-            </div>
-
-            <div className="vf-datetime-row">
-              <div className="form-group">
-                <label>Fecha <span className="required">*</span></label>
+              <div className="form-group vf-visitante-dni">
+                <label className="vf-label-sm">DNI</label>
                 <input
-                  type="date"
-                  value={formData.fecha}
-                  onChange={(e) => handleChange('fecha', e.target.value)}
-                  className={errors.fecha ? 'input-error' : ''}
+                  type="text"
+                  value={formData.dni_visitante}
+                  onChange={(e) => handleChange('dni_visitante', e.target.value)}
+                  placeholder="Documento"
+                  inputMode="numeric"
                 />
-                {errors.fecha && <span className="error-message">{errors.fecha}</span>}
               </div>
-              <div className="form-group">
-                <label>Hora <span className="required">*</span></label>
-                <input
-                  type="time"
-                  value={formData.hora}
-                  onChange={(e) => handleChange('hora', e.target.value)}
-                  className={errors.hora ? 'input-error' : ''}
-                />
-                {errors.hora && <span className="error-message">{errors.hora}</span>}
-              </div>
-              <div className="form-group">
-                <label><Clock size={13} style={{ marginRight: 4, verticalAlign: -2 }} />Duración</label>
-                {categoriaSeleccionada?.duracion_modificable ? (
-                  <select
-                    value={formData.duracion_minutos}
-                    onChange={(e) => handleChange('duracion_minutos', Number(e.target.value))}
-                  >
-                    <option value={30}>30 min</option>
-                    <option value={60}>60 min</option>
-                    <option value={90}>90 min</option>
-                    <option value={120}>2 horas</option>
-                    <option value={180}>3 horas</option>
-                    <option value={240}>4 horas</option>
-                    <option value={300}>5 horas</option>
-                    <option value={360}>6 horas</option>
-                  </select>
-                ) : (
+              {categoriaSeleccionada?.requiere_patente && (
+                <div className="form-group vf-visitante-patente">
+                  <label className="vf-label-sm">Patente <span className="required">*</span></label>
                   <input
                     type="text"
-                    value={`${formData.duracion_minutos} min`}
-                    disabled
+                    value={formData.patente}
+                    onChange={(e) => handleChange('patente', e.target.value.toUpperCase())}
+                    className={errors.patente ? 'input-error' : ''}
+                    placeholder="AB123CD"
+                    style={{ textTransform: 'uppercase', letterSpacing: '1px' }}
                   />
-                )}
-              </div>
+                  {errors.patente && <span className="error-message">{errors.patente}</span>}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* ── Fecha / Hora / Duración ── */}
+          <div className="vf-datetime-row">
+            <div className="form-group">
+              <label className="vf-label-sm">Fecha <span className="required">*</span></label>
+              <input
+                type="date"
+                value={formData.fecha}
+                onChange={(e) => handleChange('fecha', e.target.value)}
+                className={errors.fecha ? 'input-error' : ''}
+              />
+              {errors.fecha && <span className="error-message">{errors.fecha}</span>}
+            </div>
+            <div className="form-group">
+              <label className="vf-label-sm">Hora <span className="required">*</span></label>
+              <input
+                type="time"
+                value={formData.hora}
+                onChange={(e) => handleChange('hora', e.target.value)}
+                className={errors.hora ? 'input-error' : ''}
+              />
+              {errors.hora && <span className="error-message">{errors.hora}</span>}
+            </div>
+            <div className="form-group">
+              <label className="vf-label-sm">Duración</label>
+              {categoriaSeleccionada?.duracion_modificable ? (
+                <select
+                  value={formData.duracion_minutos}
+                  onChange={(e) => handleChange('duracion_minutos', Number(e.target.value))}
+                >
+                  <option value={30}>30 min</option>
+                  <option value={60}>60 min</option>
+                  <option value={90}>90 min</option>
+                  <option value={120}>2 horas</option>
+                  <option value={180}>3 horas</option>
+                  <option value={240}>4 horas</option>
+                  <option value={300}>5 horas</option>
+                  <option value={360}>6 horas</option>
+                </select>
+              ) : (
+                <input
+                  type="text"
+                  value={`${formData.duracion_minutos} min`}
+                  disabled
+                />
+              )}
             </div>
           </div>
 
-          {/* ─── SECCIÓN 4: Nota (colapsable visualmente) ─── */}
-          <div className="vf-section vf-section-last">
-            <div className="vf-section-title">
-              <FileText size={15} />
-              <span>Nota</span>
-              <span className="vf-optional-label">Opcional</span>
-            </div>
-            <div className="form-group" style={{ marginBottom: 0 }}>
-              <textarea
-                value={formData.nota}
-                onChange={(e) => handleChange('nota', e.target.value)}
-                rows={2}
-                placeholder="Observaciones adicionales..."
-              />
-            </div>
+          {/* ── Nota ── */}
+          <div className="form-group" style={{ marginBottom: 0 }}>
+            <label className="vf-label-sm">
+              Nota
+              <span className="vf-optional-tag">opcional</span>
+            </label>
+            <textarea
+              value={formData.nota}
+              onChange={(e) => handleChange('nota', e.target.value)}
+              rows={2}
+              placeholder="Observaciones adicionales..."
+            />
           </div>
         </div>
 

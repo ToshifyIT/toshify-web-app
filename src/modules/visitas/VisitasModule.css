@@ -401,56 +401,41 @@
   width: 95vw;
 }
 
-.visitas-form-modal .modal-body {
+/* Compact form layout */
+.visitas-form-modal .modal-body.vf-compact {
   padding: 16px 20px 12px;
   display: flex;
   flex-direction: column;
-  gap: 0;
+  gap: 14px;
 }
 
-.visitas-form-modal .form-row {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 12px;
+.visitas-form-modal .modal-body.vf-compact .form-group {
+  margin-bottom: 0;
 }
 
-.visitas-form-modal .form-row:has(> :nth-child(3)) {
-  grid-template-columns: 1fr 1fr 1fr;
-}
-
-/* Section separators */
-.vf-section {
-  padding: 14px 0;
-  border-bottom: 1px solid var(--border-primary);
-}
-
-.vf-section-last {
-  border-bottom: none;
-  padding-bottom: 4px;
-}
-
-.vf-section-title {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  font-size: 13px;
+.vf-label-sm {
+  display: block;
+  font-size: 12px;
   font-weight: 600;
   color: var(--text-secondary);
-  margin-bottom: 12px;
+  margin-bottom: 5px;
   text-transform: uppercase;
   letter-spacing: 0.3px;
 }
 
-.vf-section-title svg {
-  color: var(--text-tertiary);
+.vf-optional-tag {
+  font-weight: 400;
+  font-size: 11px;
+  color: var(--text-quaternary);
+  text-transform: none;
+  letter-spacing: 0;
+  margin-left: 6px;
 }
 
-.vf-section .form-group {
-  margin-bottom: 12px;
-}
-
-.vf-section .form-group:last-child {
-  margin-bottom: 0;
+.vf-divider {
+  height: 1px;
+  background: var(--border-primary);
+  margin: 2px 0;
 }
 
 /* Category chip grid */
@@ -496,34 +481,75 @@
   flex-shrink: 0;
 }
 
-/* Auto-assigned anfitrion display */
-.vf-anfitrion-auto {
+/* Motivo + Anfitrión compact row */
+.vf-motivo-anfitrion-row {
   display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 10px 12px;
-  border-radius: 8px;
-  background: var(--bg-secondary);
-  border: 1px solid var(--border-primary);
-  font-size: 14px;
-  color: var(--text-primary);
-  font-weight: 500;
+  gap: 12px;
+  align-items: flex-end;
 }
 
-.vf-anfitrion-auto svg {
+.vf-motivo-field {
+  flex: 1;
+  min-width: 0;
+}
+
+.vf-anfitrion-field {
+  flex: 0 0 160px;
+}
+
+/* Auto-assigned anfitrion - inline compact (sits in the row) */
+.vf-anfitrion-inline {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 12px;
+  border-radius: 6px;
+  background: var(--bg-secondary);
+  font-size: 13px;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  margin-bottom: 1px;
+}
+
+.vf-anfitrion-inline svg {
   color: var(--text-tertiary);
   flex-shrink: 0;
 }
 
-.vf-auto-badge {
-  margin-left: auto;
-  font-size: 11px;
-  font-weight: 500;
-  color: var(--text-tertiary);
-  background: var(--bg-primary);
-  padding: 2px 8px;
-  border-radius: 10px;
-  border: 1px solid var(--border-primary);
+.vf-anfitrion-inline strong {
+  color: var(--text-primary);
+}
+
+/* Warning when no anfitrion available */
+.vf-anfitrion-warning {
+  display: flex;
+  align-items: center;
+  padding: 7px 12px;
+  border-radius: 6px;
+  background: #fff8f0;
+  border: 1px solid #f0c060;
+  font-size: 12px;
+  color: #9a6b20;
+  margin-bottom: 1px;
+}
+
+/* Visitante row (nombre + dni + patente inline) */
+.vf-visitante-row {
+  display: flex;
+  gap: 12px;
+}
+
+.vf-visitante-nombre {
+  flex: 1;
+  min-width: 0;
+}
+
+.vf-visitante-dni {
+  flex: 0 0 120px;
+}
+
+.vf-visitante-patente {
+  flex: 0 0 120px;
 }
 
 /* Date/time row */
