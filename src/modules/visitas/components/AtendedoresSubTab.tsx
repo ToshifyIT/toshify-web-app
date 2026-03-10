@@ -247,7 +247,6 @@ export function AtendedoresSubTab() {
         emptyIcon={<Users size={48} />}
         emptyTitle="No hay anfitriones"
         emptyDescription="Agregue un nuevo anfitrión."
-        disableAutoFilters
         headerAction={
           <button className="visitas-btn-primary" onClick={handleCreate}>
             <Plus size={16} /> Nuevo Anfitrión

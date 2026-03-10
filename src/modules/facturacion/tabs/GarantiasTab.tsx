@@ -1,10 +1,11 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useRef } from 'react'
 import { supabase } from '../../../lib/supabase'
 import { useSede } from '../../../contexts/SedeContext'
 import { usePermissions } from '../../../contexts/PermissionsContext'
 import Swal from 'sweetalert2'
 import { showSuccess } from '../../../utils/toast'
+import * as XLSX from 'xlsx'
 import {
   Shield,
   Users,
@@ -21,7 +22,9 @@ import {
   Trash2,
   Receipt,
   ArrowUpCircle,
-  RotateCcw
+  RotateCcw,
+  Download,
+  Upload
 } from 'lucide-react'
 import { type ColumnDef } from '@tanstack/react-table'
 import { DataTable } from '../../../components/ui/DataTable'
@@ -55,6 +58,7 @@ export function GarantiasTab() {
   // Sub-tab activo (Movimientos removido - no se usa)
   const [activeSubTab] = useState<'garantias' | 'movimientos'>('garantias')
   
+  const fileInputRef = useRef<HTMLInputElement>(null)
   const [garantias, setGarantias] = useState<GarantiaConductor[]>([])
   const [todosLosPagos, setTodosLosPagos] = useState<PagoGarantiaRow[]>([])
   const [loading, setLoading] = useState(true)
@@ -134,17 +138,19 @@ export function GarantiasTab() {
 
       if (error) throw error
 
-      // Cargar estado de conductores (Activo/Baja)
+      // Cargar estado y DNI de conductores
       const conductorIds = (data || []).map((g: any) => g.conductor_id)
       const ESTADO_ACTIVO = '57e9de5f-e6fc-4ff7-8d14-cf8e13e9dbe2'
       let estadoConductorMap = new Map<string, string>()
+      const dniConductorMap = new Map<string, string>()
       if (conductorIds.length > 0) {
         const { data: conductoresData } = await supabase
           .from('conductores')
-          .select('id, estado_id')
+          .select('id, estado_id, numero_dni')
           .in('id', conductorIds)
         ;(conductoresData || []).forEach((c: any) => {
           estadoConductorMap.set(c.id, c.estado_id === ESTADO_ACTIVO ? 'ACTIVO' : 'BAJA')
+          if (c.numero_dni) dniConductorMap.set(c.id, c.numero_dni)
         })
       }
 
@@ -156,6 +162,7 @@ export function GarantiasTab() {
         if (necesitaDevolucion) idsParaDevolucion.push(g.id)
         return {
           ...g,
+          conductor_dni: g.conductor_dni || dniConductorMap.get(g.conductor_id) || null,
           estado: necesitaDevolucion ? 'en_devolucion' : g.estado,
           estado_conductor: estadoCond
         }
@@ -879,6 +886,347 @@ export function GarantiasTab() {
     }
   }
 
+  // ====== EXPORTAR GARANTÍAS A EXCEL ======
+  function exportarGarantias() {
+    if (garantias.length === 0) {
+      Swal.fire('Sin datos', 'No hay garantías para exportar', 'info')
+      return
+    }
+
+    const data = garantias.map((g) => ({
+      'DNI': g.conductor_dni || '',
+      'Conductor': g.conductor_nombre || '',
+      'Monto Total': g.monto_total,
+      'Monto Pagado': g.monto_pagado,
+      'Cuotas Totales': g.cuotas_totales,
+      'Cuotas Pagadas': g.cuotas_pagadas,
+    }))
+
+    const ws = XLSX.utils.json_to_sheet(data)
+
+    ws['!cols'] = [
+      { wch: 14 }, // DNI
+      { wch: 35 }, // Conductor
+      { wch: 14 }, // Monto Total
+      { wch: 14 }, // Monto Pagado
+      { wch: 14 }, // Cuotas Totales
+      { wch: 14 }, // Cuotas Pagadas
+    ]
+
+    const wb = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(wb, ws, 'Garantias')
+
+    const fecha = new Date().toISOString().slice(0, 10)
+    XLSX.writeFile(wb, `Garantias_Conductores_${fecha}.xlsx`)
+    showSuccess('Exportado correctamente')
+  }
+
+  // ====== IMPORTAR GARANTÍAS DESDE EXCEL ======
+  async function importarGarantias(file: File) {
+    try {
+      const buffer = await file.arrayBuffer()
+      const wb = XLSX.read(buffer, { type: 'array' })
+
+      // Buscar la hoja correcta: primero "Garantias", sino la primera que tenga columna DNI
+      let sheetName = ''
+      if (wb.SheetNames.includes('Garantias')) {
+        sheetName = 'Garantias'
+      } else {
+        for (const name of wb.SheetNames) {
+          const testWs = wb.Sheets[name]
+          const testRows: any[] = XLSX.utils.sheet_to_json(testWs, { raw: false })
+          if (testRows.length > 0 && (testRows[0]['DNI'] !== undefined || testRows[0]['dni'] !== undefined || testRows[0]['Dni'] !== undefined)) {
+            sheetName = name
+            break
+          }
+        }
+        if (!sheetName) sheetName = wb.SheetNames[0]
+      }
+
+      const ws = wb.Sheets[sheetName]
+      const rows: any[] = XLSX.utils.sheet_to_json(ws, { raw: false })
+
+      if (rows.length === 0) {
+        Swal.fire('Error', 'El archivo no contiene datos en la hoja "' + sheetName + '"', 'error')
+        return
+      }
+
+      // Buscar columna DNI (case-insensitive)
+      const firstRow = rows[0]
+      const findCol = (names: string[]) => {
+        for (const key of Object.keys(firstRow)) {
+          if (names.includes(key.trim().toLowerCase())) return key
+        }
+        return null
+      }
+      const colDni = findCol(['dni'])
+      const colMontoTotal = findCol(['monto total', 'montototal', 'total'])
+      const colMontoPagado = findCol(['monto pagado', 'montopagado', 'pagado'])
+      const colCuotasTotales = findCol(['cuotas totales', 'cuotastotales'])
+      const colCuotasPagadas = findCol(['cuotas pagadas', 'cuotaspagadas'])
+      const colCuotaSemanal = findCol(['cuota semanal', 'cuotasemanal'])
+      const colEstado = findCol(['estado'])
+
+      if (!colDni) {
+        Swal.fire('Error', 'El archivo debe tener la columna "DNI".<br><br>Columnas encontradas: ' + Object.keys(firstRow).join(', '), 'error')
+        return
+      }
+
+      // Crear mapa DNI -> garantia
+      const dniMap = new Map<string, GarantiaConductor & { estado_conductor?: string }>()
+      for (const g of garantias) {
+        if (g.conductor_dni) {
+          const dniNorm = String(g.conductor_dni).replace(/[.\s]/g, '').replace(/^0+/, '')
+          dniMap.set(dniNorm, g)
+        }
+      }
+
+      const estadosValidos = ['pendiente', 'en_curso', 'completada', 'cancelada', 'suspendida', 'en_devolucion']
+
+      interface ImportRow {
+        garantia_id: string
+        dni: string
+        nombre: string
+        monto_total: number
+        monto_pagado: number
+        cuotas_totales: number
+        cuotas_pagadas: number
+        monto_cuota_semanal: number
+        estado: string
+      }
+
+      const parsed: ImportRow[] = []
+      const errores: string[] = []
+
+      for (let i = 0; i < rows.length; i++) {
+        const r = rows[i]
+        const dniRaw = String(r[colDni] || '').trim()
+        const dniNorm = dniRaw.replace(/[.\s]/g, '').replace(/^0+/, '')
+
+        if (!dniNorm || dniNorm.length < 5) {
+          errores.push(`Fila ${i + 2}: DNI invalido "${dniRaw}"`)
+          continue
+        }
+
+        const match = dniMap.get(dniNorm)
+        if (!match) {
+          errores.push(`Fila ${i + 2}: DNI ${dniRaw} no encontrado en garantias`)
+          continue
+        }
+
+        // Leer columnas del Excel, si falta usar valor de DB
+        const montoTotal = colMontoTotal
+          ? parseFloat(String(r[colMontoTotal] || '0').replace(/,/g, ''))
+          : match.monto_total
+        const montoPagado = colMontoPagado
+          ? parseFloat(String(r[colMontoPagado] || '0').replace(/,/g, ''))
+          : match.monto_pagado
+        const cuotasTotales = colCuotasTotales
+          ? (parseInt(String(r[colCuotasTotales] || '0')) || 0)
+          : match.cuotas_totales
+        const cuotasPagadas = colCuotasPagadas
+          ? (parseInt(String(r[colCuotasPagadas] || '0')) || 0)
+          : match.cuotas_pagadas
+
+        // Cuota semanal: si viene en el Excel usarla, sino siempre 50000
+        const cuotaSemanal = colCuotaSemanal
+          ? parseFloat(String(r[colCuotaSemanal] || '0').replace(/,/g, ''))
+          : 50000
+
+        // Auto-calcular estado si no viene en el Excel
+        let estado: string
+        if (colEstado) {
+          estado = String(r[colEstado]).trim().toLowerCase()
+        } else {
+          // Mantener en_devolucion si el conductor está de baja
+          const esBaja = (match as any).estado_conductor === 'BAJA'
+          if (esBaja && montoPagado > 0) {
+            estado = 'en_devolucion'
+          } else if (montoPagado >= montoTotal && montoTotal > 0) {
+            estado = 'completada'
+          } else if (montoPagado > 0 || cuotasPagadas > 0) {
+            estado = 'en_curso'
+          } else {
+            estado = 'pendiente'
+          }
+        }
+
+        if (isNaN(montoTotal) || isNaN(montoPagado) || isNaN(cuotaSemanal)) {
+          errores.push(`Fila ${i + 2}: Valores numericos invalidos`)
+          continue
+        }
+
+        if (!estadosValidos.includes(estado)) {
+          errores.push(`Fila ${i + 2}: Estado "${estado}" no valido`)
+          continue
+        }
+
+        parsed.push({
+          garantia_id: match.id,
+          dni: dniRaw,
+          nombre: String(r['Conductor'] || r['conductor'] || match.conductor_nombre || ''),
+          monto_total: Math.round(montoTotal * 100) / 100,
+          monto_pagado: Math.round(montoPagado * 100) / 100,
+          cuotas_totales: cuotasTotales,
+          cuotas_pagadas: cuotasPagadas,
+          monto_cuota_semanal: Math.round(cuotaSemanal * 100) / 100,
+          estado: estado,
+        })
+      }
+
+      if (parsed.length === 0) {
+        Swal.fire('Error', `No se pudo procesar ninguna fila.${errores.length > 0 ? '<br><br>' + errores.slice(0, 10).join('<br>') : ''}`, 'error')
+        return
+      }
+
+      // Detectar cambios
+      const cambios = parsed.filter((p) => {
+        const actual = garantias.find((g) => g.id === p.garantia_id)
+        return !actual ||
+          Math.abs(actual.monto_total - p.monto_total) > 0.01 ||
+          Math.abs(actual.monto_pagado - p.monto_pagado) > 0.01 ||
+          actual.cuotas_totales !== p.cuotas_totales ||
+          actual.cuotas_pagadas !== p.cuotas_pagadas ||
+          Math.abs(actual.monto_cuota_semanal - p.monto_cuota_semanal) > 0.01 ||
+          actual.estado !== p.estado
+      })
+
+      if (cambios.length === 0) {
+        Swal.fire('Sin cambios', 'Los valores del archivo son iguales a los actuales', 'info')
+        return
+      }
+
+      // Preview HTML - mostrar todos los campos: anterior → nuevo
+      const cellStyle = 'padding:3px 6px;border-bottom:1px solid #E5E7EB;font-size:10px;'
+      const diffCell = (ant: string | number, nuevo: string | number, isNum = true) => {
+        const changed = String(ant) !== String(nuevo)
+        if (!changed) return `<td style="${cellStyle}text-align:right;color:#9CA3AF;">${isNum ? formatCurrency(Number(nuevo)) : nuevo}</td>`
+        return `<td style="${cellStyle}text-align:right;">
+          <span style="color:#9CA3AF;text-decoration:line-through;font-size:9px;">${isNum ? formatCurrency(Number(ant)) : ant}</span>
+          <span style="color:#111;font-weight:600;margin-left:2px;">${isNum ? formatCurrency(Number(nuevo)) : nuevo}</span>
+        </td>`
+      }
+
+      const previewRows = cambios.slice(0, 50).map((c) => {
+        const a = garantias.find((g) => g.id === c.garantia_id)
+        return `<tr>
+          <td style="${cellStyle}white-space:nowrap;font-weight:500;">${c.nombre}</td>
+          <td style="${cellStyle}text-align:center;color:#6B7280;">${c.dni}</td>
+          ${diffCell(a?.monto_total ?? 0, c.monto_total)}
+          ${diffCell(a?.monto_pagado ?? 0, c.monto_pagado)}
+          ${diffCell(a?.cuotas_totales ?? 0, c.cuotas_totales)}
+          ${diffCell(a?.cuotas_pagadas ?? 0, c.cuotas_pagadas)}
+          ${diffCell(a?.monto_cuota_semanal ?? 0, c.monto_cuota_semanal)}
+          ${diffCell(a?.estado ?? '', c.estado, false)}
+        </tr>`
+      }).join('')
+
+      const { isConfirmed } = await Swal.fire({
+        title: '<span style="font-size:16px;font-weight:600;">Preview de Importacion</span>',
+        html: `
+          <div style="text-align:left;font-size:13px;">
+            <div style="display:flex;gap:12px;margin-bottom:10px;">
+              <div style="flex:1;background:#F0FDF4;border:1px solid #BBF7D0;border-radius:6px;padding:8px 10px;text-align:center;">
+                <div style="font-size:18px;font-weight:700;color:#16a34a;">${parsed.length}</div>
+                <div style="font-size:10px;color:#6B7280;">Filas leidas</div>
+              </div>
+              <div style="flex:1;background:#FEF3C7;border:1px solid #FDE68A;border-radius:6px;padding:8px 10px;text-align:center;">
+                <div style="font-size:18px;font-weight:700;color:#D97706;">${cambios.length}</div>
+                <div style="font-size:10px;color:#6B7280;">Con cambios</div>
+              </div>
+              ${errores.length > 0 ? `<div style="flex:1;background:#FEF2F2;border:1px solid #FECACA;border-radius:6px;padding:8px 10px;text-align:center;">
+                <div style="font-size:18px;font-weight:700;color:#dc2626;">${errores.length}</div>
+                <div style="font-size:10px;color:#6B7280;">Errores</div>
+              </div>` : `<div style="flex:1;background:#F0FDF4;border:1px solid #BBF7D0;border-radius:6px;padding:8px 10px;text-align:center;">
+                <div style="font-size:18px;font-weight:700;color:#16a34a;">0</div>
+                <div style="font-size:10px;color:#6B7280;">Errores</div>
+              </div>`}
+            </div>
+            ${errores.length > 0 ? `<details style="margin-bottom:8px;font-size:11px;">
+              <summary style="cursor:pointer;color:#dc2626;font-weight:500;">Ver ${errores.length} errores</summary>
+              <div style="max-height:80px;overflow-y:auto;background:#FEF2F2;padding:6px 8px;border-radius:4px;margin-top:4px;color:#991B1B;">
+                ${errores.slice(0, 20).map(e => `<div>${e}</div>`).join('')}
+                ${errores.length > 20 ? `<div>... y ${errores.length - 20} mas</div>` : ''}
+              </div>
+            </details>` : ''}
+            <div style="max-height:350px;overflow:auto;border:1px solid #E5E7EB;border-radius:6px;">
+              <table style="width:100%;border-collapse:collapse;font-size:11px;">
+                <thead>
+                  <tr style="background:#F9FAFB;position:sticky;top:0;z-index:1;">
+                    <th style="padding:5px 6px;text-align:left;font-weight:600;">Conductor</th>
+                    <th style="padding:5px 6px;text-align:center;font-weight:600;">DNI</th>
+                    <th style="padding:5px 6px;text-align:right;font-weight:600;font-size:9px;">Monto Total</th>
+                    <th style="padding:5px 6px;text-align:right;font-weight:600;font-size:9px;">Monto Pagado</th>
+                    <th style="padding:5px 6px;text-align:right;font-weight:600;font-size:9px;">Cuotas Tot.</th>
+                    <th style="padding:5px 6px;text-align:right;font-weight:600;font-size:9px;">Cuotas Pag.</th>
+                    <th style="padding:5px 6px;text-align:right;font-weight:600;font-size:9px;">Cuota Sem.</th>
+                    <th style="padding:5px 6px;text-align:right;font-weight:600;font-size:9px;">Estado</th>
+                  </tr>
+                </thead>
+                <tbody>${previewRows}
+                ${cambios.length > 50 ? `<tr><td colspan="8" style="padding:6px;text-align:center;color:#9CA3AF;font-size:11px;">... y ${cambios.length - 50} cambios mas</td></tr>` : ''}
+                </tbody>
+              </table>
+            </div>
+            <div style="margin-top:8px;font-size:10px;color:#6B7280;">Los valores <span style="text-decoration:line-through;">tachados</span> son los actuales. Los valores en <strong>negrita</strong> son los nuevos.</div>
+          </div>
+        `,
+        showCancelButton: true,
+        confirmButtonText: `Confirmar ${cambios.length} cambios`,
+        cancelButtonText: 'Cancelar',
+        confirmButtonColor: '#ff0033',
+        width: 850,
+        customClass: {
+          popup: 'swal-compact',
+          title: 'swal-title-compact',
+          htmlContainer: 'swal-html-compact'
+        }
+      })
+
+      if (!isConfirmed) return
+
+      // Ejecutar updates
+      setLoading(true)
+      const now = new Date().toISOString()
+      let updated = 0
+      let errors = 0
+
+      for (const c of cambios) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { error } = await (supabase.from('garantias_conductores') as any)
+          .update({
+            monto_total: c.monto_total,
+            monto_pagado: c.monto_pagado,
+            cuotas_totales: c.cuotas_totales,
+            cuotas_pagadas: c.cuotas_pagadas,
+            monto_cuota_semanal: c.monto_cuota_semanal,
+            estado: c.estado,
+            updated_at: now,
+          })
+          .eq('id', c.garantia_id)
+
+        if (error) {
+          errors++
+        } else {
+          updated++
+        }
+      }
+
+      if (errors > 0) {
+        Swal.fire('Importacion parcial', `${updated} actualizados, ${errors} errores`, 'warning')
+      } else {
+        Swal.fire('Importacion exitosa', `${updated} garantias actualizadas`, 'success')
+      }
+
+      await cargarGarantias()
+    } catch {
+      setLoading(false)
+      Swal.fire('Error', 'No se pudo procesar el archivo', 'error')
+    } finally {
+      if (fileInputRef.current) fileInputRef.current.value = ''
+    }
+  }
+
   // ========== COLUMNAS TABLA GARANTÍAS ==========
 
   const columnsGarantias = useMemo<ColumnDef<GarantiaConductor>[]>(() => [
@@ -1208,12 +1556,42 @@ export function GarantiasTab() {
       {/* Loading Overlay - bloquea toda la pantalla */}
       <LoadingOverlay show={loading} message="Cargando garantias..." size="lg" />
 
+      {/* Hidden file input for import */}
+      <input
+        type="file"
+        ref={fileInputRef}
+        accept=".xlsx,.xls"
+        style={{ display: 'none' }}
+        onChange={(e) => {
+          const file = e.target.files?.[0]
+          if (file) importarGarantias(file)
+        }}
+      />
+
       {/* Contenido Garantías (sub-tab Movimientos removido - no se usa) */}
       {activeSubTab === 'garantias' && (
         <>
           {/* Header (filtro removido - se usan los filtros de columna) */}
           <div className="fact-header">
             <div className="fact-header-left">
+              {(isAdmin() || isAdministrativo()) && (
+                <div style={{ display: 'flex', gap: '6px' }}>
+                  <button
+                    className="fact-btn fact-btn-secondary"
+                    onClick={exportarGarantias}
+                    title="Exportar garantias a Excel"
+                  >
+                    <Download size={14} /> Exportar
+                  </button>
+                  <button
+                    className="fact-btn fact-btn-primary"
+                    onClick={() => fileInputRef.current?.click()}
+                    title="Importar garantias desde Excel"
+                  >
+                    <Upload size={14} /> Importar
+                  </button>
+                </div>
+              )}
             </div>
             <div className="fact-header-right">
               <VerLogsButton tablas={['garantias_conductores', 'garantias_pagos']} label="Garant\u00edas" />

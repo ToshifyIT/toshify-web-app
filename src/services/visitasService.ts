@@ -100,13 +100,27 @@ export async function fetchVisitas(
   });
 }
 
+/**
+ * Construye un ISO timestamp con el offset del browser local.
+ * Ej: "2026-03-09" + "10:00" en Argentina (UTC-3) → "2026-03-09T10:00:00-03:00"
+ * Así Supabase (timestamptz) lo interpreta correctamente sin importar la TZ del server.
+ */
+export function buildLocalTimestamp(fecha: string, hora: string): string {
+  const dt = new Date(`${fecha}T${hora}:00`);
+  const offset = -dt.getTimezoneOffset();
+  const sign = offset >= 0 ? '+' : '-';
+  const hh = String(Math.floor(Math.abs(offset) / 60)).padStart(2, '0');
+  const mm = String(Math.abs(offset) % 60).padStart(2, '0');
+  return `${fecha}T${hora}:00${sign}${hh}:${mm}`;
+}
+
 export async function createVisita(
   formData: VisitaFormData,
   sedeId: string,
   citadorId: string,
   citadorNombre: string
 ): Promise<void> {
-  const fechaHora = `${formData.fecha}T${formData.hora}:00`;
+  const fechaHora = buildLocalTimestamp(formData.fecha, formData.hora);
 
   const { error } = await supabase.from('visitas').insert({
     categoria_id: formData.categoria_id,
@@ -130,7 +144,7 @@ export async function updateVisita(
   id: string,
   formData: VisitaFormData
 ): Promise<void> {
-  const fechaHora = `${formData.fecha}T${formData.hora}:00`;
+  const fechaHora = buildLocalTimestamp(formData.fecha, formData.hora);
 
   const { error } = await supabase.from('visitas').update({
     categoria_id: formData.categoria_id,
@@ -154,12 +168,72 @@ export async function updateVisitaEstado(id: string, estado: VisitaEstado): Prom
   if (error) throw error;
 }
 
+export async function cancelarVisitaConMotivo(id: string, motivo: string, notaActual: string | null): Promise<void> {
+  const nuevaNota = notaActual
+    ? `${notaActual}\n[Cancelada: ${motivo}]`
+    : `[Cancelada: ${motivo}]`;
+  const { error } = await supabase
+    .from('visitas')
+    .update({ estado: 'cancelada' as VisitaEstado, nota: nuevaNota })
+    .eq('id', id);
+  if (error) throw error;
+}
+
 export async function deleteVisita(id: string): Promise<void> {
   const { error } = await supabase
     .from('visitas')
     .delete()
     .eq('id', id);
   if (error) throw error;
+}
+
+/**
+ * Auto-actualiza estados de visitas según la hora actual:
+ * - pendiente + hora_inicio ya pasó → en_curso
+ * - pendiente/en_curso + hora_fin ya pasó → completada
+ * No toca las canceladas (estado terminal manual).
+ * Retorna las visitas con el estado ya corregido.
+ */
+export async function autoUpdateEstados(visitas: VisitaCompleta[]): Promise<VisitaCompleta[]> {
+  const now = new Date();
+  const updates: { id: string; estado: VisitaEstado }[] = [];
+
+  const result = visitas.map(v => {
+    // Solo auto-transicionar pendiente y en_curso
+    if (v.estado !== 'pendiente' && v.estado !== 'en_curso') return v;
+
+    const inicio = new Date(v.fecha_hora);
+    const fin = new Date(inicio.getTime() + v.duracion_minutos * 60_000);
+
+    let nuevoEstado: VisitaEstado = v.estado as VisitaEstado;
+
+    if (now >= fin) {
+      // Ya pasó la hora de fin → completada
+      nuevoEstado = 'completada';
+    } else if (now >= inicio && v.estado === 'pendiente') {
+      // Ya empezó pero no terminó → en_curso
+      nuevoEstado = 'en_curso';
+    }
+
+    if (nuevoEstado !== v.estado) {
+      updates.push({ id: v.id, estado: nuevoEstado });
+      return { ...v, estado: nuevoEstado };
+    }
+    return v;
+  });
+
+  // Actualizar en DB en paralelo (fire & forget, no bloquea UI)
+  if (updates.length > 0) {
+    for (const u of updates) {
+      supabase
+        .from('visitas')
+        .update({ estado: u.estado })
+        .eq('id', u.id)
+        .then();
+    }
+  }
+
+  return result;
 }
 
 // --- Lógica de negocio ---

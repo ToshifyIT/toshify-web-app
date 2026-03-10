@@ -297,7 +297,7 @@ export function PortalPage() {
       pdf.setFontSize(14)
       pdf.setTextColor(negro)
       pdf.setFont('helvetica', 'bold')
-      pdf.text('FACTURACIÓN', pageWidth - margin, y, { align: 'right' })
+      pdf.text('PROFORMA', pageWidth - margin, y, { align: 'right' })
 
       pdf.setFontSize(10)
       pdf.setTextColor(rojo)
@@ -335,7 +335,7 @@ export function PortalPage() {
       }
       pdf.text(`Vehículo: ${selectedFactura.vehiculo_patente || '-'}`, pageWidth / 2, y)
       y += 5
-      pdf.text(`Tipo: ${selectedFactura.tipo_alquiler}`, margin, y)
+      pdf.text(`Modalidad: ${selectedFactura.tipo_alquiler}`, margin, y)
       pdf.text(`Turnos: ${selectedFactura.turnos_cobrados}/${selectedFactura.turnos_base}`, pageWidth / 2, y)
       y += 10
 
@@ -345,63 +345,40 @@ export function PortalPage() {
       pdf.line(margin, y, pageWidth - margin, y)
       y += 8
 
-      // CARGOS
+      // CONCEPTOS (cargos + descuentos unificados, sin subtotales)
       const cargos = detalleItems.filter(d => !d.es_descuento && d.total !== 0)
+      const descuentos = detalleItems.filter(d => d.es_descuento && d.total !== 0)
+
       pdf.setFontSize(11)
-      pdf.setTextColor(rojo)
+      pdf.setTextColor(negro)
       pdf.setFont('helvetica', 'bold')
-      pdf.text('CARGOS', margin, y)
+      pdf.text('CONCEPTOS', margin, y)
       y += 7
 
       pdf.setFontSize(10)
-      pdf.setTextColor(negro)
       pdf.setFont('helvetica', 'normal')
       cargos.forEach(cargo => {
+        pdf.setTextColor(negro)
         pdf.text(cargo.concepto_descripcion, margin, y)
         pdf.text(formatCurrency(cargo.total), pageWidth - margin, y, { align: 'right' })
         y += 5
       })
-
-      y += 3
-      pdf.setFont('helvetica', 'bold')
-      const subtotalCargos = cargos.reduce((sum, c) => sum + c.total, 0)
-      pdf.text('SUBTOTAL CARGOS', margin, y)
-      pdf.text(formatCurrency(subtotalCargos), pageWidth - margin, y, { align: 'right' })
-      y += 10
-
-      // DESCUENTOS
-      const descuentos = detalleItems.filter(d => d.es_descuento && d.total !== 0)
-      if (descuentos.length > 0) {
-        pdf.setFontSize(11)
-        pdf.setTextColor(verde)
-        pdf.setFont('helvetica', 'bold')
-        pdf.text('DESCUENTOS / CRÉDITOS', margin, y)
-        y += 7
-
-        pdf.setFontSize(10)
+      descuentos.forEach(desc => {
         pdf.setTextColor(negro)
-        pdf.setFont('helvetica', 'normal')
-        descuentos.forEach(desc => {
-          pdf.text(desc.concepto_descripcion, margin, y)
-          pdf.text(`-${formatCurrency(desc.total)}`, pageWidth - margin, y, { align: 'right' })
-          y += 5
-        })
-
-        y += 3
-        pdf.setFont('helvetica', 'bold')
+        pdf.text(desc.concepto_descripcion, margin, y)
         pdf.setTextColor(verde)
-        const subtotalDesc = descuentos.reduce((sum, d) => sum + d.total, 0)
-        pdf.text('SUBTOTAL DESCUENTOS', margin, y)
-        pdf.text(`-${formatCurrency(subtotalDesc)}`, pageWidth - margin, y, { align: 'right' })
-        y += 10
-      }
+        pdf.text(`-${formatCurrency(desc.total)}`, pageWidth - margin, y, { align: 'right' })
+        y += 5
+      })
 
       // TOTAL
+      y += 5
       pdf.setDrawColor(200, 200, 200)
       pdf.setLineWidth(0.5)
       pdf.line(margin, y, pageWidth - margin, y)
       y += 8
 
+      const subtotalCargos = cargos.reduce((sum, c) => sum + c.total, 0)
       const subtotalDescPdf = descuentos.reduce((sum, d) => sum + d.total, 0)
       const totalFinal = subtotalCargos - subtotalDescPdf
       const saldoColor = totalFinal > 0 ? rojo : verde
@@ -409,17 +386,26 @@ export function PortalPage() {
       pdf.setFontSize(14)
       pdf.setTextColor(saldoColor)
       pdf.setFont('helvetica', 'bold')
-      pdf.text('TOTAL A PAGAR', margin, y)
+      pdf.text('MONTO TOTAL REFERENCIAL', margin, y)
       pdf.text(formatCurrency(totalFinal), pageWidth - margin, y, { align: 'right' })
 
-      // Pie de página
+      // Nota legal
+      y += 12
       pdf.setFontSize(8)
       pdf.setTextColor(gris)
+      pdf.setFont('helvetica', 'italic')
+      pdf.text(
+        'La información presentada es de carácter referencial y no constituye un comprobante fiscal válido.',
+        pageWidth / 2, y, { align: 'center' }
+      )
+
+      // Pie de página
+      pdf.setFont('helvetica', 'normal')
       pdf.text(`Generado el ${format(new Date(), 'dd/MM/yyyy HH:mm')}`, margin, pdf.internal.pageSize.getHeight() - 10)
       pdf.text('TOSHIFY - Sistema de Gestión de Flota', pageWidth - margin, pdf.internal.pageSize.getHeight() - 10, { align: 'right' })
 
       // Guardar
-      const nombreArchivo = `Facturacion_${selectedFactura.conductor_nombre.replace(/\s+/g, '_')}_Semana${periodo.semana}_${periodo.anio}.pdf`
+      const nombreArchivo = `Proforma_${selectedFactura.conductor_nombre.replace(/\s+/g, '_')}_Semana${periodo.semana}_${periodo.anio}.pdf`
       pdf.save(nombreArchivo)
     } catch {
       // Silent fail - el PDF se intenta descargar igual
@@ -591,7 +577,7 @@ export function PortalPage() {
                   <span className="portal-detail-info-value">{selectedFactura.vehiculo_patente || '-'}</span>
                 </div>
                 <div className="portal-detail-info-item">
-                  <span className="portal-detail-info-label">Tipo</span>
+                  <span className="portal-detail-info-label">Modalidad</span>
                   <span className="portal-detail-info-value">{selectedFactura.tipo_alquiler}</span>
                 </div>
                 <div className="portal-detail-info-item">
@@ -601,61 +587,42 @@ export function PortalPage() {
               </div>
 
               <div className="portal-detail-body">
-                {/* CARGOS */}
-                {cargos.length > 0 && (
-                  <div className="portal-detail-section">
-                    <div className="portal-detail-section-title cargos">Cargos</div>
-                    <div className="portal-detail-items">
-                      {cargos.map((item) => (
-                        <div key={item.id} className="portal-detail-item">
-                          <span className="portal-detail-item-name">
-                            <span className="portal-detail-item-dot cargo" />
-                            {item.concepto_descripcion}
-                            {item.cantidad > 1 && ` x${item.cantidad}`}
-                          </span>
-                          <span className="portal-detail-item-amount">{formatCurrency(item.total)}</span>
-                        </div>
-                      ))}
-                    </div>
-                    <div className="portal-detail-subtotal cargos">
-                      <span>Subtotal Cargos</span>
-                      <span>{formatCurrency(subtotalCargos)}</span>
-                    </div>
+                {/* CONCEPTOS (cargos + descuentos unificados) */}
+                <div className="portal-detail-section">
+                  <div className="portal-detail-section-title cargos">Conceptos</div>
+                  <div className="portal-detail-items">
+                    {cargos.map((item) => (
+                      <div key={item.id} className="portal-detail-item">
+                        <span className="portal-detail-item-name">
+                          <span className="portal-detail-item-dot cargo" />
+                          {item.concepto_descripcion}
+                          {item.cantidad > 1 && ` x${item.cantidad}`}
+                        </span>
+                        <span className="portal-detail-item-amount">{formatCurrency(item.total)}</span>
+                      </div>
+                    ))}
+                    {descuentos.map((item) => (
+                      <div key={item.id} className="portal-detail-item">
+                        <span className="portal-detail-item-name">
+                          <span className="portal-detail-item-dot descuento" />
+                          {item.concepto_descripcion}
+                        </span>
+                        <span className="portal-detail-item-amount" style={{ color: '#059669' }}>
+                          -{formatCurrency(item.total)}
+                        </span>
+                      </div>
+                    ))}
                   </div>
-                )}
-
-                {/* DESCUENTOS */}
-                {descuentos.length > 0 && (
-                  <div className="portal-detail-section">
-                    <div className="portal-detail-section-title descuentos">Descuentos / Créditos</div>
-                    <div className="portal-detail-items">
-                      {descuentos.map((item) => (
-                        <div key={item.id} className="portal-detail-item">
-                          <span className="portal-detail-item-name">
-                            <span className="portal-detail-item-dot descuento" />
-                            {item.concepto_descripcion}
-                          </span>
-                          <span className="portal-detail-item-amount" style={{ color: '#059669' }}>
-                            -{formatCurrency(item.total)}
-                          </span>
-                        </div>
-                      ))}
-                    </div>
-                    <div className="portal-detail-subtotal descuentos">
-                      <span>Subtotal Descuentos</span>
-                      <span>-{formatCurrency(subtotalDescuentos)}</span>
-                    </div>
-                  </div>
-                )}
+                </div>
 
                 {/* TOTAL */}
                 <div className="portal-detail-total">
-                  <div className="portal-detail-total-label">Total a Pagar</div>
+                  <div className="portal-detail-total-label">Monto Total Referencial</div>
                   <div className={`portal-detail-total-amount ${totalAPagar > 0 ? 'debit' : 'credit'}`}>
                     {formatCurrency(totalAPagar)}
                   </div>
                   <div className="portal-detail-total-note">
-                    {totalAPagar > 0 ? 'El conductor debe pagar' : totalAPagar < 0 ? 'Saldo a favor' : 'Sin saldo'}
+                    {totalAPagar > 0 ? 'Monto referencial' : totalAPagar < 0 ? 'Saldo a favor' : 'Sin saldo'}
                   </div>
                 </div>
               </div>
@@ -711,7 +678,10 @@ export function PortalPage() {
             {/* Stats row */}
             <div className="portal-stats-grid">
               <div className="portal-stat-card">
-                <div className="portal-stat-label">Última semana</div>
+                <div className="portal-stat-label">
+                  Última semana
+                  <span className="portal-stat-tooltip" data-tooltip="Monto estimado de proforma de la última semana facturada">ⓘ</span>
+                </div>
                 <div className="portal-stat-value debit">{formatCurrency(stats.ultima)}</div>
                 {stats.variacion !== 0 && (
                   <div className={`portal-stat-change ${stats.variacion > 0 ? 'up' : 'down'}`}>
@@ -720,12 +690,15 @@ export function PortalPage() {
                 )}
               </div>
               <div className="portal-stat-card">
-                <div className="portal-stat-label">Promedio semanal</div>
+                <div className="portal-stat-label">
+                  Promedio semanal
+                  <span className="portal-stat-tooltip" data-tooltip="Promedio de proforma semanal sobre todas las semanas registradas">ⓘ</span>
+                </div>
                 <div className="portal-stat-value">{formatCurrency(stats.promedio)}</div>
                 <div className="portal-stat-sub">{stats.totalSemanas} semanas</div>
               </div>
               <div className="portal-stat-card">
-                <div className="portal-stat-label">Ganancia Cabify</div>
+                <div className="portal-stat-label">Cobro App Cabify</div>
                 <div className="portal-stat-value" style={{ color: '#059669' }}>{formatCurrency(stats.ultimaGanancia)}</div>
                 <div className="portal-stat-sub">última semana</div>
               </div>
@@ -760,10 +733,10 @@ export function PortalPage() {
                 {/* Chart */}
                 <div className="portal-chart-card">
                   <div className="portal-chart-header">
-                    <div className="portal-chart-title">Facturación vs Ganancia Cabify</div>
+                    <div className="portal-chart-title">Proforma vs Cobro App Cabify</div>
                     <div className="portal-chart-legend">
-                      <span className="portal-legend-item"><span className="portal-legend-dot" style={{ background: '#ff0033' }} /> Facturación</span>
-                      <span className="portal-legend-item"><span className="portal-legend-dot" style={{ background: '#059669' }} /> Ganancia</span>
+                      <span className="portal-legend-item"><span className="portal-legend-dot" style={{ background: '#ff0033' }} /> Proforma</span>
+                      <span className="portal-legend-item"><span className="portal-legend-dot" style={{ background: '#059669' }} /> Cobro App Cabify</span>
                     </div>
                   </div>
                   <div className="portal-chart-container">
@@ -783,7 +756,7 @@ export function PortalPage() {
                           tickFormatter={(v: number) => v >= 1000 ? `$${(v / 1000).toFixed(0)}K` : `$${v}`}
                         />
                         <Tooltip
-                          formatter={(value: string | number, name: string) => [formatCurrency(Number(value)), name === 'facturacion' ? 'Facturación' : 'Ganancia Cabify']}
+                          formatter={(value: string | number, name: string) => [formatCurrency(Number(value)), name === 'facturacion' ? 'Proforma' : 'Cobro App Cabify']}
                           contentStyle={{
                             background: 'var(--bg-tertiary)',
                             border: '1px solid var(--border-primary)',
@@ -859,6 +832,10 @@ export function PortalPage() {
                   })}
                 </div>
               </div>
+            </div>
+            {/* Nota legal */}
+            <div className="portal-nota-legal">
+              La información presentada es de carácter referencial y no constituye un comprobante fiscal válido.
             </div>
           </>
         )}

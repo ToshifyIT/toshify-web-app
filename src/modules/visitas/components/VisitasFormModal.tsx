@@ -2,10 +2,11 @@
 // Modal de formulario para crear/editar visitas
 // Responsabilidad: UI del formulario + validación local
 // Soporta múltiples visitantes para categoría Inducción + motivo Inducción
+// Auto-asigna anfitrión según categoría+motivo (excepto Directivo)
 // ============================================================
 
 import { useState, useEffect, useMemo, useCallback } from 'react';
-import { X, Plus, Trash2 } from 'lucide-react';
+import { X, Plus, Trash2, Calendar, Clock, User, Tag, FileText, Car } from 'lucide-react';
 import Swal from 'sweetalert2';
 import type {
   VisitaCategoria,
@@ -16,7 +17,7 @@ import type {
 } from '../../../types/visitas.types';
 import { VISITA_FORM_INITIAL } from '../../../types/visitas.types';
 import { TIPO_ASIGNACION_LABELS } from '../../../types/onboarding.types';
-import { getMotivosByCategoria, checkConflict } from '../../../services/visitasService';
+import { getMotivosByCategoria, checkConflict, buildLocalTimestamp } from '../../../services/visitasService';
 import { format } from 'date-fns';
 
 // Motivos derivados de asignaciones, formateados como opciones de select
@@ -24,7 +25,33 @@ const MOTIVOS_ASIGNACIONES = Object.entries(TIPO_ASIGNACION_LABELS).map(
   ([key, label]) => ({ key, label })
 );
 
-// Separador usado para concatenar múltiples visitantes en un solo campo
+/**
+ * Mapeo categoría+motivo → anfitrión por defecto.
+ * Clave: "categoria::motivo" (lowercase, trimmed). Valor: nombre del anfitrión.
+ * Para categorías con un único anfitrión sin importar el motivo: "categoria::*".
+ */
+const ANFITRION_DEFAULT_MAP: Record<string, string> = {
+  'inducción::inducción': 'Manuel/Marina',
+  'asignaciones::*': 'Iván',
+  'siniestros::declaración de siniestro': 'Eugenia',
+  'logística::checklist': 'Emiliano',
+  'logística::incidencia': 'Emiliano',
+  'logística::service': 'Emiliano',
+  'autos del pueblo::inducción': 'Manuel/Marina',
+  'autos del pueblo::check vehicular': 'Emiliano',
+  'autos del pueblo::check vehícular': 'Emiliano',
+  'autos del pueblo::firma de contrato de alquiler': 'Karen',
+  'externo::proveedor': 'Eugenia',
+  'externo::taller kalzalo': 'Kalzalo',
+};
+
+/** Categorías donde el anfitrión se elige manualmente (no auto-asignar) */
+const CATEGORIAS_ANFITRION_MANUAL = ['directivo'];
+
+/** Para "Directivo", solo mostrar estos anfitriones */
+const ANFITRIONES_DIRECTIVO = ['josué', 'sara'];
+
+// Separador para concatenar múltiples visitantes en un solo campo
 const VISITANTES_SEPARATOR = '; ';
 
 interface VisitanteEntry {
@@ -44,10 +71,6 @@ interface VisitasFormModalProps {
   onClose: () => void;
 }
 
-/**
- * Parsea campos concatenados (nombre_visitante, dni_visitante) en un array de VisitanteEntry.
- * Soporta el formato "Nombre1; Nombre2" / "DNI1; DNI2".
- */
 function parseVisitantes(nombres: string, dnis: string): VisitanteEntry[] {
   const nombresArr = nombres.split(VISITANTES_SEPARATOR).map((s) => s.trim()).filter(Boolean);
   const dnisArr = dnis.split(VISITANTES_SEPARATOR).map((s) => s.trim());
@@ -62,13 +85,53 @@ function parseVisitantes(nombres: string, dnis: string): VisitanteEntry[] {
   }));
 }
 
-/** Concatena un array de visitantes en los campos nombre_visitante y dni_visitante */
 function serializeVisitantes(visitantes: VisitanteEntry[]): { nombre: string; dni: string } {
   const filtered = visitantes.filter((v) => v.nombre.trim());
   return {
     nombre: filtered.map((v) => v.nombre.trim()).join(VISITANTES_SEPARATOR),
     dni: filtered.map((v) => v.dni.trim()).join(VISITANTES_SEPARATOR),
   };
+}
+
+/**
+ * Busca el anfitrión por defecto para una categoría+motivo.
+ * Retorna el id del anfitrión si se encuentra match, o '' si no.
+ */
+function resolveDefaultAnfitrion(
+  catNombre: string | undefined,
+  motNombre: string | undefined,
+  atendedores: VisitaAtendedor[]
+): string {
+  if (!catNombre) return '';
+  const catKey = catNombre.trim().toLowerCase();
+
+  // No auto-asignar para categorías manuales
+  if (CATEGORIAS_ANFITRION_MANUAL.includes(catKey)) return '';
+
+  // Buscar por categoría+motivo específico
+  if (motNombre) {
+    const motKey = motNombre.trim().toLowerCase();
+    const specificKey = `${catKey}::${motKey}`;
+    const anfitrionNombre = ANFITRION_DEFAULT_MAP[specificKey];
+    if (anfitrionNombre) {
+      const match = atendedores.find(
+        (a) => a.nombre.toLowerCase() === anfitrionNombre.toLowerCase()
+      );
+      if (match) return match.id;
+    }
+  }
+
+  // Buscar por categoría wildcard
+  const wildcardKey = `${catKey}::*`;
+  const anfitrionNombre = ANFITRION_DEFAULT_MAP[wildcardKey];
+  if (anfitrionNombre) {
+    const match = atendedores.find(
+      (a) => a.nombre.toLowerCase() === anfitrionNombre.toLowerCase()
+    );
+    if (match) return match.id;
+  }
+
+  return '';
 }
 
 export function VisitasFormModal({
@@ -85,8 +148,6 @@ export function VisitasFormModal({
   const [formData, setFormData] = useState<VisitaFormData>(VISITA_FORM_INITIAL);
   const [saving, setSaving] = useState(false);
   const [errors, setErrors] = useState<Partial<Record<keyof VisitaFormData, string>>>({});
-
-  // Estado para múltiples visitantes (solo activo en modo Inducción)
   const [visitantes, setVisitantes] = useState<VisitanteEntry[]>([{ nombre: '', dni: '' }]);
 
   // Prefill on open
@@ -105,8 +166,6 @@ export function VisitasFormModal({
         duracion_minutos: visita.duracion_minutos,
         nota: visita.nota ?? '',
       });
-
-      // Parsear visitantes concatenados al editar
       setVisitantes(
         parseVisitantes(visita.nombre_visitante, visita.dni_visitante ?? '')
       );
@@ -133,35 +192,87 @@ export function VisitasFormModal({
     [categorias, formData.categoria_id]
   );
 
-  // Motivo seleccionado
+  // Motivo seleccionado (para motivos normales o nombre desde asignaciones)
   const motivoSeleccionado = useMemo(
     () => motivos.find((m) => m.id === formData.motivo_id),
     [motivos, formData.motivo_id]
   );
 
-  // Determinar si la categoría es "Asignaciones" (motivos desde módulo de asignaciones)
   const esAsignaciones = useMemo(() => {
     return categoriaSeleccionada?.nombre?.trim().toLowerCase() === 'asignaciones';
   }, [categoriaSeleccionada]);
 
-  // Determinar si el modo multi-visitante está activo
+  const esDirectivo = useMemo(() => {
+    return categoriaSeleccionada?.nombre?.trim().toLowerCase() === 'directivo';
+  }, [categoriaSeleccionada]);
+
   const esInduccion = useMemo(() => {
     const catNombre = categoriaSeleccionada?.nombre?.trim().toLowerCase();
     const motNombre = motivoSeleccionado?.nombre?.trim().toLowerCase();
     return catNombre === 'inducción' && motNombre === 'inducción';
   }, [categoriaSeleccionada, motivoSeleccionado]);
 
-  // Al cambiar categoría, actualizar duración default y limpiar motivo
+  // Anfitriones filtrados: para Directivo solo Josué/Sara, para el resto todos
+  const anfitrionesDisponibles = useMemo(() => {
+    if (esDirectivo) {
+      return atendedores.filter((a) =>
+        ANFITRIONES_DIRECTIVO.includes(a.nombre.toLowerCase())
+      );
+    }
+    return atendedores;
+  }, [atendedores, esDirectivo]);
+
+  // Determinar si el anfitrión fue auto-asignado (para mostrarlo como readonly)
+  const anfitrionAutoAsignado = useMemo(() => {
+    if (!categoriaSeleccionada) return false;
+    const catKey = categoriaSeleccionada.nombre.trim().toLowerCase();
+    return !CATEGORIAS_ANFITRION_MANUAL.includes(catKey);
+  }, [categoriaSeleccionada]);
+
+  // Nombre del anfitrión seleccionado
+  const anfitrionNombre = useMemo(() => {
+    return atendedores.find((a) => a.id === formData.atendedor_id)?.nombre ?? '';
+  }, [atendedores, formData.atendedor_id]);
+
+  // Auto-asignar anfitrión cuando cambia categoría o motivo
+  useEffect(() => {
+    // Solo auto-asignar en modo create o si el usuario cambió la categoría
+    if (mode === 'edit') return;
+    if (!categoriaSeleccionada) return;
+
+    const catKey = categoriaSeleccionada.nombre.trim().toLowerCase();
+    if (CATEGORIAS_ANFITRION_MANUAL.includes(catKey)) return;
+
+    const motNombre = motivoSeleccionado?.nombre;
+    const resolved = resolveDefaultAnfitrion(
+      categoriaSeleccionada.nombre,
+      motNombre,
+      atendedores
+    );
+    if (resolved) {
+      setFormData((prev) => ({ ...prev, atendedor_id: resolved }));
+    }
+  }, [categoriaSeleccionada, motivoSeleccionado, atendedores, mode]);
+
+  // Al cambiar categoría: duración default, limpiar motivo, auto-asignar anfitrión
   function handleCategoriaChange(categoriaId: string) {
     const cat = categorias.find((c) => c.id === categoriaId);
     setFormData((prev) => ({
       ...prev,
       categoria_id: categoriaId,
       motivo_id: '',
+      atendedor_id: '', // Se re-asigna via useEffect
       duracion_minutos: cat?.duracion_default ?? 30,
     }));
-    // Resetear visitantes al cambiar categoría
     setVisitantes([{ nombre: '', dni: '' }]);
+  }
+
+  function handleMotivoChange(motivoId: string) {
+    setFormData((prev) => ({
+      ...prev,
+      motivo_id: motivoId,
+      // anfitrión se re-asigna via useEffect cuando cambia motivoSeleccionado
+    }));
   }
 
   function handleChange(field: keyof VisitaFormData, value: string | number) {
@@ -183,7 +294,6 @@ export function VisitasFormModal({
         updated[index] = { ...updated[index], [field]: value };
         return updated;
       });
-      // Limpiar error de nombre si se está escribiendo
       if (field === 'nombre' && errors.nombre_visitante) {
         setErrors((prev) => {
           const next = { ...prev };
@@ -212,7 +322,6 @@ export function VisitasFormModal({
     if (!formData.atendedor_id) e.atendedor_id = 'Seleccione un anfitrión';
 
     if (esInduccion) {
-      // Validar que al menos un visitante tenga nombre
       const tieneAlMenosUno = visitantes.some((v) => v.nombre.trim());
       if (!tieneAlMenosUno) {
         e.nombre_visitante = 'Ingrese al menos un visitante';
@@ -236,7 +345,6 @@ export function VisitasFormModal({
   async function handleSubmit() {
     if (!validate()) return;
 
-    // Si es modo multi-visitante, serializar antes de enviar
     let dataToSave = { ...formData };
     if (esInduccion) {
       const { nombre, dni } = serializeVisitantes(visitantes);
@@ -249,9 +357,8 @@ export function VisitasFormModal({
 
     setSaving(true);
     try {
-      // Verificar conflicto de agenda (skip para categorías grupales)
       if (categoriaSeleccionada?.tipo_visita !== 'grupal') {
-        const fechaHora = `${dataToSave.fecha}T${dataToSave.hora}:00`;
+        const fechaHora = buildLocalTimestamp(dataToSave.fecha, dataToSave.hora);
         const hasConflict = await checkConflict(
           dataToSave.atendedor_id,
           fechaHora,
@@ -287,218 +394,264 @@ export function VisitasFormModal({
         </div>
 
         <div className="modal-body">
-          {/* Categoría */}
-          <div className="form-group">
-            <label>Categoría <span className="required">*</span></label>
-            <select
-              value={formData.categoria_id}
-              onChange={(e) => handleCategoriaChange(e.target.value)}
-              className={errors.categoria_id ? 'input-error' : ''}
-            >
-              <option value="">Seleccionar...</option>
-              {categorias.map((c) => (
-                <option key={c.id} value={c.id}>{c.nombre}</option>
-              ))}
-            </select>
-            {errors.categoria_id && <span className="error-message">{errors.categoria_id}</span>}
-          </div>
-
-          {/* Motivo: muestra motivos de asignaciones o motivos normales según categoría */}
-          {esAsignaciones ? (
-            <div className="form-group">
-              <label>Motivo</label>
-              <select
-                value={formData.motivo_id}
-                onChange={(e) => handleChange('motivo_id', e.target.value)}
-              >
-                <option value="">Seleccionar...</option>
-                {MOTIVOS_ASIGNACIONES.map((m) => (
-                  <option key={m.key} value={m.key}>{m.label}</option>
-                ))}
-              </select>
+          {/* ─── SECCIÓN 1: Tipo de cita ─── */}
+          <div className="vf-section">
+            <div className="vf-section-title">
+              <Tag size={15} />
+              <span>Tipo de cita</span>
             </div>
-          ) : motivosFiltrados.length > 0 ? (
-            <div className="form-group">
-              <label>Motivo</label>
-              <select
-                value={formData.motivo_id}
-                onChange={(e) => handleChange('motivo_id', e.target.value)}
-              >
-                <option value="">Seleccionar...</option>
-                {motivosFiltrados.map((m) => (
-                  <option key={m.id} value={m.id}>{m.nombre}</option>
-                ))}
-              </select>
-            </div>
-          ) : null}
 
-          {/* Anfitrión */}
-          <div className="form-group">
-            <label>Anfitrión <span className="required">*</span></label>
-            <select
-              value={formData.atendedor_id}
-              onChange={(e) => handleChange('atendedor_id', e.target.value)}
-              className={errors.atendedor_id ? 'input-error' : ''}
-            >
-              <option value="">Seleccionar...</option>
-              {atendedores.map((a) => (
-                <option key={a.id} value={a.id}>{a.nombre}</option>
-              ))}
-            </select>
-            {errors.atendedor_id && <span className="error-message">{errors.atendedor_id}</span>}
-          </div>
-
-          {/* Visitante(s) */}
-          {esInduccion ? (
             <div className="form-group">
-              <div className="visitantes-header">
-                <label>Visitantes <span className="required">*</span></label>
-                <button
-                  type="button"
-                  className="btn-add-visitante"
-                  onClick={handleAddVisitante}
-                  title="Agregar visitante"
-                >
-                  <Plus size={14} /> Agregar
-                </button>
-              </div>
-              {errors.nombre_visitante && (
-                <span className="error-message">{errors.nombre_visitante}</span>
-              )}
-              <div className="visitantes-list">
-                {visitantes.map((v, index) => (
-                  <div key={index} className="visitante-row">
-                    <div className="visitante-fields">
-                      <input
-                        type="text"
-                        value={v.nombre}
-                        onChange={(e) => handleVisitanteChange(index, 'nombre', e.target.value)}
-                        placeholder={`Nombre completo ${index + 1}`}
-                        className="visitante-nombre"
-                      />
-                      <input
-                        type="text"
-                        value={v.dni}
-                        onChange={(e) => handleVisitanteChange(index, 'dni', e.target.value)}
-                        placeholder="DNI"
-                        className="visitante-dni"
-                      />
-                    </div>
-                    {visitantes.length > 1 && (
-                      <button
-                        type="button"
-                        className="btn-remove-visitante"
-                        onClick={() => handleRemoveVisitante(index)}
-                        title="Eliminar visitante"
-                      >
-                        <Trash2 size={14} />
-                      </button>
-                    )}
-                  </div>
+              <label>Categoría <span className="required">*</span></label>
+              <div className="vf-category-grid">
+                {categorias.map((c) => (
+                  <button
+                    key={c.id}
+                    type="button"
+                    className={`vf-category-chip ${formData.categoria_id === c.id ? 'active' : ''}`}
+                    style={{
+                      '--chip-color': c.color,
+                      borderColor: formData.categoria_id === c.id ? c.color : undefined,
+                    } as React.CSSProperties}
+                    onClick={() => handleCategoriaChange(c.id)}
+                  >
+                    <span className="vf-chip-dot" style={{ background: c.color }} />
+                    {c.nombre}
+                  </button>
                 ))}
               </div>
-              <span className="visitantes-count">
-                {visitantes.filter((v) => v.nombre.trim()).length} visitante(s)
-              </span>
+              {errors.categoria_id && <span className="error-message">{errors.categoria_id}</span>}
             </div>
-          ) : (
-            <div className="form-row">
+
+            {/* Motivo */}
+            {esAsignaciones ? (
               <div className="form-group">
-                <label>Nombre visitante <span className="required">*</span></label>
-                <input
-                  type="text"
-                  value={formData.nombre_visitante}
-                  onChange={(e) => handleChange('nombre_visitante', e.target.value)}
-                  className={errors.nombre_visitante ? 'input-error' : ''}
-                  placeholder="Nombre completo"
-                />
-                {errors.nombre_visitante && <span className="error-message">{errors.nombre_visitante}</span>}
-              </div>
-              <div className="form-group">
-                <label>DNI</label>
-                <input
-                  type="text"
-                  value={formData.dni_visitante}
-                  onChange={(e) => handleChange('dni_visitante', e.target.value)}
-                  placeholder="Documento"
-                />
-              </div>
-            </div>
-          )}
-
-          {/* Patente (solo si la categoría lo requiere) */}
-          {categoriaSeleccionada?.requiere_patente && (
-            <div className="form-group">
-              <label>Patente <span className="required">*</span></label>
-              <input
-                type="text"
-                value={formData.patente}
-                onChange={(e) => handleChange('patente', e.target.value.toUpperCase())}
-                className={errors.patente ? 'input-error' : ''}
-                placeholder="Ej: AB123CD"
-              />
-              {errors.patente && <span className="error-message">{errors.patente}</span>}
-            </div>
-          )}
-
-          {/* Fecha y hora */}
-          <div className="form-row">
-            <div className="form-group">
-              <label>Fecha <span className="required">*</span></label>
-              <input
-                type="date"
-                value={formData.fecha}
-                onChange={(e) => handleChange('fecha', e.target.value)}
-                className={errors.fecha ? 'input-error' : ''}
-              />
-              {errors.fecha && <span className="error-message">{errors.fecha}</span>}
-            </div>
-            <div className="form-group">
-              <label>Hora <span className="required">*</span></label>
-              <input
-                type="time"
-                value={formData.hora}
-                onChange={(e) => handleChange('hora', e.target.value)}
-                className={errors.hora ? 'input-error' : ''}
-              />
-              {errors.hora && <span className="error-message">{errors.hora}</span>}
-            </div>
-            <div className="form-group">
-              <label>Duración</label>
-              {categoriaSeleccionada?.duracion_modificable ? (
+                <label>Motivo</label>
                 <select
-                  value={formData.duracion_minutos}
-                  onChange={(e) => handleChange('duracion_minutos', Number(e.target.value))}
+                  value={formData.motivo_id}
+                  onChange={(e) => handleMotivoChange(e.target.value)}
                 >
-                  <option value={30}>30 min</option>
-                  <option value={60}>60 min</option>
-                  <option value={90}>90 min</option>
-                  <option value={120}>2 horas</option>
-                  <option value={180}>3 horas</option>
-                  <option value={240}>4 horas</option>
-                  <option value={300}>5 horas</option>
-                  <option value={360}>6 horas</option>
+                  <option value="">Seleccionar motivo...</option>
+                  {MOTIVOS_ASIGNACIONES.map((m) => (
+                    <option key={m.key} value={m.key}>{m.label}</option>
+                  ))}
                 </select>
-              ) : (
+              </div>
+            ) : motivosFiltrados.length > 0 ? (
+              <div className="form-group">
+                <label>Motivo</label>
+                <select
+                  value={formData.motivo_id}
+                  onChange={(e) => handleMotivoChange(e.target.value)}
+                >
+                  <option value="">Seleccionar motivo...</option>
+                  {motivosFiltrados.map((m) => (
+                    <option key={m.id} value={m.id}>{m.nombre}</option>
+                  ))}
+                </select>
+              </div>
+            ) : null}
+
+            {/* Anfitrión - auto-asignado o seleccionable */}
+            {anfitrionAutoAsignado && formData.atendedor_id ? (
+              <div className="form-group">
+                <label>Anfitrión</label>
+                <div className="vf-anfitrion-auto">
+                  <User size={14} />
+                  <span>{anfitrionNombre}</span>
+                  <span className="vf-auto-badge">Asignado</span>
+                </div>
+              </div>
+            ) : (
+              <div className="form-group">
+                <label>Anfitrión <span className="required">*</span></label>
+                <select
+                  value={formData.atendedor_id}
+                  onChange={(e) => handleChange('atendedor_id', e.target.value)}
+                  className={errors.atendedor_id ? 'input-error' : ''}
+                >
+                  <option value="">Seleccionar anfitrión...</option>
+                  {anfitrionesDisponibles.map((a) => (
+                    <option key={a.id} value={a.id}>{a.nombre}</option>
+                  ))}
+                </select>
+                {errors.atendedor_id && <span className="error-message">{errors.atendedor_id}</span>}
+              </div>
+            )}
+          </div>
+
+          {/* ─── SECCIÓN 2: Visitante ─── */}
+          <div className="vf-section">
+            <div className="vf-section-title">
+              <User size={15} />
+              <span>Visitante</span>
+            </div>
+
+            {esInduccion ? (
+              <div className="form-group">
+                <div className="visitantes-header">
+                  <label>Visitantes <span className="required">*</span></label>
+                  <button
+                    type="button"
+                    className="btn-add-visitante"
+                    onClick={handleAddVisitante}
+                    title="Agregar visitante"
+                  >
+                    <Plus size={14} /> Agregar
+                  </button>
+                </div>
+                {errors.nombre_visitante && (
+                  <span className="error-message">{errors.nombre_visitante}</span>
+                )}
+                <div className="visitantes-list">
+                  {visitantes.map((v, index) => (
+                    <div key={index} className="visitante-row">
+                      <div className="visitante-fields">
+                        <input
+                          type="text"
+                          value={v.nombre}
+                          onChange={(e) => handleVisitanteChange(index, 'nombre', e.target.value)}
+                          placeholder={`Nombre completo ${index + 1}`}
+                          className="visitante-nombre"
+                        />
+                        <input
+                          type="text"
+                          value={v.dni}
+                          onChange={(e) => handleVisitanteChange(index, 'dni', e.target.value)}
+                          placeholder="DNI"
+                          className="visitante-dni"
+                        />
+                      </div>
+                      {visitantes.length > 1 && (
+                        <button
+                          type="button"
+                          className="btn-remove-visitante"
+                          onClick={() => handleRemoveVisitante(index)}
+                          title="Eliminar visitante"
+                        >
+                          <Trash2 size={14} />
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                </div>
+                <span className="visitantes-count">
+                  {visitantes.filter((v) => v.nombre.trim()).length} visitante(s)
+                </span>
+              </div>
+            ) : (
+              <div className="form-row">
+                <div className="form-group">
+                  <label>Nombre <span className="required">*</span></label>
+                  <input
+                    type="text"
+                    value={formData.nombre_visitante}
+                    onChange={(e) => handleChange('nombre_visitante', e.target.value)}
+                    className={errors.nombre_visitante ? 'input-error' : ''}
+                    placeholder="Nombre completo"
+                  />
+                  {errors.nombre_visitante && <span className="error-message">{errors.nombre_visitante}</span>}
+                </div>
+                <div className="form-group">
+                  <label>DNI</label>
+                  <input
+                    type="text"
+                    value={formData.dni_visitante}
+                    onChange={(e) => handleChange('dni_visitante', e.target.value)}
+                    placeholder="Documento"
+                    inputMode="numeric"
+                  />
+                </div>
+              </div>
+            )}
+
+            {/* Patente */}
+            {categoriaSeleccionada?.requiere_patente && (
+              <div className="form-group">
+                <label><Car size={13} style={{ marginRight: 4, verticalAlign: -2 }} />Patente <span className="required">*</span></label>
                 <input
                   type="text"
-                  value={`${formData.duracion_minutos} min`}
-                  disabled
-                  style={{ backgroundColor: 'var(--color-bg-secondary)', cursor: 'not-allowed' }}
+                  value={formData.patente}
+                  onChange={(e) => handleChange('patente', e.target.value.toUpperCase())}
+                  className={errors.patente ? 'input-error' : ''}
+                  placeholder="Ej: AB123CD"
+                  style={{ textTransform: 'uppercase', letterSpacing: '1px' }}
                 />
-              )}
+                {errors.patente && <span className="error-message">{errors.patente}</span>}
+              </div>
+            )}
+          </div>
+
+          {/* ─── SECCIÓN 3: Programar ─── */}
+          <div className="vf-section">
+            <div className="vf-section-title">
+              <Calendar size={15} />
+              <span>Programar</span>
+            </div>
+
+            <div className="vf-datetime-row">
+              <div className="form-group">
+                <label>Fecha <span className="required">*</span></label>
+                <input
+                  type="date"
+                  value={formData.fecha}
+                  onChange={(e) => handleChange('fecha', e.target.value)}
+                  className={errors.fecha ? 'input-error' : ''}
+                />
+                {errors.fecha && <span className="error-message">{errors.fecha}</span>}
+              </div>
+              <div className="form-group">
+                <label>Hora <span className="required">*</span></label>
+                <input
+                  type="time"
+                  value={formData.hora}
+                  onChange={(e) => handleChange('hora', e.target.value)}
+                  className={errors.hora ? 'input-error' : ''}
+                />
+                {errors.hora && <span className="error-message">{errors.hora}</span>}
+              </div>
+              <div className="form-group">
+                <label><Clock size={13} style={{ marginRight: 4, verticalAlign: -2 }} />Duración</label>
+                {categoriaSeleccionada?.duracion_modificable ? (
+                  <select
+                    value={formData.duracion_minutos}
+                    onChange={(e) => handleChange('duracion_minutos', Number(e.target.value))}
+                  >
+                    <option value={30}>30 min</option>
+                    <option value={60}>60 min</option>
+                    <option value={90}>90 min</option>
+                    <option value={120}>2 horas</option>
+                    <option value={180}>3 horas</option>
+                    <option value={240}>4 horas</option>
+                    <option value={300}>5 horas</option>
+                    <option value={360}>6 horas</option>
+                  </select>
+                ) : (
+                  <input
+                    type="text"
+                    value={`${formData.duracion_minutos} min`}
+                    disabled
+                  />
+                )}
+              </div>
             </div>
           </div>
 
-          {/* Nota */}
-          <div className="form-group">
-            <label>Nota</label>
-            <textarea
-              value={formData.nota}
-              onChange={(e) => handleChange('nota', e.target.value)}
-              rows={3}
-              placeholder="Observaciones adicionales..."
-            />
+          {/* ─── SECCIÓN 4: Nota (colapsable visualmente) ─── */}
+          <div className="vf-section vf-section-last">
+            <div className="vf-section-title">
+              <FileText size={15} />
+              <span>Nota</span>
+              <span className="vf-optional-label">Opcional</span>
+            </div>
+            <div className="form-group" style={{ marginBottom: 0 }}>
+              <textarea
+                value={formData.nota}
+                onChange={(e) => handleChange('nota', e.target.value)}
+                rows={2}
+                placeholder="Observaciones adicionales..."
+              />
+            </div>
           </div>
         </div>
 

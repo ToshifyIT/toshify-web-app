@@ -176,7 +176,6 @@ export function MotivosSubTab() {
         emptyIcon={<FileText size={48} />}
         emptyTitle="No hay motivos"
         emptyDescription="Agregue un nuevo motivo de visita"
-        disableAutoFilters
         headerAction={
           <button className="visitas-btn-primary" onClick={handleCreate}>
             <Plus size={16} /> Nuevo Motivo
