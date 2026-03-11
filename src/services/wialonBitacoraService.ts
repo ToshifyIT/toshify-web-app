@@ -20,6 +20,8 @@ export interface BitacoraRegistroTransformado {
   fecha_turno: string
   hora_inicio: string | null
   hora_cierre: string | null
+  periodo_inicio: string | null
+  periodo_fin: string | null
   duracion_minutos: number | null
   kilometraje: number
   observaciones: string | null
@@ -42,6 +44,8 @@ interface WialonBitacoraRow {
   fecha_turno: string
   hora_inicio: string | null
   hora_cierre: string | null
+  periodo_inicio: string | null
+  periodo_fin: string | null
   duracion_minutos: number | null
   kilometraje: number
   observaciones: string | null
@@ -194,8 +198,8 @@ export const wialonBitacoraService = {
         // Normalize A_CARGO -> CARGO for display consistency
         tipoTurno = row.vehiculo_modalidad === 'A_CARGO' ? 'CARGO' : row.vehiculo_modalidad
       }
-      if (row.horario && row.horario !== 'todo_dia') {
-        turnoIndicador = row.horario === 'diurno' ? 'Diurno' : row.horario === 'nocturno' ? 'Nocturno' : null
+      if (row.horario) {
+        turnoIndicador = row.horario === 'diurno' ? 'diurno' : row.horario === 'nocturno' ? 'nocturno' : 'todo_dia'
       }
 
       return {
@@ -208,6 +212,8 @@ export const wialonBitacoraService = {
         fecha_turno: row.fecha_turno,
         hora_inicio: formatearHora(row.hora_inicio),
         hora_cierre: formatearHora(row.hora_cierre),
+        periodo_inicio: row.periodo_inicio,
+        periodo_fin: row.periodo_fin,
         duracion_minutos: row.duracion_minutos,
         kilometraje: Number(row.kilometraje) || 0,
         observaciones: row.observaciones,
