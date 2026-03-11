@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useMemo } from 'react'
 import { useSearchParams, useParams } from 'react-router-dom'
 import { supabase } from '../../lib/supabase'
-import { fetchGuias } from './guiasService'
+import { fetchGuias, getCabifyDatosPorSemanas } from './guiasService'
 import { format, startOfISOWeek, endOfISOWeek, setISOWeek, addHours, previousSunday, startOfDay, endOfDay, subWeeks, nextSunday, addWeeks } from 'date-fns'
 import { WeekSelector } from './components/WeekSelector'
 import { 
@@ -23,8 +23,7 @@ import {
   Target,
   GraduationCap,
   Triangle,
-  X,
-  RefreshCw
+  X
 } from 'lucide-react'
 import { DataTable } from '../../components/ui/DataTable'
 import { ActionsMenu } from '../../components/ui/ActionsMenu'
@@ -37,6 +36,7 @@ import { AnotacionesEditorModal, type Nota } from './components/AnotacionesEdito
 import { AnotacionesModal, type Anotacion } from './components/AnotacionesModal'
 import { ReporteEscuelaModal, type ConductorEscuela } from './components/ReporteEscuelaModal'
 import { ReasignacionModal } from './components/ReasignacionModal'
+import { CabifyHistoricoModal } from './components/CabifyHistoricoModal'
 import GestionConductores from './components/GestionConductores'
 import { useAuth } from '../../contexts/AuthContext'
 import { useSede } from '../../contexts/SedeContext'
@@ -76,8 +76,6 @@ export function GuiasModule() {
   const hasDistributedRef = useRef(false)
   const hasSyncedRef = useRef(false)
   const [syncFinished, setSyncFinished] = useState(false)
-  const [actualizandoData, setActualizandoData] = useState(false)
-
   // Estados para filtros (replicados de ConductoresModule)
   const [nombreFilter, setNombreFilter] = useState<string[]>([])
   const [cbuFilter] = useState<string[]>([]) // Reutilizado para CUIL
@@ -89,6 +87,7 @@ export function GuiasModule() {
   const [appFilter, setAppFilter] = useState<string[]>([])
   const [totalFilter, setTotalFilter] = useState<string[]>([])
   const [openColumnFilter, setOpenColumnFilter] = useState<string | null>(null)
+  const [sinGncFilter, setSinGncFilter] = useState(false)
   
   // Estados para búsqueda dentro de filtros
   const [nombreSearch, setNombreSearch] = useState('')
@@ -136,6 +135,10 @@ export function GuiasModule() {
 
   // Estado para el modal de Gestión de Conductores
   const [gestionConductoresModalOpen, setGestionConductoresModalOpen] = useState(false);
+
+  // Estado para el modal de Cabify Histórico
+  const [cabifyHistoricoModalOpen, setCabifyHistoricoModalOpen] = useState(false);
+  const [cabifyHistoricoConductor, setCabifyHistoricoConductor] = useState<{ id: string; nombres: string; apellidos: string; numero_dni: string } | null>(null);
 
   // Efecto para precargar reporte de escuela en segundo plano
   useEffect(() => {
@@ -540,44 +543,27 @@ export function GuiasModule() {
     setShowHistoryModal(true);
     setHistoryRows([]);
 
-    // Helper for currency parsing (same as in fetchDriversData)
-    const parseCustomCurrency = (val: any) => {
-      if (val === null || val === undefined) return 0;
-      if (typeof val === 'number') return val;
-      
-      let str = String(val).trim();
-      
-      // Remove currency symbols and other non-numeric chars (except . , and -)
-      str = str.replace(/[^0-9.,-]/g, '');
-      
-      if (str === '') return 0;
-
-      // Misma heurística mejorada para aceptar floats con muchos decimales
-      if (str.includes('.') && !str.includes(',') && /^\d+\.\d+$/.test(str)) {
-         return parseFloat(str);
-      }
-      const clean = str.replace(/\./g, '').replace(',', '.');
-      const parsed = parseFloat(clean);
-      return isNaN(parsed) ? 0 : parsed;
-    };
-
     try {
-      // 1. Get history rows from guias_historial_semanal
+      // 1. Get history rows from guias_historial_semanal (solo metadata)
       const { data: historyData, error: historyError } = await supabase
         .from('guias_historial_semanal')
-        .select('semana, app, efectivo, total, seguimiento, id_accion_imp, fecha_llamada, anotaciones_extra')
+        .select('semana, seguimiento, id_accion_imp, fecha_llamada, anotaciones_extra')
         .eq('id_conductor', driver.id)
         .order('semana', { ascending: false });
 
       if (historyError) throw historyError;
 
-      if (!historyData) return;
+      if (!historyData || historyData.length === 0) return;
+
+      // 2. Obtener datos financieros desde cabify_historico via RPC (única fuente de verdad)
+      const semanas = historyData.map((d: any) => d.semana);
+      const cabifyDataMap = await getCabifyDatosPorSemanas([driver.id], semanas);
 
       const rows = historyData.map(d => {
-        const app = parseCustomCurrency(d.app);
-        const efectivo = parseCustomCurrency(d.efectivo);
-        const dbTotal = parseCustomCurrency(d.total);
-        const total = dbTotal > 0 ? dbTotal : (app + efectivo);
+        const cabifyEntry = cabifyDataMap.get(d.semana)?.get(driver.id);
+        const app = cabifyEntry ? Number(cabifyEntry.cobroApp.toFixed(2)) : 0;
+        const efectivo = cabifyEntry ? Number(cabifyEntry.cobroEfectivo.toFixed(2)) : 0;
+        const total = Number((app + efectivo).toFixed(2));
 
         let seguimientoLabel = 'SEMANAL';
         const rawSeguimiento = (d as any).seguimiento;
@@ -710,7 +696,7 @@ export function GuiasModule() {
               asignaciones (
                 estado,
                 horario,
-                vehiculos (id, patente, marca, modelo)
+                vehiculos (id, patente, marca, modelo, gnc)
               )
             )
           )
@@ -739,80 +725,31 @@ export function GuiasModule() {
       // --------------------------------------------------------------------------------
       
       // Preparar promesas para ejecución paralela
-      const cabifyPromise = (async () => {
-        // OPTIMIZACIÓN: Si no es la semana actual, NO consultamos a Cabify
-        // porque los datos históricos ya deben estar consolidados en la tabla guias_historial_semanal.
-        if (!isCurrentWeek) {
-           return { dniMap: new Map(), nameMap: new Map() };
-        }
-
-        try {
-          const [yearStr, weekStr] = targetWeek.split('-W');
-          if (yearStr && weekStr) {
-            const year = parseInt(yearStr);
-            const week = parseInt(weekStr);
-            const baseDate = new Date(year, 0, 4);
-            const weekDate = setISOWeek(baseDate, week);
-            const mondayLocal = startOfISOWeek(weekDate);
-            const sundayLocal = endOfISOWeek(weekDate);
-
-            const startDate = new Date(Date.UTC(
-              mondayLocal.getFullYear(),
-              mondayLocal.getMonth(),
-              mondayLocal.getDate(),
-              0, 0, 0, 0
-            ));
-            const endDate = new Date(Date.UTC(
-              sundayLocal.getFullYear(),
-              sundayLocal.getMonth(),
-              sundayLocal.getDate(),
-              23, 59, 59, 999
-            ));
-
-            const { data: cabifyDataRaw, error: cabifyError } = await supabase
-              .from('cabify_historico')
-              .select('dni, nombre, apellido, cobro_app, cobro_efectivo')
-              .gte('fecha_inicio', startDate.toISOString())
-              .lte('fecha_inicio', endDate.toISOString());
-
-            if (!cabifyError && cabifyDataRaw && cabifyDataRaw.length > 0) {
-              const dniMap = new Map();
-              const nameMap = new Map();
-              cabifyDataRaw.forEach(d => {
-                const cobroApp = Number(d.cobro_app) || 0;
-                const cobroEfectivo = Number(d.cobro_efectivo) || 0;
-                if (d.dni) {
-                  const dni = normalizeDni(d.dni);
-                  if (!dniMap.has(dni)) dniMap.set(dni, { cobroApp: 0, cobroEfectivo: 0 });
-                  const entry = dniMap.get(dni);
-                  entry.cobroApp += cobroApp;
-                  entry.cobroEfectivo += cobroEfectivo;
-                }
-                const fullName = `${d.nombre || ''} ${d.apellido || ''}`.trim().toLowerCase();
-                if (fullName) {
-                  if (!nameMap.has(fullName)) nameMap.set(fullName, { cobroApp: 0, cobroEfectivo: 0 });
-                  const entry = nameMap.get(fullName);
-                  entry.cobroApp += cobroApp;
-                  entry.cobroEfectivo += cobroEfectivo;
-                }
-              });
-              return { dniMap, nameMap };
-            }
-          }
-        } catch {
-          // silently ignored
-        }
-        return { dniMap: new Map(), nameMap: new Map() };
-      })();
 
       // Identificar IDs de conductores para consultas masivas
       const conductorIds = Array.from(new Set((historialData || []).map((h: any) => h.id_conductor).filter((id: string | null) => !!id)));
+
+      // Calcular semana anterior para la RPC de Cabify
+      const [tYearStr, tWeekStr] = targetWeek.split('-W');
+      const tYear = parseInt(tYearStr);
+      const tWeek = parseInt(tWeekStr);
+      const tBaseDate = new Date(tYear, 0, 4);
+      const tWeekDate = setISOWeek(tBaseDate, tWeek);
+      const tMondayLocal = startOfISOWeek(tWeekDate);
+      const prevMondayForCabify = subWeeks(tMondayLocal, 1);
+      const prevWeekLabelForCabify = format(prevMondayForCabify, "R-'W'II");
+
+      // RPC Cabify: buscar datos financieros para semana objetivo Y semana anterior
+      const cabifySemanasToFetch = [targetWeek, prevWeekLabelForCabify];
+      const cabifyPromise = conductorIds.length > 0
+        ? getCabifyDatosPorSemanas(conductorIds, cabifySemanasToFetch)
+        : Promise.resolve(new Map<string, Map<string, { cobroApp: number; cobroEfectivo: number }>>());
       
       const vehiculosPromise = (async () => {
         if (conductorIds.length === 0) return new Map<string, number>();
         const { data: vehiculosHistorial } = await supabase
           .from('asignaciones_conductores')
-          .select(`conductor_id, asignaciones (vehiculos (id, patente, marca, modelo, anio))`)
+          .select(`conductor_id, asignaciones (vehiculos (id, patente, marca, modelo, anio, gnc))`)
           .in('conductor_id', conductorIds);
           
         const map = new Map<string, number>();
@@ -833,17 +770,16 @@ export function GuiasModule() {
       })();
 
       const prevWeekDataPromise = (async () => {
-        if (conductorIds.length === 0) return { 
-          assignmentsMap: new Map(), 
-          financialMap: new Map(), 
+        if (conductorIds.length === 0) return {
+          assignmentsMap: new Map(),
           prevLabel: null,
-          detailMap: new Map() 
+          detailMap: new Map()
         };
 
         try {
           const [yearStr, weekStr] = targetWeek.split('-W');
           if (!yearStr || !weekStr) throw new Error("Invalid week format");
-          
+
           const year = parseInt(yearStr);
           const week = parseInt(weekStr);
           const baseDate = new Date(year, 0, 4);
@@ -853,31 +789,27 @@ export function GuiasModule() {
           const prevMondayLocal = subWeeks(mondayLocal, 1);
           const prevSundayLocal = subWeeks(sundayLocal, 1);
           const prevWeekLabel = format(prevMondayLocal, "R-'W'II");
-          
+
           const prevStartDate = new Date(Date.UTC(prevMondayLocal.getFullYear(), prevMondayLocal.getMonth(), prevMondayLocal.getDate(), 0, 0, 0, 0));
           const prevEndDate = new Date(Date.UTC(prevSundayLocal.getFullYear(), prevSundayLocal.getMonth(), prevSundayLocal.getDate(), 23, 59, 59, 999));
 
-          // Consultas de asignaciones anteriores
+          // Consultas de asignaciones anteriores (sin consulta financiera - ahora viene de RPC Cabify)
           const baseSelect = `id, conductor_id, horario, estado, asignaciones!inner (id, codigo, estado, horario, modalidad, fecha_inicio, fecha_fin, sede_id)`;
-          
+
           let qA: any = supabase.from('asignaciones_conductores').select(baseSelect).in('conductor_id', conductorIds).lte('asignaciones.fecha_inicio', prevEndDate.toISOString()).is('asignaciones.fecha_fin', null);
           qA = aplicarFiltroSede(qA, 'asignaciones.sede_id');
 
           let qB: any = supabase.from('asignaciones_conductores').select(baseSelect).in('conductor_id', conductorIds).lte('asignaciones.fecha_inicio', prevEndDate.toISOString()).gte('asignaciones.fecha_fin', prevStartDate.toISOString());
           qB = aplicarFiltroSede(qB, 'asignaciones.sede_id');
 
-          // Consulta de historial financiero anterior
-          const altPrevWeekLabel = prevWeekLabel.replace('W', '');
-          const qHist = supabase.from('guias_historial_semanal').select('id_conductor, app, efectivo, total').or(`semana.eq.${prevWeekLabel},semana.eq.${altPrevWeekLabel}`).eq('id_guia', guiaId).in('id_conductor', conductorIds);
+          const [resA, resB] = await Promise.all([qA, qB]);
 
-          const [resA, resB, resHist] = await Promise.all([qA, qB, qHist]);
-          
           // Procesar Asignaciones
           const prevAssignmentsRaw = [...(resA.data || []), ...(resB.data || [])];
           const assignmentsMap = new Map<string, { total: number; diurno: number; nocturno: number; cargo: number }>();
           const detailMap = new Map<string, any[]>();
           const seen = new Set<string>();
-          
+
           prevAssignmentsRaw.filter((ac: any) => {
              const key = `${ac.asignaciones?.id || ac.id}-${ac.conductor_id}`;
              if (seen.has(key)) return false;
@@ -887,7 +819,7 @@ export function GuiasModule() {
              const cid = ac.conductor_id;
              const asig = ac.asignaciones;
              if (!cid || !asig) return;
-             
+
              const stats = assignmentsMap.get(cid) || { total: 0, diurno: 0, nocturno: 0, cargo: 0 };
              stats.total++;
              const mod = (asig.horario || asig.modalidad || '').toString().toUpperCase();
@@ -900,35 +832,27 @@ export function GuiasModule() {
                 stats.cargo++;
              }
              assignmentsMap.set(cid, stats);
-             
+
              const det = { asignacion_id: asig.id, codigo: asig.codigo, modalidad: asig.horario || asig.modalidad, estado: asig.estado, fecha_inicio: asig.fecha_inicio, fecha_fin: asig.fecha_fin, turno_conductor: ac.horario };
              const arr = detailMap.get(cid) || [];
              arr.push(det);
              detailMap.set(cid, arr);
           });
 
-          // Procesar Financiero
-          const financialMap = new Map<string, { app: any; efectivo: any; total: any }>();
-          if (resHist.data) {
-            resHist.data.forEach((row: any) => {
-              if (row.id_conductor) financialMap.set(row.id_conductor, { app: row.app, efectivo: row.efectivo, total: row.total });
-            });
-          }
-
-          return { assignmentsMap, financialMap, prevLabel: prevWeekLabel, detailMap };
+          return { assignmentsMap, prevLabel: prevWeekLabel, detailMap };
         } catch (e) {
-          return { assignmentsMap: new Map(), financialMap: new Map(), prevLabel: null, detailMap: new Map() };
+          return { assignmentsMap: new Map(), prevLabel: null, detailMap: new Map() };
         }
       })();
 
       // Ejecutar todo en paralelo
-      const [cabifyResult, vehiculosMap, prevWeekData] = await Promise.all([cabifyPromise, vehiculosPromise, prevWeekDataPromise]);
-      
-      const cabifyDriversMapByDni = cabifyResult.dniMap;
-      const cabifyDriversMapByName = cabifyResult.nameMap;
+      const [cabifyDataMap, vehiculosMap, prevWeekData] = await Promise.all([cabifyPromise, vehiculosPromise, prevWeekDataPromise]);
+
+      // cabifyDataMap: Map<semana, Map<id_conductor, { cobroApp, cobroEfectivo }>>
+      const cabifyTargetWeekMap = cabifyDataMap.get(targetWeek) || new Map<string, { cobroApp: number; cobroEfectivo: number }>();
+      const cabifyPrevWeekMap = cabifyDataMap.get(prevWeekLabelForCabify) || new Map<string, { cobroApp: number; cobroEfectivo: number }>();
       const vehiculosHistorialCountMap = vehiculosMap;
       const prevWeekAssignmentsMap = prevWeekData.assignmentsMap;
-      const prevWeekFinancialMap = prevWeekData.financialMap;
       const prevWeekLabel = prevWeekData.prevLabel;
       // --------------------------------------------------------------------------------
 
@@ -1097,63 +1021,20 @@ export function GuiasModule() {
           
           baseConductor.searchMetadata = searchMetadata;
 
-          // Helper para parsear moneda con formato ES-AR (puntos miles, coma decimal)
-          // REGLA USUARIO: "consideres que la , es el separador de decimal y que el punto es el separador de centesimas" (interpretado como miles)
-          const parseCustomCurrency = (val: any) => {
-            if (val === null || val === undefined) return 0;
-            if (typeof val === 'number') return val;
-            const str = String(val).trim();
-            
-            // Heurística de seguridad MEJORADA: Si tiene punto pero no coma, y parece un float estándar (con cualquier cantidad de decimales)
-            // asumimos que es formato DB/JS estándar ("1234.56" o "1234.56789") para evitar multiplicar por 1000.
-            // Si tiene exactamente 3 decimales ("1.234") podría ser ambiguo, pero en este contexto DB priorizamos formato float.
-            if (str.includes('.') && !str.includes(',') && /^\d+\.\d+$/.test(str)) {
-               return parseFloat(str);
-            }
-
-            // Eliminar puntos de miles y reemplazar coma por punto para formato estándar JS
-            const clean = str.replace(/\./g, '').replace(',', '.');
-            const parsed = parseFloat(clean);
-            return isNaN(parsed) ? 0 : parsed;
-          };
-
-          // Lógica de cruce con Cabify (Facturación y Efectivo)
-          // Usamos el valor de base de datos por defecto (para semanas pasadas o si falla la API)
-          let facturacionApp = parseCustomCurrency(historial.app);
-          let facturacionEfectivo = parseCustomCurrency(historial.efectivo);
-          let facturacionTotal = parseCustomCurrency(historial.total);
-          let cabifyData = null;
-
-          const dni = normalizeDni(baseConductor.numero_dni);
-          const nombreCompleto = `${baseConductor.nombres || ''} ${baseConductor.apellidos || ''}`.trim().toLowerCase();
-
-          // Solo buscamos datos frescos de Cabify si estamos en la semana actual
-          if (isCurrentWeek) {
-            if (dni && cabifyDriversMapByDni.has(dni)) {
-              cabifyData = cabifyDriversMapByDni.get(dni);
-              // Forzar 2 decimales para evitar errores de punto flotante antes de procesar/guardar
-              facturacionApp = Number(parseCustomCurrency(cabifyData.cobroApp).toFixed(2));
-              facturacionEfectivo = Number(parseCustomCurrency(cabifyData.cobroEfectivo).toFixed(2));
-            } else if (cabifyDriversMapByName.has(nombreCompleto)) {
-              cabifyData = cabifyDriversMapByName.get(nombreCompleto);
-              // Forzar 2 decimales para evitar errores de punto flotante antes de procesar/guardar
-              facturacionApp = Number(parseCustomCurrency(cabifyData.cobroApp).toFixed(2));
-              facturacionEfectivo = Number(parseCustomCurrency(cabifyData.cobroEfectivo).toFixed(2));
-            }
-
-            // Recalculamos total si estamos en semana actual
-            facturacionTotal = Number((facturacionApp + facturacionEfectivo).toFixed(2));
-          }
+          // Datos financieros: SOLO desde cabify_historico via RPC (única fuente de verdad)
+          const cabifyEntry = cabifyTargetWeekMap.get(conductor.id);
+          const facturacionApp = cabifyEntry ? Number(cabifyEntry.cobroApp.toFixed(2)) : 0;
+          const facturacionEfectivo = cabifyEntry ? Number(cabifyEntry.cobroEfectivo.toFixed(2)) : 0;
+          const facturacionTotal = Number((facturacionApp + facturacionEfectivo).toFixed(2));
+          const hasCabifyData = !!cabifyEntry;
 
           baseConductor.facturacion_app = facturacionApp;
           baseConductor.facturacion_efectivo = facturacionEfectivo;
           baseConductor.facturacion_total = facturacionTotal;
-          baseConductor.cabifyData = cabifyData;
+          baseConductor.hasCabifyData = hasCabifyData;
 
-          const hasCabifyData = !!cabifyData;
-          const getFilterDisplayValue = (value: number | null | undefined) => {
-            if (value === undefined || value === null) return "N/A";
-            if (value === 0 && isCurrentWeek && !hasCabifyData) return "N/A";
+          const getFilterDisplayValue = (value: number) => {
+            if (value === 0 && !hasCabifyData) return "N/A";
             return new Intl.NumberFormat('es-AR', {
               style: 'currency',
               currency: 'ARS',
@@ -1166,34 +1047,10 @@ export function GuiasModule() {
           baseConductor.facturacion_app_filter = getFilterDisplayValue(facturacionApp);
           baseConductor.facturacion_total_filter = getFilterDisplayValue(facturacionTotal);
 
-          // Cálculo parseado de app/efectivo/total de la semana anterior (monetario) para logging
-          let prevFinancialRow = prevWeekFinancialMap.get(conductor.id);
-          // Fallback puntual por conductor: si no hay datos aún, buscar directamente por id_conductor + semana
-          if (!prevFinancialRow && prevWeekLabel) {
-            try {
-              const altPrevWeekLabel = prevWeekLabel.replace('W', '');
-              const { data: singlePrev } = await supabase
-                .from('guias_historial_semanal')
-                .select('app, efectivo, total')
-                .eq('id_conductor', conductor.id)
-                .or(`semana.eq.${prevWeekLabel},semana.eq.${altPrevWeekLabel}`)
-                .maybeSingle();
-              if (singlePrev) {
-                prevFinancialRow = {
-                  app: singlePrev.app,
-                  efectivo: singlePrev.efectivo,
-                  total: singlePrev.total
-                };
-                prevWeekFinancialMap.set(conductor.id, prevFinancialRow);
-              }
-            } catch {
-              // Ignorar silenciosamente fallback fallido
-            }
-          }
-          let prevAppParsed = 0;
-          if (prevFinancialRow) {
-            prevAppParsed = parseCustomCurrency(prevFinancialRow.app);
-          }
+          // Cálculo de app de la semana anterior (desde cabify_historico via RPC)
+          // Se usa para determinar el seguimiento (DIARIO/CERCANO/SEMANAL)
+          const prevCabifyEntry = cabifyPrevWeekMap.get(conductor.id);
+          const prevAppParsed = prevCabifyEntry ? Number(prevCabifyEntry.cobroApp.toFixed(2)) : 0;
 
           let prevSeguimientoRule: any | null = null;
           if (matchingSeguimientoRules && matchingSeguimientoRules.length > 0) {
@@ -1252,41 +1109,13 @@ export function GuiasModule() {
             baseConductor.seguimiento = autoSeguimiento;
           }
 
-          // Lógica de actualización automática de las columnas 'app', 'efectivo' y 'total'
-          // Solo si estamos en la semana actual
-          if (isCurrentWeek) {
-            const updates: any = {};
-            let needsUpdate = false;
-
-            // Verificamos cambio en APP (comparando numéricamente)
-            if (Math.abs(parseCustomCurrency(historial.app) - facturacionApp) > 0.01) {
-               updates.app = facturacionApp;
-               needsUpdate = true;
-            }
-
-            // Verificamos cambio en EFECTIVO (comparando numéricamente)
-            if (Math.abs(parseCustomCurrency(historial.efectivo) - facturacionEfectivo) > 0.01) {
-               updates.efectivo = facturacionEfectivo;
-               needsUpdate = true;
-            }
-
-            // Verificamos cambio en TOTAL (comparando numéricamente)
-            if (Math.abs(parseCustomCurrency(historial.total) - facturacionTotal) > 0.01) {
-               updates.total = facturacionTotal;
-               needsUpdate = true;
-            }
-
-            if (!rawSeguimientoDb && autoSeguimiento) {
-              updates.seguimiento = autoSeguimiento;
-              needsUpdate = true;
-            }
-
-            if (needsUpdate) {
-              updatesToPerform.push({
-                id: historial.id,
-                ...updates
-              });
-            }
+          // Lógica de actualización automática del seguimiento (ya no se escriben app/efectivo/total)
+          // Solo si estamos en la semana actual y hay un seguimiento auto-calculado que falta en DB
+          if (isCurrentWeek && !rawSeguimientoDb && autoSeguimiento) {
+            updatesToPerform.push({
+              id: historial.id,
+              seguimiento: autoSeguimiento
+            });
           }
           processedDrivers.push(baseConductor);
         }
@@ -1815,8 +1644,15 @@ export function GuiasModule() {
       }
     }
 
+    if (sinGncFilter) {
+      result = result.filter(c => {
+        const vehiculo = (c as any).vehiculo_asignado;
+        return vehiculo && vehiculo.gnc !== true;
+      });
+    }
+
     return result;
-  }, [drivers, nombreFilter, cbuFilter, estadoFilter, turnoFilter, categoriaFilter, asignacionFilter, activeStatFilter, selectedWeek, seguimientoRules, efectivoFilter, appFilter, totalFilter]);
+  }, [drivers, nombreFilter, cbuFilter, estadoFilter, turnoFilter, categoriaFilter, asignacionFilter, activeStatFilter, selectedWeek, seguimientoRules, efectivoFilter, appFilter, totalFilter, sinGncFilter]);
 
   const uniqueEstados = useMemo(() => {
     const estados = new Map<string, string>();
@@ -2225,12 +2061,19 @@ export function GuiasModule() {
           
           const vehiculo = (row.original as any).vehiculo_asignado;
           if (vehiculo) {
+            const tieneGnc = vehiculo.gnc === true;
             return (
               <div className="vehiculo-cell">
                 <div className="vehiculo-cell-patente">{vehiculo.patente}</div>
                 <div className="vehiculo-cell-info">
                   {vehiculo.marca} {vehiculo.modelo}
                 </div>
+                <span
+                  className={`dt-badge badge-no-dot ${tieneGnc ? 'dt-badge-green' : 'dt-badge-yellow'}`}
+                  style={{ fontSize: '10px', marginTop: '4px' }}
+                >
+                  {tieneGnc ? 'CON GNC' : 'SIN GNC'}
+                </span>
               </div>
             );
           }
@@ -2244,92 +2087,122 @@ export function GuiasModule() {
         size: 120,
       },
       {
-        id: "escuela",
-        header: "Escuela",
-        accessorFn: (row) => (row as any).fecha_escuela ? "SI" : "NO",
+        id: "seguimiento",
+        header: "Seguimiento",
+        accessorFn: (row) => {
+          const rawSeguimientoDb = (row as any).seguimiento;
+          const rawTotalPrev = (row as any).prev_week_total_monetario;
+          const matchingRules = ((row as any).prev_week_matching_rules || []) as any[];
+
+          const rawDb = typeof rawSeguimientoDb === 'string' ? rawSeguimientoDb.trim().toUpperCase() : '';
+          if (rawDb) return rawDb;
+
+          const parse = (val: any): number => {
+            if (typeof val === 'number') return val;
+            if (!val) return 0;
+            const str = String(val).trim();
+            if (!isNaN(Number(str))) return Number(str);
+            return parseFloat(str.replace(/\./g, '').replace(',', '.'));
+          };
+
+          const total = parse(rawTotalPrev);
+
+          let ruleMatch: any = null;
+          if (matchingRules && matchingRules.length > 0) {
+            for (const rule of matchingRules) {
+              const desde = Number(rule.desde || 0);
+              const hasHasta = rule.hasta !== null && rule.hasta !== undefined;
+              const hasta = hasHasta ? Number(rule.hasta) : null;
+              const matchesLower = total >= desde;
+              const matchesUpper = hasHasta ? total <= (hasta as number) : true;
+              if (matchesLower && matchesUpper) {
+                ruleMatch = rule;
+                break;
+              }
+            }
+          }
+
+          if (ruleMatch) {
+            const nombre = (ruleMatch.rango_nombre || '').toString().toUpperCase();
+            if (nombre.includes('DIARIO')) return 'DIARIO';
+            if (nombre.includes('CERCANO')) return 'CERCANO';
+            if (nombre.includes('SEMANAL')) return 'SEMANAL';
+            return nombre || '-';
+          }
+
+          if (!matchingRules || matchingRules.length === 0) return 'SIN REGISTRO';
+          return '-';
+        },
         cell: ({ row }) => {
-          const hasDate = !!(row.original as any).fecha_escuela;
+          const rawSeguimientoDb = (row.original as any).seguimiento;
+          const rawTotalPrev = (row.original as any).prev_week_total_monetario;
+          const matchingRules = ((row.original as any).prev_week_matching_rules || []) as any[];
+
+          const parseTotal = (val: any): number => {
+            if (typeof val === 'number') return val;
+            if (!val) return 0;
+            const str = String(val).trim();
+            if (!isNaN(Number(str))) return Number(str);
+            return parseFloat(str.replace(/\./g, '').replace(',', '.'));
+          };
+
+          const total = parseTotal(rawTotalPrev);
+
+          const getBadgeColor = (color: string) => {
+            const c = color?.toLowerCase().trim();
+            if (c === 'verde') return 'dt-badge dt-badge-green badge-no-dot';
+            if (c === 'amarillo') return 'dt-badge dt-badge-yellow badge-no-dot';
+            if (c === 'rojo') return 'dt-badge dt-badge-red badge-no-dot';
+            return 'dt-badge dt-badge-gray badge-no-dot';
+          };
+
+          const rawDb = typeof rawSeguimientoDb === 'string' ? rawSeguimientoDb.trim().toUpperCase() : '';
+          if (rawDb) {
+            let manualClass = 'dt-badge dt-badge-gray badge-no-dot';
+            if (rawDb === 'SEMANAL') manualClass = 'dt-badge dt-badge-green badge-no-dot';
+            else if (rawDb === 'CERCANO') manualClass = 'dt-badge dt-badge-yellow badge-no-dot';
+            else if (rawDb === 'DIARIO') manualClass = 'dt-badge dt-badge-red badge-no-dot';
+            return (
+              <div className="flex justify-center">
+                <span className={manualClass}>{rawDb}</span>
+              </div>
+            );
+          }
+
+          let ruleMatch = null;
+
+          if (matchingRules && matchingRules.length > 0) {
+            for (const rule of matchingRules) {
+              const desde = Number(rule.desde || 0);
+              const hasHasta = rule.hasta !== null && rule.hasta !== undefined;
+              const hasta = hasHasta ? Number(rule.hasta) : null;
+              const matchesLower = total >= desde;
+              const matchesUpper = hasHasta ? total <= (hasta as number) : true;
+              if (matchesLower && matchesUpper) {
+                ruleMatch = rule;
+                break;
+              }
+            }
+          }
+
           return (
-            <span className={`dt-badge ${hasDate ? 'dt-badge-green' : 'dt-badge-gray'} badge-no-dot`}>
-              {hasDate ? "SI" : "NO"}
-            </span>
+            <div className="flex justify-center">
+              {ruleMatch ? (
+                <span className={getBadgeColor(ruleMatch.color)}>
+                  {ruleMatch.rango_nombre}
+                </span>
+              ) : matchingRules.length === 0 ? (
+                <span className="dt-badge dt-badge-gray badge-no-dot">
+                  SIN REGISTRO
+                </span>
+              ) : (
+                <span style={{ color: 'var(--text-tertiary)' }}>-</span>
+              )}
+            </div>
           );
         },
         enableSorting: true,
-        size: 65,
-      },
-      {
-        accessorKey: "facturacion_efectivo",
-        header: () => (
-          <div className="dt-column-filter">
-            <span>Efectivo {efectivoFilter.length > 0 && `(${efectivoFilter.length})`}</span>
-            <button
-              className={`dt-column-filter-btn ${efectivoFilter.length > 0 ? 'active' : ''}`}
-              onClick={(e) => {
-                e.stopPropagation();
-                setOpenColumnFilter(openColumnFilter === 'efectivo' ? null : 'efectivo');
-              }}
-              title="Filtrar por efectivo"
-            >
-              <Filter size={12} />
-            </button>
-            {openColumnFilter === 'efectivo' && (
-              <div className="dt-column-filter-dropdown dt-excel-filter" onClick={(e) => e.stopPropagation()}>
-                <input
-                  type="text"
-                  placeholder="Buscar..."
-                  value={efectivoSearch}
-                  onChange={(e) => setEfectivoSearch(e.target.value)}
-                  className="dt-column-filter-input"
-                  autoFocus
-                />
-                <div className="dt-excel-filter-list">
-                  {efectivoFiltrados.length === 0 ? (
-                    <div className="dt-excel-filter-empty">Sin resultados</div>
-                  ) : (
-                    efectivoFiltrados.slice(0, 50).map(val => (
-                      <label key={val} className={`dt-column-filter-checkbox ${efectivoFilter.includes(val) ? 'selected' : ''}`}>
-                        <input
-                          type="checkbox"
-                          checked={efectivoFilter.includes(val)}
-                          onChange={() => toggleEfectivoFilter(val)}
-                        />
-                        <span>{val}</span>
-                      </label>
-                    ))
-                  )}
-                </div>
-                {efectivoFilter.length > 0 && (
-                  <button
-                    className="dt-column-filter-clear"
-                    onClick={() => { setEfectivoFilter([]); setEfectivoSearch(''); }}
-                  >
-                    Limpiar ({efectivoFilter.length})
-                  </button>
-                )}
-              </div>
-            )}
-          </div>
-        ),
-        cell: ({ row, getValue }) => {
-          const rawVal = getValue() as number;
-          // Sanitizamos a 2 decimales para evitar problemas de visualización con números flotantes largos
-          const val = rawVal ? Number(Number(rawVal).toFixed(2)) : rawVal;
-          
-          // Si el valor es mayor a 0, lo mostramos siempre (sea manual o automático)
-          if (val && val > 0) {
-            return new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(val);
-          }
-          // Si es 0 y no hay datos de Cabify en semana actual, mostramos N/A
-          if (selectedWeek === getCurrentWeek() && !(row.original as any).cabifyData) {
-            return <span className="italic" style={{ color: 'var(--text-tertiary)' }} title="Sin datos de Cabify">N/A</span>;
-          }
-          // Si es 0 pero hay datos (o semana pasada), mostramos $0
-          if (val === undefined || val === null) return "-";
-          return new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(val);
-        },
-        enableSorting: true,
-        size: 110,
+        size: 105,
       },
       {
         accessorKey: "facturacion_app",
@@ -2388,15 +2261,88 @@ export function GuiasModule() {
           const rawVal = getValue() as number;
           // Sanitizamos a 2 decimales para evitar problemas de visualización con números flotantes largos
           const val = rawVal ? Number(Number(rawVal).toFixed(2)) : rawVal;
-          
+
           // Si el valor es mayor a 0, lo mostramos siempre (sea manual o automático)
           if (val && val > 0) {
             return new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(val);
           }
-          // Si es 0 y no hay datos de Cabify en semana actual, mostramos N/A
-          if (selectedWeek === getCurrentWeek() && !(row.original as any).cabifyData) {
+          // Si es 0 y no hay datos de Cabify, mostramos N/A
+          if (!(row.original as any).hasCabifyData) {
             return <span className="italic" style={{ color: 'var(--text-tertiary)' }} title="Sin datos de Cabify">N/A</span>;
           }
+          if (val === undefined || val === null) return "-";
+          return new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(val);
+        },
+        enableSorting: true,
+        size: 110,
+      },
+      {
+        accessorKey: "facturacion_efectivo",
+        header: () => (
+          <div className="dt-column-filter">
+            <span>Efectivo {efectivoFilter.length > 0 && `(${efectivoFilter.length})`}</span>
+            <button
+              className={`dt-column-filter-btn ${efectivoFilter.length > 0 ? 'active' : ''}`}
+              onClick={(e) => {
+                e.stopPropagation();
+                setOpenColumnFilter(openColumnFilter === 'efectivo' ? null : 'efectivo');
+              }}
+              title="Filtrar por efectivo"
+            >
+              <Filter size={12} />
+            </button>
+            {openColumnFilter === 'efectivo' && (
+              <div className="dt-column-filter-dropdown dt-excel-filter" onClick={(e) => e.stopPropagation()}>
+                <input
+                  type="text"
+                  placeholder="Buscar..."
+                  value={efectivoSearch}
+                  onChange={(e) => setEfectivoSearch(e.target.value)}
+                  className="dt-column-filter-input"
+                  autoFocus
+                />
+                <div className="dt-excel-filter-list">
+                  {efectivoFiltrados.length === 0 ? (
+                    <div className="dt-excel-filter-empty">Sin resultados</div>
+                  ) : (
+                    efectivoFiltrados.slice(0, 50).map(val => (
+                      <label key={val} className={`dt-column-filter-checkbox ${efectivoFilter.includes(val) ? 'selected' : ''}`}>
+                        <input
+                          type="checkbox"
+                          checked={efectivoFilter.includes(val)}
+                          onChange={() => toggleEfectivoFilter(val)}
+                        />
+                        <span>{val}</span>
+                      </label>
+                    ))
+                  )}
+                </div>
+                {efectivoFilter.length > 0 && (
+                  <button
+                    className="dt-column-filter-clear"
+                    onClick={() => { setEfectivoFilter([]); setEfectivoSearch(''); }}
+                  >
+                    Limpiar ({efectivoFilter.length})
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
+        ),
+        cell: ({ row, getValue }) => {
+          const rawVal = getValue() as number;
+          // Sanitizamos a 2 decimales para evitar problemas de visualización con números flotantes largos
+          const val = rawVal ? Number(Number(rawVal).toFixed(2)) : rawVal;
+
+          // Si el valor es mayor a 0, lo mostramos siempre (sea manual o automático)
+          if (val && val > 0) {
+            return new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(val);
+          }
+          // Si es 0 y no hay datos de Cabify, mostramos N/A
+          if (!(row.original as any).hasCabifyData) {
+            return <span className="italic" style={{ color: 'var(--text-tertiary)' }} title="Sin datos de Cabify">N/A</span>;
+          }
+          // Si es 0 pero hay datos (o semana pasada), mostramos $0
           if (val === undefined || val === null) return "-";
           return new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(val);
         },
@@ -2465,8 +2411,8 @@ export function GuiasModule() {
           if (val && val > 0) {
             return new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(val);
           }
-          // Si es 0 y no hay datos de Cabify en semana actual, mostramos N/A
-          if (selectedWeek === getCurrentWeek() && !(row.original as any).cabifyData) {
+          // Si es 0 y no hay datos de Cabify, mostramos N/A
+          if (!(row.original as any).hasCabifyData) {
             return <span className="italic" style={{ color: 'var(--text-tertiary)' }} title="Sin datos de Cabify">N/A</span>;
           }
           if (val === undefined || val === null) return "-";
@@ -2541,122 +2487,19 @@ export function GuiasModule() {
         size: 160,
       },
       {
-        id: "seguimiento",
-        header: "Seguimiento",
-        accessorFn: (row) => {
-          const rawSeguimientoDb = (row as any).seguimiento;
-          const rawTotalPrev = (row as any).prev_week_total_monetario;
-          const matchingRules = ((row as any).prev_week_matching_rules || []) as any[];
-
-          const rawDb = typeof rawSeguimientoDb === 'string' ? rawSeguimientoDb.trim().toUpperCase() : '';
-          if (rawDb) return rawDb;
-
-          const parse = (val: any): number => {
-            if (typeof val === 'number') return val;
-            if (!val) return 0;
-            const str = String(val).trim();
-            if (!isNaN(Number(str))) return Number(str);
-            return parseFloat(str.replace(/\./g, '').replace(',', '.'));
-          };
-
-          const total = parse(rawTotalPrev);
-
-          let ruleMatch: any = null;
-          if (matchingRules && matchingRules.length > 0) {
-            for (const rule of matchingRules) {
-              const desde = Number(rule.desde || 0);
-              const hasHasta = rule.hasta !== null && rule.hasta !== undefined;
-              const hasta = hasHasta ? Number(rule.hasta) : null;
-              const matchesLower = total >= desde;
-              const matchesUpper = hasHasta ? total <= (hasta as number) : true;
-              if (matchesLower && matchesUpper) {
-                ruleMatch = rule;
-                break;
-              }
-            }
-          }
-
-          if (ruleMatch) {
-            const nombre = (ruleMatch.rango_nombre || '').toString().toUpperCase();
-            if (nombre.includes('DIARIO')) return 'DIARIO';
-            if (nombre.includes('CERCANO')) return 'CERCANO';
-            if (nombre.includes('SEMANAL')) return 'SEMANAL';
-            return nombre || '-';
-          }
-
-          if (!matchingRules || matchingRules.length === 0) return 'SIN REGISTRO';
-          return '-';
-        },
+        id: "escuela",
+        header: "Escuela",
+        accessorFn: (row) => (row as any).fecha_escuela ? "SI" : "NO",
         cell: ({ row }) => {
-          const rawSeguimientoDb = (row.original as any).seguimiento;
-          const rawTotalPrev = (row.original as any).prev_week_total_monetario;
-          const matchingRules = ((row.original as any).prev_week_matching_rules || []) as any[];
-          
-          const parseTotal = (val: any): number => {
-            if (typeof val === 'number') return val;
-            if (!val) return 0;
-            const str = String(val).trim();
-            if (!isNaN(Number(str))) return Number(str);
-            return parseFloat(str.replace(/\./g, '').replace(',', '.'));
-          };
-
-          const total = parseTotal(rawTotalPrev);
-
-          const getBadgeColor = (color: string) => {
-            const c = color?.toLowerCase().trim();
-            if (c === 'verde') return 'dt-badge dt-badge-green badge-no-dot';
-            if (c === 'amarillo') return 'dt-badge dt-badge-yellow badge-no-dot';
-            if (c === 'rojo') return 'dt-badge dt-badge-red badge-no-dot';
-            return 'dt-badge dt-badge-gray badge-no-dot';
-          };
-
-          const rawDb = typeof rawSeguimientoDb === 'string' ? rawSeguimientoDb.trim().toUpperCase() : '';
-          if (rawDb) {
-            let manualClass = 'dt-badge dt-badge-gray badge-no-dot';
-            if (rawDb === 'SEMANAL') manualClass = 'dt-badge dt-badge-green badge-no-dot';
-            else if (rawDb === 'CERCANO') manualClass = 'dt-badge dt-badge-yellow badge-no-dot';
-            else if (rawDb === 'DIARIO') manualClass = 'dt-badge dt-badge-red badge-no-dot';
-            return (
-              <div className="flex justify-center">
-                <span className={manualClass}>{rawDb}</span>
-              </div>
-            );
-          }
-
-          let ruleMatch = null;
-          
-          if (matchingRules && matchingRules.length > 0) {
-            for (const rule of matchingRules) {
-              const desde = Number(rule.desde || 0);
-              const hasHasta = rule.hasta !== null && rule.hasta !== undefined;
-              const hasta = hasHasta ? Number(rule.hasta) : null;
-              const matchesLower = total >= desde;
-              const matchesUpper = hasHasta ? total <= (hasta as number) : true;
-              if (matchesLower && matchesUpper) {
-                ruleMatch = rule;
-                break;
-              }
-            }
-          }
-
+          const hasDate = !!(row.original as any).fecha_escuela;
           return (
-            <div className="flex justify-center">
-              {ruleMatch ? (
-                <span className={getBadgeColor(ruleMatch.color)}>
-                  {ruleMatch.rango_nombre}
-                </span>
-              ) : matchingRules.length === 0 ? (
-                <span className="dt-badge dt-badge-gray badge-no-dot">
-                  SIN REGISTRO
-                </span>
-              ) : (
-                <span style={{ color: 'var(--text-tertiary)' }}>-</span>
-              )}
-            </div>
+            <span className={`dt-badge ${hasDate ? 'dt-badge-green' : 'dt-badge-gray'} badge-no-dot`}>
+              {hasDate ? "SI" : "NO"}
+            </span>
           );
         },
         enableSorting: true,
-        size: 105,
+        size: 65,
       },
       {
         id: "acciones",
@@ -2685,6 +2528,19 @@ export function GuiasModule() {
                   label: 'Historial Notas',
                   onClick: () => handleViewHistoryNotes(row)
                 },
+                {
+                  icon: <DollarSign size={15} />,
+                  label: 'Ver Cabify',
+                  onClick: () => {
+                    setCabifyHistoricoConductor({
+                      id: row.original.id,
+                      nombres: row.original.nombres,
+                      apellidos: row.original.apellidos,
+                      numero_dni: row.original.numero_dni || '',
+                    });
+                    setCabifyHistoricoModalOpen(true);
+                  }
+                },
                 ...(isCurrent ? [{
                   icon: <ArrowLeftRight size={15} />,
                   label: 'Reasignacion Guia',
@@ -2711,148 +2567,6 @@ export function GuiasModule() {
     ]
   );
 
-  const handleActualizarData = async () => {
-    try {
-      if (actualizandoData) return;
-      setActualizandoData(true);
-      const currentWeek = getCurrentWeek();
-
-      // 1. Obtener datos de guias_historial_semanal (semanas anteriores)
-      const { data: historialData, error: historialError } = await supabase
-        .from('guias_historial_semanal')
-        .select('id_conductor, semana')
-        .neq('semana', currentWeek);
-
-      if (historialError) {
-        throw historialError;
-      }
-
-      // 2. Obtener id_conductor únicos
-      // Filtrar nulls/undefineds y obtener únicos
-      const uniqueDriverIds = [...new Set(
-        (historialData || [])
-          .map(d => d.id_conductor)
-          .filter(id => id !== null && id !== undefined)
-      )];
-
-      // 3. Loop por conductores
-      for (const driverId of uniqueDriverIds) {
-        // 3a. Buscar datos del conductor
-        const { data: driverData, error: driverError } = await supabase
-          .from('conductores')
-          .select('id, nombres, apellidos, numero_dni')
-          .eq('id', driverId)
-          .single();
-
-        if (driverError) {
-          // Continuamos con el siguiente conductor aunque falle la obtención de sus datos personales
-        }
-
-        // 3b. Buscar historial del conductor (semanas anteriores)
-        // Reutilizamos la lógica de filtro: id_conductor = driverId AND semana != currentWeek
-        const { data: driverHistory, error: driverHistoryError } = await supabase
-          .from('guias_historial_semanal')
-          .select('id, semana, id_conductor, app, efectivo, total')
-          .eq('id_conductor', driverId)
-          .neq('semana', currentWeek);
-
-        if (driverHistoryError) {
-          continue;
-        }
-
-        if (!driverHistory || driverHistory.length === 0) {
-          continue;
-        }
-
-        // 4. Segundo loop por resultados del historial
-        for (const historyRecord of driverHistory) {
-          const weekStr = historyRecord.semana; // Format: "YYYY-Www"
-
-          // 5. Calcular la última fecha de la semana
-          const [yearStr, weekNumStr] = weekStr.split('-W');
-          const year = parseInt(yearStr);
-          const week = parseInt(weekNumStr);
-
-          const baseDate = new Date(year, 0, 4);
-          const weekDate = setISOWeek(baseDate, week);
-          const sundayDate = endOfISOWeek(weekDate);
-          
-          const endDateUTC = new Date(Date.UTC(
-            sundayDate.getFullYear(),
-            sundayDate.getMonth(),
-            sundayDate.getDate(),
-            23, 59, 59, 999
-          )).toISOString().replace('Z', '+00');
-
-          // 6. Filtro en cabify_historico por fecha_fin y conductor
-          let cabifyRecord = null;
-          const dniNorm = normalizeDni(driverData?.numero_dni);
-
-          // Búsqueda por DNI
-          if (dniNorm) {
-            const { data: dataDni } = await supabase
-              .from('cabify_historico')
-              .select('ganancia_total, cobro_app, cobro_efectivo, fecha_fin')
-              .eq('dni', dniNorm)
-              .eq('fecha_fin', endDateUTC)
-              .maybeSingle();
-            
-            if (dataDni) {
-              cabifyRecord = dataDni;
-            }
-          }
-
-          // 7. Si no encuentra, buscar por Nombre
-          if (!cabifyRecord && driverData?.nombres && driverData?.apellidos) {
-            const nombre = driverData.nombres.trim();
-            const apellido = driverData.apellidos.trim();
-            
-            const { data: dataName } = await supabase
-              .from('cabify_historico')
-              .select('ganancia_total, cobro_app, cobro_efectivo, fecha_fin')
-              .ilike('nombre', `%${nombre}%`)
-              .ilike('apellido', `%${apellido}%`)
-              .eq('fecha_fin', endDateUTC)
-              .maybeSingle();
-
-            if (dataName) {
-              cabifyRecord = dataName;
-            }
-          }
-
-          // 8. Obtener datos
-          if (!cabifyRecord) {
-            continue;
-          }
-
-          // 9. Actualizar datos en guias_historial_semanal
-          const appValue = Number(cabifyRecord.cobro_app) || 0;
-          const efectivoValue = Number(cabifyRecord.cobro_efectivo) || 0;
-          const totalValue = appValue + efectivoValue;
-
-          await supabase
-            .from('guias_historial_semanal')
-            .update({ app: appValue, efectivo: efectivoValue, total: totalValue })
-            .eq('id', historyRecord.id);
-
-          // Update error silently ignored
-        }
-      }
-
-      Swal.fire({
-        title: 'Actualización Completada',
-        text: 'Se ha procesado la data y generado los logs en la consola.',
-        icon: 'success',
-        confirmButtonColor: 'var(--color-primary)'
-      });
-
-    } catch {
-      Swal.fire('Error', 'Hubo un error al actualizar la data.', 'error');
-    } finally {
-      setActualizandoData(false);
-    }
-  };
-
   const handleClearAllFilters = () => {
     setNombreFilter([]);
     setEstadoFilter([]);
@@ -2862,6 +2576,7 @@ export function GuiasModule() {
     setAppFilter([]);
     setTotalFilter([]);
     setActiveStatFilter(null);
+    setSinGncFilter(false);
     setGlobalSearch('');
   };
 
@@ -3135,17 +2850,54 @@ export function GuiasModule() {
 
               {/* Filters & Table Container */}
               <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                {/* Filters Row: Search + Week Selector + Button */}
+                {/* Filters Row: Quick filters + Search + Week Selector + Button */}
                 <div style={{
                   display: 'flex',
-                  alignItems: 'center',
-                  gap: '12px',
+                  flexDirection: 'column',
+                  gap: '8px',
                   background: 'var(--bg-secondary)',
                   padding: '12px',
                   borderRadius: '8px',
                   boxShadow: 'var(--shadow-sm)',
-                  flexWrap: 'wrap',
                 }}>
+                  {/* Quick filters row */}
+                  {(() => {
+                    const countSinGnc = drivers.filter(c => {
+                      const vehiculo = (c as any).vehiculo_asignado;
+                      return vehiculo && vehiculo.gnc !== true;
+                    }).length;
+                    return countSinGnc > 0 ? (
+                      <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+                        <button
+                          onClick={() => setSinGncFilter(prev => !prev)}
+                          style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '5px',
+                            padding: '4px 10px',
+                            borderRadius: '14px',
+                            fontSize: '11px',
+                            fontWeight: 600,
+                            border: sinGncFilter ? '2px solid #d97706' : '1px solid var(--border-primary)',
+                            background: sinGncFilter ? 'rgba(245,158,11,0.12)' : 'transparent',
+                            color: sinGncFilter ? '#d97706' : 'var(--text-secondary)',
+                            cursor: 'pointer',
+                            transition: 'all 0.15s',
+                            whiteSpace: 'nowrap',
+                          }}
+                        >
+                          Sin GNC <span style={{ opacity: 0.7 }}>{countSinGnc}</span>
+                        </button>
+                      </div>
+                    ) : null;
+                  })()}
+                  {/* Search + Week Selector + Gestión row */}
+                  <div style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '12px',
+                    flexWrap: 'wrap',
+                  }}>
                   {/* Search Input */}
                   <div className="dt-search-wrapper" style={{ flex: 1, minWidth: '200px' }}>
                     <Search className="dt-search-icon" size={20} />
@@ -3187,34 +2939,11 @@ export function GuiasModule() {
                     <Users size={16} />
                     <span>Gestión de Conductores</span>
                   </button>
-                  <button 
-                    onClick={handleActualizarData}
-                    disabled={actualizandoData}
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '8px',
-                      height: '42px',
-                      padding: '0 16px',
-                      background: 'var(--bg-primary)',
-                      color: 'var(--text-primary)',
-                      border: '1px solid var(--border-primary)',
-                      borderRadius: '8px',
-                      fontSize: '13px',
-                      fontWeight: 600,
-                      cursor: 'pointer',
-                      whiteSpace: 'nowrap',
-                      transition: 'all 0.15s',
-                      opacity: actualizandoData ? 0.7 : 1,
-                    }}
-                  >
-                    <RefreshCw size={16} className={actualizandoData ? 'animate-spin' : ''} />
-                    <span>{actualizandoData ? 'Actualizando...' : 'Actualizar Data'}</span>
-                  </button>
+                  </div>
                 </div>
 
                 {/* Filtros Activos */}
-                {(nombreFilter.length > 0 || estadoFilter.length > 0 || turnoFilter.length > 0 || asignacionFilter.length > 0 || efectivoFilter.length > 0 || appFilter.length > 0 || totalFilter.length > 0 || activeStatFilter) && (
+                {(nombreFilter.length > 0 || estadoFilter.length > 0 || turnoFilter.length > 0 || asignacionFilter.length > 0 || efectivoFilter.length > 0 || appFilter.length > 0 || totalFilter.length > 0 || activeStatFilter || sinGncFilter) && (
                   <div className="active-filters-container">
                     <div className="active-filters-label">
                       <Triangle size={8} fill="var(--color-primary)" stroke="var(--color-primary)" style={{ transform: 'rotate(180deg)' }} />
@@ -3268,6 +2997,13 @@ export function GuiasModule() {
                         <button onClick={() => toggleTotalFilter(f)} className="active-filter-close"><X size={10} /></button>
                       </span>
                     ))}
+
+                    {sinGncFilter && (
+                      <span className="active-filter-tag">
+                        Sin GNC
+                        <button onClick={() => setSinGncFilter(false)} className="active-filter-close"><X size={10} /></button>
+                      </span>
+                    )}
 
                     {activeStatFilter && (
                       <span className="active-filter-tag">
@@ -3397,6 +3133,19 @@ export function GuiasModule() {
         <GestionConductores
           isOpen={gestionConductoresModalOpen}
           onClose={() => setGestionConductoresModalOpen(false)}
+        />
+      )}
+
+      {/* Modal de Cabify Histórico */}
+      {cabifyHistoricoModalOpen && (
+        <CabifyHistoricoModal
+          isOpen={cabifyHistoricoModalOpen}
+          onClose={() => {
+            setCabifyHistoricoModalOpen(false);
+            setCabifyHistoricoConductor(null);
+          }}
+          conductor={cabifyHistoricoConductor}
+          semana={selectedWeek}
         />
       )}
     </div>

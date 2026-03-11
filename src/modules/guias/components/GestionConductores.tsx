@@ -4,6 +4,7 @@ import { format } from "date-fns";
 import Swal from "sweetalert2";
 import { useSede } from '../../../contexts/SedeContext';
 import { Search, FileEdit } from 'lucide-react';
+import { getCabifyDatosPorSemanas } from '../guiasService';
 import "./GestionConductores.css";
 
 // Interfaces
@@ -218,22 +219,39 @@ const GestionConductores = ({ isOpen, onClose, onRefresh }: Props) => {
 
       if (error) throw error;
 
-      const rows: HistoryRow[] = (history as unknown as RawHistory[]).map((h) => ({
-        semana: h.semana,
-        efectivo: Number(h.efectivo || 0),
-        app: Number(h.app || 0),
-        total: Number(h.total || 0),
-        llamada: h.fecha_llamada ? "REALIZADA" : "PENDIENTES",
-        fecha_llamada: h.fecha_llamada ? format(new Date(h.fecha_llamada), 'dd/MM/yyyy') : null,
-        accion_nombre: (h.id_accion_imp ? accionesMap[h.id_accion_imp] : undefined) || (h.id_accion_imp === 1 ? 'CAPACITACION CABIFY' : '-'),
-        notas: h.anotaciones_extra || [],
-        // Repeat current driver context (as history doesn't track these changes yet)
-        turno: driver.turno || 'N/A',
-        estado: driver.estado || 'N/A',
-        asignacion: driver.asignacion || 'N/A',
-        asignacionDetalle: driver.asignacionDetalle || '',
-        escuela: driver.escuela ? 'SI' : 'NO'
-      }));
+      const rawHistory = history as unknown as RawHistory[];
+      if (!rawHistory || rawHistory.length === 0) {
+        setHistoryData([]);
+        return;
+      }
+
+      // Obtener datos financieros reales desde cabify_historico via RPC
+      const semanas = rawHistory.map(h => h.semana);
+      const cabifyDataMap = await getCabifyDatosPorSemanas([driver.id], semanas);
+
+      const rows: HistoryRow[] = rawHistory.map((h) => {
+        // Datos financieros: SOLO desde cabify_historico via RPC (única fuente de verdad)
+        const cabifyEntry = cabifyDataMap.get(h.semana)?.get(driver.id);
+        const app = cabifyEntry ? Number(cabifyEntry.cobroApp.toFixed(2)) : 0;
+        const efectivo = cabifyEntry ? Number(cabifyEntry.cobroEfectivo.toFixed(2)) : 0;
+        const total = Number((app + efectivo).toFixed(2));
+
+        return {
+          semana: h.semana,
+          efectivo,
+          app,
+          total,
+          llamada: h.fecha_llamada ? "REALIZADA" : "PENDIENTES",
+          fecha_llamada: h.fecha_llamada ? format(new Date(h.fecha_llamada), 'dd/MM/yyyy') : null,
+          accion_nombre: (h.id_accion_imp ? accionesMap[h.id_accion_imp] : undefined) || (h.id_accion_imp === 1 ? 'CAPACITACION CABIFY' : '-'),
+          notas: h.anotaciones_extra || [],
+          turno: driver.turno || 'N/A',
+          estado: driver.estado || 'N/A',
+          asignacion: driver.asignacion || 'N/A',
+          asignacionDetalle: driver.asignacionDetalle || '',
+          escuela: driver.escuela ? 'SI' : 'NO'
+        };
+      });
 
       setHistoryData(rows);
 

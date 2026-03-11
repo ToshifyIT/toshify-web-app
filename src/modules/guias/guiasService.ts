@@ -42,6 +42,45 @@ export const fetchGuias = async (): Promise<Guia[]> => {
   }
 }
 
+/**
+ * Consulta los datos financieros de Cabify para un conjunto de conductores y semanas.
+ * Usa la RPC get_cabify_datos_por_semanas que busca en cabify_historico por DNI (o nombre).
+ *
+ * - Semana actual: trae el registro del día de hoy
+ * - Semanas anteriores: trae el registro del domingo de esa semana
+ *
+ * Retorna: Map<semana, Map<id_conductor, { cobroApp, cobroEfectivo }>>
+ */
+export const getCabifyDatosPorSemanas = async (
+  conductorIds: string[],
+  semanas: string[]
+): Promise<Map<string, Map<string, { cobroApp: number; cobroEfectivo: number }>>> => {
+  const result = new Map<string, Map<string, { cobroApp: number; cobroEfectivo: number }>>();
+
+  if (conductorIds.length === 0 || semanas.length === 0) return result;
+
+  try {
+    const { data, error } = await supabase.rpc('get_cabify_datos_por_semanas', {
+      p_conductor_ids: conductorIds,
+      p_semanas: semanas,
+    });
+
+    if (error || !data) return result;
+
+    for (const row of data as any[]) {
+      if (!result.has(row.semana)) result.set(row.semana, new Map());
+      result.get(row.semana)!.set(row.id_conductor, {
+        cobroApp: Number(row.cobro_app) || 0,
+        cobroEfectivo: Number(row.cobro_efectivo) || 0,
+      });
+    }
+  } catch {
+    // Silently return empty map on failure
+  }
+
+  return result;
+};
+
 export const distributeDriversService = async (guias: Guia[]) => {
   try {
     if (guias.length === 0) {
