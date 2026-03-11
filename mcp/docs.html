@@ -433,15 +433,15 @@
   "leads": [
     {
       "id": "a1b2c3d4-...",
-      "Nombre Completo": "Juan Perez",
-      "Email": "juan@email.com",
-      "Phone": "+5491112345678",
-      "DNI": "33444555",
-      "Estado de Lead": "Contactado",
-      "Sede": "Buenos Aires",
-      "Agente asignado": "Maria Garcia",
-      "Fecha creacion": "2025-06-15T10:30:00Z",
-      "Fase de Preguntas": "Entrevista"
+      "nombre_completo": "Juan Perez",
+      "email": "juan@email.com",
+      "phone": "+5491112345678",
+      "dni": "33444555",
+      "estado_de_lead": "Contactado",
+      "sede": "Buenos Aires",
+      "agente_asignado": "Maria Garcia",
+      "fecha_creacion": "2025-06-15T10:30:00Z",
+      "fase_de_preguntas": "Entrevista"
     },
     ...
   ]
@@ -481,30 +481,30 @@
       <div class="example-label output">Respuesta:</div>
       <pre>{
   "id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
-  "Nombre Completo": "Juan Perez",
-  "Apellido": "Perez",
-  "Primer nombre": "Juan",
-  "Email": "juan@email.com",
-  "Phone": "+5491112345678",
-  "WhatsApp number": "+5491112345678",
-  "DNI": "33444555",
-  "Edad": 28,
-  "Direccion": "Av. Corrientes 1234",
-  "City": "CABA",
-  "Region": "Buenos Aires",
-  "Country": "Argentina",
-  "Zona": "Norte",
-  "Sede": "Buenos Aires",
-  "Turno": "Manana",
-  "Estado de Lead": "Contactado",
-  "Agente asignado": "Maria Garcia",
-  "Entrevistador asignado": "Carlos Lopez",
-  "Fase de Preguntas": "Entrevista",
-  "Patente": "AB123CD",
-  "Marca y modelo de vehiculo": "Toyota Corolla 2020",
-  "Licencia": "Profesional",
-  "Monotributo": "Si",
-  "Fecha creacion": "2025-06-15T10:30:00Z",
+  "nombre_completo": "Juan Perez",
+  "apellido": "Perez",
+  "primer_nombre": "Juan",
+  "email": "juan@email.com",
+  "phone": "+5491112345678",
+  "whatsapp_number": "+5491112345678",
+  "dni": "33444555",
+  "edad": 28,
+  "direccion": "Av. Corrientes 1234",
+  "city": "CABA",
+  "region": "Buenos Aires",
+  "country": "Argentina",
+  "zona": "Norte",
+  "sede": "Buenos Aires",
+  "turno": "Manana",
+  "estado_de_lead": "Contactado",
+  "agente_asignado": "Maria Garcia",
+  "entrevistador_asignado": "Carlos Lopez",
+  "fase_de_preguntas": "Entrevista",
+  "patente": "AB123CD",
+  "marca_y_modelo_de_vehiculo": "Toyota Corolla 2020",
+  "licencia": "Profesional",
+  "monotributo": "Si",
+  "fecha_creacion": "2025-06-15T10:30:00Z",
   ... (todos los campos del lead)
 }</pre>
     </div>
@@ -532,13 +532,13 @@
       <div class="example-label input">Tool call:</div>
       <pre>crear_lead({
   campos: {
-    "Nombre Completo": "Juan Perez",
-    "Primer nombre": "Juan",
-    "Apellido": "Perez",
-    "Email": "juan@mail.com",
-    "Phone": "+5491112345678",
-    "Sede": "Buenos Aires",
-    "Estado de Lead": "Nuevo"
+    "nombre_completo": "Juan Perez",
+    "primer_nombre": "Juan",
+    "apellido": "Perez",
+    "email": "juan@mail.com",
+    "phone": "+5491112345678",
+    "sede": "Buenos Aires",
+    "estado_de_lead": "Nuevo"
   }
 })</pre>
       <div class="example-label output">Respuesta:</div>
@@ -546,14 +546,14 @@
   "mensaje": "Lead creado exitosamente",
   "lead": {
     "id": "f47ac10b-58cc-4372-a567-0e02b2c3d479",
-    "Nombre Completo": "Juan Perez",
-    "Primer nombre": "Juan",
-    "Apellido": "Perez",
-    "Email": "juan@mail.com",
-    "Phone": "+5491112345678",
-    "Sede": "Buenos Aires",
-    "Estado de Lead": "Nuevo",
-    "Fecha creacion": "2025-06-20T14:30:00Z",
+    "nombre_completo": "Juan Perez",
+    "primer_nombre": "Juan",
+    "apellido": "Perez",
+    "email": "juan@mail.com",
+    "phone": "+5491112345678",
+    "sede": "Buenos Aires",
+    "estado_de_lead": "Nuevo",
+    "fecha_creacion": "2025-06-20T14:30:00Z",
     "created_at": "2025-06-20T14:30:00Z",
     ...
   }
@@ -563,64 +563,66 @@
       <div class="example-label input">Tool call:</div>
       <pre>crear_lead({
   campos: {
-    "Nombre Completo": "Maria Lopez",
-    "Email": "maria@mail.com",
-    "Phone": "+5491198765432",
-    "DNI": "40123456",
-    "Sede": "Cordoba",
-    "Zona": "Centro",
-    "Estado de Lead": "Nuevo",
-    "Fuente de lead": "Instagram",
-    "Marca y modelo de vehiculo": "Fiat Cronos 2022",
-    "Patente": "AE456FG"
+    "nombre_completo": "Maria Lopez",
+    "email": "maria@mail.com",
+    "phone": "+5491198765432",
+    "dni": "40123456",
+    "sede": "Cordoba",
+    "zona": "Centro",
+    "estado_de_lead": "Nuevo",
+    "fuente_de_lead": "Instagram",
+    "marca_y_modelo_de_vehiculo": "Fiat Cronos 2022",
+    "patente": "AE456FG"
   }
 })</pre>
 
-      <h3>Campos permitidos para crear</h3>
+      <h3>Campos permitidos para crear/actualizar</h3>
       <ul class="fields-list">
-        <li>Nombre Completo</li>
-        <li>Apellido</li>
-        <li>Primer nombre</li>
-        <li>Email</li>
-        <li>Phone</li>
-        <li>WhatsApp number</li>
-        <li>DNI</li>
-        <li>Edad</li>
-        <li>Direccion</li>
-        <li>City / Region / Country</li>
-        <li>Zona</li>
-        <li>Sede</li>
-        <li>Turno</li>
-        <li>Patente</li>
-        <li>Compañero</li>
-        <li>Tipo</li>
-        <li>Estado de Lead</li>
-        <li>Agente asignado</li>
-        <li>Entrevistador asignado</li>
-        <li>Especialista Onboarding</li>
-        <li>Administrativo Asignado</li>
-        <li>Dataentry Asignado</li>
-        <li>Agente logistico asignado</li>
-        <li>Guia asignado</li>
-        <li>Asistente Virtual</li>
-        <li>Licencia</li>
-        <li>Monotributo</li>
-        <li>Experiencia previa</li>
-        <li>Acepta oferta</li>
-        <li>Antecedentes penales</li>
-        <li>Tiempo de antiguedad</li>
-        <li>Fase de Preguntas</li>
-        <li>Documentos pendientes</li>
-        <li>Causal de cierre</li>
-        <li>Contacto de emergencia</li>
-        <li>Link facturacion</li>
-        <li>Ayuda Entrevista</li>
-        <li>Codigo Referido</li>
-        <li>Año de auto</li>
-        <li>Km de auto</li>
-        <li>Marca y modelo de vehiculo</li>
-        <li>Fuente de lead</li>
-        <li>Cerrado timeout wpp</li>
+        <li>nombre_completo</li>
+        <li>apellido</li>
+        <li>primer_nombre</li>
+        <li>email</li>
+        <li>phone</li>
+        <li>whatsapp_number</li>
+        <li>dni</li>
+        <li>edad</li>
+        <li>direccion</li>
+        <li>city</li>
+        <li>region</li>
+        <li>country</li>
+        <li>zona</li>
+        <li>sede</li>
+        <li>turno</li>
+        <li>patente</li>
+        <li>companero</li>
+        <li>tipo</li>
+        <li>estado_de_lead</li>
+        <li>agente_asignado</li>
+        <li>entrevistador_asignado</li>
+        <li>especialista_onboarding</li>
+        <li>administrativo_asignado</li>
+        <li>dataentry_asignado</li>
+        <li>agente_logistico_asignado</li>
+        <li>guia_asignado</li>
+        <li>asistente_virtual</li>
+        <li>licencia</li>
+        <li>monotributo</li>
+        <li>experiencia_previa</li>
+        <li>acepta_oferta</li>
+        <li>antecedentes_penales</li>
+        <li>tiempo_de_antiguedad</li>
+        <li>fase_de_preguntas</li>
+        <li>documentos_pendientes</li>
+        <li>causal_de_cierre</li>
+        <li>contacto_de_emergencia</li>
+        <li>link_facturacion</li>
+        <li>ayuda_entrevista</li>
+        <li>codigo_referido</li>
+        <li>anio_de_auto</li>
+        <li>km_de_auto</li>
+        <li>marca_y_modelo_de_vehiculo</li>
+        <li>fuente_de_lead</li>
+        <li>cerrado_timeout_wpp</li>
       </ul>
     </div>
 
@@ -649,17 +651,17 @@
       <pre>actualizar_lead({
   id: "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
   campos: {
-    "Estado de Lead": "Contactado"
+    "estado_de_lead": "Contactado"
   }
 })</pre>
       <div class="example-label output">Respuesta:</div>
       <pre>{
   "mensaje": "Lead actualizado exitosamente",
-  "camposActualizados": ["Estado de Lead"],
+  "camposActualizados": ["estado_de_lead"],
   "lead": {
     "id": "a1b2c3d4-...",
-    "Nombre Completo": "Juan Perez",
-    "Estado de Lead": "Contactado",
+    "nombre_completo": "Juan Perez",
+    "estado_de_lead": "Contactado",
     ...
   }
 }</pre>
@@ -669,10 +671,10 @@
       <pre>actualizar_lead({
   id: "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
   campos: {
-    "Sede": "Cordoba",
-    "Agente asignado": "Pedro Martinez",
-    "Phone": "+5493511234567",
-    "Fase de Preguntas": "Documentacion"
+    "sede": "Cordoba",
+    "agente_asignado": "Pedro Martinez",
+    "phone": "+5493511234567",
+    "fase_de_preguntas": "Documentacion"
   }
 })</pre>
 
@@ -681,14 +683,14 @@
       <pre>actualizar_lead({
   id: "a1b2c3d4-...",
   campos: {
-    "Estado de Lead": "En proceso",
+    "estado_de_lead": "En proceso",
     "campo_inventado": "valor"
   }
 })</pre>
       <div class="example-label output">Respuesta (actualiza lo valido, avisa lo rechazado):</div>
       <pre>{
   "mensaje": "Lead actualizado exitosamente",
-  "camposActualizados": ["Estado de Lead"],
+  "camposActualizados": ["estado_de_lead"],
   "camposRechazados": ["campo_inventado"],
   "lead": { ... }
 }</pre>

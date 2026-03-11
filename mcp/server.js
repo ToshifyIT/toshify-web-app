@@ -76,55 +76,55 @@ function hasPermission(apiKeyData, permission) {
 }
 
 // =====================================================
-// Campos permitidos para actualizar leads
+// Campos de la tabla leads (nombres reales en BD, snake_case)
 // =====================================================
 
 const UPDATABLE_FIELDS = [
-  'Estado de Lead',
-  'Agente asignado',
-  'Entrevistador asignado',
-  'Especialista Onboarding',
-  'Administrativo Asignado',
-  'Dataentry Asignado',
-  'Agente logistico asignado',
-  'Guia asignado',
-  'Asistente Virtual',
-  'Nombre Completo',
-  'Apellido',
-  'Primer nombre',
-  'Email',
-  'Phone',
-  'WhatsApp number',
-  'DNI',
-  'Edad',
-  'Direccion',
-  'City',
-  'Region',
-  'Country',
-  'Zona',
-  'Sede',
-  'Turno',
-  'Patente',
-  'Compañero',
-  'Tipo',
-  'Licencia',
-  'Monotributo',
-  'Experiencia previa',
-  'Acepta oferta',
-  'Antecedentes penales',
-  'Tiempo de antiguedad',
-  'Fase de Preguntas',
-  'Documentos pendientes',
-  'Causal de cierre',
-  'Contacto de emergencia',
-  'Link facturacion',
-  'Ayuda Entrevista',
-  'Código Referido',
-  'Año de auto',
-  'Km de auto',
-  'Marca y modelo de vehículo',
-  'Fuente de lead',
-  'Cerrado timeout wpp',
+  'estado_de_lead',
+  'agente_asignado',
+  'entrevistador_asignado',
+  'especialista_onboarding',
+  'administrativo_asignado',
+  'dataentry_asignado',
+  'agente_logistico_asignado',
+  'guia_asignado',
+  'asistente_virtual',
+  'nombre_completo',
+  'apellido',
+  'primer_nombre',
+  'email',
+  'phone',
+  'whatsapp_number',
+  'dni',
+  'edad',
+  'direccion',
+  'city',
+  'region',
+  'country',
+  'zona',
+  'sede',
+  'turno',
+  'patente',
+  'companero',
+  'tipo',
+  'licencia',
+  'monotributo',
+  'experiencia_previa',
+  'acepta_oferta',
+  'antecedentes_penales',
+  'tiempo_de_antiguedad',
+  'fase_de_preguntas',
+  'documentos_pendientes',
+  'causal_de_cierre',
+  'contacto_de_emergencia',
+  'link_facturacion',
+  'ayuda_entrevista',
+  'codigo_referido',
+  'anio_de_auto',
+  'km_de_auto',
+  'marca_y_modelo_de_vehiculo',
+  'fuente_de_lead',
+  'cerrado_timeout_wpp',
 ];
 
 const UPDATABLE_SET = new Set(UPDATABLE_FIELDS);
@@ -145,7 +145,7 @@ function createMcpServer(apiKeyData) {
       'buscar_leads',
       'Buscar leads por nombre, DNI, email, estado, sede u otros filtros. Devuelve una lista paginada.',
       {
-        search: z.string().optional().describe('Buscar en Nombre Completo, Email o DNI'),
+        search: z.string().optional().describe('Buscar en nombre_completo, email o dni'),
         estado: z.string().optional().describe('Filtrar por Estado de Lead (ej: Nuevo, Contactado, En proceso)'),
         agente: z.string().optional().describe('Filtrar por Agente asignado'),
         sede: z.string().optional().describe('Filtrar por Sede (ej: Buenos Aires, Córdoba)'),
@@ -161,18 +161,18 @@ function createMcpServer(apiKeyData) {
           const offset = (page - 1) * limit;
 
           const filters = [];
-          if (params.estado) filters.push(`"Estado de Lead"=eq.${encodeURIComponent(params.estado)}`);
-          if (params.agente) filters.push(`"Agente asignado"=eq.${encodeURIComponent(params.agente)}`);
-          if (params.sede) filters.push(`"Sede"=eq.${encodeURIComponent(params.sede)}`);
-          if (params.desde) filters.push(`"Fecha creación"=gte.${encodeURIComponent(params.desde)}`);
-          if (params.hasta) filters.push(`"Fecha creación"=lte.${encodeURIComponent(params.hasta)}`);
+          if (params.estado) filters.push(`estado_de_lead=eq.${encodeURIComponent(params.estado)}`);
+          if (params.agente) filters.push(`agente_asignado=eq.${encodeURIComponent(params.agente)}`);
+          if (params.sede) filters.push(`sede=eq.${encodeURIComponent(params.sede)}`);
+          if (params.desde) filters.push(`fecha_creacion=gte.${encodeURIComponent(params.desde)}`);
+          if (params.hasta) filters.push(`fecha_creacion=lte.${encodeURIComponent(params.hasta)}`);
           if (params.search) {
             const s = encodeURIComponent(params.search);
-            filters.push(`or=("Nombre Completo".ilike.*${s}*,"Email".ilike.*${s}*,"DNI".ilike.*${s}*)`);
+            filters.push(`or=(nombre_completo.ilike.*${s}*,email.ilike.*${s}*,dni.ilike.*${s}*)`);
           }
 
           const filterStr = filters.length ? `&${filters.join('&')}` : '';
-          const path = `leads?select=id,"Nombre Completo","Email","Phone","DNI","Estado de Lead","Sede","Agente asignado","Fecha creación","Fase de Preguntas"&order="Fecha creación".desc&offset=${offset}&limit=${limit}${filterStr}`;
+          const path = `leads?select=id,nombre_completo,email,phone,dni,estado_de_lead,sede,agente_asignado,fecha_creacion,fase_de_preguntas&order=fecha_creacion.desc&offset=${offset}&limit=${limit}${filterStr}`;
 
           const res = await supabaseRequest(path, {
             headers: { 'Prefer': 'count=exact' },
@@ -240,7 +240,7 @@ function createMcpServer(apiKeyData) {
       'crear_lead',
       'Crear un nuevo lead. Devuelve el lead creado con su ID.',
       {
-        campos: z.record(z.string(), z.any()).describe('Objeto con los campos del lead. Ej: { "Nombre Completo": "Juan Perez", "Email": "juan@mail.com", "Sede": "Buenos Aires" }'),
+        campos: z.record(z.string(), z.any()).describe('Objeto con los campos del lead. Ej: { "nombre_completo": "Juan Perez", "email": "juan@mail.com", "sede": "Buenos Aires" }'),
       },
       async ({ campos }) => {
         try {
@@ -303,7 +303,7 @@ function createMcpServer(apiKeyData) {
       `Actualizar campos de un lead existente. Campos actualizables: ${UPDATABLE_FIELDS.join(', ')}`,
       {
         id: z.string().uuid().describe('ID del lead (UUID)'),
-        campos: z.record(z.string(), z.any()).describe('Objeto con los campos a actualizar. Ej: { "Estado de Lead": "Contactado", "Sede": "Córdoba" }'),
+        campos: z.record(z.string(), z.any()).describe('Objeto con los campos a actualizar. Ej: { "estado_de_lead": "Contactado", "sede": "Cordoba" }'),
       },
       async ({ id, campos }) => {
         try {
@@ -382,7 +382,7 @@ function createMcpServer(apiKeyData) {
       async ({ id }) => {
         try {
           // Verificar que existe
-          const checkRes = await supabaseRequest(`leads?id=eq.${id}&select=id,"Nombre Completo"`);
+          const checkRes = await supabaseRequest(`leads?id=eq.${id}&select=id,nombre_completo`);
           const existing = await checkRes.json();
           if (!existing.length) {
             return {
@@ -401,7 +401,7 @@ function createMcpServer(apiKeyData) {
               text: JSON.stringify({
                 mensaje: 'Lead eliminado exitosamente',
                 id,
-                nombre: existing[0]['Nombre Completo'],
+                nombre: existing[0].nombre_completo,
               }, null, 2),
             }],
           };
