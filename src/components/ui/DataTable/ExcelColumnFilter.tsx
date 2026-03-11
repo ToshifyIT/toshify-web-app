@@ -91,16 +91,17 @@ export function ExcelColumnFilter({
     if (!buttonRef.current) return { top: 0, left: 0 }
 
     const rect = buttonRef.current.getBoundingClientRect()
-    const dropdownWidth = 260
+    const dropdownWidth = dropdownRef.current?.getBoundingClientRect().width || 260
+    const viewportWidth = window.innerWidth
     let left = rect.left
-    if (left + dropdownWidth > window.innerWidth - 8) {
-      left = window.innerWidth - dropdownWidth - 8
+    // Si no cabe a la derecha, alinear al borde derecho del viewport
+    if (left + dropdownWidth > viewportWidth - 8) {
+      left = Math.max(8, viewportWidth - dropdownWidth - 8)
     }
     if (left < 8) left = 8
-    return {
-      top: rect.bottom + 4,
-      left
-    }
+
+    const top = rect.bottom + 4
+    return { top, left }
   }, [])
 
   // Calcular posición INMEDIATAMENTE cuando se abre (useLayoutEffect para evitar flash)
@@ -138,9 +139,18 @@ export function ExcelColumnFilter({
       }
     }
 
-    // Recalcular posición en scroll/resize
+    // Recalcular posición en scroll/resize usando ancho real del dropdown
     const handleReposition = () => {
-      setPosition(calculatePosition())
+      const newPos = calculatePosition()
+      // Doble verificación con el DOM real del dropdown
+      if (dropdownRef.current) {
+        const dropdownWidth = dropdownRef.current.getBoundingClientRect().width
+        const viewportWidth = window.innerWidth
+        if (newPos.left + dropdownWidth > viewportWidth - 8) {
+          newPos.left = Math.max(8, viewportWidth - dropdownWidth - 8)
+        }
+      }
+      setPosition(newPos)
     }
 
     document.addEventListener('mousedown', handleClickOutside)

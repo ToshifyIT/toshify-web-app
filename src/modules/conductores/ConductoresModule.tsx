@@ -28,7 +28,7 @@ import { LoadingOverlay } from "../../components/ui/LoadingOverlay";
 import { ExcelColumnFilter } from "../../components/ui/DataTable/ExcelColumnFilter";
 import "./ConductoresModule.css";
 import { ConductorWizard } from "./components/ConductorWizard";
-import { cabifyService } from "../../services/cabifyService";
+
 import { createConductorDriveFolder } from "../../services/driveService";
 import { AddressAutocomplete } from "../../components/ui/AddressAutocomplete";
 import { registrarHistorialConductor, registrarHistorialVehiculo } from "../../services/historialService";
@@ -2344,50 +2344,56 @@ function ModalEditar({
   const syncEmailFromCabify = async () => {
     setSyncingEmail(true);
     try {
-      const cabifyDrivers = await cabifyService.getAllDriversWithoutCompanyFilter();
-
       const dni = normalizeDni(formData.numero_dni);
-      const nombreCompleto = `${formData.nombres} ${formData.apellidos}`.trim().toUpperCase();
+      const primerNombre = (formData.nombres || '').split(' ')[0];
+      const primerApellido = (formData.apellidos || '').split(' ')[0];
 
-      let match = dni
-        ? cabifyDrivers.find((d: any) => normalizeDni(d.nationalIdNumber) === dni)
-        : null;
+      // Buscar email en cabify_historico (datos ya sincronizados)
+      let email: string | null = null;
 
-      if (!match && nombreCompleto) {
-        match = cabifyDrivers.find((d: any) => {
-          const cabifyName = `${d.name || ''} ${d.surname || ''}`.trim().toUpperCase();
-          return cabifyName === nombreCompleto;
-        });
+      if (dni) {
+        const { data } = await supabase
+          .from('cabify_historico')
+          .select('email')
+          .eq('dni', formData.numero_dni)
+          .not('email', 'is', null)
+          .neq('email', '')
+          .limit(1)
+          .single();
+        email = data?.email || null;
       }
 
-      if (!match) {
+      if (!email && primerNombre && primerApellido) {
+        const { data } = await supabase
+          .from('cabify_historico')
+          .select('email')
+          .ilike('nombre', `%${primerNombre}%`)
+          .ilike('apellido', `%${primerApellido}%`)
+          .not('email', 'is', null)
+          .neq('email', '')
+          .limit(1)
+          .single();
+        email = data?.email || null;
+      }
+
+      if (!email) {
         Swal.fire({
           icon: 'info',
           title: 'Sin coincidencia',
-          text: `No se encontró en Cabify con DNI "${dni || 'N/A'}" ni nombre "${nombreCompleto}"`,
+          text: `No se encontró email en datos de Cabify con DNI "${dni || 'N/A'}" ni nombre "${primerNombre} ${primerApellido}"`,
           confirmButtonColor: '#FF0033',
         });
         return;
       }
 
-      if (!match.email) {
-        Swal.fire({
-          icon: 'info',
-          title: 'Sin email en Cabify',
-          text: 'Se encontró al conductor pero no tiene email registrado en Cabify',
-          confirmButtonColor: '#FF0033',
-        });
-        return;
-      }
-
-      setFormData({ ...formData, email: match.email });
-      showSuccess('Email sincronizado', match.email);
+      setFormData({ ...formData, email });
+      showSuccess('Email sincronizado', email);
     } catch (err: any) {
       const message = err instanceof Error ? err.message : String(err);
       Swal.fire({
         icon: 'error',
         title: 'Error',
-        text: 'Error al sincronizar con Cabify: ' + message,
+        text: 'Error al sincronizar email: ' + message,
         confirmButtonColor: '#FF0033',
       });
     } finally {
@@ -3132,38 +3138,43 @@ function ModalDetalles({
 
     setSyncingEmail(true);
     try {
-      const cabifyDrivers = await cabifyService.getAllDriversWithoutCompanyFilter();
-
       const dni = normalizeDni(selectedConductor.numero_dni);
-      const nombreCompleto = `${selectedConductor.nombres || ''} ${selectedConductor.apellidos || ''}`.trim().toUpperCase();
+      const primerNombre = (selectedConductor.nombres || '').split(' ')[0];
+      const primerApellido = (selectedConductor.apellidos || '').split(' ')[0];
 
-      // Match by DNI first, then by name
-      let match = dni
-        ? cabifyDrivers.find((d: any) => normalizeDni(d.nationalIdNumber) === dni)
-        : null;
+      // Buscar email en cabify_historico (datos ya sincronizados)
+      let email: string | null = null;
 
-      if (!match && nombreCompleto) {
-        match = cabifyDrivers.find((d: any) => {
-          const cabifyName = `${d.name || ''} ${d.surname || ''}`.trim().toUpperCase();
-          return cabifyName === nombreCompleto;
-        });
+      if (dni) {
+        const { data } = await supabase
+          .from('cabify_historico')
+          .select('email')
+          .eq('dni', selectedConductor.numero_dni)
+          .not('email', 'is', null)
+          .neq('email', '')
+          .limit(1)
+          .single();
+        email = data?.email || null;
       }
 
-      if (!match) {
+      if (!email && primerNombre && primerApellido) {
+        const { data } = await supabase
+          .from('cabify_historico')
+          .select('email')
+          .ilike('nombre', `%${primerNombre}%`)
+          .ilike('apellido', `%${primerApellido}%`)
+          .not('email', 'is', null)
+          .neq('email', '')
+          .limit(1)
+          .single();
+        email = data?.email || null;
+      }
+
+      if (!email) {
         Swal.fire({
           icon: 'info',
           title: 'Sin coincidencia',
-          text: `No se encontró conductor en Cabify con DNI ${dni || 'N/A'} ni nombre "${nombreCompleto}"`,
-          confirmButtonColor: '#FF0033',
-        });
-        return;
-      }
-
-      if (!match.email) {
-        Swal.fire({
-          icon: 'info',
-          title: 'Sin email en Cabify',
-          text: `Se encontró al conductor en Cabify pero no tiene email registrado`,
+          text: `No se encontró email en datos de Cabify con DNI "${dni || 'N/A'}" ni nombre "${primerNombre} ${primerApellido}"`,
           confirmButtonColor: '#FF0033',
         });
         return;
@@ -3172,21 +3183,21 @@ function ModalDetalles({
       // Update in DB
       const { error } = await supabase
         .from('conductores')
-        .update({ email: match.email })
+        .update({ email })
         .eq('id', selectedConductor.id);
 
       if (error) throw error;
 
-      setConductorEmail(match.email);
-      selectedConductor.email = match.email;
+      setConductorEmail(email);
+      selectedConductor.email = email;
       onConductorUpdated?.();
-      showSuccess('Email Actualizado', `Email sincronizado: ${match.email}`);
+      showSuccess('Email Actualizado', `Email sincronizado: ${email}`);
     } catch (err: any) {
       const message = err instanceof Error ? err.message : String(err);
       Swal.fire({
         icon: 'error',
         title: 'Error',
-        text: 'Error al sincronizar con Cabify: ' + message,
+        text: 'Error al sincronizar email: ' + message,
         confirmButtonColor: '#FF0033',
       });
     } finally {
@@ -3635,14 +3646,30 @@ function ModalDetalles({
           )}
         </div>
         </div>
-        <div className="modal-footer">
-          <button
-            className="btn-secondary"
-            onClick={() => setShowDetailsModal(false)}
-          >
-            Cerrar
-          </button>
-        </div>
+        {(() => {
+          const folderUrl = (selectedConductor as any).drive_folder_url || (selectedConductor as any).url_documentacion;
+          return (
+            <div className="modal-footer" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <button
+                className={folderUrl ? 'btn-success' : 'btn-secondary'}
+                onClick={() => {
+                  if (folderUrl) window.open(folderUrl, '_blank');
+                  else Swal.fire('Sin URL', 'Este conductor no tiene una URL de documentación configurada', 'info');
+                }}
+                style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
+              >
+                {folderUrl ? <FolderOpen size={16} /> : <FolderPlus size={16} />}
+                {folderUrl ? 'Ver documentos' : 'Sin carpeta'}
+              </button>
+              <button
+                className="btn-secondary"
+                onClick={() => setShowDetailsModal(false)}
+              >
+                Cerrar
+              </button>
+            </div>
+          );
+        })()}
       </div>
     </div>
   );

@@ -69,7 +69,7 @@ function App() {
       <DeviceTypeInitializer>
         <Routes>
           {/* Portal público - fuera de auth providers (lazy: arrastra jsPDF + recharts) */}
-          <Route path="/mi-facturacion" element={<Suspense fallback={<div />}><PortalPage /></Suspense>} />
+          <Route path="/mi-espacio" element={<Suspense fallback={<div />}><PortalPage /></Suspense>} />
 
           {/* App principal - con auth */}
           <Route path="/*" element={
