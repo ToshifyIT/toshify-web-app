@@ -2179,7 +2179,6 @@ export function ConductoresModule() {
         }
         externalFilters={externalFilters}
         onClearAllFilters={handleClearAllFilters}
-        disableAutoFilters
       />
 
       {/* Modales definidos en componente separado para reducir tamaño del archivo */}

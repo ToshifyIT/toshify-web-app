@@ -893,7 +893,6 @@ export function ProductosModule() {
           ) : undefined
         }
         externalFilters={externalFilters}
-        disableAutoFilters
         onClearAllFilters={() => {
           // Limpiar filtros de columna
           setCodigoFilter([])
