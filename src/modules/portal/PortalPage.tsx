@@ -1,5 +1,5 @@
 // src/modules/portal/PortalPage.tsx
-// Portal público para conductores - Mi Facturación
+// Portal público para conductores - Mi Espacio
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import { jsPDF } from 'jspdf'
 import { format, parseISO } from 'date-fns'
@@ -77,6 +77,30 @@ interface PortalFraccionamiento {
 }
 
 type View = 'login' | 'dashboard' | 'detail'
+
+// Mapeo de códigos de concepto a descripciones legibles
+const CONCEPTO_LABELS: Record<string, string> = {
+  P001: 'Alquiler Turno Diurno',
+  P002: 'Alquiler a Cargo',
+  P003: 'Cuota de Garantía',
+  P004: 'Tickets',
+  P005: 'Peajes',
+  P006: 'Combustible',
+  P007: 'Penalidades',
+  P008: 'Multas de Tránsito',
+  P009: 'Mora',
+  P010: 'Plan de Pagos',
+  P013: 'Alquiler Turno Nocturno',
+}
+
+/** Si la descripción es solo un número o está vacía, usar el label del código */
+function getConceptoLabel(item: PortalDetalle): string {
+  const desc = item.concepto_descripcion?.trim()
+  if (!desc || /^\d+([,.]\d+)?$/.test(desc)) {
+    return CONCEPTO_LABELS[item.concepto_codigo] || desc || item.concepto_codigo
+  }
+  return desc
+}
 
 // =====================================================
 // LOGO PRELOAD (para PDF)
@@ -316,7 +340,17 @@ export function PortalPage() {
       pdf.setDrawColor(220, 38, 38)
       pdf.setLineWidth(0.5)
       pdf.line(margin, y, pageWidth - margin, y)
-      y += 10
+      y += 6
+
+      // Nota legal superior
+      pdf.setFontSize(8)
+      pdf.setTextColor(gris)
+      pdf.setFont('helvetica', 'italic')
+      pdf.text(
+        'La información presentada es de carácter referencial y no constituye un comprobante fiscal válido.',
+        pageWidth / 2, y, { align: 'center' }
+      )
+      y += 8
 
       // Datos del conductor
       pdf.setFontSize(11)
@@ -359,13 +393,21 @@ export function PortalPage() {
       pdf.setFont('helvetica', 'normal')
       cargos.forEach(cargo => {
         pdf.setTextColor(negro)
-        pdf.text(cargo.concepto_descripcion, margin, y)
+        const cargoDesc = getConceptoLabel(cargo)
+        const cargoLabel = cargo.cantidad > 1
+          ? `${cargoDesc} x${cargo.cantidad}`
+          : cargoDesc
+        pdf.text(cargoLabel, margin, y)
         pdf.text(formatCurrency(cargo.total), pageWidth - margin, y, { align: 'right' })
         y += 5
       })
       descuentos.forEach(desc => {
         pdf.setTextColor(negro)
-        pdf.text(desc.concepto_descripcion, margin, y)
+        const descDesc = getConceptoLabel(desc)
+        const descLabel = desc.cantidad > 1
+          ? `${descDesc} x${desc.cantidad}`
+          : descDesc
+        pdf.text(descLabel, margin, y)
         pdf.setTextColor(verde)
         pdf.text(`-${formatCurrency(desc.total)}`, pageWidth - margin, y, { align: 'right' })
         y += 5
@@ -487,8 +529,8 @@ export function PortalPage() {
       <div className="portal portal-login">
         <form className="portal-login-card" onSubmit={handleLogin}>
           <img src={logoToshifyUrl} alt="Toshify" className="portal-login-logo" />
-          <h1 className="portal-login-title">Mi Facturación</h1>
-          <p className="portal-login-subtitle">Ingresá tu DNI o CUIT para ver tu liquidación</p>
+          <h1 className="portal-login-title">Mi Espacio</h1>
+          <p className="portal-login-subtitle">Ingresá tu DNI o CUIT para ver tu proforma</p>
 
           <input
             type="text"
@@ -595,7 +637,7 @@ export function PortalPage() {
                       <div key={item.id} className="portal-detail-item">
                         <span className="portal-detail-item-name">
                           <span className="portal-detail-item-dot cargo" />
-                          {item.concepto_descripcion}
+                          {getConceptoLabel(item)}
                           {item.cantidad > 1 && ` x${item.cantidad}`}
                         </span>
                         <span className="portal-detail-item-amount">{formatCurrency(item.total)}</span>
@@ -605,7 +647,7 @@ export function PortalPage() {
                       <div key={item.id} className="portal-detail-item">
                         <span className="portal-detail-item-name">
                           <span className="portal-detail-item-dot descuento" />
-                          {item.concepto_descripcion}
+                          {getConceptoLabel(item)}
                         </span>
                         <span className="portal-detail-item-amount" style={{ color: '#059669' }}>
                           -{formatCurrency(item.total)}
@@ -639,6 +681,10 @@ export function PortalPage() {
               </div>
             </div>
           )}
+          {/* Nota legal */}
+          <div className="portal-nota-legal">
+            La información presentada es de carácter referencial y no constituye un comprobante fiscal válido.
+          </div>
         </div>
       </div>
     )

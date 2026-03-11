@@ -82,17 +82,33 @@ function FilterHeader({
   useLayoutEffect(() => {
     if (!isOpen || !buttonRef.current) return;
     const rect = buttonRef.current.getBoundingClientRect();
+    const dropdownWidth = dropdownRef.current?.getBoundingClientRect().width || 220;
+    const viewportWidth = window.innerWidth;
     let left = rect.left;
     let top = rect.bottom + 4;
 
-    // Adjust if goes off screen
-    if (left + 220 > window.innerWidth) {
-      left = window.innerWidth - 230;
+    // Adjust if goes off right edge of viewport
+    if (left + dropdownWidth > viewportWidth - 8) {
+      left = Math.max(8, viewportWidth - dropdownWidth - 8);
     }
+    if (left < 8) left = 8;
     if (top + 300 > window.innerHeight) {
       top = rect.top - 304;
     }
     setPosition({ top, left });
+  }, [isOpen]);
+
+  // Re-adjust after render if dropdown overflows viewport
+  useLayoutEffect(() => {
+    if (!isOpen || !dropdownRef.current) return;
+    const dropdownRect = dropdownRef.current.getBoundingClientRect();
+    const viewportWidth = window.innerWidth;
+    if (dropdownRect.right > viewportWidth - 8) {
+      setPosition(prev => ({
+        ...prev,
+        left: Math.max(8, viewportWidth - dropdownRect.width - 8)
+      }));
+    }
   }, [isOpen]);
 
   // Clear search when closing
@@ -100,7 +116,7 @@ function FilterHeader({
     if (!isOpen) setSearchTerm('');
   }, [isOpen]);
 
-  // Close on outside click
+  // Close on outside click + reposition on scroll/resize
   useEffect(() => {
     if (!isOpen) return;
     const handleClick = (e: MouseEvent) => {
@@ -111,8 +127,30 @@ function FilterHeader({
         onToggle(colId);
       }
     };
+    const handleReposition = () => {
+      if (!buttonRef.current) return;
+      const rect = buttonRef.current.getBoundingClientRect();
+      const dropdownWidth = dropdownRef.current?.getBoundingClientRect().width || 220;
+      const viewportWidth = window.innerWidth;
+      let left = rect.left;
+      let top = rect.bottom + 4;
+      if (left + dropdownWidth > viewportWidth - 8) {
+        left = Math.max(8, viewportWidth - dropdownWidth - 8);
+      }
+      if (left < 8) left = 8;
+      if (top + 300 > window.innerHeight) {
+        top = rect.top - 304;
+      }
+      setPosition({ top, left });
+    };
     document.addEventListener('mousedown', handleClick);
-    return () => document.removeEventListener('mousedown', handleClick);
+    window.addEventListener('scroll', handleReposition, { capture: true, passive: true });
+    window.addEventListener('resize', handleReposition, { passive: true });
+    return () => {
+      document.removeEventListener('mousedown', handleClick);
+      window.removeEventListener('scroll', handleReposition, true);
+      window.removeEventListener('resize', handleReposition);
+    };
   }, [isOpen, colId, onToggle]);
 
   const handleToggle = (e: React.MouseEvent) => {

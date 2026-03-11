@@ -1069,6 +1069,7 @@
 .dt-column-filter-dropdown {
   position: fixed;
   min-width: 150px;
+  max-width: calc(100vw - 16px);
   padding: 6px;
   background: var(--bg-primary);
   border: 1px solid var(--border-primary);

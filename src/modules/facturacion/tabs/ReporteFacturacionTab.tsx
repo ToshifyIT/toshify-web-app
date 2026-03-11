@@ -283,7 +283,7 @@ async function upsertSaldoConductor(params: {
 export function ReporteFacturacionTab() {
   const { profile } = useAuth()
   const { isAdmin } = usePermissions()
-  const { sedeActualId, sedeUsuario } = useSede()
+  const { sedeActualId, sedeUsuario, loading: sedeLoading } = useSede()
   
   // Ref para auto-recalcular después de crear un nuevo período
   const autoRecalcularRef = useRef(false)
@@ -454,12 +454,15 @@ export function ReporteFacturacionTab() {
 
   // Cargar facturaciones cuando cambia la semana
   useEffect(() => {
+    // Esperar a que el contexto de sede termine de cargar para evitar race condition
+    // (sedeActualId empieza null y luego cambia al valor real de localStorage)
+    if (sedeLoading) return
     // Resetear modo vista previa al cambiar de semana
     setModoVistaPrevia(false)
     setVistaPreviaData([])
     setBuscarConductor('')
     cargarFacturacion()
-  }, [semanaActual, sedeActualId])
+  }, [semanaActual, sedeActualId, sedeLoading])
 
   // Cargar conceptos de nómina al montar (para agregar ajustes manuales)
   useEffect(() => {
@@ -932,7 +935,7 @@ export function ReporteFacturacionTab() {
       const peajesFinSemAnt = format(subWeeks(parseISO(periodoFin), 1), 'yyyy-MM-dd')
 
       // Obtener datos de Cabify incluyendo cobro_app para barras de cobertura
-      const cabifyTable = getCabifyTable(sedeActualId)
+      const cabifyTable = getCabifyTable((periodoData as any).sede_id || sedeActualId)
       const [{ data: cabifyGanancias }, { data: cabifyPeajes }] = await Promise.all([
         supabase.from(cabifyTable)
           .select('dni, cobro_app, cabify_driver_id, cabify_company_id')
@@ -1515,11 +1518,11 @@ export function ReporteFacturacionTab() {
           .select('conductor_id, conductor_nombre, estado, cuotas_pagadas, cuotas_totales, tipo_alquiler, monto_cuota_semanal, monto_pagado, monto_total')
           .in('conductor_id', conductorIds),
         Promise.all([
-          supabase.from(getCabifyTable(sedeActualId))
+          supabase.from(getCabifyTable(sedeParaVP))
             .select('dni, cobro_app, cobro_efectivo')
             .gte('fecha_inicio', fechaInicio + 'T00:00:00')
             .lte('fecha_inicio', fechaFin + 'T23:59:59'),
-          supabase.from(getCabifyTable(sedeActualId))
+          supabase.from(getCabifyTable(sedeParaVP))
             .select('dni, peajes')
             .gte('fecha_inicio', peajesInicio + 'T00:00:00')
             .lte('fecha_inicio', peajesFin + 'T23:59:59'),
@@ -2459,7 +2462,7 @@ export function ReporteFacturacionTab() {
         (() => {
           const peajesInicio = format(subWeeks(parseISO(fechaInicio), 1), 'yyyy-MM-dd')
           const peajesFin = format(subWeeks(parseISO(fechaFin), 1), 'yyyy-MM-dd')
-          return supabase.from(getCabifyTable(sedeActualId)).select('dni, peajes').gte('fecha_inicio', peajesInicio + 'T00:00:00').lte('fecha_inicio', peajesFin + 'T23:59:59')
+          return supabase.from(getCabifyTable(sedeDelPeriodo)).select('dni, peajes').gte('fecha_inicio', peajesInicio + 'T00:00:00').lte('fecha_inicio', peajesFin + 'T23:59:59')
         })(),
         (supabase.from('garantias_conductores') as any).select('*').in('conductor_id', conductorIds),
         (supabase.from('cobros_fraccionados') as any).select('*').in('conductor_id', conductorIds).lte('semana', semanaNum).eq('anio', anioNum),
@@ -6786,9 +6789,10 @@ export function ReporteFacturacionTab() {
       // Cargar datos de Cabify desde cabify_historico (o bariloche según sede)
       const fechaInicio = format(semanaActual.inicio, 'yyyy-MM-dd')
       const fechaFin = format(semanaActual.fin, 'yyyy-MM-dd')
+      const sedeParaPreview = sedeActualId || sedeUsuario?.id
       
       const { data: cabifyData } = await supabase
-        .from(getCabifyTable(sedeActualId))
+        .from(getCabifyTable(sedeParaPreview))
         .select('dni, horas_conectadas, ganancia_total, cobro_app, cobro_efectivo')
         .gte('fecha_inicio', fechaInicio + 'T00:00:00')
         .lte('fecha_inicio', fechaFin + 'T23:59:59')
@@ -6920,8 +6924,9 @@ export function ReporteFacturacionTab() {
       })
 
       // Cargar datos de Cabify desde cabify_historico (para valores por defecto, sede-aware)
+      const sedeParaPreviewGen = periodo.sede_id || sedeActualId
       const { data: cabifyData } = await supabase
-        .from(getCabifyTable(sedeActualId))
+        .from(getCabifyTable(sedeParaPreviewGen))
         .select('dni, horas_conectadas, ganancia_total, cobro_app, cobro_efectivo')
         .gte('fecha_inicio', periodo.fecha_inicio + 'T00:00:00')
         .lte('fecha_inicio', periodo.fecha_fin + 'T23:59:59')
