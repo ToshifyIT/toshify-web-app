@@ -121,18 +121,17 @@ export function CabifyModule() {
   const hasDrivers = drivers.length > 0
   const hasError = Boolean(queryState.error)
 
-  // Label del período actual para mostrar en UI (en hora Argentina)
+  // Label del período actual para mostrar en UI
+  // Las fechas son UTC (ej: 2026-03-09T00:00:00.000Z), extraemos YYYY-MM-DD directamente
+  // para evitar desfase al convertir a zona horaria Argentina (UTC-3)
   const periodLabel = useMemo(() => {
     if (!effectiveDateRange) return 'Sin período'
-    const formatOptions: Intl.DateTimeFormatOptions = {
-      timeZone: 'America/Argentina/Buenos_Aires',
-      day: '2-digit',
-      month: '2-digit',
-      year: 'numeric'
+    const formatISODate = (iso: string) => {
+      const [datePart] = iso.split('T')
+      const [year, month, day] = datePart.split('-')
+      return `${day}/${month}/${year}`
     }
-    const startDate = new Date(effectiveDateRange.startDate).toLocaleDateString('es-AR', formatOptions)
-    const endDate = new Date(effectiveDateRange.endDate).toLocaleDateString('es-AR', formatOptions)
-    return `${startDate} - ${endDate}`
+    return `${formatISODate(effectiveDateRange.startDate)} - ${formatISODate(effectiveDateRange.endDate)}`
   }, [effectiveDateRange])
 
   // Separar conductores con y sin asignación activa
@@ -379,6 +378,8 @@ function useTableColumns(
       { ...createMoneyColumn('cobroEfectivo', 'Efectivo'), size: 110, minSize: 95 },
       { ...createMoneyColumn('cobroApp', 'App'), size: 110, minSize: 95 },
       { ...createMoneyColumn('peajes', 'Peajes', 'cabify-money tolls'), size: 100, minSize: 85 },
+      { ...createMoneyColumn('promociones', 'Promociones', 'cabify-money promos'), size: 115, minSize: 95 },
+      { ...createDeduccionesColumn(), size: 115, minSize: 95 },
       { ...createPermisoEfectivoColumn(), size: 110, minSize: 95 },
     ],
     [asignaciones]
@@ -546,6 +547,21 @@ function createTasaOcupacionColumn(): ColumnDef<CabifyDriver, unknown> {
           {rate ? `${rate}%` : '-'}
         </span>
       )
+    },
+  }
+}
+
+function createDeduccionesColumn(): ColumnDef<CabifyDriver, unknown> {
+  return {
+    accessorKey: 'deducciones',
+    header: 'Deducciones',
+    cell: ({ getValue }) => {
+      const rawValue = getValue() as string | number
+      const numValue = Number(rawValue) || 0
+      const formatted = numValue > 0
+        ? `-${numValue.toLocaleString('es-AR', { style: 'currency', currency: 'ARS', minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+        : numValue.toLocaleString('es-AR', { style: 'currency', currency: 'ARS', minimumFractionDigits: 2, maximumFractionDigits: 2 })
+      return <span className="cabify-money deductions" style={{ color: numValue > 0 ? '#dc2626' : undefined }}>{formatted}</span>
     },
   }
 }

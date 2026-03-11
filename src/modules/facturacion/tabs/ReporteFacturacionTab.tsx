@@ -176,7 +176,7 @@ interface FacturacionConductor {
   fecha_pago?: string | null
   // Estado de facturación semanal (Activo, Pausa, De baja)
   estado_billing?: 'Activo' | 'Pausa' | 'De baja'
-  // Alquiler proyectado a semana completa (precio_unitario * 49)
+  // Alquiler proyectado a semana completa (precio_unitario * 7)
   proyectado_alquiler?: number
   // Alerta: fecha_terminacion del conductor no coincide con fecha_fin de asignación
   fecha_baja_no_coincide?: boolean
@@ -189,6 +189,8 @@ interface FacturacionConductor {
     fecha_entrega: string
     descuento_turnos: number
   } | null
+  // GNC del vehículo asignado (leído de tabla vehiculos)
+  tiene_gnc?: boolean
 }
 
 interface FacturacionDetalle {
@@ -281,7 +283,7 @@ async function upsertSaldoConductor(params: {
 export function ReporteFacturacionTab() {
   const { profile } = useAuth()
   const { isAdmin } = usePermissions()
-  const { sedeActualId, sedeUsuario } = useSede()
+  const { sedeActualId, sedeUsuario, loading: sedeLoading } = useSede()
   
   // Ref para auto-recalcular después de crear un nuevo período
   const autoRecalcularRef = useRef(false)
@@ -424,7 +426,7 @@ export function ReporteFacturacionTab() {
   const [showSiFacturaPreview, setShowSiFacturaPreview] = useState(false)
   const [siFacturaPreviewData, setSiFacturaPreviewData] = useState<FacturacionPreviewRow[]>([])
   const [loadingSiFacturaPreview, setLoadingSiFacturaPreview] = useState(false)
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+   
   const [conceptosPendientes, setConceptosPendientes] = useState<ConceptoPendiente[]>([])
   const [conceptosNomina, setConceptosNomina] = useState<ConceptoNomina[]>([])
 
@@ -452,12 +454,15 @@ export function ReporteFacturacionTab() {
 
   // Cargar facturaciones cuando cambia la semana
   useEffect(() => {
+    // Esperar a que el contexto de sede termine de cargar para evitar race condition
+    // (sedeActualId empieza null y luego cambia al valor real de localStorage)
+    if (sedeLoading) return
     // Resetear modo vista previa al cambiar de semana
     setModoVistaPrevia(false)
     setVistaPreviaData([])
     setBuscarConductor('')
     cargarFacturacion()
-  }, [semanaActual, sedeActualId])
+  }, [semanaActual, sedeActualId, sedeLoading])
 
   // Cargar conceptos de nómina al montar (para agregar ajustes manuales)
   useEffect(() => {
@@ -473,6 +478,28 @@ export function ReporteFacturacionTab() {
       }
     }
     cargarConceptos()
+  }, [])
+
+  // Realtime: actualizar badge GNC cuando cambia en tabla vehiculos
+  useEffect(() => {
+    const channel = supabase
+      .channel('vehiculos-gnc-changes')
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'vehiculos' }, (payload) => {
+        const updated = payload.new as { patente?: string; gnc?: boolean }
+        if (updated.patente == null) return
+        const patente = updated.patente
+        const gnc = updated.gnc === true
+
+        setVistaPreviaData(prev => prev.map(f =>
+          f.vehiculo_patente === patente ? { ...f, tiene_gnc: gnc } : f
+        ))
+        setFacturaciones(prev => prev.map(f =>
+          f.vehiculo_patente === patente ? { ...f, tiene_gnc: gnc } : f
+        ))
+      })
+      .subscribe()
+
+    return () => { supabase.removeChannel(channel) }
   }, [])
 
   // Cerrar dropdown de filtro al hacer click fuera
@@ -908,7 +935,7 @@ export function ReporteFacturacionTab() {
       const peajesFinSemAnt = format(subWeeks(parseISO(periodoFin), 1), 'yyyy-MM-dd')
 
       // Obtener datos de Cabify incluyendo cobro_app para barras de cobertura
-      const cabifyTable = getCabifyTable(sedeActualId)
+      const cabifyTable = getCabifyTable((periodoData as any).sede_id || sedeActualId)
       const [{ data: cabifyGanancias }, { data: cabifyPeajes }] = await Promise.all([
         supabase.from(cabifyTable)
           .select('dni, cobro_app, cabify_driver_id, cabify_company_id')
@@ -929,20 +956,20 @@ export function ReporteFacturacionTab() {
         }
       })
 
-      // Agrupar peajes por DNI (semana anterior)
+      // Agrupar peajes por DNI (semana anterior) - incluir todos los días del rango
       const peajesPorDni = new Map<string, number>()
       const peajesDetalleMap = new Map<string, Array<{ fecha: string; monto: number }>>()
       ;(cabifyPeajes || []).forEach((c: any) => {
-        if (c.dni && c.peajes) {
-          const dniNorm = normalizeDni(c.dni)
-          const monto = parseFloat(String(c.peajes)) || 0
+        if (!c.dni) return
+        const dniNorm = normalizeDni(c.dni)
+        const monto = parseFloat(String(c.peajes)) || 0
+        if (monto > 0) {
           peajesPorDni.set(dniNorm, (peajesPorDni.get(dniNorm) || 0) + monto)
-          
-          // Guardar detalle por fecha para popup
-          const fecha = c.fecha_inicio ? c.fecha_inicio.split('T')[0] : 's/f'
-          if (!peajesDetalleMap.has(dniNorm)) peajesDetalleMap.set(dniNorm, [])
-          peajesDetalleMap.get(dniNorm)!.push({ fecha, monto })
         }
+        // Guardar detalle por fecha para popup (todos los días, incluyendo $0)
+        const fecha = c.fecha_inicio ? c.fecha_inicio.split('T')[0] : 's/f'
+        if (!peajesDetalleMap.has(dniNorm)) peajesDetalleMap.set(dniNorm, [])
+        peajesDetalleMap.get(dniNorm)!.push({ fecha, monto })
       })
 
       // Agregar cobro_app de Cabify a cada facturación (para barras de cobertura)
@@ -1045,12 +1072,12 @@ export function ReporteFacturacionTab() {
         }
       })
 
-      // Construir mapa de alquiler proyectado: facturacion_id → Math.round(precio_unitario * 49)
+      // Construir mapa de alquiler proyectado: facturacion_id → Math.round(precio_unitario * 7)
       const proyectadoMap = new Map<string, number>()
       ;(alquilerDetalleData || []).forEach((d: any) => {
         const pu = Number(d.precio_unitario) || 0
         if (pu > 0) {
-          proyectadoMap.set(d.facturacion_id, Math.round(pu * 49))
+          proyectadoMap.set(d.facturacion_id, Math.round(pu * 7))
         }
       })
 
@@ -1064,6 +1091,24 @@ export function ReporteFacturacionTab() {
       facturacionesTransformadas.sort((a: any, b: any) => 
         (a.conductor_nombre || '').localeCompare(b.conductor_nombre || '')
       )
+
+      // Cruzar patentes con tabla vehiculos para obtener GNC actual
+      const patentesUnicasLoad = [...new Set(facturacionesTransformadas.map((f: any) => f.vehiculo_patente).filter(Boolean))]
+      if (patentesUnicasLoad.length > 0) {
+        const { data: vehiculosGncLoad } = await supabase
+          .from('vehiculos')
+          .select('patente, gnc')
+          .in('patente', patentesUnicasLoad)
+        if (vehiculosGncLoad) {
+          const gncMapLoad = new Map(vehiculosGncLoad.map((v: any) => [v.patente, v.gnc === true]))
+          facturacionesTransformadas = facturacionesTransformadas.map((f: any) => ({
+            ...f,
+            tiene_gnc: f.vehiculo_patente && gncMapLoad.has(f.vehiculo_patente)
+              ? gncMapLoad.get(f.vehiculo_patente)
+              : undefined,
+          }))
+        }
+      }
 
       setFacturaciones(facturacionesTransformadas as FacturacionConductor[])
       setExcesos((excesosData || []) as ExcesoKm[])
@@ -1091,7 +1136,7 @@ export function ReporteFacturacionTab() {
 
       // 1. Cargar conductores desde asignaciones que se solapan con la semana + penalidades pendientes
       const sedeParaVP = sedeActualId || sedeUsuario?.id
-      const conductoresControl: { numero_dni: string; estado: string; patente: string; modalidad: string; valor_alquiler: number | null }[] = []
+      const conductoresControl: { numero_dni: string; estado: string; patente: string; modalidad: string; valor_alquiler: number | null; tiene_gnc: boolean }[] = []
       const dnisAgregadosVP = new Set<string>()
 
       // 1a + 1b + 1c en paralelo (son independientes entre sí)
@@ -1099,7 +1144,7 @@ export function ReporteFacturacionTab() {
         (supabase.from('asignaciones_conductores') as any)
           .select(`
             conductor_id, horario, fecha_inicio, fecha_fin, estado,
-            asignaciones!inner(horario, estado, fecha_fin, vehiculo_id, vehiculos(patente)),
+            asignaciones!inner(horario, estado, fecha_fin, vehiculo_id, vehiculos(patente, gnc)),
             conductores!inner(numero_dni, sede_id)
           `)
           .in('estado', ['asignado', 'activo', 'activa', 'finalizado', 'finalizada', 'completado', 'cancelado', 'cancelada']),
@@ -1147,7 +1192,8 @@ export function ReporteFacturacionTab() {
               estado: 'Activo',
               patente: asig.vehiculos?.patente || '',
               modalidad,
-              valor_alquiler: null
+              valor_alquiler: null,
+              tiene_gnc: asig.vehiculos?.gnc === true,
             })
           }
         }
@@ -1173,7 +1219,8 @@ export function ReporteFacturacionTab() {
             estado: 'Activo',
             patente: '',
             modalidad: 'TURNO',
-            valor_alquiler: null
+            valor_alquiler: null,
+            tiene_gnc: true,
           })
         }
       }
@@ -1213,6 +1260,7 @@ export function ReporteFacturacionTab() {
       interface ProrrateoVistaPrevia {
         CARGO: number; TURNO_DIURNO: number; TURNO_NOCTURNO: number;
         monto_CARGO: number; monto_TURNO_DIURNO: number; monto_TURNO_NOCTURNO: number;
+        proyectado_raw: number;
       }
       const prorrateoMap = new Map<string, ProrrateoVistaPrevia>()
       
@@ -1220,7 +1268,8 @@ export function ReporteFacturacionTab() {
       conductorIds.forEach((id: string) => {
         prorrateoMap.set(id, { 
           CARGO: 0, TURNO_DIURNO: 0, TURNO_NOCTURNO: 0,
-          monto_CARGO: 0, monto_TURNO_DIURNO: 0, monto_TURNO_NOCTURNO: 0
+          monto_CARGO: 0, monto_TURNO_DIURNO: 0, monto_TURNO_NOCTURNO: 0,
+          proyectado_raw: 0,
         })
       })
 
@@ -1438,6 +1487,13 @@ export function ReporteFacturacionTab() {
           }
         }
         
+        // Calcular proyectado ANTES de redondear para evitar error de redondeo intermedio
+        const diasRaw = prorrateo.CARGO + prorrateo.TURNO_DIURNO + prorrateo.TURNO_NOCTURNO
+        const subtotalRaw = prorrateo.monto_CARGO + prorrateo.monto_TURNO_DIURNO + prorrateo.monto_TURNO_NOCTURNO
+        prorrateo.proyectado_raw = diasRaw > 0 && diasRaw < 7
+          ? Math.round((subtotalRaw / diasRaw) * 7)
+          : Math.round(subtotalRaw)
+
         prorrateo.monto_CARGO = Math.round(prorrateo.monto_CARGO)
         prorrateo.monto_TURNO_DIURNO = Math.round(prorrateo.monto_TURNO_DIURNO)
         prorrateo.monto_TURNO_NOCTURNO = Math.round(prorrateo.monto_TURNO_NOCTURNO)
@@ -1462,11 +1518,11 @@ export function ReporteFacturacionTab() {
           .select('conductor_id, conductor_nombre, estado, cuotas_pagadas, cuotas_totales, tipo_alquiler, monto_cuota_semanal, monto_pagado, monto_total')
           .in('conductor_id', conductorIds),
         Promise.all([
-          supabase.from(getCabifyTable(sedeActualId))
+          supabase.from(getCabifyTable(sedeParaVP))
             .select('dni, cobro_app, cobro_efectivo')
             .gte('fecha_inicio', fechaInicio + 'T00:00:00')
             .lte('fecha_inicio', fechaFin + 'T23:59:59'),
-          supabase.from(getCabifyTable(sedeActualId))
+          supabase.from(getCabifyTable(sedeParaVP))
             .select('dni, peajes')
             .gte('fecha_inicio', peajesInicio + 'T00:00:00')
             .lte('fecha_inicio', peajesFin + 'T23:59:59'),
@@ -1527,23 +1583,22 @@ export function ReporteFacturacionTab() {
       const peajesMap = new Map<string, number>()
       const peajesDetalleMap = new Map<string, Array<{ fecha: string; monto: number }>>()
       ;(cabifyPeajesData || []).forEach((record: any) => {
-        if (record.dni && record.peajes) {
-          let dniKey = String(record.dni)
-          if (dniKey.startsWith('CABIFY_')) {
-            const resolved = cabifyHashMap.get(dniKey)
-            if (resolved) dniKey = resolved
-            else return // Hash desconocido, skip
-          }
-          const dniNorm = normalizeDni(dniKey)
-          const actualPeajes = peajesMap.get(dniNorm) || 0
-          const peajes = parseFloat(String(record.peajes)) || 0
-          peajesMap.set(dniNorm, actualPeajes + peajes)
-          
-          // Guardar detalle por fecha para popup
-          const fecha = record.fecha_inicio ? record.fecha_inicio.split('T')[0] : 's/f'
-          if (!peajesDetalleMap.has(dniNorm)) peajesDetalleMap.set(dniNorm, [])
-          peajesDetalleMap.get(dniNorm)!.push({ fecha, monto: peajes })
+        if (!record.dni) return
+        let dniKey = String(record.dni)
+        if (dniKey.startsWith('CABIFY_')) {
+          const resolved = cabifyHashMap.get(dniKey)
+          if (resolved) dniKey = resolved
+          else return // Hash desconocido, skip
         }
+        const dniNorm = normalizeDni(dniKey)
+        const peajes = parseFloat(String(record.peajes)) || 0
+        if (peajes > 0) {
+          peajesMap.set(dniNorm, (peajesMap.get(dniNorm) || 0) + peajes)
+        }
+        // Guardar detalle por fecha para popup (todos los días, incluyendo $0)
+        const fecha = record.fecha_inicio ? record.fecha_inicio.split('T')[0] : 's/f'
+        if (!peajesDetalleMap.has(dniNorm)) peajesDetalleMap.set(dniNorm, [])
+        peajesDetalleMap.get(dniNorm)!.push({ fecha, monto: peajes })
       })
 
       const ticketsMap = new Map<string, number>()
@@ -1725,7 +1780,8 @@ export function ReporteFacturacionTab() {
         // Obtener prorrateo de días y montos por modalidad/horario (con precios históricos)
         const prorrateo = prorrateoMap.get(conductorId) || { 
           CARGO: 0, TURNO_DIURNO: 0, TURNO_NOCTURNO: 0,
-          monto_CARGO: 0, monto_TURNO_DIURNO: 0, monto_TURNO_NOCTURNO: 0
+          monto_CARGO: 0, monto_TURNO_DIURNO: 0, monto_TURNO_NOCTURNO: 0,
+          proyectado_raw: 0,
         }
         const diasTotales = Math.min(7, prorrateo.CARGO + prorrateo.TURNO_DIURNO + prorrateo.TURNO_NOCTURNO)
         
@@ -1733,7 +1789,7 @@ export function ReporteFacturacionTab() {
         if (diasTotales === 0 && !dnisConPenalidadesVP.has(control.numero_dni)) continue
         
         // Calcular alquiler usando montos pre-calculados con precios (precio_final ya incluye IVA)
-        let subtotalAlquiler = prorrateo.monto_CARGO + prorrateo.monto_TURNO_DIURNO + prorrateo.monto_TURNO_NOCTURNO
+        const subtotalAlquiler = prorrateo.monto_CARGO + prorrateo.monto_TURNO_DIURNO + prorrateo.monto_TURNO_NOCTURNO
         // precio_final ya incluye IVA - no se agrega de nuevo
         
         // Determinar tipo de alquiler predominante para garantía
@@ -1831,9 +1887,7 @@ export function ReporteFacturacionTab() {
           turnos_cobrados: Math.round(factorProporcional * 7),
           factor_proporcional: factorProporcional,
            subtotal_alquiler: subtotalAlquiler,
-          proyectado_alquiler: diasTotales > 0 && diasTotales < 7
-            ? Math.round((subtotalAlquiler / diasTotales) * 7)
-            : subtotalAlquiler,
+           proyectado_alquiler: prorrateo.proyectado_raw || subtotalAlquiler,
           subtotal_garantia: subtotalGarantia,
           subtotal_cargos: subtotalCargos,
           subtotal_descuentos: subtotalDescuentos,
@@ -1874,7 +1928,9 @@ export function ReporteFacturacionTab() {
               const tieneAsignacionCierre = conductoresConAsignacionAlCierreVP.has(conductorId)
               return (diasTotales >= 7 || tieneAsignacionCierre) ? 'Activo' : 'Pausa'
             })(),
-            // Discrepancia de formato DNI
+             // GNC del vehículo (leído de tabla vehiculos)
+             tiene_gnc: control.tiene_gnc,
+             // Discrepancia de formato DNI
             dni_discrepancy: dniDiscrepancy ? { conductorRaw: conductorRawDni, cabifyRaw: cabifyRawDni } : null,
             // Detectar si fecha_terminacion no coincide con fecha_fin de asignación
             fecha_baja_no_coincide: (() => {
@@ -1901,7 +1957,25 @@ export function ReporteFacturacionTab() {
        // Ordenar por nombre
        facturacionesProyectadas.sort((a, b) => a.conductor_nombre.localeCompare(b.conductor_nombre))
 
-      setVistaPreviaData(facturacionesProyectadas)
+      // Cruzar patentes con tabla vehiculos para obtener GNC actual en tiempo real
+      const patentesUnicas = [...new Set(facturacionesProyectadas.map(f => f.vehiculo_patente).filter(Boolean))]
+      let facturacionesConGnc: FacturacionConductor[] = facturacionesProyectadas
+      if (patentesUnicas.length > 0) {
+        const { data: vehiculosGnc } = await supabase
+          .from('vehiculos')
+          .select('patente, gnc')
+          .in('patente', patentesUnicas)
+        if (vehiculosGnc) {
+          const gncMap = new Map(vehiculosGnc.map((v: any) => [v.patente, v.gnc === true]))
+          facturacionesConGnc = facturacionesProyectadas.map(f =>
+            f.vehiculo_patente && gncMap.has(f.vehiculo_patente)
+              ? { ...f, tiene_gnc: gncMap.get(f.vehiculo_patente)! }
+              : f
+          )
+        }
+      }
+
+      setVistaPreviaData(facturacionesConGnc)
 
     } catch (error) {
       if (showError) {
@@ -2074,7 +2148,7 @@ export function ReporteFacturacionTab() {
       await supabase.from('facturacion_conductores').delete().eq('periodo_id', periodoId)
 
       // 3. Cargar conductores desde asignaciones que se solapan con la semana + penalidades pendientes
-      const conductoresControl: { numero_dni: string; estado: string; patente: string; modalidad: string; valor_alquiler: number | null }[] = []
+      const conductoresControl: { numero_dni: string; estado: string; patente: string; modalidad: string; valor_alquiler: number | null; tiene_gnc: boolean }[] = []
       const dnisAgregadosRecalc = new Set<string>()
       const dnisConPenalidadesRecalc = new Set<string>()
 
@@ -2084,7 +2158,7 @@ export function ReporteFacturacionTab() {
           .from('asignaciones_conductores') as any)
           .select(`
             conductor_id, horario, fecha_inicio, fecha_fin, estado,
-            asignaciones!inner(horario, estado, fecha_fin, vehiculo_id, vehiculos(patente)),
+            asignaciones!inner(horario, estado, fecha_fin, vehiculo_id, vehiculos(patente, gnc)),
             conductores!inner(numero_dni, sede_id)
           `)
           .in('estado', ['asignado', 'activo', 'activa', 'finalizado', 'finalizada', 'completado', 'cancelado', 'cancelada'])
@@ -2117,7 +2191,8 @@ export function ReporteFacturacionTab() {
               estado: 'Activo',
               patente: asig.vehiculos?.patente || '',
               modalidad,
-              valor_alquiler: null
+              valor_alquiler: null,
+              tiene_gnc: asig.vehiculos?.gnc === true,
             })
           }
         }
@@ -2145,7 +2220,8 @@ export function ReporteFacturacionTab() {
             estado: 'Activo',
             patente: '',
             modalidad: 'TURNO',
-            valor_alquiler: null
+            valor_alquiler: null,
+            tiene_gnc: true,
           })
         }
       }
@@ -2386,7 +2462,7 @@ export function ReporteFacturacionTab() {
         (() => {
           const peajesInicio = format(subWeeks(parseISO(fechaInicio), 1), 'yyyy-MM-dd')
           const peajesFin = format(subWeeks(parseISO(fechaFin), 1), 'yyyy-MM-dd')
-          return supabase.from(getCabifyTable(sedeActualId)).select('dni, peajes').gte('fecha_inicio', peajesInicio + 'T00:00:00').lte('fecha_inicio', peajesFin + 'T23:59:59')
+          return supabase.from(getCabifyTable(sedeDelPeriodo)).select('dni, peajes').gte('fecha_inicio', peajesInicio + 'T00:00:00').lte('fecha_inicio', peajesFin + 'T23:59:59')
         })(),
         (supabase.from('garantias_conductores') as any).select('*').in('conductor_id', conductorIds),
         (supabase.from('cobros_fraccionados') as any).select('*').in('conductor_id', conductorIds).lte('semana', semanaNum).eq('anio', anioNum),
@@ -2492,19 +2568,26 @@ export function ReporteFacturacionTab() {
         (dniMapeoResRecalc.data || []).map((m: any) => [m.cabify_hash, m.dni_real])
       )
 
-      // Mapear peajes por DNI (normalizado)
+      // Mapear peajes por DNI (normalizado) - incluir todos los días del rango
       const peajesMap = new Map<string, number>()
+      const peajesDetalleMapRecalc = new Map<string, Array<{ fecha: string; monto: number }>>()
       ;((cabifyRes.data || []) as any[]).forEach((r: any) => {
-        if (r.dni && r.peajes) {
-          let dniKey = String(r.dni)
-          if (dniKey.startsWith('CABIFY_')) {
-            const resolved = cabifyHashMapRecalc.get(dniKey)
-            if (resolved) dniKey = resolved
-            else return // Hash desconocido, skip
-          }
-          const dniNorm = normalizeDni(dniKey)
-          peajesMap.set(dniNorm, (peajesMap.get(dniNorm) || 0) + (parseFloat(String(r.peajes)) || 0))
+        if (!r.dni) return
+        let dniKey = String(r.dni)
+        if (dniKey.startsWith('CABIFY_')) {
+          const resolved = cabifyHashMapRecalc.get(dniKey)
+          if (resolved) dniKey = resolved
+          else return // Hash desconocido, skip
         }
+        const dniNorm = normalizeDni(dniKey)
+        const peajes = parseFloat(String(r.peajes)) || 0
+        if (peajes > 0) {
+          peajesMap.set(dniNorm, (peajesMap.get(dniNorm) || 0) + peajes)
+        }
+        // Guardar detalle por fecha para popup (todos los días, incluyendo $0)
+        const fecha = r.fecha_inicio ? r.fecha_inicio.split('T')[0] : 's/f'
+        if (!peajesDetalleMapRecalc.has(dniNorm)) peajesDetalleMapRecalc.set(dniNorm, [])
+        peajesDetalleMapRecalc.get(dniNorm)!.push({ fecha, monto: peajes })
       })
 
       // Mapear multas por patente
@@ -2703,11 +2786,12 @@ export function ReporteFacturacionTab() {
         const cobroIdsAplicar: string[] = []
 
         // Alquiler detalles (P001/P002/P013)
+        // precio_unitario = precio DIARIO (precio_final de conceptos_nomina ya es diario)
         for (const detalle of detallesAlquiler) {
           let precioUnitario = 0
-          if (detalle.codigo === 'P001') precioUnitario = precioTurnoDiurno / 7
-          else if (detalle.codigo === 'P013') precioUnitario = precioTurnoNocturno / 7
-          else if (detalle.codigo === 'P002') precioUnitario = precioCargo / 7
+          if (detalle.codigo === 'P001') precioUnitario = precioTurnoDiurno
+          else if (detalle.codigo === 'P013') precioUnitario = precioTurnoNocturno
+          else if (detalle.codigo === 'P002') precioUnitario = precioCargo
           todosDetalles.push({
             facturacion_id: facturacionId, concepto_codigo: detalle.codigo,
             concepto_descripcion: detalle.descripcion, cantidad: detalle.dias,
@@ -3602,7 +3686,7 @@ export function ReporteFacturacionTab() {
     const total = item.total
 
     // Desglose básico que siempre se muestra
-    let htmlBasico = `
+    const htmlBasico = `
       <div style="display:grid; grid-template-columns:120px 1fr; gap:4px 12px; font-size:13px; line-height:1.8">
         <strong>Código:</strong> <span>${codigo}</span>
         <strong>Concepto:</strong> <span>${desc}</span>
@@ -4495,7 +4579,7 @@ export function ReporteFacturacionTab() {
     setVistaPreviaData([])
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+   
   function cerrarDetalle() {
     setShowDetalle(false)
     setDetallePagos([])
@@ -6705,9 +6789,10 @@ export function ReporteFacturacionTab() {
       // Cargar datos de Cabify desde cabify_historico (o bariloche según sede)
       const fechaInicio = format(semanaActual.inicio, 'yyyy-MM-dd')
       const fechaFin = format(semanaActual.fin, 'yyyy-MM-dd')
+      const sedeParaPreview = sedeActualId || sedeUsuario?.id
       
       const { data: cabifyData } = await supabase
-        .from(getCabifyTable(sedeActualId))
+        .from(getCabifyTable(sedeParaPreview))
         .select('dni, horas_conectadas, ganancia_total, cobro_app, cobro_efectivo')
         .gte('fecha_inicio', fechaInicio + 'T00:00:00')
         .lte('fecha_inicio', fechaFin + 'T23:59:59')
@@ -6839,8 +6924,9 @@ export function ReporteFacturacionTab() {
       })
 
       // Cargar datos de Cabify desde cabify_historico (para valores por defecto, sede-aware)
+      const sedeParaPreviewGen = periodo.sede_id || sedeActualId
       const { data: cabifyData } = await supabase
-        .from(getCabifyTable(sedeActualId))
+        .from(getCabifyTable(sedeParaPreviewGen))
         .select('dni, horas_conectadas, ganancia_total, cobro_app, cobro_efectivo')
         .gte('fecha_inicio', periodo.fecha_inicio + 'T00:00:00')
         .lte('fecha_inicio', periodo.fecha_fin + 'T23:59:59')
@@ -6892,7 +6978,7 @@ export function ReporteFacturacionTab() {
             const conductorId = dbIdToConId.get(d.facturacion_id)
             const pu = Number(d.precio_unitario) || 0
             if (conductorId && pu > 0) {
-              precioSemanalByConductor.set(conductorId, Math.round(pu * 49))
+              precioSemanalByConductor.set(conductorId, Math.round(pu * 7))
             }
           })
         }
@@ -7197,7 +7283,7 @@ export function ReporteFacturacionTab() {
           const totalAlquilerActual = src.reduce((s, f) => s + (f.subtotal_alquiler || 0), 0)
           const porcentaje = totalProyectado > 0 ? Math.round(totalAlquilerActual / totalProyectado * 100) : 0
           return `<div style="text-align:left;font-size:13px;">
-            <p>Alquiler semanal proyectado (precio_unitario × 49):</p>
+            <p>Alquiler semanal proyectado (precio_unitario × 7):</p>
             <table style="width:100%;border-collapse:collapse;">
               <tr><td>Conductores con alquiler</td><td style="text-align:right"><b>${conductoresConProyectado.length}</b></td></tr>
               <tr><td>Proyectado semanal</td><td style="text-align:right"><b>${formatCurrency(totalProyectado)}</b></td></tr>
@@ -7385,7 +7471,7 @@ export function ReporteFacturacionTab() {
               else if (diurno > 0 && nocturno > 0) label = 'D+N'
               return <span className="dt-badge dt-badge-solid-gray" style={{ fontSize: '9px', padding: '1px 5px' }}>{label}</span>
             })()}
-            {['AG558DZ', 'AG304XD'].includes(normalizePatente(row.original.vehiculo_patente)) && (
+            {row.original.tiene_gnc === false && row.original.vehiculo_patente && (
               <span className="dt-badge dt-badge-orange" style={{ fontSize: '9px', padding: '1px 5px' }}>Sin GNC</span>
             )}
           </div>
@@ -7501,7 +7587,7 @@ export function ReporteFacturacionTab() {
               justifyContent: 'space-between',
               alignItems: 'center'
             }}>
-              <span>{porcentajeCubierto}% cubierto</span>
+              <span>{cobroApp === 0 ? 'Sin datos Cabify' : `${porcentajeCubierto}% cubierto`}</span>
               {cubreCuota && <span style={{ color: '#10b981', fontWeight: 600 }}>✓</span>}
             </div>
           </div>
@@ -8502,7 +8588,7 @@ export function ReporteFacturacionTab() {
             const countIngreso = vistaPreviaData.filter(f => f.alerta_prorrateo_ingreso).length
             const countBaja = vistaPreviaData.filter(f => f.estado_billing === 'De baja').length
             const countPausa = vistaPreviaData.filter(f => f.estado_billing === 'Pausa').length
-            const countSinGnc = vistaPreviaData.filter(f => f.vehiculo_patente && ['AG558DZ', 'AG304XD'].includes(normalizePatente(f.vehiculo_patente))).length
+            const countSinGnc = vistaPreviaData.filter(f => f.tiene_gnc === false && f.vehiculo_patente).length
             const hayAlertas = countIngreso > 0 || countBaja > 0 || countPausa > 0 || countSinGnc > 0
             if (!hayAlertas) return null
             const btnStyle = (active: boolean, bg: string, color: string) => ({
@@ -8565,7 +8651,7 @@ export function ReporteFacturacionTab() {
               if (filtroAlerta === 'ingreso' && !f.alerta_prorrateo_ingreso) return false
               if (filtroAlerta === 'baja' && f.estado_billing !== 'De baja') return false
               if (filtroAlerta === 'pausa' && f.estado_billing !== 'Pausa') return false
-              if (filtroAlerta === 'sin_gnc' && !(f.vehiculo_patente && ['AG558DZ', 'AG304XD'].includes(normalizePatente(f.vehiculo_patente)))) return false
+              if (filtroAlerta === 'sin_gnc' && !(f.tiene_gnc === false && f.vehiculo_patente)) return false
               return true
             })}
             columns={columns}
@@ -8720,7 +8806,7 @@ export function ReporteFacturacionTab() {
               const countIngreso = src.filter(f => f.alerta_prorrateo_ingreso).length
               const countBaja = src.filter(f => f.estado_billing === 'De baja').length
               const countPausa = src.filter(f => f.estado_billing === 'Pausa').length
-              const countSinGnc = src.filter(f => f.vehiculo_patente && ['AG558DZ', 'AG304XD'].includes(normalizePatente(f.vehiculo_patente))).length
+              const countSinGnc = src.filter(f => f.tiene_gnc === false && f.vehiculo_patente).length
               const hayAlertas = countIngreso > 0 || countBaja > 0 || countPausa > 0 || countSinGnc > 0
               if (!hayAlertas) return null
               const btnStyle = (active: boolean, bg: string, color: string) => ({
@@ -8771,7 +8857,7 @@ export function ReporteFacturacionTab() {
                 if (filtroAlerta === 'ingreso') return !!f.alerta_prorrateo_ingreso
                 if (filtroAlerta === 'baja') return f.estado_billing === 'De baja'
                 if (filtroAlerta === 'pausa') return f.estado_billing === 'Pausa'
-                if (filtroAlerta === 'sin_gnc') return f.vehiculo_patente && ['AG558DZ', 'AG304XD'].includes(normalizePatente(f.vehiculo_patente))
+                if (filtroAlerta === 'sin_gnc') return f.tiene_gnc === false && f.vehiculo_patente
                 return true
               }) : facturacionesFiltradas}
               columns={columns}
@@ -8815,6 +8901,15 @@ export function ReporteFacturacionTab() {
                     Pendiente: {formatCurrency(pendiente)}
                   </span>
                 </div>
+                {cobroAppPopup.cobroApp === 0 && (
+                  <div style={{
+                    backgroundColor: '#fef3c7', border: '1px solid #f59e0b', borderRadius: '6px',
+                    padding: '8px 12px', fontSize: '11px', color: '#92400e', marginBottom: '8px',
+                    lineHeight: '1.4'
+                  }}>
+                    No se encontraron datos de cobro en Cabify para este conductor. Esto puede deberse a que el DNI no coincide con el registro en Cabify o a que aun no se sincronizaron los datos de esta semana.
+                  </div>
+                )}
                 {/* Barra de progreso */}
                 <div style={{
                   width: '100%', height: '14px', backgroundColor: '#e5e7eb',

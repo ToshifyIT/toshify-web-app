@@ -156,7 +156,11 @@ export const wialonBitacoraService = {
 
     // Aplicar filtros en la query
     if (options?.patente) {
-      query = query.ilike('patente', `%${options.patente}%`)
+      // Buscar en patente, patente_normalizada, conductor e ibutton con OR
+      const term = options.patente.replace(/[\s\-.]/g, '').toUpperCase()
+      query = query.or(
+        `patente.ilike.%${options.patente}%,patente_normalizada.ilike.%${term}%,conductor_wialon.ilike.%${options.patente}%,ibutton.ilike.%${options.patente}%`
+      )
     }
 
     if (options?.conductor) {

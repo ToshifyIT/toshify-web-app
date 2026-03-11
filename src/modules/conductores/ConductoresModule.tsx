@@ -4,7 +4,7 @@ import { useState, useEffect, useMemo } from "react";
 import { Eye, Edit2, Trash2, AlertTriangle, Users, UserCheck, UserX, Clock, Filter, FolderOpen, FolderPlus, Loader2, History, RefreshCw, ShieldX } from "lucide-react";
 import { ActionsMenu } from "../../components/ui/ActionsMenu";
 import { VerLogsButton } from "../../components/ui/VerLogsButton";
-import { DriveFilesModal } from "../../components/DriveFilesModal";
+
 import { HistorialModal } from "../../components/ui/HistorialModal";
 import { supabase } from "../../lib/supabase";
 import { usePermissions } from "../../contexts/PermissionsContext";
@@ -28,7 +28,7 @@ import { LoadingOverlay } from "../../components/ui/LoadingOverlay";
 import { ExcelColumnFilter } from "../../components/ui/DataTable/ExcelColumnFilter";
 import "./ConductoresModule.css";
 import { ConductorWizard } from "./components/ConductorWizard";
-import { cabifyService } from "../../services/cabifyService";
+
 import { createConductorDriveFolder } from "../../services/driveService";
 import { AddressAutocomplete } from "../../components/ui/AddressAutocomplete";
 import { registrarHistorialConductor, registrarHistorialVehiculo } from "../../services/historialService";
@@ -82,6 +82,8 @@ export function ConductoresModule() {
   const [turnoFilter, setTurnoFilter] = useState<string[]>([]);
   const [categoriaFilter, setCategoriaFilter] = useState<string[]>([]);
   const [asignacionFilter, setAsignacionFilter] = useState<string[]>([]);
+  const [vencimientoFilter, setVencimientoFilter] = useState<string[]>([]);
+  const [telefonoFilter, setTelefonoFilter] = useState<string[]>([]);
   const [licenciaVencerFilter] = useState(false);
   const [openColumnFilter, setOpenColumnFilter] = useState<string | null>(null);
   const [activeStatCard, setActiveStatCard] = useState<string | null>(null);
@@ -97,25 +99,7 @@ export function ConductoresModule() {
   const [affectedAssignments, setAffectedAssignments] = useState<any[]>([]);
   const [pendingBajaUpdate, setPendingBajaUpdate] = useState(false);
 
-  // Estado para creación de carpeta de Drive
-  const [creatingDriveFolder, setCreatingDriveFolder] = useState<string | null>(null);
   const [historialConductor, setHistorialConductor] = useState<{ id: string; nombre: string } | null>(null);
-
-  // Drive Files Modal
-  const [showDriveModal, setShowDriveModal] = useState(false);
-  const [driveFiles, setDriveFiles] = useState<Array<{
-    id: string;
-    name: string;
-    mimeType: string;
-    size?: string;
-    modifiedTime: string;
-    webViewLink?: string;
-    thumbnailLink?: string;
-    iconLink?: string;
-  }>>([]);
-  const [loadingDriveFiles, setLoadingDriveFiles] = useState(false);
-  const [driveModalTitle, setDriveModalTitle] = useState('');
-  const [driveModalUrl, setDriveModalUrl] = useState('');
 
   const { canCreateInMenu, canEditInMenu, canDeleteInMenu, isAdmin } = usePermissions();
   const { profile } = useAuth();
@@ -564,103 +548,7 @@ export function ConductoresModule() {
     }
   };
 
-  // Crear carpeta de Drive para un conductor
-  const handleCreateDriveFolder = async (conductor: any) => {
-    const conductorId = conductor.id;
-    const conductorNombre = `${conductor.nombres} ${conductor.apellidos}`;
-    const conductorDni = conductor.numero_dni;
 
-    setCreatingDriveFolder(conductorId);
-
-    try {
-      const response = await fetch('/api/create-drive-folder', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          tipo: 'conductor',
-          conductorId,
-          conductorNombre,
-          conductorDni,
-        }),
-      });
-
-      const result = await response.json();
-
-      if (!response.ok) {
-        throw new Error(result.error || 'Error al crear carpeta');
-      }
-
-      // Actualizar en la base de datos
-      await (supabase as any)
-        .from('conductores')
-        .update({ drive_folder_url: result.folderUrl })
-        .eq('id', conductorId);
-
-      // Actualizar el conductor en la lista local
-      setConductores(prev => prev.map(c =>
-        c.id === conductorId
-          ? { ...c, drive_folder_url: result.folderUrl }
-          : c
-      ));
-
-      showSuccess('Carpeta creada', `Se creó "${result.folderName}" en Google Drive`);
-
-      // Abrir la carpeta en nueva pestaña
-      window.open(result.folderUrl, '_blank');
-
-    } catch (err: any) {
-      Swal.fire({
-        icon: 'error',
-        title: 'Error',
-        text: err.message || 'No se pudo crear la carpeta de Drive',
-        confirmButtonColor: '#ff0033',
-      });
-    } finally {
-      setCreatingDriveFolder(null);
-    }
-  };
-
-  // Abrir modal con lista de archivos de Drive
-  const handleOpenDriveFolder = async (conductor: ConductorWithRelations) => {
-    const driveUrl = (conductor as any).drive_folder_url;
-    if (!driveUrl) return;
-
-    const conductorNombre = `${conductor.nombres} ${conductor.apellidos}`;
-    setDriveModalTitle(`Documentos - ${conductorNombre}`);
-    setDriveModalUrl(driveUrl);
-    setShowDriveModal(true);
-    setLoadingDriveFiles(true);
-    setDriveFiles([]);
-
-    try {
-      const response = await fetch('/api/list-drive-files', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ folderUrl: driveUrl })
-      });
-
-      const result = await response.json();
-
-      if (!response.ok) {
-        throw new Error(result.error || 'Error al listar archivos');
-      }
-
-      setDriveFiles(result.files || []);
-    } catch (err: any) {
-      Swal.fire({
-        icon: 'error',
-        title: 'Error',
-        text: err.message || 'No se pudieron cargar los archivos',
-        confirmButtonColor: '#ff0033'
-      });
-    } finally {
-      setLoadingDriveFiles(false);
-    }
-  };
 
   // Cargar detalles completos de un conductor (para modal de detalles/edición)
   const loadConductorDetails = async (conductorId: string) => {
@@ -1672,6 +1560,20 @@ export function ConductoresModule() {
         const okDisponible = asignacionSet.has('disponible') && !tieneAsignacion && esActivo
         if (!okAsignado && !okDisponible) return false
       }
+      if (telefonoFilter.length > 0) {
+        if (!telefonoFilter.includes((c as any).telefono_contacto || '')) return false
+      }
+      if (vencimientoFilter.length > 0) {
+        const venc = c.licencia_vencimiento
+        let categoria = 'sin_fecha'
+        if (venc) {
+          const fechaVenc = new Date(venc)
+          if (fechaVenc < hoy) categoria = 'vencido'
+          else if (fechaVenc <= enXDias) categoria = 'por_vencer'
+          else categoria = 'vigente'
+        }
+        if (!vencimientoFilter.includes(categoria)) return false
+      }
       if (licenciaVencerFilter || statCardLicenciaFilter) {
         if (estadoCodigoLower !== 'activo' || !c.licencia_vencimiento) return false
         const fechaVenc = new Date(c.licencia_vencimiento)
@@ -1709,7 +1611,7 @@ export function ConductoresModule() {
       const prioridadB = estadoB === 'activo' ? 0 : estadoB === 'baja' ? 1 : 2;
       return prioridadA - prioridadB;
     });
-  }, [conductores, nombreFilter, dniFilter, cbuFilter, estadoFilter, turnoFilter, categoriaFilter, asignacionFilter, licenciaVencerFilter, statCardEstadoFilter, statCardAsignacionFilter, statCardLicenciaFilter, statCardLicenciaVencidaFilter]);
+  }, [conductores, nombreFilter, dniFilter, cbuFilter, estadoFilter, turnoFilter, categoriaFilter, asignacionFilter, telefonoFilter, vencimientoFilter, licenciaVencerFilter, statCardEstadoFilter, statCardAsignacionFilter, statCardLicenciaFilter, statCardLicenciaVencidaFilter]);
 
   // Obtener lista única de estados para el filtro
   const uniqueEstados = useMemo(() => {
@@ -1739,6 +1641,14 @@ export function ConductoresModule() {
     });
     return Array.from(categorias.keys()).sort();
   }, [conductores]);
+
+  const uniqueTelefonos = useMemo(() => {
+    const tels = new Set<string>()
+    conductores.forEach(c => {
+      if ((c as any).telefono_contacto) tels.add((c as any).telefono_contacto)
+    })
+    return Array.from(tels).sort()
+  }, [conductores])
 
   // Handler para abrir detalles de un conductor (usado en tabla y acciones)
   const handleOpenDetails = async (conductorId: string) => {
@@ -1823,8 +1733,10 @@ export function ConductoresModule() {
             <a
               href={`/conductores?id=${row.original.id}`}
               onClick={(e) => {
-                e.preventDefault();
-                handleOpenDetails(row.original.id);
+                if (!e.ctrlKey && !e.metaKey && !e.shiftKey && e.button === 0) {
+                  e.preventDefault();
+                  handleOpenDetails(row.original.id);
+                }
               }}
               style={{ textTransform: 'uppercase', fontWeight: 700, color: 'inherit', textDecoration: 'none', display: 'block' }}
             >
@@ -1944,7 +1856,17 @@ export function ConductoresModule() {
       },
       {
         accessorKey: "licencia_vencimiento",
-        header: "Vencimiento",
+        header: () => (
+          <ExcelColumnFilter
+            label="Vencimiento"
+            options={['Vencido', 'Por vencer', 'Vigente', 'Sin fecha']}
+            selectedValues={vencimientoFilter.map(v => v === 'vencido' ? 'Vencido' : v === 'por_vencer' ? 'Por vencer' : v === 'vigente' ? 'Vigente' : 'Sin fecha')}
+            onSelectionChange={(vals) => setVencimientoFilter(vals.map(v => v === 'Vencido' ? 'vencido' : v === 'Por vencer' ? 'por_vencer' : v === 'Vigente' ? 'vigente' : 'sin_fecha'))}
+            filterId="vencimiento"
+            openFilterId={openColumnFilter}
+            onOpenChange={setOpenColumnFilter}
+          />
+        ),
         cell: ({ row, getValue }) => {
           // No mostrar vencimiento para conductores de baja
           const estadoCodigo = row.original.conductores_estados?.codigo?.toLowerCase();
@@ -1957,7 +1879,17 @@ export function ConductoresModule() {
       },
       {
         accessorKey: "telefono_contacto",
-        header: "Teléfono",
+        header: () => (
+          <ExcelColumnFilter
+            label="Teléfono"
+            options={uniqueTelefonos}
+            selectedValues={telefonoFilter}
+            onSelectionChange={setTelefonoFilter}
+            filterId="telefono"
+            openFilterId={openColumnFilter}
+            onOpenChange={setOpenColumnFilter}
+          />
+        ),
         cell: ({ getValue }) => (getValue() as string) || "-",
         enableSorting: true,
       },
@@ -2100,7 +2032,6 @@ export function ConductoresModule() {
         header: "Acciones",
         cell: ({ row }) => {
           const driveUrl = (row.original as any).drive_folder_url;
-          const isCreatingFolder = creatingDriveFolder === row.original.id;
           
           return (
             <ActionsMenu
@@ -2118,10 +2049,12 @@ export function ConductoresModule() {
                   variant: 'info'
                 },
                 {
-                  icon: driveUrl ? <FolderOpen size={15} /> : (isCreatingFolder ? <Loader2 size={15} className="animate-spin" /> : <FolderPlus size={15} />),
-                  label: driveUrl ? 'Ver documentos' : 'Crear carpeta',
-                  onClick: () => driveUrl ? handleOpenDriveFolder(row.original) : handleCreateDriveFolder(row.original),
-                  disabled: isCreatingFolder,
+                  icon: driveUrl ? <FolderOpen size={15} /> : <FolderPlus size={15} />,
+                  label: driveUrl ? 'Ver documentos' : 'Sin carpeta',
+                  onClick: () => {
+                    if (driveUrl) window.open(driveUrl, '_blank')
+                    else Swal.fire('Sin URL', 'Este conductor no tiene una URL de documentación configurada', 'info')
+                  },
                   variant: driveUrl ? 'success' : 'default'
                 },
                 {
@@ -2145,7 +2078,7 @@ export function ConductoresModule() {
         enableSorting: false,
       },
     ],
-    [canUpdate, canDelete, nombreFilter, nombreSearch, nombresFiltrados, dniFilter, cbuFilter, estadoFilter, turnoFilter, categoriaFilter, uniqueCategorias, asignacionFilter, openColumnFilter, uniqueEstados, creatingDriveFolder, activeStatCard],
+    [canUpdate, canDelete, nombreFilter, nombreSearch, nombresFiltrados, dniFilter, cbuFilter, estadoFilter, turnoFilter, categoriaFilter, uniqueCategorias, asignacionFilter, telefonoFilter, uniqueTelefonos, vencimientoFilter, openColumnFilter, uniqueEstados, activeStatCard],
   );
 
   return (
@@ -2246,7 +2179,6 @@ export function ConductoresModule() {
         }
         externalFilters={externalFilters}
         onClearAllFilters={handleClearAllFilters}
-        disableAutoFilters
       />
 
       {/* Modales definidos en componente separado para reducir tamaño del archivo */}
@@ -2318,15 +2250,7 @@ export function ConductoresModule() {
         />
       )}
 
-      {/* Modal Drive Files */}
-      <DriveFilesModal
-        isOpen={showDriveModal}
-        onClose={() => setShowDriveModal(false)}
-        title={driveModalTitle}
-        driveUrl={driveModalUrl}
-        files={driveFiles}
-        loading={loadingDriveFiles}
-      />
+
 
       {/* Modal Historial */}
       {historialConductor && (
@@ -2421,50 +2345,56 @@ function ModalEditar({
   const syncEmailFromCabify = async () => {
     setSyncingEmail(true);
     try {
-      const cabifyDrivers = await cabifyService.getAllDriversWithoutCompanyFilter();
-
       const dni = normalizeDni(formData.numero_dni);
-      const nombreCompleto = `${formData.nombres} ${formData.apellidos}`.trim().toUpperCase();
+      const primerNombre = (formData.nombres || '').split(' ')[0];
+      const primerApellido = (formData.apellidos || '').split(' ')[0];
 
-      let match = dni
-        ? cabifyDrivers.find((d: any) => normalizeDni(d.nationalIdNumber) === dni)
-        : null;
+      // Buscar email en cabify_historico (datos ya sincronizados)
+      let email: string | null = null;
 
-      if (!match && nombreCompleto) {
-        match = cabifyDrivers.find((d: any) => {
-          const cabifyName = `${d.name || ''} ${d.surname || ''}`.trim().toUpperCase();
-          return cabifyName === nombreCompleto;
-        });
+      if (dni) {
+        const { data } = await supabase
+          .from('cabify_historico')
+          .select('email')
+          .eq('dni', formData.numero_dni)
+          .not('email', 'is', null)
+          .neq('email', '')
+          .limit(1)
+          .single();
+        email = data?.email || null;
       }
 
-      if (!match) {
+      if (!email && primerNombre && primerApellido) {
+        const { data } = await supabase
+          .from('cabify_historico')
+          .select('email')
+          .ilike('nombre', `%${primerNombre}%`)
+          .ilike('apellido', `%${primerApellido}%`)
+          .not('email', 'is', null)
+          .neq('email', '')
+          .limit(1)
+          .single();
+        email = data?.email || null;
+      }
+
+      if (!email) {
         Swal.fire({
           icon: 'info',
           title: 'Sin coincidencia',
-          text: `No se encontró en Cabify con DNI "${dni || 'N/A'}" ni nombre "${nombreCompleto}"`,
+          text: `No se encontró email en datos de Cabify con DNI "${dni || 'N/A'}" ni nombre "${primerNombre} ${primerApellido}"`,
           confirmButtonColor: '#FF0033',
         });
         return;
       }
 
-      if (!match.email) {
-        Swal.fire({
-          icon: 'info',
-          title: 'Sin email en Cabify',
-          text: 'Se encontró al conductor pero no tiene email registrado en Cabify',
-          confirmButtonColor: '#FF0033',
-        });
-        return;
-      }
-
-      setFormData({ ...formData, email: match.email });
-      showSuccess('Email sincronizado', match.email);
+      setFormData({ ...formData, email });
+      showSuccess('Email sincronizado', email);
     } catch (err: any) {
       const message = err instanceof Error ? err.message : String(err);
       Swal.fire({
         icon: 'error',
         title: 'Error',
-        text: 'Error al sincronizar con Cabify: ' + message,
+        text: 'Error al sincronizar email: ' + message,
         confirmButtonColor: '#FF0033',
       });
     } finally {
@@ -3209,38 +3139,43 @@ function ModalDetalles({
 
     setSyncingEmail(true);
     try {
-      const cabifyDrivers = await cabifyService.getAllDriversWithoutCompanyFilter();
-
       const dni = normalizeDni(selectedConductor.numero_dni);
-      const nombreCompleto = `${selectedConductor.nombres || ''} ${selectedConductor.apellidos || ''}`.trim().toUpperCase();
+      const primerNombre = (selectedConductor.nombres || '').split(' ')[0];
+      const primerApellido = (selectedConductor.apellidos || '').split(' ')[0];
 
-      // Match by DNI first, then by name
-      let match = dni
-        ? cabifyDrivers.find((d: any) => normalizeDni(d.nationalIdNumber) === dni)
-        : null;
+      // Buscar email en cabify_historico (datos ya sincronizados)
+      let email: string | null = null;
 
-      if (!match && nombreCompleto) {
-        match = cabifyDrivers.find((d: any) => {
-          const cabifyName = `${d.name || ''} ${d.surname || ''}`.trim().toUpperCase();
-          return cabifyName === nombreCompleto;
-        });
+      if (dni) {
+        const { data } = await supabase
+          .from('cabify_historico')
+          .select('email')
+          .eq('dni', selectedConductor.numero_dni)
+          .not('email', 'is', null)
+          .neq('email', '')
+          .limit(1)
+          .single();
+        email = data?.email || null;
       }
 
-      if (!match) {
+      if (!email && primerNombre && primerApellido) {
+        const { data } = await supabase
+          .from('cabify_historico')
+          .select('email')
+          .ilike('nombre', `%${primerNombre}%`)
+          .ilike('apellido', `%${primerApellido}%`)
+          .not('email', 'is', null)
+          .neq('email', '')
+          .limit(1)
+          .single();
+        email = data?.email || null;
+      }
+
+      if (!email) {
         Swal.fire({
           icon: 'info',
           title: 'Sin coincidencia',
-          text: `No se encontró conductor en Cabify con DNI ${dni || 'N/A'} ni nombre "${nombreCompleto}"`,
-          confirmButtonColor: '#FF0033',
-        });
-        return;
-      }
-
-      if (!match.email) {
-        Swal.fire({
-          icon: 'info',
-          title: 'Sin email en Cabify',
-          text: `Se encontró al conductor en Cabify pero no tiene email registrado`,
+          text: `No se encontró email en datos de Cabify con DNI "${dni || 'N/A'}" ni nombre "${primerNombre} ${primerApellido}"`,
           confirmButtonColor: '#FF0033',
         });
         return;
@@ -3249,21 +3184,21 @@ function ModalDetalles({
       // Update in DB
       const { error } = await supabase
         .from('conductores')
-        .update({ email: match.email })
+        .update({ email })
         .eq('id', selectedConductor.id);
 
       if (error) throw error;
 
-      setConductorEmail(match.email);
-      selectedConductor.email = match.email;
+      setConductorEmail(email);
+      selectedConductor.email = email;
       onConductorUpdated?.();
-      showSuccess('Email Actualizado', `Email sincronizado: ${match.email}`);
+      showSuccess('Email Actualizado', `Email sincronizado: ${email}`);
     } catch (err: any) {
       const message = err instanceof Error ? err.message : String(err);
       Swal.fire({
         icon: 'error',
         title: 'Error',
-        text: 'Error al sincronizar con Cabify: ' + message,
+        text: 'Error al sincronizar email: ' + message,
         confirmButtonColor: '#FF0033',
       });
     } finally {
@@ -3712,14 +3647,30 @@ function ModalDetalles({
           )}
         </div>
         </div>
-        <div className="modal-footer">
-          <button
-            className="btn-secondary"
-            onClick={() => setShowDetailsModal(false)}
-          >
-            Cerrar
-          </button>
-        </div>
+        {(() => {
+          const folderUrl = (selectedConductor as any).drive_folder_url || (selectedConductor as any).url_documentacion;
+          return (
+            <div className="modal-footer" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <button
+                className={folderUrl ? 'btn-success' : 'btn-secondary'}
+                onClick={() => {
+                  if (folderUrl) window.open(folderUrl, '_blank');
+                  else Swal.fire('Sin URL', 'Este conductor no tiene una URL de documentación configurada', 'info');
+                }}
+                style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
+              >
+                {folderUrl ? <FolderOpen size={16} /> : <FolderPlus size={16} />}
+                {folderUrl ? 'Ver documentos' : 'Sin carpeta'}
+              </button>
+              <button
+                className="btn-secondary"
+                onClick={() => setShowDetailsModal(false)}
+              >
+                Cerrar
+              </button>
+            </div>
+          );
+        })()}
       </div>
     </div>
   );

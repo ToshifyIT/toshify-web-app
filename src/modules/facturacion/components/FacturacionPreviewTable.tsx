@@ -127,7 +127,7 @@ interface FacturacionPreviewTableProps {
   onExport: (filteredRows: FacturacionPreviewRow[]) => void
   exporting: boolean
   onSync?: (data: FacturacionPreviewRow[]) => Promise<boolean>
-  // Mapa conductor_id → alquiler semanal proyectado (precio_unitario * 49)
+  // Mapa conductor_id → alquiler semanal proyectado (precio_unitario * 7)
   proyectadoAlquilerMap?: Map<string, number>
 }
 

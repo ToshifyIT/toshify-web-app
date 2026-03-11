@@ -26,6 +26,7 @@ interface CategoriaFormData {
   activo: boolean;
   tipo_visita: TipoVisita;
   duracion_modificable: boolean;
+  max_sesiones_dia: number;
 }
 
 const INITIAL_FORM: CategoriaFormData = {
@@ -37,6 +38,7 @@ const INITIAL_FORM: CategoriaFormData = {
   activo: true,
   tipo_visita: 'exclusivo',
   duracion_modificable: false,
+  max_sesiones_dia: 0,
 };
 
 export function CategoriasSubTab() {
@@ -78,6 +80,7 @@ export function CategoriasSubTab() {
       activo: item.activo,
       tipo_visita: item.tipo_visita,
       duracion_modificable: item.duracion_modificable,
+      max_sesiones_dia: item.max_sesiones_dia ?? 0,
     });
     setSelected(item);
     setModalMode('edit');
@@ -122,6 +125,7 @@ export function CategoriasSubTab() {
           activo: form.activo,
           tipo_visita: form.tipo_visita,
           duracion_modificable: form.duracion_modificable,
+          max_sesiones_dia: form.max_sesiones_dia,
         });
         showSuccess('Categoría creada');
       } else if (selected) {
@@ -134,6 +138,7 @@ export function CategoriasSubTab() {
           activo: form.activo,
           tipo_visita: form.tipo_visita,
           duracion_modificable: form.duracion_modificable,
+          max_sesiones_dia: form.max_sesiones_dia,
         });
         showSuccess('Categoría actualizada');
       }
@@ -172,6 +177,14 @@ export function CategoriasSubTab() {
       accessorFn: (row: any) => row.requiere_patente ? 'Sí' : 'No',
       header: 'Req. Patente',
       cell: ({ getValue }) => getValue() as string,
+    },
+    {
+      accessorKey: 'max_sesiones_dia',
+      header: 'Máx. Sesiones/Día',
+      cell: ({ getValue }) => {
+        const val = getValue() as number;
+        return val > 0 ? val : 'Sin límite';
+      },
     },
     {
       id: 'activo',
@@ -257,10 +270,32 @@ export function CategoriasSubTab() {
                       <option value={15}>15 min</option>
                       <option value={30}>30 min</option>
                       <option value={45}>45 min</option>
-                      <option value={60}>60 min</option>
-                      <option value={90}>90 min</option>
-                      <option value={120}>120 min</option>
+                      <option value={60}>1 hora</option>
+                      <option value={90}>1.5 horas</option>
+                      <option value={120}>2 horas</option>
+                      <option value={150}>2.5 horas</option>
+                      <option value={180}>3 horas</option>
+                      <option value={210}>3.5 horas</option>
+                      <option value={240}>4 horas</option>
+                      <option value={270}>4.5 horas</option>
+                      <option value={300}>5 horas</option>
+                      <option value={330}>5.5 horas</option>
+                      <option value={360}>6 horas</option>
                     </select>
+                  </div>
+                </div>
+                <div className="visitas-form-row">
+                  <div className="visitas-form-group">
+                    <label>Máx. sesiones por día</label>
+                    <input
+                      type="number"
+                      min={0}
+                      max={50}
+                      value={form.max_sesiones_dia}
+                      onChange={(e) => setForm((p) => ({ ...p, max_sesiones_dia: Math.max(0, Number(e.target.value)) }))}
+                      placeholder="0 = sin límite"
+                    />
+                    <small style={{ color: 'var(--text-tertiary)', fontSize: 11 }}>0 = sin límite</small>
                   </div>
                 </div>
                 <div className="visitas-form-row">

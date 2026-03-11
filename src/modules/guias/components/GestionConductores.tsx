@@ -117,7 +117,7 @@ const GestionConductores = ({ isOpen, onClose, onRefresh }: Props) => {
       setAccionesMap(accMap);
 
       // Fetch Guides for name mapping using user_profiles table (consistent with GuiasModule)
-      let guidesMap: Record<string, string> = {};
+      const guidesMap: Record<string, string> = {};
       try {
         const { data: guiasData } = await supabase
           .from('user_profiles')
