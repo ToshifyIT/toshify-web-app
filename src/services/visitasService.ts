@@ -22,7 +22,7 @@ import type {
 export async function fetchCategorias(): Promise<VisitaCategoria[]> {
   const { data, error } = await supabase
     .from('visitas_categorias')
-    .select('id, nombre, color, duracion_default, requiere_patente, tipo_visita, duracion_modificable, orden, activo, created_at')
+    .select('id, nombre, color, duracion_default, requiere_patente, tipo_visita, duracion_modificable, max_sesiones_dia, orden, activo, created_at')
     .eq('activo', true)
     .order('orden');
   if (error) throw error;
@@ -290,7 +290,7 @@ export function getMotivosByCategoria(
 export async function fetchAllCategorias(): Promise<VisitaCategoria[]> {
   const { data, error } = await supabase
     .from('visitas_categorias')
-    .select('id, nombre, color, duracion_default, requiere_patente, orden, activo, created_at, tipo_visita, duracion_modificable')
+    .select('id, nombre, color, duracion_default, requiere_patente, orden, activo, created_at, tipo_visita, duracion_modificable, max_sesiones_dia')
     .order('orden');
   if (error) throw error;
   return data ?? [];
