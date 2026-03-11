@@ -105,8 +105,8 @@ export function useUSSHistoricoData() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Vista activa
-  const [vista, setVista] = useState<'historico' | 'marcaciones'>('historico');
+  // Vista activa (marcaciones por defecto)
+  const [vista, setVista] = useState<'historico' | 'marcaciones'>('marcaciones');
 
   // Debounce para búsqueda
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -143,7 +143,7 @@ export function useUSSHistoricoData() {
 
       setRegistros(paginatedResult.data);
       setTotalCount(paginatedResult.count);
-      setMarcaciones(bitacoraResult.data.map(transformarMarcacion));
+      setMarcaciones(bitacoraResult.data.map(transformarMarcacion).filter(m => m.estado !== 'Sin Actividad'));
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Error desconocido');
     } finally {
