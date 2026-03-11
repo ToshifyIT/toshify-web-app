@@ -14,6 +14,7 @@ export interface VisitaCategoria {
   requiere_patente: boolean;
   tipo_visita: TipoVisita;
   duracion_modificable: boolean;
+  max_sesiones_dia: number;
   orden: number;
   activo: boolean;
   created_at: string;
