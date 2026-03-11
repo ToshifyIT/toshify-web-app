@@ -776,7 +776,6 @@ export function ProveedoresModule() {
           setActiveStatCard(null)
           setStatCardEstadoFilter([])
         }}
-        disableAutoFilters
       />
 
       {/* Create Modal */}

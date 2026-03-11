@@ -1387,7 +1387,6 @@ export function VehicleManagement() {
         }
         externalFilters={externalFilters}
         onClearAllFilters={handleClearAllFilters}
-        disableAutoFilters
       />
 
       {/* MODALS */}

@@ -1196,7 +1196,6 @@ export function SiniestrosModule() {
         globalFilterFn={customGlobalFilter}
         externalFilters={externalFilters}
         onClearAllFilters={handleClearAllFilters}
-        disableAutoFilters
       />
 
       {/* Modal */}

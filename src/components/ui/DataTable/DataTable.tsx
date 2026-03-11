@@ -19,7 +19,7 @@ import {
   type Table,
   type FilterFn,
 } from "@tanstack/react-table";
-import { Calendar } from "lucide-react";
+import { Calendar, ChevronLeft, ChevronRight } from "lucide-react";
 
 // Icono de filtro estilo Excel - dropdown arrow pequeño y sutil
 const FilterIcon = ({ size = 8 }: { size?: number }) => (
@@ -34,10 +34,41 @@ const FilterIcon = ({ size = 8 }: { size?: number }) => (
 );
 import { Spinner } from "../LoadingOverlay";
 import "./DataTable.css";
+import "../DateRangeSelector/DateRangeSelector.css";
 
 // Tipo para filtros de columna
 type ColumnFilters = Record<string, string[]>;
 type DateFilters = Record<string, { from?: string; to?: string }>;
+
+// Calendar helper functions
+const DAYS_SHORT = ['LU', 'MA', 'MI', 'JU', 'VI', 'SA', 'DO'];
+const MONTH_NAMES_SHORT = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
+                           'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
+
+const toISODate = (y: number, m: number, d: number) =>
+  `${y}-${String(m + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+
+const getMondayOf = (y: number, m: number, d: number) => {
+  const date = new Date(y, m, d);
+  const dow = date.getDay();
+  const diff = dow === 0 ? 6 : dow - 1;
+  const mon = new Date(y, m, d - diff);
+  return { y: mon.getFullYear(), m: mon.getMonth(), d: mon.getDate() };
+};
+
+const getSundayOf = (y: number, m: number, d: number) => {
+  const mon = getMondayOf(y, m, d);
+  const sun = new Date(mon.y, mon.m, mon.d + 6);
+  return { y: sun.getFullYear(), m: sun.getMonth(), d: sun.getDate() };
+};
+
+const getWeekNum = (y: number, m: number, d: number) => {
+  const dt = new Date(Date.UTC(y, m, d));
+  const dayNum = dt.getUTCDay() || 7;
+  dt.setUTCDate(dt.getUTCDate() + 4 - dayNum);
+  const yearStart = new Date(Date.UTC(dt.getUTCFullYear(), 0, 1));
+  return Math.ceil((((dt.getTime() - yearStart.getTime()) / 86400000) + 1) / 7);
+};
 
 // Filter Header Component - extracted to avoid hooks in callbacks
 interface FilterHeaderProps {
@@ -74,9 +105,122 @@ function FilterHeader({
   const [position, setPosition] = useState({ top: 0, left: 0 });
   const [searchTerm, setSearchTerm] = useState('');
 
+  // Calendar state for date filters (local to this component)
+  const [viewDate, setViewDate] = useState(() => new Date());
+  const [selectionMode, setSelectionMode] = useState<'day' | 'week'>('day');
+
+  // Track previous isOpen to detect open transitions
+  const prevIsOpenRef = useRef(isOpen);
+  useEffect(() => {
+    // Only reset calendar view when transitioning from closed to open
+    if (isOpen && !prevIsOpenRef.current && isDate) {
+      if (dateFilter?.from) {
+        const [y, m] = dateFilter.from.split('-').map(Number);
+        setViewDate(new Date(y, m - 1, 1));
+      } else {
+        setViewDate(new Date());
+      }
+    }
+    prevIsOpenRef.current = isOpen;
+  });
+
   const filteredOptions = searchTerm
     ? uniqueValues.filter(opt => opt.toLowerCase().includes(searchTerm.toLowerCase()))
     : uniqueValues;
+
+  // Calendar days computation
+  const calendarDays = useMemo(() => {
+    if (!isDate) return [];
+    const year = viewDate.getFullYear();
+    const month = viewDate.getMonth();
+    const firstDay = new Date(year, month, 1);
+    const lastDay = new Date(year, month + 1, 0);
+    const days: Array<{ y: number; m: number; d: number; cur: boolean; ts: number }> = [];
+
+    const startDow = firstDay.getDay();
+    const prevDays = startDow === 0 ? 6 : startDow - 1;
+    for (let i = prevDays; i > 0; i--) {
+      const dt = new Date(year, month, 1 - i);
+      days.push({ y: dt.getFullYear(), m: dt.getMonth(), d: dt.getDate(), cur: false, ts: dt.getTime() });
+    }
+    for (let i = 1; i <= lastDay.getDate(); i++) {
+      days.push({ y: year, m: month, d: i, cur: true, ts: new Date(year, month, i).getTime() });
+    }
+    const rem = 7 - (days.length % 7);
+    if (rem < 7) {
+      for (let i = 1; i <= rem; i++) {
+        const dt = new Date(year, month + 1, i);
+        days.push({ y: dt.getFullYear(), m: dt.getMonth(), d: dt.getDate(), cur: false, ts: dt.getTime() });
+      }
+    }
+    return days;
+  }, [isDate, viewDate]);
+
+  const todayTs = useMemo(() => {
+    const n = new Date(); return new Date(n.getFullYear(), n.getMonth(), n.getDate()).getTime();
+  }, []);
+
+  // Parse current filter range
+  const filterRange = useMemo(() => {
+    if (!dateFilter?.from && !dateFilter?.to) return null;
+    const from = dateFilter.from ? new Date(dateFilter.from + 'T00:00:00').getTime() : -Infinity;
+    const to = dateFilter.to ? new Date(dateFilter.to + 'T00:00:00').getTime() : Infinity;
+    return { from, to };
+  }, [dateFilter]);
+
+  // Handle day click in calendar
+  const handleCalendarDayClick = useCallback((day: { y: number; m: number; d: number }, e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+
+    if (selectionMode === 'day') {
+      const iso = toISODate(day.y, day.m, day.d);
+      if (!dateFilter?.from || !dateFilter?.to || dateFilter.from !== dateFilter.to) {
+        // No selection or a range is set: start fresh single-day selection
+        onDateChange(colId, 'from', iso);
+        onDateChange(colId, 'to', iso);
+      } else {
+        // A single day is selected (from === to): extend to a range
+        const fromTs = new Date(dateFilter.from + 'T00:00:00').getTime();
+        const clickTs = new Date(iso + 'T00:00:00').getTime();
+        if (clickTs === fromTs) {
+          return; // Clicked same day again
+        } else if (clickTs > fromTs) {
+          onDateChange(colId, 'to', iso);
+        } else {
+          onDateChange(colId, 'from', iso);
+          onDateChange(colId, 'to', dateFilter.from);
+        }
+      }
+    } else {
+      // Week mode
+      const mon = getMondayOf(day.y, day.m, day.d);
+      const sun = getSundayOf(day.y, day.m, day.d);
+      onDateChange(colId, 'from', toISODate(mon.y, mon.m, mon.d));
+      onDateChange(colId, 'to', toISODate(sun.y, sun.m, sun.d));
+    }
+  }, [selectionMode, dateFilter, colId, onDateChange]);
+
+  // Shortcuts
+  const dateShortcuts = useMemo(() => {
+    const now = new Date();
+    const y = now.getFullYear(), m = now.getMonth(), d = now.getDate();
+    const mon = getMondayOf(y, m, d);
+    const sun = getSundayOf(y, m, d);
+    const wn = getWeekNum(mon.y, mon.m, mon.d);
+    const prevMon = getMondayOf(mon.y, mon.m, mon.d - 7);
+    const prevSun = getSundayOf(prevMon.y, prevMon.m, prevMon.d);
+    const pwn = getWeekNum(prevMon.y, prevMon.m, prevMon.d);
+    const yesterday = new Date(y, m, d - 1);
+
+    return [
+      { id: 'today', label: 'Hoy', from: toISODate(y, m, d), to: toISODate(y, m, d) },
+      { id: 'yesterday', label: 'Ayer', from: toISODate(yesterday.getFullYear(), yesterday.getMonth(), yesterday.getDate()), to: toISODate(yesterday.getFullYear(), yesterday.getMonth(), yesterday.getDate()) },
+      { id: 'this-week', label: `Esta semana (S${wn})`, from: toISODate(mon.y, mon.m, mon.d), to: toISODate(sun.y, sun.m, sun.d) },
+      { id: 'last-week', label: `Semana pasada (S${pwn})`, from: toISODate(prevMon.y, prevMon.m, prevMon.d), to: toISODate(prevSun.y, prevSun.m, prevSun.d) },
+      { id: 'this-year', label: `Este año (${y})`, from: toISODate(y, 0, 1), to: toISODate(y, 11, 31) },
+    ];
+  }, []);
 
   // Calculate position when opening
   useLayoutEffect(() => {
@@ -120,9 +264,10 @@ function FilterHeader({
   useEffect(() => {
     if (!isOpen) return;
     const handleClick = (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
       if (
-        dropdownRef.current && !dropdownRef.current.contains(e.target as Node) &&
-        buttonRef.current && !buttonRef.current.contains(e.target as Node)
+        dropdownRef.current && !dropdownRef.current.contains(target) &&
+        buttonRef.current && !buttonRef.current.contains(target)
       ) {
         onToggle(colId);
       }
@@ -173,28 +318,96 @@ function FilterHeader({
       {isOpen && createPortal(
         <div
           ref={dropdownRef}
-          className="dt-filter-dropdown"
+          className={`dt-filter-dropdown ${isDate ? 'dt-filter-dropdown-calendar' : ''}`}
           style={{ position: 'fixed', top: position.top, left: position.left }}
           onClick={e => e.stopPropagation()}
         >
           {isDate ? (
-            <div className="dt-filter-date">
-              <label>
-                <span>Desde:</span>
-                <input
-                  type="date"
-                  value={dateFilter?.from || ''}
-                  onChange={e => onDateChange(colId, 'from', e.target.value)}
-                />
-              </label>
-              <label>
-                <span>Hasta:</span>
-                <input
-                  type="date"
-                  value={dateFilter?.to || ''}
-                  onChange={e => onDateChange(colId, 'to', e.target.value)}
-                />
-              </label>
+            <div className="dt-filter-calendar">
+              {/* Tabs Día/Semana */}
+              <div className="date-range-tabs">
+                <button type="button" className={`date-range-tab ${selectionMode === 'day' ? 'active' : ''}`} onClick={() => setSelectionMode('day')}>Día</button>
+                <button type="button" className={`date-range-tab ${selectionMode === 'week' ? 'active' : ''}`} onClick={() => setSelectionMode('week')}>Semana</button>
+              </div>
+              {/* Month navigation */}
+              <div className="date-range-header">
+                <button type="button" className="date-range-nav" onClick={() => setViewDate(new Date(viewDate.getFullYear(), viewDate.getMonth() - 1, 1))}>
+                  <ChevronLeft size={16} />
+                </button>
+                <div className="date-range-month-year">
+                  <span className="date-range-month">{MONTH_NAMES_SHORT[viewDate.getMonth()]}</span>
+                  <select
+                    className="date-range-year-select"
+                    value={viewDate.getFullYear()}
+                    onChange={e => setViewDate(new Date(parseInt(e.target.value), viewDate.getMonth(), 1))}
+                  >
+                    {Array.from({ length: 10 }, (_, i) => new Date().getFullYear() - 5 + i).map(yr => (
+                      <option key={yr} value={yr}>{yr}</option>
+                    ))}
+                  </select>
+                </div>
+                <button type="button" className="date-range-nav" onClick={() => setViewDate(new Date(viewDate.getFullYear(), viewDate.getMonth() + 1, 1))}>
+                  <ChevronRight size={16} />
+                </button>
+              </div>
+              {/* Day names */}
+              <div className="date-range-days-header">
+                {DAYS_SHORT.map(d => <div key={d} className="date-range-day-name">{d}</div>)}
+              </div>
+              {/* Day grid */}
+              <div className="date-range-grid">
+                {calendarDays.map((day, idx) => {
+                  const iso = toISODate(day.y, day.m, day.d);
+                  const isToday = day.ts === todayTs;
+                  const inRange = filterRange && day.ts >= filterRange.from && day.ts <= filterRange.to;
+                  const isStart = dateFilter?.from === iso;
+                  const isEnd = dateFilter?.to === iso;
+                  const dow = new Date(day.y, day.m, day.d).getDay();
+                  const gridPos = dow === 0 ? 6 : dow - 1;
+                  const isRowStart = gridPos === 0;
+                  const isRowEnd = gridPos === 6;
+
+                  const cls = [
+                    'date-range-day',
+                    !day.cur && 'other-month',
+                    inRange && 'selected',
+                    isStart && 'range-start',
+                    isEnd && 'range-end',
+                    isStart && !dateFilter?.to && 'day-selected',
+                    isToday && !inRange && !isStart && 'today',
+                    inRange && isRowStart && 'row-start',
+                    inRange && isRowEnd && 'row-end',
+                  ].filter(Boolean).join(' ');
+
+                  return (
+                    <div key={idx} className={cls} onClick={e => handleCalendarDayClick(day, e)} role="button" tabIndex={0}>
+                      <span>{day.d}</span>
+                    </div>
+                  );
+                })}
+              </div>
+              {/* Range display */}
+              {(dateFilter?.from || dateFilter?.to) && (
+                <div className="dt-filter-range-display">
+                  {dateFilter.from && <span>{dateFilter.from.split('-').reverse().join('/')}</span>}
+                  {dateFilter.from && dateFilter.to && <span> → </span>}
+                  {dateFilter.to && <span>{dateFilter.to.split('-').reverse().join('/')}</span>}
+                  {dateFilter.from && !dateFilter.to && <span className="dt-filter-range-hint"> (selecciona fin)</span>}
+                </div>
+              )}
+              {/* Shortcuts */}
+              <div className="date-range-shortcuts">
+                {dateShortcuts.map(s => (
+                  <button
+                    key={s.id}
+                    type="button"
+                    className={`date-range-shortcut ${dateFilter?.from === s.from && dateFilter?.to === s.to ? 'active' : ''}`}
+                    onClick={() => { onDateChange(colId, 'from', s.from); onDateChange(colId, 'to', s.to); }}
+                  >
+                    {s.label}
+                  </button>
+                ))}
+              </div>
             </div>
           ) : (
             <>
@@ -344,6 +557,13 @@ export function DataTable<T>({
   const [columnFilters, setColumnFilters] = useState<ColumnFilters>({});
   const [dateFilters, setDateFilters] = useState<DateFilters>({});
   const [openFilterId, setOpenFilterId] = useState<string | null>(null);
+
+  // Refs that mirror filter state - used inside header callbacks to avoid
+  // triggering useMemo recalculation (which would unmount/remount FilterHeader)
+  const columnFiltersRef = useRef(columnFilters);
+  columnFiltersRef.current = columnFilters;
+  const dateFiltersRef = useRef(dateFilters);
+  dateFiltersRef.current = dateFilters;
 
   // Helper: Check if column is date type based on accessor key or data
   const isDateColumn = useCallback((colId: string): boolean => {
@@ -609,6 +829,10 @@ export function DataTable<T>({
   }, [isDateColumn]);
 
   // Wrap columns with auto-filters (if enabled)
+  // IMPORTANT: This memo intentionally uses refs for dateFilters/columnFilters instead of state.
+  // This prevents the memo from recalculating when filter values change, which would cause
+  // FilterHeader components to unmount/remount and lose their local state (viewDate, selectionMode).
+  // The header callbacks read current values from refs at render time.
   const columnsWithFilters = useMemo(() => {
     // If auto-filters are disabled, return columns as-is
     if (disableAutoFilters) {
@@ -616,11 +840,12 @@ export function DataTable<T>({
     }
 
     return regularColumns.map(col => {
-      const colDef = col as { accessorKey?: string; id?: string; header?: unknown; enableSorting?: boolean };
+      const colDef = col as { accessorKey?: string; id?: string; header?: unknown; enableSorting?: boolean; accessorFn?: unknown };
       const colId = colDef.accessorKey || colDef.id || "";
 
-      // Skip if no accessorKey (custom columns like expand)
-      if (!colId) return col;
+      // Skip columns without accessorKey AND without accessorFn (computed columns like 'fraccionado', 'incidencia')
+      // Only add auto-filters to columns that have real data to filter on
+      if (!colDef.accessorKey && !colDef.accessorFn) return col;
 
       // Force enableSorting on all data columns
       const sortingOverride = colDef.enableSorting === false ? { enableSorting: true } : {};
@@ -638,33 +863,39 @@ export function DataTable<T>({
       }
 
       const isDate = isDateColumn(colId);
-      const isOpen = openFilterId === colId;
-      const hasFilter = isDate
-        ? !!(dateFilters[colId]?.from || dateFilters[colId]?.to)
-        : (columnFilters[colId]?.length || 0) > 0;
 
       return {
         ...col,
         ...sortingOverride,
-        header: () => (
-          <FilterHeader
-            colId={colId}
-            label={headerLabel}
-            isOpen={isOpen}
-            hasFilter={hasFilter}
-            isDate={isDate}
-            uniqueValues={isDate ? [] : (isOpen ? getUniqueValues(colId) : [])}
-            selectedValues={columnFilters[colId] || []}
-            dateFilter={dateFilters[colId]}
-            onToggle={handleFilterToggle}
-            onSelectValue={handleSelectValue}
-            onDateChange={handleDateChange}
-            onClearFilter={handleClearFilter}
-          />
-        ),
+        header: () => {
+          // Read current values from refs (not state) to avoid triggering memo recalculation
+          const currentDateFilters = dateFiltersRef.current;
+          const currentColumnFilters = columnFiltersRef.current;
+          const isOpen = openFilterId === colId;
+          const hasFilter = isDate
+            ? !!(currentDateFilters[colId]?.from || currentDateFilters[colId]?.to)
+            : (currentColumnFilters[colId]?.length || 0) > 0;
+
+          return (
+            <FilterHeader
+              colId={colId}
+              label={headerLabel}
+              isOpen={isOpen}
+              hasFilter={hasFilter}
+              isDate={isDate}
+              uniqueValues={isDate ? [] : (isOpen ? getUniqueValues(colId) : [])}
+              selectedValues={currentColumnFilters[colId] || []}
+              dateFilter={currentDateFilters[colId]}
+              onToggle={handleFilterToggle}
+              onSelectValue={handleSelectValue}
+              onDateChange={handleDateChange}
+              onClearFilter={handleClearFilter}
+            />
+          );
+        },
       } as ColumnDef<T, unknown>;
     });
-  }, [regularColumns, disableAutoFilters, isDateColumn, openFilterId, dateFilters, columnFilters, getUniqueValues, handleFilterToggle, handleSelectValue, handleDateChange, handleClearFilter]);
+  }, [regularColumns, disableAutoFilters, isDateColumn, openFilterId, getUniqueValues, handleFilterToggle, handleSelectValue, handleDateChange, handleClearFilter]);
 
   // Memoize final columns — all regular columns with filters + actions
   const finalColumns = useMemo<ColumnDef<T, unknown>[]>(() => {
