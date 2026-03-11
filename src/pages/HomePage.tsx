@@ -11,7 +11,7 @@ import {
 import type { LucideIcon } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 import { useSede } from '../contexts/SedeContext'
-import { useNavigate, Routes, Route, useLocation, Navigate } from 'react-router-dom'
+import { useNavigate, Routes, Route, useLocation, Navigate, Link } from 'react-router-dom'
 import { useEffectivePermissions } from '../hooks/useEffectivePermissions'
 import { useTheme } from '../contexts/ThemeContext'
 import logoToshify from '../assets/logo-toshify.png'
@@ -417,17 +417,17 @@ export function HomePage() {
           </div>
         )
       } else {
-        // Submenú sin hijos - renderizar como botón navegable
+        // Submenú sin hijos - renderizar como link navegable
         const isGuia = submenu.submenu_name?.startsWith('guia-')
         return (
-          <button
+          <Link
             key={submenu.submenu_id}
+            to={submenu.submenu_route}
             className={`nav-item ${depth > 0 ? 'nested' : ''} ${isActiveRoute(submenu.submenu_route) ? 'active' : ''}`}
-            onClick={() => navigate(submenu.submenu_route)}
           >
             {isGuia && <span className="nav-icon"><Users size={16} /></span>}
             <span className="nav-label">{submenu.submenu_label === 'Telepase Histórico' ? 'Telepase' : submenu.submenu_label}</span>
-          </button>
+          </Link>
         )
       }
     })
@@ -713,6 +713,7 @@ export function HomePage() {
           background: none;
           width: 100%;
           text-align: left;
+          text-decoration: none;
         }
 
         .nav-item:hover {
@@ -852,6 +853,7 @@ export function HomePage() {
           border-radius: 6px;
           cursor: pointer;
           text-align: left;
+          text-decoration: none;
           transition: all 0.15s;
         }
 
@@ -1019,6 +1021,8 @@ export function HomePage() {
           cursor: pointer;
           transition: all 0.2s;
           text-align: left;
+          text-decoration: none;
+          color: inherit;
         }
 
         .user-card-clickable:hover {
@@ -1483,14 +1487,14 @@ export function HomePage() {
                                     const isGuia = submenu.submenu_name?.startsWith('guia-')
                                     const SubIcon = isGuia ? Users : getMenuIcon(submenu.submenu_name)
                                     return (
-                                      <button
+                                      <Link
                                         key={submenu.submenu_id}
+                                        to={submenu.submenu_route}
                                         className={`nav-flyout-item ${isActiveRoute(submenu.submenu_route) ? 'active' : ''}`}
-                                        onClick={() => navigate(submenu.submenu_route)}
                                       >
                                         <span className="nav-flyout-icon"><SubIcon size={16} /></span>
                                         <span>{submenu.submenu_label === 'Telepase Histórico' ? 'Telepase' : submenu.submenu_label}</span>
-                                      </button>
+                                      </Link>
                                     )
                                   })}
                               </div>
@@ -1510,13 +1514,13 @@ export function HomePage() {
                   const MenuIcon = getMenuIcon(menu.menu_name)
                   return (
                     <div key={menu.menu_id} className="nav-item-wrapper">
-                      <button
+                      <Link
+                        to={menu.menu_route}
                         className={`nav-item ${isActiveRoute(menu.menu_route) ? 'active' : ''}`}
-                        onClick={() => navigate(menu.menu_route)}
                       >
                         <span className="nav-icon"><MenuIcon size={18} /></span>
                         <span className="nav-label">{menu.menu_label}</span>
-                      </button>
+                      </Link>
                       {sidebarCollapsed && (
                         <div className="nav-tooltip">{menu.menu_label}</div>
                       )}
@@ -1534,9 +1538,9 @@ export function HomePage() {
           </nav>
 
           <div className="sidebar-footer">
-            <button
+            <Link
+              to="/perfil"
               className="user-card user-card-clickable"
-              onClick={() => navigate('/perfil')}
               title="Ver mi perfil"
             >
               <div className="user-avatar">
@@ -1552,7 +1556,7 @@ export function HomePage() {
                   {profile?.roles?.name || 'Sin rol'}
                 </div>
               </div>
-            </button>
+            </Link>
           </div>
         </aside>
 
