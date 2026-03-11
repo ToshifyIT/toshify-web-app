@@ -32,19 +32,22 @@ function formatFecha(fecha: string): string {
 }
 
 /**
- * Formatea un ISO timestamp (periodo_inicio/periodo_fin) a DD/MM/YY HH:MM
- * en zona horaria Argentina.
+ * Formatea un ISO timestamp (periodo_inicio/periodo_fin) a DD/MM/YY HH:MM:SS
+ * Los periodos vienen en UTC (+00), se les resta 3 horas para mostrar hora Argentina.
  */
 function formatPeriodo(iso: string | null): string {
   if (!iso) return '-';
   const d = new Date(iso);
   if (isNaN(d.getTime())) return '-';
-  const opts: Intl.DateTimeFormatOptions = {
-    timeZone: 'America/Argentina/Buenos_Aires',
-    day: '2-digit', month: '2-digit', year: '2-digit',
-    hour: '2-digit', minute: '2-digit', hour12: false,
-  };
-  return d.toLocaleString('es-AR', opts).replace(',', '');
+  // Restar 6 horas para coincidir con hora real Argentina
+  const ar = new Date(d.getTime() - 6 * 60 * 60 * 1000);
+  const dd = String(ar.getUTCDate()).padStart(2, '0');
+  const mm = String(ar.getUTCMonth() + 1).padStart(2, '0');
+  const yy = String(ar.getUTCFullYear()).slice(2);
+  const hh = String(ar.getUTCHours()).padStart(2, '0');
+  const mi = String(ar.getUTCMinutes()).padStart(2, '0');
+  const ss = String(ar.getUTCSeconds()).padStart(2, '0');
+  return `${dd}/${mm}/${yy} ${hh}:${mi}:${ss}`;
 }
 
 /**
@@ -65,7 +68,6 @@ function resolverFechaHora(periodo: string | null, fechaTurno: string, hora: str
   // Fallback: reconstruir desde fecha_turno + hora + horario
   if (!hora || hora === '-') return '-';
   const horaNum = parseInt(hora.split(':')[0], 10);
-  const horaStr = hora.slice(0, 5);
   // Nocturno con hora de madrugada → la fecha real es fecha_turno + 1
   if (horario === 'nocturno' && horaNum >= 0 && horaNum < 6) {
     const d = new Date(fechaTurno + 'T12:00:00');
@@ -73,11 +75,11 @@ function resolverFechaHora(periodo: string | null, fechaTurno: string, hora: str
     const yr = String(d.getFullYear()).slice(2);
     const mo = String(d.getMonth() + 1).padStart(2, '0');
     const da = String(d.getDate()).padStart(2, '0');
-    return `${da}/${mo}/${yr} ${horaStr}`;
+    return `${da}/${mo}/${yr} ${hora}`;
   }
   // Diurno o nocturno con hora nocturna (18-23): fecha real = fecha_turno
   const [y, m, dd] = fechaTurno.split('-');
-  return `${dd}/${m}/${y.slice(2)} ${horaStr}`;
+  return `${dd}/${m}/${y.slice(2)} ${hora}`;
 }
 
 function formatDuracion(minutos: number | null): string {
@@ -203,6 +205,14 @@ export function MarcacionesTable({
         <span style={{ fontFamily: 'monospace', fontSize: '12px', color: 'var(--color-primary)', fontWeight: 600 }}>
           {row.original.patente}
         </span>
+      ),
+      enableSorting: false,
+    },
+    {
+      accessorKey: 'ibutton',
+      header: 'iButton',
+      cell: ({ row }) => (
+        <span style={{ color: 'var(--text-tertiary)', fontSize: '12px' }}>{row.original.ibutton || '-'}</span>
       ),
       enableSorting: false,
     },
@@ -407,6 +417,7 @@ export function MarcacionesTable({
     return marcacionesFiltradas.map(m => ({
       'Conductor': m.conductor,
       'Patente': m.patente,
+      'iButton': m.ibutton || '',
       'Fecha Turno': formatFecha(m.fecha),
       'Entrada': resolverFechaHora(m.periodoInicio, m.fecha, m.entrada, m.horario),
       'Salida': m.estado === 'En Curso'

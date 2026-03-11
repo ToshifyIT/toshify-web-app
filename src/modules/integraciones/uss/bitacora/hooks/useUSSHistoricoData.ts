@@ -31,6 +31,7 @@ export interface Marcacion {
   id: string;
   conductor: string;
   conductorId: string | null;
+  ibutton: string | null;
   fecha: string; // YYYY-MM-DD (fecha_turno)
   patente: string;
   patenteNormalizada: string;
@@ -59,6 +60,7 @@ function transformarMarcacion(reg: BitacoraRegistroTransformado): Marcacion {
     id: reg.id,
     conductor: reg.conductor_wialon || 'Sin conductor',
     conductorId: reg.conductor_id,
+    ibutton: reg.ibutton,
     fecha: reg.fecha_turno,
     patente: reg.patente,
     patenteNormalizada: reg.patente_normalizada,

@@ -1904,7 +1904,7 @@ export function ReporteFacturacionTab() {
           cuota_garantia_numero: cuotaGarantiaNumero,
           // Datos detallados para RIT export
             monto_peajes: montoPeajes,       // P005
-            peajes_detalle: peajesDetalleMap.get(conductorId) || [],
+            peajes_detalle: peajesDetalleMap.get(dniConductor) || [],
             monto_excesos: montoExcesos,     // P006
             km_exceso: kmExceso,
             monto_penalidades: montoPenalidades,  // P007
@@ -3734,7 +3734,7 @@ export function ReporteFacturacionTab() {
         titleExtra = 'Detalle de Peajes'
         const peajesDetalle = detalleFacturacion.peajes_detalle
         if (peajesDetalle && peajesDetalle.length > 0) {
-          const rows = peajesDetalle.map(p => {
+          const rows = [...peajesDetalle].sort((a, b) => (a.fecha || '').localeCompare(b.fecha || '')).map(p => {
             const fecha = p.fecha ? format(parseISO(p.fecha), 'dd/MM/yy') : '-'
             return `<tr><td style="padding:4px 8px;font-size:12px;border-bottom:1px solid #e5e7eb">${fecha}</td><td style="padding:4px 8px;font-size:12px;border-bottom:1px solid #e5e7eb;text-align:right;font-family:monospace;font-weight:600">${formatCurrency(p.monto)}</td></tr>`
           }).join('')
@@ -7743,7 +7743,7 @@ export function ReporteFacturacionTab() {
                   <th style="padding:8px;">Fecha</th>
                   <th style="padding:8px;text-align:right;">Monto</th>
                 </tr></thead>
-                <tbody>${peajesDetalle.map((p: any) => `<tr style="border-bottom:1px solid var(--border-secondary);"><td style="padding:8px;">${p.fecha}</td><td style="padding:8px;text-align:right;font-weight:600;">${formatCurrency(p.monto)}</td></tr>`).join('')}</tbody>
+                <tbody>${[...peajesDetalle].sort((a: any, b: any) => a.fecha.localeCompare(b.fecha)).map((p: any) => `<tr style="border-bottom:1px solid var(--border-secondary);"><td style="padding:8px;">${p.fecha}</td><td style="padding:8px;text-align:right;font-weight:600;">${formatCurrency(p.monto)}</td></tr>`).join('')}</tbody>
                 <tfoot><tr style="border-top:2px solid var(--border-primary);font-weight:700;">
                   <td style="padding:8px;">Total</td>
                   <td style="padding:8px;text-align:right;">${formatCurrency(peajes)}</td>

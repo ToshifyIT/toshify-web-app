@@ -32,7 +32,7 @@ export const ussHistoricoService = {
     endDate: string,
     options?: USSHistoricoQueryOptions
   ): Promise<{ data: USSHistoricoRegistro[]; count: number }> {
-    // endDate + 1 day para incluir todo el día final
+    // Las fechas en uss_historico ya vienen en hora Argentina (sin offset)
     const endDatePlusOne = new Date(endDate + 'T00:00:00');
     endDatePlusOne.setDate(endDatePlusOne.getDate() + 1);
     const endStr = endDatePlusOne.toISOString().slice(0, 10);
