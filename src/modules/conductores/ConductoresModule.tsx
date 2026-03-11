@@ -1733,8 +1733,10 @@ export function ConductoresModule() {
             <a
               href={`/conductores?id=${row.original.id}`}
               onClick={(e) => {
-                e.preventDefault();
-                handleOpenDetails(row.original.id);
+                if (!e.ctrlKey && !e.metaKey && !e.shiftKey && e.button === 0) {
+                  e.preventDefault();
+                  handleOpenDetails(row.original.id);
+                }
               }}
               style={{ textTransform: 'uppercase', fontWeight: 700, color: 'inherit', textDecoration: 'none', display: 'block' }}
             >
