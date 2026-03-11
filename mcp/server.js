@@ -234,6 +234,68 @@ function createMcpServer(apiKeyData) {
     );
   }
 
+  // ----- Tool: crear_lead -----
+  if (hasPermission(apiKeyData, 'leads:create')) {
+    server.tool(
+      'crear_lead',
+      'Crear un nuevo lead. Devuelve el lead creado con su ID.',
+      {
+        campos: z.record(z.string(), z.any()).describe('Objeto con los campos del lead. Ej: { "Nombre Completo": "Juan Perez", "Email": "juan@mail.com", "Sede": "Buenos Aires" }'),
+      },
+      async ({ campos }) => {
+        try {
+          // Filtrar solo campos permitidos
+          const allowed = {};
+          const rejected = [];
+
+          for (const [key, value] of Object.entries(campos)) {
+            if (UPDATABLE_SET.has(key)) {
+              allowed[key] = value;
+            } else {
+              rejected.push(key);
+            }
+          }
+
+          if (Object.keys(allowed).length === 0) {
+            return {
+              content: [{
+                type: 'text',
+                text: `Ningun campo valido para crear lead. Campos rechazados: ${rejected.join(', ')}. Campos permitidos: ${UPDATABLE_FIELDS.join(', ')}`,
+              }],
+              isError: true,
+            };
+          }
+
+          const res = await supabaseRequest('leads', {
+            method: 'POST',
+            headers: { 'Prefer': 'return=representation' },
+            body: JSON.stringify(allowed),
+          });
+
+          const data = await res.json();
+
+          const result = {
+            mensaje: 'Lead creado exitosamente',
+            lead: data[0],
+          };
+
+          if (rejected.length > 0) {
+            result.camposRechazados = rejected;
+          }
+
+          return {
+            content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],
+          };
+        } catch (error) {
+          return {
+            content: [{ type: 'text', text: `Error creando lead: ${error.message}` }],
+            isError: true,
+          };
+        }
+      }
+    );
+  }
+
   // ----- Tool: actualizar_lead -----
   if (hasPermission(apiKeyData, 'leads:update')) {
     server.tool(
@@ -309,6 +371,50 @@ function createMcpServer(apiKeyData) {
     );
   }
 
+  // ----- Tool: eliminar_lead -----
+  if (hasPermission(apiKeyData, 'leads:delete')) {
+    server.tool(
+      'eliminar_lead',
+      'Eliminar un lead por su ID (UUID). Esta accion es irreversible.',
+      {
+        id: z.string().uuid().describe('ID del lead (UUID)'),
+      },
+      async ({ id }) => {
+        try {
+          // Verificar que existe
+          const checkRes = await supabaseRequest(`leads?id=eq.${id}&select=id,"Nombre Completo"`);
+          const existing = await checkRes.json();
+          if (!existing.length) {
+            return {
+              content: [{ type: 'text', text: `Lead con ID ${id} no encontrado.` }],
+              isError: true,
+            };
+          }
+
+          await supabaseRequest(`leads?id=eq.${id}`, {
+            method: 'DELETE',
+          });
+
+          return {
+            content: [{
+              type: 'text',
+              text: JSON.stringify({
+                mensaje: 'Lead eliminado exitosamente',
+                id,
+                nombre: existing[0]['Nombre Completo'],
+              }, null, 2),
+            }],
+          };
+        } catch (error) {
+          return {
+            content: [{ type: 'text', text: `Error eliminando lead: ${error.message}` }],
+            isError: true,
+          };
+        }
+      }
+    );
+  }
+
   // ----- Tool: buscar_hireflix -----
   if (hasPermission(apiKeyData, 'hireflix:read')) {
     server.tool(
@@ -360,6 +466,208 @@ function createMcpServer(apiKeyData) {
         } catch (error) {
           return {
             content: [{ type: 'text', text: `Error buscando hireflix: ${error.message}` }],
+            isError: true,
+          };
+        }
+      }
+    );
+  }
+
+  // ----- Tool: obtener_hireflix -----
+  if (hasPermission(apiKeyData, 'hireflix:read')) {
+    server.tool(
+      'obtener_hireflix',
+      'Obtener todos los datos de un registro Hireflix por su ID (UUID).',
+      {
+        id: z.string().uuid().describe('ID del registro Hireflix (UUID)'),
+      },
+      async ({ id }) => {
+        try {
+          const res = await supabaseRequest(`hireflix_historico?id=eq.${id}&select=*`);
+          const data = await res.json();
+
+          if (!data.length) {
+            return {
+              content: [{ type: 'text', text: `Registro Hireflix con ID ${id} no encontrado.` }],
+              isError: true,
+            };
+          }
+
+          return {
+            content: [{ type: 'text', text: JSON.stringify(data[0], null, 2) }],
+          };
+        } catch (error) {
+          return {
+            content: [{ type: 'text', text: `Error obteniendo registro Hireflix: ${error.message}` }],
+            isError: true,
+          };
+        }
+      }
+    );
+  }
+
+  // ----- Tool: crear_hireflix -----
+  if (hasPermission(apiKeyData, 'hireflix:create')) {
+    server.tool(
+      'crear_hireflix',
+      'Crear un nuevo registro en hireflix_historico. Campos: nombre, email, fecha.',
+      {
+        nombre: z.string().optional().describe('Nombre del candidato'),
+        email: z.string().optional().describe('Email del candidato'),
+        fecha: z.string().optional().describe('Fecha de la entrevista (ISO 8601)'),
+      },
+      async (params) => {
+        try {
+          const body = {};
+          if (params.nombre) body.nombre = params.nombre;
+          if (params.email) body.email = params.email;
+          if (params.fecha) body.fecha = params.fecha;
+
+          if (Object.keys(body).length === 0) {
+            return {
+              content: [{ type: 'text', text: 'Debes proporcionar al menos un campo: nombre, email o fecha.' }],
+              isError: true,
+            };
+          }
+
+          const res = await supabaseRequest('hireflix_historico', {
+            method: 'POST',
+            headers: { 'Prefer': 'return=representation' },
+            body: JSON.stringify(body),
+          });
+
+          const data = await res.json();
+
+          return {
+            content: [{
+              type: 'text',
+              text: JSON.stringify({
+                mensaje: 'Registro Hireflix creado exitosamente',
+                registro: data[0],
+              }, null, 2),
+            }],
+          };
+        } catch (error) {
+          return {
+            content: [{ type: 'text', text: `Error creando registro Hireflix: ${error.message}` }],
+            isError: true,
+          };
+        }
+      }
+    );
+  }
+
+  // ----- Tool: actualizar_hireflix -----
+  if (hasPermission(apiKeyData, 'hireflix:update')) {
+    server.tool(
+      'actualizar_hireflix',
+      'Actualizar un registro existente en hireflix_historico. Campos actualizables: nombre, email, fecha.',
+      {
+        id: z.string().uuid().describe('ID del registro Hireflix (UUID)'),
+        campos: z.record(z.string(), z.any()).describe('Campos a actualizar. Ej: { "nombre": "Maria Lopez", "email": "maria@mail.com" }'),
+      },
+      async ({ id, campos }) => {
+        try {
+          const HIREFLIX_FIELDS = new Set(['nombre', 'email', 'fecha']);
+          const updates = {};
+          const rejected = [];
+
+          for (const [key, value] of Object.entries(campos)) {
+            if (HIREFLIX_FIELDS.has(key)) {
+              updates[key] = value;
+            } else {
+              rejected.push(key);
+            }
+          }
+
+          if (Object.keys(updates).length === 0) {
+            return {
+              content: [{
+                type: 'text',
+                text: `Ningun campo valido para actualizar. Campos rechazados: ${rejected.join(', ')}. Campos permitidos: nombre, email, fecha`,
+              }],
+              isError: true,
+            };
+          }
+
+          // Verificar que existe
+          const checkRes = await supabaseRequest(`hireflix_historico?id=eq.${id}&select=id`);
+          const existing = await checkRes.json();
+          if (!existing.length) {
+            return {
+              content: [{ type: 'text', text: `Registro Hireflix con ID ${id} no encontrado.` }],
+              isError: true,
+            };
+          }
+
+          const updateRes = await supabaseRequest(`hireflix_historico?id=eq.${id}`, {
+            method: 'PATCH',
+            headers: { 'Prefer': 'return=representation' },
+            body: JSON.stringify(updates),
+          });
+
+          const updatedData = await updateRes.json();
+
+          const result = {
+            mensaje: 'Registro Hireflix actualizado exitosamente',
+            camposActualizados: Object.keys(updates),
+            registro: updatedData[0],
+          };
+
+          if (rejected.length > 0) {
+            result.camposRechazados = rejected;
+          }
+
+          return {
+            content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],
+          };
+        } catch (error) {
+          return {
+            content: [{ type: 'text', text: `Error actualizando registro Hireflix: ${error.message}` }],
+            isError: true,
+          };
+        }
+      }
+    );
+  }
+
+  // ----- Tool: eliminar_hireflix -----
+  if (hasPermission(apiKeyData, 'hireflix:delete')) {
+    server.tool(
+      'eliminar_hireflix',
+      'Eliminar un registro de hireflix_historico por su ID (UUID). Esta accion es irreversible.',
+      {
+        id: z.string().uuid().describe('ID del registro Hireflix (UUID)'),
+      },
+      async ({ id }) => {
+        try {
+          // Verificar que existe
+          const checkRes = await supabaseRequest(`hireflix_historico?id=eq.${id}&select=id,nombre`);
+          const existing = await checkRes.json();
+          if (!existing.length) {
+            return {
+              content: [{ type: 'text', text: `Registro Hireflix con ID ${id} no encontrado.` }],
+              isError: true,
+            };
+          }
+
+          await supabaseRequest(`hireflix_historico?id=eq.${id}`, {
+            method: 'DELETE',
+          });
+
+          return {
+            content: [{
+              type: 'text',
+              text: JSON.stringify({
+                mensaje: 'Registro Hireflix eliminado exitosamente',
+                id,
+                nombre: existing[0].nombre,
+              }, null, 2),
+            }],
+          };
+        } catch (error) {
+          return {
+            content: [{ type: 'text', text: `Error eliminando registro Hireflix: ${error.message}` }],
             isError: true,
           };
         }

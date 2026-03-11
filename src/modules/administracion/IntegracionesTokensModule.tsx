@@ -1305,8 +1305,13 @@ interface ApiKeyData {
 
 const AVAILABLE_PERMISSIONS = [
   { value: 'leads:read', label: 'Leads: Lectura', desc: 'Buscar y ver leads' },
+  { value: 'leads:create', label: 'Leads: Crear', desc: 'Crear nuevos leads' },
   { value: 'leads:update', label: 'Leads: Escritura', desc: 'Actualizar campos de leads' },
-  { value: 'hireflix:read', label: 'Hireflix: Lectura', desc: 'Buscar registros de Hireflix' },
+  { value: 'leads:delete', label: 'Leads: Eliminar', desc: 'Eliminar leads' },
+  { value: 'hireflix:read', label: 'Hireflix: Lectura', desc: 'Buscar y ver registros de Hireflix' },
+  { value: 'hireflix:create', label: 'Hireflix: Crear', desc: 'Crear registros de Hireflix' },
+  { value: 'hireflix:update', label: 'Hireflix: Escritura', desc: 'Actualizar registros de Hireflix' },
+  { value: 'hireflix:delete', label: 'Hireflix: Eliminar', desc: 'Eliminar registros de Hireflix' },
 ];
 
 function McpTab() {
@@ -1314,7 +1319,7 @@ function McpTab() {
   const [loading, setLoading] = useState(true);
   const [showCreate, setShowCreate] = useState(false);
   const [newName, setNewName] = useState('');
-  const [newPermissions, setNewPermissions] = useState<string[]>(['leads:read', 'leads:update', 'hireflix:read']);
+  const [newPermissions, setNewPermissions] = useState<string[]>(['leads:read', 'hireflix:read']);
   const [creating, setCreating] = useState(false);
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [revealedKeys, setRevealedKeys] = useState<Set<string>>(new Set());

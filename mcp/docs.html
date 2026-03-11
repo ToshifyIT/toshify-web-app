@@ -17,6 +17,7 @@
       --orange: #d29922;
       --red: #f85149;
       --purple: #bc8cff;
+      --blue: #58a6ff;
     }
 
     * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -88,6 +89,7 @@
     }
 
     h3 { font-size: 16px; font-weight: 600; margin: 20px 0 8px; }
+    h4 { font-size: 14px; font-weight: 600; margin: 16px 0 6px; color: var(--text-dim); }
 
     .section { margin-bottom: 32px; }
 
@@ -122,7 +124,9 @@
     }
 
     .badge-read { background: rgba(59, 185, 80, 0.15); color: var(--green); }
+    .badge-create { background: rgba(88, 166, 255, 0.15); color: var(--blue); }
     .badge-write { background: rgba(210, 153, 34, 0.15); color: var(--orange); }
+    .badge-delete { background: rgba(248, 81, 73, 0.15); color: var(--red); }
 
     .tool-desc { color: var(--text-dim); font-size: 14px; margin-bottom: 16px; }
 
@@ -171,6 +175,17 @@
       line-height: 1.5;
       margin: 12px 0;
     }
+
+    .example-label {
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 4px;
+    }
+
+    .example-label.input { color: var(--primary); }
+    .example-label.output { color: var(--green); }
 
     .auth-section {
       background: rgba(88, 166, 255, 0.08);
@@ -240,6 +255,21 @@
       color: var(--border);
     }
 
+    .separator {
+      border: none;
+      border-top: 1px dashed var(--border);
+      margin: 16px 0;
+    }
+
+    .table-header {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--orange);
+      margin: 24px 0 8px;
+      padding: 8px 0;
+      border-bottom: 1px solid var(--border);
+    }
+
     footer {
       margin-top: 48px;
       padding-top: 24px;
@@ -269,7 +299,7 @@
         Toshify MCP Server
         <span class="badge" id="status-badge">Checking...</span>
       </h1>
-      <p>Model Context Protocol server para chatbots. Acceso a <strong>leads</strong> y <strong>hireflix_historico</strong>.</p>
+      <p>Model Context Protocol server para chatbots. Acceso completo (CRUD) a <strong>leads</strong> y <strong>hireflix_historico</strong>.</p>
 
       <div class="server-url">
         <div>
@@ -307,7 +337,7 @@
           <strong>Configurar tu cliente MCP</strong><br>
           <pre>{
   "mcpServers": {
-    "toshify-leads": {
+    "toshify": {
       "url": "<span id="config-url"></span>/sse?apiKey=TU_API_KEY"
     }
   }
@@ -318,24 +348,52 @@
 
     <!-- Permissions -->
     <h2>Permisos</h2>
-    <p style="color: var(--text-dim); font-size: 14px; margin-bottom: 12px;">Cada API key tiene permisos granulares que determinan que herramientas puede usar.</p>
+    <p style="color: var(--text-dim); font-size: 14px; margin-bottom: 12px;">Cada API key tiene permisos granulares. Solo ve las herramientas para las que tiene permiso.</p>
+
+    <div class="table-header">Tabla: leads</div>
     <div class="permissions-grid">
       <div class="perm-card">
         <code>leads:read</code>
         <p>Buscar y ver leads</p>
       </div>
       <div class="perm-card">
+        <code>leads:create</code>
+        <p>Crear nuevos leads</p>
+      </div>
+      <div class="perm-card">
         <code>leads:update</code>
         <p>Actualizar campos de leads</p>
       </div>
       <div class="perm-card">
-        <code>hireflix:read</code>
-        <p>Buscar registros de Hireflix</p>
+        <code>leads:delete</code>
+        <p>Eliminar leads</p>
       </div>
     </div>
 
-    <!-- Tools -->
-    <h2>Herramientas</h2>
+    <div class="table-header">Tabla: hireflix_historico</div>
+    <div class="permissions-grid">
+      <div class="perm-card">
+        <code>hireflix:read</code>
+        <p>Buscar y ver registros</p>
+      </div>
+      <div class="perm-card">
+        <code>hireflix:create</code>
+        <p>Crear registros</p>
+      </div>
+      <div class="perm-card">
+        <code>hireflix:update</code>
+        <p>Actualizar registros</p>
+      </div>
+      <div class="perm-card">
+        <code>hireflix:delete</code>
+        <p>Eliminar registros</p>
+      </div>
+    </div>
+
+    <!-- ============================= -->
+    <!-- HERRAMIENTAS DE LEADS -->
+    <!-- ============================= -->
+    <h2>Herramientas - Leads</h2>
 
     <!-- buscar_leads -->
     <div class="card">
@@ -350,17 +408,52 @@
         </thead>
         <tbody>
           <tr><td><code>search</code></td><td>string</td><td class="optional">No</td><td>Buscar en Nombre Completo, Email o DNI</td></tr>
-          <tr><td><code>estado</code></td><td>string</td><td class="optional">No</td><td>Filtrar por Estado de Lead</td></tr>
+          <tr><td><code>estado</code></td><td>string</td><td class="optional">No</td><td>Filtrar por Estado de Lead (ej: Nuevo, Contactado, En proceso)</td></tr>
           <tr><td><code>agente</code></td><td>string</td><td class="optional">No</td><td>Filtrar por Agente asignado</td></tr>
-          <tr><td><code>sede</code></td><td>string</td><td class="optional">No</td><td>Filtrar por Sede</td></tr>
-          <tr><td><code>desde</code></td><td>string</td><td class="optional">No</td><td>Fecha desde (ISO 8601)</td></tr>
-          <tr><td><code>hasta</code></td><td>string</td><td class="optional">No</td><td>Fecha hasta (ISO 8601)</td></tr>
+          <tr><td><code>sede</code></td><td>string</td><td class="optional">No</td><td>Filtrar por Sede (ej: Buenos Aires, Cordoba)</td></tr>
+          <tr><td><code>desde</code></td><td>string</td><td class="optional">No</td><td>Fecha desde (ISO 8601, ej: 2025-01-01)</td></tr>
+          <tr><td><code>hasta</code></td><td>string</td><td class="optional">No</td><td>Fecha hasta (ISO 8601, ej: 2025-12-31)</td></tr>
           <tr><td><code>page</code></td><td>number</td><td class="optional">No</td><td>Pagina (default: 1)</td></tr>
           <tr><td><code>limit</code></td><td>number</td><td class="optional">No</td><td>Cantidad por pagina (default: 20, max: 100)</td></tr>
         </tbody>
       </table>
-      <h3>Ejemplo</h3>
-      <pre>buscar_leads({ search: "Juan Perez", estado: "Nuevo" })</pre>
+
+      <hr class="separator">
+      <h4>Ejemplo 1: Buscar por nombre</h4>
+      <div class="example-label input">Lo que le decis al chatbot:</div>
+      <pre>"Busca todos los leads que se llamen Juan"</pre>
+      <div class="example-label input">Tool call:</div>
+      <pre>buscar_leads({ search: "Juan" })</pre>
+      <div class="example-label output">Respuesta:</div>
+      <pre>{
+  "total": 3,
+  "page": 1,
+  "limit": 20,
+  "totalPages": 1,
+  "leads": [
+    {
+      "id": "a1b2c3d4-...",
+      "Nombre Completo": "Juan Perez",
+      "Email": "juan@email.com",
+      "Phone": "+5491112345678",
+      "DNI": "33444555",
+      "Estado de Lead": "Contactado",
+      "Sede": "Buenos Aires",
+      "Agente asignado": "Maria Garcia",
+      "Fecha creacion": "2025-06-15T10:30:00Z",
+      "Fase de Preguntas": "Entrevista"
+    },
+    ...
+  ]
+}</pre>
+
+      <h4>Ejemplo 2: Filtrar por estado y sede</h4>
+      <div class="example-label input">Tool call:</div>
+      <pre>buscar_leads({ estado: "Nuevo", sede: "Cordoba", limit: 10 })</pre>
+
+      <h4>Ejemplo 3: Leads de la ultima semana</h4>
+      <div class="example-label input">Tool call:</div>
+      <pre>buscar_leads({ desde: "2025-06-01", hasta: "2025-06-07" })</pre>
     </div>
 
     <!-- obtener_lead -->
@@ -369,7 +462,7 @@
         <span class="tool-name">obtener_lead</span>
         <span class="tool-badge badge-read">leads:read</span>
       </div>
-      <div class="tool-desc">Obtener todos los datos de un lead por su ID (UUID).</div>
+      <div class="tool-desc">Obtener TODOS los datos de un lead por su ID. Devuelve todos los campos (60+).</div>
       <table>
         <thead>
           <tr><th>Parametro</th><th>Tipo</th><th>Requerido</th><th>Descripcion</th></tr>
@@ -378,37 +471,113 @@
           <tr><td><code>id</code></td><td>string (UUID)</td><td class="required">Si</td><td>ID del lead</td></tr>
         </tbody>
       </table>
-      <h3>Ejemplo</h3>
-      <pre>obtener_lead({ id: "550e8400-e29b-41d4-a716-446655440000" })</pre>
+
+      <hr class="separator">
+      <h4>Ejemplo</h4>
+      <div class="example-label input">Lo que le decis al chatbot:</div>
+      <pre>"Dame toda la info del lead Juan Perez" (el chatbot primero busca con buscar_leads, obtiene el ID, y luego llama a obtener_lead)</pre>
+      <div class="example-label input">Tool call:</div>
+      <pre>obtener_lead({ id: "a1b2c3d4-e5f6-7890-abcd-ef1234567890" })</pre>
+      <div class="example-label output">Respuesta:</div>
+      <pre>{
+  "id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+  "Nombre Completo": "Juan Perez",
+  "Apellido": "Perez",
+  "Primer nombre": "Juan",
+  "Email": "juan@email.com",
+  "Phone": "+5491112345678",
+  "WhatsApp number": "+5491112345678",
+  "DNI": "33444555",
+  "Edad": 28,
+  "Direccion": "Av. Corrientes 1234",
+  "City": "CABA",
+  "Region": "Buenos Aires",
+  "Country": "Argentina",
+  "Zona": "Norte",
+  "Sede": "Buenos Aires",
+  "Turno": "Manana",
+  "Estado de Lead": "Contactado",
+  "Agente asignado": "Maria Garcia",
+  "Entrevistador asignado": "Carlos Lopez",
+  "Fase de Preguntas": "Entrevista",
+  "Patente": "AB123CD",
+  "Marca y modelo de vehiculo": "Toyota Corolla 2020",
+  "Licencia": "Profesional",
+  "Monotributo": "Si",
+  "Fecha creacion": "2025-06-15T10:30:00Z",
+  ... (todos los campos del lead)
+}</pre>
     </div>
 
-    <!-- actualizar_lead -->
+    <!-- crear_lead -->
     <div class="card">
       <div class="card-header">
-        <span class="tool-name">actualizar_lead</span>
-        <span class="tool-badge badge-write">leads:update</span>
+        <span class="tool-name">crear_lead</span>
+        <span class="tool-badge badge-create">leads:create</span>
       </div>
-      <div class="tool-desc">Actualizar campos de un lead existente. Solo se pueden modificar campos permitidos.</div>
+      <div class="tool-desc">Crear un nuevo lead. Se genera un ID automaticamente. Solo acepta campos permitidos (ver lista abajo).</div>
       <table>
         <thead>
           <tr><th>Parametro</th><th>Tipo</th><th>Requerido</th><th>Descripcion</th></tr>
         </thead>
         <tbody>
-          <tr><td><code>id</code></td><td>string (UUID)</td><td class="required">Si</td><td>ID del lead</td></tr>
-          <tr><td><code>campos</code></td><td>object</td><td class="required">Si</td><td>Campos a actualizar</td></tr>
+          <tr><td><code>campos</code></td><td>object</td><td class="required">Si</td><td>Objeto con los datos del lead a crear</td></tr>
         </tbody>
       </table>
-      <h3>Campos actualizables</h3>
+
+      <hr class="separator">
+      <h4>Ejemplo 1: Crear lead basico</h4>
+      <div class="example-label input">Lo que le decis al chatbot:</div>
+      <pre>"Crea un lead nuevo: Juan Perez, email juan@mail.com, telefono +5491112345678, sede Buenos Aires"</pre>
+      <div class="example-label input">Tool call:</div>
+      <pre>crear_lead({
+  campos: {
+    "Nombre Completo": "Juan Perez",
+    "Primer nombre": "Juan",
+    "Apellido": "Perez",
+    "Email": "juan@mail.com",
+    "Phone": "+5491112345678",
+    "Sede": "Buenos Aires",
+    "Estado de Lead": "Nuevo"
+  }
+})</pre>
+      <div class="example-label output">Respuesta:</div>
+      <pre>{
+  "mensaje": "Lead creado exitosamente",
+  "lead": {
+    "id": "f47ac10b-58cc-4372-a567-0e02b2c3d479",
+    "Nombre Completo": "Juan Perez",
+    "Primer nombre": "Juan",
+    "Apellido": "Perez",
+    "Email": "juan@mail.com",
+    "Phone": "+5491112345678",
+    "Sede": "Buenos Aires",
+    "Estado de Lead": "Nuevo",
+    "Fecha creacion": "2025-06-20T14:30:00Z",
+    "created_at": "2025-06-20T14:30:00Z",
+    ...
+  }
+}</pre>
+
+      <h4>Ejemplo 2: Crear lead con mas datos</h4>
+      <div class="example-label input">Tool call:</div>
+      <pre>crear_lead({
+  campos: {
+    "Nombre Completo": "Maria Lopez",
+    "Email": "maria@mail.com",
+    "Phone": "+5491198765432",
+    "DNI": "40123456",
+    "Sede": "Cordoba",
+    "Zona": "Centro",
+    "Estado de Lead": "Nuevo",
+    "Fuente de lead": "Instagram",
+    "Marca y modelo de vehiculo": "Fiat Cronos 2022",
+    "Patente": "AE456FG"
+  }
+})</pre>
+
+      <h3>Campos permitidos para crear</h3>
       <ul class="fields-list">
-        <li>Estado de Lead</li>
-        <li>Agente asignado</li>
-        <li>Entrevistador asignado</li>
-        <li>Especialista Onboarding</li>
-        <li>Administrativo Asignado</li>
-        <li>Dataentry Asignado</li>
-        <li>Agente logistico asignado</li>
-        <li>Guia asignado</li>
-        <li>Asistente Virtual</li>
         <li>Nombre Completo</li>
         <li>Apellido</li>
         <li>Primer nombre</li>
@@ -423,29 +592,145 @@
         <li>Sede</li>
         <li>Turno</li>
         <li>Patente</li>
+        <li>Compañero</li>
         <li>Tipo</li>
+        <li>Estado de Lead</li>
+        <li>Agente asignado</li>
+        <li>Entrevistador asignado</li>
+        <li>Especialista Onboarding</li>
+        <li>Administrativo Asignado</li>
+        <li>Dataentry Asignado</li>
+        <li>Agente logistico asignado</li>
+        <li>Guia asignado</li>
+        <li>Asistente Virtual</li>
         <li>Licencia</li>
         <li>Monotributo</li>
         <li>Experiencia previa</li>
         <li>Acepta oferta</li>
         <li>Antecedentes penales</li>
+        <li>Tiempo de antiguedad</li>
         <li>Fase de Preguntas</li>
         <li>Documentos pendientes</li>
         <li>Causal de cierre</li>
         <li>Contacto de emergencia</li>
+        <li>Link facturacion</li>
+        <li>Ayuda Entrevista</li>
+        <li>Codigo Referido</li>
+        <li>Año de auto</li>
+        <li>Km de auto</li>
+        <li>Marca y modelo de vehiculo</li>
         <li>Fuente de lead</li>
         <li>Cerrado timeout wpp</li>
       </ul>
-      <h3>Ejemplo</h3>
+    </div>
+
+    <!-- actualizar_lead -->
+    <div class="card">
+      <div class="card-header">
+        <span class="tool-name">actualizar_lead</span>
+        <span class="tool-badge badge-write">leads:update</span>
+      </div>
+      <div class="tool-desc">Actualizar campos de un lead existente. Solo modifica los campos que envies, el resto queda igual.</div>
+      <table>
+        <thead>
+          <tr><th>Parametro</th><th>Tipo</th><th>Requerido</th><th>Descripcion</th></tr>
+        </thead>
+        <tbody>
+          <tr><td><code>id</code></td><td>string (UUID)</td><td class="required">Si</td><td>ID del lead a actualizar</td></tr>
+          <tr><td><code>campos</code></td><td>object</td><td class="required">Si</td><td>Campos a actualizar (mismos campos permitidos que crear_lead)</td></tr>
+        </tbody>
+      </table>
+
+      <hr class="separator">
+      <h4>Ejemplo 1: Cambiar estado</h4>
+      <div class="example-label input">Lo que le decis al chatbot:</div>
+      <pre>"Cambia el estado de Juan Perez a Contactado"</pre>
+      <div class="example-label input">Tool call:</div>
       <pre>actualizar_lead({
-  id: "550e8400-e29b-41d4-a716-446655440000",
+  id: "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
   campos: {
-    "Estado de Lead": "Contactado",
-    "Sede": "Cordoba",
-    "Phone": "+5491112345678"
+    "Estado de Lead": "Contactado"
   }
 })</pre>
+      <div class="example-label output">Respuesta:</div>
+      <pre>{
+  "mensaje": "Lead actualizado exitosamente",
+  "camposActualizados": ["Estado de Lead"],
+  "lead": {
+    "id": "a1b2c3d4-...",
+    "Nombre Completo": "Juan Perez",
+    "Estado de Lead": "Contactado",
+    ...
+  }
+}</pre>
+
+      <h4>Ejemplo 2: Actualizar varios campos a la vez</h4>
+      <div class="example-label input">Tool call:</div>
+      <pre>actualizar_lead({
+  id: "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+  campos: {
+    "Sede": "Cordoba",
+    "Agente asignado": "Pedro Martinez",
+    "Phone": "+5493511234567",
+    "Fase de Preguntas": "Documentacion"
+  }
+})</pre>
+
+      <h4>Ejemplo 3: Si mandas un campo que no existe</h4>
+      <div class="example-label input">Tool call:</div>
+      <pre>actualizar_lead({
+  id: "a1b2c3d4-...",
+  campos: {
+    "Estado de Lead": "En proceso",
+    "campo_inventado": "valor"
+  }
+})</pre>
+      <div class="example-label output">Respuesta (actualiza lo valido, avisa lo rechazado):</div>
+      <pre>{
+  "mensaje": "Lead actualizado exitosamente",
+  "camposActualizados": ["Estado de Lead"],
+  "camposRechazados": ["campo_inventado"],
+  "lead": { ... }
+}</pre>
     </div>
+
+    <!-- eliminar_lead -->
+    <div class="card">
+      <div class="card-header">
+        <span class="tool-name">eliminar_lead</span>
+        <span class="tool-badge badge-delete">leads:delete</span>
+      </div>
+      <div class="tool-desc">Eliminar un lead por su ID. <strong>CUIDADO: esta accion es irreversible.</strong></div>
+      <table>
+        <thead>
+          <tr><th>Parametro</th><th>Tipo</th><th>Requerido</th><th>Descripcion</th></tr>
+        </thead>
+        <tbody>
+          <tr><td><code>id</code></td><td>string (UUID)</td><td class="required">Si</td><td>ID del lead a eliminar</td></tr>
+        </tbody>
+      </table>
+
+      <hr class="separator">
+      <h4>Ejemplo</h4>
+      <div class="example-label input">Lo que le decis al chatbot:</div>
+      <pre>"Elimina el lead de Juan Perez"</pre>
+      <div class="example-label input">Tool call:</div>
+      <pre>eliminar_lead({ id: "a1b2c3d4-e5f6-7890-abcd-ef1234567890" })</pre>
+      <div class="example-label output">Respuesta:</div>
+      <pre>{
+  "mensaje": "Lead eliminado exitosamente",
+  "id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+  "nombre": "Juan Perez"
+}</pre>
+
+      <h4>Si el lead no existe:</h4>
+      <pre style="border-color: var(--red);">"Lead con ID a1b2c3d4-... no encontrado."</pre>
+    </div>
+
+    <!-- ============================= -->
+    <!-- HERRAMIENTAS DE HIREFLIX -->
+    <!-- ============================= -->
+    <h2>Herramientas - Hireflix Historico</h2>
 
     <!-- buscar_hireflix -->
     <div class="card">
@@ -453,32 +738,210 @@
         <span class="tool-name">buscar_hireflix</span>
         <span class="tool-badge badge-read">hireflix:read</span>
       </div>
-      <div class="tool-desc">Buscar registros historicos de Hireflix (entrevistas).</div>
+      <div class="tool-desc">Buscar registros historicos de entrevistas Hireflix. Filtrar por nombre, email o fecha.</div>
       <table>
         <thead>
           <tr><th>Parametro</th><th>Tipo</th><th>Requerido</th><th>Descripcion</th></tr>
         </thead>
         <tbody>
           <tr><td><code>search</code></td><td>string</td><td class="optional">No</td><td>Buscar en nombre o email</td></tr>
-          <tr><td><code>desde</code></td><td>string</td><td class="optional">No</td><td>Fecha desde (ISO 8601)</td></tr>
+          <tr><td><code>desde</code></td><td>string</td><td class="optional">No</td><td>Fecha desde (ISO 8601, ej: 2025-01-01)</td></tr>
           <tr><td><code>hasta</code></td><td>string</td><td class="optional">No</td><td>Fecha hasta (ISO 8601)</td></tr>
           <tr><td><code>page</code></td><td>number</td><td class="optional">No</td><td>Pagina (default: 1)</td></tr>
-          <tr><td><code>limit</code></td><td>number</td><td class="optional">No</td><td>Cantidad por pagina (max: 100)</td></tr>
+          <tr><td><code>limit</code></td><td>number</td><td class="optional">No</td><td>Cantidad por pagina (default: 20, max: 100)</td></tr>
         </tbody>
       </table>
-      <h3>Ejemplo</h3>
-      <pre>buscar_hireflix({ search: "Maria Lopez", desde: "2025-01-01" })</pre>
+
+      <hr class="separator">
+      <h4>Ejemplo 1: Buscar por nombre</h4>
+      <div class="example-label input">Lo que le decis al chatbot:</div>
+      <pre>"Busca las entrevistas de Maria Lopez en Hireflix"</pre>
+      <div class="example-label input">Tool call:</div>
+      <pre>buscar_hireflix({ search: "Maria Lopez" })</pre>
+      <div class="example-label output">Respuesta:</div>
+      <pre>{
+  "total": 2,
+  "page": 1,
+  "limit": 20,
+  "totalPages": 1,
+  "registros": [
+    {
+      "id": "b2c3d4e5-...",
+      "nombre": "Maria Lopez",
+      "email": "maria@email.com",
+      "fecha": "2025-06-10T15:00:00Z",
+      "created_at": "2025-06-10T15:00:00Z",
+      "updated_at": "2025-06-10T15:00:00Z"
+    },
+    {
+      "id": "c3d4e5f6-...",
+      "nombre": "Maria Lopez",
+      "email": "maria@email.com",
+      "fecha": "2025-05-20T11:00:00Z",
+      ...
+    }
+  ]
+}</pre>
+
+      <h4>Ejemplo 2: Entrevistas del ultimo mes</h4>
+      <div class="example-label input">Tool call:</div>
+      <pre>buscar_hireflix({ desde: "2025-06-01", hasta: "2025-06-30" })</pre>
+    </div>
+
+    <!-- obtener_hireflix -->
+    <div class="card">
+      <div class="card-header">
+        <span class="tool-name">obtener_hireflix</span>
+        <span class="tool-badge badge-read">hireflix:read</span>
+      </div>
+      <div class="tool-desc">Obtener todos los datos de un registro Hireflix por su ID.</div>
+      <table>
+        <thead>
+          <tr><th>Parametro</th><th>Tipo</th><th>Requerido</th><th>Descripcion</th></tr>
+        </thead>
+        <tbody>
+          <tr><td><code>id</code></td><td>string (UUID)</td><td class="required">Si</td><td>ID del registro Hireflix</td></tr>
+        </tbody>
+      </table>
+
+      <hr class="separator">
+      <h4>Ejemplo</h4>
+      <div class="example-label input">Tool call:</div>
+      <pre>obtener_hireflix({ id: "b2c3d4e5-f6a7-8901-bcde-f12345678901" })</pre>
+      <div class="example-label output">Respuesta:</div>
+      <pre>{
+  "id": "b2c3d4e5-f6a7-8901-bcde-f12345678901",
+  "nombre": "Maria Lopez",
+  "email": "maria@email.com",
+  "fecha": "2025-06-10T15:00:00Z",
+  "created_at": "2025-06-10T15:00:00Z",
+  "updated_at": "2025-06-10T15:00:00Z"
+}</pre>
+    </div>
+
+    <!-- crear_hireflix -->
+    <div class="card">
+      <div class="card-header">
+        <span class="tool-name">crear_hireflix</span>
+        <span class="tool-badge badge-create">hireflix:create</span>
+      </div>
+      <div class="tool-desc">Crear un nuevo registro en hireflix_historico. Campos disponibles: nombre, email, fecha.</div>
+      <table>
+        <thead>
+          <tr><th>Parametro</th><th>Tipo</th><th>Requerido</th><th>Descripcion</th></tr>
+        </thead>
+        <tbody>
+          <tr><td><code>nombre</code></td><td>string</td><td class="optional">No*</td><td>Nombre del candidato</td></tr>
+          <tr><td><code>email</code></td><td>string</td><td class="optional">No*</td><td>Email del candidato</td></tr>
+          <tr><td><code>fecha</code></td><td>string</td><td class="optional">No*</td><td>Fecha de la entrevista (ISO 8601)</td></tr>
+        </tbody>
+      </table>
+      <p style="color: var(--text-dim); font-size: 12px; margin-top: 8px;">* Al menos uno de los tres campos es requerido.</p>
+
+      <hr class="separator">
+      <h4>Ejemplo</h4>
+      <div class="example-label input">Lo que le decis al chatbot:</div>
+      <pre>"Registra una entrevista Hireflix de Pedro Martinez, pedro@mail.com, fecha 15 de junio 2025"</pre>
+      <div class="example-label input">Tool call:</div>
+      <pre>crear_hireflix({
+  nombre: "Pedro Martinez",
+  email: "pedro@mail.com",
+  fecha: "2025-06-15T10:00:00Z"
+})</pre>
+      <div class="example-label output">Respuesta:</div>
+      <pre>{
+  "mensaje": "Registro Hireflix creado exitosamente",
+  "registro": {
+    "id": "d4e5f6a7-...",
+    "nombre": "Pedro Martinez",
+    "email": "pedro@mail.com",
+    "fecha": "2025-06-15T10:00:00Z",
+    "created_at": "2025-06-20T14:30:00Z",
+    "updated_at": "2025-06-20T14:30:00Z"
+  }
+}</pre>
+    </div>
+
+    <!-- actualizar_hireflix -->
+    <div class="card">
+      <div class="card-header">
+        <span class="tool-name">actualizar_hireflix</span>
+        <span class="tool-badge badge-write">hireflix:update</span>
+      </div>
+      <div class="tool-desc">Actualizar un registro de hireflix_historico. Campos actualizables: nombre, email, fecha.</div>
+      <table>
+        <thead>
+          <tr><th>Parametro</th><th>Tipo</th><th>Requerido</th><th>Descripcion</th></tr>
+        </thead>
+        <tbody>
+          <tr><td><code>id</code></td><td>string (UUID)</td><td class="required">Si</td><td>ID del registro a actualizar</td></tr>
+          <tr><td><code>campos</code></td><td>object</td><td class="required">Si</td><td>Campos a actualizar: nombre, email, fecha</td></tr>
+        </tbody>
+      </table>
+
+      <hr class="separator">
+      <h4>Ejemplo: Corregir email</h4>
+      <div class="example-label input">Lo que le decis al chatbot:</div>
+      <pre>"Corrige el email del registro Hireflix de Pedro Martinez a pedro.martinez@gmail.com"</pre>
+      <div class="example-label input">Tool call:</div>
+      <pre>actualizar_hireflix({
+  id: "d4e5f6a7-b8c9-0123-defg-h45678901234",
+  campos: {
+    "email": "pedro.martinez@gmail.com"
+  }
+})</pre>
+      <div class="example-label output">Respuesta:</div>
+      <pre>{
+  "mensaje": "Registro Hireflix actualizado exitosamente",
+  "camposActualizados": ["email"],
+  "registro": {
+    "id": "d4e5f6a7-...",
+    "nombre": "Pedro Martinez",
+    "email": "pedro.martinez@gmail.com",
+    "fecha": "2025-06-15T10:00:00Z",
+    ...
+  }
+}</pre>
+    </div>
+
+    <!-- eliminar_hireflix -->
+    <div class="card">
+      <div class="card-header">
+        <span class="tool-name">eliminar_hireflix</span>
+        <span class="tool-badge badge-delete">hireflix:delete</span>
+      </div>
+      <div class="tool-desc">Eliminar un registro de hireflix_historico. <strong>CUIDADO: esta accion es irreversible.</strong></div>
+      <table>
+        <thead>
+          <tr><th>Parametro</th><th>Tipo</th><th>Requerido</th><th>Descripcion</th></tr>
+        </thead>
+        <tbody>
+          <tr><td><code>id</code></td><td>string (UUID)</td><td class="required">Si</td><td>ID del registro a eliminar</td></tr>
+        </tbody>
+      </table>
+
+      <hr class="separator">
+      <h4>Ejemplo</h4>
+      <div class="example-label input">Tool call:</div>
+      <pre>eliminar_hireflix({ id: "d4e5f6a7-b8c9-0123-defg-h45678901234" })</pre>
+      <div class="example-label output">Respuesta:</div>
+      <pre>{
+  "mensaje": "Registro Hireflix eliminado exitosamente",
+  "id": "d4e5f6a7-b8c9-0123-defg-h45678901234",
+  "nombre": "Pedro Martinez"
+}</pre>
     </div>
 
     <!-- Security -->
     <h2>Seguridad</h2>
     <div class="card">
       <ul style="list-style: none; font-size: 14px;">
-        <li style="margin: 8px 0;">Este servidor <strong>solo</strong> tiene acceso a las tablas <code>leads</code> y <code>hireflix_historico</code>.</li>
+        <li style="margin: 8px 0;">Este servidor <strong>solo</strong> tiene acceso a las tablas <code>leads</code> y <code>hireflix_historico</code>. Nada mas.</li>
         <li style="margin: 8px 0;">No tiene acceso a conductores, vehiculos, facturacion, ni ninguna otra tabla del sistema.</li>
-        <li style="margin: 8px 0;">Cada API key tiene permisos granulares - se puede crear una key de solo lectura.</li>
+        <li style="margin: 8px 0;">Cada API key tiene permisos granulares - podes crear una key de solo lectura, o una que solo pueda crear pero no borrar, etc.</li>
         <li style="margin: 8px 0;">Las API keys se pueden desactivar en cualquier momento desde la app de administracion.</li>
-        <li style="margin: 8px 0;">Se registra la ultima vez que se uso cada API key (<code>last_used_at</code>).</li>
+        <li style="margin: 8px 0;">Se registra la ultima vez que se uso cada API key.</li>
+        <li style="margin: 8px 0;">Las acciones de eliminar son <strong>irreversibles</strong>. Usa con cuidado.</li>
       </ul>
     </div>
 
