@@ -683,7 +683,10 @@ function createMcpServer(apiKeyData) {
 // =====================================================
 
 const app = express();
-app.use(express.json());
+
+// IMPORTANTE: NO usar express.json() globalmente
+// porque consume el body stream antes de que SSEServerTransport.handlePostMessage pueda leerlo.
+// Solo usar en rutas que lo necesiten explicitamente.
 
 // Docs page
 app.get('/docs', (req, res) => {
