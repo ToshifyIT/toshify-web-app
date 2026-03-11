@@ -7,6 +7,42 @@
   gap: 16px;
 }
 
+/* Tabs estilo facturación */
+.bitacora-tabs {
+  display: flex;
+  gap: 4px;
+  background: transparent;
+  padding: 0;
+  flex-wrap: wrap;
+}
+
+.bitacora-tab {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 8px 16px;
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  border-radius: 6px;
+  transition: all 0.15s;
+  flex: 1;
+}
+
+.bitacora-tab:hover {
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+}
+
+.bitacora-tab.active {
+  background: var(--color-primary);
+  color: white;
+}
+
 /* Table scrolls internally, fits screen */
 .bitacora-module .dt-table-wrapper {
   max-height: calc(100vh - 340px);

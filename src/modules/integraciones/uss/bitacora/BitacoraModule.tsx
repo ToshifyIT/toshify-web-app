@@ -1,18 +1,25 @@
 // src/modules/integraciones/uss/bitacora/BitacoraModule.tsx
 /**
  * Módulo principal de Bitácora - Control de Turnos
- * Histórico: registros crudos de uss_historico
  * Marcaciones: datos sumarizados de wialon_bitacora (1 fila/conductor/día)
+ * Histórico: registros crudos de uss_historico
  */
 
 import { useMemo } from 'react';
-import { List, UserCheck } from 'lucide-react';
+import { UserCheck, List } from 'lucide-react';
 import { useUSSHistoricoData } from './hooks/useUSSHistoricoData';
 import { BitacoraHeader } from './components';
 import { HistoricoTable } from './components/HistoricoTable';
 import { MarcacionesTable } from './components/MarcacionesTable';
 import './styles/bitacora.css';
 import '../styles/uss.css';
+
+type VistaType = 'marcaciones' | 'historico';
+
+const TABS: { id: VistaType; label: string; icon: typeof UserCheck }[] = [
+  { id: 'marcaciones', label: 'Marcaciones', icon: UserCheck },
+  { id: 'historico', label: 'Histórico', icon: List },
+];
 
 export function BitacoraModule() {
   const {
@@ -62,46 +69,43 @@ export function BitacoraModule() {
         </div>
       )}
 
-      {/* Toggle de vistas */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-        <button
-          onClick={() => setVista('historico')}
-          style={{
-            display: 'flex', alignItems: 'center', gap: '6px',
-            padding: '8px 16px', fontSize: '13px', fontWeight: 600,
-            border: '1px solid', borderRadius: '6px',
-            borderColor: vista === 'historico' ? 'var(--color-primary)' : 'var(--border-color)',
-            background: vista === 'historico' ? 'var(--color-primary)' : 'var(--bg-primary)',
-            color: vista === 'historico' ? '#fff' : 'var(--text-secondary)',
-            cursor: 'pointer',
-          }}
-        >
-          <List size={15} /> Histórico
-        </button>
-        <button
-          onClick={() => setVista('marcaciones')}
-          style={{
-            display: 'flex', alignItems: 'center', gap: '6px',
-            padding: '8px 16px', fontSize: '13px', fontWeight: 600,
-            border: '1px solid', borderRadius: '6px',
-            borderColor: vista === 'marcaciones' ? 'var(--color-primary)' : 'var(--border-color)',
-            background: vista === 'marcaciones' ? 'var(--color-primary)' : 'var(--bg-primary)',
-            color: vista === 'marcaciones' ? '#fff' : 'var(--text-secondary)',
-            cursor: 'pointer',
-          }}
-        >
-          <UserCheck size={15} /> Marcaciones
-        </button>
-
-        {/* Stats rápidos en vista marcaciones */}
-        {vista === 'marcaciones' && marcacionesStats && (
-          <div style={{ display: 'flex', gap: '16px', marginLeft: '16px', fontSize: '13px', color: 'var(--text-secondary)' }}>
-            <span><strong>{marcacionesStats.conductores}</strong> conductores</span>
-            <span><strong>{marcacionesStats.kmTotal.toLocaleString('es-AR')}</strong> km</span>
-            <span><strong>{marcacionesStats.activos}</strong> activos</span>
-          </div>
-        )}
+      {/* Tabs estilo facturación */}
+      <div className="bitacora-tabs">
+        {TABS.map(tab => {
+          const Icon = tab.icon;
+          return (
+            <button
+              key={tab.id}
+              className={`bitacora-tab ${vista === tab.id ? 'active' : ''}`}
+              onClick={() => setVista(tab.id)}
+            >
+              <Icon size={16} />
+              <span>{tab.label}</span>
+            </button>
+          );
+        })}
       </div>
+
+      {/* Stats rápidos en vista marcaciones */}
+      {vista === 'marcaciones' && marcacionesStats && (
+        <div style={{ display: 'flex', gap: '16px', fontSize: '13px', color: 'var(--text-secondary)' }}>
+          <span><strong>{marcacionesStats.conductores}</strong> conductores</span>
+          <span><strong>{marcacionesStats.kmTotal.toLocaleString('es-AR')}</strong> km</span>
+          <span><strong>{marcacionesStats.activos}</strong> activos</span>
+        </div>
+      )}
+
+      {/* Vista Marcaciones */}
+      {vista === 'marcaciones' && (
+        <MarcacionesTable
+          marcaciones={marcaciones}
+          isLoading={loading}
+          searchTerm={searchTerm}
+          onSearchChange={handleSearchChange}
+          headerControls={headerControls}
+          onUpdateChecklist={updateChecklist}
+        />
+      )}
 
       {/* Vista Histórico */}
       {vista === 'historico' && (
@@ -116,18 +120,6 @@ export function BitacoraModule() {
           searchTerm={searchTerm}
           onSearchChange={handleSearchChange}
           headerControls={headerControls}
-        />
-      )}
-
-      {/* Vista Marcaciones */}
-      {vista === 'marcaciones' && (
-        <MarcacionesTable
-          marcaciones={marcaciones}
-          isLoading={loading}
-          searchTerm={searchTerm}
-          onSearchChange={handleSearchChange}
-          headerControls={headerControls}
-          onUpdateChecklist={updateChecklist}
         />
       )}
     </div>
