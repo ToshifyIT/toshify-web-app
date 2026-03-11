@@ -1,5 +1,6 @@
 # CI/CD Pipeline Lineal
-# BUILD → APPROVAL STAGING → MERGE STAGING → APPROVAL PROD → MERGE MAIN
+# BUILD → MERGE STAGING → MERGE MAIN → DEPLOY
+# (Aprobaciones comentadas para deploys rapidos)
 
 name: CI/CD Pipeline
 
@@ -36,23 +37,23 @@ jobs:
           VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
 
   # ═══════════════════════════════════════════
-  # PASO 2: Aprobación para Staging
+  # PASO 2: Aprobación para Staging (COMENTADO)
   # ═══════════════════════════════════════════
-  approval-staging:
-    name: "2. Approval Staging"
-    needs: build
-    runs-on: ubuntu-latest
-    environment:
-      name: staging
-    steps:
-      - run: echo "✅ Aprobado para Staging"
+  # approval-staging:
+  #   name: "2. Approval Staging"
+  #   needs: build
+  #   runs-on: ubuntu-latest
+  #   environment:
+  #     name: staging
+  #   steps:
+  #     - run: echo "✅ Aprobado para Staging"
 
   # ═══════════════════════════════════════════
-  # PASO 3: Merge a Staging
+  # PASO 2: Merge a Staging (directo tras build)
   # ═══════════════════════════════════════════
   merge-staging:
-    name: "3. Merge Staging"
-    needs: approval-staging
+    name: "2. Merge Staging"
+    needs: build
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -69,23 +70,23 @@ jobs:
           git push origin staging
 
   # ═══════════════════════════════════════════
-  # PASO 4: Aprobación para Producción
+  # PASO 3: Aprobación para Producción (COMENTADO)
   # ═══════════════════════════════════════════
-  approval-production:
-    name: "4. Approval Prod"
-    needs: merge-staging
-    runs-on: ubuntu-latest
-    environment:
-      name: production
-    steps:
-      - run: echo "✅ Aprobado para Producción"
+  # approval-production:
+  #   name: "4. Approval Prod"
+  #   needs: merge-staging
+  #   runs-on: ubuntu-latest
+  #   environment:
+  #     name: production
+  #   steps:
+  #     - run: echo "✅ Aprobado para Producción"
 
   # ═══════════════════════════════════════════
-  # PASO 5: Merge a Main
+  # PASO 3: Merge a Main + Deploy (directo tras staging)
   # ═══════════════════════════════════════════
   merge-main:
-    name: "5. Merge Main"
-    needs: approval-production
+    name: "3. Merge Main + Deploy"
+    needs: merge-staging
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
