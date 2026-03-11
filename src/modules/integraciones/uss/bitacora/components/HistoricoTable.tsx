@@ -25,16 +25,22 @@ interface HistoricoTableProps {
   headerControls?: React.ReactNode;
 }
 
-// Formatear timestamp a DD/MM HH:MM
+// Formatear timestamp a DD/MM HH:MM:SS
+// Las fechas de uss_historico se almacenan en UTC, se convierten a Argentina (UTC-3)
 function formatTimestamp(ts: string | null): string {
   if (!ts) return '-';
-  const d = new Date(ts);
+  // Forzar interpretación como UTC agregando Z si no tiene offset
+  const isoStr = ts.includes('Z') || ts.includes('+') || ts.includes('-', 10) ? ts : ts.replace(' ', 'T') + 'Z';
+  const d = new Date(isoStr);
   if (isNaN(d.getTime())) return '-';
-  const dd = String(d.getDate()).padStart(2, '0');
-  const mm = String(d.getMonth() + 1).padStart(2, '0');
-  const hh = String(d.getHours()).padStart(2, '0');
-  const mi = String(d.getMinutes()).padStart(2, '0');
-  return `${dd}/${mm} ${hh}:${mi}`;
+  // Convertir a Argentina (UTC-3)
+  const ar = new Date(d.getTime() - 3 * 60 * 60 * 1000);
+  const dd = String(ar.getUTCDate()).padStart(2, '0');
+  const mm = String(ar.getUTCMonth() + 1).padStart(2, '0');
+  const hh = String(ar.getUTCHours()).padStart(2, '0');
+  const mi = String(ar.getUTCMinutes()).padStart(2, '0');
+  const ss = String(ar.getUTCSeconds()).padStart(2, '0');
+  return `${dd}/${mm} ${hh}:${mi}:${ss}`;
 }
 
 // Formatear km
