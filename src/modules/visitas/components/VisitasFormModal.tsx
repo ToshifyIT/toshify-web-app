@@ -398,7 +398,7 @@ export function VisitasFormModal({
           <div className="form-group">
             <label className="vf-label-sm">Categoría <span className="required">*</span></label>
             <div className="vf-category-grid">
-              {categorias.map((c) => (
+              {categorias.filter((c) => c.nombre.toLowerCase() !== 'asignaciones').map((c) => (
                 <button
                   key={c.id}
                   type="button"

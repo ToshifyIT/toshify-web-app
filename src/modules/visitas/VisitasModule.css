@@ -653,6 +653,20 @@
   font-size: 13px;
 }
 
+.visita-detalle-visitantes-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.visita-detalle-visitantes-list li {
+  font-size: 14px;
+  line-height: 1.4;
+}
+
 .visita-detalle-meta {
   display: flex;
   flex-direction: column;

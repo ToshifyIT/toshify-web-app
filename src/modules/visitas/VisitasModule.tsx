@@ -110,10 +110,16 @@ export function VisitasModule() {
     const { start, end } = getQueryRange(currentDate);
     const raw = await fetchVisitas(sedeActualId, start, end);
     // Auto-transicionar estados según hora actual (pendiente→en_curso→completada)
-    const data = await autoUpdateEstados(raw);
+    const updated = await autoUpdateEstados(raw);
+    // Filtrar citas "Directivo": solo visibles para el creador y admins
+    const data = updated.filter((v) => {
+      if (v.categoria_nombre?.toLowerCase() !== 'directivo') return true;
+      if (isAdmin()) return true;
+      return v.citador_id === user?.id;
+    });
     setVisitas(data);
     setCalendarEvents(toCalendarEvents(data));
-  }, [sedeActualId, currentDate, getQueryRange]);
+  }, [sedeActualId, currentDate, getQueryRange, isAdmin, user?.id]);
 
   useEffect(() => {
     let cancelled = false;
@@ -344,7 +350,19 @@ export function VisitasModule() {
         );
       },
     },
-    { accessorKey: 'citador_nombre', header: 'Citador', size: 140 },
+    {
+      accessorKey: 'citador_nombre',
+      header: 'Citador',
+      size: 140,
+      cell: ({ getValue }) => {
+        const val = (getValue() as string) || '-';
+        return (
+          <span title={val} style={{ display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '130px' }}>
+            {val}
+          </span>
+        );
+      },
+    },
     {
       accessorKey: 'duracion_minutos',
       header: 'Duración',

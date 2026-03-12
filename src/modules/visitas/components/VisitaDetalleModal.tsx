@@ -72,8 +72,28 @@ export function VisitaDetalleModal({
           <div className="visita-detalle-row">
             <User size={16} />
             <div>
-              <strong>{visita.nombre_visitante}</strong>
-              {visita.dni_visitante && <span className="visita-detalle-sub"> - DNI: {visita.dni_visitante}</span>}
+              {(() => {
+                const nombres = visita.nombre_visitante?.split(';').map((n) => n.trim()).filter(Boolean) ?? [];
+                const dnis = visita.dni_visitante?.split(';').map((d) => d.trim()).filter(Boolean) ?? [];
+                if (nombres.length <= 1) {
+                  return (
+                    <>
+                      <strong>{visita.nombre_visitante}</strong>
+                      {visita.dni_visitante && <span className="visita-detalle-sub"> - DNI: {visita.dni_visitante}</span>}
+                    </>
+                  );
+                }
+                return (
+                  <ul className="visita-detalle-visitantes-list">
+                    {nombres.map((nombre, i) => (
+                      <li key={i}>
+                        <strong>{nombre}</strong>
+                        {dnis[i] && <span className="visita-detalle-sub"> - DNI: {dnis[i]}</span>}
+                      </li>
+                    ))}
+                  </ul>
+                );
+              })()}
             </div>
           </div>
 

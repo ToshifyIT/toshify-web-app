@@ -568,8 +568,9 @@ export function DataTable<T>({
   // Helper: Check if column is date type based on accessor key or data
   const isDateColumn = useCallback((colId: string): boolean => {
     const lowerColId = colId.toLowerCase();
-    // Excluir columnas de hora (tienen "hora" en el nombre pero no son fechas)
-    if (lowerColId.includes('hora')) return false;
+    // Excluir columnas que son SOLO hora (ej: hora_inicio, hora_cierre),
+    // pero NO excluir fecha_hora que es un timestamp completo
+    if (lowerColId.includes('hora') && !lowerColId.includes('fecha')) return false;
     const dateKeywords = ['fecha', 'date', 'created', 'updated', 'vencimiento', 'inicio', 'fin'];
     return dateKeywords.some(keyword => lowerColId.includes(keyword));
   }, []);
