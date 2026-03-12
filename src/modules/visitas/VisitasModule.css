@@ -667,6 +667,76 @@
   line-height: 1.4;
 }
 
+.visita-detalle-visitantes-header {
+  margin-bottom: 4px;
+}
+
+.visita-ver-todos-btn {
+  margin-top: 6px;
+  background: none;
+  border: none;
+  color: var(--primary);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  padding: 2px 0;
+  text-decoration: underline;
+}
+
+.visita-ver-todos-btn:hover {
+  opacity: 0.8;
+}
+
+/* Sub-modal de visitantes */
+.visita-submodal-overlay {
+  z-index: 1100;
+}
+
+.visita-visitantes-submodal {
+  max-width: 480px;
+  max-height: 70vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.visita-visitantes-submodal .modal-header h3 {
+  margin: 0;
+  font-size: 16px;
+}
+
+.visita-visitantes-submodal-body {
+  overflow-y: auto;
+  flex: 1;
+  padding: 12px 16px;
+}
+
+.visita-visitantes-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.visita-visitantes-table th,
+.visita-visitantes-table td {
+  text-align: left;
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--border-primary);
+}
+
+.visita-visitantes-table th {
+  font-weight: 600;
+  color: var(--text-secondary);
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+
+.visita-visitantes-table td:first-child,
+.visita-visitantes-table th:first-child {
+  width: 40px;
+  color: var(--text-tertiary);
+}
+
 .visita-detalle-meta {
   display: flex;
   flex-direction: column;
