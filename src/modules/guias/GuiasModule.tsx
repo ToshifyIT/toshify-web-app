@@ -95,9 +95,9 @@ export function GuiasModule() {
   const [nombreSearch, setNombreSearch] = useState('')
   const [globalSearch, setGlobalSearch] = useState('')
   const [cbuSearch] = useState('')
-  const [efectivoSearch, setEfectivoSearch] = useState('')
-  const [appSearch, setAppSearch] = useState('')
-  const [totalSearch, setTotalSearch] = useState('')
+  const [efectivoSearch] = useState('')
+  const [appSearch] = useState('')
+  const [totalSearch] = useState('')
 
   // Estados para modal de detalles
   const [showDetailsModal, setShowDetailsModal] = useState(false)
@@ -1544,24 +1544,6 @@ export function GuiasModule() {
   const toggleAsignacionFilter = (asignacion: string) => {
     setAsignacionFilter(prev =>
       prev.includes(asignacion) ? prev.filter(a => a !== asignacion) : [...prev, asignacion]
-    );
-  };
-
-  const toggleEfectivoFilter = (val: string) => {
-    setEfectivoFilter(prev =>
-      prev.includes(val) ? prev.filter(v => v !== val) : [...prev, val]
-    );
-  };
-
-  const toggleAppFilter = (val: string) => {
-    setAppFilter(prev =>
-      prev.includes(val) ? prev.filter(v => v !== val) : [...prev, val]
-    );
-  };
-
-  const toggleTotalFilter = (val: string) => {
-    setTotalFilter(prev =>
-      prev.includes(val) ? prev.filter(v => v !== val) : [...prev, val]
     );
   };
 
