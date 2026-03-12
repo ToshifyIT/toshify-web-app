@@ -770,7 +770,7 @@ export function PortalPage() {
               <div className="portal-stat-card">
                 <div className="portal-stat-label">
                   Última semana
-                  <span className="portal-stat-tooltip" data-tooltip="Monto estimado de proforma de la última semana facturada">ⓘ</span>
+                  <span className="portal-stat-tooltip" data-tooltip="Monto total referencial de la última semana">ⓘ</span>
                 </div>
                 <div className="portal-stat-value debit">{formatCurrency(stats.ultima)}</div>
                 {stats.variacion !== 0 && (
@@ -782,7 +782,7 @@ export function PortalPage() {
               <div className="portal-stat-card">
                 <div className="portal-stat-label">
                   Promedio semanal
-                  <span className="portal-stat-tooltip" data-tooltip="Promedio de proforma semanal sobre todas las semanas registradas">ⓘ</span>
+                  <span className="portal-stat-tooltip" data-tooltip="Promedio de los montos totales referenciales de las semanas que he tenido un vehículo">ⓘ</span>
                 </div>
                 <div className="portal-stat-value">{formatCurrency(stats.promedio)}</div>
                 <div className="portal-stat-sub">{stats.totalSemanas} semanas</div>
