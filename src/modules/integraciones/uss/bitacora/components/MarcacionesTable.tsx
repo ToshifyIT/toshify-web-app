@@ -8,7 +8,7 @@ import { useMemo, useState, useRef, useEffect } from 'react';
 import { type ColumnDef } from '@tanstack/react-table';
 import { DataTable } from '../../../../../components/ui/DataTable/DataTable';
 import { ExcelColumnFilter, useExcelFilters } from '../../../../../components/ui/DataTable/ExcelColumnFilter';
-import { Search, ClipboardList, Download, ChevronDown, Fuel, Droplets, Car, Sun, Moon, Clock } from 'lucide-react';
+import { Search, ClipboardList, Download, ChevronDown, Fuel, Droplets, Car, Sun, Moon, Clock, X } from 'lucide-react';
 import type { Marcacion } from '../hooks/useUSSHistoricoData';
 import * as XLSX from 'xlsx';
 
@@ -148,7 +148,19 @@ export function MarcacionesTable({
     [...new Set(marcaciones.map(m => m.vehiculoModalidad || 'Sin asignar'))].filter(Boolean).sort()
   , [marcaciones]);
 
-  // Filtrado local + búsqueda
+  const hasActiveFilters = conductorFilter.length > 0 || patenteFilter.length > 0 || fechaFilter.length > 0 || estadoFilter.length > 0 || horarioFilter.length > 0 || turnoFilter.length > 0 || searchTerm.trim() !== '';
+
+  const clearAllFilters = () => {
+    setConductorFilter([]);
+    setPatenteFilter([]);
+    setFechaFilter([]);
+    setEstadoFilter([]);
+    setHorarioFilter([]);
+    setTurnoFilter([]);
+    onSearchChange('');
+  };
+
+   // Filtrado local + búsqueda
   const marcacionesFiltradas = useMemo(() => {
     let filtered = marcaciones;
 
@@ -474,6 +486,19 @@ export function MarcacionesTable({
             onChange={(e) => onSearchChange(e.target.value)} className="dt-search-input" />
         </div>
         {headerControls}
+
+        {hasActiveFilters && (
+          <button onClick={clearAllFilters}
+            style={{
+              display: 'flex', alignItems: 'center', gap: '4px',
+              padding: '6px 10px', fontSize: '13px', fontWeight: 500,
+              border: '1px solid var(--color-danger)', borderRadius: '6px',
+              background: 'var(--bg-primary)', color: 'var(--color-danger)',
+              cursor: 'pointer', whiteSpace: 'nowrap',
+            }}>
+            <X size={14} /> Quitar filtros
+          </button>
+        )}
 
         {/* Exportar dropdown */}
         <div ref={exportRef} style={{ position: 'relative' }}>

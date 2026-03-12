@@ -8,7 +8,7 @@ import { useMemo, useState, useRef, useEffect } from 'react';
 import { type ColumnDef } from '@tanstack/react-table';
 import { DataTable } from '../../../../../components/ui/DataTable/DataTable';
 import { ExcelColumnFilter, useExcelFilters } from '../../../../../components/ui/DataTable/ExcelColumnFilter';
-import { Search, ChevronsLeft, ChevronLeft, ChevronRight, ChevronsRight, ClipboardList, Download, ChevronDown } from 'lucide-react';
+import { Search, ChevronsLeft, ChevronLeft, ChevronRight, ChevronsRight, ClipboardList, Download, ChevronDown, X } from 'lucide-react';
 import type { USSHistoricoRegistro } from '../../../../../services/ussHistoricoService';
 import * as XLSX from 'xlsx';
 
@@ -83,6 +83,15 @@ export function HistoricoTable({
   const ibuttonsUnicos = useMemo(() =>
     [...new Set(registros.map(r => r.ibutton || '-'))].sort()
   , [registros]);
+
+  const hasActiveFilters = patenteFilter.length > 0 || conductorFilter.length > 0 || ibuttonFilter.length > 0 || searchTerm.trim() !== '';
+
+  const clearAllFilters = () => {
+    setPatenteFilter([]);
+    setConductorFilter([]);
+    setIbuttonFilter([]);
+    onSearchChange('');
+  };
 
   // Filtrado local
   const registrosFiltrados = useMemo(() => {
@@ -248,6 +257,19 @@ export function HistoricoTable({
             onChange={(e) => onSearchChange(e.target.value)} className="dt-search-input" />
         </div>
         {headerControls}
+
+        {hasActiveFilters && (
+          <button onClick={clearAllFilters}
+            style={{
+              display: 'flex', alignItems: 'center', gap: '4px',
+              padding: '6px 10px', fontSize: '13px', fontWeight: 500,
+              border: '1px solid var(--color-danger)', borderRadius: '6px',
+              background: 'var(--bg-primary)', color: 'var(--color-danger)',
+              cursor: 'pointer', whiteSpace: 'nowrap',
+            }}>
+            <X size={14} /> Quitar filtros
+          </button>
+        )}
 
         {/* Exportar dropdown */}
         <div ref={exportRef} style={{ position: 'relative' }}>

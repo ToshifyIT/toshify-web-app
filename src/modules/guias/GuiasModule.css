@@ -242,3 +242,21 @@
 .active-filters-clear:hover {
   color: var(--color-primary);
 }
+
+/* =====================================================
+   TABLE LAYOUT: distribución proporcional de columnas.
+   Con table-layout:fixed + width:100% (heredado), el
+   espacio sobrante se reparte proporcionalmente entre
+   todas las columnas según su size, eliminando gaps
+   desiguales.
+   ===================================================== */
+
+.guias-module .dt-table {
+  table-layout: fixed;
+}
+
+/* Evitar que los botones de Acciones se desborden */
+.guias-module .dt-table td:last-child,
+.guias-module .dt-table th:last-child {
+  overflow: hidden;
+}

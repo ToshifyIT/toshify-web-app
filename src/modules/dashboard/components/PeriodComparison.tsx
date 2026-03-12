@@ -1,5 +1,6 @@
 import { useMemo, useState, useEffect } from 'react'
 import { ArrowDownRight, ArrowUpRight, Minus, Info } from 'lucide-react'
+import { AdaptiveTooltip } from '../../../components/ui/AdaptiveTooltip'
 import { format, subDays, subWeeks, subMonths, subYears, getWeek } from 'date-fns'
 import { es } from 'date-fns/locale'
 import { getMockPeriodData } from '../mockData'
@@ -475,10 +476,11 @@ export function PeriodComparison() {
               <span className="period-comparison-name">
                 {metric.name}
                 {metric.tooltipContent && (
-                  <span className="kpi-info-wrapper">
-                    <Info size={14} className="kpi-info-icon" />
-                    <div className="kpi-tooltip">{metric.tooltipContent}</div>
-                  </span>
+                  <AdaptiveTooltip content={metric.tooltipContent} width={280} variant="card">
+                    <span className="kpi-info-wrapper">
+                      <Info size={14} className="kpi-info-icon" />
+                    </span>
+                  </AdaptiveTooltip>
                 )}
               </span>
               <div className="period-comparison-values">

@@ -130,6 +130,239 @@ const CustomTooltip = ({ active, payload, label }: any) => {
   return null
 }
 
+// =====================================================
+// Helper: Ejecutar pipeline completo de cálculo para un rango de mes independiente.
+// Retorna datos por día (garantiaTeorica, alquilerTeorico, cobroReal)
+// usando los conductores, garantías y precios PROPIOS de ese mes.
+// =====================================================
+async function calcularPipelineMesIndependiente(
+  rangeStart: Date,
+  rangeEnd: Date,
+  sedeActualId: string | null
+): Promise<Map<string, { garantiaTeorica: number, alquilerTeorico: number, cobroReal: number }>> {
+  const daysInt = eachDayOfInterval({ start: rangeStart, end: rangeEnd })
+  const fIniStr = format(rangeStart, 'yyyy-MM-dd')
+  const fFinStr = format(rangeEnd, 'yyyy-MM-dd')
+
+  const resultado = new Map<string, { garantiaTeorica: number, alquilerTeorico: number, cobroReal: number }>()
+  daysInt.forEach(d => resultado.set(format(d, 'yyyy-MM-dd'), { garantiaTeorica: 0, alquilerTeorico: 0, cobroReal: 0 }))
+
+  // 1. Precios
+  const [histRes, nomRes] = await Promise.all([
+    (supabase.from('conceptos_facturacion_historial') as any)
+      .select('codigo, precio_base, precio_final, fecha_vigencia_desde, fecha_vigencia_hasta')
+      .in('codigo', ['P001', 'P002', 'P003', 'P013'])
+      .lte('fecha_vigencia_desde', fFinStr)
+      .gte('fecha_vigencia_hasta', fIniStr),
+    supabase.from('conceptos_nomina')
+      .select('codigo, precio_base, precio_final')
+      .eq('activo', true)
+      .in('codigo', ['P001', 'P002', 'P003', 'P013']),
+  ])
+  const pMap = new Map<string, number>()
+  ;(nomRes.data || []).forEach((c: any) => pMap.set(c.codigo, c.precio_final ?? c.precio_base ?? 0))
+  const hPorCod = new Map<string, any[]>()
+  for (const h of (histRes.data || [])) {
+    const arr = hPorCod.get(h.codigo) || []
+    arr.push(h)
+    hPorCod.set(h.codigo, arr)
+  }
+  const getPrecio = (codigo: string, fecha: Date): number => {
+    const fs = fecha.toISOString().split('T')[0]
+    const regs = hPorCod.get(codigo)
+    if (regs) { for (const h of regs) { if (h.fecha_vigencia_desde <= fs && h.fecha_vigencia_hasta >= fs) return h.precio_final ?? h.precio_base } }
+    return pMap.get(codigo) || 0
+  }
+
+  // 2. Descubrimiento de conductores (overlap generoso)
+  const { data: asigDesc } = await (supabase.from('asignaciones_conductores') as any)
+    .select(`conductor_id, horario, fecha_inicio, fecha_fin, estado,
+      asignaciones!inner(horario, estado, fecha_fin, vehiculo_id, vehiculos(patente)),
+      conductores!inner(numero_dni, sede_id)`)
+    .in('estado', ['asignado', 'activo', 'activa', 'finalizado', 'finalizada', 'completado', 'cancelado', 'cancelada'])
+  const dnisDesc = new Set<string>()
+  for (const ac of (asigDesc || []) as any[]) {
+    const cond = ac.conductores; const asig = ac.asignaciones
+    if (!cond || !asig) continue
+    if (sedeActualId && cond.sede_id !== sedeActualId) continue
+    const ep = (asig.estado || '').toLowerCase()
+    if (['programado', 'programada'].includes(ep)) continue
+    if (['finalizada', 'cancelada', 'finalizado', 'cancelado'].includes(ep) && !asig.fecha_fin) continue
+    const acIni = ac.fecha_inicio ? parseISO(toArgDate(ac.fecha_inicio)) : new Date('2020-01-01')
+    const acFn = ac.fecha_fin ? parseISO(toArgDate(ac.fecha_fin)) : (asig.fecha_fin ? parseISO(toArgDate(asig.fecha_fin)) : new Date('2099-12-31'))
+    if (acFn < rangeStart || acIni > rangeEnd) continue
+    dnisDesc.add(cond.numero_dni)
+  }
+  if (dnisDesc.size === 0) return resultado
+
+  // 3. Datos de conductores
+  const dnisList = Array.from(dnisDesc)
+  let qC = supabase.from('conductores').select('id, nombres, apellidos, numero_dni, fecha_terminacion').in('numero_dni', dnisList)
+  if (sedeActualId) qC = qC.eq('sede_id', sedeActualId)
+  const { data: condData } = await qC
+  const cInfoMap = new Map<string, any>()
+  const fTermMap = new Map<string, Date>()
+  for (const c of (condData || []) as any[]) {
+    cInfoMap.set(c.id, { id: c.id, nombres: c.nombres, apellidos: c.apellidos, dni: c.numero_dni })
+    if (c.fecha_terminacion) fTermMap.set(c.id, parseISO(c.fecha_terminacion))
+  }
+  const cIds = Array.from(cInfoMap.keys())
+  if (cIds.length === 0) return resultado
+
+  // 4. Asignaciones detalladas
+  const { data: asigDet } = await (supabase.from('asignaciones_conductores') as any)
+    .select('id, conductor_id, horario, fecha_inicio, fecha_fin, estado, asignaciones!inner(id, horario, estado, fecha_inicio, fecha_fin)')
+    .in('conductor_id', cIds)
+    .in('estado', ['asignado', 'activo', 'activa', 'finalizado', 'finalizada', 'completado', 'cancelado', 'cancelada'])
+
+  const diasTrabMap = new Map<string, Map<string, string>>()
+  const alqMap = new Map<string, number>()
+  interface PrAdj { CARGO: number; TURNO_DIURNO: number; TURNO_NOCTURNO: number; monto_CARGO: number; monto_TURNO_DIURNO: number; monto_TURNO_NOCTURNO: number }
+  const prMap = new Map<string, PrAdj>()
+  const asigPorC = new Map<string, Array<{ modalidad: string; codigoConcepto: string; fechaInicio: Date; fechaFin: Date }>>()
+  cIds.forEach(id => {
+    diasTrabMap.set(id, new Map()); alqMap.set(id, 0)
+    prMap.set(id, { CARGO: 0, TURNO_DIURNO: 0, TURNO_NOCTURNO: 0, monto_CARGO: 0, monto_TURNO_DIURNO: 0, monto_TURNO_NOCTURNO: 0 })
+    asigPorC.set(id, [])
+  })
+
+  // Pase 1: Contar días
+  for (const ac of (asigDet || []) as any[]) {
+    const asignacion = ac.asignaciones
+    if (!asignacion) continue
+    const ep = (asignacion.estado || '').toLowerCase()
+    if (['programado', 'programada'].includes(ep)) continue
+    if (['finalizada', 'cancelada', 'finalizado', 'cancelado'].includes(ep) && !asignacion.fecha_fin) continue
+    const cIni = ac.fecha_inicio ? parseISO(toArgDate(ac.fecha_inicio)) : null
+    const pIni = asignacion.fecha_inicio ? parseISO(toArgDate(asignacion.fecha_inicio)) : null
+    const acInicio = cIni && pIni ? (cIni > pIni ? cIni : pIni) : (cIni || pIni || rangeStart)
+    const cFin = ac.fecha_fin ? parseISO(toArgDate(ac.fecha_fin)) : null
+    const pFin = asignacion.fecha_fin ? parseISO(toArgDate(asignacion.fecha_fin)) : null
+    const acFin = cFin && pFin ? (cFin < pFin ? cFin : pFin) : (cFin || pFin || rangeEnd)
+    const efIni = acInicio < rangeStart ? rangeStart : acInicio
+    let efFn = acFin > rangeEnd ? rangeEnd : acFin
+    const tieneFinP = ac.fecha_fin || asignacion.fecha_fin
+    const fT = fTermMap.get(ac.conductor_id)
+    if (fT && !tieneFinP && efFn > fT) efFn = fT
+    if (efIni > efFn) continue
+
+    const modA = asignacion.horario
+    const hL = (ac.horario || '').toLowerCase().trim()
+    let modalidad = 'CARGO', codConc = 'P002', horLabel = 'CARGO'
+    if (modA === 'CARGO' || hL === 'todo_dia') { modalidad = 'CARGO'; codConc = 'P002'; horLabel = 'CARGO' }
+    else if (modA === 'TURNO') {
+      if (hL === 'nocturno' || hL === 'n') { modalidad = 'TURNO_NOCTURNO'; codConc = 'P013'; horLabel = 'NOCTURNO' }
+      else { modalidad = 'TURNO_DIURNO'; codConc = 'P001'; horLabel = 'DIURNO' }
+    }
+    const dm = diasTrabMap.get(ac.conductor_id)!
+    const pr = prMap.get(ac.conductor_id)!
+    let diasR = 0
+    let cur = new Date(efIni)
+    while (cur <= efFn) {
+      const ds = format(cur, 'yyyy-MM-dd')
+      if (!dm.has(ds)) {
+        dm.set(ds, horLabel)
+        if (modalidad === 'CARGO') pr.CARGO++
+        else if (modalidad === 'TURNO_NOCTURNO') pr.TURNO_NOCTURNO++
+        else pr.TURNO_DIURNO++
+        diasR++
+      }
+      cur = addDays(cur, 1)
+    }
+    if (diasR <= 0) continue
+    asigPorC.get(ac.conductor_id)!.push({ modalidad, codigoConcepto: codConc, fechaInicio: efIni, fechaFin: efFn })
+  }
+
+  // Pase 2: Calcular montos
+  const codPorMod: Record<string, string> = { 'CARGO': 'P002', 'TURNO_DIURNO': 'P001', 'TURNO_NOCTURNO': 'P013' }
+  for (const [cId, asigs] of asigPorC.entries()) {
+    const pr = prMap.get(cId)
+    if (!pr) continue
+    for (const a of asigs) {
+      const cod = codPorMod[a.modalidad]
+      const mk = `monto_${a.modalidad}` as keyof PrAdj
+      const cd = new Date(a.fechaInicio)
+      while (cd <= a.fechaFin) { (pr as any)[mk] += getPrecio(cod, cd); cd.setDate(cd.getDate() + 1) }
+    }
+    pr.monto_CARGO = Math.round(pr.monto_CARGO)
+    pr.monto_TURNO_DIURNO = Math.round(pr.monto_TURNO_DIURNO)
+    pr.monto_TURNO_NOCTURNO = Math.round(pr.monto_TURNO_NOCTURNO)
+    alqMap.set(cId, pr.monto_CARGO + pr.monto_TURNO_DIURNO + pr.monto_TURNO_NOCTURNO)
+  }
+
+  // 5. Garantías y filtro 50k
+  const condActivos = Array.from(cInfoMap.values()).filter(c => { const d = diasTrabMap.get(c.id); return d && d.size > 0 })
+  const [garRes, p003Res] = await Promise.all([
+    supabase.from('garantias_conductores')
+      .select('conductor_id, monto_cuota_semanal, estado, cuotas_pagadas, cuotas_totales')
+      .in('conductor_id', cIds),
+    supabase.from('conceptos_nomina').select('codigo, precio_base, precio_final')
+      .eq('codigo', 'P003').eq('activo', true).maybeSingle()
+  ])
+  const gMap = new Map<string, any>()
+  garRes.data?.forEach((g: any) => gMap.set(g.conductor_id, g))
+  const pp003 = p003Res.data?.precio_final ?? p003Res.data?.precio_base ?? 7143
+  const cuotaDef = Math.round(pp003 * 7)
+  const gCalcMap = new Map<string, number>()
+  condActivos.forEach(c => {
+    const g = gMap.get(c.id)
+    let sub = 0
+    if (g) {
+      const compl = g.estado === 'completada' || g.estado === 'cancelada' || (g.cuotas_pagadas >= g.cuotas_totales && g.cuotas_totales > 0)
+      if (!compl) sub = g.monto_cuota_semanal || cuotaDef
+    } else { sub = cuotaDef }
+    gCalcMap.set(c.id, sub)
+  })
+  const cond50k = condActivos.filter(c => gCalcMap.get(c.id) === 50000)
+  const garTeoDiaria = (50000 * cond50k.length) / 7
+
+  // 6. Alquiler teórico por día (solo 50k)
+  const alqTeoPorDia = new Map<string, number>()
+  daysInt.forEach(d => alqTeoPorDia.set(format(d, 'yyyy-MM-dd'), 0))
+  cond50k.forEach(c => {
+    const alqT = alqMap.get(c.id) || 0
+    const dias = diasTrabMap.get(c.id)
+    if (!dias || dias.size === 0) return
+    const alqDia = alqT / dias.size
+    for (const [ds] of dias.entries()) { alqTeoPorDia.set(ds, (alqTeoPorDia.get(ds) || 0) + alqDia) }
+  })
+
+  // 7. Cobro real (cabify_historico)
+  const dnis50k = cond50k.map(c => normalizeDni(c.dni)).filter(Boolean)
+  const cobroRealPorDia = new Map<string, number>()
+  daysInt.forEach(d => cobroRealPorDia.set(format(d, 'yyyy-MM-dd'), 0))
+  if (dnis50k.length > 0) {
+    const { data: hist } = await supabase.from('cabify_historico')
+      .select('fecha_inicio, cobro_app, dni, fecha_guardado')
+      .in('dni', dnis50k)
+      .gte('fecha_inicio', fIniStr)
+      .lte('fecha_inicio', fFinStr + 'T23:59:59')
+    const uniqM = new Map<string, any>()
+    hist?.forEach((r: any) => {
+      if (!r.dni) return
+      const fd = r.fecha_inicio ? r.fecha_inicio.split('T')[0] : ''
+      const uk = `${r.dni}_${fd}`
+      const ex = uniqM.get(uk)
+      if (!ex || new Date(r.fecha_guardado || 0) > new Date(ex.fecha_guardado || 0)) uniqM.set(uk, r)
+    })
+    for (const r of Array.from(uniqM.values())) {
+      const fd = r.fecha_inicio.split('T')[0]
+      if (cobroRealPorDia.has(fd)) cobroRealPorDia.set(fd, (cobroRealPorDia.get(fd) || 0) + Number(r.cobro_app || 0))
+    }
+  }
+
+  // 8. Construir resultado
+  for (const d of daysInt) {
+    const ds = format(d, 'yyyy-MM-dd')
+    resultado.set(ds, {
+      garantiaTeorica: garTeoDiaria,
+      alquilerTeorico: alqTeoPorDia.get(ds) || 0,
+      cobroReal: cobroRealPorDia.get(ds) || 0
+    })
+  }
+  return resultado
+}
+
 export function CobroTeoricoVsReal() {
   const { sedeActualId } = useSede()
   const [granularity, setGranularity] = useState<Granularity>('semana')
@@ -141,6 +374,7 @@ export function CobroTeoricoVsReal() {
   const [chartData, setChartData] = useState(INITIAL_DATA)
   const [loading, setLoading] = useState(false)
   const [activeTab, setActiveTab] = useState<ActiveTab>('datos')
+  const [debugBorderWeeks, setDebugBorderWeeks] = useState<any[]>([])
   // const [conductoresFiltrados, setConductoresFiltrados] = useState<ConductorFiltrado[]>([])
 
   // Cargar datos cuando cambia el periodo específico
@@ -842,14 +1076,15 @@ export function CobroTeoricoVsReal() {
 
         if (granularity === 'semana') {
              finalData = dailyData
+             setDebugBorderWeeks([])
         } else if (granularity === 'mes') {
-            // Agrupar por Semana (Sem 01, Sem 02...)
+            // === PASO A: Agrupar datos del mes por Semana (Sem 01, Sem 02...) ===
             const grouped = new Map<string, { label: string, teorico: number, real: number, count: number, garantia: number, alquiler: number }>()
-            
+
             dailyData.forEach(d => {
                 const weekNum = getWeek(d.fecha, { weekStartsOn: 1 })
                 const key = `Sem ${weekNum.toString().padStart(2, '0')}`
-                
+
                 if (!grouped.has(key)) {
                     grouped.set(key, { label: key, teorico: 0, real: 0, count: 0, garantia: 0, alquiler: 0 })
                 }
@@ -860,15 +1095,150 @@ export function CobroTeoricoVsReal() {
                 g.alquiler += (d as any).alquiler
                 g.count++
             })
-            
+
+            // === PASO B: Identificar semanas de borde y calcular con pipeline independiente por mes ===
+            const firstWeekMonday = startOfWeek(startDate, { weekStartsOn: 1 })
+            const lastWeekSunday = endOfWeek(endDate, { weekStartsOn: 1 })
+
+            const compDaysBefore: Date[] = []
+            if (firstWeekMonday < startDate) {
+              let d = new Date(firstWeekMonday)
+              while (d < startDate) { compDaysBefore.push(new Date(d)); d = addDays(d, 1) }
+            }
+            const compDaysAfter: Date[] = []
+            if (lastWeekSunday > endDate) {
+              let d = addDays(endDate, 1)
+              while (d <= lastWeekSunday) { compDaysAfter.push(new Date(d)); d = addDays(d, 1) }
+            }
+
+            // Debug info
+            const debugInfo: any[] = []
+            for (const [key, g] of Array.from(grouped.entries())) {
+              debugInfo.push({
+                semana: key,
+                diasMes: g.count,
+                teoricoMes: Math.round(g.teorico),
+                realMes: Math.round(g.real),
+                diasAdj: 0,
+                teoricoAdj: 0,
+                realAdj: 0,
+                diasAdjDetalle: '-',
+                teoricoFinal: 0,
+                realFinal: 0,
+                diasTotal: 0,
+              })
+            }
+
+            const hasBefore = compDaysBefore.length > 0
+            const hasAfter = compDaysAfter.length > 0
+
+            if (hasBefore || hasAfter) {
+              // Ejecutar pipelines INDEPENDIENTES para los meses adyacentes en paralelo
+              const [prevMonthResult, nextMonthResult] = await Promise.all([
+                hasBefore
+                  ? calcularPipelineMesIndependiente(
+                      startOfMonth(addDays(startDate, -1)),
+                      endOfMonth(addDays(startDate, -1)),
+                      sedeActualId
+                    )
+                  : Promise.resolve(null),
+                hasAfter
+                  ? calcularPipelineMesIndependiente(
+                      startOfMonth(addDays(endDate, 1)),
+                      endOfMonth(addDays(endDate, 1)),
+                      sedeActualId
+                    )
+                  : Promise.resolve(null),
+              ])
+
+              // Sumar datos del mes ANTERIOR (pipeline independiente) a la primera semana
+              if (hasBefore && prevMonthResult) {
+                const weekNum = getWeek(compDaysBefore[0], { weekStartsOn: 1 })
+                const weekKey = `Sem ${weekNum.toString().padStart(2, '0')}`
+                const g = grouped.get(weekKey)
+                if (g) {
+                  let adjTeorico = 0, adjReal = 0, adjGarantia = 0, adjAlquiler = 0
+                  for (const cd of compDaysBefore) {
+                    const diaStr = format(cd, 'yyyy-MM-dd')
+                    const datos = prevMonthResult.get(diaStr)
+                    if (datos) {
+                      adjGarantia += datos.garantiaTeorica
+                      adjAlquiler += datos.alquilerTeorico
+                      adjTeorico += datos.garantiaTeorica + datos.alquilerTeorico
+                      adjReal += datos.cobroReal
+                    }
+                  }
+                  g.teorico += adjTeorico
+                  g.real += adjReal
+                  g.garantia += adjGarantia
+                  g.alquiler += adjAlquiler
+                  g.count += compDaysBefore.length
+
+                  const dbg = debugInfo.find(d => d.semana === weekKey)
+                  if (dbg) {
+                    dbg.diasAdj = compDaysBefore.length
+                    dbg.teoricoAdj = Math.round(adjTeorico)
+                    dbg.realAdj = Math.round(adjReal)
+                    dbg.diasAdjDetalle = `Mes anterior: ${compDaysBefore.map(d => format(d, 'dd/MM')).join(', ')}`
+                  }
+                }
+              }
+
+              // Sumar datos del mes SIGUIENTE (pipeline independiente) a la última semana
+              if (hasAfter && nextMonthResult) {
+                const weekNum = getWeek(compDaysAfter[0], { weekStartsOn: 1 })
+                const weekKey = `Sem ${weekNum.toString().padStart(2, '0')}`
+                const g = grouped.get(weekKey)
+                if (g) {
+                  let adjTeorico = 0, adjReal = 0, adjGarantia = 0, adjAlquiler = 0
+                  for (const cd of compDaysAfter) {
+                    const diaStr = format(cd, 'yyyy-MM-dd')
+                    const datos = nextMonthResult.get(diaStr)
+                    if (datos) {
+                      adjGarantia += datos.garantiaTeorica
+                      adjAlquiler += datos.alquilerTeorico
+                      adjTeorico += datos.garantiaTeorica + datos.alquilerTeorico
+                      adjReal += datos.cobroReal
+                    }
+                  }
+                  g.teorico += adjTeorico
+                  g.real += adjReal
+                  g.garantia += adjGarantia
+                  g.alquiler += adjAlquiler
+                  g.count += compDaysAfter.length
+
+                  const dbg = debugInfo.find(d => d.semana === weekKey)
+                  if (dbg) {
+                    dbg.diasAdj = compDaysAfter.length
+                    dbg.teoricoAdj = Math.round(adjTeorico)
+                    dbg.realAdj = Math.round(adjReal)
+                    dbg.diasAdjDetalle = `Mes siguiente: ${compDaysAfter.map(d => format(d, 'dd/MM')).join(', ')}`
+                  }
+                }
+              }
+            }
+
+            // Actualizar debug con totales finales
+            debugInfo.forEach((dbg: any) => {
+              const g = grouped.get(dbg.semana)
+              if (g) {
+                dbg.teoricoFinal = Math.round(g.teorico)
+                dbg.realFinal = Math.round(g.real)
+                dbg.diasTotal = g.count
+              }
+            })
+
+            setDebugBorderWeeks(debugInfo)
+
             finalData = Array.from(grouped.values()).map(g => ({
-                dia: g.label, // Eje X
+                dia: g.label,
                 teorico: g.teorico,
                 real: g.real,
                 garantia: g.garantia,
                 alquiler: g.alquiler
             }))
         } else if (granularity === 'ano') {
+            setDebugBorderWeeks([])
             // Agrupar por Mes (Ene, Feb...)
             const grouped = new Map<string, { label: string, order: number, teorico: number, real: number, garantia: number, alquiler: number }>()
             
@@ -1055,6 +1425,55 @@ export function CobroTeoricoVsReal() {
               </ResponsiveContainer>
             )}
           </div>
+
+          {/* DEBUG: Tabla de cálculo de semanas de borde (temporal) */}
+          {granularity === 'mes' && debugBorderWeeks.length > 0 && (
+            <div style={{ marginTop: 16, overflowX: 'auto' }}>
+              <h4 style={{ fontSize: 13, fontWeight: 600, marginBottom: 8, color: '#374151' }}>
+                DEBUG — Cálculo semanas de borde ({selectedPeriod})
+              </h4>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 11 }}>
+                <thead>
+                  <tr style={{ background: '#f3f4f6', textAlign: 'left' }}>
+                    <th style={{ padding: '6px 8px', borderBottom: '2px solid #d1d5db' }}>Semana</th>
+                    <th style={{ padding: '6px 8px', borderBottom: '2px solid #d1d5db', textAlign: 'center' }}>Días Mes</th>
+                    <th style={{ padding: '6px 8px', borderBottom: '2px solid #d1d5db', textAlign: 'right', color: '#16a34a' }}>Esperado (Mes)</th>
+                    <th style={{ padding: '6px 8px', borderBottom: '2px solid #d1d5db', textAlign: 'right', color: '#2563eb' }}>Percibido (Mes)</th>
+                    <th style={{ padding: '6px 8px', borderBottom: '2px solid #d1d5db', textAlign: 'center' }}>Días Adj.</th>
+                    <th style={{ padding: '6px 8px', borderBottom: '2px solid #d1d5db' }}>Fechas Adj.</th>
+                    <th style={{ padding: '6px 8px', borderBottom: '2px solid #d1d5db', textAlign: 'right', color: '#16a34a' }}>Esperado (Adj.)</th>
+                    <th style={{ padding: '6px 8px', borderBottom: '2px solid #d1d5db', textAlign: 'right', color: '#2563eb' }}>Percibido (Adj.)</th>
+                    <th style={{ padding: '6px 8px', borderBottom: '2px solid #d1d5db', textAlign: 'center', fontWeight: 700 }}>Días Total</th>
+                    <th style={{ padding: '6px 8px', borderBottom: '2px solid #d1d5db', textAlign: 'right', fontWeight: 700, color: '#16a34a' }}>Esperado Final</th>
+                    <th style={{ padding: '6px 8px', borderBottom: '2px solid #d1d5db', textAlign: 'right', fontWeight: 700, color: '#2563eb' }}>Percibido Final</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {debugBorderWeeks.map((row: any, i: number) => {
+                    const isBorder = row.diasAdj > 0
+                    return (
+                      <tr key={i} style={{ background: isBorder ? '#fefce8' : 'transparent', borderBottom: '1px solid #e5e7eb' }}>
+                        <td style={{ padding: '5px 8px', fontWeight: 600 }}>{row.semana}</td>
+                        <td style={{ padding: '5px 8px', textAlign: 'center' }}>{row.diasMes}</td>
+                        <td style={{ padding: '5px 8px', textAlign: 'right' }}>{formatCurrencyFull(row.teoricoMes)}</td>
+                        <td style={{ padding: '5px 8px', textAlign: 'right' }}>{formatCurrencyFull(row.realMes)}</td>
+                        <td style={{ padding: '5px 8px', textAlign: 'center', color: isBorder ? '#d97706' : '#9ca3af' }}>{row.diasAdj || '-'}</td>
+                        <td style={{ padding: '5px 8px', fontSize: 10, color: '#6b7280' }}>{row.diasAdjDetalle}</td>
+                        <td style={{ padding: '5px 8px', textAlign: 'right', color: isBorder ? '#d97706' : '#9ca3af' }}>{isBorder ? formatCurrencyFull(row.teoricoAdj) : '-'}</td>
+                        <td style={{ padding: '5px 8px', textAlign: 'right', color: isBorder ? '#d97706' : '#9ca3af' }}>{isBorder ? formatCurrencyFull(row.realAdj) : '-'}</td>
+                        <td style={{ padding: '5px 8px', textAlign: 'center', fontWeight: 600 }}>{row.diasTotal}</td>
+                        <td style={{ padding: '5px 8px', textAlign: 'right', fontWeight: 600 }}>{formatCurrencyFull(row.teoricoFinal)}</td>
+                        <td style={{ padding: '5px 8px', textAlign: 'right', fontWeight: 600 }}>{formatCurrencyFull(row.realFinal)}</td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+              <p style={{ fontSize: 10, color: '#9ca3af', marginTop: 6 }}>
+                Las filas en amarillo son semanas de borde. "Adj." = calculado independientemente por el pipeline del mes adyacente (sus propios conductores, garantías y precios).
+              </p>
+            </div>
+          )}
         </>
       ) : (
         <CobroComparativo

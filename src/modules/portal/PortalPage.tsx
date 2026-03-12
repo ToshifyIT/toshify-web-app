@@ -93,11 +93,19 @@ const CONCEPTO_LABELS: Record<string, string> = {
   P013: 'Alquiler Turno Nocturno',
 }
 
-/** Si la descripción es solo un número o está vacía, usar el label del código */
+/** Si la descripción es solo un número, fracción ("8 de 18"), o está vacía, usar el label del código.
+ *  Para cuotas de garantía, mostrar "Cuota de Garantía X de Y" */
 function getConceptoLabel(item: PortalDetalle): string {
   const desc = item.concepto_descripcion?.trim()
-  if (!desc || /^\d+([,.]\d+)?$/.test(desc)) {
-    return CONCEPTO_LABELS[item.concepto_codigo] || desc || item.concepto_codigo
+  // Check if description is empty, a plain number, or a fraction pattern like "8 de 18"
+  const isCuotaPattern = desc ? /^\d+\s+de\s+\d+$/.test(desc) : false
+  if (!desc || /^\d+([,.]\d+)?$/.test(desc) || isCuotaPattern) {
+    const baseLabel = CONCEPTO_LABELS[item.concepto_codigo] || item.concepto_codigo
+    // For guarantee installments, append the fraction (e.g. "Cuota de Garantía 8 de 18")
+    if (isCuotaPattern && desc) {
+      return `${baseLabel} ${desc}`
+    }
+    return baseLabel
   }
   return desc
 }
@@ -201,7 +209,43 @@ export function PortalPage() {
         .order('created_at', { ascending: false })
 
       if (error) throw error
-      setFacturas((data || []) as unknown as PortalFacturacion[])
+      const facturasData = (data || []) as unknown as PortalFacturacion[]
+
+      // Backfill missing vehiculo_patente from assignment history
+      const missingPatente = facturasData.filter(f => !f.vehiculo_patente)
+      if (missingPatente.length > 0) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { data: asignaciones } = await (supabase
+          .from('asignaciones_conductores') as any)
+          .select(`
+            fecha_inicio, fecha_fin, estado,
+            asignaciones!inner(fecha_inicio, fecha_fin, estado, vehiculos(patente))
+          `)
+          .eq('conductor_id', conductorId)
+          .in('estado', ['asignado', 'activo', 'activa', 'finalizado', 'finalizada', 'completado'])
+
+        if (asignaciones && asignaciones.length > 0) {
+          for (const factura of missingPatente) {
+            const p = factura.periodos_facturacion
+            const semInicio = new Date(p.fecha_inicio + 'T00:00:00')
+            const semFin = new Date(p.fecha_fin + 'T23:59:59')
+
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            for (const ac of asignaciones as any[]) {
+              const asig = ac.asignaciones
+              if (!asig?.vehiculos?.patente || asig.estado === 'programado') continue
+              const acInicio = ac.fecha_inicio ? new Date(ac.fecha_inicio) : new Date(asig.fecha_inicio)
+              const acFin = ac.fecha_fin ? new Date(ac.fecha_fin) : (asig.fecha_fin ? new Date(asig.fecha_fin) : new Date())
+              if (acFin >= semInicio && acInicio <= semFin) {
+                factura.vehiculo_patente = asig.vehiculos.patente
+                break
+              }
+            }
+          }
+        }
+      }
+
+      setFacturas(facturasData)
     } catch {
       setFacturas([])
     } finally {
@@ -726,7 +770,7 @@ export function PortalPage() {
               <div className="portal-stat-card">
                 <div className="portal-stat-label">
                   Última semana
-                  <span className="portal-stat-tooltip" data-tooltip="Monto estimado de proforma de la última semana facturada">ⓘ</span>
+                  <span className="portal-stat-tooltip" data-tooltip="Monto total referencial de la última semana">ⓘ</span>
                 </div>
                 <div className="portal-stat-value debit">{formatCurrency(stats.ultima)}</div>
                 {stats.variacion !== 0 && (
@@ -738,7 +782,7 @@ export function PortalPage() {
               <div className="portal-stat-card">
                 <div className="portal-stat-label">
                   Promedio semanal
-                  <span className="portal-stat-tooltip" data-tooltip="Promedio de proforma semanal sobre todas las semanas registradas">ⓘ</span>
+                  <span className="portal-stat-tooltip" data-tooltip="Promedio de los montos totales referenciales de las semanas que he tenido un vehículo">ⓘ</span>
                 </div>
                 <div className="portal-stat-value">{formatCurrency(stats.promedio)}</div>
                 <div className="portal-stat-sub">{stats.totalSemanas} semanas</div>
@@ -781,8 +825,14 @@ export function PortalPage() {
                   <div className="portal-chart-header">
                     <div className="portal-chart-title">Proforma vs Cobro App Cabify</div>
                     <div className="portal-chart-legend">
-                      <span className="portal-legend-item"><span className="portal-legend-dot" style={{ background: '#ff0033' }} /> Proforma</span>
-                      <span className="portal-legend-item"><span className="portal-legend-dot" style={{ background: '#059669' }} /> Cobro App Cabify</span>
+                      <span className="portal-legend-item">
+                        <span className="portal-legend-dot" style={{ background: '#ff0033' }} /> Proforma
+                        <span className="portal-stat-tooltip" data-tooltip="Monto de compromiso semanal de suma de conceptos: alquiler, garantía y otros">ⓘ</span>
+                      </span>
+                      <span className="portal-legend-item">
+                        <span className="portal-legend-dot" style={{ background: '#059669' }} /> Cobro App Cabify
+                        <span className="portal-stat-tooltip" data-tooltip="Total semanal recaudado por el conductor a través de la aplicación Cabify (excluye efectivo)">ⓘ</span>
+                      </span>
                     </div>
                   </div>
                   <div className="portal-chart-container">

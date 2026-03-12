@@ -1422,6 +1422,8 @@ export function HomePage() {
               visibleMenus.map((menu) => {
                 let submenus = getVisibleSubmenusForMenu(menu.menu_id)
                 const isMenuOpen = openMenus[menu.menu_name] || false
+                // Display label overrides (DB stores original name, frontend can rename)
+                const menuLabel = menu.menu_name === 'visitas' ? 'Gestión de Visitas' : menu.menu_label
                 const isSeguimiento = menu.menu_name === 'seguimiento-conductores'
 
                 // Inyectar guías como submenús si no están ya presentes
@@ -1468,7 +1470,7 @@ export function HomePage() {
                         >
                           <span className="nav-section-icon"><MenuIcon size={18} /></span>
                           <div className="nav-section-title">
-                            {menu.menu_label}
+                            {menuLabel}
                           </div>
                           <span className={`nav-section-arrow ${isMenuOpen ? 'open' : ''}`}>▸</span>
                         </button>
@@ -1477,7 +1479,7 @@ export function HomePage() {
                         {sidebarCollapsed && (
                           <div className="nav-flyout">
                             <div className="nav-flyout-content">
-                              <div className="nav-flyout-header">{menu.menu_label}</div>
+                              <div className="nav-flyout-header">{menuLabel}</div>
                               <div className="nav-flyout-items">
                                 {/* Submenús del menú (incluye guías registradas como submenús) */}
                                 {(submenus as SubmenuWithHierarchy[])
@@ -1519,10 +1521,10 @@ export function HomePage() {
                         className={`nav-item ${isActiveRoute(menu.menu_route) ? 'active' : ''}`}
                       >
                         <span className="nav-icon"><MenuIcon size={18} /></span>
-                        <span className="nav-label">{menu.menu_label}</span>
+                        <span className="nav-label">{menuLabel}</span>
                       </Link>
                       {sidebarCollapsed && (
-                        <div className="nav-tooltip">{menu.menu_label}</div>
+                        <div className="nav-tooltip">{menuLabel}</div>
                       )}
                     </div>
                   )
