@@ -110,10 +110,31 @@ export function VisitasModule() {
     const { start, end } = getQueryRange(currentDate);
     const raw = await fetchVisitas(sedeActualId, start, end);
     // Auto-transicionar estados según hora actual (pendiente→en_curso→completada)
-    const data = await autoUpdateEstados(raw);
+    const updated = await autoUpdateEstados(raw);
+    // Citas "Directivo": admin y citador ven el detalle completo,
+    // los demás ven un bloque gris "Reservado" sin datos
+    const data = updated.map((v) => {
+      if (v.categoria_nombre?.toLowerCase() !== 'directivo') return v;
+      if (isAdmin()) return v;
+      if (v.citador_id === user?.id) return v;
+      // Enmascarar: mantener fecha/hora/duración, ocultar todo lo demás
+      return {
+        ...v,
+        nombre_visitante: 'Reservado',
+        dni_visitante: null,
+        patente: null,
+        motivo_nombre: null,
+        atendedor_nombre: '-',
+        nota: null,
+        citador_nombre: '-',
+        categoria_nombre: 'Directivo',
+        categoria_color: '#9ca3af',
+        _masked: true,
+      } as VisitaCompleta & { _masked?: boolean };
+    });
     setVisitas(data);
     setCalendarEvents(toCalendarEvents(data));
-  }, [sedeActualId, currentDate, getQueryRange]);
+  }, [sedeActualId, currentDate, getQueryRange, isAdmin, user?.id]);
 
   useEffect(() => {
     let cancelled = false;
@@ -151,6 +172,9 @@ export function VisitasModule() {
   }
 
   function handleSelectEvent(event: VisitaCalendarEvent) {
+    // No abrir detalle para citas Directivo enmascaradas
+    const masked = (event.visita as VisitaCompleta & { _masked?: boolean })._masked;
+    if (masked) return;
     setSelectedVisita(event.visita);
     setShowDetalleModal(true);
   }
@@ -286,7 +310,7 @@ export function VisitasModule() {
       return;
     }
     const XLSX = await import('xlsx');
-    const dataExport = visitas.map((v) => ({
+    const dataExport = visitas.filter((v) => !isMasked(v)).map((v) => ({
       'Fecha': format(new Date(v.fecha_hora), 'dd/MM/yyyy'),
       'Hora': format(new Date(v.fecha_hora), 'HH:mm'),
       'Duración (min)': v.duracion_minutos,
@@ -313,28 +337,98 @@ export function VisitasModule() {
     XLSX.writeFile(wb, `Visitas_${fecha}.xlsx`);
   }
 
+  // Helper: detectar si una fila es una cita Directivo enmascarada
+  const isMasked = (row: VisitaCompleta) =>
+    !!(row as VisitaCompleta & { _masked?: boolean })._masked;
+
   // === COLUMNAS DATATABLE (vista tabla) ===
   const columns: ColumnDef<VisitaCompleta>[] = [
     {
       accessorKey: 'fecha_hora',
       header: 'Fecha/Hora',
-      cell: ({ getValue }) => {
+      cell: ({ getValue, row }) => {
         const dt = new Date(getValue() as string);
-        return `${format(dt, 'dd/MM/yyyy')} ${format(dt, 'HH:mm')}`;
+        const text = `${format(dt, 'dd/MM/yyyy')} ${format(dt, 'HH:mm')}`;
+        if (isMasked(row.original)) return <span style={{ color: '#9ca3af' }}>{text}</span>;
+        return text;
       },
-      size: 140,
     },
-    { accessorKey: 'categoria_nombre', header: 'Categoría', size: 120 },
-    { accessorKey: 'motivo_nombre', header: 'Motivo', size: 150, cell: ({ getValue }) => (getValue() as string) || '-' },
-    { accessorKey: 'nombre_visitante', header: 'Visitante', size: 180 },
-    { accessorKey: 'dni_visitante', header: 'DNI', size: 100, cell: ({ getValue }) => (getValue() as string) || '-' },
-    { accessorKey: 'patente', header: 'Patente', size: 90, cell: ({ getValue }) => (getValue() as string) || '-' },
-    { accessorKey: 'atendedor_nombre', header: 'Anfitrión', size: 150 },
+    {
+      accessorKey: 'categoria_nombre',
+      header: 'Categoría',
+      cell: ({ getValue, row }) => {
+        if (isMasked(row.original)) return <span style={{ color: '#9ca3af', fontStyle: 'italic' }}>Reservado</span>;
+        return (getValue() as string) || '-';
+      },
+    },
+    {
+      accessorKey: 'motivo_nombre',
+      header: 'Motivo',
+      meta: { expand: true },
+      cell: ({ getValue, row }) => {
+        if (isMasked(row.original)) return <span style={{ color: '#d1d5db' }}>-</span>;
+        return (getValue() as string) || '-';
+      },
+    },
+    {
+      accessorKey: 'nombre_visitante',
+      header: 'Visitante',
+      cell: ({ getValue, row }) => {
+        if (isMasked(row.original)) {
+          return <span style={{ color: '#9ca3af', fontStyle: 'italic' }}>Reservado</span>;
+        }
+        const val = (getValue() as string) || '-';
+        const parts = val.split(';').map((s) => s.trim()).filter(Boolean);
+        if (parts.length <= 1) return val;
+        return (
+          <span
+            style={{ cursor: 'pointer' }}
+            title={parts.join(', ')}
+            onClick={() => { setSelectedVisita(row.original); setShowDetalleModal(true); }}
+          >
+            {parts[0]} <span style={{ color: 'var(--primary)', fontWeight: 500 }}>+{parts.length - 1} más</span>
+          </span>
+        );
+      },
+    },
+    {
+      accessorKey: 'dni_visitante',
+      header: 'DNI',
+      cell: ({ getValue, row }) => {
+        if (isMasked(row.original)) return <span style={{ color: '#d1d5db' }}>-</span>;
+        const val = (getValue() as string) || '-';
+        const parts = val.split(';').map((s) => s.trim()).filter(Boolean);
+        if (parts.length <= 1) return val;
+        return <span title={parts.join(', ')}>{parts[0]}…</span>;
+      },
+    },
+    {
+      accessorKey: 'patente',
+      header: 'Patente',
+      cell: ({ getValue, row }) => {
+        if (isMasked(row.original)) return <span style={{ color: '#d1d5db' }}>-</span>;
+        return (getValue() as string) || '-';
+      },
+    },
+    {
+      accessorKey: 'atendedor_nombre',
+      header: 'Anfitrión',
+      cell: ({ getValue, row }) => {
+        if (isMasked(row.original)) return <span style={{ color: '#d1d5db' }}>-</span>;
+        return (getValue() as string) || '-';
+      },
+    },
     {
       accessorKey: 'estado',
       header: 'Estado',
-      size: 110,
-      cell: ({ getValue }) => {
+      cell: ({ getValue, row }) => {
+        if (isMasked(row.original)) {
+          return (
+            <span className="visita-estado-badge" style={{ backgroundColor: '#d1d5db', color: '#6b7280' }}>
+              -
+            </span>
+          );
+        }
         const estado = getValue() as VisitaEstado;
         const info = VISITA_ESTADOS[estado];
         return (
@@ -344,29 +438,46 @@ export function VisitasModule() {
         );
       },
     },
-    { accessorKey: 'citador_nombre', header: 'Citador', size: 140 },
+    {
+      accessorKey: 'citador_nombre',
+      header: 'Citador',
+      cell: ({ getValue, row }) => {
+        if (isMasked(row.original)) return <span style={{ color: '#d1d5db' }}>-</span>;
+        const val = (getValue() as string) || '-';
+        return (
+          <span title={val} style={{ display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '160px' }}>
+            {val}
+          </span>
+        );
+      },
+    },
     {
       accessorKey: 'duracion_minutos',
       header: 'Duración',
-      size: 80,
-      cell: ({ getValue }) => `${getValue()} min`,
+      cell: ({ getValue, row }) => {
+        if (isMasked(row.original)) return <span style={{ color: '#d1d5db' }}>-</span>;
+        return `${getValue()} min`;
+      },
     },
     {
       id: 'acciones',
       header: '',
       size: 50,
-      cell: ({ row }) => (
-        <button
-          className="btn-icon"
-          title="Ver detalle"
-          onClick={() => {
-            setSelectedVisita(row.original);
-            setShowDetalleModal(true);
-          }}
-        >
-          <Eye size={16} />
-        </button>
-      ),
+      cell: ({ row }) => {
+        if (isMasked(row.original)) return null;
+        return (
+          <button
+            className="btn-icon"
+            title="Ver detalle"
+            onClick={() => {
+              setSelectedVisita(row.original);
+              setShowDetalleModal(true);
+            }}
+          >
+            <Eye size={16} />
+          </button>
+        );
+      },
     },
   ];
 

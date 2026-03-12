@@ -1,20 +1,35 @@
 // src/modules/integraciones/uss/bitacora/BitacoraModule.tsx
 /**
- * Módulo principal de Bitácora - Control de Turnos Wialon
+ * Módulo principal de Bitácora - Control de Turnos
+ * Marcaciones: datos sumarizados de wialon_bitacora (1 fila/conductor/día)
+ * Histórico: registros crudos de uss_historico
  */
 
-import { useState, useMemo, useCallback, useRef, useEffect } from 'react'
-import { useBitacoraData } from './hooks/useBitacoraData'
-import { BitacoraHeader, BitacoraStats, BitacoraTable } from './components'
-import './styles/bitacora.css'
-import '../styles/uss.css' // Para estilos del dropdown de fecha
+import { useMemo } from 'react';
+import { UserCheck, List } from 'lucide-react';
+import { useUSSHistoricoData } from './hooks/useUSSHistoricoData';
+import { BitacoraHeader } from './components';
+import { HistoricoTable } from './components/HistoricoTable';
+import { MarcacionesTable } from './components/MarcacionesTable';
+import './styles/bitacora.css';
+import '../styles/uss.css';
+
+type VistaType = 'marcaciones' | 'historico';
+
+const TABS: { id: VistaType; label: string; icon: typeof UserCheck }[] = [
+  { id: 'marcaciones', label: 'Marcaciones', icon: UserCheck },
+  { id: 'historico', label: 'Histórico', icon: List },
+];
 
 export function BitacoraModule() {
   const {
+    vista,
+    setVista,
     registros,
-    stats,
-    queryState,
     totalCount,
+    marcaciones,
+    loading,
+    error,
     dateRange,
     setDateRangePreset,
     setCustomDateRange,
@@ -22,75 +37,91 @@ export function BitacoraModule() {
     setPage,
     pageSize,
     setPageSize,
-    filterPatente,
-    setFilterPatente,
+    searchTerm,
+    handleSearchChange,
     updateChecklist,
-  } = useBitacoraData()
+  } = useUSSHistoricoData();
 
-  const [searchTerm, setSearchTerm] = useState('')
-  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  // Stats rápidos para marcaciones
+  const marcacionesStats = useMemo(() => {
+    if (marcaciones.length === 0) return null;
+    const conductores = new Set(marcaciones.map(m => m.conductor)).size;
+    const kmTotal = marcaciones.reduce((sum, m) => sum + m.kmTotal, 0);
+    const activos = marcaciones.filter(m => m.estado !== 'Sin Actividad').length;
+    return { conductores, kmTotal: Math.round(kmTotal * 100) / 100, activos };
+  }, [marcaciones]);
 
-  // Debounce: aplicar búsqueda server-side después de 400ms sin escribir
-  const handleSearchChange = useCallback((value: string) => {
-    setSearchTerm(value)
-    if (debounceRef.current) clearTimeout(debounceRef.current)
-    debounceRef.current = setTimeout(() => {
-      setFilterPatente(value.trim())
-      setPage(1) // Reset a primera página al buscar
-    }, 400)
-  }, [setFilterPatente, setPage])
-
-  // Limpiar timeout al desmontar
-  useEffect(() => {
-    return () => { if (debounceRef.current) clearTimeout(debounceRef.current) }
-  }, [])
-
-  // Filtro local adicional para conductor/ibutton (el server-side solo filtra por patente)
-  const filteredRegistros = useMemo(() => {
-    if (!searchTerm.trim()) return registros
-    const term = searchTerm.toLowerCase()
-    // Si el filtro server-side ya está aplicado por patente, solo filtrar adicionalmente por conductor/ibutton
-    // para cubrir búsquedas que no sean por patente
-    if (filterPatente && registros.length > 0) return registros
-    return registros.filter(
-      (r) =>
-        r.patente?.toLowerCase().includes(term) ||
-        r.conductor_wialon?.toLowerCase().includes(term) ||
-        r.ibutton?.toLowerCase().includes(term)
-    )
-  }, [registros, searchTerm, filterPatente])
+  const headerControls = (
+    <BitacoraHeader
+      dateRange={dateRange}
+      onDateRangePreset={setDateRangePreset}
+      onCustomDateRange={setCustomDateRange}
+      isLoading={loading}
+      lastUpdate={null}
+    />
+  );
 
   return (
     <div className="bitacora-module">
-      {queryState.error && (
+      {error && (
         <div className="bitacora-error">
-          <p>{queryState.error}</p>
+          <p>{error}</p>
         </div>
       )}
 
-      <BitacoraStats stats={stats} isLoading={queryState.loading} />
+      {/* Tabs estilo facturación */}
+      <div className="bitacora-tabs">
+        {TABS.map(tab => {
+          const Icon = tab.icon;
+          return (
+            <button
+              key={tab.id}
+              className={`bitacora-tab ${vista === tab.id ? 'active' : ''}`}
+              onClick={() => setVista(tab.id)}
+            >
+              <Icon size={16} />
+              <span>{tab.label}</span>
+            </button>
+          );
+        })}
+      </div>
 
-      <BitacoraTable
-        registros={filteredRegistros}
-        totalCount={totalCount}
-        isLoading={queryState.loading}
-        page={page}
-        pageSize={pageSize}
-        onPageChange={setPage}
-        onPageSizeChange={setPageSize}
-        onChecklistChange={updateChecklist}
-        searchTerm={searchTerm}
-        onSearchChange={handleSearchChange}
-        headerControls={
-          <BitacoraHeader
-            dateRange={dateRange}
-            onDateRangePreset={setDateRangePreset}
-            onCustomDateRange={setCustomDateRange}
-            isLoading={queryState.loading}
-            lastUpdate={queryState.lastUpdate}
-          />
-        }
-      />
+      {/* Stats rápidos en vista marcaciones */}
+      {vista === 'marcaciones' && marcacionesStats && (
+        <div style={{ display: 'flex', gap: '16px', fontSize: '13px', color: 'var(--text-secondary)' }}>
+          <span><strong>{marcacionesStats.conductores}</strong> conductores</span>
+          <span><strong>{marcacionesStats.kmTotal.toLocaleString('es-AR')}</strong> km</span>
+          <span><strong>{marcacionesStats.activos}</strong> activos</span>
+        </div>
+      )}
+
+      {/* Vista Marcaciones */}
+      {vista === 'marcaciones' && (
+        <MarcacionesTable
+          marcaciones={marcaciones}
+          isLoading={loading}
+          searchTerm={searchTerm}
+          onSearchChange={handleSearchChange}
+          headerControls={headerControls}
+          onUpdateChecklist={updateChecklist}
+        />
+      )}
+
+      {/* Vista Histórico */}
+      {vista === 'historico' && (
+        <HistoricoTable
+          registros={registros}
+          totalCount={totalCount}
+          isLoading={loading}
+          page={page}
+          pageSize={pageSize}
+          onPageChange={setPage}
+          onPageSizeChange={setPageSize}
+          searchTerm={searchTerm}
+          onSearchChange={handleSearchChange}
+          headerControls={headerControls}
+        />
+      )}
     </div>
-  )
+  );
 }

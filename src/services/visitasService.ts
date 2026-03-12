@@ -260,9 +260,10 @@ export function toCalendarEvents(visitas: VisitaCompleta[]): VisitaCalendarEvent
   return visitas.map((v) => {
     const start = new Date(v.fecha_hora);
     const end = new Date(start.getTime() + v.duracion_minutos * 60_000);
+    const masked = (v as VisitaCompleta & { _masked?: boolean })._masked;
     return {
       id: v.id,
-      title: `${v.nombre_visitante} - ${v.categoria_nombre}`,
+      title: masked ? 'Reservado' : `${v.nombre_visitante} - ${v.categoria_nombre}`,
       start,
       end,
       resourceId: v.atendedor_id,

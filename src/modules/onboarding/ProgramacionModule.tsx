@@ -1030,6 +1030,56 @@ export function ProgramacionModule() {
         })
         .eq('id', prog.id)
 
+      // Crear visita automática con categoría "Asignaciones"
+      try {
+        const visitanteNombres: string[] = []
+        const visitanteDnis: string[] = []
+        if (esTurno) {
+          if (prog.conductor_diurno_nombre && enviarDiurno) {
+            visitanteNombres.push(prog.conductor_diurno_nombre)
+            visitanteDnis.push(prog.conductor_diurno_dni || '')
+          }
+          if (prog.conductor_nocturno_nombre && enviarNocturno) {
+            visitanteNombres.push(prog.conductor_nocturno_nombre)
+            visitanteDnis.push(prog.conductor_nocturno_dni || '')
+          }
+        } else if (prog.conductor_nombre) {
+          visitanteNombres.push(prog.conductor_nombre)
+          visitanteDnis.push(prog.conductor_dni || '')
+        }
+
+        const tipoLabel = TIPO_ASIGNACION_LABELS[prog.tipo_asignacion || ''] || prog.tipo_asignacion || 'Asignación'
+
+        const CATEGORIA_ASIGNACIONES_ID = '76514b14-b403-4587-993e-d64bad874594'
+        const ATENDEDOR_IVAN_ID = 'd0a03327-f364-48c8-9940-71d2f2793a9e'
+
+        if (visitanteNombres.length > 0 && prog.fecha_cita) {
+          const soloFechaCita = prog.fecha_cita.split('T')[0]
+          const horaCita = prog.hora_cita && prog.hora_cita.trim() !== ''
+            ? prog.hora_cita.substring(0, 5)
+            : '10:00'
+          const fechaHoraVisita = new Date(`${soloFechaCita}T${horaCita}:00-03:00`).toISOString()
+
+          await (supabase.from('visitas') as any).insert({
+            categoria_id: CATEGORIA_ASIGNACIONES_ID,
+            motivo_id: null,
+            atendedor_id: ATENDEDOR_IVAN_ID,
+            sede_id: prog.sede_id || sedeActualId || sedeUsuario?.id,
+            nombre_visitante: visitanteNombres.join('; '),
+            dni_visitante: visitanteDnis.join('; ') || null,
+            patente: prog.vehiculo_entregar_patente || null,
+            fecha_hora: fechaHoraVisita,
+            duracion_minutos: 30,
+            nota: `${tipoLabel} — ${prog.modalidad || ''} — Código: ${asignacion.codigo}`,
+            estado: 'pendiente',
+            citador_id: user?.id || null,
+            citador_nombre: profile?.full_name || 'Sistema',
+          })
+        }
+      } catch (_visitaErr) {
+        // No bloquear el flujo principal si falla la creación de visita
+      }
+
       // Remover de la lista local (ya no debe aparecer)
       setProgramaciones(prev => prev.filter(p => p.id !== prog.id))
 
