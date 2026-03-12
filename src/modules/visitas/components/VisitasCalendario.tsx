@@ -7,7 +7,7 @@ import { useMemo, useCallback } from 'react';
 import { Calendar, dateFnsLocalizer } from 'react-big-calendar';
 import { format, parse, startOfWeek, getDay } from 'date-fns';
 import { es } from 'date-fns/locale/es';
-import type { VisitaCalendarEvent, CalendarResource, VisitaEstado } from '../../../types/visitas.types';
+import type { VisitaCalendarEvent, VisitaCompleta, CalendarResource, VisitaEstado } from '../../../types/visitas.types';
 import { VISITA_ESTADOS } from '../../../types/visitas.types';
 
 import 'react-big-calendar/lib/css/react-big-calendar.css';
@@ -63,8 +63,29 @@ export function VisitasCalendario({
 
   // Color del evento por categoría + opacidad por estado
   const eventStyleGetter = useCallback((event: VisitaCalendarEvent) => {
-    const estado = event.visita.estado as VisitaEstado;
-    const baseColor = event.visita.categoria_color || '#3b82f6';
+    const v = event.visita;
+    const masked = (v as VisitaCompleta & { _masked?: boolean })._masked;
+
+    // Citas Directivo enmascaradas: gris sólido, sin detalles
+    if (masked) {
+      return {
+        style: {
+          backgroundColor: '#d1d5db',
+          opacity: 0.85,
+          borderRadius: '6px',
+          border: 'none',
+          borderLeft: '3px solid #9ca3af',
+          color: '#6b7280',
+          fontSize: '11px',
+          padding: '3px 8px',
+          fontWeight: 500 as const,
+          cursor: 'default',
+        },
+      };
+    }
+
+    const estado = v.estado as VisitaEstado;
+    const baseColor = v.categoria_color || '#3b82f6';
     const isDone = estado === 'completada' || estado === 'cancelada' || estado === 'no_asistio';
     return {
       style: {
@@ -76,7 +97,7 @@ export function VisitasCalendario({
         color: '#fff',
         fontSize: '11px',
         padding: '3px 8px',
-        fontWeight: 500,
+        fontWeight: 500 as const,
       },
     };
   }, []);
@@ -84,6 +105,9 @@ export function VisitasCalendario({
   // Tooltip content
   const tooltipAccessor = useCallback((event: VisitaCalendarEvent) => {
     const v = event.visita;
+    // Citas Directivo enmascaradas: tooltip genérico
+    const masked = (v as VisitaCompleta & { _masked?: boolean })._masked;
+    if (masked) return 'Reservado';
     const estadoInfo = VISITA_ESTADOS[v.estado];
     return `${v.nombre_visitante}\n${v.categoria_nombre}${v.motivo_nombre ? ' - ' + v.motivo_nombre : ''}\nAnfitrión: ${v.atendedor_nombre}\nEstado: ${estadoInfo.label}\nDuración: ${v.duracion_minutos} min`;
   }, []);

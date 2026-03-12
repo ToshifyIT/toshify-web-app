@@ -1032,7 +1032,6 @@ export function ProgramacionModule() {
 
       // Crear visita automática con categoría "Asignaciones"
       try {
-        // Armar nombre(s) del visitante
         const visitanteNombres: string[] = []
         const visitanteDnis: string[] = []
         if (esTurno) {
@@ -1051,7 +1050,6 @@ export function ProgramacionModule() {
 
         const tipoLabel = TIPO_ASIGNACION_LABELS[prog.tipo_asignacion || ''] || prog.tipo_asignacion || 'Asignación'
 
-        // IDs fijos: categoría "Asignaciones" y anfitrión "Iván"
         const CATEGORIA_ASIGNACIONES_ID = '76514b14-b403-4587-993e-d64bad874594'
         const ATENDEDOR_IVAN_ID = 'd0a03327-f364-48c8-9940-71d2f2793a9e'
 

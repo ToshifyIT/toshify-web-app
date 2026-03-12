@@ -111,11 +111,26 @@ export function VisitasModule() {
     const raw = await fetchVisitas(sedeActualId, start, end);
     // Auto-transicionar estados según hora actual (pendiente→en_curso→completada)
     const updated = await autoUpdateEstados(raw);
-    // Filtrar citas "Directivo": solo visibles para el creador y admins
-    const data = updated.filter((v) => {
-      if (v.categoria_nombre?.toLowerCase() !== 'directivo') return true;
-      if (isAdmin()) return true;
-      return v.citador_id === user?.id;
+    // Citas "Directivo": admin y citador ven el detalle completo,
+    // los demás ven un bloque gris "Reservado" sin datos
+    const data = updated.map((v) => {
+      if (v.categoria_nombre?.toLowerCase() !== 'directivo') return v;
+      if (isAdmin()) return v;
+      if (v.citador_id === user?.id) return v;
+      // Enmascarar: mantener fecha/hora/duración, ocultar todo lo demás
+      return {
+        ...v,
+        nombre_visitante: 'Reservado',
+        dni_visitante: null,
+        patente: null,
+        motivo_nombre: null,
+        atendedor_nombre: '-',
+        nota: null,
+        citador_nombre: '-',
+        categoria_nombre: 'Directivo',
+        categoria_color: '#9ca3af',
+        _masked: true,
+      } as VisitaCompleta & { _masked?: boolean };
     });
     setVisitas(data);
     setCalendarEvents(toCalendarEvents(data));
@@ -157,6 +172,9 @@ export function VisitasModule() {
   }
 
   function handleSelectEvent(event: VisitaCalendarEvent) {
+    // No abrir detalle para citas Directivo enmascaradas
+    const masked = (event.visita as VisitaCompleta & { _masked?: boolean })._masked;
+    if (masked) return;
     setSelectedVisita(event.visita);
     setShowDetalleModal(true);
   }
@@ -292,7 +310,7 @@ export function VisitasModule() {
       return;
     }
     const XLSX = await import('xlsx');
-    const dataExport = visitas.map((v) => ({
+    const dataExport = visitas.filter((v) => !isMasked(v)).map((v) => ({
       'Fecha': format(new Date(v.fecha_hora), 'dd/MM/yyyy'),
       'Hora': format(new Date(v.fecha_hora), 'HH:mm'),
       'Duración (min)': v.duracion_minutos,
@@ -319,27 +337,46 @@ export function VisitasModule() {
     XLSX.writeFile(wb, `Visitas_${fecha}.xlsx`);
   }
 
+  // Helper: detectar si una fila es una cita Directivo enmascarada
+  const isMasked = (row: VisitaCompleta) =>
+    !!(row as VisitaCompleta & { _masked?: boolean })._masked;
+
   // === COLUMNAS DATATABLE (vista tabla) ===
   const columns: ColumnDef<VisitaCompleta>[] = [
     {
       accessorKey: 'fecha_hora',
       header: 'Fecha/Hora',
-      cell: ({ getValue }) => {
+      cell: ({ getValue, row }) => {
         const dt = new Date(getValue() as string);
-        return `${format(dt, 'dd/MM/yyyy')} ${format(dt, 'HH:mm')}`;
+        const text = `${format(dt, 'dd/MM/yyyy')} ${format(dt, 'HH:mm')}`;
+        if (isMasked(row.original)) return <span style={{ color: '#9ca3af' }}>{text}</span>;
+        return text;
       },
     },
-    { accessorKey: 'categoria_nombre', header: 'Categoría' },
+    {
+      accessorKey: 'categoria_nombre',
+      header: 'Categoría',
+      cell: ({ getValue, row }) => {
+        if (isMasked(row.original)) return <span style={{ color: '#9ca3af', fontStyle: 'italic' }}>Reservado</span>;
+        return (getValue() as string) || '-';
+      },
+    },
     {
       accessorKey: 'motivo_nombre',
       header: 'Motivo',
       meta: { expand: true },
-      cell: ({ getValue }) => (getValue() as string) || '-',
+      cell: ({ getValue, row }) => {
+        if (isMasked(row.original)) return <span style={{ color: '#d1d5db' }}>-</span>;
+        return (getValue() as string) || '-';
+      },
     },
     {
       accessorKey: 'nombre_visitante',
       header: 'Visitante',
       cell: ({ getValue, row }) => {
+        if (isMasked(row.original)) {
+          return <span style={{ color: '#9ca3af', fontStyle: 'italic' }}>Reservado</span>;
+        }
         const val = (getValue() as string) || '-';
         const parts = val.split(';').map((s) => s.trim()).filter(Boolean);
         if (parts.length <= 1) return val;
@@ -357,19 +394,41 @@ export function VisitasModule() {
     {
       accessorKey: 'dni_visitante',
       header: 'DNI',
-      cell: ({ getValue }) => {
+      cell: ({ getValue, row }) => {
+        if (isMasked(row.original)) return <span style={{ color: '#d1d5db' }}>-</span>;
         const val = (getValue() as string) || '-';
         const parts = val.split(';').map((s) => s.trim()).filter(Boolean);
         if (parts.length <= 1) return val;
         return <span title={parts.join(', ')}>{parts[0]}…</span>;
       },
     },
-    { accessorKey: 'patente', header: 'Patente', cell: ({ getValue }) => (getValue() as string) || '-' },
-    { accessorKey: 'atendedor_nombre', header: 'Anfitrión' },
+    {
+      accessorKey: 'patente',
+      header: 'Patente',
+      cell: ({ getValue, row }) => {
+        if (isMasked(row.original)) return <span style={{ color: '#d1d5db' }}>-</span>;
+        return (getValue() as string) || '-';
+      },
+    },
+    {
+      accessorKey: 'atendedor_nombre',
+      header: 'Anfitrión',
+      cell: ({ getValue, row }) => {
+        if (isMasked(row.original)) return <span style={{ color: '#d1d5db' }}>-</span>;
+        return (getValue() as string) || '-';
+      },
+    },
     {
       accessorKey: 'estado',
       header: 'Estado',
-      cell: ({ getValue }) => {
+      cell: ({ getValue, row }) => {
+        if (isMasked(row.original)) {
+          return (
+            <span className="visita-estado-badge" style={{ backgroundColor: '#d1d5db', color: '#6b7280' }}>
+              -
+            </span>
+          );
+        }
         const estado = getValue() as VisitaEstado;
         const info = VISITA_ESTADOS[estado];
         return (
@@ -382,7 +441,8 @@ export function VisitasModule() {
     {
       accessorKey: 'citador_nombre',
       header: 'Citador',
-      cell: ({ getValue }) => {
+      cell: ({ getValue, row }) => {
+        if (isMasked(row.original)) return <span style={{ color: '#d1d5db' }}>-</span>;
         const val = (getValue() as string) || '-';
         return (
           <span title={val} style={{ display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '160px' }}>
@@ -394,24 +454,30 @@ export function VisitasModule() {
     {
       accessorKey: 'duracion_minutos',
       header: 'Duración',
-      cell: ({ getValue }) => `${getValue()} min`,
+      cell: ({ getValue, row }) => {
+        if (isMasked(row.original)) return <span style={{ color: '#d1d5db' }}>-</span>;
+        return `${getValue()} min`;
+      },
     },
     {
       id: 'acciones',
       header: '',
       size: 50,
-      cell: ({ row }) => (
-        <button
-          className="btn-icon"
-          title="Ver detalle"
-          onClick={() => {
-            setSelectedVisita(row.original);
-            setShowDetalleModal(true);
-          }}
-        >
-          <Eye size={16} />
-        </button>
-      ),
+      cell: ({ row }) => {
+        if (isMasked(row.original)) return null;
+        return (
+          <button
+            className="btn-icon"
+            title="Ver detalle"
+            onClick={() => {
+              setSelectedVisita(row.original);
+              setShowDetalleModal(true);
+            }}
+          >
+            <Eye size={16} />
+          </button>
+        );
+      },
     },
   ];
 
