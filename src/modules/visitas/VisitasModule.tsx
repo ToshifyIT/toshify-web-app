@@ -328,18 +328,47 @@ export function VisitasModule() {
         const dt = new Date(getValue() as string);
         return `${format(dt, 'dd/MM/yyyy')} ${format(dt, 'HH:mm')}`;
       },
-      size: 140,
     },
-    { accessorKey: 'categoria_nombre', header: 'Categoría', size: 120 },
-    { accessorKey: 'motivo_nombre', header: 'Motivo', size: 150, cell: ({ getValue }) => (getValue() as string) || '-' },
-    { accessorKey: 'nombre_visitante', header: 'Visitante', size: 180 },
-    { accessorKey: 'dni_visitante', header: 'DNI', size: 100, cell: ({ getValue }) => (getValue() as string) || '-' },
-    { accessorKey: 'patente', header: 'Patente', size: 90, cell: ({ getValue }) => (getValue() as string) || '-' },
-    { accessorKey: 'atendedor_nombre', header: 'Anfitrión', size: 150 },
+    { accessorKey: 'categoria_nombre', header: 'Categoría' },
+    {
+      accessorKey: 'motivo_nombre',
+      header: 'Motivo',
+      meta: { expand: true },
+      cell: ({ getValue }) => (getValue() as string) || '-',
+    },
+    {
+      accessorKey: 'nombre_visitante',
+      header: 'Visitante',
+      cell: ({ getValue, row }) => {
+        const val = (getValue() as string) || '-';
+        const parts = val.split(';').map((s) => s.trim()).filter(Boolean);
+        if (parts.length <= 1) return val;
+        return (
+          <span
+            style={{ cursor: 'pointer' }}
+            title={parts.join(', ')}
+            onClick={() => { setSelectedVisita(row.original); setShowDetalleModal(true); }}
+          >
+            {parts[0]} <span style={{ color: 'var(--primary)', fontWeight: 500 }}>+{parts.length - 1} más</span>
+          </span>
+        );
+      },
+    },
+    {
+      accessorKey: 'dni_visitante',
+      header: 'DNI',
+      cell: ({ getValue }) => {
+        const val = (getValue() as string) || '-';
+        const parts = val.split(';').map((s) => s.trim()).filter(Boolean);
+        if (parts.length <= 1) return val;
+        return <span title={parts.join(', ')}>{parts[0]}…</span>;
+      },
+    },
+    { accessorKey: 'patente', header: 'Patente', cell: ({ getValue }) => (getValue() as string) || '-' },
+    { accessorKey: 'atendedor_nombre', header: 'Anfitrión' },
     {
       accessorKey: 'estado',
       header: 'Estado',
-      size: 110,
       cell: ({ getValue }) => {
         const estado = getValue() as VisitaEstado;
         const info = VISITA_ESTADOS[estado];
@@ -353,11 +382,10 @@ export function VisitasModule() {
     {
       accessorKey: 'citador_nombre',
       header: 'Citador',
-      size: 140,
       cell: ({ getValue }) => {
         const val = (getValue() as string) || '-';
         return (
-          <span title={val} style={{ display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '130px' }}>
+          <span title={val} style={{ display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '160px' }}>
             {val}
           </span>
         );
@@ -366,7 +394,6 @@ export function VisitasModule() {
     {
       accessorKey: 'duracion_minutos',
       header: 'Duración',
-      size: 80,
       cell: ({ getValue }) => `${getValue()} min`,
     },
     {
