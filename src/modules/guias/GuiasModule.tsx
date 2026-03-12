@@ -86,8 +86,10 @@ export function GuiasModule() {
   const [efectivoFilter, setEfectivoFilter] = useState<string[]>([])
   const [appFilter, setAppFilter] = useState<string[]>([])
   const [totalFilter, setTotalFilter] = useState<string[]>([])
+  const [cabifyDataFilter, setCabifyDataFilter] = useState<string[]>([])
   const [openColumnFilter, setOpenColumnFilter] = useState<string | null>(null)
   const [sinGncFilter, setSinGncFilter] = useState(false)
+  const [conSaldoFilter, setConSaldoFilter] = useState(false)
   
   // Estados para búsqueda dentro de filtros
   const [nombreSearch, setNombreSearch] = useState('')
@@ -845,8 +847,55 @@ export function GuiasModule() {
         }
       })();
 
+      // Consultar datos de facturación (Alquiler, Garantía) desde facturacion_conductores
+      const facturacionBillingPromise = (async () => {
+        if (conductorIds.length === 0) return new Map<string, { alquiler: number; garantia: number; total: number }>();
+        // Parsear semana y año desde el formato ISO "2026-W11"
+        const [fYearStr, fWeekStr] = targetWeek.split('-W');
+        const fYear = parseInt(fYearStr);
+        const fWeek = parseInt(fWeekStr);
+
+        // Buscar el periodo_facturacion que coincida con semana y año
+        const { data: periodoData } = await supabase
+          .from('periodos_facturacion')
+          .select('id')
+          .eq('semana', fWeek)
+          .eq('anio', fYear)
+          .limit(1)
+          .maybeSingle();
+
+        if (!periodoData) return new Map<string, { alquiler: number; garantia: number; total: number }>();
+
+        // Obtener facturacion_conductores para ese periodo y los conductores de la guía
+        const { data: facturacionRows } = await supabase
+          .from('facturacion_conductores')
+          .select('conductor_id, subtotal_alquiler, subtotal_garantia')
+          .eq('periodo_id', periodoData.id)
+          .in('conductor_id', conductorIds);
+
+        const map = new Map<string, { alquiler: number; garantia: number; total: number }>();
+        (facturacionRows || []).forEach((row: any) => {
+          const alquiler = Number(row.subtotal_alquiler) || 0;
+          const garantia = Number(row.subtotal_garantia) || 0;
+          map.set(row.conductor_id, { alquiler, garantia, total: alquiler + garantia });
+        });
+        return map;
+      })();
+
+      // Consultar saldos de conductores (deuda/a favor)
+      const saldosPromise = conductorIds.length > 0
+        ? (supabase.from('saldos_conductores') as any)
+            .select('conductor_id, saldo_actual')
+            .in('conductor_id', conductorIds)
+            .then((res: any) => {
+              const map = new Map<string, number>();
+              (res.data || []).forEach((s: any) => map.set(s.conductor_id, s.saldo_actual ?? 0));
+              return map;
+            })
+        : Promise.resolve(new Map<string, number>());
+
       // Ejecutar todo en paralelo
-      const [cabifyDataMap, vehiculosMap, prevWeekData] = await Promise.all([cabifyPromise, vehiculosPromise, prevWeekDataPromise]);
+      const [cabifyDataMap, vehiculosMap, prevWeekData, saldosMap, facturacionBillingMap] = await Promise.all([cabifyPromise, vehiculosPromise, prevWeekDataPromise, saldosPromise, facturacionBillingPromise]);
 
       // cabifyDataMap: Map<semana, Map<id_conductor, { cobroApp, cobroEfectivo }>>
       const cabifyTargetWeekMap = cabifyDataMap.get(targetWeek) || new Map<string, { cobroApp: number; cobroEfectivo: number }>();
@@ -1046,6 +1095,17 @@ export function GuiasModule() {
           baseConductor.facturacion_efectivo_filter = getFilterDisplayValue(facturacionEfectivo);
           baseConductor.facturacion_app_filter = getFilterDisplayValue(facturacionApp);
           baseConductor.facturacion_total_filter = getFilterDisplayValue(facturacionTotal);
+
+          // Saldo del conductor (negativo = deuda, positivo = a favor, 0 = sin saldo)
+          const saldoRaw = saldosMap.get(conductor.id) ?? 0;
+          baseConductor.saldo_conductor = saldoRaw;
+
+          // Datos de facturación billing (Alquiler, Garantía, Cuota Semanal)
+          const billingEntry = facturacionBillingMap.get(conductor.id);
+          baseConductor.billing_alquiler = billingEntry ? billingEntry.alquiler : 0;
+          baseConductor.billing_garantia = billingEntry ? billingEntry.garantia : 0;
+          baseConductor.billing_cuota_semanal = billingEntry ? billingEntry.total : 0;
+          baseConductor.hasBillingData = !!billingEntry;
 
           // Cálculo de app de la semana anterior (desde cabify_historico via RPC)
           // Se usa para determinar el seguimiento (DIARIO/CERCANO/SEMANAL)
@@ -1505,6 +1565,12 @@ export function GuiasModule() {
     );
   };
 
+  const toggleCabifyDataFilter = (val: string) => {
+    setCabifyDataFilter(prev =>
+      prev.includes(val) ? prev.filter(v => v !== val) : [...prev, val]
+    );
+  };
+
   const filteredDrivers = useMemo(() => {
     let result = drivers;
 
@@ -1567,6 +1633,15 @@ export function GuiasModule() {
       result = result.filter(c => {
          const val = (c as any).facturacion_total_filter || "N/A";
          return totalFilter.includes(val);
+      });
+    }
+
+    if (cabifyDataFilter.length > 0) {
+      result = result.filter(c => {
+        const hasCabify = !!(c as any).hasCabifyData;
+        if (cabifyDataFilter.includes('con_datos') && hasCabify) return true;
+        if (cabifyDataFilter.includes('sin_datos') && !hasCabify) return true;
+        return false;
       });
     }
 
@@ -1651,8 +1726,15 @@ export function GuiasModule() {
       });
     }
 
+    if (conSaldoFilter) {
+      result = result.filter(c => {
+        const saldo = (c as any).saldo_conductor ?? 0;
+        return saldo < 0; // negativo = tiene deuda
+      });
+    }
+
     return result;
-  }, [drivers, nombreFilter, cbuFilter, estadoFilter, turnoFilter, categoriaFilter, asignacionFilter, activeStatFilter, selectedWeek, seguimientoRules, efectivoFilter, appFilter, totalFilter, sinGncFilter]);
+  }, [drivers, nombreFilter, cbuFilter, estadoFilter, turnoFilter, categoriaFilter, asignacionFilter, activeStatFilter, selectedWeek, seguimientoRules, efectivoFilter, appFilter, totalFilter, cabifyDataFilter, sinGncFilter, conSaldoFilter]);
 
   const uniqueEstados = useMemo(() => {
     const estados = new Map<string, string>();
@@ -1882,68 +1964,62 @@ export function GuiasModule() {
           return preferencia.charAt(0).toUpperCase();
         },
         cell: ({ row }: any) => {
+          const chip = (bg: string, color: string, txt: string) => (
+            <span
+              style={{
+                fontSize: '12px',
+                lineHeight: 1,
+                padding: '2px 6px',
+                borderRadius: 9999,
+                backgroundColor: bg,
+                color,
+                display: 'inline-block',
+                whiteSpace: 'nowrap',
+              }}
+            >
+              {txt}
+            </span>
+          );
           const asignacionInfo = (row.original as any).asignacion_info;
-          
           if (asignacionInfo) {
             if (asignacionInfo.modalidad === 'CARGO') {
-              return (
-                <span className="dt-badge dt-badge-purple badge-with-dot">
-                  A
-                </span>
-              );
+              return chip('#EDE9FE', '#6D28D9', 'A Cargo');
             }
             const turno = asignacionInfo.turno_conductor?.toLowerCase();
             if (turno === 'diurno') {
-              return (
-                <span className="dt-badge dt-badge-orange badge-with-dot">
-                  D
-                </span>
-              );
+              return chip('#FEF3C7', '#9A3412', 'Diurno');
             }
             if (turno === 'nocturno') {
-              return (
-                <span className="dt-badge dt-badge-blue badge-with-dot">
-                  N
-                </span>
-              );
+              return chip('#DBEAFE', '#1D4ED8', 'Nocturno');
             }
             if (turno) {
-              return (
-                <span className="dt-badge dt-badge-gray badge-with-dot">
-                  {turno.charAt(0).toUpperCase()}
-                </span>
-              );
+              return chip('#E5E7EB', '#374151', turno.charAt(0).toUpperCase());
             }
           }
-
           const preferenciaRaw = (row.original as any).preferencia_turno;
           const preferencia = preferenciaRaw ? preferenciaRaw.toString().toLowerCase() : '';
-
-          let label = 'S';
-          let badgeClass = 'dt-badge dt-badge-gray badge-with-dot';
-
+          let label = 'Sin preferencia';
+          let bg = '#E5E7EB';
+          let color = '#374151';
           if (preferencia === 'diurno' || preferencia === 'mañana') {
-            label = 'D';
-            badgeClass = 'dt-badge dt-badge-orange badge-with-dot';
+            label = 'Diurno';
+            bg = '#FEF3C7';
+            color = '#9A3412';
           } else if (preferencia === 'nocturno' || preferencia === 'noche') {
-            label = 'N';
-            badgeClass = 'dt-badge dt-badge-blue badge-with-dot';
+            label = 'Nocturno';
+            bg = '#DBEAFE';
+            color = '#1D4ED8';
           } else if (preferencia && preferencia !== 'sin preferencia') {
             label = preferencia.charAt(0).toUpperCase();
           }
-
-          return (
-            <span className={badgeClass}>
-              {label}
-            </span>
-          );
+          return chip(bg, color, label);
         },
         filterFn: (row: any, id: string, filterValue: any) => {
           if (!filterValue.length) return true
           const val = row.getValue(id) as string
           return filterValue.includes(val)
         },
-        size: 90,
+        size: 80,
       }] : []),
 
       {
@@ -2157,14 +2233,33 @@ export function GuiasModule() {
           };
 
           const rawDb = typeof rawSeguimientoDb === 'string' ? rawSeguimientoDb.trim().toUpperCase() : '';
+
+          // Saldo del conductor
+          const saldoConductor = (row.original as any).saldo_conductor ?? 0;
+          const tieneSaldo = saldoConductor < 0; // negativo = deuda
+          const saldoDisplay = tieneSaldo
+            ? new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', minimumFractionDigits: 2 }).format(Math.abs(saldoConductor))
+            : null;
+
+          const saldoElement = (
+            <div style={{ marginTop: '4px', fontSize: '10px', fontWeight: 600, textAlign: 'center' }}>
+              {tieneSaldo ? (
+                <span style={{ color: '#dc2626' }}>{saldoDisplay}</span>
+              ) : (
+                <span style={{ color: 'var(--text-tertiary)', fontWeight: 400 }}>Sin Saldo</span>
+              )}
+            </div>
+          );
+
           if (rawDb) {
             let manualClass = 'dt-badge dt-badge-gray badge-no-dot';
             if (rawDb === 'SEMANAL') manualClass = 'dt-badge dt-badge-green badge-no-dot';
             else if (rawDb === 'CERCANO') manualClass = 'dt-badge dt-badge-yellow badge-no-dot';
             else if (rawDb === 'DIARIO') manualClass = 'dt-badge dt-badge-red badge-no-dot';
             return (
-              <div className="flex justify-center">
+              <div className="flex justify-center" style={{ flexDirection: 'column', alignItems: 'center' }}>
                 <span className={manualClass}>{rawDb}</span>
+                {saldoElement}
               </div>
             );
           }
@@ -2186,7 +2281,7 @@ export function GuiasModule() {
           }
 
           return (
-            <div className="flex justify-center">
+            <div className="flex justify-center" style={{ flexDirection: 'column', alignItems: 'center' }}>
               {ruleMatch ? (
                 <span className={getBadgeColor(ruleMatch.color)}>
                   {ruleMatch.rango_nombre}
@@ -2198,6 +2293,7 @@ export function GuiasModule() {
               ) : (
                 <span style={{ color: 'var(--text-tertiary)' }}>-</span>
               )}
+              {saldoElement}
             </div>
           );
         },
@@ -2205,221 +2301,108 @@ export function GuiasModule() {
         size: 105,
       },
       {
-        accessorKey: "facturacion_app",
+        id: "datos_cabify",
         header: () => (
           <div className="dt-column-filter">
-            <span>APP {appFilter.length > 0 && `(${appFilter.length})`}</span>
+            <span>Datos Cabify {cabifyDataFilter.length > 0 && `(${cabifyDataFilter.length})`}</span>
             <button
-              className={`dt-column-filter-btn ${appFilter.length > 0 ? 'active' : ''}`}
+              className={`dt-column-filter-btn ${cabifyDataFilter.length > 0 ? 'active' : ''}`}
               onClick={(e) => {
                 e.stopPropagation();
-                setOpenColumnFilter(openColumnFilter === 'app' ? null : 'app');
+                setOpenColumnFilter(openColumnFilter === 'cabifyData' ? null : 'cabifyData');
               }}
-              title="Filtrar por APP"
+              title="Filtrar por datos Cabify"
             >
               <Filter size={12} />
             </button>
-            {openColumnFilter === 'app' && (
+            {openColumnFilter === 'cabifyData' && (
               <div className="dt-column-filter-dropdown dt-excel-filter" onClick={(e) => e.stopPropagation()}>
-                <input
-                  type="text"
-                  placeholder="Buscar..."
-                  value={appSearch}
-                  onChange={(e) => setAppSearch(e.target.value)}
-                  className="dt-column-filter-input"
-                  autoFocus
-                />
                 <div className="dt-excel-filter-list">
-                  {appFiltrados.length === 0 ? (
-                    <div className="dt-excel-filter-empty">Sin resultados</div>
-                  ) : (
-                    appFiltrados.slice(0, 50).map(val => (
-                      <label key={val} className={`dt-column-filter-checkbox ${appFilter.includes(val) ? 'selected' : ''}`}>
-                        <input
-                          type="checkbox"
-                          checked={appFilter.includes(val)}
-                          onChange={() => toggleAppFilter(val)}
-                        />
-                        <span>{val}</span>
-                      </label>
-                    ))
-                  )}
+                  <label className={`dt-column-filter-checkbox ${cabifyDataFilter.includes('con_datos') ? 'selected' : ''}`}>
+                    <input
+                      type="checkbox"
+                      checked={cabifyDataFilter.includes('con_datos')}
+                      onChange={() => toggleCabifyDataFilter('con_datos')}
+                    />
+                    <span>Con datos</span>
+                  </label>
+                  <label className={`dt-column-filter-checkbox ${cabifyDataFilter.includes('sin_datos') ? 'selected' : ''}`}>
+                    <input
+                      type="checkbox"
+                      checked={cabifyDataFilter.includes('sin_datos')}
+                      onChange={() => toggleCabifyDataFilter('sin_datos')}
+                    />
+                    <span>N/A</span>
+                  </label>
                 </div>
-                {appFilter.length > 0 && (
+                {cabifyDataFilter.length > 0 && (
                   <button
                     className="dt-column-filter-clear"
-                    onClick={() => { setAppFilter([]); setAppSearch(''); }}
+                    onClick={() => setCabifyDataFilter([])}
                   >
-                    Limpiar ({appFilter.length})
+                    Limpiar ({cabifyDataFilter.length})
                   </button>
                 )}
               </div>
             )}
           </div>
         ),
-        cell: ({ row, getValue }) => {
-          const rawVal = getValue() as number;
-          // Sanitizamos a 2 decimales para evitar problemas de visualización con números flotantes largos
-          const val = rawVal ? Number(Number(rawVal).toFixed(2)) : rawVal;
-
-          // Si el valor es mayor a 0, lo mostramos siempre (sea manual o automático)
-          if (val && val > 0) {
-            return new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(val);
-          }
-          // Si es 0 y no hay datos de Cabify, mostramos N/A
-          if (!(row.original as any).hasCabifyData) {
-            return <span className="italic" style={{ color: 'var(--text-tertiary)' }} title="Sin datos de Cabify">N/A</span>;
-          }
-          if (val === undefined || val === null) return "-";
-          return new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(val);
+        cell: ({ row }) => {
+          const hasCabify = (row.original as any).hasCabifyData;
+          const appRaw = (row.original as any).facturacion_app as number | null | undefined;
+          const efectivoRaw = (row.original as any).facturacion_efectivo as number | null | undefined;
+          const totalRaw = (row.original as any).facturacion_total as number | null | undefined;
+          const formatMoney = (v: number | null | undefined) => {
+            const n = v ? Number(Number(v).toFixed(2)) : v as any;
+            if (n && n > 0) {
+              return new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n as number);
+            }
+            if (!hasCabify) {
+              return <span className="italic" style={{ color: 'var(--text-tertiary)' }} title="Sin datos de Cabify">N/A</span>;
+            }
+            if (n === undefined || n === null) return "-";
+            return new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(Number(Number(n).toFixed(2)));
+          };
+          return (
+            <div style={{ display: 'grid', gridTemplateColumns: '84px 1fr', columnGap: 8, rowGap: 2, alignItems: 'center' }}>
+              <span style={{ fontWeight: 600 }}>App:</span>
+              <span style={{ textAlign: 'right' }}>{formatMoney(appRaw) as any}</span>
+              <span style={{ fontWeight: 600 }}>Efectivo:</span>
+              <span style={{ textAlign: 'right' }}>{formatMoney(efectivoRaw) as any}</span>
+              <span style={{ fontWeight: 600 }}>Total:</span>
+              <span style={{ textAlign: 'right' }}>{formatMoney(totalRaw) as any}</span>
+            </div>
+          );
         },
-        enableSorting: true,
-        size: 110,
+        enableSorting: false,
+        size: 200,
       },
-      {
-        accessorKey: "facturacion_efectivo",
-        header: () => (
-          <div className="dt-column-filter">
-            <span>Efectivo {efectivoFilter.length > 0 && `(${efectivoFilter.length})`}</span>
-            <button
-              className={`dt-column-filter-btn ${efectivoFilter.length > 0 ? 'active' : ''}`}
-              onClick={(e) => {
-                e.stopPropagation();
-                setOpenColumnFilter(openColumnFilter === 'efectivo' ? null : 'efectivo');
-              }}
-              title="Filtrar por efectivo"
-            >
-              <Filter size={12} />
-            </button>
-            {openColumnFilter === 'efectivo' && (
-              <div className="dt-column-filter-dropdown dt-excel-filter" onClick={(e) => e.stopPropagation()}>
-                <input
-                  type="text"
-                  placeholder="Buscar..."
-                  value={efectivoSearch}
-                  onChange={(e) => setEfectivoSearch(e.target.value)}
-                  className="dt-column-filter-input"
-                  autoFocus
-                />
-                <div className="dt-excel-filter-list">
-                  {efectivoFiltrados.length === 0 ? (
-                    <div className="dt-excel-filter-empty">Sin resultados</div>
-                  ) : (
-                    efectivoFiltrados.slice(0, 50).map(val => (
-                      <label key={val} className={`dt-column-filter-checkbox ${efectivoFilter.includes(val) ? 'selected' : ''}`}>
-                        <input
-                          type="checkbox"
-                          checked={efectivoFilter.includes(val)}
-                          onChange={() => toggleEfectivoFilter(val)}
-                        />
-                        <span>{val}</span>
-                      </label>
-                    ))
-                  )}
-                </div>
-                {efectivoFilter.length > 0 && (
-                  <button
-                    className="dt-column-filter-clear"
-                    onClick={() => { setEfectivoFilter([]); setEfectivoSearch(''); }}
-                  >
-                    Limpiar ({efectivoFilter.length})
-                  </button>
-                )}
-              </div>
-            )}
-          </div>
-        ),
-        cell: ({ row, getValue }) => {
-          const rawVal = getValue() as number;
-          // Sanitizamos a 2 decimales para evitar problemas de visualización con números flotantes largos
-          const val = rawVal ? Number(Number(rawVal).toFixed(2)) : rawVal;
 
-          // Si el valor es mayor a 0, lo mostramos siempre (sea manual o automático)
-          if (val && val > 0) {
-            return new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(val);
-          }
-          // Si es 0 y no hay datos de Cabify, mostramos N/A
-          if (!(row.original as any).hasCabifyData) {
-            return <span className="italic" style={{ color: 'var(--text-tertiary)' }} title="Sin datos de Cabify">N/A</span>;
-          }
-          // Si es 0 pero hay datos (o semana pasada), mostramos $0
-          if (val === undefined || val === null) return "-";
-          return new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(val);
-        },
-        enableSorting: true,
-        size: 110,
-      },
       {
-        accessorKey: "facturacion_total",
-        header: () => (
-          <div className="dt-column-filter">
-            <span>TOTAL {totalFilter.length > 0 && `(${totalFilter.length})`}</span>
-            <button
-              className={`dt-column-filter-btn ${totalFilter.length > 0 ? 'active' : ''}`}
-              onClick={(e) => {
-                e.stopPropagation();
-                setOpenColumnFilter(openColumnFilter === 'total' ? null : 'total');
-              }}
-              title="Filtrar por Total"
-            >
-              <Filter size={12} />
-            </button>
-            {openColumnFilter === 'total' && (
-              <div className="dt-column-filter-dropdown dt-excel-filter" onClick={(e) => e.stopPropagation()}>
-                <input
-                  type="text"
-                  placeholder="Buscar..."
-                  value={totalSearch}
-                  onChange={(e) => setTotalSearch(e.target.value)}
-                  className="dt-column-filter-input"
-                  autoFocus
-                />
-                <div className="dt-excel-filter-list">
-                  {totalFiltrados.length === 0 ? (
-                    <div className="dt-excel-filter-empty">Sin resultados</div>
-                  ) : (
-                    totalFiltrados.slice(0, 50).map(val => (
-                      <label key={val} className={`dt-column-filter-checkbox ${totalFilter.includes(val) ? 'selected' : ''}`}>
-                        <input
-                          type="checkbox"
-                          checked={totalFilter.includes(val)}
-                          onChange={() => toggleTotalFilter(val)}
-                        />
-                        <span>{val}</span>
-                      </label>
-                    ))
-                  )}
-                </div>
-                {totalFilter.length > 0 && (
-                  <button
-                    className="dt-column-filter-clear"
-                    onClick={() => { setTotalFilter([]); setTotalSearch(''); }}
-                  >
-                    Limpiar ({totalFilter.length})
-                  </button>
-                )}
-              </div>
-            )}
-          </div>
-        ),
-        cell: ({ row, getValue }) => {
-          const rawVal = getValue() as number;
-          // Sanitizamos a 2 decimales para evitar problemas de visualización con números flotantes largos
-          const val = rawVal ? Number(Number(rawVal).toFixed(2)) : rawVal;
-          
-          // Si el valor es mayor a 0, lo mostramos siempre (sea manual o automático)
-          if (val && val > 0) {
-            return new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(val);
-          }
-          // Si es 0 y no hay datos de Cabify, mostramos N/A
-          if (!(row.original as any).hasCabifyData) {
-            return <span className="italic" style={{ color: 'var(--text-tertiary)' }} title="Sin datos de Cabify">N/A</span>;
-          }
-          if (val === undefined || val === null) return "-";
-          return new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(val);
+        id: "cuota_semanal",
+        header: "Facturación",
+        cell: ({ row }) => {
+          const hasBilling = (row.original as any).hasBillingData;
+          const alquiler = (row.original as any).billing_alquiler as number;
+          const garantia = (row.original as any).billing_garantia as number;
+          const cuota = (row.original as any).billing_cuota_semanal as number;
+          const fmtBilling = (v: number) => {
+            if (!hasBilling) return <span className="italic" style={{ color: 'var(--text-tertiary)' }} title="Sin datos de facturación">N/A</span>;
+            return new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(v);
+          };
+          return (
+            <div style={{ display: 'grid', gridTemplateColumns: '72px 1fr', columnGap: 8, rowGap: 2, alignItems: 'center' }}>
+              <span style={{ fontWeight: 600 }}>Alquiler:</span>
+              <span style={{ textAlign: 'right' }}>{fmtBilling(alquiler) as any}</span>
+              <span style={{ fontWeight: 600 }}>Garantía:</span>
+              <span style={{ textAlign: 'right' }}>{fmtBilling(garantia) as any}</span>
+              <span style={{ fontWeight: 600, borderTop: '1px solid var(--border-color, #e5e7eb)', paddingTop: 2 }}>Total:</span>
+              <span style={{ textAlign: 'right', fontWeight: 700, borderTop: '1px solid var(--border-color, #e5e7eb)', paddingTop: 2 }}>{fmtBilling(cuota) as any}</span>
+            </div>
+          );
         },
-        enableSorting: true,
-        size: 110,
+        enableSorting: false,
+        size: 180,
       },
 
       {
@@ -2553,15 +2536,15 @@ export function GuiasModule() {
             />
           );
         },
-        size: 120,
+        size: 150,
       },
     ],
     [
-      nombreFilter, cbuFilter, estadoFilter, turnoFilter, 
+      nombreFilter, cbuFilter, estadoFilter, turnoFilter,
       categoriaFilter, asignacionFilter, openColumnFilter,
       nombresFiltrados, cuilsFiltrados, uniqueCategorias, uniqueEstados,
       nombreSearch, cbuSearch, selectedWeek, seguimientoRules, accionesImplementadas,
-      efectivoFilter, appFilter, totalFilter,
+      efectivoFilter, appFilter, totalFilter, cabifyDataFilter,
       efectivoFiltrados, appFiltrados, totalFiltrados,
       efectivoSearch, appSearch, totalSearch
     ]
@@ -2575,6 +2558,7 @@ export function GuiasModule() {
     setEfectivoFilter([]);
     setAppFilter([]);
     setTotalFilter([]);
+    setCabifyDataFilter([]);
     setActiveStatFilter(null);
     setSinGncFilter(false);
     setGlobalSearch('');
@@ -2866,28 +2850,57 @@ export function GuiasModule() {
                       const vehiculo = (c as any).vehiculo_asignado;
                       return vehiculo && vehiculo.gnc !== true;
                     }).length;
-                    return countSinGnc > 0 ? (
+                    const countConSaldo = drivers.filter(c => {
+                      const saldo = (c as any).saldo_conductor ?? 0;
+                      return saldo < 0;
+                    }).length;
+                    const showQuickFilters = countSinGnc > 0 || countConSaldo > 0;
+                    return showQuickFilters ? (
                       <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
-                        <button
-                          onClick={() => setSinGncFilter(prev => !prev)}
-                          style={{
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                            gap: '5px',
-                            padding: '4px 10px',
-                            borderRadius: '14px',
-                            fontSize: '11px',
-                            fontWeight: 600,
-                            border: sinGncFilter ? '2px solid #d97706' : '1px solid var(--border-primary)',
-                            background: sinGncFilter ? 'rgba(245,158,11,0.12)' : 'transparent',
-                            color: sinGncFilter ? '#d97706' : 'var(--text-secondary)',
-                            cursor: 'pointer',
-                            transition: 'all 0.15s',
-                            whiteSpace: 'nowrap',
-                          }}
-                        >
-                          Sin GNC <span style={{ opacity: 0.7 }}>{countSinGnc}</span>
-                        </button>
+                        {countSinGnc > 0 && (
+                          <button
+                            onClick={() => setSinGncFilter(prev => !prev)}
+                            style={{
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '5px',
+                              padding: '4px 10px',
+                              borderRadius: '14px',
+                              fontSize: '11px',
+                              fontWeight: 600,
+                              border: sinGncFilter ? '2px solid #d97706' : '1px solid var(--border-primary)',
+                              background: sinGncFilter ? 'rgba(245,158,11,0.12)' : 'transparent',
+                              color: sinGncFilter ? '#d97706' : 'var(--text-secondary)',
+                              cursor: 'pointer',
+                              transition: 'all 0.15s',
+                              whiteSpace: 'nowrap',
+                            }}
+                          >
+                            Sin GNC <span style={{ opacity: 0.7 }}>{countSinGnc}</span>
+                          </button>
+                        )}
+                        {countConSaldo > 0 && (
+                          <button
+                            onClick={() => setConSaldoFilter(prev => !prev)}
+                            style={{
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '5px',
+                              padding: '4px 10px',
+                              borderRadius: '14px',
+                              fontSize: '11px',
+                              fontWeight: 600,
+                              border: conSaldoFilter ? '2px solid #dc2626' : '1px solid var(--border-primary)',
+                              background: conSaldoFilter ? 'rgba(220,38,38,0.08)' : 'transparent',
+                              color: conSaldoFilter ? '#dc2626' : 'var(--text-secondary)',
+                              cursor: 'pointer',
+                              transition: 'all 0.15s',
+                              whiteSpace: 'nowrap',
+                            }}
+                          >
+                            Con Saldo <span style={{ opacity: 0.7 }}>{countConSaldo}</span>
+                          </button>
+                        )}
                       </div>
                     ) : null;
                   })()}
@@ -2943,7 +2956,7 @@ export function GuiasModule() {
                 </div>
 
                 {/* Filtros Activos */}
-                {(nombreFilter.length > 0 || estadoFilter.length > 0 || turnoFilter.length > 0 || asignacionFilter.length > 0 || efectivoFilter.length > 0 || appFilter.length > 0 || totalFilter.length > 0 || activeStatFilter || sinGncFilter) && (
+                {(nombreFilter.length > 0 || estadoFilter.length > 0 || turnoFilter.length > 0 || asignacionFilter.length > 0 || cabifyDataFilter.length > 0 || activeStatFilter || sinGncFilter || conSaldoFilter) && (
                   <div className="active-filters-container">
                     <div className="active-filters-label">
                       <Triangle size={8} fill="var(--color-primary)" stroke="var(--color-primary)" style={{ transform: 'rotate(180deg)' }} />
@@ -2977,24 +2990,10 @@ export function GuiasModule() {
                       </span>
                     ))}
 
-                    {efectivoFilter.map(f => (
-                      <span key={`efec-${f}`} className="active-filter-tag">
-                        Efectivo: {f}
-                        <button onClick={() => toggleEfectivoFilter(f)} className="active-filter-close"><X size={10} /></button>
-                      </span>
-                    ))}
-
-                    {appFilter.map(f => (
-                      <span key={`app-${f}`} className="active-filter-tag">
-                        App: {f}
-                        <button onClick={() => toggleAppFilter(f)} className="active-filter-close"><X size={10} /></button>
-                      </span>
-                    ))}
-
-                    {totalFilter.map(f => (
-                      <span key={`tot-${f}`} className="active-filter-tag">
-                        Total: {f}
-                        <button onClick={() => toggleTotalFilter(f)} className="active-filter-close"><X size={10} /></button>
+                    {cabifyDataFilter.map(f => (
+                      <span key={`cab-${f}`} className="active-filter-tag">
+                        Cabify: {f === 'con_datos' ? 'Con datos' : 'N/A'}
+                        <button onClick={() => toggleCabifyDataFilter(f)} className="active-filter-close"><X size={10} /></button>
                       </span>
                     ))}
 
@@ -3002,6 +3001,13 @@ export function GuiasModule() {
                       <span className="active-filter-tag">
                         Sin GNC
                         <button onClick={() => setSinGncFilter(false)} className="active-filter-close"><X size={10} /></button>
+                      </span>
+                    )}
+
+                    {conSaldoFilter && (
+                      <span className="active-filter-tag">
+                        Con Saldo
+                        <button onClick={() => setConSaldoFilter(false)} className="active-filter-close"><X size={10} /></button>
                       </span>
                     )}
 
