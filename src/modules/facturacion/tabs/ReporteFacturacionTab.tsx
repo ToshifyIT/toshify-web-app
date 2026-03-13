@@ -4428,7 +4428,27 @@ export function ReporteFacturacionTab() {
     try {
       const arrayBuffer = await file.arrayBuffer()
       const workbook = XLSX.read(arrayBuffer, { type: 'array' })
-      const sheetName = workbook.SheetNames[0]
+
+      // Buscar la hoja que coincida con la semana actual del período
+      const semBuscar = periodo?.semana || getWeek(semanaActual.inicio, { weekStartsOn: 1 })
+      let sheetName = workbook.SheetNames[0]
+      // 1) Buscar por nombre de hoja que contenga "semana X"
+      const hojaMatch = workbook.SheetNames.find((n: string) =>
+        n.toLowerCase().includes(`semana ${semBuscar}`) || n.toLowerCase().includes(`semana${semBuscar}`)
+      )
+      if (hojaMatch) {
+        sheetName = hojaMatch
+      } else {
+        // 2) Buscar hoja cuya col B (semana) tenga el número de semana buscado
+        for (const sn of workbook.SheetNames) {
+          const tempRows = XLSX.utils.sheet_to_json<any[]>(workbook.Sheets[sn], { header: 1, defval: '' })
+          if (tempRows.length > 1 && Number(tempRows[1][1]) === semBuscar) {
+            sheetName = sn
+            break
+          }
+        }
+      }
+
       const sheet = workbook.Sheets[sheetName]
       // Leer como array de arrays (raw) para acceder por índice de columna
       const rows = XLSX.utils.sheet_to_json<any[]>(sheet, { header: 1, defval: '' })
@@ -4480,13 +4500,10 @@ export function ReporteFacturacionTab() {
           continue
         }
 
-        // Solo excluir si ya está pagado o no debe nada
+        // Solo excluir si ya está pagado
         if (fact.estado === 'pagado') continue
-        if (fact.total_a_pagar <= 0 && exRow.importe_descontar <= 0) continue
 
         const yaCobrado = fact.monto_cobrado || 0
-        const pendiente = Math.abs(fact.total_a_pagar) - yaCobrado
-        if (pendiente <= 0 && exRow.importe_descontar <= 0) continue
 
         matched.push({
           conductor_nombre: fact.conductor_nombre,
@@ -4494,7 +4511,7 @@ export function ReporteFacturacionTab() {
           patente: exRow.patente || fact.vehiculo_patente || '',
           importe_contrato: exRow.importe_contrato,
           disponible: exRow.disponible,
-          importe_descontar: Math.min(exRow.importe_descontar, pendiente), // No pagar más de lo que se debe
+          importe_descontar: exRow.importe_descontar,
           saldo_adeudado: exRow.saldo_adeudado,
           total_a_pagar: Math.abs(fact.total_a_pagar),
           facturacion_id: fact.id,
