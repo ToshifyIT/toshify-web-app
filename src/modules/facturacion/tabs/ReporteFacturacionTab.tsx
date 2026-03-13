@@ -4478,8 +4478,6 @@ export function ReporteFacturacionTab() {
 
         const disponible = parseFloat(row[15]) || 0
         const importeDescontar = parseFloat(row[16]) || 0
-        // Solo incluir filas donde hay algo para descontar
-        if (importeDescontar <= 0) continue
 
         excelData.push({
           nombre: String(row[4] || '').trim(),
@@ -4515,12 +4513,13 @@ export function ReporteFacturacionTab() {
           continue
         }
 
-        // Solo incluir si tiene total_a_pagar > 0 y no está ya pagado
-        if (fact.total_a_pagar <= 0 || fact.estado === 'pagado') continue
+        // Solo excluir si ya está pagado o no debe nada
+        if (fact.estado === 'pagado') continue
+        if (fact.total_a_pagar <= 0 && exRow.importe_descontar <= 0) continue
 
         const yaCobrado = fact.monto_cobrado || 0
         const pendiente = Math.abs(fact.total_a_pagar) - yaCobrado
-        if (pendiente <= 0) continue
+        if (pendiente <= 0 && exRow.importe_descontar <= 0) continue
 
         matched.push({
           conductor_nombre: fact.conductor_nombre,
