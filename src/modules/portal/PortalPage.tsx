@@ -93,18 +93,23 @@ const CONCEPTO_LABELS: Record<string, string> = {
   P013: 'Alquiler Turno Nocturno',
 }
 
-/** Si la descripción es solo un número, fracción ("8 de 18"), o está vacía, usar el label del código.
- *  Para cuotas de garantía, mostrar "Cuota de Garantía X de Y" */
+/** Para P003 (garantía), SIEMPRE mostrar "Cuota de Garantía" (+ "X de Y" si aplica).
+ *  Para otros códigos: si la descripción es solo un número, fracción, o vacía, usar el label del código. */
 function getConceptoLabel(item: PortalDetalle): string {
   const desc = item.concepto_descripcion?.trim()
-  // Check if description is empty, a plain number, or a fraction pattern like "8 de 18"
-  const isCuotaPattern = desc ? /^\d+\s+de\s+\d+$/.test(desc) : false
-  if (!desc || /^\d+([,.]\d+)?$/.test(desc) || isCuotaPattern) {
-    const baseLabel = CONCEPTO_LABELS[item.concepto_codigo] || item.concepto_codigo
-    // For guarantee installments, append the fraction (e.g. "Cuota de Garantía 8 de 18")
-    if (isCuotaPattern && desc) {
-      return `${baseLabel} ${desc}`
-    }
+  const baseLabel = CONCEPTO_LABELS[item.concepto_codigo] || item.concepto_codigo
+  const cuotaMatch = desc ? /^(\d+\s+de\s+\d+)$/.exec(desc) : null
+
+  // P003 = Cuota de Garantía: ALWAYS use the base label, append fraction if present
+  if (item.concepto_codigo === 'P003') {
+    if (cuotaMatch) return `${baseLabel} ${cuotaMatch[1]}`
+    if (desc && desc !== baseLabel) return `${baseLabel} - ${desc}`
+    return baseLabel
+  }
+
+  // Other codes: use description if it's meaningful, otherwise fall back to base label
+  if (!desc || /^\d+([,.]\d+)?$/.test(desc) || cuotaMatch) {
+    if (cuotaMatch) return `${baseLabel} ${cuotaMatch[1]}`
     return baseLabel
   }
   return desc
@@ -218,28 +223,39 @@ export function PortalPage() {
         const { data: asignaciones } = await (supabase
           .from('asignaciones_conductores') as any)
           .select(`
-            fecha_inicio, fecha_fin, estado,
+            fecha_inicio, fecha_fin, estado, created_at,
             asignaciones!inner(fecha_inicio, fecha_fin, estado, vehiculos(patente))
           `)
           .eq('conductor_id', conductorId)
-          .in('estado', ['asignado', 'activo', 'activa', 'finalizado', 'finalizada', 'completado'])
+          .in('estado', ['asignado', 'activo', 'activa', 'finalizado', 'finalizada', 'completado', 'cancelado', 'cancelada'])
+          .order('created_at', { ascending: false })
 
         if (asignaciones && asignaciones.length > 0) {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const validAsignaciones = (asignaciones as any[]).filter(
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            (ac: any) => ac.asignaciones?.vehiculos?.patente && ac.asignaciones.estado !== 'programado'
+          )
+
           for (const factura of missingPatente) {
             const p = factura.periodos_facturacion
             const semInicio = new Date(p.fecha_inicio + 'T00:00:00')
             const semFin = new Date(p.fecha_fin + 'T23:59:59')
 
+            // Try date overlap match first
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            for (const ac of asignaciones as any[]) {
+            const match = validAsignaciones.find((ac: any) => {
               const asig = ac.asignaciones
-              if (!asig?.vehiculos?.patente || asig.estado === 'programado') continue
               const acInicio = ac.fecha_inicio ? new Date(ac.fecha_inicio) : new Date(asig.fecha_inicio)
               const acFin = ac.fecha_fin ? new Date(ac.fecha_fin) : (asig.fecha_fin ? new Date(asig.fecha_fin) : new Date())
-              if (acFin >= semInicio && acInicio <= semFin) {
-                factura.vehiculo_patente = asig.vehiculos.patente
-                break
-              }
+              return acFin >= semInicio && acInicio <= semFin
+            })
+
+            if (match) {
+              factura.vehiculo_patente = match.asignaciones.vehiculos.patente
+            } else if (validAsignaciones.length > 0) {
+              // Fallback: use the most recent assignment's vehicle
+              factura.vehiculo_patente = validAsignaciones[0].asignaciones.vehiculos.patente
             }
           }
         }
