@@ -96,10 +96,6 @@ export function GuiasModule() {
   const [globalSearch, setGlobalSearch] = useState('')
   const [cbuSearch] = useState('')
 
-  const [efectivoSearch] = useState('')
-  const [appSearch] = useState('')
-  const [totalSearch] = useState('')
-
   // Estados para modal de detalles
   const [showDetailsModal, setShowDetailsModal] = useState(false)
   const [selectedConductor, setSelectedConductor] = useState<ConductorWithRelations | null>(null)
@@ -895,9 +891,38 @@ export function GuiasModule() {
           return map;
         }
 
-        // Sin periodo guardado: calcular estimación desde conceptos_nomina + asignación activa
-        // Precios DIARIOS: P001=Turno Diurno, P002=Cargo, P003=Garantía, P013=Turno Nocturno
-        const [{ data: conceptosData }, { data: garantiasData }] = await Promise.all([
+        // Sin periodo guardado: calcular con prorrateo por días efectivos
+        // (misma lógica que Vista Previa de ReporteFacturacionTab)
+
+        // Helper: convertir timestamp a fecha YYYY-MM-DD en timezone Argentina
+        const ARG_TZ_FB = 'America/Argentina/Buenos_Aires';
+        const argDateFmtFB = new Intl.DateTimeFormat('en-CA', { timeZone: ARG_TZ_FB, year: 'numeric', month: '2-digit', day: '2-digit' });
+        const toArgDateFB = (ts: string | null | undefined): string => {
+          if (!ts) return '';
+          return argDateFmtFB.format(new Date(ts));
+        };
+
+        // Calcular rango de la semana (lunes → domingo) en formato YYYY-MM-DD
+        const jan4 = new Date(Date.UTC(fYear, 0, 4));
+        const dowJ = jan4.getUTCDay() || 7;
+        const mondayW1 = new Date(jan4.getTime() - (dowJ - 1) * 86400000);
+        const mondayDate = new Date(mondayW1.getTime() + (fWeek - 1) * 7 * 86400000);
+        const sundayDate = new Date(mondayDate.getTime() + 6 * 86400000);
+        const weekStartStr = mondayDate.toISOString().split('T')[0];
+        const weekEndStr = sundayDate.toISOString().split('T')[0];
+
+        // Tope de días: MIN(hoy, domingo) — igual que Vista Previa (no proyecta días futuros)
+        const hoyFB = new Date();
+        hoyFB.setHours(0, 0, 0, 0);
+        const hoyStr = hoyFB.toISOString().split('T')[0];
+        const weekCapStr = hoyStr < weekEndStr ? hoyStr : weekEndStr;
+
+        // Fecha semana como Date para comparaciones
+        const weekStartDate = new Date(weekStartStr + 'T00:00:00');
+        const weekCapDate = new Date(weekCapStr + 'T00:00:00');
+
+        // Query SEPARADA para asignaciones con fechas (no toca el query principal)
+        const [{ data: conceptosData }, { data: garantiasData }, { data: asignacionesConFechas }, { data: conductoresExtraData }] = await Promise.all([
           supabase
             .from('conceptos_nomina')
             .select('codigo, precio_base, precio_final')
@@ -908,7 +933,26 @@ export function GuiasModule() {
             .select('conductor_id, estado, monto_total, monto_pagado, monto_cuota_semanal, cuotas_pagadas, cuotas_totales')
             .in('conductor_id', conductorIds)
             .in('estado', ['activa', 'pendiente']),
+          supabase
+            .from('asignaciones_conductores')
+            .select('conductor_id, horario, fecha_inicio, fecha_fin, asignaciones!inner(estado, horario, fecha_inicio, fecha_fin)')
+            .in('conductor_id', conductorIds)
+            .in('estado', ['asignado', 'activo', 'activa', 'finalizado', 'finalizada', 'completado', 'cancelado', 'cancelada']),
+          supabase
+            .from('conductores')
+            .select('id, fecha_terminacion, sede_id')
+            .in('id', conductorIds),
         ]);
+
+        // Mapa conductor_id → fecha_terminacion (tope de días para conductores de baja)
+        const fechaTermFBMap = new Map<string, Date>();
+        const conductorSedeFBMap = new Map<string, string>();
+        (conductoresExtraData || []).forEach((c: any) => {
+          if (c.fecha_terminacion) {
+            fechaTermFBMap.set(c.id, new Date(c.fecha_terminacion.substring(0, 10) + 'T00:00:00'));
+          }
+          if (c.sede_id) conductorSedeFBMap.set(c.id, c.sede_id);
+        });
 
         const precios = new Map<string, number>();
         (conceptosData || []).forEach((c: any) => {
@@ -920,38 +964,107 @@ export function GuiasModule() {
           garantiasMap.set(g.conductor_id, g);
         });
 
-        // Precio diario de garantía × 7 = cuota semanal por defecto
         const cuotaGarantiaSemanalDefault = Math.round((precios.get('P003') || 7143) * 7);
 
-        // Calcular para cada conductor usando su modalidad de asignación
-        for (const h of (historialData || [])) {
-          const conductor = h.conductores;
-          if (!conductor || !conductorIds.includes(conductor.id)) continue;
+        // Mapa de código de concepto por modalidad (igual que Vista Previa)
+        const codigosPorModalidad: Record<string, string> = {
+          'CARGO': 'P002', 'TURNO_DIURNO': 'P001', 'TURNO_NOCTURNO': 'P013',
+        };
 
-          // Determinar modalidad desde asignación activa
-          const asignacionActiva = (conductor.asignaciones_conductores || []).find((ac: any) =>
-            ac.asignaciones?.estado === 'activo' || ac.asignaciones?.estado === 'activa'
-          );
-          if (!asignacionActiva) continue;
+        // Agrupar asignaciones por conductor
+        const asigPorConductor = new Map<string, any[]>();
+        (asignacionesConFechas || []).forEach((ac: any) => {
+          // Filtrar por sede si hay sede seleccionada
+          if (sedeActualId && conductorSedeFBMap.get(ac.conductor_id) !== sedeActualId) return;
+          const arr = asigPorConductor.get(ac.conductor_id) || [];
+          arr.push(ac);
+          asigPorConductor.set(ac.conductor_id, arr);
+        });
 
-          const modalidad = (asignacionActiva.asignaciones?.horario || '').toUpperCase();
-          const turnoConductor = (asignacionActiva.horario || '').toLowerCase();
+        // Calcular prorrateo para cada conductor
+        for (const cid of conductorIds) {
+          // Filtrar por sede
+          if (sedeActualId && conductorSedeFBMap.get(cid) !== sedeActualId) continue;
 
-          // Determinar precio diario según modalidad
-          let precioDiario = 0;
-          if (modalidad === 'CARGO') {
-            precioDiario = precios.get('P002') || 0;
-          } else if (modalidad === 'TURNO') {
-            precioDiario = turnoConductor === 'nocturno'
-              ? (precios.get('P013') || 0)
-              : (precios.get('P001') || 0);
+          const asignaciones = asigPorConductor.get(cid) || [];
+          const fechasContadas = new Set<string>();
+          let montoTotal = 0;
+
+          for (const ac of asignaciones) {
+            const asignacion = ac.asignaciones;
+            if (!asignacion) continue;
+
+            const estadoPadre = (asignacion.estado || '').toLowerCase();
+            if (['programado', 'programada'].includes(estadoPadre)) continue;
+            if (['finalizada', 'finalizado', 'cancelada', 'cancelado'].includes(estadoPadre) && !asignacion.fecha_fin) continue;
+
+            // Determinar modalidad (misma lógica que Vista Previa)
+            const modalidadAsig = (asignacion.horario || '').toUpperCase();
+            const horarioCond = (ac.horario || '').toLowerCase().trim();
+            let modalidad: string;
+            if (modalidadAsig === 'CARGO' || horarioCond === 'todo_dia') {
+              modalidad = 'CARGO';
+            } else if (modalidadAsig === 'TURNO') {
+              modalidad = (horarioCond === 'nocturno' || horarioCond === 'n') ? 'TURNO_NOCTURNO' : 'TURNO_DIURNO';
+            } else {
+              modalidad = 'CARGO';
+            }
+
+            // Fecha inicio: MAX(conductor.fecha_inicio, asignacion.fecha_inicio)
+            // (no cobrar antes de la entrega real — misma lógica que Vista Previa)
+            const condInicioStr = ac.fecha_inicio ? toArgDateFB(ac.fecha_inicio) : '';
+            const padreInicioStr = asignacion.fecha_inicio ? toArgDateFB(asignacion.fecha_inicio) : '';
+            const condInicioDate = condInicioStr ? new Date(condInicioStr + 'T00:00:00') : null;
+            const padreInicioDate = padreInicioStr ? new Date(padreInicioStr + 'T00:00:00') : null;
+            const acInicioDate = condInicioDate && padreInicioDate
+              ? (condInicioDate > padreInicioDate ? condInicioDate : padreInicioDate)
+              : (condInicioDate || padreInicioDate || weekStartDate);
+
+            // Fecha fin: MIN(conductor.fecha_fin, asignacion.fecha_fin)
+            // Si ninguno tiene fin → usar tope semana (MIN(hoy, domingo))
+            const condFinStr = ac.fecha_fin ? toArgDateFB(ac.fecha_fin) : '';
+            const padreFinStr = asignacion.fecha_fin ? toArgDateFB(asignacion.fecha_fin) : '';
+            const condFinDate = condFinStr ? new Date(condFinStr + 'T00:00:00') : null;
+            const padreFinDate = padreFinStr ? new Date(padreFinStr + 'T00:00:00') : null;
+            let acFinDate = condFinDate && padreFinDate
+              ? (condFinDate < padreFinDate ? condFinDate : padreFinDate)
+              : (condFinDate || padreFinDate || weekCapDate);
+
+            // Rango efectivo dentro de la semana
+            const efectivoInicio = acInicioDate < weekStartDate ? weekStartDate : acInicioDate;
+            let efectivoFin = acFinDate > weekCapDate ? weekCapDate : acFinDate;
+
+            // Tope por fecha_terminacion (igual que Vista Previa):
+            // Solo aplica si la asignación NO tiene fecha_fin propia
+            // y la asignación empezó ANTES de la fecha_terminacion
+            const tieneFinPropio = ac.fecha_fin || asignacion.fecha_fin;
+            const fechaTermCond = fechaTermFBMap.get(ac.conductor_id);
+            if (fechaTermCond && !tieneFinPropio && efectivoFin > fechaTermCond && acInicioDate <= fechaTermCond) {
+              efectivoFin = fechaTermCond;
+            }
+
+            if (efectivoInicio > efectivoFin) continue;
+
+            // Contar días y sumar montos (deduplicando por fecha)
+            const codigo = codigosPorModalidad[modalidad] || 'P002';
+            const precioDiario = precios.get(codigo) || 0;
+            const cursor = new Date(efectivoInicio);
+            while (cursor <= efectivoFin) {
+              const key = cursor.toISOString().split('T')[0];
+              if (!fechasContadas.has(key)) {
+                fechasContadas.add(key);
+                montoTotal += precioDiario;
+              }
+              cursor.setDate(cursor.getDate() + 1);
+            }
           }
 
-          const alquiler = Math.round(precioDiario * 7);
+          const alquiler = Math.round(montoTotal);
+          if (alquiler === 0 && fechasContadas.size === 0) continue;
 
           // Garantía: usar datos reales si existen, sino cuota por defecto
           let garantia = cuotaGarantiaSemanalDefault;
-          const garantiaData = garantiasMap.get(conductor.id);
+          const garantiaData = garantiasMap.get(cid);
           if (garantiaData) {
             if (garantiaData.estado === 'completada' || garantiaData.monto_pagado >= garantiaData.monto_total) {
               garantia = 0;
@@ -961,8 +1074,9 @@ export function GuiasModule() {
               garantia = Math.min(cuotaNormal, pendiente);
             }
           }
+          if (fechasContadas.size === 0) garantia = 0;
 
-          map.set(conductor.id, { alquiler, garantia, total: alquiler + garantia });
+          map.set(cid, { alquiler, garantia, total: alquiler + garantia });
         }
 
         return map;
