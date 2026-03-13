@@ -27,6 +27,7 @@ import {
   Upload
 } from 'lucide-react'
 import { type ColumnDef } from '@tanstack/react-table'
+import { format, startOfWeek, endOfWeek, parseISO } from 'date-fns'
 import { DataTable } from '../../../components/ui/DataTable'
 import { VerLogsButton } from '../../../components/ui/VerLogsButton'
 import { LoadingOverlay } from '../../../components/ui/LoadingOverlay'
@@ -70,6 +71,9 @@ export function GarantiasTab() {
   const [conductorSearch, setConductorSearch] = useState('')
   const [tipoFilter, setTipoFilter] = useState<string[]>([])
   const [estadoFilter, setEstadoFilter] = useState<string[]>([])
+  const [estadoCondFilter, setEstadoCondFilter] = useState<'todos' | 'activo' | 'baja'>('todos')
+  const [asignadoFilter, setAsignadoFilter] = useState<'todos' | 'asignado' | 'no_asignado'>('todos')
+  const [conductoresAsignados, setConductoresAsignados] = useState<Set<string>>(new Set())
 
   // Estados para filtros Excel - Movimientos
   const [movConductorFilter, setMovConductorFilter] = useState<string[]>([])
@@ -138,28 +142,22 @@ export function GarantiasTab() {
 
       if (error) throw error
 
-      // Cargar estado y DNI de conductores
-      const conductorIds = (data || []).map((g: any) => g.conductor_id)
+      // Cargar estado y DNI de TODOS los conductores (evita .in() con 500+ UUIDs que puede fallar)
       const ESTADO_ACTIVO = '57e9de5f-e6fc-4ff7-8d14-cf8e13e9dbe2'
       const estadoConductorMap = new Map<string, string>()
       const dniConductorMap = new Map<string, string>()
-      if (conductorIds.length > 0) {
-        const { data: conductoresData } = await supabase
-          .from('conductores')
-          .select('id, estado_id, numero_dni')
-          .in('id', conductorIds)
-        ;(conductoresData || []).forEach((c: any) => {
-          estadoConductorMap.set(c.id, c.estado_id === ESTADO_ACTIVO ? 'ACTIVO' : 'BAJA')
-          if (c.numero_dni) dniConductorMap.set(c.id, c.numero_dni)
-        })
-      }
+      const { data: conductoresData } = await supabase
+        .from('conductores')
+        .select('id, estado_id, numero_dni')
+      ;(conductoresData || []).forEach((c: any) => {
+        estadoConductorMap.set(c.id, c.estado_id === ESTADO_ACTIVO ? 'ACTIVO' : 'BAJA')
+        if (c.numero_dni) dniConductorMap.set(c.id, c.numero_dni)
+      })
 
-      // Auto-transicionar a en_devolucion si conductor es BAJA y garantía no está ya en ese estado
-      const idsParaDevolucion: string[] = []
+      // Marcar visualmente como en_devolucion si conductor es BAJA (solo in-memory, no se guarda en BD)
       const garantiasConEstado = (data || []).map((g: any) => {
         const estadoCond = estadoConductorMap.get(g.conductor_id) || 'ACTIVO'
-        const necesitaDevolucion = estadoCond === 'BAJA' && g.monto_pagado > 0 && g.estado !== 'en_devolucion' && g.estado !== 'cancelada'
-        if (necesitaDevolucion) idsParaDevolucion.push(g.id)
+        const necesitaDevolucion = estadoCond === 'BAJA' && g.monto_pagado > 0 && g.estado !== 'cancelada'
         return {
           ...g,
           conductor_dni: g.conductor_dni || dniConductorMap.get(g.conductor_id) || null,
@@ -168,19 +166,56 @@ export function GarantiasTab() {
         }
       })
 
-      // Actualizar en BD los que cambiaron a en_devolucion
-      if (idsParaDevolucion.length > 0) {
-        await (supabase.from('garantias_conductores') as any)
-          .update({ estado: 'en_devolucion', updated_at: new Date().toISOString() })
-          .in('id', idsParaDevolucion)
+      // Cargar conductores asignados en la semana actual (misma lógica que ReporteFacturacionTab)
+      const ahora = new Date()
+      const semInicio = startOfWeek(ahora, { weekStartsOn: 1 })
+      const semFin = endOfWeek(ahora, { weekStartsOn: 1 })
+      const fechaInicioSem = format(semInicio, 'yyyy-MM-dd')
+      const fechaFinSem = format(semFin, 'yyyy-MM-dd')
+      const semInicioDate = parseISO(fechaInicioSem)
+      const semFinDate = parseISO(fechaFinSem)
+
+      const ARG_TZ = 'America/Argentina/Buenos_Aires'
+      const argDateFmt = new Intl.DateTimeFormat('en-CA', { timeZone: ARG_TZ, year: 'numeric', month: '2-digit', day: '2-digit' })
+      const toArgDateLocal = (ts: string | null | undefined): string => {
+        if (!ts) return '-'
+        return argDateFmt.format(new Date(ts))
       }
+
+      const { data: asignacionesSemana } = await (supabase.from('asignaciones_conductores') as any)
+        .select(`
+          conductor_id, fecha_inicio, fecha_fin, estado,
+          asignaciones!inner(estado, fecha_fin),
+          conductores!inner(sede_id)
+        `)
+        .in('estado', ['asignado', 'activo', 'activa', 'finalizado', 'finalizada', 'completado', 'cancelado', 'cancelada'])
+
+      const sedeParaFiltro = sedeActualId
+      const idsAsignados = new Set<string>()
+      for (const ac of (asignacionesSemana || []) as any[]) {
+        const cond = ac.conductores
+        const asig = ac.asignaciones
+        if (!cond || !asig) continue
+        if (sedeParaFiltro && cond.sede_id !== sedeParaFiltro) continue
+        // Skip programados y huérfanos
+        const estadoPadre = (asig.estado || '').toLowerCase()
+        if (['programado', 'programada'].includes(estadoPadre)) continue
+        if (['finalizada', 'cancelada', 'finalizado', 'cancelado'].includes(estadoPadre) && !asig.fecha_fin) continue
+        // Solapamiento con la semana
+        const acInicio = ac.fecha_inicio ? parseISO(toArgDateLocal(ac.fecha_inicio)) : new Date('2020-01-01')
+        const acFin = ac.fecha_fin ? parseISO(toArgDateLocal(ac.fecha_fin))
+          : (asig.fecha_fin ? parseISO(toArgDateLocal(asig.fecha_fin)) : new Date('2099-12-31'))
+        if (acFin < semInicioDate || acInicio > semFinDate) continue
+        idsAsignados.add(ac.conductor_id)
+      }
+      setConductoresAsignados(idsAsignados)
 
       setGarantias(garantiasConEstado)
 
       // Cargar todos los pagos para el sub-tab "Movimientos"
-      const { data: pagos, error: errorPagos } = await supabase
+      const { data: pagos, error: errorPagos } = await aplicarFiltroSede(supabase
         .from('garantias_pagos')
-        .select('*')
+        .select('*'))
         .order('fecha_pago', { ascending: false })
         .limit(500)
 
@@ -1525,9 +1560,18 @@ export function GarantiasTab() {
       if (conductorFilter.length > 0 && !conductorFilter.includes(g.conductor_nombre || '')) return false
       if (tipoFilter.length > 0 && !tipoFilter.includes(g.tipo_alquiler)) return false
       if (estadoFilter.length > 0 && !estadoFilter.includes(g.estado)) return false
+      // Filtro estado conductor
+      if (estadoCondFilter !== 'todos') {
+        const ec = ((g as any).estado_conductor || 'ACTIVO').toUpperCase()
+        if (estadoCondFilter === 'activo' && ec !== 'ACTIVO') return false
+        if (estadoCondFilter === 'baja' && ec !== 'BAJA') return false
+      }
+      // Filtro asignado
+      if (asignadoFilter === 'asignado' && !conductoresAsignados.has(g.conductor_id)) return false
+      if (asignadoFilter === 'no_asignado' && conductoresAsignados.has(g.conductor_id)) return false
       return true
     })
-  }, [garantias, filtroEstado, conductorFilter, tipoFilter, estadoFilter])
+  }, [garantias, filtroEstado, conductorFilter, tipoFilter, estadoFilter, estadoCondFilter, asignadoFilter, conductoresAsignados])
 
   const movimientosFiltrados = useMemo(() => {
     return todosLosPagos.filter(p => {
@@ -1593,8 +1637,46 @@ export function GarantiasTab() {
                 </div>
               )}
             </div>
-            <div className="fact-header-right">
-              <VerLogsButton tablas={['garantias_conductores', 'garantias_pagos']} label="Garant\u00edas" />
+            <div className="fact-header-right" style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+              <div style={{ display: 'flex', gap: '2px', background: 'var(--bg-secondary)', borderRadius: '6px', padding: '2px' }}>
+                {[
+                  { value: 'todos' as const, label: 'Todos' },
+                  { value: 'asignado' as const, label: 'Asignados' },
+                  { value: 'no_asignado' as const, label: 'No asignados' },
+                ].map(opt => (
+                  <button
+                    key={opt.value}
+                    onClick={() => setAsignadoFilter(opt.value)}
+                    style={{
+                      padding: '4px 10px', fontSize: '11px', fontWeight: 600, borderRadius: '4px', border: 'none', cursor: 'pointer',
+                      background: asignadoFilter === opt.value ? '#ff0033' : 'transparent',
+                      color: asignadoFilter === opt.value ? 'white' : 'var(--text-secondary)',
+                    }}
+                  >
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
+              <div style={{ display: 'flex', gap: '2px', background: 'var(--bg-secondary)', borderRadius: '6px', padding: '2px' }}>
+                {[
+                  { value: 'todos' as const, label: 'Todos' },
+                  { value: 'activo' as const, label: 'Activos' },
+                  { value: 'baja' as const, label: 'Baja' },
+                ].map(opt => (
+                  <button
+                    key={opt.value}
+                    onClick={() => setEstadoCondFilter(opt.value)}
+                    style={{
+                      padding: '4px 10px', fontSize: '11px', fontWeight: 600, borderRadius: '4px', border: 'none', cursor: 'pointer',
+                      background: estadoCondFilter === opt.value ? '#ff0033' : 'transparent',
+                      color: estadoCondFilter === opt.value ? 'white' : 'var(--text-secondary)',
+                    }}
+                  >
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
+              <VerLogsButton tablas={['garantias_conductores', 'garantias_pagos']} label="Garantías" />
               <button className="fact-btn fact-btn-primary" onClick={agregarGarantia}>
                 <UserPlus size={16} />
                 Agregar Garantía

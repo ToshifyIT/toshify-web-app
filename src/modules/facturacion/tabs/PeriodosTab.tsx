@@ -257,7 +257,8 @@ export function PeriodosTab() {
             fecha_inicio: semana.fecha_inicio,
             fecha_fin: semana.fecha_fin,
             estado: 'procesando',
-            created_by_name: profile?.full_name || 'Sistema'
+            created_by_name: profile?.full_name || 'Sistema',
+            sede_id: sedeActualId,
           })
           .select()
           .single()

@@ -175,6 +175,109 @@ app.post('/cabify-graphql', async (req, res) => {
   }
 })
 
+// Cabify efectivo toggle - activar/desactivar en un solo request
+app.post('/api/cabify-efectivo', async (req, res) => {
+  try {
+    const { cabify_driver_id, cabify_company_id, accion, conductor_dni, conductor_nombre, alquiler, garantia, cobro_app } = req.body
+
+    if (!cabify_driver_id || !cabify_company_id || !accion) {
+      return res.status(400).json({ error: 'Faltan campos requeridos: cabify_driver_id, cabify_company_id, accion' })
+    }
+
+    if (accion !== 'activar' && accion !== 'desactivar') {
+      return res.status(400).json({ error: 'accion debe ser "activar" o "desactivar"' })
+    }
+
+    // 1. Autenticar con Cabify
+    const authResponse = await fetch('https://cabify.com/auth/api/authorization', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        grant_type: 'password',
+        client_id: process.env.CABIFY_CLIENT_ID || 'd14cdae660ad4817a6b20542a61cf5b1',
+        client_secret: process.env.CABIFY_CLIENT_SECRET || 'ebZ45Oj3ln9W5tFC',
+        username: process.env.CABIFY_USERNAME || 'admin.log2@toshify.com.ar',
+        password: process.env.CABIFY_PASSWORD || 'tOSHIBASE2026.',
+      }),
+    })
+
+    if (!authResponse.ok) {
+      const authError = await authResponse.text()
+      return res.status(401).json({ error: 'Error de autenticación con Cabify', detail: authError })
+    }
+
+    const authData = await authResponse.json()
+    const token = authData.access_token
+
+    // 2. Ejecutar mutation GraphQL
+    const enabled = accion === 'activar'
+    const mutation = `
+      mutation ($driverId: String!, $companyId: String, $name: PreferenceName!, $enabled: Boolean!, $canWrite: Boolean) {
+        updateDriverPreference(driverId: $driverId, companyId: $companyId, name: $name, enabled: $enabled, canWrite: $canWrite) {
+          driverId name enabled canWrite
+        }
+      }
+    `
+
+    const gqlResponse = await fetch('https://partners.cabify.com/api/graphql', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`,
+      },
+      body: JSON.stringify({
+        query: mutation,
+        variables: {
+          driverId: cabify_driver_id,
+          companyId: cabify_company_id,
+          name: 'PAYMENT_CASH',
+          enabled,
+          canWrite: true,
+        },
+      }),
+    })
+
+    const gqlData = await gqlResponse.json()
+    const result = gqlData?.data?.updateDriverPreference
+
+    if (!result || result.enabled !== enabled) {
+      const errorMsg = gqlData?.errors?.[0]?.message || 'Respuesta inesperada de Cabify'
+      return res.status(500).json({ error: errorMsg, detail: gqlData })
+    }
+
+    // 3. Registrar en log via Supabase
+    const supabaseUrl = process.env.VITE_SUPABASE_URL
+    const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+
+    if (supabaseUrl && serviceKey) {
+      await fetch(`${supabaseUrl}/rest/v1/cabify_efectivo_log`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'apikey': serviceKey,
+          'Authorization': `Bearer ${serviceKey}`,
+        },
+        body: JSON.stringify({
+          conductor_dni: conductor_dni || null,
+          conductor_nombre: conductor_nombre || null,
+          cabify_driver_id,
+          cabify_company_id,
+          accion: accion === 'activar' ? 'activacion' : 'desactivacion',
+          estado_anterior: enabled ? 'Desactivado' : 'Activado',
+          resultado: 'ok',
+          alquiler: alquiler || 0,
+          garantia: garantia || 0,
+          cobro_app: cobro_app || 0,
+        }),
+      })
+    }
+
+    res.json({ success: true, enabled: result.enabled, driverId: result.driverId })
+  } catch (error) {
+    res.status(500).json({ error: error.message })
+  }
+})
+
 // Admin-only: Get integration tokens/credentials
 // Verifies the Supabase JWT and checks the user is admin role
 app.get('/api/admin/tokens', async (req, res) => {

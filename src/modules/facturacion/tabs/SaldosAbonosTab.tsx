@@ -27,6 +27,7 @@ import {
 } from 'lucide-react'
 import { type ColumnDef } from '@tanstack/react-table'
 import { DataTable } from '../../../components/ui/DataTable'
+import { format, startOfWeek, endOfWeek, parseISO } from 'date-fns'
 import { VerLogsButton } from '../../../components/ui/VerLogsButton'
 import { LoadingOverlay } from '../../../components/ui/LoadingOverlay'
 import type { SaldoConductor } from '../../../types/facturacion.types'
@@ -110,6 +111,9 @@ export function SaldosAbonosTab() {
   const [conductorFilter, setConductorFilter] = useState<string[]>([])
   const [conductorSearch, setConductorSearch] = useState('')
   const [estadoFilter, setEstadoFilter] = useState<string[]>([])
+  const [estadoCondFilter, setEstadoCondFilter] = useState<'todos' | 'activo' | 'baja'>('todos')
+  const [asignadoFilter, setAsignadoFilter] = useState<'todos' | 'asignado' | 'no_asignado'>('todos')
+  const [conductoresAsignados, setConductoresAsignados] = useState<Set<string>>(new Set())
   const [tasaMoraPct, setTasaMoraPct] = useState(1) // default 1% diario desde P009
   const fileInputRef = useRef<HTMLInputElement>(null)
 
@@ -197,6 +201,50 @@ export function SaldosAbonosTab() {
 
       if (saldosRes.error) throw saldosRes.error
       if (fraccionadosRes.error) throw fraccionadosRes.error
+
+      // Cargar conductores asignados en la semana actual (misma lógica que ReporteFacturacionTab)
+      const ahora = new Date()
+      const semInicio = startOfWeek(ahora, { weekStartsOn: 1 })
+      const semFin = endOfWeek(ahora, { weekStartsOn: 1 })
+      const fechaInicioSem = format(semInicio, 'yyyy-MM-dd')
+      const fechaFinSem = format(semFin, 'yyyy-MM-dd')
+      const semInicioDate = parseISO(fechaInicioSem)
+      const semFinDate = parseISO(fechaFinSem)
+
+      const ARG_TZ = 'America/Argentina/Buenos_Aires'
+      const argDateFmt = new Intl.DateTimeFormat('en-CA', { timeZone: ARG_TZ, year: 'numeric', month: '2-digit', day: '2-digit' })
+      const toArgDateLocal = (ts: string | null | undefined): string => {
+        if (!ts) return '-'
+        return argDateFmt.format(new Date(ts))
+      }
+
+      const { data: asignacionesSemana } = await (supabase.from('asignaciones_conductores') as any)
+        .select(`
+          conductor_id, fecha_inicio, fecha_fin, estado,
+          asignaciones!inner(estado, fecha_fin),
+          conductores!inner(sede_id)
+        `)
+        .in('estado', ['asignado', 'activo', 'activa', 'finalizado', 'finalizada', 'completado', 'cancelado', 'cancelada'])
+
+      const sedeParaFiltro = sedeActualId
+      const idsAsignados = new Set<string>()
+      for (const ac of (asignacionesSemana || []) as any[]) {
+        const cond = ac.conductores
+        const asig = ac.asignaciones
+        if (!cond || !asig) continue
+        if (sedeParaFiltro && cond.sede_id !== sedeParaFiltro) continue
+        // Skip programados y huérfanos
+        const estadoPadre = (asig.estado || '').toLowerCase()
+        if (['programado', 'programada'].includes(estadoPadre)) continue
+        if (['finalizada', 'cancelada', 'finalizado', 'cancelado'].includes(estadoPadre) && !asig.fecha_fin) continue
+        // Solapamiento con la semana
+        const acInicio = ac.fecha_inicio ? parseISO(toArgDateLocal(ac.fecha_inicio)) : new Date('2020-01-01')
+        const acFin = ac.fecha_fin ? parseISO(toArgDateLocal(ac.fecha_fin))
+          : (asig.fecha_fin ? parseISO(toArgDateLocal(asig.fecha_fin)) : new Date('2099-12-31'))
+        if (acFin < semInicioDate || acInicio > semFinDate) continue
+        idsAsignados.add(ac.conductor_id)
+      }
+      setConductoresAsignados(idsAsignados)
 
       // Procesar saldos
       const saldosConEstado = (saldosRes.data || []).map((s: {
@@ -1842,9 +1890,18 @@ export function SaldosAbonosTab() {
         const estado = s.saldo_actual > 0 ? 'favor' : s.saldo_actual < 0 ? 'deuda' : 'sin_saldo'
         if (!estadoFilter.includes(estado)) return false
       }
+      // Filtro estado conductor
+      if (estadoCondFilter !== 'todos') {
+        const ec = ((s as any).conductor_estado || '').toUpperCase()
+        if (estadoCondFilter === 'activo' && ec !== 'ACTIVO') return false
+        if (estadoCondFilter === 'baja' && ec !== 'BAJA' && ec !== 'INACTIVO') return false
+      }
+      // Filtro asignado
+      if (asignadoFilter === 'asignado' && !conductoresAsignados.has(s.conductor_id)) return false
+      if (asignadoFilter === 'no_asignado' && conductoresAsignados.has(s.conductor_id)) return false
       return true
     })
-  }, [saldos, filtroSaldo, conductorFilter, estadoFilter, conductoresConFraccionado])
+  }, [saldos, filtroSaldo, conductorFilter, estadoFilter, estadoCondFilter, asignadoFilter, conductoresAsignados, conductoresConFraccionado])
 
   const stats = useMemo(() => {
     const total = saldos.length
@@ -2022,7 +2079,45 @@ export function SaldosAbonosTab() {
                 </div>
               )}
             </div>
-            <div className="fact-header-right">
+            <div className="fact-header-right" style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+              <div style={{ display: 'flex', gap: '2px', background: 'var(--bg-secondary)', borderRadius: '6px', padding: '2px' }}>
+                {[
+                  { value: 'todos' as const, label: 'Todos' },
+                  { value: 'asignado' as const, label: 'Asignados' },
+                  { value: 'no_asignado' as const, label: 'No asignados' },
+                ].map(opt => (
+                  <button
+                    key={opt.value}
+                    onClick={() => setAsignadoFilter(opt.value)}
+                    style={{
+                      padding: '4px 10px', fontSize: '11px', fontWeight: 600, borderRadius: '4px', border: 'none', cursor: 'pointer',
+                      background: asignadoFilter === opt.value ? '#ff0033' : 'transparent',
+                      color: asignadoFilter === opt.value ? 'white' : 'var(--text-secondary)',
+                    }}
+                  >
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
+              <div style={{ display: 'flex', gap: '2px', background: 'var(--bg-secondary)', borderRadius: '6px', padding: '2px' }}>
+                {[
+                  { value: 'todos' as const, label: 'Todos' },
+                  { value: 'activo' as const, label: 'Activos' },
+                  { value: 'baja' as const, label: 'Baja' },
+                ].map(opt => (
+                  <button
+                    key={opt.value}
+                    onClick={() => setEstadoCondFilter(opt.value)}
+                    style={{
+                      padding: '4px 10px', fontSize: '11px', fontWeight: 600, borderRadius: '4px', border: 'none', cursor: 'pointer',
+                      background: estadoCondFilter === opt.value ? '#ff0033' : 'transparent',
+                      color: estadoCondFilter === opt.value ? 'white' : 'var(--text-secondary)',
+                    }}
+                  >
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
               <VerLogsButton tablas={['saldos_conductores', 'abonos_conductores', 'cobros_fraccionados']} label="Saldos" />
             </div>
           </div>
@@ -2048,7 +2143,7 @@ export function SaldosAbonosTab() {
           </div>
 
           {/* Barra de filtros activos */}
-          {(conductorFilter.length > 0 || estadoFilter.length > 0) && (
+          {(conductorFilter.length > 0 || estadoFilter.length > 0 || asignadoFilter !== 'todos') && (
             <div style={{
               display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 12px',
               background: 'rgba(255, 0, 51, 0.04)', border: '1px solid rgba(255, 0, 51, 0.12)',
@@ -2073,8 +2168,16 @@ export function SaldosAbonosTab() {
                   {f === 'favor' ? 'A Favor' : f === 'deuda' ? 'Deuda' : 'Sin Saldo'} <span style={{ fontWeight: 700 }}>&times;</span>
                 </span>
               ))}
+              {asignadoFilter !== 'todos' && (
+                <span style={{
+                  background: '#ff0033', color: 'white', padding: '2px 8px', borderRadius: '10px',
+                  fontSize: '11px', fontWeight: 500, display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer'
+                }} onClick={() => setAsignadoFilter('todos')}>
+                  {asignadoFilter === 'asignado' ? 'Asignados' : 'No asignados'} <span style={{ fontWeight: 700 }}>&times;</span>
+                </span>
+              )}
               <button
-                onClick={() => { setConductorFilter([]); setEstadoFilter([]); setConductorSearch('') }}
+                onClick={() => { setConductorFilter([]); setEstadoFilter([]); setAsignadoFilter('todos'); setConductorSearch('') }}
                 style={{
                   marginLeft: 'auto', background: 'transparent', border: '1px solid var(--border-primary)',
                   borderRadius: '4px', padding: '2px 8px', fontSize: '11px', cursor: 'pointer', color: 'var(--text-secondary)'

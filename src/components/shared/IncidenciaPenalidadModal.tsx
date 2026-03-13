@@ -3,6 +3,7 @@
 import { useState, useEffect, useMemo } from 'react'
 import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../contexts/AuthContext'
+import { useSede } from '../../contexts/SedeContext'
 import Swal from 'sweetalert2'
 import { showSuccess } from '../../utils/toast'
 import { X, Car, User } from 'lucide-react'
@@ -57,6 +58,7 @@ export function IncidenciaPenalidadModal({
   preloadedData
 }: IncidenciaPenalidadModalProps) {
   const { user, profile } = useAuth()
+  const { aplicarFiltroSede, sedeActualId, sedeUsuario } = useSede()
 
   // Datos maestros
   const [estados, setEstados] = useState<EstadoIncidencia[]>([])
@@ -120,8 +122,8 @@ export function IncidenciaPenalidadModal({
       const [estadosRes, tiposRes, vehiculosRes, conductoresRes] = await Promise.all([
         supabase.from('incidencias_estados').select('id, codigo, nombre').eq('is_active', true).order('orden'),
         (supabase.from('tipos_penalidad' as any) as any).select('id, nombre').eq('is_active', true).order('nombre'),
-        supabase.from('vehiculos').select('id, patente, marca, modelo').is('deleted_at', null).order('patente'),
-        supabase.from('conductores').select('id, nombres, apellidos').order('apellidos')
+        aplicarFiltroSede(supabase.from('vehiculos').select('id, patente, marca, modelo').is('deleted_at', null)).order('patente'),
+        aplicarFiltroSede(supabase.from('conductores').select('id, nombres, apellidos')).order('apellidos')
       ])
 
       setEstados((estadosRes.data as any) || [])
@@ -254,8 +256,9 @@ export function IncidenciaPenalidadModal({
           aplicado: false,
           semana: semanaCalculada,
           fecha: incidenciaForm.fecha,
-          created_by: user?.id,
-          created_by_name: profile?.full_name || 'Sistema'
+           created_by: user?.id,
+          created_by_name: profile?.full_name || 'Sistema',
+          sede_id: sedeActualId || sedeUsuario?.id,
         })
         .select('id')
         .single()

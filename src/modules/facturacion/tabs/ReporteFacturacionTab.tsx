@@ -804,8 +804,8 @@ export function ReporteFacturacionTab() {
       if (sedeActualId) qAnt = qAnt.eq('sede_id', sedeActualId)
       const { data: periodoAnt } = await qAnt.single()
       
-      // La semana anterior está cerrada si: tiene período con estado 'cerrado', o es semana 1 (no hay anterior)
-      const anteriorCerrado = semana === 1 || (periodoAnt?.estado === 'cerrado')
+      // La semana anterior está cerrada si: tiene período con estado 'cerrado', es semana 1, o no existe período anterior (sede nueva)
+      const anteriorCerrado = semana === 1 || !periodoAnt || (periodoAnt?.estado === 'cerrado')
       setPeriodoAnteriorCerrado(anteriorCerrado)
 
       // 1. Buscar el período para esta semana
@@ -3160,59 +3160,26 @@ export function ReporteFacturacionTab() {
     try {
       Swal.fire({ title: `${nuevaAccion === 'desactivar' ? 'Desactivando' : 'Activando'} efectivo...`, allowOutsideClick: false, didOpen: () => Swal.showLoading() })
 
-      // 1. Autenticar con Cabify
-      const authResp = await fetch('https://cabify.com/auth/api/authorization', {
+      const resp = await fetch('/api/cabify-efectivo', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        body: new URLSearchParams({
-          grant_type: 'password',
-          client_id: 'd14cdae660ad4817a6b20542a61cf5b1',
-          client_secret: 'ebZ45Oj3ln9W5tFC',
-          username: 'admin.log2@toshify.com.ar',
-          password: 'tOSHIBASE2026.',
-        }),
-      })
-      if (!authResp.ok) throw new Error('Error de autenticación con Cabify')
-      const authData = await authResp.json()
-      const token = authData.access_token
-
-      // 2. Ejecutar mutation
-      const enabled = nuevaAccion === 'activar'
-      const mutation = `
-        mutation ($driverId: String!, $companyId: String, $name: PreferenceName!, $enabled: Boolean!, $canWrite: Boolean) {
-          updateDriverPreference(driverId: $driverId, companyId: $companyId, name: $name, enabled: $enabled, canWrite: $canWrite) {
-            driverId name enabled canWrite
-          }
-        }
-      `
-      const gqlResp = await fetch('https://partners.cabify.com/api/graphql', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          query: mutation,
-          variables: { driverId: cabify_driver_id, companyId: cabify_company_id, name: 'PAYMENT_CASH', enabled, canWrite: true },
+          cabify_driver_id,
+          cabify_company_id,
+          accion: nuevaAccion,
+          conductor_dni: facturacion.conductor_dni,
+          conductor_nombre: conductor_nombre,
+          alquiler: facturacion.subtotal_alquiler,
+          garantia: facturacion.subtotal_garantia,
+          cobro_app: facturacion.ganancia_cabify || 0,
         }),
       })
-      const gqlData = await gqlResp.json()
-      const result = gqlData?.data?.updateDriverPreference
-      if (!result || result.enabled !== enabled) throw new Error(gqlData?.errors?.[0]?.message || 'Respuesta inesperada de Cabify')
 
-      // 3. Registrar en log
-      await supabase.from('cabify_efectivo_log').insert({
-        conductor_dni: facturacion.conductor_dni,
-        conductor_nombre: conductor_nombre,
-        cabify_driver_id,
-        cabify_company_id,
-        accion: nuevaAccion === 'activar' ? 'activacion' : 'desactivacion',
-        estado_anterior: permiso_efectivo,
-        resultado: 'ok',
-        alquiler: facturacion.subtotal_alquiler,
-        garantia: facturacion.subtotal_garantia,
-        cobro_app: facturacion.ganancia_cabify || 0,
-      })
+      const data = await resp.json()
+      if (!resp.ok) throw new Error(data.error || 'Error al cambiar efectivo en Cabify')
 
-      // 4. Actualizar estado local
-      const nuevoPermiso = enabled ? 'Activado' : 'Desactivado'
+      // Actualizar estado local
+      const nuevoPermiso = data.enabled ? 'Activado' : 'Desactivado'
       if (modoVistaPrevia) {
         setVistaPreviaData(prev => prev.map(f =>
           f.conductor_id === facturacion.conductor_id ? { ...f, permiso_efectivo: nuevoPermiso as 'Activado' | 'Desactivado' } : f
@@ -3225,8 +3192,8 @@ export function ReporteFacturacionTab() {
 
       Swal.fire({
         icon: 'success',
-        title: `Efectivo ${enabled ? 'activado' : 'desactivado'}`,
-        text: `Se ${enabled ? 'activó' : 'desactivó'} el efectivo de ${conductor_nombre}`,
+        title: `Efectivo ${data.enabled ? 'activado' : 'desactivado'}`,
+        text: `Se ${data.enabled ? 'activó' : 'desactivó'} el efectivo de ${conductor_nombre}`,
         timer: 2500,
         showConfirmButton: false,
       })
@@ -4461,7 +4428,27 @@ export function ReporteFacturacionTab() {
     try {
       const arrayBuffer = await file.arrayBuffer()
       const workbook = XLSX.read(arrayBuffer, { type: 'array' })
-      const sheetName = workbook.SheetNames[0]
+
+      // Buscar la hoja que coincida con la semana actual del período
+      const semBuscar = periodo?.semana || getWeek(semanaActual.inicio, { weekStartsOn: 1 })
+      let sheetName = workbook.SheetNames[0]
+      // 1) Buscar por nombre de hoja que contenga "semana X"
+      const hojaMatch = workbook.SheetNames.find((n: string) =>
+        n.toLowerCase().includes(`semana ${semBuscar}`) || n.toLowerCase().includes(`semana${semBuscar}`)
+      )
+      if (hojaMatch) {
+        sheetName = hojaMatch
+      } else {
+        // 2) Buscar hoja cuya col B (semana) tenga el número de semana buscado
+        for (const sn of workbook.SheetNames) {
+          const tempRows = XLSX.utils.sheet_to_json<any[]>(workbook.Sheets[sn], { header: 1, defval: '' })
+          if (tempRows.length > 1 && Number(tempRows[1][1]) === semBuscar) {
+            sheetName = sn
+            break
+          }
+        }
+      }
+
       const sheet = workbook.Sheets[sheetName]
       // Leer como array de arrays (raw) para acceder por índice de columna
       const rows = XLSX.utils.sheet_to_json<any[]>(sheet, { header: 1, defval: '' })
@@ -4513,13 +4500,10 @@ export function ReporteFacturacionTab() {
           continue
         }
 
-        // Solo excluir si ya está pagado o no debe nada
+        // Solo excluir si ya está pagado
         if (fact.estado === 'pagado') continue
-        if (fact.total_a_pagar <= 0 && exRow.importe_descontar <= 0) continue
 
         const yaCobrado = fact.monto_cobrado || 0
-        const pendiente = Math.abs(fact.total_a_pagar) - yaCobrado
-        if (pendiente <= 0 && exRow.importe_descontar <= 0) continue
 
         matched.push({
           conductor_nombre: fact.conductor_nombre,
@@ -4527,7 +4511,7 @@ export function ReporteFacturacionTab() {
           patente: exRow.patente || fact.vehiculo_patente || '',
           importe_contrato: exRow.importe_contrato,
           disponible: exRow.disponible,
-          importe_descontar: Math.min(exRow.importe_descontar, pendiente), // No pagar más de lo que se debe
+          importe_descontar: exRow.importe_descontar,
           saldo_adeudado: exRow.saldo_adeudado,
           total_a_pagar: Math.abs(fact.total_a_pagar),
           facturacion_id: fact.id,

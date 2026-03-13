@@ -133,7 +133,7 @@ export function CobrosFraccionadosTab({ periodoActual }: CobrosFraccionadosTabPr
           id, monto, fraccionado, cantidad_cuotas, conductor_id, conductor_nombre,
           vehiculo_patente, fecha, observaciones, conductor:conductores(id, nombres, apellidos)
         `)).eq('fraccionado', true).order('fecha', { ascending: false }),
-        supabase.from('penalidades_cuotas').select('*').order('numero_cuota', { ascending: true }),
+        aplicarFiltroSede(supabase.from('penalidades_cuotas').select('*')).order('numero_cuota', { ascending: true }),
         aplicarFiltroSede(supabase.from('cobros_fraccionados').select(`
           id, conductor_id, monto_total, monto_cuota, numero_cuota, semana, anio,
           descripcion, aplicado, fecha_aplicacion, total_cuotas, created_at,
