@@ -213,9 +213,9 @@ export function GarantiasTab() {
       setGarantias(garantiasConEstado)
 
       // Cargar todos los pagos para el sub-tab "Movimientos"
-      const { data: pagos, error: errorPagos } = await supabase
+      const { data: pagos, error: errorPagos } = await aplicarFiltroSede(supabase
         .from('garantias_pagos')
-        .select('*')
+        .select('*'))
         .order('fecha_pago', { ascending: false })
         .limit(500)
 

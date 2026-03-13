@@ -106,9 +106,9 @@ export function LiquidacionConductoresTab() {
   async function cargarLiquidaciones() {
     setLoading(true)
     try {
-      const { data, error } = await (supabase
+      const { data, error } = await aplicarFiltroSede((supabase
         .from('liquidaciones_conductores') as any)
-        .select('*')
+        .select('*'))
         .order('created_at', { ascending: false })
 
       if (error) throw error

@@ -87,9 +87,9 @@ export function TicketsFavorTab() {
   }
 
   async function crearTicket() {
-    const { data: conductores } = await supabase
+    const { data: conductores } = await aplicarFiltroSede(supabase
       .from('conductores')
-      .select('id, nombres, apellidos, numero_dni')
+      .select('id, nombres, apellidos, numero_dni'))
       .order('apellidos')
 
     // Guardar conductores en variable global temporal para el modal

@@ -970,7 +970,8 @@ export function IncidenciasModule() {
               conductor_nombre: incidencia.conductor_display,
               vehiculo_patente: incidencia.patente_display,
               created_by: user?.id,
-              created_by_name: profile?.full_name || 'Sistema'
+              created_by_name: profile?.full_name || 'Sistema',
+              sede_id: sedeActualId || sedeUsuario?.id,
             })
           if (error) throw error
         }
@@ -1804,7 +1805,8 @@ export function IncidenciasModule() {
         conductor_nombre: incidencia.conductor_display,
         vehiculo_patente: incidencia.patente_display,
         created_by: user?.id,
-        created_by_name: profile?.full_name || 'Sistema'
+        created_by_name: profile?.full_name || 'Sistema',
+        sede_id: sedeActualId || sedeUsuario?.id,
       }
       
       const { data: insertedData, error: insertError } = await (supabase.from('penalidades' as any) as any)

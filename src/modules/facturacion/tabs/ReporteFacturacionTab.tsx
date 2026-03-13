@@ -804,8 +804,8 @@ export function ReporteFacturacionTab() {
       if (sedeActualId) qAnt = qAnt.eq('sede_id', sedeActualId)
       const { data: periodoAnt } = await qAnt.single()
       
-      // La semana anterior está cerrada si: tiene período con estado 'cerrado', o es semana 1 (no hay anterior)
-      const anteriorCerrado = semana === 1 || (periodoAnt?.estado === 'cerrado')
+      // La semana anterior está cerrada si: tiene período con estado 'cerrado', es semana 1, o no existe período anterior (sede nueva)
+      const anteriorCerrado = semana === 1 || !periodoAnt || (periodoAnt?.estado === 'cerrado')
       setPeriodoAnteriorCerrado(anteriorCerrado)
 
       // 1. Buscar el período para esta semana
