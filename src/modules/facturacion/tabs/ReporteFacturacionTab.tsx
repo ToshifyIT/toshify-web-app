@@ -33,7 +33,9 @@ import {
   Lock,
   Unlock,
   Info,
-  Target
+  Target,
+  Zap,
+  ZapOff,
 } from 'lucide-react'
 import { type ColumnDef, type Table } from '@tanstack/react-table'
 import { DataTable } from '../../../components/ui/DataTable'
@@ -191,6 +193,10 @@ interface FacturacionConductor {
   } | null
   // GNC del vehículo asignado (leído de tabla vehiculos)
   tiene_gnc?: boolean
+  // Permiso de efectivo Cabify (leído de cabify_historico)
+  permiso_efectivo?: 'Activado' | 'Desactivado' | null
+  cabify_driver_id?: string | null
+  cabify_company_id?: string | null
 }
 
 interface FacturacionDetalle {
@@ -313,7 +319,7 @@ export function ReporteFacturacionTab() {
   const [showDiscrepancyModal, setShowDiscrepancyModal] = useState(false)
 
   // Filtros rápidos de alertas (toggle)
-  const [filtroAlerta, setFiltroAlerta] = useState<'ingreso' | 'baja' | 'sin_gnc' | 'pausa' | null>(null)
+  const [filtroAlerta, setFiltroAlerta] = useState<'ingreso' | 'baja' | 'sin_gnc' | 'pausa' | 'efectivo_on' | 'efectivo_off' | null>(null)
 
   // Modal de desglose de días
   const [showDiasModal, setShowDiasModal] = useState(false)
@@ -938,7 +944,7 @@ export function ReporteFacturacionTab() {
       const cabifyTable = getCabifyTable((periodoData as any).sede_id || sedeActualId)
       const [{ data: cabifyGanancias }, { data: cabifyPeajes }] = await Promise.all([
         supabase.from(cabifyTable)
-          .select('dni, cobro_app, cabify_driver_id, cabify_company_id')
+          .select('dni, cobro_app, cabify_driver_id, cabify_company_id, permiso_efectivo')
           .gte('fecha_inicio', periodoInicio + 'T00:00:00')
           .lte('fecha_inicio', periodoFin + 'T23:59:59'),
         supabase.from(cabifyTable)
@@ -949,10 +955,19 @@ export function ReporteFacturacionTab() {
 
       // Agrupar cobro_app por DNI (semana actual) - lo que Cabify cobra al conductor
       const cobroAppPorDni = new Map<string, number>()
+      const cabifyEfectivoMapPeriodo = new Map<string, { permiso_efectivo: string | null; cabify_driver_id: string | null; cabify_company_id: string | null }>()
       ;(cabifyGanancias || []).forEach((c: any) => {
         if (c.dni) {
           const dniNorm = normalizeDni(c.dni)
           cobroAppPorDni.set(dniNorm, (cobroAppPorDni.get(dniNorm) || 0) + (parseFloat(c.cobro_app) || 0))
+          // Guardar permiso_efectivo y IDs Cabify (último registro gana)
+          if (c.cabify_driver_id) {
+            cabifyEfectivoMapPeriodo.set(dniNorm, {
+              permiso_efectivo: c.permiso_efectivo || null,
+              cabify_driver_id: c.cabify_driver_id || null,
+              cabify_company_id: c.cabify_company_id || null,
+            })
+          }
         }
       })
 
@@ -977,10 +992,14 @@ export function ReporteFacturacionTab() {
         const dniNorm = normalizeDni(f.conductor_dni)
         const cobroApp = dniNorm ? (cobroAppPorDni.get(dniNorm) || 0) : 0
         const cuotaFija = f.subtotal_alquiler + f.subtotal_garantia
+        const efectivoInfo = dniNorm ? cabifyEfectivoMapPeriodo.get(dniNorm) : null
         return {
           ...f,
           ganancia_cabify: cobroApp,
-          cubre_cuota: cobroApp >= cuotaFija
+          cubre_cuota: cobroApp >= cuotaFija,
+          permiso_efectivo: efectivoInfo?.permiso_efectivo || null,
+          cabify_driver_id: efectivoInfo?.cabify_driver_id || null,
+          cabify_company_id: efectivoInfo?.cabify_company_id || null,
         }
       })
       
@@ -1519,7 +1538,7 @@ export function ReporteFacturacionTab() {
           .in('conductor_id', conductorIds),
         Promise.all([
           supabase.from(getCabifyTable(sedeParaVP))
-            .select('dni, cobro_app, cobro_efectivo')
+            .select('dni, cobro_app, cobro_efectivo, permiso_efectivo, cabify_driver_id, cabify_company_id')
             .gte('fecha_inicio', fechaInicio + 'T00:00:00')
             .lte('fecha_inicio', fechaFin + 'T23:59:59'),
           supabase.from(getCabifyTable(sedeParaVP))
@@ -1564,6 +1583,8 @@ export function ReporteFacturacionTab() {
       // Crear mapa de cobro_app Cabify por DNI + trackear raw para discrepancias
       const cabifyMap = new Map<string, number>()
       const cabifyRawDniMap = new Map<string, string>() // normalized -> raw cabify DNI
+      // Mapa de permiso_efectivo + IDs Cabify por DNI (último registro más reciente)
+      const cabifyEfectivoMap = new Map<string, { permiso_efectivo: string | null; cabify_driver_id: string | null; cabify_company_id: string | null }>()
       ;(cabifyData || []).forEach((record: any) => {
         if (record.dni) {
           let dniKey = String(record.dni)
@@ -1577,6 +1598,14 @@ export function ReporteFacturacionTab() {
           const cobroApp = parseFloat(String(record.cobro_app)) || 0
           cabifyMap.set(dniNorm, actual + cobroApp)
           if (!cabifyRawDniMap.has(dniNorm)) cabifyRawDniMap.set(dniNorm, String(record.dni))
+          // Guardar permiso_efectivo y IDs Cabify (último registro gana)
+          if (record.cabify_driver_id) {
+            cabifyEfectivoMap.set(dniNorm, {
+              permiso_efectivo: record.permiso_efectivo || null,
+              cabify_driver_id: record.cabify_driver_id || null,
+              cabify_company_id: record.cabify_company_id || null,
+            })
+          }
         }
       })
       // Crear mapa de peajes Cabify por DNI (P005) - semana anterior, SIN redondeo
@@ -1930,6 +1959,10 @@ export function ReporteFacturacionTab() {
             })(),
              // GNC del vehículo (leído de tabla vehiculos)
              tiene_gnc: control.tiene_gnc,
+             // Permiso de efectivo Cabify
+             permiso_efectivo: (cabifyEfectivoMap.get(dniConductor)?.permiso_efectivo as 'Activado' | 'Desactivado') || null,
+             cabify_driver_id: cabifyEfectivoMap.get(dniConductor)?.cabify_driver_id || null,
+             cabify_company_id: cabifyEfectivoMap.get(dniConductor)?.cabify_company_id || null,
              // Discrepancia de formato DNI
             dni_discrepancy: dniDiscrepancy ? { conductorRaw: conductorRawDni, cabifyRaw: cabifyRawDni } : null,
             // Detectar si fecha_terminacion no coincide con fecha_fin de asignación
@@ -3100,6 +3133,104 @@ export function ReporteFacturacionTab() {
       showSuccess('Período Reabierto', `Semana ${periodo.semana}/${periodo.anio} está abierta nuevamente`)
     } catch (error: any) {
       Swal.fire('Error', error.message || 'No se pudo reabrir el período', 'error')
+    }
+  }
+
+  // Toggle efectivo Cabify (activar/desactivar)
+  async function toggleEfectivoCabify(facturacion: FacturacionConductor) {
+    const { cabify_driver_id, cabify_company_id, permiso_efectivo, conductor_nombre } = facturacion
+    if (!cabify_driver_id || !cabify_company_id) {
+      Swal.fire('Error', 'Este conductor no tiene datos de Cabify asociados', 'error')
+      return
+    }
+
+    const nuevaAccion = permiso_efectivo === 'Activado' ? 'desactivar' : 'activar'
+    const confirm = await Swal.fire({
+      title: `${nuevaAccion === 'desactivar' ? 'Desactivar' : 'Activar'} efectivo`,
+      html: `¿Seguro que deseas <b>${nuevaAccion}</b> el efectivo de <b>${conductor_nombre}</b> en Cabify?`,
+      icon: 'question',
+      showCancelButton: true,
+      confirmButtonText: nuevaAccion === 'desactivar' ? 'Sí, desactivar' : 'Sí, activar',
+      cancelButtonText: 'Cancelar',
+      confirmButtonColor: nuevaAccion === 'desactivar' ? '#dc2626' : '#16a34a',
+    })
+    if (!confirm.isConfirmed) return
+
+    try {
+      Swal.fire({ title: `${nuevaAccion === 'desactivar' ? 'Desactivando' : 'Activando'} efectivo...`, allowOutsideClick: false, didOpen: () => Swal.showLoading() })
+
+      // 1. Autenticar con Cabify
+      const authResp = await fetch('https://cabify.com/auth/api/authorization', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({
+          grant_type: 'password',
+          client_id: 'd14cdae660ad4817a6b20542a61cf5b1',
+          client_secret: 'ebZ45Oj3ln9W5tFC',
+          username: 'admin.log2@toshify.com.ar',
+          password: 'tOSHIBASE2026.',
+        }),
+      })
+      if (!authResp.ok) throw new Error('Error de autenticación con Cabify')
+      const authData = await authResp.json()
+      const token = authData.access_token
+
+      // 2. Ejecutar mutation
+      const enabled = nuevaAccion === 'activar'
+      const mutation = `
+        mutation ($driverId: String!, $companyId: String, $name: PreferenceName!, $enabled: Boolean!, $canWrite: Boolean) {
+          updateDriverPreference(driverId: $driverId, companyId: $companyId, name: $name, enabled: $enabled, canWrite: $canWrite) {
+            driverId name enabled canWrite
+          }
+        }
+      `
+      const gqlResp = await fetch('https://partners.cabify.com/api/graphql', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({
+          query: mutation,
+          variables: { driverId: cabify_driver_id, companyId: cabify_company_id, name: 'PAYMENT_CASH', enabled, canWrite: true },
+        }),
+      })
+      const gqlData = await gqlResp.json()
+      const result = gqlData?.data?.updateDriverPreference
+      if (!result || result.enabled !== enabled) throw new Error(gqlData?.errors?.[0]?.message || 'Respuesta inesperada de Cabify')
+
+      // 3. Registrar en log
+      await supabase.from('cabify_efectivo_log').insert({
+        conductor_dni: facturacion.conductor_dni,
+        conductor_nombre: conductor_nombre,
+        cabify_driver_id,
+        cabify_company_id,
+        accion: nuevaAccion === 'activar' ? 'activacion' : 'desactivacion',
+        estado_anterior: permiso_efectivo,
+        resultado: 'ok',
+        alquiler: facturacion.subtotal_alquiler,
+        garantia: facturacion.subtotal_garantia,
+        cobro_app: facturacion.ganancia_cabify || 0,
+      })
+
+      // 4. Actualizar estado local
+      const nuevoPermiso = enabled ? 'Activado' : 'Desactivado'
+      if (modoVistaPrevia) {
+        setVistaPreviaData(prev => prev.map(f =>
+          f.conductor_id === facturacion.conductor_id ? { ...f, permiso_efectivo: nuevoPermiso as 'Activado' | 'Desactivado' } : f
+        ))
+      } else {
+        setFacturaciones(prev => prev.map(f =>
+          f.conductor_id === facturacion.conductor_id ? { ...f, permiso_efectivo: nuevoPermiso as 'Activado' | 'Desactivado' } : f
+        ))
+      }
+
+      Swal.fire({
+        icon: 'success',
+        title: `Efectivo ${enabled ? 'activado' : 'desactivado'}`,
+        text: `Se ${enabled ? 'activó' : 'desactivó'} el efectivo de ${conductor_nombre}`,
+        timer: 2500,
+        showConfirmButton: false,
+      })
+    } catch (error: any) {
+      Swal.fire('Error', `No se pudo ${nuevaAccion} el efectivo: ${error.message}`, 'error')
     }
   }
 
@@ -7474,6 +7605,16 @@ export function ReporteFacturacionTab() {
             {row.original.tiene_gnc === false && row.original.vehiculo_patente && (
               <span className="dt-badge dt-badge-orange" style={{ fontSize: '9px', padding: '1px 5px' }}>Sin GNC</span>
             )}
+            {row.original.permiso_efectivo === 'Activado' && (
+              <span className="dt-badge" style={{ fontSize: '9px', padding: '1px 5px', background: 'rgba(34,197,94,0.15)', color: '#16a34a', border: '1px solid rgba(34,197,94,0.3)' }}>
+                <Zap size={8} style={{ marginRight: '2px' }} />Efectivo
+              </span>
+            )}
+            {row.original.permiso_efectivo === 'Desactivado' && (
+              <span className="dt-badge" style={{ fontSize: '9px', padding: '1px 5px', background: 'rgba(239,68,68,0.1)', color: '#dc2626', border: '1px solid rgba(239,68,68,0.25)' }}>
+                <ZapOff size={8} style={{ marginRight: '2px' }} />Sin Efectivo
+              </span>
+            )}
           </div>
         </div>
       ),
@@ -8001,7 +8142,7 @@ export function ReporteFacturacionTab() {
     {
       id: 'acciones',
       header: '',
-      size: 50,
+      size: 80,
       maxSize: 170,
       cell: ({ row }) => (
         <div style={{ display: 'flex', gap: '4px', justifyContent: 'center' }}>
@@ -8013,7 +8154,19 @@ export function ReporteFacturacionTab() {
           >
             <Eye size={14} />
           </button>
-          {/* Botón pago individual oculto — pagos se cargan desde semana cerrada */}
+          {row.original.cabify_driver_id && (
+            <button
+              className="dt-btn-action"
+              onClick={(e) => { e.stopPropagation(); toggleEfectivoCabify(row.original) }}
+              data-tooltip={row.original.permiso_efectivo === 'Activado' ? 'Desactivar efectivo' : 'Activar efectivo'}
+              style={{
+                padding: '6px',
+                color: row.original.permiso_efectivo === 'Activado' ? '#16a34a' : '#dc2626',
+              }}
+            >
+              {row.original.permiso_efectivo === 'Activado' ? <Zap size={14} /> : <ZapOff size={14} />}
+            </button>
+          )}
         </div>
       )
     }
@@ -8589,8 +8742,8 @@ export function ReporteFacturacionTab() {
             const countBaja = vistaPreviaData.filter(f => f.estado_billing === 'De baja').length
             const countPausa = vistaPreviaData.filter(f => f.estado_billing === 'Pausa').length
             const countSinGnc = vistaPreviaData.filter(f => f.tiene_gnc === false && f.vehiculo_patente).length
-            const hayAlertas = countIngreso > 0 || countBaja > 0 || countPausa > 0 || countSinGnc > 0
-            if (!hayAlertas) return null
+            const countEfectivoOn = vistaPreviaData.filter(f => f.permiso_efectivo === 'Activado').length
+            const countEfectivoOff = vistaPreviaData.filter(f => f.permiso_efectivo === 'Desactivado').length
             const btnStyle = (active: boolean, bg: string, color: string) => ({
               display: 'inline-flex', alignItems: 'center', gap: '5px',
               padding: '4px 10px', borderRadius: '14px', fontSize: '11px', fontWeight: 600 as const,
@@ -8601,6 +8754,24 @@ export function ReporteFacturacionTab() {
             })
             return (
               <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginBottom: '8px' }}>
+                {countSinGnc > 0 && (
+                  <button style={btnStyle(filtroAlerta === 'sin_gnc', 'rgba(249,115,22,0.12)', '#ea580c')}
+                    onClick={() => setFiltroAlerta(filtroAlerta === 'sin_gnc' ? null : 'sin_gnc')}>
+                    <AlertTriangle size={12} /> Sin GNC <span style={{ opacity: 0.7 }}>{countSinGnc}</span>
+                  </button>
+                )}
+                {countEfectivoOn > 0 && (
+                  <button style={btnStyle(filtroAlerta === 'efectivo_on', 'rgba(34,197,94,0.12)', '#16a34a')}
+                    onClick={() => setFiltroAlerta(filtroAlerta === 'efectivo_on' ? null : 'efectivo_on')}>
+                    <Zap size={12} /> Efectivo activado <span style={{ opacity: 0.7 }}>{countEfectivoOn}</span>
+                  </button>
+                )}
+                {countEfectivoOff > 0 && (
+                  <button style={btnStyle(filtroAlerta === 'efectivo_off', 'rgba(239,68,68,0.12)', '#dc2626')}
+                    onClick={() => setFiltroAlerta(filtroAlerta === 'efectivo_off' ? null : 'efectivo_off')}>
+                    <ZapOff size={12} /> Efectivo desactivado <span style={{ opacity: 0.7 }}>{countEfectivoOff}</span>
+                  </button>
+                )}
                 {countIngreso > 0 && (
                   <button style={btnStyle(filtroAlerta === 'ingreso', 'rgba(245,158,11,0.12)', '#d97706')}
                     onClick={() => setFiltroAlerta(filtroAlerta === 'ingreso' ? null : 'ingreso')}>
@@ -8617,12 +8788,6 @@ export function ReporteFacturacionTab() {
                   <button style={btnStyle(filtroAlerta === 'pausa', 'rgba(107,114,128,0.12)', '#6b7280')}
                     onClick={() => setFiltroAlerta(filtroAlerta === 'pausa' ? null : 'pausa')}>
                     <AlertCircle size={12} /> Pausa <span style={{ opacity: 0.7 }}>{countPausa}</span>
-                  </button>
-                )}
-                {countSinGnc > 0 && (
-                  <button style={btnStyle(filtroAlerta === 'sin_gnc', 'rgba(249,115,22,0.12)', '#ea580c')}
-                    onClick={() => setFiltroAlerta(filtroAlerta === 'sin_gnc' ? null : 'sin_gnc')}>
-                    <AlertTriangle size={12} /> Sin GNC <span style={{ opacity: 0.7 }}>{countSinGnc}</span>
                   </button>
                 )}
                 {filtroAlerta && (
@@ -8652,6 +8817,8 @@ export function ReporteFacturacionTab() {
               if (filtroAlerta === 'baja' && f.estado_billing !== 'De baja') return false
               if (filtroAlerta === 'pausa' && f.estado_billing !== 'Pausa') return false
               if (filtroAlerta === 'sin_gnc' && !(f.tiene_gnc === false && f.vehiculo_patente)) return false
+              if (filtroAlerta === 'efectivo_on' && f.permiso_efectivo !== 'Activado') return false
+              if (filtroAlerta === 'efectivo_off' && f.permiso_efectivo !== 'Desactivado') return false
               return true
             })}
             columns={columns}
@@ -8807,8 +8974,8 @@ export function ReporteFacturacionTab() {
               const countBaja = src.filter(f => f.estado_billing === 'De baja').length
               const countPausa = src.filter(f => f.estado_billing === 'Pausa').length
               const countSinGnc = src.filter(f => f.tiene_gnc === false && f.vehiculo_patente).length
-              const hayAlertas = countIngreso > 0 || countBaja > 0 || countPausa > 0 || countSinGnc > 0
-              if (!hayAlertas) return null
+              const countEfectivoOn = src.filter(f => f.permiso_efectivo === 'Activado').length
+              const countEfectivoOff = src.filter(f => f.permiso_efectivo === 'Desactivado').length
               const btnStyle = (active: boolean, bg: string, color: string) => ({
                 display: 'inline-flex', alignItems: 'center', gap: '5px',
                 padding: '4px 10px', borderRadius: '14px', fontSize: '11px', fontWeight: 600 as const,
@@ -8819,6 +8986,24 @@ export function ReporteFacturacionTab() {
               })
               return (
                 <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginBottom: '8px' }}>
+                  {countSinGnc > 0 && (
+                    <button style={btnStyle(filtroAlerta === 'sin_gnc', 'rgba(249,115,22,0.12)', '#ea580c')}
+                      onClick={() => setFiltroAlerta(filtroAlerta === 'sin_gnc' ? null : 'sin_gnc')}>
+                      <AlertTriangle size={12} /> Sin GNC <span style={{ opacity: 0.7 }}>{countSinGnc}</span>
+                    </button>
+                  )}
+                  {countEfectivoOn > 0 && (
+                    <button style={btnStyle(filtroAlerta === 'efectivo_on', 'rgba(34,197,94,0.12)', '#16a34a')}
+                      onClick={() => setFiltroAlerta(filtroAlerta === 'efectivo_on' ? null : 'efectivo_on')}>
+                      <Zap size={12} /> Efectivo activado <span style={{ opacity: 0.7 }}>{countEfectivoOn}</span>
+                    </button>
+                  )}
+                  {countEfectivoOff > 0 && (
+                    <button style={btnStyle(filtroAlerta === 'efectivo_off', 'rgba(239,68,68,0.12)', '#dc2626')}
+                      onClick={() => setFiltroAlerta(filtroAlerta === 'efectivo_off' ? null : 'efectivo_off')}>
+                      <ZapOff size={12} /> Efectivo desactivado <span style={{ opacity: 0.7 }}>{countEfectivoOff}</span>
+                    </button>
+                  )}
                   {countIngreso > 0 && (
                     <button style={btnStyle(filtroAlerta === 'ingreso', 'rgba(245,158,11,0.12)', '#d97706')}
                       onClick={() => setFiltroAlerta(filtroAlerta === 'ingreso' ? null : 'ingreso')}>
@@ -8837,12 +9022,6 @@ export function ReporteFacturacionTab() {
                       <AlertCircle size={12} /> Pausa <span style={{ opacity: 0.7 }}>{countPausa}</span>
                     </button>
                   )}
-                  {countSinGnc > 0 && (
-                    <button style={btnStyle(filtroAlerta === 'sin_gnc', 'rgba(249,115,22,0.12)', '#ea580c')}
-                      onClick={() => setFiltroAlerta(filtroAlerta === 'sin_gnc' ? null : 'sin_gnc')}>
-                      <AlertTriangle size={12} /> Sin GNC <span style={{ opacity: 0.7 }}>{countSinGnc}</span>
-                    </button>
-                  )}
                   {filtroAlerta && (
                     <button style={{ ...btnStyle(false, '', ''), fontSize: '10px', padding: '3px 8px' }}
                       onClick={() => setFiltroAlerta(null)}>
@@ -8858,6 +9037,8 @@ export function ReporteFacturacionTab() {
                 if (filtroAlerta === 'baja') return f.estado_billing === 'De baja'
                 if (filtroAlerta === 'pausa') return f.estado_billing === 'Pausa'
                 if (filtroAlerta === 'sin_gnc') return f.tiene_gnc === false && f.vehiculo_patente
+                if (filtroAlerta === 'efectivo_on') return f.permiso_efectivo === 'Activado'
+                if (filtroAlerta === 'efectivo_off') return f.permiso_efectivo === 'Desactivado'
                 return true
               }) : facturacionesFiltradas}
               columns={columns}
