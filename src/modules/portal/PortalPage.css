@@ -330,6 +330,32 @@
   display: inline-block;
 }
 
+.portal-legend-info {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: 1.5px solid var(--text-tertiary, #9ca3af);
+  color: var(--text-tertiary, #9ca3af);
+  font-size: 9px;
+  font-weight: 700;
+  font-style: italic;
+  font-family: Georgia, 'Times New Roman', serif;
+  line-height: 1;
+  margin-left: 4px;
+  cursor: help;
+  transition: all 0.15s;
+  flex-shrink: 0;
+}
+
+.portal-legend-info:hover {
+  border-color: var(--text-primary, #374151);
+  color: var(--text-primary, #374151);
+  background: var(--bg-secondary, #f3f4f6);
+}
+
 /* Fraccionamientos */
 .portal-fraccionamientos-card {
   background: var(--card-bg);

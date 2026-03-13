@@ -13,6 +13,8 @@ import { useState, useEffect } from 'react'
 import { ChevronDown, ChevronUp, DollarSign, Eye } from 'lucide-react'
 import { supabase } from '../../../lib/supabase'
 import { useSede } from '../../../contexts/SedeContext'
+import { useAuth } from '../../../contexts/AuthContext'
+import { insertControlSaldo } from '../../../services/controlSaldosService'
 import { showSuccess } from '../../../utils/toast'
 import { formatCurrency } from '../../../types/facturacion.types'
 import Swal from 'sweetalert2'
@@ -107,6 +109,7 @@ interface CobrosFraccionadosTabProps {
 export function CobrosFraccionadosTab({ periodoActual }: CobrosFraccionadosTabProps) {
   void periodoActual
   const { sedeActualId, aplicarFiltroSede } = useSede()
+  const { profile } = useAuth()
   const [cobros, setCobros] = useState<PenalidadFraccionada[]>([])
   const [loading, setLoading] = useState(true)
   const [expandidos, setExpandidos] = useState<Record<string, boolean>>({})
@@ -396,6 +399,18 @@ export function CobrosFraccionadosTab({ periodoActual }: CobrosFraccionadosTabPr
             ultima_actualizacion: new Date().toISOString()
           })
           .eq('id', saldoExistente.id)
+
+        // Registrar movimiento en kardex (control_saldos)
+        await insertControlSaldo({
+          conductorId: cobro.conductor_id || '',
+          semana: formValues.semana,
+          anio: formValues.anio,
+          tipoMovimiento: 'pago_cuota',
+          montoMovimiento: formValues.monto,
+          saldoPendiente: nuevoSaldo,
+          referencia: `Pago cuota #${cuota.numero_cuota} - ${esPenalidad ? 'Penalidad fraccionada' : 'Saldo fraccionado'}`,
+          userName: profile?.full_name,
+        })
       }
 
       // 4. Registrar en abonos_conductores como audit trail

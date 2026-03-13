@@ -96,6 +96,11 @@ export function GuiasModule() {
   const [globalSearch, setGlobalSearch] = useState('')
   const [cbuSearch] = useState('')
 
+
+  const [_efectivoSearch] = useState('')
+  const [_appSearch] = useState('')
+  const [_totalSearch] = useState('')
+
   // Estados para modal de detalles
   const [showDetailsModal, setShowDetailsModal] = useState(false)
   const [selectedConductor, setSelectedConductor] = useState<ConductorWithRelations | null>(null)

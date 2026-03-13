@@ -302,8 +302,12 @@ export function PeriodosTab() {
         if (!conductor) continue
 
         // Verificar que la asignación se solape con la semana
-        const acInicio = ac.fecha_inicio ? new Date(ac.fecha_inicio + 'T00:00:00') : new Date('2020-01-01')
-        const acFin = ac.fecha_fin ? new Date(ac.fecha_fin + 'T23:59:59') : new Date('2099-12-31')
+        // NOTA: fecha_inicio/fecha_fin pueden ser timestamps con hora (ej: "2026-02-06 18:32:18.981+00")
+        // Extraer solo la parte de fecha (YYYY-MM-DD) para evitar Invalid Date al concatenar con 'T00:00:00'
+        const acInicioStr = ac.fecha_inicio ? new Date(ac.fecha_inicio).toISOString().split('T')[0] : null
+        const acFinStr = ac.fecha_fin ? new Date(ac.fecha_fin).toISOString().split('T')[0] : null
+        const acInicio = acInicioStr ? new Date(acInicioStr + 'T00:00:00') : new Date('2020-01-01')
+        const acFin = acFinStr ? new Date(acFinStr + 'T23:59:59') : new Date('2099-12-31')
         
         // Si la asignación terminó antes de la semana o empezó después, no cuenta
         if (acFin < semanaInicioDate || acInicio > semanaFinDate) continue
