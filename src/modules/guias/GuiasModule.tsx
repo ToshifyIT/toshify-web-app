@@ -95,9 +95,10 @@ export function GuiasModule() {
   const [nombreSearch, setNombreSearch] = useState('')
   const [globalSearch, setGlobalSearch] = useState('')
   const [cbuSearch] = useState('')
-  const [efectivoSearch] = useState('')
-  const [appSearch] = useState('')
-  const [totalSearch] = useState('')
+
+  const [_efectivoSearch] = useState('')
+  const [_appSearch] = useState('')
+  const [_totalSearch] = useState('')
 
   // Estados para modal de detalles
   const [showDetailsModal, setShowDetailsModal] = useState(false)
@@ -559,7 +560,9 @@ export function GuiasModule() {
 
       // 2. Obtener datos financieros desde cabify_historico via RPC (única fuente de verdad)
       const semanas = historyData.map((d: any) => d.semana);
-      const cabifyDataMap = await getCabifyDatosPorSemanas([driver.id], semanas);
+      const dniMap = new Map<string, string>();
+      if (driver.numero_dni) dniMap.set(driver.id, String(driver.numero_dni));
+      const cabifyDataMap = await getCabifyDatosPorSemanas([driver.id], semanas, dniMap, sedeActualId);
 
       const rows = historyData.map(d => {
         const cabifyEntry = cabifyDataMap.get(d.semana)?.get(driver.id);
@@ -743,8 +746,15 @@ export function GuiasModule() {
 
       // RPC Cabify: buscar datos financieros para semana objetivo Y semana anterior
       const cabifySemanasToFetch = [targetWeek, prevWeekLabelForCabify];
+      // Construir mapa UUID → DNI para consulta complementaria en Bariloche
+      const conductorDniMap = new Map<string, string>();
+      (historialData || []).forEach((h: any) => {
+        if (h.id_conductor && h.conductores?.numero_dni) {
+          conductorDniMap.set(h.id_conductor, String(h.conductores.numero_dni));
+        }
+      });
       const cabifyPromise = conductorIds.length > 0
-        ? getCabifyDatosPorSemanas(conductorIds, cabifySemanasToFetch)
+        ? getCabifyDatosPorSemanas(conductorIds, cabifySemanasToFetch, conductorDniMap, sedeActualId)
         : Promise.resolve(new Map<string, Map<string, { cobroApp: number; cobroEfectivo: number }>>());
       
       const vehiculosPromise = (async () => {
@@ -848,6 +858,7 @@ export function GuiasModule() {
       })();
 
       // Consultar datos de facturación (Alquiler, Garantía) desde facturacion_conductores
+      // Si no existe periodo guardado, calcula estimación desde conceptos_nomina + asignaciones
       const facturacionBillingPromise = (async () => {
         if (conductorIds.length === 0) return new Map<string, { alquiler: number; garantia: number; total: number }>();
         // Parsear semana y año desde el formato ISO "2026-W11"
@@ -855,30 +866,105 @@ export function GuiasModule() {
         const fYear = parseInt(fYearStr);
         const fWeek = parseInt(fWeekStr);
 
-        // Buscar el periodo_facturacion que coincida con semana y año
-        const { data: periodoData } = await supabase
+        // Buscar el periodo_facturacion que coincida con semana y año (filtrado por sede)
+        let periodoQuery = supabase
           .from('periodos_facturacion')
           .select('id')
           .eq('semana', fWeek)
-          .eq('anio', fYear)
+          .eq('anio', fYear);
+        periodoQuery = aplicarFiltroSede(periodoQuery);
+        const { data: periodoData } = await periodoQuery
           .limit(1)
           .maybeSingle();
 
-        if (!periodoData) return new Map<string, { alquiler: number; garantia: number; total: number }>();
-
-        // Obtener facturacion_conductores para ese periodo y los conductores de la guía
-        const { data: facturacionRows } = await supabase
-          .from('facturacion_conductores')
-          .select('conductor_id, subtotal_alquiler, subtotal_garantia')
-          .eq('periodo_id', periodoData.id)
-          .in('conductor_id', conductorIds);
-
         const map = new Map<string, { alquiler: number; garantia: number; total: number }>();
-        (facturacionRows || []).forEach((row: any) => {
-          const alquiler = Number(row.subtotal_alquiler) || 0;
-          const garantia = Number(row.subtotal_garantia) || 0;
-          map.set(row.conductor_id, { alquiler, garantia, total: alquiler + garantia });
+
+        if (periodoData) {
+          // Periodo guardado: obtener facturacion_conductores directamente
+          const { data: facturacionRows } = await supabase
+            .from('facturacion_conductores')
+            .select('conductor_id, subtotal_alquiler, subtotal_garantia')
+            .eq('periodo_id', periodoData.id)
+            .in('conductor_id', conductorIds);
+
+          (facturacionRows || []).forEach((row: any) => {
+            const alquiler = Number(row.subtotal_alquiler) || 0;
+            const garantia = Number(row.subtotal_garantia) || 0;
+            map.set(row.conductor_id, { alquiler, garantia, total: alquiler + garantia });
+          });
+          return map;
+        }
+
+        // Sin periodo guardado: calcular estimación desde conceptos_nomina + asignación activa
+        // Precios DIARIOS: P001=Turno Diurno, P002=Cargo, P003=Garantía, P013=Turno Nocturno
+        const [{ data: conceptosData }, { data: garantiasData }] = await Promise.all([
+          supabase
+            .from('conceptos_nomina')
+            .select('codigo, precio_base, precio_final')
+            .eq('activo', true)
+            .in('codigo', ['P001', 'P002', 'P003', 'P013']),
+          supabase
+            .from('garantias_conductores')
+            .select('conductor_id, estado, monto_total, monto_pagado, monto_cuota_semanal, cuotas_pagadas, cuotas_totales')
+            .in('conductor_id', conductorIds)
+            .in('estado', ['activa', 'pendiente']),
+        ]);
+
+        const precios = new Map<string, number>();
+        (conceptosData || []).forEach((c: any) => {
+          precios.set(c.codigo, c.precio_final ?? c.precio_base ?? 0);
         });
+
+        const garantiasMap = new Map<string, any>();
+        (garantiasData || []).forEach((g: any) => {
+          garantiasMap.set(g.conductor_id, g);
+        });
+
+        // Precio diario de garantía × 7 = cuota semanal por defecto
+        const cuotaGarantiaSemanalDefault = Math.round((precios.get('P003') || 7143) * 7);
+
+        // Calcular para cada conductor usando su modalidad de asignación
+        for (const h of (historialData || [])) {
+          const conductor = h.conductores;
+          if (!conductor || !conductorIds.includes(conductor.id)) continue;
+
+          // Determinar modalidad desde asignación activa
+          const asignacionActiva = (conductor.asignaciones_conductores || []).find((ac: any) =>
+            ac.asignaciones?.estado === 'activo' || ac.asignaciones?.estado === 'activa'
+          );
+          if (!asignacionActiva) continue;
+
+          const modalidad = (asignacionActiva.asignaciones?.horario || '').toUpperCase();
+          const turnoConductor = (asignacionActiva.horario || '').toLowerCase();
+
+          // Determinar precio diario según modalidad
+          let precioDiario = 0;
+          if (modalidad === 'CARGO') {
+            precioDiario = precios.get('P002') || 0;
+          } else if (modalidad === 'TURNO') {
+            precioDiario = turnoConductor === 'nocturno'
+              ? (precios.get('P013') || 0)
+              : (precios.get('P001') || 0);
+          }
+
+          const alquiler = Math.round(precioDiario * 7);
+
+          // Garantía: usar datos reales si existen, sino cuota por defecto
+          let garantia = cuotaGarantiaSemanalDefault;
+          const garantiaData = garantiasMap.get(conductor.id);
+          if (garantiaData) {
+            if (garantiaData.estado === 'completada' || garantiaData.monto_pagado >= garantiaData.monto_total) {
+              garantia = 0;
+            } else {
+              const cuotaNormal = garantiaData.monto_cuota_semanal || cuotaGarantiaSemanalDefault;
+              const pendiente = garantiaData.monto_total - garantiaData.monto_pagado;
+              garantia = Math.min(cuotaNormal, pendiente);
+            }
+          }
+
+          map.set(conductor.id, { alquiler, garantia, total: alquiler + garantia });
+        }
+
         return map;
       })();
 
@@ -1742,36 +1828,6 @@ export function GuiasModule() {
     return Array.from(categorias.keys()).sort();
   }, [drivers]);
 
-  const uniqueEfectivo = useMemo(() => {
-    const values = drivers.map(c => (c as any).facturacion_efectivo_filter || "N/A");
-    return [...new Set(values)].sort();
-  }, [drivers]);
-
-  const uniqueApp = useMemo(() => {
-    const values = drivers.map(c => (c as any).facturacion_app_filter || "N/A");
-    return [...new Set(values)].sort();
-  }, [drivers]);
-
-  const uniqueTotal = useMemo(() => {
-    const values = drivers.map(c => (c as any).facturacion_total_filter || "N/A");
-    return [...new Set(values)].sort();
-  }, [drivers]);
-
-  const efectivoFiltrados = useMemo(() => {
-    if (!efectivoSearch) return uniqueEfectivo;
-    return uniqueEfectivo.filter(v => v.toLowerCase().includes(efectivoSearch.toLowerCase()));
-  }, [uniqueEfectivo, efectivoSearch]);
-
-  const appFiltrados = useMemo(() => {
-    if (!appSearch) return uniqueApp;
-    return uniqueApp.filter(v => v.toLowerCase().includes(appSearch.toLowerCase()));
-  }, [uniqueApp, appSearch]);
-
-  const totalFiltrados = useMemo(() => {
-    if (!totalSearch) return uniqueTotal;
-    return uniqueTotal.filter(v => v.toLowerCase().includes(totalSearch.toLowerCase()));
-  }, [uniqueTotal, totalSearch]);
-
   const columns = useMemo<ColumnDef<any>[]>(
     () => [
       {
@@ -2526,9 +2582,7 @@ export function GuiasModule() {
       categoriaFilter, asignacionFilter, openColumnFilter,
       nombresFiltrados, cuilsFiltrados, uniqueCategorias, uniqueEstados,
       nombreSearch, cbuSearch, selectedWeek, seguimientoRules, accionesImplementadas,
-      efectivoFilter, appFilter, totalFilter, cabifyDataFilter,
-      efectivoFiltrados, appFiltrados, totalFiltrados,
-      efectivoSearch, appSearch, totalSearch
+      efectivoFilter, appFilter, totalFilter, cabifyDataFilter
     ]
   );
 

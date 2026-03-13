@@ -46,6 +46,7 @@ import { usePermissions } from '../../../contexts/PermissionsContext'
 import { useSede } from '../../../contexts/SedeContext'
 import { formatCurrency, formatDate, FACTURACION_CONFIG } from '../../../types/facturacion.types'
 import { normalizeDni, normalizePatente } from '../../../utils/normalizeDocuments'
+import { insertControlSaldo } from '../../../services/controlSaldosService'
 import { format, startOfWeek, endOfWeek, addWeeks, subWeeks, getWeek, getYear, parseISO, startOfDay, differenceInCalendarDays } from 'date-fns'
 import { es } from 'date-fns/locale'
 import { RITPreviewTable, type RITPreviewRow } from '../components/RITPreviewTable'
@@ -3640,13 +3641,28 @@ export function ReporteFacturacionTab() {
       // 2. Revertir saldo (restar el monto del pago)
       const { data: saldoExistente } = await (supabase.from('saldos_conductores') as any)
         .select('id, saldo_actual').eq('conductor_id', conductorId).maybeSingle()
+      const nuevoSaldoElim = (saldoExistente?.saldo_actual || 0) - monto
       if (saldoExistente) {
         await (supabase.from('saldos_conductores') as any)
           .update({
-            saldo_actual: (saldoExistente.saldo_actual || 0) - monto,
+            saldo_actual: nuevoSaldoElim,
             ultima_actualizacion: new Date().toISOString()
           }).eq('id', saldoExistente.id)
       }
+
+      // 2b. Registrar movimiento en kardex (control_saldos)
+      const semanaElim = periodo?.semana || getWeek(semanaActual.inicio, { weekStartsOn: 1 })
+      const anioElim = periodo?.anio || getYear(semanaActual.inicio)
+      await insertControlSaldo({
+        conductorId,
+        semana: semanaElim,
+        anio: anioElim,
+        tipoMovimiento: 'eliminacion_pago',
+        montoMovimiento: monto,
+        saldoPendiente: nuevoSaldoElim,
+        referencia: `Eliminacion pago S${semanaElim}/${anioElim}`,
+        userName: profile?.full_name,
+      })
 
       // 3. Eliminar abono correspondiente (mismo monto, misma fecha aprox)
       const { data: abonos } = await (supabase.from('abonos_conductores') as any)
@@ -4038,13 +4054,28 @@ export function ReporteFacturacionTab() {
       // 2. Ajustar saldo (sumar la diferencia)
       const { data: saldoExistente } = await (supabase.from('saldos_conductores') as any)
         .select('id, saldo_actual').eq('conductor_id', conductorId).maybeSingle()
+      const nuevoSaldoEdit = (saldoExistente?.saldo_actual || 0) + diferencia
       if (saldoExistente) {
         await (supabase.from('saldos_conductores') as any)
           .update({
-            saldo_actual: (saldoExistente.saldo_actual || 0) + diferencia,
+            saldo_actual: nuevoSaldoEdit,
             ultima_actualizacion: new Date().toISOString()
           }).eq('id', saldoExistente.id)
       }
+
+      // 2b. Registrar movimiento en kardex (control_saldos)
+      const semanaEdit = periodo?.semana || getWeek(semanaActual.inicio, { weekStartsOn: 1 })
+      const anioEdit = periodo?.anio || getYear(semanaActual.inicio)
+      await insertControlSaldo({
+        conductorId,
+        semana: semanaEdit,
+        anio: anioEdit,
+        tipoMovimiento: 'edicion_pago',
+        montoMovimiento: diferencia,
+        saldoPendiente: nuevoSaldoEdit,
+        referencia: `Edicion pago S${semanaEdit}/${anioEdit} (${formatCurrency(montoActual)} -> ${formatCurrency(nuevoMonto)})`,
+        userName: profile?.full_name,
+      })
 
       // 3. Actualizar abono correspondiente
       const { data: abonos } = await (supabase.from('abonos_conductores') as any)
@@ -4329,6 +4360,18 @@ export function ReporteFacturacionTab() {
         timestamp: new Date().toISOString(),
       })
 
+      // 2b. Registrar movimiento en kardex (control_saldos)
+      await insertControlSaldo({
+        conductorId: facturacion.conductor_id,
+        semana: semanaNum,
+        anio: anioNum,
+        tipoMovimiento: 'pago',
+        montoMovimiento: formValues.monto,
+        saldoPendiente: nuevoSaldo,
+        referencia: `Pago facturacion S${semanaNum}/${anioNum}`,
+        userName: profile?.full_name,
+      })
+
       // 3. Registrar en abonos_conductores como audit trail
       await (supabase.from('abonos_conductores') as any).insert({
         conductor_id: facturacion.conductor_id,
@@ -4587,6 +4630,18 @@ export function ReporteFacturacionTab() {
           conductorCuit: pago.conductor_cuit || null,
           nuevoSaldo: nuevoSaldoCabify,
           timestamp: hoy.toISOString(),
+        })
+
+        // 2b. Registrar movimiento en kardex (control_saldos)
+        await insertControlSaldo({
+          conductorId: pago.conductor_id,
+          semana: semanaNum,
+          anio: anioNum,
+          tipoMovimiento: 'pago_cabify',
+          montoMovimiento: monto,
+          saldoPendiente: nuevoSaldoCabify,
+          referencia: `Pago Cabify S${semanaNum}/${anioNum}`,
+          userName: profile?.full_name,
         })
 
         // 3. Registrar en abonos_conductores como audit trail
