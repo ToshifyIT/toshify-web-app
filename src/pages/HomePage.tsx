@@ -1422,6 +1422,9 @@ export function HomePage() {
               visibleMenus.map((menu) => {
                 let submenus = getVisibleSubmenusForMenu(menu.menu_id)
                 const isMenuOpen = openMenus[menu.menu_name] || false
+                // Display label and route overrides (DB stores original name, frontend can rename)
+                const menuLabel = menu.menu_name === 'visitas' ? 'Gestión de Visitas' : menu.menu_label
+                const menuRoute = menu.menu_name === 'visitas' ? '/gestion-de-visitas' : menu.menu_route
                 const isSeguimiento = menu.menu_name === 'seguimiento-conductores'
 
                 // Inyectar guías como submenús si no están ya presentes
@@ -1468,7 +1471,7 @@ export function HomePage() {
                         >
                           <span className="nav-section-icon"><MenuIcon size={18} /></span>
                           <div className="nav-section-title">
-                            {menu.menu_label}
+                            {menuLabel}
                           </div>
                           <span className={`nav-section-arrow ${isMenuOpen ? 'open' : ''}`}>▸</span>
                         </button>
@@ -1477,7 +1480,7 @@ export function HomePage() {
                         {sidebarCollapsed && (
                           <div className="nav-flyout">
                             <div className="nav-flyout-content">
-                              <div className="nav-flyout-header">{menu.menu_label}</div>
+                              <div className="nav-flyout-header">{menuLabel}</div>
                               <div className="nav-flyout-items">
                                 {/* Submenús del menú (incluye guías registradas como submenús) */}
                                 {(submenus as SubmenuWithHierarchy[])
@@ -1515,14 +1518,14 @@ export function HomePage() {
                   return (
                     <div key={menu.menu_id} className="nav-item-wrapper">
                       <Link
-                        to={menu.menu_route}
-                        className={`nav-item ${isActiveRoute(menu.menu_route) ? 'active' : ''}`}
+                        to={menuRoute}
+                        className={`nav-item ${isActiveRoute(menuRoute) ? 'active' : ''}`}
                       >
                         <span className="nav-icon"><MenuIcon size={18} /></span>
-                        <span className="nav-label">{menu.menu_label}</span>
+                        <span className="nav-label">{menuLabel}</span>
                       </Link>
                       {sidebarCollapsed && (
-                        <div className="nav-tooltip">{menu.menu_label}</div>
+                        <div className="nav-tooltip">{menuLabel}</div>
                       )}
                     </div>
                   )
@@ -1857,7 +1860,8 @@ export function HomePage() {
                   <LazyPage><SiniestrosPage /></LazyPage>
                 </ProtectedRoute>
               } />
-              <Route path="/visitas" element={
+              <Route path="/visitas" element={<Navigate to="/gestion-de-visitas" replace />} />
+              <Route path="/gestion-de-visitas" element={
                 <ProtectedRoute menuName="visitas" action="view">
                   <LazyPage><VisitasPage /></LazyPage>
                 </ProtectedRoute>

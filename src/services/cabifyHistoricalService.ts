@@ -302,16 +302,28 @@ class CabifyHistoricalService {
 
       const existing = uniqueRecordsMap.get(uniqueKey)
 
-      // Si no existe o el registro actual es más reciente, guardar
+      // Si no existe o el registro actual es mejor, guardar
       if (!existing) {
         uniqueRecordsMap.set(uniqueKey, record)
       } else {
-        // Comparar fecha_guardado para quedarse con el más reciente
-        const existingDate = new Date(existing.fecha_guardado || 0)
-        const currentDate = new Date(record.fecha_guardado || 0)
+        // Preferir el registro que tenga datos financieros (peajes/promociones/deducciones)
+        // sobre uno más reciente pero vacío — esto resuelve duplicados de scripts legacy
+        const existingHasFinancials = Number(existing.peajes || 0) > 0 || Number(existing.promociones || 0) > 0 || Number(existing.deducciones || 0) > 0
+        const currentHasFinancials = Number(record.peajes || 0) > 0 || Number(record.promociones || 0) > 0 || Number(record.deducciones || 0) > 0
 
-        if (currentDate > existingDate) {
+        if (currentHasFinancials && !existingHasFinancials) {
+          // El actual tiene datos financieros y el existente no → preferir actual
           uniqueRecordsMap.set(uniqueKey, record)
+        } else if (!currentHasFinancials && existingHasFinancials) {
+          // El existente tiene datos financieros y el actual no → mantener existente
+          // no hacer nada
+        } else {
+          // Ambos tienen o ambos no tienen datos financieros → usar el más reciente
+          const existingDate = new Date(existing.fecha_guardado || 0)
+          const currentDate = new Date(record.fecha_guardado || 0)
+          if (currentDate > existingDate) {
+            uniqueRecordsMap.set(uniqueKey, record)
+          }
         }
       }
     }

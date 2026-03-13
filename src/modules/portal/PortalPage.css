@@ -844,7 +844,9 @@
   text-transform: none;
   letter-spacing: 0;
   line-height: 1.4;
-  white-space: nowrap;
+  white-space: normal;
+  max-width: 260px;
+  text-align: center;
   z-index: 100;
   pointer-events: none;
   opacity: 0;
