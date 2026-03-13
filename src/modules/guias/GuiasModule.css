@@ -244,19 +244,11 @@
 }
 
 /* =====================================================
-   TABLE LAYOUT: distribución proporcional de columnas.
-   Con table-layout:fixed + width:100% (heredado), el
-   espacio sobrante se reparte proporcionalmente entre
-   todas las columnas según su size, eliminando gaps
-   desiguales.
+   TABLE LAYOUT: scroll horizontal cuando el contenido
+   excede el ancho disponible. Las columnas mantienen su
+   tamaño definido y no se superponen ni generan gaps.
    ===================================================== */
 
 .guias-module .dt-table {
-  table-layout: fixed;
-}
-
-/* Evitar que los botones de Acciones se desborden */
-.guias-module .dt-table td:last-child,
-.guias-module .dt-table th:last-child {
-  overflow: hidden;
+  min-width: 1200px;
 }

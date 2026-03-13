@@ -858,19 +858,22 @@ export function GuiasModule() {
         }
       })();
 
-      // Consultar datos de facturación (Alquiler, Garantía) desde facturacion_conductores
+      // Consultar datos de facturación (Alquiler, Garantía, Proyectado) desde facturacion_conductores
       // Si no existe periodo guardado, calcula estimación desde conceptos_nomina + asignaciones
       const facturacionBillingPromise = (async () => {
-        if (conductorIds.length === 0) return new Map<string, { alquiler: number; garantia: number; total: number }>();
+        if (conductorIds.length === 0) return new Map<string, { alquiler: number; garantia: number; total: number; proyectado: number }>();
         // Parsear semana y año desde el formato ISO "2026-W11"
         const [fYearStr, fWeekStr] = targetWeek.split('-W');
         const fYear = parseInt(fYearStr);
         const fWeek = parseInt(fWeekStr);
 
         // Buscar el periodo_facturacion que coincida con semana y año (filtrado por sede)
+        // Solo usar datos guardados si el período está CERRADO (datos definitivos).
+        // Si está abierto/procesando, los montos pueden estar desactualizados o proyectados
+        // a 7 días completos, así que se recalcula en tiempo real.
         let periodoQuery = supabase
           .from('periodos_facturacion')
-          .select('id')
+          .select('id, estado')
           .eq('semana', fWeek)
           .eq('anio', fYear);
         periodoQuery = aplicarFiltroSede(periodoQuery);
@@ -878,20 +881,24 @@ export function GuiasModule() {
           .limit(1)
           .maybeSingle();
 
-        const map = new Map<string, { alquiler: number; garantia: number; total: number }>();
+        const map = new Map<string, { alquiler: number; garantia: number; total: number; proyectado: number }>();
 
-        if (periodoData) {
-          // Periodo guardado: obtener facturacion_conductores directamente
+        if (periodoData && (periodoData as any).estado === 'cerrado') {
+          // Periodo cerrado: obtener facturacion_conductores directamente (datos definitivos)
           const { data: facturacionRows } = await supabase
             .from('facturacion_conductores')
-            .select('conductor_id, subtotal_alquiler, subtotal_garantia')
+            .select('conductor_id, subtotal_alquiler, subtotal_garantia, turnos_cobrados')
             .eq('periodo_id', periodoData.id)
             .in('conductor_id', conductorIds);
 
           (facturacionRows || []).forEach((row: any) => {
             const alquiler = Number(row.subtotal_alquiler) || 0;
             const garantia = Number(row.subtotal_garantia) || 0;
-            map.set(row.conductor_id, { alquiler, garantia, total: alquiler + garantia });
+            const dias = Number(row.turnos_cobrados) || 0;
+            const proyectado = dias > 0 && dias < 7
+              ? Math.round((alquiler / dias) * 7)
+              : alquiler;
+            map.set(row.conductor_id, { alquiler, garantia, total: alquiler + garantia, proyectado });
           });
           return map;
         }
@@ -1065,7 +1072,13 @@ export function GuiasModule() {
           }
 
           const alquiler = Math.round(montoTotal);
-          if (alquiler === 0 && fechasContadas.size === 0) continue;
+          const dias = fechasContadas.size;
+          if (alquiler === 0 && dias === 0) continue;
+
+          // Proyectado: extrapolación del alquiler a 7 días (misma lógica que Vista Previa)
+          const proyectado = dias > 0 && dias < 7
+            ? Math.round((montoTotal / dias) * 7)
+            : Math.round(montoTotal);
 
           // Garantía: usar datos reales si existen, sino cuota por defecto
           let garantia = cuotaGarantiaSemanalDefault;
@@ -1079,9 +1092,9 @@ export function GuiasModule() {
               garantia = Math.min(cuotaNormal, pendiente);
             }
           }
-          if (fechasContadas.size === 0) garantia = 0;
+          if (dias === 0) garantia = 0;
 
-          map.set(cid, { alquiler, garantia, total: alquiler + garantia });
+          map.set(cid, { alquiler, garantia, total: alquiler + garantia, proyectado });
         }
 
         return map;
@@ -1305,11 +1318,12 @@ export function GuiasModule() {
           const saldoRaw = saldosMap.get(conductor.id) ?? 0;
           baseConductor.saldo_conductor = saldoRaw;
 
-          // Datos de facturación billing (Alquiler, Garantía, Cuota Semanal)
+          // Datos de facturación billing (Alquiler, Garantía, Cuota Semanal, Proyectado)
           const billingEntry = facturacionBillingMap.get(conductor.id);
           baseConductor.billing_alquiler = billingEntry ? billingEntry.alquiler : 0;
           baseConductor.billing_garantia = billingEntry ? billingEntry.garantia : 0;
           baseConductor.billing_cuota_semanal = billingEntry ? billingEntry.total : 0;
+          baseConductor.billing_proyectado = billingEntry ? billingEntry.proyectado : 0;
           baseConductor.hasBillingData = !!billingEntry;
 
           // Cálculo de app de la semana anterior (desde cabify_historico via RPC)
@@ -2180,7 +2194,8 @@ export function GuiasModule() {
       }] : []),
 
       {
-        accessorKey: "conductores_estados.codigo",
+        id: "conductores_estados_codigo",
+        accessorFn: (row) => (row as any).conductores_estados?.codigo,
         header: () => (
           <div className="dt-column-filter">
             <span>Estado {estadoFilter.length > 0 && `(${estadoFilter.length})`}</span>
@@ -2532,7 +2547,7 @@ export function GuiasModule() {
           );
         },
         enableSorting: false,
-        size: 200,
+        size: 170,
       },
 
       {
@@ -2559,7 +2574,63 @@ export function GuiasModule() {
           );
         },
         enableSorting: false,
-        size: 180,
+        size: 160,
+      },
+
+      {
+        id: "proyectado",
+        header: "Proyectado",
+        accessorFn: (row) => (row as any).billing_proyectado || 0,
+        cell: ({ row }) => {
+          const hasBilling = (row.original as any).hasBillingData;
+          const proyectado = (row.original as any).billing_proyectado as number;
+          const alquiler = (row.original as any).billing_alquiler as number;
+
+          if (!hasBilling || proyectado === 0) {
+            return <span className="italic" style={{ color: 'var(--text-tertiary)', fontSize: '11px' }} title="Sin datos de facturación">-</span>;
+          }
+
+          const porcentaje = proyectado > 0 ? Math.min(100, Math.round((alquiler / proyectado) * 100)) : 0;
+          const completo = alquiler >= proyectado && alquiler > 0;
+
+          return (
+            <div style={{ fontSize: '11px', minWidth: '80px' }}>
+              <div style={{ fontWeight: 600, color: 'var(--text-primary)', marginBottom: '4px' }}>
+                {new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(proyectado)}
+              </div>
+              <div style={{
+                width: '100%',
+                height: '8px',
+                backgroundColor: '#e5e7eb',
+                borderRadius: '4px',
+                overflow: 'hidden',
+                border: '1px solid #d1d5db'
+              }}>
+                <div style={{
+                  width: `${Math.max(porcentaje, 0)}%`,
+                  height: '100%',
+                  backgroundColor: completo ? '#10b981' : porcentaje >= 70 ? '#f59e0b' : '#ef4444',
+                  borderRadius: '3px',
+                  transition: 'width 0.3s ease',
+                  minWidth: porcentaje > 0 ? '4px' : '0'
+                }} />
+              </div>
+              <div style={{
+                fontSize: '9px',
+                color: completo ? '#10b981' : '#6b7280',
+                marginTop: '3px',
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center'
+              }}>
+                <span>{porcentaje}%</span>
+                {completo && <span style={{ color: '#10b981', fontWeight: 600 }}>✓</span>}
+              </div>
+            </div>
+          );
+        },
+        enableSorting: true,
+        size: 110,
       },
 
       {
@@ -2624,7 +2695,7 @@ export function GuiasModule() {
           );
         },
         enableSorting: true,
-        size: 160,
+        size: 130,
       },
       {
         id: "escuela",
@@ -3209,6 +3280,7 @@ export function GuiasModule() {
                     showSearch={false}
                     globalFilter={globalSearch}
                     onGlobalFilterChange={setGlobalSearch}
+                    stickyFirstColumn
                     emptyIcon={<Users size={64} />}
                     emptyTitle="No hay conductores asignados"
                     emptyDescription="Este guía no tiene conductores asignados o no cumplen con los filtros."

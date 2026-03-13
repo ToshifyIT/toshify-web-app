@@ -374,7 +374,6 @@ export function CobroTeoricoVsReal() {
   const [chartData, setChartData] = useState(INITIAL_DATA)
   const [loading, setLoading] = useState(false)
   const [activeTab, setActiveTab] = useState<ActiveTab>('datos')
-  const [debugBorderWeeks, setDebugBorderWeeks] = useState<any[]>([])
   // const [conductoresFiltrados, setConductoresFiltrados] = useState<ConductorFiltrado[]>([])
 
   // Cargar datos cuando cambia el periodo específico
@@ -1076,7 +1075,6 @@ export function CobroTeoricoVsReal() {
 
         if (granularity === 'semana') {
              finalData = dailyData
-             setDebugBorderWeeks([])
         } else if (granularity === 'mes') {
             // === PASO A: Agrupar datos del mes por Semana (Sem 01, Sem 02...) ===
             const grouped = new Map<string, { label: string, teorico: number, real: number, count: number, garantia: number, alquiler: number }>()
@@ -1109,24 +1107,6 @@ export function CobroTeoricoVsReal() {
             if (lastWeekSunday > endDate) {
               let d = addDays(endDate, 1)
               while (d <= lastWeekSunday) { compDaysAfter.push(new Date(d)); d = addDays(d, 1) }
-            }
-
-            // Debug info
-            const debugInfo: any[] = []
-            for (const [key, g] of Array.from(grouped.entries())) {
-              debugInfo.push({
-                semana: key,
-                diasMes: g.count,
-                teoricoMes: Math.round(g.teorico),
-                realMes: Math.round(g.real),
-                diasAdj: 0,
-                teoricoAdj: 0,
-                realAdj: 0,
-                diasAdjDetalle: '-',
-                teoricoFinal: 0,
-                realFinal: 0,
-                diasTotal: 0,
-              })
             }
 
             const hasBefore = compDaysBefore.length > 0
@@ -1173,14 +1153,6 @@ export function CobroTeoricoVsReal() {
                   g.garantia += adjGarantia
                   g.alquiler += adjAlquiler
                   g.count += compDaysBefore.length
-
-                  const dbg = debugInfo.find(d => d.semana === weekKey)
-                  if (dbg) {
-                    dbg.diasAdj = compDaysBefore.length
-                    dbg.teoricoAdj = Math.round(adjTeorico)
-                    dbg.realAdj = Math.round(adjReal)
-                    dbg.diasAdjDetalle = `Mes anterior: ${compDaysBefore.map(d => format(d, 'dd/MM')).join(', ')}`
-                  }
                 }
               }
 
@@ -1206,29 +1178,9 @@ export function CobroTeoricoVsReal() {
                   g.garantia += adjGarantia
                   g.alquiler += adjAlquiler
                   g.count += compDaysAfter.length
-
-                  const dbg = debugInfo.find(d => d.semana === weekKey)
-                  if (dbg) {
-                    dbg.diasAdj = compDaysAfter.length
-                    dbg.teoricoAdj = Math.round(adjTeorico)
-                    dbg.realAdj = Math.round(adjReal)
-                    dbg.diasAdjDetalle = `Mes siguiente: ${compDaysAfter.map(d => format(d, 'dd/MM')).join(', ')}`
-                  }
                 }
               }
             }
-
-            // Actualizar debug con totales finales
-            debugInfo.forEach((dbg: any) => {
-              const g = grouped.get(dbg.semana)
-              if (g) {
-                dbg.teoricoFinal = Math.round(g.teorico)
-                dbg.realFinal = Math.round(g.real)
-                dbg.diasTotal = g.count
-              }
-            })
-
-            setDebugBorderWeeks(debugInfo)
 
             finalData = Array.from(grouped.values()).map(g => ({
                 dia: g.label,
@@ -1238,7 +1190,6 @@ export function CobroTeoricoVsReal() {
                 alquiler: g.alquiler
             }))
         } else if (granularity === 'ano') {
-            setDebugBorderWeeks([])
             // Agrupar por Mes (Ene, Feb...)
             const grouped = new Map<string, { label: string, order: number, teorico: number, real: number, garantia: number, alquiler: number }>()
             
@@ -1426,54 +1377,6 @@ export function CobroTeoricoVsReal() {
             )}
           </div>
 
-          {/* DEBUG: Tabla de cálculo de semanas de borde (temporal) */}
-          {granularity === 'mes' && debugBorderWeeks.length > 0 && (
-            <div style={{ marginTop: 16, overflowX: 'auto' }}>
-              <h4 style={{ fontSize: 13, fontWeight: 600, marginBottom: 8, color: '#374151' }}>
-                DEBUG — Cálculo semanas de borde ({selectedPeriod})
-              </h4>
-              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 11 }}>
-                <thead>
-                  <tr style={{ background: '#f3f4f6', textAlign: 'left' }}>
-                    <th style={{ padding: '6px 8px', borderBottom: '2px solid #d1d5db' }}>Semana</th>
-                    <th style={{ padding: '6px 8px', borderBottom: '2px solid #d1d5db', textAlign: 'center' }}>Días Mes</th>
-                    <th style={{ padding: '6px 8px', borderBottom: '2px solid #d1d5db', textAlign: 'right', color: '#16a34a' }}>Esperado (Mes)</th>
-                    <th style={{ padding: '6px 8px', borderBottom: '2px solid #d1d5db', textAlign: 'right', color: '#2563eb' }}>Percibido (Mes)</th>
-                    <th style={{ padding: '6px 8px', borderBottom: '2px solid #d1d5db', textAlign: 'center' }}>Días Adj.</th>
-                    <th style={{ padding: '6px 8px', borderBottom: '2px solid #d1d5db' }}>Fechas Adj.</th>
-                    <th style={{ padding: '6px 8px', borderBottom: '2px solid #d1d5db', textAlign: 'right', color: '#16a34a' }}>Esperado (Adj.)</th>
-                    <th style={{ padding: '6px 8px', borderBottom: '2px solid #d1d5db', textAlign: 'right', color: '#2563eb' }}>Percibido (Adj.)</th>
-                    <th style={{ padding: '6px 8px', borderBottom: '2px solid #d1d5db', textAlign: 'center', fontWeight: 700 }}>Días Total</th>
-                    <th style={{ padding: '6px 8px', borderBottom: '2px solid #d1d5db', textAlign: 'right', fontWeight: 700, color: '#16a34a' }}>Esperado Final</th>
-                    <th style={{ padding: '6px 8px', borderBottom: '2px solid #d1d5db', textAlign: 'right', fontWeight: 700, color: '#2563eb' }}>Percibido Final</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {debugBorderWeeks.map((row: any, i: number) => {
-                    const isBorder = row.diasAdj > 0
-                    return (
-                      <tr key={i} style={{ background: isBorder ? '#fefce8' : 'transparent', borderBottom: '1px solid #e5e7eb' }}>
-                        <td style={{ padding: '5px 8px', fontWeight: 600 }}>{row.semana}</td>
-                        <td style={{ padding: '5px 8px', textAlign: 'center' }}>{row.diasMes}</td>
-                        <td style={{ padding: '5px 8px', textAlign: 'right' }}>{formatCurrencyFull(row.teoricoMes)}</td>
-                        <td style={{ padding: '5px 8px', textAlign: 'right' }}>{formatCurrencyFull(row.realMes)}</td>
-                        <td style={{ padding: '5px 8px', textAlign: 'center', color: isBorder ? '#d97706' : '#9ca3af' }}>{row.diasAdj || '-'}</td>
-                        <td style={{ padding: '5px 8px', fontSize: 10, color: '#6b7280' }}>{row.diasAdjDetalle}</td>
-                        <td style={{ padding: '5px 8px', textAlign: 'right', color: isBorder ? '#d97706' : '#9ca3af' }}>{isBorder ? formatCurrencyFull(row.teoricoAdj) : '-'}</td>
-                        <td style={{ padding: '5px 8px', textAlign: 'right', color: isBorder ? '#d97706' : '#9ca3af' }}>{isBorder ? formatCurrencyFull(row.realAdj) : '-'}</td>
-                        <td style={{ padding: '5px 8px', textAlign: 'center', fontWeight: 600 }}>{row.diasTotal}</td>
-                        <td style={{ padding: '5px 8px', textAlign: 'right', fontWeight: 600 }}>{formatCurrencyFull(row.teoricoFinal)}</td>
-                        <td style={{ padding: '5px 8px', textAlign: 'right', fontWeight: 600 }}>{formatCurrencyFull(row.realFinal)}</td>
-                      </tr>
-                    )
-                  })}
-                </tbody>
-              </table>
-              <p style={{ fontSize: 10, color: '#9ca3af', marginTop: 6 }}>
-                Las filas en amarillo son semanas de borde. "Adj." = calculado independientemente por el pipeline del mes adyacente (sus propios conductores, garantías y precios).
-              </p>
-            </div>
-          )}
         </>
       ) : (
         <CobroComparativo
