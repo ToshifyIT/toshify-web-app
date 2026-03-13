@@ -843,11 +843,11 @@ export function PortalPage() {
                     <div className="portal-chart-legend">
                       <span className="portal-legend-item">
                         <span className="portal-legend-dot" style={{ background: '#ff0033' }} /> Proforma
-                        <span className="portal-stat-tooltip" data-tooltip="Monto de compromiso semanal de suma de conceptos: alquiler, garantía y otros">ⓘ</span>
+                        <span className="portal-legend-info" title="Monto de compromiso semanal de suma de conceptos: alquiler, garantía y otros">i</span>
                       </span>
                       <span className="portal-legend-item">
                         <span className="portal-legend-dot" style={{ background: '#059669' }} /> Cobro App Cabify
-                        <span className="portal-stat-tooltip" data-tooltip="Total semanal recaudado por el conductor a través de la aplicación Cabify (excluye efectivo)">ⓘ</span>
+                        <span className="portal-legend-info" title="Total semanal recaudado por el conductor a través de la aplicación Cabify (excluye efectivo)">i</span>
                       </span>
                     </div>
                   </div>
