@@ -3160,59 +3160,26 @@ export function ReporteFacturacionTab() {
     try {
       Swal.fire({ title: `${nuevaAccion === 'desactivar' ? 'Desactivando' : 'Activando'} efectivo...`, allowOutsideClick: false, didOpen: () => Swal.showLoading() })
 
-      // 1. Autenticar con Cabify
-      const authResp = await fetch('https://cabify.com/auth/api/authorization', {
+      const resp = await fetch('/api/cabify-efectivo', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        body: new URLSearchParams({
-          grant_type: 'password',
-          client_id: 'd14cdae660ad4817a6b20542a61cf5b1',
-          client_secret: 'ebZ45Oj3ln9W5tFC',
-          username: 'admin.log2@toshify.com.ar',
-          password: 'tOSHIBASE2026.',
-        }),
-      })
-      if (!authResp.ok) throw new Error('Error de autenticación con Cabify')
-      const authData = await authResp.json()
-      const token = authData.access_token
-
-      // 2. Ejecutar mutation
-      const enabled = nuevaAccion === 'activar'
-      const mutation = `
-        mutation ($driverId: String!, $companyId: String, $name: PreferenceName!, $enabled: Boolean!, $canWrite: Boolean) {
-          updateDriverPreference(driverId: $driverId, companyId: $companyId, name: $name, enabled: $enabled, canWrite: $canWrite) {
-            driverId name enabled canWrite
-          }
-        }
-      `
-      const gqlResp = await fetch('https://partners.cabify.com/api/graphql', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          query: mutation,
-          variables: { driverId: cabify_driver_id, companyId: cabify_company_id, name: 'PAYMENT_CASH', enabled, canWrite: true },
+          cabify_driver_id,
+          cabify_company_id,
+          accion: nuevaAccion,
+          conductor_dni: facturacion.conductor_dni,
+          conductor_nombre: conductor_nombre,
+          alquiler: facturacion.subtotal_alquiler,
+          garantia: facturacion.subtotal_garantia,
+          cobro_app: facturacion.ganancia_cabify || 0,
         }),
       })
-      const gqlData = await gqlResp.json()
-      const result = gqlData?.data?.updateDriverPreference
-      if (!result || result.enabled !== enabled) throw new Error(gqlData?.errors?.[0]?.message || 'Respuesta inesperada de Cabify')
 
-      // 3. Registrar en log
-      await supabase.from('cabify_efectivo_log').insert({
-        conductor_dni: facturacion.conductor_dni,
-        conductor_nombre: conductor_nombre,
-        cabify_driver_id,
-        cabify_company_id,
-        accion: nuevaAccion === 'activar' ? 'activacion' : 'desactivacion',
-        estado_anterior: permiso_efectivo,
-        resultado: 'ok',
-        alquiler: facturacion.subtotal_alquiler,
-        garantia: facturacion.subtotal_garantia,
-        cobro_app: facturacion.ganancia_cabify || 0,
-      })
+      const data = await resp.json()
+      if (!resp.ok) throw new Error(data.error || 'Error al cambiar efectivo en Cabify')
 
-      // 4. Actualizar estado local
-      const nuevoPermiso = enabled ? 'Activado' : 'Desactivado'
+      // Actualizar estado local
+      const nuevoPermiso = data.enabled ? 'Activado' : 'Desactivado'
       if (modoVistaPrevia) {
         setVistaPreviaData(prev => prev.map(f =>
           f.conductor_id === facturacion.conductor_id ? { ...f, permiso_efectivo: nuevoPermiso as 'Activado' | 'Desactivado' } : f
@@ -3225,8 +3192,8 @@ export function ReporteFacturacionTab() {
 
       Swal.fire({
         icon: 'success',
-        title: `Efectivo ${enabled ? 'activado' : 'desactivado'}`,
-        text: `Se ${enabled ? 'activó' : 'desactivó'} el efectivo de ${conductor_nombre}`,
+        title: `Efectivo ${data.enabled ? 'activado' : 'desactivado'}`,
+        text: `Se ${data.enabled ? 'activó' : 'desactivó'} el efectivo de ${conductor_nombre}`,
         timer: 2500,
         showConfirmButton: false,
       })
