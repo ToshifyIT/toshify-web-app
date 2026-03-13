@@ -8,6 +8,9 @@
 --   - Semanas anteriores: busca el registro del domingo de esa semana
 --   - Match por DNI (principal), fallback por nombre+apellido
 --   - Si hay duplicados por día, toma el de fecha_guardado más reciente
+--   - NOTA: Solo busca en cabify_historico (Buenos Aires).
+--     Para Bariloche, el frontend complementa con consulta directa
+--     a cabify_historico_bariloche (ver guiasService.ts)
 --   - Las columnas app/efectivo/total de guias_historial_semanal
 --     se mantienen como fallback manual (Opción A)
 --

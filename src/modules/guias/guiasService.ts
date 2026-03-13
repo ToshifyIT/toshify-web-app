@@ -1,4 +1,6 @@
 import { supabase } from '../../lib/supabase'
+import { cabifyHistoricalService } from '../../services/cabifyHistoricalService'
+import { normalizeDni } from '../../utils/normalizeDocuments'
 
 export const getCurrentWeek = () => {
   const date = new Date();
@@ -44,35 +46,87 @@ export const fetchGuias = async (): Promise<Guia[]> => {
 
 /**
  * Consulta los datos financieros de Cabify para un conjunto de conductores y semanas.
- * Usa la RPC get_cabify_datos_por_semanas que busca en cabify_historico por DNI (o nombre).
  *
- * - Semana actual: trae el registro del día de hoy
- * - Semanas anteriores: trae el registro del domingo de esa semana
+ * Delega TODA la lógica a cabifyHistoricalService.getDriversData() — el mismo
+ * servicio singleton que usa el módulo Integración Cabify. Esto garantiza que
+ * los datos sean idénticos al 100% (misma query, misma dedup, misma suma).
+ *
+ * @param conductorIds - UUIDs de conductores
+ * @param semanas - Semanas ISO (ej: ['2026-W11', '2026-W10'])
+ * @param conductorDnis - Mapa de UUID → DNI para matching
+ * @param sedeId - ID de la sede actual
  *
  * Retorna: Map<semana, Map<id_conductor, { cobroApp, cobroEfectivo }>>
  */
 export const getCabifyDatosPorSemanas = async (
   conductorIds: string[],
-  semanas: string[]
+  semanas: string[],
+  conductorDnis?: Map<string, string>,
+  sedeId?: string | null
 ): Promise<Map<string, Map<string, { cobroApp: number; cobroEfectivo: number }>>> => {
   const result = new Map<string, Map<string, { cobroApp: number; cobroEfectivo: number }>>();
 
   if (conductorIds.length === 0 || semanas.length === 0) return result;
+  if (!conductorDnis || conductorDnis.size === 0) return result;
 
   try {
-    const { data, error } = await supabase.rpc('get_cabify_datos_por_semanas', {
-      p_conductor_ids: conductorIds,
-      p_semanas: semanas,
+    // Construir mapa inverso: DNI normalizado → conductor UUID
+    const dniToConductorId = new Map<string, string>();
+    for (const [conductorId, dni] of conductorDnis) {
+      if (dni && dni.trim() !== '') {
+        dniToConductorId.set(normalizeDni(dni), conductorId);
+      }
+    }
+
+    // Helper: calcular lunes y domingo UTC para una semana ISO
+    const getWeekRange = (semana: string): { startDate: string; endDate: string } => {
+      const [yStr, wStr] = semana.split('-W');
+      const y = parseInt(yStr);
+      const w = parseInt(wStr);
+      // Mismo cálculo que cabifyService.getWeekRange pero desde semana ISO
+      const jan4 = new Date(Date.UTC(y, 0, 4));
+      const dow = jan4.getUTCDay() || 7;
+      const mondayW1 = new Date(jan4.getTime() - (dow - 1) * 86400000);
+      const monday = new Date(mondayW1.getTime() + (w - 1) * 7 * 86400000);
+      const sunday = new Date(monday.getTime() + 6 * 86400000);
+      return {
+        startDate: new Date(Date.UTC(monday.getUTCFullYear(), monday.getUTCMonth(), monday.getUTCDate(), 0, 0, 0, 0)).toISOString(),
+        endDate: new Date(Date.UTC(sunday.getUTCFullYear(), sunday.getUTCMonth(), sunday.getUTCDate(), 23, 59, 59, 999)).toISOString(),
+      };
+    };
+
+    // Llamar a cabifyHistoricalService para cada semana en paralelo
+    // Es el MISMO servicio que usa el módulo Integración Cabify → datos idénticos
+    const semanaPromises = semanas.map(async (semana) => {
+      const { startDate, endDate } = getWeekRange(semana);
+      const { drivers } = await cabifyHistoricalService.getDriversData(startDate, endDate, { sedeId });
+      return { semana, drivers };
     });
 
-    if (error || !data) return result;
+    const semanaResults = await Promise.all(semanaPromises);
 
-    for (const row of data as any[]) {
-      if (!result.has(row.semana)) result.set(row.semana, new Map());
-      result.get(row.semana)!.set(row.id_conductor, {
-        cobroApp: Number(row.cobro_app) || 0,
-        cobroEfectivo: Number(row.cobro_efectivo) || 0,
-      });
+    // Mapear resultados: DNI del driver → UUID del conductor
+    for (const { semana, drivers } of semanaResults) {
+      if (drivers.length === 0) continue;
+
+      const semanaMap = new Map<string, { cobroApp: number; cobroEfectivo: number }>();
+
+      for (const driver of drivers) {
+        const dniNorm = normalizeDni(driver.nationalIdNumber);
+        if (!dniNorm) continue;
+
+        const conductorId = dniToConductorId.get(dniNorm);
+        if (conductorId && conductorIds.includes(conductorId)) {
+          semanaMap.set(conductorId, {
+            cobroApp: driver.cobroApp,
+            cobroEfectivo: driver.cobroEfectivo,
+          });
+        }
+      }
+
+      if (semanaMap.size > 0) {
+        result.set(semana, semanaMap);
+      }
     }
   } catch {
     // Silently return empty map on failure
