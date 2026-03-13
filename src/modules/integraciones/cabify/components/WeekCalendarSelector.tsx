@@ -169,9 +169,10 @@ export function WeekCalendarSelector({
       // Modo día: seleccionar ese día exacto (cabify_historico almacena registros DIARIOS)
       setSelectedDay({ year: dayInfo.year, month: dayInfo.month, day: dayInfo.day })
 
-      // Argentina es UTC-3: medianoche ARG = 03:00 UTC, fin de dia ARG = 02:59:59 UTC del dia siguiente
-      const dayStart = new Date(Date.UTC(dayInfo.year, dayInfo.month, dayInfo.day, 3, 0, 0, 0))
-      const dayEnd = new Date(Date.UTC(dayInfo.year, dayInfo.month, dayInfo.day + 1, 2, 59, 59, 999))
+      // Los scripts de sync guardan fecha_inicio como YYYY-MM-DDT00:00:00.000Z (midnight UTC)
+      // Así que el rango del día es: 00:00:00 UTC hasta 23:59:59 UTC del mismo día
+      const dayStart = new Date(Date.UTC(dayInfo.year, dayInfo.month, dayInfo.day, 0, 0, 0, 0))
+      const dayEnd = new Date(Date.UTC(dayInfo.year, dayInfo.month, dayInfo.day, 23, 59, 59, 999))
 
       const customDay: WeekOption = {
         weeksAgo: -1,
