@@ -70,6 +70,8 @@ export function GarantiasTab() {
   const [conductorSearch, setConductorSearch] = useState('')
   const [tipoFilter, setTipoFilter] = useState<string[]>([])
   const [estadoFilter, setEstadoFilter] = useState<string[]>([])
+  const [asignadoFilter, setAsignadoFilter] = useState<'todos' | 'asignado' | 'no_asignado'>('todos')
+  const [conductoresAsignados, setConductoresAsignados] = useState<Set<string>>(new Set())
 
   // Estados para filtros Excel - Movimientos
   const [movConductorFilter, setMovConductorFilter] = useState<string[]>([])
@@ -174,6 +176,13 @@ export function GarantiasTab() {
           .update({ estado: 'en_devolucion', updated_at: new Date().toISOString() })
           .in('id', idsParaDevolucion)
       }
+
+      // Cargar conductores con asignación activa
+      const { data: asignacionesActivas } = await supabase
+        .from('asignaciones_conductores')
+        .select('conductor_id')
+        .is('fecha_fin', null)
+      setConductoresAsignados(new Set((asignacionesActivas || []).map((a: { conductor_id: string }) => a.conductor_id)))
 
       setGarantias(garantiasConEstado)
 
@@ -1525,9 +1534,12 @@ export function GarantiasTab() {
       if (conductorFilter.length > 0 && !conductorFilter.includes(g.conductor_nombre || '')) return false
       if (tipoFilter.length > 0 && !tipoFilter.includes(g.tipo_alquiler)) return false
       if (estadoFilter.length > 0 && !estadoFilter.includes(g.estado)) return false
+      // Filtro asignado
+      if (asignadoFilter === 'asignado' && !conductoresAsignados.has(g.conductor_id)) return false
+      if (asignadoFilter === 'no_asignado' && conductoresAsignados.has(g.conductor_id)) return false
       return true
     })
-  }, [garantias, filtroEstado, conductorFilter, tipoFilter, estadoFilter])
+  }, [garantias, filtroEstado, conductorFilter, tipoFilter, estadoFilter, asignadoFilter, conductoresAsignados])
 
   const movimientosFiltrados = useMemo(() => {
     return todosLosPagos.filter(p => {
@@ -1593,8 +1605,27 @@ export function GarantiasTab() {
                 </div>
               )}
             </div>
-            <div className="fact-header-right">
-              <VerLogsButton tablas={['garantias_conductores', 'garantias_pagos']} label="Garant\u00edas" />
+            <div className="fact-header-right" style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+              <div style={{ display: 'flex', gap: '2px', background: 'var(--bg-secondary)', borderRadius: '6px', padding: '2px' }}>
+                {[
+                  { value: 'todos' as const, label: 'Todos' },
+                  { value: 'asignado' as const, label: 'Asignados' },
+                  { value: 'no_asignado' as const, label: 'No asignados' },
+                ].map(opt => (
+                  <button
+                    key={opt.value}
+                    onClick={() => setAsignadoFilter(opt.value)}
+                    style={{
+                      padding: '4px 10px', fontSize: '11px', fontWeight: 600, borderRadius: '4px', border: 'none', cursor: 'pointer',
+                      background: asignadoFilter === opt.value ? '#ff0033' : 'transparent',
+                      color: asignadoFilter === opt.value ? 'white' : 'var(--text-secondary)',
+                    }}
+                  >
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
+              <VerLogsButton tablas={['garantias_conductores', 'garantias_pagos']} label="Garantías" />
               <button className="fact-btn fact-btn-primary" onClick={agregarGarantia}>
                 <UserPlus size={16} />
                 Agregar Garantía
