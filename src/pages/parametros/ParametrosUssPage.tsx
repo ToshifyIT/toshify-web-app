@@ -52,8 +52,14 @@ export function ParametrosUssPage() {
       const faltantes = PARAMETROS_SEED.filter(p => !clavesExistentes.has(p.clave))
 
       if (faltantes.length > 0) {
-        await (supabase.from('parametros_sistema') as any)
-          .insert(faltantes.map(p => ({ ...p, activo: true })))
+        // Insertar uno por uno para evitar que un error en uno bloquee los demás
+        for (const param of faltantes) {
+          const { error: insertErr } = await (supabase.from('parametros_sistema') as any)
+            .insert({ clave: param.clave, descripcion: param.descripcion, tipo: param.tipo, modulo: param.modulo, valor: param.valor })
+          if (insertErr) {
+            console.error(`Error creando parametro ${param.clave}:`, insertErr)
+          }
+        }
       }
 
       // Cargar todos
