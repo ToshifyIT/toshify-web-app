@@ -437,6 +437,15 @@ export function ReporteFacturacionTab() {
   const [conceptosPendientes, setConceptosPendientes] = useState<ConceptoPendiente[]>([])
   const [conceptosNomina, setConceptosNomina] = useState<ConceptoNomina[]>([])
 
+  // Parámetros de descuento por hora de entrega
+  const [horasCorteTurno, setHorasCorteTurno] = useState({
+    diurno: 12,        // Hora corte diurno (si entrega >= esta hora, descuento completo)
+    cargo: 14,         // Hora corte a cargo (si entrega >= esta hora, descuento medio turno)
+    descDiurnoAntes: 0.5,   // Descuento si entrega antes del corte diurno
+    descDiurnoDespues: 1,   // Descuento si entrega después del corte diurno
+    descCargoDespues: 0.5,  // Descuento si entrega después del corte cargo
+  })
+
   // Cargar Pagos Cabify (desde Excel)
   const [showCabifyPagosPreview, setShowCabifyPagosPreview] = useState(false)
   const [cabifyPagosData, setCabifyPagosData] = useState<{
@@ -471,7 +480,7 @@ export function ReporteFacturacionTab() {
     cargarFacturacion()
   }, [semanaActual, sedeActualId, sedeLoading])
 
-  // Cargar conceptos de nómina al montar (para agregar ajustes manuales)
+  // Cargar conceptos de nómina y parámetros de descuento al montar
   useEffect(() => {
     async function cargarConceptos() {
       const { data } = await supabase
@@ -484,7 +493,30 @@ export function ReporteFacturacionTab() {
         setConceptosNomina(data as ConceptoNomina[])
       }
     }
+    async function cargarParametrosDescuento() {
+      const { data } = await supabase
+        .from('parametros_sistema')
+        .select('clave, valor')
+        .eq('modulo', 'facturacion')
+        .in('clave', [
+          'hora_corte_diurno', 'hora_corte_cargo',
+          'descuento_diurno_antes', 'descuento_diurno_despues',
+          'descuento_cargo_despues',
+        ])
+      if (data && data.length > 0) {
+        const params: Record<string, string> = {}
+        data.forEach((p: any) => { params[p.clave] = p.valor })
+        setHorasCorteTurno(prev => ({
+          diurno: params.hora_corte_diurno ? parseInt(params.hora_corte_diurno) : prev.diurno,
+          cargo: params.hora_corte_cargo ? parseInt(params.hora_corte_cargo) : prev.cargo,
+          descDiurnoAntes: params.descuento_diurno_antes ? parseFloat(params.descuento_diurno_antes) : prev.descDiurnoAntes,
+          descDiurnoDespues: params.descuento_diurno_despues ? parseFloat(params.descuento_diurno_despues) : prev.descDiurnoDespues,
+          descCargoDespues: params.descuento_cargo_despues ? parseFloat(params.descuento_cargo_despues) : prev.descCargoDespues,
+        }))
+      }
+    }
     cargarConceptos()
+    cargarParametrosDescuento()
   }, [])
 
   // Realtime: actualizar badge GNC cuando cambia en tabla vehiculos
@@ -1397,20 +1429,31 @@ export function ReporteFacturacionTab() {
         
         if (diasReales <= 0) return
 
-        // Detectar prorrateo de ingreso para conductores DIURNOS
+        // Detectar prorrateo de ingreso por hora de entrega real
         // Solo aplica si la asignación es NUEVA en esta semana (acInicio >= inicio de semana)
-        if (modalidad === 'TURNO_DIURNO' && acInicio >= fechaInicioSemana && !alertasProrrateoVP.has(ac.conductor_id)) {
+        // Reglas (configurables via parametros_sistema):
+        //   DIURNO:   entrega antes de hora_corte_diurno → descuento medio turno
+        //             entrega después de hora_corte_diurno → descuento turno completo
+        //   CARGO:    entrega después de hora_corte_cargo → descuento medio turno
+        //   NOCTURNO: sin descuento
+        if ((modalidad === 'TURNO_DIURNO' || modalidad === 'CARGO') && acInicio >= fechaInicioSemana && !alertasProrrateoVP.has(ac.conductor_id)) {
           const rawTimestamp = ac.fecha_inicio || asignacion.fecha_inicio
           if (rawTimestamp) {
             const hora = getArgHour(rawTimestamp)
             const horaStr = toArgTime(rawTimestamp)
             const fechaStr = displayArgDate(toArgDate(rawTimestamp))
-            if (hora < 12) {
-              // Entrega en la mañana: cobrar medio turno (descuento 0.5)
-              alertasProrrateoVP.set(ac.conductor_id, { tipo: 'medio_turno', hora: horaStr, fecha: fechaStr, descuento: 0.5 })
-            } else {
-              // Entrega en la tarde: no cobrar ese día (descuento 1 turno completo)
-              alertasProrrateoVP.set(ac.conductor_id, { tipo: 'dia_completo', hora: horaStr, fecha: fechaStr, descuento: 1 })
+
+            if (modalidad === 'TURNO_DIURNO') {
+              if (hora < horasCorteTurno.diurno) {
+                alertasProrrateoVP.set(ac.conductor_id, { tipo: 'medio_turno', hora: horaStr, fecha: fechaStr, descuento: horasCorteTurno.descDiurnoAntes })
+              } else {
+                alertasProrrateoVP.set(ac.conductor_id, { tipo: 'dia_completo', hora: horaStr, fecha: fechaStr, descuento: horasCorteTurno.descDiurnoDespues })
+              }
+            } else if (modalidad === 'CARGO') {
+              if (hora >= horasCorteTurno.cargo) {
+                alertasProrrateoVP.set(ac.conductor_id, { tipo: 'medio_turno', hora: horaStr, fecha: fechaStr, descuento: horasCorteTurno.descCargoDespues })
+              }
+              // Si entrega antes del corte cargo → sin descuento
             }
           }
         }
@@ -9212,6 +9255,34 @@ export function ReporteFacturacionTab() {
                       {diasModalData.totalDias}<span style={{ fontSize: '14px', fontWeight: 400, color: 'var(--text-secondary)' }}>/7 días</span>
                     </div>
                   </div>
+
+                  {/* Alerta de descuento por hora de entrega */}
+                  {(() => {
+                    // Buscar si este conductor tiene alerta de prorrateo
+                    const datosActuales = modoVistaPrevia ? vistaPreviaData : facturaciones
+                    const conductorData = datosActuales.find(f => f.conductor_id === diasModalData.conductorId)
+                    const alerta = conductorData?.alerta_prorrateo_ingreso
+                    if (!alerta) return null
+                    const esCompleto = alerta.tipo === 'dia_completo'
+                    return (
+                      <div style={{
+                        marginBottom: '12px', padding: '10px 14px', borderRadius: '8px',
+                        background: esCompleto ? 'rgba(239, 68, 68, 0.06)' : 'rgba(234, 179, 8, 0.08)',
+                        border: `1px solid ${esCompleto ? 'rgba(239, 68, 68, 0.15)' : 'rgba(234, 179, 8, 0.2)'}`,
+                        display: 'flex', alignItems: 'center', gap: '10px',
+                      }}>
+                        <AlertTriangle size={16} style={{ color: esCompleto ? '#dc2626' : '#d97706', flexShrink: 0 }} />
+                        <div style={{ fontSize: '12px', color: 'var(--text-primary)' }}>
+                          <strong>Descuento por hora de entrega:</strong>{' '}
+                          Entrega el {alerta.fecha_entrega} a las {alerta.hora_entrega}.{' '}
+                          {esCompleto
+                            ? `Se descuenta ${alerta.descuento_turnos} turno${alerta.descuento_turnos > 1 ? 's' : ''} (entrega después de las ${horasCorteTurno.diurno}:00).`
+                            : `Se descuenta ${alerta.descuento_turnos} turno (entrega ${conductorData?.tipo_alquiler === 'CARGO' ? `después de las ${horasCorteTurno.cargo}:00` : `antes de las ${horasCorteTurno.diurno}:00`}).`
+                          }
+                        </div>
+                      </div>
+                    )
+                  })()}
 
                   {/* Dos columnas: Días + Asignaciones */}
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
