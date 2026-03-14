@@ -1,131 +1,175 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '../../lib/supabase'
-import { showSuccess } from '../../utils/toast'
 import Swal from 'sweetalert2'
-import { Save, Loader2 } from 'lucide-react'
+import { showSuccess } from '../../utils/toast'
+import { Edit2 } from 'lucide-react'
+import type { ColumnDef } from '@tanstack/react-table'
+import { DataTable } from '../../components/ui/DataTable'
 
-interface ParamConfig {
+interface ParametroAsignacion {
+  id: string
   clave: string
-  label: string
+  valor: string
+  tipo: string
   descripcion: string
-  defaultValor: string
-  unidad: string
-  step: string
+  modulo: string
+  updated_at: string
 }
 
-const PARAMS: ParamConfig[] = [
-  { clave: 'hora_corte_diurno', label: 'Hora corte Diurno', descripcion: 'Si la entrega es despues de esta hora, se descuenta 1 turno. Antes se descuenta medio turno.', defaultValor: '12', unidad: 'hs', step: '1' },
-  { clave: 'hora_corte_cargo', label: 'Hora corte A Cargo', descripcion: 'Si la entrega es despues de esta hora, se descuenta medio turno.', defaultValor: '14', unidad: 'hs', step: '1' },
-  { clave: 'descuento_diurno_antes', label: 'Descuento Diurno (antes del corte)', descripcion: 'Turnos a descontar si la entrega es antes de la hora corte.', defaultValor: '0.5', unidad: 'turnos', step: '0.5' },
-  { clave: 'descuento_diurno_despues', label: 'Descuento Diurno (despues del corte)', descripcion: 'Turnos a descontar si la entrega es despues de la hora corte.', defaultValor: '1', unidad: 'turnos', step: '0.5' },
-  { clave: 'descuento_cargo_despues', label: 'Descuento A Cargo (despues del corte)', descripcion: 'Turnos a descontar si la entrega a cargo es despues de la hora corte.', defaultValor: '0.5', unidad: 'turnos', step: '0.5' },
-]
+const PARAMS_DEFAULTS: Record<string, { valor: string; descripcion: string }> = {
+  hora_corte_diurno: { valor: '12', descripcion: 'Hora corte Diurno - Si entrega >= esta hora, descuento turno completo' },
+  hora_corte_cargo: { valor: '14', descripcion: 'Hora corte A Cargo - Si entrega >= esta hora, descuento medio turno' },
+  descuento_diurno_antes: { valor: '0.5', descripcion: 'Descuento (turnos) si entrega diurna antes del corte' },
+  descuento_diurno_despues: { valor: '1', descripcion: 'Descuento (turnos) si entrega diurna despues del corte' },
+  descuento_cargo_despues: { valor: '0.5', descripcion: 'Descuento (turnos) si entrega a cargo despues del corte' },
+}
+
+const CLAVES = Object.keys(PARAMS_DEFAULTS)
 
 export function ParametrosAsignacionesPage() {
-  const [valores, setValores] = useState<Record<string, string>>({})
-  const [dbIds, setDbIds] = useState<Record<string, string>>({})
+  const [parametros, setParametros] = useState<ParametroAsignacion[]>([])
   const [loading, setLoading] = useState(true)
-  const [saving, setSaving] = useState(false)
 
   useEffect(() => { cargarParametros() }, [])
 
   async function cargarParametros() {
     setLoading(true)
     try {
-      const { data } = await (supabase.from('parametros_sistema') as ReturnType<typeof supabase.from>)
-        .select('id, clave, valor')
+      const { data, error } = await (supabase
+        .from('parametros_sistema') as ReturnType<typeof supabase.from>)
+        .select('*')
         .eq('modulo', 'facturacion')
-        .in('clave', PARAMS.map(p => p.clave))
+        .in('clave', CLAVES)
 
-      const vals: Record<string, string> = {}
-      const ids: Record<string, string> = {}
-      PARAMS.forEach(p => { vals[p.clave] = p.defaultValor })
+      if (error) throw error
+
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      if (data) (data as any[]).forEach(r => { vals[r.clave] = r.valor; ids[r.clave] = r.id })
-      setValores(vals)
-      setDbIds(ids)
-    } catch { /* ignore */ } finally { setLoading(false) }
-  }
+      const dbMap = new Map((data as any[] || []).map((r: any) => [r.clave, r]))
 
-  async function guardar() {
-    setSaving(true)
-    try {
-      for (const p of PARAMS) {
-        const valor = valores[p.clave] || p.defaultValor
-        if (dbIds[p.clave]) {
-          await (supabase.from('parametros_sistema') as ReturnType<typeof supabase.from>)
-            .update({ valor, updated_at: new Date().toISOString() }).eq('id', dbIds[p.clave])
-        } else {
-          await (supabase.from('parametros_sistema') as ReturnType<typeof supabase.from>)
-            .insert({ clave: p.clave, valor, tipo: 'number', modulo: 'facturacion', descripcion: p.descripcion, activo: true })
+      const rows: ParametroAsignacion[] = CLAVES.map(clave => {
+        const db = dbMap.get(clave)
+        const def = PARAMS_DEFAULTS[clave]
+        return {
+          id: db?.id || `new_${clave}`,
+          clave,
+          valor: db?.valor || def.valor,
+          tipo: db?.tipo || 'number',
+          descripcion: def.descripcion,
+          modulo: 'facturacion',
+          updated_at: db?.updated_at || '',
         }
-      }
-      showSuccess('Parametros guardados')
-      await cargarParametros()
-    } catch { Swal.fire('Error', 'No se pudieron guardar', 'error') } finally { setSaving(false) }
+      })
+      setParametros(rows)
+    } catch {
+      // silently ignored
+    } finally {
+      setLoading(false)
+    }
   }
 
-  if (loading) return <div className="loading-container"><Loader2 size={32} className="spinning" /><span>Cargando...</span></div>
+  async function editarParametro(param: ParametroAsignacion) {
+    const { value: formValues } = await Swal.fire({
+      title: 'Editar Parametro',
+      html: `
+        <div style="display:flex;flex-direction:column;gap:12px;text-align:left;">
+          <div>
+            <label style="font-size:13px;font-weight:600;color:var(--text-secondary);display:block;margin-bottom:4px;">Clave</label>
+            <input class="swal2-input" value="${param.clave}" disabled style="margin:0;width:100%;box-sizing:border-box;opacity:0.6;">
+          </div>
+          <div>
+            <label style="font-size:13px;font-weight:600;color:var(--text-secondary);display:block;margin-bottom:4px;">Descripcion</label>
+            <input id="swal-desc" class="swal2-input" value="${param.descripcion}" style="margin:0;width:100%;box-sizing:border-box;">
+          </div>
+          <div>
+            <label style="font-size:13px;font-weight:600;color:var(--text-secondary);display:block;margin-bottom:4px;">Valor</label>
+            <input id="swal-valor" class="swal2-input" value="${param.valor}" type="number" step="0.5" min="0" style="margin:0;width:100%;box-sizing:border-box;">
+          </div>
+        </div>
+      `,
+      showCancelButton: true,
+      confirmButtonText: 'Guardar',
+      cancelButtonText: 'Cancelar',
+      confirmButtonColor: '#ef4444',
+      preConfirm: () => {
+        const descripcion = (document.getElementById('swal-desc') as HTMLInputElement).value.trim()
+        const valor = (document.getElementById('swal-valor') as HTMLInputElement).value.trim()
+        if (!valor) { Swal.showValidationMessage('El valor es obligatorio'); return false }
+        return { descripcion, valor, updated_at: new Date().toISOString() }
+      },
+    })
+
+    if (!formValues) return
+
+    try {
+      if (param.id.startsWith('new_')) {
+        const { error } = await (supabase.from('parametros_sistema') as ReturnType<typeof supabase.from>)
+          .insert({ clave: param.clave, valor: formValues.valor, tipo: 'number', modulo: 'facturacion', descripcion: formValues.descripcion, activo: true })
+        if (error) throw error
+      } else {
+        const { error } = await (supabase.from('parametros_sistema') as ReturnType<typeof supabase.from>)
+          .update(formValues)
+          .eq('id', param.id)
+        if (error) throw error
+      }
+      showSuccess('Parametro actualizado')
+      cargarParametros()
+    } catch {
+      Swal.fire('Error', 'No se pudo guardar', 'error')
+    }
+  }
+
+  const columns: ColumnDef<ParametroAsignacion, unknown>[] = [
+    {
+      accessorKey: 'descripcion',
+      header: 'Descripcion',
+      cell: ({ row }) => (
+        <div>
+          <div style={{ fontWeight: 600, fontSize: '13px' }}>{row.original.descripcion}</div>
+          <div style={{ fontSize: '11px', color: 'var(--text-tertiary)' }}>{row.original.clave}</div>
+        </div>
+      ),
+    },
+    {
+      accessorKey: 'valor',
+      header: 'Valor',
+      size: 100,
+      cell: ({ row }) => (
+        <span style={{ fontWeight: 600, fontSize: '14px' }}>{row.original.valor}</span>
+      ),
+    },
+    {
+      accessorKey: 'tipo',
+      header: 'Tipo',
+      size: 100,
+      cell: () => (
+        <span style={{ color: 'var(--text-secondary)', fontSize: '12px' }}>Numero</span>
+      ),
+    },
+    {
+      id: 'acciones',
+      header: 'Acciones',
+      size: 80,
+      cell: ({ row }) => (
+        <button
+          onClick={() => editarParametro(row.original)}
+          style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-secondary)', padding: '4px' }}
+          title="Editar"
+        >
+          <Edit2 size={16} />
+        </button>
+      ),
+    },
+  ]
 
   return (
-    <div className="module-container" style={{ maxWidth: 900 }}>
-      <div className="module-header">
-        <div className="module-header-left">
-          <h1 className="module-title">Descuentos por Hora de Entrega</h1>
-          <p className="module-subtitle">Reglas de descuento de turnos segun la hora de entrega real del vehiculo</p>
-        </div>
-        <button className="btn-primary" onClick={guardar} disabled={saving} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-          <Save size={16} />
-          {saving ? 'Guardando...' : 'Guardar cambios'}
-        </button>
-      </div>
-
-      <div className="info-banner" style={{ marginBottom: 16, padding: '10px 14px', background: 'var(--bg-secondary)', borderRadius: 8, fontSize: 13, color: 'var(--text-secondary)', border: '1px solid var(--border-primary)' }}>
-        <strong>Nocturno:</strong> No aplica descuento por hora de entrega.
-      </div>
-
-      <table className="dt-table" style={{ width: '100%' }}>
-        <thead>
-          <tr>
-            <th>Parametro</th>
-            <th style={{ width: 120, textAlign: 'center' }}>Valor</th>
-          </tr>
-        </thead>
-        <tbody>
-          {PARAMS.map(p => (
-            <tr key={p.clave}>
-              <td>
-                <div style={{ fontWeight: 600, fontSize: 13 }}>{p.label}</div>
-                <div style={{ fontSize: 11, color: 'var(--text-tertiary)', marginTop: 2 }}>{p.descripcion}</div>
-              </td>
-              <td style={{ textAlign: 'center' }}>
-                <div style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                  <input
-                    type="number"
-                    step={p.step}
-                    min="0"
-                    value={valores[p.clave] || ''}
-                    onChange={e => setValores(prev => ({ ...prev, [p.clave]: e.target.value }))}
-                    style={{
-                      width: 60, padding: '6px 8px', fontSize: 14, fontWeight: 700,
-                      textAlign: 'center', border: '1px solid var(--border-primary)',
-                      borderRadius: 6, background: 'var(--bg-primary)', color: 'var(--text-primary)',
-                    }}
-                  />
-                  <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{p.unidad}</span>
-                </div>
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-
-      <div style={{ marginTop: 16, padding: 14, background: 'var(--bg-secondary)', borderRadius: 8, fontSize: 12, color: 'var(--text-secondary)', border: '1px solid var(--border-primary)', lineHeight: 1.7 }}>
-        <strong style={{ color: 'var(--text-primary)' }}>Resumen:</strong><br />
-        Diurno: antes de las {valores.hora_corte_diurno || '12'}hs → -{valores.descuento_diurno_antes || '0.5'} turno(s) · despues de las {valores.hora_corte_diurno || '12'}hs → -{valores.descuento_diurno_despues || '1'} turno(s)<br />
-        A Cargo: despues de las {valores.hora_corte_cargo || '14'}hs → -{valores.descuento_cargo_despues || '0.5'} turno(s) · antes → sin descuento<br />
-        Nocturno: sin descuento
-      </div>
-    </div>
+    <DataTable
+      columns={columns}
+      data={parametros}
+      loading={loading}
+      searchPlaceholder="Buscar parametro..."
+      emptyTitle="Sin parametros"
+      emptyDescription="No se encontraron parametros de asignacion"
+      pageSize={10}
+    />
   )
 }
