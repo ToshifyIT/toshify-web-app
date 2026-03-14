@@ -494,26 +494,52 @@ export function ReporteFacturacionTab() {
       }
     }
     async function cargarParametrosDescuento() {
+      const claves = [
+        'hora_corte_diurno', 'hora_corte_cargo',
+        'descuento_diurno_antes', 'descuento_diurno_despues',
+        'descuento_cargo_despues',
+      ]
       const { data } = await supabase
         .from('parametros_sistema')
         .select('clave, valor')
         .eq('modulo', 'facturacion')
-        .in('clave', [
-          'hora_corte_diurno', 'hora_corte_cargo',
-          'descuento_diurno_antes', 'descuento_diurno_despues',
-          'descuento_cargo_despues',
-        ])
-      if (data && data.length > 0) {
-        const params: Record<string, string> = {}
-        data.forEach((p: any) => { params[p.clave] = p.valor })
-        setHorasCorteTurno(prev => ({
-          diurno: params.hora_corte_diurno ? parseInt(params.hora_corte_diurno) : prev.diurno,
-          cargo: params.hora_corte_cargo ? parseInt(params.hora_corte_cargo) : prev.cargo,
-          descDiurnoAntes: params.descuento_diurno_antes ? parseFloat(params.descuento_diurno_antes) : prev.descDiurnoAntes,
-          descDiurnoDespues: params.descuento_diurno_despues ? parseFloat(params.descuento_diurno_despues) : prev.descDiurnoDespues,
-          descCargoDespues: params.descuento_cargo_despues ? parseFloat(params.descuento_cargo_despues) : prev.descCargoDespues,
-        }))
+        .in('clave', claves)
+
+      // Auto-crear parámetros faltantes si no existen
+      const defaults: Record<string, { valor: string; tipo: string; descripcion: string }> = {
+        hora_corte_diurno: { valor: '12', tipo: 'number', descripcion: 'Hora corte entrega diurno. Si entrega >= esta hora, descuento turno completo' },
+        hora_corte_cargo: { valor: '14', tipo: 'number', descripcion: 'Hora corte entrega a cargo. Si entrega >= esta hora, descuento medio turno' },
+        descuento_diurno_antes: { valor: '0.5', tipo: 'number', descripcion: 'Descuento (turnos) si entrega diurna antes del corte' },
+        descuento_diurno_despues: { valor: '1', tipo: 'number', descripcion: 'Descuento (turnos) si entrega diurna despues del corte' },
+        descuento_cargo_despues: { valor: '0.5', tipo: 'number', descripcion: 'Descuento (turnos) si entrega a cargo despues del corte' },
       }
+      const existentes = new Set((data || []).map((p: any) => p.clave))
+      const faltantes = claves.filter(c => !existentes.has(c))
+      if (faltantes.length > 0) {
+        const inserts = faltantes.map(clave => ({
+          modulo: 'facturacion',
+          clave,
+          valor: defaults[clave].valor,
+          tipo: defaults[clave].tipo,
+          descripcion: defaults[clave].descripcion,
+          activo: true,
+        }))
+        await supabase.from('parametros_sistema').insert(inserts)
+      }
+
+      // Leer valores (incluidos los recién creados)
+      const params: Record<string, string> = {}
+      if (data) data.forEach((p: any) => { params[p.clave] = p.valor })
+      // Completar con defaults para los recién creados
+      faltantes.forEach(c => { params[c] = defaults[c].valor })
+
+      setHorasCorteTurno(prev => ({
+        diurno: params.hora_corte_diurno ? parseInt(params.hora_corte_diurno) : prev.diurno,
+        cargo: params.hora_corte_cargo ? parseInt(params.hora_corte_cargo) : prev.cargo,
+        descDiurnoAntes: params.descuento_diurno_antes ? parseFloat(params.descuento_diurno_antes) : prev.descDiurnoAntes,
+        descDiurnoDespues: params.descuento_diurno_despues ? parseFloat(params.descuento_diurno_despues) : prev.descDiurnoDespues,
+        descCargoDespues: params.descuento_cargo_despues ? parseFloat(params.descuento_cargo_despues) : prev.descCargoDespues,
+      }))
     }
     cargarConceptos()
     cargarParametrosDescuento()
