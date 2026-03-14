@@ -176,7 +176,7 @@ export function VehicleManagement() {
           .from('vehiculos')
           .select(`
             id, patente, marca, modelo, anio, color, kilometraje_actual, estado_id, created_at,
-            drive_folder_id, drive_folder_url, url_documentacion, gnc,
+            drive_folder_id, drive_folder_url, url_documentacion, gnc, titular,
             vehiculos_estados (id, codigo, descripcion)
           `)
           .is('deleted_at', null))
@@ -1072,6 +1072,16 @@ export function VehicleManagement() {
         enableSorting: true,
       },
       {
+        accessorKey: 'titular',
+        header: 'Titular',
+        cell: ({ row }) => {
+          const titular = (row.original as any).titular
+          if (!titular) return <span style={{ color: 'var(--text-tertiary)' }}>-</span>
+          return <span style={{ fontSize: '12px' }}>{titular}</span>
+        },
+        enableSorting: true,
+      },
+      {
         accessorKey: 'anio',
         header: () => (
           <ExcelColumnFilter
@@ -1401,6 +1411,7 @@ export function VehicleManagement() {
         error={error}
         pageSize={100}
         pageSizeOptions={[50, 100, 200]}
+        disableAutoFilters
         searchPlaceholder="Buscar por patente, marca, modelo..."
         emptyIcon={<Car size={64} />}
         emptyTitle="No hay vehiculos registrados"

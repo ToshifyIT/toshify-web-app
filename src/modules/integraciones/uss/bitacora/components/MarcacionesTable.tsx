@@ -113,7 +113,7 @@ export function MarcacionesTable({
   // Filtros Excel
   const [conductorFilter, setConductorFilter] = useState<string[]>([]);
   const [patenteFilter, setPatenteFilter] = useState<string[]>([]);
-  const [fechaFilter, setFechaFilter] = useState<string[]>([]);
+
   const [estadoFilter, setEstadoFilter] = useState<string[]>([]);
   const [horarioFilter, setHorarioFilter] = useState<string[]>([]);
   const [turnoFilter, setTurnoFilter] = useState<string[]>([]);
@@ -125,13 +125,7 @@ export function MarcacionesTable({
   const patentesUnicas = useMemo(() =>
     [...new Set(marcaciones.map(m => m.patente))].filter(Boolean).sort()
   , [marcaciones]);
-  const fechasUnicas = useMemo(() =>
-    [...new Set(marcaciones.map(m => formatFecha(m.fecha)))].sort((a, b) => {
-      const [da, ma, ya] = a.split('/');
-      const [db, mb, yb] = b.split('/');
-      return `${yb}${mb}${db}`.localeCompare(`${ya}${ma}${da}`);
-    })
-  , [marcaciones]);
+
   const estadosUnicos = useMemo(() =>
     [...new Set(marcaciones.map(m => m.estado))].filter(Boolean).sort()
   , [marcaciones]);
@@ -148,12 +142,11 @@ export function MarcacionesTable({
     [...new Set(marcaciones.map(m => m.vehiculoModalidad || 'Sin asignar'))].filter(Boolean).sort()
   , [marcaciones]);
 
-  const hasActiveFilters = conductorFilter.length > 0 || patenteFilter.length > 0 || fechaFilter.length > 0 || estadoFilter.length > 0 || horarioFilter.length > 0 || turnoFilter.length > 0 || searchTerm.trim() !== '';
+  const hasActiveFilters = conductorFilter.length > 0 || patenteFilter.length > 0 || estadoFilter.length > 0 || horarioFilter.length > 0 || turnoFilter.length > 0 || searchTerm.trim() !== '';
 
   const clearAllFilters = () => {
     setConductorFilter([]);
     setPatenteFilter([]);
-    setFechaFilter([]);
     setEstadoFilter([]);
     setHorarioFilter([]);
     setTurnoFilter([]);
@@ -169,9 +162,6 @@ export function MarcacionesTable({
     }
     if (patenteFilter.length > 0) {
       filtered = filtered.filter(m => patenteFilter.includes(m.patente));
-    }
-    if (fechaFilter.length > 0) {
-      filtered = filtered.filter(m => fechaFilter.includes(formatFecha(m.fecha)));
     }
     if (estadoFilter.length > 0) {
       filtered = filtered.filter(m => estadoFilter.includes(m.estado));
@@ -192,7 +182,7 @@ export function MarcacionesTable({
     }
 
     return filtered;
-  }, [marcaciones, conductorFilter, patenteFilter, fechaFilter, estadoFilter, horarioFilter, turnoFilter, searchTerm]);
+  }, [marcaciones, conductorFilter, patenteFilter, estadoFilter, horarioFilter, turnoFilter, searchTerm]);
 
   // Columnas
   const columns = useMemo<ColumnDef<Marcacion, unknown>[]>(() => [
@@ -225,17 +215,6 @@ export function MarcacionesTable({
       header: 'iButton',
       cell: ({ row }) => (
         <span style={{ color: 'var(--text-tertiary)', fontSize: '12px' }}>{row.original.ibutton || '-'}</span>
-      ),
-      enableSorting: false,
-    },
-    {
-      accessorKey: 'fecha',
-      header: () => (
-        <ExcelColumnFilter label="Fecha Turno" options={fechasUnicas} selectedValues={fechaFilter}
-          onSelectionChange={setFechaFilter} filterId="m-fecha" openFilterId={openFilterId} onOpenChange={setOpenFilterId} />
-      ),
-      cell: ({ row }) => (
-        <span style={{ fontSize: '12px' }}>{formatFecha(row.original.fecha)}</span>
       ),
       enableSorting: false,
     },
@@ -438,7 +417,7 @@ export function MarcacionesTable({
       },
       enableSorting: false,
     },
-  ], [conductoresUnicos, conductorFilter, patentesUnicas, patenteFilter, fechasUnicas, fechaFilter,
+  ], [conductoresUnicos, conductorFilter, patentesUnicas, patenteFilter,
       estadosUnicos, estadoFilter, horariosUnicos, horarioFilter, turnosUnicos, turnoFilter, openFilterId, onUpdateChecklist]);
 
   // Exportar
