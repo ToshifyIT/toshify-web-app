@@ -8,7 +8,7 @@ import { useMemo, useState, useRef, useEffect } from 'react';
 import { type ColumnDef } from '@tanstack/react-table';
 import { DataTable } from '../../../../../components/ui/DataTable/DataTable';
 import { ExcelColumnFilter, useExcelFilters } from '../../../../../components/ui/DataTable/ExcelColumnFilter';
-import { Search, ClipboardList, Download, ChevronDown, Fuel, Droplets, Car, Sun, Moon, Clock, X } from 'lucide-react';
+import { Search, ClipboardList, Download, ChevronDown, Fuel, SprayCan, Flame, Sun, Moon, Clock, X } from 'lucide-react';
 import type { Marcacion } from '../hooks/useUSSHistoricoData';
 import * as XLSX from 'xlsx';
 
@@ -294,7 +294,7 @@ export function MarcacionesTable({
       header: 'Km Total',
       cell: ({ row }) => (
         <span style={{ fontWeight: 600 }}>
-          {row.original.kmTotal.toLocaleString('es-AR', { maximumFractionDigits: 1 })}
+          {row.original.kmTotal.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
         </span>
       ),
       enableSorting: true,
@@ -302,19 +302,23 @@ export function MarcacionesTable({
     {
       accessorKey: 'vehiculoModalidad',
       header: () => (
-        <ExcelColumnFilter label="Turno" options={turnosUnicos} selectedValues={turnoFilter}
+        <ExcelColumnFilter label="Modalidad" options={turnosUnicos} selectedValues={turnoFilter}
           onSelectionChange={setTurnoFilter} filterId="m-turno" openFilterId={openFilterId} onOpenChange={setOpenFilterId} />
       ),
       cell: ({ row }) => {
         const mod = row.original.vehiculoModalidad;
-        if (!mod) return <span style={{ fontSize: '12px', color: 'var(--text-tertiary)' }}>-</span>;
+        if (!mod) return <span title="Sin modalidad de turno asignada" style={{ fontSize: '12px', color: 'var(--text-tertiary)', cursor: 'default' }}>-</span>;
+        const isCargo = mod === 'CARGO' || mod === 'A_CARGO';
         const color = mod === 'TURNO' ? '#7c3aed' : '#0891b2';
+        const tooltip = isCargo
+          ? 'A Cargo: El vehiculo esta asignado permanentemente al conductor'
+          : 'Turno: El vehiculo se comparte entre conductores por turnos';
         return (
-          <span style={{
+          <span title={tooltip} style={{
             fontSize: '11px', fontWeight: 600, padding: '2px 8px',
-            borderRadius: '10px', color: '#fff', background: color,
+            borderRadius: '10px', color: '#fff', background: color, cursor: 'default',
           }}>
-            {mod === 'CARGO' || mod === 'A_CARGO' ? 'A Cargo' : 'Turno'}
+            {isCargo ? 'A Cargo' : 'Turno'}
           </span>
         );
       },
@@ -326,38 +330,54 @@ export function MarcacionesTable({
         <ExcelColumnFilter label="Estado" options={estadosUnicos} selectedValues={estadoFilter}
           onSelectionChange={setEstadoFilter} filterId="m-estado" openFilterId={openFilterId} onOpenChange={setOpenFilterId} />
       ),
-      cell: ({ row }) => (
-        <span style={{
-          fontSize: '11px', fontWeight: 600, padding: '2px 8px',
-          borderRadius: '10px', color: '#fff',
-          background: getEstadoColor(row.original.estado),
-        }}>
-          {row.original.estado}
-        </span>
-      ),
+      cell: ({ row }) => {
+        const estado = row.original.estado;
+        const tooltips: Record<string, string> = {
+          'Turno Finalizado': 'Turno Finalizado: El conductor completo su turno correctamente',
+          'En Curso': 'En Curso: El conductor esta actualmente en servicio',
+          'Poco Km': 'Poco Km: El conductor registro menos de 100 km en su turno',
+          'Sin Actividad': 'Sin Actividad: No se registro actividad para este conductor',
+        };
+        const shortLabels: Record<string, string> = {
+          'Turno Finalizado': 'Finalizado',
+        };
+        return (
+          <span title={tooltips[estado] || estado} style={{
+            fontSize: '11px', fontWeight: 600, padding: '2px 8px',
+            borderRadius: '10px', color: '#fff', whiteSpace: 'nowrap',
+            background: getEstadoColor(estado), cursor: 'default',
+          }}>
+            {shortLabels[estado] || estado}
+          </span>
+        );
+      },
       enableSorting: false,
     },
     {
       accessorKey: 'horario',
       header: () => (
-        <ExcelColumnFilter label="Horario" options={horariosUnicos} selectedValues={horarioFilter}
+        <ExcelColumnFilter label="Turno" options={horariosUnicos} selectedValues={horarioFilter}
           onSelectionChange={setHorarioFilter} filterId="m-horario" openFilterId={openFilterId} onOpenChange={setOpenFilterId} />
       ),
       cell: ({ row }) => {
         const h = row.original.horario;
         const mod = row.original.vehiculoModalidad;
-        let icon, color, label;
+        let icon, color, label, tooltip;
         if (h === 'diurno') {
           icon = <Sun size={14} />; color = '#d97706'; label = 'Diurno';
+          tooltip = 'Turno diurno (06:00 - 18:00)';
         } else if (h === 'nocturno') {
           icon = <Moon size={14} />; color = '#4f46e5'; label = 'Nocturno';
+          tooltip = 'Turno nocturno (18:00 - 06:00)';
         } else if (mod === 'CARGO' || mod === 'A_CARGO') {
           icon = <Clock size={14} />; color = '#0891b2'; label = 'A Cargo';
+          tooltip = 'Vehiculo a cargo del conductor (sin turno fijo)';
         } else {
           icon = <Clock size={14} />; color = '#6b7280'; label = '-';
+          tooltip = 'Sin horario asignado';
         }
         return (
-          <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', fontSize: '12px', fontWeight: 600, color }}>
+          <span title={tooltip} style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', fontSize: '12px', fontWeight: 600, color, cursor: 'default' }}>
             {icon} {label}
           </span>
         );
@@ -366,13 +386,22 @@ export function MarcacionesTable({
     },
     {
       id: 'checklist',
-      header: 'Checklist',
+      header: () => (
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '2px' }}>
+          <span>Checklist</span>
+          <div style={{ display: 'flex', gap: '6px', fontSize: '9px', color: 'var(--text-tertiary)', fontWeight: 400 }}>
+            <span title="Carga de GNC" style={{ display: 'flex', alignItems: 'center', gap: '1px' }}><Flame size={10} />GNC</span>
+            <span title="Lavado del vehiculo" style={{ display: 'flex', alignItems: 'center', gap: '1px' }}><SprayCan size={10} />Lav</span>
+            <span title="Carga de Nafta" style={{ display: 'flex', alignItems: 'center', gap: '1px' }}><Fuel size={10} />Naf</span>
+          </div>
+        </div>
+      ),
       cell: ({ row }) => {
         const m = row.original;
         return (
           <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
             <button
-              title="GNC cargado"
+              title={m.gncCargado ? 'GNC: Cargado - Click para desmarcar' : 'GNC: No cargado - Click para marcar como cargado'}
               onClick={() => onUpdateChecklist(m.id, { gnc_cargado: !m.gncCargado })}
               style={{
                 background: 'none', border: 'none', cursor: 'pointer', padding: '2px',
@@ -380,10 +409,10 @@ export function MarcacionesTable({
                 opacity: m.gncCargado ? 1 : 0.4,
               }}
             >
-              <Fuel size={15} />
+              <Flame size={15} />
             </button>
             <button
-              title="Lavado realizado"
+              title={m.lavadoRealizado ? 'Lavado: Realizado - Click para desmarcar' : 'Lavado: No realizado - Click para marcar como realizado'}
               onClick={() => onUpdateChecklist(m.id, { lavado_realizado: !m.lavadoRealizado })}
               style={{
                 background: 'none', border: 'none', cursor: 'pointer', padding: '2px',
@@ -391,10 +420,10 @@ export function MarcacionesTable({
                 opacity: m.lavadoRealizado ? 1 : 0.4,
               }}
             >
-              <Droplets size={15} />
+              <SprayCan size={15} />
             </button>
             <button
-              title="Nafta cargada"
+              title={m.naftaCargada ? 'Nafta: Cargada - Click para desmarcar' : 'Nafta: No cargada - Click para marcar como cargada'}
               onClick={() => onUpdateChecklist(m.id, { nafta_cargada: !m.naftaCargada })}
               style={{
                 background: 'none', border: 'none', cursor: 'pointer', padding: '2px',
@@ -402,7 +431,7 @@ export function MarcacionesTable({
                 opacity: m.naftaCargada ? 1 : 0.4,
               }}
             >
-              <Car size={15} />
+              <Fuel size={15} />
             </button>
           </div>
         );
@@ -437,9 +466,9 @@ export function MarcacionesTable({
         : resolverFechaHora(m.periodoFin, m.fecha, m.salida, m.horario),
       'Duración': formatDuracion(m.duracionMinutos),
       'Km Total': m.kmTotal,
-      'Turno': m.vehiculoModalidad === 'CARGO' ? 'A Cargo' : m.vehiculoModalidad === 'TURNO' ? 'Turno' : '-',
+      'Modalidad': m.vehiculoModalidad === 'CARGO' ? 'A Cargo' : m.vehiculoModalidad === 'TURNO' ? 'Turno' : '-',
       'Estado': m.estado,
-      'Horario': getHorarioLabel(m.horario, m.vehiculoModalidad),
+      'Turno': getHorarioLabel(m.horario, m.vehiculoModalidad),
       'GNC': m.gncCargado ? 'Sí' : 'No',
       'Lavado': m.lavadoRealizado ? 'Sí' : 'No',
       'Nafta': m.naftaCargada ? 'Sí' : 'No',
@@ -476,8 +505,26 @@ export function MarcacionesTable({
     setShowExportMenu(false);
   }
 
+  // Stats calculados desde datos filtrados
+  const filteredStats = useMemo(() => {
+    if (marcacionesFiltradas.length === 0) return null;
+    const conductores = new Set(marcacionesFiltradas.map(m => m.conductor)).size;
+    const kmTotal = marcacionesFiltradas.reduce((sum, m) => sum + m.kmTotal, 0);
+    const activos = marcacionesFiltradas.filter(m => m.estado !== 'Sin Actividad').length;
+    return { conductores, kmTotal: Math.round(kmTotal * 100) / 100, activos };
+  }, [marcacionesFiltradas]);
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+      {/* Stats from filtered data */}
+      {filteredStats && (
+        <div style={{ display: 'flex', gap: '16px', fontSize: '13px', color: 'var(--text-secondary)' }}>
+          <span><strong>{filteredStats.conductores}</strong> conductores</span>
+          <span><strong>{filteredStats.kmTotal.toLocaleString('es-AR')}</strong> km</span>
+          <span><strong>{filteredStats.activos}</strong> activos</span>
+        </div>
+      )}
+
       {/* Toolbar */}
       <div className="dt-header-bar">
         <div className="dt-search-wrapper">
@@ -539,17 +586,19 @@ export function MarcacionesTable({
       </div>
 
       {/* DataTable */}
-      <DataTable
-        data={marcacionesFiltradas}
-        columns={columns}
-        loading={isLoading}
-        showSearch={false}
-        showPagination={false}
-        emptyIcon={<ClipboardList size={48} />}
-        emptyTitle="Sin marcaciones"
-        emptyDescription="No hay marcaciones para mostrar en este rango de fechas"
-        pageSize={999}
-      />
+      <div className="marcaciones-sticky">
+        <DataTable
+          data={marcacionesFiltradas}
+          columns={columns}
+          loading={isLoading}
+          showSearch={false}
+          showPagination={false}
+          emptyIcon={<ClipboardList size={48} />}
+          emptyTitle="Sin marcaciones"
+          emptyDescription="No hay marcaciones para mostrar en este rango de fechas"
+          pageSize={999}
+        />
+      </div>
     </div>
   );
 }

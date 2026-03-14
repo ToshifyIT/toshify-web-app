@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 // src/modules/vehiculos/VehicleManagement.tsx
 import { useState, useEffect, useMemo } from 'react'
-import { AlertTriangle, Eye, Edit, Trash2, Info, Car, Wrench, Briefcase, PaintBucket, Warehouse, FolderOpen, FolderPlus, Undo2, History } from 'lucide-react'
+import { AlertTriangle, Eye, Edit, Trash2, Info, Car, Wrench, Briefcase, PaintBucket, Warehouse, FolderOpen, FolderPlus, Undo2, History, Fuel } from 'lucide-react'
 import { ActionsMenu } from '../../components/ui/ActionsMenu'
 import { VerLogsButton } from '../../components/ui/VerLogsButton'
 
@@ -62,6 +62,7 @@ export function VehicleManagement() {
   const [activeStatCard, setActiveStatCard] = useState<string | null>(null)
   const [statCardEstadoFilter, setStatCardEstadoFilter] = useState<string[]>([]) // Filtro separado para stat cards
   const [statCardExcludeMode, setStatCardExcludeMode] = useState(false) // true = excluir los estados del filtro en vez de incluir
+  const [gncFilter, setGncFilter] = useState<string | null>(null) // 'sinGnc' para filtrar sin GNC
 
   // Excel filter hook for portal-based dropdowns
   const { openFilterId, setOpenFilterId } = useExcelFilters()
@@ -120,6 +121,7 @@ export function VehicleManagement() {
     let vehiculosChapaPintura = 0
     let vehiculosCorporativos = 0
     let vehiculosDevueltos = 0
+    let vehiculosSinGnc = 0
 
     // UNA SOLA PASADA sobre los vehículos
     for (const v of vehiculos) {
@@ -128,6 +130,11 @@ export function VehicleManagement() {
       // Excluir del total
       if (!estadosExcluidos.includes(estadoCodigo)) {
         totalVehiculos++
+      }
+
+      // Contar sin GNC (solo entre flota activa)
+      if (!(v as any).gnc && !estadosExcluidos.includes(estadoCodigo)) {
+        vehiculosSinGnc++
       }
 
       // Contar por estado
@@ -154,6 +161,7 @@ export function VehicleManagement() {
       vehiculosChapaPintura,
       vehiculosCorporativos,
       vehiculosDevueltos,
+      vehiculosSinGnc,
     }
   }, [vehiculos])
 
@@ -168,7 +176,7 @@ export function VehicleManagement() {
           .from('vehiculos')
           .select(`
             id, patente, marca, modelo, anio, color, kilometraje_actual, estado_id, created_at,
-            drive_folder_id, drive_folder_url, url_documentacion,
+            drive_folder_id, drive_folder_url, url_documentacion, gnc,
             vehiculos_estados (id, codigo, descripcion)
           `)
           .is('deleted_at', null))
@@ -718,10 +726,12 @@ export function VehicleManagement() {
       setActiveStatCard(null)
       setStatCardEstadoFilter([]) // Solo limpiar el filtro del stat card, NO el de columna
       setStatCardExcludeMode(false)
+      setGncFilter(null)
       return
     }
 
     setActiveStatCard(cardType)
+    setGncFilter(null) // Limpiar filtro GNC al cambiar de card
 
     // Definir estados para cada categoría (usando labels formateados)
     const estadosEnCochera = ['PKG ON'] // Solo disponibles (listos para usar)
@@ -762,6 +772,11 @@ export function VehicleManagement() {
         setStatCardEstadoFilter(estadosDevueltos)
         setStatCardExcludeMode(false)
         break
+      case 'sinGnc':
+        setStatCardEstadoFilter([])
+        setStatCardExcludeMode(false)
+        setGncFilter('sinGnc')
+        break
       default:
         setStatCardEstadoFilter([])
         setStatCardExcludeMode(false)
@@ -781,7 +796,8 @@ export function VehicleManagement() {
         tallerMecanico: 'Taller Mecánico',
         chapaPintura: 'Chapa y Pintura',
         corporativos: 'Corporativos',
-        devueltos: 'Dev. Proveedor'
+        devueltos: 'Dev. Proveedor',
+        sinGnc: 'Sin GNC',
       }
       filters.push({
         id: 'statCard',
@@ -845,12 +861,13 @@ export function VehicleManagement() {
     }
 
     return filters
-  }, [activeStatCard, patenteFilter, marcaFilter, modeloFilter, anioFilter, colorFilter, kmFilter, estadoFilter])
+  }, [activeStatCard, patenteFilter, marcaFilter, modeloFilter, anioFilter, colorFilter, kmFilter, estadoFilter, gncFilter])
 
   // Limpiar todos los filtros
   const handleClearAllFilters = () => {
     setActiveStatCard(null)
     setStatCardEstadoFilter([])
+    setGncFilter(null)
     setPatenteFilter([])
     setMarcaFilter([])
     setModeloFilter([])
@@ -977,6 +994,11 @@ export function VehicleManagement() {
       })
     }
 
+    // Filtro de GNC
+    if (gncFilter === 'sinGnc') {
+      result = result.filter(v => !(v as any).gnc)
+    }
+
     // Ordenar por estado: En Uso, PKG ON, PKG OFF, Chapa&Pintura, luego el resto
     const estadoOrden: Record<string, number> = {
       'EN_USO': 1,
@@ -993,7 +1015,7 @@ export function VehicleManagement() {
     })
 
     return result
-  }, [vehiculos, patenteFilter, marcaFilter, modeloFilter, anioFilter, colorFilter, kmFilter, estadoFilter, statCardEstadoFilter, statCardExcludeMode])
+  }, [vehiculos, patenteFilter, marcaFilter, modeloFilter, anioFilter, colorFilter, kmFilter, estadoFilter, statCardEstadoFilter, statCardExcludeMode, gncFilter])
 
 
   // Definir columnas para TanStack Table
@@ -1348,6 +1370,17 @@ export function VehicleManagement() {
             <div className="stat-content">
               <span className="stat-value">{calculatedStats.vehiculosDevueltos}</span>
               <span className="stat-label">Dev. Proveedor</span>
+            </div>
+          </div>
+          <div
+            className={`stat-card stat-card-clickable ${activeStatCard === 'sinGnc' ? 'stat-card-active' : ''}`}
+            onClick={() => handleStatCardClick('sinGnc')}
+            title="Click para filtrar: Vehiculos sin GNC"
+          >
+            <Fuel size={18} className="stat-icon" />
+            <div className="stat-content">
+              <span className="stat-value">{calculatedStats.vehiculosSinGnc}</span>
+              <span className="stat-label">Sin GNC</span>
             </div>
           </div>
         </div>
