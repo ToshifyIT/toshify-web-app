@@ -3253,14 +3253,20 @@ function ModalDetalles({
   }, [selectedConductor?.id]);
 
   // Helper para obtener el estado badge del conductor en la asignación
-  const getConductorAsignacionEstadoBadge = (estado: string) => {
+  // Tiene en cuenta tanto el estado del conductor (asignaciones_conductores.estado)
+  // como el estado de la asignación padre (asignaciones.estado)
+  const getConductorAsignacionEstadoBadge = (conductorEstado: string, asignacionEstado?: string) => {
+    // Si la asignación padre está programada, mostrar como "Programada" sin importar el estado del conductor
+    if (asignacionEstado === 'programado') {
+      return { bg: 'rgba(234, 179, 8, 0.1)', color: '#A16207', label: 'Programada' };
+    }
     const estados: Record<string, { bg: string; color: string; label: string }> = {
       activo: { bg: 'rgba(34, 197, 94, 0.1)', color: '#22C55E', label: 'Activa' },
       asignado: { bg: 'rgba(59, 130, 246, 0.1)', color: '#3B82F6', label: 'Asignado' },
       cancelado: { bg: 'rgba(239, 68, 68, 0.1)', color: '#EF4444', label: 'Cancelada' },
       completado: { bg: 'rgba(107, 114, 128, 0.1)', color: '#6B7280', label: 'Finalizada' },
     };
-    return estados[estado] || { bg: 'rgba(107, 114, 128, 0.1)', color: '#6B7280', label: estado };
+    return estados[conductorEstado] || { bg: 'rgba(107, 114, 128, 0.1)', color: '#6B7280', label: conductorEstado };
   };
 
   // Helper para obtener el turno badge
@@ -3591,14 +3597,15 @@ function ModalDetalles({
               {vehiculosAsignados.map((item) => {
                 const asig = item.asignaciones;
                 const vehiculo = asig?.vehiculos;
-                const estadoBadge = getConductorAsignacionEstadoBadge(item.estado);
+                const estadoBadge = getConductorAsignacionEstadoBadge(item.estado, asig?.estado);
                 const turnoBadge = getTurnoBadge(item.horario);
                 const isActiva = asig?.estado === 'activa';
+                const isProgramada = asig?.estado === 'programado';
 
                 return (
                   <div
                     key={item.id}
-                    className={`vehiculo-historial-item ${isActiva ? 'activa' : ''}`}
+                    className={`vehiculo-historial-item ${isActiva ? 'activa' : ''} ${isProgramada ? 'programada' : ''}`}
                   >
                     <div className="vehiculo-info">
                       <div className="vehiculo-codigo">
