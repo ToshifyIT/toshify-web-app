@@ -4,7 +4,6 @@
  * Principio: Single Responsibility - Solo UI de encabezado
  */
 
-import { Radio } from 'lucide-react'
 import type { WeekOption } from '../types/cabify.types'
 import { formatDateTimeAR } from '../../../../utils/dateUtils'
 import { WeekCalendarSelector } from './WeekCalendarSelector'
@@ -54,16 +53,10 @@ export function CabifyHeader({
             <span>Sincronizando...</span>
           </div>
         )}
-        {!isLoading && (
-          <div className="cabify-realtime-indicator">
-            <Radio size={14} className="pulse-icon" />
-            <span>Tiempo real</span>
-          </div>
-        )}
       </div>
       {lastUpdate && (
         <span className="cabify-last-update-compact">
-          Última actualización: {formatDateTimeAR(lastUpdate)}
+          Última sync: {formatDateTimeAR(lastUpdate)}
         </span>
       )}
     </div>
