@@ -50,7 +50,9 @@ export const ussHistoricoService = {
       .lt('fecha_hora_inicio', `${endStr}T00:00:00`)
       .order('fecha_hora_inicio', { ascending: false });
 
-    // uss_historico no tiene sede_id: filtrar por patentes de vehículos de la sede
+    // uss_historico no tiene sede_id: filtrar por patentes de vehículos de la sede.
+    // Las patentes en uss_historico están normalizadas (sin guiones/espacios),
+    // así que normalizamos las de vehiculos antes de comparar.
     if (options?.sedeId) {
       const { data: vehiculos } = await supabase
         .from('vehiculos')
@@ -59,10 +61,9 @@ export const ussHistoricoService = {
         .is('deleted_at', null);
 
       if (vehiculos && vehiculos.length > 0) {
-        const patentes = vehiculos.map((v: { patente: string }) => v.patente);
+        const patentes = vehiculos.map((v: { patente: string }) => normalizarPatente(v.patente));
         query = query.in('patente', patentes);
       } else {
-        // No hay vehículos en esta sede, retornar vacío
         return { data: [], count: 0 };
       }
     }

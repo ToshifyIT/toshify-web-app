@@ -999,14 +999,15 @@ export function ConductoresModule() {
       })
       .eq('id', asignacion.id);
 
-    // 2. Actualizar registro del conductor en junction table
+    // 2. Cancelar TODOS los registros de conductores en esta asignación (no solo el dado de baja)
     await (supabase as any)
       .from('asignaciones_conductores')
       .update({
         estado: 'cancelado',
         fecha_fin: ahora
       })
-      .eq('id', asignacionConductor.id);
+      .eq('asignacion_id', asignacion.id)
+      .in('estado', ['asignado', 'activo']);
 
     // 3. Devolver vehículo a DISPONIBLE
     const { data: estadoDisponible } = await (supabase as any)
@@ -1083,7 +1084,18 @@ export function ConductoresModule() {
       .eq('asignacion_conductor_id', asignacionConductor.id);
 
     // 3. Verificar si hay otro conductor activo
-    const otherConductors = asignacionConductor.otherConductors || [];
+    // Re-consultar en tiempo real para evitar datos obsoletos del estado previo
+    let otherConductors = asignacionConductor.otherConductors || [];
+    if (otherConductors.length === 0) {
+      // Fallback: consultar directamente la DB por si los datos precargados están desactualizados
+      const { data: freshOthers } = await (supabase as any)
+        .from('asignaciones_conductores')
+        .select('id, conductor_id, horario, estado')
+        .eq('asignacion_id', asignacion.id)
+        .neq('conductor_id', asignacionConductor.conductor_id)
+        .in('estado', ['asignado', 'activo']);
+      otherConductors = freshOthers || [];
+    }
 
     if (otherConductors.length > 0) {
       // Hay otro conductor - solo agregar nota de vacante
@@ -1126,6 +1138,15 @@ export function ConductoresModule() {
         updated_at: ahora
       })
       .eq('id', asignacion.id);
+
+    // Cancelar todos los registros de asignaciones_conductores de esta asignación
+    // (por si hay registros residuales con otros estados)
+    await (supabase as any)
+      .from('asignaciones_conductores')
+      .update({ estado: 'cancelado', fecha_fin: ahora })
+      .eq('asignacion_id', asignacion.id)
+      .neq('id', asignacionConductor.id)
+      .in('estado', ['asignado', 'activo']);
 
     // Devolver vehículo a DISPONIBLE
     const { data: estadoDisponible } = await (supabase as any)
