@@ -58,6 +58,7 @@ export function VehicleManagement() {
   const [anioFilter, setAnioFilter] = useState<string[]>([])
   const [colorFilter, setColorFilter] = useState<string[]>([])
   const [kmFilter, setKmFilter] = useState<string[]>([])
+  const [titularFilter, setTitularFilter] = useState<string[]>([])
   const [estadoFilter, setEstadoFilter] = useState<string[]>([]) // Filtro de columna Estado
   const [activeStatCard, setActiveStatCard] = useState<string | null>(null)
   const [statCardEstadoFilter, setStatCardEstadoFilter] = useState<string[]>([]) // Filtro separado para stat cards
@@ -852,6 +853,13 @@ export function VehicleManagement() {
         onClear: () => setKmFilter([])
       })
     }
+    if (titularFilter.length > 0) {
+      filters.push({
+        id: 'titular',
+        label: `Titular: ${titularFilter.length === 1 ? titularFilter[0] : `${titularFilter.length} seleccionados`}`,
+        onClear: () => setTitularFilter([])
+      })
+    }
     if (estadoFilter.length > 0) {
       filters.push({
         id: 'estado',
@@ -861,7 +869,7 @@ export function VehicleManagement() {
     }
 
     return filters
-  }, [activeStatCard, patenteFilter, marcaFilter, modeloFilter, anioFilter, colorFilter, kmFilter, estadoFilter, gncFilter])
+  }, [activeStatCard, patenteFilter, marcaFilter, modeloFilter, anioFilter, colorFilter, titularFilter, kmFilter, estadoFilter, gncFilter])
 
   // Limpiar todos los filtros
   const handleClearAllFilters = () => {
@@ -873,6 +881,7 @@ export function VehicleManagement() {
     setModeloFilter([])
     setAnioFilter([])
     setColorFilter([])
+    setTitularFilter([])
     setKmFilter([])
     setEstadoFilter([])
   }
@@ -898,6 +907,15 @@ export function VehicleManagement() {
   const patentesUnicas = useMemo(() => {
     const patentes = vehiculos.map(v => v.patente).filter(Boolean) as string[]
     return [...new Set(patentes)].sort()
+  }, [vehiculos])
+
+  const titularesUnicos = useMemo(() => {
+    const titulares = new Set<string>()
+    vehiculos.forEach(v => {
+      const t = (v as any).titular
+      if (t) titulares.add(t)
+    })
+    return Array.from(titulares).sort()
   }, [vehiculos])
 
   const aniosUnicos = useMemo(() => {
@@ -960,6 +978,12 @@ export function VehicleManagement() {
       )
     }
 
+    if (titularFilter.length > 0) {
+      result = result.filter(v =>
+        titularFilter.includes((v as any).titular || '')
+      )
+    }
+
     if (kmFilter.length > 0) {
       result = result.filter(v => {
         const km = (v as any).kilometraje_actual || 0
@@ -1015,7 +1039,7 @@ export function VehicleManagement() {
     })
 
     return result
-  }, [vehiculos, patenteFilter, marcaFilter, modeloFilter, anioFilter, colorFilter, kmFilter, estadoFilter, statCardEstadoFilter, statCardExcludeMode, gncFilter])
+  }, [vehiculos, patenteFilter, marcaFilter, modeloFilter, anioFilter, colorFilter, titularFilter, kmFilter, estadoFilter, statCardEstadoFilter, statCardExcludeMode, gncFilter])
 
 
   // Definir columnas para TanStack Table
@@ -1073,7 +1097,17 @@ export function VehicleManagement() {
       },
       {
         accessorKey: 'titular',
-        header: 'Titular',
+        header: () => (
+          <ExcelColumnFilter
+            label="Titular"
+            options={titularesUnicos}
+            selectedValues={titularFilter}
+            onSelectionChange={setTitularFilter}
+            filterId="titular"
+            openFilterId={openFilterId}
+            onOpenChange={setOpenFilterId}
+          />
+        ),
         cell: ({ row }) => {
           const titular = (row.original as any).titular
           if (!titular) return <span style={{ color: 'var(--text-tertiary)' }}>-</span>
@@ -1194,7 +1228,8 @@ export function VehicleManagement() {
             'ROBO': 'Robo',
             'DESTRUCCION_TOTAL': 'Destrucción',
             'JUBILADO': 'Jubilado',
-            'PROGRAMADO': 'Programado'
+            'PROGRAMADO': 'Programado',
+            'DEVUELTO_PROVEEDOR': 'Dev. Proveedor',
           }
 
           let badgeClass = 'dt-badge dt-badge-solid-gray'
@@ -1224,6 +1259,9 @@ export function VehicleManagement() {
             case 'TALLER_BASE_VALIENTE':
             case 'INSTALACION_GNC':
               badgeClass = 'dt-badge dt-badge-solid-orange'
+              break
+            case 'DEVUELTO_PROVEEDOR':
+              badgeClass = 'dt-badge dt-badge-solid-red'
               break
             case 'ROBO':
             case 'DESTRUCCION_TOTAL':
@@ -1294,7 +1332,7 @@ export function VehicleManagement() {
         enableSorting: false,
       },
     ],
-    [canUpdate, canDelete, patenteFilter, marcaFilter, modeloFilter, anioFilter, colorFilter, kmFilter, estadoFilter, openFilterId, patentesUnicas, marcasExistentes, modelosExistentes, aniosUnicos, coloresUnicos, estadosUnicos]
+    [canUpdate, canDelete, patenteFilter, marcaFilter, modeloFilter, titularFilter, anioFilter, colorFilter, kmFilter, estadoFilter, openFilterId, patentesUnicas, marcasExistentes, modelosExistentes, titularesUnicos, aniosUnicos, coloresUnicos, estadosUnicos]
   )
 
   return (
@@ -1411,7 +1449,6 @@ export function VehicleManagement() {
         error={error}
         pageSize={100}
         pageSizeOptions={[50, 100, 200]}
-        disableAutoFilters
         searchPlaceholder="Buscar por patente, marca, modelo..."
         emptyIcon={<Car size={64} />}
         emptyTitle="No hay vehiculos registrados"

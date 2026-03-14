@@ -2267,7 +2267,7 @@ export function AsignacionesModule() {
     {
       id: 'asignados',
       header: 'Asignados',
-      meta: { expand: true },
+      size: 250,
       accessorFn: (row) => {
         if (row.esDevolucion) return row.conductorCargo?.nombre || ''
         if (row.horario === 'CARGO' || !row.horario) {
@@ -2434,7 +2434,7 @@ export function AsignacionesModule() {
     {
       accessorKey: 'estado',
       header: 'Estado',
-      size: 110,
+      size: 130,
       cell: ({ row }) => {
         if (row.original.esDevolucion) {
           return <span className="dt-badge" style={{ background: '#FEF3C7', color: '#92400E' }}>Pend. Devolución</span>

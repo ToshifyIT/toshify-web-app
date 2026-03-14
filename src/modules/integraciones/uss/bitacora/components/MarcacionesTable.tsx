@@ -495,15 +495,6 @@ export function MarcacionesTable({
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-      {/* Stats from filtered data */}
-      {filteredStats && (
-        <div style={{ display: 'flex', gap: '16px', fontSize: '13px', color: 'var(--text-secondary)' }}>
-          <span><strong>{filteredStats.conductores}</strong> conductores</span>
-          <span><strong>{filteredStats.kmTotal.toLocaleString('es-AR')}</strong> km</span>
-          <span><strong>{filteredStats.activos}</strong> activos</span>
-        </div>
-      )}
-
       {/* Toolbar */}
       <div className="dt-header-bar">
         <div className="dt-search-wrapper">
@@ -559,6 +550,11 @@ export function MarcacionesTable({
           )}
         </div>
 
+        {filteredStats && (
+          <span style={{ color: 'var(--text-secondary)', fontSize: '13px', whiteSpace: 'nowrap' }}>
+            <strong>{filteredStats.conductores}</strong> conductores &middot; <strong>{filteredStats.kmTotal.toLocaleString('es-AR')}</strong> km &middot; <strong>{filteredStats.activos}</strong> activos
+          </span>
+        )}
         <span style={{ color: 'var(--text-secondary)', fontSize: '13px', whiteSpace: 'nowrap' }}>
           {marcacionesFiltradas.length} registros
         </span>
