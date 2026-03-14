@@ -52,9 +52,12 @@ type CalendarView = 'week' | 'month';
 export function VisitasModule() {
   // === HOOKS ===
   const { user, profile } = useAuth();
-  const { canEditInSubmenu, isAdmin } = usePermissions();
+  const { canCreateInMenu, canEditInMenu, canDeleteInMenu, isAdmin } = usePermissions();
   const { sedeActualId, sedeUsuario } = useSede();
-  const canEdit = isAdmin() || canEditInSubmenu('visitas');
+  const canCreate = isAdmin() || canCreateInMenu('visitas');
+  const canEdit = isAdmin() || canEditInMenu('visitas');
+  const _canDelete = isAdmin() || canDeleteInMenu('visitas');
+  void _canDelete; // Reservado para uso futuro
 
   // === STATE: tabs ===
   const [mainTab, setMainTab] = useState<MainTab>('calendario');
@@ -111,26 +114,13 @@ export function VisitasModule() {
     const raw = await fetchVisitas(sedeActualId, start, end);
     // Auto-transicionar estados según hora actual (pendiente→en_curso→completada)
     const updated = await autoUpdateEstados(raw);
-    // Citas "Directivo": admin y citador ven el detalle completo,
-    // los demás ven un bloque gris "Reservado" sin datos
-    const data = updated.map((v) => {
-      if (v.categoria_nombre?.toLowerCase() !== 'directivo') return v;
-      if (isAdmin()) return v;
-      if (v.citador_id === user?.id) return v;
-      // Enmascarar: mantener fecha/hora/duración, ocultar todo lo demás
-      return {
-        ...v,
-        nombre_visitante: 'Reservado',
-        dni_visitante: null,
-        patente: null,
-        motivo_nombre: null,
-        atendedor_nombre: '-',
-        nota: null,
-        citador_nombre: '-',
-        categoria_nombre: 'Directivo',
-        categoria_color: '#9ca3af',
-        _masked: true,
-      } as VisitaCompleta & { _masked?: boolean };
+    // Citas "Directivo": solo visibles para admin y quien la creó.
+    // Los demás usuarios no las ven en absoluto.
+    const data = updated.filter((v) => {
+      if (v.categoria_nombre?.toLowerCase() !== 'directivo') return true;
+      if (isAdmin()) return true;
+      if (v.citador_id === user?.id) return true;
+      return false;
     });
     setVisitas(data);
     setCalendarEvents(toCalendarEvents(data));
@@ -172,9 +162,6 @@ export function VisitasModule() {
   }
 
   function handleSelectEvent(event: VisitaCalendarEvent) {
-    // No abrir detalle para citas Directivo enmascaradas
-    const masked = (event.visita as VisitaCompleta & { _masked?: boolean })._masked;
-    if (masked) return;
     setSelectedVisita(event.visita);
     setShowDetalleModal(true);
   }
@@ -337,9 +324,9 @@ export function VisitasModule() {
     XLSX.writeFile(wb, `Visitas_${fecha}.xlsx`);
   }
 
-  // Helper: detectar si una fila es una cita Directivo enmascarada
-  const isMasked = (row: VisitaCompleta) =>
-    !!(row as VisitaCompleta & { _masked?: boolean })._masked;
+  // Helper: ya no se enmascaran, las citas Directivo se filtran completamente
+  // Se mantiene para compatibilidad con las columnas que lo referencian
+  const isMasked = (_row: VisitaCompleta) => false;
 
   // === COLUMNAS DATATABLE (vista tabla) ===
   const columns: ColumnDef<VisitaCompleta>[] = [
@@ -526,7 +513,7 @@ export function VisitasModule() {
               <button className="btn-secondary" onClick={handleExportarExcel}>
                 <Download size={16} /> Exportar
               </button>
-              {canEdit && (
+              {canCreate && (
                 <button className="btn-primary" onClick={handleNuevaCita}>
                   <Plus size={16} /> Nueva Cita
                 </button>
