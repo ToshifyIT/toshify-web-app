@@ -30,9 +30,33 @@ export function ParametrosUssPage() {
     cargarParametros()
   }, [])
 
+  // Parámetros que deben existir siempre (se crean automáticamente si faltan)
+  const PARAMETROS_SEED: { clave: string; modulo: string; valor: string; tipo: string; descripcion: string }[] = [
+    // Facturación - descuentos por hora de entrega
+    { clave: 'hora_corte_diurno', modulo: 'facturacion', valor: '12', tipo: 'number', descripcion: 'Hora corte entrega diurno. Si entrega >= esta hora, descuento turno completo' },
+    { clave: 'hora_corte_cargo', modulo: 'facturacion', valor: '14', tipo: 'number', descripcion: 'Hora corte entrega a cargo. Si entrega >= esta hora, descuento medio turno' },
+    { clave: 'descuento_diurno_antes', modulo: 'facturacion', valor: '0.5', tipo: 'number', descripcion: 'Descuento (turnos) si entrega diurna antes del corte' },
+    { clave: 'descuento_diurno_despues', modulo: 'facturacion', valor: '1', tipo: 'number', descripcion: 'Descuento (turnos) si entrega diurna despues del corte' },
+    { clave: 'descuento_cargo_despues', modulo: 'facturacion', valor: '0.5', tipo: 'number', descripcion: 'Descuento (turnos) si entrega a cargo despues del corte' },
+  ]
+
   async function cargarParametros() {
     setLoading(true)
     try {
+      // Primero verificar y crear parámetros faltantes
+      const { data: existentes } = await (supabase
+        .from('parametros_sistema') as any)
+        .select('clave')
+
+      const clavesExistentes = new Set((existentes || []).map((p: any) => p.clave))
+      const faltantes = PARAMETROS_SEED.filter(p => !clavesExistentes.has(p.clave))
+
+      if (faltantes.length > 0) {
+        await (supabase.from('parametros_sistema') as any)
+          .insert(faltantes.map(p => ({ ...p, activo: true })))
+      }
+
+      // Cargar todos
       const { data, error } = await (supabase
         .from('parametros_sistema') as any)
         .select('*')
