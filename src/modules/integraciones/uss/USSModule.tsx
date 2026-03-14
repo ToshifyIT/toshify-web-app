@@ -4,12 +4,14 @@
  */
 
 import { useState, useMemo } from 'react'
+import { useSede } from '../../../contexts/SedeContext'
 import { useUSSData } from './hooks'
 import { USSHeader, ExcesosStats, ExcesosTable } from './components'
 import type { ExcesoStats } from './types/uss.types'
 import './styles/uss.css'
 
 export function USSModule() {
+  const { sedeActualId } = useSede()
   const {
     excesos,
     stats,
@@ -22,7 +24,7 @@ export function USSModule() {
     pageSize,
     setPageSize,
     isRealtime,
-  } = useUSSData()
+  } = useUSSData({ sedeId: sedeActualId })
 
   const [searchTerm, setSearchTerm] = useState('')
 

@@ -50,6 +50,7 @@ export interface BitacoraQueryOptions {
   patente?: string
   conductor?: string
   estado?: string
+  sedeId?: string | null
 }
 
 export interface BitacoraDateRange {
