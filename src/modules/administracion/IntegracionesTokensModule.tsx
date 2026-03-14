@@ -1578,13 +1578,13 @@ function McpTab() {
               disabled={creating || !newName.trim() || newPermissions.length === 0}
               style={{
                 padding: '8px 20px',
-                background: creating || !newName.trim() ? 'var(--border-primary)' : 'var(--color-primary)',
+                background: creating || !newName.trim() || newPermissions.length === 0 ? 'var(--border-primary)' : 'var(--color-primary)',
                 color: '#fff',
                 border: 'none',
                 borderRadius: '6px',
                 fontSize: '13px',
                 fontWeight: 600,
-                cursor: creating || !newName.trim() ? 'not-allowed' : 'pointer',
+                cursor: creating || !newName.trim() || newPermissions.length === 0 ? 'not-allowed' : 'pointer',
               }}
             >
               {creating ? 'Creando...' : 'Crear API Key'}
