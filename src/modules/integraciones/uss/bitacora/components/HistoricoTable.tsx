@@ -69,73 +69,68 @@ export function HistoricoTable({
   const { openFilterId, setOpenFilterId } = useExcelFilters();
 
   // Filtros Excel
-  const [patenteFilter, setPatenteFilter] = useState<string[]>([]);
   const [conductorFilter, setConductorFilter] = useState<string[]>([]);
-  const [ibuttonFilter, setIbuttonFilter] = useState<string[]>([]);
 
-  // Listas únicas
-  const patentesUnicas = useMemo(() =>
-    [...new Set(registros.map(r => r.patente))].filter(Boolean).sort()
-  , [registros]);
-  const conductoresUnicos = useMemo(() =>
-    [...new Set(registros.map(r => r.conductor || '-'))].sort()
-  , [registros]);
-  const ibuttonsUnicos = useMemo(() =>
-    [...new Set(registros.map(r => r.ibutton || '-'))].sort()
-  , [registros]);
+  // Lista única: "CONDUCTOR | PATENTE" para filtro combinado
+  const conductorPatenteUnicos = useMemo(() => {
+    const set = new Set<string>();
+    for (const r of registros) {
+      const conductor = r.conductor || 'Sin conductor';
+      const patente = r.patente || '-';
+      set.add(`${conductor} | ${patente}`);
+    }
+    return [...set].sort();
+  }, [registros]);
 
-  const hasActiveFilters = patenteFilter.length > 0 || conductorFilter.length > 0 || ibuttonFilter.length > 0 || searchTerm.trim() !== '';
+  const hasActiveFilters = conductorFilter.length > 0 || searchTerm.trim() !== '';
 
   const clearAllFilters = () => {
-    setPatenteFilter([]);
     setConductorFilter([]);
-    setIbuttonFilter([]);
     onSearchChange('');
+  };
+
+  // Helper para obtener la clave combinada de un registro
+  const getConductorPatenteKey = (r: USSHistoricoRegistro) => {
+    const conductor = r.conductor || 'Sin conductor';
+    const patente = r.patente || '-';
+    return `${conductor} | ${patente}`;
   };
 
   // Filtrado local
   const registrosFiltrados = useMemo(() => {
     return registros.filter(r => {
-      if (patenteFilter.length > 0 && !patenteFilter.includes(r.patente)) return false;
-      if (conductorFilter.length > 0 && !conductorFilter.includes(r.conductor || '-')) return false;
-      if (ibuttonFilter.length > 0 && !ibuttonFilter.includes(r.ibutton || '-')) return false;
+      if (conductorFilter.length > 0 && !conductorFilter.includes(getConductorPatenteKey(r))) return false;
       return true;
     });
-  }, [registros, patenteFilter, conductorFilter, ibuttonFilter]);
+  }, [registros, conductorFilter]);
 
   // Columnas
   const columns = useMemo<ColumnDef<USSHistoricoRegistro, unknown>[]>(() => [
     {
-      accessorKey: 'patente',
-      header: () => (
-        <ExcelColumnFilter label="Patente" options={patentesUnicas} selectedValues={patenteFilter}
-          onSelectionChange={setPatenteFilter} filterId="h-patente" openFilterId={openFilterId} onOpenChange={setOpenFilterId} />
-      ),
-      cell: ({ row }) => (
-        <span style={{ fontWeight: 600, color: 'var(--color-primary)', fontFamily: 'monospace', fontSize: '12px' }}>
-          {row.original.patente}
-        </span>
-      ),
-      enableSorting: false,
-    },
-    {
+      id: 'conductor_patente',
       accessorKey: 'conductor',
       header: () => (
-        <ExcelColumnFilter label="Conductor" options={conductoresUnicos} selectedValues={conductorFilter}
+        <ExcelColumnFilter label="Conductor / Patente" options={conductorPatenteUnicos} selectedValues={conductorFilter}
           onSelectionChange={setConductorFilter} filterId="h-conductor" openFilterId={openFilterId} onOpenChange={setOpenFilterId} />
       ),
-      cell: ({ row }) => row.original.conductor || '-',
-      enableSorting: false,
-    },
-    {
-      accessorKey: 'ibutton',
-      header: () => (
-        <ExcelColumnFilter label="iButton" options={ibuttonsUnicos} selectedValues={ibuttonFilter}
-          onSelectionChange={setIbuttonFilter} filterId="h-ibutton" openFilterId={openFilterId} onOpenChange={setOpenFilterId} />
-      ),
-      cell: ({ row }) => (
-        <span style={{ color: 'var(--text-tertiary)', fontSize: '12px' }}>{row.original.ibutton || '-'}</span>
-      ),
+      cell: ({ row }) => {
+        const r = row.original;
+        return (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', lineHeight: 1.3 }}>
+            <span style={{ fontWeight: 600, fontSize: '13px' }}>{r.conductor || 'Sin conductor'}</span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <span style={{ fontWeight: 600, color: 'var(--color-primary)', fontFamily: 'monospace', fontSize: '12px' }}>
+                {r.patente}
+              </span>
+              {r.ibutton && (
+                <span style={{ color: 'var(--text-tertiary)', fontSize: '11px' }}>
+                  iB: {r.ibutton}
+                </span>
+              )}
+            </div>
+          </div>
+        );
+      },
       enableSorting: false,
     },
     {
@@ -173,7 +168,7 @@ export function HistoricoTable({
       ),
       enableSorting: false,
     },
-  ], [patentesUnicas, patenteFilter, conductoresUnicos, conductorFilter, ibuttonsUnicos, ibuttonFilter, openFilterId]);
+  ], [conductorPatenteUnicos, conductorFilter, openFilterId]);
 
   // Exportar
   const [showExportMenu, setShowExportMenu] = useState(false);

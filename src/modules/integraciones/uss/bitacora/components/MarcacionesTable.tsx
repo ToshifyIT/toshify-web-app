@@ -112,19 +112,19 @@ export function MarcacionesTable({
 
   // Filtros Excel
   const [conductorFilter, setConductorFilter] = useState<string[]>([]);
-  const [patenteFilter, setPatenteFilter] = useState<string[]>([]);
   const [fechaFilter, setFechaFilter] = useState<string[]>([]);
   const [estadoFilter, setEstadoFilter] = useState<string[]>([]);
   const [horarioFilter, setHorarioFilter] = useState<string[]>([]);
   const [turnoFilter, setTurnoFilter] = useState<string[]>([]);
 
   // Listas únicas
-  const conductoresUnicos = useMemo(() =>
-    [...new Set(marcaciones.map(m => m.conductor))].filter(Boolean).sort()
-  , [marcaciones]);
-  const patentesUnicas = useMemo(() =>
-    [...new Set(marcaciones.map(m => m.patente))].filter(Boolean).sort()
-  , [marcaciones]);
+  const conductorPatenteUnicos = useMemo(() => {
+    const set = new Set<string>();
+    for (const m of marcaciones) {
+      set.add(`${m.conductor} | ${m.patente}`);
+    }
+    return [...set].sort();
+  }, [marcaciones]);
   const fechasUnicas = useMemo(() =>
     [...new Set(marcaciones.map(m => formatFecha(m.fecha)))].sort((a, b) => {
       const [da, ma, ya] = a.split('/');
@@ -148,11 +148,10 @@ export function MarcacionesTable({
     [...new Set(marcaciones.map(m => m.vehiculoModalidad || 'Sin asignar'))].filter(Boolean).sort()
   , [marcaciones]);
 
-  const hasActiveFilters = conductorFilter.length > 0 || patenteFilter.length > 0 || fechaFilter.length > 0 || estadoFilter.length > 0 || horarioFilter.length > 0 || turnoFilter.length > 0 || searchTerm.trim() !== '';
+  const hasActiveFilters = conductorFilter.length > 0 || fechaFilter.length > 0 || estadoFilter.length > 0 || horarioFilter.length > 0 || turnoFilter.length > 0 || searchTerm.trim() !== '';
 
   const clearAllFilters = () => {
     setConductorFilter([]);
-    setPatenteFilter([]);
     setFechaFilter([]);
     setEstadoFilter([]);
     setHorarioFilter([]);
@@ -165,10 +164,7 @@ export function MarcacionesTable({
     let filtered = marcaciones;
 
     if (conductorFilter.length > 0) {
-      filtered = filtered.filter(m => conductorFilter.includes(m.conductor));
-    }
-    if (patenteFilter.length > 0) {
-      filtered = filtered.filter(m => patenteFilter.includes(m.patente));
+      filtered = filtered.filter(m => conductorFilter.includes(`${m.conductor} | ${m.patente}`));
     }
     if (fechaFilter.length > 0) {
       filtered = filtered.filter(m => fechaFilter.includes(formatFecha(m.fecha)));
@@ -192,32 +188,28 @@ export function MarcacionesTable({
     }
 
     return filtered;
-  }, [marcaciones, conductorFilter, patenteFilter, fechaFilter, estadoFilter, horarioFilter, turnoFilter, searchTerm]);
+  }, [marcaciones, conductorFilter, fechaFilter, estadoFilter, horarioFilter, turnoFilter, searchTerm]);
 
   // Columnas
   const columns = useMemo<ColumnDef<Marcacion, unknown>[]>(() => [
     {
+      id: 'conductor_patente',
       accessorKey: 'conductor',
       header: () => (
-        <ExcelColumnFilter label="Conductor" options={conductoresUnicos} selectedValues={conductorFilter}
+        <ExcelColumnFilter label="Conductor / Patente" options={conductorPatenteUnicos} selectedValues={conductorFilter}
           onSelectionChange={setConductorFilter} filterId="m-conductor" openFilterId={openFilterId} onOpenChange={setOpenFilterId} />
       ),
-      cell: ({ row }) => (
-        <span style={{ fontWeight: 600 }}>{row.original.conductor}</span>
-      ),
-      enableSorting: false,
-    },
-    {
-      accessorKey: 'patente',
-      header: () => (
-        <ExcelColumnFilter label="Patente" options={patentesUnicas} selectedValues={patenteFilter}
-          onSelectionChange={setPatenteFilter} filterId="m-patente" openFilterId={openFilterId} onOpenChange={setOpenFilterId} />
-      ),
-      cell: ({ row }) => (
-        <span style={{ fontFamily: 'monospace', fontSize: '12px', color: 'var(--color-primary)', fontWeight: 600 }}>
-          {row.original.patente}
-        </span>
-      ),
+      cell: ({ row }) => {
+        const m = row.original;
+        return (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', lineHeight: 1.3 }}>
+            <span style={{ fontWeight: 600, fontSize: '13px' }}>{m.conductor}</span>
+            <span style={{ fontFamily: 'monospace', fontSize: '12px', color: 'var(--color-primary)', fontWeight: 600 }}>
+              {m.patente}
+            </span>
+          </div>
+        );
+      },
       enableSorting: false,
     },
     {
@@ -409,7 +401,7 @@ export function MarcacionesTable({
       },
       enableSorting: false,
     },
-  ], [conductoresUnicos, conductorFilter, patentesUnicas, patenteFilter, fechasUnicas, fechaFilter,
+  ], [conductorPatenteUnicos, conductorFilter, fechasUnicas, fechaFilter,
       estadosUnicos, estadoFilter, horariosUnicos, horarioFilter, turnosUnicos, turnoFilter, openFilterId, onUpdateChecklist]);
 
   // Exportar
