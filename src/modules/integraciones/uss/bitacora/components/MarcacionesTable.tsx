@@ -203,21 +203,18 @@ export function MarcacionesTable({
         const m = row.original;
         return (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', lineHeight: 1.3 }}>
-            <span style={{ fontWeight: 600, fontSize: '13px' }}>{m.conductor}</span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <span style={{ fontWeight: 600, fontSize: '13px' }}>{m.conductor}</span>
+              {m.ibutton && (
+                <span style={{ color: 'var(--text-tertiary)', fontSize: '11px' }}>#{m.ibutton}</span>
+              )}
+            </div>
             <span style={{ fontFamily: 'monospace', fontSize: '12px', color: 'var(--color-primary)', fontWeight: 600 }}>
               {m.patente}
             </span>
           </div>
         );
       },
-      enableSorting: false,
-    },
-    {
-      accessorKey: 'ibutton',
-      header: 'iButton',
-      cell: ({ row }) => (
-        <span style={{ color: 'var(--text-tertiary)', fontSize: '12px' }}>{row.original.ibutton || '-'}</span>
-      ),
       enableSorting: false,
     },
     {
