@@ -22,6 +22,7 @@ import {
   DollarSign,
   CheckCircle,
   XCircle,
+  RefreshCw,
   Users,
   Car,
   Download,
@@ -1427,11 +1428,9 @@ export function IncidenciasModule() {
       id: 'acciones',
       header: 'Acciones',
       cell: ({ row }) => {
-        // Buscar penalidad asociada - total_penalidades > 0 significa que tiene penalidad
-        const tienePenalidad = (row.original.total_penalidades || 0) > 0
-        // Solo puede enviar si NO tiene penalidad (ni aplicada ni rechazada/no aplica)
-        const puedeEnviar = !tienePenalidad
-        
+        const penalidad = penalidades.find(p => p.incidencia_id === row.original.id)
+        const fueRechazada = penalidad?.rechazado === true
+
         return (
           <ActionsMenu
             actions={[
@@ -1447,11 +1446,11 @@ export function IncidenciasModule() {
                 variant: 'info'
               },
               {
-                icon: puedeEnviar ? <DollarSign size={15} /> : <CheckCircle size={15} />,
-                label: puedeEnviar ? 'Enviar a facturacion' : 'Ya enviado',
-                onClick: () => puedeEnviar && handleEnviarAFacturacion(row.original),
-                disabled: !puedeEnviar,
-                variant: puedeEnviar ? 'warning' : 'success'
+                icon: <RefreshCw size={15} />,
+                label: 'Reenviar a facturación',
+                onClick: () => handleEnviarAFacturacion(row.original),
+                hidden: !fueRechazada,
+                variant: 'warning'
               },
               {
                 icon: <Trash2 size={15} />,
