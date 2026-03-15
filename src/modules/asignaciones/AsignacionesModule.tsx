@@ -2229,7 +2229,6 @@ export function AsignacionesModule() {
     {
       id: 'motivo',
       header: 'Motivo',
-      size: 120,
       accessorFn: (row) => {
         const labels: Record<string, string> = {
           entrega_auto: 'Entrega de auto',
@@ -2269,7 +2268,6 @@ export function AsignacionesModule() {
     {
       id: 'asignados',
       header: 'Asignados',
-      size: 220,
       accessorFn: (row) => {
         if (row.esDevolucion) return row.conductorCargo?.nombre || ''
         if (row.horario === 'CARGO' || !row.horario) {
@@ -2332,8 +2330,7 @@ export function AsignacionesModule() {
     },
     {
       id: 'cita_programada',
-      header: 'Cita Programada',
-      size: 110,
+      header: 'Cita',
       accessorFn: (row) => {
         if (!row.fecha_programada) return '-'
         const fecha = new Date(row.fecha_programada)
@@ -2347,23 +2344,15 @@ export function AsignacionesModule() {
       cell: ({ row }) => {
         const fechaProg = row.original.fecha_programada
         if (!fechaProg) return <span className="text-muted">-</span>
-        
         const fecha = new Date(fechaProg)
         const fechaStr = fecha.toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: '2-digit', timeZone: 'America/Argentina/Buenos_Aires' })
         const horaStr = fecha.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'America/Argentina/Buenos_Aires' })
-        
-        return (
-          <div style={{ display: 'flex', flexDirection: 'column', fontSize: '12px', lineHeight: '1.3' }}>
-            <span style={{ fontWeight: 500 }}>{fechaStr}</span>
-            <span style={{ color: 'var(--text-secondary)', fontSize: '11px' }}>{horaStr}</span>
-          </div>
-        )
+        return <span style={{ fontSize: '11px' }}>{fechaStr} {horaStr}</span>
       }
     },
     {
       id: 'entrega_real',
-      header: 'Entrega Real',
-      size: 110,
+      header: 'Entrega',
       accessorFn: (row) => {
         if (!row.fecha_inicio) return '-'
         const fecha = new Date(row.fecha_inicio)
@@ -2372,49 +2361,37 @@ export function AsignacionesModule() {
       cell: ({ row }) => {
         const fechaInicio = row.original.fecha_inicio
         if (!fechaInicio) return <span className="text-muted">-</span>
-        
         const fecha = new Date(fechaInicio)
         const fechaStr = fecha.toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: '2-digit', timeZone: 'America/Argentina/Buenos_Aires' })
         const horaStr = fecha.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'America/Argentina/Buenos_Aires' })
-        
-        return (
-          <div style={{ display: 'flex', flexDirection: 'column', fontSize: '12px', lineHeight: '1.3' }}>
-            <span style={{ fontWeight: 500, color: 'var(--color-success)' }}>{fechaStr}</span>
-            <span style={{ color: 'var(--text-secondary)', fontSize: '11px' }}>{horaStr}</span>
-          </div>
-        )
+        return <span style={{ fontSize: '11px', color: 'var(--color-success)' }}>{fechaStr} {horaStr}</span>
       }
     },
     {
       id: 'tipo_documento',
-      header: 'Documento',
-      size: 100,
+      header: 'Doc.',
       accessorFn: (row) => {
         const conductores = row.asignaciones_conductores || []
         const documentos = [...new Set(conductores.map((c: any) => c.documento).filter(Boolean))]
         if (documentos.length === 0) return '-'
-        // Retornar solo el primer documento para el filtro (prioridad: CARTA_OFERTA > ANEXO > otros)
         const primerDoc = documentos.includes('CARTA_OFERTA') ? 'CARTA_OFERTA'
           : documentos.includes('ANEXO') ? 'ANEXO'
           : documentos[0]
-        return primerDoc === 'CARTA_OFERTA' ? 'Carta Oferta' : primerDoc === 'ANEXO' ? 'Anexo' : 'N/A'
+        return primerDoc === 'CARTA_OFERTA' ? 'C.Oferta' : primerDoc === 'ANEXO' ? 'Anexo' : 'N/A'
       },
       cell: ({ row }) => {
         const conductores = row.original.asignaciones_conductores || []
-        // Obtener documentos únicos de los conductores
         const documentos = [...new Set(conductores.map(c => c.documento).filter(Boolean))]
-
         if (documentos.length === 0) return <span className="text-muted">-</span>
-
-        // Si hay múltiples documentos diferentes, mostrar ambos
         return (
-          <div className="asig-documento-badges">
+          <div style={{ fontSize: '11px' }}>
             {documentos.map((doc, idx) => (
               <span
                 key={idx}
                 className={`asig-documento-badge ${doc === 'CARTA_OFERTA' ? 'asig-doc-carta' : doc === 'ANEXO' ? 'asig-doc-anexo' : 'asig-doc-na'}`}
+                style={{ fontSize: '10px', padding: '1px 4px' }}
               >
-                {doc === 'CARTA_OFERTA' ? 'Carta Oferta' : doc === 'ANEXO' ? 'Anexo' : 'N/A'}
+                {doc === 'CARTA_OFERTA' ? 'C.Oferta' : doc === 'ANEXO' ? 'Anexo' : 'N/A'}
               </span>
             ))}
           </div>
@@ -2423,26 +2400,24 @@ export function AsignacionesModule() {
     },
     {
       accessorKey: 'fecha_fin',
-      header: 'Fecha Fin',
-      size: 100,
+      header: 'Fin',
       cell: ({ row }) => (
-        <span>
+        <span style={{ fontSize: '11px' }}>
           {row.original.fecha_fin
-            ? new Date(row.original.fecha_fin).toLocaleDateString('es-ES', { year: 'numeric', month: 'short', day: 'numeric' })
-            : 'Sin definir'}
+            ? new Date(row.original.fecha_fin).toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: '2-digit', timeZone: 'America/Argentina/Buenos_Aires' })
+            : '-'}
         </span>
       )
     },
     {
       accessorKey: 'estado',
       header: 'Estado',
-      size: 110,
       cell: ({ row }) => {
         if (row.original.esDevolucion) {
-          return <span className="dt-badge" style={{ background: '#FEF3C7', color: '#92400E' }}>Pend. Devolución</span>
+          return <span className="dt-badge" style={{ background: '#FEF3C7', color: '#92400E', fontSize: '10px', padding: '2px 6px' }}>Pend. Dev.</span>
         }
         return (
-          <span className={getStatusBadgeClass(row.original.estado)}>
+          <span className={getStatusBadgeClass(row.original.estado)} style={{ fontSize: '10px', padding: '2px 6px' }}>
             {getStatusLabel(row.original.estado)}
           </span>
         )
@@ -2450,8 +2425,7 @@ export function AsignacionesModule() {
     },
     {
       id: 'acciones',
-      header: 'Acciones',
-      size: 80,
+      header: '',
       enableSorting: false,
       cell: ({ row }) => {
         // Acciones especiales para devoluciones
