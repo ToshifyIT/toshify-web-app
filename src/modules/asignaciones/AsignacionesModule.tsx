@@ -740,18 +740,28 @@ export function AsignacionesModule() {
       }
     })
 
-    // Ordenar: programados primero (tienen prioridad), luego vacantes, luego el resto
+    // Ordenar: programados primero, luego pendientes (sin entrada real), luego vacantes, luego por fecha programada desc
     const vacantesIds = new Set(asignacionesConVacante.map(a => a.id))
     return asignacionesProcesadas.sort((a, b) => {
-      // Programados van primero
+      // 1. Programados van primero
       const aEsProgramado = a.estado === 'programado' ? 0 : 1
       const bEsProgramado = b.estado === 'programado' ? 0 : 1
       if (aEsProgramado !== bEsProgramado) return aEsProgramado - bEsProgramado
 
-      // Luego vacantes
+      // 2. Pendientes (sin entrada real / fecha_inicio) van antes
+      const aPendiente = !a.fecha_inicio ? 0 : 1
+      const bPendiente = !b.fecha_inicio ? 0 : 1
+      if (aPendiente !== bPendiente) return aPendiente - bPendiente
+
+      // 3. Vacantes
       const aEsVacante = vacantesIds.has(a.id) ? 0 : 1
       const bEsVacante = vacantesIds.has(b.id) ? 0 : 1
-      return aEsVacante - bEsVacante
+      if (aEsVacante !== bEsVacante) return aEsVacante - bEsVacante
+
+      // 4. Por fecha programada descendente (más recientes primero)
+      const fechaA = a.fecha_programada ? new Date(a.fecha_programada).getTime() : 0
+      const fechaB = b.fecha_programada ? new Date(b.fecha_programada).getTime() : 0
+      return fechaB - fechaA
     })
   }, [filteredAsignaciones])
 
