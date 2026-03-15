@@ -1882,8 +1882,11 @@ export function ReporteFacturacionTab() {
           monto_CARGO: 0, monto_TURNO_DIURNO: 0, monto_TURNO_NOCTURNO: 0,
           proyectado_raw: 0,
         }
-        const diasTotales = Math.min(7, prorrateo.CARGO + prorrateo.TURNO_DIURNO + prorrateo.TURNO_NOCTURNO)
-        
+        const diasTotalesBrutos = Math.min(7, prorrateo.CARGO + prorrateo.TURNO_DIURNO + prorrateo.TURNO_NOCTURNO)
+        // Descuento automático por hora de entrega (ya detectado en alertasProrrateoVP)
+        const descuentoVP = alertasProrrateoVP.get(conductorId)?.descuento || 0
+        const diasTotales = Math.max(0, diasTotalesBrutos - descuentoVP)
+
         // Excluir conductores con 0 días, SALVO que tengan penalidades pendientes
         if (diasTotales === 0 && !dnisConPenalidadesVP.has(control.numero_dni)) continue
         
@@ -2391,6 +2394,9 @@ export function ReporteFacturacionTab() {
         }
       }
 
+      // Descuentos por hora de entrega (misma lógica que Vista Previa)
+      const descuentosPorHoraRecalc = new Map<string, number>()
+
       for (const ac of (asignacionesConductoresRecalc || []) as any[]) {
         const asignacion = ac.asignaciones
         if (!asignacion) continue
@@ -2456,6 +2462,24 @@ export function ReporteFacturacionTab() {
           cursorR.setDate(cursorR.getDate() + 1)
         }
 
+        // Detectar descuento por hora de entrega (mismas reglas que Vista Previa)
+        const modalidadDescR = (modalidadAsignacion === 'CARGO' || horarioLower === 'todo_dia')
+          ? 'CARGO'
+          : (modalidadAsignacion === 'TURNO' && (horarioLower === 'nocturno' || horarioLower === 'n'))
+            ? 'TURNO_NOCTURNO'
+            : 'TURNO_DIURNO'
+        if ((modalidadDescR === 'TURNO_DIURNO' || modalidadDescR === 'CARGO') && acInicio >= fechaInicioSemanaRecalc && !descuentosPorHoraRecalc.has(ac.conductor_id)) {
+          const rawTs = ac.fecha_inicio || asignacion.fecha_inicio
+          if (rawTs) {
+            const horaR = getArgHour(rawTs)
+            if (modalidadDescR === 'TURNO_DIURNO') {
+              descuentosPorHoraRecalc.set(ac.conductor_id, horaR < horasCorteTurno.diurno ? horasCorteTurno.descDiurnoAntes : horasCorteTurno.descDiurnoDespues)
+            } else if (modalidadDescR === 'CARGO' && horaR >= horasCorteTurno.cargo) {
+              descuentosPorHoraRecalc.set(ac.conductor_id, horasCorteTurno.descCargoDespues)
+            }
+          }
+        }
+
         // Rastrear fecha_fin más tardía de asignación
         const finRealStrR = toArgDate(ac.fecha_fin || asignacion.fecha_fin || '')
         if (finRealStrR && finRealStrR > (maxAsigFinRecalc.get(ac.conductor_id) || '')) {
@@ -2497,7 +2521,10 @@ export function ReporteFacturacionTab() {
         if (!conductorData) continue
 
         const prorrateo = prorrateoRecalcMap.get(conductorData.id) || { CARGO: 0, TURNO_DIURNO: 0, TURNO_NOCTURNO: 0 }
-        const totalDias = Math.min(7, prorrateo.CARGO + prorrateo.TURNO_DIURNO + prorrateo.TURNO_NOCTURNO)
+        const totalDiasBrutos = Math.min(7, prorrateo.CARGO + prorrateo.TURNO_DIURNO + prorrateo.TURNO_NOCTURNO)
+        // Descuento automático por hora de entrega
+        const descuentoRecalc = descuentosPorHoraRecalc.get(conductorData.id) || 0
+        const totalDias = Math.max(0, totalDiasBrutos - descuentoRecalc)
 
         // Excluir conductores con 0 días, SALVO que tengan penalidades pendientes
         if (totalDias === 0 && !dnisConPenalidadesRecalc.has(control.numero_dni)) continue
