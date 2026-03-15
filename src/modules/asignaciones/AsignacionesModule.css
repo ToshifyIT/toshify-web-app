@@ -2310,78 +2310,7 @@ input[type="date"].asig-status-select {
   }
 }
 
-/* =====================================================
-   STICKY COLUMNS - First 4 columns fixed on scroll
-   ===================================================== */
-
-.asig-module .dt-table th:nth-child(1),
-.asig-module .dt-table td:nth-child(1) {
-  position: sticky;
-  left: 0;
-  z-index: 2;
-  background: var(--bg-primary);
-}
-
-.asig-module .dt-table th:nth-child(2),
-.asig-module .dt-table td:nth-child(2) {
-  position: sticky;
-  left: 120px;
-  z-index: 2;
-  background: var(--bg-primary);
-}
-
-.asig-module .dt-table th:nth-child(3),
-.asig-module .dt-table td:nth-child(3) {
-  position: sticky;
-  left: 210px;
-  z-index: 2;
-  background: var(--bg-primary);
-}
-
-.asig-module .dt-table th:nth-child(4),
-.asig-module .dt-table td:nth-child(4) {
-  position: sticky;
-  left: 330px;
-  z-index: 2;
-  background: var(--bg-primary);
-}
-
-/* Shadow after last sticky column */
-.asig-module .dt-table th:nth-child(4)::after,
-.asig-module .dt-table td:nth-child(4)::after {
-  content: '';
-  position: absolute;
-  top: 0;
-  right: -4px;
-  bottom: 0;
-  width: 4px;
-  background: linear-gradient(to right, rgba(0,0,0,0.06), transparent);
-  pointer-events: none;
-}
-
-/* Header sticky needs higher z-index */
-.asig-module .dt-table thead th:nth-child(1),
-.asig-module .dt-table thead th:nth-child(2),
-.asig-module .dt-table thead th:nth-child(3),
-.asig-module .dt-table thead th:nth-child(4) {
-  z-index: 4;
-}
-
-/* Maintain background on hover for sticky cells */
-.asig-module .dt-table tbody tr:hover td:nth-child(1),
-.asig-module .dt-table tbody tr:hover td:nth-child(2),
-.asig-module .dt-table tbody tr:hover td:nth-child(3),
-.asig-module .dt-table tbody tr:hover td:nth-child(4) {
-  background: var(--bg-secondary);
-}
-
-/* Even rows */
-.asig-module .dt-table tbody tr:nth-child(even) td:nth-child(1),
-.asig-module .dt-table tbody tr:nth-child(even) td:nth-child(2),
-.asig-module .dt-table tbody tr:nth-child(even) td:nth-child(3),
-.asig-module .dt-table tbody tr:nth-child(even) td:nth-child(4) {
-  background: var(--bg-secondary);
-}
+/* Prevent Estado badge truncation */
 
 /* Prevent Estado badge truncation */
 .asig-module .dt-table td .dt-badge {
