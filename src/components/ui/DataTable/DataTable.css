@@ -363,7 +363,7 @@
   position: relative;
 }
 
-/* Table Wrapper for horizontal + vertical scroll with sticky header */
+/* Table Wrapper for scroll */
 .dt-table-wrapper {
   overflow: auto;
   -webkit-overflow-scrolling: touch;
@@ -443,6 +443,9 @@
   white-space: nowrap;
   user-select: none;
   overflow: visible;
+  position: sticky;
+  top: 0;
+  z-index: 4;
 }
 
 .dt-table th.dt-sortable {
