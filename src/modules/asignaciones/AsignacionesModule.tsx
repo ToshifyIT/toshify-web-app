@@ -740,20 +740,24 @@ export function AsignacionesModule() {
       }
     })
 
-    // Ordenar: programados primero, luego pendientes (sin entrada real), luego vacantes, luego por fecha programada desc
+    // Ordenar: programados > activas pendientes > activas con entrada > finalizadas/canceladas
+    // Dentro de cada grupo: vacantes primero, luego por fecha programada desc
     const vacantesIds = new Set(asignacionesConVacante.map(a => a.id))
     return asignacionesProcesadas.sort((a, b) => {
-      // 1. Programados van primero
-      const aEsProgramado = a.estado === 'programado' ? 0 : 1
-      const bEsProgramado = b.estado === 'programado' ? 0 : 1
-      if (aEsProgramado !== bEsProgramado) return aEsProgramado - bEsProgramado
+      // 1. Prioridad por estado: programado=0, activa=1, finalizada=2, cancelada=3
+      const estadoPrio: Record<string, number> = { programado: 0, activa: 1, finalizada: 2, cancelada: 3 }
+      const prioA = estadoPrio[a.estado] ?? 99
+      const prioB = estadoPrio[b.estado] ?? 99
+      if (prioA !== prioB) return prioA - prioB
 
-      // 2. Pendientes (sin entrada real / fecha_inicio) van antes
-      const aPendiente = !a.fecha_inicio ? 0 : 1
-      const bPendiente = !b.fecha_inicio ? 0 : 1
-      if (aPendiente !== bPendiente) return aPendiente - bPendiente
+      // 2. Dentro de activas: pendientes (sin entrada real) primero
+      if (a.estado === 'activa' && b.estado === 'activa') {
+        const aPendiente = !a.fecha_inicio ? 0 : 1
+        const bPendiente = !b.fecha_inicio ? 0 : 1
+        if (aPendiente !== bPendiente) return aPendiente - bPendiente
+      }
 
-      // 3. Vacantes
+      // 3. Vacantes antes
       const aEsVacante = vacantesIds.has(a.id) ? 0 : 1
       const bEsVacante = vacantesIds.has(b.id) ? 0 : 1
       if (aEsVacante !== bEsVacante) return aEsVacante - bEsVacante
