@@ -10,6 +10,9 @@
   display: flex;
   flex-direction: column;
   gap: 16px;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
 }
 
 /* =====================================================
@@ -2310,9 +2313,24 @@ input[type="date"].asig-status-select {
   }
 }
 
-/* Table scrolls internally, fits screen */
+/* Table fills remaining height, scrolls internally */
+.asig-module .dt-wrapper {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.asig-module .dt-container {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
 .asig-module .dt-table-wrapper {
-  max-height: calc(100vh - 380px);
+  flex: 1;
+  min-height: 0;
 }
 
 /* Compact padding to fit all columns without horizontal scroll */
