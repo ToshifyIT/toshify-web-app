@@ -5,6 +5,11 @@
 
 import { supabase } from '../lib/supabase';
 
+/** Normaliza patente: quita espacios, guiones y pasa a mayúsculas */
+function normalizarPatente(p: string): string {
+  return p.replace(/[\s\-]/g, '').toUpperCase();
+}
+
 export interface USSHistoricoRegistro {
   id: number;
   patente: string;
@@ -45,8 +50,22 @@ export const ussHistoricoService = {
       .lt('fecha_hora_inicio', `${endStr}T00:00:00`)
       .order('fecha_hora_inicio', { ascending: false });
 
+    // uss_historico no tiene sede_id: filtrar por patentes de vehículos de la sede.
+    // Las patentes en uss_historico están normalizadas (sin guiones/espacios),
+    // así que normalizamos las de vehiculos antes de comparar.
     if (options?.sedeId) {
-      query = query.eq('sede_id', options.sedeId);
+      const { data: vehiculos } = await supabase
+        .from('vehiculos')
+        .select('patente')
+        .eq('sede_id', options.sedeId)
+        .is('deleted_at', null);
+
+      if (vehiculos && vehiculos.length > 0) {
+        const patentes = vehiculos.map((v: { patente: string }) => normalizarPatente(v.patente));
+        query = query.in('patente', patentes);
+      } else {
+        return { data: [], count: 0 };
+      }
     }
 
     if (options?.patente) {

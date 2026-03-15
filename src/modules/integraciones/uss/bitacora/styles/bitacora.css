@@ -691,3 +691,90 @@
     gap: 12px;
   }
 }
+
+/* Sticky columns for Marcaciones table */
+.marcaciones-sticky .dt-table-wrapper {
+  overflow-x: auto;
+}
+
+.marcaciones-sticky .dt-table th:nth-child(1),
+.marcaciones-sticky .dt-table td:nth-child(1) {
+  position: sticky;
+  left: 0;
+  z-index: 2;
+  background: var(--bg-primary);
+}
+
+.marcaciones-sticky .dt-table th:nth-child(2),
+.marcaciones-sticky .dt-table td:nth-child(2) {
+  position: sticky;
+  left: 140px;
+  z-index: 2;
+  background: var(--bg-primary);
+}
+
+.marcaciones-sticky .dt-table th:nth-child(3),
+.marcaciones-sticky .dt-table td:nth-child(3) {
+  position: sticky;
+  left: 230px;
+  z-index: 2;
+  background: var(--bg-primary);
+}
+
+/* Checklist column (last column) sticky right */
+.marcaciones-sticky .dt-table th:last-child,
+.marcaciones-sticky .dt-table td:last-child {
+  position: sticky;
+  right: 0;
+  z-index: 2;
+  background: var(--bg-primary);
+}
+
+/* Shadow indicators for sticky columns */
+.marcaciones-sticky .dt-table th:nth-child(3)::after,
+.marcaciones-sticky .dt-table td:nth-child(3)::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  right: -4px;
+  bottom: 0;
+  width: 4px;
+  background: linear-gradient(to right, rgba(0,0,0,0.06), transparent);
+  pointer-events: none;
+}
+
+.marcaciones-sticky .dt-table th:last-child::before,
+.marcaciones-sticky .dt-table td:last-child::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -4px;
+  bottom: 0;
+  width: 4px;
+  background: linear-gradient(to left, rgba(0,0,0,0.06), transparent);
+  pointer-events: none;
+}
+
+/* Maintain background on hover for sticky cells */
+.marcaciones-sticky .dt-table tbody tr:hover td:nth-child(1),
+.marcaciones-sticky .dt-table tbody tr:hover td:nth-child(2),
+.marcaciones-sticky .dt-table tbody tr:hover td:nth-child(3),
+.marcaciones-sticky .dt-table tbody tr:hover td:last-child {
+  background: var(--bg-secondary);
+}
+
+/* Header sticky columns need higher z-index */
+.marcaciones-sticky .dt-table thead th:nth-child(1),
+.marcaciones-sticky .dt-table thead th:nth-child(2),
+.marcaciones-sticky .dt-table thead th:nth-child(3),
+.marcaciones-sticky .dt-table thead th:last-child {
+  z-index: 4;
+}
+
+/* Even rows background for sticky */
+.marcaciones-sticky .dt-table tbody tr:nth-child(even) td:nth-child(1),
+.marcaciones-sticky .dt-table tbody tr:nth-child(even) td:nth-child(2),
+.marcaciones-sticky .dt-table tbody tr:nth-child(even) td:nth-child(3),
+.marcaciones-sticky .dt-table tbody tr:nth-child(even) td:last-child {
+  background: var(--bg-secondary);
+}

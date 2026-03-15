@@ -5,7 +5,7 @@
  * Histórico: registros crudos de uss_historico
  */
 
-import { useMemo } from 'react';
+// useMemo removed - stats now computed inside MarcacionesTable
 import { UserCheck, List } from 'lucide-react';
 import { useSede } from '../../../../contexts/SedeContext';
 import { useUSSHistoricoData } from './hooks/useUSSHistoricoData';
@@ -44,14 +44,7 @@ export function BitacoraModule() {
     updateChecklist,
   } = useUSSHistoricoData(sedeActualId);
 
-  // Stats rápidos para marcaciones
-  const marcacionesStats = useMemo(() => {
-    if (marcaciones.length === 0) return null;
-    const conductores = new Set(marcaciones.map(m => m.conductor)).size;
-    const kmTotal = marcaciones.reduce((sum, m) => sum + m.kmTotal, 0);
-    const activos = marcaciones.filter(m => m.estado !== 'Sin Actividad').length;
-    return { conductores, kmTotal: Math.round(kmTotal * 100) / 100, activos };
-  }, [marcaciones]);
+  // Stats removed from here - now computed inside MarcacionesTable from filtered data
 
   const headerControls = (
     <BitacoraHeader
@@ -87,14 +80,7 @@ export function BitacoraModule() {
         })}
       </div>
 
-      {/* Stats rápidos en vista marcaciones */}
-      {vista === 'marcaciones' && marcacionesStats && (
-        <div style={{ display: 'flex', gap: '16px', fontSize: '13px', color: 'var(--text-secondary)' }}>
-          <span><strong>{marcacionesStats.conductores}</strong> conductores</span>
-          <span><strong>{marcacionesStats.kmTotal.toLocaleString('es-AR')}</strong> km</span>
-          <span><strong>{marcacionesStats.activos}</strong> activos</span>
-        </div>
-      )}
+      {/* Stats now rendered inside MarcacionesTable from filtered data */}
 
       {/* Vista Marcaciones */}
       {vista === 'marcaciones' && (

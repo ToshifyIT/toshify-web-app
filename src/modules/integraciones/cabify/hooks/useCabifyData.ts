@@ -153,11 +153,20 @@ export function useCabifyData(): UseCabifyDataReturn {
     // Cargar asignaciones
     await loadAsignaciones(driverData)
 
+    // Determinar última fecha de sync desde los datos (fecha_guardado más reciente)
+    let ultimaSync: Date | null = null
+    for (const d of driverData as any[]) {
+      if (d.fecha_guardado) {
+        const fg = new Date(d.fecha_guardado)
+        if (!ultimaSync || fg > ultimaSync) ultimaSync = fg
+      }
+    }
+
     // Finalizar carga exitosa
     setQueryState((prev) => ({
       ...prev,
       loading: false,
-      lastUpdate: new Date(),
+      lastUpdate: ultimaSync || new Date(),
       error: null,
     }))
   }, [sedeActualId, loadAsignaciones])

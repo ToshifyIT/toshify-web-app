@@ -9,6 +9,34 @@ import type {
   BitacoraQueryOptions,
 } from '../modules/integraciones/uss/bitacora/types/bitacora.types'
 
+/** Normaliza patente: quita espacios, guiones y pasa a mayúsculas */
+function normalizarPatente(p: string): string {
+  return p.replace(/[\s\-]/g, '').toUpperCase()
+}
+
+/** Cache de patentes normalizadas por sede (evita queries repetidas) */
+const patentesPorSedeCache = new Map<string, { patentes: string[]; expires: number }>()
+const PATENTES_CACHE_TTL = 5 * 60 * 1000 // 5 minutos
+
+async function getPatentesPorSede(sedeId: string): Promise<string[] | null> {
+  const cached = patentesPorSedeCache.get(sedeId)
+  if (cached && Date.now() < cached.expires) {
+    return cached.patentes
+  }
+
+  const { data: vehiculos } = await supabase
+    .from('vehiculos')
+    .select('patente')
+    .eq('sede_id', sedeId)
+    .is('deleted_at', null)
+
+  if (!vehiculos || vehiculos.length === 0) return null
+
+  const patentes = vehiculos.map((v: { patente: string }) => normalizarPatente(v.patente))
+  patentesPorSedeCache.set(sedeId, { patentes, expires: Date.now() + PATENTES_CACHE_TTL })
+  return patentes
+}
+
 // Tipo para registro de bitácora
 export interface BitacoraRegistroTransformado {
   id: string
@@ -158,9 +186,14 @@ export const wialonBitacoraService = {
       .order('fecha_turno', { ascending: false })
       .order('hora_inicio', { ascending: false })
 
-    // Filtro por sede
+    // wialon_bitacora no tiene sede_id: filtrar por patentes normalizadas de la sede
     if (options?.sedeId) {
-      query = query.eq('sede_id', options.sedeId)
+      const patentes = await getPatentesPorSede(options.sedeId)
+      if (patentes) {
+        query = query.in('patente_normalizada', patentes)
+      } else {
+        return { data: [], count: 0 }
+      }
     }
 
     // Aplicar filtros en la query
@@ -252,7 +285,17 @@ export const wialonBitacoraService = {
       .lte('fecha_turno', endDate)
       .limit(5000)
     if (sedeId) {
-      statsQuery = statsQuery.eq('sede_id', sedeId)
+      const patentes = await getPatentesPorSede(sedeId)
+      if (patentes) {
+        statsQuery = statsQuery.in('patente_normalizada', patentes)
+      } else {
+        return {
+          totalTurnos: 0, vehiculosUnicos: 0, conductoresUnicos: 0,
+          kilometrajeTotal: 0, kilometrajePromedio: 0,
+          turnosFinalizados: 0, turnosPocaKm: 0, turnosEnCurso: 0,
+          conGnc: 0, conLavado: 0, conNafta: 0,
+        }
+      }
     }
     const { data: rawData, error } = await statsQuery
 

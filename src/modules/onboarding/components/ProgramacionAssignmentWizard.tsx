@@ -369,6 +369,8 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
             direccion,
             direccion_lat,
             direccion_lng,
+            created_at,
+            motivo_baja,
             conductores_estados (
               codigo,
               descripcion
@@ -989,9 +991,66 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
     }
   }
 
-  // Auto-rellenar zona desde datos del conductor al entrar al paso 4
+  // Auto-detectar tipo de candidato basándose en datos del conductor
+  // Nuevo: creado a partir del 01/02/2025 y nunca tuvo asignación
+  // Antiguo: ya ha tenido asignaciones y/o creado antes del 01/02/2025
+  // Reingreso: se dio de baja y se reactivó
+  async function detectarTipoCandidato(conductorId: string): Promise<'nuevo' | 'antiguo' | 'reingreso'> {
+    const conductor = conductores.find(c => c.id === conductorId) as any
+    if (!conductor) return 'nuevo'
+
+    // Reingreso: tiene motivo_baja (se dio de baja y volvió a activarse)
+    if (conductor.motivo_baja) return 'reingreso'
+
+    // Verificar si tuvo asignaciones previas (cualquier estado)
+    const { count } = await supabase
+      .from('asignaciones_conductores')
+      .select('id', { count: 'exact', head: true })
+      .eq('conductor_id', conductorId)
+    const tuvoAsignaciones = (count || 0) > 0
+
+    // Fecha de corte: 01/02/2025
+    const fechaCorte = new Date('2025-02-01T00:00:00')
+    const createdAt = conductor.created_at ? new Date(conductor.created_at) : null
+    const esCreadoDespuesCorte = createdAt && createdAt >= fechaCorte
+
+    // Nuevo: creado después del corte Y sin asignaciones previas
+    if (esCreadoDespuesCorte && !tuvoAsignaciones) return 'nuevo'
+
+    // Antiguo: todo lo demás
+    return 'antiguo'
+  }
+
+  // Auto-rellenar zona y tipo de candidato al entrar al paso 4
   useEffect(() => {
     if (step !== 4) return
+
+    // Auto-detectar tipo de candidato para cada conductor seleccionado
+    async function autoDetectarTipos() {
+      const updates: any = {}
+      let changed = false
+
+      if (formData.modalidad === 'CARGO' && formData.conductor_id && !formData.tipo_candidato_cargo) {
+        updates.tipo_candidato_cargo = await detectarTipoCandidato(formData.conductor_id)
+        changed = true
+      }
+      if (formData.modalidad === 'TURNO') {
+        if (formData.conductor_diurno_id && !formData.tipo_candidato_diurno) {
+          updates.tipo_candidato_diurno = await detectarTipoCandidato(formData.conductor_diurno_id)
+          changed = true
+        }
+        if (formData.conductor_nocturno_id && !formData.tipo_candidato_nocturno) {
+          updates.tipo_candidato_nocturno = await detectarTipoCandidato(formData.conductor_nocturno_id)
+          changed = true
+        }
+      }
+
+      if (changed) {
+        setFormData(prev => ({ ...prev, ...updates }))
+      }
+    }
+
+    autoDetectarTipos()
 
     setFormData(prev => {
       const updates: any = { ...prev }

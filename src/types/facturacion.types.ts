@@ -662,7 +662,14 @@ export const PARAMETROS_FACTURACION = {
 
   // Referidos
   REFERIDO_BONO_SEMANA_1: 'referido_bono_semana_1',
-  REFERIDO_BONO_SEMANA_5: 'referido_bono_semana_5'
+  REFERIDO_BONO_SEMANA_5: 'referido_bono_semana_5',
+
+  // Descuento por hora de entrega
+  HORA_CORTE_DIURNO: 'hora_corte_diurno',           // Hora límite entrega diurno (default 12). Si entrega >= esta hora, descuento 1 turno
+  HORA_CORTE_CARGO: 'hora_corte_cargo',              // Hora límite entrega a cargo (default 14). Si entrega >= esta hora, descuento 0.5 turno
+  DESCUENTO_DIURNO_ANTES: 'descuento_diurno_antes',  // Descuento si entrega antes del corte diurno (default 0.5)
+  DESCUENTO_DIURNO_DESPUES: 'descuento_diurno_despues', // Descuento si entrega después del corte diurno (default 1)
+  DESCUENTO_CARGO_DESPUES: 'descuento_cargo_despues',   // Descuento si entrega después del corte cargo (default 0.5)
 } as const
 
 // Helper para parsear valor según tipo
