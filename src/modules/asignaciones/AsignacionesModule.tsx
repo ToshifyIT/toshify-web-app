@@ -2213,7 +2213,7 @@ export function AsignacionesModule() {
       accessorFn: (row) => row.vehiculos?.patente || '',
       id: 'vehiculo',
       header: 'Vehículo',
-      size: 100,
+      size: 120,
       cell: ({ row }) => (
         <div className="asig-vehiculo-cell">
           <span className="asig-vehiculo-patente">{row.original.vehiculos?.patente || 'N/A'}</span>
@@ -2281,6 +2281,7 @@ export function AsignacionesModule() {
     {
       id: 'asignados',
       header: 'Asignados',
+      size: 220,
       accessorFn: (row) => {
         if (row.esDevolucion) return row.conductorCargo?.nombre || ''
         if (row.horario === 'CARGO' || !row.horario) {
