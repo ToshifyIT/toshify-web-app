@@ -298,7 +298,7 @@ export function MarcacionesTable({
     {
       accessorKey: 'vehiculoModalidad',
       header: () => (
-        <ExcelColumnFilter label="Turno" options={turnosUnicos} selectedValues={turnoFilter}
+        <ExcelColumnFilter label="Modalidad" options={turnosUnicos} selectedValues={turnoFilter}
           onSelectionChange={setTurnoFilter} filterId="m-turno" openFilterId={openFilterId} onOpenChange={setOpenFilterId} />
       ),
       cell: ({ row }) => {
@@ -317,26 +317,9 @@ export function MarcacionesTable({
       enableSorting: false,
     },
     {
-      accessorKey: 'estado',
-      header: () => (
-        <ExcelColumnFilter label="Estado" options={estadosUnicos} selectedValues={estadoFilter}
-          onSelectionChange={setEstadoFilter} filterId="m-estado" openFilterId={openFilterId} onOpenChange={setOpenFilterId} />
-      ),
-      cell: ({ row }) => (
-        <span style={{
-          fontSize: '11px', fontWeight: 600, padding: '2px 8px',
-          borderRadius: '10px', color: '#fff',
-          background: getEstadoColor(row.original.estado),
-        }}>
-          {row.original.estado === 'Turno Finalizado' ? 'Finalizado' : row.original.estado}
-        </span>
-      ),
-      enableSorting: false,
-    },
-    {
       accessorKey: 'horario',
       header: () => (
-        <ExcelColumnFilter label="Horario" options={horariosUnicos} selectedValues={horarioFilter}
+        <ExcelColumnFilter label="Turno" options={horariosUnicos} selectedValues={horarioFilter}
           onSelectionChange={setHorarioFilter} filterId="m-horario" openFilterId={openFilterId} onOpenChange={setOpenFilterId} />
       ),
       cell: ({ row }) => {
@@ -358,6 +341,23 @@ export function MarcacionesTable({
           </span>
         );
       },
+      enableSorting: false,
+    },
+    {
+      accessorKey: 'estado',
+      header: () => (
+        <ExcelColumnFilter label="Estado" options={estadosUnicos} selectedValues={estadoFilter}
+          onSelectionChange={setEstadoFilter} filterId="m-estado" openFilterId={openFilterId} onOpenChange={setOpenFilterId} />
+      ),
+      cell: ({ row }) => (
+        <span style={{
+          fontSize: '11px', fontWeight: 600, padding: '2px 8px',
+          borderRadius: '10px', color: '#fff',
+          background: getEstadoColor(row.original.estado),
+        }}>
+          {row.original.estado === 'Turno Finalizado' ? 'Finalizado' : row.original.estado}
+        </span>
+      ),
       enableSorting: false,
     },
     {
