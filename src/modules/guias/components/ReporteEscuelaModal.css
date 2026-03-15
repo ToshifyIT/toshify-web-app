@@ -2,7 +2,7 @@
 .reporte-overlay {
   position: fixed;
   inset: 0;
-  background-color: rgba(226, 232, 240, 0.5);
+  background-color: var(--bg-overlay);
   backdrop-filter: blur(2px);
   display: flex;
   align-items: center;
@@ -13,16 +13,17 @@
 
 /* MODAL */
 .reporte-modal {
-  background-color: #ffffff;
+  background-color: var(--bg-primary);
   border-radius: 16px;
   width: 100%;
   max-width: 1200px;
   max-height: 90vh;
-  box-shadow: 0 25px 60px rgba(0, 0, 0, 0.1);
+  box-shadow: var(--shadow-lg);
   animation: slideIn 0.3s ease;
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  border: 1px solid var(--border-primary);
 }
 
 @keyframes slideIn {
@@ -41,27 +42,27 @@
 .reporte-title {
   font-size: 18px;
   font-weight: 700;
-  color: #1e293b;
+  color: var(--text-primary);
   margin: 0;
 }
 
 .reporte-subtitle {
   font-size: 13px;
-  color: #64748b;
+  color: var(--text-secondary);
   margin: 4px 0 0 0;
 }
 
 .reporte-close {
   background: none;
   border: none;
-  color: #94a3b8;
+  color: var(--text-tertiary);
   padding: 6px;
   border-radius: 6px;
   cursor: pointer;
 }
 
 .reporte-close:hover {
-  background-color: #f1f5f9;
+  background-color: var(--bg-tertiary);
 }
 
 /* TABLA CONTAINER */
@@ -78,7 +79,7 @@
   font-size: 13px;
 }
 
-/* HEADER GRUPOS (primera fila del thead) */
+/* HEADER GRUPOS */
 .header-grupos th {
   padding: 10px 12px;
   font-size: 11px;
@@ -86,52 +87,52 @@
   text-transform: uppercase;
   letter-spacing: 0.5px;
   text-align: center;
-  border-bottom: 2px solid #e2e8f0;
+  border-bottom: 2px solid var(--border-primary);
 }
 
 .grupo-escuela {
-  background-color: #fef3c7;
+  background-color: rgba(245, 158, 11, 0.15);
   color: #92400e;
   border-radius: 8px 0 0 0;
 }
 
 .grupo-previo {
-  background-color: #f8fafc;
-  color: #64748b;
+  background-color: var(--bg-secondary);
+  color: var(--text-secondary);
 }
 
 .grupo-2semanas {
-  background-color: #dbeafe;
+  background-color: rgba(59, 130, 246, 0.1);
   color: #1e40af;
 }
 
 .grupo-4semanas {
-  background-color: #dcfce7;
+  background-color: rgba(34, 197, 94, 0.1);
   color: #166534;
   border-radius: 0 8px 0 0;
 }
 
-/* HEADER COLUMNAS (segunda fila del thead) */
+/* HEADER COLUMNAS */
 .header-columnas th {
   padding: 16px 14px;
   font-size: 11px;
   font-weight: 600;
-  color: #64748b;
+  color: var(--text-secondary);
   text-transform: uppercase;
   letter-spacing: 0.5px;
   text-align: left;
-  border-bottom: 1px solid #e2e8f0;
+  border-bottom: 1px solid var(--border-primary);
   white-space: nowrap;
 }
 
 /* TBODY */
 .reporte-table tbody tr {
-  border-bottom: 1px solid #f1f5f9;
+  border-bottom: 1px solid var(--border-secondary);
   transition: background-color 0.15s;
 }
 
 .reporte-table tbody tr:hover {
-  background-color: #f8fafc;
+  background-color: var(--bg-hover);
 }
 
 .reporte-table tbody td {
@@ -142,29 +143,29 @@
 /* CELDAS ESPECÍFICAS */
 .td-nombre {
   font-weight: 600;
-  color: #1e293b;
+  color: var(--text-primary);
   white-space: nowrap;
 }
 
 .td-fecha {
-  color: #64748b;
+  color: var(--text-secondary);
   font-size: 12px;
   white-space: nowrap;
 }
 
 .td-money {
   font-family: monospace;
-  color: #1e293b;
+  color: var(--text-primary);
   font-weight: 500;
 }
 
 .td-horas {
-  color: #475569;
+  color: var(--text-secondary);
   text-align: center;
 }
 
 .td-porcentaje {
-  color: #475569;
+  color: var(--text-secondary);
   text-align: center;
 }
 
@@ -180,24 +181,24 @@
 }
 
 .badge-baja {
-  background-color: #fef2f2;
+  background-color: rgba(239, 68, 68, 0.1);
   color: #dc2626;
 }
 
 .badge-media {
-  background-color: #fefce8;
+  background-color: rgba(245, 158, 11, 0.1);
   color: #ca8a04;
 }
 
 .badge-alta {
-  background-color: #f0fdf4;
+  background-color: rgba(34, 197, 94, 0.1);
   color: #16a34a;
 }
 
 .badge-muy-alta {
-  background-color: #dcfce7;
+  background-color: rgba(34, 197, 94, 0.15);
   color: #15803d;
-  border: 1px solid #86efac;
+  border: 1px solid rgba(34, 197, 94, 0.3);
 }
 
 /* FOOTER */
@@ -206,14 +207,14 @@
   justify-content: space-between;
   align-items: center;
   padding: 16px 28px 20px;
-  border-top: 1px solid #f1f5f9;
+  border-top: 1px solid var(--border-secondary);
   gap: 16px;
 }
 
 /* COUNT */
 .reporte-count {
   font-size: 13px;
-  color: #64748b;
+  color: var(--text-secondary);
 }
 
 /* PAGINACIÓN */
@@ -227,9 +228,9 @@
   width: 32px;
   height: 32px;
   border-radius: 8px;
-  border: 1px solid #e2e8f0;
-  background-color: white;
-  color: #64748b;
+  border: 1px solid var(--border-primary);
+  background-color: var(--bg-primary);
+  color: var(--text-secondary);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -238,8 +239,8 @@
 }
 
 .page-arrow:hover:not(:disabled) {
-  background-color: #f8fafc;
-  border-color: #cbd5e1;
+  background-color: var(--bg-hover);
+  border-color: var(--border-primary);
 }
 
 .page-arrow:disabled {
@@ -251,22 +252,22 @@
   width: 32px;
   height: 32px;
   border-radius: 8px;
-  border: 1px solid #e2e8f0;
-  background-color: white;
-  color: #64748b;
+  border: 1px solid var(--border-primary);
+  background-color: var(--bg-primary);
+  color: var(--text-secondary);
   font-size: 13px;
   font-weight: 500;
   cursor: pointer;
 }
 
 .page-num:hover {
-  background-color: #f8fafc;
+  background-color: var(--bg-hover);
 }
 
 .page-num.active {
-  background-color: #3b82f6;
+  background-color: var(--color-primary);
   color: white;
-  border-color: #3b82f6;
+  border-color: var(--color-primary);
 }
 
 /* BOTONES ACCIONES */
@@ -278,9 +279,9 @@
 .btn-cerrar {
   padding: 10px 20px;
   border-radius: 8px;
-  border: 1px solid #e2e8f0;
-  background-color: white;
-  color: #475569;
+  border: 1px solid var(--border-primary);
+  background-color: var(--bg-primary);
+  color: var(--text-secondary);
   font-size: 13px;
   font-weight: 600;
   cursor: pointer;
@@ -288,15 +289,15 @@
 }
 
 .btn-cerrar:hover {
-  background-color: #f8fafc;
-  border-color: #cbd5e1;
+  background-color: var(--bg-hover);
+  border-color: var(--border-primary);
 }
 
 .btn-descargar {
   padding: 10px 20px;
   border-radius: 8px;
   border: none;
-  background-color: #3b82f6;
+  background-color: var(--color-primary);
   color: white;
   font-size: 13px;
   font-weight: 600;
@@ -308,7 +309,7 @@
 }
 
 .btn-descargar:hover {
-  background-color: #2563eb;
+  background-color: var(--color-primary-hover);
 }
 
 /* RESPONSIVE */
