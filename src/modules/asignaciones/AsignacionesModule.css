@@ -2310,7 +2310,10 @@ input[type="date"].asig-status-select {
   }
 }
 
-/* Prevent Estado badge truncation */
+/* Table scrolls internally, fits screen */
+.asig-module .dt-table-wrapper {
+  max-height: calc(100vh - 380px);
+}
 
 /* Prevent Estado badge truncation */
 .asig-module .dt-table td .dt-badge {
