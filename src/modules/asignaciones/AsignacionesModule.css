@@ -2315,6 +2315,12 @@ input[type="date"].asig-status-select {
   max-height: calc(100vh - 380px);
 }
 
+/* Compact padding to fit all columns without horizontal scroll */
+.asig-module .dt-table th,
+.asig-module .dt-table td {
+  padding: 8px 6px;
+}
+
 /* Prevent Estado badge truncation */
 .asig-module .dt-table td .dt-badge {
   white-space: nowrap;
