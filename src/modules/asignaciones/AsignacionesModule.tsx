@@ -2213,7 +2213,7 @@ export function AsignacionesModule() {
       accessorFn: (row) => row.vehiculos?.patente || '',
       id: 'vehiculo',
       header: 'Vehículo',
-      size: 120,
+      size: 100,
       cell: ({ row }) => (
         <div className="asig-vehiculo-cell">
           <span className="asig-vehiculo-patente">{row.original.vehiculos?.patente || 'N/A'}</span>
