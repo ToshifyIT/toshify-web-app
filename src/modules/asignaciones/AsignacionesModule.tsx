@@ -2281,7 +2281,6 @@ export function AsignacionesModule() {
     {
       id: 'asignados',
       header: 'Asignados',
-      meta: { expand: true },
       accessorFn: (row) => {
         if (row.esDevolucion) return row.conductorCargo?.nombre || ''
         if (row.horario === 'CARGO' || !row.horario) {
