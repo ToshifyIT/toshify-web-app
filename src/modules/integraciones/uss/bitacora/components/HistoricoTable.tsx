@@ -117,17 +117,17 @@ export function HistoricoTable({
         const r = row.original;
         return (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', lineHeight: 1.3 }}>
-            <span style={{ fontWeight: 600, fontSize: '13px' }}>{r.conductor || 'Sin conductor'}</span>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <span style={{ fontWeight: 600, color: 'var(--color-primary)', fontFamily: 'monospace', fontSize: '12px' }}>
-                {r.patente}
-              </span>
+              <span style={{ fontWeight: 600, fontSize: '13px' }}>{r.conductor || 'Sin conductor'}</span>
               {r.ibutton && (
                 <span style={{ color: 'var(--text-tertiary)', fontSize: '11px' }}>
-                  iB: {r.ibutton}
+                  #{r.ibutton}
                 </span>
               )}
             </div>
+            <span style={{ fontWeight: 600, color: 'var(--color-primary)', fontFamily: 'monospace', fontSize: '12px' }}>
+              {r.patente}
+            </span>
           </div>
         );
       },
