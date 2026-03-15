@@ -10,7 +10,7 @@ interface BitacoraHeaderProps {
   onDateRangePreset: (preset: string) => void
   onCustomDateRange: (startDate: string, endDate: string, label?: string) => void
   isLoading: boolean
-  lastUpdate: Date | null
+  lastUpdate?: Date | null
 }
 
 // Helpers de fecha en zona Argentina
@@ -25,9 +25,7 @@ export function BitacoraHeader({
   onDateRangePreset,
   onCustomDateRange,
   isLoading,
-  lastUpdate: _lastUpdate,
 }: BitacoraHeaderProps) {
-  void _lastUpdate; // Kept in interface for API compatibility
 
   const isRealtime = dateRange.label === 'Hoy'
 

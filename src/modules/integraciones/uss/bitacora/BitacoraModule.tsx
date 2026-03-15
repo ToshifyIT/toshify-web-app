@@ -52,7 +52,6 @@ export function BitacoraModule() {
       onDateRangePreset={setDateRangePreset}
       onCustomDateRange={setCustomDateRange}
       isLoading={loading}
-      lastUpdate={null}
     />
   );
 

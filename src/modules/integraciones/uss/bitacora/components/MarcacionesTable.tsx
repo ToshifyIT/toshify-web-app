@@ -8,7 +8,7 @@ import { useMemo, useState, useRef, useEffect } from 'react';
 import { type ColumnDef } from '@tanstack/react-table';
 import { DataTable } from '../../../../../components/ui/DataTable/DataTable';
 import { ExcelColumnFilter, useExcelFilters } from '../../../../../components/ui/DataTable/ExcelColumnFilter';
-import { Search, ClipboardList, Download, ChevronDown, Fuel, Droplets, Car, Sun, Moon, Clock, X } from 'lucide-react';
+import { Search, ClipboardList, Download, ChevronDown, Fuel, Droplets, Sun, Moon, Clock, X } from 'lucide-react';
 import type { Marcacion } from '../hooks/useUSSHistoricoData';
 import * as XLSX from 'xlsx';
 
@@ -217,17 +217,7 @@ export function MarcacionesTable({
       },
       enableSorting: false,
     },
-    {
-      accessorKey: 'fecha',
-      header: () => (
-        <ExcelColumnFilter label="Fecha Turno" options={fechasUnicas} selectedValues={fechaFilter}
-          onSelectionChange={setFechaFilter} filterId="m-fecha" openFilterId={openFilterId} onOpenChange={setOpenFilterId} />
-      ),
-      cell: ({ row }) => (
-        <span style={{ fontSize: '12px' }}>{formatFecha(row.original.fecha)}</span>
-      ),
-      enableSorting: false,
-    },
+
     {
       accessorKey: 'entrada',
       header: 'Entrada',
@@ -298,7 +288,7 @@ export function MarcacionesTable({
     {
       accessorKey: 'vehiculoModalidad',
       header: () => (
-        <ExcelColumnFilter label="Turno" options={turnosUnicos} selectedValues={turnoFilter}
+        <ExcelColumnFilter label="Modalidad" options={turnosUnicos} selectedValues={turnoFilter}
           onSelectionChange={setTurnoFilter} filterId="m-turno" openFilterId={openFilterId} onOpenChange={setOpenFilterId} />
       ),
       cell: ({ row }) => {
@@ -317,26 +307,9 @@ export function MarcacionesTable({
       enableSorting: false,
     },
     {
-      accessorKey: 'estado',
-      header: () => (
-        <ExcelColumnFilter label="Estado" options={estadosUnicos} selectedValues={estadoFilter}
-          onSelectionChange={setEstadoFilter} filterId="m-estado" openFilterId={openFilterId} onOpenChange={setOpenFilterId} />
-      ),
-      cell: ({ row }) => (
-        <span style={{
-          fontSize: '11px', fontWeight: 600, padding: '2px 8px',
-          borderRadius: '10px', color: '#fff',
-          background: getEstadoColor(row.original.estado),
-        }}>
-          {row.original.estado === 'Turno Finalizado' ? 'Finalizado' : row.original.estado}
-        </span>
-      ),
-      enableSorting: false,
-    },
-    {
       accessorKey: 'horario',
       header: () => (
-        <ExcelColumnFilter label="Horario" options={horariosUnicos} selectedValues={horarioFilter}
+        <ExcelColumnFilter label="Turno" options={horariosUnicos} selectedValues={horarioFilter}
           onSelectionChange={setHorarioFilter} filterId="m-horario" openFilterId={openFilterId} onOpenChange={setOpenFilterId} />
       ),
       cell: ({ row }) => {
@@ -361,44 +334,67 @@ export function MarcacionesTable({
       enableSorting: false,
     },
     {
+      accessorKey: 'estado',
+      header: () => (
+        <ExcelColumnFilter label="Estado" options={estadosUnicos} selectedValues={estadoFilter}
+          onSelectionChange={setEstadoFilter} filterId="m-estado" openFilterId={openFilterId} onOpenChange={setOpenFilterId} />
+      ),
+      cell: ({ row }) => (
+        <span style={{
+          fontSize: '11px', fontWeight: 600, padding: '2px 8px',
+          borderRadius: '10px', color: '#fff',
+          background: getEstadoColor(row.original.estado),
+        }}>
+          {row.original.estado === 'Turno Finalizado' ? 'Finalizado' : row.original.estado}
+        </span>
+      ),
+      enableSorting: false,
+    },
+    {
       id: 'checklist',
       header: 'Checklist',
       cell: ({ row }) => {
         const m = row.original;
         return (
-          <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+          <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
             <button
               title="GNC cargado"
               onClick={() => onUpdateChecklist(m.id, { gnc_cargado: !m.gncCargado })}
               style={{
+                display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1px',
                 background: 'none', border: 'none', cursor: 'pointer', padding: '2px',
                 color: m.gncCargado ? '#16a34a' : 'var(--text-tertiary)',
                 opacity: m.gncCargado ? 1 : 0.4,
               }}
             >
-              <Fuel size={15} />
+              <Fuel size={14} />
+              <span style={{ fontSize: '9px', fontWeight: 600, lineHeight: 1 }}>GNC</span>
             </button>
             <button
               title="Lavado realizado"
               onClick={() => onUpdateChecklist(m.id, { lavado_realizado: !m.lavadoRealizado })}
               style={{
+                display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1px',
                 background: 'none', border: 'none', cursor: 'pointer', padding: '2px',
                 color: m.lavadoRealizado ? '#2563eb' : 'var(--text-tertiary)',
                 opacity: m.lavadoRealizado ? 1 : 0.4,
               }}
             >
-              <Droplets size={15} />
+              <Droplets size={14} />
+              <span style={{ fontSize: '9px', fontWeight: 600, lineHeight: 1 }}>Lav</span>
             </button>
             <button
               title="Nafta cargada"
               onClick={() => onUpdateChecklist(m.id, { nafta_cargada: !m.naftaCargada })}
               style={{
+                display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1px',
                 background: 'none', border: 'none', cursor: 'pointer', padding: '2px',
                 color: m.naftaCargada ? '#d97706' : 'var(--text-tertiary)',
                 opacity: m.naftaCargada ? 1 : 0.4,
               }}
             >
-              <Car size={15} />
+              <Fuel size={14} />
+              <span style={{ fontSize: '9px', fontWeight: 600, lineHeight: 1 }}>Nafta</span>
             </button>
           </div>
         );

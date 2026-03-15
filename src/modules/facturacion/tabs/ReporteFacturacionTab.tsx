@@ -1583,9 +1583,9 @@ export function ReporteFacturacionTab() {
           ? Math.round((subtotalRaw / diasRaw) * 7)
           : Math.round(subtotalRaw)
 
-        prorrateo.monto_CARGO = Math.round(prorrateo.monto_CARGO)
-        prorrateo.monto_TURNO_DIURNO = Math.round(prorrateo.monto_TURNO_DIURNO)
-        prorrateo.monto_TURNO_NOCTURNO = Math.round(prorrateo.monto_TURNO_NOCTURNO)
+        prorrateo.monto_CARGO = Math.round(prorrateo.monto_CARGO * 100) / 100
+        prorrateo.monto_TURNO_DIURNO = Math.round(prorrateo.monto_TURNO_DIURNO * 100) / 100
+        prorrateo.monto_TURNO_NOCTURNO = Math.round(prorrateo.monto_TURNO_NOCTURNO * 100) / 100
       }
 
       // 2 + 3 + 3.1 + 4 + 5. Cargar saldos, garantías, cabify, tickets y excesos en paralelo
@@ -2723,7 +2723,7 @@ export function ReporteFacturacionTab() {
 
         // P001: Turno Diurno
         if (conductor.dias_turno_diurno > 0) {
-          const montoDiurno = Math.round(precioTurnoDiurno * conductor.dias_turno_diurno)
+          const montoDiurno = Math.round(precioTurnoDiurno * conductor.dias_turno_diurno * 100) / 100
           alquilerTotal += montoDiurno
           detallesAlquiler.push({
             codigo: 'P001', 
@@ -2733,7 +2733,7 @@ export function ReporteFacturacionTab() {
         }
         // P013: Turno Nocturno
         if (conductor.dias_turno_nocturno > 0) {
-          const montoNocturno = Math.round(precioTurnoNocturno * conductor.dias_turno_nocturno)
+          const montoNocturno = Math.round(precioTurnoNocturno * conductor.dias_turno_nocturno * 100) / 100
           alquilerTotal += montoNocturno
           detallesAlquiler.push({
             codigo: 'P013', 
