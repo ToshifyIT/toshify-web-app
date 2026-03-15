@@ -2313,31 +2313,7 @@ input[type="date"].asig-status-select {
   }
 }
 
-/* Table fills remaining height, scrolls internally */
-.asig-module .dt-wrapper {
-  flex: 1;
-  min-height: 0;
-  display: flex;
-  flex-direction: column;
-}
-
-.asig-module .dt-container {
-  flex: 1;
-  min-height: 0;
-  display: flex;
-  flex-direction: column;
-}
-
-.asig-module .dt-table-wrapper {
-  flex: 1;
-  min-height: 0;
-}
-
-/* Compact padding to fit all columns without horizontal scroll */
-.asig-module .dt-table th,
-.asig-module .dt-table td {
-  padding: 8px 6px;
-}
+/* Layout handled globally by DataTable.css flex chain */
 
 /* Prevent Estado badge truncation */
 .asig-module .dt-table td .dt-badge {
