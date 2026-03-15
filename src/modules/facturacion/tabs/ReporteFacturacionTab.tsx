@@ -9318,30 +9318,54 @@ export function ReporteFacturacionTab() {
                         Días de la Semana
                       </div>
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                        {diasModalData.dias.map((d, i) => (
-                          <div key={i} style={{
-                            display: 'flex', alignItems: 'center', gap: '10px',
-                            padding: '7px 12px', borderRadius: '6px',
-                            background: d.trabajado ? 'rgba(16, 185, 129, 0.06)' : 'transparent',
-                            border: `1px solid ${d.trabajado ? 'rgba(16, 185, 129, 0.15)' : 'var(--border-primary)'}`,
-                          }}>
-                            <div style={{
-                              width: '8px', height: '8px', borderRadius: '50%',
-                              background: d.trabajado ? '#10b981' : '#d1d5db', flexShrink: 0,
-                            }} />
-                            <span style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-primary)', width: '75px' }}>
-                              {d.diaSemana}
-                            </span>
-                            <span style={{ fontSize: '12px', color: 'var(--text-secondary)', flex: 1 }}>
-                              {d.fecha}
-                            </span>
-                            {d.trabajado ? (
-                              <span style={{ fontSize: '10px', color: '#10b981', fontWeight: 600 }}>{d.horario}</span>
-                            ) : (
-                              <span style={{ fontSize: '10px', color: 'var(--text-secondary)' }}>-</span>
-                            )}
-                          </div>
-                        ))}
+                        {(() => {
+                          const datosActuales = modoVistaPrevia ? vistaPreviaData : facturaciones;
+                          const conductorData = datosActuales.find(f => f.conductor_id === diasModalData.conductorId);
+                          const alerta = conductorData?.alerta_prorrateo_ingreso;
+                          return diasModalData.dias.map((d, i) => {
+                            // Detectar si este día es el de la entrega con descuento
+                            const esDiaDescuento = alerta && d.trabajado && alerta.fecha_entrega === d.fecha;
+                            const esCompleto = esDiaDescuento && alerta.tipo === 'dia_completo';
+                            const colorDia = esDiaDescuento
+                              ? (esCompleto ? '#ef4444' : '#d97706')
+                              : (d.trabajado ? '#10b981' : '#d1d5db');
+                            const bgDia = esDiaDescuento
+                              ? (esCompleto ? 'rgba(239, 68, 68, 0.06)' : 'rgba(234, 179, 8, 0.06)')
+                              : (d.trabajado ? 'rgba(16, 185, 129, 0.06)' : 'transparent');
+                            const borderDia = esDiaDescuento
+                              ? `1px solid ${esCompleto ? 'rgba(239, 68, 68, 0.2)' : 'rgba(234, 179, 8, 0.25)'}`
+                              : `1px solid ${d.trabajado ? 'rgba(16, 185, 129, 0.15)' : 'var(--border-primary)'}`;
+
+                            return (
+                              <div key={i} style={{
+                                display: 'flex', alignItems: 'center', gap: '10px',
+                                padding: '7px 12px', borderRadius: '6px',
+                                background: bgDia,
+                                border: borderDia,
+                              }}>
+                                <div style={{
+                                  width: '8px', height: '8px', borderRadius: '50%',
+                                  background: colorDia, flexShrink: 0,
+                                }} />
+                                <span style={{ fontSize: '12px', fontWeight: 600, color: esDiaDescuento ? colorDia : 'var(--text-primary)', width: '75px' }}>
+                                  {d.diaSemana}
+                                </span>
+                                <span style={{ fontSize: '12px', color: 'var(--text-secondary)', flex: 1 }}>
+                                  {d.fecha}
+                                </span>
+                                {esDiaDescuento ? (
+                                  <span style={{ fontSize: '10px', color: colorDia, fontWeight: 700 }}>
+                                    {d.horario} · Desc. {alerta.descuento_turnos === 1 ? '1 turno' : `½ turno`}
+                                  </span>
+                                ) : d.trabajado ? (
+                                  <span style={{ fontSize: '10px', color: '#10b981', fontWeight: 600 }}>{d.horario}</span>
+                                ) : (
+                                  <span style={{ fontSize: '10px', color: 'var(--text-secondary)' }}>-</span>
+                                )}
+                              </div>
+                            );
+                          });
+                        })()}
                       </div>
                     </div>
 
