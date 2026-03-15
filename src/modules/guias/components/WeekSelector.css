@@ -173,17 +173,17 @@
 
 .week-calendar-day.today {
   font-weight: 700;
-  color: #ef4444;
+  color: var(--color-primary);
 }
 
 .week-calendar-day.selected {
-  background: #fee2e2; /* Red-100 */
-  color: #b91c1c; /* Red-700 */
+  background: var(--color-primary-light);
+  color: var(--color-primary);
   border-radius: 0;
 }
 
 .week-calendar-day.day-selected {
-  background: #ef4444 !important; /* Red-500 */
+  background: var(--color-primary) !important;
   color: white !important;
   border-radius: 50% !important;
 }
@@ -191,14 +191,14 @@
 .week-calendar-day.week-start {
   border-top-left-radius: 50%;
   border-bottom-left-radius: 50%;
-  background: #ef4444;
+  background: var(--color-primary);
   color: white;
 }
 
 .week-calendar-day.week-end {
   border-top-right-radius: 50%;
   border-bottom-right-radius: 50%;
-  background: #ef4444;
+  background: var(--color-primary);
   color: white;
 }
 
@@ -224,13 +224,13 @@
 }
 
 .week-calendar-shortcut:hover {
-  background: #fee2e2;
-  color: #b91c1c;
+  background: var(--color-primary-light);
+  color: var(--color-primary);
 }
 
 .week-calendar-shortcut.active {
-  background: #fee2e2;
-  color: #b91c1c;
+  background: var(--color-primary-light);
+  color: var(--color-primary);
   font-weight: 500;
 }
 

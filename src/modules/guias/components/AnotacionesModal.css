@@ -1,7 +1,7 @@
 .anotaciones-overlay {
   position: fixed;
   inset: 0;
-  background-color: rgba(226, 232, 240, 0.85);
+  background-color: var(--bg-overlay);
   backdrop-filter: blur(4px);
   display: flex;
   align-items: center;
@@ -11,16 +11,17 @@
 }
 
 .anotaciones-modal {
-  background-color: #ffffff;
+  background-color: var(--bg-primary);
   border-radius: 20px;
   width: 95%;
   max-width: 1100px;
   max-height: 90vh;
-  box-shadow: 0 25px 60px rgba(0, 0, 0, 0.08);
+  box-shadow: var(--shadow-lg);
   animation: anotacionesSlideIn 0.3s ease-out;
   overflow: hidden;
   display: flex;
   flex-direction: column;
+  border: 1px solid var(--border-primary);
 }
 
 @keyframes anotacionesSlideIn {
@@ -50,18 +51,18 @@
 .anotaciones-icon {
   width: 44px;
   height: 44px;
-  background-color: #eff6ff;
+  background-color: var(--color-info-light);
   border-radius: 12px;
   display: flex;
   align-items: center;
   justify-content: center;
-  color: #3b82f6;
+  color: var(--color-info);
 }
 
 .anotaciones-title {
   font-size: 20px;
   font-weight: 700;
-  color: #1a1a2e;
+  color: var(--text-primary);
   margin: 0;
 }
 
@@ -70,7 +71,7 @@
   align-items: center;
   gap: 24px;
   font-size: 13px;
-  color: #1f2933;
+  color: var(--text-primary);
   margin: 4px 0 0 0;
 }
 
@@ -82,7 +83,7 @@
 .anotaciones-close {
   background: none;
   border: none;
-  color: #94a3b8;
+  color: var(--text-tertiary);
   padding: 8px;
   border-radius: 8px;
   cursor: pointer;
@@ -90,11 +91,11 @@
 }
 
 .anotaciones-close:hover {
-  background-color: #f1f5f9;
-  color: #475569;
+  background-color: var(--bg-tertiary);
+  color: var(--text-secondary);
 }
 
-/* --- TABLA (Adapted from DriverHistoryModal) --- */
+/* --- TABLA --- */
 .anotaciones-table-container {
   flex: 1;
   overflow-y: auto;
@@ -114,9 +115,9 @@
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.8px;
-  color: #64748b;
-  border-bottom: 2px solid #e2e8f0;
-  background-color: #fafbfc;
+  color: var(--text-secondary);
+  border-bottom: 2px solid var(--border-primary);
+  background-color: var(--bg-secondary);
   position: sticky;
   top: 0;
   z-index: 10;
@@ -125,13 +126,13 @@
 .anotaciones-table td {
   padding: 18px 16px;
   font-size: 14px;
-  color: #334155;
-  border-bottom: 1px solid #f1f5f9;
+  color: var(--text-primary);
+  border-bottom: 1px solid var(--border-secondary);
   vertical-align: middle;
 }
 
 .anotaciones-table tr:hover td {
-  background-color: #f8fafc;
+  background-color: var(--bg-hover);
 }
 
 .anotaciones-table tr:last-child td {
@@ -140,29 +141,29 @@
 
 /* --- CELDAS ESPECÍFICAS --- */
 .td-mensaje {
-  color: #334155;
+  color: var(--text-primary);
 }
 
 .mensaje-content {
   display: block;
   max-width: 400px;
   line-height: 1.5;
-  color: #334155;
+  color: var(--text-primary);
 }
 
 .td-semana {
   font-weight: 600;
-  color: #475569;
+  color: var(--text-secondary);
   white-space: nowrap;
 }
 
 .td-fecha {
-  color: #64748b;
+  color: var(--text-secondary);
   white-space: nowrap;
 }
 
 .td-usuario {
-  color: #475569;
+  color: var(--text-secondary);
   white-space: nowrap;
 }
 
@@ -171,12 +172,12 @@
   align-items: center;
   gap: 8px;
   font-size: 13px;
-  color: #475569;
+  color: var(--text-secondary);
   font-weight: 500;
 }
 
 .meta-value svg {
-  color: #94a3b8;
+  color: var(--text-tertiary);
 }
 
 .avatar {
@@ -192,12 +193,12 @@
   align-items: center;
   padding: 20px 32px 24px;
   margin-top: 8px;
-  border-top: 1px solid #f1f5f9;
+  border-top: 1px solid var(--border-secondary);
 }
 
 .anotaciones-count {
   font-size: 13px;
-  color: #94a3b8;
+  color: var(--text-tertiary);
   font-weight: 500;
 }
 
@@ -210,9 +211,9 @@
   width: 36px;
   height: 36px;
   border-radius: 10px;
-  border: 1px solid #e2e8f0;
-  background-color: #ffffff;
-  color: #475569;
+  border: 1px solid var(--border-primary);
+  background-color: var(--bg-primary);
+  color: var(--text-secondary);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -221,8 +222,8 @@
 }
 
 .page-btn:hover:not(:disabled) {
-  background-color: #f8fafc;
-  border-color: #cbd5e1;
+  background-color: var(--bg-hover);
+  border-color: var(--border-primary);
 }
 
 .page-btn:disabled {
@@ -242,15 +243,14 @@
   .anotaciones-table-container {
     padding: 0 16px;
   }
-  
+
   .anotaciones-header,
   .anotaciones-footer {
     padding-left: 16px;
     padding-right: 16px;
   }
 
-  /* Make table scroll horizontally on small screens if needed */
   .anotaciones-table {
-    min-width: 600px; 
+    min-width: 600px;
   }
 }

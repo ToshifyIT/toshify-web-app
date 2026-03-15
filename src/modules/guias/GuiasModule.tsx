@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useMemo } from 'react'
 import { useSearchParams, useParams } from 'react-router-dom'
 import { supabase } from '../../lib/supabase'
-import { fetchGuias, getCabifyDatosPorSemanas } from './guiasService'
+import { fetchGuias } from './guiasService'
 import { format, startOfISOWeek, endOfISOWeek, setISOWeek, addHours, previousSunday, startOfDay, endOfDay, subWeeks, nextSunday, addWeeks } from 'date-fns'
 import { WeekSelector } from './components/WeekSelector'
 import { 
@@ -525,13 +525,14 @@ export function GuiasModule() {
         if (errorHistorial) throw errorHistorial;
       }
 
-      Swal.fire({
-        title: 'Reasignación Exitosa',
-        text: 'El conductor ha sido reasignado correctamente.',
-        icon: 'success',
+      Swal.mixin({
+        toast: true,
+        position: 'top',
+        showConfirmButton: false,
         timer: 2000,
-        showConfirmButton: false
-      });
+        timerProgressBar: true,
+        customClass: { popup: 'toast-popup', title: 'toast-title' }
+      }).fire({ icon: 'success', title: 'Reasignación exitosa' });
 
       // Recargar conductores del guía actual para reflejar que se fue
       if (!selectedGuiaId) return;
@@ -559,11 +560,49 @@ export function GuiasModule() {
 
       if (!historyData || historyData.length === 0) return;
 
-      // 2. Obtener datos financieros desde cabify_historico via RPC (única fuente de verdad)
+      // 2. Obtener datos financieros con consulta directa a cabify_historico (filtrada por DNI)
       const semanas = historyData.map((d: any) => d.semana);
-      const dniMap = new Map<string, string>();
-      if (driver.numero_dni) dniMap.set(driver.id, String(driver.numero_dni));
-      const cabifyDataMap = await getCabifyDatosPorSemanas([driver.id], semanas, dniMap, sedeActualId);
+      let cabifyDataMap = new Map<string, Map<string, { cobroApp: number; cobroEfectivo: number }>>();
+      const dniNorm = driver.numero_dni ? normalizeDni(String(driver.numero_dni)) : '';
+      if (dniNorm && semanas.length > 0) {
+        try {
+          const weekDates = semanas.map(s => {
+            const [yStr, wStr] = s.split('-W');
+            const y = parseInt(yStr); const w = parseInt(wStr);
+            const jan4 = new Date(Date.UTC(y, 0, 4));
+            const dow = jan4.getUTCDay() || 7;
+            const mondayW1 = new Date(jan4.getTime() - (dow - 1) * 86400000);
+            const monday = new Date(mondayW1.getTime() + (w - 1) * 7 * 86400000);
+            const sunday = new Date(monday.getTime() + 6 * 86400000);
+            return { monday, sunday };
+          });
+          const minDate = new Date(Math.min(...weekDates.map(w => w.monday.getTime())));
+          const maxDate = new Date(Math.max(...weekDates.map(w => w.sunday.getTime())));
+
+          const { data: cabifyRows } = await supabase
+            .from('cabify_historico')
+            .select('dni, cobro_efectivo, cobro_app, fecha_inicio')
+            .eq('dni', dniNorm)
+            .gte('fecha_inicio', minDate.toISOString())
+            .lte('fecha_inicio', new Date(Date.UTC(maxDate.getUTCFullYear(), maxDate.getUTCMonth(), maxDate.getUTCDate(), 23, 59, 59, 999)).toISOString());
+
+          if (cabifyRows && cabifyRows.length > 0) {
+            for (const row of cabifyRows) {
+              const fechaDate = new Date(row.fecha_inicio);
+              const monday = startOfISOWeek(fechaDate);
+              const semanaKey = format(monday, "R-'W'II");
+              let semanaMap = cabifyDataMap.get(semanaKey);
+              if (!semanaMap) { semanaMap = new Map(); cabifyDataMap.set(semanaKey, semanaMap); }
+              const existing = semanaMap.get(driver.id) || { cobroApp: 0, cobroEfectivo: 0 };
+              existing.cobroApp += Number(row.cobro_app) || 0;
+              existing.cobroEfectivo += Number(row.cobro_efectivo) || 0;
+              semanaMap.set(driver.id, existing);
+            }
+          }
+        } catch {
+          // Cabify falló — se mostrará $0
+        }
+      }
 
       const rows = historyData.map(d => {
         const cabifyEntry = cabifyDataMap.get(d.semana)?.get(driver.id);
@@ -661,11 +700,33 @@ export function GuiasModule() {
       return;
     }
     if (selectedGuiaId) {
+      // Si ya estamos en la semana actual, loadDrivers ya setea currentWeekDrivers
+      if (selectedWeek === getCurrentWeek()) return;
       loadCurrentWeekMetrics(selectedGuiaId);
     } else {
       setCurrentWeekDrivers([]);
     }
   }, [selectedGuiaId, sedeActualId, seguimientoLoaded])
+
+  // Auto-refresco silencioso cada 10 minutos
+  useEffect(() => {
+    if (!seguimientoLoaded || !selectedGuiaId) return;
+
+    const intervalId = setInterval(async () => {
+      try {
+        const [driversData, metricsData] = await Promise.all([
+          fetchDriversData(selectedGuiaId, selectedWeek),
+          fetchDriversData(selectedGuiaId, getCurrentWeek()),
+        ]);
+        setDrivers(driversData);
+        setCurrentWeekDrivers(metricsData);
+      } catch {
+        // Silencioso: no mostrar errores al usuario en refresco automático
+      }
+    }, 10 * 60 * 1000);
+
+    return () => clearInterval(intervalId);
+  }, [selectedGuiaId, selectedWeek, sedeActualId, seguimientoLoaded])
 
   const fetchDriversData = async (guiaId: string, targetWeek: string) => {
     const isCurrentWeek = targetWeek === getCurrentWeek();
@@ -745,18 +806,58 @@ export function GuiasModule() {
       const prevMondayForCabify = subWeeks(tMondayLocal, 1);
       const prevWeekLabelForCabify = format(prevMondayForCabify, "R-'W'II");
 
-      // RPC Cabify: buscar datos financieros para semana objetivo Y semana anterior
-      const cabifySemanasToFetch = [targetWeek, prevWeekLabelForCabify];
-      // Construir mapa UUID → DNI para consulta complementaria en Bariloche
+      // Construir mapa UUID → DNI normalizado para cruce con cabify_historico
       const conductorDniMap = new Map<string, string>();
+      const dniToConductorId = new Map<string, string>();
       (historialData || []).forEach((h: any) => {
         if (h.id_conductor && h.conductores?.numero_dni) {
-          conductorDniMap.set(h.id_conductor, String(h.conductores.numero_dni));
+          const dniNorm = normalizeDni(String(h.conductores.numero_dni));
+          conductorDniMap.set(h.id_conductor, dniNorm);
+          dniToConductorId.set(dniNorm, h.id_conductor);
         }
       });
-      const cabifyPromise = conductorIds.length > 0
-        ? getCabifyDatosPorSemanas(conductorIds, cabifySemanasToFetch, conductorDniMap, sedeActualId)
-        : Promise.resolve(new Map<string, Map<string, { cobroApp: number; cobroEfectivo: number }>>());
+
+      // Consulta directa a cabify_historico filtrada por DNIs (en vez de traer todos los conductores)
+      const cabifyPromise = (async () => {
+        const result = new Map<string, Map<string, { cobroApp: number; cobroEfectivo: number }>>();
+        const dniList = Array.from(dniToConductorId.keys());
+        if (dniList.length === 0) return result;
+
+        // Calcular rango de fechas: semana anterior → semana objetivo (2 semanas)
+        const prevMondayDate = subWeeks(tMondayLocal, 1);
+        const sundayDate = endOfISOWeek(tMondayLocal);
+        const startDateStr = new Date(Date.UTC(prevMondayDate.getFullYear(), prevMondayDate.getMonth(), prevMondayDate.getDate(), 0, 0, 0, 0)).toISOString();
+        const endDateStr = new Date(Date.UTC(sundayDate.getFullYear(), sundayDate.getMonth(), sundayDate.getDate(), 23, 59, 59, 999)).toISOString();
+
+        // Una sola query filtrada por DNIs del guía
+        const { data: cabifyRows } = await supabase
+          .from('cabify_historico')
+          .select('dni, cobro_efectivo, cobro_app, fecha_inicio')
+          .in('dni', dniList)
+          .gte('fecha_inicio', startDateStr)
+          .lte('fecha_inicio', endDateStr);
+
+        if (cabifyRows && cabifyRows.length > 0) {
+          for (const row of cabifyRows) {
+            const fechaDate = new Date(row.fecha_inicio);
+            const monday = startOfISOWeek(fechaDate);
+            const semanaKey = format(monday, "R-'W'II");
+            const conductorId = dniToConductorId.get(normalizeDni(row.dni));
+            if (!conductorId) continue;
+
+            let semanaMap = result.get(semanaKey);
+            if (!semanaMap) {
+              semanaMap = new Map();
+              result.set(semanaKey, semanaMap);
+            }
+            const existing = semanaMap.get(conductorId) || { cobroApp: 0, cobroEfectivo: 0 };
+            existing.cobroApp += Number(row.cobro_app) || 0;
+            existing.cobroEfectivo += Number(row.cobro_efectivo) || 0;
+            semanaMap.set(conductorId, existing);
+          }
+        }
+        return result;
+      })();
       
       const vehiculosPromise = (async () => {
         if (conductorIds.length === 0) return new Map<string, number>();
@@ -1421,6 +1522,10 @@ export function GuiasModule() {
       setLoadingDrivers(true);
       const data = await fetchDriversData(guiaId, selectedWeek);
       setDrivers(data);
+      // Si estamos viendo la semana actual, reutilizar para métricas (evita doble consulta)
+      if (selectedWeek === getCurrentWeek()) {
+        setCurrentWeekDrivers(data);
+      }
     } catch {
       setDrivers([]);
     } finally {
@@ -1657,9 +1762,9 @@ export function GuiasModule() {
           // History insert failed
         }
       }
-      
-      // Recargar datos para reflejar cambios
-      if (selectedGuiaId) {
+
+      // Solo recargar si se insertaron registros de historial que afecten la vista actual
+      if (historyInserts.length > 0 && selectedGuiaId) {
            loadDrivers(selectedGuiaId);
       }
 
@@ -2536,7 +2641,7 @@ export function GuiasModule() {
             return new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(Number(Number(n).toFixed(2)));
           };
           return (
-            <div style={{ display: 'grid', gridTemplateColumns: '84px 1fr', columnGap: 8, rowGap: 2, alignItems: 'center' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '68px 1fr', columnGap: 8, rowGap: 2, alignItems: 'center' }}>
               <span style={{ fontWeight: 600 }}>App:</span>
               <span style={{ textAlign: 'right' }}>{formatMoney(appRaw) as any}</span>
               <span style={{ fontWeight: 600 }}>Efectivo:</span>
@@ -2547,7 +2652,7 @@ export function GuiasModule() {
           );
         },
         enableSorting: false,
-        size: 170,
+        size: 210,
       },
 
       {
@@ -2563,7 +2668,7 @@ export function GuiasModule() {
             return new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(v);
           };
           return (
-            <div style={{ display: 'grid', gridTemplateColumns: '72px 1fr', columnGap: 8, rowGap: 2, alignItems: 'center' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '66px 1fr', columnGap: 8, rowGap: 2, alignItems: 'center' }}>
               <span style={{ fontWeight: 600 }}>Alquiler:</span>
               <span style={{ textAlign: 'right' }}>{fmtBilling(alquiler) as any}</span>
               <span style={{ fontWeight: 600 }}>Garantía:</span>
@@ -2574,7 +2679,7 @@ export function GuiasModule() {
           );
         },
         enableSorting: false,
-        size: 160,
+        size: 190,
       },
 
       {

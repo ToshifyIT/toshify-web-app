@@ -59,9 +59,9 @@ export function AdaptiveTooltip({
   }, [width])
 
   const isDark = variant === 'dark'
-  const bg = isDark ? '#1e293b' : '#ffffff'
-  const textColor = isDark ? '#ffffff' : '#1e293b'
-  const borderStyle = isDark ? 'none' : '1px solid #e2e8f0'
+  const bg = isDark ? 'var(--bg-secondary)' : 'var(--card-bg)'
+  const textColor = 'var(--text-primary)'
+  const borderStyle = isDark ? 'none' : '1px solid var(--border-primary)'
 
   const tooltipStyle: React.CSSProperties = {
     position: 'fixed',
@@ -80,7 +80,7 @@ export function AdaptiveTooltip({
     width: `${width}px`,
     zIndex: 99999,
     pointerEvents: 'none' as const,
-    boxShadow: '0 4px 16px rgba(0,0,0,0.12)',
+    boxShadow: 'var(--shadow-md)',
     textTransform: 'none' as const,
     letterSpacing: 'normal',
   }
@@ -93,8 +93,8 @@ export function AdaptiveTooltip({
     height: 0,
     border: '6px solid transparent',
     ...(layout.showBelow
-      ? { top: '-12px', borderBottomColor: isDark ? bg : '#e2e8f0' }
-      : { bottom: '-12px', borderTopColor: isDark ? bg : '#e2e8f0' }),
+      ? { top: '-12px', borderBottomColor: isDark ? 'var(--bg-secondary)' : 'var(--border-primary)' }
+      : { bottom: '-12px', borderTopColor: isDark ? 'var(--bg-secondary)' : 'var(--border-primary)' }),
   }
 
   // Segunda capa para tapar el borde en variante card
@@ -108,8 +108,8 @@ export function AdaptiveTooltip({
           height: 0,
           border: '5px solid transparent',
           ...(layout.showBelow
-            ? { top: '-10px', borderBottomColor: bg }
-            : { bottom: '-10px', borderTopColor: bg }),
+            ? { top: '-10px', borderBottomColor: 'var(--card-bg)' }
+            : { bottom: '-10px', borderTopColor: 'var(--card-bg)' }),
         }
       : null
 

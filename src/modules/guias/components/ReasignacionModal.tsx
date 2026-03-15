@@ -133,7 +133,7 @@ export function ReasignacionModal({
                     <span className="vehiculo-placa">Placa: {conductor.vehiculo_asignado.patente}</span>
                   </>
                 ) : (
-                  <span className="vehiculo-modelo" style={{ fontStyle: 'italic', color: '#9ca3af' }}>
+                  <span className="vehiculo-modelo" style={{ fontStyle: 'italic', color: 'var(--text-tertiary)' }}>
                     Sin vehículo asignado
                   </span>
                 )}
