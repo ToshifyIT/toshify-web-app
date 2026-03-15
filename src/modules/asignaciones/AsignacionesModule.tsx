@@ -2214,8 +2214,8 @@ export function AsignacionesModule() {
       id: 'vehiculo',
       header: 'Vehículo',
       cell: ({ row }) => (
-        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-          <span className="asig-vehiculo-patente">{row.original.vehiculos?.patente || 'N/A'}</span>
+        <div>
+          <div><span className="asig-vehiculo-patente">{row.original.vehiculos?.patente || 'N/A'}</span></div>
           {row.original.esDevolucion ? (
             <span className="dt-badge" style={{ background: '#F3F4F6', color: '#4B5563', fontSize: '10px', padding: '1px 6px' }}>DEV</span>
           ) : (
@@ -2347,7 +2347,12 @@ export function AsignacionesModule() {
         const fecha = new Date(fechaProg)
         const fechaStr = fecha.toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: '2-digit', timeZone: 'America/Argentina/Buenos_Aires' })
         const horaStr = fecha.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'America/Argentina/Buenos_Aires' })
-        return <span style={{ fontSize: '11px' }}>{fechaStr} {horaStr}</span>
+        return (
+          <div style={{ fontSize: '11px', lineHeight: '1.3' }}>
+            <div>{fechaStr}</div>
+            <div style={{ color: 'var(--text-secondary)' }}>{horaStr}</div>
+          </div>
+        )
       }
     },
     {
@@ -2364,7 +2369,12 @@ export function AsignacionesModule() {
         const fecha = new Date(fechaInicio)
         const fechaStr = fecha.toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: '2-digit', timeZone: 'America/Argentina/Buenos_Aires' })
         const horaStr = fecha.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'America/Argentina/Buenos_Aires' })
-        return <span style={{ fontSize: '11px', color: 'var(--color-success)' }}>{fechaStr} {horaStr}</span>
+        return (
+          <div style={{ fontSize: '11px', lineHeight: '1.3' }}>
+            <div style={{ color: 'var(--color-success)' }}>{fechaStr}</div>
+            <div style={{ color: 'var(--text-secondary)' }}>{horaStr}</div>
+          </div>
+        )
       }
     },
     {
