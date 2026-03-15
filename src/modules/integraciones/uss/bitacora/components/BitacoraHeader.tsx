@@ -10,7 +10,7 @@ interface BitacoraHeaderProps {
   onDateRangePreset: (preset: string) => void
   onCustomDateRange: (startDate: string, endDate: string, label?: string) => void
   isLoading: boolean
-  lastUpdate: Date | null
+  lastUpdate?: Date | null
 }
 
 // Helpers de fecha en zona Argentina
@@ -25,12 +25,7 @@ export function BitacoraHeader({
   onDateRangePreset,
   onCustomDateRange,
   isLoading,
-  lastUpdate,
 }: BitacoraHeaderProps) {
-  const formatLastUpdate = (date: Date | null) => {
-    if (!date) return 'Nunca'
-    return date.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false })
-  }
 
   const isRealtime = dateRange.label === 'Hoy'
 
@@ -88,10 +83,11 @@ export function BitacoraHeader({
       />
 
       <div className="uss-status">
-        <span className="uss-last-update">
-          Actualizado: {formatLastUpdate(lastUpdate)}
-          {isLoading && <span className="uss-loading"> (cargando...)</span>}
-        </span>
+        {isLoading && (
+          <span className="uss-last-update">
+            <span className="uss-loading">Cargando...</span>
+          </span>
+        )}
         {isRealtime && (
           <div className="uss-realtime-indicator">
             <Radio size={14} className="pulse-icon" />
