@@ -740,18 +740,32 @@ export function AsignacionesModule() {
       }
     })
 
-    // Ordenar: programados primero (tienen prioridad), luego vacantes, luego el resto
+    // Ordenar: programados > activas pendientes > activas con entrada > finalizadas/canceladas
+    // Dentro de cada grupo: vacantes primero, luego por fecha programada desc
     const vacantesIds = new Set(asignacionesConVacante.map(a => a.id))
     return asignacionesProcesadas.sort((a, b) => {
-      // Programados van primero
-      const aEsProgramado = a.estado === 'programado' ? 0 : 1
-      const bEsProgramado = b.estado === 'programado' ? 0 : 1
-      if (aEsProgramado !== bEsProgramado) return aEsProgramado - bEsProgramado
+      // 1. Prioridad por estado: programado=0, activa=1, finalizada=2, cancelada=3
+      const estadoPrio: Record<string, number> = { programado: 0, activa: 1, finalizada: 2, cancelada: 3 }
+      const prioA = estadoPrio[a.estado] ?? 99
+      const prioB = estadoPrio[b.estado] ?? 99
+      if (prioA !== prioB) return prioA - prioB
 
-      // Luego vacantes
+      // 2. Dentro de activas: pendientes (sin entrada real) primero
+      if (a.estado === 'activa' && b.estado === 'activa') {
+        const aPendiente = !a.fecha_inicio ? 0 : 1
+        const bPendiente = !b.fecha_inicio ? 0 : 1
+        if (aPendiente !== bPendiente) return aPendiente - bPendiente
+      }
+
+      // 3. Vacantes antes
       const aEsVacante = vacantesIds.has(a.id) ? 0 : 1
       const bEsVacante = vacantesIds.has(b.id) ? 0 : 1
-      return aEsVacante - bEsVacante
+      if (aEsVacante !== bEsVacante) return aEsVacante - bEsVacante
+
+      // 4. Por fecha programada descendente (más recientes primero)
+      const fechaA = a.fecha_programada ? new Date(a.fecha_programada).getTime() : 0
+      const fechaB = b.fecha_programada ? new Date(b.fecha_programada).getTime() : 0
+      return fechaB - fechaA
     })
   }, [filteredAsignaciones])
 
@@ -2199,7 +2213,7 @@ export function AsignacionesModule() {
       accessorFn: (row) => row.vehiculos?.patente || '',
       id: 'vehiculo',
       header: 'Vehículo',
-      size: 120,
+      size: 100,
       cell: ({ row }) => (
         <div className="asig-vehiculo-cell">
           <span className="asig-vehiculo-patente">{row.original.vehiculos?.patente || 'N/A'}</span>
@@ -2267,7 +2281,6 @@ export function AsignacionesModule() {
     {
       id: 'asignados',
       header: 'Asignados',
-      meta: { expand: true },
       accessorFn: (row) => {
         if (row.esDevolucion) return row.conductorCargo?.nombre || ''
         if (row.horario === 'CARGO' || !row.horario) {

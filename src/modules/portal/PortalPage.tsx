@@ -843,21 +843,11 @@ export function PortalPage() {
                     <div className="portal-chart-legend">
                       <span className="portal-legend-item">
                         <span className="portal-legend-dot" style={{ background: '#ff0033' }} /> Proforma
-                        <span className="portal-stat-tooltip" data-tooltip="Monto de compromiso semanal de suma de conceptos: alquiler, garantía y otros">
-                          <svg width="13" height="13" viewBox="0 0 16 16" fill="none" style={{ verticalAlign: 'middle' }}>
-                            <circle cx="8" cy="8" r="7" stroke="currentColor" strokeWidth="1.5" />
-                            <text x="8" y="12" textAnchor="middle" fill="currentColor" fontSize="10" fontWeight="700" fontFamily="serif" fontStyle="italic">i</text>
-                          </svg>
-                        </span>
+                        <span className="portal-stat-tooltip" data-tooltip="Monto de compromiso semanal de suma de conceptos: alquiler, garant&#237;a y otros">&#9432;</span>
                       </span>
                       <span className="portal-legend-item">
                         <span className="portal-legend-dot" style={{ background: '#059669' }} /> Cobro App Cabify
-                        <span className="portal-stat-tooltip" data-tooltip="Total semanal recaudado por el conductor a través de la aplicación Cabify (excluye efectivo)">
-                          <svg width="13" height="13" viewBox="0 0 16 16" fill="none" style={{ verticalAlign: 'middle' }}>
-                            <circle cx="8" cy="8" r="7" stroke="currentColor" strokeWidth="1.5" />
-                            <text x="8" y="12" textAnchor="middle" fill="currentColor" fontSize="10" fontWeight="700" fontFamily="serif" fontStyle="italic">i</text>
-                          </svg>
-                        </span>
+                        <span className="portal-stat-tooltip" data-tooltip="Total semanal recaudado por el conductor a trav&#233;s de la aplicaci&#243;n Cabify (excluye efectivo)">&#9432;</span>
                       </span>
                     </div>
                   </div>

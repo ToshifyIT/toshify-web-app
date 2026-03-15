@@ -158,6 +158,11 @@ export const wialonBitacoraService = {
       .order('fecha_turno', { ascending: false })
       .order('hora_inicio', { ascending: false })
 
+    // Filtro por sede
+    if (options?.sedeId) {
+      query = query.eq('sede_id', options.sedeId)
+    }
+
     // Aplicar filtros en la query
     if (options?.patente) {
       // Buscar en patente, patente_normalizada, conductor e ibutton con OR
@@ -233,19 +238,23 @@ export const wialonBitacoraService = {
   /**
    * Obtiene estadísticas agregadas desde wialon_bitacora
    */
-  async getStats(startDate: string, endDate: string): Promise<BitacoraStats> {
-    const cacheKey = `stats_${startDate}_${endDate}`
+  async getStats(startDate: string, endDate: string, sedeId?: string | null): Promise<BitacoraStats> {
+    const cacheKey = `stats_${startDate}_${endDate}_${sedeId || 'all'}`
     const cached = statsCache.get(cacheKey)
 
     if (cached) return cached
 
     // Query directa para stats (sin paginación)
-    const { data: rawData, error } = await supabase
+    let statsQuery = supabase
       .from('wialon_bitacora')
       .select('patente_normalizada, conductor_wialon, kilometraje, estado, gnc_cargado, lavado_realizado, nafta_cargada')
       .gte('fecha_turno', startDate)
       .lte('fecha_turno', endDate)
       .limit(5000)
+    if (sedeId) {
+      statsQuery = statsQuery.eq('sede_id', sedeId)
+    }
+    const { data: rawData, error } = await statsQuery
 
     // Cast a tipo conocido
     const data = (rawData || []) as WialonBitacoraStatsRow[]

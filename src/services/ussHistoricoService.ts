@@ -21,6 +21,7 @@ export interface USSHistoricoQueryOptions {
   offset?: number;
   patente?: string;
   conductor?: string;
+  sedeId?: string | null;
 }
 
 export const ussHistoricoService = {
@@ -43,6 +44,10 @@ export const ussHistoricoService = {
       .gte('fecha_hora_inicio', `${startDate}T00:00:00`)
       .lt('fecha_hora_inicio', `${endStr}T00:00:00`)
       .order('fecha_hora_inicio', { ascending: false });
+
+    if (options?.sedeId) {
+      query = query.eq('sede_id', options.sedeId);
+    }
 
     if (options?.patente) {
       const term = options.patente.trim();

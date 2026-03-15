@@ -7,6 +7,7 @@
 
 import { useMemo } from 'react';
 import { UserCheck, List } from 'lucide-react';
+import { useSede } from '../../../../contexts/SedeContext';
 import { useUSSHistoricoData } from './hooks/useUSSHistoricoData';
 import { BitacoraHeader } from './components';
 import { HistoricoTable } from './components/HistoricoTable';
@@ -22,6 +23,7 @@ const TABS: { id: VistaType; label: string; icon: typeof UserCheck }[] = [
 ];
 
 export function BitacoraModule() {
+  const { sedeActualId } = useSede();
   const {
     vista,
     setVista,
@@ -40,7 +42,7 @@ export function BitacoraModule() {
     searchTerm,
     handleSearchChange,
     updateChecklist,
-  } = useUSSHistoricoData();
+  } = useUSSHistoricoData(sedeActualId);
 
   // Stats rápidos para marcaciones
   const marcacionesStats = useMemo(() => {
@@ -57,7 +59,6 @@ export function BitacoraModule() {
       onDateRangePreset={setDateRangePreset}
       onCustomDateRange={setCustomDateRange}
       isLoading={loading}
-      lastUpdate={null}
     />
   );
 

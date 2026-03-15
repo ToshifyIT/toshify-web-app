@@ -79,11 +79,18 @@ function transformarMarcacion(reg: BitacoraRegistroTransformado): Marcacion {
   };
 }
 
-export function useUSSHistoricoData() {
-  const [dateRange, setDateRange] = useState<USSHistoricoDateRange>({
-    startDate: getToday(),
-    endDate: getToday(),
-    label: 'Hoy',
+export function useUSSHistoricoData(sedeId?: string | null) {
+  const [dateRange, setDateRange] = useState<USSHistoricoDateRange>(() => {
+    const today = getToday();
+    const d = new Date();
+    const day = d.getDay();
+    const diff = d.getDate() - day + (day === 0 ? -6 : 1);
+    d.setDate(diff);
+    return {
+      startDate: toArgentinaDateString(d),
+      endDate: today,
+      label: 'Esta semana',
+    };
   });
 
   // Registros crudos para tabla Histórico
@@ -137,8 +144,9 @@ export function useUSSHistoricoData() {
           limit: pageSize,
           offset,
           patente: filterPatente || undefined,
+          sedeId,
         }),
-        wialonBitacoraService.getBitacora(dateRange.startDate, dateRange.endDate),
+        wialonBitacoraService.getBitacora(dateRange.startDate, dateRange.endDate, { sedeId }),
       ]);
 
       setRegistros(paginatedResult.data);
@@ -149,7 +157,7 @@ export function useUSSHistoricoData() {
     } finally {
       setLoading(false);
     }
-  }, [dateRange, page, pageSize, filterPatente]);
+  }, [dateRange, page, pageSize, filterPatente, sedeId]);
 
   // Cargar al montar y cuando cambian parámetros
   const isFirstRender = useRef(true);

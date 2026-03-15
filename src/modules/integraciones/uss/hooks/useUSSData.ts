@@ -25,6 +25,7 @@ const REALTIME_DEBOUNCE_MS = 500
 interface UseUSSDataOptions {
   autoLoad?: boolean
   defaultPeriod?: 'today' | 'yesterday' | 'week' | 'month'
+  sedeId?: string | null
 }
 
 interface UseUSSDataReturn {
@@ -63,7 +64,7 @@ interface UseUSSDataReturn {
 const DEFAULT_PAGE_SIZE = 50
 
 export function useUSSData(options: UseUSSDataOptions = {}): UseUSSDataReturn {
-  const { autoLoad = true, defaultPeriod = 'week' } = options
+  const { autoLoad = true, defaultPeriod = 'week', sedeId } = options
 
   // Estado de datos
   const [excesos, setExcesos] = useState<ExcesoVelocidad[]>([])
@@ -111,6 +112,7 @@ export function useUSSData(options: UseUSSDataOptions = {}): UseUSSDataReturn {
           patente: patenteFilter || undefined,
           conductor: conductorFilter || undefined,
           minExceso: minExcesoFilter || undefined,
+          sedeId,
         }
       )
 
@@ -118,13 +120,13 @@ export function useUSSData(options: UseUSSDataOptions = {}): UseUSSDataReturn {
       setTotalCount(count)
 
       // Cargar estadísticas
-      const statsData = await ussService.getStats(dateRange.startDate, dateRange.endDate)
+      const statsData = await ussService.getStats(dateRange.startDate, dateRange.endDate, sedeId)
       setStats(statsData)
 
       // Cargar rankings
       const [vehiculos, conductores] = await Promise.all([
-        ussService.getVehiculosRanking(dateRange.startDate, dateRange.endDate, 10),
-        ussService.getConductoresRanking(dateRange.startDate, dateRange.endDate, 10),
+        ussService.getVehiculosRanking(dateRange.startDate, dateRange.endDate, 10, sedeId),
+        ussService.getConductoresRanking(dateRange.startDate, dateRange.endDate, 10, sedeId),
       ])
 
       setVehiculosRanking(vehiculos)
@@ -149,7 +151,7 @@ export function useUSSData(options: UseUSSDataOptions = {}): UseUSSDataReturn {
         setQueryState((prev) => ({ ...prev, lastUpdate: new Date() }))
       }
     }
-  }, [dateRange, page, pageSize, patenteFilter, conductorFilter, minExcesoFilter])
+  }, [dateRange, page, pageSize, patenteFilter, conductorFilter, minExcesoFilter, sedeId])
 
   // Cargar datos con loading visible (para carga inicial y cambios de filtros)
   const loadData = useCallback(() => fetchData(true), [fetchData])

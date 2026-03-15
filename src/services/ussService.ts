@@ -110,9 +110,10 @@ export const ussService = {
       patente?: string
       conductor?: string
       minExceso?: number
+      sedeId?: string | null
     }
   ): Promise<{ data: ExcesoVelocidad[]; count: number }> {
-    const cacheKey = `excesos_${startDate}_${endDate}_${JSON.stringify(options)}`
+    const cacheKey = `excesos_${startDate}_${endDate}_${options?.sedeId || 'all'}_${JSON.stringify(options)}`
     const cached = excesosCache.get(cacheKey)
 
     if (cached) {
@@ -125,6 +126,10 @@ export const ussService = {
       .gte('fecha_evento', `${startDate}T00:00:00`)
       .lte('fecha_evento', `${endDate}T23:59:59`)
       .order('fecha_evento', { ascending: false })
+
+    if (options?.sedeId) {
+      query = query.eq('sede_id', options.sedeId)
+    }
 
     if (options?.patente) {
       query = query.ilike('patente', `%${options.patente}%`)
@@ -159,12 +164,17 @@ export const ussService = {
   /**
    * Obtiene estadísticas agregadas para un rango de fechas
    */
-  async getStats(startDate: string, endDate: string): Promise<ExcesoStats> {
-    const cacheKey = `stats_${startDate}_${endDate}`
+  async getStats(startDate: string, endDate: string, sedeId?: string | null): Promise<ExcesoStats> {
+    const cacheKey = `stats_${startDate}_${endDate}_${sedeId || 'all'}`
     const cached = statsCache.get(cacheKey)
 
     if (cached) {
       return cached
+    }
+
+    // Si hay filtro de sede, no usar RPC (no soporta sede), calcular manualmente
+    if (sedeId) {
+      return this.calculateStatsManually(startDate, endDate, sedeId)
     }
 
     const { data, error } = await (supabase.rpc as Function)('get_uss_excesos_stats', {
@@ -173,7 +183,6 @@ export const ussService = {
     }) as { data: USSStatsRPCResult | null; error: unknown }
 
     if (error) {
-      // Si la función RPC no existe, calculamos manualmente
       return this.calculateStatsManually(startDate, endDate)
     }
 
@@ -194,13 +203,17 @@ export const ussService = {
   /**
    * Calcula stats manualmente si no hay RPC
    */
-  async calculateStatsManually(startDate: string, endDate: string): Promise<ExcesoStats> {
-    const { data, error } = await supabase
+  async calculateStatsManually(startDate: string, endDate: string, sedeId?: string | null): Promise<ExcesoStats> {
+    let statsQ = supabase
       .from('uss_excesos_velocidad')
       .select('velocidad_maxima, exceso, duracion_segundos, patente, conductor_wialon')
       .gte('fecha_evento', `${startDate}T00:00:00`)
       .lte('fecha_evento', `${endDate}T23:59:59`)
-      .limit(5000) as { data: Pick<USSExcesoRow, 'velocidad_maxima' | 'exceso' | 'duracion_segundos' | 'patente' | 'conductor_wialon'>[] | null; error: unknown }
+      .limit(5000)
+    if (sedeId) {
+      statsQ = statsQ.eq('sede_id', sedeId)
+    }
+    const { data, error } = await statsQ as { data: Pick<USSExcesoRow, 'velocidad_maxima' | 'exceso' | 'duracion_segundos' | 'patente' | 'conductor_wialon'>[] | null; error: unknown }
 
     if (error || !data) {
       return {
@@ -239,14 +252,19 @@ export const ussService = {
   async getVehiculosRanking(
     startDate: string,
     endDate: string,
-    limit: number = 10
+    limit: number = 10,
+    sedeId?: string | null
   ): Promise<VehiculoRanking[]> {
-    const { data, error } = await supabase
+    let vehQ = supabase
       .from('uss_excesos_velocidad')
       .select('patente, vehiculo_id, velocidad_maxima, exceso, duracion_segundos')
       .gte('fecha_evento', `${startDate}T00:00:00`)
       .lte('fecha_evento', `${endDate}T23:59:59`)
-      .limit(1000) as { data: Pick<USSExcesoRow, 'patente' | 'vehiculo_id' | 'velocidad_maxima' | 'exceso' | 'duracion_segundos'>[] | null; error: unknown }
+      .limit(1000)
+    if (sedeId) {
+      vehQ = vehQ.eq('sede_id', sedeId)
+    }
+    const { data, error } = await vehQ as { data: Pick<USSExcesoRow, 'patente' | 'vehiculo_id' | 'velocidad_maxima' | 'exceso' | 'duracion_segundos'>[] | null; error: unknown }
 
     if (error || !data) {
       return []
@@ -298,14 +316,19 @@ export const ussService = {
   async getConductoresRanking(
     startDate: string,
     endDate: string,
-    limit: number = 10
+    limit: number = 10,
+    sedeId?: string | null
   ): Promise<ConductorRanking[]> {
-    const { data, error } = await supabase
+    let condQ = supabase
       .from('uss_excesos_velocidad')
       .select('conductor_wialon, conductor_id, velocidad_maxima, patente')
       .gte('fecha_evento', `${startDate}T00:00:00`)
       .lte('fecha_evento', `${endDate}T23:59:59`)
-      .limit(1000) as { data: Pick<USSExcesoRow, 'conductor_wialon' | 'conductor_id' | 'velocidad_maxima' | 'patente'>[] | null; error: unknown }
+      .limit(1000)
+    if (sedeId) {
+      condQ = condQ.eq('sede_id', sedeId)
+    }
+    const { data, error } = await condQ as { data: Pick<USSExcesoRow, 'conductor_wialon' | 'conductor_id' | 'velocidad_maxima' | 'patente'>[] | null; error: unknown }
 
     if (error || !data) {
       return []

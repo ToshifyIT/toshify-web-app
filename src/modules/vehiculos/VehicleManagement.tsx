@@ -735,7 +735,7 @@ export function VehicleManagement() {
     switch (cardType) {
       case 'total':
         // Excluir estados que no son parte de la flota activa
-        setStatCardEstadoFilter(['Robo', 'Destrucción', 'Jubilado', 'Dev. Proveedor'])
+        setStatCardEstadoFilter(['Robo', 'Destruccion', 'Jubilado', 'Dev. Proveedor'])
         setStatCardExcludeMode(true)
         break
       case 'enCochera':
