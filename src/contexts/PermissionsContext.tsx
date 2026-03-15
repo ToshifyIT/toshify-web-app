@@ -131,6 +131,8 @@ export function PermissionsProvider({ children }: { children: React.ReactNode })
       return
     }
 
+    setLoading(true)
+
     try {
       // TEMPORAL: Usar fallback directo hasta que edge function se actualice
       await loadPermissionsFallback()
@@ -350,7 +352,10 @@ export function PermissionsProvider({ children }: { children: React.ReactNode })
         tabs: tabsData
       })
     } catch {
-      setUserPermissions(null)
+      // No borrar permisos si ya se cargaron previamente (evita redirect a /unauthorized)
+      if (!userPermissions) {
+        setUserPermissions(null)
+      }
     }
   }
 

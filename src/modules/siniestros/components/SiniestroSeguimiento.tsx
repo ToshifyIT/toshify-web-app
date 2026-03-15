@@ -349,7 +349,31 @@ export function SiniestroSeguimiento({ siniestro, onReload }: SiniestroSeguimien
 
       if (segError) throw segError
 
-      showSuccess('Incidencia registrada', 'Se ha creado la incidencia y el seguimiento correctamente')
+      // Auto-crear penalidad para que la incidencia vaya directo a "Por Aplicar"
+      if ((incidenciaData as any)?.id) {
+        await (supabase.from('penalidades' as any) as any)
+          .insert({
+            incidencia_id: (incidenciaData as any).id,
+            vehiculo_id: incidenciaForm.vehiculo_id || null,
+            conductor_id: incidenciaForm.conductor_id,
+            tipo_cobro_descuento_id: incidenciaForm.tipo_cobro_descuento_id || null,
+            semana: semana,
+            fecha: incidenciaForm.fecha,
+            turno: incidenciaForm.turno || null,
+            area_responsable: incidenciaForm.area || 'Siniestros',
+            detalle: 'Cobro por siniestro',
+            monto: incidenciaForm.monto || 0,
+            observaciones: incidenciaForm.descripcion || '',
+            aplicado: false,
+            conductor_nombre: selectedConductor?.nombre_completo || null,
+            vehiculo_patente: selectedVehiculo?.patente || null,
+            created_by: user?.id,
+            created_by_name: profile?.full_name || 'Sistema',
+            sede_id: sedeActualId || sedeUsuario?.id,
+          })
+      }
+
+      showSuccess('Incidencia registrada', 'Se ha creado la incidencia y enviado a facturación')
 
       setShowIncidenciaModal(false)
       setIncidenciaForm({
