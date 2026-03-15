@@ -6,7 +6,6 @@
  */
 
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { supabase } from '../../../../../lib/supabase';
 import {
   ussHistoricoService,
   type USSHistoricoRegistro,
@@ -15,7 +14,6 @@ import {
   wialonBitacoraService,
   type BitacoraRegistroTransformado,
 } from '../../../../../services/wialonBitacoraService';
-import { normalizePatente } from '../../../../../utils/normalizeDocuments';
 
 // Zona horaria Argentina
 const TIMEZONE_ARGENTINA = 'America/Argentina/Buenos_Aires';
@@ -26,18 +24,6 @@ function toArgentinaDateString(date: Date): string {
 
 function getToday(): string {
   return toArgentinaDateString(new Date());
-}
-
-function getWeekRange(): { startDate: string; endDate: string } {
-  const now = new Date();
-  const day = now.getDay();
-  const diff = now.getDate() - day + (day === 0 ? -6 : 1);
-  const monday = new Date(now);
-  monday.setDate(diff);
-  return {
-    startDate: toArgentinaDateString(monday),
-    endDate: toArgentinaDateString(now),
-  };
 }
 
 // Marcación: 1 fila por conductor por día (de wialon_bitacora)
@@ -69,20 +55,6 @@ export interface USSHistoricoDateRange {
   label: string;
 }
 
-// Tipos para enriquecimiento desde asignaciones
-interface ConductorTurno {
-  conductor_nombre: string;
-  conductor_completo: string;
-  turno: string | null; // diurno, nocturno, todo_dia
-}
-
-interface AsignacionActiva {
-  patente: string;
-  patente_normalizada: string;
-  modalidad: string | null; // TURNO, CARGO
-  conductores: ConductorTurno[];
-}
-
 function transformarMarcacion(reg: BitacoraRegistroTransformado): Marcacion {
   return {
     id: reg.id,
@@ -109,10 +81,14 @@ function transformarMarcacion(reg: BitacoraRegistroTransformado): Marcacion {
 
 export function useUSSHistoricoData(sedeId?: string | null) {
   const [dateRange, setDateRange] = useState<USSHistoricoDateRange>(() => {
-    const week = getWeekRange();
+    const today = getToday();
+    const d = new Date();
+    const day = d.getDay();
+    const diff = d.getDate() - day + (day === 0 ? -6 : 1);
+    d.setDate(diff);
     return {
-      startDate: week.startDate,
-      endDate: week.endDate,
+      startDate: toArgentinaDateString(d),
+      endDate: today,
       label: 'Esta semana',
     };
   });
@@ -123,9 +99,6 @@ export function useUSSHistoricoData(sedeId?: string | null) {
 
   // Marcaciones de wialon_bitacora
   const [marcaciones, setMarcaciones] = useState<Marcacion[]>([]);
-
-  // Ref para asignaciones activas (no necesita re-render)
-  const asignacionesRef = useRef<Map<string, AsignacionActiva>>(new Map());
 
   // Paginación (solo para Histórico)
   const [page, setPage] = useState(1);
@@ -158,109 +131,6 @@ export function useUSSHistoricoData(sedeId?: string | null) {
     return () => { if (debounceRef.current) clearTimeout(debounceRef.current); };
   }, []);
 
-  // Cargar asignaciones activas con conductores y sus turnos
-  const loadAsignaciones = useCallback(async () => {
-    try {
-      const { data: asignacionesData } = await (supabase
-        .from('asignaciones')
-        .select('id, vehiculo_id, horario, vehiculos!inner(patente)')
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        .eq('estado', 'activa') as any);
-
-      if (!asignacionesData || asignacionesData.length === 0) {
-        asignacionesRef.current = new Map();
-        return new Map<string, AsignacionActiva>();
-      }
-
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const asignacionIds = asignacionesData.map((a: any) => a.id);
-      const { data: conductoresData } = await (supabase
-        .from('asignaciones_conductores')
-        .select('asignacion_id, horario, conductor_id, conductores(nombres, apellidos)')
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        .in('asignacion_id', asignacionIds) as any);
-
-      const conductoresPorAsignacion = new Map<string, ConductorTurno[]>();
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      for (const ac of (conductoresData || []) as any[]) {
-        const conductor = ac.conductores;
-        if (conductor) {
-          const asigId = ac.asignacion_id as string;
-          if (!conductoresPorAsignacion.has(asigId)) {
-            conductoresPorAsignacion.set(asigId, []);
-          }
-          conductoresPorAsignacion.get(asigId)!.push({
-            conductor_nombre: conductor.nombres,
-            conductor_completo: `${conductor.nombres} ${conductor.apellidos}`,
-            turno: ac.horario,
-          });
-        }
-      }
-
-      const map = new Map<string, AsignacionActiva>();
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      for (const asig of asignacionesData as any[]) {
-        const vehiculo = asig.vehiculos;
-        if (vehiculo) {
-          const patenteNorm = normalizePatente(vehiculo.patente);
-          const conductores = conductoresPorAsignacion.get(asig.id) || [];
-          map.set(patenteNorm, {
-            patente: vehiculo.patente,
-            patente_normalizada: patenteNorm,
-            modalidad: asig.horario,
-            conductores,
-          });
-        }
-      }
-      asignacionesRef.current = map;
-      return map;
-    } catch {
-      asignacionesRef.current = new Map();
-      return new Map<string, AsignacionActiva>();
-    }
-  }, []);
-
-  // Cargar asignaciones al montar
-  useEffect(() => {
-    loadAsignaciones();
-  }, [loadAsignaciones]);
-
-  // Enriquecer registros de bitácora con datos de asignaciones
-  function enriquecerConAsignaciones(
-    registros: BitacoraRegistroTransformado[],
-    asigMap: Map<string, AsignacionActiva>,
-  ): BitacoraRegistroTransformado[] {
-    return registros.map((r) => {
-      const asignacion = asigMap.get(r.patente_normalizada);
-      if (!asignacion) return r;
-
-      // Buscar conductor en la asignación
-      let conductorMatch: ConductorTurno | undefined;
-      const conductorWialon = r.conductor_wialon?.toLowerCase() || '';
-      conductorMatch = asignacion.conductores.find(c =>
-        conductorWialon && conductorWialon.includes(c.conductor_nombre.toLowerCase())
-      );
-      if (!conductorMatch && asignacion.conductores.length > 0) {
-        conductorMatch = asignacion.conductores[0];
-      }
-
-      // Siempre usar asignación como fuente de verdad para turno/horario
-      let turnoIndicador: string | null = null;
-      if (asignacion.modalidad === 'TURNO' && conductorMatch?.turno) {
-        if (conductorMatch.turno === 'diurno') turnoIndicador = 'diurno';
-        else if (conductorMatch.turno === 'nocturno') turnoIndicador = 'nocturno';
-      } else if (asignacion.modalidad === 'CARGO') {
-        turnoIndicador = 'todo_dia';
-      }
-
-      return {
-        ...r,
-        tipo_turno: asignacion.modalidad === 'CARGO' ? 'CARGO' : asignacion.modalidad,
-        turno_indicador: turnoIndicador,
-      };
-    });
-  }
-
   // Cargar datos
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -268,8 +138,8 @@ export function useUSSHistoricoData(sedeId?: string | null) {
     try {
       const offset = (page - 1) * pageSize;
 
-      // Cargar Histórico + Marcaciones + Asignaciones en paralelo
-      const [paginatedResult, bitacoraResult, asigMap] = await Promise.all([
+      // Cargar Histórico (uss_historico) + Marcaciones (wialon_bitacora) en paralelo
+      const [paginatedResult, bitacoraResult] = await Promise.all([
         ussHistoricoService.getRegistros(dateRange.startDate, dateRange.endDate, {
           limit: pageSize,
           offset,
@@ -277,21 +147,17 @@ export function useUSSHistoricoData(sedeId?: string | null) {
           sedeId,
         }),
         wialonBitacoraService.getBitacora(dateRange.startDate, dateRange.endDate, { sedeId }),
-        loadAsignaciones(),
       ]);
-
-      // Enriquecer bitácora con asignaciones antes de transformar
-      const registrosEnriquecidos = enriquecerConAsignaciones(bitacoraResult.data, asigMap);
 
       setRegistros(paginatedResult.data);
       setTotalCount(paginatedResult.count);
-      setMarcaciones(registrosEnriquecidos.map(transformarMarcacion).filter(m => m.estado !== 'Sin Actividad'));
+      setMarcaciones(bitacoraResult.data.map(transformarMarcacion).filter(m => m.estado !== 'Sin Actividad'));
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Error desconocido');
     } finally {
       setLoading(false);
     }
-  }, [dateRange, page, pageSize, filterPatente, sedeId, loadAsignaciones]);
+  }, [dateRange, page, pageSize, filterPatente, sedeId]);
 
   // Cargar al montar y cuando cambian parámetros
   const isFirstRender = useRef(true);

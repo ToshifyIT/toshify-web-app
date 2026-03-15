@@ -8,7 +8,7 @@ import { useMemo, useState, useRef, useEffect } from 'react';
 import { type ColumnDef } from '@tanstack/react-table';
 import { DataTable } from '../../../../../components/ui/DataTable/DataTable';
 import { ExcelColumnFilter, useExcelFilters } from '../../../../../components/ui/DataTable/ExcelColumnFilter';
-import { Search, ClipboardList, Download, ChevronDown, Fuel, SprayCan, Flame, Sun, Moon, Clock, X } from 'lucide-react';
+import { Search, ClipboardList, Download, ChevronDown, Fuel, Droplets, Car, Sun, Moon, Clock, X } from 'lucide-react';
 import type { Marcacion } from '../hooks/useUSSHistoricoData';
 import * as XLSX from 'xlsx';
 
@@ -112,20 +112,26 @@ export function MarcacionesTable({
 
   // Filtros Excel
   const [conductorFilter, setConductorFilter] = useState<string[]>([]);
-  const [patenteFilter, setPatenteFilter] = useState<string[]>([]);
-
+  const [fechaFilter, setFechaFilter] = useState<string[]>([]);
   const [estadoFilter, setEstadoFilter] = useState<string[]>([]);
   const [horarioFilter, setHorarioFilter] = useState<string[]>([]);
   const [turnoFilter, setTurnoFilter] = useState<string[]>([]);
 
   // Listas únicas
-  const conductoresUnicos = useMemo(() =>
-    [...new Set(marcaciones.map(m => m.conductor))].filter(Boolean).sort()
+  const conductorPatenteUnicos = useMemo(() => {
+    const set = new Set<string>();
+    for (const m of marcaciones) {
+      set.add(`${m.conductor} | ${m.patente}`);
+    }
+    return [...set].sort();
+  }, [marcaciones]);
+  const fechasUnicas = useMemo(() =>
+    [...new Set(marcaciones.map(m => formatFecha(m.fecha)))].sort((a, b) => {
+      const [da, ma, ya] = a.split('/');
+      const [db, mb, yb] = b.split('/');
+      return `${yb}${mb}${db}`.localeCompare(`${ya}${ma}${da}`);
+    })
   , [marcaciones]);
-  const patentesUnicas = useMemo(() =>
-    [...new Set(marcaciones.map(m => m.patente))].filter(Boolean).sort()
-  , [marcaciones]);
-
   const estadosUnicos = useMemo(() =>
     [...new Set(marcaciones.map(m => m.estado))].filter(Boolean).sort()
   , [marcaciones]);
@@ -142,11 +148,11 @@ export function MarcacionesTable({
     [...new Set(marcaciones.map(m => m.vehiculoModalidad || 'Sin asignar'))].filter(Boolean).sort()
   , [marcaciones]);
 
-  const hasActiveFilters = conductorFilter.length > 0 || patenteFilter.length > 0 || estadoFilter.length > 0 || horarioFilter.length > 0 || turnoFilter.length > 0 || searchTerm.trim() !== '';
+  const hasActiveFilters = conductorFilter.length > 0 || fechaFilter.length > 0 || estadoFilter.length > 0 || horarioFilter.length > 0 || turnoFilter.length > 0 || searchTerm.trim() !== '';
 
   const clearAllFilters = () => {
     setConductorFilter([]);
-    setPatenteFilter([]);
+    setFechaFilter([]);
     setEstadoFilter([]);
     setHorarioFilter([]);
     setTurnoFilter([]);
@@ -158,10 +164,10 @@ export function MarcacionesTable({
     let filtered = marcaciones;
 
     if (conductorFilter.length > 0) {
-      filtered = filtered.filter(m => conductorFilter.includes(m.conductor));
+      filtered = filtered.filter(m => conductorFilter.includes(`${m.conductor} | ${m.patente}`));
     }
-    if (patenteFilter.length > 0) {
-      filtered = filtered.filter(m => patenteFilter.includes(m.patente));
+    if (fechaFilter.length > 0) {
+      filtered = filtered.filter(m => fechaFilter.includes(formatFecha(m.fecha)));
     }
     if (estadoFilter.length > 0) {
       filtered = filtered.filter(m => estadoFilter.includes(m.estado));
@@ -182,39 +188,43 @@ export function MarcacionesTable({
     }
 
     return filtered;
-  }, [marcaciones, conductorFilter, patenteFilter, estadoFilter, horarioFilter, turnoFilter, searchTerm]);
+  }, [marcaciones, conductorFilter, fechaFilter, estadoFilter, horarioFilter, turnoFilter, searchTerm]);
 
   // Columnas
   const columns = useMemo<ColumnDef<Marcacion, unknown>[]>(() => [
     {
+      id: 'conductor_patente',
       accessorKey: 'conductor',
       header: () => (
-        <ExcelColumnFilter label="Conductor" options={conductoresUnicos} selectedValues={conductorFilter}
+        <ExcelColumnFilter label="Conductor / Patente" options={conductorPatenteUnicos} selectedValues={conductorFilter}
           onSelectionChange={setConductorFilter} filterId="m-conductor" openFilterId={openFilterId} onOpenChange={setOpenFilterId} />
       ),
-      cell: ({ row }) => (
-        <span style={{ fontWeight: 600 }}>{row.original.conductor}</span>
-      ),
+      cell: ({ row }) => {
+        const m = row.original;
+        return (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', lineHeight: 1.3 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <span style={{ fontWeight: 600, fontSize: '13px' }}>{m.conductor}</span>
+              {m.ibutton && (
+                <span style={{ color: 'var(--text-tertiary)', fontSize: '11px' }}>#{m.ibutton}</span>
+              )}
+            </div>
+            <span style={{ fontFamily: 'monospace', fontSize: '12px', color: 'var(--color-primary)', fontWeight: 600 }}>
+              {m.patente}
+            </span>
+          </div>
+        );
+      },
       enableSorting: false,
     },
     {
-      accessorKey: 'patente',
+      accessorKey: 'fecha',
       header: () => (
-        <ExcelColumnFilter label="Patente" options={patentesUnicas} selectedValues={patenteFilter}
-          onSelectionChange={setPatenteFilter} filterId="m-patente" openFilterId={openFilterId} onOpenChange={setOpenFilterId} />
+        <ExcelColumnFilter label="Fecha Turno" options={fechasUnicas} selectedValues={fechaFilter}
+          onSelectionChange={setFechaFilter} filterId="m-fecha" openFilterId={openFilterId} onOpenChange={setOpenFilterId} />
       ),
       cell: ({ row }) => (
-        <span style={{ fontFamily: 'monospace', fontSize: '12px', color: 'var(--color-primary)', fontWeight: 600 }}>
-          {row.original.patente}
-        </span>
-      ),
-      enableSorting: false,
-    },
-    {
-      accessorKey: 'ibutton',
-      header: 'iButton',
-      cell: ({ row }) => (
-        <span style={{ color: 'var(--text-tertiary)', fontSize: '12px' }}>{row.original.ibutton || '-'}</span>
+        <span style={{ fontSize: '12px' }}>{formatFecha(row.original.fecha)}</span>
       ),
       enableSorting: false,
     },
@@ -273,7 +283,7 @@ export function MarcacionesTable({
       header: 'Km Total',
       cell: ({ row }) => (
         <span style={{ fontWeight: 600 }}>
-          {row.original.kmTotal.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+          {row.original.kmTotal.toLocaleString('es-AR', { maximumFractionDigits: 1 })}
         </span>
       ),
       enableSorting: true,
@@ -281,23 +291,19 @@ export function MarcacionesTable({
     {
       accessorKey: 'vehiculoModalidad',
       header: () => (
-        <ExcelColumnFilter label="Modalidad" options={turnosUnicos} selectedValues={turnoFilter}
+        <ExcelColumnFilter label="Turno" options={turnosUnicos} selectedValues={turnoFilter}
           onSelectionChange={setTurnoFilter} filterId="m-turno" openFilterId={openFilterId} onOpenChange={setOpenFilterId} />
       ),
       cell: ({ row }) => {
         const mod = row.original.vehiculoModalidad;
-        if (!mod) return <span title="Sin modalidad de turno asignada" style={{ fontSize: '12px', color: 'var(--text-tertiary)', cursor: 'default' }}>-</span>;
-        const isCargo = mod === 'CARGO' || mod === 'A_CARGO';
+        if (!mod) return <span style={{ fontSize: '12px', color: 'var(--text-tertiary)' }}>-</span>;
         const color = mod === 'TURNO' ? '#7c3aed' : '#0891b2';
-        const tooltip = isCargo
-          ? 'A Cargo: El vehiculo esta asignado permanentemente al conductor'
-          : 'Turno: El vehiculo se comparte entre conductores por turnos';
         return (
-          <span title={tooltip} style={{
+          <span style={{
             fontSize: '11px', fontWeight: 600, padding: '2px 8px',
-            borderRadius: '10px', color: '#fff', background: color, cursor: 'default',
+            borderRadius: '10px', color: '#fff', background: color,
           }}>
-            {isCargo ? 'A Cargo' : 'Turno'}
+            {mod === 'CARGO' || mod === 'A_CARGO' ? 'A Cargo' : 'Turno'}
           </span>
         );
       },
@@ -309,54 +315,38 @@ export function MarcacionesTable({
         <ExcelColumnFilter label="Estado" options={estadosUnicos} selectedValues={estadoFilter}
           onSelectionChange={setEstadoFilter} filterId="m-estado" openFilterId={openFilterId} onOpenChange={setOpenFilterId} />
       ),
-      cell: ({ row }) => {
-        const estado = row.original.estado;
-        const tooltips: Record<string, string> = {
-          'Turno Finalizado': 'Turno Finalizado: El conductor completo su turno correctamente',
-          'En Curso': 'En Curso: El conductor esta actualmente en servicio',
-          'Poco Km': 'Poco Km: El conductor registro menos de 100 km en su turno',
-          'Sin Actividad': 'Sin Actividad: No se registro actividad para este conductor',
-        };
-        const shortLabels: Record<string, string> = {
-          'Turno Finalizado': 'Finalizado',
-        };
-        return (
-          <span title={tooltips[estado] || estado} style={{
-            fontSize: '11px', fontWeight: 600, padding: '2px 8px',
-            borderRadius: '10px', color: '#fff', whiteSpace: 'nowrap',
-            background: getEstadoColor(estado), cursor: 'default',
-          }}>
-            {shortLabels[estado] || estado}
-          </span>
-        );
-      },
+      cell: ({ row }) => (
+        <span style={{
+          fontSize: '11px', fontWeight: 600, padding: '2px 8px',
+          borderRadius: '10px', color: '#fff',
+          background: getEstadoColor(row.original.estado),
+        }}>
+          {row.original.estado}
+        </span>
+      ),
       enableSorting: false,
     },
     {
       accessorKey: 'horario',
       header: () => (
-        <ExcelColumnFilter label="Turno" options={horariosUnicos} selectedValues={horarioFilter}
+        <ExcelColumnFilter label="Horario" options={horariosUnicos} selectedValues={horarioFilter}
           onSelectionChange={setHorarioFilter} filterId="m-horario" openFilterId={openFilterId} onOpenChange={setOpenFilterId} />
       ),
       cell: ({ row }) => {
         const h = row.original.horario;
         const mod = row.original.vehiculoModalidad;
-        let icon, color, label, tooltip;
+        let icon, color, label;
         if (h === 'diurno') {
           icon = <Sun size={14} />; color = '#d97706'; label = 'Diurno';
-          tooltip = 'Turno diurno (06:00 - 18:00)';
         } else if (h === 'nocturno') {
           icon = <Moon size={14} />; color = '#4f46e5'; label = 'Nocturno';
-          tooltip = 'Turno nocturno (18:00 - 06:00)';
         } else if (mod === 'CARGO' || mod === 'A_CARGO') {
           icon = <Clock size={14} />; color = '#0891b2'; label = 'A Cargo';
-          tooltip = 'Vehiculo a cargo del conductor (sin turno fijo)';
         } else {
           icon = <Clock size={14} />; color = '#6b7280'; label = '-';
-          tooltip = 'Sin horario asignado';
         }
         return (
-          <span title={tooltip} style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', fontSize: '12px', fontWeight: 600, color, cursor: 'default' }}>
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', fontSize: '12px', fontWeight: 600, color }}>
             {icon} {label}
           </span>
         );
@@ -365,22 +355,13 @@ export function MarcacionesTable({
     },
     {
       id: 'checklist',
-      header: () => (
-        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '2px' }}>
-          <span>Checklist</span>
-          <div style={{ display: 'flex', gap: '6px', fontSize: '9px', color: 'var(--text-tertiary)', fontWeight: 400 }}>
-            <span title="Carga de GNC" style={{ display: 'flex', alignItems: 'center', gap: '1px' }}><Flame size={10} />GNC</span>
-            <span title="Lavado del vehiculo" style={{ display: 'flex', alignItems: 'center', gap: '1px' }}><SprayCan size={10} />Lav</span>
-            <span title="Carga de Nafta" style={{ display: 'flex', alignItems: 'center', gap: '1px' }}><Fuel size={10} />Naf</span>
-          </div>
-        </div>
-      ),
+      header: 'Checklist',
       cell: ({ row }) => {
         const m = row.original;
         return (
           <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
             <button
-              title={m.gncCargado ? 'GNC: Cargado - Click para desmarcar' : 'GNC: No cargado - Click para marcar como cargado'}
+              title="GNC cargado"
               onClick={() => onUpdateChecklist(m.id, { gnc_cargado: !m.gncCargado })}
               style={{
                 background: 'none', border: 'none', cursor: 'pointer', padding: '2px',
@@ -388,10 +369,10 @@ export function MarcacionesTable({
                 opacity: m.gncCargado ? 1 : 0.4,
               }}
             >
-              <Flame size={15} />
+              <Fuel size={15} />
             </button>
             <button
-              title={m.lavadoRealizado ? 'Lavado: Realizado - Click para desmarcar' : 'Lavado: No realizado - Click para marcar como realizado'}
+              title="Lavado realizado"
               onClick={() => onUpdateChecklist(m.id, { lavado_realizado: !m.lavadoRealizado })}
               style={{
                 background: 'none', border: 'none', cursor: 'pointer', padding: '2px',
@@ -399,10 +380,10 @@ export function MarcacionesTable({
                 opacity: m.lavadoRealizado ? 1 : 0.4,
               }}
             >
-              <SprayCan size={15} />
+              <Droplets size={15} />
             </button>
             <button
-              title={m.naftaCargada ? 'Nafta: Cargada - Click para desmarcar' : 'Nafta: No cargada - Click para marcar como cargada'}
+              title="Nafta cargada"
               onClick={() => onUpdateChecklist(m.id, { nafta_cargada: !m.naftaCargada })}
               style={{
                 background: 'none', border: 'none', cursor: 'pointer', padding: '2px',
@@ -410,14 +391,14 @@ export function MarcacionesTable({
                 opacity: m.naftaCargada ? 1 : 0.4,
               }}
             >
-              <Fuel size={15} />
+              <Car size={15} />
             </button>
           </div>
         );
       },
       enableSorting: false,
     },
-  ], [conductoresUnicos, conductorFilter, patentesUnicas, patenteFilter,
+  ], [conductorPatenteUnicos, conductorFilter, fechasUnicas, fechaFilter,
       estadosUnicos, estadoFilter, horariosUnicos, horarioFilter, turnosUnicos, turnoFilter, openFilterId, onUpdateChecklist]);
 
   // Exportar
@@ -445,9 +426,9 @@ export function MarcacionesTable({
         : resolverFechaHora(m.periodoFin, m.fecha, m.salida, m.horario),
       'Duración': formatDuracion(m.duracionMinutos),
       'Km Total': m.kmTotal,
-      'Modalidad': m.vehiculoModalidad === 'CARGO' ? 'A Cargo' : m.vehiculoModalidad === 'TURNO' ? 'Turno' : '-',
+      'Turno': m.vehiculoModalidad === 'CARGO' ? 'A Cargo' : m.vehiculoModalidad === 'TURNO' ? 'Turno' : '-',
       'Estado': m.estado,
-      'Turno': getHorarioLabel(m.horario, m.vehiculoModalidad),
+      'Horario': getHorarioLabel(m.horario, m.vehiculoModalidad),
       'GNC': m.gncCargado ? 'Sí' : 'No',
       'Lavado': m.lavadoRealizado ? 'Sí' : 'No',
       'Nafta': m.naftaCargada ? 'Sí' : 'No',
@@ -483,15 +464,6 @@ export function MarcacionesTable({
     URL.revokeObjectURL(url);
     setShowExportMenu(false);
   }
-
-  // Stats calculados desde datos filtrados
-  const filteredStats = useMemo(() => {
-    if (marcacionesFiltradas.length === 0) return null;
-    const conductores = new Set(marcacionesFiltradas.map(m => m.conductor)).size;
-    const kmTotal = marcacionesFiltradas.reduce((sum, m) => sum + m.kmTotal, 0);
-    const activos = marcacionesFiltradas.filter(m => m.estado !== 'Sin Actividad').length;
-    return { conductores, kmTotal: Math.round(kmTotal * 100) / 100, activos };
-  }, [marcacionesFiltradas]);
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
@@ -550,30 +522,23 @@ export function MarcacionesTable({
           )}
         </div>
 
-        {filteredStats && (
-          <span style={{ color: 'var(--text-secondary)', fontSize: '13px', whiteSpace: 'nowrap' }}>
-            <strong>{filteredStats.conductores}</strong> conductores &middot; <strong>{filteredStats.kmTotal.toLocaleString('es-AR')}</strong> km &middot; <strong>{filteredStats.activos}</strong> activos
-          </span>
-        )}
         <span style={{ color: 'var(--text-secondary)', fontSize: '13px', whiteSpace: 'nowrap' }}>
           {marcacionesFiltradas.length} registros
         </span>
       </div>
 
       {/* DataTable */}
-      <div className="marcaciones-sticky">
-        <DataTable
-          data={marcacionesFiltradas}
-          columns={columns}
-          loading={isLoading}
-          showSearch={false}
-          showPagination={false}
-          emptyIcon={<ClipboardList size={48} />}
-          emptyTitle="Sin marcaciones"
-          emptyDescription="No hay marcaciones para mostrar en este rango de fechas"
-          pageSize={999}
-        />
-      </div>
+      <DataTable
+        data={marcacionesFiltradas}
+        columns={columns}
+        loading={isLoading}
+        showSearch={false}
+        showPagination={false}
+        emptyIcon={<ClipboardList size={48} />}
+        emptyTitle="Sin marcaciones"
+        emptyDescription="No hay marcaciones para mostrar en este rango de fechas"
+        pageSize={999}
+      />
     </div>
   );
 }
