@@ -7784,7 +7784,7 @@ export function ReporteFacturacionTab() {
             </span>
             {alerta && (
               <span
-                title={`Ingreso diurno ${alerta.fecha_entrega} a las ${alerta.hora_entrega} — Requiere incidencia a favor (${alerta.descuento_turnos === 0.5 ? 'medio turno' : '1 turno completo'})`}
+                title={`Entrega ${alerta.fecha_entrega} a las ${alerta.hora_entrega} — Descuento automático: ${alerta.descuento_turnos === 0.5 ? 'medio turno' : '1 turno'}`}
                 style={{
                   display: 'inline-flex',
                   alignItems: 'center',
@@ -9331,8 +9331,8 @@ export function ReporteFacturacionTab() {
                           <strong>Descuento por hora de entrega:</strong>{' '}
                           Entrega el {alerta.fecha_entrega} a las {alerta.hora_entrega}.{' '}
                           {esCompleto
-                            ? `Se descuenta ${alerta.descuento_turnos} turno${alerta.descuento_turnos > 1 ? 's' : ''} (entrega después de las ${horasCorteTurno.diurno}:00).`
-                            : `Se descuenta ${alerta.descuento_turnos} turno (entrega ${conductorData?.tipo_alquiler === 'CARGO' ? `después de las ${horasCorteTurno.cargo}:00` : `antes de las ${horasCorteTurno.diurno}:00`}).`
+                            ? `Se descuenta ${alerta.descuento_turnos} turno${alerta.descuento_turnos > 1 ? 's' : ''} (diurno, entrega después de las ${horasCorteTurno.diurno}:00).`
+                            : `Se descuenta ${alerta.descuento_turnos} turno (a cargo, entrega después de las ${horasCorteTurno.cargo}:00).`
                           }
                         </div>
                       </div>
