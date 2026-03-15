@@ -202,14 +202,16 @@ export function MarcacionesTable({
       cell: ({ row }) => {
         const m = row.original;
         return (
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <span style={{ fontWeight: 600, fontSize: '13px' }}>{m.conductor}</span>
-            <span style={{ fontFamily: 'monospace', fontSize: '11px', color: 'var(--color-primary)', fontWeight: 600, background: 'var(--bg-secondary)', padding: '2px 6px', borderRadius: '4px', whiteSpace: 'nowrap' }}>
-              {m.patente}
-            </span>
-            {m.ibutton && (
-              <span style={{ color: 'var(--text-tertiary)', fontSize: '11px' }}>#{m.ibutton}</span>
-            )}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '1px', lineHeight: 1.3 }}>
+            <span style={{ fontWeight: 600, fontSize: '13px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{m.conductor}</span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <span style={{ fontFamily: 'monospace', fontSize: '11px', color: 'var(--color-primary)', fontWeight: 600, background: 'var(--bg-secondary)', padding: '1px 5px', borderRadius: '3px', whiteSpace: 'nowrap' }}>
+                {m.patente}
+              </span>
+              {m.ibutton && (
+                <span style={{ color: 'var(--text-tertiary)', fontSize: '10px', whiteSpace: 'nowrap' }}>#{m.ibutton}</span>
+              )}
+            </div>
           </div>
         );
       },
@@ -285,7 +287,7 @@ export function MarcacionesTable({
     },
     {
       accessorKey: 'kmTotal',
-      header: 'Km Total',
+      header: 'Km',
       cell: ({ row }) => (
         <span style={{ fontWeight: 600 }}>
           {row.original.kmTotal.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
