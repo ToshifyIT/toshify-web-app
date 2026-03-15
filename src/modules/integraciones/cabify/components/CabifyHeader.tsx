@@ -4,7 +4,6 @@
  * Principio: Single Responsibility - Solo UI de encabezado
  */
 
-
 import type { WeekOption } from '../types/cabify.types'
 import { formatDateTimeAR } from '../../../../utils/dateUtils'
 import { WeekCalendarSelector } from './WeekCalendarSelector'
@@ -57,7 +56,7 @@ export function CabifyHeader({
       </div>
       {lastUpdate && (
         <span className="cabify-last-update-compact">
-          Última actualización: {formatDateTimeAR(lastUpdate)}
+          Última sync: {formatDateTimeAR(lastUpdate)}
         </span>
       )}
     </div>
