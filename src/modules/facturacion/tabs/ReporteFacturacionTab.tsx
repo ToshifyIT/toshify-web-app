@@ -1470,11 +1470,11 @@ export function ReporteFacturacionTab() {
             const fechaStr = displayArgDate(toArgDate(rawTimestamp))
 
             if (modalidad === 'TURNO_DIURNO') {
-              if (hora < horasCorteTurno.diurno) {
-                alertasProrrateoVP.set(ac.conductor_id, { tipo: 'medio_turno', hora: horaStr, fecha: fechaStr, descuento: horasCorteTurno.descDiurnoAntes })
-              } else {
+              if (hora >= horasCorteTurno.diurno) {
+                // Entrega después del corte → descuento 1 turno
                 alertasProrrateoVP.set(ac.conductor_id, { tipo: 'dia_completo', hora: horaStr, fecha: fechaStr, descuento: horasCorteTurno.descDiurnoDespues })
               }
+              // Entrega antes del corte → sin descuento
             } else if (modalidad === 'CARGO') {
               if (hora >= horasCorteTurno.cargo) {
                 alertasProrrateoVP.set(ac.conductor_id, { tipo: 'medio_turno', hora: horaStr, fecha: fechaStr, descuento: horasCorteTurno.descCargoDespues })
@@ -2473,7 +2473,9 @@ export function ReporteFacturacionTab() {
           if (rawTs) {
             const horaR = getArgHour(rawTs)
             if (modalidadDescR === 'TURNO_DIURNO') {
-              descuentosPorHoraRecalc.set(ac.conductor_id, horaR < horasCorteTurno.diurno ? horasCorteTurno.descDiurnoAntes : horasCorteTurno.descDiurnoDespues)
+              if (horaR >= horasCorteTurno.diurno) {
+                descuentosPorHoraRecalc.set(ac.conductor_id, horasCorteTurno.descDiurnoDespues)
+              }
             } else if (modalidadDescR === 'CARGO' && horaR >= horasCorteTurno.cargo) {
               descuentosPorHoraRecalc.set(ac.conductor_id, horasCorteTurno.descCargoDespues)
             }
