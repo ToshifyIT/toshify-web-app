@@ -326,7 +326,7 @@ export function MarcacionesTable({
           borderRadius: '10px', color: '#fff',
           background: getEstadoColor(row.original.estado),
         }}>
-          {row.original.estado}
+          {row.original.estado === 'Turno Finalizado' ? 'Finalizado' : row.original.estado}
         </span>
       ),
       enableSorting: false,
