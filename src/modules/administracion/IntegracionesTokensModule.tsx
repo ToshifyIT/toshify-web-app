@@ -4,6 +4,7 @@ import {
   Server, Radio, MapPin, Car, HardDrive, Mail, Eye, EyeOff,
   AlertCircle, RefreshCw, Zap, ZapOff, Activity,
   Bot, Key, Plus, Trash2, Copy, Check, Power,
+  Play, Pause, Edit2, CalendarClock, Loader2,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
@@ -1737,16 +1738,214 @@ function McpTab() {
 }
 
 // =============================================
+// Cron Jobs Tab
+// =============================================
+
+interface CronJobRecord {
+  id: string;
+  nombre: string;
+  descripcion: string | null;
+  schedule: string;
+  comando: string | null;
+  tipo: string;
+  integracion: string | null;
+  activo: boolean;
+  ultima_ejecucion: string | null;
+  ultimo_estado: string | null;
+  ultimo_error: string | null;
+  metadata: Record<string, unknown>;
+  created_at: string;
+  updated_at: string;
+}
+
+function describeCron(cron: string): string {
+  const parts = cron.split(' ');
+  if (parts.length !== 5) return cron;
+  const [min, hour, , , dow] = parts;
+  const days = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
+  if (min.startsWith('*/')) return `Cada ${min.slice(2)} min`;
+  if (hour === '*' && min === '0') return 'Cada hora';
+  if (dow !== '*') {
+    const dayName = days[parseInt(dow)] || dow;
+    return `${dayName} ${hour}:${min.padStart(2, '0')} hs`;
+  }
+  return `Diario ${hour}:${min.padStart(2, '0')} hs`;
+}
+
+const TIPO_LABELS: Record<string, { label: string; color: string }> = {
+  script: { label: 'Script', color: '#3b82f6' },
+  edge_function: { label: 'Edge Fn', color: '#8b5cf6' },
+  email: { label: 'Email', color: '#10b981' },
+};
+
+const INTEG_LABELS: Record<string, string> = {
+  wialon: 'Wialon', uss: 'USS', cabify_ba: 'Cabify BA', cabify_bari: 'Cabify Bari', sistema: 'Sistema',
+};
+
+function CronJobsTab() {
+  const [jobs, setJobs] = useState<CronJobRecord[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState<string | null>(null);
+
+  const cargarJobs = useCallback(async () => {
+    setLoading(true);
+    try {
+      const { data, error } = await supabase.from('cron_jobs').select('*').order('integracion').order('nombre');
+      if (error) throw error;
+      setJobs((data || []) as CronJobRecord[]);
+    } catch { setJobs([]); }
+    finally { setLoading(false); }
+  }, []);
+
+  useEffect(() => { cargarJobs(); }, [cargarJobs]);
+
+  const toggleActivo = async (job: CronJobRecord) => {
+    setSaving(job.id);
+    try {
+      const { error } = await supabase.from('cron_jobs').update({ activo: !job.activo, updated_at: new Date().toISOString() }).eq('id', job.id);
+      if (error) throw error;
+      setJobs(prev => prev.map(j => j.id === job.id ? { ...j, activo: !j.activo } : j));
+    } finally { setSaving(null); }
+  };
+
+  const editarJob = async (job: Partial<CronJobRecord> & { id: string }) => {
+    const { default: Swal } = await import('sweetalert2');
+    const isNew = !job.id;
+    const { value } = await Swal.fire({
+      title: isNew ? 'Nuevo Cron Job' : 'Editar Cron Job',
+      html: `
+        <div style="text-align:left;display:flex;flex-direction:column;gap:10px;">
+          <div><label style="font-size:12px;font-weight:600;color:#666;">Nombre</label>
+          <input id="swal-nombre" class="swal2-input" style="margin:4px 0;font-size:13px;" value="${job.nombre || ''}" placeholder="Nombre del job"></div>
+          <div><label style="font-size:12px;font-weight:600;color:#666;">Descripción</label>
+          <input id="swal-desc" class="swal2-input" style="margin:4px 0;font-size:13px;" value="${job.descripcion || ''}" placeholder="Descripción"></div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+            <div><label style="font-size:12px;font-weight:600;color:#666;">Schedule (cron)</label>
+            <input id="swal-schedule" class="swal2-input" style="margin:4px 0;font-size:13px;" value="${job.schedule || ''}" placeholder="*/5 * * * *"></div>
+            <div><label style="font-size:12px;font-weight:600;color:#666;">Tipo</label>
+            <select id="swal-tipo" class="swal2-select" style="margin:4px 0;font-size:13px;padding:8px;">
+              <option value="script" ${job.tipo === 'script' ? 'selected' : ''}>Script</option>
+              <option value="edge_function" ${job.tipo === 'edge_function' ? 'selected' : ''}>Edge Function</option>
+              <option value="email" ${job.tipo === 'email' ? 'selected' : ''}>Email</option>
+            </select></div>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+            <div><label style="font-size:12px;font-weight:600;color:#666;">Comando/Script</label>
+            <input id="swal-comando" class="swal2-input" style="margin:4px 0;font-size:13px;" value="${job.comando || ''}" placeholder="run-script.sh"></div>
+            <div><label style="font-size:12px;font-weight:600;color:#666;">Integración</label>
+            <select id="swal-integ" class="swal2-select" style="margin:4px 0;font-size:13px;padding:8px;">
+              <option value="">Sin integración</option>
+              <option value="wialon" ${job.integracion === 'wialon' ? 'selected' : ''}>Wialon</option>
+              <option value="uss" ${job.integracion === 'uss' ? 'selected' : ''}>USS</option>
+              <option value="cabify_ba" ${job.integracion === 'cabify_ba' ? 'selected' : ''}>Cabify BA</option>
+              <option value="cabify_bari" ${job.integracion === 'cabify_bari' ? 'selected' : ''}>Cabify Bariloche</option>
+              <option value="sistema" ${job.integracion === 'sistema' ? 'selected' : ''}>Sistema</option>
+            </select></div>
+          </div>
+        </div>
+      `,
+      showCancelButton: true, confirmButtonText: 'Guardar', cancelButtonText: 'Cancelar', confirmButtonColor: '#ef4444',
+      preConfirm: () => ({
+        nombre: (document.getElementById('swal-nombre') as HTMLInputElement).value,
+        descripcion: (document.getElementById('swal-desc') as HTMLInputElement).value || null,
+        schedule: (document.getElementById('swal-schedule') as HTMLInputElement).value,
+        tipo: (document.getElementById('swal-tipo') as HTMLSelectElement).value,
+        comando: (document.getElementById('swal-comando') as HTMLInputElement).value || null,
+        integracion: (document.getElementById('swal-integ') as HTMLSelectElement).value || null,
+      }),
+    });
+    if (!value || !value.nombre || !value.schedule) return;
+    try {
+      if (job.id) {
+        const { error } = await supabase.from('cron_jobs').update({ ...value, updated_at: new Date().toISOString() }).eq('id', job.id);
+        if (error) throw error;
+      } else {
+        const { error } = await supabase.from('cron_jobs').insert({ ...value, activo: true });
+        if (error) throw error;
+      }
+      cargarJobs();
+    } catch {
+      const { default: S } = await import('sweetalert2');
+      S.fire('Error', 'No se pudo guardar', 'error');
+    }
+  };
+
+  const eliminarJob = async (job: CronJobRecord) => {
+    const { default: Swal } = await import('sweetalert2');
+    const r = await Swal.fire({ title: '¿Eliminar cron job?', text: job.nombre, icon: 'warning', showCancelButton: true, confirmButtonText: 'Eliminar', cancelButtonText: 'Cancelar', confirmButtonColor: '#ef4444' });
+    if (!r.isConfirmed) return;
+    await supabase.from('cron_jobs').delete().eq('id', job.id);
+    cargarJobs();
+  };
+
+  if (loading) {
+    return <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', padding: '60px', gap: '8px', color: 'var(--text-secondary)' }}><Loader2 size={20} className="spinning" /> Cargando...</div>;
+  }
+
+  return (
+    <div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+        <div style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>{jobs.length} jobs · {jobs.filter(j => j.activo).length} activos</div>
+        <button onClick={() => editarJob({ id: '', nombre: '', schedule: '', tipo: 'script' })} style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '8px 16px', background: 'var(--color-primary)', color: 'white', border: 'none', borderRadius: '8px', fontSize: '13px', fontWeight: 600, cursor: 'pointer' }}>
+          <Plus size={14} /> Nuevo Job
+        </button>
+      </div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+        {jobs.map(job => {
+          const ti = TIPO_LABELS[job.tipo] || { label: job.tipo, color: '#666' };
+          return (
+            <div key={job.id} style={{ background: 'var(--bg-primary)', border: '1px solid var(--border-primary)', borderRadius: '10px', padding: '14px 16px', opacity: job.activo ? 1 : 0.5, transition: 'opacity 0.2s' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                <div style={{ width: '8px', height: '8px', borderRadius: '50%', flexShrink: 0, background: job.activo ? '#10b981' : '#9ca3af' }} />
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '2px', flexWrap: 'wrap' }}>
+                    <span style={{ fontSize: '13px', fontWeight: 600 }}>{job.nombre}</span>
+                    <span style={{ fontSize: '10px', fontWeight: 600, padding: '1px 6px', borderRadius: '4px', background: `${ti.color}15`, color: ti.color }}>{ti.label}</span>
+                    {job.integracion && <span style={{ fontSize: '10px', fontWeight: 500, padding: '1px 6px', borderRadius: '4px', background: 'var(--bg-secondary)', color: 'var(--text-secondary)' }}>{INTEG_LABELS[job.integracion] || job.integracion}</span>}
+                  </div>
+                  <div style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>{job.descripcion || job.comando || '-'}</div>
+                </div>
+                <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                  <div style={{ fontSize: '11px', fontWeight: 600 }}>{describeCron(job.schedule)}</div>
+                  <div style={{ fontSize: '10px', color: 'var(--text-tertiary)', fontFamily: 'monospace' }}>{job.schedule}</div>
+                </div>
+                <div style={{ textAlign: 'right', flexShrink: 0, minWidth: '80px' }}>
+                  {job.ultima_ejecucion ? (
+                    <>
+                      <div style={{ fontSize: '10px', color: job.ultimo_estado === 'error' ? '#ef4444' : '#10b981', fontWeight: 600 }}>{job.ultimo_estado === 'error' ? 'Error' : 'OK'}</div>
+                      <div style={{ fontSize: '10px', color: 'var(--text-tertiary)' }}>{new Date(job.ultima_ejecucion).toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}</div>
+                    </>
+                  ) : <div style={{ fontSize: '10px', color: 'var(--text-tertiary)' }}>Sin ejecución</div>}
+                </div>
+                <div style={{ display: 'flex', gap: '4px', flexShrink: 0 }}>
+                  <button onClick={() => toggleActivo(job)} disabled={saving === job.id} title={job.activo ? 'Desactivar' : 'Activar'} style={{ padding: '6px', background: 'transparent', border: '1px solid var(--border-primary)', borderRadius: '6px', cursor: 'pointer', color: job.activo ? '#10b981' : '#9ca3af' }}>{job.activo ? <Play size={14} /> : <Pause size={14} />}</button>
+                  <button onClick={() => editarJob(job)} title="Editar" style={{ padding: '6px', background: 'transparent', border: '1px solid var(--border-primary)', borderRadius: '6px', cursor: 'pointer', color: 'var(--text-secondary)' }}><Edit2 size={14} /></button>
+                  <button onClick={() => eliminarJob(job)} title="Eliminar" style={{ padding: '6px', background: 'transparent', border: '1px solid var(--border-primary)', borderRadius: '6px', cursor: 'pointer', color: '#ef4444' }}><Trash2 size={14} /></button>
+                </div>
+              </div>
+              {job.ultimo_estado === 'error' && job.ultimo_error && (
+                <div style={{ marginTop: '8px', padding: '8px 10px', borderRadius: '6px', background: 'rgba(239,68,68,0.06)', border: '1px solid rgba(239,68,68,0.15)', fontSize: '11px', color: '#dc2626' }}>{job.ultimo_error}</div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+// =============================================
 // Tab types & config
 // =============================================
 
-type TabId = 'integraciones' | 'monitor' | 'credenciales' | 'mcp';
+type TabId = 'integraciones' | 'monitor' | 'credenciales' | 'mcp' | 'cronjobs';
 
 const TABS: { id: TabId; label: string; icon: LucideIcon }[] = [
   { id: 'integraciones', label: 'Integraciones', icon: Globe },
   { id: 'monitor', label: 'Monitor', icon: Activity },
   { id: 'credenciales', label: 'Credenciales', icon: Eye },
   { id: 'mcp', label: 'MCP', icon: Bot },
+  { id: 'cronjobs', label: 'Cron Jobs', icon: CalendarClock },
 ];
 
 // =============================================
@@ -1908,6 +2107,10 @@ export function IntegracionesTokensModule() {
 
       {activeTab === 'mcp' && (
         <McpTab />
+      )}
+
+      {activeTab === 'cronjobs' && (
+        <CronJobsTab />
       )}
     </div>
   );
