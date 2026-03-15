@@ -202,16 +202,14 @@ export function MarcacionesTable({
       cell: ({ row }) => {
         const m = row.original;
         return (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', lineHeight: 1.3 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <span style={{ fontWeight: 600, fontSize: '13px' }}>{m.conductor}</span>
-              {m.ibutton && (
-                <span style={{ color: 'var(--text-tertiary)', fontSize: '11px' }}>#{m.ibutton}</span>
-              )}
-            </div>
-            <span style={{ fontFamily: 'monospace', fontSize: '12px', color: 'var(--color-primary)', fontWeight: 600 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <span style={{ fontWeight: 600, fontSize: '13px' }}>{m.conductor}</span>
+            <span style={{ fontFamily: 'monospace', fontSize: '11px', color: 'var(--color-primary)', fontWeight: 600, background: 'var(--bg-secondary)', padding: '2px 6px', borderRadius: '4px', whiteSpace: 'nowrap' }}>
               {m.patente}
             </span>
+            {m.ibutton && (
+              <span style={{ color: 'var(--text-tertiary)', fontSize: '11px' }}>#{m.ibutton}</span>
+            )}
           </div>
         );
       },
@@ -234,10 +232,13 @@ export function MarcacionesTable({
       cell: ({ row }) => {
         const m = row.original;
         const texto = resolverFechaHora(m.periodoInicio, m.fecha, m.entrada, m.horario);
+        if (texto === '-') return <span style={{ fontSize: '12px', color: 'var(--text-tertiary)' }}>-</span>;
+        const [fechaPart, horaPart] = texto.split(' ');
         return (
-          <span style={{ fontWeight: 600, fontSize: '12px', color: texto === '-' ? 'var(--text-tertiary)' : '#16a34a' }}>
-            {texto}
-          </span>
+          <div style={{ display: 'flex', flexDirection: 'column', lineHeight: 1.3, color: '#16a34a' }}>
+            <span style={{ fontWeight: 600, fontSize: '12px' }}>{fechaPart}</span>
+            <span style={{ fontSize: '11px' }}>{horaPart}</span>
+          </div>
         );
       },
       enableSorting: true,
@@ -250,20 +251,24 @@ export function MarcacionesTable({
         if (m.estado === 'En Curso') {
           const texto = resolverFechaHora(m.periodoFin, m.fecha, m.salida, m.horario);
           if (texto !== '-') {
+            const [fechaPart, horaPart] = texto.split(' ');
             return (
-              <span style={{ fontSize: '12px' }}>
-                <span style={{ fontWeight: 600, color: '#2563eb' }}>{texto}</span>
-                <span style={{ color: '#2563eb', fontStyle: 'italic', marginLeft: '4px' }}>(en curso)</span>
-              </span>
+              <div style={{ display: 'flex', flexDirection: 'column', lineHeight: 1.3, color: '#2563eb' }}>
+                <span style={{ fontWeight: 600, fontSize: '12px' }}>{fechaPart}</span>
+                <span style={{ fontSize: '11px' }}>{horaPart} <i>(en curso)</i></span>
+              </div>
             );
           }
           return <span style={{ fontSize: '12px', fontWeight: 600, fontStyle: 'italic', color: '#2563eb' }}>En curso</span>;
         }
         const texto = resolverFechaHora(m.periodoFin, m.fecha, m.salida, m.horario);
+        if (texto === '-') return <span style={{ fontSize: '12px', color: 'var(--text-tertiary)' }}>-</span>;
+        const [fechaPart, horaPart] = texto.split(' ');
         return (
-          <span style={{ fontWeight: 600, fontSize: '12px', color: texto === '-' ? 'var(--text-tertiary)' : '#dc2626' }}>
-            {texto}
-          </span>
+          <div style={{ display: 'flex', flexDirection: 'column', lineHeight: 1.3, color: '#dc2626' }}>
+            <span style={{ fontWeight: 600, fontSize: '12px' }}>{fechaPart}</span>
+            <span style={{ fontSize: '11px' }}>{horaPart}</span>
+          </div>
         );
       },
       enableSorting: true,
@@ -283,7 +288,7 @@ export function MarcacionesTable({
       header: 'Km Total',
       cell: ({ row }) => (
         <span style={{ fontWeight: 600 }}>
-          {row.original.kmTotal.toLocaleString('es-AR', { maximumFractionDigits: 1 })}
+          {row.original.kmTotal.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
         </span>
       ),
       enableSorting: true,
