@@ -2210,33 +2210,26 @@ export function AsignacionesModule() {
   // Columnas para DataTable - headers simples para usar filtros automáticos
   const columns = useMemo<ColumnDef<ExpandedAsignacion, any>[]>(() => [
     {
-      accessorFn: (row) => row.vehiculos?.patente || '',
+      accessorFn: (row) => `${row.vehiculos?.patente || ''} ${row.horario === 'CARGO' ? 'A CARGO' : 'TURNO'}`,
       id: 'vehiculo',
       header: 'Vehículo',
-      size: 120,
       cell: ({ row }) => (
         <div className="asig-vehiculo-cell">
-          <span className="asig-vehiculo-patente">{row.original.vehiculos?.patente || 'N/A'}</span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <span className="asig-vehiculo-patente">{row.original.vehiculos?.patente || 'N/A'}</span>
+            {row.original.esDevolucion ? (
+              <span className="dt-badge" style={{ background: '#F3F4F6', color: '#4B5563', fontSize: '10px', padding: '1px 6px' }}>DEVOLUCIÓN</span>
+            ) : (
+              <span className={getHorarioBadgeClass(row.original.horario)} style={{ fontSize: '10px', padding: '1px 6px' }}>
+                {row.original.horario === 'CARGO' ? 'A CARGO' : 'TURNO'}
+              </span>
+            )}
+          </div>
           <span className="asig-vehiculo-info">
             {row.original.vehiculos?.marca} {row.original.vehiculos?.modelo}
           </span>
         </div>
       )
-    },
-    {
-      accessorKey: 'horario',
-      header: 'Modalidad',
-      size: 90,
-      cell: ({ row }) => {
-        if (row.original.esDevolucion) {
-          return <span className="dt-badge" style={{ background: '#F3F4F6', color: '#4B5563' }}>DEVOLUCIÓN</span>
-        }
-        return (
-          <span className={getHorarioBadgeClass(row.original.horario)}>
-            {row.original.horario === 'CARGO' ? 'A CARGO' : 'TURNO'}
-          </span>
-        )
-      }
     },
     {
       id: 'motivo',

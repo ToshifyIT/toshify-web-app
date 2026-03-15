@@ -1399,7 +1399,6 @@ export function DataTable<T>({
                             ${shouldShrink ? "dt-col-shrink" : ""}
                             ${shouldExpand ? "dt-col-expand" : ""}
                           `}
-                          style={hasExplicitSize ? { width: `${userColumnSizes.get(header.id)}px` } : undefined}
                         >
                           <div
                             className={`dt-header-content ${
@@ -1446,7 +1445,6 @@ export function DataTable<T>({
                           <td
                             key={cell.id}
                             className={`${isActionsColumn ? "dt-sticky-col" : ""} ${isFirstColumn ? "dt-sticky-col-left" : ""} ${shouldShrink ? "dt-col-shrink" : ""} ${shouldExpand ? "dt-col-expand" : ""}`}
-                            style={hasExplicitSize ? { width: `${userColumnSizes.get(cell.column.id)}px` } : undefined}
                           >
                             {flexRender(
                               cell.column.columnDef.cell,

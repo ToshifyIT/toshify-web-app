@@ -370,7 +370,6 @@
   padding-bottom: 4px;
   scrollbar-width: auto;
   max-width: 100%;
-  max-height: 70vh;
 }
 
 .dt-table-wrapper::-webkit-scrollbar {
@@ -418,33 +417,11 @@
 
 /* Sticky column for actions (right) */
 .dt-sticky-col {
-  position: sticky;
-  right: 0;
-  background: var(--bg-primary);
-  z-index: 2;
-  box-shadow: -4px 0 8px rgba(0, 0, 0, 0.06);
   text-align: center;
 }
 
 .dt-table thead .dt-sticky-col {
   background: var(--table-header-bg);
-  z-index: 5; /* Above sticky header + sticky column */
-}
-
-.dt-table tbody tr:hover .dt-sticky-col {
-  background: var(--table-row-hover);
-}
-
-.dt-table tbody tr:nth-child(even) .dt-sticky-col {
-  background: var(--bg-primary);
-}
-
-.dt-table tbody tr:nth-child(even):hover .dt-sticky-col {
-  background: var(--table-row-hover);
-}
-
-[data-theme="dark"] .dt-sticky-col {
-  box-shadow: -4px 0 8px rgba(0, 0, 0, 0.2);
 }
 
 /* Sticky column for first column (left) */
