@@ -513,8 +513,6 @@
   display: flex;
   align-items: center;
   gap: 4px;
-  overflow: hidden;
-  min-width: 0;
 }
 
 .dt-header-center {
@@ -1489,20 +1487,15 @@
 
 /* Filter Header */
 .dt-filter-header {
-  display: flex;
+  display: inline-flex;
   align-items: center;
   gap: 4px;
   white-space: nowrap;
-  overflow: hidden;
-  min-width: 0;
-  flex: 1;
 }
 
 .dt-filter-label {
-  flex: 1 1 0;
   overflow: hidden;
   text-overflow: ellipsis;
-  min-width: 0;
 }
 
 /* Filter Button - Toshify Design System */
