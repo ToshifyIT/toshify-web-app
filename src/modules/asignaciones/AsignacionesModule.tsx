@@ -2214,20 +2214,15 @@ export function AsignacionesModule() {
       id: 'vehiculo',
       header: 'Vehículo',
       cell: ({ row }) => (
-        <div className="asig-vehiculo-cell">
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <span className="asig-vehiculo-patente">{row.original.vehiculos?.patente || 'N/A'}</span>
-            {row.original.esDevolucion ? (
-              <span className="dt-badge" style={{ background: '#F3F4F6', color: '#4B5563', fontSize: '10px', padding: '1px 6px' }}>DEVOLUCIÓN</span>
-            ) : (
-              <span className={getHorarioBadgeClass(row.original.horario)} style={{ fontSize: '10px', padding: '1px 6px' }}>
-                {row.original.horario === 'CARGO' ? 'A CARGO' : 'TURNO'}
-              </span>
-            )}
-          </div>
-          <span className="asig-vehiculo-info">
-            {row.original.vehiculos?.marca} {row.original.vehiculos?.modelo}
-          </span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+          <span className="asig-vehiculo-patente">{row.original.vehiculos?.patente || 'N/A'}</span>
+          {row.original.esDevolucion ? (
+            <span className="dt-badge" style={{ background: '#F3F4F6', color: '#4B5563', fontSize: '10px', padding: '1px 6px' }}>DEV</span>
+          ) : (
+            <span className={getHorarioBadgeClass(row.original.horario)} style={{ fontSize: '10px', padding: '1px 6px' }}>
+              {row.original.horario === 'CARGO' ? 'A CARGO' : 'TURNO'}
+            </span>
+          )}
         </div>
       )
     },
