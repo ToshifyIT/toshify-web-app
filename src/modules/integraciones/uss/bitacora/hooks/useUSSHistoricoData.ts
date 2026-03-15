@@ -80,10 +80,17 @@ function transformarMarcacion(reg: BitacoraRegistroTransformado): Marcacion {
 }
 
 export function useUSSHistoricoData(sedeId?: string | null) {
-  const [dateRange, setDateRange] = useState<USSHistoricoDateRange>({
-    startDate: getToday(),
-    endDate: getToday(),
-    label: 'Hoy',
+  const [dateRange, setDateRange] = useState<USSHistoricoDateRange>(() => {
+    const today = getToday();
+    const d = new Date();
+    const day = d.getDay();
+    const diff = d.getDate() - day + (day === 0 ? -6 : 1);
+    d.setDate(diff);
+    return {
+      startDate: toArgentinaDateString(d),
+      endDate: today,
+      label: 'Esta semana',
+    };
   });
 
   // Registros crudos para tabla Histórico
