@@ -12,6 +12,13 @@
   gap: 16px;
 }
 
+/* Compact table for 1024px */
+.fact-module .dt-table th,
+.fact-module .dt-table td {
+  padding: 6px 4px;
+  font-size: 11px;
+}
+
 /* =====================================================
    TABS
    ===================================================== */
