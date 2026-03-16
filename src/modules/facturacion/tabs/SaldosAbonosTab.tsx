@@ -932,7 +932,7 @@ export function SaldosAbonosTab() {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { error: errorAbono } = await (supabase.from('abonos_conductores') as any).insert({
         conductor_id: saldo.conductor_id,
-        tipo: 'pago',
+        tipo: 'abono',
         monto: formValues.monto,
         concepto: formValues.concepto,
         referencia: formValues.referencia,
