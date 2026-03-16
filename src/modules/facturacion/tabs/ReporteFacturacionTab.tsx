@@ -1270,6 +1270,7 @@ export function ReporteFacturacionTab() {
           const estadoPadreVPExtra = (asig.estado || '').toLowerCase()
           if (['programado', 'programada'].includes(estadoPadreVPExtra)) continue
           if (['finalizada', 'cancelada', 'finalizado', 'cancelado'].includes(estadoPadreVPExtra) && !asig.fecha_fin) continue
+          if (!ac.fecha_inicio && !asig.fecha_inicio) continue
 
           // Verificar solapamiento con la semana (normalizar sin hora)
           const acInicioExtra = ac.fecha_inicio ? parseISO(toArgDate(ac.fecha_inicio)) : new Date('2020-01-01')
@@ -1408,6 +1409,8 @@ export function ReporteFacturacionTab() {
         if (['programado', 'programada'].includes(estadoPadreVP)) return
         // Si la asignación padre está finalizada/cancelada sin fecha_fin → registro huérfano
         if (['finalizada', 'cancelada', 'finalizado', 'cancelado'].includes(estadoPadreVP) && !asignacion.fecha_fin) return
+        // Skip huérfano sin fecha_inicio
+        if (!ac.fecha_inicio && !asignacion.fecha_inicio) return
         
         // Calcular días que este registro se solapa con la semana
         // Normalizar a solo fecha (sin hora) — timestamps de asignaciones tienen hora que rompe el conteo
@@ -2317,6 +2320,7 @@ export function ReporteFacturacionTab() {
           const estadoPadreRecExtra = (asig.estado || '').toLowerCase()
           if (['programado', 'programada'].includes(estadoPadreRecExtra)) continue
           if (['finalizada', 'cancelada', 'finalizado', 'cancelado'].includes(estadoPadreRecExtra) && !asig.fecha_fin) continue
+          if (!ac.fecha_inicio && !asig.fecha_inicio) continue
 
           // Verificar solapamiento con la semana (normalizar sin hora)
           const acInicioRecExtra = ac.fecha_inicio ? parseISO(toArgDate(ac.fecha_inicio)) : new Date('2020-01-01')
@@ -2441,6 +2445,8 @@ export function ReporteFacturacionTab() {
         if (['programado', 'programada'].includes(estadoPadre)) continue
         // Skip orphan: padre finalizado/cancelado sin fecha_fin
         if (['finalizada', 'cancelada', 'finalizado', 'cancelado'].includes(estadoPadre) && !asignacion.fecha_fin) continue
+        // Skip huérfano sin fecha_inicio (ni conductor ni padre)
+        if (!ac.fecha_inicio && !asignacion.fecha_inicio) continue
 
         // Inicio: usar la fecha MÁS TARDÍA entre conductor y padre (Entrega Real)
         // para no cobrar antes de que el vehículo fuera realmente entregado
