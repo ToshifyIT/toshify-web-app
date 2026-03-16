@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo, useRef } from 'react'
+import { createPortal } from 'react-dom'
 import { supabase } from '../../../lib/supabase'
 import { useSede } from '../../../contexts/SedeContext'
 import { useAuth } from '../../../contexts/AuthContext'
@@ -1687,12 +1688,13 @@ export function SaldosAbonosTab() {
           <span>Conductor {conductorFilter.length > 0 && `(${conductorFilter.length})`}</span>
           <button
             className={`dt-column-filter-btn ${conductorFilter.length > 0 ? 'active' : ''}`}
+            data-filter-id="saldo-conductor"
             onClick={(e) => { e.stopPropagation(); setOpenColumnFilter(openColumnFilter === 'conductor' ? null : 'conductor') }}
           >
             <Filter size={12} />
           </button>
-          {openColumnFilter === 'conductor' && (
-            <div className="dt-column-filter-dropdown dt-excel-filter" onClick={(e) => e.stopPropagation()}>
+          {openColumnFilter === 'conductor' && createPortal(
+            <div className="dt-column-filter-dropdown dt-excel-filter" style={{ position: 'fixed', top: (document.querySelector('[data-filter-id="saldo-conductor"]')?.getBoundingClientRect().bottom ?? 0) + 4, left: Math.min(document.querySelector('[data-filter-id="saldo-conductor"]')?.getBoundingClientRect().left ?? 0, window.innerWidth - 268), zIndex: 9999 }} onClick={(e) => e.stopPropagation()}>
               <input
                 type="text"
                 placeholder="Buscar conductor..."
@@ -1713,7 +1715,8 @@ export function SaldosAbonosTab() {
                   Limpiar ({conductorFilter.length})
                 </button>
               )}
-            </div>
+            </div>,
+            document.body
           )}
         </div>
       ),
@@ -1764,12 +1767,13 @@ export function SaldosAbonosTab() {
           <span>Estado {estadoFilter.length > 0 && `(${estadoFilter.length})`}</span>
           <button
             className={`dt-column-filter-btn ${estadoFilter.length > 0 ? 'active' : ''}`}
+            data-filter-id="saldo-estado"
             onClick={(e) => { e.stopPropagation(); setOpenColumnFilter(openColumnFilter === 'estado' ? null : 'estado') }}
           >
             <Filter size={12} />
           </button>
-          {openColumnFilter === 'estado' && (
-            <div className="dt-column-filter-dropdown dt-excel-filter" onClick={(e) => e.stopPropagation()}>
+          {openColumnFilter === 'estado' && createPortal(
+            <div className="dt-column-filter-dropdown dt-excel-filter" style={{ position: 'fixed', top: (document.querySelector('[data-filter-id="saldo-estado"]')?.getBoundingClientRect().bottom ?? 0) + 4, left: Math.min(document.querySelector('[data-filter-id="saldo-estado"]')?.getBoundingClientRect().left ?? 0, window.innerWidth - 268), zIndex: 9999 }} onClick={(e) => e.stopPropagation()}>
               <div className="dt-excel-filter-list">
                 {[
                   { value: 'favor', label: 'A Favor' },
@@ -1787,7 +1791,8 @@ export function SaldosAbonosTab() {
                   Limpiar ({estadoFilter.length})
                 </button>
               )}
-            </div>
+            </div>,
+            document.body
           )}
         </div>
       ),
