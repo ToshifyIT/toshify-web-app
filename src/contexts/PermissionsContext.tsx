@@ -5,7 +5,7 @@
  * - useMemo para evitar recálculos innecesarios
  * - useCallback para estabilidad referencial
  */
-import { createContext, useContext, useEffect, useState, useMemo, useCallback } from 'react'
+import { createContext, useContext, useEffect, useState, useMemo, useCallback, useRef } from 'react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from './AuthContext'
 
@@ -111,6 +111,7 @@ export function PermissionsProvider({ children }: { children: React.ReactNode })
   const { user, loading: authLoading } = useAuth()
   const [userPermissions, setUserPermissions] = useState<UserPermissionsResponse | null>(null)
   const [loading, setLoading] = useState(true)
+  const hasLoadedOnce = useRef(false)
 
   useEffect(() => {
     if (authLoading) return
@@ -132,7 +133,7 @@ export function PermissionsProvider({ children }: { children: React.ReactNode })
     }
 
     // Solo mostrar loading en la carga inicial, no en recargas por token refresh
-    if (!userPermissions) {
+    if (!hasLoadedOnce.current) {
       setLoading(true)
     }
 
@@ -354,9 +355,10 @@ export function PermissionsProvider({ children }: { children: React.ReactNode })
         submenus: submenusData,
         tabs: tabsData
       })
+      hasLoadedOnce.current = true
     } catch {
       // No borrar permisos si ya se cargaron previamente (evita redirect a /unauthorized)
-      if (!userPermissions) {
+      if (!hasLoadedOnce.current) {
         setUserPermissions(null)
       }
     }
