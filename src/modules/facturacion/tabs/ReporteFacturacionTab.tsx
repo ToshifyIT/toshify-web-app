@@ -921,6 +921,8 @@ export function ReporteFacturacionTab() {
       const horarioMapLoad = new Map<string, { diurno: number; nocturno: number; cargo: number }>()
       // Rastrear fecha_fin más tardía de asignación por conductor
       const maxAsigFinLoad = new Map<string, string>()
+      // Rastrear primera fecha de inicio de asignación por conductor (para proyectado)
+      const primeraFechaInicioLoad = new Map<string, Date>()
       ;(asignacionesLoad || []).forEach((ac: any) => {
         const asignacion = ac.asignaciones
         if (!asignacion) return
@@ -943,6 +945,12 @@ export function ReporteFacturacionTab() {
         const efFin = acFinLoad > fechaFinPeriodoLoad ? fechaFinPeriodoLoad : acFinLoad
         const diasOverlap = Math.max(0, Math.ceil((efFin.getTime() - efInicio.getTime()) / (1000 * 60 * 60 * 24)) + 1)
         if (diasOverlap <= 0) return
+
+        // Rastrear la primera fecha de inicio para el proyectado
+        const existingFirst = primeraFechaInicioLoad.get(ac.conductor_id)
+        if (!existingFirst || efInicio < existingFirst) {
+          primeraFechaInicioLoad.set(ac.conductor_id, efInicio)
+        }
 
         // Rastrear la fecha_fin más tardía de la asignación
         const finRealStrLoad = toArgDate(ac.fecha_fin || asignacion.fecha_fin || '')
@@ -1149,12 +1157,20 @@ export function ReporteFacturacionTab() {
         }
       })
 
-      // Construir mapa de alquiler proyectado: facturacion_id → Math.round(precio_unitario * 7)
+      // Construir mapa de alquiler proyectado: precio_unitario × días desde inicio asignación hasta domingo
       const proyectadoMap = new Map<string, number>()
       ;(alquilerDetalleData || []).forEach((d: any) => {
         const pu = Number(d.precio_unitario) || 0
         if (pu > 0) {
-          proyectadoMap.set(d.facturacion_id, Math.round(pu * 7))
+          // Buscar la facturación para obtener el conductor_id
+          const facturacion = (facturacionesData || []).find((f: any) => f.id === d.facturacion_id)
+          const conductorId = facturacion?.conductor_id
+          const primeraFecha = conductorId ? primeraFechaInicioLoad.get(conductorId) : null
+          const finPeriodo = fechaFinPeriodoLoad
+          const diasProyectados = primeraFecha
+            ? Math.min(7, Math.max(1, Math.round((finPeriodo.getTime() - primeraFecha.getTime()) / (1000 * 60 * 60 * 24)) + 1))
+            : 7
+          proyectadoMap.set(d.facturacion_id, Math.round(pu * diasProyectados))
         }
       })
 
