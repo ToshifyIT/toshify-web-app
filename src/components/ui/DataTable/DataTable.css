@@ -370,7 +370,6 @@
   padding-bottom: 4px;
   scrollbar-width: auto;
   max-width: 100%;
-  max-height: calc(100vh - 340px);
 }
 
 .dt-table-wrapper::-webkit-scrollbar {
