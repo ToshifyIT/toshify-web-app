@@ -1114,7 +1114,16 @@ export function IncidenciasModule() {
           onOpenChange={setOpenFilterId}
         />
       ),
-      cell: ({ row }) => row.original.conductor_display || '-'
+      cell: ({ row }) => {
+        const turno = row.original.turno
+        const color = turno === 'Diurno' ? 'yellow' : turno === 'Nocturno' ? 'blue' : 'gray'
+        return (
+          <div>
+            <div style={{ fontSize: '12px' }}>{row.original.conductor_display || '-'}</div>
+            {turno && <span className={`dt-badge dt-badge-${color}`} style={{ fontSize: '9px', padding: '1px 5px' }}>{turno}</span>}
+          </div>
+        )
+      }
     },
     {
       accessorKey: 'tipo_cobro_descuento_id',
@@ -1151,26 +1160,6 @@ export function IncidenciasModule() {
       }
     },
     {
-      accessorKey: 'turno',
-      header: () => (
-        <ExcelColumnFilter
-          label="Turno"
-          options={turnosUnicos}
-          selectedValues={turnoFilter}
-          onSelectionChange={setTurnoFilter}
-          filterId="inc_turno"
-          openFilterId={openFilterId}
-          onOpenChange={setOpenFilterId}
-        />
-      ),
-      cell: ({ row }) => {
-        const turno = row.original.turno
-        if (!turno) return '-'
-        const color = turno === 'Diurno' ? 'yellow' : turno === 'Nocturno' ? 'blue' : 'gray'
-        return <span className={`dt-badge dt-badge-${color}`}>{turno}</span>
-      }
-    },
-    {
       accessorKey: 'area',
       header: () => (
         <ExcelColumnFilter
@@ -1204,27 +1193,22 @@ export function IncidenciasModule() {
       }
     },
     {
-      accessorKey: 'registrado_por',
-      header: 'Responsable',
-      cell: ({ row }) => row.original.registrado_por || '-'
-    },
-    {
       accessorKey: 'created_at',
       header: 'Creado',
       cell: ({ row }) => {
         if (!row.original.created_at) return '-'
-        return new Date(row.original.created_at).toLocaleDateString('es-AR', {
-          day: '2-digit',
-          month: '2-digit',
-          year: 'numeric',
-          hour: '2-digit',
-          minute: '2-digit'
-        })
+        const d = new Date(row.original.created_at)
+        return (
+          <div style={{ fontSize: '11px', lineHeight: '1.3' }}>
+            <div>{d.toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: '2-digit' })}</div>
+            <div style={{ color: 'var(--text-tertiary)' }}>{d.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' })}</div>
+          </div>
+        )
       }
     },
     {
       id: 'acciones',
-      header: 'Acciones',
+      header: '',
       cell: ({ row }) => (
         <ActionsMenu
           actions={[
@@ -2847,23 +2831,9 @@ export function IncidenciasModule() {
             />
           )}
           <VerLogsButton tablas={['incidencias', 'penalidades', 'penalidades_cuotas', 'penalidades_rechazos']} label="Incidencias" />
-          <button
-            className="btn-secondary"
-            onClick={activeTab === 'por_aplicar' || activeTab === 'aplicadas' ? handleExportarPenalidades : handleExportarIncidencias}
-            title="Exportar a Excel"
-          >
-            <Download size={16} />
-            Exportar
-          </button>
-          {activeTab !== 'por_aplicar' && activeTab !== 'aplicadas' && activeTab !== 'rechazados' && (
-            <button
-              className="btn-primary"
-              onClick={handleNuevaIncidencia}
-              disabled={!canCreate}
-              title={!canCreate ? 'No tienes permisos para crear' : ''}
-            >
-              <Plus size={16} />
-              Nueva Incidencia
+          {(activeTab === 'por_aplicar' || activeTab === 'aplicadas') && (
+            <button className="btn-secondary" onClick={handleExportarPenalidades} title="Exportar" style={{ padding: '6px 10px', fontSize: '12px' }}>
+              <Download size={14} /> Exportar
             </button>
           )}
         </div>
@@ -2964,6 +2934,16 @@ export function IncidenciasModule() {
             emptyDescription="No hay incidencias logísticas registradas"
             pageSize={100}
             pageSizeOptions={[10, 20, 50, 100]}
+            headerAction={
+              <div style={{ display: 'flex', gap: '6px' }}>
+                <button className="btn-secondary" onClick={handleExportarIncidencias} title="Exportar" style={{ padding: '7px 10px', fontSize: '12px' }}>
+                  <Download size={14} /> Exportar
+                </button>
+                <button className="btn-primary" onClick={handleNuevaIncidencia} disabled={!canCreate} style={{ padding: '7px 10px', fontSize: '12px' }}>
+                  <Plus size={14} /> Nueva
+                </button>
+              </div>
+            }
           />
         </>
       )}
@@ -3133,6 +3113,16 @@ export function IncidenciasModule() {
             emptyDescription="Las incidencias que generan cobros aparecerán aquí"
             pageSize={100}
             pageSizeOptions={[10, 20, 50, 100]}
+            headerAction={
+              <div style={{ display: 'flex', gap: '6px' }}>
+                <button className="btn-secondary" onClick={handleExportarIncidencias} title="Exportar" style={{ padding: '7px 10px', fontSize: '12px' }}>
+                  <Download size={14} /> Exportar
+                </button>
+                <button className="btn-primary" onClick={handleNuevaIncidencia} disabled={!canCreate} style={{ padding: '7px 10px', fontSize: '12px' }}>
+                  <Plus size={14} /> Nueva
+                </button>
+              </div>
+            }
           />
         </>
       )}
