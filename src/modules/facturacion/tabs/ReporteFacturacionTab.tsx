@@ -7725,43 +7725,35 @@ export function ReporteFacturacionTab() {
             </span>
             {(() => {
               const o = row.original
-              const s = { fontSize: '8px', padding: '0px 4px', lineHeight: '14px' }
+              const bs = { fontSize: '8px', padding: '1px 4px', lineHeight: '12px', borderRadius: '3px', fontWeight: 700 } as const
               if (o.tipo_alquiler === 'CARGO') {
-                return <span className="dt-badge dt-badge-solid-blue" style={s}>CARGO</span>
+                return <span style={{ ...bs, background: '#3b82f6', color: '#fff' }}>CARGO</span>
               }
               const diurno = o.prorrateo_diurno_dias || 0
               const nocturno = o.prorrateo_nocturno_dias || 0
               const label = diurno > 0 && nocturno === 0 ? 'D' : nocturno > 0 && diurno === 0 ? 'N' : diurno > 0 && nocturno > 0 ? 'D+N' : 'T'
-              return <span className="dt-badge dt-badge-solid-gray" style={s}>{label}</span>
+              const bg = label === 'D' ? '#f59e0b' : label === 'N' ? '#6366f1' : '#6b7280'
+              return <span style={{ ...bs, background: bg, color: '#fff' }}>{label}</span>
             })()}
             {row.original.tiene_gnc === false && row.original.vehiculo_patente && (
-              <span className="dt-badge dt-badge-orange" style={{ fontSize: '8px', padding: '0px 4px', lineHeight: '14px' }}>!GNC</span>
+              <span style={{ fontSize: '8px', padding: '1px 4px', lineHeight: '12px', borderRadius: '3px', fontWeight: 700, background: '#f97316', color: '#fff' }}>!GNC</span>
             )}
             {row.original.permiso_efectivo === 'Activado' && (
-              <span className="dt-badge" style={{ fontSize: '8px', padding: '0px 4px', lineHeight: '14px', background: 'rgba(34,197,94,0.15)', color: '#16a34a' }}>
-                <Zap size={7} />$
-              </span>
+              <span style={{ fontSize: '8px', padding: '1px 4px', lineHeight: '12px', borderRadius: '3px', fontWeight: 700, background: '#22c55e', color: '#fff' }}>$</span>
             )}
             {row.original.permiso_efectivo === 'Desactivado' && (
-              <span className="dt-badge" style={{ fontSize: '8px', padding: '0px 4px', lineHeight: '14px', background: 'rgba(239,68,68,0.1)', color: '#dc2626' }}>
-                <ZapOff size={7} />
-              </span>
+              <span style={{ fontSize: '8px', padding: '1px 4px', lineHeight: '12px', borderRadius: '3px', fontWeight: 700, background: '#ef4444', color: '#fff' }}>✕$</span>
             )}
           </div>
         </div>
       ),
       enableSorting: true,
-      size: 140,
-      meta: { expand: true },
     },
     {
       id: 'dias_trabajados',
       accessorFn: (row) => row.turnos_cobrados,
       header: 'Días',
       enableSorting: true,
-      size: 55,
-      minSize: 45,
-      maxSize: 65,
       cell: ({ row }) => {
         const cobrados = row.original.turnos_cobrados ?? 0
         const alerta = row.original.alerta_prorrateo_ingreso
@@ -7808,7 +7800,6 @@ export function ReporteFacturacionTab() {
       accessorFn: (row) => row.subtotal_alquiler,
       header: 'Alq.',
       enableSorting: true,
-      size: 100,
       cell: ({ row }) => {
         const alquiler = row.original.subtotal_alquiler
         const cobroApp = row.original.ganancia_cabify || 0
@@ -7845,7 +7836,6 @@ export function ReporteFacturacionTab() {
       accessorFn: (row) => row.subtotal_garantia,
       header: 'Gar.',
       enableSorting: true,
-      size: 90,
       cell: ({ row }) => {
         const garantia = row.original.subtotal_garantia
         const cuotaNum = row.original.cuota_garantia_numero || ''
@@ -7912,7 +7902,6 @@ export function ReporteFacturacionTab() {
     {
       id: 'peajes',
       header: 'Peajes',
-      size: 75,
       accessorFn: (row) => row.monto_peajes || 0,
       cell: ({ row }) => {
         const peajes = row.original.monto_peajes || 0
@@ -7966,8 +7955,6 @@ export function ReporteFacturacionTab() {
     {
       id: 'incidencias',
       header: 'Inc.',
-      size: 80,
-      minSize: 70,
       accessorFn: (row) => row.monto_penalidades || 0,
       cell: ({ row }) => {
         const penalidades = row.original.penalidades_detalle || []
@@ -8038,8 +8025,6 @@ export function ReporteFacturacionTab() {
     {
       id: 'tickets_favor',
       header: 'Tickets Fav.',
-      size: 80,
-      minSize: 70,
       accessorFn: (row) => row.monto_tickets_favor || 0,
       cell: ({ row }) => {
         const tickets = row.original.tickets_detalle || []
@@ -8110,7 +8095,6 @@ export function ReporteFacturacionTab() {
     {
       accessorKey: 'saldo_anterior',
       header: 'Saldo Ant.',
-      size: 75,
       cell: ({ row }) => (
         <span style={{
           fontSize: '11px',
@@ -8126,7 +8110,6 @@ export function ReporteFacturacionTab() {
     {
       accessorKey: 'total_a_pagar',
       header: 'TOTAL',
-      size: 100,
       cell: ({ row }) => {
         const total = row.original.total_a_pagar
         return (
@@ -8147,7 +8130,6 @@ export function ReporteFacturacionTab() {
     {
       id: 'estado_billing',
       header: 'Estado',
-      size: 70,
       accessorFn: (row) => row.estado_billing || '',
       cell: ({ row }) => {
         const estado = row.original.estado_billing
@@ -8188,8 +8170,6 @@ export function ReporteFacturacionTab() {
     {
       id: 'acciones',
       header: '',
-      size: 80,
-      maxSize: 170,
       cell: ({ row }) => (
         <div style={{ display: 'flex', gap: '4px', justifyContent: 'center' }}>
           <button
