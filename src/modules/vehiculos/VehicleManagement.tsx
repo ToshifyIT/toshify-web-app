@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 // src/modules/vehiculos/VehicleManagement.tsx
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useRef } from 'react'
 import { AlertTriangle, Eye, Edit, Trash2, Info, Car, Wrench, Briefcase, PaintBucket, Warehouse, FolderOpen, FolderPlus, Undo2, History, Fuel } from 'lucide-react'
 import { ActionsMenu } from '../../components/ui/ActionsMenu'
 import { VerLogsButton } from '../../components/ui/VerLogsButton'
@@ -42,7 +42,16 @@ export function VehicleManagement() {
   const [historialVehiculo, setHistorialVehiculo] = useState<{ id: string; patente: string } | null>(null)
   const [sedes, setSedes] = useState<{ id: string; nombre: string }[]>([])
 
-
+  // Modal de finalización de asignación al cambiar estado del vehículo
+  const [showFinalizarModal, setShowFinalizarModal] = useState(false)
+  const [finalizarData, setFinalizarData] = useState<{
+    asignaciones: { id: string; codigo: string }[]
+    conductores: { nombre: string; horario: string }[]
+    nuevoEstadoCodigo: string
+    fechaFinalizacion: string
+    motivo: string
+  } | null>(null)
+  const finalizarResolveRef = useRef<((confirmed: boolean) => void) | null>(null)
 
   // Stats calculados desde datos cargados (ver calculatedStats useMemo)
 
@@ -411,39 +420,46 @@ export function VehicleManagement() {
           .in('estado', ['activa', 'programado'])
 
         if (asignacionesActivas && asignacionesActivas.length > 0) {
-          // Pedir motivo de finalización
-          const result = await Swal.fire({
-            icon: 'warning',
-            title: 'Vehículo con asignación activa',
-            html: `Este vehículo tiene <b>${asignacionesActivas.length}</b> asignación(es) activa(s).<br><br>
-                   Al cambiar el estado a <b>${VEHICULO_ESTADO_LABELS[nuevoEstadoCodigo] || nuevoEstadoCodigo}</b>, se finalizarán automáticamente.<br><br>
-                   <b>Ingrese el motivo de finalización:</b>`,
-            input: 'textarea',
-            inputPlaceholder: 'Ej: Vehículo ingresa a taller por revisión mecánica...',
-            inputAttributes: {
-              'aria-label': 'Motivo de finalización'
-            },
-            showCancelButton: true,
-            confirmButtonText: 'Finalizar y continuar',
-            cancelButtonText: 'Cancelar',
-            confirmButtonColor: '#ff0033',
-            inputValidator: (value) => {
-              if (!value || value.trim().length < 5) {
-                return 'Debe ingresar un motivo (mínimo 5 caracteres)'
-              }
-              return null
-            }
+          // Obtener conductores afectados
+          const asigIds = asignacionesActivas.map((a: any) => a.id)
+          const { data: conductoresAfectados } = await (supabase as any)
+            .from('asignaciones_conductores')
+            .select('conductor_id, horario, conductores(nombre, apellido)')
+            .in('asignacion_id', asigIds)
+            .in('estado', ['asignado', 'activo'])
+
+          const conductoresList = (conductoresAfectados || []).map((c: any) => ({
+            nombre: `${c.conductores?.nombre || ''} ${c.conductores?.apellido || ''}`.trim(),
+            horario: c.horario || 'N/A',
+          }))
+
+          // Mostrar modal de confirmación con fecha de finalización
+          const hoy = new Date().toISOString().split('T')[0]
+          setFinalizarData({
+            asignaciones: asignacionesActivas,
+            conductores: conductoresList,
+            nuevoEstadoCodigo,
+            fechaFinalizacion: hoy,
+            motivo: '',
+          })
+          setShowFinalizarModal(true)
+
+          // Esperar confirmación del usuario
+          const confirmed = await new Promise<boolean>((resolve) => {
+            finalizarResolveRef.current = resolve
           })
 
-          if (!result.isConfirmed) {
+          if (!confirmed || !finalizarData) {
             setSaving(false)
             return
           }
 
-          motivoFinalizacion = result.value || 'Sin motivo especificado'
+          motivoFinalizacion = finalizarData.motivo || 'Sin motivo especificado'
+          const fechaFin = finalizarData.fechaFinalizacion
+            ? new Date(finalizarData.fechaFinalizacion + 'T23:59:59').toISOString()
+            : new Date().toISOString()
 
           // Finalizar asignaciones activas
-          const ahora = new Date().toISOString()
 
           // 1. Finalizar conductores de las asignaciones
           for (const asig of asignacionesActivas) {
@@ -451,7 +467,7 @@ export function VehicleManagement() {
               .from('asignaciones_conductores')
               .update({
                 estado: 'completado',
-                fecha_fin: ahora
+                fecha_fin: fechaFin
               })
               .eq('asignacion_id', asig.id)
               .in('estado', ['asignado', 'activo'])
@@ -462,7 +478,7 @@ export function VehicleManagement() {
             .from('asignaciones')
             .update({
               estado: 'finalizada',
-              fecha_fin: ahora,
+              fecha_fin: fechaFin,
               notas: `[FINALIZADA] Cambio de estado a ${VEHICULO_ESTADO_LABELS[nuevoEstadoCodigo] || nuevoEstadoCodigo}. Motivo: ${motivoFinalizacion}`,
               updated_by: profile?.full_name || 'Sistema'
             })
@@ -2087,6 +2103,105 @@ export function VehicleManagement() {
           entityLabel={historialVehiculo.patente}
           onClose={() => setHistorialVehiculo(null)}
         />
+      )}
+
+      {/* Modal Finalización de Asignación */}
+      {showFinalizarModal && finalizarData && (
+        <div className="modal-overlay" onClick={() => {
+          setShowFinalizarModal(false)
+          finalizarResolveRef.current?.(false)
+        }}>
+          <div className="modal-content" style={{ maxWidth: '520px' }} onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h2 style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <AlertTriangle size={20} style={{ color: '#ef4444' }} />
+                Vehículo con asignación activa
+              </h2>
+            </div>
+            <div className="modal-body" style={{ padding: '16px 24px' }}>
+              <p style={{ fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '16px' }}>
+                Este vehículo tiene <strong>{finalizarData.asignaciones.length}</strong> asignación(es) activa(s).
+                Al cambiar el estado a <strong>{VEHICULO_ESTADO_LABELS[finalizarData.nuevoEstadoCodigo] || finalizarData.nuevoEstadoCodigo}</strong>, se finalizarán automáticamente.
+              </p>
+
+              {/* Conductores afectados */}
+              {finalizarData.conductores.length > 0 && (
+                <div style={{ marginBottom: '16px' }}>
+                  <label style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                    Conductores afectados
+                  </label>
+                  <div style={{ marginTop: '6px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                    {finalizarData.conductores.map((c, i) => (
+                      <div key={i} style={{
+                        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                        padding: '8px 12px', borderRadius: '6px',
+                        background: 'rgba(239, 68, 68, 0.05)',
+                        border: '1px solid rgba(239, 68, 68, 0.12)',
+                      }}>
+                        <span style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-primary)' }}>{c.nombre}</span>
+                        <span style={{ fontSize: '11px', color: 'var(--text-secondary)', background: 'var(--bg-secondary)', padding: '2px 8px', borderRadius: '4px' }}>{c.horario}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Fecha de finalización */}
+              <div style={{ marginBottom: '16px' }}>
+                <label style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.5px', display: 'block', marginBottom: '6px' }}>
+                  Fecha de finalización de asignación
+                </label>
+                <input
+                  type="date"
+                  className="form-input"
+                  value={finalizarData.fechaFinalizacion}
+                  onChange={(e) => setFinalizarData({ ...finalizarData, fechaFinalizacion: e.target.value })}
+                  max={new Date().toISOString().split('T')[0]}
+                />
+                <span style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '4px', display: 'block' }}>
+                  Esta fecha se usará como fecha de fin de la asignación. Afecta la facturación.
+                </span>
+              </div>
+
+              {/* Motivo */}
+              <div>
+                <label style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.5px', display: 'block', marginBottom: '6px' }}>
+                  Motivo de finalización
+                </label>
+                <textarea
+                  className="form-input"
+                  rows={3}
+                  placeholder="Ej: Vehículo ingresa a taller por revisión mecánica..."
+                  value={finalizarData.motivo}
+                  onChange={(e) => setFinalizarData({ ...finalizarData, motivo: e.target.value })}
+                  style={{ resize: 'vertical' }}
+                />
+              </div>
+            </div>
+            <div className="modal-footer" style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', padding: '12px 24px', borderTop: '1px solid var(--border-primary)' }}>
+              <button
+                className="btn-secondary"
+                onClick={() => {
+                  setShowFinalizarModal(false)
+                  finalizarResolveRef.current?.(false)
+                }}
+              >
+                Cancelar
+              </button>
+              <button
+                className="btn-primary"
+                style={{ background: '#ef4444', borderColor: '#ef4444' }}
+                disabled={!finalizarData.motivo || finalizarData.motivo.trim().length < 5}
+                onClick={() => {
+                  setShowFinalizarModal(false)
+                  finalizarResolveRef.current?.(true)
+                }}
+              >
+                Finalizar y Guardar
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   )

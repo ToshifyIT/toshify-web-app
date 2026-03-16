@@ -2391,19 +2391,29 @@ export function AsignacionesModule() {
       },
       cell: ({ row }) => {
         const conductores = row.original.asignaciones_conductores || []
-        const documentos = [...new Set(conductores.map(c => c.documento).filter(Boolean))]
-        if (documentos.length === 0) return <span className="text-muted">-</span>
+        if (conductores.length === 0) return <span className="text-muted">-</span>
+        // Ordenar: diurno primero, nocturno después
+        const sorted = [...conductores].sort((a: any, b: any) => {
+          if (a.horario === 'diurno') return -1
+          if (b.horario === 'diurno') return 1
+          return 0
+        })
         return (
-          <div style={{ fontSize: '11px' }}>
-            {documentos.map((doc, idx) => (
-              <span
-                key={idx}
-                className={`asig-documento-badge ${doc === 'CARTA_OFERTA' ? 'asig-doc-carta' : doc === 'ANEXO' ? 'asig-doc-anexo' : 'asig-doc-na'}`}
-                style={{ fontSize: '10px', padding: '1px 4px' }}
-              >
-                {doc === 'CARTA_OFERTA' ? 'C.Oferta' : doc === 'ANEXO' ? 'Anexo' : 'N/A'}
-              </span>
-            ))}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+            {sorted.map((c: any, idx: number) => {
+              const doc = c.documento
+              const label = doc === 'CARTA_OFERTA' ? 'C.Oferta' : doc === 'ANEXO' ? 'Anexo' : 'N/A'
+              const badgeClass = doc === 'CARTA_OFERTA' ? 'asig-doc-carta' : doc === 'ANEXO' ? 'asig-doc-anexo' : 'asig-doc-na'
+              return (
+                <span
+                  key={idx}
+                  className={`asig-documento-badge ${badgeClass}`}
+                  style={{ fontSize: '10px', padding: '1px 4px' }}
+                >
+                  {label}
+                </span>
+              )
+            })}
           </div>
         )
       }
