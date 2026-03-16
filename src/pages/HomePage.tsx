@@ -111,21 +111,58 @@ class LazyErrorBoundary extends Component<{ children: ReactNode }, LazyErrorBoun
   }
 
   componentDidCatch(error: Error, _errorInfo: ErrorInfo) {
-    // Si es error de chunk (deploy nuevo) y no hemos recargado ya, recargar automaticamente
+    // Si es error de chunk (deploy nuevo), NO auto-recargar
+    // Solo mostrar el botón de reintentar para que el usuario decida
     if (isChunkLoadError(error)) {
-      const lastReload = sessionStorage.getItem('chunk-reload')
-      const now = Date.now()
-      // Solo auto-recargar si no lo hicimos en los ultimos 10 segundos (evita loop infinito)
-      if (!lastReload || now - Number(lastReload) > 10000) {
-        sessionStorage.setItem('chunk-reload', String(now))
-        window.location.reload()
-        return
-      }
+      // Limpiar el estado de error después de un momento para que React re-intente el lazy load
+      // Esto permite que al navegar a otra página, el error se limpie sin reload
+      return
     }
   }
 
   render() {
     if (this.state.hasError) {
+      if (this.state.isChunkError) {
+        // Para chunk errors: botón que limpia el error y re-navega (sin reload completo)
+        return (
+          <div style={{
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'center',
+            height: '50vh',
+            gap: '16px',
+            color: 'var(--text-secondary)',
+            textAlign: 'center',
+            padding: '20px'
+          }}>
+            <RefreshCw size={48} style={{ color: 'var(--color-primary, #3B82F6)' }} />
+            <h3 style={{ margin: 0, color: 'var(--text-primary)' }}>Actualización disponible</h3>
+            <p style={{ margin: 0, maxWidth: '400px' }}>
+              Se detectó una nueva versión de la aplicación. Haz clic para recargar.
+            </p>
+            <button
+              onClick={() => window.location.reload()}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+                padding: '10px 20px',
+                background: 'var(--color-primary, #3B82F6)',
+                color: 'white',
+                border: 'none',
+                borderRadius: '6px',
+                cursor: 'pointer',
+                fontSize: '14px',
+                fontWeight: 500
+              }}
+            >
+              <RefreshCw size={16} />
+              Recargar
+            </button>
+          </div>
+        )
+      }
       return (
         <div style={{
           display: 'flex',
@@ -140,11 +177,7 @@ class LazyErrorBoundary extends Component<{ children: ReactNode }, LazyErrorBoun
         }}>
           <AlertCircle size={48} style={{ color: 'var(--color-error, #ff0033)' }} />
           <h3 style={{ margin: 0, color: 'var(--text-primary)' }}>Error al cargar la pagina</h3>
-          <p style={{ margin: 0 }}>
-            {this.state.isChunkError
-              ? 'Se actualizo la aplicacion. Recargando...'
-              : 'Hubo un problema de conexion. Intenta de nuevo.'}
-          </p>
+          <p style={{ margin: 0 }}>Hubo un problema de conexion. Intenta de nuevo.</p>
           <button
             onClick={() => window.location.reload()}
             style={{
