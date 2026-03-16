@@ -26,7 +26,6 @@ import {
   AlertTriangle,
   Calculator,
   Edit2,
-  Search,
   Play,
   Banknote,
   Upload,
@@ -8599,22 +8598,19 @@ export function ReporteFacturacionTab() {
             <ChevronRight size={18} />
           </button>
         </div>
-        {/* Buscador inline */}
-        <div style={{ position: 'relative', flex: '0 1 260px' }}>
-          <Search size={14} style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-tertiary)' }} />
-          <input
-            type="text"
-            placeholder="Buscar conductor, DNI, patente..."
-            value={buscarConductor}
-            onChange={(e) => setBuscarConductor(e.target.value)}
-            style={{ width: '100%', padding: '7px 30px 7px 30px', border: '1px solid var(--border-primary)', borderRadius: '8px', fontSize: '12px', background: 'var(--bg-primary)', color: 'var(--text-primary)' }}
-          />
-          {buscarConductor && (
-            <button onClick={() => setBuscarConductor('')} style={{ position: 'absolute', right: '8px', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-tertiary)', padding: '2px' }}>
-              <X size={14} />
+        {/* Vista Previa indicator inline */}
+        {modoVistaPrevia && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '6px 12px', background: 'var(--badge-blue-bg)', borderRadius: '6px', border: '1px solid var(--color-info)' }}>
+            <Calculator size={14} style={{ color: 'var(--color-info)', flexShrink: 0 }} />
+            <span style={{ fontSize: '11px', fontWeight: 600, color: 'var(--badge-blue-text)', whiteSpace: 'nowrap' }}>VISTA PREVIA</span>
+            <button onClick={cargarVistaPrevia} disabled={loadingVistaPrevia} style={{ display: 'flex', alignItems: 'center', gap: '4px', padding: '4px 8px', background: 'var(--color-info)', color: 'white', border: 'none', borderRadius: '4px', fontSize: '11px', cursor: 'pointer', whiteSpace: 'nowrap' }}>
+              <RefreshCw size={12} className={loadingVistaPrevia ? 'spinning' : ''} /> Recalcular
             </button>
-          )}
-        </div>
+            <button onClick={salirVistaPrevia} style={{ padding: '4px 8px', background: 'var(--bg-primary)', color: 'var(--text-primary)', border: '1px solid var(--border-primary)', borderRadius: '4px', fontSize: '11px', cursor: 'pointer' }}>
+              Salir
+            </button>
+          </div>
+        )}
         <div className="fact-semana-actions">
           {/* Botón Generar - solo cuando NO existe período Y la semana anterior está cerrada */}
           {!periodo && !loading && periodoAnteriorCerrado && (
@@ -8717,69 +8713,9 @@ export function ReporteFacturacionTab() {
         </div>
       )}
 
-      {/* Vista Previa Mode - Muestra datos calculados on-the-fly (carga automáticamente cuando no hay período) */}
+      {/* Vista Previa Mode */}
       {modoVistaPrevia && (
         <>
-          {/* Banner indicador de Vista Previa */}
-          <div style={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            gap: '12px',
-            padding: '12px 16px',
-            background: 'var(--badge-blue-bg)',
-            borderRadius: '8px',
-            marginBottom: '16px',
-            border: '1px solid var(--color-info)'
-          }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-              <Calculator size={20} style={{ color: 'var(--color-info)' }} />
-              <div>
-                <span style={{ fontWeight: 600, color: 'var(--badge-blue-text)', fontSize: '14px' }}>
-                  VISTA PREVIA - Liquidación Proyectada
-                </span>
-                <p style={{ margin: '2px 0 0', fontSize: '12px', color: 'var(--text-secondary)' }}>
-                   Cálculo en tiempo real desde conductores de la semana. No guardado en BD.
-                </p>
-              </div>
-            </div>
-            <div style={{ display: 'flex', gap: '8px' }}>
-              <button
-                onClick={cargarVistaPrevia}
-                disabled={loadingVistaPrevia}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '6px',
-                  padding: '8px 12px',
-                  background: 'var(--color-info)',
-                  color: 'white',
-                  border: 'none',
-                  borderRadius: '6px',
-                  fontSize: '13px',
-                  cursor: 'pointer'
-                }}
-              >
-                <RefreshCw size={14} className={loadingVistaPrevia ? 'spinning' : ''} />
-                Recalcular
-              </button>
-              <button
-                onClick={salirVistaPrevia}
-                style={{
-                  padding: '8px 12px',
-                  background: 'var(--bg-primary)',
-                  color: 'var(--text-primary)',
-                  border: '1px solid var(--border-color)',
-                  borderRadius: '6px',
-                  fontSize: '13px',
-                  cursor: 'pointer'
-                }}
-              >
-                Salir
-              </button>
-            </div>
-          </div>
-
           {/* Stats de Vista Previa */}
           {stats && (
             <div className="fact-stats">
@@ -8846,25 +8782,7 @@ export function ReporteFacturacionTab() {
             </div>
 
             <div className="fact-export-btn-group">
-              <VerLogsButton tablas={['facturacion_conductores', 'facturacion_detalle', 'periodos_facturacion', 'penalidades', 'saldos_conductores']} label="Facturación" />
-              <button
-                className="fact-btn-export"
-                onClick={prepararFacturacionPreviewVistaPrevia}
-                disabled={loadingSiFacturaPreview || vistaPreviaData.length === 0}
-                style={{ backgroundColor: '#059669' }}
-              >
-                {loadingSiFacturaPreview ? <Loader2 size={14} className="spinning" /> : <Eye size={14} />}
-                {loadingSiFacturaPreview ? 'Cargando...' : 'Preview Facturación'}
-              </button>
-              <button
-                className="fact-btn-export"
-                onClick={prepararCabifyPreview}
-                disabled={loadingCabifyPreview || vistaPreviaData.length === 0}
-                style={{ backgroundColor: '#7C3AED' }}
-              >
-                {loadingCabifyPreview ? <Loader2 size={14} className="spinning" /> : <Eye size={14} />}
-                {loadingCabifyPreview ? 'Cargando...' : 'Preview Cabify'}
-              </button>
+              {/* Botones movidos al headerAction del DataTable */}
             </div>
           </div>
 
@@ -8962,6 +8880,19 @@ export function ReporteFacturacionTab() {
             pageSize={100}
             pageSizeOptions={[10, 20, 50, 100]}
             onTableReady={setTableInstance}
+            headerAction={
+              <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+                <VerLogsButton tablas={['facturacion_conductores', 'facturacion_detalle', 'periodos_facturacion', 'penalidades', 'saldos_conductores']} label="Facturación" />
+                <button className="fact-btn-export" onClick={prepararFacturacionPreviewVistaPrevia} disabled={loadingSiFacturaPreview || vistaPreviaData.length === 0} style={{ backgroundColor: '#059669', padding: '6px 10px', fontSize: '11px' }}>
+                  {loadingSiFacturaPreview ? <Loader2 size={12} className="spinning" /> : <Eye size={12} />}
+                  Prev. Fact.
+                </button>
+                <button className="fact-btn-export" onClick={prepararCabifyPreview} disabled={loadingCabifyPreview || vistaPreviaData.length === 0} style={{ backgroundColor: '#7C3AED', padding: '6px 10px', fontSize: '11px' }}>
+                  {loadingCabifyPreview ? <Loader2 size={12} className="spinning" /> : <Eye size={12} />}
+                  Prev. Cabify
+                </button>
+              </div>
+            }
           />
         </>
       )}
@@ -9182,6 +9113,24 @@ export function ReporteFacturacionTab() {
               pageSize={100}
               pageSizeOptions={[10, 20, 50, 100]}
               onTableReady={setTableInstance}
+              headerAction={
+                <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+                  <button className="fact-btn-export" onClick={prepararSiFacturaPreview} disabled={loadingSiFacturaPreview || facturacionesFiltradas.length === 0} style={{ backgroundColor: '#059669', padding: '6px 10px', fontSize: '11px' }}>
+                    {loadingSiFacturaPreview ? <Loader2 size={12} className="spinning" /> : <Eye size={12} />} Prev. Fact.
+                  </button>
+                  <button className="fact-btn-export" onClick={prepararCabifyPreviewDesdeFacturacion} disabled={loadingCabifyPreview || facturacionesFiltradas.length === 0} style={{ backgroundColor: '#7C3AED', padding: '6px 10px', fontSize: '11px' }}>
+                    {loadingCabifyPreview ? <Loader2 size={12} className="spinning" /> : <Eye size={12} />} Prev. Cabify
+                  </button>
+                  {periodo?.estado === 'cerrado' && (
+                    <>
+                      <input type="file" ref={cabifyFileInputRef} accept=".xlsx,.xls" style={{ display: 'none' }} onChange={handleCabifyFileUpload} />
+                      <button className="fact-btn-export" onClick={() => cabifyFileInputRef.current?.click()} disabled={loadingCabifyPagos || facturacionesFiltradas.length === 0} style={{ backgroundColor: '#7C3AED', padding: '6px 10px', fontSize: '11px' }}>
+                        {loadingCabifyPagos ? <Loader2 size={12} className="spinning" /> : <Upload size={12} />} Pagos Cabify
+                      </button>
+                    </>
+                  )}
+                </div>
+              }
             />
           </div>
         </>
