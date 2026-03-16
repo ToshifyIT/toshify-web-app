@@ -123,7 +123,7 @@ export function PermissionsProvider({ children }: { children: React.ReactNode })
 
     loadPermissions()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user, authLoading])
+  }, [user?.id, authLoading])
 
   const loadPermissions = async () => {
     if (!user) {
@@ -131,7 +131,10 @@ export function PermissionsProvider({ children }: { children: React.ReactNode })
       return
     }
 
-    setLoading(true)
+    // Solo mostrar loading en la carga inicial, no en recargas por token refresh
+    if (!userPermissions) {
+      setLoading(true)
+    }
 
     try {
       // TEMPORAL: Usar fallback directo hasta que edge function se actualice
