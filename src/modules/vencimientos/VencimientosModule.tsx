@@ -523,24 +523,13 @@ export function VencimientosModule() {
   const columns = useMemo<ColumnDef<Vencimiento>[]>(() => [
     {
       accessorKey: 'titular',
-      header: 'Titular',
-      cell: ({ getValue }) => {
-        const value = getValue() as string
-        return (
-          <div className="venc-cell">
-            <span className="venc-titular">{value}</span>
-          </div>
-        )
-      },
-      enableSorting: true
-    },
-    {
-      accessorKey: 'patente',
-      header: 'Patente',
-      cell: ({ getValue }) => {
-        const val = getValue() as string
-        return <span className="venc-patente">{val || '-'}</span>
-      },
+      header: 'Titular / Patente',
+      cell: ({ row }) => (
+        <div>
+          <div style={{ fontSize: '12px' }}>{row.original.titular}</div>
+          <span className="venc-patente" style={{ fontSize: '11px' }}>{row.original.patente || '-'}</span>
+        </div>
+      ),
       enableSorting: true
     },
     {
