@@ -2790,12 +2790,26 @@ export function AsignacionesModule() {
       {showViewModal && viewAsignacion && (
         <div className="asig-modal-overlay">
           <div className="asig-modal-content wide">
-            <h2 className="asig-modal-title">Detalles de Asignación</h2>
+             <h2 className="asig-modal-title">Detalles de Asignación</h2>
 
             <div className="asig-detail-grid">
-              <div>
-                <label className="asig-detail-label">Número de Asignación</label>
-                <p className="asig-detail-value code">{viewAsignacion.codigo}</p>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                <div>
+                  <label className="asig-detail-label">Número de Asignación</label>
+                  <p className="asig-detail-value code">{viewAsignacion.codigo}</p>
+                </div>
+                {viewAsignacion.motivo && (
+                  <div style={{ textAlign: 'right', padding: '4px 10px', background: 'var(--bg-secondary)', borderRadius: '6px', border: '1px solid var(--border-primary)' }}>
+                    <div style={{ fontSize: '10px', color: 'var(--text-tertiary)', textTransform: 'uppercase', fontWeight: 600 }}>Programación</div>
+                    <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-primary)' }}>{viewAsignacion.motivo === 'entrega_auto' ? 'Entrega de auto' : viewAsignacion.motivo === 'cambio_auto' ? 'Cambio de auto' : viewAsignacion.motivo === 'cambio_turno' ? 'Cambio de turno' : viewAsignacion.motivo === 'entrega_cargo' ? 'Entrega a cargo' : viewAsignacion.motivo === 'devolucion' ? 'Devolución' : viewAsignacion.motivo}</div>
+                    {viewAsignacion.motivoDetalle?.programadoPor && (
+                      <div style={{ fontSize: '11px', color: 'var(--text-secondary)', marginTop: '2px' }}>por {viewAsignacion.motivoDetalle.programadoPor}</div>
+                    )}
+                    {viewAsignacion.motivoDetalle?.observaciones && (
+                      <div style={{ fontSize: '11px', color: 'var(--text-secondary)', marginTop: '4px', fontStyle: 'italic', maxWidth: '250px' }}>{viewAsignacion.motivoDetalle.observaciones}</div>
+                    )}
+                  </div>
+                )}
               </div>
 
               <div>
