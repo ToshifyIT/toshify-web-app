@@ -78,8 +78,14 @@
 
 .tabs-actions {
   display: flex;
-  gap: 8px;
+  gap: 6px;
   flex-shrink: 0;
+}
+
+.tabs-actions .btn-secondary,
+.tabs-actions .btn-primary {
+  font-size: 12px;
+  padding: 6px 10px;
 }
 
 /* =====================================================
