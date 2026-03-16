@@ -367,7 +367,7 @@
 .dt-table-wrapper {
   overflow: auto;
   -webkit-overflow-scrolling: touch;
-  padding-bottom: 4px;
+  padding: 0 8px 4px 8px;
   scrollbar-width: auto;
   max-width: 100%;
   max-height: calc(100vh - 340px);

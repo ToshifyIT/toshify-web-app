@@ -1756,8 +1756,10 @@ export function ReporteFacturacionTab() {
       const [cuotasSemanaRes, pagosCuotasPreviewRes, todasCuotasPenIdsPreviewRes] = await Promise.all([
         (supabase
           .from('penalidades_cuotas') as any)
-          .select('id, penalidad_id, monto_cuota, numero_cuota, anio, semana')
-          .lte('semana', semanaDelPeriodo),
+          .select('id, penalidad_id, monto_cuota, numero_cuota, anio, semana, penalidades!inner(aplicado)')
+          .eq('semana', semanaDelPeriodo)
+          .eq('anio', anioDelPeriodo)
+          .eq('penalidades.aplicado', true),
         // Pagos registrados en pagos_conductores para cruzar
         (supabase
           .from('pagos_conductores') as any)
@@ -2625,8 +2627,10 @@ export function ReporteFacturacionTab() {
       const [penalidadesCuotasResult, pagosCuotasRecalcRes, todasCuotasPenIdsRes] = await Promise.all([
         (supabase
           .from('penalidades_cuotas') as any)
-          .select('*, penalidad:penalidades(id, conductor_id, detalle, cantidad_cuotas, tipos_cobro_descuento(categoria, es_a_favor, nombre))')
-          .lte('semana', semanaNum),
+          .select('*, penalidad:penalidades!inner(id, conductor_id, detalle, cantidad_cuotas, aplicado, tipos_cobro_descuento(categoria, es_a_favor, nombre))')
+          .eq('semana', semanaNum)
+          .eq('anio', anioNum)
+          .eq('penalidad.aplicado', true),
         // Pagos registrados para cruzar (penalidad_cuota + cobro_fraccionado)
         (supabase
           .from('pagos_conductores') as any)
@@ -5804,11 +5808,13 @@ export function ReporteFacturacionTab() {
       
       const saldosMap = new Map((saldosData || []).map((s: any) => [s.conductor_id, s]))
 
-      // 7. Cargar penalidades_cuotas hasta esta semana — ya tenemos pagos en pagosFraccionadosIds
+      // 7. Cargar penalidades_cuotas de esta semana — ya tenemos pagos en pagosFraccionadosIds
       const { data: penalidadesCuotasData } = await (supabase
         .from('penalidades_cuotas') as any)
-        .select('*, penalidad:penalidades(conductor_id, conductor_nombre, conductor:conductores(nombres, apellidos))')
-        .lte('semana', semana)
+        .select('*, penalidad:penalidades!inner(conductor_id, conductor_nombre, aplicado, conductor:conductores(nombres, apellidos))')
+        .eq('semana', semana)
+        .eq('anio', anio)
+        .eq('penalidad.aplicado', true)
       
       // Filtrar por año correcto o sin año, y excluir pagadas (aplicado=true O en pagos_conductores)
       const penalidadesCuotasFiltradas = (penalidadesCuotasData || []).filter((pc: any) =>

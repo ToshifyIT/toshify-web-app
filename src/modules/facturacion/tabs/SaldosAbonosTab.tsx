@@ -114,7 +114,7 @@ export function SaldosAbonosTab() {
   const [estadoCondFilter, setEstadoCondFilter] = useState<'todos' | 'activo' | 'baja'>('todos')
   const [asignadoFilter, setAsignadoFilter] = useState<'todos' | 'asignado' | 'no_asignado'>('todos')
   const [conductoresAsignados, setConductoresAsignados] = useState<Set<string>>(new Set())
-  const [tasaMoraPct, setTasaMoraPct] = useState(1) // default 1% diario desde P009
+  const [, setTasaMoraPct] = useState(1) // default 1% diario desde P009
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
@@ -1803,10 +1803,8 @@ export function SaldosAbonosTab() {
       header: 'Días Mora',
       cell: ({ row }) => {
         const s = row.original
-        // Mostrar valor de BD si existe, sino calcular solo si hay deuda
-        const diasBD = s.dias_mora && s.dias_mora > 0 ? s.dias_mora : 0
-        const diasCalc = s.saldo_actual < 0 && s.ultima_actualizacion ? diasCalendario(s.ultima_actualizacion) : 0
-        const dias = diasBD || diasCalc
+        // Usar el valor de BD directamente — no recalcular si fue seteado manualmente
+        const dias = s.dias_mora ?? 0
         if (dias === 0) return <span className="text-gray-400">-</span>
         return <span className={`fact-badge ${dias > 7 ? 'fact-badge-red' : dias > 3 ? 'fact-badge-yellow' : 'fact-badge-gray'}`}>{dias} días</span>
       }
@@ -1816,13 +1814,8 @@ export function SaldosAbonosTab() {
       header: 'Mora Acum.',
       cell: ({ row }) => {
         const s = row.original
-        // Mostrar valor de BD si existe, sino calcular solo si hay deuda
-        const diasBD = s.dias_mora && s.dias_mora > 0 ? s.dias_mora : 0
-        const diasCalc = s.saldo_actual < 0 && s.ultima_actualizacion ? diasCalendario(s.ultima_actualizacion) : 0
-        const dias = diasBD || diasCalc
-        const moraBD = s.monto_mora_acumulada && s.monto_mora_acumulada > 0 ? s.monto_mora_acumulada : 0
-        const moraCalc = dias > 0 ? Math.round(Math.abs(s.saldo_actual) * (tasaMoraPct / 100) * dias * 100) / 100 : 0
-        const mora = moraBD || moraCalc
+        // Usar el valor de BD directamente — no recalcular si fue seteado manualmente
+        const mora = s.monto_mora_acumulada ?? 0
         if (mora === 0) return <span className="text-gray-400">-</span>
         return (
           <span
