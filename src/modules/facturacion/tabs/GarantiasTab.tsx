@@ -147,12 +147,14 @@ export function GarantiasTab() {
       const ESTADO_ACTIVO = '57e9de5f-e6fc-4ff7-8d14-cf8e13e9dbe2'
       const estadoConductorMap = new Map<string, string>()
       const dniConductorMap = new Map<string, string>()
+      const fechaBajaMap = new Map<string, string>()
       const { data: conductoresData } = await supabase
         .from('conductores')
-        .select('id, estado_id, numero_dni')
+        .select('id, estado_id, numero_dni, fecha_terminacion')
       ;(conductoresData || []).forEach((c: any) => {
         estadoConductorMap.set(c.id, c.estado_id === ESTADO_ACTIVO ? 'ACTIVO' : 'BAJA')
         if (c.numero_dni) dniConductorMap.set(c.id, c.numero_dni)
+        if (c.fecha_terminacion) fechaBajaMap.set(c.id, c.fecha_terminacion.substring(0, 10))
       })
 
       // Marcar visualmente como en_devolucion si conductor es BAJA (solo in-memory, no se guarda en BD)
@@ -163,7 +165,8 @@ export function GarantiasTab() {
           ...g,
           conductor_dni: g.conductor_dni || dniConductorMap.get(g.conductor_id) || null,
           estado: necesitaDevolucion ? 'en_devolucion' : g.estado,
-          estado_conductor: estadoCond
+          estado_conductor: estadoCond,
+          fecha_baja: fechaBajaMap.get(g.conductor_id) || null
         }
       })
 
@@ -1325,6 +1328,20 @@ export function GarantiasTab() {
         return (
           <span className={`fact-badge ${estado === 'ACTIVO' ? 'fact-badge-green' : 'fact-badge-red'}`} style={{ fontSize: '10px' }}>
             {estado}
+          </span>
+        )
+      }
+    },
+    {
+      id: 'dias_desde_baja',
+      header: 'Días Baja',
+      cell: ({ row }) => {
+        const fechaBaja = (row.original as any).fecha_baja
+        if (!fechaBaja) return <span style={{ color: 'var(--text-secondary)', fontSize: '11px' }}>N/A</span>
+        const dias = Math.floor((new Date().getTime() - new Date(fechaBaja).getTime()) / (1000 * 60 * 60 * 24))
+        return (
+          <span style={{ fontSize: '11px', fontWeight: 600, color: dias > 30 ? '#ef4444' : dias > 14 ? '#d97706' : 'var(--text-primary)' }}>
+            {dias} días
           </span>
         )
       }
