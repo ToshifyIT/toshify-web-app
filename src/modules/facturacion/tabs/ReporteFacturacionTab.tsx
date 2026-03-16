@@ -1210,7 +1210,6 @@ export function ReporteFacturacionTab() {
       // Semana y año del período (para queries)
       const semanaDelPeriodo = getWeek(parseISO(fechaInicio), { weekStartsOn: 1 })
       const anioDelPeriodo = getYear(parseISO(fechaInicio))
-      alert(`[DEBUG VP] semana=${semanaDelPeriodo} anio=${anioDelPeriodo} fechaInicio=${fechaInicio} fechaFin=${fechaFin}`)
 
       // 1. Cargar conductores desde asignaciones que se solapan con la semana + penalidades pendientes
       const sedeParaVP = sedeActualId || sedeUsuario?.id
