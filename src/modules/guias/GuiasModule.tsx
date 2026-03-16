@@ -90,6 +90,7 @@ export function GuiasModule() {
   const [openColumnFilter, setOpenColumnFilter] = useState<string | null>(null)
   const [sinGncFilter, setSinGncFilter] = useState(false)
   const [conSaldoFilter, setConSaldoFilter] = useState(false)
+  const [showAllDrivers, setShowAllDrivers] = useState(false)
   
   // Estados para búsqueda dentro de filtros
   const [nombreSearch, setNombreSearch] = useState('')
@@ -525,13 +526,14 @@ export function GuiasModule() {
         if (errorHistorial) throw errorHistorial;
       }
 
-      Swal.fire({
-        title: 'Reasignación Exitosa',
-        text: 'El conductor ha sido reasignado correctamente.',
-        icon: 'success',
+      Swal.mixin({
+        toast: true,
+        position: 'top',
+        showConfirmButton: false,
         timer: 2000,
-        showConfirmButton: false
-      });
+        timerProgressBar: true,
+        customClass: { popup: 'toast-popup', title: 'toast-title' }
+      }).fire({ icon: 'success', title: 'Reasignación exitosa' });
 
       // Recargar conductores del guía actual para reflejar que se fue
       if (!selectedGuiaId) return;
@@ -559,11 +561,49 @@ export function GuiasModule() {
 
       if (!historyData || historyData.length === 0) return;
 
-      // 2. Obtener datos financieros desde cabify_historico via RPC (única fuente de verdad)
+      // 2. Obtener datos financieros con consulta directa a cabify_historico (filtrada por DNI)
       const semanas = historyData.map((d: any) => d.semana);
-      const dniMap = new Map<string, string>();
-      if (driver.numero_dni) dniMap.set(driver.id, String(driver.numero_dni));
-      const cabifyDataMap = await getCabifyDatosPorSemanas([driver.id], semanas, dniMap, sedeActualId);
+      let cabifyDataMap = new Map<string, Map<string, { cobroApp: number; cobroEfectivo: number }>>();
+      const dniNorm = driver.numero_dni ? normalizeDni(String(driver.numero_dni)) : '';
+      if (dniNorm && semanas.length > 0) {
+        try {
+          const weekDates = semanas.map(s => {
+            const [yStr, wStr] = s.split('-W');
+            const y = parseInt(yStr); const w = parseInt(wStr);
+            const jan4 = new Date(Date.UTC(y, 0, 4));
+            const dow = jan4.getUTCDay() || 7;
+            const mondayW1 = new Date(jan4.getTime() - (dow - 1) * 86400000);
+            const monday = new Date(mondayW1.getTime() + (w - 1) * 7 * 86400000);
+            const sunday = new Date(monday.getTime() + 6 * 86400000);
+            return { monday, sunday };
+          });
+          const minDate = new Date(Math.min(...weekDates.map(w => w.monday.getTime())));
+          const maxDate = new Date(Math.max(...weekDates.map(w => w.sunday.getTime())));
+
+          const { data: cabifyRows } = await supabase
+            .from('cabify_historico')
+            .select('dni, cobro_efectivo, cobro_app, fecha_inicio')
+            .eq('dni', dniNorm)
+            .gte('fecha_inicio', minDate.toISOString())
+            .lte('fecha_inicio', new Date(Date.UTC(maxDate.getUTCFullYear(), maxDate.getUTCMonth(), maxDate.getUTCDate(), 23, 59, 59, 999)).toISOString());
+
+          if (cabifyRows && cabifyRows.length > 0) {
+            for (const row of cabifyRows) {
+              const fechaDate = new Date(row.fecha_inicio);
+              const monday = startOfISOWeek(fechaDate);
+              const semanaKey = format(monday, "R-'W'II");
+              let semanaMap = cabifyDataMap.get(semanaKey);
+              if (!semanaMap) { semanaMap = new Map(); cabifyDataMap.set(semanaKey, semanaMap); }
+              const existing = semanaMap.get(driver.id) || { cobroApp: 0, cobroEfectivo: 0 };
+              existing.cobroApp += Number(row.cobro_app) || 0;
+              existing.cobroEfectivo += Number(row.cobro_efectivo) || 0;
+              semanaMap.set(driver.id, existing);
+            }
+          }
+        } catch {
+          // Cabify falló — se mostrará $0
+        }
+      }
 
       const rows = historyData.map(d => {
         const cabifyEntry = cabifyDataMap.get(d.semana)?.get(driver.id);
@@ -661,11 +701,33 @@ export function GuiasModule() {
       return;
     }
     if (selectedGuiaId) {
+      // Si ya estamos en la semana actual, loadDrivers ya setea currentWeekDrivers
+      if (selectedWeek === getCurrentWeek()) return;
       loadCurrentWeekMetrics(selectedGuiaId);
     } else {
       setCurrentWeekDrivers([]);
     }
   }, [selectedGuiaId, sedeActualId, seguimientoLoaded])
+
+  // Auto-refresco silencioso cada 10 minutos
+  useEffect(() => {
+    if (!seguimientoLoaded || !selectedGuiaId) return;
+
+    const intervalId = setInterval(async () => {
+      try {
+        const [driversData, metricsData] = await Promise.all([
+          fetchDriversData(selectedGuiaId, selectedWeek),
+          fetchDriversData(selectedGuiaId, getCurrentWeek()),
+        ]);
+        setDrivers(driversData);
+        setCurrentWeekDrivers(metricsData);
+      } catch {
+        // Silencioso: no mostrar errores al usuario en refresco automático
+      }
+    }, 10 * 60 * 1000);
+
+    return () => clearInterval(intervalId);
+  }, [selectedGuiaId, selectedWeek, sedeActualId, seguimientoLoaded])
 
   const fetchDriversData = async (guiaId: string, targetWeek: string) => {
     const isCurrentWeek = targetWeek === getCurrentWeek();
@@ -697,9 +759,9 @@ export function GuiasModule() {
             conductores_licencias_categorias (
               licencias_categorias (id, codigo, descripcion)
             ),
-            asignaciones_conductores (
+            asignaciones_conductores!left (
               horario,
-              asignaciones (
+              asignaciones!left (
                 estado,
                 horario,
                 vehiculos (id, patente, marca, modelo, gnc)
@@ -709,12 +771,6 @@ export function GuiasModule() {
         `)
         .eq('id_guia', guiaId)
         .eq('semana', targetWeek);
-
-      // SOLO en la semana actual filtramos por asignación activa.
-      // En semanas pasadas queremos ver TODO el historial, incluso si ya no tienen asignación hoy.
-      if (isCurrentWeek) {
-        query = query.filter('conductores.asignaciones_conductores.asignaciones.estado', 'in', '("activo","activa")');
-      }
 
       // Aplicar filtro de sede si está seleccionada (Optimización: filtro en DB)
       if (sedeActualId) {
@@ -747,7 +803,7 @@ export function GuiasModule() {
 
       // RPC Cabify: buscar datos financieros para semana objetivo Y semana anterior
       const cabifySemanasToFetch = [targetWeek, prevWeekLabelForCabify];
-      // Construir mapa UUID → DNI para consulta complementaria en Bariloche
+      // Construir mapa UUID → DNI para consulta en cabifyHistoricalService
       const conductorDniMap = new Map<string, string>();
       (historialData || []).forEach((h: any) => {
         if (h.id_conductor && h.conductores?.numero_dni) {
@@ -1421,6 +1477,10 @@ export function GuiasModule() {
       setLoadingDrivers(true);
       const data = await fetchDriversData(guiaId, selectedWeek);
       setDrivers(data);
+      // Si estamos viendo la semana actual, reutilizar para métricas (evita doble consulta)
+      if (selectedWeek === getCurrentWeek()) {
+        setCurrentWeekDrivers(data);
+      }
     } catch {
       setDrivers([]);
     } finally {
@@ -1657,9 +1717,9 @@ export function GuiasModule() {
           // History insert failed
         }
       }
-      
-      // Recargar datos para reflejar cambios
-      if (selectedGuiaId) {
+
+      // Solo recargar si se insertaron registros de historial que afecten la vista actual
+      if (historyInserts.length > 0 && selectedGuiaId) {
            loadDrivers(selectedGuiaId);
       }
 
@@ -1774,6 +1834,14 @@ export function GuiasModule() {
 
   const filteredDrivers = useMemo(() => {
     let result = drivers;
+
+    // Por defecto solo mostrar conductores activos; si showAllDrivers, mostrar todos (activos + baja)
+    if (!showAllDrivers) {
+      result = result.filter(c => {
+        const codigo = (c as any).conductores_estados?.codigo?.toLowerCase();
+        return codigo === 'activo';
+      });
+    }
 
     if (nombreFilter.length > 0) {
       result = result.filter(c =>
@@ -1935,7 +2003,7 @@ export function GuiasModule() {
     }
 
     return result;
-  }, [drivers, nombreFilter, cbuFilter, estadoFilter, turnoFilter, categoriaFilter, asignacionFilter, activeStatFilter, selectedWeek, seguimientoRules, efectivoFilter, appFilter, totalFilter, cabifyDataFilter, sinGncFilter, conSaldoFilter]);
+  }, [drivers, nombreFilter, cbuFilter, estadoFilter, turnoFilter, categoriaFilter, asignacionFilter, activeStatFilter, selectedWeek, seguimientoRules, efectivoFilter, appFilter, totalFilter, cabifyDataFilter, sinGncFilter, conSaldoFilter, showAllDrivers]);
 
   const uniqueEstados = useMemo(() => {
     const estados = new Map<string, string>();
@@ -2049,25 +2117,31 @@ export function GuiasModule() {
             }
           }
           const dni = row.original.numero_dni;
+          const estado = (row.original as any).conductores_estados;
+          const estadoCodigo = estado?.codigo?.toLowerCase();
+          let estadoColor = '#6b7280'; // gris por defecto
+          if (estadoCodigo === 'activo') estadoColor = '#16a34a';
+          else if (estadoCodigo === 'baja') estadoColor = '#dc2626';
           return (
-            <div style={{ display: 'flex', flexDirection: 'column' }}>
-              <strong style={{ textTransform: 'uppercase' }}>{`${row.original.nombres} ${row.original.apellidos}`}</strong>
-              {label && (
-                <span
-                  className="dt-badge dt-badge-gray badge-no-dot"
-                  style={{ fontSize: '11px', marginTop: 4, alignSelf: 'flex-start' }}
-                >
-                  {label}
-                </span>
-              )}
-              {dni && (
-                <span
-                  className="dt-badge dt-badge-gray badge-with-dot"
-                  style={{ fontSize: '11px', marginTop: 4, alignSelf: 'flex-start' }}
-                >
-                  {dni}
-                </span>
-              )}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '1px' }}>
+              <strong style={{ textTransform: 'uppercase', fontSize: '12.5px', lineHeight: 1.2 }}>{`${row.original.nombres} ${row.original.apellidos}`}</strong>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '4px', flexWrap: 'wrap', marginTop: '2px' }}>
+                {label && (
+                  <span style={{ fontSize: '9.5px', color: 'var(--text-tertiary)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.3px' }}>
+                    {label}
+                  </span>
+                )}
+                {dni && (
+                  <span style={{ fontSize: '9.5px', color: 'var(--text-tertiary)' }}>
+                    {label ? '·' : ''} {dni}
+                  </span>
+                )}
+                {estado?.codigo && (
+                  <span style={{ fontSize: '9.5px', color: estadoColor, fontWeight: 600, textTransform: 'uppercase' }}>
+                    · {getEstadoConductorDisplay(estado)}
+                  </span>
+                )}
+              </div>
             </div>
           );
         },
@@ -2193,65 +2267,6 @@ export function GuiasModule() {
         size: 80,
       }] : []),
 
-      {
-        id: "conductores_estados_codigo",
-        accessorFn: (row) => (row as any).conductores_estados?.codigo,
-        header: () => (
-          <div className="dt-column-filter">
-            <span>Estado {estadoFilter.length > 0 && `(${estadoFilter.length})`}</span>
-            <button
-              className={`dt-column-filter-btn ${estadoFilter.length > 0 ? 'active' : ''}`}
-              onClick={(e) => {
-                e.stopPropagation();
-                setOpenColumnFilter(openColumnFilter === 'estado' ? null : 'estado');
-              }}
-              title="Filtrar por estado"
-            >
-              <Filter size={12} />
-            </button>
-            {openColumnFilter === 'estado' && (
-              <div className="dt-column-filter-dropdown dt-excel-filter" onClick={(e) => e.stopPropagation()}>
-                <div className="dt-excel-filter-list">
-                  {uniqueEstados.map(([codigo, descripcion]) => (
-                    <label key={codigo} className={`dt-column-filter-checkbox ${estadoFilter.includes(codigo) ? 'selected' : ''}`}>
-                      <input
-                        type="checkbox"
-                        checked={estadoFilter.includes(codigo)}
-                        onChange={() => toggleEstadoFilter(codigo)}
-                      />
-                      <span>{descripcion}</span>
-                    </label>
-                  ))}
-                </div>
-                {estadoFilter.length > 0 && (
-                  <button
-                    className="dt-column-filter-clear"
-                    onClick={() => setEstadoFilter([])}
-                  >
-                    Limpiar ({estadoFilter.length})
-                  </button>
-                )}
-              </div>
-            )}
-          </div>
-        ),
-        cell: ({ row }) => {
-          const estado = row.original.conductores_estados;
-          if (!estado?.codigo) return "-";
-          const codigoLower = estado.codigo.toLowerCase();
-
-          let badgeClass = "dt-badge dt-badge-solid-blue badge-no-dot";
-          if (codigoLower === "baja") {
-            badgeClass = "dt-badge dt-badge-solid-gray badge-no-dot";
-          } else if (codigoLower === "activo") {
-            badgeClass = "dt-badge dt-badge-solid-green badge-no-dot";
-          }
-
-          return <span className={badgeClass}>{getEstadoConductorDisplay(estado)}</span>;
-        },
-        enableSorting: true,
-        size: 80,
-      },
       {
         id: "vehiculo_asignado",
         header: () => (
@@ -2536,18 +2551,15 @@ export function GuiasModule() {
             return new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(Number(Number(n).toFixed(2)));
           };
           return (
-            <div style={{ display: 'grid', gridTemplateColumns: '84px 1fr', columnGap: 8, rowGap: 2, alignItems: 'center' }}>
-              <span style={{ fontWeight: 600 }}>App:</span>
-              <span style={{ textAlign: 'right' }}>{formatMoney(appRaw) as any}</span>
-              <span style={{ fontWeight: 600 }}>Efectivo:</span>
-              <span style={{ textAlign: 'right' }}>{formatMoney(efectivoRaw) as any}</span>
-              <span style={{ fontWeight: 600 }}>Total:</span>
-              <span style={{ textAlign: 'right' }}>{formatMoney(totalRaw) as any}</span>
+            <div style={{ display: 'inline-grid', gridTemplateColumns: 'auto auto', columnGap: 4, rowGap: 1, fontSize: '12px', alignItems: 'baseline' }}>
+              <span style={{ fontWeight: 600 }}>App:</span><span style={{ textAlign: 'right' }}>{formatMoney(appRaw) as any}</span>
+              <span style={{ fontWeight: 600 }}>Efectivo:</span><span style={{ textAlign: 'right' }}>{formatMoney(efectivoRaw) as any}</span>
+              <span style={{ fontWeight: 600 }}>Total:</span><span style={{ textAlign: 'right' }}>{formatMoney(totalRaw) as any}</span>
             </div>
           );
         },
         enableSorting: false,
-        size: 170,
+        size: 145,
       },
 
       {
@@ -2563,18 +2575,15 @@ export function GuiasModule() {
             return new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(v);
           };
           return (
-            <div style={{ display: 'grid', gridTemplateColumns: '72px 1fr', columnGap: 8, rowGap: 2, alignItems: 'center' }}>
-              <span style={{ fontWeight: 600 }}>Alquiler:</span>
-              <span style={{ textAlign: 'right' }}>{fmtBilling(alquiler) as any}</span>
-              <span style={{ fontWeight: 600 }}>Garantía:</span>
-              <span style={{ textAlign: 'right' }}>{fmtBilling(garantia) as any}</span>
-              <span style={{ fontWeight: 600, borderTop: '1px solid var(--border-color, #e5e7eb)', paddingTop: 2 }}>Total:</span>
-              <span style={{ textAlign: 'right', fontWeight: 700, borderTop: '1px solid var(--border-color, #e5e7eb)', paddingTop: 2 }}>{fmtBilling(cuota) as any}</span>
+            <div style={{ display: 'inline-grid', gridTemplateColumns: 'auto auto', columnGap: 4, rowGap: 1, fontSize: '12px', alignItems: 'baseline' }}>
+              <span style={{ fontWeight: 600 }}>Alquiler:</span><span style={{ textAlign: 'right' }}>{fmtBilling(alquiler) as any}</span>
+              <span style={{ fontWeight: 600 }}>Garantía:</span><span style={{ textAlign: 'right' }}>{fmtBilling(garantia) as any}</span>
+              <span style={{ fontWeight: 600, borderTop: '1px solid var(--border-color, #e5e7eb)', paddingTop: 1 }}>Total:</span><span style={{ textAlign: 'right', fontWeight: 700, borderTop: '1px solid var(--border-color, #e5e7eb)', paddingTop: 1 }}>{fmtBilling(cuota) as any}</span>
             </div>
           );
         },
         enableSorting: false,
-        size: 160,
+        size: 130,
       },
 
       {
@@ -3080,8 +3089,7 @@ export function GuiasModule() {
                       const saldo = (c as any).saldo_conductor ?? 0;
                       return saldo < 0;
                     }).length;
-                    const showQuickFilters = countSinGnc > 0 || countConSaldo > 0;
-                    return showQuickFilters ? (
+                    return (
                       <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
                         {countSinGnc > 0 && (
                           <button
@@ -3127,8 +3135,28 @@ export function GuiasModule() {
                             Con Saldo <span style={{ opacity: 0.7 }}>{countConSaldo}</span>
                           </button>
                         )}
+                        <button
+                          onClick={() => setShowAllDrivers(prev => !prev)}
+                          style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '5px',
+                            padding: '4px 10px',
+                            borderRadius: '14px',
+                            fontSize: '11px',
+                            fontWeight: 600,
+                            border: showAllDrivers ? '2px solid #6366f1' : '1px solid var(--border-primary)',
+                            background: showAllDrivers ? 'rgba(99,102,241,0.10)' : 'transparent',
+                            color: showAllDrivers ? '#6366f1' : 'var(--text-secondary)',
+                            cursor: 'pointer',
+                            transition: 'all 0.15s',
+                            whiteSpace: 'nowrap',
+                          }}
+                        >
+                          {showAllDrivers ? 'Ver solo activos' : 'Ver total conductores'}
+                        </button>
                       </div>
-                    ) : null;
+                    );
                   })()}
                   {/* Search + Week Selector + Gestión row */}
                   <div style={{
@@ -3182,7 +3210,7 @@ export function GuiasModule() {
                 </div>
 
                 {/* Filtros Activos */}
-                {(nombreFilter.length > 0 || estadoFilter.length > 0 || turnoFilter.length > 0 || asignacionFilter.length > 0 || cabifyDataFilter.length > 0 || activeStatFilter || sinGncFilter || conSaldoFilter) && (
+                {(nombreFilter.length > 0 || estadoFilter.length > 0 || turnoFilter.length > 0 || asignacionFilter.length > 0 || cabifyDataFilter.length > 0 || activeStatFilter || sinGncFilter || conSaldoFilter || showAllDrivers) && (
                   <div className="active-filters-container">
                     <div className="active-filters-label">
                       <Triangle size={8} fill="var(--color-primary)" stroke="var(--color-primary)" style={{ transform: 'rotate(180deg)' }} />
@@ -3234,6 +3262,13 @@ export function GuiasModule() {
                       <span className="active-filter-tag">
                         Con Saldo
                         <button onClick={() => setConSaldoFilter(false)} className="active-filter-close"><X size={10} /></button>
+                      </span>
+                    )}
+
+                    {showAllDrivers && (
+                      <span className="active-filter-tag">
+                        Total conductores
+                        <button onClick={() => setShowAllDrivers(false)} className="active-filter-close"><X size={10} /></button>
                       </span>
                     )}
 

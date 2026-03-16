@@ -19,10 +19,14 @@ interface DashboardStats {
   porcentajeOperatividad: DashboardCardValue
   fondoGarantia: DashboardCardValue
   pendienteDevolucion: DashboardCardValue
+  reintegroReciente: DashboardCardValue
+  reintegroAntiguo: DashboardCardValue
   cobroPendiente: DashboardCardValue
   diasSinSiniestro: DashboardCardValue
   diasSinRobo: DashboardCardValue
   totalSaldo: DashboardCardValue
+  totalSaldoPendiente: DashboardCardValue
+  totalSaldoMora: DashboardCardValue
   vueltasMundo: DashboardCardValue
 }
 
@@ -118,7 +122,7 @@ export function useDashboardStats() {
           aplicarFiltroSede(
             supabase
               .from('conductores')
-              .select('id, estado_id')
+              .select('id, estado_id, fecha_terminacion')
           ),
           supabase.rpc('sum_kilometraje_total', {
             p_sede_id: sedeActualId || null
@@ -255,21 +259,21 @@ export function useDashboardStats() {
         ).length
 
         // Calcular Reintegro de Garantía (Pendiente de Devolución)
-        const conductoresMap = new Map(conductores.map((c: any) => [c.id, c.estado_id]))
+        const conductoresMap = new Map(conductores.map((c: any) => [c.id, { estado_id: c.estado_id, fecha_terminacion: c.fecha_terminacion }]))
         const ESTADO_ACTIVO = '57e9de5f-e6fc-4ff7-8d14-cf8e13e9dbe2'
-        
+
         const garantiasEnDevolucion = garantias.filter((g: any) => {
           // Si ya está marcado como en_devolucion en BD
           if (g.estado === 'en_devolucion') return true
-          
+
           // Si está cancelada, ignorar
           if (g.estado === 'cancelada') return false
 
           // Verificar lógica: Conductor BAJA + Saldo pagado > 0
-          const estadoConductor = conductoresMap.get(g.conductor_id)
-          const esBaja = estadoConductor && estadoConductor !== ESTADO_ACTIVO
+          const conductor = conductoresMap.get(g.conductor_id)
+          const esBaja = conductor && conductor.estado_id !== ESTADO_ACTIVO
           const montoPagado = g.monto_pagado || 0
-          
+
           return esBaja && montoPagado > 0
         })
 
@@ -279,6 +283,43 @@ export function useDashboardStats() {
           const pendiente = pagado - devuelto
           return sum + (pendiente > 0 ? pendiente : 0)
         }, 0)
+
+        // Reintegros segmentados por antigüedad de baja (120 días)
+        const hoy = new Date()
+        const LIMITE_DIAS = 120
+
+        let reintegroReciente = 0
+        let reintegroAntiguo = 0
+        let countReciente = 0
+        let countAntiguo = 0
+
+        for (const g of garantiasEnDevolucion) {
+          const pagado = g.monto_pagado || 0
+          const devuelto = g.monto_devuelto || 0
+          const pendiente = pagado - devuelto
+          if (pendiente <= 0) continue
+
+          const conductor = conductoresMap.get(g.conductor_id)
+          const fechaTermStr = conductor?.fecha_terminacion
+
+          if (fechaTermStr) {
+            const fechaTerm = new Date(fechaTermStr)
+            const diffMs = hoy.getTime() - fechaTerm.getTime()
+            const diffDias = Math.floor(diffMs / (1000 * 60 * 60 * 24))
+
+            if (diffDias <= LIMITE_DIAS) {
+              reintegroReciente += pendiente
+              countReciente++
+            } else {
+              reintegroAntiguo += pendiente
+              countAntiguo++
+            }
+          } else {
+            // Sin fecha de terminación → se suma al acumulado antiguo
+            reintegroAntiguo += pendiente
+            countAntiguo++
+          }
+        }
 
         // Calcular Total Saldo
         const totalSaldoActual = saldos.reduce((sum, item) => sum + Math.abs(item.saldo_actual || 0), 0)
@@ -343,6 +384,14 @@ export function useDashboardStats() {
             value: formatCurrencyArs(totalReintegroPendiente),
             subtitle: `${garantiasEnDevolucion.length} en devolución`,
           },
+          reintegroReciente: {
+            value: formatCurrencyArs(reintegroReciente),
+            subtitle: `${countReciente} conductores (≤ 120 días)`,
+          },
+          reintegroAntiguo: {
+            value: formatCurrencyArs(reintegroAntiguo),
+            subtitle: `${countAntiguo} conductores (> 120 días)`,
+          },
           cobroPendiente: {
             value: formatCurrencyArs(totalDeudaActual),
             subtitle: `${formatCurrencyArs(deudaSemanaPasada)} (${porcentajeDeudaSemanaPasada}%)`,
@@ -363,6 +412,14 @@ export function useDashboardStats() {
           totalSaldo: {
             value: formatCurrencyArs(totalSaldoFinal),
             subtitle: 'Saldo Actual + Mora'
+          },
+          totalSaldoPendiente: {
+            value: formatCurrencyArs(totalSaldoActual),
+            subtitle: `${saldos.filter(s => (s.saldo_actual || 0) < 0).length} conductores con deuda`
+          },
+          totalSaldoMora: {
+            value: formatCurrencyArs(totalMora),
+            subtitle: `${saldos.filter(s => (s.monto_mora_acumulada || 0) > 0).length} conductores con mora`
           },
           vueltasMundo: {
             value: vueltasMundoVal.toLocaleString('es-AR', { minimumFractionDigits: 0, maximumFractionDigits: 0 }),

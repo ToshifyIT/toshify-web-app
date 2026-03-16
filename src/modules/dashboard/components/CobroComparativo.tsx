@@ -13,6 +13,7 @@ import { format, getWeek } from 'date-fns'
 import { es } from 'date-fns/locale'
 import { useCobroTeoricoData, type Granularity } from '../../../hooks/useCobroTeoricoData'
 import { PeriodPicker } from './PeriodPicker'
+import { AdaptiveTooltip } from '../../../components/ui/AdaptiveTooltip'
 import './CobroComparativo.css'
 
 const formatCurrencyK = (value: number) => {
@@ -39,6 +40,28 @@ function getGenericLabels(granularity: Granularity, count: number): string[] {
   // año
   const meses = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic']
   return meses.slice(0, count)
+}
+
+/** Etiqueta corta de período para textos de variación */
+const mesesCompletos: Record<string, string> = {
+  ene: 'Enero', feb: 'Febrero', mar: 'Marzo', abr: 'Abril',
+  may: 'Mayo', jun: 'Junio', jul: 'Julio', ago: 'Agosto',
+  sep: 'Septiembre', oct: 'Octubre', nov: 'Noviembre', dic: 'Diciembre',
+}
+
+function getShortLabel(period: string, granularity: Granularity): string {
+  if (granularity === 'semana') {
+    // "Sem 11 2026" → "Semana 11"
+    const match = period.match(/Sem\s+(\d+)/)
+    return match ? `Semana ${parseInt(match[1], 10)}` : period
+  }
+  if (granularity === 'mes') {
+    // "Mar 2026" → "Marzo"
+    const abbr = period.split(' ')[0]?.toLowerCase() || ''
+    return mesesCompletos[abbr] || period.split(' ')[0] || period
+  }
+  // año: "2026" → "2026"
+  return period
 }
 
 /** Calcula variación porcentual */
@@ -233,6 +256,56 @@ export function CobroComparativo({ granularity, onGranularityChange }: Props) {
         </div>
       </div>
 
+      {/* Variaciones descriptivas — sección propia */}
+      {!loading && (
+        <div className="cobro-comparativo-variation-section">
+          <p className="cobro-comparativo-variation-text">
+            El <strong>COBRO ESPERADO</strong> de <strong>{getShortLabel(periodA, granularity)}</strong> es un{' '}
+            <span className={`cobro-comparativo-variation-pct cobro-comparativo-variation-pct--${totals.varEsperado.direction}`}>
+              {totals.varEsperado.pct}%{' '}
+              {totals.varEsperado.direction === 'up' ? 'mayor' : totals.varEsperado.direction === 'down' ? 'menor' : 'igual'}
+            </span>{' '}
+            respecto a <strong>{getShortLabel(periodB, granularity)}</strong>
+            <AdaptiveTooltip
+              width={280}
+              variant="card"
+              content={
+                <span>
+                  <strong>Variación del Cobro Esperado</strong><br /><br />
+                  Compara el total esperado (teórico) entre <strong>{getShortLabel(periodA, granularity)}</strong> y <strong>{getShortLabel(periodB, granularity)}</strong>.<br /><br />
+                  Si el porcentaje es positivo (↗), significa que en {getShortLabel(periodA, granularity)} se esperaba cobrar <strong>más</strong>. Si es negativo (↘), se esperaba cobrar <strong>menos</strong>.<br /><br />
+                  <em>Fórmula: ((Esperado A − Esperado B) / Esperado B) × 100</em>
+                </span>
+              }
+            >
+              <span className="cobro-comparativo-info-icon">i</span>
+            </AdaptiveTooltip>
+          </p>
+          <p className="cobro-comparativo-variation-text">
+            El <strong>COBRO PERCIBIDO</strong> de <strong>{getShortLabel(periodA, granularity)}</strong> es un{' '}
+            <span className={`cobro-comparativo-variation-pct cobro-comparativo-variation-pct--${totals.varPercibido.direction}`}>
+              {totals.varPercibido.pct}%{' '}
+              {totals.varPercibido.direction === 'up' ? 'mayor' : totals.varPercibido.direction === 'down' ? 'menor' : 'igual'}
+            </span>{' '}
+            respecto a <strong>{getShortLabel(periodB, granularity)}</strong>
+            <AdaptiveTooltip
+              width={280}
+              variant="card"
+              content={
+                <span>
+                  <strong>Variación del Cobro Percibido</strong><br /><br />
+                  Compara el total efectivamente cobrado (real) entre <strong>{getShortLabel(periodA, granularity)}</strong> y <strong>{getShortLabel(periodB, granularity)}</strong>.<br /><br />
+                  Si el porcentaje es positivo (↗), significa que en {getShortLabel(periodA, granularity)} se cobró <strong>más</strong>. Si es negativo (↘), se cobró <strong>menos</strong>.<br /><br />
+                  <em>Fórmula: ((Percibido A − Percibido B) / Percibido B) × 100</em>
+                </span>
+              }
+            >
+              <span className="cobro-comparativo-info-icon">i</span>
+            </AdaptiveTooltip>
+          </p>
+        </div>
+      )}
+
       {/* Gráfico */}
       <div className="cobro-comparativo-chart-wrapper">
         {loading ? (
@@ -360,15 +433,6 @@ export function CobroComparativo({ granularity, onGranularityChange }: Props) {
         </div>
       </div>
 
-      {/* Variaciones */}
-      <div className="cobro-comparativo-variations">
-        <div className={`cobro-comparativo-card-variation cobro-comparativo-card-variation--${totals.varEsperado.direction}`}>
-          Esperado: {totals.varEsperado.direction === 'up' ? '↗' : totals.varEsperado.direction === 'down' ? '↘' : '—'} {totals.varEsperado.pct}%
-        </div>
-        <div className={`cobro-comparativo-card-variation cobro-comparativo-card-variation--${totals.varPercibido.direction}`}>
-          Percibido: {totals.varPercibido.direction === 'up' ? '↗' : totals.varPercibido.direction === 'down' ? '↘' : '—'} {totals.varPercibido.pct}%
-        </div>
-      </div>
     </div>
   )
 }

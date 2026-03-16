@@ -244,27 +244,24 @@ export function DriverDetailModal({ driver, onClose, onDriverUpdate, accionesImp
 
       if (error) throw error;
 
-      await Swal.fire({
-        title: '¡Guardado con éxito!',
-        text: 'Los cambios han sido aplicados correctamente en el sistema de gestión de flota.',
-        icon: 'success',
-        timer: 1500,
-        showConfirmButton: true,
-        confirmButtonText: 'Entendido',
-        confirmButtonColor: '#1d4ed8',
-        buttonsStyling: true,
-        customClass: {
-          popup: 'rounded-2xl shadow-xl',
-          confirmButton: 'px-6 py-2.5 rounded-xl font-bold text-sm shadow-sm transition-transform active:scale-95',
-          title: 'text-xl font-bold text-gray-800',
-          htmlContainer: 'text-sm text-gray-500'
-        },
+      // Toast de éxito (no bloquea la UI)
+      Swal.mixin({
+        toast: true,
+        position: 'top',
+        showConfirmButton: false,
+        timer: 2000,
         timerProgressBar: true,
-        didClose: () => {
-          if (onDriverUpdate) onDriverUpdate();
-          onClose();
+        customClass: {
+          popup: 'toast-popup',
+          title: 'toast-title',
         }
+      }).fire({
+        icon: 'success',
+        title: '¡Guardado con éxito!',
       });
+
+      if (onDriverUpdate) onDriverUpdate();
+      onClose();
 
     } catch (error: any) {
       Swal.fire('Error', error.message || 'No se pudo guardar', 'error');
