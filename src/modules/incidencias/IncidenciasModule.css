@@ -18,32 +18,30 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
-  flex-wrap: wrap;
+  gap: 8px;
 }
 
 .incidencias-tabs {
   display: flex;
-  gap: 4px;
+  gap: 2px;
   background: var(--bg-primary);
-  padding: 8px;
+  padding: 4px;
   border-radius: 8px;
-  flex-wrap: wrap;
 }
 
 .incidencias-tab {
-  padding: 8px 16px;
+  padding: 6px 10px;
   border: none;
   background: transparent;
   color: var(--text-secondary);
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 500;
   cursor: pointer;
   border-radius: 6px;
   transition: all 0.15s;
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 4px;
   white-space: nowrap;
 }
 
@@ -1395,14 +1393,7 @@
    ===================================================== */
 
 .incidencias-bulk-bar {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  margin-bottom: 16px;
-  padding: 12px 16px;
-  background: var(--bg-secondary);
-  border-radius: 8px;
-  border: 1px solid var(--border-primary);
+  display: none;
 }
 
 .incidencias-bulk-bar .btn-filter {
