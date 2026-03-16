@@ -467,7 +467,17 @@ export function SiniestrosModule() {
           onOpenChange={setOpenFilterId}
         />
       ),
-      cell: ({ row }) => row.original.conductor_display || '-'
+      cell: ({ row }) => {
+        const resp = row.original.responsable
+        const color = resp === 'tercero' ? 'green' : resp === 'conductor' ? 'red' : resp === 'compartida' ? 'yellow' : 'gray'
+        const labels: Record<string, string> = { tercero: 'Tercero', conductor: 'Conductor', sin_info: 'Sin Info', compartida: 'Compartida' }
+        return (
+          <div>
+            <div style={{ fontSize: '12px' }}>{row.original.conductor_display || '-'}</div>
+            {resp && <span className={`dt-badge dt-badge-${color}`} style={{ fontSize: '9px', padding: '1px 5px' }}>{labels[resp] || resp}</span>}
+          </div>
+        )
+      }
     },
     {
       accessorKey: 'categoria_nombre',
@@ -483,31 +493,6 @@ export function SiniestrosModule() {
         />
       ),
       cell: ({ row }) => row.original.categoria_nombre || '-'
-    },
-    {
-      accessorKey: 'responsable',
-      header: () => (
-        <ExcelColumnFilter
-          label="Responsable"
-          options={['tercero', 'conductor', 'compartida', 'sin_info']}
-          selectedValues={responsableFilter}
-          onSelectionChange={setResponsableFilter}
-          filterId="responsable"
-          openFilterId={openFilterId}
-          onOpenChange={setOpenFilterId}
-        />
-      ),
-      cell: ({ row }) => {
-        const resp = row.original.responsable
-        const color = resp === 'tercero' ? 'green' : resp === 'conductor' ? 'red' : 'gray'
-        const labels: Record<string, string> = {
-          tercero: 'Tercero',
-          conductor: 'Conductor',
-          sin_info: 'Sin Info',
-          compartida: 'Compartida'
-        }
-        return <span className={`dt-badge dt-badge-${color}`}>{labels[resp] || resp}</span>
-      }
     },
     {
       accessorKey: 'estado_nombre',
@@ -537,7 +522,7 @@ export function SiniestrosModule() {
     },
     {
       accessorKey: 'estado_vehiculo',
-      header: 'Estado Vehículo',
+      header: 'Est. Veh.',
       cell: ({ row }) => {
         const estado = row.original.estado_vehiculo
         if (!estado) return <span style={{ color: 'var(--text-tertiary)' }}>-</span>
@@ -565,7 +550,7 @@ export function SiniestrosModule() {
 
     {
       id: 'acciones',
-      header: 'Acciones',
+      header: '',
       cell: ({ row }) => {
         const isHabilitado = row.original.habilitado_circular;
         const hasVehiculo = !!row.original.vehiculo_id;

@@ -545,19 +545,19 @@ export function VencimientosModule() {
     },
     {
       accessorKey: 'documento',
-      header: 'Documento',
+      header: 'Doc.',
       cell: ({ getValue }) => (getValue() as string) || '-',
       enableSorting: false
     },
     {
       accessorKey: 'fecha_entrega',
-      header: 'F.ENTREGA',
+      header: 'Entrega',
       cell: ({ getValue }) => formatDate(getValue() as string | null | undefined),
       enableSorting: true
     },
     {
       accessorKey: 'fecha_vencimiento',
-      header: 'F.VENCIMIENTO',
+      header: 'Vence',
       cell: ({ row, getValue }) => {
         const raw = getValue() as string | null | undefined
         const label = formatDate(raw)
@@ -569,7 +569,7 @@ export function VencimientosModule() {
     },
     {
       accessorKey: 'fecha_iniciar_gestion',
-      header: 'F.INICIO GESTIÓN',
+      header: 'Gestión',
       cell: ({ getValue }) => formatDate(getValue() as string | null | undefined),
       enableSorting: true
     },
@@ -610,18 +610,8 @@ export function VencimientosModule() {
       enableSorting: false
     },
     {
-      accessorKey: 'observacion',
-      header: 'Observaciones',
-      cell: ({ getValue }) => {
-        const value = (getValue() as string) || ''
-        if (!value) return '-'
-        return <span className="venc-observacion">{value}</span>
-      },
-      enableSorting: false
-    },
-    {
       id: 'acciones',
-      header: 'Acciones',
+      header: '',
       cell: ({ row }) => (
         <div className="table-actions">
           <button

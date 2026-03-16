@@ -71,10 +71,6 @@
 /* Wrapper */
 .dt-wrapper {
   width: 100%;
-  flex: 1;
-  min-height: 0;
-  display: flex;
-  flex-direction: column;
 }
 
 /* Header Bar (Search + Action) */
@@ -365,10 +361,6 @@
   overflow: visible;
   box-shadow: none;
   position: relative;
-  flex: 1;
-  min-height: 0;
-  display: flex;
-  flex-direction: column;
 }
 
 /* Table Wrapper for scroll */
@@ -378,8 +370,7 @@
   padding-bottom: 4px;
   scrollbar-width: auto;
   max-width: 100%;
-  flex: 1;
-  min-height: 0;
+  max-height: calc(100vh - 340px);
 }
 
 .dt-table-wrapper::-webkit-scrollbar {
