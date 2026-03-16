@@ -658,6 +658,11 @@ export function ReporteFacturacionTab() {
           historial.push({ fechaInicio: acInicioStr, fechaFin: acFinStr, padreEstado: estadoPadre, horario, dias: 0, nota: 'Huérfano (padre sin fecha_fin)' })
           continue
         }
+        // Skip huérfano sin fecha_inicio
+        if (!ac.fecha_inicio && !asignacion.fecha_inicio) {
+          historial.push({ fechaInicio: acInicioStr, fechaFin: acFinStr, padreEstado: estadoPadre, horario, dias: 0, nota: 'Huérfano (sin fecha_inicio)' })
+          continue
+        }
 
         // Normalizar fechas a timezone Argentina para conteo correcto de días
         // Inicio: usar la fecha MÁS TARDÍA entre conductor y padre (Entrega Real)
