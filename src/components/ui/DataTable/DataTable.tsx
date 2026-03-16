@@ -545,21 +545,7 @@ export function DataTable<T>({
   const tableWrapperRef = useRef<HTMLDivElement>(null);
   const [isMobile, setIsMobile] = useState(false);
 
-  // Dynamic max-height: fill remaining viewport height (avoids double scroll)
-  useEffect(() => {
-    const el = tableWrapperRef.current;
-    if (!el) return;
-    const update = () => {
-      const rect = el.getBoundingClientRect();
-      // 80px = pagination footer + bottom padding
-      const available = window.innerHeight - rect.top - 80;
-      el.style.maxHeight = `${Math.max(200, available)}px`;
-    };
-    // Run after layout settles
-    const raf = requestAnimationFrame(update);
-    window.addEventListener('resize', update);
-    return () => { cancelAnimationFrame(raf); window.removeEventListener('resize', update); };
-  });
+  // Max-height set via CSS (.dt-table-wrapper max-height: calc(100vh - 340px))
 
   // Detectar mobile
   useEffect(() => {
