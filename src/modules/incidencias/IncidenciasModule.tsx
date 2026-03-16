@@ -4245,25 +4245,16 @@ function IncidenciaForm({ formData, setFormData, estados, vehiculos, conductores
           </div>
           <div className="form-group">
             <label>Modalidad <span className="required">*</span></label>
-            {formData.turno ? (
-              <input
-                type="text"
-                value={formData.turno}
-                readOnly
-                className="form-input-readonly"
-              />
-            ) : (
-              <select
-                value={formData.turno || ''}
-                onChange={e => setFormData(prev => ({ ...prev, turno: e.target.value || undefined }))}
-                disabled={disabled}
-              >
-                <option value="">Seleccionar</option>
-                <option value="Diurno">Diurno</option>
-                <option value="Nocturno">Nocturno</option>
-                <option value="A cargo">A cargo</option>
-              </select>
-            )}
+            <select
+              value={formData.turno || ''}
+              onChange={e => setFormData(prev => ({ ...prev, turno: e.target.value || undefined }))}
+              disabled={disabled}
+            >
+              <option value="">Seleccionar</option>
+              <option value="Diurno">Diurno</option>
+              <option value="Nocturno">Nocturno</option>
+              <option value="A cargo">A cargo</option>
+            </select>
           </div>
         </div>
         <div className="form-row three-cols">
@@ -4377,113 +4368,95 @@ function IncidenciaForm({ formData, setFormData, estados, vehiculos, conductores
             </select>
           </div>
         </div>
-        {/* Monto, KM Excedidos, Estado Vehículo - solo para cobro (3 columnas) */}
+        {/* Monto y KM Excedidos - solo para cobro */}
         {esCobro && (
-          <div className="form-row three-cols">
+          <div className="form-row" style={{ gridTemplateColumns: esExcesoKm ? '1fr 1fr 1fr' : '1fr 1fr' }}>
+            {esExcesoKm && (
+              <div className="form-group">
+                <label>KM Excedidos</label>
+                <input
+                  type="number"
+                  min="0"
+                  step="1"
+                  value={formData.km_exceso || ''}
+                  onChange={e => setFormData(prev => ({ ...prev, km_exceso: e.target.value ? parseInt(e.target.value) : undefined }))}
+                  placeholder="0"
+                  disabled={!formData.turno || disabled}
+                />
+              </div>
+            )}
             <div className="form-group">
               <label>Monto <span className="required">*</span></label>
-              <input
-                type="number"
-                min="0"
-                step="0.01"
-                value={formData.monto || ''}
-                onChange={e => setFormData(prev => ({ ...prev, monto: e.target.value ? parseFloat(e.target.value) : undefined }))}
-                placeholder="0.00"
-                disabled={disabled}
-              />
+              <div style={{ display: 'flex', gap: '6px' }}>
+                <input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={formData.monto || ''}
+                  onChange={e => setFormData(prev => ({ ...prev, monto: e.target.value ? parseFloat(e.target.value) : undefined }))}
+                  placeholder="0.00"
+                  disabled={disabled}
+                  style={{ flex: 1 }}
+                />
+              </div>
             </div>
             <div className="form-group">
-              <label>KM Excedidos</label>
-              <input
-                type="number"
-                min="0"
-                step="1"
-                value={formData.km_exceso || ''}
-                onChange={e => setFormData(prev => ({ ...prev, km_exceso: e.target.value ? parseInt(e.target.value) : undefined }))}
-                placeholder="0"
-                disabled={!(esExcesoKm && formData.turno) || disabled}
-                style={{ opacity: (esExcesoKm && formData.turno) ? 1 : 0.5 }}
-              />
-            </div>
-            <div className="form-group">
-              <label>Estado del Vehículo <span className="required">*</span></label>
-              <select value={formData.estado_vehiculo || ''} onChange={e => setFormData(prev => ({ ...prev, estado_vehiculo: e.target.value }))} disabled={disabled}>
-                <option value="">Seleccionar</option>
-                <option value="En uso">En uso</option>
-                <option value="Parking-Disponible">Parking-Disponible</option>
-                <option value="Parking-No disponible">Parking-No disponible</option>
-                <option value="Taller">Taller</option>
-                <option value="Taller mecanico">Taller mecánico</option>
-                <option value="Taller chapa & pintura">Taller chapa & pintura</option>
-                <option value="Sin asignar">Sin asignar</option>
-              </select>
+              <label>Calcular por turno</label>
+              <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
+                {[
+                  { label: '½', value: 0.5 },
+                  { label: '1', value: 1 },
+                  { label: '1½', value: 1.5 },
+                  { label: '2', value: 2 },
+                ].map(opt => {
+                  const esCargo = formData.turno === 'A cargo'
+                  const conceptoCodigo = esCargo ? 'P002' : (formData.turno === 'Nocturno' ? 'P013' : 'P001')
+                  const precioTurno = conceptosNomina.find(c => c.codigo === conceptoCodigo)?.precio_final || 0
+                  const montoCalculado = Math.round(precioTurno * opt.value * 100) / 100
+                  return (
+                    <button
+                      key={opt.label}
+                      type="button"
+                      disabled={disabled || !formData.turno}
+                      onClick={() => setFormData(prev => ({ ...prev, monto: montoCalculado }))}
+                      style={{
+                        padding: '4px 10px', borderRadius: '4px', fontSize: '12px', fontWeight: 600,
+                        border: '1px solid var(--border-primary)', background: formData.monto === montoCalculado ? 'var(--color-primary)' : 'var(--bg-secondary)',
+                        color: formData.monto === montoCalculado ? 'white' : 'var(--text-primary)',
+                        cursor: disabled || !formData.turno ? 'not-allowed' : 'pointer', opacity: disabled || !formData.turno ? 0.5 : 1,
+                      }}
+                      title={formData.turno ? `${opt.label} turno = $${montoCalculado.toLocaleString('es-AR')}` : 'Seleccione modalidad primero'}
+                    >
+                      {opt.label}
+                    </button>
+                  )
+                })}
+              </div>
             </div>
           </div>
         )}
-        {/* Estado vehículo para logística */}
-        {!esCobro && (
-          <div className="form-row">
-            <div className="form-group">
-              <label>Estado del Vehículo</label>
-              <select value={formData.estado_vehiculo || ''} onChange={e => setFormData(prev => ({ ...prev, estado_vehiculo: e.target.value }))} disabled={disabled}>
-                <option value="">Seleccionar</option>
-                <option value="En uso">En uso</option>
-                <option value="Parking-Disponible">Parking-Disponible</option>
-                <option value="Parking-No disponible">Parking-No disponible</option>
-                <option value="Taller">Taller</option>
-                <option value="Taller mecanico">Taller mecánico</option>
-                <option value="Taller chapa & pintura">Taller chapa & pintura</option>
-                <option value="Sin asignar">Sin asignar</option>
-              </select>
-            </div>
-            <div className="form-group">
-              <label>Registrado por</label>
-              <input
-                type="text"
-                value={formData.registrado_por || ''}
-                readOnly
-                className="form-input-readonly"
-                placeholder="Se asigna automáticamente"
-              />
-            </div>
+        <div className="form-row">
+          <div className="form-group">
+            <label>Registrado por</label>
+            <input
+              type="text"
+              value={formData.registrado_por || ''}
+              readOnly
+              className="form-input-readonly"
+              placeholder="Se asigna automáticamente"
+            />
           </div>
-        )}
-        {esCobro && (
-          <div className="form-row">
-            <div className="form-group">
-              <label>Registrado por</label>
-              <input
-                type="text"
-                value={formData.registrado_por || ''}
-                readOnly
-                className="form-input-readonly"
-                placeholder="Se asigna automáticamente"
-              />
-            </div>
-          </div>
-        )}
+        </div>
       </div>
 
       <div className="form-section">
-        <div className="form-section-title">Descripción</div>
         <div className="form-row">
           <div className="form-group full-width">
-            <label>Descripción del problema</label>
+            <label>Descripción</label>
             <textarea
               value={formData.descripcion || ''}
               onChange={e => setFormData(prev => ({ ...prev, descripcion: e.target.value }))}
               placeholder="Describa la incidencia..."
-              disabled={disabled}
-            />
-          </div>
-        </div>
-        <div className="form-row">
-          <div className="form-group full-width">
-            <label>Acción ejecutada</label>
-            <textarea
-              value={formData.accion_ejecutada || ''}
-              onChange={e => setFormData(prev => ({ ...prev, accion_ejecutada: e.target.value }))}
-              placeholder="¿Qué se hizo para resolver?"
               disabled={disabled}
             />
           </div>
