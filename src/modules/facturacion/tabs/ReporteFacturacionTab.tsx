@@ -8599,6 +8599,22 @@ export function ReporteFacturacionTab() {
             <ChevronRight size={18} />
           </button>
         </div>
+        {/* Buscador inline */}
+        <div style={{ position: 'relative', flex: '0 1 260px' }}>
+          <Search size={14} style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-tertiary)' }} />
+          <input
+            type="text"
+            placeholder="Buscar conductor, DNI, patente..."
+            value={buscarConductor}
+            onChange={(e) => setBuscarConductor(e.target.value)}
+            style={{ width: '100%', padding: '7px 30px 7px 30px', border: '1px solid var(--border-primary)', borderRadius: '8px', fontSize: '12px', background: 'var(--bg-primary)', color: 'var(--text-primary)' }}
+          />
+          {buscarConductor && (
+            <button onClick={() => setBuscarConductor('')} style={{ position: 'absolute', right: '8px', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-tertiary)', padding: '2px' }}>
+              <X size={14} />
+            </button>
+          )}
+        </div>
         <div className="fact-semana-actions">
           {/* Botón Generar - solo cuando NO existe período Y la semana anterior está cerrada */}
           {!periodo && !loading && periodoAnteriorCerrado && (
@@ -8813,26 +8829,6 @@ export function ReporteFacturacionTab() {
               </div>
             </div>
           )}
-
-          {/* Buscador de conductor */}
-          <div className="fact-search-container">
-            <Search size={18} className="fact-search-icon" />
-            <input
-              type="text"
-              placeholder="Buscar conductor por nombre, DNI o patente..."
-              value={buscarConductor}
-              onChange={(e) => setBuscarConductor(e.target.value)}
-              className="fact-search-input"
-            />
-            {buscarConductor && (
-              <button
-                onClick={() => setBuscarConductor('')}
-                className="fact-search-clear"
-              >
-                <X size={16} />
-              </button>
-            )}
-          </div>
 
           {/* Filtros para Vista Previa */}
           <div className="fact-filtros-columna">
