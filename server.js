@@ -574,19 +574,8 @@ app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() })
 })
 
-// Serve static files from dist with proper cache headers
-// Assets with hash in filename (JS/CSS chunks) = immutable cache (1 year)
-// index.html = no cache (always fetch latest)
-app.use(express.static(join(__dirname, 'dist'), {
-  maxAge: '1y',
-  immutable: true,
-  setHeaders: (res, path) => {
-    // index.html must not be cached (so new deploys are picked up)
-    if (path.endsWith('.html')) {
-      res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate')
-    }
-  }
-}))
+// Serve static files from dist
+app.use(express.static(join(__dirname, 'dist')))
 
 // SPA fallback - all routes go to index.html
 app.get('*', (req, res) => {
