@@ -59,31 +59,30 @@ export function AdaptiveTooltip({
   }, [width])
 
   const isDark = variant === 'dark'
-  const bg = isDark ? '#1e293b' : '#ffffff'
-  const textColor = isDark ? '#ffffff' : '#1e293b'
-  const borderStyle = isDark ? 'none' : '1px solid #e2e8f0'
 
   const tooltipStyle: React.CSSProperties = {
     position: 'fixed',
     top: layout.top,
     left: layout.left,
     transform: layout.showBelow ? 'none' : 'translateY(-100%)',
-    background: bg,
-    color: textColor,
+    background: isDark ? 'var(--bg-tertiary)' : 'var(--bg-primary)',
+    color: 'var(--text-primary)',
     fontSize: '12px',
     fontWeight: 400,
     lineHeight: '1.5',
     padding: '10px 14px',
     borderRadius: '8px',
-    border: borderStyle,
+    border: isDark ? '1px solid var(--border-primary)' : '1px solid var(--border-primary)',
     whiteSpace: 'normal',
     width: `${width}px`,
     zIndex: 99999,
     pointerEvents: 'none' as const,
-    boxShadow: '0 4px 16px rgba(0,0,0,0.12)',
+    boxShadow: 'var(--shadow-lg)',
     textTransform: 'none' as const,
     letterSpacing: 'normal',
   }
+
+  const arrowBg = isDark ? 'var(--bg-tertiary)' : 'var(--bg-primary)'
 
   const arrowStyle: React.CSSProperties = {
     position: 'absolute',
@@ -93,25 +92,22 @@ export function AdaptiveTooltip({
     height: 0,
     border: '6px solid transparent',
     ...(layout.showBelow
-      ? { top: '-12px', borderBottomColor: isDark ? bg : '#e2e8f0' }
-      : { bottom: '-12px', borderTopColor: isDark ? bg : '#e2e8f0' }),
+      ? { top: '-12px', borderBottomColor: 'var(--border-primary)' }
+      : { bottom: '-12px', borderTopColor: 'var(--border-primary)' }),
   }
 
-  // Segunda capa para tapar el borde en variante card
-  const arrowInnerStyle: React.CSSProperties | null =
-    !isDark
-      ? {
-          position: 'absolute',
-          left: layout.arrowLeft,
-          transform: 'translateX(-50%)',
-          width: 0,
-          height: 0,
-          border: '5px solid transparent',
-          ...(layout.showBelow
-            ? { top: '-10px', borderBottomColor: bg }
-            : { bottom: '-10px', borderTopColor: bg }),
-        }
-      : null
+  // Segunda capa para tapar el borde
+  const arrowInnerStyle: React.CSSProperties = {
+    position: 'absolute',
+    left: layout.arrowLeft,
+    transform: 'translateX(-50%)',
+    width: 0,
+    height: 0,
+    border: '5px solid transparent',
+    ...(layout.showBelow
+      ? { top: '-10px', borderBottomColor: arrowBg }
+      : { bottom: '-10px', borderTopColor: arrowBg }),
+  }
 
   return (
     <>
@@ -128,7 +124,7 @@ export function AdaptiveTooltip({
           <div style={tooltipStyle}>
             {content}
             <span style={arrowStyle} />
-            {arrowInnerStyle && <span style={arrowInnerStyle} />}
+            <span style={arrowInnerStyle} />
           </div>,
           document.body
         )}
