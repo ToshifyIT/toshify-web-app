@@ -1176,19 +1176,12 @@ export function ReporteFacturacionTab() {
         if (pu > 0) puMap.set(d.facturacion_id, pu)
       })
 
-      // Agregar proyectado_alquiler usando días reales de asignación
+      // Proyectado = precio_unitario × días de asignación (turnos_cobrados del recálculo)
+      // turnos_cobrados ya refleja los días reales de la asignación
       facturacionesTransformadas = facturacionesTransformadas.map((f: any) => {
         const pu = puMap.get(f.id) || 0
         if (pu <= 0) return { ...f, proyectado_alquiler: f.subtotal_alquiler || 0 }
-        // Usar fecha de inicio de asignación para calcular días hasta fin de semana
-        const primeraFecha = primeraFechaInicioLoad.get(f.conductor_id)
-        let diasProyectados = 7
-        if (primeraFecha) {
-          diasProyectados = Math.min(7, Math.max(1, Math.round((fechaFinPeriodoLoad.getTime() - primeraFecha.getTime()) / (1000 * 60 * 60 * 24)) + 1))
-        } else if (f.turnos_cobrados && f.turnos_cobrados > 0 && f.turnos_cobrados < 7) {
-          // Fallback: usar turnos_cobrados del recálculo si no hay fecha
-          diasProyectados = f.turnos_cobrados
-        }
+        const diasProyectados = (f.turnos_cobrados && f.turnos_cobrados > 0) ? f.turnos_cobrados : 7
         return { ...f, proyectado_alquiler: Math.round(pu * diasProyectados) }
       })
 
