@@ -1607,9 +1607,10 @@ export function ReporteFacturacionTab() {
         // Calcular días desde inicio de asignación hasta fin de semana (domingo)
         const primeraFecha = primeraFechaPorConductor.get(conductorId)
         const finSemanaCompleta = semanaActual.fin // domingo
-        const diasProyectados = primeraFecha
-          ? Math.max(diasRaw, Math.round((finSemanaCompleta.getTime() - primeraFecha.getTime()) / (1000 * 60 * 60 * 24)) + 1)
+        const diasDesdePrimeraFecha = primeraFecha
+          ? Math.round((finSemanaCompleta.getTime() - primeraFecha.getTime()) / (1000 * 60 * 60 * 24)) + 1
           : 7
+        const diasProyectados = Math.min(7, Math.max(1, diasDesdePrimeraFecha))
 
         prorrateo.proyectado_raw = diasRaw > 0 && diasRaw < diasProyectados
           ? Math.round((subtotalRaw / diasRaw) * diasProyectados)
