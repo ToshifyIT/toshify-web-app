@@ -1162,28 +1162,25 @@ export function ReporteFacturacionTab() {
         }
       })
 
-      // Construir mapa de alquiler proyectado: precio_unitario × días desde inicio asignación hasta domingo
-      const proyectadoMap = new Map<string, number>()
+      // Proyectado = precio_unitario × días de asignación (desde inicio hasta domingo)
+      // Usar primeraFechaInicioLoad calculada desde las asignaciones reales
+      const puMap = new Map<string, number>()
       ;(alquilerDetalleData || []).forEach((d: any) => {
         const pu = Number(d.precio_unitario) || 0
-        if (pu > 0) {
-          // Buscar la facturación para obtener el conductor_id
-          const facturacion = (facturacionesData || []).find((f: any) => f.id === d.facturacion_id)
-          const conductorId = facturacion?.conductor_id
-          const primeraFecha = conductorId ? primeraFechaInicioLoad.get(conductorId) : null
-          const finPeriodo = fechaFinPeriodoLoad
-          const diasProyectados = primeraFecha
-            ? Math.min(7, Math.max(1, Math.round((finPeriodo.getTime() - primeraFecha.getTime()) / (1000 * 60 * 60 * 24)) + 1))
-            : 7
-          proyectadoMap.set(d.facturacion_id, Math.round(pu * diasProyectados))
-        }
+        if (pu > 0) puMap.set(d.facturacion_id, pu)
       })
 
-      // Agregar proyectado_alquiler a cada facturación
-      facturacionesTransformadas = facturacionesTransformadas.map((f: any) => ({
-        ...f,
-        proyectado_alquiler: proyectadoMap.get(f.id) || f.subtotal_alquiler || 0,
-      }))
+      // Agregar proyectado_alquiler usando la fecha real de inicio de asignación
+      facturacionesTransformadas = facturacionesTransformadas.map((f: any) => {
+        const pu = puMap.get(f.id) || 0
+        if (pu <= 0) return { ...f, proyectado_alquiler: f.subtotal_alquiler || 0 }
+        const primeraFecha = primeraFechaInicioLoad.get(f.conductor_id)
+        const finPeriodo = fechaFinPeriodoLoad
+        const diasProyectados = primeraFecha
+          ? Math.min(7, Math.max(1, Math.round((finPeriodo.getTime() - primeraFecha.getTime()) / (1000 * 60 * 60 * 24)) + 1))
+          : 7
+        return { ...f, proyectado_alquiler: Math.round(pu * diasProyectados) }
+      })
 
       // Ordenar por nombre
       facturacionesTransformadas.sort((a: any, b: any) => 
