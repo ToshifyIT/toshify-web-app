@@ -90,6 +90,26 @@ export function DashboardKpisModule() {
                 <span className="stat-subtitle">{stats.pendienteDevolucion.subtitle}</span>
               </div>
             </div>
+            <div className="stat-card">
+              <div className="stat-content">
+                <span className="stat-value">{stats.reintegroReciente.value}</span>
+                <span className="stat-label">
+                  <span className="stat-label-text">REINTEGRO RECIENTE</span>
+                  <KpiInfoIcon text="Monto acumulado de garantías pendientes de devolución para conductores cuya fecha de baja es de 120 días o menos desde hoy." />
+                </span>
+                <span className="stat-subtitle">{stats.reintegroReciente.subtitle}</span>
+              </div>
+            </div>
+            <div className="stat-card">
+              <div className="stat-content">
+                <span className="stat-value">{stats.reintegroAntiguo.value}</span>
+                <span className="stat-label">
+                  <span className="stat-label-text">REINTEGRO VENCIDO</span>
+                  <KpiInfoIcon text="Monto acumulado de garantías pendientes de devolución para conductores cuya fecha de baja supera los 120 días o no tiene fecha registrada." />
+                </span>
+                <span className="stat-subtitle">{stats.reintegroAntiguo.subtitle}</span>
+              </div>
+            </div>
             {/* <div className="stat-card">
               <div className="stat-content">
                 <span className="stat-value">{stats.cobroPendiente.value}</span>
@@ -137,6 +157,26 @@ export function DashboardKpisModule() {
                   <KpiInfoIcon text="Suma de todos los saldos pendientes de los conductores (lo que deben) más la mora acumulada por pagos atrasados." />
                 </span>
                 <span className="stat-subtitle">{stats.totalSaldo.subtitle}</span>
+              </div>
+            </div>
+            <div className="stat-card">
+              <div className="stat-content">
+                <span className="stat-value">{stats.totalSaldoPendiente.value}</span>
+                <span className="stat-label">
+                  <span className="stat-label-text">SALDO PENDIENTE</span>
+                  <KpiInfoIcon text="Suma de todos los saldos pendientes de los conductores, sin incluir mora. Representa la deuda actual pura." />
+                </span>
+                <span className="stat-subtitle">{stats.totalSaldoPendiente.subtitle}</span>
+              </div>
+            </div>
+            <div className="stat-card">
+              <div className="stat-content">
+                <span className="stat-value">{stats.totalSaldoMora.value}</span>
+                <span className="stat-label">
+                  <span className="stat-label-text">TOTAL MORA</span>
+                  <KpiInfoIcon text="Suma de toda la mora acumulada por pagos atrasados de los conductores, sin incluir el saldo pendiente base." />
+                </span>
+                <span className="stat-subtitle">{stats.totalSaldoMora.subtitle}</span>
               </div>
             </div>
           </div>

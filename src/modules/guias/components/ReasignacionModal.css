@@ -5,7 +5,7 @@
   left: 0;
   right: 0;
   bottom: 0;
-  background: rgba(0, 0, 0, 0.5);
+  background: var(--bg-overlay);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -15,14 +15,15 @@
 
 /* Container */
 .modal-container {
-  background: #ffffff;
+  background: var(--bg-primary);
   border-radius: 16px;
   width: 100%;
   max-width: 480px;
   padding: 28px;
-  box-shadow: 0 25px 60px rgba(0, 0, 0, 0.15);
+  box-shadow: var(--shadow-lg);
   animation: modalSlideIn 0.3s ease;
   position: relative;
+  border: 1px solid var(--border-primary);
 }
 
 @keyframes modalSlideIn {
@@ -47,7 +48,7 @@
 .modal-title {
   font-size: 22px;
   font-weight: 600;
-  color: #1a1a2e;
+  color: var(--text-primary);
   margin: 0;
 }
 
@@ -55,7 +56,7 @@
   background: none;
   border: none;
   cursor: pointer;
-  color: #9ca3af;
+  color: var(--text-tertiary);
   padding: 4px;
   border-radius: 6px;
   transition: all 0.2s;
@@ -65,8 +66,8 @@
 }
 
 .modal-close:hover {
-  background: #f3f4f6;
-  color: #4b5563;
+  background: var(--bg-tertiary);
+  color: var(--text-secondary);
 }
 
 /* Sections */
@@ -84,14 +85,14 @@
 .section-indicator {
   width: 4px;
   height: 18px;
-  background: #3b82f6;
+  background: var(--color-info);
   border-radius: 2px;
 }
 
 .section-title {
   font-size: 11px;
   font-weight: 600;
-  color: #6b7280;
+  color: var(--text-secondary);
   letter-spacing: 1.2px;
   text-transform: uppercase;
 }
@@ -112,7 +113,7 @@
 
 .info-label {
   font-size: 12px;
-  color: #9ca3af;
+  color: var(--text-tertiary);
   font-weight: 500;
   text-transform: uppercase;
 }
@@ -120,7 +121,7 @@
 .info-value {
   font-size: 16px;
   font-weight: 600;
-  color: #1f2937;
+  color: var(--text-primary);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -129,7 +130,7 @@
 /* Vehículo Card */
 .vehiculo-label {
   font-size: 12px;
-  color: #9ca3af;
+  color: var(--text-tertiary);
   font-weight: 500;
   display: block;
   margin-bottom: 8px;
@@ -137,24 +138,24 @@
 }
 
 .vehiculo-content {
-  background: #f8fafc;
+  background: var(--bg-secondary);
   border-radius: 12px;
   padding: 16px;
   display: flex;
   align-items: center;
   gap: 14px;
-  border: 1px solid #f1f5f9;
+  border: 1px solid var(--border-secondary);
 }
 
 .vehiculo-icon {
   width: 48px;
   height: 48px;
-  background: #fef2f2;
+  background: var(--color-danger-light);
   border-radius: 10px;
   display: flex;
   align-items: center;
   justify-content: center;
-  color: #dc2626;
+  color: var(--color-danger);
   flex-shrink: 0;
 }
 
@@ -168,7 +169,7 @@
 .vehiculo-modelo {
   font-size: 15px;
   font-weight: 600;
-  color: #1f2937;
+  color: var(--text-primary);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -176,7 +177,7 @@
 
 .vehiculo-placa {
   font-size: 13px;
-  color: #6b7280;
+  color: var(--text-secondary);
 }
 
 /* Form */
@@ -187,7 +188,7 @@
 .form-label {
   font-size: 13px;
   font-weight: 500;
-  color: #4b5563;
+  color: var(--text-secondary);
   display: block;
   margin-bottom: 8px;
 }
@@ -201,29 +202,29 @@
 .select-icon {
   position: absolute;
   left: 14px;
-  color: #9ca3af;
+  color: var(--text-tertiary);
   pointer-events: none;
 }
 
 .select-input {
   width: 100%;
   padding: 14px 44px;
-  border: 1px solid #e5e7eb;
+  border: 1px solid var(--border-primary);
   border-radius: 10px;
   font-size: 14px;
-  color: #1f2937;
+  color: var(--text-primary);
   transition: all 0.2s;
-  background: white;
+  background: var(--bg-primary);
 }
 
 .select-input:focus {
   outline: none;
-  border-color: #3b82f6;
+  border-color: var(--color-info);
   box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
 }
 
 .select-input::placeholder {
-  color: #9ca3af;
+  color: var(--text-tertiary);
 }
 
 .guia-indicator {
@@ -231,22 +232,22 @@
   right: 14px;
   width: 12px;
   height: 12px;
-  background: #e5e7eb;
+  background: var(--border-primary);
   border-radius: 50%;
   transition: background-color 0.2s;
 }
 
-/* Dropdown List Styles (Required for functionality) */
+/* Dropdown List Styles */
 .dropdown-list {
   position: absolute;
   top: 100%;
   left: 0;
   right: 0;
   margin-top: 8px;
-  background: white;
-  border: 1px solid #f1f5f9;
+  background: var(--bg-primary);
+  border: 1px solid var(--border-secondary);
   border-radius: 12px;
-  box-shadow: 0 10px 25px rgba(0,0,0,0.1);
+  box-shadow: var(--shadow-lg);
   max-height: 240px;
   overflow-y: auto;
   z-index: 50;
@@ -270,12 +271,12 @@
 }
 
 .dropdown-item:hover {
-  background-color: #f8fafc;
+  background-color: var(--bg-hover);
 }
 
 .dropdown-item.selected {
-  background-color: #eff6ff;
-  color: #2563eb;
+  background-color: var(--color-info-light);
+  color: var(--color-info);
 }
 
 .dropdown-item-content {
@@ -288,8 +289,8 @@
   width: 32px;
   height: 32px;
   border-radius: 50%;
-  background-color: #f3f4f6;
-  color: #6b7280;
+  background-color: var(--bg-tertiary);
+  color: var(--text-secondary);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -298,18 +299,18 @@
 }
 
 .dropdown-item-avatar.active {
-  background-color: #dbeafe;
-  color: #2563eb;
+  background-color: var(--color-info-light);
+  color: var(--color-info);
 }
 
 .dropdown-check {
-  color: #2563eb;
+  color: var(--color-info);
 }
 
 .dropdown-empty {
   padding: 24px;
   text-align: center;
-  color: #9ca3af;
+  color: var(--text-tertiary);
   font-size: 14px;
 }
 
@@ -323,14 +324,14 @@
 }
 
 .dropdown-list::-webkit-scrollbar-thumb {
-  background-color: #e2e8f0;
+  background-color: var(--border-primary);
   border-radius: 20px;
 }
 
 /* Nota */
 .nota {
   font-size: 12px;
-  color: #9ca3af;
+  color: var(--text-tertiary);
   margin: 0;
   font-style: italic;
   margin-top: 12px;
@@ -343,7 +344,7 @@
   gap: 12px;
   margin-top: 28px;
   padding-top: 20px;
-  border-top: 1px solid #f1f5f9;
+  border-top: 1px solid var(--border-secondary);
 }
 
 .btn {
@@ -360,23 +361,23 @@
 }
 
 .btn-cancel {
-  background: #ffffff;
-  border: 1px solid #e5e7eb;
-  color: #4b5563;
+  background: var(--bg-primary);
+  border: 1px solid var(--border-primary);
+  color: var(--text-secondary);
 }
 
 .btn-cancel:hover {
-  background: #f9fafb;
-  border-color: #d1d5db;
+  background: var(--bg-secondary);
+  border-color: var(--border-primary);
 }
 
 .btn-confirm {
-  background: #3b82f6;
+  background: var(--color-info);
   color: #ffffff;
 }
 
 .btn-confirm:hover {
-  background: #2563eb;
+  background: var(--color-info-hover);
   box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
 }
 

@@ -127,7 +127,7 @@
   min-width: 0;
   min-height: 200px;
   position: relative;
-  overflow: hidden;
+  overflow: visible;
 }
 
 /* Tooltip */
@@ -230,11 +230,65 @@
   background: #f3f4f6;
 }
 
-/* Fila de variaciones */
+/* Fila de variaciones (legacy — eliminada del JSX) */
 .cobro-comparativo-variations {
   display: flex;
   gap: 12px;
   justify-content: center;
+}
+
+/* Sección de variación entre períodos y chart */
+.cobro-comparativo-variation-section {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+}
+
+.cobro-comparativo-variation-text {
+  margin: 0;
+  font-size: 12px;
+  color: var(--text-secondary, #64748b);
+  line-height: 1.6;
+  white-space: nowrap;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.cobro-comparativo-variation-pct {
+  font-weight: 700;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.cobro-comparativo-variation-pct--up {
+  color: #16a34a;
+}
+
+.cobro-comparativo-variation-pct--down {
+  color: #ef4444;
+}
+
+.cobro-comparativo-variation-pct--neutral {
+  color: #6b7280;
+}
+
+.cobro-comparativo-info-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 15px;
+  height: 15px;
+  border-radius: 50%;
+  font-size: 9px;
+  font-weight: 700;
+  font-style: italic;
+  border: 1.5px solid var(--text-secondary, #9ca3af);
+  color: var(--text-secondary, #9ca3af);
+  cursor: help;
+  line-height: 1;
+  flex-shrink: 0;
 }
 
 /* Desktop */

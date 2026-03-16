@@ -252,3 +252,10 @@
 .guias-module .dt-table {
   min-width: 1200px;
 }
+
+/* Reducir padding horizontal de celdas para aprovechar mejor el espacio */
+.guias-module .dt-table td,
+.guias-module .dt-table th {
+  padding-left: 3px !important;
+  padding-right: 3px !important;
+}
