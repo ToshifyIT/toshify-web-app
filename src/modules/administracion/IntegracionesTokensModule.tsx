@@ -1958,6 +1958,13 @@ export function IntegracionesTokensModule() {
   const [tokensLoading, setTokensLoading] = useState(false);
   const [tokensError, setTokensError] = useState<string | null>(null);
   const [tokensLoaded, setTokensLoaded] = useState(false);
+  const [cronJobCount, setCronJobCount] = useState<number | null>(null);
+
+  // Load cron job count from DB
+  useEffect(() => {
+    supabase.from('cron_jobs').select('id', { count: 'exact', head: true })
+      .then(({ count }) => { if (count !== null) setCronJobCount(count); });
+  }, []);
 
   const fetchTokens = useCallback(async () => {
     if (tokensLoaded) return;
@@ -2002,7 +2009,7 @@ export function IntegracionesTokensModule() {
   }, [activeTab, tokensLoaded, fetchTokens]);
 
   const activeCount = INTEGRATIONS.filter(s => s.status === 'active').length;
-  const cronCount = INTEGRATIONS.reduce((acc, s) => acc + s.cronJobs.length, 0);
+  const cronCount = cronJobCount ?? INTEGRATIONS.reduce((acc, s) => acc + s.cronJobs.length, 0);
 
   return (
     <div className="module-container" style={{ maxWidth: '1100px' }}>

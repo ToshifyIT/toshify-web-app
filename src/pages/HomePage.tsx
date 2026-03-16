@@ -1120,9 +1120,6 @@ export function HomePage() {
           overflow-x: hidden;
           background: var(--bg-secondary);
           padding: 32px;
-          display: flex;
-          flex-direction: column;
-          min-height: 0;
         }
 
         .content-card {
