@@ -7719,35 +7719,32 @@ export function ReporteFacturacionTab() {
               />
             )}
           </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
-            <span style={{ fontSize: '11px', color: 'var(--text-tertiary)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '3px', flexWrap: 'wrap' }}>
+            <span style={{ fontSize: '10px', color: 'var(--text-tertiary)' }}>
               {row.original.vehiculo_patente || '-'}
             </span>
             {(() => {
               const o = row.original
+              const s = { fontSize: '8px', padding: '0px 4px', lineHeight: '14px' }
               if (o.tipo_alquiler === 'CARGO') {
-                return <span className="dt-badge dt-badge-solid-blue" style={{ fontSize: '9px', padding: '1px 5px' }}>CARGO</span>
+                return <span className="dt-badge dt-badge-solid-blue" style={s}>CARGO</span>
               }
-              // TURNO: determinar si es diurno, nocturno o mixto usando prorrateo
               const diurno = o.prorrateo_diurno_dias || 0
               const nocturno = o.prorrateo_nocturno_dias || 0
-              let label = 'TURNO'
-              if (diurno > 0 && nocturno === 0) label = 'DIURNO'
-              else if (nocturno > 0 && diurno === 0) label = 'NOCTURNO'
-              else if (diurno > 0 && nocturno > 0) label = 'D+N'
-              return <span className="dt-badge dt-badge-solid-gray" style={{ fontSize: '9px', padding: '1px 5px' }}>{label}</span>
+              const label = diurno > 0 && nocturno === 0 ? 'D' : nocturno > 0 && diurno === 0 ? 'N' : diurno > 0 && nocturno > 0 ? 'D+N' : 'T'
+              return <span className="dt-badge dt-badge-solid-gray" style={s}>{label}</span>
             })()}
             {row.original.tiene_gnc === false && row.original.vehiculo_patente && (
-              <span className="dt-badge dt-badge-orange" style={{ fontSize: '9px', padding: '1px 5px' }}>Sin GNC</span>
+              <span className="dt-badge dt-badge-orange" style={{ fontSize: '8px', padding: '0px 4px', lineHeight: '14px' }}>!GNC</span>
             )}
             {row.original.permiso_efectivo === 'Activado' && (
-              <span className="dt-badge" style={{ fontSize: '9px', padding: '1px 5px', background: 'rgba(34,197,94,0.15)', color: '#16a34a', border: '1px solid rgba(34,197,94,0.3)' }}>
-                <Zap size={8} style={{ marginRight: '2px' }} />Efectivo
+              <span className="dt-badge" style={{ fontSize: '8px', padding: '0px 4px', lineHeight: '14px', background: 'rgba(34,197,94,0.15)', color: '#16a34a' }}>
+                <Zap size={7} />$
               </span>
             )}
             {row.original.permiso_efectivo === 'Desactivado' && (
-              <span className="dt-badge" style={{ fontSize: '9px', padding: '1px 5px', background: 'rgba(239,68,68,0.1)', color: '#dc2626', border: '1px solid rgba(239,68,68,0.25)' }}>
-                <ZapOff size={8} style={{ marginRight: '2px' }} />Sin Efectivo
+              <span className="dt-badge" style={{ fontSize: '8px', padding: '0px 4px', lineHeight: '14px', background: 'rgba(239,68,68,0.1)', color: '#dc2626' }}>
+                <ZapOff size={7} />
               </span>
             )}
           </div>
@@ -7809,7 +7806,7 @@ export function ReporteFacturacionTab() {
     {
       id: 'alquiler_desglose',
       accessorFn: (row) => row.subtotal_alquiler,
-      header: 'Alquiler',
+      header: 'Alq.',
       enableSorting: true,
       size: 100,
       cell: ({ row }) => {
@@ -7833,39 +7830,12 @@ export function ReporteFacturacionTab() {
         }
 
         return (
-          <div style={{ fontSize: '11px', minWidth: '80px', cursor: 'pointer' }} onClick={handleClick}>
-            <div style={{ fontWeight: 600, color: 'var(--text-primary)', marginBottom: '4px' }}>
-              {formatCurrency(alquiler)}
+          <div style={{ cursor: 'pointer' }} onClick={handleClick}>
+            <div style={{ fontWeight: 600 }}>{formatCurrency(alquiler)}</div>
+            <div style={{ width: '60px', height: '5px', backgroundColor: '#e5e7eb', borderRadius: '3px', overflow: 'hidden', marginTop: '2px' }}>
+              <div style={{ width: `${porcentajeCubierto}%`, height: '100%', backgroundColor: cubreCuota ? '#10b981' : porcentajeCubierto >= 70 ? '#f59e0b' : '#ef4444', borderRadius: '3px' }} />
             </div>
-            {/* Barra de progreso: cobertura con cobro app Cabify */}
-            <div style={{ 
-              width: '100%', 
-              height: '8px', 
-              backgroundColor: '#e5e7eb', 
-              borderRadius: '4px',
-              overflow: 'hidden',
-              border: '1px solid #d1d5db'
-            }}>
-              <div style={{ 
-                width: `${Math.max(porcentajeCubierto, 0)}%`, 
-                height: '100%', 
-                backgroundColor: cubreCuota ? '#10b981' : porcentajeCubierto >= 70 ? '#f59e0b' : '#ef4444',
-                borderRadius: '3px',
-                transition: 'width 0.3s ease',
-                minWidth: porcentajeCubierto > 0 ? '4px' : '0'
-              }} />
-            </div>
-            <div style={{ 
-              fontSize: '9px', 
-              color: cubreCuota ? '#10b981' : '#6b7280', 
-              marginTop: '3px',
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'center'
-            }}>
-              <span>{cobroApp === 0 ? 'Sin datos Cabify' : `${porcentajeCubierto}% cubierto`}</span>
-              {cubreCuota && <span style={{ color: '#10b981', fontWeight: 600 }}>✓</span>}
-            </div>
+            <span style={{ fontSize: '9px', color: cubreCuota ? '#10b981' : '#6b7280' }}>{cobroApp === 0 ? 'Sin datos' : `${porcentajeCubierto}%`}{cubreCuota ? ' ✓' : ''}</span>
           </div>
         )
       }
@@ -7873,7 +7843,7 @@ export function ReporteFacturacionTab() {
     {
       id: 'garantia_desglose',
       accessorFn: (row) => row.subtotal_garantia,
-      header: 'Garantía',
+      header: 'Gar.',
       enableSorting: true,
       size: 90,
       cell: ({ row }) => {
@@ -7907,39 +7877,12 @@ export function ReporteFacturacionTab() {
         }
 
         return (
-          <div style={{ fontSize: '11px', minWidth: '70px' }}>
-            <div style={{ fontWeight: 500, color: 'var(--text-primary)', marginBottom: '4px' }}>
-              {formatCurrency(garantia)}
+          <div>
+            <div style={{ fontWeight: 500 }}>{formatCurrency(garantia)}</div>
+            <div style={{ width: '60px', height: '5px', backgroundColor: '#e5e7eb', borderRadius: '3px', overflow: 'hidden', marginTop: '2px' }}>
+              <div style={{ width: `${porcentajeCubierto}%`, height: '100%', backgroundColor: cubreGarantia ? '#10b981' : porcentajeCubierto >= 70 ? '#f59e0b' : '#ef4444', borderRadius: '3px' }} />
             </div>
-            {/* Barra de progreso: cuánto cubrió con restante de Cabify */}
-            <div style={{ 
-              width: '100%', 
-              height: '8px', 
-              backgroundColor: '#e5e7eb', 
-              borderRadius: '4px',
-              overflow: 'hidden',
-              border: '1px solid #d1d5db'
-            }}>
-              <div style={{ 
-                width: `${Math.max(porcentajeCubierto, 0)}%`, 
-                height: '100%', 
-                backgroundColor: cubreGarantia ? '#10b981' : porcentajeCubierto >= 70 ? '#f59e0b' : '#ef4444',
-                borderRadius: '3px',
-                transition: 'width 0.3s ease',
-                minWidth: porcentajeCubierto > 0 ? '4px' : '0'
-              }} />
-            </div>
-            <div style={{ 
-              fontSize: '9px', 
-              color: cubreGarantia ? '#10b981' : '#6b7280', 
-              marginTop: '3px',
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'center'
-            }}>
-              <span>{cuotaNum && `${cuotaNum}`}</span>
-              {cubreGarantia && <span style={{ color: '#10b981', fontWeight: 600 }}>✓</span>}
-            </div>
+            <span style={{ fontSize: '9px', color: cubreGarantia ? '#10b981' : '#6b7280' }}>{cuotaNum}{cubreGarantia ? ' ✓' : ''}</span>
           </div>
         )
       }
@@ -7947,53 +7890,21 @@ export function ReporteFacturacionTab() {
     {
       id: 'proyectado_alquiler',
       accessorFn: (row) => row.proyectado_alquiler || 0,
-      header: 'Proyectado',
+      header: 'Proy.',
       enableSorting: true,
-      size: 100,
       cell: ({ row }) => {
         const proyectado = row.original.proyectado_alquiler || 0
         const alquiler = row.original.subtotal_alquiler || 0
-
-        if (proyectado === 0) {
-          return <span style={{ color: 'var(--text-muted)', fontSize: '11px' }}>-</span>
-        }
-
+        if (proyectado === 0) return <span style={{ color: 'var(--text-muted)' }}>-</span>
         const porcentaje = proyectado > 0 ? Math.min(100, Math.round((alquiler / proyectado) * 100)) : 0
         const completo = alquiler >= proyectado && alquiler > 0
-
         return (
-          <div style={{ fontSize: '11px', minWidth: '80px' }}>
-            <div style={{ fontWeight: 600, color: 'var(--text-primary)', marginBottom: '4px' }}>
-              {formatCurrency(proyectado)}
+          <div>
+            <div style={{ fontWeight: 600 }}>{formatCurrency(proyectado)}</div>
+            <div style={{ width: '60px', height: '5px', backgroundColor: '#e5e7eb', borderRadius: '3px', overflow: 'hidden', marginTop: '2px' }}>
+              <div style={{ width: `${porcentaje}%`, height: '100%', backgroundColor: completo ? '#10b981' : porcentaje >= 70 ? '#f59e0b' : '#ef4444', borderRadius: '3px' }} />
             </div>
-            <div style={{ 
-              width: '100%', 
-              height: '8px', 
-              backgroundColor: '#e5e7eb', 
-              borderRadius: '4px',
-              overflow: 'hidden',
-              border: '1px solid #d1d5db'
-            }}>
-              <div style={{ 
-                width: `${Math.max(porcentaje, 0)}%`, 
-                height: '100%', 
-                backgroundColor: completo ? '#10b981' : porcentaje >= 70 ? '#f59e0b' : '#ef4444',
-                borderRadius: '3px',
-                transition: 'width 0.3s ease',
-                minWidth: porcentaje > 0 ? '4px' : '0'
-              }} />
-            </div>
-            <div style={{ 
-              fontSize: '9px', 
-              color: completo ? '#10b981' : '#6b7280', 
-              marginTop: '3px',
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'center'
-            }}>
-              <span>{porcentaje}%</span>
-              {completo && <span style={{ color: '#10b981', fontWeight: 600 }}>✓</span>}
-            </div>
+            <span style={{ fontSize: '9px', color: completo ? '#10b981' : '#6b7280' }}>{porcentaje}%</span>
           </div>
         )
       }
@@ -8054,7 +7965,7 @@ export function ReporteFacturacionTab() {
     },
     {
       id: 'incidencias',
-      header: 'Incidencias',
+      header: 'Inc.',
       size: 80,
       minSize: 70,
       accessorFn: (row) => row.monto_penalidades || 0,
@@ -8766,25 +8677,7 @@ export function ReporteFacturacionTab() {
             </div>
           )}
 
-          {/* Filtros para Vista Previa */}
-          <div className="fact-filtros-columna">
-            <div className="fact-filtros-grupo">
-              {buscarConductor && (
-                <button
-                  className="fact-filtro-limpiar"
-                  onClick={() => {
-                    setBuscarConductor('')
-                  }}
-                >
-                  Limpiar filtros
-                </button>
-              )}
-            </div>
-
-            <div className="fact-export-btn-group">
-              {/* Botones movidos al headerAction del DataTable */}
-            </div>
-          </div>
+          {/* Botones movidos al headerAction del DataTable */}
 
           {/* Filtros rápidos de alertas */}
           {(() => {
