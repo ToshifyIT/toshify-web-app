@@ -1317,7 +1317,16 @@ export function IncidenciasModule() {
           onOpenChange={setOpenFilterId}
         />
       ),
-      cell: ({ row }) => row.original.conductor_display || '-'
+      cell: ({ row }) => {
+        const turno = row.original.turno
+        const color = turno === 'Diurno' ? 'yellow' : turno === 'Nocturno' ? 'blue' : 'gray'
+        return (
+          <div>
+            <div style={{ fontSize: '12px' }}>{row.original.conductor_display || '-'}</div>
+            {turno && <span className={`dt-badge dt-badge-${color}`} style={{ fontSize: '9px', padding: '1px 5px' }}>{turno}</span>}
+          </div>
+        )
+      }
     },
     {
       accessorKey: 'monto',
@@ -1346,26 +1355,6 @@ export function IncidenciasModule() {
         if (!tipoId) return '-'
         const tipo = tiposCobroDescuento.find(t => t.id === tipoId)
         return tipo?.nombre || '-'
-      }
-    },
-    {
-      accessorKey: 'turno',
-      header: () => (
-        <ExcelColumnFilter
-          label="Turno"
-          options={turnosUnicos}
-          selectedValues={turnoFilter}
-          onSelectionChange={setTurnoFilter}
-          filterId="inc_cobro_turno"
-          openFilterId={openFilterId}
-          onOpenChange={setOpenFilterId}
-        />
-      ),
-      cell: ({ row }) => {
-        const turno = row.original.turno
-        if (!turno) return '-'
-        const color = turno === 'Diurno' ? 'yellow' : turno === 'Nocturno' ? 'blue' : 'gray'
-        return <span className={`dt-badge dt-badge-${color}`}>{turno}</span>
       }
     },
     {
@@ -1406,27 +1395,22 @@ export function IncidenciasModule() {
       }
     },
     {
-      accessorKey: 'registrado_por',
-      header: 'Responsable',
-      cell: ({ row }) => row.original.registrado_por || '-'
-    },
-    {
       accessorKey: 'created_at',
       header: 'Creado',
       cell: ({ row }) => {
         if (!row.original.created_at) return '-'
-        return new Date(row.original.created_at).toLocaleDateString('es-AR', {
-          day: '2-digit',
-          month: '2-digit',
-          year: 'numeric',
-          hour: '2-digit',
-          minute: '2-digit'
-        })
+        const d = new Date(row.original.created_at)
+        return (
+          <div style={{ fontSize: '11px', lineHeight: '1.3' }}>
+            <div>{d.toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: '2-digit' })}</div>
+            <div style={{ color: 'var(--text-tertiary)' }}>{d.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' })}</div>
+          </div>
+        )
       }
     },
     {
       id: 'acciones',
-      header: 'Acciones',
+      header: '',
       cell: ({ row }) => {
         const penalidad = penalidades.find(p => p.incidencia_id === row.original.id)
         const fueRechazada = penalidad?.rechazado === true
