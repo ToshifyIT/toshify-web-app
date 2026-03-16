@@ -1726,14 +1726,19 @@ export function ReporteFacturacionTab() {
       //   b) Cuotas de penalidades fraccionadas que corresponden a esta semana
       
       // a) Penalidades aplicadas completas en esta semana
-      const { data: penalidadesCompletas } = await (supabase
+      const { data: penalidadesCompletasRaw } = await (supabase
         .from('penalidades') as any)
-        .select('id, conductor_id, monto, detalle, observaciones, incidencia_id, tipos_cobro_descuento(categoria, es_a_favor, nombre), incidencias(descripcion)')
+        .select('id, conductor_id, monto, detalle, observaciones, incidencia_id, cantidad_cuotas, tipos_cobro_descuento(categoria, es_a_favor, nombre), incidencias(descripcion, estado_facturacion)')
         .eq('aplicado', true)
         .eq('fraccionado', false)
         .neq('rechazado', true)
         .eq('semana_aplicacion', semanaDelPeriodo)
         .eq('anio_aplicacion', anioDelPeriodo)
+      // Filtrar penalidades cuya incidencia fue rechazada o eliminada
+      const penalidadesCompletas = (penalidadesCompletasRaw || []).filter((p: any) => {
+        if (!p.incidencias) return true // penalidad sin incidencia (standalone)
+        return p.incidencias.estado_facturacion !== 'rechazado'
+      })
       
       // b) Cuotas fraccionadas hasta esta semana + pagos para cruzar
       const [cuotasSemanaRes, pagosCuotasPreviewRes, todasCuotasPenIdsPreviewRes] = await Promise.all([
@@ -2585,7 +2590,7 @@ export function ReporteFacturacionTab() {
       // NOTA: multas_historico DESACTIVADO temporalmente — reactivar cuando se defina el flujo
       const MULTAS_HABILITADAS = false
       const [penalidadesRes, ticketsRes, saldosRes, excesosRes, cabifyRes, garantiasRes, cobrosRes, multasRes, dniMapeoResRecalc] = await Promise.all([
-        (supabase.from('penalidades') as any).select('*, tipos_cobro_descuento(categoria, es_a_favor, nombre), incidencias(descripcion)').in('conductor_id', conductorIds).eq('semana_aplicacion', semanaNum).eq('anio_aplicacion', anioNum).eq('aplicado', true).eq('fraccionado', false).neq('rechazado', true),
+        (supabase.from('penalidades') as any).select('*, tipos_cobro_descuento(categoria, es_a_favor, nombre), incidencias(descripcion, estado_facturacion)').in('conductor_id', conductorIds).eq('semana_aplicacion', semanaNum).eq('anio_aplicacion', anioNum).eq('aplicado', true).eq('fraccionado', false).neq('rechazado', true),
         (supabase.from('tickets_favor') as any).select('*').in('conductor_id', conductorIds).eq('estado', 'aprobado'),
         (supabase.from('saldos_conductores') as any).select('conductor_id, saldo_actual').in('conductor_id', conductorIds),
         (supabase.from('excesos_kilometraje') as any).select('*').in('conductor_id', conductorIds).eq('aplicado', false),
@@ -2643,7 +2648,11 @@ export function ReporteFacturacionTab() {
         (todasCuotasPenIdsRes.data || []).map((pc: any) => pc.penalidad_id).filter(Boolean)
       )
 
-      const penalidades = penalidadesRes.data || []
+      // Filtrar penalidades cuya incidencia fue rechazada
+      const penalidades = (penalidadesRes.data || []).filter((p: any) => {
+        if (!p.incidencias) return true
+        return p.incidencias.estado_facturacion !== 'rechazado'
+      })
       const tickets = ticketsRes.data || []
       const saldos = saldosRes.data || []
       const excesosArr = excesosRes.data || []
