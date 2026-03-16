@@ -2088,10 +2088,7 @@ export function IncidenciasModule() {
         Swal.fire('Error', 'Por favor ingrese el monto del cobro', 'warning')
         return
       }
-      if (!incidenciaForm.estado_vehiculo) {
-        Swal.fire('Error', 'Por favor seleccione el estado del vehículo', 'warning')
-        return
-      }
+      // estado_vehiculo ya no es requerido (campo eliminado del formulario)
     }
 
     setSaving(true)
@@ -4358,6 +4355,8 @@ function IncidenciaForm({ formData, setFormData, estados, vehiculos, conductores
               ))}
             </select>
           </div>
+        </div>
+        <div className="form-row" style={{ gridTemplateColumns: '1fr 1fr' }}>
           <div className="form-group">
             <label>Sede</label>
             <select value={formData.sede_id || ''} onChange={e => setFormData((prev: any) => ({ ...prev, sede_id: e.target.value }))} disabled={disabled}>
@@ -4366,6 +4365,16 @@ function IncidenciaForm({ formData, setFormData, estados, vehiculos, conductores
                 <option key={s.id} value={s.id}>{s.nombre}</option>
               ))}
             </select>
+          </div>
+          <div className="form-group">
+            <label>Registrado por</label>
+            <input
+              type="text"
+              value={formData.registrado_por || ''}
+              readOnly
+              className="form-input-readonly"
+              placeholder="Se asigna automáticamente"
+            />
           </div>
         </div>
         {/* Monto y KM Excedidos - solo para cobro */}
@@ -4435,18 +4444,7 @@ function IncidenciaForm({ formData, setFormData, estados, vehiculos, conductores
             </div>
           </div>
         )}
-        <div className="form-row">
-          <div className="form-group">
-            <label>Registrado por</label>
-            <input
-              type="text"
-              value={formData.registrado_por || ''}
-              readOnly
-              className="form-input-readonly"
-              placeholder="Se asigna automáticamente"
-            />
-          </div>
-        </div>
+        {/* Registrado por ya está en la fila de Sede */}
       </div>
 
       <div className="form-section">
