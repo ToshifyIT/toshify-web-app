@@ -386,31 +386,35 @@ export function CobrosFraccionadosTab({ periodoActual }: CobrosFraccionadosTabPr
       }
 
       // 3. Actualizar saldo_actual en saldos_conductores
-      const { data: saldoExistente } = await (supabase.from('saldos_conductores') as any)
-        .select('id, saldo_actual')
-        .eq('conductor_id', cobro.conductor_id)
-        .single()
+      // Las cuotas de penalidades NO afectan el saldo — ya se descuentan en la facturación semanal
+      // Solo los cobros fraccionados (saldos) afectan el saldo
+      if (!esPenalidad) {
+        const { data: saldoExistente } = await (supabase.from('saldos_conductores') as any)
+          .select('id, saldo_actual')
+          .eq('conductor_id', cobro.conductor_id)
+          .single()
 
-      if (saldoExistente) {
-        const nuevoSaldo = saldoExistente.saldo_actual + formValues.monto
-        await (supabase.from('saldos_conductores') as any)
-          .update({
-            saldo_actual: nuevoSaldo,
-            ultima_actualizacion: new Date().toISOString()
+        if (saldoExistente) {
+          const nuevoSaldo = saldoExistente.saldo_actual + formValues.monto
+          await (supabase.from('saldos_conductores') as any)
+            .update({
+              saldo_actual: nuevoSaldo,
+              ultima_actualizacion: new Date().toISOString()
+            })
+            .eq('id', saldoExistente.id)
+
+          // Registrar movimiento en kardex (control_saldos)
+          await insertControlSaldo({
+            conductorId: cobro.conductor_id || '',
+            semana: formValues.semana,
+            anio: formValues.anio,
+            tipoMovimiento: 'pago_cuota',
+            montoMovimiento: formValues.monto,
+            saldoPendiente: nuevoSaldo,
+            referencia: `Pago cuota #${cuota.numero_cuota} - Saldo fraccionado`,
+            userName: profile?.full_name,
           })
-          .eq('id', saldoExistente.id)
-
-        // Registrar movimiento en kardex (control_saldos)
-        await insertControlSaldo({
-          conductorId: cobro.conductor_id || '',
-          semana: formValues.semana,
-          anio: formValues.anio,
-          tipoMovimiento: 'pago_cuota',
-          montoMovimiento: formValues.monto,
-          saldoPendiente: nuevoSaldo,
-          referencia: `Pago cuota #${cuota.numero_cuota} - ${esPenalidad ? 'Penalidad fraccionada' : 'Saldo fraccionado'}`,
-          userName: profile?.full_name,
-        })
+        }
       }
 
       // 4. Registrar en abonos_conductores como audit trail
