@@ -342,6 +342,7 @@ export function ReporteFacturacionTab() {
       horario: string
       dias: number
       nota: string
+      horaEntrega?: string
     }[]
   } | null>(null)
   const [loadingDias, setLoadingDias] = useState(false)
@@ -631,7 +632,7 @@ export function ReporteFacturacionTab() {
       // Construir un Set de fechas cubiertas con su horario
       const diasNombres = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado']
       const diasCubiertos = new Map<string, string>() // fecha -> horario
-      const historial: { fechaInicio: string; fechaFin: string; padreEstado: string; horario: string; dias: number; nota: string }[] = []
+      const historial: { fechaInicio: string; fechaFin: string; padreEstado: string; horario: string; dias: number; nota: string; horaEntrega?: string }[] = []
 
       for (const ac of (asignacionesCond || []) as any[]) {
         const asignacion = ac.asignaciones
@@ -704,7 +705,12 @@ export function ReporteFacturacionTab() {
           }
           cursorAc.setDate(cursorAc.getDate() + 1)
         }
-        historial.push({ fechaInicio: acInicioStr, fechaFin: acFinStr, padreEstado: estadoPadre, horario, dias: diasContados, nota: diasContados > 0 ? `${format(efectivoInicio, 'dd/MM')} → ${format(efectivoFin, 'dd/MM')}` : 'Días ya cubiertos' })
+        // Extraer hora de entrega real del timestamp original
+        const rawTimestampEntrega = ac.fecha_inicio || asignacion.fecha_inicio || ''
+        const horaEntregaMatch = rawTimestampEntrega.match?.(/T?(\d{2}:\d{2})/)
+        const horaEntrega = horaEntregaMatch ? horaEntregaMatch[1] : undefined
+
+        historial.push({ fechaInicio: acInicioStr, fechaFin: acFinStr, padreEstado: estadoPadre, horario, dias: diasContados, nota: diasContados > 0 ? `${format(efectivoInicio, 'dd/MM')} → ${format(efectivoFin, 'dd/MM')}` : 'Días ya cubiertos', horaEntrega })
       }
 
       // Generar los 7 días de la semana con su estado
@@ -1170,15 +1176,19 @@ export function ReporteFacturacionTab() {
         if (pu > 0) puMap.set(d.facturacion_id, pu)
       })
 
-      // Agregar proyectado_alquiler usando la fecha real de inicio de asignación
+      // Agregar proyectado_alquiler usando días reales de asignación
       facturacionesTransformadas = facturacionesTransformadas.map((f: any) => {
         const pu = puMap.get(f.id) || 0
         if (pu <= 0) return { ...f, proyectado_alquiler: f.subtotal_alquiler || 0 }
+        // Usar fecha de inicio de asignación para calcular días hasta fin de semana
         const primeraFecha = primeraFechaInicioLoad.get(f.conductor_id)
-        const finPeriodo = fechaFinPeriodoLoad
-        const diasProyectados = primeraFecha
-          ? Math.min(7, Math.max(1, Math.round((finPeriodo.getTime() - primeraFecha.getTime()) / (1000 * 60 * 60 * 24)) + 1))
-          : 7
+        let diasProyectados = 7
+        if (primeraFecha) {
+          diasProyectados = Math.min(7, Math.max(1, Math.round((fechaFinPeriodoLoad.getTime() - primeraFecha.getTime()) / (1000 * 60 * 60 * 24)) + 1))
+        } else if (f.turnos_cobrados && f.turnos_cobrados > 0 && f.turnos_cobrados < 7) {
+          // Fallback: usar turnos_cobrados del recálculo si no hay fecha
+          diasProyectados = f.turnos_cobrados
+        }
         return { ...f, proyectado_alquiler: Math.round(pu * diasProyectados) }
       })
 
@@ -2567,9 +2577,9 @@ export function ReporteFacturacionTab() {
 
         const prorrateo = prorrateoRecalcMap.get(conductorData.id) || { CARGO: 0, TURNO_DIURNO: 0, TURNO_NOCTURNO: 0 }
         const totalDiasBrutos = Math.min(7, prorrateo.CARGO + prorrateo.TURNO_DIURNO + prorrateo.TURNO_NOCTURNO)
-        // Descuento automático por hora de entrega
-        const descuentoRecalc = descuentosPorHoraRecalc.get(conductorData.id) || 0
-        const totalDias = Math.max(0, totalDiasBrutos - descuentoRecalc)
+        // Descuento por hora de entrega desactivado — el timestamp del sistema no es la hora real de entrega
+        // Se implementará cuando se use la hora de "Entrega Real" del módulo de asignaciones
+        const totalDias = totalDiasBrutos
 
         // Excluir conductores con 0 días, SALVO que tengan penalidades pendientes
         if (totalDias === 0 && !dnisConPenalidadesRecalc.has(control.numero_dni)) continue
@@ -9217,10 +9227,30 @@ export function ReporteFacturacionTab() {
                           const datosActuales = modoVistaPrevia ? vistaPreviaData : facturaciones;
                           const conductorData = datosActuales.find(f => f.conductor_id === diasModalData.conductorId);
                           const alerta = conductorData?.alerta_prorrateo_ingreso;
+                          // Si no hay alerta de la facturación, calcular desde el historial de asignaciones
+                          const alertaLocal = (() => {
+                            if (alerta) return alerta;
+                            // Buscar primera asignación con hora de entrega
+                            const primeraConHora = diasModalData.historial.find(h => h.horaEntrega && h.dias > 0);
+                            if (!primeraConHora?.horaEntrega) return null;
+                            const [hh] = primeraConHora.horaEntrega.split(':').map(Number);
+                            const horario = primeraConHora.horario?.toUpperCase();
+                            const esDiurno = horario === 'DIURNO' || horario === 'TURNO_DIURNO';
+                            const esCargo = horario === 'CARGO' || horario === 'A CARGO';
+                            if (esDiurno && hh >= (horasCorteTurno?.diurno || 12)) {
+                              const primerDiaTrabajado = diasModalData.dias.find(dd => dd.trabajado);
+                              return { tipo: 'dia_completo', fecha_entrega: primerDiaTrabajado?.fecha, hora_entrega: primeraConHora.horaEntrega, descuento_turnos: 1 };
+                            }
+                            if (esCargo && hh >= (horasCorteTurno?.cargo || 14)) {
+                              const primerDiaTrabajado = diasModalData.dias.find(dd => dd.trabajado);
+                              return { tipo: 'medio_turno', fecha_entrega: primerDiaTrabajado?.fecha, hora_entrega: primeraConHora.horaEntrega, descuento_turnos: 0.5 };
+                            }
+                            return null;
+                          })();
                           return diasModalData.dias.map((d, i) => {
                             // Detectar si este día es el de la entrega con descuento
-                            const esDiaDescuento = alerta && d.trabajado && alerta.fecha_entrega === d.fecha;
-                            const esCompleto = esDiaDescuento && alerta.tipo === 'dia_completo';
+                            const esDiaDescuento = alertaLocal && d.trabajado && alertaLocal.fecha_entrega === d.fecha;
+                            const esCompleto = esDiaDescuento && alertaLocal?.tipo === 'dia_completo';
                             const colorDia = esDiaDescuento
                               ? (esCompleto ? '#ef4444' : '#d97706')
                               : (d.trabajado ? '#10b981' : '#d1d5db');
@@ -9250,7 +9280,7 @@ export function ReporteFacturacionTab() {
                                 </span>
                                 {esDiaDescuento ? (
                                   <span style={{ fontSize: '10px', color: colorDia, fontWeight: 700 }}>
-                                    {d.horario} · Desc. {alerta.descuento_turnos === 1 ? '1 turno' : `½ turno`}
+                                    {d.horario} · Desc. {alertaLocal?.descuento_turnos === 1 ? '1 turno' : `½ turno`}
                                   </span>
                                 ) : d.trabajado ? (
                                   <span style={{ fontSize: '10px', color: '#10b981', fontWeight: 600 }}>{d.horario}</span>
@@ -9321,6 +9351,11 @@ export function ReporteFacturacionTab() {
                                   <span style={{ fontSize: '10px', color: 'var(--text-secondary)' }}>
                                     {h.dias > 0 ? `${h.dias} día${h.dias > 1 ? 's' : ''} contados` : h.nota}
                                   </span>
+                                  {h.horaEntrega && (
+                                    <span style={{ fontSize: '9px', padding: '1px 5px', borderRadius: '3px', background: 'rgba(59, 130, 246, 0.1)', color: '#3b82f6', fontWeight: 500 }}>
+                                      Entrega: {h.horaEntrega}hs
+                                    </span>
+                                  )}
                                   <span style={{
                                     fontSize: '9px', padding: '1px 5px', borderRadius: '3px', fontWeight: 500,
                                     background: `${estadoColor}15`, color: estadoColor,
