@@ -1559,6 +1559,9 @@ export function ReporteFacturacionTab() {
       }
       
       // Calcular montos por día usando precios históricos
+      // También rastrear la fecha de inicio más temprana por conductor para el proyectado
+      const primeraFechaPorConductor = new Map<string, Date>()
+
       for (const [conductorId, asignaciones] of asignacionesPorConductorVP.entries()) {
         const prorrateo = prorrateoMap.get(conductorId)
         if (!prorrateo) continue
@@ -1567,6 +1570,12 @@ export function ReporteFacturacionTab() {
           const codigo = codigosPorModalidadVP[asig.modalidad]
           const montoKey = `monto_${asig.modalidad}` as keyof ProrrateoVistaPrevia
           
+          // Rastrear fecha de inicio más temprana para este conductor
+          const existing = primeraFechaPorConductor.get(conductorId)
+          if (!existing || asig.fechaInicio < existing) {
+            primeraFechaPorConductor.set(conductorId, asig.fechaInicio)
+          }
+
           const currentDate = new Date(asig.fechaInicio)
           while (currentDate <= asig.fechaFin) {
             const precioDiario = getPrecioEnFechaVP(codigo, currentDate)
@@ -1575,11 +1584,19 @@ export function ReporteFacturacionTab() {
           }
         }
         
-        // Calcular proyectado ANTES de redondear para evitar error de redondeo intermedio
+        // Calcular proyectado: desde el día que tomó el vehículo hasta el domingo (fin de semana)
         const diasRaw = prorrateo.CARGO + prorrateo.TURNO_DIURNO + prorrateo.TURNO_NOCTURNO
         const subtotalRaw = prorrateo.monto_CARGO + prorrateo.monto_TURNO_DIURNO + prorrateo.monto_TURNO_NOCTURNO
-        prorrateo.proyectado_raw = diasRaw > 0 && diasRaw < 7
-          ? Math.round((subtotalRaw / diasRaw) * 7)
+        
+        // Calcular días desde inicio de asignación hasta fin de semana (domingo)
+        const primeraFecha = primeraFechaPorConductor.get(conductorId)
+        const finSemanaCompleta = semanaActual.fin // domingo
+        const diasProyectados = primeraFecha
+          ? Math.max(diasRaw, Math.round((finSemanaCompleta.getTime() - primeraFecha.getTime()) / (1000 * 60 * 60 * 24)) + 1)
+          : 7
+
+        prorrateo.proyectado_raw = diasRaw > 0 && diasRaw < diasProyectados
+          ? Math.round((subtotalRaw / diasRaw) * diasProyectados)
           : Math.round(subtotalRaw)
 
         prorrateo.monto_CARGO = Math.round(prorrateo.monto_CARGO * 100) / 100
