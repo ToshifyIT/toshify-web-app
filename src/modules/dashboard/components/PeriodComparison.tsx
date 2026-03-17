@@ -129,83 +129,7 @@ export function PeriodComparison() {
       }
     }
 
-    // --- INGRESO DE VEHÍCULOS ---
-    {
-      const variation = calculateVariation(vehiculosStats.totalA, vehiculosStats.totalB)
-      metricList.push({
-        id: 'metric-vehiculos-ingreso',
-        name: 'INGRESO DE VEHÍCULOS',
-        valueA: vehiculosStats.totalA.toLocaleString('es-AR'),
-        valueB: vehiculosStats.totalB.toLocaleString('es-AR'),
-        variationLabel: variation.label,
-        variationSign: variation.sign,
-        tooltipContent: (
-          <div className="kpi-tooltip-content">
-            <strong>Ingreso de Vehículos</strong>
-            <p>Cantidad de vehículos registrados en el sistema durante el período seleccionado, según su fecha de creación.</p>
-          </div>
-        ),
-      })
-    }
-
-    // --- BAJAS CONDUCTORES ---
-    {
-      const variation = calculateVariation(bajasConductoresStats.totalA, bajasConductoresStats.totalB)
-      metricList.push({
-        id: 'metric-bajas-conductores',
-        name: 'BAJAS CONDUCTORES',
-        valueA: bajasConductoresStats.totalA.toLocaleString('es-AR'),
-        valueB: bajasConductoresStats.totalB.toLocaleString('es-AR'),
-        variationLabel: variation.label,
-        variationSign: variation.sign,
-        tooltipContent: (
-          <div className="kpi-tooltip-content">
-            <strong>Bajas Conductores</strong>
-            <p>Cantidad de conductores que pasaron a estado «Baja» durante el período, según su fecha de terminación.</p>
-          </div>
-        ),
-      })
-    }
-
-    // --- PROM. PERMANENCIA ---
-    {
-      const variation = calculateVariation(Math.round(permanenciaStats.avgDaysA), Math.round(permanenciaStats.avgDaysB))
-      metricList.push({
-        id: 'metric-permanencia',
-        name: 'PROM. PERMANENCIA',
-        valueA: `${Math.round(permanenciaStats.avgDaysA).toLocaleString('es-AR')} días`,
-        valueB: `${Math.round(permanenciaStats.avgDaysB).toLocaleString('es-AR')} días`,
-        variationLabel: variation.label,
-        variationSign: variation.sign,
-        tooltipContent: (
-          <div className="kpi-tooltip-content">
-            <strong>Promedio de Permanencia</strong>
-            <p>Promedio de días que los conductores dados de baja en el período estuvieron asignados a vehículos. Se calcula sumando los días de todas sus asignaciones y dividiendo por la cantidad de conductores.</p>
-          </div>
-        ),
-      })
-    }
-
-    // --- KILÓMETROS RECORRIDOS ---
-    {
-      const variation = calculateVariation(kilometrajeStats.totalA, kilometrajeStats.totalB)
-      metricList.push({
-        id: 'metric-kilometraje',
-        name: 'KILÓMETROS RECORRIDOS',
-        valueA: kmFormatter.format(kilometrajeStats.totalA),
-        valueB: kmFormatter.format(kilometrajeStats.totalB),
-        variationLabel: variation.label,
-        variationSign: variation.sign,
-        tooltipContent: (
-          <div className="kpi-tooltip-content">
-            <strong>Kilómetros Recorridos</strong>
-            <p>Suma total de kilómetros registrados por todos los vehículos de la flota durante el período seleccionado.</p>
-          </div>
-        ),
-      })
-    }
-
-    // --- VUELTAS A ARGENTINA ---
+    // --- 1. VUELTAS A ARGENTINA ---
     const vueltasA = Math.floor(kilometrajeStats.totalA / 3700)
     const vueltasB = Math.floor(kilometrajeStats.totalB / 3700)
     {
@@ -226,7 +150,83 @@ export function PeriodComparison() {
       })
     }
 
-    // --- TOTAL MULTAS ---
+    // --- 2. KILÓMETROS RECORRIDOS ---
+    {
+      const variation = calculateVariation(kilometrajeStats.totalA, kilometrajeStats.totalB)
+      metricList.push({
+        id: 'metric-kilometraje',
+        name: 'KILÓMETROS RECORRIDOS',
+        valueA: kmFormatter.format(kilometrajeStats.totalA),
+        valueB: kmFormatter.format(kilometrajeStats.totalB),
+        variationLabel: variation.label,
+        variationSign: variation.sign,
+        tooltipContent: (
+          <div className="kpi-tooltip-content">
+            <strong>Kilómetros Recorridos</strong>
+            <p>Suma total de kilómetros registrados por todos los vehículos de la flota durante el período seleccionado.</p>
+          </div>
+        ),
+      })
+    }
+
+    // --- 3. INGRESO DE VEHÍCULOS ---
+    {
+      const variation = calculateVariation(vehiculosStats.totalA, vehiculosStats.totalB)
+      metricList.push({
+        id: 'metric-vehiculos-ingreso',
+        name: 'INGRESO DE VEHÍCULOS',
+        valueA: vehiculosStats.totalA.toLocaleString('es-AR'),
+        valueB: vehiculosStats.totalB.toLocaleString('es-AR'),
+        variationLabel: variation.label,
+        variationSign: variation.sign,
+        tooltipContent: (
+          <div className="kpi-tooltip-content">
+            <strong>Ingreso de Vehículos</strong>
+            <p>Cantidad de vehículos registrados en el sistema durante el período seleccionado, según su fecha de creación.</p>
+          </div>
+        ),
+      })
+    }
+
+    // --- 4. BAJAS CONDUCTORES ---
+    {
+      const variation = calculateVariation(bajasConductoresStats.totalA, bajasConductoresStats.totalB)
+      metricList.push({
+        id: 'metric-bajas-conductores',
+        name: 'BAJAS CONDUCTORES',
+        valueA: bajasConductoresStats.totalA.toLocaleString('es-AR'),
+        valueB: bajasConductoresStats.totalB.toLocaleString('es-AR'),
+        variationLabel: variation.label,
+        variationSign: variation.sign,
+        tooltipContent: (
+          <div className="kpi-tooltip-content">
+            <strong>Bajas Conductores</strong>
+            <p>Cantidad de conductores que pasaron a estado «Baja» durante el período, según su fecha de terminación.</p>
+          </div>
+        ),
+      })
+    }
+
+    // --- 5. PROM. PERMANENCIA ---
+    {
+      const variation = calculateVariation(Math.round(permanenciaStats.avgDaysA), Math.round(permanenciaStats.avgDaysB))
+      metricList.push({
+        id: 'metric-permanencia',
+        name: 'PROM. PERMANENCIA',
+        valueA: `${Math.round(permanenciaStats.avgDaysA).toLocaleString('es-AR')} días`,
+        valueB: `${Math.round(permanenciaStats.avgDaysB).toLocaleString('es-AR')} días`,
+        variationLabel: variation.label,
+        variationSign: variation.sign,
+        tooltipContent: (
+          <div className="kpi-tooltip-content">
+            <strong>Promedio de Permanencia</strong>
+            <p>Promedio de días que los conductores dados de baja en el período estuvieron asignados a vehículos. Se calcula sumando los días de todas sus asignaciones y dividiendo por la cantidad de conductores.</p>
+          </div>
+        ),
+      })
+    }
+
+    // --- 6. TOTAL MULTAS ---
     {
       const variation = calculateVariation(multasStats.totalA, multasStats.totalB)
       metricList.push({
@@ -245,7 +245,7 @@ export function PeriodComparison() {
       })
     }
 
-    // --- TOTAL TELEPASE ---
+    // --- 7. TOTAL TELEPASE ---
     {
       const variation = calculateVariation(telepaseStats.totalA, telepaseStats.totalB)
       metricList.push({
@@ -258,13 +258,13 @@ export function PeriodComparison() {
         tooltipContent: (
           <div className="kpi-tooltip-content">
             <strong>Total Telepase</strong>
-            <p>Suma de los montos de todos los consumos de peaje (Telepase) registrados durante el período seleccionado.</p>
+            <p>Suma de los montos de peajes registrados por los conductores de Cabify durante el período seleccionado.</p>
           </div>
         ),
       })
     }
 
-    // --- INCIDENCIAS A FAVOR ---
+    // --- 8. INCIDENCIAS A FAVOR ---
     {
       const variation = calculateVariation(incidenciasSplit.aFavorA, incidenciasSplit.aFavorB)
       const tiposTexto = incidenciasSplit.tiposAFavor.length > 0

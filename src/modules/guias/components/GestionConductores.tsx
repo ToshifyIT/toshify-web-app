@@ -1,10 +1,11 @@
 import { useState, useEffect, useRef } from "react";
 import { supabase } from "../../../lib/supabase";
-import { format, startOfISOWeek } from "date-fns";
+import { format } from "date-fns";
 import Swal from "sweetalert2";
 import { useSede } from '../../../contexts/SedeContext';
 import { Search, FileEdit } from 'lucide-react';
 import { normalizeDni } from '../../../utils/normalizeDocuments';
+import { cabifyHistoricalService } from '../../../services/cabifyHistoricalService';
 import "./GestionConductores.css";
 
 // Interfaces
@@ -27,6 +28,8 @@ interface RawDriver {
 interface SearchableDriver {
   id: string;
   nombre: string;
+  nombres: string;
+  apellidos: string;
   dni: string;
   guia_nombre: string;
   // Current data for context
@@ -179,6 +182,8 @@ const GestionConductores = ({ isOpen, onClose, onRefresh }: Props) => {
         return {
           id: d.id,
           nombre: `${d.apellidos} ${d.nombres}`.trim(),
+          nombres: d.nombres || '',
+          apellidos: d.apellidos || '',
           dni: d.numero_dni || '',
           guia_nombre: (d.id_guia ? guidesMap[d.id_guia] : undefined) || 'Desconocido',
           turno: d.preferencia_turno || 'N/A',
@@ -307,38 +312,51 @@ const GestionConductores = ({ isOpen, onClose, onRefresh }: Props) => {
         const { monday, sunday } = getWeekRange(s);
         return { semana: s, monday, sunday };
       });
-      const minDate = new Date(Math.min(...weekDates.map(w => w.monday.getTime())));
-      const maxDate = new Date(Math.max(...weekDates.map(w => w.sunday.getTime())));
-      const startDateStr = minDate.toISOString();
-      const endDateStr = new Date(Date.UTC(maxDate.getUTCFullYear(), maxDate.getUTCMonth(), maxDate.getUTCDate(), 23, 59, 59, 999)).toISOString();
-
       // Ejecutar 3 consultas en paralelo: Cabify + Asignaciones + fecha_terminacion
+      // Usa cabifyHistoricalService (igual que la tabla principal) para deduplicación y consulta de ambas tablas
       const cabifyPromise = (async () => {
-        if (!driver.dni) return undefined;
         try {
-          const dniNorm = normalizeDni(driver.dni);
-          const { data: cabifyRows } = await supabase
-            .from('cabify_historico')
-            .select('dni, cobro_efectivo, cobro_app, fecha_inicio')
-            .eq('dni', dniNorm)
-            .gte('fecha_inicio', startDateStr)
-            .lte('fecha_inicio', endDateStr);
+          const dniNorm = driver.dni ? normalizeDni(driver.dni) : '';
+          const nombresLower = (driver.nombres || '').trim().toLowerCase();
+          const apellidosLower = (driver.apellidos || '').trim().toLowerCase();
 
-          if (!cabifyRows || cabifyRows.length === 0) return undefined;
+          // Consultar cabifyHistoricalService por cada semana (misma lógica que getCabifyDatosPorSemanas)
+          const semanaPromises = weekDates.map(async (wd) => {
+            const weekStartDate = new Date(Date.UTC(wd.monday.getUTCFullYear(), wd.monday.getUTCMonth(), wd.monday.getUTCDate(), 0, 0, 0, 0)).toISOString();
+            const weekEndDate = new Date(Date.UTC(wd.sunday.getUTCFullYear(), wd.sunday.getUTCMonth(), wd.sunday.getUTCDate(), 23, 59, 59, 999)).toISOString();
+            const { drivers: cabifyDrivers } = await cabifyHistoricalService.getDriversData(weekStartDate, weekEndDate, { sedeId: sedeActualId });
+            return { semana: wd.semana, cabifyDrivers };
+          });
+
+          const semanaResults = await Promise.all(semanaPromises);
 
           const cabifyMap = new Map<string, Map<string, { cobroApp: number; cobroEfectivo: number }>>();
-          for (const row of cabifyRows) {
-            const fechaDate = new Date(row.fecha_inicio);
-            const monday = startOfISOWeek(fechaDate);
-            const semanaKey = format(monday, "R-'W'II");
-            let semanaMap = cabifyMap.get(semanaKey);
-            if (!semanaMap) { semanaMap = new Map(); cabifyMap.set(semanaKey, semanaMap); }
-            const existing = semanaMap.get(driver.id) || { cobroApp: 0, cobroEfectivo: 0 };
-            existing.cobroApp += Number(row.cobro_app) || 0;
-            existing.cobroEfectivo += Number(row.cobro_efectivo) || 0;
-            semanaMap.set(driver.id, existing);
+          for (const { semana, cabifyDrivers } of semanaResults) {
+            if (cabifyDrivers.length === 0) continue;
+
+            // 1. Buscar por DNI normalizado
+            let matched = dniNorm
+              ? cabifyDrivers.find(d => normalizeDni(d.nationalIdNumber) === dniNorm)
+              : undefined;
+
+            // 2. Fallback: buscar por nombre y apellido si DNI no coincidió
+            if (!matched && nombresLower && apellidosLower) {
+              matched = cabifyDrivers.find(d => {
+                const cabifyFull = `${(d.name || '')} ${(d.surname || '')}`.trim().toLowerCase();
+                return cabifyFull.includes(nombresLower) && cabifyFull.includes(apellidosLower);
+              });
+            }
+
+            if (matched) {
+              const semanaMap = new Map<string, { cobroApp: number; cobroEfectivo: number }>();
+              semanaMap.set(driver.id, {
+                cobroApp: matched.cobroApp,
+                cobroEfectivo: matched.cobroEfectivo,
+              });
+              cabifyMap.set(semana, semanaMap);
+            }
           }
-          return cabifyMap;
+          return cabifyMap.size > 0 ? cabifyMap : undefined;
         } catch {
           return undefined;
         }

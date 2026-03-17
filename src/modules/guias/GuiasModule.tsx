@@ -88,6 +88,7 @@ export function GuiasModule() {
   const [totalFilter, setTotalFilter] = useState<string[]>([])
   const [cabifyDataFilter, setCabifyDataFilter] = useState<string[]>([])
   const [openColumnFilter, setOpenColumnFilter] = useState<string | null>(null)
+  const [filterDropdownPos, setFilterDropdownPos] = useState<{ top: number; left: number }>({ top: 0, left: 0 })
   const [sinGncFilter, setSinGncFilter] = useState(false)
   const [conSaldoFilter, setConSaldoFilter] = useState(false)
   const [showAllDrivers, setShowAllDrivers] = useState(false)
@@ -803,15 +804,24 @@ export function GuiasModule() {
 
       // RPC Cabify: buscar datos financieros para semana objetivo Y semana anterior
       const cabifySemanasToFetch = [targetWeek, prevWeekLabelForCabify];
-      // Construir mapa UUID → DNI para consulta en cabifyHistoricalService
+      // Construir mapa UUID → DNI y mapa UUID → nombres/apellidos para consulta en cabifyHistoricalService
       const conductorDniMap = new Map<string, string>();
+      const conductorNamesMap = new Map<string, { nombres: string; apellidos: string }>();
       (historialData || []).forEach((h: any) => {
-        if (h.id_conductor && h.conductores?.numero_dni) {
-          conductorDniMap.set(h.id_conductor, String(h.conductores.numero_dni));
+        if (h.id_conductor) {
+          if (h.conductores?.numero_dni) {
+            conductorDniMap.set(h.id_conductor, String(h.conductores.numero_dni));
+          }
+          if (h.conductores?.nombres || h.conductores?.apellidos) {
+            conductorNamesMap.set(h.id_conductor, {
+              nombres: String(h.conductores.nombres || ''),
+              apellidos: String(h.conductores.apellidos || ''),
+            });
+          }
         }
       });
       const cabifyPromise = conductorIds.length > 0
-        ? getCabifyDatosPorSemanas(conductorIds, cabifySemanasToFetch, conductorDniMap, sedeActualId)
+        ? getCabifyDatosPorSemanas(conductorIds, cabifySemanasToFetch, conductorDniMap, sedeActualId, conductorNamesMap)
         : Promise.resolve(new Map<string, Map<string, { cobroApp: number; cobroEfectivo: number }>>());
       
       const vehiculosPromise = (async () => {
@@ -1127,14 +1137,14 @@ export function GuiasModule() {
             }
           }
 
-          const alquiler = Math.round(montoTotal);
+          const alquiler = montoTotal;
           const dias = fechasContadas.size;
           if (alquiler === 0 && dias === 0) continue;
 
           // Proyectado: extrapolación del alquiler a 7 días (misma lógica que Vista Previa)
           const proyectado = dias > 0 && dias < 7
-            ? Math.round((montoTotal / dias) * 7)
-            : Math.round(montoTotal);
+            ? (montoTotal / dias) * 7
+            : montoTotal;
 
           // Garantía: usar datos reales si existen, sino cuota por defecto
           let garantia = cuotaGarantiaSemanalDefault;
@@ -2040,6 +2050,8 @@ export function GuiasModule() {
               className={`dt-column-filter-btn ${nombreFilter.length > 0 ? 'active' : ''}`}
               onClick={(e) => {
                 e.stopPropagation();
+                const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+                setFilterDropdownPos({ top: rect.bottom + 4, left: rect.left });
                 setOpenColumnFilter(openColumnFilter === 'nombre' ? null : 'nombre');
               }}
               title="Filtrar por nombre"
@@ -2047,7 +2059,7 @@ export function GuiasModule() {
               <Filter size={12} />
             </button>
             {openColumnFilter === 'nombre' && (
-              <div className="dt-column-filter-dropdown dt-excel-filter" onClick={(e) => e.stopPropagation()}>
+              <div className="dt-column-filter-dropdown dt-excel-filter" style={{ top: filterDropdownPos.top, left: filterDropdownPos.left }} onClick={(e) => e.stopPropagation()}>
                 <input
                   type="text"
                   placeholder="Buscar..."
@@ -2158,6 +2170,8 @@ export function GuiasModule() {
               className={`dt-column-filter-btn ${turnoFilter.length > 0 ? 'active' : ''}`}
               onClick={(e) => {
                 e.stopPropagation();
+                const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+                setFilterDropdownPos({ top: rect.bottom + 4, left: rect.left });
                 setOpenColumnFilter(openColumnFilter === 'turno' ? null : 'turno');
               }}
               title="Filtrar por turno"
@@ -2165,7 +2179,7 @@ export function GuiasModule() {
               <Filter size={12} />
             </button>
             {openColumnFilter === 'turno' && (
-              <div className="dt-column-filter-dropdown dt-excel-filter" onClick={(e) => e.stopPropagation()}>
+              <div className="dt-column-filter-dropdown dt-excel-filter" style={{ top: filterDropdownPos.top, left: filterDropdownPos.left }} onClick={(e) => e.stopPropagation()}>
                 <div className="dt-excel-filter-list">
                   {turnosUnicos.map(turno => (
                     <label key={turno} className={`dt-column-filter-checkbox ${turnoFilter.includes(turno) ? 'selected' : ''}`}>
@@ -2276,6 +2290,8 @@ export function GuiasModule() {
               className={`dt-column-filter-btn ${asignacionFilter.length > 0 ? 'active' : ''}`}
               onClick={(e) => {
                 e.stopPropagation();
+                const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+                setFilterDropdownPos({ top: rect.bottom + 4, left: rect.left });
                 setOpenColumnFilter(openColumnFilter === 'asignacion' ? null : 'asignacion');
               }}
               title="Filtrar por asignación"
@@ -2283,7 +2299,7 @@ export function GuiasModule() {
               <Filter size={12} />
             </button>
             {openColumnFilter === 'asignacion' && (
-              <div className="dt-column-filter-dropdown dt-excel-filter" onClick={(e) => e.stopPropagation()}>
+              <div className="dt-column-filter-dropdown dt-excel-filter" style={{ top: filterDropdownPos.top, left: filterDropdownPos.left }} onClick={(e) => e.stopPropagation()}>
                 <div className="dt-excel-filter-list">
                   <label className={`dt-column-filter-checkbox ${asignacionFilter.includes('asignado') ? 'selected' : ''}`}>
                     <input
@@ -2496,6 +2512,8 @@ export function GuiasModule() {
               className={`dt-column-filter-btn ${cabifyDataFilter.length > 0 ? 'active' : ''}`}
               onClick={(e) => {
                 e.stopPropagation();
+                const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+                setFilterDropdownPos({ top: rect.bottom + 4, left: rect.left });
                 setOpenColumnFilter(openColumnFilter === 'cabifyData' ? null : 'cabifyData');
               }}
               title="Filtrar por datos Cabify"
@@ -2503,7 +2521,7 @@ export function GuiasModule() {
               <Filter size={12} />
             </button>
             {openColumnFilter === 'cabifyData' && (
-              <div className="dt-column-filter-dropdown dt-excel-filter" onClick={(e) => e.stopPropagation()}>
+              <div className="dt-column-filter-dropdown dt-excel-filter" style={{ top: filterDropdownPos.top, left: filterDropdownPos.left }} onClick={(e) => e.stopPropagation()}>
                 <div className="dt-excel-filter-list">
                   <label className={`dt-column-filter-checkbox ${cabifyDataFilter.includes('con_datos') ? 'selected' : ''}`}>
                     <input
@@ -2572,7 +2590,7 @@ export function GuiasModule() {
           const cuota = (row.original as any).billing_cuota_semanal as number;
           const fmtBilling = (v: number) => {
             if (!hasBilling) return <span className="italic" style={{ color: 'var(--text-tertiary)' }} title="Sin datos de facturación">N/A</span>;
-            return new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(v);
+            return new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(v);
           };
           return (
             <div style={{ display: 'inline-grid', gridTemplateColumns: 'auto auto', columnGap: 4, rowGap: 1, fontSize: '12px', alignItems: 'baseline' }}>

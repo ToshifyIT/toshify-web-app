@@ -321,8 +321,10 @@ export function useDashboardStats() {
           }
         }
 
-        // Calcular Total Saldo
-        const totalSaldoActual = saldos.reduce((sum, item) => sum + Math.abs(item.saldo_actual || 0), 0)
+        // Calcular Total Saldo (solo saldos negativos = deuda)
+        const totalSaldoActual = saldos
+          .filter((item: any) => (item.saldo_actual || 0) < 0)
+          .reduce((sum: number, item: any) => sum + Math.abs(item.saldo_actual), 0)
         const totalMora = saldos.reduce((sum, item) => sum + (item.monto_mora_acumulada || 0), 0)
         const totalSaldoFinal = totalSaldoActual + totalMora
 

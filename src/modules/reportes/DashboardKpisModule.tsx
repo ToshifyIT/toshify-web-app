@@ -30,6 +30,7 @@ export function DashboardKpisModule() {
       <div className="dkpis-stats">
         {stats && (
           <div className="dkpis-stats-grid">
+            {/* 1. VUELTAS AL MUNDO */}
             <div className="stat-card">
               <div className="stat-content">
                 <span className="stat-value">{stats.vueltasMundo.value}</span>
@@ -40,6 +41,7 @@ export function DashboardKpisModule() {
                 <span className="stat-subtitle">{stats.vueltasMundo.subtitle}</span>
               </div>
             </div>
+            {/* 2. TOTAL FLOTA */}
             <div className="stat-card">
               <div className="stat-content">
                 <span className="stat-value">{stats.totalFlota.value}</span>
@@ -50,6 +52,7 @@ export function DashboardKpisModule() {
                 <span className="stat-subtitle">{stats.totalFlota.subtitle}</span>
               </div>
             </div>
+            {/* 3. % OCUPACIÓN */}
             <div className="stat-card">
               <div className="stat-content">
                 <span className="stat-value">{stats.porcentajeOcupacion.value}</span>
@@ -60,6 +63,7 @@ export function DashboardKpisModule() {
                 <span className="stat-subtitle">{stats.porcentajeOcupacion.subtitle}</span>
               </div>
             </div>
+            {/* 4. % OPERATIVIDAD */}
             <div className="stat-card">
               <div className="stat-content">
                 <span className="stat-value">{stats.porcentajeOperatividad.value}</span>
@@ -70,65 +74,7 @@ export function DashboardKpisModule() {
                 <span className="stat-subtitle">{stats.porcentajeOperatividad.subtitle}</span>
               </div>
             </div>
-            <div className="stat-card">
-              <div className="stat-content">
-                <span className="stat-value">{stats.fondoGarantia.value}</span>
-                <span className="stat-label">
-                  <span className="stat-label-text">FONDO DE GARANTÍA</span>
-                  <KpiInfoIcon text="Suma total del dinero cobrado en concepto de garantía a todos los conductores que tienen una garantía activa (en curso)." />
-                </span>
-                <span className="stat-subtitle">{stats.fondoGarantia.subtitle}</span>
-              </div>
-            </div>
-            <div className="stat-card">
-              <div className="stat-content">
-                <span className="stat-value">{stats.pendienteDevolucion.value}</span>
-                <span className="stat-label">
-                  <span className="stat-label-text">REINTEGRO DE GARANTÍA</span>
-                  <KpiInfoIcon text="Monto total de garantías que se deben devolver a conductores que ya no están activos o que están en proceso de devolución." />
-                </span>
-                <span className="stat-subtitle">{stats.pendienteDevolucion.subtitle}</span>
-              </div>
-            </div>
-            <div className="stat-card">
-              <div className="stat-content">
-                <span className="stat-value">{stats.reintegroReciente.value}</span>
-                <span className="stat-label">
-                  <span className="stat-label-text">REINTEGRO RECIENTE</span>
-                  <KpiInfoIcon text="Monto acumulado de garantías pendientes de devolución para conductores cuya fecha de baja es de 120 días o menos desde hoy." />
-                </span>
-                <span className="stat-subtitle">{stats.reintegroReciente.subtitle}</span>
-              </div>
-            </div>
-            <div className="stat-card">
-              <div className="stat-content">
-                <span className="stat-value">{stats.reintegroAntiguo.value}</span>
-                <span className="stat-label">
-                  <span className="stat-label-text">REINTEGRO VENCIDO</span>
-                  <KpiInfoIcon text="Monto acumulado de garantías pendientes de devolución para conductores cuya fecha de baja supera los 120 días o no tiene fecha registrada." />
-                </span>
-                <span className="stat-subtitle">{stats.reintegroAntiguo.subtitle}</span>
-              </div>
-            </div>
-            {/* <div className="stat-card">
-              <div className="stat-content">
-                <span className="stat-value">{stats.cobroPendiente.value}</span>
-                <span className="stat-label">COBRO PENDIENTE (ARRASTRE)</span>
-                {stats.cobroPendiente.extra ? (
-                  <div className="flex items-center gap-1 mt-0.5">
-                    <span className="stat-subtitle">{stats.cobroPendiente.extra.deudaSemanaPasada}</span>
-                    <span className="stat-subtitle" style={{ opacity: 0.8 }}>
-                      ({stats.cobroPendiente.extra.porcentaje}%)
-                    </span>
-                    <span title={stats.cobroPendiente.extra.tooltip} className="cursor-help flex items-center">
-                      <Info size={12} className="text-gray-400" strokeWidth={2} />
-                    </span>
-                  </div>
-                ) : (
-                  <span className="stat-subtitle">{stats.cobroPendiente.subtitle}</span>
-                )}
-              </div>
-            </div> */}
+            {/* 5. DÍAS SIN SINIESTRO */}
             <div className="stat-card">
               <div className="stat-content">
                 <span className="stat-value">{stats.diasSinSiniestro.value}</span>
@@ -139,6 +85,7 @@ export function DashboardKpisModule() {
                 <span className="stat-subtitle">{stats.diasSinSiniestro.subtitle}</span>
               </div>
             </div>
+            {/* 6. DÍAS SIN ROBO */}
             <div className="stat-card">
               <div className="stat-content">
                 <span className="stat-value">{stats.diasSinRobo.value}</span>
@@ -149,16 +96,40 @@ export function DashboardKpisModule() {
                 <span className="stat-subtitle">{stats.diasSinRobo.subtitle}</span>
               </div>
             </div>
+            {/* 7. FONDO DE GARANTÍA */}
             <div className="stat-card">
               <div className="stat-content">
-                <span className="stat-value">{stats.totalSaldo.value}</span>
+                <span className="stat-value">{stats.fondoGarantia.value}</span>
                 <span className="stat-label">
-                  <span className="stat-label-text">TOTAL SALDO</span>
-                  <KpiInfoIcon text="Suma de todos los saldos pendientes de los conductores (lo que deben) más la mora acumulada por pagos atrasados." />
+                  <span className="stat-label-text">FONDO DE GARANTÍA</span>
+                  <KpiInfoIcon text="Suma total del dinero cobrado en concepto de garantía a todos los conductores que tienen una garantía activa (en curso)." />
                 </span>
-                <span className="stat-subtitle">{stats.totalSaldo.subtitle}</span>
+                <span className="stat-subtitle">{stats.fondoGarantia.subtitle}</span>
               </div>
             </div>
+            {/* 8. REINTEGRO RECIENTE */}
+            <div className="stat-card">
+              <div className="stat-content">
+                <span className="stat-value">{stats.reintegroReciente.value}</span>
+                <span className="stat-label">
+                  <span className="stat-label-text">REINTEGRO RECIENTE</span>
+                  <KpiInfoIcon text="Monto acumulado de garantías pendientes de devolución para conductores cuya fecha de baja es de 120 días o menos desde hoy." />
+                </span>
+                <span className="stat-subtitle">{stats.reintegroReciente.subtitle}</span>
+              </div>
+            </div>
+            {/* 9. REINTEGRO VENCIDO */}
+            <div className="stat-card">
+              <div className="stat-content">
+                <span className="stat-value">{stats.reintegroAntiguo.value}</span>
+                <span className="stat-label">
+                  <span className="stat-label-text">REINTEGRO VENCIDO</span>
+                  <KpiInfoIcon text="Monto acumulado de garantías pendientes de devolución para conductores cuya fecha de baja supera los 120 días o no tiene fecha registrada." />
+                </span>
+                <span className="stat-subtitle">{stats.reintegroAntiguo.subtitle}</span>
+              </div>
+            </div>
+            {/* 10. SALDO PENDIENTE */}
             <div className="stat-card">
               <div className="stat-content">
                 <span className="stat-value">{stats.totalSaldoPendiente.value}</span>
@@ -169,6 +140,7 @@ export function DashboardKpisModule() {
                 <span className="stat-subtitle">{stats.totalSaldoPendiente.subtitle}</span>
               </div>
             </div>
+            {/* 11. TOTAL MORA */}
             <div className="stat-card">
               <div className="stat-content">
                 <span className="stat-value">{stats.totalSaldoMora.value}</span>
