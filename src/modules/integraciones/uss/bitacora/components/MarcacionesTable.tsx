@@ -194,11 +194,11 @@ export function MarcacionesTable({
   const columns = useMemo<ColumnDef<Marcacion, unknown>[]>(() => [
     {
       id: 'patente_col',
-      accessorKey: 'patente',
+      accessorFn: (row) => row.patenteNormalizada || row.patente.replace(/\s/g, ''),
       header: 'Patente',
       cell: ({ row }) => (
-        <span style={{ fontFamily: 'monospace', fontSize: '11px', color: 'var(--color-primary)', fontWeight: 600, background: 'var(--bg-secondary)', padding: '1px 5px', borderRadius: '3px', whiteSpace: 'nowrap' }}>
-          {row.original.patente}
+        <span style={{ fontFamily: 'monospace', fontSize: '11px', color: 'var(--color-primary)', fontWeight: 600, background: 'var(--bg-secondary)', padding: '2px 6px', borderRadius: '3px', whiteSpace: 'nowrap' }}>
+          {row.original.patenteNormalizada || row.original.patente.replace(/\s/g, '')}
         </span>
       ),
       enableSorting: true,
