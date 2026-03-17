@@ -633,8 +633,7 @@ export function SaldosAbonosTab() {
       } else {
         // Crear nuevo registro
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const { error: errorInsert } = await (supabase.from('saldos_conductores') as any)
-          .insert({
+        const insertData: Record<string, unknown> = {
             conductor_id: formValues.conductorId,
             conductor_nombre: conductorNombre,
             conductor_dni: conductor.dni,
@@ -643,7 +642,10 @@ export function SaldosAbonosTab() {
             monto_mora_acumulada: 0,
             fecha_referencia: fechaReferencia,
             ultima_actualizacion: new Date().toISOString()
-          })
+          }
+        if (sedeActualId) insertData.sede_id = sedeActualId
+        const { error: errorInsert } = await (supabase.from('saldos_conductores') as any)
+          .insert(insertData)
         if (errorInsert) throw errorInsert
       }
 

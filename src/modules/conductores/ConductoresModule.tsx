@@ -963,7 +963,7 @@ export function ConductoresModule() {
   const appendNota = (notasExistentes: string | null, nuevaNota: string) =>
     notasExistentes ? `${notasExistentes}\n\n${nuevaNota}` : nuevaNota;
 
-  // Función para procesar la cancelación de asignaciones por baja
+  // Función para procesar la finalización de asignaciones por baja
   const processConductorBaja = async (_conductorId: string, conductorNombre: string, motivoUsuario: string) => {
     const ahora = new Date().toISOString();
     const motivoBaja = `[BAJA CONDUCTOR] ${conductorNombre}: ${motivoUsuario}`;
@@ -982,28 +982,28 @@ export function ConductoresModule() {
     }
   };
 
-  // Cancelación para modo CARGO
+  // Finalización para modo CARGO
   const handleCargoCancellation = async (
     asignacion: any,
     asignacionConductor: any,
     motivoBaja: string,
     ahora: string
   ) => {
-    // 1. Cancelar la asignación
+    // 1. Finalizar la asignación
     await (supabase as any)
       .from('asignaciones')
       .update({
-        estado: 'cancelada',
+        estado: 'completada',
         notas: appendNota(asignacion.notas, motivoBaja),
         updated_at: ahora
       })
       .eq('id', asignacion.id);
 
-    // 2. Cancelar TODOS los registros de conductores en esta asignación (no solo el dado de baja)
+    // 2. Finalizar TODOS los registros de conductores en esta asignación (no solo el dado de baja)
     await (supabase as any)
       .from('asignaciones_conductores')
       .update({
-        estado: 'cancelado',
+        estado: 'completado',
         fecha_fin: ahora
       })
       .eq('asignacion_id', asignacion.id)
@@ -1033,7 +1033,7 @@ export function ConductoresModule() {
     if (asignacion.vehiculo_id) {
       registrarHistorialVehiculo({
         vehiculoId: asignacion.vehiculo_id,
-        tipoEvento: 'asignacion_cancelada',
+        tipoEvento: 'asignacion_finalizada',
         estadoNuevo: 'DISPONIBLE',
         detalles: {
           asignacion_id: asignacion.id,
@@ -1046,10 +1046,10 @@ export function ConductoresModule() {
       });
     }
 
-    // Registrar historial para conductor (asignación cancelada)
+    // Registrar historial para conductor (asignación finalizada por baja)
     registrarHistorialConductor({
       conductorId: asignacionConductor.conductor_id,
-      tipoEvento: 'asignacion_cancelada',
+      tipoEvento: 'asignacion_completada',
       detalles: {
         asignacion_id: asignacion.id,
         asignacion_codigo: asignacion.codigo,
@@ -1061,18 +1061,18 @@ export function ConductoresModule() {
     });
   };
 
-  // Cancelación para modo TURNO
+  // Finalización para modo TURNO
   const handleTurnoCancellation = async (
     asignacionConductor: any,
     asignacion: any,
     motivoBaja: string,
     ahora: string
   ) => {
-    // 1. Cancelar registro específico del conductor
+    // 1. Finalizar registro específico del conductor
     await (supabase as any)
       .from('asignaciones_conductores')
       .update({
-        estado: 'cancelado',
+        estado: 'completado',
         fecha_fin: ahora
       })
       .eq('id', asignacionConductor.id);
@@ -1113,7 +1113,7 @@ export function ConductoresModule() {
       // Registrar historial para conductor (removido del turno, asignación continúa)
       registrarHistorialConductor({
         conductorId: asignacionConductor.conductor_id,
-        tipoEvento: 'asignacion_cancelada',
+        tipoEvento: 'asignacion_completada',
         detalles: {
           asignacion_id: asignacion.id,
           asignacion_codigo: asignacion.codigo,
@@ -1129,21 +1129,21 @@ export function ConductoresModule() {
       return;
     }
 
-    // No hay otros conductores - cancelar asignación completa
+    // No hay otros conductores - finalizar asignación completa
     await (supabase as any)
       .from('asignaciones')
       .update({
-        estado: 'cancelada',
+        estado: 'completada',
         notas: appendNota(asignacion.notas, motivoBaja),
         updated_at: ahora
       })
       .eq('id', asignacion.id);
 
-    // Cancelar todos los registros de asignaciones_conductores de esta asignación
+    // Finalizar todos los registros de asignaciones_conductores de esta asignación
     // (por si hay registros residuales con otros estados)
     await (supabase as any)
       .from('asignaciones_conductores')
-      .update({ estado: 'cancelado', fecha_fin: ahora })
+      .update({ estado: 'completado', fecha_fin: ahora })
       .eq('asignacion_id', asignacion.id)
       .neq('id', asignacionConductor.id)
       .in('estado', ['asignado', 'activo']);
@@ -1166,7 +1166,7 @@ export function ConductoresModule() {
     if (asignacion.vehiculo_id) {
       registrarHistorialVehiculo({
         vehiculoId: asignacion.vehiculo_id,
-        tipoEvento: 'asignacion_cancelada',
+        tipoEvento: 'asignacion_finalizada',
         estadoNuevo: 'DISPONIBLE',
         detalles: {
           asignacion_id: asignacion.id,
@@ -1180,10 +1180,10 @@ export function ConductoresModule() {
       });
     }
 
-    // Registrar historial para conductor (asignación cancelada)
+    // Registrar historial para conductor (asignación finalizada por baja)
     registrarHistorialConductor({
       conductorId: asignacionConductor.conductor_id,
-      tipoEvento: 'asignacion_cancelada',
+      tipoEvento: 'asignacion_completada',
       detalles: {
         asignacion_id: asignacion.id,
         asignacion_codigo: asignacion.codigo,
@@ -3765,7 +3765,7 @@ function ModalConfirmBaja({
                 {cargoAssignments.length} asignación(es)
               </h4>
               <p className="info-text">
-                Estas asignaciones serán <strong>canceladas</strong> y los vehículos volverán a estado DISPONIBLE.
+                Estas asignaciones serán <strong>finalizadas</strong> y los vehículos volverán a estado DISPONIBLE.
               </p>
               <div className="assignment-items">
                 {cargoAssignments.map((a: any) => (
@@ -3793,7 +3793,7 @@ function ModalConfirmBaja({
                 El conductor será removido de su turno.{' '}
                 {turnoAssignments.some((a: any) => a.otherConductors?.length > 0)
                   ? 'Las asignaciones con otro conductor continuarán con el turno vacante.'
-                  : 'Si no hay otro conductor, la asignación será cancelada.'}
+                  : 'Si no hay otro conductor, la asignación será finalizada.'}
               </p>
               <div className="assignment-items">
                 {turnoAssignments.map((a: any) => (
