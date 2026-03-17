@@ -27,6 +27,15 @@ import { VEHICULO_ESTADO_LABELS } from '../../types/vehiculo.types'
 import './VehicleManagement.css'
 
 
+
+
+
+
+
+
+
+
+
 export function VehicleManagement() {
   const { sedeActualId, aplicarFiltroSede } = useSede()
   const [vehiculos, setVehiculos] = useState<VehiculoWithRelations[]>([])
