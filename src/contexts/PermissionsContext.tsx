@@ -96,6 +96,7 @@ interface PermissionsContextType {
   canAccess: (menuOrSubmenuName: string, action?: 'view' | 'create' | 'edit' | 'delete') => boolean
   isAdmin: () => boolean
   isAdministrativo: () => boolean
+  getRoleName: () => string
   // Obtener menús/submenús visibles
   getVisibleMenus: () => MenuPermission[]
   getVisibleSubmenus: () => SubmenuPermission[]
@@ -537,6 +538,10 @@ export function PermissionsProvider({ children }: { children: React.ReactNode })
     return userPermissions?.role?.name === 'administrativo'
   }, [userPermissions?.role?.name])
 
+  const getRoleName = useCallback((): string => {
+    return userPermissions?.role?.name || 'sin_rol'
+  }, [userPermissions?.role?.name])
+
   // Retornan caches pre-calculados - O(1)
   const getVisibleMenus = useCallback((): MenuPermission[] => {
     return visibleMenusCache
@@ -578,6 +583,7 @@ export function PermissionsProvider({ children }: { children: React.ReactNode })
     canAccess,
     isAdmin,
     isAdministrativo,
+    getRoleName,
     getVisibleMenus,
     getVisibleSubmenus,
     canCreate,
@@ -602,6 +608,7 @@ export function PermissionsProvider({ children }: { children: React.ReactNode })
     canAccess,
     isAdmin,
     isAdministrativo,
+    getRoleName,
     getVisibleMenus,
     getVisibleSubmenus,
     canCreate,

@@ -52,7 +52,7 @@ type CalendarView = 'week' | 'month';
 export function VisitasModule() {
   // === HOOKS ===
   const { user, profile } = useAuth();
-  const { canCreateInMenu, canEditInMenu, canDeleteInMenu, isAdmin } = usePermissions();
+  const { canCreateInMenu, canEditInMenu, canDeleteInMenu, isAdmin, getRoleName } = usePermissions();
   const { sedeActualId, sedeUsuario } = useSede();
   const canCreate = isAdmin() || canCreateInMenu('visitas');
   const canEdit = isAdmin() || canEditInMenu('visitas');
@@ -114,17 +114,20 @@ export function VisitasModule() {
     const raw = await fetchVisitas(sedeActualId, start, end);
     // Auto-transicionar estados según hora actual (pendiente→en_curso→completada)
     const updated = await autoUpdateEstados(raw);
-    // Citas "Directivo": solo visibles para admin y quien la creó.
-    // Los demás usuarios no las ven en absoluto.
-    const data = updated.filter((v) => {
-      if (v.categoria_nombre?.toLowerCase() !== 'directivo') return true;
-      if (isAdmin()) return true;
-      if (v.citador_id === user?.id) return true;
-      return false;
-    });
+    // Roles con acceso completo a detalles de visitas
+    const roleName = getRoleName()
+    const rolesConAcceso = ['admin', 'directivo', 'adm_logistico', 'administrador']
+    const tieneAccesoCompleto = rolesConAcceso.includes(roleName)
+
+    // Marcar visitas como masked para roles sin acceso (excepto las que creó el usuario)
+    const data = updated.map((v) => {
+      const esCreador = v.citador_id === user?.id
+      if (tieneAccesoCompleto || esCreador) return v
+      return { ...v, _masked: true } as typeof v
+    })
     setVisitas(data);
     setCalendarEvents(toCalendarEvents(data));
-  }, [sedeActualId, currentDate, getQueryRange, isAdmin, user?.id]);
+  }, [sedeActualId, currentDate, getQueryRange, isAdmin, getRoleName, user?.id]);
 
   useEffect(() => {
     let cancelled = false;
@@ -162,6 +165,8 @@ export function VisitasModule() {
   }
 
   function handleSelectEvent(event: VisitaCalendarEvent) {
+    // No abrir detalle para eventos masked
+    if ((event.visita as any)._masked) return;
     setSelectedVisita(event.visita);
     setShowDetalleModal(true);
   }
