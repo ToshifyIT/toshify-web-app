@@ -253,8 +253,9 @@ async function upsertSaldoConductor(params: {
   conductorCuit: string | null
   nuevoSaldo: number
   timestamp: string
+  sedeId?: string | null
 }) {
-  const { conductorId, conductorNombre, conductorDni, conductorCuit, nuevoSaldo, timestamp } = params
+  const { conductorId, conductorNombre, conductorDni, conductorCuit, nuevoSaldo, timestamp, sedeId } = params
   const { data: saldoExistente } = await (supabase.from('saldos_conductores') as any)
     .select('id, saldo_actual')
     .eq('conductor_id', conductorId)
@@ -270,16 +271,18 @@ async function upsertSaldoConductor(params: {
       .eq('id', saldoExistente.id)
     if (error) throw error
   } else {
+    const insertData: Record<string, unknown> = {
+      conductor_id: conductorId,
+      conductor_nombre: conductorNombre,
+      conductor_dni: conductorDni,
+      conductor_cuit: conductorCuit,
+      saldo_actual: nuevoSaldo,
+      dias_mora: 0,
+      ultima_actualizacion: timestamp
+    }
+    if (sedeId) insertData.sede_id = sedeId
     const { error } = await (supabase.from('saldos_conductores') as any)
-      .insert({
-        conductor_id: conductorId,
-        conductor_nombre: conductorNombre,
-        conductor_dni: conductorDni,
-        conductor_cuit: conductorCuit,
-        saldo_actual: nuevoSaldo,
-        dias_mora: 0,
-        ultima_actualizacion: timestamp
-      })
+      .insert(insertData)
     if (error) throw error
   }
 }
@@ -4481,6 +4484,7 @@ export function ReporteFacturacionTab() {
         conductorCuit: facturacion.conductor_cuit || null,
         nuevoSaldo,
         timestamp: new Date().toISOString(),
+        sedeId: sedeActualId || sedeUsuario?.id,
       })
 
       // 2b. Registrar movimiento en kardex (control_saldos)
@@ -4768,6 +4772,7 @@ export function ReporteFacturacionTab() {
           conductorCuit: pago.conductor_cuit || null,
           nuevoSaldo: nuevoSaldoCabify,
           timestamp: hoy.toISOString(),
+          sedeId: sedeActualId || sedeUsuario?.id,
         })
 
         // 2b. Registrar movimiento en kardex (control_saldos)
