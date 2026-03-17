@@ -29,6 +29,7 @@ interface DateRangeSelectorProps {
   showAllOption?: boolean // Mostrar opción "Todo el historial"
   placeholder?: string
   extraShortcuts?: DateRangeShortcut[] // Atajos adicionales al inicio de la lista
+  weekOnly?: boolean // Solo modo semana, sin día ni shortcuts Hoy/Ayer
 }
 
 // Días de la semana (Lunes a Domingo)
@@ -92,6 +93,7 @@ export function DateRangeSelector({
   showAllOption = true,
   placeholder = 'Seleccionar fecha',
   extraShortcuts = [],
+  weekOnly = false,
 }: DateRangeSelectorProps) {
   const [isOpen, setIsOpen] = useState(false)
   const [viewDate, setViewDate] = useState(new Date())
@@ -310,6 +312,7 @@ export function DateRangeSelector({
       {isOpen && (
         <div className="date-range-dropdown">
           {/* Pestañas Día/Semana */}
+          {!weekOnly && (
           <div className="date-range-tabs">
             <button
               type="button"
@@ -326,6 +329,7 @@ export function DateRangeSelector({
               Semana
             </button>
           </div>
+          )}
 
           {/* Header con navegación */}
           <div className="date-range-header">

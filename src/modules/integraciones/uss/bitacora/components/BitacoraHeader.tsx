@@ -11,6 +11,7 @@ interface BitacoraHeaderProps {
   onCustomDateRange: (startDate: string, endDate: string, label?: string) => void
   isLoading: boolean
   lastUpdate?: Date | null
+  weekOnly?: boolean
 }
 
 // Helpers de fecha en zona Argentina
@@ -25,6 +26,7 @@ export function BitacoraHeader({
   onDateRangePreset,
   onCustomDateRange,
   isLoading,
+  weekOnly = false,
 }: BitacoraHeaderProps) {
 
   const isRealtime = dateRange.label === 'Hoy'
@@ -37,8 +39,9 @@ export function BitacoraHeader({
     type: dateRange.startDate === dateRange.endDate ? 'day' : 'week',
   }), [dateRange])
 
-  // Atajos extra: Hoy y Ayer (se agregan antes de Esta semana / Semana pasada)
+  // Atajos extra: Hoy y Ayer solo para Marcaciones, no para Histórico
   const extraShortcuts: DateRangeShortcut[] = useMemo(() => {
+    if (weekOnly) return []
     const today = toArgentinaDateString(new Date())
     const yesterday = new Date()
     yesterday.setDate(yesterday.getDate() - 1)
@@ -56,7 +59,7 @@ export function BitacoraHeader({
         range: { startDate: yesterdayStr, endDate: yesterdayStr, label: 'Ayer', type: 'day' },
       },
     ]
-  }, [])
+  }, [weekOnly])
 
   // Manejar cambio de rango desde el DateRangeSelector compartido
   const handleRangeChange = (range: DateRange) => {
@@ -80,6 +83,7 @@ export function BitacoraHeader({
         showAllOption={false}
         placeholder="Seleccionar fecha"
         extraShortcuts={extraShortcuts}
+        weekOnly={weekOnly}
       />
 
       <div className="uss-status">

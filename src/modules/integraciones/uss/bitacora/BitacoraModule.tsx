@@ -52,6 +52,7 @@ export function BitacoraModule() {
       onDateRangePreset={setDateRangePreset}
       onCustomDateRange={setCustomDateRange}
       isLoading={loading}
+      weekOnly={vista === 'historico'}
     />
   );
 
