@@ -203,7 +203,6 @@ export function MarcacionesTable({
         const m = row.original;
         return (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '1px', lineHeight: 1.3 }}>
-            <span style={{ fontWeight: 600, fontSize: '13px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{m.conductor}</span>
             <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
               <span style={{ fontFamily: 'monospace', fontSize: '11px', color: 'var(--color-primary)', fontWeight: 600, background: 'var(--bg-secondary)', padding: '1px 5px', borderRadius: '3px', whiteSpace: 'nowrap' }}>
                 {m.patente}
@@ -212,6 +211,10 @@ export function MarcacionesTable({
                 <span style={{ color: 'var(--text-tertiary)', fontSize: '10px', whiteSpace: 'nowrap' }}>#{m.ibutton}</span>
               )}
             </div>
+            <span style={{ fontWeight: 600, fontSize: '13px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{m.conductor}</span>
+            {m.conductorDni && (
+              <span style={{ color: 'var(--text-secondary)', fontSize: '10px' }}>{m.conductorDni}</span>
+            )}
           </div>
         );
       },

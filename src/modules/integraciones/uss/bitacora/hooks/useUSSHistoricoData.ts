@@ -6,6 +6,7 @@
  */
 
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { supabase } from '../../../../../lib/supabase';
 import {
   ussHistoricoService,
   type USSHistoricoRegistro,
@@ -31,6 +32,7 @@ export interface Marcacion {
   id: string;
   conductor: string;
   conductorId: string | null;
+  conductorDni?: string | null;
   ibutton: string | null;
   fecha: string; // YYYY-MM-DD (fecha_turno)
   patente: string;
@@ -60,6 +62,7 @@ function transformarMarcacion(reg: BitacoraRegistroTransformado): Marcacion {
     id: reg.id,
     conductor: reg.conductor_wialon || 'Sin conductor',
     conductorId: reg.conductor_id,
+    conductorDni: (reg as any).conductor_dni || null,
     ibutton: reg.ibutton,
     fecha: reg.fecha_turno,
     patente: reg.patente,
@@ -151,7 +154,22 @@ export function useUSSHistoricoData(sedeId?: string | null) {
 
       setRegistros(paginatedResult.data);
       setTotalCount(paginatedResult.count);
-      setMarcaciones(bitacoraResult.data.map(transformarMarcacion).filter(m => m.estado !== 'Sin Actividad'));
+      const marcacionesTransformadas = bitacoraResult.data.map(transformarMarcacion).filter(m => m.estado !== 'Sin Actividad');
+      
+      // Lookup DNIs en batch
+      const conductorIds = [...new Set(marcacionesTransformadas.map(m => m.conductorId).filter(Boolean))] as string[];
+      if (conductorIds.length > 0) {
+        const { data: conductoresData } = await supabase
+          .from('conductores')
+          .select('id, numero_dni')
+          .in('id', conductorIds);
+        const dniMap = new Map((conductoresData || []).map((c: any) => [c.id, c.numero_dni]));
+        marcacionesTransformadas.forEach(m => {
+          if (m.conductorId) m.conductorDni = dniMap.get(m.conductorId) ?? null;
+        });
+      }
+      
+      setMarcaciones(marcacionesTransformadas);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Error desconocido');
     } finally {
