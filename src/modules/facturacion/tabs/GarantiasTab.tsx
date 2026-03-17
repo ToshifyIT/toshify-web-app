@@ -150,11 +150,17 @@ export function GarantiasTab() {
       const fechaBajaMap = new Map<string, string>()
       const { data: conductoresData } = await supabase
         .from('conductores')
-        .select('id, estado_id, numero_dni, fecha_terminacion')
+        .select('id, estado_id, numero_dni, fecha_terminacion, updated_at')
       ;(conductoresData || []).forEach((c: any) => {
-        estadoConductorMap.set(c.id, c.estado_id === ESTADO_ACTIVO ? 'ACTIVO' : 'BAJA')
+        const esBaja = c.estado_id !== ESTADO_ACTIVO
+        estadoConductorMap.set(c.id, esBaja ? 'BAJA' : 'ACTIVO')
         if (c.numero_dni) dniConductorMap.set(c.id, c.numero_dni)
-        if (c.fecha_terminacion) fechaBajaMap.set(c.id, c.fecha_terminacion.substring(0, 10))
+        // Fecha de baja: usar fecha_terminacion, o updated_at como fallback para conductores de baja
+        if (c.fecha_terminacion) {
+          fechaBajaMap.set(c.id, c.fecha_terminacion.substring(0, 10))
+        } else if (esBaja && c.updated_at) {
+          fechaBajaMap.set(c.id, c.updated_at.substring(0, 10))
+        }
       })
 
       // Marcar visualmente como en_devolucion si conductor es BAJA (solo in-memory, no se guarda en BD)
