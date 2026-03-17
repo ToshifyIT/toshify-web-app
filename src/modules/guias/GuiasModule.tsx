@@ -2223,6 +2223,11 @@ export function GuiasModule() {
           return preferencia.charAt(0).toUpperCase();
         },
         cell: ({ row }: any) => {
+          const estadoCodigo = (row.original as any).conductores_estados?.codigo?.toLowerCase() || '';
+          const isBaja = estadoCodigo === 'baja' || estadoCodigo.includes('baja');
+          if (isBaja) {
+            return <span className="vehiculo-cell-na">N/A</span>;
+          }
           const chip = (bg: string, color: string, txt: string) => (
             <span
               style={{
