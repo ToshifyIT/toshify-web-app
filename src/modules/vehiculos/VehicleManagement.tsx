@@ -96,6 +96,7 @@ export function VehicleManagement() {
     tipo_gps: '',
     gps_uss: false,
     gnc: false,
+    telepase: false,
     numero_motor: '',
     numero_chasis: '',
     provisoria: '',
@@ -334,6 +335,7 @@ export function VehicleManagement() {
           titular: formData.titular || null,
           notas: formData.notas || null,
           gnc: formData.gnc || false,
+          telepase: formData.telepase || false,
           url_documentacion: formData.url_documentacion || null,
           created_by: user?.id,
           created_by_name: profile?.full_name || 'Sistema',
@@ -511,6 +513,7 @@ export function VehicleManagement() {
           titular: formData.titular || null,
           notas: formData.notas || null,
           gnc: formData.gnc || false,
+          telepase: formData.telepase || false,
           url_documentacion: formData.url_documentacion || null,
           sede_id: formData.sede_id || null,
           updated_at: new Date().toISOString(),
@@ -645,6 +648,7 @@ export function VehicleManagement() {
         tipo_gps: (fullVehiculo as any).tipo_gps || '',
         gps_uss: (fullVehiculo as any).gps_uss || false,
         gnc: (fullVehiculo as any).gnc || false,
+        telepase: (fullVehiculo as any).telepase || false,
         numero_motor: fullVehiculo.numero_motor || '',
         numero_chasis: fullVehiculo.numero_chasis || '',
         provisoria: fullVehiculo.provisoria || '',
@@ -683,6 +687,7 @@ export function VehicleManagement() {
       tipo_gps: '',
       gps_uss: false,
       gnc: false,
+      telepase: false,
       numero_motor: '',
       numero_chasis: '',
       provisoria: '',
@@ -1627,6 +1632,21 @@ export function VehicleManagement() {
                   />
                   <span style={{ color: formData.gnc ? '#10B981' : 'var(--text-primary)' }}>
                     GNC
+                  </span>
+                </label>
+              </div>
+              <div className="form-group">
+                <label className="form-label">Telepase</label>
+                <label style={{ display: 'flex', alignItems: 'center', height: '42px', cursor: 'pointer', gap: '8px' }}>
+                  <input
+                    type="checkbox"
+                    checked={formData.telepase}
+                    onChange={(e) => setFormData({ ...formData, telepase: e.target.checked })}
+                    disabled={saving}
+                    style={{ width: '18px', height: '18px', cursor: 'pointer' }}
+                  />
+                  <span style={{ color: formData.telepase ? '#3b82f6' : 'var(--text-primary)' }}>
+                    Telepase
                   </span>
                 </label>
               </div>
