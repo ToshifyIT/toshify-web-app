@@ -4652,8 +4652,7 @@ export function ReporteFacturacionTab() {
       for (const exRow of excelData) {
         const fact = facturacionesPorDNI.get(exRow.dni)
 
-        // Si tiene facturación y ya está pagado, saltar
-        if (fact && fact.estado === 'pagado') continue
+        // Mostrar todos los conductores del Excel, incluyendo pagados
 
         const yaCobrado = fact?.monto_cobrado || 0
 
