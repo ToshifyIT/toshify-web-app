@@ -645,12 +645,14 @@ export function DataTable<T>({
           const value = getNestedValueForFilter(row as Record<string, unknown>, colId);
           if (!value) return false;
 
-          const dateStr = String(value);
+          const dateStr = String(value).split('\n')[0].trim();
           let dateValue: Date | null = null;
           if (dateStr.includes('/')) {
             const parts = dateStr.split('/');
             if (parts.length === 3) {
-              dateValue = new Date(parseInt(parts[2]), parseInt(parts[1]) - 1, parseInt(parts[0]));
+              let year = parseInt(parts[2]);
+              if (year < 100) year += 2000;
+              dateValue = new Date(year, parseInt(parts[1]) - 1, parseInt(parts[0]));
             }
           } else {
             dateValue = new Date(dateStr);
@@ -724,14 +726,15 @@ export function DataTable<T>({
           const value = getNestedValueForFilter(row as Record<string, unknown>, colId);
           if (!value) return false;
 
-          const dateStr = String(value);
-          // Try to parse the date - handle multiple formats
+          const dateStr = String(value).split('\n')[0].trim();
+          // Try to parse the date - handle multiple formats (DD/MM/YY, DD/MM/YYYY)
           let dateValue: Date | null = null;
           if (dateStr.includes('/')) {
-            // Format: DD/MM/YYYY
             const parts = dateStr.split('/');
             if (parts.length === 3) {
-              dateValue = new Date(parseInt(parts[2]), parseInt(parts[1]) - 1, parseInt(parts[0]));
+              let year = parseInt(parts[2]);
+              if (year < 100) year += 2000;
+              dateValue = new Date(year, parseInt(parts[1]) - 1, parseInt(parts[0]));
             }
           } else {
             dateValue = new Date(dateStr);
