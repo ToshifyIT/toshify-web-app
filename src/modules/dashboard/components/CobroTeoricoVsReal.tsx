@@ -424,9 +424,6 @@ export function CobroTeoricoVsReal() {
            endDate = endOfWeek(new Date(), { weekStartsOn: 1 })
         }
 
-        // console.log(`[CobroTeorico] Analizando periodo: ${format(startDate, 'yyyy-MM-dd')} a ${format(endDate, 'yyyy-MM-dd')}`)
-        // console.group('[CobroTeorico] CÁLCULO DETALLADO DE COBROS')
-
         // Inicializar estructura de datos diaria
         const diasMap = new Map<string, {
           fecha: Date,
