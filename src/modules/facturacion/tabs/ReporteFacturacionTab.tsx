@@ -1590,6 +1590,9 @@ export function ReporteFacturacionTab() {
         const prorrateo = prorrateoMap.get(conductorId)
         if (!prorrateo) continue
         
+        // Deduplicar montos por fecha (evitar cobro doble si 2 asignaciones cubren el mismo día)
+        const montosContados = new Set<string>()
+
         for (const asig of asignaciones) {
           const codigo = codigosPorModalidadVP[asig.modalidad]
           const montoKey = `monto_${asig.modalidad}` as keyof ProrrateoVistaPrevia
@@ -1602,14 +1605,21 @@ export function ReporteFacturacionTab() {
 
           const currentDate = new Date(asig.fechaInicio)
           while (currentDate <= asig.fechaFin) {
-            const precioDiario = getPrecioEnFechaVP(codigo, currentDate)
-            ;(prorrateo as any)[montoKey] += precioDiario
+            const dateKey = format(currentDate, 'yyyy-MM-dd')
+            if (!montosContados.has(dateKey)) {
+              montosContados.add(dateKey)
+              const precioDiario = getPrecioEnFechaVP(codigo, currentDate)
+              ;(prorrateo as any)[montoKey] += precioDiario
+            }
             currentDate.setDate(currentDate.getDate() + 1)
           }
         }
         
         // Calcular proyectado: desde el día que tomó el vehículo hasta el domingo (fin de semana)
-        const diasRaw = prorrateo.CARGO + prorrateo.TURNO_DIURNO + prorrateo.TURNO_NOCTURNO
+        // Restar descuento por hora de entrega
+        const alertaVP = alertasProrrateoVP.get(conductorId)
+        const descuentoVP = alertaVP?.descuento || 0
+        const diasRaw = Math.max(0, prorrateo.CARGO + prorrateo.TURNO_DIURNO + prorrateo.TURNO_NOCTURNO - descuentoVP)
         const subtotalRaw = prorrateo.monto_CARGO + prorrateo.monto_TURNO_DIURNO + prorrateo.monto_TURNO_NOCTURNO
         
         // Calcular días desde inicio de asignación hasta fin de semana (domingo)
@@ -2570,9 +2580,9 @@ export function ReporteFacturacionTab() {
 
         const prorrateo = prorrateoRecalcMap.get(conductorData.id) || { CARGO: 0, TURNO_DIURNO: 0, TURNO_NOCTURNO: 0 }
         const totalDiasBrutos = Math.min(7, prorrateo.CARGO + prorrateo.TURNO_DIURNO + prorrateo.TURNO_NOCTURNO)
-        // Descuento por hora de entrega desactivado — el timestamp del sistema no es la hora real de entrega
-        // Se implementará cuando se use la hora de "Entrega Real" del módulo de asignaciones
-        const totalDias = totalDiasBrutos
+        // Descuento por hora de entrega: restar turnos descontados
+        const descuentoRecalc = descuentosPorHoraRecalc.get(conductorData.id) || 0
+        const totalDias = Math.max(0, totalDiasBrutos - descuentoRecalc)
 
         // Excluir conductores con 0 días, SALVO que tengan penalidades pendientes
         if (totalDias === 0 && !dnisConPenalidadesRecalc.has(control.numero_dni)) continue
