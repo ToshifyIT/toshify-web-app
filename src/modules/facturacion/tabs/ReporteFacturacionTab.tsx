@@ -4651,30 +4651,30 @@ export function ReporteFacturacionTab() {
 
       for (const exRow of excelData) {
         const fact = facturacionesPorDNI.get(exRow.dni)
-        if (!fact) {
-          noMatch.push(`${exRow.nombre} (DNI: ${exRow.dni})`)
-          continue
-        }
 
-        // Solo excluir si ya está pagado
-        if (fact.estado === 'pagado') continue
+        // Si tiene facturación y ya está pagado, saltar
+        if (fact && fact.estado === 'pagado') continue
 
-        const yaCobrado = fact.monto_cobrado || 0
+        const yaCobrado = fact?.monto_cobrado || 0
 
         matched.push({
-          conductor_nombre: fact.conductor_nombre,
+          conductor_nombre: fact?.conductor_nombre || exRow.nombre,
           conductor_dni: exRow.dni,
-          patente: exRow.patente || fact.vehiculo_patente || '',
+          patente: exRow.patente || fact?.vehiculo_patente || '',
           importe_contrato: exRow.importe_contrato,
           disponible: exRow.disponible,
           importe_descontar: exRow.importe_descontar,
           saldo_adeudado: exRow.saldo_adeudado,
-          total_a_pagar: Math.abs(fact.total_a_pagar),
-          facturacion_id: fact.id,
-          conductor_id: fact.conductor_id,
-          conductor_cuit: fact.conductor_cuit || '',
+          total_a_pagar: fact ? Math.abs(fact.total_a_pagar) : 0,
+          facturacion_id: fact?.id || '',
+          conductor_id: fact?.conductor_id || '',
+          conductor_cuit: fact?.conductor_cuit || '',
           monto_cobrado: yaCobrado,
         })
+
+        if (!fact) {
+          noMatch.push(`${exRow.nombre} (DNI: ${exRow.dni}) — sin facturación`)
+        }
       }
 
       if (matched.length === 0) {
