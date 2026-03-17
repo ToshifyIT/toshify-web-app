@@ -8883,55 +8883,11 @@ export function ReporteFacturacionTab() {
             </div>
           )}
 
-          {/* Acciones */}
-          <div className="fact-filtros-columna">
-            <div className="fact-filtros-grupo">
-            </div>
-
-            <div className="fact-export-btn-group">
-              <button
-                className="fact-btn-export"
-                onClick={prepararSiFacturaPreview}
-                disabled={loadingSiFacturaPreview || facturacionesFiltradas.length === 0 || periodo?.estado === 'procesando'}
-                style={{ backgroundColor: '#059669' }}
-              >
-                {loadingSiFacturaPreview ? <Loader2 size={14} className="spinning" /> : <Eye size={14} />}
-                {loadingSiFacturaPreview ? 'Cargando...' : 'Preview Facturación'}
-              </button>
-              <button
-                className="fact-btn-export"
-                onClick={prepararCabifyPreviewDesdeFacturacion}
-                disabled={loadingCabifyPreview || facturacionesFiltradas.length === 0 || periodo?.estado === 'procesando'}
-                style={{ backgroundColor: '#7C3AED' }}
-              >
-                {loadingCabifyPreview ? <Loader2 size={14} className="spinning" /> : <Eye size={14} />}
-                {loadingCabifyPreview ? 'Cargando...' : 'Preview Cabify'}
-              </button>
-              {periodo?.estado === 'cerrado' && (
-                <>
-                  <input
-                    type="file"
-                    ref={cabifyFileInputRef}
-                    accept=".xlsx,.xls"
-                    style={{ display: 'none' }}
-                    onChange={handleCabifyFileUpload}
-                  />
-                  <button
-                    className="fact-btn-export"
-                    onClick={() => cabifyFileInputRef.current?.click()}
-                    disabled={loadingCabifyPagos || facturacionesFiltradas.length === 0}
-                    style={{ backgroundColor: '#7C3AED' }}
-                  >
-                    {loadingCabifyPagos ? <Loader2 size={14} className="spinning" /> : <Upload size={14} />}
-                    {loadingCabifyPagos ? 'Leyendo...' : 'Cargar Pagos Cabify'}
-                  </button>
-                </>
-              )}
-              {/* Botones ocultos para mantener funciones */}
-              <button style={{ display: 'none' }} onClick={exportarExcel} disabled={exportingExcel}>Excel</button>
-              <button style={{ display: 'none' }} onClick={prepareRITPreview} disabled={loadingRITPreview}>RIT</button>
-              <button style={{ display: 'none' }} onClick={() => registrarPagoFacturacion(null as any)}>Pago</button>
-            </div>
+          {/* Botones ocultos para mantener funciones */}
+          <div style={{ display: 'none' }}>
+            <button onClick={exportarExcel} disabled={exportingExcel}>Excel</button>
+            <button onClick={prepareRITPreview} disabled={loadingRITPreview}>RIT</button>
+            <button onClick={() => registrarPagoFacturacion(null as any)}>Pago</button>
           </div>
 
           {/* DataTable */}
