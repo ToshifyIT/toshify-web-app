@@ -573,7 +573,7 @@ export function DataTable<T>({
     // Excluir columnas que son SOLO hora (ej: hora_inicio, hora_cierre),
     // pero NO excluir fecha_hora que es un timestamp completo
     if (lowerColId.includes('hora') && !lowerColId.includes('fecha')) return false;
-    const dateKeywords = ['fecha', 'date', 'created', 'updated', 'vencimiento', 'inicio', 'fin'];
+    const dateKeywords = ['fecha', 'date', 'created', 'updated', 'vencimiento', 'inicio', 'fin', 'cita', 'entrega'];
     return dateKeywords.some(keyword => lowerColId.includes(keyword));
   }, []);
 
