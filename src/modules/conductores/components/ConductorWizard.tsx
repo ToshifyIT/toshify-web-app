@@ -247,18 +247,6 @@ export function ConductorWizard({
                 </select>
                 {errors.estado_civil_id && <span className="error-message">{errors.estado_civil_id}</span>}
               </div>
-              <div className="form-group">
-                <label className="form-label">Zona *</label>
-                <input
-                  type="text"
-                  className={`form-input ${errors.zona ? 'input-error' : ''}`}
-                  value={formData.zona}
-                  onChange={(e) => setFormData({ ...formData, zona: e.target.value })}
-                  disabled={saving}
-                  placeholder="Ej: Zona Norte, CABA"
-                />
-                {errors.zona && <span className="error-message">{errors.zona}</span>}
-              </div>
             </div>
           </div>
         )
@@ -421,19 +409,33 @@ export function ConductorWizard({
               </div>
             </div>
 
-            <div className="form-group" style={{ width: '100%' }}>
-              <label className="form-label">Dirección</label>
-              <AddressAutocomplete
-                value={formData.direccion}
-                onChange={(address, lat, lng) => setFormData({
-                  ...formData,
-                  direccion: address,
-                  direccion_lat: lat ?? null,
-                  direccion_lng: lng ?? null
-                })}
-                disabled={saving}
-                placeholder="Buscar dirección..."
-              />
+            <div className="form-row">
+              <div className="form-group" style={{ flex: 2 }}>
+                <label className="form-label">Dirección</label>
+                <AddressAutocomplete
+                  value={formData.direccion}
+                  onChange={(address, lat, lng) => setFormData({
+                    ...formData,
+                    direccion: address,
+                    direccion_lat: lat ?? null,
+                    direccion_lng: lng ?? null
+                  })}
+                  disabled={saving}
+                  placeholder="Buscar dirección..."
+                />
+              </div>
+              <div className="form-group" style={{ flex: 1 }}>
+                <label className="form-label">Zona</label>
+                <input
+                  type="text"
+                  className={`form-input ${errors.zona ? 'input-error' : ''}`}
+                  value={formData.zona}
+                  onChange={(e) => setFormData({ ...formData, zona: e.target.value })}
+                  disabled={saving}
+                  placeholder="Ej: Zona Norte, CABA"
+                />
+                {errors.zona && <span className="error-message">{errors.zona}</span>}
+              </div>
             </div>
 
             <div className="section-divider">Contacto de Emergencia</div>
