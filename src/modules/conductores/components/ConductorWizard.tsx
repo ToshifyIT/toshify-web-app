@@ -92,7 +92,6 @@ export function ConductorWizard({
       if (!formData.fecha_nacimiento) newErrors.fecha_nacimiento = 'Requerido'
       if (!formData.nacionalidad_id) newErrors.nacionalidad_id = 'Requerido'
       if (!formData.estado_civil_id) newErrors.estado_civil_id = 'Requerido'
-      if (!formData.zona.trim()) newErrors.zona = 'Requerido'
     }
 
     if (step === 3) {
@@ -409,33 +408,44 @@ export function ConductorWizard({
               </div>
             </div>
 
-            <div className="form-row">
-              <div className="form-group" style={{ flex: 2 }}>
-                <label className="form-label">Dirección</label>
-                <AddressAutocomplete
-                  value={formData.direccion}
-                  onChange={(address, lat, lng) => setFormData({
+            <div className="form-group" style={{ width: '100%' }}>
+              <label className="form-label">Dirección</label>
+              <AddressAutocomplete
+                value={formData.direccion}
+                onChange={(address, lat, lng) => {
+                  // Auto-detectar zona desde la dirección
+                  const addrLower = (address || '').toLowerCase()
+                  let zona = formData.zona
+                  if (!zona || zona === '') {
+                    if (addrLower.includes('zona norte') || addrLower.includes('san isidro') || addrLower.includes('vicente lópez') || addrLower.includes('san fernando') || addrLower.includes('tigre')) zona = 'Zona Norte'
+                    else if (addrLower.includes('zona sur') || addrLower.includes('lanús') || addrLower.includes('avellaneda') || addrLower.includes('quilmes') || addrLower.includes('berazategui') || addrLower.includes('lomas de zamora')) zona = 'Zona Sur'
+                    else if (addrLower.includes('zona oeste') || addrLower.includes('morón') || addrLower.includes('merlo') || addrLower.includes('moreno') || addrLower.includes('ituzaingó') || addrLower.includes('hurlingham') || addrLower.includes('tres de febrero')) zona = 'Zona Oeste'
+                    else if (addrLower.includes('caba') || addrLower.includes('ciudad autónoma') || addrLower.includes('buenos aires city') || addrLower.includes('capital federal')) zona = 'CABA'
+                    else if (addrLower.includes('muñiz') || addrLower.includes('san miguel') || addrLower.includes('josé c. paz') || addrLower.includes('malvinas')) zona = 'Zona Norte'
+                  }
+                  setFormData({
                     ...formData,
                     direccion: address,
                     direccion_lat: lat ?? null,
-                    direccion_lng: lng ?? null
-                  })}
-                  disabled={saving}
-                  placeholder="Buscar dirección..."
-                />
-              </div>
-              <div className="form-group" style={{ flex: 1 }}>
-                <label className="form-label">Zona</label>
-                <input
-                  type="text"
-                  className={`form-input ${errors.zona ? 'input-error' : ''}`}
-                  value={formData.zona}
-                  onChange={(e) => setFormData({ ...formData, zona: e.target.value })}
-                  disabled={saving}
-                  placeholder="Ej: Zona Norte, CABA"
-                />
-                {errors.zona && <span className="error-message">{errors.zona}</span>}
-              </div>
+                    direccion_lng: lng ?? null,
+                    zona: zona,
+                  })
+                }}
+                disabled={saving}
+                placeholder="Buscar dirección..."
+              />
+            </div>
+            <div className="form-group" style={{ width: '100%' }}>
+              <label className="form-label">Zona</label>
+              <input
+                type="text"
+                className={`form-input ${errors.zona ? 'input-error' : ''}`}
+                value={formData.zona}
+                onChange={(e) => setFormData({ ...formData, zona: e.target.value })}
+                disabled={saving}
+                placeholder="Ej: Zona Norte, CABA"
+              />
+              {errors.zona && <span className="error-message">{errors.zona}</span>}
             </div>
 
             <div className="section-divider">Contacto de Emergencia</div>
