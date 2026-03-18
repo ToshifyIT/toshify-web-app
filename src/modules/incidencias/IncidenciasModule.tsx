@@ -4442,21 +4442,30 @@ function IncidenciaForm({ formData, setFormData, estados, vehiculos, conductores
                       ? preciosAlquiler.P013
                       : preciosAlquiler.P001
                   const montoCalculado = Math.round(precioTurno * opt.value * 100) / 100
+                  const isSelected = formData.monto === montoCalculado && montoCalculado > 0
                   return (
                     <button
                       key={opt.label}
                       type="button"
-                      disabled={disabled || !formData.turno}
+                      disabled={disabled || !formData.turno || precioTurno === 0}
                       onClick={() => setFormData(prev => ({ ...prev, monto: montoCalculado }))}
                       style={{
-                        padding: '4px 10px', borderRadius: '4px', fontSize: '12px', fontWeight: 600,
-                        border: '1px solid var(--border-primary)', background: formData.monto === montoCalculado ? 'var(--color-primary)' : 'var(--bg-secondary)',
-                        color: formData.monto === montoCalculado ? 'white' : 'var(--text-primary)',
-                        cursor: disabled || !formData.turno ? 'not-allowed' : 'pointer', opacity: disabled || !formData.turno ? 0.5 : 1,
+                        padding: '4px 8px', borderRadius: '4px', fontSize: '11px', fontWeight: 600,
+                        border: '1px solid var(--border-primary)',
+                        background: isSelected ? 'var(--color-primary)' : 'var(--bg-secondary)',
+                        color: isSelected ? 'white' : 'var(--text-primary)',
+                        cursor: disabled || !formData.turno || precioTurno === 0 ? 'not-allowed' : 'pointer',
+                        opacity: disabled || !formData.turno || precioTurno === 0 ? 0.5 : 1,
+                        display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1px', minWidth: '70px',
                       }}
                       title={formData.turno ? `${opt.label} turno = $${montoCalculado.toLocaleString('es-AR')}` : 'Seleccione modalidad primero'}
                     >
-                      {opt.label}
+                      <span>{opt.label}</span>
+                      {formData.turno && precioTurno > 0 && (
+                        <span style={{ fontSize: '9px', fontWeight: 400, opacity: 0.85 }}>
+                          ${Math.round(montoCalculado).toLocaleString('es-AR')}
+                        </span>
+                      )}
                     </button>
                   )
                 })}
