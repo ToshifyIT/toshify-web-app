@@ -132,6 +132,7 @@ export function IncidenciasModule() {
   const [tiposPenalidad, setTiposPenalidad] = useState<TipoPenalidad[]>([])
   const [tiposCobroDescuento, setTiposCobroDescuento] = useState<TipoCobroDescuento[]>([])
   const [conceptosNomina, setConceptosNomina] = useState<{ id: string; codigo: string; descripcion: string; precio_final: number }[]>([])
+  const [preciosAlquiler, setPreciosAlquiler] = useState<{ P001: number; P002: number; P013: number }>({ P001: 0, P002: 0, P013: 0 })
   const [vehiculos, setVehiculos] = useState<VehiculoSimple[]>([])
   const [conductores, setConductores] = useState<ConductorSimple[]>([])
   // Mapa de penalidades fraccionadas: penalidad_id -> { total_cuotas, cuotas_pendientes }
@@ -396,6 +397,21 @@ export function IncidenciasModule() {
       // Conceptos para dropdown: excluir los que ya están cubiertos por tipos_cobro_descuento (P004, P006, P007)
       const conceptosFiltrados = (conceptosRes.data || []).filter((c: any) => !['P004', 'P006', 'P007'].includes(c.codigo))
       setConceptosNomina(conceptosFiltrados)
+      // Cargar precios de alquiler para cálculo por turno
+      const { data: preciosData } = await supabase
+        .from('conceptos_nomina')
+        .select('codigo, precio_final')
+        .in('codigo', ['P001', 'P002', 'P013'])
+        .eq('activo', true)
+      if (preciosData) {
+        const precios = { P001: 0, P002: 0, P013: 0 }
+        for (const p of preciosData) {
+          if (p.codigo === 'P001') precios.P001 = Number(p.precio_final) || 0
+          else if (p.codigo === 'P002') precios.P002 = Number(p.precio_final) || 0
+          else if (p.codigo === 'P013') precios.P013 = Number(p.precio_final) || 0
+        }
+        setPreciosAlquiler(precios)
+      }
       setVehiculos(vehiculosRes.data || [])
       setConductores((conductoresRes.data || []).map((c: any) => ({
         id: c.id,
@@ -3426,6 +3442,7 @@ export function IncidenciasModule() {
                   conductores={conductores}
                   tiposCobroDescuento={tiposCobroDescuento}
                   conceptosNomina={conceptosNomina}
+                  preciosAlquiler={preciosAlquiler}
                   disabled={saving}
                   esCobro={activeTab === 'cobro'}
                   sedes={sedes}
@@ -3880,6 +3897,7 @@ interface IncidenciaFormProps {
   conductores: ConductorSimple[]
   tiposCobroDescuento: TipoCobroDescuento[]
   conceptosNomina?: { id: string; codigo: string; descripcion: string; precio_final: number }[]
+  preciosAlquiler?: { P001: number; P002: number; P013: number }
   disabled?: boolean
   esCobro?: boolean  // Indica si es incidencia de cobro (muestra campo monto)
   sedes?: any[]
@@ -3900,7 +3918,7 @@ interface PatenteAsignada {
   fechaHasta: string
 }
 
-function IncidenciaForm({ formData, setFormData, estados, vehiculos, conductores, tiposCobroDescuento, conceptosNomina = [], disabled, esCobro = false, sedes }: IncidenciaFormProps) {
+function IncidenciaForm({ formData, setFormData, estados, vehiculos, conductores, tiposCobroDescuento, conceptosNomina = [], preciosAlquiler = { P001: 0, P002: 0, P013: 0 }, disabled, esCobro = false, sedes }: IncidenciaFormProps) {
   const [vehiculoSearch, setVehiculoSearch] = useState('')
   const [conductorSearch, setConductorSearch] = useState('')
   const [showVehiculoDropdown, setShowVehiculoDropdown] = useState(false)
@@ -4418,9 +4436,11 @@ function IncidenciaForm({ formData, setFormData, estados, vehiculos, conductores
                   { label: '1½', value: 1.5 },
                   { label: '2', value: 2 },
                 ].map(opt => {
-                  const esCargo = formData.turno === 'A cargo'
-                  const conceptoCodigo = esCargo ? 'P002' : (formData.turno === 'Nocturno' ? 'P013' : 'P001')
-                  const precioTurno = conceptosNomina.find(c => c.codigo === conceptoCodigo)?.precio_final || 0
+                  const precioTurno = formData.turno === 'A cargo'
+                    ? preciosAlquiler.P002
+                    : formData.turno === 'Nocturno'
+                      ? preciosAlquiler.P013
+                      : preciosAlquiler.P001
                   const montoCalculado = Math.round(precioTurno * opt.value * 100) / 100
                   return (
                     <button
