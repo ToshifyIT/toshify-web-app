@@ -4413,21 +4413,6 @@ function IncidenciaForm({ formData, setFormData, estados, vehiculos, conductores
               </div>
             )}
             <div className="form-group">
-              <label>Monto <span className="required">*</span></label>
-              <div style={{ display: 'flex', gap: '6px' }}>
-                <input
-                  type="number"
-                  min="0"
-                  step="0.01"
-                  value={formData.monto || ''}
-                  onChange={e => setFormData(prev => ({ ...prev, monto: e.target.value ? parseFloat(e.target.value) : undefined }))}
-                  placeholder="0.00"
-                  disabled={disabled}
-                  style={{ flex: 1 }}
-                />
-              </div>
-            </div>
-            <div className="form-group">
               <label>Calcular por turno</label>
               <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
                 {[
@@ -4469,6 +4454,21 @@ function IncidenciaForm({ formData, setFormData, estados, vehiculos, conductores
                     </button>
                   )
                 })}
+              </div>
+            </div>
+            <div className="form-group">
+              <label>Monto <span className="required">*</span></label>
+              <div style={{ display: 'flex', gap: '6px' }}>
+                <input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={formData.monto || ''}
+                  onChange={e => setFormData(prev => ({ ...prev, monto: e.target.value ? parseFloat(e.target.value) : undefined }))}
+                  placeholder="0.00"
+                  disabled={disabled}
+                  style={{ flex: 1 }}
+                />
               </div>
             </div>
           </div>
