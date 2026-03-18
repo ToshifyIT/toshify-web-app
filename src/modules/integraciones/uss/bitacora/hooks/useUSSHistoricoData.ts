@@ -156,9 +156,10 @@ export function useUSSHistoricoData(sedeId?: string | null) {
       setTotalCount(paginatedResult.count);
       const marcacionesTransformadas = bitacoraResult.data.map(transformarMarcacion).filter(m => m.estado !== 'Sin Actividad');
       
-      // Lookup DNIs en batch
+      // Lookup DNIs + horario asignado en batch
       const conductorIds = [...new Set(marcacionesTransformadas.map(m => m.conductorId).filter(Boolean))] as string[];
       if (conductorIds.length > 0) {
+        // DNIs
         const { data: conductoresData } = await supabase
           .from('conductores')
           .select('id, numero_dni')
@@ -167,9 +168,41 @@ export function useUSSHistoricoData(sedeId?: string | null) {
         marcacionesTransformadas.forEach(m => {
           if (m.conductorId) m.conductorDni = dniMap.get(m.conductorId) ?? null;
         });
+
+        // Horario asignado: buscar en asignaciones_conductores el turno de cada conductor
+        const { data: asignacionesData } = await (supabase
+          .from('asignaciones_conductores') as any)
+          .select('conductor_id, horario, asignaciones!inner(horario)')
+          .in('conductor_id', conductorIds)
+          .in('estado', ['activo', 'completado']);
+        // Mapa conductor_id → horario asignado (diurno/nocturno/todo_dia)
+        const horarioMap = new Map<string, string>();
+        if (asignacionesData) {
+          for (const ac of asignacionesData as any[]) {
+            const asigHorario = ac.asignaciones?.horario;
+            // Si la asignación es CARGO (todo_dia), no filtrar
+            if (asigHorario === 'CARGO') {
+              horarioMap.set(ac.conductor_id, 'todo_dia');
+            } else if (ac.horario && !horarioMap.has(ac.conductor_id)) {
+              // TURNO: usar el horario del conductor (diurno/nocturno)
+              horarioMap.set(ac.conductor_id, ac.horario);
+            }
+          }
+        }
+
+        // Filtrar: para vehículos TURNO, solo mostrar el turno asignado al conductor
+        const marcacionesFiltradas = marcacionesTransformadas.filter(m => {
+          if (!m.conductorId) return true;
+          const horarioAsignado = horarioMap.get(m.conductorId);
+          if (!horarioAsignado || horarioAsignado === 'todo_dia') return true;
+          // Solo mostrar si el horario de la marcación coincide con el asignado
+          return m.horario === horarioAsignado;
+        });
+
+        setMarcaciones(marcacionesFiltradas);
+      } else {
+        setMarcaciones(marcacionesTransformadas);
       }
-      
-      setMarcaciones(marcacionesTransformadas);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Error desconocido');
     } finally {
