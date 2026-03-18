@@ -62,7 +62,8 @@ export const getCabifyDatosPorSemanas = async (
   conductorIds: string[],
   semanas: string[],
   conductorDnis?: Map<string, string>,
-  sedeId?: string | null
+  sedeId?: string | null,
+  conductorNames?: Map<string, { nombres: string; apellidos: string }>
 ): Promise<Map<string, Map<string, { cobroApp: number; cobroEfectivo: number }>>> => {
   const result = new Map<string, Map<string, { cobroApp: number; cobroEfectivo: number }>>();
 
@@ -111,6 +112,8 @@ export const getCabifyDatosPorSemanas = async (
 
       const semanaMap = new Map<string, { cobroApp: number; cobroEfectivo: number }>();
 
+      // Paso 1: Match por DNI normalizado
+      const matchedConductorIds = new Set<string>();
       for (const driver of drivers) {
         const dniNorm = normalizeDni(driver.nationalIdNumber);
         if (!dniNorm) continue;
@@ -121,6 +124,31 @@ export const getCabifyDatosPorSemanas = async (
             cobroApp: driver.cobroApp,
             cobroEfectivo: driver.cobroEfectivo,
           });
+          matchedConductorIds.add(conductorId);
+        }
+      }
+
+      // Paso 2: Fallback por nombre/apellido para conductores no encontrados por DNI
+      if (conductorNames && conductorNames.size > 0) {
+        const unmatchedIds = conductorIds.filter(id => !matchedConductorIds.has(id));
+        for (const conductorId of unmatchedIds) {
+          const nameInfo = conductorNames.get(conductorId);
+          if (!nameInfo) continue;
+          const nombresLower = nameInfo.nombres.trim().toLowerCase();
+          const apellidosLower = nameInfo.apellidos.trim().toLowerCase();
+          if (!nombresLower || !apellidosLower) continue;
+
+          const matched = drivers.find(d => {
+            const cabifyFull = `${(d.name || '')} ${(d.surname || '')}`.trim().toLowerCase();
+            return cabifyFull.includes(nombresLower) && cabifyFull.includes(apellidosLower);
+          });
+
+          if (matched) {
+            semanaMap.set(conductorId, {
+              cobroApp: matched.cobroApp,
+              cobroEfectivo: matched.cobroEfectivo,
+            });
+          }
         }
       }
 

@@ -658,11 +658,71 @@ export function ProgramacionModule() {
     if (!result.isConfirmed) return
 
     try {
+      // Buscar conductor: 1) de prog, 2) de programaciones_onboarding, 3) de la asignación activa del vehículo
+      let conductorId = prog.conductor_id || prog.conductor_diurno_id || prog.conductor_nocturno_id || null
+      let conductorNombre = prog.conductor_nombre || prog.conductor_display || prog.conductor_diurno_nombre || prog.conductor_nocturno_nombre || null
+
+      if (!conductorNombre) {
+        // Fallback 2: buscar en la tabla programaciones_onboarding
+        const { data: progDB } = await (supabase.from('programaciones_onboarding') as any)
+          .select('conductor_id, conductor_nombre, conductor_diurno_id, conductor_diurno_nombre, conductor_nocturno_id, conductor_nocturno_nombre')
+          .eq('id', prog.id)
+          .single()
+        if (progDB) {
+          conductorId = conductorId || progDB.conductor_id || progDB.conductor_diurno_id || progDB.conductor_nocturno_id || null
+          conductorNombre = progDB.conductor_nombre || progDB.conductor_diurno_nombre || progDB.conductor_nocturno_nombre || null
+        }
+      }
+
+      if (!conductorNombre && prog.vehiculo_entregar_id) {
+        // Fallback 3: buscar conductor de la asignación activa del vehículo
+        const { data: asigActivas } = await (supabase as any)
+          .from('asignaciones')
+          .select('asignaciones_conductores(conductor_id, estado, conductores(nombres, apellidos))')
+          .eq('vehiculo_id', prog.vehiculo_entregar_id)
+          .in('estado', ['activa', 'activo'])
+        if (asigActivas) {
+          for (const asig of asigActivas) {
+            for (const ac of (asig.asignaciones_conductores || [])) {
+              if (ac.conductores && ac.estado !== 'cancelado') {
+                conductorId = conductorId || ac.conductor_id
+                conductorNombre = `${ac.conductores.nombres || ''} ${ac.conductores.apellidos || ''}`.trim()
+                break
+              }
+            }
+            if (conductorNombre) break
+          }
+        }
+      }
+
+      // Fallback 4: buscar en la asignación más reciente completada/finalizada del vehículo
+      if (!conductorNombre && prog.vehiculo_entregar_id) {
+        const { data: asigsCompletadas } = await (supabase as any)
+          .from('asignaciones')
+          .select('asignaciones_conductores(conductor_id, estado, conductores(nombres, apellidos))')
+          .eq('vehiculo_id', prog.vehiculo_entregar_id)
+          .in('estado', ['completada', 'finalizada'])
+          .order('created_at', { ascending: false })
+          .limit(1)
+        if (asigsCompletadas) {
+          for (const asig of asigsCompletadas) {
+            for (const ac of (asig.asignaciones_conductores || [])) {
+              if (ac.conductores && ac.estado !== 'cancelado') {
+                conductorId = conductorId || ac.conductor_id
+                conductorNombre = `${ac.conductores.nombres || ''} ${ac.conductores.apellidos || ''}`.trim()
+                break
+              }
+            }
+            if (conductorNombre) break
+          }
+        }
+      }
+
       const { error: devError } = await (supabase.from('devoluciones') as any)
         .insert({
           vehiculo_id: prog.vehiculo_entregar_id,
-          conductor_id: null,
-          conductor_nombre: null,
+          conductor_id: conductorId,
+          conductor_nombre: conductorNombre,
           programacion_id: prog.id,
           programado_por: prog.created_by_name || profile?.full_name || 'Sistema',
           fecha_programada: fechaProgramada,

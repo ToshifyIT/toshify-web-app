@@ -5,7 +5,7 @@
 /* eslint-disable react-hooks/exhaustive-deps */
 
 import { useState, useEffect, useMemo, useRef, lazy, Suspense } from 'react'
-import { X, Calendar, User, ChevronRight, Check, Sun, Moon, Route, Loader2, MapPin, Building2, Map as MapIcon } from 'lucide-react'
+import { X, Calendar, User, ChevronRight, Check, Sun, Moon, Route, Loader2, MapPin, Building2, Map as MapIcon, RotateCcw } from 'lucide-react'
 import { supabase } from '../../../lib/supabase'
 import { useAuth } from '../../../contexts/AuthContext'
 // Lazy import para que un fallo de Google Maps no tumbe todo el wizard
@@ -64,6 +64,9 @@ interface ProgramacionData {
   documento_nocturno: TipoDocumento | ''
   zona_nocturno: string
   distancia_nocturno: number | ''
+  // Devolución de vehículo
+  devolucion_vehiculo: boolean
+  ultimo_dia_cobro: 'dia_entrega' | 'fecha_baja' | ''
   // Otros
   observaciones: string
 }
@@ -172,6 +175,8 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
         documento_nocturno: (editData.documento_nocturno || '') as TipoDocumento,
         zona_nocturno: editData.zona_nocturno || '',
         distancia_nocturno: editData.distancia_nocturno || '',
+        devolucion_vehiculo: editData.devolucion_vehiculo ?? false,
+        ultimo_dia_cobro: editData.ultimo_dia_cobro || '',
         observaciones: editData.observaciones || ''
       }
     }
@@ -212,6 +217,8 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
     documento_nocturno: '',
     zona_nocturno: '',
     distancia_nocturno: '',
+    devolucion_vehiculo: false,
+    ultimo_dia_cobro: '',
     observaciones: ''
     }
   })
@@ -758,6 +765,20 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
       // Cargar conductores del vehiculo antes de pasar al paso 3
       setLoading(true)
       await loadConductoresDelVehiculo(formData.vehiculo_id)
+
+      // Si es devolución, auto-setear tipo de asignación y documento
+      if (formData.devolucion_vehiculo) {
+        setFormData(prev => ({
+          ...prev,
+          tipo_asignacion_cargo: 'devolucion_vehiculo' as TipoAsignacion,
+          documento_cargo: 'na' as TipoDocumento,
+          tipo_asignacion_diurno: prev.conductor_diurno_id ? 'devolucion_vehiculo' as TipoAsignacion : prev.tipo_asignacion_diurno,
+          documento_diurno: prev.conductor_diurno_id ? 'na' as TipoDocumento : prev.documento_diurno,
+          tipo_asignacion_nocturno: prev.conductor_nocturno_id ? 'devolucion_vehiculo' as TipoAsignacion : prev.tipo_asignacion_nocturno,
+          documento_nocturno: prev.conductor_nocturno_id ? 'na' as TipoDocumento : prev.documento_nocturno,
+        }))
+      }
+
       setLoading(false)
     }
 
@@ -826,6 +847,7 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
           horario,
           asignaciones_conductores (
             horario,
+            estado,
             conductor_id,
             conductores (
               id,
@@ -841,7 +863,11 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
 
       if (asignacionData) {
         const asigData = asignacionData as any
-        const conductoresAsig = asigData.asignaciones_conductores || []
+        // Si es devolución, solo traer conductores activos (no los dados de baja/completados)
+        const conductoresAsigRaw = asigData.asignaciones_conductores || []
+        const conductoresAsig = formData.devolucion_vehiculo
+          ? conductoresAsigRaw.filter((c: any) => c.estado === 'asignado' || c.estado === 'activo')
+          : conductoresAsigRaw
 
         // Guardar los IDs de conductores que ya están asignados a este vehículo
         // para que aparezcan disponibles en la lista aunque tengan asignación activa
@@ -1222,7 +1248,9 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
         vehiculo_entregar_color: formData.vehiculo_color,
         fecha_cita: formData.fecha_cita,
         hora_cita: formData.hora_cita,
-        observaciones: formData.observaciones || null
+        observaciones: formData.observaciones || null,
+        devolucion_vehiculo: formData.devolucion_vehiculo || false,
+        ultimo_dia_cobro: formData.devolucion_vehiculo ? (formData.ultimo_dia_cobro || null) : null
       }
 
       if (formData.modalidad === 'CARGO') {
@@ -1356,17 +1384,14 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
           if (a.id === formData.vehiculo_id) return -1
           if (b.id === formData.vehiculo_id) return 1
         }
-        const prioridad: Record<string, number> = {
-          'disponible': 0,
-          'turno_diurno_libre': 1,
-          'turno_nocturno_libre': 1,
-          'ocupado': 2
-        }
+        const prioridad: Record<string, number> = formData.devolucion_vehiculo
+          ? { 'ocupado': 0, 'turno_diurno_libre': 0, 'turno_nocturno_libre': 0, 'programado': 1, 'disponible': 2 }
+          : { 'disponible': 0, 'turno_diurno_libre': 1, 'turno_nocturno_libre': 1, 'ocupado': 2 }
         const prioA = prioridad[a.disponibilidad] ?? 99
         const prioB = prioridad[b.disponibilidad] ?? 99
         return prioA - prioB
       })
-  }, [vehicles, vehicleSearch, vehicleAvailabilityFilter, isEditMode, formData.vehiculo_id])
+  }, [vehicles, vehicleSearch, vehicleAvailabilityFilter, isEditMode, formData.vehiculo_id, formData.devolucion_vehiculo])
 
   // Obtener conductores seleccionados (buscar en lista o crear objeto temporal con datos del form)
   const conductorDiurno = conductores.find(c => c.id === formData.conductor_diurno_id) || 
@@ -2559,35 +2584,54 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
               </div>
             )}
 
-            {/* Step 1: Modalidad */}
+            {/* Step 1: Tipo */}
             {step === 1 && (
               <div>
                 <div className="step-description">
-                  <h3>Paso 1: Selecciona la Modalidad</h3>
-                  <p>Que tipo de asignacion sera?</p>
+                  <h3>Paso 1: Selecciona el Tipo</h3>
+                  <p>Que tipo de programacion sera?</p>
                 </div>
 
                 <div className="modality-grid">
                   <div
-                    className={`modality-card ${formData.modalidad === 'TURNO' ? 'selected' : ''}`}
-                    onClick={() => handleSelectModality('TURNO')}
+                    className={`modality-card ${formData.modalidad === 'TURNO' && !formData.devolucion_vehiculo ? 'selected' : ''}`}
+                    onClick={() => { handleSelectModality('TURNO'); setFormData(prev => ({ ...prev, modalidad: 'TURNO', devolucion_vehiculo: false })) }}
+                    style={{ padding: '20px 16px' }}
                   >
                     <div className="modality-icon">
-                      <Calendar size={48} />
+                      <Calendar size={36} />
                     </div>
                     <h4 className="modality-title">Turno</h4>
                     <p className="modality-description">Asignacion por jornada (Diurno y/o Nocturno)</p>
                   </div>
 
                   <div
-                    className={`modality-card ${formData.modalidad === 'CARGO' ? 'selected' : ''}`}
-                    onClick={() => handleSelectModality('CARGO')}
+                    className={`modality-card ${formData.modalidad === 'CARGO' && !formData.devolucion_vehiculo ? 'selected' : ''}`}
+                    onClick={() => { handleSelectModality('CARGO'); setFormData(prev => ({ ...prev, modalidad: 'CARGO', devolucion_vehiculo: false })) }}
+                    style={{ padding: '20px 16px' }}
                   >
                     <div className="modality-icon">
-                      <User size={48} />
+                      <User size={36} />
                     </div>
                     <h4 className="modality-title">A Cargo</h4>
                     <p className="modality-description">Asignacion permanente a conductor</p>
+                  </div>
+                </div>
+
+                <div className="modality-grid" style={{ marginTop: '12px', gridTemplateColumns: '1fr' }}>
+                  <div
+                    className={`modality-card ${formData.devolucion_vehiculo ? 'selected' : ''}`}
+                    onClick={() => {
+                      handleSelectModality('TURNO');
+                      setFormData(prev => ({ ...prev, modalidad: 'TURNO', devolucion_vehiculo: true }))
+                    }}
+                    style={{ maxWidth: '280px', margin: '0 auto', padding: '16px 16px' }}
+                  >
+                    <div className="modality-icon">
+                      <RotateCcw size={32} />
+                    </div>
+                    <h4 className="modality-title">Devolución Vehículo</h4>
+                    <p className="modality-description">Programar devolución de un vehículo asignado</p>
                   </div>
                 </div>
               </div>
@@ -3266,13 +3310,14 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
                           <select
                             value={formData.tipo_asignacion_cargo}
                             onChange={handleTipoAsignacionChange('tipo_asignacion_cargo', 'documento_cargo')}
+                            disabled={formData.devolucion_vehiculo}
                           >
                             <option value="">Seleccionar...</option>
                             <option value="entrega_auto">Entrega de auto</option>
                             <option value="asignacion_companero">Asignacion companero</option>
                             <option value="cambio_auto">Cambio de auto</option>
                             <option value="cambio_turno">Cambio de turno</option>
-                            <option value="devolucion_vehiculo">Devolucion vehiculo</option>
+                            {formData.devolucion_vehiculo && <option value="devolucion_vehiculo">Devolucion vehiculo</option>}
                           </select>
                         </div>
                       </div>
@@ -3289,7 +3334,21 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
                             <option value="na">N/A</option>
                           </select>
                         </div>
-                        <div></div>
+                        <div>
+                          {formData.tipo_asignacion_cargo === 'devolucion_vehiculo' && (
+                            <>
+                              <label>Último Día de Cobro *</label>
+                              <select
+                                value={formData.ultimo_dia_cobro}
+                                onChange={(e) => setFormData({ ...formData, ultimo_dia_cobro: e.target.value as 'dia_entrega' | 'fecha_baja' | '' })}
+                              >
+                                <option value="">Seleccionar...</option>
+                                <option value="dia_entrega">Día de entrega de vehículo</option>
+                                <option value="fecha_baja">Fecha de Baja</option>
+                              </select>
+                            </>
+                          )}
+                        </div>
                       </div>
                       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
                         <div>
@@ -3336,13 +3395,14 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
                           <select
                             value={formData.tipo_asignacion_diurno}
                             onChange={handleTipoAsignacionChange('tipo_asignacion_diurno', 'documento_diurno')}
+                            disabled={formData.devolucion_vehiculo}
                           >
                             <option value="">Seleccionar...</option>
                             <option value="entrega_auto">Entrega de auto</option>
                             <option value="asignacion_companero">Asignacion companero</option>
                             <option value="cambio_auto">Cambio de auto</option>
                             <option value="cambio_turno">Cambio de turno</option>
-                            <option value="devolucion_vehiculo">Devolucion vehiculo</option>
+                            {formData.devolucion_vehiculo && <option value="devolucion_vehiculo">Devolucion vehiculo</option>}
                           </select>
                         </div>
                       </div>
@@ -3359,7 +3419,21 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
                             <option value="na">N/A</option>
                           </select>
                         </div>
-                        <div></div>
+                        <div>
+                          {formData.tipo_asignacion_diurno === 'devolucion_vehiculo' && (
+                            <>
+                              <label>Último Día de Cobro *</label>
+                              <select
+                                value={formData.ultimo_dia_cobro}
+                                onChange={(e) => setFormData({ ...formData, ultimo_dia_cobro: e.target.value as 'dia_entrega' | 'fecha_baja' | '' })}
+                              >
+                                <option value="">Seleccionar...</option>
+                                <option value="dia_entrega">Día de entrega de vehículo</option>
+                                <option value="fecha_baja">Fecha de Baja</option>
+                              </select>
+                            </>
+                          )}
+                        </div>
                       </div>
                       <div style={{ display: 'grid', gridTemplateColumns: conductorNocturno ? '1fr 1fr' : '1fr', gap: '16px' }}>
                         <div>
@@ -3411,13 +3485,14 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
                               const val = e.target.value as TipoAsignacion
                               setFormData({ ...formData, tipo_asignacion_nocturno: val, ...(val === 'devolucion_vehiculo' ? { documento_nocturno: 'na' as TipoDocumento } : {}) })
                             }}
+                            disabled={formData.devolucion_vehiculo}
                           >
                             <option value="">Seleccionar...</option>
                             <option value="entrega_auto">Entrega de auto</option>
                             <option value="asignacion_companero">Asignacion companero</option>
                             <option value="cambio_auto">Cambio de auto</option>
                             <option value="cambio_turno">Cambio de turno</option>
-                            <option value="devolucion_vehiculo">Devolucion vehiculo</option>
+                            {formData.devolucion_vehiculo && <option value="devolucion_vehiculo">Devolucion vehiculo</option>}
                           </select>
                         </div>
                       </div>
@@ -3434,7 +3509,21 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
                             <option value="na">N/A</option>
                           </select>
                         </div>
-                        <div></div>
+                        <div>
+                          {formData.tipo_asignacion_nocturno === 'devolucion_vehiculo' && (
+                            <>
+                              <label>Último Día de Cobro *</label>
+                              <select
+                                value={formData.ultimo_dia_cobro}
+                                onChange={(e) => setFormData({ ...formData, ultimo_dia_cobro: e.target.value as 'dia_entrega' | 'fecha_baja' | '' })}
+                              >
+                                <option value="">Seleccionar...</option>
+                                <option value="dia_entrega">Día de entrega de vehículo</option>
+                                <option value="fecha_baja">Fecha de Baja</option>
+                              </select>
+                            </>
+                          )}
+                        </div>
                       </div>
                       <div style={{ display: 'grid', gridTemplateColumns: conductorDiurno ? '1fr 1fr' : '1fr', gap: '16px' }}>
                         <div>

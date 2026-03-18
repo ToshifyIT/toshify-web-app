@@ -98,6 +98,7 @@ export function ConductoresModule() {
   const [showBajaConfirmModal, setShowBajaConfirmModal] = useState(false);
   const [affectedAssignments, setAffectedAssignments] = useState<any[]>([]);
   const [pendingBajaUpdate, setPendingBajaUpdate] = useState(false);
+  const [asignacionesFinalizadas, setAsignacionesFinalizadas] = useState(false);
 
   const [historialConductor, setHistorialConductor] = useState<{ id: string; nombre: string } | null>(null);
 
@@ -865,6 +866,26 @@ export function ConductoresModule() {
       selectedConductor.estado_id !== bajaEstadoId;
 
     if (isChangingToBaja) {
+      // Validar campos obligatorios para baja
+      if (!formData.fecha_terminacion) {
+        Swal.fire({
+          icon: "warning",
+          title: "Fecha de terminación requerida",
+          text: "Debes ingresar la fecha de terminación para dar de baja al conductor",
+          confirmButtonColor: "#ff0033",
+        });
+        return;
+      }
+      if (!formData.motivo_baja?.trim()) {
+        Swal.fire({
+          icon: "warning",
+          title: "Motivo de baja requerido",
+          text: "Debes ingresar el motivo de baja para dar de baja al conductor",
+          confirmButtonColor: "#ff0033",
+        });
+        return;
+      }
+
       // Buscar asignaciones afectadas
       setSaving(true);
       const affected = await fetchAffectedAssignments(selectedConductor.id);
@@ -1278,6 +1299,265 @@ export function ConductoresModule() {
     }
   };
 
+  // Handler para el botón "Sí" (finalizar asignaciones) y "Dar de Baja" (solo TURNO con compañero)
+  // Procesa TODAS las asignaciones afectadas según su tipo:
+  //   - TURNO con compañero: asignación continúa, conductor removido, turno vacante
+  //   - TURNO solo / CARGO: asignación finalizada (completada), vehículo disponible
+  const handleFinalizarAsignacionSi = async () => {
+    if (!selectedConductor) return;
+
+    setPendingBajaUpdate(true);
+    try {
+      const ahora = new Date().toISOString();
+      const conductorNombre = `${selectedConductor.nombres} ${selectedConductor.apellidos}`;
+      const fechaBaja = formData.fecha_terminacion || ahora.split('T')[0];
+      const motivoBaja = `[BAJA CONDUCTOR] ${conductorNombre} (${fechaBaja}). Último día de facturación: ${fechaBaja}`;
+
+      // Obtener estado DISPONIBLE una sola vez para todos los vehículos
+      const { data: estadoDisponible } = await (supabase as any)
+        .from('vehiculos_estados')
+        .select('id')
+        .eq('codigo', 'DISPONIBLE')
+        .single();
+
+      for (const asignacionConductor of affectedAssignments) {
+        const asignacion = asignacionConductor.asignaciones;
+        const horarioAsignacion = asignacion.horario; // TURNO o CARGO
+        const tieneCompanero = asignacionConductor.otherConductors?.length > 0;
+
+        // --- Paso común: finalizar registro del conductor dado de baja ---
+        const { error: errCompletarConductor } = await (supabase as any)
+          .from('asignaciones_conductores')
+          .update({ estado: 'completado', fecha_fin: ahora })
+          .eq('id', asignacionConductor.id);
+        if (errCompletarConductor) throw new Error(`Error al completar conductor: ${errCompletarConductor.message}`);
+
+        // --- Paso común: limpiar turnos ocupados del conductor dado de baja ---
+        const { error: errLimpiarTurnos } = await (supabase as any)
+          .from('vehiculos_turnos_ocupados')
+          .delete()
+          .eq('asignacion_conductor_id', asignacionConductor.id);
+        if (errLimpiarTurnos) throw new Error(`Error al limpiar turnos: ${errLimpiarTurnos.message}`);
+
+        if (horarioAsignacion === 'TURNO' && tieneCompanero) {
+          // ─── TURNO CON COMPAÑERO: asignación continúa, turno queda vacante ───
+          const turnoVacante = asignacionConductor.horario === 'diurno' ? 'Turno Diurno' : 'Turno Nocturno';
+          const notaVacante = `[VACANTE] ${turnoVacante} - Baja de ${conductorNombre} (${fechaBaja}). Último día de facturación: ${fechaBaja}`;
+
+          const { error: errNota } = await (supabase as any)
+            .from('asignaciones')
+            .update({
+              notas: appendNota(asignacion.notas, notaVacante),
+              updated_at: ahora
+            })
+            .eq('id', asignacion.id);
+          if (errNota) throw new Error(`Error al agregar nota vacante: ${errNota.message}`);
+
+          // Vehículo a DISPONIBLE
+          if (estadoDisponible && asignacion.vehiculo_id) {
+            await (supabase as any)
+              .from('vehiculos')
+              .update({ estado_id: estadoDisponible.id })
+              .eq('id', asignacion.vehiculo_id);
+          }
+
+          // Historial vehículo
+          if (asignacion.vehiculo_id) {
+            registrarHistorialVehiculo({
+              vehiculoId: asignacion.vehiculo_id,
+              tipoEvento: 'conductor_removido',
+              estadoNuevo: 'DISPONIBLE',
+              detalles: {
+                asignacion_id: asignacion.id,
+                asignacion_codigo: asignacion.codigo,
+                patente: asignacion.vehiculos?.patente,
+                conductor_baja: conductorNombre,
+                modo: 'TURNO',
+                turno_vacante: turnoVacante,
+                fecha_baja: fechaBaja,
+                ultimo_dia_facturacion: fechaBaja,
+                asignacion_continua: true,
+              },
+              modulo: 'conductores',
+            });
+          }
+
+          // Historial conductor
+          registrarHistorialConductor({
+            conductorId: asignacionConductor.conductor_id,
+            tipoEvento: 'asignacion_completada',
+            detalles: {
+              asignacion_id: asignacion.id,
+              asignacion_codigo: asignacion.codigo,
+              patente: asignacion.vehiculos?.patente,
+              modo: 'TURNO',
+              horario: asignacionConductor.horario,
+              turno_vacante: turnoVacante,
+              fecha_baja: fechaBaja,
+              ultimo_dia_facturacion: fechaBaja,
+              asignacion_continua: true,
+              companero_no_afectado: true,
+            },
+            modulo: 'conductores',
+          });
+
+        } else {
+          // ─── CARGO o TURNO SOLO: finalizar asignación completa ───
+          const modo = horarioAsignacion === 'CARGO' ? 'CARGO' : 'TURNO';
+
+          // Finalizar la asignación
+          const { error: errFinalizar } = await (supabase as any)
+            .from('asignaciones')
+            .update({
+              estado: 'completada',
+              notas: appendNota(asignacion.notas, motivoBaja),
+              updated_at: ahora
+            })
+            .eq('id', asignacion.id);
+          if (errFinalizar) throw new Error(`Error al finalizar asignación: ${errFinalizar.message}`);
+
+          // Finalizar cualquier otro registro de conductor en esta asignación (residuales)
+          await (supabase as any)
+            .from('asignaciones_conductores')
+            .update({ estado: 'completado', fecha_fin: ahora })
+            .eq('asignacion_id', asignacion.id)
+            .neq('id', asignacionConductor.id)
+            .in('estado', ['asignado', 'activo']);
+
+          // Vehículo a DISPONIBLE
+          if (estadoDisponible && asignacion.vehiculo_id) {
+            await (supabase as any)
+              .from('vehiculos')
+              .update({ estado_id: estadoDisponible.id })
+              .eq('id', asignacion.vehiculo_id);
+          }
+
+          // Historial vehículo
+          if (asignacion.vehiculo_id) {
+            registrarHistorialVehiculo({
+              vehiculoId: asignacion.vehiculo_id,
+              tipoEvento: 'asignacion_finalizada',
+              estadoNuevo: 'DISPONIBLE',
+              detalles: {
+                asignacion_id: asignacion.id,
+                asignacion_codigo: asignacion.codigo,
+                patente: asignacion.vehiculos?.patente,
+                conductor_baja: conductorNombre,
+                modo,
+                fecha_baja: fechaBaja,
+                ultimo_dia_facturacion: fechaBaja,
+              },
+              modulo: 'conductores',
+            });
+          }
+
+          // Historial conductor
+          registrarHistorialConductor({
+            conductorId: asignacionConductor.conductor_id,
+            tipoEvento: 'asignacion_completada',
+            detalles: {
+              asignacion_id: asignacion.id,
+              asignacion_codigo: asignacion.codigo,
+              patente: asignacion.vehiculos?.patente,
+              modo,
+              horario: asignacionConductor.horario,
+              fecha_baja: fechaBaja,
+              ultimo_dia_facturacion: fechaBaja,
+            },
+            modulo: 'conductores',
+          });
+        }
+      }
+
+      // Asignaciones procesadas — ahora ejecutar la baja del conductor
+      await performConductorUpdate(formData.motivo_baja || 'Baja con finalización de asignaciones');
+
+      // Registrar historial de baja
+      registrarHistorialConductor({
+        conductorId: selectedConductor.id,
+        tipoEvento: 'baja',
+        estadoAnterior: 'ACTIVO',
+        estadoNuevo: 'BAJA',
+        detalles: {
+          nombre: `${selectedConductor.nombres} ${selectedConductor.apellidos}`,
+          motivo_baja: formData.motivo_baja,
+          fecha_terminacion: formData.fecha_terminacion,
+          asignaciones_finalizadas: affectedAssignments?.length || 0,
+        },
+        modulo: 'conductores',
+        sedeId: selectedConductor.sede_id,
+      });
+
+      // Cerrar modales y refrescar
+      setAffectedAssignments([]);
+      setAsignacionesFinalizadas(false);
+      setShowBajaConfirmModal(false);
+      setShowEditModal(false);
+      setSelectedConductor(null);
+      resetForm();
+      await loadConductores(true);
+
+      showSuccess("Baja procesada", "El conductor fue dado de baja y sus asignaciones fueron actualizadas.");
+    } catch (err: any) {
+      Swal.fire({
+        icon: "error",
+        title: "Error",
+        text: err.message,
+        confirmButtonColor: "#ff0033",
+      });
+    } finally {
+      setPendingBajaUpdate(false);
+    }
+  };
+
+  // Handler para botón "No": solo registra la baja del conductor, NO toca las asignaciones.
+  // Las asignaciones quedan activas para que Onboarding/Logística las gestione después.
+  const handleBajaSinFinalizar = async () => {
+    if (!selectedConductor) return;
+
+    setPendingBajaUpdate(true);
+    try {
+      // Solo actualizar el conductor a estado Baja
+      await performConductorUpdate(formData.motivo_baja || 'Baja sin finalización de asignaciones');
+
+      // Cerrar modales y refrescar
+      setShowBajaConfirmModal(false);
+      setAffectedAssignments([]);
+      setShowEditModal(false);
+      setSelectedConductor(null);
+      resetForm();
+      await loadConductores(true);
+
+      // Registrar historial de baja
+      registrarHistorialConductor({
+        conductorId: selectedConductor.id,
+        tipoEvento: 'baja',
+        estadoAnterior: 'ACTIVO',
+        estadoNuevo: 'BAJA',
+        detalles: {
+          nombre: `${selectedConductor.nombres} ${selectedConductor.apellidos}`,
+          motivo_baja: formData.motivo_baja,
+          fecha_terminacion: formData.fecha_terminacion,
+          asignaciones_sin_finalizar: affectedAssignments?.length || 0,
+          nota: 'Asignaciones no finalizadas - pendiente gestión por Onboarding/Logística',
+        },
+        modulo: 'conductores',
+        sedeId: selectedConductor.sede_id,
+      });
+
+      showSuccess("Baja registrada", "El conductor fue dado de baja. Las asignaciones quedan activas para gestión de Onboarding/Logística.");
+    } catch (err: any) {
+      Swal.fire({
+        icon: "error",
+        title: "Error",
+        text: err.message,
+        confirmButtonColor: "#ff0033",
+      });
+    } finally {
+      setPendingBajaUpdate(false);
+    }
+  };
+
   // Handler para confirmar baja con asignaciones
   const handleConfirmBaja = async (motivoBaja: string) => {
     if (!selectedConductor) return;
@@ -1346,6 +1626,12 @@ export function ConductoresModule() {
 
     setSaving(true);
     try {
+      // Limpiar referencias en devoluciones antes de eliminar
+      await (supabase as any)
+        .from('devoluciones')
+        .update({ conductor_id: null, conductor_nombre: null })
+        .eq('conductor_id', selectedConductor.id);
+
       const { error: deleteError } = await supabase
         .from("conductores")
         .delete()
@@ -2266,7 +2552,11 @@ export function ConductoresModule() {
           onCancel={() => {
             setShowBajaConfirmModal(false);
             setAffectedAssignments([]);
+            setAsignacionesFinalizadas(false);
           }}
+          onFinalizarSi={handleFinalizarAsignacionSi}
+          onBajaSinFinalizar={handleBajaSinFinalizar}
+          asignacionesFinalizadas={asignacionesFinalizadas}
           processing={pendingBajaUpdate}
         />
       )}
@@ -3238,6 +3528,8 @@ function ModalDetalles({
             id,
             horario,
             estado,
+            fecha_inicio,
+            fecha_fin,
             created_at,
             asignaciones!inner (
               id,
@@ -3659,10 +3951,10 @@ function ModalDetalles({
                       </span>
                     </div>
                     <div className="vehiculo-fecha">
-                      {asig?.fecha_inicio && (
+                      {(item.fecha_inicio || asig?.fecha_inicio) && (
                         <span>
-                          {new Date(asig.fecha_inicio).toLocaleDateString('es-AR')}
-                          {asig?.fecha_fin && ` - ${new Date(asig.fecha_fin).toLocaleDateString('es-AR')}`}
+                          {new Date(item.fecha_inicio || asig.fecha_inicio).toLocaleDateString('es-AR')}
+                          {(item.fecha_fin || asig?.fecha_fin) && ` - ${new Date(item.fecha_fin || asig.fecha_fin).toLocaleDateString('es-AR')}`}
                         </span>
                       )}
                     </div>
@@ -3708,16 +4000,22 @@ function ModalConfirmBaja({
   affectedAssignments,
   onConfirm,
   onCancel,
+  onFinalizarSi,
+  onBajaSinFinalizar,
+  asignacionesFinalizadas,
   processing,
 }: {
   conductor: ConductorWithRelations;
   affectedAssignments: any[];
   onConfirm: (motivo: string) => void;
   onCancel: () => void;
+  onFinalizarSi: () => void;
+  onBajaSinFinalizar: () => void;
+  asignacionesFinalizadas: boolean;
   processing: boolean;
 }) {
   const [motivoBaja, setMotivoBaja] = useState('');
-  
+
   // Agrupar por tipo de asignación
   const turnoAssignments = affectedAssignments.filter(
     (a) => a.asignaciones?.horario === 'TURNO'
@@ -3725,6 +4023,16 @@ function ModalConfirmBaja({
   const cargoAssignments = affectedAssignments.filter(
     (a) => a.asignaciones?.horario === 'CARGO'
   );
+
+  // TURNO con compañero: no requiere pregunta de finalización, se resuelve automáticamente
+  const turnoConCompanero = turnoAssignments.filter((a) => a.otherConductors?.length > 0);
+  // TURNO solo (sin compañero): requiere pregunta igual que CARGO
+  const turnoSolo = turnoAssignments.filter((a) => !a.otherConductors || a.otherConductors.length === 0);
+
+  // Solo TURNO con compañero → flujo simplificado (no se pregunta, se da de baja directo)
+  const soloTurnoConCompanero = turnoConCompanero.length > 0 && cargoAssignments.length === 0 && turnoSolo.length === 0;
+  // Hay asignaciones que requieren pregunta de finalización (CARGO o TURNO solo)
+  const requiereFinalizacion = cargoAssignments.length > 0 || turnoSolo.length > 0;
 
   return (
     <div className="modal-overlay" onClick={() => !processing && onCancel()}>
@@ -3751,9 +4059,11 @@ function ModalConfirmBaja({
               El conductor <strong>{conductor.nombres} {conductor.apellidos}</strong> tiene{' '}
               {affectedAssignments.length} asignación(es) activa(s) o programada(s).
             </p>
-            <p style={{ margin: '8px 0 0 0', fontSize: '13px', color: '#6B7280' }}>
-              Al confirmar la baja, estas asignaciones serán actualizadas automáticamente.
-            </p>
+            {soloTurnoConCompanero && (
+              <p style={{ margin: '8px 0 0 0', fontSize: '13px', color: '#6B7280' }}>
+                El conductor será removido del turno. La asignación continuará con el compañero y el turno quedará como Vacante.
+              </p>
+            )}
           </div>
         </div>
 
@@ -3791,9 +4101,11 @@ function ModalConfirmBaja({
               </h4>
               <p className="info-text">
                 El conductor será removido de su turno.{' '}
-                {turnoAssignments.some((a: any) => a.otherConductors?.length > 0)
-                  ? 'Las asignaciones con otro conductor continuarán con el turno vacante.'
-                  : 'Si no hay otro conductor, la asignación será finalizada.'}
+                {turnoConCompanero.length > 0 && turnoSolo.length === 0
+                  ? 'La asignación continuará con el compañero y el turno quedará como Vacante.'
+                  : turnoConCompanero.length > 0 && turnoSolo.length > 0
+                    ? 'Las asignaciones con otro conductor continuarán con el turno vacante. Las asignaciones sin compañero serán finalizadas.'
+                    : 'Si no hay otro conductor, la asignación será finalizada.'}
               </p>
               <div className="assignment-items">
                 {turnoAssignments.map((a: any) => (
@@ -3819,37 +4131,37 @@ function ModalConfirmBaja({
             </div>
           )}
         </div>
-        
-        {/* Campo de motivo de baja */}
-        <div style={{ marginTop: '20px' }}>
-          <label style={{ 
-            display: 'block', 
-            marginBottom: '8px', 
-            fontWeight: 600,
-            color: 'var(--text-primary)'
+
+        {/* Alerta de finalización */}
+        <div style={{
+          marginTop: '20px',
+          padding: '16px',
+          background: '#FFF8E1',
+          border: '1px solid #FFD54F',
+          borderRadius: '8px',
+        }}>
+          <p style={{
+            margin: 0,
+            fontWeight: 700,
+            fontSize: '14px',
+            color: '#F57F17',
+            marginBottom: '8px',
           }}>
-            Motivo de la baja <span style={{ color: '#ff0033' }}>*</span>
-          </label>
-          <textarea
-            value={motivoBaja}
-            onChange={(e) => setMotivoBaja(e.target.value)}
-            placeholder="Ingrese el motivo de la baja del conductor..."
-            style={{
-              width: '100%',
-              minHeight: '80px',
-              padding: '10px 12px',
-              border: '1px solid var(--border-color)',
-              borderRadius: '6px',
-              fontSize: '14px',
-              resize: 'vertical',
-              background: 'var(--bg-secondary)',
-              color: 'var(--text-primary)'
-            }}
-            disabled={processing}
-          />
+            ¿Finalizar la asignación del conductor ahora?
+          </p>
+          <p style={{
+            margin: 0,
+            fontSize: '13px',
+            color: '#5D4037',
+            lineHeight: '1.5',
+          }}>
+            Si el conductor debe devolver el vehículo y se le programará una devolución, selecciona <strong>Mantener asignación</strong>: Onboarding/Logística gestionará la finalización al crear la programación de devolución.
+            <br /><br />
+            Si el conductor ya entregó el vehículo, selecciona <strong>Finalizar asignación</strong>.
+          </p>
         </div>
         </div>
-        <div className="modal-footer">
+        <div className="modal-footer" style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
           <button
             className="btn-secondary"
             onClick={onCancel}
@@ -3858,21 +4170,36 @@ function ModalConfirmBaja({
             Cancelar
           </button>
           <button
-            className="btn-danger"
-            onClick={() => onConfirm(motivoBaja)}
-            disabled={processing || !motivoBaja.trim()}
+            onClick={onFinalizarSi}
+            disabled={processing || asignacionesFinalizadas}
             style={{
-              background: '#ff0033',
+              background: asignacionesFinalizadas ? '#86EFAC' : '#16A34A',
+              color: 'white',
+              border: asignacionesFinalizadas ? '2px solid #16A34A' : 'none',
+              padding: '10px 20px',
+              borderRadius: '6px',
+              fontWeight: '600',
+              cursor: (processing || asignacionesFinalizadas) ? 'not-allowed' : 'pointer',
+              opacity: (processing || asignacionesFinalizadas) ? 0.8 : 1,
+            }}
+          >
+            {asignacionesFinalizadas ? 'Baja y asignación finalizada' : 'Dar de baja y finalizar asignación'}
+          </button>
+          <button
+            onClick={onBajaSinFinalizar}
+            disabled={processing}
+            style={{
+              background: '#6B7280',
               color: 'white',
               border: 'none',
               padding: '10px 20px',
               borderRadius: '6px',
               fontWeight: '600',
-              cursor: (processing || !motivoBaja.trim()) ? 'not-allowed' : 'pointer',
-              opacity: (processing || !motivoBaja.trim()) ? 0.7 : 1,
+              cursor: processing ? 'not-allowed' : 'pointer',
+              opacity: processing ? 0.7 : 1,
             }}
           >
-            {processing ? 'Procesando...' : 'Confirmar Baja'}
+            {processing ? 'Procesando...' : 'Dar de baja y mantener asignación'}
           </button>
         </div>
       </div>

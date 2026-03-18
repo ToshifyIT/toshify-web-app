@@ -3,6 +3,7 @@ import { Eye, Edit2, Trash2, FileText, AlertTriangle, Plus, Shield } from 'lucid
 import Swal from 'sweetalert2'
 import { supabase } from '../../lib/supabase'
 import { useSede } from '../../contexts/SedeContext'
+import { useAuth } from '../../contexts/AuthContext'
 import { showSuccess } from '../../utils/toast'
 import { DataTable } from '../../components/ui/DataTable'
 import { LoadingOverlay } from '../../components/ui/LoadingOverlay'
@@ -18,10 +19,13 @@ interface Vencimiento {
   fecha_entrega?: string | null
   fecha_vencimiento: string
   fecha_iniciar_gestion?: string | null
-  prioridad: 'ALTO' | 'MEDIO' | 'BAJO' | 'N/A' | 'VENCIDO'
+  prioridad: 'ALTO' | 'MEDIO' | 'BAJO' | 'N/A'
   solicitado: boolean
   observacion?: string | null
   created_at: string
+  usuario_creacion?: string | null
+  fecha_edicion?: string | null
+  usuario_edicion?: string | null
 }
 
 type ModalMode = 'create' | 'edit' | 'view'
@@ -62,6 +66,20 @@ function formatDate(value: string | null | undefined): string {
   return `${day}/${month}/${year}`
 }
 
+function formatDateTime(value: string | null | undefined): string {
+  if (!value) return '-'
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return '-'
+  return date.toLocaleString('es-AR', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: true
+  })
+}
+
 function formatDateInput(date: Date): string {
   const year = date.getFullYear()
   const month = `${date.getMonth() + 1}`.padStart(2, '0')
@@ -75,68 +93,86 @@ function normalizeToday(): Date {
   return today
 }
 
-function calculatePriority(fechaVencimiento: string | null | undefined, documento: string | null | undefined): 'ALTO' | 'MEDIO' | 'BAJO' | 'N/A' | 'VENCIDO' {
+/**
+ * Determina si un registro está vencido (fecha_vencimiento <= hoy).
+ * El día del vencimiento ya se considera vencido.
+ * Se usa para el KPI "Vencidos", su filtro, y para excluir de "Próximas a vencer".
+ */
+function isVencido(fechaVencimiento: string | null | undefined): boolean {
   const d = parseDate(fechaVencimiento)
-  if (!d) return 'BAJO' // Default fallback
+  if (!d) return false
+  const today = normalizeToday()
+  const target = new Date(d)
+  target.setHours(0, 0, 0, 0)
+  return target.getTime() <= today.getTime()
+}
+
+/**
+ * Calcula la prioridad visual del registro según el tipo de documento y días restantes.
+ * NO retorna 'VENCIDO' — los registros vencidos conservan su última prioridad aplicable.
+ * Para saber si un registro está vencido, usar isVencido().
+ */
+function calculateDisplayPriority(fechaVencimiento: string | null | undefined, documento: string | null | undefined): 'ALTO' | 'MEDIO' | 'BAJO' | 'N/A' {
+  const d = parseDate(fechaVencimiento)
+  if (!d) return 'BAJO'
 
   const today = normalizeToday()
   const target = new Date(d)
   target.setHours(0, 0, 0, 0)
-  
-  // Diferencia en días: (Fecha Vencimiento - Hoy)
-  // Si target < today, diffDays será negativo (Vencido)
+
   const diffDays = Math.ceil((target.getTime() - today.getTime()) / (1000 * 60 * 60 * 24))
 
-  // 1. Regla VENCIDO
-  if (diffDays < 0) return 'VENCIDO'
+  // Para registros vencidos (diffDays < 0), usamos el valor absoluto
+  // para evaluar qué tan lejos están del vencimiento con las mismas reglas
+  const absDays = Math.abs(diffDays)
 
-  // 2. Regla N/A (Más de 6 meses ~ 180 días)
+  // N/A: más de 6 meses en el futuro (no aplica a vencidos)
   if (diffDays > 180) return 'N/A'
 
   const doc = (documento || '').toLowerCase().trim()
 
-  // 3. Reglas específicas por documento
+  // Reglas por documento (aplican tanto a vencidos como no vencidos)
   if (doc === 'matafuegos') {
-    // Matafuegos: <= 15 días MEDIA, > 15 días BAJA
-    if (diffDays <= 15) return 'MEDIO'
+    // Vencido o <= 15 días → MEDIO, sino BAJO
+    if (diffDays < 0 || diffDays <= 15) return 'MEDIO'
     return 'BAJO'
   }
 
-  // Grupo 1: Umbral 15 días (ALTA)
-  // Constancia de cédula, GNC, Patente provisoria
+  // Grupo 1: Umbral 15 días — Constancia de cédula, GNC, Patente provisoria
   if (
     doc === 'constancia de cédula' ||
     doc === 'gnc' ||
     doc === 'tarjeta gnc' ||
     doc === 'patente provisoria'
   ) {
-    if (diffDays <= 15) return 'ALTO'
+    if (diffDays < 0 || diffDays <= 15) return 'ALTO'
     return 'BAJO'
   }
 
-  // Grupo 2: Umbral 30 días (ALTA)
-  // VTV, Habilitacion remis, Seguro
+  // Grupo 2: Umbral 30 días — VTV, Habilitacion remis, Seguro
   if (
     doc === 'vtv' ||
     doc === 'habilitacion remis' ||
     doc === 'seguro'
   ) {
-    if (diffDays <= 30) return 'ALTO'
+    if (diffDays < 0 || diffDays <= 30) return 'ALTO'
     return 'BAJO'
   }
 
-  // Default para otros documentos no especificados
-  if (diffDays <= 30) return 'ALTO'
+  // Default para otros documentos
+  if (diffDays < 0 || diffDays <= 30) return 'ALTO'
   return 'BAJO'
 }
 
 function isProximoAVencer(item: Vencimiento): boolean {
-  const p = calculatePriority(item.fecha_vencimiento, item.documento)
+  if (isVencido(item.fecha_vencimiento)) return false
+  const p = calculateDisplayPriority(item.fecha_vencimiento, item.documento)
   return p === 'ALTO' || p === 'MEDIO'
 }
 
 export function VencimientosModule() {
   const { sedeActual } = useSede()
+  const { user, profile } = useAuth()
   const [loading, setLoading] = useState(true)
   const [items, setItems] = useState<Vencimiento[]>([])
   const [search, setSearch] = useState('')
@@ -193,7 +229,7 @@ export function VencimientosModule() {
       const { data, error } = await supabase
         .from('vencimientos' as any)
         .select('*')
-        .order('fecha_vencimiento', { ascending: true })
+        .order('created_at', { ascending: false })
         .limit(3000)
 
       if (error) throw error
@@ -206,10 +242,13 @@ export function VencimientosModule() {
         fecha_entrega: row.fecha_entrega ?? null,
         fecha_vencimiento: row.fecha_vencimiento,
         fecha_iniciar_gestion: row.fecha_iniciar_gestion ?? null,
-        prioridad: calculatePriority(row.fecha_vencimiento, row.documento),
+        prioridad: calculateDisplayPriority(row.fecha_vencimiento, row.documento),
         solicitado: !!row.solicitado,
         observacion: row.observacion ?? null,
-        created_at: row.created_at
+        created_at: row.created_at,
+        usuario_creacion: row.usuario_creacion ?? null,
+        fecha_edicion: row.fecha_edicion ?? null,
+        usuario_edicion: row.usuario_edicion ?? null
       }))
 
       setItems(mapped)
@@ -276,26 +315,23 @@ export function VencimientosModule() {
   const totalRegistros = useMemo(() => sedeFilteredItems.length, [sedeFilteredItems])
 
   const totalProximosAVencer = useMemo(() => {
-    return sedeFilteredItems.filter(i => {
-      const p = calculatePriority(i.fecha_vencimiento, i.documento)
-      return p === 'ALTO' || p === 'MEDIO'
-    }).length
+    return sedeFilteredItems.filter(i => isProximoAVencer(i)).length
   }, [sedeFilteredItems])
 
   const totalPrioridadAlta = useMemo(() => {
-    return sedeFilteredItems.filter(i => calculatePriority(i.fecha_vencimiento, i.documento) === 'ALTO').length
+    return sedeFilteredItems.filter(i => calculateDisplayPriority(i.fecha_vencimiento, i.documento) === 'ALTO').length
   }, [sedeFilteredItems])
 
   const totalPrioridadMedia = useMemo(() => {
-    return sedeFilteredItems.filter(i => calculatePriority(i.fecha_vencimiento, i.documento) === 'MEDIO').length
+    return sedeFilteredItems.filter(i => calculateDisplayPriority(i.fecha_vencimiento, i.documento) === 'MEDIO').length
   }, [sedeFilteredItems])
 
   const totalPrioridadBaja = useMemo(() => {
-    return sedeFilteredItems.filter(i => calculatePriority(i.fecha_vencimiento, i.documento) === 'BAJO').length
+    return sedeFilteredItems.filter(i => calculateDisplayPriority(i.fecha_vencimiento, i.documento) === 'BAJO').length
   }, [sedeFilteredItems])
 
   const totalVencidos = useMemo(
-    () => sedeFilteredItems.filter(i => calculatePriority(i.fecha_vencimiento, i.documento) === 'VENCIDO').length,
+    () => sedeFilteredItems.filter(i => isVencido(i.fecha_vencimiento)).length,
     [sedeFilteredItems]
   )
 
@@ -305,18 +341,15 @@ export function VencimientosModule() {
 
     // 1. Aplicar filtro por KPI
     if (activeFilter === 'proximos') {
-      res = res.filter(i => {
-        const p = calculatePriority(i.fecha_vencimiento, i.documento)
-        return p === 'ALTO' || p === 'MEDIO'
-      })
+      res = res.filter(i => isProximoAVencer(i))
     } else if (activeFilter === 'vencidos') {
-      res = res.filter(i => calculatePriority(i.fecha_vencimiento, i.documento) === 'VENCIDO')
+      res = res.filter(i => isVencido(i.fecha_vencimiento))
     } else if (activeFilter === 'alta') {
-      res = res.filter(i => calculatePriority(i.fecha_vencimiento, i.documento) === 'ALTO')
+      res = res.filter(i => calculateDisplayPriority(i.fecha_vencimiento, i.documento) === 'ALTO')
     } else if (activeFilter === 'media') {
-      res = res.filter(i => calculatePriority(i.fecha_vencimiento, i.documento) === 'MEDIO')
+      res = res.filter(i => calculateDisplayPriority(i.fecha_vencimiento, i.documento) === 'MEDIO')
     } else if (activeFilter === 'baja') {
-      res = res.filter(i => calculatePriority(i.fecha_vencimiento, i.documento) === 'BAJO')
+      res = res.filter(i => calculateDisplayPriority(i.fecha_vencimiento, i.documento) === 'BAJO')
     }
 
     // 2. Aplicar filtro de búsqueda
@@ -437,6 +470,7 @@ export function VencimientosModule() {
     setSaving(true)
     try {
       if (modalMode === 'create') {
+        const usuarioActual = profile?.full_name || user?.email || 'desconocido'
         const payload = {
           titular: formData.titular.trim(),
           patente: formData.patente.trim(),
@@ -445,7 +479,8 @@ export function VencimientosModule() {
           fecha_vencimiento: formData.fecha_vencimiento,
           fecha_iniciar_gestion: formData.fecha_iniciar_gestion || null,
           solicitado: formData.solicitado,
-          observacion: formData.observacion?.trim() || null
+          observacion: formData.observacion?.trim() || null,
+          usuario_creacion: usuarioActual
         }
 
         const { data, error } = await supabase
@@ -465,15 +500,19 @@ export function VencimientosModule() {
           fecha_entrega: row.fecha_entrega ?? null,
           fecha_vencimiento: row.fecha_vencimiento,
           fecha_iniciar_gestion: row.fecha_iniciar_gestion ?? null,
-          prioridad: row.prioridad || 'MEDIO',
+          prioridad: calculateDisplayPriority(row.fecha_vencimiento, row.documento),
           solicitado: !!row.solicitado,
           observacion: row.observacion ?? null,
-          created_at: row.created_at
+          created_at: row.created_at,
+          usuario_creacion: row.usuario_creacion ?? null,
+          fecha_edicion: row.fecha_edicion ?? null,
+          usuario_edicion: row.usuario_edicion ?? null
         }
 
         setItems(prev => [mapped, ...prev])
         showSuccess('Registro creado correctamente')
       } else if (modalMode === 'edit' && selectedItem) {
+        const usuarioActual = profile?.full_name || user?.email || 'desconocido'
         const payload = {
           titular: formData.titular.trim(),
           patente: formData.patente.trim(),
@@ -482,7 +521,9 @@ export function VencimientosModule() {
           fecha_vencimiento: formData.fecha_vencimiento,
           fecha_iniciar_gestion: formData.fecha_iniciar_gestion || null,
           solicitado: formData.solicitado,
-          observacion: formData.observacion?.trim() || null
+          observacion: formData.observacion?.trim() || null,
+          fecha_edicion: new Date().toISOString(),
+          usuario_edicion: usuarioActual
         }
 
         const { error } = await supabase
@@ -504,7 +545,9 @@ export function VencimientosModule() {
                   fecha_vencimiento: payload.fecha_vencimiento,
                   fecha_iniciar_gestion: payload.fecha_iniciar_gestion,
                   solicitado: payload.solicitado,
-                  observacion: payload.observacion
+                  observacion: payload.observacion,
+                  fecha_edicion: payload.fecha_edicion,
+                  usuario_edicion: payload.usuario_edicion
                 }
               : x
           )
@@ -566,12 +609,11 @@ export function VencimientosModule() {
       accessorKey: 'prioridad',
       header: 'Prioridad',
       cell: ({ row }) => {
-        const pr = calculatePriority(row.original.fecha_vencimiento, row.original.documento)
+        const pr = calculateDisplayPriority(row.original.fecha_vencimiento, row.original.documento)
         const upper = pr.toUpperCase()
         let cls = 'prioridad-badge prioridad-baja'
         if (upper === 'ALTO') cls = 'prioridad-badge prioridad-alta'
         else if (upper === 'MEDIO') cls = 'prioridad-badge prioridad-media'
-        else if (upper === 'VENCIDO') cls = 'prioridad-badge prioridad-vencido'
         else if (upper === 'N/A') cls = 'prioridad-badge prioridad-na'
         return <span className={cls}>{upper}</span>
       },
@@ -643,7 +685,7 @@ export function VencimientosModule() {
         Fecha_entrega: formatDate(item.fecha_entrega),
         Fecha_vencimiento: formatDate(item.fecha_vencimiento),
         Fecha_iniciar_gestion: formatDate(item.fecha_iniciar_gestion),
-        Prioridad: calculatePriority(item.fecha_vencimiento, item.documento),
+        Prioridad: calculateDisplayPriority(item.fecha_vencimiento, item.documento),
         Solicitado: item.solicitado ? 'Sí' : 'No',
         Observaciones: item.observacion || ''
       }))
@@ -998,6 +1040,21 @@ export function VencimientosModule() {
                   </div>
                 </div>
               </div>
+              {modalMode === 'view' && selectedItem && (
+                <div className="venc-registro-section">
+                  <span className="venc-registro-title">REGISTRO</span>
+                  <div className="venc-registro-row">
+                    <div className="venc-registro-item">
+                      <span className="venc-registro-label">CREADO</span>
+                      <span className="venc-registro-value">{formatDateTime(selectedItem.created_at)}</span>
+                    </div>
+                    <div className="venc-registro-item">
+                      <span className="venc-registro-label">ÚLTIMA ACTUALIZACIÓN</span>
+                      <span className="venc-registro-value">{selectedItem.fecha_edicion ? formatDateTime(selectedItem.fecha_edicion) : '---'}</span>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
             {modalMode !== 'view' && (
               <div className="modal-footer">

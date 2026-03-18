@@ -641,3 +641,55 @@ input:checked + .slider .off-text {
   color: var(--text-primary, #0f172a);
   border-color: var(--border-primary, #cbd5e1);
 }
+
+/* Sección REGISTRO en modal */
+.venc-registro-section {
+  margin-top: 16px;
+  padding-top: 16px;
+  margin-bottom: 16px;
+  border-top: 2px solid var(--border-primary, #e2e8f0);
+}
+
+.venc-registro-title {
+  display: block;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  color: var(--text-tertiary, #94a3b8);
+  margin-bottom: 12px;
+}
+
+.venc-registro-row {
+  display: flex;
+  gap: 12px;
+}
+
+.venc-registro-item {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  background: var(--bg-secondary, #f8fafc);
+  border: 1px solid var(--border-primary, #e2e8f0);
+  border-radius: 8px;
+  padding: 12px 14px;
+}
+
+.venc-registro-label {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: var(--text-tertiary, #94a3b8);
+  text-transform: uppercase;
+}
+
+.venc-registro-value {
+  font-size: 13px;
+  color: var(--text-secondary, #475569);
+}
+
+.venc-registro-user {
+  font-size: 11px;
+  color: var(--text-tertiary, #94a3b8);
+  font-style: italic;
+}
