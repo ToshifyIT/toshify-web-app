@@ -407,7 +407,7 @@
 
   font-size: 15px;
   font-weight: 500;
-  color: #475569; /* Slate-600 */
+  color: var(--text-secondary);
 
   line-height: 1;
   white-space: nowrap;
@@ -416,7 +416,7 @@
 .period-comparison-value-secondary {
 
   font-weight: 500;
-  color: #475569; /* Slate-600 */
+  color: var(--text-secondary);
 
   line-height: 1;
   white-space: nowrap;
@@ -444,8 +444,8 @@
 }
 
 .period-comparison-badge--neutral {
-  background: #f1f5f9; /* Slate-100 */
-  color: #64748b; /* Slate-500 */
+  background: var(--bg-tertiary);
+  color: var(--text-secondary);
 }
 
 .period-comparison-badge-icon {
