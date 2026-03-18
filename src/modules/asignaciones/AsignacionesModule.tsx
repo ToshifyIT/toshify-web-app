@@ -375,11 +375,11 @@ export function AsignacionesModule() {
           .from('programaciones_onboarding')
           .select('asignacion_id, tipo_asignacion, observaciones, created_by_name')
           .not('asignacion_id', 'is', null),
-        // Devoluciones pendientes
-        (supabase as any)
+        // Devoluciones pendientes y completadas
+        aplicarFiltroSede((supabase as any)
           .from('devoluciones')
-          .select('id, vehiculo_id, conductor_nombre, programado_por, fecha_programada, estado, observaciones, created_at, vehiculos:vehiculo_id(patente, marca, modelo)')
-          .eq('estado', 'pendiente')
+          .select('id, vehiculo_id, conductor_nombre, programado_por, fecha_programada, fecha_devolucion, estado, observaciones, created_at, programacion_id, vehiculos:vehiculo_id(patente, marca, modelo), programaciones_onboarding:programacion_id(conductor_nombre, conductor_diurno_nombre, conductor_nocturno_nombre, documento_diurno, documento_nocturno, tipo_documento)'))
+          .in('estado', ['pendiente', 'completado'])
           .order('fecha_programada', { ascending: true })
       ])
 
@@ -404,29 +404,100 @@ export function AsignacionesModule() {
       })
 
       // Convertir devoluciones pendientes en filas virtuales
-      const devolucionesVirtuales: Asignacion[] = (devolucionesRes?.data || []).map((d: any) => ({
-        id: d.id,
-        codigo: '',
-        vehiculo_id: d.vehiculo_id,
-        conductor_id: '',
-        fecha_programada: d.fecha_programada,
-        fecha_inicio: '',
-        fecha_fin: null,
-        modalidad: '',
-        horario: 'DEVOLUCION',
-        estado: 'programado',
-        notas: d.observaciones,
-        created_at: d.created_at,
-        created_by: null,
-        motivo: 'devolucion_vehiculo',
-        vehiculos: d.vehiculos || undefined,
-        asignaciones_conductores: [],
-        esDevolucion: true,
-        devolucionId: d.id,
-        _conductorNombre: d.conductor_nombre,
-        _programadoPor: d.programado_por,
-        motivoDetalle: { observaciones: d.observaciones, programadoPor: d.programado_por },
-      }))
+      const devolucionesVirtuales: Asignacion[] = (devolucionesRes?.data || []).map((d: any) => {
+        // Buscar la modalidad real del vehículo en las asignaciones existentes
+        const asigVehiculo = asignacionesConMotivo.find((a: any) => a.vehiculo_id === d.vehiculo_id && a.estado === 'activa')
+        const horarioReal = asigVehiculo?.horario || 'TURNO'
+        // Resolver conductor: primero de devoluciones, luego de programacion, luego de la asignacion activa
+        const prog = d.programaciones_onboarding
+        let conductorNombre = d.conductor_nombre || prog?.conductor_nombre || prog?.conductor_diurno_nombre || prog?.conductor_nocturno_nombre || ''
+        if (!conductorNombre && asigVehiculo?.asignaciones_conductores) {
+          conductorNombre = asigVehiculo.asignaciones_conductores
+            .filter((c: any) => c.estado !== 'completado' && c.estado !== 'cancelado')
+            .map((c: any) => c.conductores ? `${c.conductores.nombres || ''} ${c.conductores.apellidos || ''}`.trim() : '')
+            .filter(Boolean).join(', ')
+        }
+        // Resolver documento: de programacion
+        const doc = prog?.tipo_documento || prog?.documento_diurno || prog?.documento_nocturno
+        return {
+          id: d.id,
+          codigo: '',
+          vehiculo_id: d.vehiculo_id,
+          conductor_id: '',
+          fecha_programada: d.fecha_programada,
+          fecha_inicio: d.fecha_devolucion || '',
+          fecha_fin: d.fecha_devolucion || null,
+          modalidad: '',
+          horario: horarioReal,
+          estado: d.estado === 'completado' ? 'finalizada' : 'programado',
+          notas: d.observaciones,
+          created_at: d.created_at,
+          created_by: null,
+          motivo: 'devolucion_vehiculo',
+          vehiculos: d.vehiculos || undefined,
+          asignaciones_conductores: doc ? [{ id: d.id, conductor_id: '', estado: 'asignado', horario: horarioReal === 'CARGO' ? 'CARGO' : 'diurno', documento: doc === 'carta_oferta' ? 'CARTA_OFERTA' : doc === 'anexo' ? 'ANEXO' : doc?.toUpperCase() }] : [],
+          esDevolucion: true,
+          devolucionId: d.id,
+          _conductorNombre: conductorNombre,
+          _programadoPor: d.programado_por,
+          motivoDetalle: { observaciones: d.observaciones, programadoPor: d.programado_por },
+        }
+      })
+
+      // Resolver conductores faltantes en devoluciones (query directa como handleConfirmarDevolucion)
+      const devsSinConductor = devolucionesVirtuales.filter((d: any) => !d._conductorNombre)
+      if (devsSinConductor.length > 0) {
+        const vehIds = [...new Set(devsSinConductor.map((d: any) => d.vehiculo_id).filter(Boolean))]
+        if (vehIds.length > 0) {
+          const { data: asigsConductores } = await (supabase as any)
+            .from('asignaciones')
+            .select('vehiculo_id, asignaciones_conductores(conductor_id, estado, horario, conductores(nombres, apellidos))')
+            .in('vehiculo_id', vehIds)
+            .in('estado', ['activa', 'activo'])
+          if (asigsConductores) {
+            const conductoresPorVehiculo = new Map<string, string>()
+            for (const asig of asigsConductores) {
+              if (conductoresPorVehiculo.has(asig.vehiculo_id)) continue
+              const activos = (asig.asignaciones_conductores || [])
+                .filter((c: any) => c.estado !== 'cancelado' && c.conductores)
+                .map((c: any) => `${c.conductores.nombres || ''} ${c.conductores.apellidos || ''}`.trim())
+                .filter(Boolean)
+              if (activos.length > 0) conductoresPorVehiculo.set(asig.vehiculo_id, activos.join(', '))
+            }
+            for (const dev of devsSinConductor) {
+              const nombre = conductoresPorVehiculo.get(dev.vehiculo_id)
+              if (nombre) (dev as any)._conductorNombre = nombre
+            }
+          }
+
+          // Fallback: buscar en asignaciones completadas/finalizadas para vehículos aún sin resolver
+          const devsSinResolver = devsSinConductor.filter((d: any) => !d._conductorNombre)
+          const vehIdsSinResolver = [...new Set(devsSinResolver.map((d: any) => d.vehiculo_id).filter(Boolean))]
+            .filter((v) => !conductoresPorVehiculo.has(v))
+          if (vehIdsSinResolver.length > 0) {
+            const { data: asigsCompletadas } = await (supabase as any)
+              .from('asignaciones')
+              .select('vehiculo_id, asignaciones_conductores(conductor_id, estado, conductores(nombres, apellidos))')
+              .in('vehiculo_id', vehIdsSinResolver)
+              .in('estado', ['completada', 'finalizada'])
+              .order('created_at', { ascending: false })
+            if (asigsCompletadas) {
+              for (const asig of asigsCompletadas) {
+                if (conductoresPorVehiculo.has(asig.vehiculo_id)) continue
+                const nombres = (asig.asignaciones_conductores || [])
+                  .filter((c: any) => c.conductores)
+                  .map((c: any) => `${c.conductores.nombres || ''} ${c.conductores.apellidos || ''}`.trim())
+                  .filter(Boolean)
+                if (nombres.length > 0) conductoresPorVehiculo.set(asig.vehiculo_id, nombres.join(', '))
+              }
+              for (const dev of devsSinResolver) {
+                const nombre = conductoresPorVehiculo.get(dev.vehiculo_id)
+                if (nombre) (dev as any)._conductorNombre = nombre
+              }
+            }
+          }
+        }
+      }
 
       setAsignaciones([...asignacionesConMotivo, ...devolucionesVirtuales])
 
@@ -481,10 +552,10 @@ export function AsignacionesModule() {
           .from('programaciones_onboarding')
           .select('asignacion_id, tipo_asignacion, observaciones, created_by_name')
           .not('asignacion_id', 'is', null),
-        (supabase as any)
+        aplicarFiltroSede((supabase as any)
           .from('devoluciones')
-          .select('id, vehiculo_id, conductor_nombre, programado_por, fecha_programada, estado, observaciones, created_at, vehiculos:vehiculo_id(patente, marca, modelo)')
-          .eq('estado', 'pendiente')
+          .select('id, vehiculo_id, conductor_nombre, programado_por, fecha_programada, fecha_devolucion, estado, observaciones, created_at, programacion_id, vehiculos:vehiculo_id(patente, marca, modelo), programaciones_onboarding:programacion_id(conductor_nombre, conductor_diurno_nombre, conductor_nocturno_nombre, documento_diurno, documento_nocturno, tipo_documento)'))
+          .in('estado', ['pendiente', 'completado'])
           .order('fecha_programada', { ascending: true })
       ])
 
@@ -503,14 +574,64 @@ export function AsignacionesModule() {
         return { ...a, motivo: prog?.tipo || null, motivoDetalle: prog ? { observaciones: prog.observaciones, programadoPor: prog.programadoPor } : null }
       })
 
-      const devolucionesVirtuales: Asignacion[] = (devRes?.data || []).map((d: any) => ({
-        id: d.id, codigo: '', vehiculo_id: d.vehiculo_id, conductor_id: '', fecha_programada: d.fecha_programada,
-        fecha_inicio: '', fecha_fin: null, modalidad: '', horario: 'DEVOLUCION', estado: 'programado',
-        notas: d.observaciones, created_at: d.created_at, created_by: null, motivo: 'devolucion_vehiculo',
-        vehiculos: d.vehiculos || undefined, asignaciones_conductores: [],
-        esDevolucion: true, devolucionId: d.id, _conductorNombre: d.conductor_nombre, _programadoPor: d.programado_por,
-        motivoDetalle: { observaciones: d.observaciones, programadoPor: d.programado_por },
-      }))
+      // Resolver conductores de devoluciones: query directa a la BD (igual que handleConfirmarDevolucion)
+      const devsData = devRes?.data || []
+      const vehIdsDev = [...new Set(devsData.filter((d: any) => !d.conductor_nombre?.trim()).map((d: any) => d.vehiculo_id).filter(Boolean))]
+      const conductoresPorVeh = new Map<string, string>()
+      if (vehIdsDev.length > 0) {
+        // Buscar primero en asignaciones activas
+        const { data: asigsCond } = await (supabase as any)
+          .from('asignaciones')
+          .select('vehiculo_id, asignaciones_conductores(conductor_id, estado, conductores(nombres, apellidos))')
+          .in('vehiculo_id', vehIdsDev)
+          .in('estado', ['activa', 'activo'])
+        if (asigsCond) {
+          for (const asig of asigsCond) {
+            if (conductoresPorVeh.has(asig.vehiculo_id)) continue
+            const nombres = (asig.asignaciones_conductores || [])
+              .filter((c: any) => c.estado !== 'cancelado' && c.conductores)
+              .map((c: any) => `${c.conductores.nombres || ''} ${c.conductores.apellidos || ''}`.trim())
+              .filter(Boolean)
+            if (nombres.length > 0) conductoresPorVeh.set(asig.vehiculo_id, nombres.join(', '))
+          }
+        }
+
+        // Fallback: para los vehículos que no se resolvieron, buscar en la asignación más reciente (completada/finalizada)
+        const vehSinResolver = vehIdsDev.filter((v) => !conductoresPorVeh.has(v))
+        if (vehSinResolver.length > 0) {
+          const { data: asigsCompletadas } = await (supabase as any)
+            .from('asignaciones')
+            .select('vehiculo_id, asignaciones_conductores(conductor_id, estado, conductores(nombres, apellidos))')
+            .in('vehiculo_id', vehSinResolver)
+            .in('estado', ['completada', 'finalizada'])
+            .order('created_at', { ascending: false })
+          if (asigsCompletadas) {
+            for (const asig of asigsCompletadas) {
+              if (conductoresPorVeh.has(asig.vehiculo_id)) continue
+              const nombres = (asig.asignaciones_conductores || [])
+                .filter((c: any) => c.conductores)
+                .map((c: any) => `${c.conductores.nombres || ''} ${c.conductores.apellidos || ''}`.trim())
+                .filter(Boolean)
+              if (nombres.length > 0) conductoresPorVeh.set(asig.vehiculo_id, nombres.join(', '))
+            }
+          }
+        }
+      }
+
+      const devolucionesVirtuales: Asignacion[] = devsData.map((d: any) => {
+        const prog = d.programaciones_onboarding
+        const condNombre = d.conductor_nombre?.trim() || conductoresPorVeh.get(d.vehiculo_id) || ''
+        const doc = prog?.tipo_documento || prog?.documento_diurno || prog?.documento_nocturno
+        return {
+          id: d.id, codigo: '', vehiculo_id: d.vehiculo_id, conductor_id: '', fecha_programada: d.fecha_programada,
+          fecha_inicio: d.fecha_devolucion || '', fecha_fin: d.fecha_devolucion || null, modalidad: '', horario: 'DEVOLUCION', estado: d.estado === 'completado' ? 'finalizada' : 'programado',
+          notas: d.observaciones, created_at: d.created_at, created_by: null, motivo: 'devolucion_vehiculo',
+          vehiculos: d.vehiculos || undefined,
+          asignaciones_conductores: doc ? [{ id: d.id, conductor_id: '', estado: 'asignado', horario: 'diurno', documento: doc === 'carta_oferta' ? 'CARTA_OFERTA' : doc === 'anexo' ? 'ANEXO' : doc?.toUpperCase() }] : [],
+          esDevolucion: true, devolucionId: d.id, _conductorNombre: condNombre, _programadoPor: d.programado_por,
+          motivoDetalle: { observaciones: d.observaciones, programadoPor: d.programado_por },
+        }
+      })
 
       setAsignaciones([...asignacionesConMotivo, ...devolucionesVirtuales])
     } catch (err: any) {
@@ -642,8 +763,42 @@ export function AsignacionesModule() {
 
     // Procesar todas las asignaciones filtradas
     const asignacionesProcesadas = filteredAsignaciones.map((asignacion): ExpandedAsignacion => {
-      // Devoluciones: crear fila virtual simple
+      // Devoluciones: crear fila virtual - buscar conductor de la asignación activa del vehículo
       if ((asignacion as any).esDevolucion) {
+        // Resolver nombre: 1) del campo _conductorNombre, 2) de otra fila del mismo vehículo (activos), 3) fallback a completados
+        let nombre = (asignacion as any)._conductorNombre || ''
+        if (!nombre) {
+          // Primero buscar conductores activos/asignados del mismo vehículo
+          for (const otra of filteredAsignaciones) {
+            if ((otra as any).esDevolucion) continue
+            if (otra.vehiculo_id !== asignacion.vehiculo_id) continue
+            const conds = otra.asignaciones_conductores || []
+            for (const c of conds) {
+              const cd = (c as any).conductores
+              if (cd && c.estado !== 'completado' && c.estado !== 'cancelado') {
+                nombre = `${cd.nombres || ''} ${cd.apellidos || ''}`.trim()
+                break
+              }
+            }
+            if (nombre) break
+          }
+        }
+        // Fallback: si no se encontró, buscar en conductores completados (asignación ya finalizada)
+        if (!nombre) {
+          for (const otra of filteredAsignaciones) {
+            if ((otra as any).esDevolucion) continue
+            if (otra.vehiculo_id !== asignacion.vehiculo_id) continue
+            const conds = otra.asignaciones_conductores || []
+            for (const c of conds) {
+              const cd = (c as any).conductores
+              if (cd && c.estado !== 'cancelado') {
+                nombre = `${cd.nombres || ''} ${cd.apellidos || ''}`.trim()
+                break
+              }
+            }
+            if (nombre) break
+          }
+        }
         return {
           ...asignacion,
           esDevolucion: true,
@@ -651,7 +806,7 @@ export function AsignacionesModule() {
           conductoresTurno: null,
           conductorCargo: {
             id: '',
-            nombre: (asignacion as any)._conductorNombre || 'Pendiente de confirmar',
+            nombre: nombre || 'Sin conductor',
             confirmado: false,
             cancelado: false,
           },
@@ -1802,7 +1957,8 @@ export function AsignacionesModule() {
       // ==========================================
       const cambios: string[] = []
       const conductoresAsig = (regularizarAsignacion.asignaciones_conductores || []) as any[]
-      const esActivoCond = (c: any) => c.estado === 'asignado' || c.estado === 'activo'
+      const esAsigFinalizada = regularizarAsignacion.estado === 'finalizada' || regularizarAsignacion.estado === 'completada'
+      const esActivoCond = (c: any) => c.estado === 'asignado' || c.estado === 'activo' || (esAsigFinalizada && c.estado === 'completado')
 
       // Detectar cambio de vehículo
       if (regularizarData.vehiculo_id && regularizarData.vehiculo_id !== regularizarAsignacion.vehiculo_id) {
@@ -1854,7 +2010,11 @@ export function AsignacionesModule() {
       }
 
       if (regularizarData.fecha_inicio) {
-        updateData.fecha_inicio = new Date(regularizarData.fecha_inicio + 'T12:00:00').toISOString()
+        // Solo actualizar fecha_inicio si cambió (comparar solo la parte de fecha, no la hora)
+        const fechaOriginal = regularizarAsignacion.fecha_inicio ? regularizarAsignacion.fecha_inicio.split('T')[0] : ''
+        if (regularizarData.fecha_inicio !== fechaOriginal) {
+          updateData.fecha_inicio = new Date(regularizarData.fecha_inicio + 'T12:00:00').toISOString()
+        }
       }
       updateData.fecha_fin = regularizarData.fecha_fin 
         ? new Date(regularizarData.fecha_fin + 'T12:00:00').toISOString() 
@@ -1918,26 +2078,45 @@ export function AsignacionesModule() {
         }
       }
 
-      // Soft-delete primero (debe completarse antes del insert para evitar duplicados)
-      const softDeletePromise = (supabase as any)
-        .from('asignaciones_conductores')
-        .update({ estado: 'completado', fecha_fin: ahora })
-        .eq('asignacion_id', regularizarAsignacion.id)
-        .in('estado', ['asignado', 'activo'])
+      // Verificar si los conductores realmente cambiaron antes de recrearlos
+      const conductoresActuales = conductoresAsig.filter(esActivoCond)
+      const idsActuales = new Set(conductoresActuales.map((c: any) => c.conductor_id))
+      const idsNuevos = new Set(nuevoConductores.map((c: any) => c.conductor_id))
+      const conductoresCambiaron = idsActuales.size !== idsNuevos.size ||
+        [...idsActuales].some(id => !idsNuevos.has(id)) ||
+        [...idsNuevos].some(id => !idsActuales.has(id))
 
-      // UPDATE asignacion y soft-delete en paralelo
-      const [updateResult, softDeleteResult] = await Promise.all([
-        (supabase as any).from('asignaciones').update(updateData).eq('id', regularizarAsignacion.id),
-        softDeletePromise
-      ])
+      // UPDATE asignacion
+      const { error: updateError2 } = await (supabase as any).from('asignaciones').update(updateData).eq('id', regularizarAsignacion.id)
+      if (updateError2) throw updateError2
 
-      if (updateResult.error) throw updateResult.error
-      if (softDeleteResult.error) throw softDeleteResult.error
+      // Solo recrear conductores si cambiaron
+      if (conductoresCambiaron && nuevoConductores.length > 0) {
+        // Soft-delete conductores actuales (incluir completados en asignaciones finalizadas)
+        const estadosAReemplazar = esAsigFinalizada
+          ? ['asignado', 'activo', 'completado']
+          : ['asignado', 'activo']
+        const { error: softDeleteError } = await (supabase as any)
+          .from('asignaciones_conductores')
+          .update({ estado: 'reemplazado', fecha_fin: ahora })
+          .eq('asignacion_id', regularizarAsignacion.id)
+          .in('estado', estadosAReemplazar)
+        if (softDeleteError) throw softDeleteError
 
-      // INSERT nuevos conductores (después del soft-delete)
-      if (nuevoConductores.length > 0) {
+        // INSERT nuevos conductores
         const { error: insertError } = await (supabase.from('asignaciones_conductores') as any).insert(nuevoConductores)
         if (insertError) throw insertError
+      } else if (!conductoresCambiaron) {
+        // Conductores no cambiaron - solo actualizar documento si cambió
+        for (const ac of conductoresActuales) {
+          const nuevo = nuevoConductores.find((n: any) => n.conductor_id === ac.conductor_id)
+          if (nuevo && nuevo.documento !== ac.documento) {
+            await (supabase as any)
+              .from('asignaciones_conductores')
+              .update({ documento: nuevo.documento })
+              .eq('id', ac.id)
+          }
+        }
       }
 
       showSuccess('Regularizado', 'Los datos de la asignación han sido actualizados correctamente.')
@@ -2144,15 +2323,24 @@ export function AsignacionesModule() {
   // Handle cancel devolucion from actions menu
   const handleCancelDevolucion = async (devolucionId: string) => {
     const res = await Swal.fire({
-      title: '¿Cancelar devolución?',
+      title: '¿Eliminar devolución?',
+      text: 'Esta acción eliminará la devolución permanentemente. Si fue creada desde Programaciones, podrás enviarla nuevamente.',
       icon: 'warning',
       showCancelButton: true,
       confirmButtonColor: '#ff0033',
-      confirmButtonText: 'Sí, cancelar',
-      cancelButtonText: 'No'
+      cancelButtonColor: '#6B7280',
+      confirmButtonText: 'Sí, eliminar',
+      cancelButtonText: 'Cancelar'
     })
     if (!res.isConfirmed) return
-    await (supabase as any).from('devoluciones').update({ estado: 'cancelado' }).eq('id', devolucionId)
+    const { error: cancelError } = await (supabase as any).from('devoluciones').update({
+      estado: 'cancelado',
+      observaciones: '[ELIMINADA] Eliminada por usuario',
+    }).eq('id', devolucionId)
+    if (cancelError) {
+      Swal.fire('Error', cancelError.message || 'Error al cancelar devolución', 'error')
+      return
+    }
     showSuccess('Cancelada', 'Devolución cancelada')
     loadAsignaciones()
   }
@@ -2216,13 +2404,9 @@ export function AsignacionesModule() {
       cell: ({ row }) => (
         <div>
           <div><span className="asig-vehiculo-patente">{row.original.vehiculos?.patente || 'N/A'}</span></div>
-          {row.original.esDevolucion ? (
-            <span className="dt-badge" style={{ background: '#F3F4F6', color: '#4B5563', fontSize: '10px', padding: '1px 6px' }}>DEV</span>
-          ) : (
-            <span className={getHorarioBadgeClass(row.original.horario)} style={{ fontSize: '10px', padding: '1px 6px' }}>
-              {row.original.horario === 'CARGO' ? 'A CARGO' : 'TURNO'}
-            </span>
-          )}
+          <span className={getHorarioBadgeClass(row.original.horario)} style={{ fontSize: '10px', padding: '1px 6px' }}>
+            {row.original.horario === 'CARGO' ? 'A CARGO' : 'TURNO'}
+          </span>
         </div>
       )
     },
@@ -2269,7 +2453,7 @@ export function AsignacionesModule() {
       id: 'asignados',
       header: 'Asignados',
       accessorFn: (row) => {
-        if (row.esDevolucion) return row.conductorCargo?.nombre || ''
+        if (row.esDevolucion) return (row as any)._conductorNombre || row.conductorCargo?.nombre || ''
         if (row.horario === 'CARGO' || !row.horario) {
           return row.conductorCargo?.nombre || ''
         }
@@ -2280,9 +2464,9 @@ export function AsignacionesModule() {
       cell: ({ row }) => {
         const { conductoresTurno, conductorCargo, horario } = row.original
 
-        // Si es DEVOLUCIÓN, mostrar conductor simple
+        // Si es DEVOLUCIÓN, mostrar conductor
         if (row.original.esDevolucion) {
-          const nombre = conductorCargo?.nombre || 'Sin conductor'
+          const nombre = (row.original as any)._conductorNombre || conductorCargo?.nombre || 'Sin conductor'
           return <span className="asig-conductor-compacto">{nombre}</span>
         }
 
@@ -2381,7 +2565,10 @@ export function AsignacionesModule() {
       id: 'tipo_documento',
       header: 'Doc.',
       accessorFn: (row) => {
-        const conductores = row.asignaciones_conductores || []
+        const esFinalizada = row.estado === 'finalizada' || row.estado === 'completada'
+        const conductores = (row.asignaciones_conductores || []).filter((c: any) =>
+          c.estado === 'asignado' || c.estado === 'activo' || (esFinalizada && c.estado === 'completado')
+        )
         const documentos = [...new Set(conductores.map((c: any) => c.documento).filter(Boolean))]
         if (documentos.length === 0) return '-'
         const primerDoc = documentos.includes('CARTA_OFERTA') ? 'CARTA_OFERTA'
@@ -2390,7 +2577,10 @@ export function AsignacionesModule() {
         return primerDoc === 'CARTA_OFERTA' ? 'C.Oferta' : primerDoc === 'ANEXO' ? 'Anexo' : 'N/A'
       },
       cell: ({ row }) => {
-        const conductores = row.original.asignaciones_conductores || []
+        const esFinalizada = row.original.estado === 'finalizada' || row.original.estado === 'completada'
+        const conductores = (row.original.asignaciones_conductores || []).filter((c: any) =>
+          c.estado === 'asignado' || c.estado === 'activo' || (esFinalizada && c.estado === 'completado')
+        )
         if (conductores.length === 0) return <span className="text-muted">-</span>
         // Ordenar: diurno primero, nocturno después
         const sorted = [...conductores].sort((a: any, b: any) => {
@@ -2432,63 +2622,42 @@ export function AsignacionesModule() {
     {
       accessorKey: 'estado',
       header: 'Estado',
-      cell: ({ row }) => {
-        if (row.original.esDevolucion) {
-          return <span className="dt-badge" style={{ background: '#FEF3C7', color: '#92400E', fontSize: '10px', padding: '2px 6px' }}>Pend. Dev.</span>
-        }
-        return (
-          <span className={getStatusBadgeClass(row.original.estado)} style={{ fontSize: '10px', padding: '2px 6px' }}>
-            {getStatusLabel(row.original.estado)}
-          </span>
-        )
-      }
+      cell: ({ row }) => (
+        <span className={getStatusBadgeClass(row.original.estado)} style={{ fontSize: '10px', padding: '2px 6px' }}>
+          {getStatusLabel(row.original.estado)}
+        </span>
+      )
     },
     {
       id: 'acciones',
       header: '',
       enableSorting: false,
       cell: ({ row }) => {
-        // Acciones especiales para devoluciones
-        if (row.original.esDevolucion) {
-          const devActions = [
-            {
-              icon: <RotateCcw size={15} />,
-              label: 'Confirmar Devolución',
-              onClick: () => handleConfirmarDevolucion(row.original),
-              disabled: !canEdit,
-              variant: 'success' as const,
-            },
-            {
-              icon: <Trash2 size={15} />,
-              label: 'Cancelar',
-              onClick: () => handleCancelDevolucion(row.original.devolucionId!),
-              disabled: !canEdit,
-              variant: 'danger' as const,
-            },
-          ]
-          return <ActionsMenu actions={devActions} />
-        }
-
+        const esDevolucion = row.original.esDevolucion || row.original.motivo === 'devolucion_vehiculo'
         const actions = [
           // Acciones de programación (solo si está programado)
           ...(row.original.estado === 'programado' ? [
             {
               icon: <CheckCircle size={15} />,
-              label: 'Confirmar',
-              onClick: () => {
-                setSelectedAsignacion(row.original)
-                setShowConfirmModal(true)
-              },
+              label: esDevolucion ? 'Confirmar Devolución' : 'Confirmar',
+              onClick: esDevolucion
+                ? () => handleConfirmarDevolucion(row.original)
+                : () => {
+                    setSelectedAsignacion(row.original)
+                    setShowConfirmModal(true)
+                  },
               disabled: !canEdit,
               variant: 'success' as const,
             },
             {
               icon: <XCircle size={15} />,
               label: 'Cancelar',
-              onClick: () => {
-                setSelectedAsignacion(row.original)
-                setShowCancelModal(true)
-              },
+              onClick: esDevolucion && row.original.devolucionId
+                ? () => handleCancelDevolucion(row.original.devolucionId!)
+                : () => {
+                    setSelectedAsignacion(row.original)
+                    setShowCancelModal(true)
+                  },
               disabled: !canEdit,
               variant: 'warning' as const,
             },
@@ -2513,7 +2682,9 @@ export function AsignacionesModule() {
           {
             icon: <Trash2 size={15} />,
             label: 'Eliminar',
-            onClick: () => handleDelete(row.original.id),
+            onClick: () => esDevolucion && row.original.devolucionId
+              ? handleCancelDevolucion(row.original.devolucionId)
+              : handleDelete(row.original.id),
             disabled: !canDelete,
             variant: 'danger' as const,
           },
