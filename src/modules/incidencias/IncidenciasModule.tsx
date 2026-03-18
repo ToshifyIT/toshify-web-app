@@ -132,6 +132,7 @@ export function IncidenciasModule() {
   const [tiposPenalidad, setTiposPenalidad] = useState<TipoPenalidad[]>([])
   const [tiposCobroDescuento, setTiposCobroDescuento] = useState<TipoCobroDescuento[]>([])
   const [conceptosNomina, setConceptosNomina] = useState<{ id: string; codigo: string; descripcion: string; precio_final: number }[]>([])
+  const [preciosAlquiler, setPreciosAlquiler] = useState<{ P001: number; P002: number; P013: number }>({ P001: 0, P002: 0, P013: 0 })
   const [vehiculos, setVehiculos] = useState<VehiculoSimple[]>([])
   const [conductores, setConductores] = useState<ConductorSimple[]>([])
   // Mapa de penalidades fraccionadas: penalidad_id -> { total_cuotas, cuotas_pendientes }
@@ -396,6 +397,21 @@ export function IncidenciasModule() {
       // Conceptos para dropdown: excluir los que ya están cubiertos por tipos_cobro_descuento (P004, P006, P007)
       const conceptosFiltrados = (conceptosRes.data || []).filter((c: any) => !['P004', 'P006', 'P007'].includes(c.codigo))
       setConceptosNomina(conceptosFiltrados)
+      // Cargar precios de alquiler para cálculo por turno
+      const { data: preciosData } = await supabase
+        .from('conceptos_nomina')
+        .select('codigo, precio_final')
+        .in('codigo', ['P001', 'P002', 'P013'])
+        .eq('activo', true)
+      if (preciosData) {
+        const precios = { P001: 0, P002: 0, P013: 0 }
+        for (const p of preciosData) {
+          if (p.codigo === 'P001') precios.P001 = Number(p.precio_final) || 0
+          else if (p.codigo === 'P002') precios.P002 = Number(p.precio_final) || 0
+          else if (p.codigo === 'P013') precios.P013 = Number(p.precio_final) || 0
+        }
+        setPreciosAlquiler(precios)
+      }
       setVehiculos(vehiculosRes.data || [])
       setConductores((conductoresRes.data || []).map((c: any) => ({
         id: c.id,
@@ -3426,6 +3442,7 @@ export function IncidenciasModule() {
                   conductores={conductores}
                   tiposCobroDescuento={tiposCobroDescuento}
                   conceptosNomina={conceptosNomina}
+                  preciosAlquiler={preciosAlquiler}
                   disabled={saving}
                   esCobro={activeTab === 'cobro'}
                   sedes={sedes}
@@ -3880,6 +3897,7 @@ interface IncidenciaFormProps {
   conductores: ConductorSimple[]
   tiposCobroDescuento: TipoCobroDescuento[]
   conceptosNomina?: { id: string; codigo: string; descripcion: string; precio_final: number }[]
+  preciosAlquiler?: { P001: number; P002: number; P013: number }
   disabled?: boolean
   esCobro?: boolean  // Indica si es incidencia de cobro (muestra campo monto)
   sedes?: any[]
@@ -3900,7 +3918,7 @@ interface PatenteAsignada {
   fechaHasta: string
 }
 
-function IncidenciaForm({ formData, setFormData, estados, vehiculos, conductores, tiposCobroDescuento, conceptosNomina = [], disabled, esCobro = false, sedes }: IncidenciaFormProps) {
+function IncidenciaForm({ formData, setFormData, estados, vehiculos, conductores, tiposCobroDescuento, conceptosNomina = [], preciosAlquiler = { P001: 0, P002: 0, P013: 0 }, disabled, esCobro = false, sedes }: IncidenciaFormProps) {
   const [vehiculoSearch, setVehiculoSearch] = useState('')
   const [conductorSearch, setConductorSearch] = useState('')
   const [showVehiculoDropdown, setShowVehiculoDropdown] = useState(false)
@@ -4395,6 +4413,50 @@ function IncidenciaForm({ formData, setFormData, estados, vehiculos, conductores
               </div>
             )}
             <div className="form-group">
+              <label>Calcular por turno</label>
+              <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
+                {[
+                  { label: '½', value: 0.5 },
+                  { label: '1', value: 1 },
+                  { label: '1½', value: 1.5 },
+                  { label: '2', value: 2 },
+                ].map(opt => {
+                  const precioTurno = formData.turno === 'A cargo'
+                    ? preciosAlquiler.P002
+                    : formData.turno === 'Nocturno'
+                      ? preciosAlquiler.P013
+                      : preciosAlquiler.P001
+                  const montoCalculado = Math.round(precioTurno * opt.value * 100) / 100
+                  const isSelected = formData.monto === montoCalculado && montoCalculado > 0
+                  return (
+                    <button
+                      key={opt.label}
+                      type="button"
+                      disabled={disabled || !formData.turno || precioTurno === 0}
+                      onClick={() => setFormData(prev => ({ ...prev, monto: montoCalculado }))}
+                      style={{
+                        padding: '4px 8px', borderRadius: '4px', fontSize: '11px', fontWeight: 600,
+                        border: '1px solid var(--border-primary)',
+                        background: isSelected ? 'var(--color-primary)' : 'var(--bg-secondary)',
+                        color: isSelected ? 'white' : 'var(--text-primary)',
+                        cursor: disabled || !formData.turno || precioTurno === 0 ? 'not-allowed' : 'pointer',
+                        opacity: disabled || !formData.turno || precioTurno === 0 ? 0.5 : 1,
+                        display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1px', minWidth: '70px',
+                      }}
+                      title={formData.turno ? `${opt.label} turno = $${montoCalculado.toLocaleString('es-AR')}` : 'Seleccione modalidad primero'}
+                    >
+                      <span>{opt.label}</span>
+                      {formData.turno && precioTurno > 0 && (
+                        <span style={{ fontSize: '9px', fontWeight: 400, opacity: 0.85 }}>
+                          ${Math.round(montoCalculado).toLocaleString('es-AR')}
+                        </span>
+                      )}
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+            <div className="form-group">
               <label>Monto <span className="required">*</span></label>
               <div style={{ display: 'flex', gap: '6px' }}>
                 <input
@@ -4407,39 +4469,6 @@ function IncidenciaForm({ formData, setFormData, estados, vehiculos, conductores
                   disabled={disabled}
                   style={{ flex: 1 }}
                 />
-              </div>
-            </div>
-            <div className="form-group">
-              <label>Calcular por turno</label>
-              <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
-                {[
-                  { label: '½', value: 0.5 },
-                  { label: '1', value: 1 },
-                  { label: '1½', value: 1.5 },
-                  { label: '2', value: 2 },
-                ].map(opt => {
-                  const esCargo = formData.turno === 'A cargo'
-                  const conceptoCodigo = esCargo ? 'P002' : (formData.turno === 'Nocturno' ? 'P013' : 'P001')
-                  const precioTurno = conceptosNomina.find(c => c.codigo === conceptoCodigo)?.precio_final || 0
-                  const montoCalculado = Math.round(precioTurno * opt.value * 100) / 100
-                  return (
-                    <button
-                      key={opt.label}
-                      type="button"
-                      disabled={disabled || !formData.turno}
-                      onClick={() => setFormData(prev => ({ ...prev, monto: montoCalculado }))}
-                      style={{
-                        padding: '4px 10px', borderRadius: '4px', fontSize: '12px', fontWeight: 600,
-                        border: '1px solid var(--border-primary)', background: formData.monto === montoCalculado ? 'var(--color-primary)' : 'var(--bg-secondary)',
-                        color: formData.monto === montoCalculado ? 'white' : 'var(--text-primary)',
-                        cursor: disabled || !formData.turno ? 'not-allowed' : 'pointer', opacity: disabled || !formData.turno ? 0.5 : 1,
-                      }}
-                      title={formData.turno ? `${opt.label} turno = $${montoCalculado.toLocaleString('es-AR')}` : 'Seleccione modalidad primero'}
-                    >
-                      {opt.label}
-                    </button>
-                  )
-                })}
               </div>
             </div>
           </div>

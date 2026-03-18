@@ -93,26 +93,34 @@ const CONCEPTO_LABELS: Record<string, string> = {
   P013: 'Alquiler Turno Nocturno',
 }
 
-/** Para P003 (garantía), SIEMPRE mostrar "Cuota de Garantía" (+ "X de Y" si aplica).
- *  Para otros códigos: si la descripción es solo un número, fracción, o vacía, usar el label del código. */
+/** Siempre mostrar el label del concepto para códigos conocidos.
+ *  Si la descripción aporta info adicional (cuota, plan de pagos), se agrega. */
 function getConceptoLabel(item: PortalDetalle): string {
   const desc = item.concepto_descripcion?.trim()
-  const baseLabel = CONCEPTO_LABELS[item.concepto_codigo] || item.concepto_codigo
-  const cuotaMatch = desc ? /^(\d+\s+de\s+\d+)$/.exec(desc) : null
+  const baseLabel = CONCEPTO_LABELS[item.concepto_codigo]
 
-  // P003 = Cuota de Garantía: ALWAYS use the base label, append fraction if present
+  // Si no tenemos label para este código, usar la descripción tal cual
+  if (!baseLabel) return desc || item.concepto_codigo
+
+  // P003 = Cuota de Garantía: agregar fracción "X de Y" si aplica
   if (item.concepto_codigo === 'P003') {
+    const cuotaMatch = desc ? /(\d+\s+de\s+\d+)/.exec(desc) : null
     if (cuotaMatch) return `${baseLabel} ${cuotaMatch[1]}`
-    if (desc && desc !== baseLabel) return `${baseLabel} - ${desc}`
     return baseLabel
   }
 
-  // Other codes: use description if it's meaningful, otherwise fall back to base label
-  if (!desc || /^\d+([,.]\d+)?$/.test(desc) || cuotaMatch) {
-    if (cuotaMatch) return `${baseLabel} ${cuotaMatch[1]}`
-    return baseLabel
+  // P010 = Plan de Pagos: agregar descripción si es informativa (ej: "valor de multas 678.733,50")
+  if (item.concepto_codigo === 'P010' && desc && !/^\d+([,.]\d+)?$/.test(desc)) {
+    return `${baseLabel} - ${desc}`
   }
-  return desc
+
+  // Para códigos con descripción informativa (fechas, detalles), agregar entre paréntesis
+  // Ej: P005 "29/01/2026 al 01/02/2026" → "Peajes (29/01/2026 al 01/02/2026)"
+  if (desc && desc !== baseLabel && !/^\d+([,.]\d+)?$/.test(desc)) {
+    return `${baseLabel} (${desc})`
+  }
+
+  return baseLabel
 }
 
 // =====================================================
