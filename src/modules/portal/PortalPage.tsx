@@ -114,7 +114,12 @@ function getConceptoLabel(item: PortalDetalle): string {
     return `${baseLabel} - ${desc}`
   }
 
-  // Para todos los demás códigos conocidos (P001, P002, P005, etc), usar siempre el label base
+  // Para códigos con descripción informativa (fechas, detalles), agregar entre paréntesis
+  // Ej: P005 "29/01/2026 al 01/02/2026" → "Peajes (29/01/2026 al 01/02/2026)"
+  if (desc && desc !== baseLabel && !/^\d+([,.]\d+)?$/.test(desc)) {
+    return `${baseLabel} (${desc})`
+  }
+
   return baseLabel
 }
 
