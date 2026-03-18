@@ -10,7 +10,8 @@ export type TipoEventoVehiculo =
   | 'devolucion'
   | 'siniestro'
   | 'regularizacion'
-  | 'eliminacion_asignacion';
+  | 'eliminacion_asignacion'
+  | 'conductor_removido';
 
 // Tipos de evento para conductores
 export type TipoEventoConductor =

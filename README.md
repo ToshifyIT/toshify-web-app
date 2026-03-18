@@ -8,13 +8,14 @@
 ![Supabase](https://img.shields.io/badge/Supabase-Cloud-3FCF8E?logo=supabase&logoColor=white)
 ![License](https://img.shields.io/badge/License-Proprietary-red)
 
-Plataforma empresarial para la gestion integral de flotas de vehiculos, sincronizacion con proveedores de movilidad (Cabify, USS) y monitoreo en tiempo real de conductores mediante integracion con Wialon GPS.
+Plataforma empresarial para la gestion integral de flotas de vehiculos, conductores, facturacion, asignaciones, incidencias y sincronizacion con proveedores de movilidad (Cabify, USS/Wialon).
 
 ---
 
 ## Tabla de Contenidos
 
 - [Caracteristicas Principales](#caracteristicas-principales)
+- [Modulos](#modulos)
 - [Tecnologias](#tecnologias)
 - [Instalacion](#instalacion)
 - [Scripts Disponibles](#scripts-disponibles)
@@ -27,26 +28,109 @@ Plataforma empresarial para la gestion integral de flotas de vehiculos, sincroni
 ## Caracteristicas Principales
 
 ### Gestion de Flotas
-- **Dashboard en tiempo real** con metricas de rendimiento
+- **Dashboard en tiempo real** con metricas de rendimiento (Estado de Flota)
 - **Seguimiento GPS** integrado con Wialon
-- **Gestion de vehiculos** y asignaciones
-- **Control de mantenimientos** y documentacion
+- **Gestion de vehiculos** con filtros por estado, GNC, titular y mas
+- **Control de kilometraje** y documentacion
+- **Registro de vencimientos** de documentos
 
-### Modulo Cabify
-- **Sincronizacion automatica** via cron jobs en Supabase
-- **Historico de conductores** con metricas detalladas
-- **Rankings de rendimiento** (mejores/peores conductores)
-- **Soporte multi-pais** (Argentina, Peru)
+### Onboarding y Asignaciones
+- **Programacion de entregas** con wizard paso a paso (Sede, Modalidad, Vehiculo, Conductores, Detalles)
+- **Asignaciones activas** con columnas sticky y vista detallada
+- **Auto-deteccion de tipo de candidato** (Nuevo/Antiguo/Reingreso)
+- **Gestion de bajas** con proteccion del companero en modalidad TURNO
+- **Zonas peligrosas** y control de areas
 
-### Modulo USS (Urban Speed Services)
-- **Monitoreo de velocidad** y excesos
-- **Reportes de kilometraje** diario/semanal
-- **Alertas automaticas** de infracciones
+### Facturacion
+- **Vista previa semanal** con calculo on-the-fly
+- **Generacion y recalculo de periodos** (abierto/cerrado)
+- **Descuentos automaticos por hora de entrega** (parametrizables)
+- **Cobros fraccionados** con cuotas semanales
+- **Incidencias (cobro)** con reasignacion de semana
+- **Integracion con Cabify** para peajes y pagos
+- **Garantias** y saldos de conductores
+- **Export a Excel y PDF** individual y masivo
+
+### Conductores
+- **Gestion completa** con estados, licencias, datos de contacto
+- **Historial de vehiculos** con asignaciones activas/finalizadas/programadas
+- **Seguimiento semanal** de conductores
+
+### Integracion Cabify
+- **Sincronizacion automatica** via cron jobs
+- **Historico de conductores** con metricas detalladas (score, tasa aceptacion, horas)
+- **Rankings de rendimiento** (Top 10 mejores/peores)
+- **Ultima fecha de sync** visible en header
+- **Soporte multi-sede** (Buenos Aires, Bariloche)
+
+### Integracion USS / Wialon
+- **Bitacora de marcaciones** con datos enriquecidos desde asignaciones
+- **Control de exceso de velocidad**
+- **Historico de kilometraje** diario/semanal
+- **Checklist por conductor** (GNC, Lavado, Nafta) con iconos descriptivos
+
+### Incidencias
+- **Incidencias logisticas** y de cobro
+- **Flujo de aprobacion** (Por Aplicar, Aplicadas, Rechazadas)
+- **Reasignacion de semana** para cobros
+- **Penalidades** con fraccionamiento en cuotas
+
+### Siniestros
+- **Registro y seguimiento** de siniestros vehiculares
+
+### Gestion de Visitas
+- **Calendario semanal/mensual** de citas
+- **Categorias** (Logistica, Directivo, etc.)
+- **Visitas Directivo** ocultas para usuarios no autorizados
+- **Permisos granulares** (ver/crear/editar) por rol
+
+### Multas y Telepase
+- **Registro de multas** e infracciones
+- **Gestion de Telepase** por vehiculo
+
+### Logistica
+- **Dashboard de inventario**
+- **Proveedores y productos**
+- **Pedidos y movimientos**
+
+### Reportes
+- **Dashboard KPIs** con graficos (Recharts)
+- **Facturacion** semanal detallada
+
+### Parametros del Sistema
+- **Conceptos de facturacion** (precios de alquiler, garantia, etc.)
+- **Configuracion USS** (horarios de turno)
+- **Configuracion Asignaciones** (descuentos por hora de entrega)
+- **Rango seguimiento guias**
 
 ### Sistema de Permisos
-- **Roles personalizables** (Admin, Supervisor, Operador)
-- **Permisos granulares** por menu y accion
-- **Auditoria completa** de cambios
+- **Roles personalizables** (Admin, Supervisor, Operador, Adm Logistico, Directivo)
+- **Permisos granulares** por menu y accion (ver/crear/editar/eliminar)
+- **Menu por Rol** y **Menu por Usuario**
+- **Multi-sede** con selector de sede
+
+---
+
+## Modulos
+
+| Modulo | Ruta | Descripcion |
+|--------|------|-------------|
+| Estado de Flota | `/estado-flota` | Dashboard principal |
+| Programaciones | `/onboarding/programaciones` | Programar entregas |
+| Asignaciones | `/onboarding/asignaciones` | Gestionar asignaciones activas |
+| Gestion Vehiculos | `/vehiculos` | CRUD de vehiculos |
+| Conductores | `/conductores` | CRUD de conductores |
+| Incidencias | `/incidencias` | Incidencias logisticas y cobros |
+| Siniestros | `/siniestros` | Registro de siniestros |
+| Facturacion | `/reportes/facturacion` | Facturacion semanal |
+| Dashboard KPIs | `/reportes/dashboard` | KPIs y graficos |
+| Cabify | `/integraciones/cabify` | Historico Cabify |
+| Bitacora USS | `/integraciones/uss/bitacora` | Marcaciones Wialon |
+| Visitas | `/visitas` | Gestion de citas |
+| Multas | `/multas-telepase/multas` | Multas vehiculares |
+| Telepase | `/multas-telepase/telepase` | Gestion Telepase |
+| Parametros | `/parametros/*` | Configuracion del sistema |
+| Administracion | `/administracion/*` | Usuarios, roles, menus, sedes |
 
 ---
 
@@ -140,19 +224,31 @@ toshify-web-app/
 │   ├── contexts/        # React Context providers
 │   │   ├── AuthContext.tsx
 │   │   ├── PermissionsContext.tsx
+│   │   ├── SedeContext.tsx
 │   │   └── ThemeContext.tsx
 │   ├── hooks/           # Custom React hooks
 │   ├── lib/             # Configuracion (Supabase client)
 │   ├── modules/         # Modulos de funcionalidad
+│   │   ├── asignaciones/
+│   │   ├── conductores/
 │   │   ├── facturacion/
+│   │   ├── incidencias/
+│   │   ├── integraciones/
+│   │   │   ├── cabify/
+│   │   │   └── uss/bitacora/
+│   │   ├── onboarding/
 │   │   ├── siniestros/
-│   │   └── incidencias/
+│   │   ├── vehiculos/
+│   │   └── visitas/
 │   ├── pages/           # Paginas (rutas)
+│   │   ├── parametros/
+│   │   └── integraciones/
 │   ├── services/        # Clientes API y logica de negocio
 │   ├── types/           # Tipos TypeScript
 │   └── utils/           # Funciones utilitarias
 ├── scripts/             # Scripts de sincronizacion
 ├── .husky/              # Git hooks
+├── instructions/        # Reglas y documentacion interna
 ├── AGENTS.md            # Guia para agentes de codigo
 └── README.md
 ```
@@ -216,7 +312,7 @@ Ver [AGENTS.md](./AGENTS.md) para guias de estilo de codigo, convenciones y coma
 
 Este software es propietario y confidencial. Todos los derechos reservados.
 
-© 2025 Toshify - Sistema de Gestion de Flotas
+© 2025-2026 Toshify - Sistema de Gestion de Flotas
 
 ---
 

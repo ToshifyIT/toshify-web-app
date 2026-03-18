@@ -27,6 +27,15 @@ import { VEHICULO_ESTADO_LABELS } from '../../types/vehiculo.types'
 import './VehicleManagement.css'
 
 
+
+
+
+
+
+
+
+
+
 export function VehicleManagement() {
   const { sedeActualId, aplicarFiltroSede } = useSede()
   const [vehiculos, setVehiculos] = useState<VehiculoWithRelations[]>([])
@@ -1749,7 +1758,9 @@ export function VehicleManagement() {
                   disabled={saving}
                 >
                   <option value="">Seleccionar...</option>
-                  {vehiculosEstados.map((estado: VehiculoEstado) => (
+                  {vehiculosEstados
+                    .filter((estado: VehiculoEstado) => estado.codigo !== 'DISPONIBLE' && estado.codigo !== 'PROGRAMADO')
+                    .map((estado: VehiculoEstado) => (
                     <option key={estado.id} value={estado.id}>{estado.descripcion}</option>
                   ))}
                 </select>
