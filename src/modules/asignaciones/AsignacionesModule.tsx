@@ -1,7 +1,7 @@
 // src/modules/asignaciones/AsignacionesModule.tsx
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { useState, useEffect, useMemo } from 'react'
-import { Eye, Trash2, CheckCircle, XCircle, FileText, Calendar, UserPlus, UserCheck, Ban, Plus, Pencil, RotateCcw } from 'lucide-react'
+import { Eye, Trash2, CheckCircle, XCircle, FileText, Calendar, UserPlus, UserCheck, Ban, Plus, Pencil } from 'lucide-react'
 import { type ColumnDef } from '@tanstack/react-table'
 import { DataTable } from '../../components/ui/DataTable/DataTable'
 import { LoadingOverlay } from '../../components/ui/LoadingOverlay'
@@ -446,6 +446,7 @@ export function AsignacionesModule() {
 
       // Resolver conductores faltantes en devoluciones (query directa como handleConfirmarDevolucion)
       const devsSinConductor = devolucionesVirtuales.filter((d: any) => !d._conductorNombre)
+      const conductoresPorVehiculo = new Map<string, string>()
       if (devsSinConductor.length > 0) {
         const vehIds = [...new Set(devsSinConductor.map((d: any) => d.vehiculo_id).filter(Boolean))]
         if (vehIds.length > 0) {
@@ -455,7 +456,6 @@ export function AsignacionesModule() {
             .in('vehiculo_id', vehIds)
             .in('estado', ['activa', 'activo'])
           if (asigsConductores) {
-            const conductoresPorVehiculo = new Map<string, string>()
             for (const asig of asigsConductores) {
               if (conductoresPorVehiculo.has(asig.vehiculo_id)) continue
               const activos = (asig.asignaciones_conductores || [])
@@ -597,7 +597,7 @@ export function AsignacionesModule() {
         }
 
         // Fallback: para los vehículos que no se resolvieron, buscar en la asignación más reciente (completada/finalizada)
-        const vehSinResolver = vehIdsDev.filter((v) => !conductoresPorVeh.has(v))
+        const vehSinResolver = vehIdsDev.filter((v) => !conductoresPorVeh.has(v as string))
         if (vehSinResolver.length > 0) {
           const { data: asigsCompletadas } = await (supabase as any)
             .from('asignaciones')

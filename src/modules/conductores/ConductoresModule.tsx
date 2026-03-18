@@ -3998,7 +3998,7 @@ function ModalDetalles({
 function ModalConfirmBaja({
   conductor,
   affectedAssignments,
-  onConfirm,
+  onConfirm: _onConfirm,
   onCancel,
   onFinalizarSi,
   onBajaSinFinalizar,
@@ -4014,7 +4014,8 @@ function ModalConfirmBaja({
   asignacionesFinalizadas: boolean;
   processing: boolean;
 }) {
-  const [motivoBaja, setMotivoBaja] = useState('');
+  const [_motivoBaja, _setMotivoBaja] = useState('');
+  void _motivoBaja; void _setMotivoBaja; void _onConfirm;
 
   // Agrupar por tipo de asignación
   const turnoAssignments = affectedAssignments.filter(
@@ -4032,7 +4033,8 @@ function ModalConfirmBaja({
   // Solo TURNO con compañero → flujo simplificado (no se pregunta, se da de baja directo)
   const soloTurnoConCompanero = turnoConCompanero.length > 0 && cargoAssignments.length === 0 && turnoSolo.length === 0;
   // Hay asignaciones que requieren pregunta de finalización (CARGO o TURNO solo)
-  const requiereFinalizacion = cargoAssignments.length > 0 || turnoSolo.length > 0;
+  const _requiereFinalizacion = cargoAssignments.length > 0 || turnoSolo.length > 0;
+  void _requiereFinalizacion;
 
   return (
     <div className="modal-overlay" onClick={() => !processing && onCancel()}>

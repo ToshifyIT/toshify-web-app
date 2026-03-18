@@ -124,7 +124,8 @@ function calculateDisplayPriority(fechaVencimiento: string | null | undefined, d
 
   // Para registros vencidos (diffDays < 0), usamos el valor absoluto
   // para evaluar qué tan lejos están del vencimiento con las mismas reglas
-  const absDays = Math.abs(diffDays)
+  const _absDays = Math.abs(diffDays)
+  void _absDays
 
   // N/A: más de 6 meses en el futuro (no aplica a vencidos)
   if (diffDays > 180) return 'N/A'
