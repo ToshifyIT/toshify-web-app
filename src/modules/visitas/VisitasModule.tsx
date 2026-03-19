@@ -3,7 +3,7 @@
 // Orquesta: calendario, formulario, detalle, export
 // ============================================================
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { Plus, Download, Calendar as CalendarIcon, List, Eye, Settings } from 'lucide-react';
 import { format, startOfMonth, endOfMonth, startOfWeek, endOfWeek, addMonths, subMonths } from 'date-fns';
 import Swal from 'sweetalert2';
@@ -83,6 +83,14 @@ export function VisitasModule() {
   const [selectedVisita, setSelectedVisita] = useState<VisitaCompleta | null>(null);
   const [prefillDate, setPrefillDate] = useState<Date | undefined>();
   const [prefillResourceId, setPrefillResourceId] = useState<string | undefined>();
+  // Filtro por categoría en calendario
+  const [filtroCategoria, setFiltroCategoria] = useState<string | null>(null);
+
+  // Eventos filtrados por categoría seleccionada
+  const eventosFiltrados = useMemo(() => {
+    if (!filtroCategoria) return calendarEvents;
+    return calendarEvents.filter((e) => e.visita.categoria_id === filtroCategoria);
+  }, [calendarEvents, filtroCategoria]);
 
   // === RANGO DE CONSULTA (expandido para cubrir vista mes) ===
   const getQueryRange = useCallback((date: Date) => {
@@ -119,8 +127,11 @@ export function VisitasModule() {
     const rolesConAcceso = ['admin', 'directivo', 'adm_logistico', 'administrador']
     const tieneAccesoCompleto = rolesConAcceso.includes(roleName)
 
-    // Marcar visitas como masked para roles sin acceso (excepto las que creó el usuario)
+    // Solo enmascarar citas de categoría "Directivo" para roles sin acceso
+    // Las demás categorías siempre se ven con detalle completo
     const data = updated.map((v) => {
+      const esDirectivo = v.categoria_nombre?.toLowerCase() === 'directivo'
+      if (!esDirectivo) return v
       const esCreador = v.citador_id === user?.id
       if (tieneAccesoCompleto || esCreador) return v
       return { ...v, _masked: true } as typeof v
@@ -526,10 +537,32 @@ export function VisitasModule() {
             </div>
           </div>
 
+          {/* Filtros por categoría */}
+          {viewMode === 'calendario' && categorias.length > 0 && (
+            <div className="visitas-category-filters">
+              <button
+                className={`visitas-cat-chip ${!filtroCategoria ? 'active' : ''}`}
+                onClick={() => setFiltroCategoria(null)}
+              >
+                Todas
+              </button>
+              {categorias.filter((c) => c.activo).map((cat) => (
+                <button
+                  key={cat.id}
+                  className={`visitas-cat-chip ${filtroCategoria === cat.id ? 'active' : ''}`}
+                  onClick={() => setFiltroCategoria(filtroCategoria === cat.id ? null : cat.id)}
+                >
+                  <span className="visitas-cat-dot" style={{ backgroundColor: cat.color }} />
+                  {cat.nombre}
+                </button>
+              ))}
+            </div>
+          )}
+
           {/* Contenido */}
           {viewMode === 'calendario' ? (
             <VisitasCalendario
-              events={calendarEvents}
+              events={eventosFiltrados}
               resources={calendarResources}
               currentDate={currentDate}
               currentView={currentCalendarView}

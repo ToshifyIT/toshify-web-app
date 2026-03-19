@@ -72,6 +72,51 @@
 }
 
 /* =====================================================
+   FILTROS POR CATEGORÍA
+   ===================================================== */
+
+.visitas-category-filters {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+
+.visitas-cat-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 12px;
+  border: 1px solid var(--border-primary);
+  background: var(--bg-secondary);
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 500;
+  border-radius: 20px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.visitas-cat-chip:hover {
+  border-color: var(--border-hover, #aaa);
+  color: var(--text-primary);
+}
+
+.visitas-cat-chip.active {
+  background: var(--text-primary, #1a1a1a);
+  color: #fff;
+  border-color: var(--text-primary, #1a1a1a);
+}
+
+.visitas-cat-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+/* =====================================================
    CALENDARIO WRAPPER (card style)
    ===================================================== */
 
@@ -317,6 +362,31 @@
   font-weight: 600;
   padding: 2px 4px;
   cursor: pointer;
+}
+
+/* Popup overlay cuando hay múltiples citas en un slot */
+.visitas-calendario-wrapper .rbc-overlay {
+  background: var(--card-bg, #fff);
+  border: 1px solid var(--border-primary);
+  border-radius: 10px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.15);
+  padding: 12px;
+  max-height: 300px;
+  overflow-y: auto;
+  z-index: 100;
+}
+
+.visitas-calendario-wrapper .rbc-overlay-header {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+  padding-bottom: 8px;
+  margin-bottom: 8px;
+  border-bottom: 1px solid var(--border-primary);
+}
+
+.visitas-calendario-wrapper .rbc-overlay .rbc-event {
+  margin-bottom: 4px;
 }
 
 /* --- Resource header --- */
