@@ -138,10 +138,7 @@ export function VisitasCalendario({
       .sort((a, b) => a.start.getTime() - b.start.getTime());
   }, [slotModalDate, events]);
 
-  // Máximo de eventos visibles por slot en vista semana; el resto se agrupan en "+X más"
-  const MAX_VISIBLE = 2;
-
-  // Pre-procesar eventos: agrupar solapados y mostrar "+X más"
+  // Pre-procesar eventos: si hay más de 1 solapado, reemplazar por un solo bloque "+X citas"
   const processedEvents = useMemo(() => {
     if (currentView !== 'week') return events;
 
@@ -155,21 +152,20 @@ export function VisitasCalendario({
 
     const result: VisitaCalendarEvent[] = [];
     for (const [, group] of groups) {
-      if (group.length <= MAX_VISIBLE) {
-        result.push(...group);
+      if (group.length === 1) {
+        // Solo 1 cita: mostrar normal
+        result.push(group[0]);
       } else {
-        // Mostrar los primeros MAX_VISIBLE y un evento sintético "+X más"
-        result.push(...group.slice(0, MAX_VISIBLE));
-        const extra = group.length - MAX_VISIBLE;
+        // Múltiples citas: un solo bloque "+X citas"
         const synth: VisitaCalendarEvent = {
           id: `more_${format(group[0].start, 'yyyy-MM-dd_HH:mm')}`,
-          title: `+${extra} más`,
+          title: `${group.length} citas`,
           start: group[0].start,
           end: group[0].end,
           resourceId: group[0].resourceId,
           visita: {
             ...group[0].visita,
-            nombre_visitante: `+${extra} más`,
+            nombre_visitante: `${group.length} citas`,
             categoria_nombre: '',
             categoria_color: '',
             _synthetic: true,
@@ -201,22 +197,24 @@ export function VisitasCalendario({
     setSlotModalDate(date);
   }, []);
 
-  // Estilo especial para el evento sintético "+X más"
+  // Estilo especial para el bloque "+X citas"
   const enhancedEventStyleGetter = useCallback((event: VisitaCalendarEvent) => {
     // deno-lint-ignore no-explicit-any
     if ((event.visita as any)._synthetic) {
       return {
         style: {
-          backgroundColor: '#f3f4f6',
-          borderRadius: '6px',
-          border: '1px dashed #9ca3af',
-          borderLeft: '3px solid #6b7280',
-          color: '#374151',
-          fontSize: '11px',
-          padding: '3px 8px',
-          fontWeight: 600 as const,
+          backgroundColor: '#1e293b',
+          borderRadius: '8px',
+          border: 'none',
+          color: '#fff',
+          fontSize: '12px',
+          padding: '6px 10px',
+          fontWeight: 700 as const,
           cursor: 'pointer',
-          textAlign: 'center' as const,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          letterSpacing: '0.3px',
         },
       };
     }
