@@ -279,7 +279,7 @@ export function VisitasCalendario({
                     <div
                       key={ev.id}
                       className={`visitas-day-modal-event ${masked ? 'masked' : ''}`}
-                      onClick={() => { if (!masked) { setSlotModalDate(null); onSelectEvent(ev); } }}
+                      onClick={() => { if (!masked) onSelectEvent(ev); }}
                       style={masked ? undefined : { borderLeftColor: v.categoria_color || '#3b82f6' }}
                     >
                       <div className="visitas-day-modal-event-time">
