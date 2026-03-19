@@ -47,7 +47,7 @@ import './VisitasModule.css';
 
 type MainTab = 'calendario' | 'parametros';
 type ViewMode = 'calendario' | 'tabla';
-type CalendarView = 'week' | 'month';
+type CalendarView = 'week' | 'month' | 'day';
 
 export function VisitasModule() {
   // === HOOKS ===
