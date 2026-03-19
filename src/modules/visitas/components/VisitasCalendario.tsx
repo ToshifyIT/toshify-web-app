@@ -127,26 +127,108 @@ export function VisitasCalendario({
     return d;
   }, []);
 
-  // Modal para ver citas de un día cuando hay muchas solapadas
-  const [dayModalDate, setDayModalDate] = useState<Date | null>(null);
+  // Modal para ver citas de un slot cuando hay muchas solapadas
+  const [slotModalDate, setSlotModalDate] = useState<Date | null>(null);
 
-  const dayModalEvents = useMemo(() => {
-    if (!dayModalDate) return [];
-    const dayStr = format(dayModalDate, 'yyyy-MM-dd');
+  const slotModalEvents = useMemo(() => {
+    if (!slotModalDate) return [];
+    const dayStr = format(slotModalDate, 'yyyy-MM-dd');
     return events
       .filter((e) => format(e.start, 'yyyy-MM-dd') === dayStr)
       .sort((a, b) => a.start.getTime() - b.start.getTime());
-  }, [dayModalDate, events]);
+  }, [slotModalDate, events]);
+
+  // Máximo de eventos visibles por slot en vista semana; el resto se agrupan en "+X más"
+  const MAX_VISIBLE = 2;
+
+  // Pre-procesar eventos: agrupar solapados y mostrar "+X más"
+  const processedEvents = useMemo(() => {
+    if (currentView !== 'week') return events;
+
+    // Agrupar eventos por día + hora de inicio
+    const groups = new Map<string, VisitaCalendarEvent[]>();
+    for (const ev of events) {
+      const key = format(ev.start, 'yyyy-MM-dd_HH:mm');
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key)!.push(ev);
+    }
+
+    const result: VisitaCalendarEvent[] = [];
+    for (const [, group] of groups) {
+      if (group.length <= MAX_VISIBLE) {
+        result.push(...group);
+      } else {
+        // Mostrar los primeros MAX_VISIBLE y un evento sintético "+X más"
+        result.push(...group.slice(0, MAX_VISIBLE));
+        const extra = group.length - MAX_VISIBLE;
+        const synth: VisitaCalendarEvent = {
+          id: `more_${format(group[0].start, 'yyyy-MM-dd_HH:mm')}`,
+          title: `+${extra} más`,
+          start: group[0].start,
+          end: group[0].end,
+          resourceId: group[0].resourceId,
+          visita: {
+            ...group[0].visita,
+            nombre_visitante: `+${extra} más`,
+            categoria_nombre: '',
+            categoria_color: '',
+            _synthetic: true,
+          } as VisitaCompleta & { _synthetic: boolean },
+        };
+        result.push(synth);
+      }
+    }
+    return result;
+  }, [events, currentView]);
+
+  // Click en evento: si es sintético "+X más", abrir modal del día
+  const handleEventClick = useCallback((event: VisitaCalendarEvent) => {
+    // deno-lint-ignore no-explicit-any
+    if ((event.visita as any)._synthetic) {
+      setSlotModalDate(event.start);
+      return;
+    }
+    onSelectEvent(event);
+  }, [onSelectEvent]);
 
   // Handler para click en "+X más" en vista mes
   const handleShowMore = useCallback((_events: VisitaCalendarEvent[], date: Date) => {
-    setDayModalDate(date);
+    setSlotModalDate(date);
   }, []);
 
-  // Handler para click en día del header en vista semana
+  // Handler para click en día del header
   const handleDrillDown = useCallback((date: Date) => {
-    setDayModalDate(date);
+    setSlotModalDate(date);
   }, []);
+
+  // Estilo especial para el evento sintético "+X más"
+  const enhancedEventStyleGetter = useCallback((event: VisitaCalendarEvent) => {
+    // deno-lint-ignore no-explicit-any
+    if ((event.visita as any)._synthetic) {
+      return {
+        style: {
+          backgroundColor: '#f3f4f6',
+          borderRadius: '6px',
+          border: '1px dashed #9ca3af',
+          borderLeft: '3px solid #6b7280',
+          color: '#374151',
+          fontSize: '11px',
+          padding: '3px 8px',
+          fontWeight: 600 as const,
+          cursor: 'pointer',
+          textAlign: 'center' as const,
+        },
+      };
+    }
+    return eventStyleGetter(event);
+  }, [eventStyleGetter]);
+
+  // Tooltip
+  const enhancedTooltipAccessor = useCallback((event: VisitaCalendarEvent) => {
+    // deno-lint-ignore no-explicit-any
+    if ((event.visita as any)._synthetic) return 'Click para ver todas las citas';
+    return tooltipAccessor(event);
+  }, [tooltipAccessor]);
 
   return (
     <div className="visitas-calendario-wrapper">
@@ -154,7 +236,7 @@ export function VisitasCalendario({
         localizer={localizer}
         culture="es"
         messages={messages}
-        events={events}
+        events={processedEvents}
         date={currentDate}
         view={currentView}
         views={['week', 'month']}
@@ -162,12 +244,12 @@ export function VisitasCalendario({
         onView={onViewChange as (view: string) => void}
         selectable
         onSelectSlot={onSelectSlot}
-        onSelectEvent={onSelectEvent}
+        onSelectEvent={handleEventClick}
         onShowMore={handleShowMore}
         onDrillDown={handleDrillDown}
         drilldownView={null}
-        eventPropGetter={eventStyleGetter}
-        tooltipAccessor={tooltipAccessor}
+        eventPropGetter={enhancedEventStyleGetter}
+        tooltipAccessor={enhancedTooltipAccessor}
         step={60}
         timeslots={1}
         min={minTime}
@@ -175,24 +257,23 @@ export function VisitasCalendario({
         defaultView="week"
         popup
         showMultiDayTimes
-        dayLayoutAlgorithm="no-overlap"
       />
 
       {/* Modal de citas del día */}
-      {dayModalDate && (
-        <div className="visitas-day-modal-overlay" onClick={() => setDayModalDate(null)}>
+      {slotModalDate && (
+        <div className="visitas-day-modal-overlay" onClick={() => setSlotModalDate(null)}>
           <div className="visitas-day-modal" onClick={(e) => e.stopPropagation()}>
             <div className="visitas-day-modal-header">
-              <h3>Citas del {format(dayModalDate, "EEEE d 'de' MMMM", { locale: es })}</h3>
-              <button className="visitas-day-modal-close" onClick={() => setDayModalDate(null)}>
+              <h3>Citas del {format(slotModalDate, "EEEE d 'de' MMMM", { locale: es })}</h3>
+              <button className="visitas-day-modal-close" onClick={() => setSlotModalDate(null)}>
                 <X size={18} />
               </button>
             </div>
             <div className="visitas-day-modal-body">
-              {dayModalEvents.length === 0 ? (
+              {slotModalEvents.length === 0 ? (
                 <p className="visitas-day-modal-empty">No hay citas este día</p>
               ) : (
-                dayModalEvents.map((ev) => {
+                slotModalEvents.map((ev: VisitaCalendarEvent) => {
                   const v = ev.visita;
                   const masked = (v as VisitaCompleta & { _masked?: boolean })._masked;
                   const estadoInfo = VISITA_ESTADOS[v.estado as VisitaEstado];
@@ -200,7 +281,7 @@ export function VisitasCalendario({
                     <div
                       key={ev.id}
                       className={`visitas-day-modal-event ${masked ? 'masked' : ''}`}
-                      onClick={() => { if (!masked) { setDayModalDate(null); onSelectEvent(ev); } }}
+                      onClick={() => { if (!masked) { setSlotModalDate(null); onSelectEvent(ev); } }}
                       style={masked ? undefined : { borderLeftColor: v.categoria_color || '#3b82f6' }}
                     >
                       <div className="visitas-day-modal-event-time">
