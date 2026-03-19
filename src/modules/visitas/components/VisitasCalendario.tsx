@@ -3,10 +3,11 @@
 // Responsabilidad: renderizar el calendario con react-big-calendar
 // ============================================================
 
-import { useMemo, useCallback } from 'react';
+import { useState, useMemo, useCallback } from 'react';
 import { Calendar, dateFnsLocalizer } from 'react-big-calendar';
 import { format, parse, startOfWeek, getDay } from 'date-fns';
 import { es } from 'date-fns/locale/es';
+import { X } from 'lucide-react';
 import type { VisitaCalendarEvent, VisitaCompleta, CalendarResource, VisitaEstado } from '../../../types/visitas.types';
 import { VISITA_ESTADOS } from '../../../types/visitas.types';
 
@@ -43,9 +44,9 @@ interface VisitasCalendarioProps {
   events: VisitaCalendarEvent[];
   resources: CalendarResource[];
   currentDate: Date;
-  currentView: 'week' | 'month';
+  currentView: 'week' | 'month' | 'day';
   onNavigate: (date: Date) => void;
-  onViewChange: (view: 'week' | 'month') => void;
+  onViewChange: (view: 'week' | 'month' | 'day') => void;
   onSelectSlot: (slotInfo: { start: Date; end: Date; resourceId?: string | number }) => void;
   onSelectEvent: (event: VisitaCalendarEvent) => void;
 }
@@ -60,6 +61,7 @@ export function VisitasCalendario({
   onSelectSlot,
   onSelectEvent,
 }: VisitasCalendarioProps) {
+  void resources; // Reservado para futuro uso con vista por recurso
 
   // Color del evento por categoría + opacidad por estado
   const eventStyleGetter = useCallback((event: VisitaCalendarEvent) => {
@@ -125,8 +127,26 @@ export function VisitasCalendario({
     return d;
   }, []);
 
-  // Recursos no se muestran (vista día removida)
-  const showResources = false;
+  // Modal para ver citas de un día cuando hay muchas solapadas
+  const [dayModalDate, setDayModalDate] = useState<Date | null>(null);
+
+  const dayModalEvents = useMemo(() => {
+    if (!dayModalDate) return [];
+    const dayStr = format(dayModalDate, 'yyyy-MM-dd');
+    return events
+      .filter((e) => format(e.start, 'yyyy-MM-dd') === dayStr)
+      .sort((a, b) => a.start.getTime() - b.start.getTime());
+  }, [dayModalDate, events]);
+
+  // Handler para click en "+X más" en vista mes
+  const handleShowMore = useCallback((_events: VisitaCalendarEvent[], date: Date) => {
+    setDayModalDate(date);
+  }, []);
+
+  // Handler para click en día del header en vista semana
+  const handleDrillDown = useCallback((date: Date) => {
+    setDayModalDate(date);
+  }, []);
 
   return (
     <div className="visitas-calendario-wrapper">
@@ -135,9 +155,6 @@ export function VisitasCalendario({
         culture="es"
         messages={messages}
         events={events}
-        resources={showResources ? resources : undefined}
-        resourceIdAccessor="id"
-        resourceTitleAccessor="title"
         date={currentDate}
         view={currentView}
         views={['week', 'month']}
@@ -146,6 +163,9 @@ export function VisitasCalendario({
         selectable
         onSelectSlot={onSelectSlot}
         onSelectEvent={onSelectEvent}
+        onShowMore={handleShowMore}
+        onDrillDown={handleDrillDown}
+        drilldownView={null}
         eventPropGetter={eventStyleGetter}
         tooltipAccessor={tooltipAccessor}
         step={60}
@@ -155,7 +175,60 @@ export function VisitasCalendario({
         defaultView="week"
         popup
         showMultiDayTimes
+        dayLayoutAlgorithm="no-overlap"
       />
+
+      {/* Modal de citas del día */}
+      {dayModalDate && (
+        <div className="visitas-day-modal-overlay" onClick={() => setDayModalDate(null)}>
+          <div className="visitas-day-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="visitas-day-modal-header">
+              <h3>Citas del {format(dayModalDate, "EEEE d 'de' MMMM", { locale: es })}</h3>
+              <button className="visitas-day-modal-close" onClick={() => setDayModalDate(null)}>
+                <X size={18} />
+              </button>
+            </div>
+            <div className="visitas-day-modal-body">
+              {dayModalEvents.length === 0 ? (
+                <p className="visitas-day-modal-empty">No hay citas este día</p>
+              ) : (
+                dayModalEvents.map((ev) => {
+                  const v = ev.visita;
+                  const masked = (v as VisitaCompleta & { _masked?: boolean })._masked;
+                  const estadoInfo = VISITA_ESTADOS[v.estado as VisitaEstado];
+                  return (
+                    <div
+                      key={ev.id}
+                      className={`visitas-day-modal-event ${masked ? 'masked' : ''}`}
+                      onClick={() => { if (!masked) { setDayModalDate(null); onSelectEvent(ev); } }}
+                      style={masked ? undefined : { borderLeftColor: v.categoria_color || '#3b82f6' }}
+                    >
+                      <div className="visitas-day-modal-event-time">
+                        {format(ev.start, 'HH:mm')} - {format(ev.end, 'HH:mm')}
+                      </div>
+                      <div className="visitas-day-modal-event-info">
+                        <span className="visitas-day-modal-event-title">
+                          {masked ? 'Reservado' : v.nombre_visitante}
+                        </span>
+                        {!masked && (
+                          <span className="visitas-day-modal-event-cat">
+                            {v.categoria_nombre}{v.motivo_nombre ? ` - ${v.motivo_nombre}` : ''}
+                          </span>
+                        )}
+                      </div>
+                      {!masked && (
+                        <span className={`visitas-day-modal-event-estado ${v.estado}`}>
+                          {estadoInfo?.label || v.estado}
+                        </span>
+                      )}
+                    </div>
+                  );
+                })
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

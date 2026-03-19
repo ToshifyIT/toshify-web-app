@@ -117,6 +117,162 @@
 }
 
 /* =====================================================
+   MODAL CITAS DEL DÍA (cuando hay muchas solapadas)
+   ===================================================== */
+
+.visitas-day-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.4);
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+
+.visitas-day-modal {
+  background: var(--card-bg, #fff);
+  border-radius: 12px;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.2);
+  width: 100%;
+  max-width: 480px;
+  max-height: 80vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.visitas-day-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--border-primary);
+}
+
+.visitas-day-modal-header h3 {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-primary);
+  text-transform: capitalize;
+}
+
+.visitas-day-modal-close {
+  background: none;
+  border: none;
+  color: var(--text-secondary);
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+}
+
+.visitas-day-modal-close:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.visitas-day-modal-body {
+  padding: 12px 20px 20px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.visitas-day-modal-empty {
+  text-align: center;
+  color: var(--text-tertiary);
+  font-size: 13px;
+  padding: 24px 0;
+}
+
+.visitas-day-modal-event {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  border-left: 3px solid #3b82f6;
+  background: var(--bg-secondary, #f8f8f8);
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.visitas-day-modal-event:hover {
+  background: var(--bg-hover, #f0f0f0);
+}
+
+.visitas-day-modal-event.masked {
+  border-left-color: #9ca3af;
+  cursor: default;
+  opacity: 0.7;
+}
+
+.visitas-day-modal-event-time {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  min-width: 90px;
+}
+
+.visitas-day-modal-event-info {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.visitas-day-modal-event-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.visitas-day-modal-event-cat {
+  font-size: 11px;
+  color: var(--text-tertiary);
+}
+
+.visitas-day-modal-event-estado {
+  font-size: 10px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 10px;
+  white-space: nowrap;
+  text-transform: uppercase;
+}
+
+.visitas-day-modal-event-estado.pendiente {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.visitas-day-modal-event-estado.en_curso {
+  background: #dbeafe;
+  color: #1e40af;
+}
+
+.visitas-day-modal-event-estado.completada {
+  background: #d1fae5;
+  color: #065f46;
+}
+
+.visitas-day-modal-event-estado.cancelada,
+.visitas-day-modal-event-estado.no_asistio {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+/* =====================================================
    CALENDARIO WRAPPER (card style)
    ===================================================== */
 
