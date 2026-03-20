@@ -456,7 +456,7 @@ export function ReporteFacturacionTab() {
   const [horasCorteTurno, setHorasCorteTurno] = useState({
     diurno: 12,        // Hora corte diurno (si entrega >= esta hora, descuento completo)
     cargo: 14,         // Hora corte a cargo (si entrega >= esta hora, descuento medio turno)
-    descDiurnoAntes: 0.5,   // Descuento si entrega antes del corte diurno
+    descDiurnoAntes: 0,     // No aplica: antes del corte no hay descuento
     descDiurnoDespues: 1,   // Descuento si entrega después del corte diurno
     descCargoDespues: 0.5,  // Descuento si entrega después del corte cargo
   })
@@ -524,7 +524,7 @@ export function ReporteFacturacionTab() {
       const defaults: Record<string, { valor: string; tipo: string; descripcion: string }> = {
         hora_corte_diurno: { valor: '12', tipo: 'number', descripcion: 'Hora corte entrega diurno. Si entrega >= esta hora, descuento turno completo' },
         hora_corte_cargo: { valor: '14', tipo: 'number', descripcion: 'Hora corte entrega a cargo. Si entrega >= esta hora, descuento medio turno' },
-        descuento_diurno_antes: { valor: '0.5', tipo: 'number', descripcion: 'Descuento (turnos) si entrega diurna antes del corte' },
+        descuento_diurno_antes: { valor: '0', tipo: 'number', descripcion: '[No aplica] Entrega diurna antes del corte: sin descuento' },
         descuento_diurno_despues: { valor: '1', tipo: 'number', descripcion: 'Descuento (turnos) si entrega diurna despues del corte' },
         descuento_cargo_despues: { valor: '0.5', tipo: 'number', descripcion: 'Descuento (turnos) si entrega a cargo despues del corte' },
       }
