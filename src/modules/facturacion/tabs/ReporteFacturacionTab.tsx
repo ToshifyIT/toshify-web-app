@@ -3265,7 +3265,9 @@ export function ReporteFacturacionTab() {
         for (const ticket of ticketsConductor) {
           todosDetalles.push({
             facturacion_id: facturacionId, concepto_codigo: 'P004',
-            concepto_descripcion: `Ticket: ${(ticket as any).descripcion || (ticket as any).tipo}`,
+            concepto_descripcion: (ticket as any).descripcion
+              ? `${(ticket as any).tipo || 'Ticket'} – ${(ticket as any).descripcion}`
+              : `${(ticket as any).tipo || 'Ticket'}`,
             cantidad: 1, precio_unitario: (ticket as any).monto,
             subtotal: (ticket as any).monto, total: (ticket as any).monto, es_descuento: true,
             referencia_id: (ticket as any).id, referencia_tipo: 'ticket'
