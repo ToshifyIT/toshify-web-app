@@ -8399,15 +8399,18 @@ export function ReporteFacturacionTab() {
     {
       accessorKey: 'saldo_anterior',
       header: 'Saldo Ant.',
-      cell: ({ row }) => (
+      cell: ({ row }) => {
+        const saldo = Math.abs(row.original.saldo_anterior) < 0.01 ? 0 : row.original.saldo_anterior
+        return (
         <span style={{
           fontSize: '11px',
-          fontWeight: row.original.saldo_anterior !== 0 ? 600 : 400,
-          color: row.original.saldo_anterior > 0 ? 'var(--badge-red-text)' : row.original.saldo_anterior < 0 ? 'var(--badge-green-text)' : 'var(--text-muted)'
+          fontWeight: saldo !== 0 ? 600 : 400,
+          color: saldo > 0 ? 'var(--badge-red-text)' : saldo < 0 ? 'var(--badge-green-text)' : 'var(--text-muted)'
         }}>
-          {row.original.saldo_anterior !== 0 ? formatCurrency(row.original.saldo_anterior) : '-'}
+          {saldo !== 0 ? formatCurrency(saldo) : '-'}
         </span>
-      ),
+        )
+      },
       enableSorting: true,
     },
 
