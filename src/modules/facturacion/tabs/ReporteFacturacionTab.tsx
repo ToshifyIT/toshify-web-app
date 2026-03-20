@@ -193,6 +193,8 @@ interface FacturacionConductor {
   } | null
   // GNC del vehículo asignado (leído de tabla vehiculos)
   tiene_gnc?: boolean
+  // Telepase del vehículo asignado (si true, no se cobra P005)
+  tiene_telepase?: boolean
   // Permiso de efectivo Cabify (leído de cabify_historico)
   permiso_efectivo?: 'Activado' | 'Desactivado' | null
   cabify_driver_id?: string | null
@@ -2267,21 +2269,35 @@ export function ReporteFacturacionTab() {
        // Ordenar por nombre
        facturacionesProyectadas.sort((a, b) => a.conductor_nombre.localeCompare(b.conductor_nombre))
 
-      // Cruzar patentes con tabla vehiculos para obtener GNC actual en tiempo real
+      // Cruzar patentes con tabla vehiculos para obtener flags actuales en tiempo real
       const patentesUnicas = [...new Set(facturacionesProyectadas.map(f => f.vehiculo_patente).filter(Boolean))]
       let facturacionesConGnc: FacturacionConductor[] = facturacionesProyectadas
       if (patentesUnicas.length > 0) {
-        const { data: vehiculosGnc } = await supabase
+        const { data: vehiculosFlags } = await supabase
           .from('vehiculos')
-          .select('patente, gnc')
+          .select('patente, gnc, telepase')
           .in('patente', patentesUnicas)
-        if (vehiculosGnc) {
-          const gncMap = new Map(vehiculosGnc.map((v: any) => [v.patente, v.gnc === true]))
-          facturacionesConGnc = facturacionesProyectadas.map(f =>
-            f.vehiculo_patente && gncMap.has(f.vehiculo_patente)
-              ? { ...f, tiene_gnc: gncMap.get(f.vehiculo_patente)! }
-              : f
+        if (vehiculosFlags) {
+          const flagsMap = new Map(
+            vehiculosFlags.map((v: any) => [v.patente, { gnc: v.gnc === true, telepase: v.telepase === true }]),
           )
+          facturacionesConGnc = facturacionesProyectadas.map((f) => {
+            if (!f.vehiculo_patente || !flagsMap.has(f.vehiculo_patente)) return f
+            const flags = flagsMap.get(f.vehiculo_patente)!
+            const montoPeajesAjustado = flags.telepase ? 0 : (f.monto_peajes || 0)
+            const subtotalCargosAjustado = (f.subtotal_cargos || 0) - ((f.monto_peajes || 0) - montoPeajesAjustado)
+            const subtotalNetoAjustado = subtotalCargosAjustado - (f.subtotal_descuentos || 0)
+            const totalAPagarAjustado = subtotalNetoAjustado + (f.saldo_anterior || 0)
+            return {
+              ...f,
+              tiene_gnc: flags.gnc,
+              tiene_telepase: flags.telepase,
+              monto_peajes: montoPeajesAjustado,
+              subtotal_cargos: subtotalCargosAjustado,
+              subtotal_neto: subtotalNetoAjustado,
+              total_a_pagar: totalAPagarAjustado,
+            }
+          })
         }
       }
 
@@ -2810,6 +2826,19 @@ export function ReporteFacturacionTab() {
         'P015': conceptosPorCodigo.get('P015')?.precio_final || 27000,
         'P016': conceptosPorCodigo.get('P016')?.precio_final || 62571,
       }
+
+      // Flags de vehículo por patente (snapshot al momento de recalcular)
+      const patentesRecalc = [...new Set(conductoresProcesados.map(c => c.vehiculo_patente).filter(Boolean))] as string[]
+      const flagsVehiculoMap = new Map<string, { gnc: boolean; telepase: boolean }>()
+      if (patentesRecalc.length > 0) {
+        const { data: vehiculosFlagsRecalc } = await supabase
+          .from('vehiculos')
+          .select('patente, gnc, telepase')
+          .in('patente', patentesRecalc)
+        ;(vehiculosFlagsRecalc || []).forEach((v: any) => {
+          flagsVehiculoMap.set(v.patente, { gnc: v.gnc === true, telepase: v.telepase === true })
+        })
+      }
       
       // Precios diarios para alquiler por modalidad + GNC
       const getCodigoAlquiler = (modalidad: 'DIURNO' | 'NOCTURNO' | 'CARGO', tieneGnc: boolean): string => {
@@ -2983,6 +3012,10 @@ export function ReporteFacturacionTab() {
       setRecalculandoProgreso({ actual: 0, total: conductoresProcesados.length, nombre: '' })
 
       for (const conductor of conductoresProcesados) {
+        const flagsVeh = conductor.vehiculo_patente ? flagsVehiculoMap.get(conductor.vehiculo_patente) : undefined
+        const tieneGncVehiculo = flagsVeh ? flagsVeh.gnc : conductor.tiene_gnc
+        const tieneTelepaseVehiculo = flagsVeh ? flagsVeh.telepase : conductor.tiene_telepase
+
         // Mostrar progreso con nombre del conductor actual
         setRecalculandoProgreso({ actual: conductoresProcesadosCount + 1, total: conductoresProcesados.length, nombre: conductor.conductor_nombre })
 
@@ -2992,37 +3025,37 @@ export function ReporteFacturacionTab() {
 
         // Turno Diurno (P001 con GNC / P014 sin GNC)
         if (conductor.dias_turno_diurno > 0) {
-          const codigoDiurno = getCodigoAlquiler('DIURNO', conductor.tiene_gnc)
+          const codigoDiurno = getCodigoAlquiler('DIURNO', tieneGncVehiculo)
           const precioDiurno = preciosActuales[codigoDiurno] || 0
           const montoDiurno = Math.round(precioDiurno * conductor.dias_turno_diurno * 100) / 100
           alquilerTotal += montoDiurno
           detallesAlquiler.push({
             codigo: codigoDiurno,
-            descripcion: conductor.tiene_gnc ? 'Alquiler Turno Diurno' : 'Alquiler Turno Diurno Sin GNC',
+            descripcion: tieneGncVehiculo ? 'Alquiler Turno Diurno' : 'Alquiler Turno Diurno Sin GNC',
             dias: conductor.dias_turno_diurno, monto: montoDiurno
           })
         }
         // Turno Nocturno (P013 con GNC / P015 sin GNC)
         if (conductor.dias_turno_nocturno > 0) {
-          const codigoNocturno = getCodigoAlquiler('NOCTURNO', conductor.tiene_gnc)
+          const codigoNocturno = getCodigoAlquiler('NOCTURNO', tieneGncVehiculo)
           const precioNocturno = preciosActuales[codigoNocturno] || 0
           const montoNocturno = Math.round(precioNocturno * conductor.dias_turno_nocturno * 100) / 100
           alquilerTotal += montoNocturno
           detallesAlquiler.push({
             codigo: codigoNocturno,
-            descripcion: conductor.tiene_gnc ? 'Alquiler Turno Nocturno' : 'Alquiler Turno Nocturno Sin GNC',
+            descripcion: tieneGncVehiculo ? 'Alquiler Turno Nocturno' : 'Alquiler Turno Nocturno Sin GNC',
             dias: conductor.dias_turno_nocturno, monto: montoNocturno
           })
         }
         // A Cargo (P002 con GNC / P016 sin GNC)
         if (conductor.dias_cargo > 0) {
-          const codigoCargo = getCodigoAlquiler('CARGO', conductor.tiene_gnc)
+          const codigoCargo = getCodigoAlquiler('CARGO', tieneGncVehiculo)
           const precioCargoConductor = preciosActuales[codigoCargo] || 0
           const montoCargo = Math.round(precioCargoConductor * conductor.dias_cargo)
           alquilerTotal += montoCargo
           detallesAlquiler.push({
             codigo: codigoCargo,
-            descripcion: conductor.tiene_gnc ? 'Alquiler a Cargo' : 'Alquiler a Cargo Sin GNC',
+            descripcion: tieneGncVehiculo ? 'Alquiler a Cargo' : 'Alquiler a Cargo Sin GNC',
             dias: conductor.dias_cargo, monto: montoCargo
           })
         }
@@ -3069,7 +3102,7 @@ export function ReporteFacturacionTab() {
 
         // Peajes (P005) - no aplica si tiene 0 días
         // Si el vehículo tiene telepase habilitado, NO cobrar P005
-        const totalPeajes = (conductor.total_dias === 0 || conductor.tiene_telepase)
+        const totalPeajes = (conductor.total_dias === 0 || tieneTelepaseVehiculo)
           ? 0
           : (conductor.conductor_dni ? (peajesMap.get(normalizeDni(conductor.conductor_dni)) || 0) : 0)
 
