@@ -1174,7 +1174,7 @@ export function ReporteFacturacionTab() {
         (supabase.from('facturacion_detalle') as any)
           .select('facturacion_id, precio_unitario')
           .in('facturacion_id', facIds)
-          .in('concepto_codigo', ['P001', 'P002', 'P013']),
+          .in('concepto_codigo', ['P001', 'P002', 'P013', 'P014', 'P015', 'P016']),
       ])
 
       // Agrupar pagos por referencia_id (puede haber pagos parciales)
@@ -7537,7 +7537,7 @@ export function ReporteFacturacionTab() {
             .from('facturacion_detalle')
             .select('facturacion_id, precio_unitario')
             .in('facturacion_id', dbIds)
-            .in('concepto_codigo', ['P001', 'P002', 'P013'])
+            .in('concepto_codigo', ['P001', 'P002', 'P013', 'P014', 'P015', 'P016'])
           ;(detallesAlquiler || []).forEach((d: { facturacion_id: string; precio_unitario: number }) => {
             const conductorId = dbIdToConId.get(d.facturacion_id)
             const pu = Number(d.precio_unitario) || 0
