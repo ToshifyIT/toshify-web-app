@@ -106,12 +106,8 @@ export async function fetchVisitas(
  * Así Supabase (timestamptz) lo interpreta correctamente sin importar la TZ del server.
  */
 export function buildLocalTimestamp(fecha: string, hora: string): string {
-  const dt = new Date(`${fecha}T${hora}:00`);
-  const offset = -dt.getTimezoneOffset();
-  const sign = offset >= 0 ? '+' : '-';
-  const hh = String(Math.floor(Math.abs(offset) / 60)).padStart(2, '0');
-  const mm = String(Math.abs(offset) % 60).padStart(2, '0');
-  return `${fecha}T${hora}:00${sign}${hh}:${mm}`;
+  // Siempre usar timezone Argentina (UTC-3) independiente del navegador
+  return `${fecha}T${hora}:00-03:00`;
 }
 
 export async function createVisita(
@@ -256,9 +252,22 @@ export async function checkConflict(
 
 // --- Transformaciones (puro, sin side effects) ---
 
+/**
+ * Convierte un timestamp UTC a un Date que muestre la hora de Argentina (UTC-3)
+ * independientemente de la zona horaria del navegador.
+ * react-big-calendar siempre usa la hora local del Date, así que necesitamos
+ * "engañarlo" para que muestre la hora de Argentina.
+ */
+function toArgentinaDate(utcDate: Date): Date {
+  // Obtener la hora en Argentina usando Intl
+  const argStr = utcDate.toLocaleString('en-US', { timeZone: 'America/Buenos_Aires' });
+  return new Date(argStr);
+}
+
 export function toCalendarEvents(visitas: VisitaCompleta[]): VisitaCalendarEvent[] {
   return visitas.map((v) => {
-    const start = new Date(v.fecha_hora);
+    const utcStart = new Date(v.fecha_hora);
+    const start = toArgentinaDate(utcStart);
     const end = new Date(start.getTime() + v.duracion_minutos * 60_000);
     const masked = (v as VisitaCompleta & { _masked?: boolean })._masked;
     return {

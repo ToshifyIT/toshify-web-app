@@ -32,6 +32,7 @@ interface PortalPeriodo {
 interface PortalFacturacion {
   id: string
   periodo_id: string
+  conductor_id: string
   conductor_nombre: string
   conductor_dni: string
   conductor_cuit: string | null
@@ -57,6 +58,8 @@ interface PortalDetalle {
   subtotal: number
   total: number
   es_descuento: boolean
+  referencia_id?: string | null
+  referencia_tipo?: string | null
 }
 
 interface PortalSaldo {
@@ -113,6 +116,16 @@ function getConceptoLabel(item: PortalDetalle): string {
   // P010 = Plan de Pagos: agregar descripción si es informativa (ej: "valor de multas 678.733,50")
   if (item.concepto_codigo === 'P010' && desc && !/^\d+([,.]\d+)?$/.test(desc)) {
     return `${baseLabel} - ${desc}`
+  }
+
+  // P004 = Tickets: mostrar detalle descriptivo, eliminando prefijo redundante "Ticket:"
+  if (item.concepto_codigo === 'P004') {
+    if (desc) {
+      // Quitar prefijo "Ticket:" o "Ticket: " para no repetir
+      const cleanDesc = desc.replace(/^Ticket:\s*/i, '').trim()
+      if (cleanDesc && cleanDesc !== baseLabel) return `${baseLabel} (${cleanDesc})`
+    }
+    return baseLabel
   }
 
   // Para códigos con descripción informativa (fechas, detalles), agregar entre paréntesis
@@ -214,7 +227,7 @@ export function PortalPage() {
       const { data, error } = await supabase
         .from('facturacion_conductores')
         .select(`
-          id, periodo_id, conductor_nombre, conductor_dni, conductor_cuit,
+          id, periodo_id, conductor_id, conductor_nombre, conductor_dni, conductor_cuit,
           vehiculo_patente, tipo_alquiler, turnos_base, turnos_cobrados,
           subtotal_cargos, subtotal_descuentos, saldo_anterior, total_a_pagar, estado,
           periodos_facturacion!inner(semana, anio, fecha_inicio, fecha_fin)
@@ -339,7 +352,7 @@ export function PortalPage() {
     try {
       const { data, error } = await supabase
         .from('facturacion_detalle')
-        .select('id, facturacion_id, concepto_codigo, concepto_descripcion, cantidad, precio_unitario, subtotal, total, es_descuento')
+        .select('id, facturacion_id, concepto_codigo, concepto_descripcion, cantidad, precio_unitario, subtotal, total, es_descuento, referencia_id, referencia_tipo')
         .eq('facturacion_id', factura.id)
         .order('es_descuento')
         .order('concepto_codigo')
@@ -347,6 +360,60 @@ export function PortalPage() {
       if (error) throw error
       const items = (data || []) as PortalDetalle[]
 
+<<<<<<< HEAD
+=======
+      // Enriquecer P004 con descripción real desde penalidades o tickets_favor
+      const ticketItems = items.filter(i => i.concepto_codigo === 'P004' && i.referencia_id)
+      if (ticketItems.length > 0) {
+        // Agrupar por referencia_tipo
+        const fromPenalidades = ticketItems.filter(i => i.referencia_tipo === 'penalidad' || i.referencia_tipo === 'penalidad_cuota')
+        const fromTickets = ticketItems.filter(i => i.referencia_tipo === 'ticket')
+
+        // Buscar en penalidades
+        if (fromPenalidades.length > 0) {
+          const penIds = fromPenalidades.map(i => i.referencia_id!).filter(Boolean)
+          const { data: penData } = await (supabase.from('penalidades') as any)
+            .select('id, detalle, observaciones, area_responsable, fecha, turno')
+            .in('id', penIds)
+          if (penData) {
+            const penMap = new Map(penData.map((p: any) => [p.id, p]))
+            for (const item of fromPenalidades) {
+              const pen = penMap.get(item.referencia_id!)
+              if (pen) {
+                const parts: string[] = []
+                if (pen.detalle) parts.push(pen.detalle)
+                if (pen.observaciones) parts.push(pen.observaciones)
+                if (pen.turno) parts.push(`Turno ${pen.turno}`)
+                if (pen.fecha) {
+                  const [y, m, d] = pen.fecha.split('-')
+                  parts.push(`${d}/${m}/${y}`)
+                }
+                item.concepto_descripcion = parts.join(' · ') || 'Descuento'
+              }
+            }
+          }
+        }
+
+        // Buscar en tickets_favor
+        if (fromTickets.length > 0) {
+          const ticketIds = fromTickets.map(i => i.referencia_id!).filter(Boolean)
+          const { data: ticketsData } = await (supabase.from('tickets_favor') as any)
+            .select('id, descripcion, tipo')
+            .in('id', ticketIds)
+          if (ticketsData) {
+            const ticketMap = new Map(ticketsData.map((t: any) => [t.id, t]))
+            for (const item of fromTickets) {
+              const ticket = ticketMap.get(item.referencia_id!)
+              if (ticket) {
+                const desc = ticket.descripcion || ticket.tipo || 'Descuento'
+                item.concepto_descripcion = desc
+              }
+            }
+          }
+        }
+      }
+
+>>>>>>> 8a4899fea2bf789c55e158ee7e4434791ab83884
       // Inject saldo_anterior as a concepto line (same logic as ReporteFacturacionTab)
       const saldo = factura.saldo_anterior || 0
       if (saldo > 0) {

@@ -163,25 +163,19 @@
 }
 
 .toast-popup .swal2-icon {
+  display: none !important;
+}
+
+.toast-popup .toast-icon-custom {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
   width: 28px !important;
   height: 28px !important;
-  margin: 0 12px 0 0 !important;
-  border-width: 2px !important;
-}
-
-.toast-popup .swal2-icon .swal2-icon-content {
-  font-size: 16px !important;
-}
-
-.toast-popup .swal2-icon.swal2-success .swal2-success-line-tip,
-.toast-popup .swal2-icon.swal2-success .swal2-success-line-long {
-  background-color: var(--color-success) !important;
-}
-
-.toast-popup .swal2-icon.swal2-success .swal2-success-circular-line-left,
-.toast-popup .swal2-icon.swal2-success .swal2-success-circular-line-right,
-.toast-popup .swal2-icon.swal2-success .swal2-success-fix {
-  background-color: transparent !important;
+  min-width: 28px !important;
+  margin: 0 10px 0 0 !important;
+  border: none !important;
+  background: none !important;
 }
 
 .toast-title {
@@ -193,10 +187,7 @@
 }
 
 .toast-popup .swal2-html-container {
-  font-size: 13px !important;
-  color: var(--text-secondary) !important;
-  margin: 4px 0 0 0 !important;
-  padding: 0 !important;
+  display: none !important;
 }
 
 .toast-popup .swal2-timer-progress-bar {

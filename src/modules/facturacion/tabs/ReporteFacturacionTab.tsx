@@ -327,7 +327,7 @@ export function ReporteFacturacionTab() {
   const [showDiscrepancyModal, setShowDiscrepancyModal] = useState(false)
 
   // Filtros rápidos de alertas (toggle)
-  const [filtroAlerta, setFiltroAlerta] = useState<'ingreso' | 'baja' | 'sin_gnc' | 'pausa' | 'efectivo_on' | 'efectivo_off' | null>(null)
+  const [filtroAlerta, setFiltroAlerta] = useState<'ingreso' | 'baja' | 'sin_gnc' | 'telepase' | 'pausa' | 'efectivo_on' | 'efectivo_off' | null>(null)
 
   // Modal de desglose de días
   const [showDiasModal, setShowDiasModal] = useState(false)
@@ -2181,13 +2181,15 @@ export function ReporteFacturacionTab() {
 
         // Saldo anterior: se LEE del tab Saldos (solo lectura, no se escribe de vuelta)
         const saldo = saldosMap.get(conductorId)
-        const saldoAnterior = diasTotales === 0 ? 0 : -(saldo?.saldo_actual || 0)
+        const saldoAnteriorRaw = diasTotales === 0 ? 0 : -(saldo?.saldo_actual || 0)
+        const saldoAnterior = Math.abs(saldoAnteriorRaw) < 0.01 ? 0 : Math.round(saldoAnteriorRaw * 100) / 100
         const diasMora = 0
         const montoMora = 0
 
         // Total a pagar
         const subtotalNeto = subtotalCargos - subtotalDescuentos
-        const totalAPagar = subtotalNeto + saldoAnterior
+        const totalAPagarRaw = subtotalNeto + saldoAnterior
+        const totalAPagar = Math.abs(totalAPagarRaw) < 0.01 ? 0 : Math.round(totalAPagarRaw * 100) / 100
 
         // Detectar discrepancia de formato DNI (conductor vs cabify)
         const cabifyRawDni = cabifyRawDniMap.get(dniConductor) || ''
@@ -3149,7 +3151,8 @@ export function ReporteFacturacionTab() {
 
         // Saldo anterior: se LEE del tab Saldos (solo lectura, no se escribe de vuelta)
         const saldoConductor = saldosMapById.get(conductor.conductor_id)
-        const saldoAnterior = conductor.total_dias === 0 ? 0 : -(saldoConductor?.saldo_actual || 0)
+        const saldoAnteriorRaw = conductor.total_dias === 0 ? 0 : -(saldoConductor?.saldo_actual || 0)
+        const saldoAnterior = Math.abs(saldoAnteriorRaw) < 0.01 ? 0 : Math.round(saldoAnteriorRaw * 100) / 100
         const diasMora = 0
         const montoMora = 0
 
@@ -3157,7 +3160,8 @@ export function ReporteFacturacionTab() {
         const subtotalCargos = alquilerTotal + cuotaGarantiaProporcional + totalPenalidades + totalExcesos + totalPeajes + montoMultas + totalCobros + totalCuotasPenalidades
         const subtotalDescuentos = totalTickets + totalPenP004
         const subtotalNeto = subtotalCargos - subtotalDescuentos
-        const totalAPagar = subtotalNeto + saldoAnterior
+        const totalAPagarRaw = subtotalNeto + saldoAnterior
+        const totalAPagar = Math.abs(totalAPagarRaw) < 0.01 ? 0 : Math.round(totalAPagarRaw * 100) / 100
 
         totalCargosGlobal += subtotalCargos
         totalDescuentosGlobal += subtotalDescuentos
@@ -3268,7 +3272,9 @@ export function ReporteFacturacionTab() {
         for (const ticket of ticketsConductor) {
           todosDetalles.push({
             facturacion_id: facturacionId, concepto_codigo: 'P004',
-            concepto_descripcion: `Ticket: ${(ticket as any).descripcion || (ticket as any).tipo}`,
+            concepto_descripcion: (ticket as any).descripcion
+              ? `${(ticket as any).tipo || 'Ticket'} – ${(ticket as any).descripcion}`
+              : `${(ticket as any).tipo || 'Ticket'}`,
             cantidad: 1, precio_unitario: (ticket as any).monto,
             subtotal: (ticket as any).monto, total: (ticket as any).monto, es_descuento: true,
             referencia_id: (ticket as any).id, referencia_tipo: 'ticket'
@@ -8396,15 +8402,18 @@ export function ReporteFacturacionTab() {
     {
       accessorKey: 'saldo_anterior',
       header: 'Saldo Ant.',
-      cell: ({ row }) => (
+      cell: ({ row }) => {
+        const saldo = Math.abs(row.original.saldo_anterior) < 0.01 ? 0 : row.original.saldo_anterior
+        return (
         <span style={{
           fontSize: '11px',
-          fontWeight: row.original.saldo_anterior !== 0 ? 600 : 400,
-          color: row.original.saldo_anterior > 0 ? 'var(--badge-red-text)' : row.original.saldo_anterior < 0 ? 'var(--badge-green-text)' : 'var(--text-muted)'
+          fontWeight: saldo !== 0 ? 600 : 400,
+          color: saldo > 0 ? 'var(--badge-red-text)' : saldo < 0 ? 'var(--badge-green-text)' : 'var(--text-muted)'
         }}>
-          {row.original.saldo_anterior !== 0 ? formatCurrency(row.original.saldo_anterior) : '-'}
+          {saldo !== 0 ? formatCurrency(saldo) : '-'}
         </span>
-      ),
+        )
+      },
       enableSorting: true,
     },
 
@@ -8966,6 +8975,9 @@ export function ReporteFacturacionTab() {
             const countBaja = vistaPreviaData.filter(f => f.estado_billing === 'De baja').length
             const countPausa = vistaPreviaData.filter(f => f.estado_billing === 'Pausa').length
             const countSinGnc = vistaPreviaData.filter(f => f.tiene_gnc === false && f.vehiculo_patente).length
+            const telepaseList = vistaPreviaData.filter(f => f.tiene_telepase === true && f.vehiculo_patente)
+            const countTelepase = telepaseList.length
+            const montoTelepase = telepaseList.reduce((sum, f) => sum + Number(f.monto_peajes || 0), 0)
             const countEfectivoOn = vistaPreviaData.filter(f => f.permiso_efectivo === 'Activado').length
             const countEfectivoOff = vistaPreviaData.filter(f => f.permiso_efectivo === 'Desactivado').length
             const btnStyle = (active: boolean, bg: string, color: string) => ({
@@ -8982,6 +8994,13 @@ export function ReporteFacturacionTab() {
                   <button style={btnStyle(filtroAlerta === 'sin_gnc', 'rgba(249,115,22,0.12)', '#ea580c')}
                     onClick={() => setFiltroAlerta(filtroAlerta === 'sin_gnc' ? null : 'sin_gnc')}>
                     <AlertTriangle size={12} /> Sin GNC <span style={{ opacity: 0.7 }}>{countSinGnc}</span>
+                  </button>
+                )}
+                {countTelepase > 0 && (
+                  <button style={btnStyle(filtroAlerta === 'telepase', 'rgba(107,114,128,0.12)', '#6b7280')}
+                    onClick={() => setFiltroAlerta(filtroAlerta === 'telepase' ? null : 'telepase')}>
+                    <AlertCircle size={12} /> Telepase propio <span style={{ opacity: 0.7 }}>{countTelepase}</span>
+                    {montoTelepase > 0 && <span style={{ opacity: 0.6, fontSize: '10px' }}>· ${montoTelepase.toLocaleString('es-AR', { minimumFractionDigits: 2 })}</span>}
                   </button>
                 )}
                 {countEfectivoOn > 0 && (
@@ -9041,6 +9060,7 @@ export function ReporteFacturacionTab() {
               if (filtroAlerta === 'baja' && f.estado_billing !== 'De baja') return false
               if (filtroAlerta === 'pausa' && f.estado_billing !== 'Pausa') return false
               if (filtroAlerta === 'sin_gnc' && !(f.tiene_gnc === false && f.vehiculo_patente)) return false
+              if (filtroAlerta === 'telepase' && !(f.tiene_telepase === true && f.vehiculo_patente)) return false
               if (filtroAlerta === 'efectivo_on' && f.permiso_efectivo !== 'Activado') return false
               if (filtroAlerta === 'efectivo_off' && f.permiso_efectivo !== 'Desactivado') return false
               return true
@@ -9166,7 +9186,11 @@ export function ReporteFacturacionTab() {
               const countIngreso = src.filter(f => f.alerta_prorrateo_ingreso).length
               const countBaja = src.filter(f => f.estado_billing === 'De baja').length
               const countPausa = src.filter(f => f.estado_billing === 'Pausa').length
-              const countSinGnc = src.filter(f => f.tiene_gnc === false && f.vehiculo_patente).length
+              const sinGncList = src.filter(f => f.tiene_gnc === false && f.vehiculo_patente)
+              const countSinGnc = sinGncList.length
+                const telepaseList = src.filter(f => f.tiene_telepase === true && f.vehiculo_patente)
+              const countTelepase = telepaseList.length
+              const montoTelepase = telepaseList.reduce((sum, f) => sum + Number(f.monto_peajes || 0), 0)
               const countEfectivoOn = src.filter(f => f.permiso_efectivo === 'Activado').length
               const countEfectivoOff = src.filter(f => f.permiso_efectivo === 'Desactivado').length
               const btnStyle = (active: boolean, bg: string, color: string) => ({
@@ -9183,6 +9207,13 @@ export function ReporteFacturacionTab() {
                     <button style={btnStyle(filtroAlerta === 'sin_gnc', 'rgba(249,115,22,0.12)', '#ea580c')}
                       onClick={() => setFiltroAlerta(filtroAlerta === 'sin_gnc' ? null : 'sin_gnc')}>
                       <AlertTriangle size={12} /> Sin GNC <span style={{ opacity: 0.7 }}>{countSinGnc}</span>
+                      </button>
+                  )}
+                  {countTelepase > 0 && (
+                    <button style={btnStyle(filtroAlerta === 'telepase', 'rgba(107,114,128,0.12)', '#6b7280')}
+                      onClick={() => setFiltroAlerta(filtroAlerta === 'telepase' ? null : 'telepase')}>
+                      <AlertCircle size={12} /> Telepase propio <span style={{ opacity: 0.7 }}>{countTelepase}</span>
+                      {montoTelepase > 0 && <span style={{ opacity: 0.6, fontSize: '10px' }}>· ${montoTelepase.toLocaleString('es-AR', { minimumFractionDigits: 2 })}</span>}
                     </button>
                   )}
                   {countEfectivoOn > 0 && (
@@ -9230,6 +9261,7 @@ export function ReporteFacturacionTab() {
                 if (filtroAlerta === 'baja') return f.estado_billing === 'De baja'
                 if (filtroAlerta === 'pausa') return f.estado_billing === 'Pausa'
                 if (filtroAlerta === 'sin_gnc') return f.tiene_gnc === false && f.vehiculo_patente
+                if (filtroAlerta === 'telepase') return f.tiene_telepase === true && f.vehiculo_patente
                 if (filtroAlerta === 'efectivo_on') return f.permiso_efectivo === 'Activado'
                 if (filtroAlerta === 'efectivo_off') return f.permiso_efectivo === 'Desactivado'
                 return true

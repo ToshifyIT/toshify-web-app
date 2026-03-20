@@ -720,7 +720,8 @@
 }
 
 .vf-anfitrion-field {
-  flex: 0 0 160px;
+  flex: 1;
+  min-width: 160px;
 }
 
 /* Auto-assigned anfitrion - inline compact (sits in the row) */

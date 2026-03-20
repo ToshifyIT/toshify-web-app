@@ -780,7 +780,9 @@ export function PeriodosTab() {
           await (supabase.from('facturacion_detalle') as any).insert({
             facturacion_id: facturacionId,
             concepto_codigo: 'P004',
-            concepto_descripcion: `Ticket: ${(ticket as any).descripcion || (ticket as any).tipo}`,
+            concepto_descripcion: (ticket as any).descripcion
+              ? `${(ticket as any).tipo || 'Ticket'} – ${(ticket as any).descripcion}`
+              : `${(ticket as any).tipo || 'Ticket'}`,
             cantidad: 1,
             precio_unitario: (ticket as any).monto,
             subtotal: (ticket as any).monto,

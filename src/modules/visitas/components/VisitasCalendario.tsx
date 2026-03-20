@@ -203,18 +203,18 @@ export function VisitasCalendario({
     if ((event.visita as any)._synthetic) {
       return {
         style: {
-          backgroundColor: '#1e293b',
-          borderRadius: '8px',
-          border: 'none',
-          color: '#fff',
+          backgroundColor: '#f1f5f9',
+          borderRadius: '6px',
+          border: '1.5px dashed #94a3b8',
+          color: '#475569',
           fontSize: '12px',
-          padding: '6px 10px',
-          fontWeight: 700 as const,
+          padding: '4px 8px',
+          fontWeight: 600 as const,
           cursor: 'pointer',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          letterSpacing: '0.3px',
+          letterSpacing: '0.2px',
         },
       };
     }
