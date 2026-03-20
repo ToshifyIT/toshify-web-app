@@ -2178,13 +2178,15 @@ export function ReporteFacturacionTab() {
 
         // Saldo anterior: se LEE del tab Saldos (solo lectura, no se escribe de vuelta)
         const saldo = saldosMap.get(conductorId)
-        const saldoAnterior = diasTotales === 0 ? 0 : -(saldo?.saldo_actual || 0)
+        const saldoAnteriorRaw = diasTotales === 0 ? 0 : -(saldo?.saldo_actual || 0)
+        const saldoAnterior = Math.abs(saldoAnteriorRaw) < 0.01 ? 0 : Math.round(saldoAnteriorRaw * 100) / 100
         const diasMora = 0
         const montoMora = 0
 
         // Total a pagar
         const subtotalNeto = subtotalCargos - subtotalDescuentos
-        const totalAPagar = subtotalNeto + saldoAnterior
+        const totalAPagarRaw = subtotalNeto + saldoAnterior
+        const totalAPagar = Math.abs(totalAPagarRaw) < 0.01 ? 0 : Math.round(totalAPagarRaw * 100) / 100
 
         // Detectar discrepancia de formato DNI (conductor vs cabify)
         const cabifyRawDni = cabifyRawDniMap.get(dniConductor) || ''
@@ -3146,7 +3148,8 @@ export function ReporteFacturacionTab() {
 
         // Saldo anterior: se LEE del tab Saldos (solo lectura, no se escribe de vuelta)
         const saldoConductor = saldosMapById.get(conductor.conductor_id)
-        const saldoAnterior = conductor.total_dias === 0 ? 0 : -(saldoConductor?.saldo_actual || 0)
+        const saldoAnteriorRaw = conductor.total_dias === 0 ? 0 : -(saldoConductor?.saldo_actual || 0)
+        const saldoAnterior = Math.abs(saldoAnteriorRaw) < 0.01 ? 0 : Math.round(saldoAnteriorRaw * 100) / 100
         const diasMora = 0
         const montoMora = 0
 
@@ -3154,7 +3157,8 @@ export function ReporteFacturacionTab() {
         const subtotalCargos = alquilerTotal + cuotaGarantiaProporcional + totalPenalidades + totalExcesos + totalPeajes + montoMultas + totalCobros + totalCuotasPenalidades
         const subtotalDescuentos = totalTickets + totalPenP004
         const subtotalNeto = subtotalCargos - subtotalDescuentos
-        const totalAPagar = subtotalNeto + saldoAnterior
+        const totalAPagarRaw = subtotalNeto + saldoAnterior
+        const totalAPagar = Math.abs(totalAPagarRaw) < 0.01 ? 0 : Math.round(totalAPagarRaw * 100) / 100
 
         totalCargosGlobal += subtotalCargos
         totalDescuentosGlobal += subtotalDescuentos

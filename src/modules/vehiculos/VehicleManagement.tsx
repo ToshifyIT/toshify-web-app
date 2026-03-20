@@ -313,11 +313,11 @@ export function VehicleManagement() {
       return
     }
 
-    if (!formData.patente || !formData.marca || !formData.modelo || !formData.sede_id) {
+    if (!formData.patente || !formData.marca || !formData.modelo || !formData.sede_id || !formData.titular?.trim()) {
       Swal.fire({
         icon: 'warning',
         title: 'Campos requeridos',
-        text: 'Complete todos los campos requeridos (incluyendo sede)',
+        text: 'Complete todos los campos requeridos: Patente, Marca, Modelo, Sede y Titular',
         confirmButtonColor: '#ff0033'
       })
       return
@@ -326,6 +326,9 @@ export function VehicleManagement() {
     setSaving(true)
     try {
       const { data: { user } } = await supabase.auth.getUser()
+
+      // Estado por defecto: PKG_ON_BASE si no se seleccionó otro
+      const defaultEstadoId = vehiculosEstados.find((e: VehiculoEstado) => e.codigo === 'PKG_ON_BASE')?.id || null
 
       const { error: insertError} = await supabase
         .from('vehiculos')
@@ -342,7 +345,7 @@ export function VehicleManagement() {
           numero_motor: formData.numero_motor || null,
           numero_chasis: formData.numero_chasis || null,
           provisoria: formData.provisoria || null,
-          estado_id: formData.estado_id || null,
+          estado_id: formData.estado_id || defaultEstadoId,
           kilometraje_actual: formData.kilometraje_actual,
           fecha_adquisicion: formData.fecha_adquisicion || null,
           fecha_ulti_inspeccion: formData.fecha_ulti_inspeccion || null,
@@ -409,6 +412,16 @@ export function VehicleManagement() {
     }
 
     if (!selectedVehiculo) return
+
+    if (!formData.titular?.trim()) {
+      Swal.fire({
+        icon: 'warning',
+        title: 'Titular obligatorio',
+        text: 'El campo Titular es requerido',
+        confirmButtonColor: '#ff0033'
+      })
+      return
+    }
 
     setSaving(true)
     try {
@@ -1882,13 +1895,16 @@ export function VehicleManagement() {
             <div className="section-title">Información Adicional</div>
 
             <div className="form-group">
-              <label className="form-label">Titular</label>
+              <label className="form-label">Titular <span style={{ color: '#ef4444' }}>*</span></label>
               <input
                 type="text"
                 className="form-input"
                 value={formData.titular}
                 onChange={(e) => setFormData({ ...formData, titular: e.target.value })}
                 disabled={saving}
+                required
+                placeholder="Nombre del titular del vehículo"
+                style={!formData.titular?.trim() ? { borderColor: '#ef4444' } : {}}
               />
             </div>
 

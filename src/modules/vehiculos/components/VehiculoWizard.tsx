@@ -475,13 +475,16 @@ export function VehiculoWizard({
             </div>
 
             <div className="form-group">
-              <label className="form-label">Titular</label>
+              <label className="form-label">Titular <span style={{ color: '#ef4444' }}>*</span></label>
               <input
                 type="text"
                 className="form-input"
                 value={formData.titular}
                 onChange={(e) => setFormData({ ...formData, titular: e.target.value })}
                 disabled={saving}
+                required
+                placeholder="Nombre del titular del vehículo"
+                style={!formData.titular?.trim() ? { borderColor: '#ef4444' } : {}}
               />
             </div>
 
