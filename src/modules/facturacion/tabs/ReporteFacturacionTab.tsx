@@ -1294,21 +1294,36 @@ export function ReporteFacturacionTab() {
         (a.conductor_nombre || '').localeCompare(b.conductor_nombre || '')
       )
 
-      // Cruzar patentes con tabla vehiculos para obtener GNC actual
+      // Cruzar patentes con tabla vehiculos para obtener flags actuales (GNC/Telepase)
       const patentesUnicasLoad = [...new Set(facturacionesTransformadas.map((f: any) => f.vehiculo_patente).filter(Boolean))]
       if (patentesUnicasLoad.length > 0) {
-        const { data: vehiculosGncLoad } = await supabase
+        const { data: vehiculosFlagsLoad } = await supabase
           .from('vehiculos')
-          .select('patente, gnc')
+          .select('patente, gnc, telepase')
           .in('patente', patentesUnicasLoad)
-        if (vehiculosGncLoad) {
-          const gncMapLoad = new Map(vehiculosGncLoad.map((v: any) => [v.patente, v.gnc === true]))
-          facturacionesTransformadas = facturacionesTransformadas.map((f: any) => ({
-            ...f,
-            tiene_gnc: f.vehiculo_patente && gncMapLoad.has(f.vehiculo_patente)
-              ? gncMapLoad.get(f.vehiculo_patente)
-              : undefined,
-          }))
+        if (vehiculosFlagsLoad) {
+          const flagsMapLoad = new Map(
+            vehiculosFlagsLoad.map((v: any) => [v.patente, { gnc: v.gnc === true, telepase: v.telepase === true }]),
+          )
+          facturacionesTransformadas = facturacionesTransformadas.map((f: any) => {
+            if (!f.vehiculo_patente || !flagsMapLoad.has(f.vehiculo_patente)) {
+              return f
+            }
+            const flags = flagsMapLoad.get(f.vehiculo_patente)!
+            const peajesOriginal = Number(f.monto_peajes || 0)
+            const peajesAjustado = flags.telepase ? 0 : peajesOriginal
+            const deltaPeaje = peajesOriginal - peajesAjustado
+
+            return {
+              ...f,
+              tiene_gnc: flags.gnc,
+              tiene_telepase: flags.telepase,
+              monto_peajes: peajesAjustado,
+              subtotal_cargos: Number(f.subtotal_cargos || 0) - deltaPeaje,
+              subtotal_neto: Number(f.subtotal_neto || 0) - deltaPeaje,
+              total_a_pagar: Number(f.total_a_pagar || 0) - deltaPeaje,
+            }
+          })
         }
       }
 
