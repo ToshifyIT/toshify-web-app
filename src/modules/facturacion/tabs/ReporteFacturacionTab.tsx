@@ -324,7 +324,7 @@ export function ReporteFacturacionTab() {
   const [showDiscrepancyModal, setShowDiscrepancyModal] = useState(false)
 
   // Filtros rápidos de alertas (toggle)
-  const [filtroAlerta, setFiltroAlerta] = useState<'ingreso' | 'baja' | 'sin_gnc' | 'pausa' | 'efectivo_on' | 'efectivo_off' | null>(null)
+  const [filtroAlerta, setFiltroAlerta] = useState<'ingreso' | 'baja' | 'sin_gnc' | 'telepase' | 'pausa' | 'efectivo_on' | 'efectivo_off' | null>(null)
 
   // Modal de desglose de días
   const [showDiasModal, setShowDiasModal] = useState(false)
@@ -8962,7 +8962,12 @@ export function ReporteFacturacionTab() {
             const countIngreso = vistaPreviaData.filter(f => f.alerta_prorrateo_ingreso).length
             const countBaja = vistaPreviaData.filter(f => f.estado_billing === 'De baja').length
             const countPausa = vistaPreviaData.filter(f => f.estado_billing === 'Pausa').length
-            const countSinGnc = vistaPreviaData.filter(f => f.tiene_gnc === false && f.vehiculo_patente).length
+            const sinGncList = vistaPreviaData.filter(f => f.tiene_gnc === false && f.vehiculo_patente)
+            const countSinGnc = sinGncList.length
+            const montoSinGnc = sinGncList.reduce((sum, f) => sum + Number(f.total_a_pagar || 0), 0)
+            const telepaseList = vistaPreviaData.filter(f => f.tiene_telepase === true && f.vehiculo_patente)
+            const countTelepase = telepaseList.length
+            const montoTelepase = telepaseList.reduce((sum, f) => sum + Number(f.monto_peajes || 0), 0)
             const countEfectivoOn = vistaPreviaData.filter(f => f.permiso_efectivo === 'Activado').length
             const countEfectivoOff = vistaPreviaData.filter(f => f.permiso_efectivo === 'Desactivado').length
             const btnStyle = (active: boolean, bg: string, color: string) => ({
@@ -8979,6 +8984,14 @@ export function ReporteFacturacionTab() {
                   <button style={btnStyle(filtroAlerta === 'sin_gnc', 'rgba(249,115,22,0.12)', '#ea580c')}
                     onClick={() => setFiltroAlerta(filtroAlerta === 'sin_gnc' ? null : 'sin_gnc')}>
                     <AlertTriangle size={12} /> Sin GNC <span style={{ opacity: 0.7 }}>{countSinGnc}</span>
+                    {montoSinGnc > 0 && <span style={{ opacity: 0.6, fontSize: '10px' }}>· ${montoSinGnc.toLocaleString('es-AR', { minimumFractionDigits: 2 })}</span>}
+                  </button>
+                )}
+                {countTelepase > 0 && (
+                  <button style={btnStyle(filtroAlerta === 'telepase', 'rgba(107,114,128,0.12)', '#6b7280')}
+                    onClick={() => setFiltroAlerta(filtroAlerta === 'telepase' ? null : 'telepase')}>
+                    <AlertCircle size={12} /> Telepase propio <span style={{ opacity: 0.7 }}>{countTelepase}</span>
+                    {montoTelepase > 0 && <span style={{ opacity: 0.6, fontSize: '10px' }}>· ${montoTelepase.toLocaleString('es-AR', { minimumFractionDigits: 2 })}</span>}
                   </button>
                 )}
                 {countEfectivoOn > 0 && (
@@ -9038,6 +9051,7 @@ export function ReporteFacturacionTab() {
               if (filtroAlerta === 'baja' && f.estado_billing !== 'De baja') return false
               if (filtroAlerta === 'pausa' && f.estado_billing !== 'Pausa') return false
               if (filtroAlerta === 'sin_gnc' && !(f.tiene_gnc === false && f.vehiculo_patente)) return false
+              if (filtroAlerta === 'telepase' && !(f.tiene_telepase === true && f.vehiculo_patente)) return false
               if (filtroAlerta === 'efectivo_on' && f.permiso_efectivo !== 'Activado') return false
               if (filtroAlerta === 'efectivo_off' && f.permiso_efectivo !== 'Desactivado') return false
               return true
@@ -9163,7 +9177,12 @@ export function ReporteFacturacionTab() {
               const countIngreso = src.filter(f => f.alerta_prorrateo_ingreso).length
               const countBaja = src.filter(f => f.estado_billing === 'De baja').length
               const countPausa = src.filter(f => f.estado_billing === 'Pausa').length
-              const countSinGnc = src.filter(f => f.tiene_gnc === false && f.vehiculo_patente).length
+              const sinGncList = src.filter(f => f.tiene_gnc === false && f.vehiculo_patente)
+              const countSinGnc = sinGncList.length
+              const montoSinGnc = sinGncList.reduce((sum, f) => sum + Number(f.total_a_pagar || 0), 0)
+              const telepaseList = src.filter(f => f.tiene_telepase === true && f.vehiculo_patente)
+              const countTelepase = telepaseList.length
+              const montoTelepase = telepaseList.reduce((sum, f) => sum + Number(f.monto_peajes || 0), 0)
               const countEfectivoOn = src.filter(f => f.permiso_efectivo === 'Activado').length
               const countEfectivoOff = src.filter(f => f.permiso_efectivo === 'Desactivado').length
               const btnStyle = (active: boolean, bg: string, color: string) => ({
@@ -9180,6 +9199,14 @@ export function ReporteFacturacionTab() {
                     <button style={btnStyle(filtroAlerta === 'sin_gnc', 'rgba(249,115,22,0.12)', '#ea580c')}
                       onClick={() => setFiltroAlerta(filtroAlerta === 'sin_gnc' ? null : 'sin_gnc')}>
                       <AlertTriangle size={12} /> Sin GNC <span style={{ opacity: 0.7 }}>{countSinGnc}</span>
+                      {montoSinGnc > 0 && <span style={{ opacity: 0.6, fontSize: '10px' }}>· ${montoSinGnc.toLocaleString('es-AR', { minimumFractionDigits: 2 })}</span>}
+                    </button>
+                  )}
+                  {countTelepase > 0 && (
+                    <button style={btnStyle(filtroAlerta === 'telepase', 'rgba(107,114,128,0.12)', '#6b7280')}
+                      onClick={() => setFiltroAlerta(filtroAlerta === 'telepase' ? null : 'telepase')}>
+                      <AlertCircle size={12} /> Telepase propio <span style={{ opacity: 0.7 }}>{countTelepase}</span>
+                      {montoTelepase > 0 && <span style={{ opacity: 0.6, fontSize: '10px' }}>· ${montoTelepase.toLocaleString('es-AR', { minimumFractionDigits: 2 })}</span>}
                     </button>
                   )}
                   {countEfectivoOn > 0 && (
@@ -9227,6 +9254,7 @@ export function ReporteFacturacionTab() {
                 if (filtroAlerta === 'baja') return f.estado_billing === 'De baja'
                 if (filtroAlerta === 'pausa') return f.estado_billing === 'Pausa'
                 if (filtroAlerta === 'sin_gnc') return f.tiene_gnc === false && f.vehiculo_patente
+                if (filtroAlerta === 'telepase') return f.tiene_telepase === true && f.vehiculo_patente
                 if (filtroAlerta === 'efectivo_on') return f.permiso_efectivo === 'Activado'
                 if (filtroAlerta === 'efectivo_off') return f.permiso_efectivo === 'Desactivado'
                 return true
