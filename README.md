@@ -315,7 +315,3 @@ Este software es propietario y confidencial. Todos los derechos reservados.
 © 2025-2026 Toshify - Sistema de Gestion de Flotas
 
 ---
-
-## Contacto
-
-- **Email:** soporte@toshify.com
