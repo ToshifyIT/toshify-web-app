@@ -20,7 +20,7 @@ export type TipoCandidato = 'nuevo' | 'antiguo' | 'reingreso'
 export type TurnoOnboarding = 'diurno' | 'nocturno'
 
 // Modalidad
-export type ModalidadOnboarding = 'TURNO' | 'CARGO'
+export type ModalidadOnboarding = 'TURNO' | 'CARGO' | 'CAMBIO_VEHICULO'
 
 // Zonas
 export type ZonaOnboarding = 'norte' | 'sur' | 'caba' | 'oeste'

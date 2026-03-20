@@ -5,7 +5,7 @@
 /* eslint-disable react-hooks/exhaustive-deps */
 
 import { useState, useEffect, useMemo, useRef, lazy, Suspense } from 'react'
-import { X, Calendar, User, ChevronRight, Check, Sun, Moon, Route, Loader2, MapPin, Building2, Map as MapIcon, RotateCcw } from 'lucide-react'
+import { X, Calendar, User, ChevronRight, Check, Sun, Moon, Route, Loader2, MapPin, Building2, Map as MapIcon, RotateCcw, ArrowLeftRight } from 'lucide-react'
 import { supabase } from '../../../lib/supabase'
 import { useAuth } from '../../../contexts/AuthContext'
 // Lazy import para que un fallo de Google Maps no tumbe todo el wizard
@@ -31,6 +31,10 @@ interface ProgramacionData {
   vehiculo_patente: string
   vehiculo_modelo: string
   vehiculo_color: string
+  // Vehículo de cambio (nuevo vehículo destino para CAMBIO_VEHICULO)
+  vehiculo_cambio_id: string
+  vehiculo_cambio_patente: string
+  vehiculo_cambio_modelo: string
   // Conductor legacy (para A CARGO)
   conductor_id: string
   conductor_nombre: string
@@ -67,6 +71,8 @@ interface ProgramacionData {
   // Devolución de vehículo
   devolucion_vehiculo: boolean
   ultimo_dia_cobro: 'dia_entrega' | 'fecha_baja' | ''
+  // Cambio de vehículo
+  cambio_vehiculo: boolean
   // Otros
   observaciones: string
 }
@@ -142,6 +148,10 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
         vehiculo_patente: editData.vehiculo_entregar_patente || editData.vehiculo_entregar_patente_sistema || '',
         vehiculo_modelo: editData.vehiculo_entregar_modelo || editData.vehiculo_entregar_modelo_sistema || '',
         vehiculo_color: editData.vehiculo_entregar_color || '',
+        // Vehículo de cambio
+        vehiculo_cambio_id: editData.vehiculo_cambio_id || '',
+        vehiculo_cambio_patente: editData.vehiculo_cambio_patente || '',
+        vehiculo_cambio_modelo: editData.vehiculo_cambio_modelo || '',
         // Conductor legacy (A CARGO)
         conductor_id: editData.conductor_id || '',
         conductor_nombre: editData.conductor_nombre || editData.conductor_display || '',
@@ -177,6 +187,7 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
         distancia_nocturno: editData.distancia_nocturno || '',
         devolucion_vehiculo: editData.devolucion_vehiculo ?? false,
         ultimo_dia_cobro: editData.ultimo_dia_cobro || '',
+        cambio_vehiculo: editData.cambio_vehiculo ?? false,
         observaciones: editData.observaciones || ''
       }
     }
@@ -188,6 +199,9 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
       vehiculo_patente: '',
       vehiculo_modelo: '',
       vehiculo_color: '',
+      vehiculo_cambio_id: '',
+      vehiculo_cambio_patente: '',
+      vehiculo_cambio_modelo: '',
       conductor_id: '',
       conductor_nombre: '',
       conductor_dni: '',
@@ -219,6 +233,7 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
     distancia_nocturno: '',
     devolucion_vehiculo: false,
     ultimo_dia_cobro: '',
+    cambio_vehiculo: false,
     observaciones: ''
     }
   })
@@ -750,8 +765,8 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
   }
 
   const handleNext = async () => {
-    // Step 1: Validate modalidad (devolución no requiere modalidad previa, se detecta del vehículo)
-    if (step === 1 && !formData.modalidad && !formData.devolucion_vehiculo) {
+    // Step 1: Validate modalidad (devolución y cambio_vehiculo no requieren modalidad previa, se detecta del vehículo)
+    if (step === 1 && !formData.modalidad && !formData.devolucion_vehiculo && !formData.cambio_vehiculo) {
       Swal.fire('Error', 'Debes seleccionar una modalidad', 'error')
       return
     }
@@ -760,6 +775,15 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
     if (step === 2) {
       if (!formData.vehiculo_id) {
         Swal.fire('Error', 'Debes seleccionar un vehiculo', 'error')
+        return
+      }
+      // Cambio de vehículo requiere ambos vehículos
+      if (formData.cambio_vehiculo && !formData.vehiculo_cambio_id) {
+        Swal.fire('Error', 'Debes seleccionar el vehículo nuevo (destino)', 'error')
+        return
+      }
+      if (formData.cambio_vehiculo && formData.vehiculo_id === formData.vehiculo_cambio_id) {
+        Swal.fire('Error', 'El vehículo origen y destino no pueden ser el mismo', 'error')
         return
       }
       // Cargar conductores del vehiculo antes de pasar al paso 3
@@ -776,6 +800,16 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
           documento_diurno: prev.conductor_diurno_id ? 'na' as TipoDocumento : prev.documento_diurno,
           tipo_asignacion_nocturno: prev.conductor_nocturno_id ? 'devolucion_vehiculo' as TipoAsignacion : prev.tipo_asignacion_nocturno,
           documento_nocturno: prev.conductor_nocturno_id ? 'na' as TipoDocumento : prev.documento_nocturno,
+        }))
+      }
+
+      // Si es cambio de vehículo, auto-setear tipo de asignación a cambio_auto
+      if (formData.cambio_vehiculo) {
+        setFormData(prev => ({
+          ...prev,
+          tipo_asignacion_cargo: 'cambio_auto' as TipoAsignacion,
+          tipo_asignacion_diurno: prev.conductor_diurno_id ? 'cambio_auto' as TipoAsignacion : prev.tipo_asignacion_diurno,
+          tipo_asignacion_nocturno: prev.conductor_nocturno_id ? 'cambio_auto' as TipoAsignacion : prev.tipo_asignacion_nocturno,
         }))
       }
 
@@ -863,9 +897,9 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
 
       if (asignacionData) {
         const asigData = asignacionData as any
-        // Si es devolución, solo traer conductores activos (no los dados de baja/completados)
+        // Si es devolución o cambio de vehículo, solo traer conductores activos (no los dados de baja/completados)
         const conductoresAsigRaw = asigData.asignaciones_conductores || []
-        const conductoresAsig = formData.devolucion_vehiculo
+        const conductoresAsig = (formData.devolucion_vehiculo || formData.cambio_vehiculo)
           ? conductoresAsigRaw.filter((c: any) => c.estado === 'asignado' || c.estado === 'activo')
           : conductoresAsigRaw
 
@@ -876,14 +910,14 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
           .filter((id: string) => id)
         setConductoresDelVehiculoActual(conductorIds)
 
-        // Si es devolución y la modalidad aún no fue seteada, usar la modalidad real del vehículo
+        // Si es devolución o cambio de vehículo y la modalidad aún no fue seteada, usar la modalidad real del vehículo
         const modalidadVehiculo = asigData.horario as 'CARGO' | 'TURNO'
-        if (formData.devolucion_vehiculo && !formData.modalidad && modalidadVehiculo) {
+        if ((formData.devolucion_vehiculo || formData.cambio_vehiculo) && !formData.modalidad && modalidadVehiculo) {
           setFormData(prev => ({ ...prev, modalidad: modalidadVehiculo }))
         }
 
         // Determinar la modalidad efectiva para la comparación
-        const modalidadSeleccionada = (formData.devolucion_vehiculo && !formData.modalidad)
+        const modalidadSeleccionada = ((formData.devolucion_vehiculo || formData.cambio_vehiculo) && !formData.modalidad)
           ? modalidadVehiculo
           : formData.modalidad
 
@@ -1250,16 +1284,23 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
 
     try {
       // Preparar datos para insertar/actualizar
+      // En cambio de vehículo: vehiculo_entregar = vehículo NUEVO (destino, el que se entrega al conductor)
+      //                        vehiculo_cambio = vehículo VIEJO (origen, el que se devuelve)
       const saveData: any = {
         modalidad: formData.modalidad,
-        vehiculo_entregar_id: formData.vehiculo_id,
-        vehiculo_entregar_patente: formData.vehiculo_patente,
-        vehiculo_entregar_modelo: formData.vehiculo_modelo,
-        vehiculo_entregar_color: formData.vehiculo_color,
+        vehiculo_entregar_id: formData.cambio_vehiculo ? formData.vehiculo_cambio_id : formData.vehiculo_id,
+        vehiculo_entregar_patente: formData.cambio_vehiculo ? formData.vehiculo_cambio_patente : formData.vehiculo_patente,
+        vehiculo_entregar_modelo: formData.cambio_vehiculo ? formData.vehiculo_cambio_modelo : formData.vehiculo_modelo,
+        vehiculo_entregar_color: formData.cambio_vehiculo ? '' : formData.vehiculo_color,
+        // Vehículo de cambio: en cambio_vehiculo guarda el vehículo VIEJO (origen)
+        vehiculo_cambio_id: formData.cambio_vehiculo ? (formData.vehiculo_id || null) : null,
+        vehiculo_cambio_patente: formData.cambio_vehiculo ? (formData.vehiculo_patente || null) : null,
+        vehiculo_cambio_modelo: formData.cambio_vehiculo ? (formData.vehiculo_modelo || null) : null,
         fecha_cita: formData.fecha_cita,
         hora_cita: formData.hora_cita,
         observaciones: formData.observaciones || null,
         devolucion_vehiculo: formData.devolucion_vehiculo || false,
+        cambio_vehiculo: formData.cambio_vehiculo || false,
         ultimo_dia_cobro: formData.devolucion_vehiculo ? (formData.ultimo_dia_cobro || null) : null
       }
 
@@ -1394,7 +1435,7 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
           if (a.id === formData.vehiculo_id) return -1
           if (b.id === formData.vehiculo_id) return 1
         }
-        const prioridad: Record<string, number> = formData.devolucion_vehiculo
+        const prioridad: Record<string, number> = (formData.devolucion_vehiculo || formData.cambio_vehiculo)
           ? { 'ocupado': 0, 'turno_diurno_libre': 0, 'turno_nocturno_libre': 0, 'programado': 1, 'disponible': 2 }
           : { 'disponible': 0, 'turno_diurno_libre': 1, 'turno_nocturno_libre': 1, 'ocupado': 2 }
         const prioA = prioridad[a.disponibilidad] ?? 99
@@ -1404,7 +1445,42 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
   }, [vehicles, vehicleSearch, vehicleAvailabilityFilter, isEditMode, formData.vehiculo_id, formData.devolucion_vehiculo])
 
   // Obtener conductores seleccionados (buscar en lista o crear objeto temporal con datos del form)
-  const conductorDiurno = conductores.find(c => c.id === formData.conductor_diurno_id) || 
+  // Helper para badge de disponibilidad de vehículo (usado en Step 2 normal y cambio)
+  const getVehicleBadge = (vehicle: Vehicle) => {
+    let badgeText = '', badgeBg = '', badgeColor = '', detalleText = ''
+    const asig = vehicle.asignacionActiva
+    switch (vehicle.disponibilidad) {
+      case 'disponible':
+        badgeText = 'Disponible'; badgeBg = '#10B981'; badgeColor = 'white'; detalleText = 'Libre para asignacion'; break
+      case 'turno_diurno_libre':
+        badgeText = 'En Uso'; badgeBg = '#F59E0B'; badgeColor = 'white'; detalleText = 'Diurno Libre'; break
+      case 'turno_nocturno_libre':
+        badgeText = 'En Uso'; badgeBg = '#F59E0B'; badgeColor = 'white'; detalleText = 'Nocturno Libre'; break
+      case 'ocupado':
+        badgeText = 'En Uso'; badgeBg = '#F59E0B'; badgeColor = 'white'; detalleText = asig?.horario === 'CARGO' ? 'A Cargo' : 'Turnos completos'; break
+      case 'programado':
+        badgeText = 'Programado'; badgeBg = '#EF4444'; badgeColor = 'white'; detalleText = 'Tiene entrega pendiente'; break
+    }
+    return { badgeText, badgeBg, badgeColor, detalleText }
+  }
+
+  // Vehículos filtrados para cambio de vehículo (memoizados)
+  const vehiculosEnUso = useMemo(() =>
+    filteredVehicles.filter(v =>
+      v.disponibilidad === 'ocupado' || v.disponibilidad === 'turno_diurno_libre' || v.disponibilidad === 'turno_nocturno_libre' || (isEditMode && v.id === formData.vehiculo_id)
+    ),
+    [filteredVehicles, isEditMode, formData.vehiculo_id]
+  )
+
+  const vehiculosDestino = useMemo(() =>
+    filteredVehicles.filter(v =>
+      (v.disponibilidad === 'disponible' || v.disponibilidad === 'ocupado' || v.disponibilidad === 'turno_diurno_libre' || v.disponibilidad === 'turno_nocturno_libre' || (isEditMode && v.id === formData.vehiculo_cambio_id))
+      && v.id !== formData.vehiculo_id
+    ),
+    [filteredVehicles, isEditMode, formData.vehiculo_cambio_id, formData.vehiculo_id]
+  )
+
+  const conductorDiurno = conductores.find(c => c.id === formData.conductor_diurno_id) ||
     (formData.conductor_diurno_id && formData.conductor_diurno_nombre ? {
       id: formData.conductor_diurno_id,
       nombres: formData.conductor_diurno_nombre.split(' ')[0] || '',
@@ -2605,7 +2681,7 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
                 <div className="modality-grid">
                   <div
                     className={`modality-card ${formData.modalidad === 'TURNO' && !formData.devolucion_vehiculo ? 'selected' : ''}`}
-                    onClick={() => { handleSelectModality('TURNO'); setFormData(prev => ({ ...prev, modalidad: 'TURNO', devolucion_vehiculo: false })) }}
+                    onClick={() => { handleSelectModality('TURNO'); setFormData(prev => ({ ...prev, modalidad: 'TURNO', devolucion_vehiculo: false, cambio_vehiculo: false })) }}
                     style={{ padding: '20px 16px' }}
                   >
                     <div className="modality-icon">
@@ -2617,7 +2693,7 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
 
                   <div
                     className={`modality-card ${formData.modalidad === 'CARGO' && !formData.devolucion_vehiculo ? 'selected' : ''}`}
-                    onClick={() => { handleSelectModality('CARGO'); setFormData(prev => ({ ...prev, modalidad: 'CARGO', devolucion_vehiculo: false })) }}
+                    onClick={() => { handleSelectModality('CARGO'); setFormData(prev => ({ ...prev, modalidad: 'CARGO', devolucion_vehiculo: false, cambio_vehiculo: false })) }}
                     style={{ padding: '20px 16px' }}
                   >
                     <div className="modality-icon">
@@ -2628,7 +2704,7 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
                   </div>
                 </div>
 
-                <div className="modality-grid" style={{ marginTop: '12px', gridTemplateColumns: '1fr' }}>
+                <div className="modality-grid" style={{ marginTop: '12px' }}>
                   <div
                     className={`modality-card ${formData.devolucion_vehiculo ? 'selected' : ''}`}
                     onClick={() => {
@@ -2638,6 +2714,7 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
                         ...prev,
                         modalidad: '',
                         devolucion_vehiculo: true,
+                        cambio_vehiculo: false,
                         // Reset conductores
                         conductor_id: '',
                         conductor_nombre: '',
@@ -2650,7 +2727,7 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
                         conductor_nocturno_dni: '',
                       }))
                     }}
-                    style={{ maxWidth: '280px', margin: '0 auto', padding: '16px 16px' }}
+                    style={{ padding: '16px 16px' }}
                   >
                     <div className="modality-icon">
                       <RotateCcw size={32} />
@@ -2658,12 +2735,47 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
                     <h4 className="modality-title">Devolución Vehículo</h4>
                     <p className="modality-description">Programar devolución de un vehículo asignado</p>
                   </div>
+
+                  <div
+                    className={`modality-card ${formData.cambio_vehiculo ? 'selected' : ''}`}
+                    onClick={() => {
+                      // No hardcodear modalidad: se determinará automáticamente en el paso 2
+                      // según la asignación activa del vehículo origen
+                      setFormData(prev => ({
+                        ...prev,
+                        modalidad: '',
+                        devolucion_vehiculo: false,
+                        cambio_vehiculo: true,
+                        // Reset vehículo cambio
+                        vehiculo_cambio_id: '',
+                        vehiculo_cambio_patente: '',
+                        vehiculo_cambio_modelo: '',
+                        // Reset conductores
+                        conductor_id: '',
+                        conductor_nombre: '',
+                        conductor_dni: '',
+                        conductor_diurno_id: '',
+                        conductor_diurno_nombre: '',
+                        conductor_diurno_dni: '',
+                        conductor_nocturno_id: '',
+                        conductor_nocturno_nombre: '',
+                        conductor_nocturno_dni: '',
+                      }))
+                    }}
+                    style={{ padding: '16px 16px' }}
+                  >
+                    <div className="modality-icon">
+                      <ArrowLeftRight size={32} />
+                    </div>
+                    <h4 className="modality-title">Cambio de Vehículo</h4>
+                    <p className="modality-description">Cambiar el vehículo asignado a un conductor</p>
+                  </div>
                 </div>
               </div>
             )}
 
             {/* Step 2: Vehiculo */}
-            {step === 2 && (
+            {step === 2 && !formData.cambio_vehiculo && (
               <div>
                 <div className="step-description">
                   <h3>Paso 2: Selecciona el Vehiculo</h3>
@@ -2710,13 +2822,13 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
                 <div className="vehicle-grid">
                   {loadingVehicles ? (
                     <div className="empty-state" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '12px' }}>
-                      <div style={{ 
-                        width: '32px', 
-                        height: '32px', 
-                        border: '3px solid var(--border-primary)', 
-                        borderTopColor: 'var(--color-primary)', 
-                        borderRadius: '50%', 
-                        animation: 'spin 1s linear infinite' 
+                      <div style={{
+                        width: '32px',
+                        height: '32px',
+                        border: '3px solid var(--border-primary)',
+                        borderTopColor: 'var(--color-primary)',
+                        borderRadius: '50%',
+                        animation: 'spin 1s linear infinite'
                       }} />
                       <span>Cargando vehiculos...</span>
                     </div>
@@ -2726,46 +2838,8 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
                     </div>
                   ) : (
                     filteredVehicles.map((vehicle) => {
-                      let badgeText = ''
-                      let badgeBg = ''
-                      let badgeColor = ''
-                      let detalleText = ''
-
+                      const { badgeText, badgeBg, badgeColor, detalleText } = getVehicleBadge(vehicle)
                       const isProgramado = vehicle.disponibilidad === 'programado'
-                      const asig = vehicle.asignacionActiva
-                      
-                      switch (vehicle.disponibilidad) {
-                        case 'disponible':
-                          badgeText = 'Disponible'
-                          badgeBg = '#10B981'
-                          badgeColor = 'white'
-                          detalleText = 'Libre para asignacion'
-                          break
-                        case 'turno_diurno_libre':
-                          badgeText = 'En Uso'
-                          badgeBg = '#F59E0B'
-                          badgeColor = 'white'
-                          detalleText = 'Diurno Libre'
-                          break
-                        case 'turno_nocturno_libre':
-                          badgeText = 'En Uso'
-                          badgeBg = '#F59E0B'
-                          badgeColor = 'white'
-                          detalleText = 'Nocturno Libre'
-                          break
-                        case 'ocupado':
-                          badgeText = 'En Uso'
-                          badgeBg = '#F59E0B'
-                          badgeColor = 'white'
-                          detalleText = asig?.horario === 'CARGO' ? 'A Cargo' : 'Turnos completos'
-                          break
-                        case 'programado':
-                          badgeText = 'Programado'
-                          badgeBg = '#EF4444'
-                          badgeColor = 'white'
-                          detalleText = 'Tiene entrega pendiente'
-                          break
-                      }
 
                       return (
                         <div
@@ -2810,12 +2884,231 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
               </div>
             )}
 
+            {/* Step 2: Cambio de Vehículo - Selección dual */}
+            {step === 2 && formData.cambio_vehiculo && (
+              <div>
+                <div className="step-description">
+                  <h3>Paso 2: Selecciona los Vehículos</h3>
+                  <p>Selecciona el vehículo actual y el vehículo por el que se va a cambiar</p>
+                </div>
+
+                {/* Buscador y Filtro */}
+                <div style={{ marginBottom: '20px', maxWidth: '900px', margin: '0 auto 20px auto', display: 'flex', gap: '12px' }}>
+                  <input
+                    type="text"
+                    placeholder="Buscar por patente, marca o modelo..."
+                    value={vehicleSearch}
+                    onChange={(e) => setVehicleSearch(e.target.value)}
+                    style={{
+                      flex: 1,
+                      padding: '12px 16px',
+                      border: '2px solid #E5E7EB',
+                      borderRadius: '8px',
+                      fontSize: 'clamp(12px, 1vw, 14px)',
+                      fontFamily: 'inherit'
+                    }}
+                  />
+                  <select
+                    value={vehicleAvailabilityFilter}
+                    onChange={(e) => setVehicleAvailabilityFilter(e.target.value)}
+                    style={{
+                      padding: '12px 16px',
+                      border: '2px solid #E5E7EB',
+                      borderRadius: '8px',
+                      fontSize: 'clamp(12px, 1vw, 14px)',
+                      fontFamily: 'inherit',
+                      background: 'white',
+                      cursor: 'pointer',
+                      minWidth: '180px'
+                    }}
+                  >
+                    <option value="">Todos</option>
+                    <option value="disponible">Disponible</option>
+                    <option value="con_turno_libre">Con turno libre</option>
+                    <option value="en_uso">En Uso</option>
+                  </select>
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr auto 1fr', gap: '16px', maxWidth: '900px', margin: '0 auto', alignItems: 'start' }}>
+                  {/* Columna izquierda: Vehículo a cambiar (origen) - solo En Uso */}
+                  <div>
+                    <div style={{
+                      padding: '8px 12px',
+                      background: '#FEF3C7',
+                      borderRadius: '8px 8px 0 0',
+                      borderBottom: '2px solid #F59E0B',
+                      textAlign: 'center'
+                    }}>
+                      <h4 style={{ margin: 0, fontSize: '12px', color: '#92400E', fontWeight: '700' }}>Vehículo a cambiar</h4>
+                      <p style={{ margin: '1px 0 0', fontSize: '10px', color: '#A16207' }}>El vehículo que tiene actualmente</p>
+                    </div>
+                    <div style={{ maxHeight: '350px', overflowY: 'auto', border: '1px solid #E5E7EB', borderTop: 'none', borderRadius: '0 0 8px 8px' }}>
+                      {loadingVehicles ? (
+                        <div style={{ padding: '20px', textAlign: 'center' }}>
+                          <div style={{ width: '20px', height: '20px', border: '2px solid var(--border-primary)', borderTopColor: 'var(--color-primary)', borderRadius: '50%', animation: 'spin 1s linear infinite', margin: '0 auto 6px' }} />
+                          <span style={{ fontSize: '11px' }}>Cargando...</span>
+                        </div>
+                      ) : vehiculosEnUso.length === 0 ? (
+                        <div style={{ padding: '20px', textAlign: 'center', fontSize: '11px', color: '#9CA3AF' }}>No hay vehículos en uso</div>
+                      ) : (
+                        vehiculosEnUso.map(vehicle => {
+                          const { badgeText, badgeBg, badgeColor, detalleText } = getVehicleBadge(vehicle)
+                          const isSelected = formData.vehiculo_id === vehicle.id
+                          return (
+                            <div
+                              key={vehicle.id}
+                              onClick={() => {
+                                setFormData(prev => ({
+                                  ...prev,
+                                  vehiculo_id: vehicle.id,
+                                  vehiculo_patente: vehicle.patente,
+                                  vehiculo_modelo: `${vehicle.marca} ${vehicle.modelo}`,
+                                  vehiculo_color: vehicle.color || ''
+                                }))
+                              }}
+                              style={{
+                                padding: '8px 12px',
+                                cursor: 'pointer',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'space-between',
+                                gap: '8px',
+                                borderBottom: '1px solid #F3F4F6',
+                                background: isSelected ? '#FEF3C7' : 'white',
+                                transition: 'background 0.15s'
+                              }}
+                            >
+                              <div style={{ minWidth: 0 }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                                  <span style={{ fontWeight: '700', fontSize: '12px' }}>{vehicle.patente}</span>
+                                  <span style={{
+                                    background: badgeBg, color: badgeColor,
+                                    padding: '1px 6px', borderRadius: '4px',
+                                    fontSize: '9px', fontWeight: '600', lineHeight: '16px'
+                                  }}>{badgeText}</span>
+                                  {detalleText && (
+                                    <span style={{ color: '#6B7280', fontSize: '9px', fontWeight: '500' }}>({detalleText})</span>
+                                  )}
+                                </div>
+                                <div style={{ fontSize: '10px', color: '#6B7280', marginTop: '1px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                  {vehicle.marca} {vehicle.modelo} - {vehicle.anio}
+                                </div>
+                              </div>
+                              <div className={`radio-circle ${isSelected ? 'selected' : ''}`} style={{ width: '18px', height: '18px', minWidth: '18px' }} />
+                            </div>
+                          )
+                        })
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Icono de flecha central */}
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', paddingTop: '60px' }}>
+                    <ArrowLeftRight size={24} style={{ color: '#9CA3AF' }} />
+                  </div>
+
+                  {/* Columna derecha: Vehículo nuevo (destino) - Disponibles + En Uso */}
+                  <div>
+                    <div style={{
+                      padding: '8px 12px',
+                      background: '#D1FAE5',
+                      borderRadius: '8px 8px 0 0',
+                      borderBottom: '2px solid #10B981',
+                      textAlign: 'center'
+                    }}>
+                      <h4 style={{ margin: 0, fontSize: '12px', color: '#065F46', fontWeight: '700' }}>Vehículo nuevo</h4>
+                      <p style={{ margin: '1px 0 0', fontSize: '10px', color: '#047857' }}>El vehículo por el que se va a cambiar</p>
+                    </div>
+                    <div style={{ maxHeight: '350px', overflowY: 'auto', border: '1px solid #E5E7EB', borderTop: 'none', borderRadius: '0 0 8px 8px' }}>
+                      {loadingVehicles ? (
+                        <div style={{ padding: '20px', textAlign: 'center' }}>
+                          <div style={{ width: '20px', height: '20px', border: '2px solid var(--border-primary)', borderTopColor: 'var(--color-primary)', borderRadius: '50%', animation: 'spin 1s linear infinite', margin: '0 auto 6px' }} />
+                          <span style={{ fontSize: '11px' }}>Cargando...</span>
+                        </div>
+                      ) : vehiculosDestino.length === 0 ? (
+                        <div style={{ padding: '20px', textAlign: 'center', fontSize: '11px', color: '#9CA3AF' }}>No hay vehículos disponibles</div>
+                      ) : (
+                        vehiculosDestino.map(vehicle => {
+                          const { badgeText, badgeBg, badgeColor, detalleText } = getVehicleBadge(vehicle)
+                          const isSelected = formData.vehiculo_cambio_id === vehicle.id
+                          return (
+                            <div
+                              key={vehicle.id}
+                              onClick={() => {
+                                setFormData(prev => ({
+                                  ...prev,
+                                  vehiculo_cambio_id: vehicle.id,
+                                  vehiculo_cambio_patente: vehicle.patente,
+                                  vehiculo_cambio_modelo: `${vehicle.marca} ${vehicle.modelo}`
+                                }))
+                              }}
+                              style={{
+                                padding: '8px 12px',
+                                cursor: 'pointer',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'space-between',
+                                gap: '8px',
+                                borderBottom: '1px solid #F3F4F6',
+                                background: isSelected ? '#D1FAE5' : 'white',
+                                transition: 'background 0.15s'
+                              }}
+                            >
+                              <div style={{ minWidth: 0 }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                                  <span style={{ fontWeight: '700', fontSize: '12px' }}>{vehicle.patente}</span>
+                                  <span style={{
+                                    background: badgeBg, color: badgeColor,
+                                    padding: '1px 6px', borderRadius: '4px',
+                                    fontSize: '9px', fontWeight: '600', lineHeight: '16px'
+                                  }}>{badgeText}</span>
+                                  {detalleText && (
+                                    <span style={{ color: '#6B7280', fontSize: '9px', fontWeight: '500' }}>({detalleText})</span>
+                                  )}
+                                </div>
+                                <div style={{ fontSize: '10px', color: '#6B7280', marginTop: '1px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                  {vehicle.marca} {vehicle.modelo} - {vehicle.anio}
+                                </div>
+                              </div>
+                              <div className={`radio-circle ${isSelected ? 'selected' : ''}`} style={{ width: '18px', height: '18px', minWidth: '18px' }} />
+                            </div>
+                          )
+                        })
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Resumen de selección */}
+                {(formData.vehiculo_id || formData.vehiculo_cambio_id) && (
+                  <div style={{ maxWidth: '900px', margin: '16px auto 0', padding: '12px 16px', background: 'var(--bg-secondary)', borderRadius: '8px', border: '1px solid var(--border-primary)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '16px' }}>
+                    <div style={{ textAlign: 'center' }}>
+                      <span style={{ fontSize: '10px', color: '#6B7280', display: 'block' }}>ORIGEN</span>
+                      <span style={{ fontSize: '13px', fontWeight: '600', color: formData.vehiculo_id ? '#92400E' : '#9CA3AF' }}>
+                        {formData.vehiculo_patente || 'Sin seleccionar'}
+                      </span>
+                    </div>
+                    <ArrowLeftRight size={18} style={{ color: '#9CA3AF', flexShrink: 0 }} />
+                    <div style={{ textAlign: 'center' }}>
+                      <span style={{ fontSize: '10px', color: '#6B7280', display: 'block' }}>DESTINO</span>
+                      <span style={{ fontSize: '13px', fontWeight: '600', color: formData.vehiculo_cambio_id ? '#065F46' : '#9CA3AF' }}>
+                        {formData.vehiculo_cambio_patente || 'Sin seleccionar'}
+                      </span>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
             {/* Step 3: Conductores */}
             {step === 3 && (
               <div>
                 <div className="step-description">
-                  <h3>Paso 3: Asigna los Conductores</h3>
-                  <p>{isTurnoMode ? 'Arrastra conductores a los turnos Diurno y/o Nocturno' : 'Arrastra un conductor a la zona de A Cargo'}</p>
+                  <h3>Paso 3: {formData.cambio_vehiculo ? 'Conductores del Vehículo' : 'Asigna los Conductores'}</h3>
+                  <p>{formData.cambio_vehiculo
+                    ? `Estos son los conductores asignados al vehículo ${formData.vehiculo_patente}. Puedes modificarlos si es necesario.`
+                    : (isTurnoMode ? 'Arrastra conductores a los turnos Diurno y/o Nocturno' : 'Arrastra un conductor a la zona de A Cargo')
+                  }</p>
                 </div>
 
                 <div className={`conductores-layout ${!isTurnoMode ? 'cargo-mode' : ''}`}>
@@ -3335,7 +3628,7 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
                           <select
                             value={formData.tipo_asignacion_cargo}
                             onChange={handleTipoAsignacionChange('tipo_asignacion_cargo', 'documento_cargo')}
-                            disabled={formData.devolucion_vehiculo}
+                            disabled={formData.devolucion_vehiculo || formData.cambio_vehiculo}
                           >
                             <option value="">Seleccionar...</option>
                             <option value="entrega_auto">Entrega de auto</option>
@@ -3420,7 +3713,7 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
                           <select
                             value={formData.tipo_asignacion_diurno}
                             onChange={handleTipoAsignacionChange('tipo_asignacion_diurno', 'documento_diurno')}
-                            disabled={formData.devolucion_vehiculo}
+                            disabled={formData.devolucion_vehiculo || formData.cambio_vehiculo}
                           >
                             <option value="">Seleccionar...</option>
                             <option value="entrega_auto">Entrega de auto</option>
@@ -3510,7 +3803,7 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
                               const val = e.target.value as TipoAsignacion
                               setFormData({ ...formData, tipo_asignacion_nocturno: val, ...(val === 'devolucion_vehiculo' ? { documento_nocturno: 'na' as TipoDocumento } : {}) })
                             }}
-                            disabled={formData.devolucion_vehiculo}
+                            disabled={formData.devolucion_vehiculo || formData.cambio_vehiculo}
                           >
                             <option value="">Seleccionar...</option>
                             <option value="entrega_auto">Entrega de auto</option>
