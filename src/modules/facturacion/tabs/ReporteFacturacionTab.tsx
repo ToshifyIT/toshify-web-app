@@ -8036,12 +8036,6 @@ export function ReporteFacturacionTab() {
             {row.original.tiene_gnc === false && row.original.vehiculo_patente && (
               <span style={{ fontSize: '8px', padding: '1px 4px', lineHeight: '12px', borderRadius: '3px', fontWeight: 700, background: '#f97316', color: '#fff' }}>!GNC</span>
             )}
-            {row.original.permiso_efectivo === 'Activado' && (
-              <span style={{ fontSize: '8px', padding: '1px 4px', lineHeight: '12px', borderRadius: '3px', fontWeight: 700, background: '#22c55e', color: '#fff' }}>$</span>
-            )}
-            {row.original.permiso_efectivo === 'Desactivado' && (
-              <span style={{ fontSize: '8px', padding: '1px 4px', lineHeight: '12px', borderRadius: '3px', fontWeight: 700, background: '#ef4444', color: '#fff' }}>✕$</span>
-            )}
           </div>
         </div>
       ),
