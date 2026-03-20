@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 // src/modules/vehiculos/VehicleManagement.tsx
 import { useState, useEffect, useMemo, useRef } from 'react'
-import { AlertTriangle, Eye, Edit, Trash2, Info, Car, Wrench, Briefcase, PaintBucket, Warehouse, FolderOpen, FolderPlus, Undo2, History, Fuel } from 'lucide-react'
+import { AlertTriangle, Eye, Edit, Trash2, Info, Car, Wrench, Briefcase, PaintBucket, Warehouse, FolderOpen, FolderPlus, Undo2, History, Fuel, CreditCard } from 'lucide-react'
 import { ActionsMenu } from '../../components/ui/ActionsMenu'
 import { VerLogsButton } from '../../components/ui/VerLogsButton'
 
@@ -82,6 +82,7 @@ export function VehicleManagement() {
   const [statCardEstadoFilter, setStatCardEstadoFilter] = useState<string[]>([]) // Filtro separado para stat cards
   const [statCardExcludeMode, setStatCardExcludeMode] = useState(false) // true = excluir los estados del filtro en vez de incluir
   const [gncFilter, setGncFilter] = useState<string | null>(null) // 'sinGnc' para filtrar sin GNC
+  const [telepaseFilter, setTelepaseFilter] = useState<boolean>(false) // true = filtrar con telepase
 
   // Excel filter hook for portal-based dropdowns
   const { openFilterId, setOpenFilterId } = useExcelFilters()
@@ -142,6 +143,7 @@ export function VehicleManagement() {
     let vehiculosCorporativos = 0
     let vehiculosDevueltos = 0
     let vehiculosSinGnc = 0
+    let vehiculosConTelepase = 0
 
     // UNA SOLA PASADA sobre los vehículos
     for (const v of vehiculos) {
@@ -155,6 +157,11 @@ export function VehicleManagement() {
       // Contar sin GNC (solo entre flota activa)
       if (!(v as any).gnc && !estadosExcluidos.includes(estadoCodigo)) {
         vehiculosSinGnc++
+      }
+
+      // Contar con Telepase (solo entre flota activa)
+      if ((v as any).telepase && !estadosExcluidos.includes(estadoCodigo)) {
+        vehiculosConTelepase++
       }
 
       // Contar por estado
@@ -182,6 +189,7 @@ export function VehicleManagement() {
       vehiculosCorporativos,
       vehiculosDevueltos,
       vehiculosSinGnc,
+      vehiculosConTelepase,
     }
   }, [vehiculos])
 
@@ -196,7 +204,7 @@ export function VehicleManagement() {
           .from('vehiculos')
           .select(`
             id, patente, marca, modelo, anio, color, kilometraje_actual, estado_id, created_at,
-            drive_folder_id, drive_folder_url, url_documentacion, gnc, titular,
+            drive_folder_id, drive_folder_url, url_documentacion, gnc, telepase, titular,
             vehiculos_estados (id, codigo, descripcion)
           `)
           .is('deleted_at', null))
@@ -758,11 +766,13 @@ export function VehicleManagement() {
       setStatCardEstadoFilter([]) // Solo limpiar el filtro del stat card, NO el de columna
       setStatCardExcludeMode(false)
       setGncFilter(null)
+      setTelepaseFilter(false)
       return
     }
 
     setActiveStatCard(cardType)
     setGncFilter(null) // Limpiar filtro GNC al cambiar de card
+    setTelepaseFilter(false) // Limpiar filtro Telepase al cambiar de card
 
     // Definir estados para cada categoría (usando labels formateados)
     const estadosEnCochera = ['PKG ON'] // Solo disponibles (listos para usar)
@@ -807,6 +817,13 @@ export function VehicleManagement() {
         setStatCardEstadoFilter([])
         setStatCardExcludeMode(false)
         setGncFilter('sinGnc')
+        setTelepaseFilter(false)
+        break
+      case 'telepase':
+        setStatCardEstadoFilter([])
+        setStatCardExcludeMode(false)
+        setGncFilter(null)
+        setTelepaseFilter(true)
         break
       default:
         setStatCardEstadoFilter([])
@@ -906,6 +923,7 @@ export function VehicleManagement() {
     setActiveStatCard(null)
     setStatCardEstadoFilter([])
     setGncFilter(null)
+    setTelepaseFilter(false)
     setPatenteFilter([])
     setMarcaFilter([])
     setModeloFilter([])
@@ -1053,6 +1071,11 @@ export function VehicleManagement() {
       result = result.filter(v => !(v as any).gnc)
     }
 
+    // Filtro de Telepase
+    if (telepaseFilter) {
+      result = result.filter(v => (v as any).telepase === true)
+    }
+
     // Ordenar por estado: En Uso, PKG ON, PKG OFF, Chapa&Pintura, luego el resto
     const estadoOrden: Record<string, number> = {
       'EN_USO': 1,
@@ -1069,7 +1092,7 @@ export function VehicleManagement() {
     })
 
     return result
-  }, [vehiculos, patenteFilter, marcaFilter, modeloFilter, anioFilter, colorFilter, titularFilter, kmFilter, estadoFilter, statCardEstadoFilter, statCardExcludeMode, gncFilter])
+  }, [vehiculos, patenteFilter, marcaFilter, modeloFilter, anioFilter, colorFilter, titularFilter, kmFilter, estadoFilter, statCardEstadoFilter, statCardExcludeMode, gncFilter, telepaseFilter])
 
 
   // Definir columnas para TanStack Table
@@ -1459,6 +1482,17 @@ export function VehicleManagement() {
             <div className="stat-content">
               <span className="stat-value">{calculatedStats.vehiculosSinGnc}</span>
               <span className="stat-label">Sin GNC</span>
+            </div>
+          </div>
+          <div
+            className={`stat-card stat-card-clickable ${activeStatCard === 'telepase' ? 'stat-card-active' : ''}`}
+            onClick={() => handleStatCardClick('telepase')}
+            title="Click para filtrar: Vehiculos con Telepase propio"
+          >
+            <CreditCard size={18} className="stat-icon" />
+            <div className="stat-content">
+              <span className="stat-value">{calculatedStats.vehiculosConTelepase}</span>
+              <span className="stat-label">Telepase</span>
             </div>
           </div>
         </div>
