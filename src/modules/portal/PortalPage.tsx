@@ -376,9 +376,9 @@ export function PortalPage() {
             .select('id, detalle, observaciones, area_responsable, fecha, turno')
             .in('id', penIds)
           if (penData) {
-            const penMap = new Map(penData.map((p: any) => [p.id, p]))
+            const penMap = new Map(penData.map((p: any) => [p.id, p] as [string, any]))
             for (const item of fromPenalidades) {
-              const pen = penMap.get(item.referencia_id!)
+              const pen: any = penMap.get(item.referencia_id!)
               if (pen) {
                 const parts: string[] = []
                 if (pen.detalle) parts.push(pen.detalle)
@@ -401,9 +401,9 @@ export function PortalPage() {
             .select('id, descripcion, tipo')
             .in('id', ticketIds)
           if (ticketsData) {
-            const ticketMap = new Map(ticketsData.map((t: any) => [t.id, t]))
+            const ticketMap = new Map(ticketsData.map((t: any) => [t.id, t] as [string, any]))
             for (const item of fromTickets) {
-              const ticket = ticketMap.get(item.referencia_id!)
+              const ticket: any = ticketMap.get(item.referencia_id!)
               if (ticket) {
                 const desc = ticket.descripcion || ticket.tipo || 'Descuento'
                 item.concepto_descripcion = desc
