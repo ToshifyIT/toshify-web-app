@@ -1336,7 +1336,7 @@ export function ReporteFacturacionTab() {
 
       // 1. Cargar conductores desde asignaciones que se solapan con la semana + penalidades pendientes
       const sedeParaVP = sedeActualId || sedeUsuario?.id
-      const conductoresControl: { numero_dni: string; estado: string; patente: string; modalidad: string; valor_alquiler: number | null; tiene_gnc: boolean }[] = []
+      const conductoresControl: { numero_dni: string; estado: string; patente: string; modalidad: string; valor_alquiler: number | null; tiene_gnc: boolean; tiene_telepase: boolean }[] = []
       const dnisAgregadosVP = new Set<string>()
 
       // 1a + 1b + 1c en paralelo (son independientes entre sí)
@@ -1344,7 +1344,7 @@ export function ReporteFacturacionTab() {
         (supabase.from('asignaciones_conductores') as any)
           .select(`
             conductor_id, horario, fecha_inicio, fecha_fin, estado,
-            asignaciones!inner(horario, estado, fecha_fin, vehiculo_id, vehiculos(patente, gnc)),
+            asignaciones!inner(horario, estado, fecha_fin, vehiculo_id, vehiculos(patente, gnc, telepase)),
             conductores!inner(numero_dni, sede_id)
           `)
           .in('estado', ['asignado', 'activo', 'activa', 'finalizado', 'finalizada', 'completado', 'cancelado', 'cancelada']),
@@ -1395,6 +1395,7 @@ export function ReporteFacturacionTab() {
               modalidad,
               valor_alquiler: null,
               tiene_gnc: asig.vehiculos?.gnc === true,
+              tiene_telepase: asig.vehiculos?.telepase === true,
             })
           }
         }
@@ -1415,14 +1416,15 @@ export function ReporteFacturacionTab() {
           dnisConPenalidadesVP.add(cond.numero_dni)
           if (dnisAgregadosVP.has(cond.numero_dni)) continue
           dnisAgregadosVP.add(cond.numero_dni)
-          conductoresControl.push({
-            numero_dni: cond.numero_dni,
-            estado: 'Activo',
-            patente: '',
-            modalidad: 'TURNO',
-            valor_alquiler: null,
-            tiene_gnc: true,
-          })
+            conductoresControl.push({
+              numero_dni: cond.numero_dni,
+              estado: 'Activo',
+              patente: '',
+              modalidad: 'TURNO',
+              valor_alquiler: null,
+              tiene_gnc: true,
+              tiene_telepase: false,
+            })
         }
       }
 
@@ -1659,14 +1661,14 @@ export function ReporteFacturacionTab() {
       const [{ data: historialPreciosVP }, { data: conceptosNominaVP }] = await Promise.all([
         (supabase.from('conceptos_facturacion_historial') as any)
           .select('codigo, precio_base, precio_final, fecha_vigencia_desde, fecha_vigencia_hasta')
-          .in('codigo', ['P001', 'P002', 'P003', 'P013'])
+          .in('codigo', ['P001', 'P002', 'P003', 'P013', 'P014', 'P015', 'P016'])
           .lte('fecha_vigencia_desde', fechaFin)
           .gte('fecha_vigencia_hasta', fechaInicio),
         supabase
           .from('conceptos_nomina')
           .select('codigo, precio_base, precio_final')
           .eq('activo', true)
-          .in('codigo', ['P001', 'P002', 'P003', 'P013']),
+          .in('codigo', ['P001', 'P002', 'P003', 'P013', 'P014', 'P015', 'P016']),
       ])
       const preciosBaseVP = new Map<string, number>()
       ;(conceptosNominaVP || []).forEach((c: any) => {
@@ -1694,11 +1696,26 @@ export function ReporteFacturacionTab() {
         return preciosBaseVP.get(codigo) || 0
       }
       
-      // Mapa de código de concepto por modalidad
-      const codigosPorModalidadVP: Record<string, string> = {
-        'CARGO': 'P002',
-        'TURNO_DIURNO': 'P001', 
-        'TURNO_NOCTURNO': 'P013'
+      // Mapa por conductor para saber si su vehículo tiene GNC
+      const controlPorDniVP = new Map<string, { tiene_gnc: boolean }>()
+      ;(conductoresControl || []).forEach((c: any) => {
+        controlPorDniVP.set(normalizeDni(c.numero_dni), { tiene_gnc: c.tiene_gnc === true })
+      })
+      const conductorTieneGncVP = new Map<string, boolean>()
+      ;((conductoresData || []) as any[]).forEach((c: any) => {
+        const ctrl = controlPorDniVP.get(normalizeDni(c.numero_dni))
+        // Default true para no romper casos sin patente/asignación
+        conductorTieneGncVP.set(c.id, ctrl ? ctrl.tiene_gnc : true)
+      })
+
+      // Mapa de código de concepto por modalidad y GNC
+      const getCodigoPorModalidadVP = (
+        modalidad: 'CARGO' | 'TURNO_DIURNO' | 'TURNO_NOCTURNO',
+        tieneGnc: boolean,
+      ): string => {
+        if (modalidad === 'CARGO') return tieneGnc ? 'P002' : 'P016'
+        if (modalidad === 'TURNO_NOCTURNO') return tieneGnc ? 'P013' : 'P015'
+        return tieneGnc ? 'P001' : 'P014'
       }
       
       // Calcular montos por día usando precios históricos
@@ -1713,7 +1730,8 @@ export function ReporteFacturacionTab() {
         const montosContados = new Set<string>()
 
         for (const asig of asignaciones) {
-          const codigo = codigosPorModalidadVP[asig.modalidad]
+          const tieneGnc = conductorTieneGncVP.get(conductorId) !== false
+          const codigo = getCodigoPorModalidadVP(asig.modalidad, tieneGnc)
           const montoKey = `monto_${asig.modalidad}` as keyof ProrrateoVistaPrevia
           
           // Rastrear fecha de inicio más temprana para este conductor
@@ -2127,7 +2145,8 @@ export function ReporteFacturacionTab() {
         const kmExceso = exceso?.kmExceso || 0
 
         // Peajes de Cabify (P005) - no aplica si tiene 0 días
-        const montoPeajes = diasTotales === 0 ? 0 : (peajesMap.get(dniConductor) || 0)
+        // Si el vehículo tiene telepase habilitado, NO cobrar P005
+        const montoPeajes = (diasTotales === 0 || control.tiene_telepase) ? 0 : (peajesMap.get(dniConductor) || 0)
 
         // Penalidades (P006 + P007 como cargos) - siempre aplica
         const montoPenalidades = penalidadesMap.get(conductorId) || 0
@@ -2439,7 +2458,7 @@ export function ReporteFacturacionTab() {
       await supabase.from('facturacion_conductores').delete().eq('periodo_id', periodoId)
 
       // 3. Cargar conductores desde asignaciones que se solapan con la semana + penalidades pendientes
-      const conductoresControl: { numero_dni: string; estado: string; patente: string; modalidad: string; valor_alquiler: number | null; tiene_gnc: boolean }[] = []
+      const conductoresControl: { numero_dni: string; estado: string; patente: string; modalidad: string; valor_alquiler: number | null; tiene_gnc: boolean; tiene_telepase: boolean }[] = []
       const dnisAgregadosRecalc = new Set<string>()
       const dnisConPenalidadesRecalc = new Set<string>()
 
@@ -2449,7 +2468,7 @@ export function ReporteFacturacionTab() {
           .from('asignaciones_conductores') as any)
           .select(`
             conductor_id, horario, fecha_inicio, fecha_fin, estado,
-            asignaciones!inner(horario, estado, fecha_fin, vehiculo_id, vehiculos(patente, gnc)),
+            asignaciones!inner(horario, estado, fecha_fin, vehiculo_id, vehiculos(patente, gnc, telepase)),
             conductores!inner(numero_dni, sede_id)
           `)
           .in('estado', ['asignado', 'activo', 'activa', 'finalizado', 'finalizada', 'completado', 'cancelado', 'cancelada'])
@@ -2485,6 +2504,7 @@ export function ReporteFacturacionTab() {
               modalidad,
               valor_alquiler: null,
               tiene_gnc: asig.vehiculos?.gnc === true,
+              tiene_telepase: asig.vehiculos?.telepase === true,
             })
           }
         }
@@ -2507,14 +2527,15 @@ export function ReporteFacturacionTab() {
           if (dnisAgregadosRecalc.has(cond.numero_dni)) continue
           dnisAgregadosRecalc.add(cond.numero_dni)
           dnisConPenalidadesRecalc.add(cond.numero_dni)
-          conductoresControl.push({
-            numero_dni: cond.numero_dni,
-            estado: 'Activo',
-            patente: '',
-            modalidad: 'TURNO',
-            valor_alquiler: null,
-            tiene_gnc: true,
-          })
+            conductoresControl.push({
+              numero_dni: cond.numero_dni,
+              estado: 'Activo',
+              patente: '',
+              modalidad: 'TURNO',
+              valor_alquiler: null,
+              tiene_gnc: true,
+              tiene_telepase: false,
+            })
         }
       }
 
@@ -2707,6 +2728,8 @@ export function ReporteFacturacionTab() {
       const conductoresProcesados: {
         conductor_id: string; conductor_nombre: string; conductor_dni: string | null;
         conductor_cuit: string | null; vehiculo_patente: string | null;
+        tiene_gnc: boolean;
+        tiene_telepase: boolean;
         dias_turno_diurno: number; dias_turno_nocturno: number; dias_cargo: number; total_dias: number;
         estado_billing: 'Activo' | 'Pausa' | 'De baja';
         fecha_baja_no_coincide?: boolean;
@@ -2757,6 +2780,8 @@ export function ReporteFacturacionTab() {
           conductor_dni: conductorData.numero_dni,
           conductor_cuit: conductorData.numero_cuit,
           vehiculo_patente: control.patente || null,
+          tiene_gnc: control.tiene_gnc === true,
+          tiene_telepase: control.tiene_telepase,
           dias_turno_diurno: diasDiurnoAjustados,
           dias_turno_nocturno: diasNocturnoAjustados,
           dias_cargo: diasCargoAjustados,
@@ -2780,13 +2805,18 @@ export function ReporteFacturacionTab() {
         'P001': conceptosPorCodigo.get('P001')?.precio_final || 42714,
         'P002': conceptosPorCodigo.get('P002')?.precio_final || 75429,
         'P003': conceptosPorCodigo.get('P003')?.precio_final || 7143,
-        'P013': conceptosPorCodigo.get('P013')?.precio_final || 32714
+        'P013': conceptosPorCodigo.get('P013')?.precio_final || 32714,
+        'P014': conceptosPorCodigo.get('P014')?.precio_final || 35571,
+        'P015': conceptosPorCodigo.get('P015')?.precio_final || 27000,
+        'P016': conceptosPorCodigo.get('P016')?.precio_final || 62571,
       }
       
-      // Precios diarios para alquiler
-      const precioTurnoDiurno = preciosActuales['P001']
-      const precioCargo = preciosActuales['P002']
-      const precioTurnoNocturno = preciosActuales['P013']
+      // Precios diarios para alquiler por modalidad + GNC
+      const getCodigoAlquiler = (modalidad: 'DIURNO' | 'NOCTURNO' | 'CARGO', tieneGnc: boolean): string => {
+        if (modalidad === 'CARGO') return tieneGnc ? 'P002' : 'P016'
+        if (modalidad === 'NOCTURNO') return tieneGnc ? 'P013' : 'P015'
+        return tieneGnc ? 'P001' : 'P014'
+      }
       // Garantía: precio en conceptos_nomina es DIARIO, multiplicar por 7 para obtener cuota semanal
       const cuotaGarantia = Math.round(preciosActuales['P003'] * 7)
       
@@ -2960,33 +2990,39 @@ export function ReporteFacturacionTab() {
         let alquilerTotal = 0
         const detallesAlquiler: { codigo: string; descripcion: string; dias: number; monto: number }[] = []
 
-        // P001: Turno Diurno
+        // Turno Diurno (P001 con GNC / P014 sin GNC)
         if (conductor.dias_turno_diurno > 0) {
-          const montoDiurno = Math.round(precioTurnoDiurno * conductor.dias_turno_diurno * 100) / 100
+          const codigoDiurno = getCodigoAlquiler('DIURNO', conductor.tiene_gnc)
+          const precioDiurno = preciosActuales[codigoDiurno] || 0
+          const montoDiurno = Math.round(precioDiurno * conductor.dias_turno_diurno * 100) / 100
           alquilerTotal += montoDiurno
           detallesAlquiler.push({
-            codigo: 'P001', 
-            descripcion: 'Alquiler Turno Diurno',
+            codigo: codigoDiurno,
+            descripcion: conductor.tiene_gnc ? 'Alquiler Turno Diurno' : 'Alquiler Turno Diurno Sin GNC',
             dias: conductor.dias_turno_diurno, monto: montoDiurno
           })
         }
-        // P013: Turno Nocturno
+        // Turno Nocturno (P013 con GNC / P015 sin GNC)
         if (conductor.dias_turno_nocturno > 0) {
-          const montoNocturno = Math.round(precioTurnoNocturno * conductor.dias_turno_nocturno * 100) / 100
+          const codigoNocturno = getCodigoAlquiler('NOCTURNO', conductor.tiene_gnc)
+          const precioNocturno = preciosActuales[codigoNocturno] || 0
+          const montoNocturno = Math.round(precioNocturno * conductor.dias_turno_nocturno * 100) / 100
           alquilerTotal += montoNocturno
           detallesAlquiler.push({
-            codigo: 'P013', 
-            descripcion: 'Alquiler Turno Nocturno',
+            codigo: codigoNocturno,
+            descripcion: conductor.tiene_gnc ? 'Alquiler Turno Nocturno' : 'Alquiler Turno Nocturno Sin GNC',
             dias: conductor.dias_turno_nocturno, monto: montoNocturno
           })
         }
-        // P002: A Cargo
+        // A Cargo (P002 con GNC / P016 sin GNC)
         if (conductor.dias_cargo > 0) {
-          const montoCargo = Math.round(precioCargo * conductor.dias_cargo)
+          const codigoCargo = getCodigoAlquiler('CARGO', conductor.tiene_gnc)
+          const precioCargoConductor = preciosActuales[codigoCargo] || 0
+          const montoCargo = Math.round(precioCargoConductor * conductor.dias_cargo)
           alquilerTotal += montoCargo
           detallesAlquiler.push({
-            codigo: 'P002', 
-            descripcion: 'Alquiler a Cargo',
+            codigo: codigoCargo,
+            descripcion: conductor.tiene_gnc ? 'Alquiler a Cargo' : 'Alquiler a Cargo Sin GNC',
             dias: conductor.dias_cargo, monto: montoCargo
           })
         }
@@ -3032,7 +3068,10 @@ export function ReporteFacturacionTab() {
         const totalExcesos = conductor.total_dias === 0 ? 0 : excesosConductor.reduce((sum: number, e: any) => sum + (e.monto_total || 0), 0)
 
         // Peajes (P005) - no aplica si tiene 0 días
-        const totalPeajes = conductor.total_dias === 0 ? 0 : (conductor.conductor_dni ? (peajesMap.get(normalizeDni(conductor.conductor_dni)) || 0) : 0)
+        // Si el vehículo tiene telepase habilitado, NO cobrar P005
+        const totalPeajes = (conductor.total_dias === 0 || conductor.tiene_telepase)
+          ? 0
+          : (conductor.conductor_dni ? (peajesMap.get(normalizeDni(conductor.conductor_dni)) || 0) : 0)
 
         // Cobros fraccionados (P010) - calcular monto real de la cuota
         const cobrosConductor = cobrosGrouped.get(conductor.conductor_id) || []
@@ -3127,13 +3166,10 @@ export function ReporteFacturacionTab() {
         const excesoIdsAplicar: string[] = []
         const cobroIdsAplicar: string[] = []
 
-        // Alquiler detalles (P001/P002/P013)
+        // Alquiler detalles (P001/P002/P013 con GNC, P014/P015/P016 sin GNC)
         // precio_unitario = precio DIARIO (precio_final de conceptos_nomina ya es diario)
         for (const detalle of detallesAlquiler) {
-          let precioUnitario = 0
-          if (detalle.codigo === 'P001') precioUnitario = precioTurnoDiurno
-          else if (detalle.codigo === 'P013') precioUnitario = precioTurnoNocturno
-          else if (detalle.codigo === 'P002') precioUnitario = precioCargo
+          const precioUnitario = preciosActuales[detalle.codigo] || (detalle.dias > 0 ? (detalle.monto / detalle.dias) : detalle.monto)
           todosDetalles.push({
             facturacion_id: facturacionId, concepto_codigo: detalle.codigo,
             concepto_descripcion: detalle.descripcion, cantidad: detalle.dias,
