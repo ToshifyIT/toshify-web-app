@@ -337,6 +337,7 @@ export function ReporteFacturacionTab() {
       diaSemana: string
       horario: string
       trabajado: boolean
+      postBaja?: boolean
     }[]
     historial: {
       fechaInicio: string
@@ -346,7 +347,16 @@ export function ReporteFacturacionTab() {
       dias: number
       nota: string
       horaEntrega?: string
+      nuevaEnSemana?: boolean
     }[]
+    devolucion?: {
+      fecha_programada: string | null
+      fecha_devolucion: string | null
+      estado: string
+      ultimo_dia_cobro: string | null
+      observaciones: string | null
+      fecha_baja: string | null
+    } | null
   } | null>(null)
   const [loadingDias, setLoadingDias] = useState(false)
 
@@ -617,7 +627,7 @@ export function ReporteFacturacionTab() {
       const hoyDesglose = parseISO(toArgDate(new Date().toISOString()))
       const limiteConteo = hoyDesglose < semanaFin ? hoyDesglose : semanaFin
 
-      const [{ data: asignacionesCond }, { data: conductorDesglose }] = await Promise.all([
+      const [{ data: asignacionesCond }, { data: conductorDesglose }, { data: devolucionProgData }] = await Promise.all([
         (supabase
           .from('asignaciones_conductores') as any)
           .select(`
@@ -626,16 +636,30 @@ export function ReporteFacturacionTab() {
           `)
           .eq('conductor_id', realConductorId)
           .in('estado', ['asignado', 'activo', 'activa', 'finalizado', 'finalizada', 'completado', 'cancelado', 'cancelada']),
-        supabase.from('conductores').select('fecha_terminacion').eq('id', realConductorId).maybeSingle()
+        supabase.from('conductores').select('fecha_terminacion').eq('id', realConductorId).maybeSingle(),
+        // Buscar devolucion en programaciones_onboarding (donde se guarda ultimo_dia_cobro)
+        (supabase as any)
+          .from('programaciones_onboarding')
+          .select('fecha_cita, estado, ultimo_dia_cobro, observaciones, devolucion_vehiculo')
+          .eq('devolucion_vehiculo', true)
+          .or(`conductor_id.eq.${realConductorId},conductor_diurno_id.eq.${realConductorId},conductor_nocturno_id.eq.${realConductorId}`)
+          .order('created_at', { ascending: false })
+          .limit(1)
       ])
 
       // Tope por fecha_terminacion del conductor
       const fechaTermDesglose = conductorDesglose?.fecha_terminacion ? parseISO(conductorDesglose.fecha_terminacion) : null
+      // Verificar si la devolución indica ultimo_dia_cobro='fecha_baja'
+      const devProgDesglose = devolucionProgData && devolucionProgData.length > 0 ? devolucionProgData[0] : null
+      const usarFechaBajaDesglose = devProgDesglose?.ultimo_dia_cobro === 'fecha_baja'
+
+      // Set de fechas que estaban en el rango de asignación pero se excluyeron por fecha de baja
+      const diasPostBaja = new Set<string>()
 
       // Construir un Set de fechas cubiertas con su horario
       const diasNombres = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado']
       const diasCubiertos = new Map<string, string>() // fecha -> horario
-      const historial: { fechaInicio: string; fechaFin: string; padreEstado: string; horario: string; dias: number; nota: string; horaEntrega?: string }[] = []
+      const historial: { fechaInicio: string; fechaFin: string; padreEstado: string; horario: string; dias: number; nota: string; horaEntrega?: string; nuevaEnSemana?: boolean }[] = []
 
       for (const ac of (asignacionesCond || []) as any[]) {
         const asignacion = ac.asignaciones
@@ -675,13 +699,11 @@ export function ReporteFacturacionTab() {
         const acInicio = conductorInicioD && padreInicioD
           ? (conductorInicioD > padreInicioD ? conductorInicioD : padreInicioD)
           : (conductorInicioD || padreInicioD || semanaInicio)
-        // Fin: usar la fecha MÁS TEMPRANA entre conductor y padre
-        // para no cobrar más allá de cuando terminó la asignación padre
-        const conductorFinD = ac.fecha_fin ? parseISO(toArgDate(ac.fecha_fin)) : null
+        // Fin: usar la fecha_fin de la asignación padre (no del conductor)
+        // Los días se cuentan hasta el fin de la asignación independientemente
+        // de si el conductor se dio de baja o no
         const padreFinD = asignacion.fecha_fin ? parseISO(toArgDate(asignacion.fecha_fin)) : null
-        const acFin = conductorFinD && padreFinD
-          ? (conductorFinD < padreFinD ? conductorFinD : padreFinD)
-          : (conductorFinD || padreFinD || semanaFin)
+        const acFin = padreFinD || semanaFin
 
         if (acFin < semanaInicio || acInicio > limiteConteo) {
           historial.push({ fechaInicio: acInicioStr, fechaFin: acFinStr, padreEstado: estadoPadre, horario, dias: 0, nota: 'Fuera de rango' })
@@ -689,13 +711,18 @@ export function ReporteFacturacionTab() {
         }
 
         const efectivoInicio = acInicio < semanaInicio ? semanaInicio : acInicio
-        let efectivoFin = acFin > limiteConteo ? limiteConteo : acFin
-        // Solo aplicar fecha_terminacion como tope si:
-        // - La asignación NO tiene fecha_fin propia
-        // - La asignación empezó ANTES de la fecha_terminacion (no es re-contratación)
-        const tieneFinPropioD = ac.fecha_fin || asignacion.fecha_fin
-        if (fechaTermDesglose && !tieneFinPropioD && efectivoFin > fechaTermDesglose && acInicio <= fechaTermDesglose) {
+        const efectivoFinOriginal = acFin > limiteConteo ? limiteConteo : acFin
+        let efectivoFin = efectivoFinOriginal
+        // Aplicar fecha_terminacion como tope si el conductor tiene devolución con ultimo_dia_cobro='fecha_baja'
+        if (fechaTermDesglose && usarFechaBajaDesglose && efectivoFin > fechaTermDesglose && acInicio <= fechaTermDesglose) {
           efectivoFin = fechaTermDesglose
+          // Rastrear días excluidos por baja (entre fecha_baja+1 y fin original de asignación)
+          const cursorBaja = new Date(fechaTermDesglose)
+          cursorBaja.setDate(cursorBaja.getDate() + 1)
+          while (cursorBaja <= efectivoFinOriginal) {
+            diasPostBaja.add(format(cursorBaja, 'yyyy-MM-dd'))
+            cursorBaja.setDate(cursorBaja.getDate() + 1)
+          }
         }
         let diasContados = 0
 
@@ -708,26 +735,28 @@ export function ReporteFacturacionTab() {
           }
           cursorAc.setDate(cursorAc.getDate() + 1)
         }
-        // Extraer hora de entrega real del timestamp original
-        const rawTimestampEntrega = ac.fecha_inicio || asignacion.fecha_inicio || ''
-        const horaEntregaMatch = rawTimestampEntrega.match?.(/T?(\d{2}:\d{2})/)
-        const horaEntrega = horaEntregaMatch ? horaEntregaMatch[1] : undefined
+        // Extraer hora de entrega real del timestamp original (padre = entrega del vehículo)
+        const rawTimestampEntrega = asignacion.fecha_inicio || ac.fecha_inicio || ''
+        const horaEntrega = rawTimestampEntrega ? toArgTime(rawTimestampEntrega) : undefined
 
-        historial.push({ fechaInicio: acInicioStr, fechaFin: acFinStr, padreEstado: estadoPadre, horario, dias: diasContados, nota: diasContados > 0 ? `${format(efectivoInicio, 'dd/MM')} → ${format(efectivoFin, 'dd/MM')}` : 'Días ya cubiertos', horaEntrega })
+        historial.push({ fechaInicio: acInicioStr, fechaFin: acFinStr, padreEstado: estadoPadre, horario, dias: diasContados, nota: diasContados > 0 ? `${format(efectivoInicio, 'dd/MM')} → ${format(efectivoFin, 'dd/MM')}` : 'Días ya cubiertos', horaEntrega, nuevaEnSemana: acInicio >= semanaInicio })
       }
 
       // Generar los 7 días de la semana con su estado
       // Solo días hasta hoy se marcan como trabajados, futuros quedan como pendientes
-      const diasSemana: { fecha: string; diaSemana: string; horario: string; trabajado: boolean }[] = []
+      // Días excluidos por fecha de baja se marcan como postBaja (rojo)
+      const diasSemana: { fecha: string; diaSemana: string; horario: string; trabajado: boolean; postBaja?: boolean }[] = []
       const cursor = new Date(semanaInicio)
       while (cursor <= semanaFin) {
         const key = format(cursor, 'yyyy-MM-dd')
         const cubierto = diasCubiertos.get(key)
+        const esPostBaja = diasPostBaja.has(key)
         diasSemana.push({
           fecha: format(cursor, 'dd/MM/yyyy'),
           diaSemana: diasNombres[cursor.getDay()],
-          horario: cubierto || '-',
+          horario: cubierto || (esPostBaja ? 'BAJA' : '-'),
           trabajado: !!cubierto,
+          postBaja: esPostBaja,
         })
         cursor.setDate(cursor.getDate() + 1)
       }
@@ -749,13 +778,51 @@ export function ReporteFacturacionTab() {
         return b.fechaInicio.localeCompare(a.fechaInicio)
       })
 
+      // Resolver devolucion del conductor (desde programaciones_onboarding)
+      const devProg = devolucionProgData && devolucionProgData.length > 0 ? devolucionProgData[0] : null
+      // Obtener fecha de devolución real desde la fecha_fin de la asignación (no de la cita programada)
+      const fechaDevolucionReal = (() => {
+        let maxFin = ''
+        for (const ac of (asignacionesCond || []) as any[]) {
+          const asig = ac.asignaciones
+          const fin = ac.fecha_fin || asig?.fecha_fin || ''
+          if (fin && fin > maxFin) maxFin = fin
+        }
+        return maxFin ? toArgDate(maxFin) : null
+      })()
+
+      const devolucionInfo = devProg
+        ? {
+            fecha_programada: devProg.fecha_cita || null,
+            fecha_devolucion: fechaDevolucionReal,
+            estado: devProg.estado || 'pendiente',
+            ultimo_dia_cobro: devProg.ultimo_dia_cobro || null,
+            observaciones: devProg.observaciones || null,
+            fecha_baja: conductorDesglose?.fecha_terminacion || null,
+          }
+        : null
+
       setDiasModalData({
         conductorId: realConductorId,
         conductorNombre,
         conductorDni,
-        totalDias: Math.min(7, diasCubiertos.size),
+        totalDias: Math.max(0, Math.min(7, diasCubiertos.size) - (() => {
+          // Calcular descuento por hora de entrega directamente desde el historial
+          // Solo aplica si la asignación es NUEVA en esta semana (misma lógica que tabla/recalcular)
+          const primeraConEntrega = historialFiltrado.find(h => h.horaEntrega && h.dias > 0 && h.nuevaEnSemana)
+          if (!primeraConEntrega || !primeraConEntrega.horaEntrega) return 0
+          const hora = parseInt(primeraConEntrega.horaEntrega.split(':')[0])
+          const modalidad = primeraConEntrega.horario
+          if (modalidad === 'DIURNO' || modalidad === 'TURNO_DIURNO') {
+            return hora >= horasCorteTurno.diurno ? horasCorteTurno.descDiurnoDespues : 0
+          } else if (modalidad === 'CARGO') {
+            return hora >= horasCorteTurno.cargo ? horasCorteTurno.descCargoDespues : 0
+          }
+          return 0
+        })()),
         dias: diasSemana,
         historial: historialFiltrado,
+        devolucion: devolucionInfo,
       })
     } catch {
       Swal.fire('Error', 'No se pudo cargar el desglose de días', 'error')
@@ -1179,13 +1246,45 @@ export function ReporteFacturacionTab() {
         if (pu > 0) puMap.set(d.facturacion_id, pu)
       })
 
-      // Proyectado = precio_unitario × días de asignación (turnos_cobrados del recálculo)
-      // turnos_cobrados ya refleja los días reales de la asignación
+      // Proyectado = precio_diario × diasProyectados
+      // diasProyectados = (dias calendario desde primeraFecha hasta domingo) - descuentos
+      // Si conductor de baja o asignacion finalizada: PROY = ALQ (sin proyeccion)
+      // Si diasRaw = 0: PROY = 0
       facturacionesTransformadas = facturacionesTransformadas.map((f: any) => {
         const pu = puMap.get(f.id) || 0
-        if (pu <= 0) return { ...f, proyectado_alquiler: f.subtotal_alquiler || 0 }
-        const diasProyectados = (f.turnos_cobrados && f.turnos_cobrados > 0) ? f.turnos_cobrados : 7
-        return { ...f, proyectado_alquiler: Math.round(pu * diasProyectados) }
+        const alquiler = f.subtotal_alquiler || 0
+        const diasRaw = f.turnos_cobrados || 0
+
+        // Si no hay precio unitario, usar alquiler tal cual
+        if (pu <= 0) return { ...f, proyectado_alquiler: alquiler, _diasProyectados: diasRaw }
+
+        // Si conductor de baja o asignacion finalizada individualmente: PROY = ALQ
+        if (f.estado_billing === 'De baja') {
+          return { ...f, proyectado_alquiler: alquiler, _diasProyectados: diasRaw }
+        }
+
+        // Si 0 dias trabajados: PROY = 0
+        if (diasRaw <= 0) return { ...f, proyectado_alquiler: 0, _diasProyectados: 0 }
+
+        // Calcular dias proyectados: desde primeraFecha hasta domingo - descuentos
+        const primeraFecha = primeraFechaInicioLoad.get(f.conductor_id)
+        const descuento = f.alerta_prorrateo_ingreso?.descuento_turnos || 0
+        let diasCalendario = 7
+        if (primeraFecha) {
+          diasCalendario = Math.min(7, Math.max(1,
+            Math.round((fechaFinPeriodoLoad.getTime() - primeraFecha.getTime()) / (1000 * 60 * 60 * 24)) + 1
+          ))
+        }
+        const diasProyectados = Math.max(1, diasCalendario - descuento)
+
+        // Si los dias trabajados ya cubren o superan los proyectados: PROY = ALQ
+        if (diasRaw >= diasProyectados) {
+          return { ...f, proyectado_alquiler: alquiler, _diasProyectados: diasProyectados }
+        }
+
+        // Proyectar: precio_diario × diasProyectados
+        const precioDiario = alquiler / diasRaw
+        return { ...f, proyectado_alquiler: Math.round(precioDiario * diasProyectados), _diasProyectados: diasProyectados }
       })
 
       // Ordenar por nombre
@@ -1386,6 +1485,22 @@ export function ReporteFacturacionTab() {
       for (const c of (conductoresData || []) as any[]) {
         if (c.fecha_terminacion) fechaTermMapVP.set(c.id, parseISO(c.fecha_terminacion))
       }
+
+      // Cargar devoluciones para determinar si usar fecha_baja como tope de días
+      const conductoresConFechaBajaVP = new Set<string>()
+      const conductoresConTerminacion = [...fechaTermMapVP.keys()]
+      if (conductoresConTerminacion.length > 0) {
+        const { data: devolucionesVP } = await (supabase as any)
+          .from('programaciones_onboarding')
+          .select('conductor_id, conductor_diurno_id, conductor_nocturno_id, ultimo_dia_cobro')
+          .eq('devolucion_vehiculo', true)
+          .eq('ultimo_dia_cobro', 'fecha_baja')
+        for (const d of (devolucionesVP || []) as any[]) {
+          if (d.conductor_id && conductoresConTerminacion.includes(d.conductor_id)) conductoresConFechaBajaVP.add(d.conductor_id)
+          if (d.conductor_diurno_id && conductoresConTerminacion.includes(d.conductor_diurno_id)) conductoresConFechaBajaVP.add(d.conductor_diurno_id)
+          if (d.conductor_nocturno_id && conductoresConTerminacion.includes(d.conductor_nocturno_id)) conductoresConFechaBajaVP.add(d.conductor_nocturno_id)
+        }
+      }
       
       // Guardar asignaciones por conductor para cálculo de montos con precios históricos
       const asignacionesPorConductorVP = new Map<string, Array<{
@@ -1440,12 +1555,13 @@ export function ReporteFacturacionTab() {
         const efectivoInicio = acInicio < fechaInicioSemana ? fechaInicioSemana : acInicio
         let efectivoFin = acFin > fechaFinSemana ? fechaFinSemana : acFin
 
-        // Solo aplicar fecha_terminacion como tope si:
-        // - La asignación NO tiene fecha_fin propia
-        // - La asignación empezó ANTES de la fecha_terminacion (no es re-contratación)
+        // Aplicar fecha_terminacion como tope si:
+        // - La asignación NO tiene fecha_fin propia, O
+        // - El conductor tiene devolución con ultimo_dia_cobro='fecha_baja' (siempre aplica)
         const tieneFinPropioVP = ac.fecha_fin || asignacion.fecha_fin
         const fechaTermVP = fechaTermMapVP.get(ac.conductor_id)
-        if (fechaTermVP && !tieneFinPropioVP && efectivoFin > fechaTermVP && acInicio <= fechaTermVP) efectivoFin = fechaTermVP
+        const usarFechaBajaVP = conductoresConFechaBajaVP.has(ac.conductor_id)
+        if (fechaTermVP && (!tieneFinPropioVP || usarFechaBajaVP) && efectivoFin > fechaTermVP && acInicio <= fechaTermVP) efectivoFin = fechaTermVP
         
         const prorrateo = prorrateoMap.get(ac.conductor_id)
         if (!prorrateo) return
@@ -1489,7 +1605,7 @@ export function ReporteFacturacionTab() {
         //   CARGO:    entrega después de hora_corte_cargo → descuento medio turno
         //   NOCTURNO: sin descuento
         if ((modalidad === 'TURNO_DIURNO' || modalidad === 'CARGO') && acInicio >= fechaInicioSemana && !alertasProrrateoVP.has(ac.conductor_id)) {
-          const rawTimestamp = ac.fecha_inicio || asignacion.fecha_inicio
+          const rawTimestamp = asignacion.fecha_inicio || ac.fecha_inicio
           if (rawTimestamp) {
             const hora = getArgHour(rawTimestamp)
             const horaStr = toArgTime(rawTimestamp)
@@ -1624,7 +1740,22 @@ export function ReporteFacturacionTab() {
         const descuentoVP = alertaVP?.descuento || 0
         const diasRaw = Math.max(0, prorrateo.CARGO + prorrateo.TURNO_DIURNO + prorrateo.TURNO_NOCTURNO - descuentoVP)
         const subtotalRaw = prorrateo.monto_CARGO + prorrateo.monto_TURNO_DIURNO + prorrateo.monto_TURNO_NOCTURNO
-        
+
+        // Ajustar montos y días del prorrateo restando el descuento de la modalidad correspondiente
+        if (alertaVP && descuentoVP > 0) {
+          if (alertaVP.tipo === 'dia_completo' && prorrateo.TURNO_DIURNO > 0) {
+            // TURNO_DIURNO: restar precio proporcional al descuento
+            const precioPorDia = prorrateo.monto_TURNO_DIURNO / prorrateo.TURNO_DIURNO
+            prorrateo.monto_TURNO_DIURNO -= precioPorDia * descuentoVP
+            prorrateo.TURNO_DIURNO = Math.max(0, prorrateo.TURNO_DIURNO - descuentoVP)
+          } else if (alertaVP.tipo === 'medio_turno' && prorrateo.CARGO > 0) {
+            // CARGO: restar precio proporcional al descuento
+            const precioPorDia = prorrateo.monto_CARGO / prorrateo.CARGO
+            prorrateo.monto_CARGO -= precioPorDia * descuentoVP
+            prorrateo.CARGO = Math.max(0, prorrateo.CARGO - descuentoVP)
+          }
+        }
+
         // Calcular días desde inicio de asignación hasta fin de semana (domingo)
         const primeraFecha = primeraFechaPorConductor.get(conductorId)
         const finSemanaCompleta = semanaActual.fin // domingo
@@ -1938,10 +2069,8 @@ export function ReporteFacturacionTab() {
           monto_CARGO: 0, monto_TURNO_DIURNO: 0, monto_TURNO_NOCTURNO: 0,
           proyectado_raw: 0,
         }
-        const diasTotalesBrutos = Math.min(7, prorrateo.CARGO + prorrateo.TURNO_DIURNO + prorrateo.TURNO_NOCTURNO)
-        // Descuento automático por hora de entrega (ya detectado en alertasProrrateoVP)
-        const descuentoVP = alertasProrrateoVP.get(conductorId)?.descuento || 0
-        const diasTotales = Math.max(0, diasTotalesBrutos - descuentoVP)
+        // prorrateo.CARGO/TURNO_DIURNO/TURNO_NOCTURNO ya tienen el descuento por hora de entrega aplicado
+        const diasTotales = Math.min(7, Math.max(0, prorrateo.CARGO + prorrateo.TURNO_DIURNO + prorrateo.TURNO_NOCTURNO))
 
         // Excluir conductores con 0 días, SALVO que tengan penalidades pendientes
         if (diasTotales === 0 && !dnisConPenalidadesVP.has(control.numero_dni)) continue
@@ -2451,8 +2580,24 @@ export function ReporteFacturacionTab() {
         }
       }
 
+      // Cargar devoluciones para determinar si usar fecha_baja como tope de días
+      const conductoresConFechaBajaRecalc = new Set<string>()
+      const conductoresConTermRecalc = [...fechaTerminacionMap.keys()]
+      if (conductoresConTermRecalc.length > 0) {
+        const { data: devolucionesRecalc } = await (supabase as any)
+          .from('programaciones_onboarding')
+          .select('conductor_id, conductor_diurno_id, conductor_nocturno_id, ultimo_dia_cobro')
+          .eq('devolucion_vehiculo', true)
+          .eq('ultimo_dia_cobro', 'fecha_baja')
+        for (const d of (devolucionesRecalc || []) as any[]) {
+          if (d.conductor_id && conductoresConTermRecalc.includes(d.conductor_id)) conductoresConFechaBajaRecalc.add(d.conductor_id)
+          if (d.conductor_diurno_id && conductoresConTermRecalc.includes(d.conductor_diurno_id)) conductoresConFechaBajaRecalc.add(d.conductor_diurno_id)
+          if (d.conductor_nocturno_id && conductoresConTermRecalc.includes(d.conductor_nocturno_id)) conductoresConFechaBajaRecalc.add(d.conductor_nocturno_id)
+        }
+      }
+
       // Descuentos por hora de entrega (misma lógica que Vista Previa)
-      const descuentosPorHoraRecalc = new Map<string, number>()
+      const descuentosPorHoraRecalc = new Map<string, { descuento: number; modalidad: string }>()
 
       for (const ac of (asignacionesConductoresRecalc || []) as any[]) {
         const asignacion = ac.asignaciones
@@ -2473,25 +2618,19 @@ export function ReporteFacturacionTab() {
         const acInicio = conductorInicioR && padreInicioR
           ? (conductorInicioR > padreInicioR ? conductorInicioR : padreInicioR)
           : (conductorInicioR || padreInicioR || fechaInicioSemanaRecalc)
-        // Fin: usar la fecha MÁS TEMPRANA entre conductor y padre
-        const conductorFinR = ac.fecha_fin ? parseISO(toArgDate(ac.fecha_fin)) : null
+        // Fin: usar la fecha_fin de la asignación padre (no del conductor)
+        // Los días se cuentan hasta el fin de la asignación independientemente del estado del conductor
         const padreFinR = asignacion.fecha_fin ? parseISO(toArgDate(asignacion.fecha_fin)) : null
-        const acFin = conductorFinR && padreFinR
-          ? (conductorFinR < padreFinR ? conductorFinR : padreFinR)
-          : (conductorFinR || padreFinR || fechaFinSemanaRecalc)
+        const acFin = padreFinR || fechaFinSemanaRecalc
 
         if (acFin < fechaInicioSemanaRecalc || acInicio > fechaFinSemanaRecalc) continue
 
         const efectivoInicio = acInicio < fechaInicioSemanaRecalc ? fechaInicioSemanaRecalc : acInicio
         let efectivoFin = acFin > fechaFinSemanaRecalc ? fechaFinSemanaRecalc : acFin
-
-        // Solo aplicar fecha_terminacion como tope si:
-        // - La asignación NO tiene fecha_fin propia
-        // - La asignación empezó ANTES de la fecha_terminacion (no es re-contratación)
-        const tieneFinPropioR = ac.fecha_fin || asignacion.fecha_fin
-        const fechaTerm = fechaTerminacionMap.get(ac.conductor_id)
-        if (fechaTerm && !tieneFinPropioR && efectivoFin > fechaTerm && acInicio <= fechaTerm) {
-          efectivoFin = fechaTerm
+        // Aplicar fecha_terminacion como tope si el conductor tiene devolución con ultimo_dia_cobro='fecha_baja'
+        const fechaTermRecalc = fechaTerminacionMap.get(ac.conductor_id)
+        if (fechaTermRecalc && conductoresConFechaBajaRecalc.has(ac.conductor_id) && efectivoFin > fechaTermRecalc && acInicio <= fechaTermRecalc) {
+          efectivoFin = fechaTermRecalc
         }
         const prorrateo = prorrateoRecalcMap.get(ac.conductor_id)
         if (!prorrateo) continue
@@ -2528,15 +2667,15 @@ export function ReporteFacturacionTab() {
             ? 'TURNO_NOCTURNO'
             : 'TURNO_DIURNO'
         if ((modalidadDescR === 'TURNO_DIURNO' || modalidadDescR === 'CARGO') && acInicio >= fechaInicioSemanaRecalc && !descuentosPorHoraRecalc.has(ac.conductor_id)) {
-          const rawTs = ac.fecha_inicio || asignacion.fecha_inicio
+          const rawTs = asignacion.fecha_inicio || ac.fecha_inicio
           if (rawTs) {
             const horaR = getArgHour(rawTs)
             if (modalidadDescR === 'TURNO_DIURNO') {
               if (horaR >= horasCorteTurno.diurno) {
-                descuentosPorHoraRecalc.set(ac.conductor_id, horasCorteTurno.descDiurnoDespues)
+                descuentosPorHoraRecalc.set(ac.conductor_id, { descuento: horasCorteTurno.descDiurnoDespues, modalidad: 'TURNO_DIURNO' })
               }
             } else if (modalidadDescR === 'CARGO' && horaR >= horasCorteTurno.cargo) {
-              descuentosPorHoraRecalc.set(ac.conductor_id, horasCorteTurno.descCargoDespues)
+              descuentosPorHoraRecalc.set(ac.conductor_id, { descuento: horasCorteTurno.descCargoDespues, modalidad: 'CARGO' })
             }
           }
         }
@@ -2584,8 +2723,18 @@ export function ReporteFacturacionTab() {
         const prorrateo = prorrateoRecalcMap.get(conductorData.id) || { CARGO: 0, TURNO_DIURNO: 0, TURNO_NOCTURNO: 0 }
         const totalDiasBrutos = Math.min(7, prorrateo.CARGO + prorrateo.TURNO_DIURNO + prorrateo.TURNO_NOCTURNO)
         // Descuento por hora de entrega: restar turnos descontados
-        const descuentoRecalc = descuentosPorHoraRecalc.get(conductorData.id) || 0
+        const descInfoRecalc = descuentosPorHoraRecalc.get(conductorData.id)
+        const descuentoRecalc = descInfoRecalc?.descuento || 0
         const totalDias = Math.max(0, totalDiasBrutos - descuentoRecalc)
+
+        // Ajustar días por modalidad restando el descuento de la modalidad correspondiente
+        let diasDiurnoAjustados = prorrateo.TURNO_DIURNO
+        let diasNocturnoAjustados = prorrateo.TURNO_NOCTURNO
+        let diasCargoAjustados = prorrateo.CARGO
+        if (descInfoRecalc) {
+          if (descInfoRecalc.modalidad === 'TURNO_DIURNO') diasDiurnoAjustados = Math.max(0, diasDiurnoAjustados - descInfoRecalc.descuento)
+          else if (descInfoRecalc.modalidad === 'CARGO') diasCargoAjustados = Math.max(0, diasCargoAjustados - descInfoRecalc.descuento)
+        }
 
         // Excluir conductores con 0 días, SALVO que tengan penalidades pendientes
         if (totalDias === 0 && !dnisConPenalidadesRecalc.has(control.numero_dni)) continue
@@ -2608,9 +2757,9 @@ export function ReporteFacturacionTab() {
           conductor_dni: conductorData.numero_dni,
           conductor_cuit: conductorData.numero_cuit,
           vehiculo_patente: control.patente || null,
-          dias_turno_diurno: prorrateo.TURNO_DIURNO,
-          dias_turno_nocturno: prorrateo.TURNO_NOCTURNO,
-          dias_cargo: prorrateo.CARGO,
+          dias_turno_diurno: diasDiurnoAjustados,
+          dias_turno_nocturno: diasNocturnoAjustados,
+          dias_cargo: diasCargoAjustados,
           total_dias: totalDias,
           estado_billing: estadoBilling,
           fecha_baja_no_coincide: fechaBajaNoCoincide,
@@ -7949,10 +8098,12 @@ export function ReporteFacturacionTab() {
       enableSorting: true,
       cell: ({ row }) => {
         const proyectado = row.original.proyectado_alquiler || 0
-        const alquiler = row.original.subtotal_alquiler || 0
+        const diasTrabajados = row.original.turnos_cobrados || 0
+        const diasProyectados = (row.original as any)._diasProyectados || 0
         if (proyectado === 0) return <span style={{ color: 'var(--text-muted)' }}>-</span>
-        const porcentaje = proyectado > 0 ? Math.min(100, Math.round((alquiler / proyectado) * 100)) : 0
-        const completo = alquiler >= proyectado && alquiler > 0
+        // Barra de progreso: dias trabajados / dias proyectados
+        const porcentaje = diasProyectados > 0 ? Math.min(100, Math.round((diasTrabajados / diasProyectados) * 100)) : 0
+        const completo = diasTrabajados >= diasProyectados && diasTrabajados > 0
         return (
           <div>
             <div style={{ fontWeight: 600 }}>{formatCurrency(proyectado)}</div>
@@ -9191,10 +9342,11 @@ export function ReporteFacturacionTab() {
                           const conductorData = datosActuales.find(f => f.conductor_id === diasModalData.conductorId);
                           const alerta = conductorData?.alerta_prorrateo_ingreso;
                           // Si no hay alerta de la facturación, calcular desde el historial de asignaciones
+                          // Solo aplica si la asignación es nueva en esta semana (no re-aplicar descuentos de semanas anteriores)
                           const alertaLocal = (() => {
                             if (alerta) return alerta;
-                            // Buscar primera asignación con hora de entrega
-                            const primeraConHora = diasModalData.historial.find(h => h.horaEntrega && h.dias > 0);
+                            // Buscar primera asignación NUEVA EN LA SEMANA con hora de entrega
+                            const primeraConHora = diasModalData.historial.find(h => h.horaEntrega && h.dias > 0 && h.nuevaEnSemana);
                             if (!primeraConHora?.horaEntrega) return null;
                             const [hh] = primeraConHora.horaEntrega.split(':').map(Number);
                             const horario = primeraConHora.horario?.toUpperCase();
@@ -9214,15 +9366,22 @@ export function ReporteFacturacionTab() {
                             // Detectar si este día es el de la entrega con descuento
                             const esDiaDescuento = alertaLocal && d.trabajado && alertaLocal.fecha_entrega === d.fecha;
                             const esCompleto = esDiaDescuento && alertaLocal?.tipo === 'dia_completo';
-                            const colorDia = esDiaDescuento
-                              ? (esCompleto ? '#ef4444' : '#d97706')
-                              : (d.trabajado ? '#10b981' : '#d1d5db');
-                            const bgDia = esDiaDescuento
-                              ? (esCompleto ? 'rgba(239, 68, 68, 0.06)' : 'rgba(234, 179, 8, 0.06)')
-                              : (d.trabajado ? 'rgba(16, 185, 129, 0.06)' : 'transparent');
-                            const borderDia = esDiaDescuento
-                              ? `1px solid ${esCompleto ? 'rgba(239, 68, 68, 0.2)' : 'rgba(234, 179, 8, 0.25)'}`
-                              : `1px solid ${d.trabajado ? 'rgba(16, 185, 129, 0.15)' : 'var(--border-primary)'}`;
+                            const esPostBaja = !!d.postBaja;
+                            const colorDia = esPostBaja
+                              ? '#ef4444'
+                              : esDiaDescuento
+                                ? (esCompleto ? '#ef4444' : '#d97706')
+                                : (d.trabajado ? '#10b981' : '#d1d5db');
+                            const bgDia = esPostBaja
+                              ? 'rgba(239, 68, 68, 0.06)'
+                              : esDiaDescuento
+                                ? (esCompleto ? 'rgba(239, 68, 68, 0.06)' : 'rgba(234, 179, 8, 0.06)')
+                                : (d.trabajado ? 'rgba(16, 185, 129, 0.06)' : 'transparent');
+                            const borderDia = esPostBaja
+                              ? '1px solid rgba(239, 68, 68, 0.2)'
+                              : esDiaDescuento
+                                ? `1px solid ${esCompleto ? 'rgba(239, 68, 68, 0.2)' : 'rgba(234, 179, 8, 0.25)'}`
+                                : `1px solid ${d.trabajado ? 'rgba(16, 185, 129, 0.15)' : 'var(--border-primary)'}`;
 
                             return (
                               <div key={i} style={{
@@ -9235,15 +9394,19 @@ export function ReporteFacturacionTab() {
                                   width: '8px', height: '8px', borderRadius: '50%',
                                   background: colorDia, flexShrink: 0,
                                 }} />
-                                <span style={{ fontSize: '12px', fontWeight: 600, color: esDiaDescuento ? colorDia : 'var(--text-primary)', width: '75px' }}>
+                                <span style={{ fontSize: '12px', fontWeight: 600, color: (esDiaDescuento || esPostBaja) ? colorDia : 'var(--text-primary)', width: '75px' }}>
                                   {d.diaSemana}
                                 </span>
                                 <span style={{ fontSize: '12px', color: 'var(--text-secondary)', flex: 1 }}>
                                   {d.fecha}
                                 </span>
-                                {esDiaDescuento ? (
+                                {esPostBaja ? (
+                                  <span style={{ fontSize: '10px', color: '#ef4444', fontWeight: 700 }}>
+                                    Desc. por día sin actividad (1)
+                                  </span>
+                                ) : esDiaDescuento ? (
                                   <span style={{ fontSize: '10px', color: colorDia, fontWeight: 700 }}>
-                                    {d.horario} · Desc. {alertaLocal?.descuento_turnos === 1 ? '1 turno' : `½ turno`}
+                                    Desc. entrega fuera de turno ({alertaLocal?.descuento_turnos === 1 ? '1' : '1/2'})
                                   </span>
                                 ) : d.trabajado ? (
                                   <span style={{ fontSize: '10px', color: '#10b981', fontWeight: 600 }}>{d.horario}</span>
@@ -9334,6 +9497,47 @@ export function ReporteFacturacionTab() {
                           </>
                         )
                       })()}
+
+                      {/* Seccion Devolución (si existe) */}
+                      {diasModalData.devolucion && (
+                        <div style={{ marginTop: '16px' }}>
+                          <div style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '8px' }}>
+                            Devolución
+                          </div>
+                          <div style={{
+                            padding: '10px 12px', borderRadius: '6px',
+                            background: diasModalData.devolucion.estado === 'completado' ? 'rgba(16, 185, 129, 0.06)' : 'rgba(245, 158, 11, 0.06)',
+                            border: `1px solid ${diasModalData.devolucion.estado === 'completado' ? 'rgba(16, 185, 129, 0.15)' : 'rgba(245, 158, 11, 0.15)'}`,
+                          }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                              <div style={{
+                                width: '8px', height: '8px', borderRadius: '50%',
+                                background: diasModalData.devolucion.estado === 'completado' ? '#10b981' : '#f59e0b', flexShrink: 0,
+                              }} />
+                              <span style={{ fontSize: '11px', color: 'var(--text-primary)', fontWeight: 500, flex: 1 }}>
+                                {diasModalData.devolucion.estado === 'completado' ? 'Completada' : 'Pendiente'}
+                              </span>
+                            </div>
+                            {diasModalData.devolucion.fecha_baja && (
+                              <div style={{ fontSize: '10px', color: 'var(--text-secondary)', marginTop: '4px', paddingLeft: '16px' }}>
+                                Fecha de Baja: {(() => { try { return format(parseISO(diasModalData.devolucion.fecha_baja), 'dd/MM/yyyy') } catch { return '-' } })()}
+                              </div>
+                            )}
+                            {diasModalData.devolucion.fecha_devolucion && (
+                              <div style={{ fontSize: '10px', color: 'var(--text-secondary)', marginTop: '2px', paddingLeft: '16px' }}>
+                                Devuelto: {(() => { try { return format(parseISO(diasModalData.devolucion.fecha_devolucion), 'dd/MM/yyyy') } catch { return '-' } })()}
+                              </div>
+                            )}
+                            {diasModalData.devolucion.ultimo_dia_cobro && (
+                              <div style={{ fontSize: '10px', marginTop: '4px', paddingLeft: '16px' }}>
+                                <span style={{ padding: '1px 6px', borderRadius: '3px', background: 'rgba(139, 92, 246, 0.1)', color: '#8b5cf6', fontWeight: 600 }}>
+                                  Último día de cobro: {diasModalData.devolucion.ultimo_dia_cobro === 'dia_entrega' ? 'Día de entrega' : diasModalData.devolucion.ultimo_dia_cobro === 'fecha_baja' ? 'Fecha de baja' : diasModalData.devolucion.ultimo_dia_cobro}
+                                </span>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      )}
                     </div>
                   </div>
                 </div>

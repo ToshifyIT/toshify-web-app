@@ -750,8 +750,8 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
   }
 
   const handleNext = async () => {
-    // Step 1: Validate modalidad
-    if (step === 1 && !formData.modalidad) {
+    // Step 1: Validate modalidad (devolución no requiere modalidad previa, se detecta del vehículo)
+    if (step === 1 && !formData.modalidad && !formData.devolucion_vehiculo) {
       Swal.fire('Error', 'Debes seleccionar una modalidad', 'error')
       return
     }
@@ -876,10 +876,16 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
           .filter((id: string) => id)
         setConductoresDelVehiculoActual(conductorIds)
 
-        // Solo pre-llenar los campos si la modalidad seleccionada coincide con la del vehículo
-        // Si el usuario cambió de CARGO a TURNO (o viceversa), no pre-llenar para que pueda elegir
-        const modalidadSeleccionada = formData.modalidad
-        const modalidadVehiculo = asigData.horario
+        // Si es devolución y la modalidad aún no fue seteada, usar la modalidad real del vehículo
+        const modalidadVehiculo = asigData.horario as 'CARGO' | 'TURNO'
+        if (formData.devolucion_vehiculo && !formData.modalidad && modalidadVehiculo) {
+          setFormData(prev => ({ ...prev, modalidad: modalidadVehiculo }))
+        }
+
+        // Determinar la modalidad efectiva para la comparación
+        const modalidadSeleccionada = (formData.devolucion_vehiculo && !formData.modalidad)
+          ? modalidadVehiculo
+          : formData.modalidad
 
         // Si la modalidad coincide, pre-llenar los campos del conductor
         if (modalidadSeleccionada === modalidadVehiculo) {
@@ -895,8 +901,12 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
               }
             }
           } else {
-            const diurnoData = conductoresAsig.find((c: any) => c.horario === 'diurno')
-            const nocturnoData = conductoresAsig.find((c: any) => c.horario === 'nocturno')
+            // Filtrar solo conductores activos/asignados para pre-llenar (ignorar completados/cancelados)
+            const conductoresActivos = conductoresAsig.filter((c: any) =>
+              c.estado === 'asignado' || c.estado === 'activo' || c.estado === 'activa'
+            )
+            const diurnoData = conductoresActivos.find((c: any) => c.horario === 'diurno')
+            const nocturnoData = conductoresActivos.find((c: any) => c.horario === 'nocturno')
 
             if (diurnoData?.conductores) {
               updates.conductor_diurno_id = diurnoData.conductores.id
@@ -2516,7 +2526,7 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
                 {step > 1 ? <Check size={16} /> : '2'}
               </div>
               <span className={`step-label ${step >= 1 ? 'active' : ''} ${step > 1 ? 'completed' : ''}`}>
-                Modalidad
+                Tipo
               </span>
             </div>
 
@@ -2622,8 +2632,23 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
                   <div
                     className={`modality-card ${formData.devolucion_vehiculo ? 'selected' : ''}`}
                     onClick={() => {
-                      handleSelectModality('TURNO');
-                      setFormData(prev => ({ ...prev, modalidad: 'TURNO', devolucion_vehiculo: true }))
+                      // No hardcodear modalidad: se determinará automáticamente en el paso 2
+                      // según la asignación activa del vehículo seleccionado
+                      setFormData(prev => ({
+                        ...prev,
+                        modalidad: '',
+                        devolucion_vehiculo: true,
+                        // Reset conductores
+                        conductor_id: '',
+                        conductor_nombre: '',
+                        conductor_dni: '',
+                        conductor_diurno_id: '',
+                        conductor_diurno_nombre: '',
+                        conductor_diurno_dni: '',
+                        conductor_nocturno_id: '',
+                        conductor_nocturno_nombre: '',
+                        conductor_nocturno_dni: '',
+                      }))
                     }}
                     style={{ maxWidth: '280px', margin: '0 auto', padding: '16px 16px' }}
                   >
