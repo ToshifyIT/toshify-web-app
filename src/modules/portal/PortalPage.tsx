@@ -41,6 +41,7 @@ interface PortalFacturacion {
   turnos_cobrados: number
   subtotal_cargos: number
   subtotal_descuentos: number
+  saldo_anterior: number
   total_a_pagar: number
   estado: string
   periodos_facturacion: PortalPeriodo
@@ -215,7 +216,7 @@ export function PortalPage() {
         .select(`
           id, periodo_id, conductor_nombre, conductor_dni, conductor_cuit,
           vehiculo_patente, tipo_alquiler, turnos_base, turnos_cobrados,
-          subtotal_cargos, subtotal_descuentos, total_a_pagar, estado,
+          subtotal_cargos, subtotal_descuentos, saldo_anterior, total_a_pagar, estado,
           periodos_facturacion!inner(semana, anio, fecha_inicio, fecha_fin)
         `)
         .eq('conductor_id', conductorId)
@@ -344,7 +345,37 @@ export function PortalPage() {
         .order('concepto_codigo')
 
       if (error) throw error
-      setDetalleItems((data || []) as PortalDetalle[])
+      const items = (data || []) as PortalDetalle[]
+
+      // Inject saldo_anterior as a concepto line (same logic as ReporteFacturacionTab)
+      const saldo = factura.saldo_anterior || 0
+      if (saldo > 0) {
+        items.push({
+          id: `saldo-${factura.id}`,
+          facturacion_id: factura.id,
+          concepto_codigo: 'SALDO',
+          concepto_descripcion: 'Saldo Anterior (deuda)',
+          cantidad: 1,
+          precio_unitario: saldo,
+          subtotal: saldo,
+          total: saldo,
+          es_descuento: false,
+        })
+      } else if (saldo < 0) {
+        items.push({
+          id: `saldo-${factura.id}`,
+          facturacion_id: factura.id,
+          concepto_codigo: 'SALDO',
+          concepto_descripcion: 'Saldo a Favor',
+          cantidad: 1,
+          precio_unitario: Math.abs(saldo),
+          subtotal: Math.abs(saldo),
+          total: Math.abs(saldo),
+          es_descuento: true,
+        })
+      }
+
+      setDetalleItems(items)
     } catch {
       setDetalleItems([])
     } finally {

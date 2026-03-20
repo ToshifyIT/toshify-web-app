@@ -1445,7 +1445,42 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
   }, [vehicles, vehicleSearch, vehicleAvailabilityFilter, isEditMode, formData.vehiculo_id, formData.devolucion_vehiculo])
 
   // Obtener conductores seleccionados (buscar en lista o crear objeto temporal con datos del form)
-  const conductorDiurno = conductores.find(c => c.id === formData.conductor_diurno_id) || 
+  // Helper para badge de disponibilidad de vehículo (usado en Step 2 normal y cambio)
+  const getVehicleBadge = (vehicle: Vehicle) => {
+    let badgeText = '', badgeBg = '', badgeColor = '', detalleText = ''
+    const asig = vehicle.asignacionActiva
+    switch (vehicle.disponibilidad) {
+      case 'disponible':
+        badgeText = 'Disponible'; badgeBg = '#10B981'; badgeColor = 'white'; detalleText = 'Libre para asignacion'; break
+      case 'turno_diurno_libre':
+        badgeText = 'En Uso'; badgeBg = '#F59E0B'; badgeColor = 'white'; detalleText = 'Diurno Libre'; break
+      case 'turno_nocturno_libre':
+        badgeText = 'En Uso'; badgeBg = '#F59E0B'; badgeColor = 'white'; detalleText = 'Nocturno Libre'; break
+      case 'ocupado':
+        badgeText = 'En Uso'; badgeBg = '#F59E0B'; badgeColor = 'white'; detalleText = asig?.horario === 'CARGO' ? 'A Cargo' : 'Turnos completos'; break
+      case 'programado':
+        badgeText = 'Programado'; badgeBg = '#EF4444'; badgeColor = 'white'; detalleText = 'Tiene entrega pendiente'; break
+    }
+    return { badgeText, badgeBg, badgeColor, detalleText }
+  }
+
+  // Vehículos filtrados para cambio de vehículo (memoizados)
+  const vehiculosEnUso = useMemo(() =>
+    filteredVehicles.filter(v =>
+      v.disponibilidad === 'ocupado' || v.disponibilidad === 'turno_diurno_libre' || v.disponibilidad === 'turno_nocturno_libre' || (isEditMode && v.id === formData.vehiculo_id)
+    ),
+    [filteredVehicles, isEditMode, formData.vehiculo_id]
+  )
+
+  const vehiculosDestino = useMemo(() =>
+    filteredVehicles.filter(v =>
+      (v.disponibilidad === 'disponible' || v.disponibilidad === 'ocupado' || v.disponibilidad === 'turno_diurno_libre' || v.disponibilidad === 'turno_nocturno_libre' || (isEditMode && v.id === formData.vehiculo_cambio_id))
+      && v.id !== formData.vehiculo_id
+    ),
+    [filteredVehicles, isEditMode, formData.vehiculo_cambio_id, formData.vehiculo_id]
+  )
+
+  const conductorDiurno = conductores.find(c => c.id === formData.conductor_diurno_id) ||
     (formData.conductor_diurno_id && formData.conductor_diurno_nombre ? {
       id: formData.conductor_diurno_id,
       nombres: formData.conductor_diurno_nombre.split(' ')[0] || '',
@@ -2803,46 +2838,8 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
                     </div>
                   ) : (
                     filteredVehicles.map((vehicle) => {
-                      let badgeText = ''
-                      let badgeBg = ''
-                      let badgeColor = ''
-                      let detalleText = ''
-
+                      const { badgeText, badgeBg, badgeColor, detalleText } = getVehicleBadge(vehicle)
                       const isProgramado = vehicle.disponibilidad === 'programado'
-                      const asig = vehicle.asignacionActiva
-
-                      switch (vehicle.disponibilidad) {
-                        case 'disponible':
-                          badgeText = 'Disponible'
-                          badgeBg = '#10B981'
-                          badgeColor = 'white'
-                          detalleText = 'Libre para asignacion'
-                          break
-                        case 'turno_diurno_libre':
-                          badgeText = 'En Uso'
-                          badgeBg = '#F59E0B'
-                          badgeColor = 'white'
-                          detalleText = 'Diurno Libre'
-                          break
-                        case 'turno_nocturno_libre':
-                          badgeText = 'En Uso'
-                          badgeBg = '#F59E0B'
-                          badgeColor = 'white'
-                          detalleText = 'Nocturno Libre'
-                          break
-                        case 'ocupado':
-                          badgeText = 'En Uso'
-                          badgeBg = '#F59E0B'
-                          badgeColor = 'white'
-                          detalleText = asig?.horario === 'CARGO' ? 'A Cargo' : 'Turnos completos'
-                          break
-                        case 'programado':
-                          badgeText = 'Programado'
-                          badgeBg = '#EF4444'
-                          badgeColor = 'white'
-                          detalleText = 'Tiene entrega pendiente'
-                          break
-                      }
 
                       return (
                         <div
@@ -2888,37 +2885,7 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
             )}
 
             {/* Step 2: Cambio de Vehículo - Selección dual */}
-            {step === 2 && formData.cambio_vehiculo && (() => {
-              // Helper para generar badge/detalle de cada vehículo (reutiliza la misma lógica visual del paso 2 normal)
-              const getVehicleBadge = (vehicle: Vehicle) => {
-                let badgeText = '', badgeBg = '', badgeColor = '', detalleText = ''
-                const asig = vehicle.asignacionActiva
-                switch (vehicle.disponibilidad) {
-                  case 'disponible':
-                    badgeText = 'Disponible'; badgeBg = '#10B981'; badgeColor = 'white'; detalleText = 'Libre para asignacion'; break
-                  case 'turno_diurno_libre':
-                    badgeText = 'En Uso'; badgeBg = '#F59E0B'; badgeColor = 'white'; detalleText = 'Diurno Libre'; break
-                  case 'turno_nocturno_libre':
-                    badgeText = 'En Uso'; badgeBg = '#F59E0B'; badgeColor = 'white'; detalleText = 'Nocturno Libre'; break
-                  case 'ocupado':
-                    badgeText = 'En Uso'; badgeBg = '#F59E0B'; badgeColor = 'white'; detalleText = asig?.horario === 'CARGO' ? 'A Cargo' : 'Turnos completos'; break
-                  case 'programado':
-                    badgeText = 'Programado'; badgeBg = '#EF4444'; badgeColor = 'white'; detalleText = 'Tiene entrega pendiente'; break
-                }
-                return { badgeText, badgeBg, badgeColor, detalleText }
-              }
-
-              // Vehículos en uso para columna izquierda
-              const vehiculosEnUso = filteredVehicles.filter(v =>
-                v.disponibilidad === 'ocupado' || v.disponibilidad === 'turno_diurno_libre' || v.disponibilidad === 'turno_nocturno_libre' || (isEditMode && v.id === formData.vehiculo_id)
-              )
-              // Vehículos disponibles + en uso para columna derecha (excluyendo el ya seleccionado a la izquierda)
-              const vehiculosDestino = filteredVehicles.filter(v =>
-                (v.disponibilidad === 'disponible' || v.disponibilidad === 'ocupado' || v.disponibilidad === 'turno_diurno_libre' || v.disponibilidad === 'turno_nocturno_libre' || (isEditMode && v.id === formData.vehiculo_cambio_id))
-                && v.id !== formData.vehiculo_id
-              )
-
-              return (
+            {step === 2 && formData.cambio_vehiculo && (
               <div>
                 <div className="step-description">
                   <h3>Paso 2: Selecciona los Vehículos</h3>
@@ -3131,8 +3098,7 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
                   </div>
                 )}
               </div>
-              )
-            })()}
+            )}
 
             {/* Step 3: Conductores */}
             {step === 3 && (

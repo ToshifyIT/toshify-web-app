@@ -78,6 +78,42 @@ function getLocalDateStr(isoString: string): string {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
 }
 
+// Helper: cargar programaciones con fallback si columnas de cambio no existen
+async function fetchProgramaciones(): Promise<any[]> {
+  try {
+    const res = await supabase
+      .from('programaciones_onboarding')
+      .select('asignacion_id, tipo_asignacion, observaciones, created_by_name, vehiculo_cambio_id, vehiculo_cambio_patente, vehiculo_cambio_modelo')
+      .not('asignacion_id', 'is', null)
+    if (res.error) throw res.error
+    return res.data || []
+  } catch {
+    const res = await supabase
+      .from('programaciones_onboarding')
+      .select('asignacion_id, tipo_asignacion, observaciones, created_by_name')
+      .not('asignacion_id', 'is', null)
+    return res.data || []
+  }
+}
+
+// Helper: mapear motivos de programación a asignaciones
+function buildAsignacionesConMotivo(asignaciones: any[], programaciones: any[]) {
+  const motivosMap = new Map<string, { tipo: string; observaciones?: string; programadoPor?: string; cambioVehiculo?: boolean; vehiculoCambioPatente?: string; vehiculoCambioModelo?: string; vehiculoCambioId?: string }>()
+  for (const p of programaciones) {
+    if (p.asignacion_id && p.tipo_asignacion) {
+      motivosMap.set(p.asignacion_id, { tipo: p.tipo_asignacion, observaciones: p.observaciones, programadoPor: p.created_by_name, cambioVehiculo: !!(p.vehiculo_cambio_id), vehiculoCambioPatente: p.vehiculo_cambio_patente || '', vehiculoCambioModelo: p.vehiculo_cambio_modelo || '', vehiculoCambioId: p.vehiculo_cambio_id || '' })
+    }
+  }
+  return asignaciones.map((a: any) => {
+    const prog = motivosMap.get(a.id)
+    return {
+      ...a,
+      motivo: prog?.tipo || null,
+      motivoDetalle: prog ? { observaciones: prog.observaciones, programadoPor: prog.programadoPor, cambioVehiculo: prog.cambioVehiculo, vehiculoCambioPatente: prog.vehiculoCambioPatente, vehiculoCambioModelo: prog.vehiculoCambioModelo, vehiculoCambioId: prog.vehiculoCambioId } : null,
+    }
+  })
+}
+
 export function AsignacionesModule() {
   const { canEditInMenu, canDeleteInMenu } = usePermissions()
   const { profile } = useAuth()
@@ -380,39 +416,8 @@ export function AsignacionesModule() {
 
       if (asignacionesRes.error) throw asignacionesRes.error
 
-      // Programaciones: cargar por separado con fallback si columnas de cambio no existen
-      let programacionesData: any[] = []
-      try {
-        const res = await supabase
-          .from('programaciones_onboarding')
-          .select('asignacion_id, tipo_asignacion, observaciones, created_by_name, vehiculo_cambio_id, vehiculo_cambio_patente, vehiculo_cambio_modelo')
-          .not('asignacion_id', 'is', null)
-        if (res.error) throw res.error
-        programacionesData = res.data || []
-      } catch {
-        // Fallback: cargar sin columnas de cambio de vehículo
-        const res = await supabase
-          .from('programaciones_onboarding')
-          .select('asignacion_id, tipo_asignacion, observaciones, created_by_name')
-          .not('asignacion_id', 'is', null)
-        programacionesData = res.data || []
-      }
-
-      // Mapear motivos de programación a asignaciones
-      const motivosMap = new Map<string, { tipo: string; observaciones?: string; programadoPor?: string; cambioVehiculo?: boolean; vehiculoCambioPatente?: string; vehiculoCambioModelo?: string; vehiculoCambioId?: string }>()
-      for (const p of programacionesData as any[]) {
-        if (p.asignacion_id && p.tipo_asignacion) {
-          motivosMap.set(p.asignacion_id, { tipo: p.tipo_asignacion, observaciones: p.observaciones, programadoPor: p.created_by_name, cambioVehiculo: !!(p.vehiculo_cambio_id), vehiculoCambioPatente: p.vehiculo_cambio_patente || '', vehiculoCambioModelo: p.vehiculo_cambio_modelo || '', vehiculoCambioId: p.vehiculo_cambio_id || '' })
-        }
-      }
-      const asignacionesConMotivo = (asignacionesRes.data || []).map((a: any) => {
-        const prog = motivosMap.get(a.id)
-        return {
-          ...a,
-          motivo: prog?.tipo || null,
-          motivoDetalle: prog ? { observaciones: prog.observaciones, programadoPor: prog.programadoPor, cambioVehiculo: prog.cambioVehiculo, vehiculoCambioPatente: prog.vehiculoCambioPatente, vehiculoCambioModelo: prog.vehiculoCambioModelo, vehiculoCambioId: prog.vehiculoCambioId } : null,
-        }
-      })
+      const programacionesData = await fetchProgramaciones()
+      const asignacionesConMotivo = buildAsignacionesConMotivo(asignacionesRes.data || [], programacionesData)
 
       // PRE-RESOLVER conductores de todos los vehículos con devoluciones via query directa
       // (misma lógica que handleConfirmarDevolucion, SIN filtro de sede)
@@ -554,33 +559,8 @@ export function AsignacionesModule() {
 
       if (asigRes.error) throw asigRes.error
 
-      // Programaciones: cargar por separado con fallback
-      let progData: any[] = []
-      try {
-        const res = await supabase
-          .from('programaciones_onboarding')
-          .select('asignacion_id, tipo_asignacion, observaciones, created_by_name, vehiculo_cambio_id, vehiculo_cambio_patente, vehiculo_cambio_modelo')
-          .not('asignacion_id', 'is', null)
-        if (res.error) throw res.error
-        progData = res.data || []
-      } catch {
-        const res = await supabase
-          .from('programaciones_onboarding')
-          .select('asignacion_id, tipo_asignacion, observaciones, created_by_name')
-          .not('asignacion_id', 'is', null)
-        progData = res.data || []
-      }
-
-      const motivosMap = new Map<string, { tipo: string; observaciones?: string; programadoPor?: string; cambioVehiculo?: boolean; vehiculoCambioPatente?: string; vehiculoCambioModelo?: string; vehiculoCambioId?: string }>()
-      for (const p of progData as any[]) {
-        if (p.asignacion_id && p.tipo_asignacion) {
-          motivosMap.set(p.asignacion_id, { tipo: p.tipo_asignacion, observaciones: p.observaciones, programadoPor: p.created_by_name, cambioVehiculo: !!(p.vehiculo_cambio_id), vehiculoCambioPatente: p.vehiculo_cambio_patente || '', vehiculoCambioModelo: p.vehiculo_cambio_modelo || '', vehiculoCambioId: p.vehiculo_cambio_id || '' })
-        }
-      }
-      const asignacionesConMotivo = (asigRes.data || []).map((a: any) => {
-        const prog = motivosMap.get(a.id)
-        return { ...a, motivo: prog?.tipo || null, motivoDetalle: prog ? { observaciones: prog.observaciones, programadoPor: prog.programadoPor, cambioVehiculo: prog.cambioVehiculo, vehiculoCambioPatente: prog.vehiculoCambioPatente, vehiculoCambioModelo: prog.vehiculoCambioModelo, vehiculoCambioId: prog.vehiculoCambioId } : null }
-      })
+      const progData = await fetchProgramaciones()
+      const asignacionesConMotivo = buildAsignacionesConMotivo(asigRes.data || [], progData)
 
       // Resolver conductores de devoluciones: query directa a la BD (igual que handleConfirmarDevolucion)
       // Buscar conductores para TODOS los vehículos con devoluciones (no solo los sin nombre)
