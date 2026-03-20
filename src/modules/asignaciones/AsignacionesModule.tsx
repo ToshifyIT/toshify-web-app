@@ -2087,12 +2087,23 @@ export function AsignacionesModule() {
       }
 
       // Verificar si los conductores realmente cambiaron antes de recrearlos
-      const conductoresActuales = conductoresAsig.filter(esActivoCond)
-      const idsActuales = new Set(conductoresActuales.map((c: any) => c.conductor_id))
-      const idsNuevos = new Set(nuevoConductores.map((c: any) => c.conductor_id))
-      const conductoresCambiaron = idsActuales.size !== idsNuevos.size ||
-        [...idsActuales].some(id => !idsNuevos.has(id)) ||
-        [...idsNuevos].some(id => !idsActuales.has(id))
+      // Consultar estado REAL de la BD (no confiar en datos locales que pueden estar desactualizados)
+      const { data: conductoresActualesBD } = await (supabase as any)
+        .from('asignaciones_conductores')
+        .select('id, conductor_id, horario, estado, documento')
+        .eq('asignacion_id', regularizarAsignacion.id)
+        .in('estado', esAsigFinalizada ? ['asignado', 'activo', 'completado'] : ['asignado', 'activo'])
+      const conductoresActuales = (conductoresActualesBD || []) as any[]
+
+      // Comparar conductor_id + horario (case-insensitive) para detectar cambios reales
+      const conductoresCambiaron = conductoresActuales.length !== nuevoConductores.length ||
+        nuevoConductores.some((n: any) => {
+          const actual = conductoresActuales.find((a: any) =>
+            a.conductor_id === n.conductor_id &&
+            a.horario?.toLowerCase() === n.horario?.toLowerCase()
+          )
+          return !actual
+        })
 
       // UPDATE asignacion
       const { error: updateError2 } = await (supabase as any).from('asignaciones').update(updateData).eq('id', regularizarAsignacion.id)
@@ -2100,20 +2111,35 @@ export function AsignacionesModule() {
 
       // Solo recrear conductores si cambiaron
       if (conductoresCambiaron && nuevoConductores.length > 0) {
-        // Soft-delete conductores actuales (incluir completados en asignaciones finalizadas)
-        const estadosAReemplazar = esAsigFinalizada
-          ? ['asignado', 'activo', 'completado']
-          : ['asignado', 'activo']
-        const { error: softDeleteError } = await (supabase as any)
-          .from('asignaciones_conductores')
-          .update({ estado: 'reemplazado', fecha_fin: ahora })
-          .eq('asignacion_id', regularizarAsignacion.id)
-          .in('estado', estadosAReemplazar)
-        if (softDeleteError) throw softDeleteError
+        // Verificar duplicados en BD antes de insertar (guard anti-duplicados)
+        const existentesSet = new Set(
+          conductoresActuales.map((e: any) => `${e.conductor_id}_${e.horario?.toLowerCase()}`)
+        )
+        const conductoresAInsertar = nuevoConductores.filter((n: any) =>
+          !existentesSet.has(`${n.conductor_id}_${n.horario?.toLowerCase()}`)
+        )
+        const conductoresAReemplazar = conductoresActuales.filter((a: any) => {
+          const seMantuvo = nuevoConductores.find((n: any) =>
+            n.conductor_id === a.conductor_id && n.horario?.toLowerCase() === a.horario?.toLowerCase()
+          )
+          return !seMantuvo
+        })
 
-        // INSERT nuevos conductores
-        const { error: insertError } = await (supabase.from('asignaciones_conductores') as any).insert(nuevoConductores)
-        if (insertError) throw insertError
+        // Solo soft-delete los que realmente fueron reemplazados
+        if (conductoresAReemplazar.length > 0) {
+          const idsAReemplazar = conductoresAReemplazar.map((c: any) => c.id)
+          const { error: softDeleteError } = await (supabase as any)
+            .from('asignaciones_conductores')
+            .update({ estado: 'reemplazado', fecha_fin: ahora })
+            .in('id', idsAReemplazar)
+          if (softDeleteError) throw softDeleteError
+        }
+
+        // Solo insertar conductores que no existen ya como activos
+        if (conductoresAInsertar.length > 0) {
+          const { error: insertError } = await (supabase.from('asignaciones_conductores') as any).insert(conductoresAInsertar)
+          if (insertError) throw insertError
+        }
       } else if (!conductoresCambiaron) {
         // Conductores no cambiaron - solo actualizar documento si cambió
         for (const ac of conductoresActuales) {
@@ -2635,11 +2661,50 @@ export function AsignacionesModule() {
     {
       accessorKey: 'estado',
       header: 'Estado',
-      cell: ({ row }) => (
-        <span className={getStatusBadgeClass(row.original.estado)} style={{ fontSize: '10px', padding: '2px 6px' }}>
-          {getStatusLabel(row.original.estado)}
-        </span>
-      )
+      cell: ({ row }) => {
+        const esFinalizada = row.original.estado === 'finalizada' || row.original.estado === 'completada'
+        const conductores = (row.original.asignaciones_conductores || []).filter((c: any) =>
+          c.estado === 'asignado' || c.estado === 'activo' || c.estado === 'completado' || (esFinalizada && c.estado === 'completado')
+        )
+        // Si hay conductores con estado individual, mostrar por conductor
+        if (conductores.length > 1 && row.original.horario === 'TURNO') {
+          const sorted = [...conductores].sort((a: any, b: any) => {
+            if (a.horario === 'diurno') return -1
+            if (b.horario === 'diurno') return 1
+            return 0
+          })
+          return (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+              {sorted.map((c: any, idx: number) => {
+                const confirmado = c.confirmado
+                const estadoCond = c.estado
+                let label = ''
+                let badgeClass = ''
+                if (estadoCond === 'completado' || esFinalizada) {
+                  label = getStatusLabel(row.original.estado)
+                  badgeClass = getStatusBadgeClass(row.original.estado)
+                } else if (confirmado) {
+                  label = getStatusLabel(row.original.estado)
+                  badgeClass = getStatusBadgeClass(row.original.estado)
+                } else {
+                  label = 'Pendiente'
+                  badgeClass = getStatusBadgeClass('programado')
+                }
+                return (
+                  <span key={idx} className={badgeClass} style={{ fontSize: '10px', padding: '2px 6px' }}>
+                    {label}
+                  </span>
+                )
+              })}
+            </div>
+          )
+        }
+        return (
+          <span className={getStatusBadgeClass(row.original.estado)} style={{ fontSize: '10px', padding: '2px 6px' }}>
+            {getStatusLabel(row.original.estado)}
+          </span>
+        )
+      }
     },
     {
       id: 'acciones',
@@ -2793,7 +2858,21 @@ export function AsignacionesModule() {
         columns={columns}
         loading={loading}
         error={error}
-        searchPlaceholder="Buscar por vehículo, conductor o número..."
+        searchPlaceholder="Buscar por patente, conductor o código..."
+        globalFilterFn={(row, _columnId, filterValue) => {
+          if (!filterValue || typeof filterValue !== 'string' || filterValue.trim() === '') return true
+          const search = filterValue.toLowerCase().trim()
+          const a = row.original as any
+          // Buscar solo en patente, código, motivo y nombres de conductores
+          const patente = (a.vehiculos?.patente || a._patente || '').toLowerCase()
+          const codigo = (a.codigo || '').toLowerCase()
+          const motivo = (a.motivo || '').toLowerCase()
+          const conductores = (a.asignaciones_conductores || [])
+            .map((c: any) => `${c.conductores?.apellidos || ''} ${c.conductores?.nombres || ''}`.toLowerCase())
+            .join(' ')
+          const text = `${patente} ${codigo} ${motivo} ${conductores}`
+          return search.split(/\s+/).every(word => text.includes(word))
+        }}
         emptyIcon={<FileText size={48} />}
         emptyTitle="No hay asignaciones"
         emptyDescription="Las asignaciones se crean desde la pestaña Programacion"
