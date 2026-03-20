@@ -8971,9 +8971,7 @@ export function ReporteFacturacionTab() {
             const countIngreso = vistaPreviaData.filter(f => f.alerta_prorrateo_ingreso).length
             const countBaja = vistaPreviaData.filter(f => f.estado_billing === 'De baja').length
             const countPausa = vistaPreviaData.filter(f => f.estado_billing === 'Pausa').length
-            const sinGncList = vistaPreviaData.filter(f => f.tiene_gnc === false && f.vehiculo_patente)
-            const countSinGnc = sinGncList.length
-            const montoSinGnc = sinGncList.reduce((sum, f) => sum + Number(f.total_a_pagar || 0), 0)
+            const countSinGnc = vistaPreviaData.filter(f => f.tiene_gnc === false && f.vehiculo_patente).length
             const telepaseList = vistaPreviaData.filter(f => f.tiene_telepase === true && f.vehiculo_patente)
             const countTelepase = telepaseList.length
             const montoTelepase = telepaseList.reduce((sum, f) => sum + Number(f.monto_peajes || 0), 0)
@@ -8993,7 +8991,6 @@ export function ReporteFacturacionTab() {
                   <button style={btnStyle(filtroAlerta === 'sin_gnc', 'rgba(249,115,22,0.12)', '#ea580c')}
                     onClick={() => setFiltroAlerta(filtroAlerta === 'sin_gnc' ? null : 'sin_gnc')}>
                     <AlertTriangle size={12} /> Sin GNC <span style={{ opacity: 0.7 }}>{countSinGnc}</span>
-                    {montoSinGnc > 0 && <span style={{ opacity: 0.6, fontSize: '10px' }}>· ${montoSinGnc.toLocaleString('es-AR', { minimumFractionDigits: 2 })}</span>}
                   </button>
                 )}
                 {countTelepase > 0 && (
@@ -9188,8 +9185,7 @@ export function ReporteFacturacionTab() {
               const countPausa = src.filter(f => f.estado_billing === 'Pausa').length
               const sinGncList = src.filter(f => f.tiene_gnc === false && f.vehiculo_patente)
               const countSinGnc = sinGncList.length
-              const montoSinGnc = sinGncList.reduce((sum, f) => sum + Number(f.total_a_pagar || 0), 0)
-              const telepaseList = src.filter(f => f.tiene_telepase === true && f.vehiculo_patente)
+                const telepaseList = src.filter(f => f.tiene_telepase === true && f.vehiculo_patente)
               const countTelepase = telepaseList.length
               const montoTelepase = telepaseList.reduce((sum, f) => sum + Number(f.monto_peajes || 0), 0)
               const countEfectivoOn = src.filter(f => f.permiso_efectivo === 'Activado').length
@@ -9208,8 +9204,7 @@ export function ReporteFacturacionTab() {
                     <button style={btnStyle(filtroAlerta === 'sin_gnc', 'rgba(249,115,22,0.12)', '#ea580c')}
                       onClick={() => setFiltroAlerta(filtroAlerta === 'sin_gnc' ? null : 'sin_gnc')}>
                       <AlertTriangle size={12} /> Sin GNC <span style={{ opacity: 0.7 }}>{countSinGnc}</span>
-                      {montoSinGnc > 0 && <span style={{ opacity: 0.6, fontSize: '10px' }}>· ${montoSinGnc.toLocaleString('es-AR', { minimumFractionDigits: 2 })}</span>}
-                    </button>
+                      </button>
                   )}
                   {countTelepase > 0 && (
                     <button style={btnStyle(filtroAlerta === 'telepase', 'rgba(107,114,128,0.12)', '#6b7280')}
