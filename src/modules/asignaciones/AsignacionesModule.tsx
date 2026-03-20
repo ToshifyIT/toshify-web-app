@@ -357,7 +357,7 @@ export function AsignacionesModule() {
             )
           `))
           .or(`estado.in.(programado,activa),created_at.gte.${fechaLimiteStr}`)
-          .order('created_at', { ascending: false })
+          .order('fecha_programada', { ascending: false, nullsFirst: false })
           .limit(500),
         // Vehículos con estado - solo activos (excluir soft-deleted)
         aplicarFiltroSede(supabase
@@ -403,21 +403,62 @@ export function AsignacionesModule() {
         }
       })
 
-      // Convertir devoluciones pendientes en filas virtuales
-      const devolucionesVirtuales: Asignacion[] = (devolucionesRes?.data || []).map((d: any) => {
-        // Buscar la modalidad real del vehículo en las asignaciones existentes
-        const asigVehiculo = asignacionesConMotivo.find((a: any) => a.vehiculo_id === d.vehiculo_id && a.estado === 'activa')
-        const horarioReal = asigVehiculo?.horario || 'TURNO'
-        // Resolver conductor: primero de devoluciones, luego de programacion, luego de la asignacion activa
-        const prog = d.programaciones_onboarding
-        let conductorNombre = d.conductor_nombre || prog?.conductor_nombre || prog?.conductor_diurno_nombre || prog?.conductor_nocturno_nombre || ''
-        if (!conductorNombre && asigVehiculo?.asignaciones_conductores) {
-          conductorNombre = asigVehiculo.asignaciones_conductores
-            .filter((c: any) => c.estado !== 'completado' && c.estado !== 'cancelado')
-            .map((c: any) => c.conductores ? `${c.conductores.nombres || ''} ${c.conductores.apellidos || ''}`.trim() : '')
-            .filter(Boolean).join(', ')
+      // PRE-RESOLVER conductores de todos los vehículos con devoluciones via query directa
+      // (misma lógica que handleConfirmarDevolucion, SIN filtro de sede)
+      // Se hace ANTES de construir devolucionesVirtuales para tener el fallback disponible inline
+      const allDevVehIds = [...new Set((devolucionesRes?.data || []).map((d: any) => d.vehiculo_id).filter(Boolean))]
+      const conductoresPorVehiculo = new Map<string, string>()
+      if (allDevVehIds.length > 0) {
+        const { data: asigsConductores } = await (supabase as any)
+          .from('asignaciones')
+          .select('vehiculo_id, asignaciones_conductores(conductor_id, estado, horario, conductores(nombres, apellidos))')
+          .in('vehiculo_id', allDevVehIds)
+          .in('estado', ['activa', 'activo'])
+        if (asigsConductores) {
+          for (const asig of asigsConductores) {
+            const nombres = (asig.asignaciones_conductores || [])
+              .filter((c: any) => c.estado !== 'cancelado' && c.estado !== 'completado' && c.conductores)
+              .map((c: any) => `${c.conductores.nombres || ''} ${c.conductores.apellidos || ''}`.trim())
+              .filter(Boolean)
+            if (nombres.length > 0) conductoresPorVehiculo.set(asig.vehiculo_id, nombres.join(', '))
+          }
         }
-        // Resolver documento: de programacion
+        // Fallback: asignaciones completadas/finalizadas para vehículos sin resolver
+        const vehSinResolver = allDevVehIds.filter((v) => !conductoresPorVehiculo.has(v as string))
+        if (vehSinResolver.length > 0) {
+          const { data: asigsCompletadas } = await (supabase as any)
+            .from('asignaciones')
+            .select('vehiculo_id, asignaciones_conductores(conductor_id, estado, conductores(nombres, apellidos))')
+            .in('vehiculo_id', vehSinResolver)
+            .in('estado', ['completada', 'finalizada'])
+            .order('created_at', { ascending: false })
+          if (asigsCompletadas) {
+            for (const asig of asigsCompletadas) {
+              if (conductoresPorVehiculo.has(asig.vehiculo_id)) continue
+              const nombres = (asig.asignaciones_conductores || [])
+                .filter((c: any) => c.conductores)
+                .map((c: any) => `${c.conductores.nombres || ''} ${c.conductores.apellidos || ''}`.trim())
+                .filter(Boolean)
+              if (nombres.length > 0) conductoresPorVehiculo.set(asig.vehiculo_id, nombres.join(', '))
+            }
+          }
+        }
+      }
+
+      // Convertir devoluciones pendientes en filas virtuales
+      // Usa conductoresPorVehiculo (ya resuelto arriba) como fallback final
+      const devolucionesVirtuales: Asignacion[] = (devolucionesRes?.data || []).map((d: any) => {
+        const asigVehiculo = asignacionesConMotivo.find((a: any) => a.vehiculo_id === d.vehiculo_id && a.estado === 'activa')
+          || asignacionesConMotivo.filter((a: any) => a.vehiculo_id === d.vehiculo_id && a.estado === 'finalizada').sort((a: any, b: any) => (b.fecha_fin || b.created_at || '').localeCompare(a.fecha_fin || a.created_at || ''))[0]
+        const horarioReal = asigVehiculo?.horario || 'TURNO'
+        const prog = d.programaciones_onboarding
+        // Resolver conductor con .trim() y fallback a conductoresPorVehiculo (query directa)
+        const conductorNombre = d.conductor_nombre?.trim()
+          || prog?.conductor_nombre?.trim()
+          || prog?.conductor_diurno_nombre?.trim()
+          || prog?.conductor_nocturno_nombre?.trim()
+          || conductoresPorVehiculo.get(d.vehiculo_id)
+          || ''
         const doc = prog?.tipo_documento || prog?.documento_diurno || prog?.documento_nocturno
         return {
           id: d.id,
@@ -443,61 +484,6 @@ export function AsignacionesModule() {
           motivoDetalle: { observaciones: d.observaciones, programadoPor: d.programado_por },
         }
       })
-
-      // Resolver conductores faltantes en devoluciones (query directa como handleConfirmarDevolucion)
-      const devsSinConductor = devolucionesVirtuales.filter((d: any) => !d._conductorNombre)
-      const conductoresPorVehiculo = new Map<string, string>()
-      if (devsSinConductor.length > 0) {
-        const vehIds = [...new Set(devsSinConductor.map((d: any) => d.vehiculo_id).filter(Boolean))]
-        if (vehIds.length > 0) {
-          const { data: asigsConductores } = await (supabase as any)
-            .from('asignaciones')
-            .select('vehiculo_id, asignaciones_conductores(conductor_id, estado, horario, conductores(nombres, apellidos))')
-            .in('vehiculo_id', vehIds)
-            .in('estado', ['activa', 'activo'])
-          if (asigsConductores) {
-            for (const asig of asigsConductores) {
-              if (conductoresPorVehiculo.has(asig.vehiculo_id)) continue
-              const activos = (asig.asignaciones_conductores || [])
-                .filter((c: any) => c.estado !== 'cancelado' && c.conductores)
-                .map((c: any) => `${c.conductores.nombres || ''} ${c.conductores.apellidos || ''}`.trim())
-                .filter(Boolean)
-              if (activos.length > 0) conductoresPorVehiculo.set(asig.vehiculo_id, activos.join(', '))
-            }
-            for (const dev of devsSinConductor) {
-              const nombre = conductoresPorVehiculo.get(dev.vehiculo_id)
-              if (nombre) (dev as any)._conductorNombre = nombre
-            }
-          }
-
-          // Fallback: buscar en asignaciones completadas/finalizadas para vehículos aún sin resolver
-          const devsSinResolver = devsSinConductor.filter((d: any) => !d._conductorNombre)
-          const vehIdsSinResolver = [...new Set(devsSinResolver.map((d: any) => d.vehiculo_id).filter(Boolean))]
-            .filter((v) => !conductoresPorVehiculo.has(v))
-          if (vehIdsSinResolver.length > 0) {
-            const { data: asigsCompletadas } = await (supabase as any)
-              .from('asignaciones')
-              .select('vehiculo_id, asignaciones_conductores(conductor_id, estado, conductores(nombres, apellidos))')
-              .in('vehiculo_id', vehIdsSinResolver)
-              .in('estado', ['completada', 'finalizada'])
-              .order('created_at', { ascending: false })
-            if (asigsCompletadas) {
-              for (const asig of asigsCompletadas) {
-                if (conductoresPorVehiculo.has(asig.vehiculo_id)) continue
-                const nombres = (asig.asignaciones_conductores || [])
-                  .filter((c: any) => c.conductores)
-                  .map((c: any) => `${c.conductores.nombres || ''} ${c.conductores.apellidos || ''}`.trim())
-                  .filter(Boolean)
-                if (nombres.length > 0) conductoresPorVehiculo.set(asig.vehiculo_id, nombres.join(', '))
-              }
-              for (const dev of devsSinResolver) {
-                const nombre = conductoresPorVehiculo.get(dev.vehiculo_id)
-                if (nombre) (dev as any)._conductorNombre = nombre
-              }
-            }
-          }
-        }
-      }
 
       setAsignaciones([...asignacionesConMotivo, ...devolucionesVirtuales])
 
@@ -575,8 +561,10 @@ export function AsignacionesModule() {
       })
 
       // Resolver conductores de devoluciones: query directa a la BD (igual que handleConfirmarDevolucion)
+      // Buscar conductores para TODOS los vehículos con devoluciones (no solo los sin nombre)
+      // para tener siempre el fallback disponible
       const devsData = devRes?.data || []
-      const vehIdsDev = [...new Set(devsData.filter((d: any) => !d.conductor_nombre?.trim()).map((d: any) => d.vehiculo_id).filter(Boolean))]
+      const vehIdsDev = [...new Set(devsData.map((d: any) => d.vehiculo_id).filter(Boolean))]
       const conductoresPorVeh = new Map<string, string>()
       if (vehIdsDev.length > 0) {
         // Buscar primero en asignaciones activas
@@ -620,14 +608,23 @@ export function AsignacionesModule() {
 
       const devolucionesVirtuales: Asignacion[] = devsData.map((d: any) => {
         const prog = d.programaciones_onboarding
-        const condNombre = d.conductor_nombre?.trim() || conductoresPorVeh.get(d.vehiculo_id) || ''
+        const condNombre = d.conductor_nombre?.trim()
+          || prog?.conductor_nombre?.trim()
+          || prog?.conductor_diurno_nombre?.trim()
+          || prog?.conductor_nocturno_nombre?.trim()
+          || conductoresPorVeh.get(d.vehiculo_id)
+          || ''
         const doc = prog?.tipo_documento || prog?.documento_diurno || prog?.documento_nocturno
+        // Resolver horario real: primero activa, luego finalizada más reciente
+        const asigVeh = asignacionesConMotivo.find((a: any) => a.vehiculo_id === d.vehiculo_id && a.estado === 'activa')
+          || asignacionesConMotivo.filter((a: any) => a.vehiculo_id === d.vehiculo_id && a.estado === 'finalizada').sort((a: any, b: any) => (b.fecha_fin || b.created_at || '').localeCompare(a.fecha_fin || a.created_at || ''))[0]
+        const horarioReal = asigVeh?.horario || 'TURNO'
         return {
           id: d.id, codigo: '', vehiculo_id: d.vehiculo_id, conductor_id: '', fecha_programada: d.fecha_programada,
-          fecha_inicio: d.fecha_devolucion || '', fecha_fin: d.fecha_devolucion || null, modalidad: '', horario: 'DEVOLUCION', estado: d.estado === 'completado' ? 'finalizada' : 'programado',
+          fecha_inicio: d.fecha_devolucion || '', fecha_fin: d.fecha_devolucion || null, modalidad: '', horario: horarioReal, estado: d.estado === 'completado' ? 'finalizada' : 'programado',
           notas: d.observaciones, created_at: d.created_at, created_by: null, motivo: 'devolucion_vehiculo',
           vehiculos: d.vehiculos || undefined,
-          asignaciones_conductores: doc ? [{ id: d.id, conductor_id: '', estado: 'asignado', horario: 'diurno', documento: doc === 'carta_oferta' ? 'CARTA_OFERTA' : doc === 'anexo' ? 'ANEXO' : doc?.toUpperCase() }] : [],
+          asignaciones_conductores: doc ? [{ id: d.id, conductor_id: '', estado: 'asignado', horario: horarioReal === 'CARGO' ? 'CARGO' : 'diurno', documento: doc === 'carta_oferta' ? 'CARTA_OFERTA' : doc === 'anexo' ? 'ANEXO' : doc?.toUpperCase() }] : [],
           esDevolucion: true, devolucionId: d.id, _conductorNombre: condNombre, _programadoPor: d.programado_por,
           motivoDetalle: { observaciones: d.observaciones, programadoPor: d.programado_por },
         }
@@ -723,52 +720,30 @@ export function AsignacionesModule() {
         break
     }
 
-    // Ordenar según el contexto:
-    // - Para filtros históricos (completadas, canceladas): más recientes primero (descendente)
-    // - Para vista operativa (programadas, activas, sin filtro): próximas primero (ascendente)
-    const esVistaHistorica = activeStatCard === 'completadas' || activeStatCard === 'canceladas'
-    
+    // Ordenar siempre por fecha de cita (fecha_programada) descendente: más reciente primero
+    // Los registros sin fecha quedan al final
     return result.sort((a, b) => {
-      if (esVistaHistorica) {
-        // Vista histórica: ordenar por fecha de entrega/cancelación, más recientes primero
-        const fechaA = a.fecha_inicio || a.fecha_fin || a.created_at
-        const fechaB = b.fecha_inicio || b.fecha_fin || b.created_at
-        const timeA = fechaA ? new Date(fechaA).getTime() : 0
-        const timeB = fechaB ? new Date(fechaB).getTime() : 0
-        return timeB - timeA // Descendente (más recientes primero)
-      }
-      
-      // Vista operativa: prioridad por estado, luego por fecha programada
-      const estadoPrioridad: Record<string, number> = { programado: 0, activa: 1, finalizada: 2, cancelada: 3 }
-      const prioA = estadoPrioridad[a.estado] ?? 99
-      const prioB = estadoPrioridad[b.estado] ?? 99
-      if (prioA !== prioB) return prioA - prioB
-      // Luego por fecha_programada ascendente (más próximas primero)
-      const fechaA = a.fecha_programada ? new Date(a.fecha_programada).getTime() : Infinity
-      const fechaB = b.fecha_programada ? new Date(b.fecha_programada).getTime() : Infinity
-      return fechaA - fechaB
+      const fechaA = a.fecha_programada ? new Date(a.fecha_programada).getTime() : 0
+      const fechaB = b.fecha_programada ? new Date(b.fecha_programada).getTime() : 0
+      return fechaB - fechaA
     })
   }, [asignaciones, activeStatCard])
 
   // Procesar asignaciones - UNA fila por asignación (solo asignaciones reales)
   const expandedAsignaciones = useMemo<ExpandedAsignacion[]>(() => {
-    // Asignaciones activas con vacantes (TURNO con menos de 2 conductores ACTIVOS) van primero
-    const asignacionesConVacante = filteredAsignaciones
-      .filter(a => (a.estado === 'activa' || a.estado === 'activo') && a.horario === 'TURNO')
-      .filter(a => {
-        const conductoresActivos = (a.asignaciones_conductores || [])
-          .filter(ac => ac.estado !== 'completado' && ac.estado !== 'finalizado' && ac.estado !== 'cancelado')
-        return conductoresActivos.length < 2
-      })
-
     // Procesar todas las asignaciones filtradas
     const asignacionesProcesadas = filteredAsignaciones.map((asignacion): ExpandedAsignacion => {
       // Devoluciones: crear fila virtual - buscar conductor de la asignación activa del vehículo
       if ((asignacion as any).esDevolucion) {
-        // Resolver nombre: 1) del campo _conductorNombre, 2) de otra fila del mismo vehículo (activos), 3) fallback a completados
+        // Resolver nombre con múltiples niveles de fallback:
+        // 1) Campo _conductorNombre (resuelto en loadAllData/loadAsignaciones)
+        // 2) Conductores activos/asignados del mismo vehículo en otras filas
+        // 3) Conductores completados del mismo vehículo (asignación ya finalizada)
+        // 4) Cualquier conductor del mismo vehículo (incluyendo cancelados, último recurso)
+        // 5) Nombre de la programación asociada (conductor_diurno/nocturno/cargo)
         let nombre = (asignacion as any)._conductorNombre || ''
         if (!nombre) {
-          // Primero buscar conductores activos/asignados del mismo vehículo
+          // Nivel 2: buscar conductores activos/asignados del mismo vehículo
           for (const otra of filteredAsignaciones) {
             if ((otra as any).esDevolucion) continue
             if (otra.vehiculo_id !== asignacion.vehiculo_id) continue
@@ -783,8 +758,8 @@ export function AsignacionesModule() {
             if (nombre) break
           }
         }
-        // Fallback: si no se encontró, buscar en conductores completados (asignación ya finalizada)
         if (!nombre) {
+          // Nivel 3: buscar en conductores completados (no cancelados)
           for (const otra of filteredAsignaciones) {
             if ((otra as any).esDevolucion) continue
             if (otra.vehiculo_id !== asignacion.vehiculo_id) continue
@@ -797,6 +772,35 @@ export function AsignacionesModule() {
               }
             }
             if (nombre) break
+          }
+        }
+        if (!nombre) {
+          // Nivel 4: cualquier conductor del mismo vehículo (incluyendo cancelados)
+          for (const otra of filteredAsignaciones) {
+            if ((otra as any).esDevolucion) continue
+            if (otra.vehiculo_id !== asignacion.vehiculo_id) continue
+            const conds = otra.asignaciones_conductores || []
+            for (const c of conds) {
+              const cd = (c as any).conductores
+              if (cd) {
+                nombre = `${cd.nombres || ''} ${cd.apellidos || ''}`.trim()
+                break
+              }
+            }
+            if (nombre) break
+          }
+        }
+        if (!nombre) {
+          // Nivel 5: buscar en otras devoluciones completadas del mismo vehículo que sí tengan nombre
+          for (const otra of filteredAsignaciones) {
+            if (!(otra as any).esDevolucion) continue
+            if (otra.id === asignacion.id) continue
+            if (otra.vehiculo_id !== asignacion.vehiculo_id) continue
+            const otroNombre = (otra as any)._conductorNombre || ''
+            if (otroNombre) {
+              nombre = otroNombre
+              break
+            }
           }
         }
         return {
@@ -895,29 +899,15 @@ export function AsignacionesModule() {
       }
     })
 
-    // Ordenar: programados > activas pendientes > activas con entrada > finalizadas/canceladas
-    // Dentro de cada grupo: vacantes primero, luego por fecha programada desc
-    const vacantesIds = new Set(asignacionesConVacante.map(a => a.id))
+    // Ordenar: PROGRAMADOS primero, luego el resto por fecha de cita descendente
+    // Los registros sin fecha quedan al final
     return asignacionesProcesadas.sort((a, b) => {
-      // 1. Prioridad por estado: programado=0, activa=1, finalizada=2, cancelada=3
-      const estadoPrio: Record<string, number> = { programado: 0, activa: 1, finalizada: 2, cancelada: 3 }
-      const prioA = estadoPrio[a.estado] ?? 99
-      const prioB = estadoPrio[b.estado] ?? 99
-      if (prioA !== prioB) return prioA - prioB
+      // 1. PROGRAMADOS siempre primero
+      const aEsProgramado = a.estado === 'programado' ? 0 : 1
+      const bEsProgramado = b.estado === 'programado' ? 0 : 1
+      if (aEsProgramado !== bEsProgramado) return aEsProgramado - bEsProgramado
 
-      // 2. Dentro de activas: pendientes (sin entrada real) primero
-      if (a.estado === 'activa' && b.estado === 'activa') {
-        const aPendiente = !a.fecha_inicio ? 0 : 1
-        const bPendiente = !b.fecha_inicio ? 0 : 1
-        if (aPendiente !== bPendiente) return aPendiente - bPendiente
-      }
-
-      // 3. Vacantes antes
-      const aEsVacante = vacantesIds.has(a.id) ? 0 : 1
-      const bEsVacante = vacantesIds.has(b.id) ? 0 : 1
-      if (aEsVacante !== bEsVacante) return aEsVacante - bEsVacante
-
-      // 4. Por fecha programada descendente (más recientes primero)
+      // 2. Dentro de cada grupo, ordenar por fecha_programada descendente
       const fechaA = a.fecha_programada ? new Date(a.fecha_programada).getTime() : 0
       const fechaB = b.fecha_programada ? new Date(b.fecha_programada).getTime() : 0
       return fechaB - fechaA
@@ -2961,143 +2951,220 @@ export function AsignacionesModule() {
       {showViewModal && viewAsignacion && (
         <div className="asig-modal-overlay">
           <div className="asig-modal-content wide">
-             <h2 className="asig-modal-title">Detalles de Asignación</h2>
-
-            <div className="asig-detail-grid">
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                <div>
-                  <label className="asig-detail-label">Número de Asignación</label>
-                  <p className="asig-detail-value code">{viewAsignacion.codigo}</p>
-                </div>
-                {viewAsignacion.motivo && (
-                  <div style={{ textAlign: 'right', padding: '4px 10px', background: 'var(--bg-secondary)', borderRadius: '6px', border: '1px solid var(--border-primary)' }}>
-                    <div style={{ fontSize: '10px', color: 'var(--text-tertiary)', textTransform: 'uppercase', fontWeight: 600 }}>Programación</div>
-                    <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-primary)' }}>{viewAsignacion.motivo === 'entrega_auto' ? 'Entrega de auto' : viewAsignacion.motivo === 'cambio_auto' ? 'Cambio de auto' : viewAsignacion.motivo === 'cambio_turno' ? 'Cambio de turno' : viewAsignacion.motivo === 'entrega_cargo' ? 'Entrega a cargo' : viewAsignacion.motivo === 'devolucion' ? 'Devolución' : viewAsignacion.motivo}</div>
-                    {viewAsignacion.motivoDetalle?.programadoPor && (
-                      <div style={{ fontSize: '11px', color: 'var(--text-secondary)', marginTop: '2px' }}>por {viewAsignacion.motivoDetalle.programadoPor}</div>
-                    )}
-                    {viewAsignacion.motivoDetalle?.observaciones && (
-                      <div style={{ fontSize: '11px', color: 'var(--text-secondary)', marginTop: '4px', fontStyle: 'italic', maxWidth: '250px' }}>{viewAsignacion.motivoDetalle.observaciones}</div>
-                    )}
+            {(viewAsignacion as any).esDevolucion ? (
+              <>
+                <h2 className="asig-modal-title">Detalle de la Devolución</h2>
+                <div className="asig-detail-grid">
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                    <div>
+                      <label className="asig-detail-label">Vehículo</label>
+                      <p className="asig-detail-value">
+                        <strong>{viewAsignacion.vehiculos?.patente}</strong> - {viewAsignacion.vehiculos?.marca} {viewAsignacion.vehiculos?.modelo}
+                      </p>
+                    </div>
+                    <div style={{ textAlign: 'right', padding: '4px 10px', background: 'var(--bg-secondary)', borderRadius: '6px', border: '1px solid var(--border-primary)' }}>
+                      <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-primary)' }}>Devolución de vehículo</div>
+                      {(viewAsignacion as any)._programadoPor && (
+                        <div style={{ fontSize: '11px', color: 'var(--text-secondary)', marginTop: '2px' }}>por {(viewAsignacion as any)._programadoPor}</div>
+                      )}
+                    </div>
                   </div>
-                )}
-              </div>
 
-              <div>
-                <label className="asig-detail-label">Vehículo</label>
-                <p className="asig-detail-value">
-                  <strong>{viewAsignacion.vehiculos?.patente}</strong> - {viewAsignacion.vehiculos?.marca} {viewAsignacion.vehiculos?.modelo}
-                </p>
-              </div>
+                  <div>
+                    <label className="asig-detail-label">Conductor</label>
+                    <div className="asig-conductor-card">
+                      <p className="asig-conductor-card-name">
+                        {(viewAsignacion as any)._conductorNombre || (viewAsignacion.asignaciones_conductores?.[0]?.conductores ? `${viewAsignacion.asignaciones_conductores[0].conductores?.nombres || ''} ${viewAsignacion.asignaciones_conductores[0].conductores?.apellidos || ''}`.trim() : '-')}
+                      </p>
+                      <p className="asig-conductor-card-info">Turno: <strong>{viewAsignacion.horario === 'CARGO' ? 'A CARGO' : viewAsignacion.horario}</strong></p>
+                      {viewAsignacion.asignaciones_conductores?.[0]?.documento && (
+                        <p className="asig-conductor-card-info">
+                          Documento: <strong style={{ color: viewAsignacion.asignaciones_conductores[0].documento === 'CARTA_OFERTA' ? '#059669' : viewAsignacion.asignaciones_conductores[0].documento === 'ANEXO' ? '#2563EB' : '#6B7280' }}>
+                            {viewAsignacion.asignaciones_conductores[0].documento === 'CARTA_OFERTA' ? 'Carta Oferta' : viewAsignacion.asignaciones_conductores[0].documento === 'ANEXO' ? 'Anexo' : viewAsignacion.asignaciones_conductores[0].documento === 'NA' ? 'N/A' : viewAsignacion.asignaciones_conductores[0].documento}
+                          </strong>
+                        </p>
+                      )}
+                    </div>
+                  </div>
 
-              <div>
-                <label className="asig-detail-label">Conductores Asignados</label>
-                {viewAsignacion.asignaciones_conductores?.length ? (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                    {viewAsignacion.asignaciones_conductores.map((ac) => (
-                      <div key={ac.id} className="asig-conductor-card">
-                        <p className="asig-conductor-card-name">
-                          {ac.conductores.nombres} {ac.conductores.apellidos}
-                        </p>
-                        <p className="asig-conductor-card-info">Licencia: {ac.conductores.numero_licencia || '-'}</p>
-                        {ac.horario !== 'todo_dia' && (
-                          <p className="asig-conductor-card-info">Turno: <strong>{ac.horario}</strong></p>
+                  <div className="asig-detail-row">
+                    <div>
+                      <label className="asig-detail-label">Horario</label>
+                      <span className={getHorarioBadgeClass(viewAsignacion.horario)}>
+                        {viewAsignacion.horario === 'CARGO' ? 'A CARGO' : 'TURNO'}
+                      </span>
+                    </div>
+                    <div>
+                      <label className="asig-detail-label">Estado</label>
+                      <span className={getStatusBadgeClass(viewAsignacion.estado)}>
+                        {viewAsignacion.estado}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="asig-detail-row">
+                    <div>
+                      <label className="asig-detail-label">Fecha Creación</label>
+                      <p className="asig-detail-value" style={{ fontSize: '14px' }}>
+                        {new Date(viewAsignacion.created_at).toLocaleDateString('es-ES', { year: 'numeric', month: 'short', day: 'numeric' })}
+                      </p>
+                    </div>
+                    <div>
+                      <label className="asig-detail-label">Fecha Devolución</label>
+                      <p className="asig-detail-value" style={{ fontSize: '14px' }}>
+                        {viewAsignacion.fecha_inicio ? new Date(viewAsignacion.fecha_inicio).toLocaleString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', timeZone: 'America/Argentina/Buenos_Aires' }) : 'No definida'}
+                      </p>
+                    </div>
+                  </div>
+
+                  {viewAsignacion.notas && (
+                    <div>
+                      <label className="asig-detail-label">Observaciones</label>
+                      <p className="asig-notes-box">{viewAsignacion.notas}</p>
+                    </div>
+                  )}
+                </div>
+              </>
+            ) : (
+              <>
+                <h2 className="asig-modal-title">Detalles de Asignación</h2>
+                <div className="asig-detail-grid">
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                    <div>
+                      <label className="asig-detail-label">Número de Asignación</label>
+                      <p className="asig-detail-value code">{viewAsignacion.codigo}</p>
+                    </div>
+                    {viewAsignacion.motivo && (
+                      <div style={{ textAlign: 'right', padding: '4px 10px', background: 'var(--bg-secondary)', borderRadius: '6px', border: '1px solid var(--border-primary)' }}>
+                        <div style={{ fontSize: '10px', color: 'var(--text-tertiary)', textTransform: 'uppercase', fontWeight: 600 }}>Programación</div>
+                        <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-primary)' }}>{viewAsignacion.motivo === 'entrega_auto' ? 'Entrega de auto' : viewAsignacion.motivo === 'cambio_auto' ? 'Cambio de auto' : viewAsignacion.motivo === 'cambio_turno' ? 'Cambio de turno' : viewAsignacion.motivo === 'entrega_cargo' ? 'Entrega a cargo' : viewAsignacion.motivo === 'devolucion' ? 'Devolución' : viewAsignacion.motivo}</div>
+                        {viewAsignacion.motivoDetalle?.programadoPor && (
+                          <div style={{ fontSize: '11px', color: 'var(--text-secondary)', marginTop: '2px' }}>por {viewAsignacion.motivoDetalle.programadoPor}</div>
                         )}
-                        {ac.documento && (
-                          <p className="asig-conductor-card-info">
-                            Documento: <strong style={{ color: ac.documento === 'CARTA_OFERTA' ? '#059669' : ac.documento === 'ANEXO' ? '#2563EB' : '#6B7280' }}>
-                              {ac.documento === 'CARTA_OFERTA' ? 'Carta Oferta' : ac.documento === 'ANEXO' ? 'Anexo' : ac.documento}
-                            </strong>
-                          </p>
+                        {viewAsignacion.motivoDetalle?.observaciones && (
+                          <div style={{ fontSize: '11px', color: 'var(--text-secondary)', marginTop: '4px', fontStyle: 'italic', maxWidth: '250px' }}>{viewAsignacion.motivoDetalle.observaciones}</div>
                         )}
-                        <p className="asig-conductor-status">
-                          {ac.confirmado ? (
-                            <>
-                              <span className="asig-conductor-confirmed">
-                                <CheckCircle size={14} /> Confirmado
-                                {ac.fecha_confirmacion && (
-                                  <span style={{ marginLeft: '6px', fontWeight: 400, fontSize: '12px', opacity: 0.85 }}>
-                                    ({new Date(ac.fecha_confirmacion).toLocaleString('es-AR', {
-                                      day: '2-digit',
-                                      month: '2-digit',
-                                      year: 'numeric',
-                                      hour: '2-digit',
-                                      minute: '2-digit',
-                                      timeZone: 'America/Buenos_Aires'
-                                    })})
-                                  </span>
-                                )}
-                              </span>
-                              {canEdit && viewAsignacion.estado === 'programado' && (
-                                <button
-                                  className="asig-btn-unconfirm"
-                                  onClick={() => handleUnconfirmFromViewModal(ac.id)}
-                                >
-                                  Desconfirmar
-                                </button>
-                              )}
-                            </>
-                          ) : (
-                            <span style={{ color: '#F59E0B', fontWeight: 600 }}>Pendiente</span>
-                          )}
-                        </p>
                       </div>
-                    ))}
+                    )}
                   </div>
-                ) : (
-                  <p style={{ color: '#9CA3AF', fontSize: '14px' }}>Sin conductores asignados</p>
-                )}
-              </div>
 
-              <div className="asig-detail-row">
-                <div>
-                  <label className="asig-detail-label">Horario</label>
-                  <span className={getHorarioBadgeClass(viewAsignacion.horario)}>
-                    {viewAsignacion.horario === 'CARGO' ? 'A CARGO' : 'TURNO'}
-                  </span>
-                </div>
-                <div>
-                  <label className="asig-detail-label">Estado</label>
-                  <span className={getStatusBadgeClass(viewAsignacion.estado)}>
-                    {viewAsignacion.estado}
-                  </span>
-                </div>
-              </div>
+                  <div>
+                    <label className="asig-detail-label">Vehículo</label>
+                    <p className="asig-detail-value">
+                      <strong>{viewAsignacion.vehiculos?.patente}</strong> - {viewAsignacion.vehiculos?.marca} {viewAsignacion.vehiculos?.modelo}
+                    </p>
+                  </div>
 
-              <div className="asig-detail-row four">
-                <div>
-                  <label className="asig-detail-label">Fecha Creación</label>
-                  <p className="asig-detail-value" style={{ fontSize: '14px' }}>
-                    {new Date(viewAsignacion.created_at).toLocaleDateString('es-ES', { year: 'numeric', month: 'short', day: 'numeric' })}
-                  </p>
-                </div>
-                <div>
-                  <label className="asig-detail-label">Fecha Entrega</label>
-                  <p className="asig-detail-value" style={{ fontSize: '14px' }}>
-                    {viewAsignacion.fecha_programada ? new Date(viewAsignacion.fecha_programada).toLocaleString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', timeZone: 'America/Argentina/Buenos_Aires' }) : 'No definida'}
-                  </p>
-                </div>
-                <div>
-                  <label className="asig-detail-label">Fecha Activación</label>
-                  <p className="asig-detail-value" style={{ fontSize: '14px' }}>
-                    {viewAsignacion.fecha_inicio ? new Date(viewAsignacion.fecha_inicio).toLocaleDateString('es-ES') : 'No activada'}
-                  </p>
-                </div>
-                <div>
-                  <label className="asig-detail-label">Fecha Fin</label>
-                  <p className="asig-detail-value" style={{ fontSize: '14px' }}>
-                    {viewAsignacion.fecha_fin ? new Date(viewAsignacion.fecha_fin).toLocaleDateString('es-ES') : 'Sin definir'}
-                  </p>
-                </div>
-              </div>
+                  <div>
+                    <label className="asig-detail-label">Conductores Asignados</label>
+                    {viewAsignacion.asignaciones_conductores?.length ? (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                        {viewAsignacion.asignaciones_conductores.map((ac) => (
+                          <div key={ac.id} className="asig-conductor-card">
+                            <p className="asig-conductor-card-name">
+                              {ac.conductores?.nombres || '-'} {ac.conductores?.apellidos || ''}
+                            </p>
+                            <p className="asig-conductor-card-info">Licencia: {ac.conductores?.numero_licencia || '-'}</p>
+                            {ac.horario !== 'todo_dia' && (
+                              <p className="asig-conductor-card-info">Turno: <strong>{ac.horario}</strong></p>
+                            )}
+                            {ac.documento && (
+                              <p className="asig-conductor-card-info">
+                                Documento: <strong style={{ color: ac.documento === 'CARTA_OFERTA' ? '#059669' : ac.documento === 'ANEXO' ? '#2563EB' : '#6B7280' }}>
+                                  {ac.documento === 'CARTA_OFERTA' ? 'Carta Oferta' : ac.documento === 'ANEXO' ? 'Anexo' : ac.documento}
+                                </strong>
+                              </p>
+                            )}
+                            <p className="asig-conductor-status">
+                              {ac.confirmado ? (
+                                <>
+                                  <span className="asig-conductor-confirmed">
+                                    <CheckCircle size={14} /> Confirmado
+                                    {ac.fecha_confirmacion && (
+                                      <span style={{ marginLeft: '6px', fontWeight: 400, fontSize: '12px', opacity: 0.85 }}>
+                                        ({new Date(ac.fecha_confirmacion).toLocaleString('es-AR', {
+                                          day: '2-digit',
+                                          month: '2-digit',
+                                          year: 'numeric',
+                                          hour: '2-digit',
+                                          minute: '2-digit',
+                                          timeZone: 'America/Buenos_Aires'
+                                        })})
+                                      </span>
+                                    )}
+                                  </span>
+                                  {canEdit && viewAsignacion.estado === 'programado' && (
+                                    <button
+                                      className="asig-btn-unconfirm"
+                                      onClick={() => handleUnconfirmFromViewModal(ac.id)}
+                                    >
+                                      Desconfirmar
+                                    </button>
+                                  )}
+                                </>
+                              ) : (
+                                <span style={{ color: '#F59E0B', fontWeight: 600 }}>Pendiente</span>
+                              )}
+                            </p>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <p style={{ color: '#9CA3AF', fontSize: '14px' }}>Sin conductores asignados</p>
+                    )}
+                  </div>
 
-              {viewAsignacion.notas && (
-                <div>
-                  <label className="asig-detail-label">Notas</label>
-                  <p className="asig-notes-box">{viewAsignacion.notas}</p>
+                  <div className="asig-detail-row">
+                    <div>
+                      <label className="asig-detail-label">Horario</label>
+                      <span className={getHorarioBadgeClass(viewAsignacion.horario)}>
+                        {viewAsignacion.horario === 'CARGO' ? 'A CARGO' : 'TURNO'}
+                      </span>
+                    </div>
+                    <div>
+                      <label className="asig-detail-label">Estado</label>
+                      <span className={getStatusBadgeClass(viewAsignacion.estado)}>
+                        {viewAsignacion.estado}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="asig-detail-row four">
+                    <div>
+                      <label className="asig-detail-label">Fecha Creación</label>
+                      <p className="asig-detail-value" style={{ fontSize: '14px' }}>
+                        {new Date(viewAsignacion.created_at).toLocaleDateString('es-ES', { year: 'numeric', month: 'short', day: 'numeric' })}
+                      </p>
+                    </div>
+                    <div>
+                      <label className="asig-detail-label">Fecha Entrega</label>
+                      <p className="asig-detail-value" style={{ fontSize: '14px' }}>
+                        {viewAsignacion.fecha_programada ? new Date(viewAsignacion.fecha_programada).toLocaleString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', timeZone: 'America/Argentina/Buenos_Aires' }) : 'No definida'}
+                      </p>
+                    </div>
+                    <div>
+                      <label className="asig-detail-label">Fecha Activación</label>
+                      <p className="asig-detail-value" style={{ fontSize: '14px' }}>
+                        {viewAsignacion.fecha_inicio ? new Date(viewAsignacion.fecha_inicio).toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric', timeZone: 'America/Argentina/Buenos_Aires' }) : 'No activada'}
+                      </p>
+                    </div>
+                    <div>
+                      <label className="asig-detail-label">Fecha Fin</label>
+                      <p className="asig-detail-value" style={{ fontSize: '14px' }}>
+                        {viewAsignacion.fecha_fin ? new Date(viewAsignacion.fecha_fin).toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric', timeZone: 'America/Argentina/Buenos_Aires' }) : 'Sin definir'}
+                      </p>
+                    </div>
+                  </div>
+
+                  {viewAsignacion.notas && (
+                    <div>
+                      <label className="asig-detail-label">Notas</label>
+                      <p className="asig-notes-box">{viewAsignacion.notas}</p>
+                    </div>
+                  )}
                 </div>
-              )}
-            </div>
+              </>
+            )}
 
             <div className="asig-modal-actions">
               <button

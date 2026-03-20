@@ -467,7 +467,7 @@ export function VehicleManagement() {
 
           motivoFinalizacion = finalizarData.motivo || 'Sin motivo especificado'
           const fechaFin = finalizarData.fechaFinalizacion
-            ? new Date(finalizarData.fechaFinalizacion + 'T23:59:59').toISOString()
+            ? new Date(finalizarData.fechaFinalizacion + 'T23:59:59-03:00').toISOString()
             : new Date().toISOString()
 
           // Finalizar asignaciones activas
