@@ -8023,18 +8023,22 @@ export function ReporteFacturacionTab() {
             </span>
             {(() => {
               const o = row.original
-              const bs = { fontSize: '8px', padding: '1px 4px', lineHeight: '12px', borderRadius: '3px', fontWeight: 700 } as const
+              const bs = { fontSize: '8px', padding: '1px 4px', lineHeight: '12px', borderRadius: '3px', fontWeight: 600 } as const
               if (o.tipo_alquiler === 'CARGO') {
-                return <span style={{ ...bs, background: '#3b82f6', color: '#fff' }}>CARGO</span>
+                return <span style={{ ...bs, background: '#d1fae5', color: '#065f46' }}>CARGO</span>
               }
               const diurno = o.prorrateo_diurno_dias || 0
               const nocturno = o.prorrateo_nocturno_dias || 0
               const label = diurno > 0 && nocturno === 0 ? 'D' : nocturno > 0 && diurno === 0 ? 'N' : diurno > 0 && nocturno > 0 ? 'D+N' : 'T'
-              const bg = label === 'D' ? '#f59e0b' : label === 'N' ? '#6366f1' : '#6b7280'
-              return <span style={{ ...bs, background: bg, color: '#fff' }}>{label}</span>
+              const bg = label === 'D' ? '#fef3c7' : label === 'N' ? '#e0e7ff' : '#f3f4f6'
+              const fg = label === 'D' ? '#92400e' : label === 'N' ? '#3730a3' : '#374151'
+              return <span style={{ ...bs, background: bg, color: fg }}>{label}</span>
             })()}
             {row.original.tiene_gnc === false && row.original.vehiculo_patente && (
-              <span style={{ fontSize: '8px', padding: '1px 4px', lineHeight: '12px', borderRadius: '3px', fontWeight: 700, background: '#f97316', color: '#fff' }}>!GNC</span>
+              <span style={{ fontSize: '8px', padding: '1px 4px', lineHeight: '12px', borderRadius: '3px', fontWeight: 600, background: '#f3f4f6', color: '#6b7280' }}>Sin GNC</span>
+            )}
+            {row.original.tiene_telepase === true && row.original.vehiculo_patente && (
+              <span style={{ fontSize: '8px', padding: '1px 4px', lineHeight: '12px', borderRadius: '3px', fontWeight: 600, background: '#f3f4f6', color: '#6b7280' }}>Telepase</span>
             )}
           </div>
         </div>
