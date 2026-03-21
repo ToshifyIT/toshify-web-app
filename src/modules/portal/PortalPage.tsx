@@ -360,8 +360,6 @@ export function PortalPage() {
       if (error) throw error
       const items = (data || []) as PortalDetalle[]
 
-<<<<<<< HEAD
-=======
       // Enriquecer P004 con descripción real desde penalidades o tickets_favor
       const ticketItems = items.filter(i => i.concepto_codigo === 'P004' && i.referencia_id)
       if (ticketItems.length > 0) {
@@ -413,7 +411,6 @@ export function PortalPage() {
         }
       }
 
->>>>>>> 8a4899fea2bf789c55e158ee7e4434791ab83884
       // Inject saldo_anterior as a concepto line (same logic as ReporteFacturacionTab)
       const saldo = factura.saldo_anterior || 0
       if (saldo > 0) {
