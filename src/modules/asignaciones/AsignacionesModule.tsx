@@ -820,7 +820,7 @@ export function AsignacionesModule() {
       }
 
       const conductores = asignacion.asignaciones_conductores || []
-      const esAsignacionFinalizada = asignacion.estado === 'finalizada' || asignacion.estado === 'completada'
+      const esAsignacionFinalizada = asignacion.estado === 'finalizada' || asignacion.estado === 'completada' || asignacion.estado === 'cancelada'
       
       // Para modalidad TURNO: extraer conductor diurno y nocturno
       // IMPORTANTE: Para trazabilidad, mostramos TODOS los conductores (incluidos cancelados)
@@ -2557,13 +2557,16 @@ export function AsignacionesModule() {
       },
       cell: ({ row }) => {
         const fechaInicio = row.original.fecha_inicio
-        if (!fechaInicio) return <span className="text-muted">-</span>
-        const fecha = new Date(fechaInicio)
+        const esCancelada = row.original.estado === 'cancelada'
+        // Para canceladas sin fecha_inicio, mostrar fecha_programada como referencia
+        const fechaRef = fechaInicio || (esCancelada ? row.original.fecha_programada : null)
+        if (!fechaRef) return <span className="text-muted">-</span>
+        const fecha = new Date(fechaRef)
         const fechaStr = fecha.toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: '2-digit', timeZone: 'America/Argentina/Buenos_Aires' })
         const horaStr = fecha.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'America/Argentina/Buenos_Aires' })
         return (
           <div style={{ fontSize: '11px', lineHeight: '1.3' }}>
-            <div style={{ color: 'var(--color-success)' }}>{fechaStr}</div>
+            <div style={{ color: esCancelada && !fechaInicio ? 'var(--text-tertiary)' : 'var(--color-success)' }}>{fechaStr}</div>
             <div style={{ color: 'var(--text-secondary)' }}>{horaStr}</div>
           </div>
         )
@@ -2573,9 +2576,9 @@ export function AsignacionesModule() {
       id: 'tipo_documento',
       header: 'Doc.',
       accessorFn: (row) => {
-        const esFinalizada = row.estado === 'finalizada' || row.estado === 'completada'
+        const esFinalizadaOCancelada = row.estado === 'finalizada' || row.estado === 'completada' || row.estado === 'cancelada'
         const conductores = (row.asignaciones_conductores || []).filter((c: any) =>
-          c.estado === 'asignado' || c.estado === 'activo' || (esFinalizada && c.estado === 'completado')
+          c.estado === 'asignado' || c.estado === 'activo' || (esFinalizadaOCancelada && c.estado === 'completado')
         )
         const documentos = [...new Set(conductores.map((c: any) => c.documento).filter(Boolean))]
         if (documentos.length === 0) return '-'
@@ -2585,9 +2588,9 @@ export function AsignacionesModule() {
         return primerDoc === 'CARTA_OFERTA' ? 'C.Oferta' : primerDoc === 'ANEXO' ? 'Anexo' : 'N/A'
       },
       cell: ({ row }) => {
-        const esFinalizada = row.original.estado === 'finalizada' || row.original.estado === 'completada'
+        const esFinalizadaOCancelada = row.original.estado === 'finalizada' || row.original.estado === 'completada' || row.original.estado === 'cancelada'
         const conductores = (row.original.asignaciones_conductores || []).filter((c: any) =>
-          c.estado === 'asignado' || c.estado === 'activo' || (esFinalizada && c.estado === 'completado')
+          c.estado === 'asignado' || c.estado === 'activo' || (esFinalizadaOCancelada && c.estado === 'completado')
         )
         if (conductores.length === 0) return <span className="text-muted">-</span>
         // Ordenar: diurno primero, nocturno después

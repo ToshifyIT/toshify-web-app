@@ -3633,7 +3633,7 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
                             <option value="">Seleccionar...</option>
                             <option value="entrega_auto">Entrega de auto</option>
                             <option value="asignacion_companero">Asignacion companero</option>
-                            <option value="cambio_auto">Cambio de auto</option>
+                            {formData.cambio_vehiculo && <option value="cambio_auto">Cambio de auto</option>}
                             <option value="cambio_turno">Cambio de turno</option>
                             {formData.devolucion_vehiculo && <option value="devolucion_vehiculo">Devolucion vehiculo</option>}
                           </select>
@@ -3718,7 +3718,7 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
                             <option value="">Seleccionar...</option>
                             <option value="entrega_auto">Entrega de auto</option>
                             <option value="asignacion_companero">Asignacion companero</option>
-                            <option value="cambio_auto">Cambio de auto</option>
+                            {formData.cambio_vehiculo && <option value="cambio_auto">Cambio de auto</option>}
                             <option value="cambio_turno">Cambio de turno</option>
                             {formData.devolucion_vehiculo && <option value="devolucion_vehiculo">Devolucion vehiculo</option>}
                           </select>
@@ -3808,7 +3808,7 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
                             <option value="">Seleccionar...</option>
                             <option value="entrega_auto">Entrega de auto</option>
                             <option value="asignacion_companero">Asignacion companero</option>
-                            <option value="cambio_auto">Cambio de auto</option>
+                            {formData.cambio_vehiculo && <option value="cambio_auto">Cambio de auto</option>}
                             <option value="cambio_turno">Cambio de turno</option>
                             {formData.devolucion_vehiculo && <option value="devolucion_vehiculo">Devolucion vehiculo</option>}
                           </select>
