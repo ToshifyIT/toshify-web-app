@@ -201,7 +201,7 @@ export function FacturacionPreviewTable({
   }, [data])
 
   // Códigos de alquiler que se proyectan
-  const CODIGOS_ALQUILER = ['P001', 'P002', 'P013']
+  const CODIGOS_ALQUILER = ['P001', 'P002', 'P013', 'P014', 'P015', 'P016']
 
   // Obtener el total de una fila (proyectado si aplica)
   const getRowTotal = useCallback((row: FacturacionPreviewRow) => {

@@ -1,7 +1,7 @@
 // src/modules/asignaciones/AsignacionesModule.tsx
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { useState, useEffect, useMemo } from 'react'
-import { Eye, Trash2, CheckCircle, XCircle, FileText, Calendar, UserPlus, UserCheck, Ban, Plus, Pencil } from 'lucide-react'
+import { Eye, Trash2, CheckCircle, XCircle, FileText, Calendar, UserPlus, UserCheck, Ban, Plus, Pencil, ArrowLeftRight } from 'lucide-react'
 import { type ColumnDef } from '@tanstack/react-table'
 import { DataTable } from '../../components/ui/DataTable/DataTable'
 import { LoadingOverlay } from '../../components/ui/LoadingOverlay'
@@ -32,7 +32,7 @@ interface Asignacion {
   created_at: string
   created_by?: string | null
   motivo?: string | null
-  motivoDetalle?: { observaciones?: string; programadoPor?: string } | null
+  motivoDetalle?: { observaciones?: string; programadoPor?: string; cambioVehiculo?: boolean; vehiculoCambioPatente?: string; vehiculoCambioModelo?: string; vehiculoCambioId?: string } | null
   vehiculos?: {
     patente: string
     marca: string
@@ -76,6 +76,42 @@ interface ExpandedAsignacion extends Asignacion {
 function getLocalDateStr(isoString: string): string {
   const date = new Date(isoString)
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
+}
+
+// Helper: cargar programaciones con fallback si columnas de cambio no existen
+async function fetchProgramaciones(): Promise<any[]> {
+  try {
+    const res = await supabase
+      .from('programaciones_onboarding')
+      .select('asignacion_id, tipo_asignacion, observaciones, created_by_name, vehiculo_cambio_id, vehiculo_cambio_patente, vehiculo_cambio_modelo')
+      .not('asignacion_id', 'is', null)
+    if (res.error) throw res.error
+    return res.data || []
+  } catch {
+    const res = await supabase
+      .from('programaciones_onboarding')
+      .select('asignacion_id, tipo_asignacion, observaciones, created_by_name')
+      .not('asignacion_id', 'is', null)
+    return res.data || []
+  }
+}
+
+// Helper: mapear motivos de programación a asignaciones
+function buildAsignacionesConMotivo(asignaciones: any[], programaciones: any[]) {
+  const motivosMap = new Map<string, { tipo: string; observaciones?: string; programadoPor?: string; cambioVehiculo?: boolean; vehiculoCambioPatente?: string; vehiculoCambioModelo?: string; vehiculoCambioId?: string }>()
+  for (const p of programaciones) {
+    if (p.asignacion_id && p.tipo_asignacion) {
+      motivosMap.set(p.asignacion_id, { tipo: p.tipo_asignacion, observaciones: p.observaciones, programadoPor: p.created_by_name, cambioVehiculo: !!(p.vehiculo_cambio_id), vehiculoCambioPatente: p.vehiculo_cambio_patente || '', vehiculoCambioModelo: p.vehiculo_cambio_modelo || '', vehiculoCambioId: p.vehiculo_cambio_id || '' })
+    }
+  }
+  return asignaciones.map((a: any) => {
+    const prog = motivosMap.get(a.id)
+    return {
+      ...a,
+      motivo: prog?.tipo || null,
+      motivoDetalle: prog ? { observaciones: prog.observaciones, programadoPor: prog.programadoPor, cambioVehiculo: prog.cambioVehiculo, vehiculoCambioPatente: prog.vehiculoCambioPatente, vehiculoCambioModelo: prog.vehiculoCambioModelo, vehiculoCambioId: prog.vehiculoCambioId } : null,
+    }
+  })
 }
 
 export function AsignacionesModule() {
@@ -344,12 +380,12 @@ export function AsignacionesModule() {
       fechaLimite.setDate(fechaLimite.getDate() - 60)
       const fechaLimiteStr = fechaLimite.toISOString()
 
-      const [asignacionesRes, vehiculosRes, conductoresRes, programacionesRes, devolucionesRes] = await Promise.all([
+      const [asignacionesRes, vehiculosRes, conductoresRes, devolucionesRes] = await Promise.all([
         // Asignaciones: activas/programadas + finalizadas recientes (máx 500)
         aplicarFiltroSede(supabase
           .from('asignaciones')
           .select(`
-            id, codigo, vehiculo_id, horario, fecha_programada, fecha_inicio, fecha_fin, estado, created_at,
+            id, codigo, vehiculo_id, horario, fecha_programada, fecha_inicio, fecha_fin, estado, created_at, sede_id,
             vehiculos (patente, marca, modelo),
             asignaciones_conductores (
               id, conductor_id, estado, horario, confirmado, fecha_confirmacion, documento,
@@ -370,11 +406,6 @@ export function AsignacionesModule() {
           .from('conductores')
           .select('id, conductores_estados(codigo)'))
           .limit(2000),
-        // Programaciones: motivo + observaciones por asignacion_id
-        supabase
-          .from('programaciones_onboarding')
-          .select('asignacion_id, tipo_asignacion, observaciones, created_by_name')
-          .not('asignacion_id', 'is', null),
         // Devoluciones pendientes y completadas
         aplicarFiltroSede((supabase as any)
           .from('devoluciones')
@@ -385,23 +416,8 @@ export function AsignacionesModule() {
 
       if (asignacionesRes.error) throw asignacionesRes.error
 
-      // Mapear motivos de programación a asignaciones
-      const motivosMap = new Map<string, { tipo: string; observaciones?: string; programadoPor?: string }>()
-      if (programacionesRes.data) {
-        for (const p of programacionesRes.data as any[]) {
-          if (p.asignacion_id && p.tipo_asignacion) {
-            motivosMap.set(p.asignacion_id, { tipo: p.tipo_asignacion, observaciones: p.observaciones, programadoPor: p.created_by_name })
-          }
-        }
-      }
-      const asignacionesConMotivo = (asignacionesRes.data || []).map((a: any) => {
-        const prog = motivosMap.get(a.id)
-        return {
-          ...a,
-          motivo: prog?.tipo || null,
-          motivoDetalle: prog ? { observaciones: prog.observaciones, programadoPor: prog.programadoPor } : null,
-        }
-      })
+      const programacionesData = await fetchProgramaciones()
+      const asignacionesConMotivo = buildAsignacionesConMotivo(asignacionesRes.data || [], programacionesData)
 
       // PRE-RESOLVER conductores de todos los vehículos con devoluciones via query directa
       // (misma lógica que handleConfirmarDevolucion, SIN filtro de sede)
@@ -520,11 +536,11 @@ export function AsignacionesModule() {
       fechaLimite.setDate(fechaLimite.getDate() - 60)
       const fechaLimiteStr = fechaLimite.toISOString()
 
-      const [asigRes, progRes, devRes] = await Promise.all([
+      const [asigRes, devRes] = await Promise.all([
         aplicarFiltroSede(supabase
           .from('asignaciones')
           .select(`
-            id, codigo, vehiculo_id, horario, fecha_programada, fecha_inicio, fecha_fin, estado, created_at,
+            id, codigo, vehiculo_id, horario, fecha_programada, fecha_inicio, fecha_fin, estado, created_at, sede_id,
             vehiculos (patente, marca, modelo),
             asignaciones_conductores (
               id, conductor_id, estado, horario, confirmado, fecha_confirmacion, documento,
@@ -534,10 +550,6 @@ export function AsignacionesModule() {
           .or(`estado.in.(programado,activa),created_at.gte.${fechaLimiteStr}`)
           .order('created_at', { ascending: false })
           .limit(500),
-        supabase
-          .from('programaciones_onboarding')
-          .select('asignacion_id, tipo_asignacion, observaciones, created_by_name')
-          .not('asignacion_id', 'is', null),
         aplicarFiltroSede((supabase as any)
           .from('devoluciones')
           .select('id, vehiculo_id, conductor_nombre, programado_por, fecha_programada, fecha_devolucion, estado, observaciones, created_at, programacion_id, vehiculos:vehiculo_id(patente, marca, modelo), programaciones_onboarding:programacion_id(conductor_nombre, conductor_diurno_nombre, conductor_nocturno_nombre, documento_diurno, documento_nocturno, tipo_documento)'))
@@ -547,18 +559,8 @@ export function AsignacionesModule() {
 
       if (asigRes.error) throw asigRes.error
 
-      const motivosMap = new Map<string, { tipo: string; observaciones?: string; programadoPor?: string }>()
-      if (progRes.data) {
-        for (const p of progRes.data as any[]) {
-          if (p.asignacion_id && p.tipo_asignacion) {
-            motivosMap.set(p.asignacion_id, { tipo: p.tipo_asignacion, observaciones: p.observaciones, programadoPor: p.created_by_name })
-          }
-        }
-      }
-      const asignacionesConMotivo = (asigRes.data || []).map((a: any) => {
-        const prog = motivosMap.get(a.id)
-        return { ...a, motivo: prog?.tipo || null, motivoDetalle: prog ? { observaciones: prog.observaciones, programadoPor: prog.programadoPor } : null }
-      })
+      const progData = await fetchProgramaciones()
+      const asignacionesConMotivo = buildAsignacionesConMotivo(asigRes.data || [], progData)
 
       // Resolver conductores de devoluciones: query directa a la BD (igual que handleConfirmarDevolucion)
       // Buscar conductores para TODOS los vehículos con devoluciones (no solo los sin nombre)
@@ -818,7 +820,7 @@ export function AsignacionesModule() {
       }
 
       const conductores = asignacion.asignaciones_conductores || []
-      const esAsignacionFinalizada = asignacion.estado === 'finalizada' || asignacion.estado === 'completada'
+      const esAsignacionFinalizada = asignacion.estado === 'finalizada' || asignacion.estado === 'completada' || asignacion.estado === 'cancelada'
       
       // Para modalidad TURNO: extraer conductor diurno y nocturno
       // IMPORTANTE: Para trazabilidad, mostramos TODOS los conductores (incluidos cancelados)
@@ -1690,6 +1692,22 @@ export function AsignacionesModule() {
               .from('vehiculos') as any)
               .update({ estado_id: (estadoEnUso as any).id })
               .eq('id', selectedAsignacion.vehiculo_id)
+          }
+
+          // Si es cambio de vehículo: cambiar el vehículo viejo a PKG_ON_BASE
+          if (selectedAsignacion?.motivoDetalle?.cambioVehiculo && selectedAsignacion?.motivoDetalle?.vehiculoCambioId) {
+            const { data: estadoPkgOn } = await supabase
+              .from('vehiculos_estados')
+              .select('id')
+              .eq('codigo', 'PKG_ON_BASE')
+              .single()
+
+            if (estadoPkgOn) {
+              await (supabase
+                .from('vehiculos') as any)
+                .update({ estado_id: (estadoPkgOn as any).id })
+                .eq('id', selectedAsignacion.motivoDetalle!.vehiculoCambioId)
+            }
           }
 
           if (fechaProgramada) {
@@ -2565,13 +2583,16 @@ export function AsignacionesModule() {
       },
       cell: ({ row }) => {
         const fechaInicio = row.original.fecha_inicio
-        if (!fechaInicio) return <span className="text-muted">-</span>
-        const fecha = new Date(fechaInicio)
+        const esCancelada = row.original.estado === 'cancelada'
+        // Para canceladas sin fecha_inicio, mostrar fecha_programada como referencia
+        const fechaRef = fechaInicio || (esCancelada ? row.original.fecha_programada : null)
+        if (!fechaRef) return <span className="text-muted">-</span>
+        const fecha = new Date(fechaRef)
         const fechaStr = fecha.toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: '2-digit', timeZone: 'America/Argentina/Buenos_Aires' })
         const horaStr = fecha.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'America/Argentina/Buenos_Aires' })
         return (
           <div style={{ fontSize: '11px', lineHeight: '1.3' }}>
-            <div style={{ color: 'var(--color-success)' }}>{fechaStr}</div>
+            <div style={{ color: esCancelada && !fechaInicio ? 'var(--text-tertiary)' : 'var(--color-success)' }}>{fechaStr}</div>
             <div style={{ color: 'var(--text-secondary)' }}>{horaStr}</div>
           </div>
         )
@@ -2581,9 +2602,9 @@ export function AsignacionesModule() {
       id: 'tipo_documento',
       header: 'Doc.',
       accessorFn: (row) => {
-        const esFinalizada = row.estado === 'finalizada' || row.estado === 'completada'
+        const esFinalizadaOCancelada = row.estado === 'finalizada' || row.estado === 'completada' || row.estado === 'cancelada'
         const conductores = (row.asignaciones_conductores || []).filter((c: any) =>
-          c.estado === 'asignado' || c.estado === 'activo' || (esFinalizada && c.estado === 'completado')
+          c.estado === 'asignado' || c.estado === 'activo' || (esFinalizadaOCancelada && c.estado === 'completado')
         )
         const documentos = [...new Set(conductores.map((c: any) => c.documento).filter(Boolean))]
         if (documentos.length === 0) return '-'
@@ -2593,9 +2614,9 @@ export function AsignacionesModule() {
         return primerDoc === 'CARTA_OFERTA' ? 'C.Oferta' : primerDoc === 'ANEXO' ? 'Anexo' : 'N/A'
       },
       cell: ({ row }) => {
-        const esFinalizada = row.original.estado === 'finalizada' || row.original.estado === 'completada'
+        const esFinalizadaOCancelada = row.original.estado === 'finalizada' || row.original.estado === 'completada' || row.original.estado === 'cancelada'
         const conductores = (row.original.asignaciones_conductores || []).filter((c: any) =>
-          c.estado === 'asignado' || c.estado === 'activo' || (esFinalizada && c.estado === 'completado')
+          c.estado === 'asignado' || c.estado === 'activo' || (esFinalizadaOCancelada && c.estado === 'completado')
         )
         if (conductores.length === 0) return <span className="text-muted">-</span>
         // Ordenar: diurno primero, nocturno después
@@ -2627,13 +2648,18 @@ export function AsignacionesModule() {
     {
       accessorKey: 'fecha_fin',
       header: 'Fin',
-      cell: ({ row }) => (
-        <span style={{ fontSize: '11px' }}>
-          {row.original.fecha_fin
-            ? new Date(row.original.fecha_fin).toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: '2-digit', timeZone: 'America/Argentina/Buenos_Aires' })
-            : '-'}
-        </span>
-      )
+      cell: ({ row }) => {
+        if (!row.original.fecha_fin) return <span style={{ fontSize: '11px' }}>-</span>
+        const d = new Date(row.original.fecha_fin)
+        return (
+          <span style={{ fontSize: '11px' }}>
+            {d.toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: '2-digit', timeZone: 'America/Argentina/Buenos_Aires' })}
+            <span style={{ display: 'block', fontSize: '9px', color: 'var(--text-tertiary)' }}>
+              {d.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Argentina/Buenos_Aires' })}
+            </span>
+          </span>
+        )
+      }
     },
     {
       accessorKey: 'estado',
@@ -2926,7 +2952,7 @@ export function AsignacionesModule() {
                                     year: 'numeric',
                                     hour: '2-digit',
                                     minute: '2-digit',
-                                    timeZone: 'America/Buenos_Aires'
+                                    timeZone: 'America/Argentina/Buenos_Aires'
                                   })})
                                 </span>
                               )}
@@ -3106,7 +3132,7 @@ export function AsignacionesModule() {
               </>
             ) : (
               <>
-                <h2 className="asig-modal-title">Detalles de Asignación</h2>
+                <h2 className="asig-modal-title">{viewAsignacion?.motivoDetalle?.cambioVehiculo ? 'Detalles de Cambio de Vehículo' : 'Detalles de Asignación'}</h2>
                 <div className="asig-detail-grid">
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                     <div>
@@ -3127,12 +3153,32 @@ export function AsignacionesModule() {
                     )}
                   </div>
 
-                  <div>
-                    <label className="asig-detail-label">Vehículo</label>
-                    <p className="asig-detail-value">
-                      <strong>{viewAsignacion.vehiculos?.patente}</strong> - {viewAsignacion.vehiculos?.marca} {viewAsignacion.vehiculos?.modelo}
-                    </p>
-                  </div>
+                  {/* Vehículo: si es cambio de vehículo mostrar ambos, sino el normal */}
+                  {viewAsignacion?.motivoDetalle?.cambioVehiculo && viewAsignacion?.motivoDetalle?.vehiculoCambioPatente ? (
+                    <div>
+                      <label className="asig-detail-label">Cambio de Vehículo</label>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginTop: '6px' }}>
+                        <div style={{ flex: 1, padding: '10px 14px', background: '#FEF3C7', borderRadius: '8px', border: '1px solid #FDE68A' }}>
+                          <div style={{ fontSize: '10px', color: '#92400E', fontWeight: 600, marginBottom: '2px' }}>VEHÍCULO A CAMBIAR</div>
+                          <div style={{ fontWeight: 700, fontSize: '14px' }}>{viewAsignacion?.motivoDetalle?.vehiculoCambioPatente}</div>
+                          <div style={{ fontSize: '11px', color: '#6B7280' }}>{viewAsignacion?.motivoDetalle?.vehiculoCambioModelo}</div>
+                        </div>
+                        <ArrowLeftRight size={20} style={{ color: '#9CA3AF', flexShrink: 0 }} />
+                        <div style={{ flex: 1, padding: '10px 14px', background: '#D1FAE5', borderRadius: '8px', border: '1px solid #A7F3D0' }}>
+                          <div style={{ fontSize: '10px', color: '#065F46', fontWeight: 600, marginBottom: '2px' }}>VEHÍCULO NUEVO</div>
+                          <div style={{ fontWeight: 700, fontSize: '14px' }}>{viewAsignacion.vehiculos?.patente}</div>
+                          <div style={{ fontSize: '11px', color: '#6B7280' }}>{viewAsignacion.vehiculos?.marca} {viewAsignacion.vehiculos?.modelo}</div>
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    <div>
+                      <label className="asig-detail-label">Vehículo</label>
+                      <p className="asig-detail-value">
+                        <strong>{viewAsignacion.vehiculos?.patente}</strong> - {viewAsignacion.vehiculos?.marca} {viewAsignacion.vehiculos?.modelo}
+                      </p>
+                    </div>
+                  )}
 
                   <div>
                     <label className="asig-detail-label">Conductores Asignados</label>
@@ -3167,7 +3213,7 @@ export function AsignacionesModule() {
                                           year: 'numeric',
                                           hour: '2-digit',
                                           minute: '2-digit',
-                                          timeZone: 'America/Buenos_Aires'
+                                          timeZone: 'America/Argentina/Buenos_Aires'
                                         })})
                                       </span>
                                     )}
@@ -3224,13 +3270,13 @@ export function AsignacionesModule() {
                     <div>
                       <label className="asig-detail-label">Fecha Activación</label>
                       <p className="asig-detail-value" style={{ fontSize: '14px' }}>
-                        {viewAsignacion.fecha_inicio ? new Date(viewAsignacion.fecha_inicio).toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric', timeZone: 'America/Argentina/Buenos_Aires' }) : 'No activada'}
+                        {viewAsignacion.fecha_inicio ? new Date(viewAsignacion.fecha_inicio).toLocaleString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', timeZone: 'America/Argentina/Buenos_Aires' }) : 'No activada'}
                       </p>
                     </div>
                     <div>
                       <label className="asig-detail-label">Fecha Fin</label>
                       <p className="asig-detail-value" style={{ fontSize: '14px' }}>
-                        {viewAsignacion.fecha_fin ? new Date(viewAsignacion.fecha_fin).toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric', timeZone: 'America/Argentina/Buenos_Aires' }) : 'Sin definir'}
+                        {viewAsignacion.fecha_fin ? new Date(viewAsignacion.fecha_fin).toLocaleString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', timeZone: 'America/Argentina/Buenos_Aires' }) : 'Sin definir'}
                       </p>
                     </div>
                   </div>

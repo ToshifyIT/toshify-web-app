@@ -6,7 +6,7 @@ import { useState, useEffect, useMemo } from 'react'
 import {
   Car, User, Calendar, FileText, Plus,
   Eye, Trash2, CheckCircle, XCircle, Send,
-  MessageSquareText, Pencil, Copy, RefreshCw, Sun, Moon
+  MessageSquareText, Pencil, Copy, RefreshCw, Sun, Moon, ArrowLeftRight
 } from 'lucide-react'
 import { type ColumnDef } from '@tanstack/react-table'
 import { DataTable } from '../../components/ui/DataTable/DataTable'
@@ -2456,16 +2456,34 @@ export function ProgramacionModule() {
               {/* Vehiculo */}
               <div className="prog-modal-section">
                 <h3><Car size={16} /> Vehiculo</h3>
-                <div className="prog-modal-grid">
+                {(previewProgramacion as any).cambio_vehiculo && (previewProgramacion as any).vehiculo_cambio_patente ? (
                   <div>
-                    <label>Patente</label>
-                    <p>{previewProgramacion.vehiculo_entregar_patente || previewProgramacion.vehiculo_entregar_patente_sistema || '-'}</p>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '10px 0' }}>
+                      <div style={{ flex: 1, padding: '10px 14px', background: '#FEF3C7', borderRadius: '8px', border: '1px solid #FDE68A' }}>
+                        <label style={{ fontSize: '10px', color: '#92400E', fontWeight: '600', display: 'block', marginBottom: '2px' }}>VEHÍCULO ANTERIOR</label>
+                        <p style={{ margin: 0, fontWeight: '700', fontSize: '14px' }}>{(previewProgramacion as any).vehiculo_cambio_patente || '-'}</p>
+                        <p style={{ margin: '2px 0 0', fontSize: '11px', color: '#6B7280' }}>{(previewProgramacion as any).vehiculo_cambio_modelo || ''}</p>
+                      </div>
+                      <ArrowLeftRight size={20} style={{ color: '#9CA3AF', flexShrink: 0 }} />
+                      <div style={{ flex: 1, padding: '10px 14px', background: '#D1FAE5', borderRadius: '8px', border: '1px solid #A7F3D0' }}>
+                        <label style={{ fontSize: '10px', color: '#065F46', fontWeight: '600', display: 'block', marginBottom: '2px' }}>VEHÍCULO NUEVO</label>
+                        <p style={{ margin: 0, fontWeight: '700', fontSize: '14px' }}>{previewProgramacion.vehiculo_entregar_patente || previewProgramacion.vehiculo_entregar_patente_sistema || '-'}</p>
+                        <p style={{ margin: '2px 0 0', fontSize: '11px', color: '#6B7280' }}>{previewProgramacion.vehiculo_entregar_modelo || previewProgramacion.vehiculo_entregar_modelo_sistema || ''}</p>
+                      </div>
+                    </div>
                   </div>
-                  <div>
-                    <label>Modelo</label>
-                    <p>{previewProgramacion.vehiculo_entregar_modelo || previewProgramacion.vehiculo_entregar_modelo_sistema || '-'}</p>
+                ) : (
+                  <div className="prog-modal-grid">
+                    <div>
+                      <label>Patente</label>
+                      <p>{previewProgramacion.vehiculo_entregar_patente || previewProgramacion.vehiculo_entregar_patente_sistema || '-'}</p>
+                    </div>
+                    <div>
+                      <label>Modelo</label>
+                      <p>{previewProgramacion.vehiculo_entregar_modelo || previewProgramacion.vehiculo_entregar_modelo_sistema || '-'}</p>
+                    </div>
                   </div>
-                </div>
+                )}
               </div>
 
               {/* Conductor */}
