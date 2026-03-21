@@ -790,26 +790,29 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
       setLoading(true)
       await loadConductoresDelVehiculo(formData.vehiculo_id)
 
-      // Si es devolución, auto-setear tipo de asignación y documento
+      // Si es devolución, auto-setear tipo de asignación y documento (anexo por defecto)
       if (formData.devolucion_vehiculo) {
         setFormData(prev => ({
           ...prev,
           tipo_asignacion_cargo: 'devolucion_vehiculo' as TipoAsignacion,
-          documento_cargo: 'na' as TipoDocumento,
+          documento_cargo: 'anexo' as TipoDocumento,
           tipo_asignacion_diurno: prev.conductor_diurno_id ? 'devolucion_vehiculo' as TipoAsignacion : prev.tipo_asignacion_diurno,
-          documento_diurno: prev.conductor_diurno_id ? 'na' as TipoDocumento : prev.documento_diurno,
+          documento_diurno: prev.conductor_diurno_id ? 'anexo' as TipoDocumento : prev.documento_diurno,
           tipo_asignacion_nocturno: prev.conductor_nocturno_id ? 'devolucion_vehiculo' as TipoAsignacion : prev.tipo_asignacion_nocturno,
-          documento_nocturno: prev.conductor_nocturno_id ? 'na' as TipoDocumento : prev.documento_nocturno,
+          documento_nocturno: prev.conductor_nocturno_id ? 'anexo' as TipoDocumento : prev.documento_nocturno,
         }))
       }
 
-      // Si es cambio de vehículo, auto-setear tipo de asignación a cambio_auto
+      // Si es cambio de vehículo, auto-setear tipo de asignación a cambio_auto y documento a anexo
       if (formData.cambio_vehiculo) {
         setFormData(prev => ({
           ...prev,
           tipo_asignacion_cargo: 'cambio_auto' as TipoAsignacion,
+          documento_cargo: 'anexo' as TipoDocumento,
           tipo_asignacion_diurno: prev.conductor_diurno_id ? 'cambio_auto' as TipoAsignacion : prev.tipo_asignacion_diurno,
+          documento_diurno: prev.conductor_diurno_id ? 'anexo' as TipoDocumento : prev.documento_diurno,
           tipo_asignacion_nocturno: prev.conductor_nocturno_id ? 'cambio_auto' as TipoAsignacion : prev.tipo_asignacion_nocturno,
+          documento_nocturno: prev.conductor_nocturno_id ? 'anexo' as TipoDocumento : prev.documento_nocturno,
         }))
       }
 
@@ -1594,7 +1597,7 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
 
   const handleTipoAsignacionChange = (field: 'tipo_asignacion_cargo' | 'tipo_asignacion_diurno' | 'tipo_asignacion_nocturno', docField: 'documento_cargo' | 'documento_diurno' | 'documento_nocturno') => (e: React.ChangeEvent<HTMLSelectElement>) => {
     const val = e.target.value as TipoAsignacion
-    setFormData({ ...formData, [field]: val, ...(val === 'devolucion_vehiculo' ? { [docField]: 'na' as TipoDocumento } : {}) })
+    setFormData({ ...formData, [field]: val, ...(val === 'devolucion_vehiculo' ? { [docField]: 'anexo' as TipoDocumento } : {}) })
   }
 
   // Ray casting - verifica si un punto está dentro de un polígono
@@ -3801,7 +3804,7 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
                             value={formData.tipo_asignacion_nocturno}
                             onChange={(e) => {
                               const val = e.target.value as TipoAsignacion
-                              setFormData({ ...formData, tipo_asignacion_nocturno: val, ...(val === 'devolucion_vehiculo' ? { documento_nocturno: 'na' as TipoDocumento } : {}) })
+                              setFormData({ ...formData, tipo_asignacion_nocturno: val, ...(val === 'devolucion_vehiculo' ? { documento_nocturno: 'anexo' as TipoDocumento } : {}) })
                             }}
                             disabled={formData.devolucion_vehiculo || formData.cambio_vehiculo}
                           >

@@ -2577,22 +2577,23 @@ export function AsignacionesModule() {
       id: 'entrega_real',
       header: 'Entrega',
       accessorFn: (row) => {
-        if (!row.fecha_inicio) return '-'
-        const fecha = new Date(row.fecha_inicio)
+        const fechaRef = row.fecha_inicio || row.fecha_programada
+        if (!fechaRef) return '-'
+        const fecha = new Date(fechaRef)
         return fecha.toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: '2-digit', timeZone: 'America/Argentina/Buenos_Aires' })
       },
       cell: ({ row }) => {
         const fechaInicio = row.original.fecha_inicio
-        const esCancelada = row.original.estado === 'cancelada'
-        // Para canceladas sin fecha_inicio, mostrar fecha_programada como referencia
-        const fechaRef = fechaInicio || (esCancelada ? row.original.fecha_programada : null)
+        // Si no tiene fecha_inicio (aún no activada), mostrar fecha_programada como referencia
+        const fechaRef = fechaInicio || row.original.fecha_programada
         if (!fechaRef) return <span className="text-muted">-</span>
+        const esFechaProgramada = !fechaInicio
         const fecha = new Date(fechaRef)
         const fechaStr = fecha.toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: '2-digit', timeZone: 'America/Argentina/Buenos_Aires' })
         const horaStr = fecha.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'America/Argentina/Buenos_Aires' })
         return (
           <div style={{ fontSize: '11px', lineHeight: '1.3' }}>
-            <div style={{ color: esCancelada && !fechaInicio ? 'var(--text-tertiary)' : 'var(--color-success)' }}>{fechaStr}</div>
+            <div style={{ color: esFechaProgramada ? 'var(--text-tertiary)' : 'var(--color-success)' }}>{fechaStr}</div>
             <div style={{ color: 'var(--text-secondary)' }}>{horaStr}</div>
           </div>
         )
@@ -2665,42 +2666,29 @@ export function AsignacionesModule() {
       accessorKey: 'estado',
       header: 'Estado',
       cell: ({ row }) => {
-        const esFinalizada = row.original.estado === 'finalizada' || row.original.estado === 'completada'
         const conductores = (row.original.asignaciones_conductores || []).filter((c: any) =>
-          c.estado === 'asignado' || c.estado === 'activo' || c.estado === 'completado' || (esFinalizada && c.estado === 'completado')
+          c.estado === 'asignado' || c.estado === 'activo' || c.estado === 'completado'
         )
-        // Si hay conductores con estado individual, mostrar por conductor
-        if (conductores.length > 1 && row.original.horario === 'TURNO') {
-          const sorted = [...conductores].sort((a: any, b: any) => {
-            if (a.horario === 'diurno') return -1
-            if (b.horario === 'diurno') return 1
-            return 0
-          })
-          return (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-              {sorted.map((c: any, idx: number) => {
-                const confirmado = c.confirmado
-                const estadoCond = c.estado
-                let label = ''
-                let badgeClass = ''
-                if (estadoCond === 'completado' || esFinalizada) {
-                  label = getStatusLabel(row.original.estado)
-                  badgeClass = getStatusBadgeClass(row.original.estado)
-                } else if (confirmado) {
-                  label = getStatusLabel(row.original.estado)
-                  badgeClass = getStatusBadgeClass(row.original.estado)
-                } else {
-                  label = 'Pendiente'
-                  badgeClass = getStatusBadgeClass('programado')
-                }
-                return (
-                  <span key={idx} className={badgeClass} style={{ fontSize: '10px', padding: '2px 6px' }}>
-                    {label}
+        // Para TURNO con 2 conductores: solo mostrar por conductor si tienen estados DIFERENTES
+        if (conductores.length > 1 && row.original.horario === 'TURNO' && row.original.estado === 'programado') {
+          const labels = conductores.map((c: any) => c.confirmado ? 'Confirmado' : 'Pendiente')
+          const todosIguales = labels.every(l => l === labels[0])
+          if (!todosIguales) {
+            const sorted = [...conductores].sort((a: any, b: any) => {
+              if (a.horario === 'diurno') return -1
+              if (b.horario === 'diurno') return 1
+              return 0
+            })
+            return (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                {sorted.map((c: any, idx: number) => (
+                  <span key={idx} className={getStatusBadgeClass(c.confirmado ? 'activa' : 'programado')} style={{ fontSize: '10px', padding: '2px 6px' }}>
+                    {c.confirmado ? 'Confirmado' : 'Pendiente'}
                   </span>
-                )
-              })}
-            </div>
-          )
+                ))}
+              </div>
+            )
+          }
         }
         return (
           <span className={getStatusBadgeClass(row.original.estado)} style={{ fontSize: '10px', padding: '2px 6px' }}>
