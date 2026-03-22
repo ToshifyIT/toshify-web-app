@@ -4505,6 +4505,7 @@ export function ReporteFacturacionTab() {
       'P001': 'Alquiler a Cargo', 'P002': 'Alquiler Turno', 'P003': 'Cuota de Garantía',
       'P004': 'Tickets/Descuentos', 'P005': 'Peajes', 'P006': 'Exceso KM',
       'P007': 'Penalidades', 'P008': 'Multas de Tránsito', 'P009': 'Mora', 'P010': 'Plan de Pagos',
+      'P013': 'Alquiler NOCTURNO', 'P014': 'Alquiler TURNO s/GNC', 'P015': 'Alquiler NOCTURNO s/GNC', 'P016': 'Alquiler CARGO s/GNC',
     }
 
     const formatDesc = (codigo: string, desc: string) => {
