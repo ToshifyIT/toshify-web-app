@@ -353,6 +353,7 @@ export function ReporteFacturacionTab() {
       nota: string
       horaEntrega?: string
       nuevaEnSemana?: boolean
+      patente?: string
     }[]
     devolucion?: {
       fecha_programada: string | null
@@ -637,7 +638,7 @@ export function ReporteFacturacionTab() {
           .from('asignaciones_conductores') as any)
           .select(`
             id, conductor_id, horario, fecha_inicio, fecha_fin, estado,
-            asignaciones!inner(id, horario, estado, fecha_inicio, fecha_fin)
+            asignaciones!inner(id, horario, estado, fecha_inicio, fecha_fin, vehiculo_id, vehiculos(patente))
           `)
           .eq('conductor_id', realConductorId)
           .in('estado', ['asignado', 'activo', 'activa', 'finalizado', 'finalizada', 'completado', 'cancelado', 'cancelada']),
@@ -664,11 +665,12 @@ export function ReporteFacturacionTab() {
       // Construir un Set de fechas cubiertas con su horario
       const diasNombres = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado']
       const diasCubiertos = new Map<string, string>() // fecha -> horario
-      const historial: { fechaInicio: string; fechaFin: string; padreEstado: string; horario: string; dias: number; nota: string; horaEntrega?: string; nuevaEnSemana?: boolean }[] = []
+      const historial: { fechaInicio: string; fechaFin: string; padreEstado: string; horario: string; dias: number; nota: string; horaEntrega?: string; nuevaEnSemana?: boolean; patente?: string }[] = []
 
       for (const ac of (asignacionesCond || []) as any[]) {
         const asignacion = ac.asignaciones
         if (!asignacion) continue
+        const patenteAsig = asignacion.vehiculos?.patente || ''
 
         const estadoPadre = (asignacion.estado || '').toLowerCase()
         const horarioRawDias = (ac.horario || asignacion.horario || '-').toLowerCase().trim()
@@ -683,17 +685,17 @@ export function ReporteFacturacionTab() {
 
         // Skip PROGRAMADO — asignación no ha iniciado, no cuenta para facturación
         if (['programado', 'programada'].includes(estadoPadre)) {
-          historial.push({ fechaInicio: acInicioStr, fechaFin: acFinStr, padreEstado: estadoPadre, horario, dias: 0, nota: 'Programada (no iniciada)' })
+          historial.push({ fechaInicio: acInicioStr, fechaFin: acFinStr, padreEstado: estadoPadre, horario, dias: 0, nota: 'Programada (no iniciada)', patente: patenteAsig })
           continue
         }
 
         if (['finalizada', 'cancelada', 'finalizado', 'cancelado'].includes(estadoPadre) && !asignacion.fecha_fin) {
-          historial.push({ fechaInicio: acInicioStr, fechaFin: acFinStr, padreEstado: estadoPadre, horario, dias: 0, nota: 'Huérfano (padre sin fecha_fin)' })
+          historial.push({ fechaInicio: acInicioStr, fechaFin: acFinStr, padreEstado: estadoPadre, horario, dias: 0, nota: 'Huérfano (padre sin fecha_fin)', patente: patenteAsig })
           continue
         }
         // Skip huérfano sin fecha_inicio
         if (!ac.fecha_inicio && !asignacion.fecha_inicio) {
-          historial.push({ fechaInicio: acInicioStr, fechaFin: acFinStr, padreEstado: estadoPadre, horario, dias: 0, nota: 'Huérfano (sin fecha_inicio)' })
+          historial.push({ fechaInicio: acInicioStr, fechaFin: acFinStr, padreEstado: estadoPadre, horario, dias: 0, nota: 'Huérfano (sin fecha_inicio)', patente: patenteAsig })
           continue
         }
 
@@ -711,7 +713,7 @@ export function ReporteFacturacionTab() {
         const acFin = padreFinD || semanaFin
 
         if (acFin < semanaInicio || acInicio > limiteConteo) {
-          historial.push({ fechaInicio: acInicioStr, fechaFin: acFinStr, padreEstado: estadoPadre, horario, dias: 0, nota: 'Fuera de rango' })
+          historial.push({ fechaInicio: acInicioStr, fechaFin: acFinStr, padreEstado: estadoPadre, horario, dias: 0, nota: 'Fuera de rango', patente: patenteAsig })
           continue
         }
 
@@ -744,7 +746,7 @@ export function ReporteFacturacionTab() {
         const rawTimestampEntrega = asignacion.fecha_inicio || ac.fecha_inicio || ''
         const horaEntrega = rawTimestampEntrega ? toArgTime(rawTimestampEntrega) : undefined
 
-        historial.push({ fechaInicio: acInicioStr, fechaFin: acFinStr, padreEstado: estadoPadre, horario, dias: diasContados, nota: diasContados > 0 ? `${format(efectivoInicio, 'dd/MM')} → ${format(efectivoFin, 'dd/MM')}` : 'Días ya cubiertos', horaEntrega, nuevaEnSemana: acInicio >= semanaInicio })
+        historial.push({ fechaInicio: acInicioStr, fechaFin: acFinStr, padreEstado: estadoPadre, horario, dias: diasContados, nota: diasContados > 0 ? `${format(efectivoInicio, 'dd/MM')} → ${format(efectivoFin, 'dd/MM')}` : 'Días ya cubiertos', horaEntrega, nuevaEnSemana: acInicio >= semanaInicio, patente: patenteAsig })
       }
 
       // Generar los 7 días de la semana con su estado
@@ -9586,6 +9588,11 @@ export function ReporteFacturacionTab() {
                                     <span style={{ color: 'var(--text-secondary)', margin: '0 4px' }}>&rarr;</span>
                                     {h.fechaFin && h.fechaFin !== 'NULL' ? displayArgDate(h.fechaFin) : <span style={{ color: '#10b981', fontWeight: 500 }}>vigente</span>}
                                   </span>
+                                  {h.patente && (
+                                    <span style={{ fontSize: '9px', padding: '1px 5px', borderRadius: '3px', background: 'rgba(107, 114, 128, 0.1)', color: 'var(--text-secondary)', fontWeight: 600, fontFamily: 'monospace' }}>
+                                      {h.patente}
+                                    </span>
+                                  )}
                                   <span style={{ fontSize: '10px', color: estadoColor, fontWeight: 600 }}>
                                     {h.horario}
                                   </span>
