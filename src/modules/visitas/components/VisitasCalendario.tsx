@@ -7,7 +7,7 @@ import { useState, useMemo, useCallback } from 'react';
 import { Calendar, dateFnsLocalizer } from 'react-big-calendar';
 import { format, parse, startOfWeek, getDay } from 'date-fns';
 import { es } from 'date-fns/locale/es';
-import { X } from 'lucide-react';
+import { X, Clock } from 'lucide-react';
 import type { VisitaCalendarEvent, VisitaCompleta, CalendarResource, VisitaEstado } from '../../../types/visitas.types';
 import { VISITA_ESTADOS } from '../../../types/visitas.types';
 
@@ -230,6 +230,10 @@ export function VisitasCalendario({
 
   return (
     <div className="visitas-calendario-wrapper">
+      <div className="visitas-timezone-badge">
+        <Clock size={14} />
+        <span>Argentina (GMT-3)</span>
+      </div>
       <Calendar<VisitaCalendarEvent, CalendarResource>
         localizer={localizer}
         culture="es"
