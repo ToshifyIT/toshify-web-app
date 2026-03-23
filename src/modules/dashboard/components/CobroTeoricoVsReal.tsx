@@ -13,6 +13,11 @@ import { startOfWeek, endOfWeek, addDays, format, setWeek, startOfMonth, endOfMo
 import { es } from 'date-fns/locale'
 import { supabase } from '../../../lib/supabase'
 import { useSede } from '../../../contexts/SedeContext'
+
+const SEDE_BARILOCHE_ID = 'f37193f7-5805-4d87-820d-c4521824860e'
+function getCabifyTable(sedeId: string | null | undefined): string {
+  return sedeId === SEDE_BARILOCHE_ID ? 'cabify_historico_bariloche' : 'cabify_historico'
+}
 import { normalizeDni } from '../../../utils/normalizeDocuments'
 import { PeriodPicker } from './PeriodPicker'
 import { CobroComparativo } from './CobroComparativo'
@@ -151,13 +156,13 @@ async function calcularPipelineMesIndependiente(
   const [histRes, nomRes] = await Promise.all([
     (supabase.from('conceptos_facturacion_historial') as any)
       .select('codigo, precio_base, precio_final, fecha_vigencia_desde, fecha_vigencia_hasta')
-      .in('codigo', ['P001', 'P002', 'P003', 'P013'])
+      .in('codigo', ['P001', 'P002', 'P003', 'P013', 'P014', 'P015', 'P016'])
       .lte('fecha_vigencia_desde', fFinStr)
       .gte('fecha_vigencia_hasta', fIniStr),
     supabase.from('conceptos_nomina')
       .select('codigo, precio_base, precio_final')
       .eq('activo', true)
-      .in('codigo', ['P001', 'P002', 'P003', 'P013']),
+      .in('codigo', ['P001', 'P002', 'P003', 'P013', 'P014', 'P015', 'P016']),
   ])
   const pMap = new Map<string, number>()
   ;(nomRes.data || []).forEach((c: any) => pMap.set(c.codigo, c.precio_final ?? c.precio_base ?? 0))
@@ -327,12 +332,12 @@ async function calcularPipelineMesIndependiente(
     for (const [ds] of dias.entries()) { alqTeoPorDia.set(ds, (alqTeoPorDia.get(ds) || 0) + alqDia) }
   })
 
-  // 7. Cobro real (cabify_historico)
+  // 7. Cobro real (cabify_historico / cabify_historico_bariloche según sede)
   const dnis50k = cond50k.map(c => normalizeDni(c.dni)).filter(Boolean)
   const cobroRealPorDia = new Map<string, number>()
   daysInt.forEach(d => cobroRealPorDia.set(format(d, 'yyyy-MM-dd'), 0))
   if (dnis50k.length > 0) {
-    const { data: hist } = await supabase.from('cabify_historico')
+    const { data: hist } = await supabase.from(getCabifyTable(sedeActualId))
       .select('fecha_inicio, cobro_app, dni, fecha_guardado')
       .in('dni', dnis50k)
       .gte('fecha_inicio', fIniStr)
@@ -461,14 +466,14 @@ export function CobroTeoricoVsReal() {
         const [historialResult, nominaResult] = await Promise.all([
           (supabase.from('conceptos_facturacion_historial') as any)
             .select('codigo, precio_base, precio_final, fecha_vigencia_desde, fecha_vigencia_hasta')
-            .in('codigo', ['P001', 'P002', 'P003', 'P013'])
+            .in('codigo', ['P001', 'P002', 'P003', 'P013', 'P014', 'P015', 'P016'])
             .lte('fecha_vigencia_desde', fechaFinStr)
             .gte('fecha_vigencia_hasta', fechaInicioStr),
           supabase
             .from('conceptos_nomina')
             .select('codigo, precio_base, precio_final')
             .eq('activo', true)
-            .in('codigo', ['P001', 'P002', 'P003', 'P013']),
+            .in('codigo', ['P001', 'P002', 'P003', 'P013', 'P014', 'P015', 'P016']),
         ])
         const historialPrecios = historialResult.data
         const conceptosNomina = nominaResult.data
@@ -957,9 +962,9 @@ export function CobroTeoricoVsReal() {
         })
 
         if (dnis50k.length > 0) {
-            // Consultar histórico
+            // Consultar histórico (tabla dinámica según sede)
             const { data: historicoData, error: historicoError } = await supabase
-                .from('cabify_historico')
+                .from(getCabifyTable(sedeActualId))
                 .select('fecha_inicio, cobro_app, dni, fecha_guardado, cabify_driver_id')
                 .in('dni', dnis50k)
                 .gte('fecha_inicio', format(startDate, 'yyyy-MM-dd'))
@@ -1218,7 +1223,7 @@ export function CobroTeoricoVsReal() {
 
         setChartData(finalData)
 
-      } catch (_error) {
+      } catch {
         // silently ignored
       } finally {
         setLoading(false)
