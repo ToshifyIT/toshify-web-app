@@ -15,6 +15,11 @@ export interface ChartDataPoint {
   alquiler: number
 }
 
+const SEDE_BARILOCHE_ID = 'f37193f7-5805-4d87-820d-c4521824860e'
+function getCabifyTable(sedeId: string | null | undefined): string {
+  return sedeId === SEDE_BARILOCHE_ID ? 'cabify_historico_bariloche' : 'cabify_historico'
+}
+
 // Helpers de fecha para consistencia con Facturación (Timezone Argentina)
 const ARG_TZ = 'America/Argentina/Buenos_Aires'
 const argDateFmt = new Intl.DateTimeFormat('en-CA', { timeZone: ARG_TZ, year: 'numeric', month: '2-digit', day: '2-digit' })
@@ -77,14 +82,14 @@ export async function fetchCobroData(
   const [historialResult, nominaResult] = await Promise.all([
     (supabase.from('conceptos_facturacion_historial') as any)
       .select('codigo, precio_base, precio_final, fecha_vigencia_desde, fecha_vigencia_hasta')
-      .in('codigo', ['P001', 'P002', 'P003', 'P013'])
+      .in('codigo', ['P001', 'P002', 'P003', 'P013', 'P014', 'P015', 'P016'])
       .lte('fecha_vigencia_desde', fechaFinStr)
       .gte('fecha_vigencia_hasta', fechaInicioStr),
     supabase
       .from('conceptos_nomina')
       .select('codigo, precio_base, precio_final')
       .eq('activo', true)
-      .in('codigo', ['P001', 'P002', 'P003', 'P013']),
+      .in('codigo', ['P001', 'P002', 'P003', 'P013', 'P014', 'P015', 'P016']),
   ])
   const historialPrecios = historialResult.data
   const conceptosNomina = nominaResult.data
@@ -455,7 +460,7 @@ export async function fetchCobroData(
 
   if (dnis50k.length > 0) {
     const { data: historicoData, error: historicoError } = await supabase
-      .from('cabify_historico')
+      .from(getCabifyTable(sedeActualId))
       .select('fecha_inicio, cobro_app, dni, fecha_guardado, cabify_driver_id')
       .in('dni', dnis50k)
       .gte('fecha_inicio', format(startDate, 'yyyy-MM-dd'))
