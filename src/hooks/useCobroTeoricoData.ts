@@ -15,9 +15,14 @@ export interface ChartDataPoint {
   alquiler: number
 }
 
-const SEDE_BARILOCHE_ID = 'f37193f7-5805-4d87-820d-c4521824860e'
-function getCabifyTable(sedeId: string | null | undefined): string {
-  return sedeId === SEDE_BARILOCHE_ID ? 'cabify_historico_bariloche' : 'cabify_historico'
+async function getCabifyTable(sedeId: string | null | undefined): Promise<string> {
+  if (!sedeId) return 'cabify_historico'
+  const { data } = await supabase
+    .from('sedes')
+    .select('cabify_tabla')
+    .eq('id', sedeId)
+    .single()
+  return (data as any)?.cabify_tabla || 'cabify_historico'
 }
 
 // Helpers de fecha para consistencia con Facturación (Timezone Argentina)
@@ -459,8 +464,9 @@ export async function fetchCobroData(
   })
 
   if (dnis50k.length > 0) {
+    const cabifyTable = await getCabifyTable(sedeActualId)
     const { data: historicoData, error: historicoError } = await supabase
-      .from(getCabifyTable(sedeActualId))
+      .from(cabifyTable)
       .select('fecha_inicio, cobro_app, dni, fecha_guardado, cabify_driver_id')
       .in('dni', dnis50k)
       .gte('fecha_inicio', format(startDate, 'yyyy-MM-dd'))
