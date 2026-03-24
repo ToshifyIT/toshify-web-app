@@ -111,12 +111,15 @@ class LazyErrorBoundary extends Component<{ children: ReactNode }, LazyErrorBoun
   }
 
   componentDidCatch(error: Error, _errorInfo: ErrorInfo) {
-    // Si es error de chunk (deploy nuevo), NO auto-recargar
-    // Solo mostrar el botón de reintentar para que el usuario decida
     if (isChunkLoadError(error)) {
-      // Limpiar el estado de error después de un momento para que React re-intente el lazy load
-      // Esto permite que al navegar a otra página, el error se limpie sin reload
-      return
+      // Auto-recargar una sola vez para obtener los chunks nuevos
+      const lastReload = sessionStorage.getItem('chunk_reload')
+      const now = Date.now()
+      if (!lastReload || now - parseInt(lastReload) > 10000) {
+        sessionStorage.setItem('chunk_reload', now.toString())
+        window.location.reload()
+        return
+      }
     }
   }
 

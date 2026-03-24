@@ -28,7 +28,7 @@ import {
 } from 'lucide-react'
 import { type ColumnDef } from '@tanstack/react-table'
 import { DataTable } from '../../../components/ui/DataTable'
-import { format, startOfWeek, endOfWeek, parseISO } from 'date-fns'
+import { format, startOfWeek, endOfWeek, parseISO, addWeeks, getISOWeek, getYear } from 'date-fns'
 import { VerLogsButton } from '../../../components/ui/VerLogsButton'
 import { LoadingOverlay } from '../../../components/ui/LoadingOverlay'
 import type { SaldoConductor } from '../../../types/facturacion.types'
@@ -118,6 +118,21 @@ export function SaldosAbonosTab() {
   const [, setTasaMoraPct] = useState(1) // default 1% diario desde P009
   const fileInputRef = useRef<HTMLInputElement>(null)
 
+  // Selector de semana para filtro de asignados
+  const [semanaOffset, setSemanaOffset] = useState(0) // 0 = semana actual, -1 = anterior, etc.
+  const semanaSeleccionada = useMemo(() => {
+    const fecha = addWeeks(new Date(), semanaOffset)
+    const inicio = startOfWeek(fecha, { weekStartsOn: 1 })
+    const fin = endOfWeek(fecha, { weekStartsOn: 1 })
+    return {
+      numero: getISOWeek(inicio),
+      anio: getYear(inicio),
+      inicio: format(inicio, 'yyyy-MM-dd'),
+      fin: format(fin, 'yyyy-MM-dd'),
+      label: `S${getISOWeek(inicio)} (${format(inicio, 'dd/MM')} - ${format(fin, 'dd/MM')})`
+    }
+  }, [semanaOffset])
+
   useEffect(() => {
     cargarSaldos()
     // Cargar tasa de mora desde P009
@@ -146,6 +161,11 @@ export function SaldosAbonosTab() {
     return () => document.removeEventListener('click', handleClick)
   }, [openColumnFilter])
 
+  // Recargar asignados cuando cambia la semana seleccionada
+  useEffect(() => {
+    cargarAsignadosSemana()
+  }, [semanaOffset, sedeActualId])
+
   // Listas únicas para filtros
   const conductoresUnicos = useMemo(() =>
     [...new Set(saldos.map(s => s.conductor_nombre).filter(Boolean) as string[])].sort()
@@ -163,6 +183,49 @@ export function SaldosAbonosTab() {
   const toggleEstadoFilter = (val: string) => setEstadoFilter(prev =>
     prev.includes(val) ? prev.filter(v => v !== val) : [...prev, val]
   )
+
+  async function cargarAsignadosSemana() {
+    const fecha = addWeeks(new Date(), semanaOffset)
+    const semInicio = startOfWeek(fecha, { weekStartsOn: 1 })
+    const semFin = endOfWeek(fecha, { weekStartsOn: 1 })
+    const fechaInicioSem = format(semInicio, 'yyyy-MM-dd')
+    const fechaFinSem = format(semFin, 'yyyy-MM-dd')
+    const semInicioDate = parseISO(fechaInicioSem)
+    const semFinDate = parseISO(fechaFinSem)
+
+    const ARG_TZ = 'America/Argentina/Buenos_Aires'
+    const argDateFmt = new Intl.DateTimeFormat('en-CA', { timeZone: ARG_TZ, year: 'numeric', month: '2-digit', day: '2-digit' })
+    const toArgDateLocal = (ts: string | null | undefined): string => {
+      if (!ts) return '-'
+      return argDateFmt.format(new Date(ts))
+    }
+
+    const { data: asignacionesSemana } = await (supabase.from('asignaciones_conductores') as any)
+      .select(`
+        conductor_id, fecha_inicio, fecha_fin, estado,
+        asignaciones!inner(estado, fecha_fin),
+        conductores!inner(sede_id)
+      `)
+      .in('estado', ['asignado', 'activo', 'activa', 'finalizado', 'finalizada', 'completado', 'cancelado', 'cancelada'])
+
+    const sedeParaFiltro = sedeActualId
+    const idsAsignados = new Set<string>()
+    for (const ac of (asignacionesSemana || []) as any[]) {
+      const cond = ac.conductores
+      const asig = ac.asignaciones
+      if (!cond || !asig) continue
+      if (sedeParaFiltro && cond.sede_id !== sedeParaFiltro) continue
+      const estadoPadre = (asig.estado || '').toLowerCase()
+      if (['programado', 'programada'].includes(estadoPadre)) continue
+      if (['finalizada', 'cancelada', 'finalizado', 'cancelado'].includes(estadoPadre) && !asig.fecha_fin) continue
+      const acInicio = ac.fecha_inicio ? parseISO(toArgDateLocal(ac.fecha_inicio)) : new Date('2020-01-01')
+      const acFin = ac.fecha_fin ? parseISO(toArgDateLocal(ac.fecha_fin))
+        : (asig.fecha_fin ? parseISO(toArgDateLocal(asig.fecha_fin)) : new Date('2099-12-31'))
+      if (acFin < semInicioDate || acInicio > semFinDate) continue
+      idsAsignados.add(ac.conductor_id)
+    }
+    setConductoresAsignados(idsAsignados)
+  }
 
   async function cargarSaldos() {
     setLoading(true)
@@ -203,49 +266,8 @@ export function SaldosAbonosTab() {
       if (saldosRes.error) throw saldosRes.error
       if (fraccionadosRes.error) throw fraccionadosRes.error
 
-      // Cargar conductores asignados en la semana actual (misma lógica que ReporteFacturacionTab)
-      const ahora = new Date()
-      const semInicio = startOfWeek(ahora, { weekStartsOn: 1 })
-      const semFin = endOfWeek(ahora, { weekStartsOn: 1 })
-      const fechaInicioSem = format(semInicio, 'yyyy-MM-dd')
-      const fechaFinSem = format(semFin, 'yyyy-MM-dd')
-      const semInicioDate = parseISO(fechaInicioSem)
-      const semFinDate = parseISO(fechaFinSem)
-
-      const ARG_TZ = 'America/Argentina/Buenos_Aires'
-      const argDateFmt = new Intl.DateTimeFormat('en-CA', { timeZone: ARG_TZ, year: 'numeric', month: '2-digit', day: '2-digit' })
-      const toArgDateLocal = (ts: string | null | undefined): string => {
-        if (!ts) return '-'
-        return argDateFmt.format(new Date(ts))
-      }
-
-      const { data: asignacionesSemana } = await (supabase.from('asignaciones_conductores') as any)
-        .select(`
-          conductor_id, fecha_inicio, fecha_fin, estado,
-          asignaciones!inner(estado, fecha_fin),
-          conductores!inner(sede_id)
-        `)
-        .in('estado', ['asignado', 'activo', 'activa', 'finalizado', 'finalizada', 'completado', 'cancelado', 'cancelada'])
-
-      const sedeParaFiltro = sedeActualId
-      const idsAsignados = new Set<string>()
-      for (const ac of (asignacionesSemana || []) as any[]) {
-        const cond = ac.conductores
-        const asig = ac.asignaciones
-        if (!cond || !asig) continue
-        if (sedeParaFiltro && cond.sede_id !== sedeParaFiltro) continue
-        // Skip programados y huérfanos
-        const estadoPadre = (asig.estado || '').toLowerCase()
-        if (['programado', 'programada'].includes(estadoPadre)) continue
-        if (['finalizada', 'cancelada', 'finalizado', 'cancelado'].includes(estadoPadre) && !asig.fecha_fin) continue
-        // Solapamiento con la semana
-        const acInicio = ac.fecha_inicio ? parseISO(toArgDateLocal(ac.fecha_inicio)) : new Date('2020-01-01')
-        const acFin = ac.fecha_fin ? parseISO(toArgDateLocal(ac.fecha_fin))
-          : (asig.fecha_fin ? parseISO(toArgDateLocal(asig.fecha_fin)) : new Date('2099-12-31'))
-        if (acFin < semInicioDate || acInicio > semFinDate) continue
-        idsAsignados.add(ac.conductor_id)
-      }
-      setConductoresAsignados(idsAsignados)
+      // Cargar conductores asignados en la semana seleccionada
+      await cargarAsignadosSemana()
 
       // Procesar saldos
       const saldosConEstado = (saldosRes.data || []).map((s: {
@@ -2079,7 +2101,30 @@ export function SaldosAbonosTab() {
                 </div>
               )}
             </div>
-            <div className="fact-header-right" style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+            <div className="fact-header-right" style={{ display: 'flex', gap: '6px', alignItems: 'center', flexWrap: 'wrap' }}>
+              {/* Selector de semana */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '4px', background: 'var(--bg-secondary)', borderRadius: '6px', padding: '2px 6px' }}>
+                <button
+                  onClick={() => { setSemanaOffset(prev => prev - 1); setAsignadoFilter('asignado') }}
+                  style={{ padding: '2px 6px', fontSize: '11px', border: 'none', background: 'transparent', cursor: 'pointer', color: 'var(--text-secondary)' }}
+                >
+                  ‹
+                </button>
+                <span
+                  style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-primary)', cursor: 'pointer', whiteSpace: 'nowrap' }}
+                  onClick={() => setSemanaOffset(0)}
+                  title="Volver a semana actual"
+                >
+                  {semanaSeleccionada.label}
+                </span>
+                <button
+                  onClick={() => { setSemanaOffset(prev => Math.min(prev + 1, 0)); setAsignadoFilter('asignado') }}
+                  style={{ padding: '2px 6px', fontSize: '11px', border: 'none', background: 'transparent', cursor: 'pointer', color: semanaOffset >= 0 ? 'var(--text-tertiary)' : 'var(--text-secondary)' }}
+                  disabled={semanaOffset >= 0}
+                >
+                  ›
+                </button>
+              </div>
               <div style={{ display: 'flex', gap: '2px', background: 'var(--bg-secondary)', borderRadius: '6px', padding: '2px' }}>
                 {[
                   { value: 'todos' as const, label: 'Todos' },

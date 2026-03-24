@@ -7,11 +7,18 @@ import { useState, useMemo, useCallback } from 'react';
 import { Calendar, dateFnsLocalizer } from 'react-big-calendar';
 import { format, parse, startOfWeek, getDay } from 'date-fns';
 import { es } from 'date-fns/locale/es';
-import { X } from 'lucide-react';
+import { X, Clock } from 'lucide-react';
 import type { VisitaCalendarEvent, VisitaCompleta, CalendarResource, VisitaEstado } from '../../../types/visitas.types';
 import { VISITA_ESTADOS } from '../../../types/visitas.types';
 
 import 'react-big-calendar/lib/css/react-big-calendar.css';
+
+// Obtener la hora actual en Argentina (para la línea roja del calendario)
+function getNowInArgentina(): Date {
+  const now = new Date()
+  const argTime = new Date(now.toLocaleString('en-US', { timeZone: 'America/Argentina/Buenos_Aires' }))
+  return argTime
+}
 
 // --- Localizer date-fns (español) ---
 const locales = { es };
@@ -230,6 +237,10 @@ export function VisitasCalendario({
 
   return (
     <div className="visitas-calendario-wrapper">
+      <div className="visitas-timezone-badge">
+        <Clock size={14} />
+        <span>Argentina (GMT-3)</span>
+      </div>
       <Calendar<VisitaCalendarEvent, CalendarResource>
         localizer={localizer}
         culture="es"
@@ -252,6 +263,8 @@ export function VisitasCalendario({
         timeslots={1}
         min={minTime}
         max={maxTime}
+        getNow={getNowInArgentina}
+        scrollToTime={getNowInArgentina()}
         defaultView="week"
         popup
         showMultiDayTimes

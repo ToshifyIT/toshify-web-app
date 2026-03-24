@@ -245,7 +245,10 @@ export function FacturacionPreviewTable({
     'P009': 'Mora',
     'P010': 'Plan Pagos',
     'P011': 'Ajuste Manual',
-    'P013': 'Alquiler NOCTURNO'
+    'P013': 'Alquiler NOCTURNO',
+    'P014': 'Alquiler TURNO s/GNC',
+    'P015': 'Alquiler NOCTURNO s/GNC',
+    'P016': 'Alquiler CARGO s/GNC'
   }
 
 
@@ -1042,7 +1045,7 @@ export function FacturacionPreviewTable({
         <div className="fact-preview-filter-group">
           <Filter size={14} />
           <select value={filtroProducto} onChange={(e) => setFiltroProducto(e.target.value)}>
-            <option value="todos">Todos</option>
+            <option value="todos">Todos los productos</option>
             {productosUnicos.map(p => (
               <option key={p} value={p}>{p} - {nombreProducto[p] || p}</option>
             ))}
@@ -1111,8 +1114,8 @@ export function FacturacionPreviewTable({
                   <td>{row.puntoVenta}</td>
                   <td><span className={`badge-tipo ${row.tipoFactura === 'FACTURA_A' ? 'tipo-a' : 'tipo-b'}`}>{row.tipoFactura === 'FACTURA_A' ? 'A' : 'B'}</span></td>
                   <td>{row.tipoDocumento}</td>
-                  <td className="col-mono">{row.numeroCuil || ''}</td>
-                  <td className="col-mono">{row.numeroDni || ''}</td>
+                  <td className="col-mono">{(row.numeroCuil || '').replace(/-/g, '')}</td>
+                  <td className="col-mono">{(row.numeroDni || '').replace(/-/g, '')}</td>
                   <td className="col-money">
                     {mostrarProyectado && CODIGOS_ALQUILER.includes(row.codigoProducto) && proyectadoAlquilerMap?.get(row.conductorId)
                       ? <span style={{ color: '#7c3aed', fontWeight: 600 }}>{fmtNum(proyectadoAlquilerMap.get(row.conductorId)!)}</span>
