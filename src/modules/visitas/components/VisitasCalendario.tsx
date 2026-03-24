@@ -136,14 +136,18 @@ export function VisitasCalendario({
 
   // Modal para ver citas de un slot cuando hay muchas solapadas
   const [slotModalDate, setSlotModalDate] = useState<Date | null>(null);
+  const [slotModalTimeKey, setSlotModalTimeKey] = useState<string | null>(null);
 
   const slotModalEvents = useMemo(() => {
     if (!slotModalDate) return [];
     const dayStr = format(slotModalDate, 'yyyy-MM-dd');
-    return events
-      .filter((e) => format(e.start, 'yyyy-MM-dd') === dayStr)
-      .sort((a, b) => a.start.getTime() - b.start.getTime());
-  }, [slotModalDate, events]);
+    let filtered = events.filter((e) => format(e.start, 'yyyy-MM-dd') === dayStr);
+    // Si viene de un evento sintético, filtrar solo la franja horaria
+    if (slotModalTimeKey) {
+      filtered = filtered.filter((e) => format(e.start, 'yyyy-MM-dd_HH:mm') === slotModalTimeKey);
+    }
+    return filtered.sort((a, b) => a.start.getTime() - b.start.getTime());
+  }, [slotModalDate, slotModalTimeKey, events]);
 
   // Pre-procesar eventos: si hay más de 1 solapado, reemplazar por un solo bloque "+X citas"
   const processedEvents = useMemo(() => {
@@ -159,11 +163,11 @@ export function VisitasCalendario({
 
     const result: VisitaCalendarEvent[] = [];
     for (const [, group] of groups) {
-      if (group.length === 1) {
-        // Solo 1 cita: mostrar normal
-        result.push(group[0]);
+      if (group.length <= 2) {
+        // 1-2 citas: mostrar lado a lado normal
+        result.push(...group);
       } else {
-        // Múltiples citas: un solo bloque "+X citas"
+        // 3+ citas solapadas: un solo bloque "+X citas"
         const synth: VisitaCalendarEvent = {
           id: `more_${format(group[0].start, 'yyyy-MM-dd_HH:mm')}`,
           title: `${group.length} citas`,
@@ -188,6 +192,7 @@ export function VisitasCalendario({
   const handleEventClick = useCallback((event: VisitaCalendarEvent) => {
     // deno-lint-ignore no-explicit-any
     if ((event.visita as any)._synthetic) {
+      setSlotModalTimeKey(format(event.start, 'yyyy-MM-dd_HH:mm'));
       setSlotModalDate(event.start);
       return;
     }
@@ -196,11 +201,13 @@ export function VisitasCalendario({
 
   // Handler para click en "+X más" en vista mes
   const handleShowMore = useCallback((_events: VisitaCalendarEvent[], date: Date) => {
+    setSlotModalTimeKey(null); // Mostrar todas las del día
     setSlotModalDate(date);
   }, []);
 
   // Handler para click en día del header
   const handleDrillDown = useCallback((date: Date) => {
+    setSlotModalTimeKey(null); // Mostrar todas las del día
     setSlotModalDate(date);
   }, []);
 
@@ -272,11 +279,14 @@ export function VisitasCalendario({
 
       {/* Modal de citas del día */}
       {slotModalDate && (
-        <div className="visitas-day-modal-overlay" onClick={() => setSlotModalDate(null)}>
+        <div className="visitas-day-modal-overlay" onClick={() => { setSlotModalDate(null); setSlotModalTimeKey(null); }}>
           <div className="visitas-day-modal" onClick={(e) => e.stopPropagation()}>
             <div className="visitas-day-modal-header">
-              <h3>Citas del {format(slotModalDate, "EEEE d 'de' MMMM", { locale: es })}</h3>
-              <button className="visitas-day-modal-close" onClick={() => setSlotModalDate(null)}>
+              <h3>
+                Citas del {format(slotModalDate, "EEEE d 'de' MMMM", { locale: es })}
+                {slotModalTimeKey && ` - ${format(slotModalDate, 'HH:mm')}`}
+              </h3>
+              <button className="visitas-day-modal-close" onClick={() => { setSlotModalDate(null); setSlotModalTimeKey(null); }}>
                 <X size={18} />
               </button>
             </div>
