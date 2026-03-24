@@ -260,7 +260,7 @@ export async function checkConflict(
  */
 function toArgentinaDate(utcDate: Date): Date {
   // Obtener la hora en Argentina usando Intl
-  const argStr = utcDate.toLocaleString('en-US', { timeZone: 'America/Buenos_Aires' });
+  const argStr = utcDate.toLocaleString('en-US', { timeZone: 'America/Argentina/Buenos_Aires' });
   return new Date(argStr);
 }
 
