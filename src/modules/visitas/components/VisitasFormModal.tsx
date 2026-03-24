@@ -20,6 +20,18 @@ import { TIPO_ASIGNACION_LABELS } from '../../../types/onboarding.types';
 import { getMotivosByCategoria, checkConflict, buildLocalTimestamp } from '../../../services/visitasService';
 import { format } from 'date-fns';
 
+// Formatear fecha/hora en zona Argentina (independiente del navegador)
+const ARG_TZ = 'America/Argentina/Buenos_Aires';
+function formatInArgentina(date: Date, fmt: string): string {
+  if (fmt === 'yyyy-MM-dd') {
+    return new Intl.DateTimeFormat('en-CA', { timeZone: ARG_TZ, year: 'numeric', month: '2-digit', day: '2-digit' }).format(date);
+  }
+  if (fmt === 'HH:mm') {
+    return new Intl.DateTimeFormat('en-GB', { timeZone: ARG_TZ, hour: '2-digit', minute: '2-digit', hour12: false }).format(date);
+  }
+  return format(date, fmt);
+}
+
 // Motivos derivados de asignaciones, formateados como opciones de select
 const MOTIVOS_ASIGNACIONES = Object.entries(TIPO_ASIGNACION_LABELS).map(
   ([key, label]) => ({ key, label })
@@ -161,8 +173,8 @@ export function VisitasFormModal({
         nombre_visitante: visita.nombre_visitante,
         dni_visitante: visita.dni_visitante ?? '',
         patente: visita.patente ?? '',
-        fecha: format(dt, 'yyyy-MM-dd'),
-        hora: format(dt, 'HH:mm'),
+        fecha: formatInArgentina(dt, 'yyyy-MM-dd'),
+        hora: formatInArgentina(dt, 'HH:mm'),
         duracion_minutos: visita.duracion_minutos,
         nota: visita.nota ?? '',
       });
@@ -172,8 +184,8 @@ export function VisitasFormModal({
     } else if (prefillDate) {
       setFormData((prev) => ({
         ...prev,
-        fecha: format(prefillDate, 'yyyy-MM-dd'),
-        hora: format(prefillDate, 'HH:mm'),
+        fecha: formatInArgentina(prefillDate, 'yyyy-MM-dd'),
+        hora: formatInArgentina(prefillDate, 'HH:mm'),
         atendedor_id: prefillResourceId ?? '',
       }));
       setVisitantes([{ nombre: '', dni: '' }]);
