@@ -2335,6 +2335,17 @@ export function ConductoresModule() {
         enableSorting: false,
       },
       {
+        accessorKey: "created_at",
+        header: "Creación",
+        cell: ({ getValue }) => {
+          const val = getValue() as string;
+          if (!val) return "-";
+          const d = new Date(val);
+          return `${d.getDate().toString().padStart(2, '0')}/${(d.getMonth() + 1).toString().padStart(2, '0')}/${d.getFullYear()}`;
+        },
+        enableSorting: true,
+      },
+      {
         id: "acciones",
         header: "Acciones",
         cell: ({ row }) => {
