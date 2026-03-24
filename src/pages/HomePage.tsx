@@ -110,12 +110,14 @@ class LazyErrorBoundary extends Component<{ children: ReactNode }, LazyErrorBoun
     return { hasError: true, isChunkError: isChunkLoadError(error) }
   }
 
-  componentDidCatch(error: Error, _errorInfo: ErrorInfo) {
+  componentDidCatch(error: Error, errorInfo: ErrorInfo) {
+    console.error('[LazyErrorBoundary]', error.message, error.stack, errorInfo.componentStack)
     if (isChunkLoadError(error)) {
       // Auto-recargar una sola vez para obtener los chunks nuevos
       const lastReload = sessionStorage.getItem('chunk_reload')
       const now = Date.now()
-      if (!lastReload || now - parseInt(lastReload) > 10000) {
+      // Solo auto-recargar si no se recargó en los últimos 60 segundos
+      if (!lastReload || now - parseInt(lastReload) > 60000) {
         sessionStorage.setItem('chunk_reload', now.toString())
         window.location.reload()
         return
