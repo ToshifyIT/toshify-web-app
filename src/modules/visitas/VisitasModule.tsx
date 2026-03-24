@@ -38,7 +38,7 @@ import {
   toCalendarEvents,
   toCalendarResources,
   autoUpdateEstados,
-} from '../../services/visitasService';
+} from '../../services/visitasService'; // timezone fix v2
 import { VisitasCalendario } from './components/VisitasCalendario';
 import { VisitasFormModal } from './components/VisitasFormModal';
 import { VisitaDetalleModal } from './components/VisitaDetalleModal';
