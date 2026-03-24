@@ -13,6 +13,13 @@ import { VISITA_ESTADOS } from '../../../types/visitas.types';
 
 import 'react-big-calendar/lib/css/react-big-calendar.css';
 
+// Obtener la hora actual en Argentina (para la línea roja del calendario)
+function getNowInArgentina(): Date {
+  const now = new Date()
+  const argTime = new Date(now.toLocaleString('en-US', { timeZone: 'America/Argentina/Buenos_Aires' }))
+  return argTime
+}
+
 // --- Localizer date-fns (español) ---
 const locales = { es };
 const localizer = dateFnsLocalizer({
@@ -256,6 +263,8 @@ export function VisitasCalendario({
         timeslots={1}
         min={minTime}
         max={maxTime}
+        getNow={getNowInArgentina}
+        scrollToTime={getNowInArgentina()}
         defaultView="week"
         popup
         showMultiDayTimes
