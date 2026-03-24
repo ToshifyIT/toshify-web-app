@@ -8,6 +8,12 @@ import { X, Clock, User, MapPin, FileText, Tag, Users } from 'lucide-react';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale/es';
 import type { VisitaCompleta, VisitaEstado } from '../../../types/visitas.types';
+
+// Convertir fecha UTC a hora Argentina
+const ARG_TZ = 'America/Argentina/Buenos_Aires';
+function toArgDate(utcDate: Date): Date {
+  return new Date(utcDate.toLocaleString('en-US', { timeZone: ARG_TZ }));
+}
 import { VISITA_ESTADOS } from '../../../types/visitas.types';
 
 // Transiciones válidas de estado
@@ -40,7 +46,7 @@ export function VisitaDetalleModal({
 }: VisitaDetalleModalProps) {
   const [showAllVisitantes, setShowAllVisitantes] = useState(false);
 
-  const fechaHora = new Date(visita.fecha_hora);
+  const fechaHora = toArgDate(new Date(visita.fecha_hora));
   const fechaFormateada = format(fechaHora, "EEEE d 'de' MMMM, yyyy", { locale: es });
   const horaInicio = format(fechaHora, 'HH:mm');
   const horaFin = format(

@@ -314,8 +314,8 @@ export function VisitasModule() {
     }
     const XLSX = await import('xlsx');
     const dataExport = visitas.filter((v) => !isMasked(v)).map((v) => ({
-      'Fecha': format(new Date(v.fecha_hora), 'dd/MM/yyyy'),
-      'Hora': format(new Date(v.fecha_hora), 'HH:mm'),
+      'Fecha': format(new Date(new Date(v.fecha_hora).toLocaleString('en-US', { timeZone: 'America/Argentina/Buenos_Aires' })), 'dd/MM/yyyy'),
+      'Hora': format(new Date(new Date(v.fecha_hora).toLocaleString('en-US', { timeZone: 'America/Argentina/Buenos_Aires' })), 'HH:mm'),
       'Duración (min)': v.duracion_minutos,
       'Categoría': v.categoria_nombre,
       'Motivo': v.motivo_nombre ?? '',
