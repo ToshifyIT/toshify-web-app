@@ -2057,6 +2057,17 @@ export function ConductoresModule() {
         enableSorting: true,
       },
       {
+        accessorKey: "created_at",
+        header: "Creación",
+        cell: ({ getValue }) => {
+          const val = getValue() as string;
+          if (!val) return "-";
+          const d = new Date(val);
+          return `${d.getDate().toString().padStart(2, '0')}/${(d.getMonth() + 1).toString().padStart(2, '0')}/${d.getFullYear()}`;
+        },
+        enableSorting: true,
+      },
+      {
         accessorKey: "preferencia_turno",
         header: () => (
           <div className="dt-column-filter">
@@ -2333,17 +2344,6 @@ export function ConductoresModule() {
           return <span className="vehiculo-cell-na">-</span>;
         },
         enableSorting: false,
-      },
-      {
-        accessorKey: "created_at",
-        header: "Creación",
-        cell: ({ getValue }) => {
-          const val = getValue() as string;
-          if (!val) return "-";
-          const d = new Date(val);
-          return `${d.getDate().toString().padStart(2, '0')}/${(d.getMonth() + 1).toString().padStart(2, '0')}/${d.getFullYear()}`;
-        },
-        enableSorting: true,
       },
       {
         id: "acciones",
