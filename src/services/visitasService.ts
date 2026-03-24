@@ -259,9 +259,13 @@ export async function checkConflict(
  * "engañarlo" para que muestre la hora de Argentina.
  */
 function toArgentinaDate(utcDate: Date): Date {
-  // Obtener la hora en Argentina usando Intl
-  const argStr = utcDate.toLocaleString('en-US', { timeZone: 'America/Argentina/Buenos_Aires' });
-  return new Date(argStr);
+  // Argentina es siempre UTC-3 (no tiene horario de verano)
+  const ARG_OFFSET_MS = -3 * 60 * 60 * 1000;
+  // Offset local del navegador en ms (ej: Colombia UTC-5 = +300 min = +18000000 ms)
+  const localOffsetMs = utcDate.getTimezoneOffset() * 60 * 1000;
+  // Diferencia: cuántos ms hay que sumar para pasar de hora local a hora Argentina
+  const diff = ARG_OFFSET_MS + localOffsetMs;
+  return new Date(utcDate.getTime() + diff);
 }
 
 export function toCalendarEvents(visitas: VisitaCompleta[]): VisitaCalendarEvent[] {
