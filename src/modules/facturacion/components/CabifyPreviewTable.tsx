@@ -505,32 +505,60 @@ export function CabifyPreviewTable({
 
     // Pre-cargar datos reales del conductor
     const conductorId = row.conductorId
-    const [ticketsRes, penalidadesRes, excesosRes, garantiaRes] = await Promise.all([
-      supabase.from('tickets_favor').select('id, tipo, descripcion, monto, estado').eq('conductor_id', conductorId).in('estado', ['aprobado', 'aplicado']),
-      supabase.from('penalidades').select('id, detalle, monto, fecha, area_responsable').eq('conductor_id', conductorId).eq('estado', 'aplicada'),
+    const [ticketsRes, penalidadesRes, excesosRes, garantiaRes, facDetRes] = await Promise.all([
+      supabase.from('tickets_favor').select('id, tipo, descripcion, monto, estado').eq('conductor_id', conductorId),
+      supabase.from('penalidades').select('id, detalle, monto, fecha, area_responsable').eq('conductor_id', conductorId),
       supabase.from('excesos_kilometraje').select('id, km_exceso, monto_total, semana').eq('conductor_id', conductorId),
       supabase.from('garantias_conductores').select('cuotas_pagadas, total_cuotas, monto_cuota').eq('conductor_id', conductorId).eq('estado', 'en_curso').single(),
+      // También buscar en facturacion_detalle por si los tickets/penalidades ya se aplicaron
+      supabase.from('facturacion_conductores').select('id').eq('conductor_id', conductorId).order('created_at', { ascending: false }).limit(1),
     ])
+
+    // Si hay facturación, cargar sus detalles P004 (tickets) y penalidades
+    let facDetalles: any[] = []
+    const lastFacId = facDetRes.data?.[0]?.id
+    if (lastFacId) {
+      const { data } = await supabase.from('facturacion_detalle').select('concepto_codigo, concepto_descripcion, total, es_descuento').eq('facturacion_id', lastFacId)
+      facDetalles = data || []
+    }
 
     const tickets = (ticketsRes.data || []) as any[]
     const penalidades = (penalidadesRes.data || []) as any[]
     const excesos = (excesosRes.data || []) as any[]
     const garantia = garantiaRes.data as any
+    // Tickets de facturacion_detalle (P004) como fallback
+    const ticketsDetalle = facDetalles.filter(d => d.concepto_codigo === 'P004' && d.es_descuento)
+    const penalidadesDetalle = facDetalles.filter(d => !d.es_descuento && d.concepto_codigo !== 'P003' && d.concepto_codigo !== 'P005' && d.concepto_codigo !== 'P006' && !d.concepto_codigo?.startsWith('P00') && !d.concepto_codigo?.startsWith('P01'))
 
     // Helpers
     const fmt = (n: number) => formatCurrency(n);
     const total = row.importeContrato + row.excedentes;
     const iBtn = (id: string) => `<span onclick="var b=document.getElementById('cbf-info-box');var t=document.getElementById('${id}');if(t){b.innerHTML=t.innerHTML;b.style.display=b.style.display==='none'?'block':'none';}else{b.style.display='none';}" style="cursor:pointer;color:#7C3AED;font-size:10px;border:1px solid #7C3AED;border-radius:50%;width:14px;height:14px;display:inline-flex;align-items:center;justify-content:center;vertical-align:middle;margin-left:2px;">i</span>`
 
-    // Generar HTML de detalles ocultos
+    // Generar HTML de detalles ocultos — usar datos de BD con fallback a facturacion_detalle
     const garantiaDetalle = garantia ? `Cuota ${garantia.cuotas_pagadas || '?'} de ${garantia.total_cuotas || 20} · ${fmt(garantia.monto_cuota || 50000)}/cuota` : 'Sin garantía activa'
-    const ticketsDetalle = tickets.length > 0
-      ? tickets.map(t => `• ${t.tipo || 'Ticket'}: ${t.descripcion || 'Sin descripción'} → ${fmt(t.monto)}`).join('<br/>')
-      : 'Sin tickets a favor'
-    const penalidadesDetalle = penalidades.length > 0
-      ? penalidades.map(p => `• ${p.detalle || 'Penalidad'} (${p.fecha || ''}) → ${fmt(p.monto)}`).join('<br/>')
-      : 'Sin penalidades'
-    const excesosDetalle = excesos.length > 0
+
+    // Tickets: primero intentar desde tickets_favor, si no hay usar facturacion_detalle P004
+    let ticketsHtml = ''
+    if (tickets.length > 0) {
+      ticketsHtml = tickets.map(t => `• ${t.tipo || 'Ticket'}${t.descripcion ? ': ' + t.descripcion : ''} → ${fmt(t.monto)} <span style="color:#888">(${t.estado})</span>`).join('<br/>')
+    } else if (ticketsDetalle.length > 0) {
+      ticketsHtml = ticketsDetalle.map(t => `• ${t.concepto_descripcion || 'Ticket'} → -${fmt(t.total)}`).join('<br/>')
+    } else {
+      ticketsHtml = 'Sin tickets a favor'
+    }
+
+    // Penalidades: desde penalidades tabla con fallback a facturacion_detalle
+    let penalidadesHtml = ''
+    if (penalidades.length > 0) {
+      penalidadesHtml = penalidades.map(p => `• ${p.detalle || 'Penalidad'} (${p.fecha || ''}) → ${fmt(p.monto)}`).join('<br/>')
+    } else if (penalidadesDetalle.length > 0) {
+      penalidadesHtml = penalidadesDetalle.map(p => `• ${p.concepto_descripcion || 'Penalidad'} → ${fmt(p.total)}`).join('<br/>')
+    } else {
+      penalidadesHtml = 'Sin penalidades'
+    }
+
+    const excesosHtml = excesos.length > 0
       ? excesos.map(e => `• S${e.semana || '?'}: +${e.km_exceso || 0} km → ${fmt(e.monto_total)}`).join('<br/>')
       : 'Sin excesos de KM'
 
@@ -553,7 +581,7 @@ export function CabifyPreviewTable({
           </div>
 
           <!-- Detalles ocultos para los (i) -->
-          <div style="display:none"><div id="det-garantia">${garantiaDetalle}</div><div id="det-peajes">Telepeajes Cabify semana anterior${d.montoPeajes === 0 ? ' (telepase propio = $0)' : ''}</div><div id="det-excesos">${excesosDetalle}</div><div id="det-penalidades">${penalidadesDetalle}</div><div id="det-tickets">${ticketsDetalle}</div><div id="det-subtotal">Alquiler ${fmt(d.subtotalAlquiler)} + Garantía ${fmt(d.subtotalGarantia)} + Peajes ${fmt(d.montoPeajes)} + Excesos ${fmt(d.montoExcesos)} + Penalidades ${fmt(d.montoPenalidades)}</div><div id="det-descuentos">${ticketsDetalle}</div><div id="det-saldo">Saldo acumulado de semanas anteriores</div><div id="det-contrato">Precio diario × 7 días = ${fmt(row.importeContrato)}</div><div id="det-excedentes">Garantía ${fmt(d.subtotalGarantia)} + Peajes ${fmt(d.montoPeajes)} + Excesos ${fmt(d.montoExcesos)} + Penalidades ${fmt(d.montoPenalidades)} − Tickets ${fmt(d.ticketsFavor)} + Saldo ${fmt(d.saldoAnterior)}</div></div>
+          <div style="display:none"><div id="det-garantia">${garantiaDetalle}</div><div id="det-peajes">Telepeajes Cabify semana anterior${d.montoPeajes === 0 ? ' (telepase propio = $0)' : ''}</div><div id="det-excesos">${excesosHtml}</div><div id="det-penalidades">${penalidadesHtml}</div><div id="det-tickets">${ticketsHtml}</div><div id="det-subtotal">Alquiler ${fmt(d.subtotalAlquiler)} + Garantía ${fmt(d.subtotalGarantia)} + Peajes ${fmt(d.montoPeajes)} + Excesos ${fmt(d.montoExcesos)} + Penalidades ${fmt(d.montoPenalidades)}</div><div id="det-descuentos">${ticketsHtml}</div><div id="det-saldo">Saldo acumulado de semanas anteriores</div><div id="det-contrato">Precio diario × 7 días = ${fmt(row.importeContrato)}</div><div id="det-excedentes">Garantía ${fmt(d.subtotalGarantia)} + Peajes ${fmt(d.montoPeajes)} + Excesos ${fmt(d.montoExcesos)} + Penalidades ${fmt(d.montoPenalidades)} − Tickets ${fmt(d.ticketsFavor)} + Saldo ${fmt(d.saldoAnterior)}</div></div>
 
           <div id="cbf-info-box" style="display:none;background:#1e1e2e;color:#fff;padding:8px 12px;border-radius:6px;font-size:11px;line-height:1.4;margin-bottom:8px;"></div>
           <table style="width: 100%; font-size: 12px; border-collapse: collapse; margin-bottom: 12px;">
