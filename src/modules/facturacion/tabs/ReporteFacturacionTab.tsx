@@ -7435,9 +7435,13 @@ export function ReporteFacturacionTab() {
         }
         
         // EXCEDENTES = resto de productos (sin alquiler) + saldo pendiente
-        // Cobros (garantía, peajes, excesos, penalidades) suman, montos a favor (tickets) restan
+        // Si tiene telepase, peajes = 0 (no existe)
+        const tieneTelepasePreview = f.tiene_telepase === true
+        const peajesReales = tieneTelepasePreview ? 0 : (f.monto_peajes || 0)
         const saldoPendiente = f.saldo_anterior || 0
-        const excedentes = (f.subtotal_cargos || 0) - (f.subtotal_descuentos || 0) - actualAlquiler + saldoPendiente
+        // subtotal_cargos sin peajes si telepase + restar peajes originales que estén incluidos
+        const subtotalCargosLimpio = (f.subtotal_cargos || 0) - (f.monto_peajes || 0) + peajesReales
+        const excedentes = subtotalCargosLimpio - (f.subtotal_descuentos || 0) - actualAlquiler + saldoPendiente
 
         return {
           anio,
@@ -7466,14 +7470,14 @@ export function ReporteFacturacionTab() {
             subtotalAlquiler: importeContrato,
             subtotalGarantia: f.subtotal_garantia || 0,
             cuotaGarantia: f.cuota_garantia_numero || '',
-            montoPeajes: f.monto_peajes || 0,
+            montoPeajes: peajesReales,
             montoExcesos: f.monto_excesos || 0,
             montoPenalidades: f.monto_penalidades || 0,
             ticketsFavor: f.monto_tickets_favor || 0,
-            subtotalCargos: (f.subtotal_cargos || 0) - actualAlquiler + importeContrato,
+            subtotalCargos: subtotalCargosLimpio - actualAlquiler + importeContrato,
             subtotalDescuentos: f.subtotal_descuentos || 0,
             saldoAnterior: f.saldo_anterior || 0,
-            totalAPagar: (f.total_a_pagar || 0) - actualAlquiler + importeContrato,
+            totalAPagar: subtotalCargosLimpio - (f.subtotal_descuentos || 0) + saldoPendiente - actualAlquiler + importeContrato,
           }
         }
       })
@@ -7622,8 +7626,12 @@ export function ReporteFacturacionTab() {
         }
         
         // EXCEDENTES = resto de productos (sin alquiler) + saldo pendiente
+        // Si tiene telepase, peajes = 0
+        const tieneTelepaseCerrado = f.tiene_telepase === true
+        const peajesRealesCerrado = tieneTelepaseCerrado ? 0 : (f.monto_peajes || 0)
         const saldoPendiente = f.saldo_anterior || 0
-        const excedentes = (f.subtotal_cargos || 0) - (f.subtotal_descuentos || 0) - actualAlquiler + saldoPendiente
+        const subtotalCargosLimpioCerrado = (f.subtotal_cargos || 0) - (f.monto_peajes || 0) + peajesRealesCerrado
+        const excedentes = subtotalCargosLimpioCerrado - (f.subtotal_descuentos || 0) - actualAlquiler + saldoPendiente
 
         return {
           anio: periodo.anio,
@@ -7652,14 +7660,14 @@ export function ReporteFacturacionTab() {
             subtotalAlquiler: importeContrato,
             subtotalGarantia: f.subtotal_garantia || 0,
             cuotaGarantia: f.cuota_garantia_numero || '',
-            montoPeajes: f.monto_peajes || 0,
+            montoPeajes: peajesRealesCerrado,
             montoExcesos: f.monto_excesos || 0,
             montoPenalidades: f.monto_penalidades || 0,
             ticketsFavor: f.monto_tickets_favor || 0,
-            subtotalCargos: (f.subtotal_cargos || 0) - actualAlquiler + importeContrato,
+            subtotalCargos: subtotalCargosLimpioCerrado - actualAlquiler + importeContrato,
             subtotalDescuentos: f.subtotal_descuentos || 0,
             saldoAnterior: f.saldo_anterior || 0,
-            totalAPagar: (f.total_a_pagar || 0) - actualAlquiler + importeContrato,
+            totalAPagar: subtotalCargosLimpioCerrado - (f.subtotal_descuentos || 0) + saldoPendiente - actualAlquiler + importeContrato,
           }
         }
       })
