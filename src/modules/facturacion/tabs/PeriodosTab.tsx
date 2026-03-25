@@ -545,7 +545,20 @@ export function PeriodosTab() {
           .eq('periodo_id', semana.periodo_id)
       }
 
-      // 9. Procesar cada conductor
+      // 9. Cargar flags de telepase de vehículos
+      const patentesUnicasPeriodo = [...new Set(conductoresProcesados.map(c => c.vehiculo_patente).filter(Boolean))] as string[]
+      const telepaseMap = new Map<string, boolean>()
+      if (patentesUnicasPeriodo.length > 0) {
+        const { data: vehFlags } = await supabase
+          .from('vehiculos')
+          .select('patente, telepase')
+          .in('patente', patentesUnicasPeriodo)
+        ;(vehFlags || []).forEach((v: any) => {
+          telepaseMap.set(v.patente, v.telepase === true)
+        })
+      }
+
+      // Procesar cada conductor
       let totalCargosGlobal = 0
       let totalDescuentosGlobal = 0
       let conductoresProcesadosCount = 0
@@ -633,7 +646,9 @@ export function PeriodosTab() {
         const totalExcesos = excesosConductor.reduce((sum: number, e: any) => sum + (e.monto_total || 0), 0)
 
         // Peajes del conductor desde Cabify (P005)
-        const totalPeajes = conductor.conductor_dni ? (peajesMap.get(normalizeDni(conductor.conductor_dni)) || 0) : 0
+        // Si el vehículo tiene telepase, NO cobrar peajes
+        const tieneTelepasePeriodo = conductor.vehiculo_patente ? (telepaseMap.get(conductor.vehiculo_patente) || false) : false
+        const totalPeajes = (tieneTelepasePeriodo || !conductor.conductor_dni) ? 0 : (peajesMap.get(normalizeDni(conductor.conductor_dni)) || 0)
 
         // Cobros fraccionados del conductor (P010)
         const cobrosConductor = (cobros as any[]).filter((c: any) => c.conductor_id === conductor.conductor_id)
