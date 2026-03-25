@@ -413,21 +413,16 @@ export function ReporteFacturacionTab() {
   const detalleCargos = useMemo(() => detalleItems.filter(d => !d.es_descuento && d.total !== 0), [detalleItems])
   const detalleDescuentos = useMemo(() => detalleItems.filter(d => d.es_descuento && d.total !== 0), [detalleItems])
 
-  // Saldo implícito: diferencia entre total_a_pagar del backend y los items visibles
-  // Si hay diferencia, es saldo anterior que no aparece como línea
-  const saldoImplicito = useMemo(() => {
-    if (!detalleFacturacion) return 0
-    const sumCargos = detalleCargos.reduce((sum, d) => sum + d.total, 0)
-    const sumDescuentos = detalleDescuentos.reduce((sum, d) => sum + d.total, 0)
-    const netoItems = sumCargos - sumDescuentos
-    const saldoExplicito = detalleFacturacion.saldo_anterior || 0
-    const saldoYaIncluido = detalleItems.some(d => d.concepto_codigo === 'SALDO')
-    // Si ya hay saldo explícito o item SALDO, no calcular implícito
-    if (saldoExplicito !== 0 || saldoYaIncluido) return 0
-    // Diferencia entre el total real y los items visibles
-    const diff = detalleFacturacion.total_a_pagar - netoItems
-    return Math.abs(diff) > 0.01 ? diff : 0
-  }, [detalleCargos, detalleDescuentos, detalleFacturacion, detalleItems])
+  // Conceptos faltantes: detectar peajes y saldo anterior que están en el total pero no como items
+  const conceptosFaltantes = useMemo(() => {
+    if (!detalleFacturacion) return { peajes: 0, saldo: 0 }
+    const tieneItemPeajes = detalleItems.some(d => d.concepto_codigo === 'P005')
+    const tieneItemSaldo = detalleItems.some(d => d.concepto_codigo === 'SALDO')
+    return {
+      peajes: !tieneItemPeajes ? (detalleFacturacion.monto_peajes || 0) : 0,
+      saldo: !tieneItemSaldo ? (detalleFacturacion.saldo_anterior || 0) : 0,
+    }
+  }, [detalleFacturacion, detalleItems])
 
   // Table instance and filters
   const [tableInstance, setTableInstance] = useState<Table<FacturacionConductor> | null>(null)
@@ -10033,43 +10028,33 @@ export function ReporteFacturacionTab() {
                     </div>
                   )}
 
-                  {/* Saldo implícito: diferencia no explicada entre items visibles y total */}
-                  {saldoImplicito !== 0 && (
+                  {/* Peajes faltantes (no guardados como detalle pero incluidos en el total) */}
+                  {conceptosFaltantes.peajes > 0 && (
                     <div style={{ marginBottom: '12px' }}>
                       <div style={{
                         fontSize: '11px', fontWeight: 600, color: 'var(--text-secondary)',
                         textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '6px',
                       }}>
-                        Saldo Anterior
+                        Otros Cargos
                       </div>
                       <div style={{
                         display: 'flex', justifyContent: 'space-between', alignItems: 'center',
                         padding: '7px 12px', borderRadius: '6px',
-                        background: saldoImplicito > 0 ? 'rgba(255, 0, 51, 0.04)' : 'rgba(16, 185, 129, 0.04)',
-                        border: `1px solid ${saldoImplicito > 0 ? 'rgba(255, 0, 51, 0.12)' : 'rgba(16, 185, 129, 0.12)'}`,
+                        background: 'rgba(255, 0, 51, 0.04)', border: '1px solid rgba(255, 0, 51, 0.12)',
                       }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                          <div style={{
-                            width: '6px', height: '6px', borderRadius: '50%',
-                            background: saldoImplicito > 0 ? '#ff0033' : '#10b981',
-                            flexShrink: 0,
-                          }} />
-                          <span style={{ fontSize: '12px', color: 'var(--text-primary)' }}>
-                            {saldoImplicito > 0 ? 'Deuda pendiente semana anterior' : 'Saldo a favor semana anterior'}
-                          </span>
+                          <div style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#ff0033', flexShrink: 0 }} />
+                          <span style={{ fontSize: '12px', color: 'var(--text-primary)' }}>Peajes Cabify</span>
                         </div>
-                        <span style={{
-                          fontSize: '12px', fontWeight: 600, fontFamily: 'monospace',
-                          color: saldoImplicito > 0 ? '#ff0033' : '#059669',
-                        }}>
-                          {saldoImplicito > 0 ? '+' : '-'}{formatCurrency(Math.abs(saldoImplicito))}
+                        <span style={{ fontSize: '12px', fontWeight: 600, fontFamily: 'monospace', color: '#ff0033' }}>
+                          {formatCurrency(conceptosFaltantes.peajes)}
                         </span>
                       </div>
                     </div>
                   )}
 
-                  {/* Saldo Anterior explícito (si existe y no está ya incluido en los items) */}
-                  {detalleFacturacion.saldo_anterior !== 0 && !detalleItems.some(d => d.concepto_codigo === 'SALDO') && (
+                  {/* Saldo Anterior (si existe y no está ya incluido en los items) */}
+                  {conceptosFaltantes.saldo !== 0 && (
                     <div style={{ marginBottom: '12px' }}>
                       <div style={{
                         fontSize: '11px', fontWeight: 600, color: 'var(--text-secondary)',
@@ -10080,24 +10065,24 @@ export function ReporteFacturacionTab() {
                       <div style={{
                         display: 'flex', justifyContent: 'space-between', alignItems: 'center',
                         padding: '7px 12px', borderRadius: '6px',
-                        background: detalleFacturacion.saldo_anterior > 0 ? 'rgba(255, 0, 51, 0.04)' : 'rgba(16, 185, 129, 0.04)',
-                        border: `1px solid ${detalleFacturacion.saldo_anterior > 0 ? 'rgba(255, 0, 51, 0.12)' : 'rgba(16, 185, 129, 0.12)'}`,
+                        background: conceptosFaltantes.saldo > 0 ? 'rgba(255, 0, 51, 0.04)' : 'rgba(16, 185, 129, 0.04)',
+                        border: `1px solid ${conceptosFaltantes.saldo > 0 ? 'rgba(255, 0, 51, 0.12)' : 'rgba(16, 185, 129, 0.12)'}`,
                       }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                           <div style={{
                             width: '6px', height: '6px', borderRadius: '50%',
-                            background: detalleFacturacion.saldo_anterior > 0 ? '#ff0033' : '#10b981',
+                            background: conceptosFaltantes.saldo > 0 ? '#ff0033' : '#10b981',
                             flexShrink: 0,
                           }} />
                           <span style={{ fontSize: '12px', color: 'var(--text-primary)' }}>
-                            {detalleFacturacion.saldo_anterior > 0 ? 'Deuda pendiente semana anterior' : 'Saldo a favor semana anterior'}
+                            {conceptosFaltantes.saldo > 0 ? 'Deuda pendiente semana anterior' : 'Saldo a favor semana anterior'}
                           </span>
                         </div>
                         <span style={{
                           fontSize: '12px', fontWeight: 600, fontFamily: 'monospace',
-                          color: detalleFacturacion.saldo_anterior > 0 ? '#ff0033' : '#059669',
+                          color: conceptosFaltantes.saldo > 0 ? '#ff0033' : '#059669',
                         }}>
-                          {detalleFacturacion.saldo_anterior > 0 ? '+' : '-'}{formatCurrency(Math.abs(detalleFacturacion.saldo_anterior))}
+                          {conceptosFaltantes.saldo > 0 ? '+' : '-'}{formatCurrency(Math.abs(conceptosFaltantes.saldo))}
                         </span>
                       </div>
                     </div>
