@@ -414,12 +414,14 @@ export function ReporteFacturacionTab() {
   const detalleDescuentos = useMemo(() => detalleItems.filter(d => d.es_descuento && d.total !== 0), [detalleItems])
 
   // Conceptos faltantes: detectar peajes y saldo anterior que están en el total pero no como items
+  // Si tiene telepase, peajes NO se cobran (independiente de lo que diga el total guardado)
   const conceptosFaltantes = useMemo(() => {
     if (!detalleFacturacion) return { peajes: 0, saldo: 0 }
     const tieneItemPeajes = detalleItems.some(d => d.concepto_codigo === 'P005')
     const tieneItemSaldo = detalleItems.some(d => d.concepto_codigo === 'SALDO')
+    const tieneTelepase = detalleFacturacion.tiene_telepase === true
     return {
-      peajes: !tieneItemPeajes ? (detalleFacturacion.monto_peajes || 0) : 0,
+      peajes: (!tieneItemPeajes && !tieneTelepase) ? (detalleFacturacion.monto_peajes || 0) : 0,
       saldo: !tieneItemSaldo ? (detalleFacturacion.saldo_anterior || 0) : 0,
     }
   }, [detalleFacturacion, detalleItems])
