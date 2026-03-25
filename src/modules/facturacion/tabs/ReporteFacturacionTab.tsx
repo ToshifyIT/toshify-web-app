@@ -413,8 +413,8 @@ export function ReporteFacturacionTab() {
   const detalleCargos = useMemo(() => detalleItems.filter(d => !d.es_descuento && d.total !== 0), [detalleItems])
   const detalleDescuentos = useMemo(() => detalleItems.filter(d => d.es_descuento && d.total !== 0), [detalleItems])
 
-  // Conceptos faltantes: detectar peajes y saldo anterior que están en el total pero no como items
-  // Si tiene telepase, peajes NO se cobran (independiente de lo que diga el total guardado)
+  // Conceptos faltantes: peajes y saldo que no están como items pero deben mostrarse
+  // Si tiene telepase, peajes = 0, no se cobra, no se muestra, no existe
   const conceptosFaltantes = useMemo(() => {
     if (!detalleFacturacion) return { peajes: 0, saldo: 0 }
     const tieneItemPeajes = detalleItems.some(d => d.concepto_codigo === 'P005')
@@ -425,6 +425,13 @@ export function ReporteFacturacionTab() {
       saldo: !tieneItemSaldo ? (detalleFacturacion.saldo_anterior || 0) : 0,
     }
   }, [detalleFacturacion, detalleItems])
+
+  // Total real: se calcula desde items visibles + conceptos faltantes (NO del backend que puede estar mal)
+  const totalRealDetalle = useMemo(() => {
+    const sumCargos = detalleCargos.reduce((sum, d) => sum + d.total, 0)
+    const sumDescuentos = detalleDescuentos.reduce((sum, d) => sum + d.total, 0)
+    return sumCargos - sumDescuentos + conceptosFaltantes.peajes + conceptosFaltantes.saldo
+  }, [detalleCargos, detalleDescuentos, conceptosFaltantes])
 
   // Table instance and filters
   const [tableInstance, setTableInstance] = useState<Table<FacturacionConductor> | null>(null)
@@ -10102,12 +10109,12 @@ export function ReporteFacturacionTab() {
                     <span style={{
                       fontSize: '28px', fontWeight: 700, fontFamily: 'monospace', lineHeight: 1,
                       margin: '6px 0',
-                      color: detalleFacturacion.total_a_pagar > 0 ? '#ff0033' : '#059669',
+                      color: totalRealDetalle > 0 ? '#ff0033' : '#059669',
                     }}>
-                      {formatCurrency(detalleFacturacion.total_a_pagar)}
+                      {formatCurrency(totalRealDetalle)}
                     </span>
                     <span style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>
-                      {detalleFacturacion.total_a_pagar > 0 ? 'El conductor debe pagar' : 'Saldo a favor del conductor'}
+                      {totalRealDetalle > 0 ? 'El conductor debe pagar' : 'Saldo a favor del conductor'}
                     </span>
                   </div>
 
