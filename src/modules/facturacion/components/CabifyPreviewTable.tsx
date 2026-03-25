@@ -495,23 +495,79 @@ export function CabifyPreviewTable({
     });
   }, []);
 
-  // Mostrar detalle de un conductor
-  const showDetalleRow = useCallback((row: CabifyPreviewRow) => {
+  // Mostrar detalle de un conductor - carga datos reales de BD
+  const showDetalleRow = useCallback(async (row: CabifyPreviewRow) => {
     const d = row.detalle;
     if (!d) {
       Swal.fire('Sin detalle', 'No hay información de cálculo disponible para este conductor.', 'info');
       return;
     }
 
+    // Pre-cargar datos reales del conductor
+    const conductorId = row.conductorId
+    const [ticketsRes, penalidadesRes, excesosRes, garantiaRes, facDetRes] = await Promise.all([
+      supabase.from('tickets_favor').select('id, tipo, descripcion, monto, estado').eq('conductor_id', conductorId),
+      supabase.from('penalidades').select('id, detalle, monto, fecha, area_responsable').eq('conductor_id', conductorId),
+      supabase.from('excesos_kilometraje').select('id, km_exceso, monto_total, semana').eq('conductor_id', conductorId),
+      supabase.from('garantias_conductores').select('cuotas_pagadas, total_cuotas, monto_cuota').eq('conductor_id', conductorId).eq('estado', 'en_curso').single(),
+      // También buscar en facturacion_detalle por si los tickets/penalidades ya se aplicaron
+      supabase.from('facturacion_conductores').select('id').eq('conductor_id', conductorId).order('created_at', { ascending: false }).limit(1),
+    ])
+
+    // Si hay facturación, cargar sus detalles P004 (tickets) y penalidades
+    let facDetalles: any[] = []
+    const lastFacId = facDetRes.data?.[0]?.id
+    if (lastFacId) {
+      const { data } = await supabase.from('facturacion_detalle').select('concepto_codigo, concepto_descripcion, total, es_descuento').eq('facturacion_id', lastFacId)
+      facDetalles = data || []
+    }
+
+    const tickets = (ticketsRes.data || []) as any[]
+    const penalidades = (penalidadesRes.data || []) as any[]
+    const excesos = (excesosRes.data || []) as any[]
+    const garantia = garantiaRes.data as any
+    // Tickets de facturacion_detalle (P004) como fallback
+    const ticketsDetalle = facDetalles.filter(d => d.concepto_codigo === 'P004' && d.es_descuento)
+    const penalidadesDetalle = facDetalles.filter(d => !d.es_descuento && d.concepto_codigo !== 'P003' && d.concepto_codigo !== 'P005' && d.concepto_codigo !== 'P006' && !d.concepto_codigo?.startsWith('P00') && !d.concepto_codigo?.startsWith('P01'))
+
+    // Helpers
     const fmt = (n: number) => formatCurrency(n);
     const total = row.importeContrato + row.excedentes;
+    const iBtn = (id: string) => `<span onclick="var b=document.getElementById('cbf-info-box');var t=document.getElementById('${id}');if(t){b.innerHTML=t.innerHTML;b.style.display=b.style.display==='none'?'block':'none';}else{b.style.display='none';}" style="cursor:pointer;color:#7C3AED;font-size:10px;border:1px solid #7C3AED;border-radius:50%;width:14px;height:14px;display:inline-flex;align-items:center;justify-content:center;vertical-align:middle;margin-left:2px;">i</span>`
+
+    // Generar HTML de detalles ocultos — usar datos de BD con fallback a facturacion_detalle
+    const garantiaDetalle = garantia ? `Cuota ${garantia.cuotas_pagadas || '?'} de ${garantia.total_cuotas || 20} · ${fmt(garantia.monto_cuota || 50000)}/cuota` : 'Sin garantía activa'
+
+    // Tickets: primero intentar desde tickets_favor, si no hay usar facturacion_detalle P004
+    let ticketsHtml = ''
+    if (tickets.length > 0) {
+      ticketsHtml = tickets.map(t => `• ${t.tipo || 'Ticket'}${t.descripcion ? ': ' + t.descripcion : ''} → ${fmt(t.monto)} <span style="color:#888">(${t.estado})</span>`).join('<br/>')
+    } else if (ticketsDetalle.length > 0) {
+      ticketsHtml = ticketsDetalle.map(t => `• ${t.concepto_descripcion || 'Ticket'} → -${fmt(t.total)}`).join('<br/>')
+    } else {
+      ticketsHtml = 'Sin tickets a favor'
+    }
+
+    // Penalidades: desde penalidades tabla con fallback a facturacion_detalle
+    let penalidadesHtml = ''
+    if (penalidades.length > 0) {
+      penalidadesHtml = penalidades.map(p => `• ${p.detalle || 'Penalidad'} (${p.fecha || ''}) → ${fmt(p.monto)}`).join('<br/>')
+    } else if (penalidadesDetalle.length > 0) {
+      penalidadesHtml = penalidadesDetalle.map(p => `• ${p.concepto_descripcion || 'Penalidad'} → ${fmt(p.total)}`).join('<br/>')
+    } else {
+      penalidadesHtml = 'Sin penalidades'
+    }
+
+    const excesosHtml = excesos.length > 0
+      ? excesos.map(e => `• S${e.semana || '?'}: +${e.km_exceso || 0} km → ${fmt(e.monto_total)}`).join('<br/>')
+      : 'Sin excesos de KM'
 
     Swal.fire({
       title: row.conductor,
       html: `
         <div style="text-align: left; font-size: 13px; line-height: 1.6; color: var(--text-primary, #333);">
           <div style="font-size: 11px; color: #888; margin-bottom: 10px;">${row.dni} · ${row.patente || 'Sin patente'} · ${row.email || 'Sin email'}</div>
-          
+
           <div style="background: rgba(124,58,237,0.06); border-radius: 6px; padding: 12px; margin-bottom: 12px;">
             <div style="font-weight: 700; font-size: 12px; text-transform: uppercase; color: #7C3AED; margin-bottom: 8px;">Días trabajados: ${d.diasTrabajados}</div>
             <table style="width: 100%; font-size: 12px; border-collapse: collapse;">
@@ -524,24 +580,28 @@ export function CabifyPreviewTable({
             </table>
           </div>
 
+          <!-- Detalles ocultos para los (i) -->
+          <div style="display:none"><div id="det-garantia">${garantiaDetalle}</div><div id="det-peajes">Telepeajes Cabify semana anterior${d.montoPeajes === 0 ? ' (telepase propio = $0)' : ''}</div><div id="det-excesos">${excesosHtml}</div><div id="det-penalidades">${penalidadesHtml}</div><div id="det-tickets">${ticketsHtml}</div><div id="det-subtotal">Alquiler ${fmt(d.subtotalAlquiler)} + Garantía ${fmt(d.subtotalGarantia)} + Peajes ${fmt(d.montoPeajes)} + Excesos ${fmt(d.montoExcesos)} + Penalidades ${fmt(d.montoPenalidades)}</div><div id="det-descuentos">${ticketsHtml}</div><div id="det-saldo">Saldo acumulado de semanas anteriores</div><div id="det-contrato">Precio diario × 7 días = ${fmt(row.importeContrato)}</div><div id="det-excedentes">Garantía ${fmt(d.subtotalGarantia)} + Peajes ${fmt(d.montoPeajes)} + Excesos ${fmt(d.montoExcesos)} + Penalidades ${fmt(d.montoPenalidades)} − Tickets ${fmt(d.ticketsFavor)} + Saldo ${fmt(d.saldoAnterior)}</div></div>
+
+          <div id="cbf-info-box" style="display:none;background:#1e1e2e;color:#fff;padding:8px 12px;border-radius:6px;font-size:11px;line-height:1.4;margin-bottom:8px;"></div>
           <table style="width: 100%; font-size: 12px; border-collapse: collapse; margin-bottom: 12px;">
             <tbody>
-              <tr><td style="padding: 4px 0;">Garantía <span style="color: #888; font-size: 11px;">(${d.cuotaGarantia})</span></td><td style="text-align: right; font-family: monospace;">${fmt(d.subtotalGarantia)}</td></tr>
-              <tr><td style="padding: 4px 0;">Peajes</td><td style="text-align: right; font-family: monospace;">${fmt(d.montoPeajes)}</td></tr>
-              <tr><td style="padding: 4px 0;">Excesos KM</td><td style="text-align: right; font-family: monospace;">${fmt(d.montoExcesos)}</td></tr>
-              <tr><td style="padding: 4px 0;">Penalidades</td><td style="text-align: right; font-family: monospace;">${fmt(d.montoPenalidades)}</td></tr>
-              <tr><td style="padding: 4px 0; color: #16a34a;">Tickets a favor</td><td style="text-align: right; font-family: monospace; color: #16a34a;">-${fmt(d.ticketsFavor)}</td></tr>
-              <tr style="border-top: 1px solid #ddd;"><td style="padding: 4px 0;">Subtotal Cargos</td><td style="text-align: right; font-family: monospace;">${fmt(d.subtotalCargos)}</td></tr>
-              <tr><td style="padding: 4px 0;">Subtotal Descuentos</td><td style="text-align: right; font-family: monospace; color: #16a34a;">-${fmt(d.subtotalDescuentos)}</td></tr>
-              <tr><td style="padding: 4px 0;">Saldo anterior</td><td style="text-align: right; font-family: monospace; ${d.saldoAnterior > 0 ? 'color: #16a34a;' : d.saldoAnterior < 0 ? 'color: #dc2626;' : ''}">${d.saldoAnterior > 0 ? '-' : ''}${fmt(Math.abs(d.saldoAnterior))}</td></tr>
+              <tr><td style="padding: 4px 0;">Garantía <span style="color: #888; font-size: 11px;">(${d.cuotaGarantia})</span> ${iBtn('det-garantia')}</td><td style="text-align: right; font-family: monospace;">${fmt(d.subtotalGarantia)}</td></tr>
+              <tr><td style="padding: 4px 0;">Peajes ${iBtn('det-peajes')}</td><td style="text-align: right; font-family: monospace;">${fmt(d.montoPeajes)}</td></tr>
+              <tr><td style="padding: 4px 0;">Excesos KM ${iBtn('det-excesos')}</td><td style="text-align: right; font-family: monospace;">${fmt(d.montoExcesos)}</td></tr>
+              <tr><td style="padding: 4px 0;">Penalidades ${iBtn('det-penalidades')}</td><td style="text-align: right; font-family: monospace;">${fmt(d.montoPenalidades)}</td></tr>
+              <tr><td style="padding: 4px 0; color: #16a34a;">Tickets a favor ${iBtn('det-tickets')}</td><td style="text-align: right; font-family: monospace; color: #16a34a;">-${fmt(d.ticketsFavor)}</td></tr>
+              <tr style="border-top: 1px solid #ddd;"><td style="padding: 4px 0;">Subtotal Cargos ${iBtn('det-subtotal')}</td><td style="text-align: right; font-family: monospace;">${fmt(d.subtotalCargos)}</td></tr>
+              <tr><td style="padding: 4px 0;">Subtotal Descuentos ${iBtn('det-descuentos')}</td><td style="text-align: right; font-family: monospace; color: #16a34a;">-${fmt(d.subtotalDescuentos)}</td></tr>
+              <tr><td style="padding: 4px 0;">Saldo anterior ${iBtn('det-saldo')}</td><td style="text-align: right; font-family: monospace; ${d.saldoAnterior > 0 ? 'color: #16a34a;' : d.saldoAnterior < 0 ? 'color: #dc2626;' : ''}">${d.saldoAnterior > 0 ? '-' : ''}${fmt(Math.abs(d.saldoAnterior))}</td></tr>
             </tbody>
           </table>
 
           <div style="background: var(--bg-secondary, #f8f9fa); border-radius: 6px; padding: 12px; border: 1px solid var(--border-color, #e5e7eb);">
             <table style="width: 100%; font-size: 13px; border-collapse: collapse;">
               <tbody>
-                <tr><td style="padding: 4px 0; font-weight: 700;">Importe Contrato</td><td style="text-align: right; font-family: monospace; font-weight: 700;">${fmt(row.importeContrato)}</td></tr>
-                <tr><td style="padding: 4px 0; font-weight: 700;">Excedentes</td><td style="text-align: right; font-family: monospace; font-weight: 700;">${fmt(row.excedentes)}</td></tr>
+                <tr><td style="padding: 4px 0; font-weight: 700;">Importe Contrato ${iBtn('det-contrato')}</td><td style="text-align: right; font-family: monospace; font-weight: 700;">${fmt(row.importeContrato)}</td></tr>
+                <tr><td style="padding: 4px 0; font-weight: 700;">Excedentes ${iBtn('det-excedentes')}</td><td style="text-align: right; font-family: monospace; font-weight: 700;">${fmt(row.excedentes)}</td></tr>
                 <tr style="border-top: 2px solid #7C3AED;"><td style="padding: 6px 0; font-weight: 700; font-size: 14px; color: #7C3AED;">TOTAL</td><td style="text-align: right; font-family: monospace; font-weight: 700; font-size: 14px; color: #7C3AED;">${fmt(total)}</td></tr>
               </tbody>
             </table>

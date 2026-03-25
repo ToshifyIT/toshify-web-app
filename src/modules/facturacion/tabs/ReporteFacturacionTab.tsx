@@ -413,6 +413,26 @@ export function ReporteFacturacionTab() {
   const detalleCargos = useMemo(() => detalleItems.filter(d => !d.es_descuento && d.total !== 0), [detalleItems])
   const detalleDescuentos = useMemo(() => detalleItems.filter(d => d.es_descuento && d.total !== 0), [detalleItems])
 
+  // Conceptos faltantes: peajes y saldo que no están como items pero deben mostrarse
+  // Si tiene telepase, peajes = 0, no se cobra, no se muestra, no existe
+  const conceptosFaltantes = useMemo(() => {
+    if (!detalleFacturacion) return { peajes: 0, saldo: 0 }
+    const tieneItemPeajes = detalleItems.some(d => d.concepto_codigo === 'P005')
+    const tieneItemSaldo = detalleItems.some(d => d.concepto_codigo === 'SALDO')
+    const tieneTelepase = detalleFacturacion.tiene_telepase === true
+    return {
+      peajes: (!tieneItemPeajes && !tieneTelepase) ? (detalleFacturacion.monto_peajes || 0) : 0,
+      saldo: !tieneItemSaldo ? (detalleFacturacion.saldo_anterior || 0) : 0,
+    }
+  }, [detalleFacturacion, detalleItems])
+
+  // Total real: se calcula desde items visibles + conceptos faltantes (NO del backend que puede estar mal)
+  const totalRealDetalle = useMemo(() => {
+    const sumCargos = detalleCargos.reduce((sum, d) => sum + d.total, 0)
+    const sumDescuentos = detalleDescuentos.reduce((sum, d) => sum + d.total, 0)
+    return sumCargos - sumDescuentos + conceptosFaltantes.peajes + conceptosFaltantes.saldo
+  }, [detalleCargos, detalleDescuentos, conceptosFaltantes])
+
   // Table instance and filters
   const [tableInstance, setTableInstance] = useState<Table<FacturacionConductor> | null>(null)
   const [exportingExcel, setExportingExcel] = useState(false)
@@ -7414,10 +7434,12 @@ export function ReporteFacturacionTab() {
           importeContrato = Math.round((actualAlquiler / actualDias) * diasProyectados)
         }
         
-        // EXCEDENTES = resto de productos (sin alquiler) + saldo pendiente
-        // Cobros (garantía, peajes, excesos, penalidades) suman, montos a favor (tickets) restan
+        // EXCEDENTES = recalcular desde campos individuales (no usar subtotal_cargos que puede estar mal)
+        const tieneTelepasePreview = f.tiene_telepase === true
+        const peajesReales = tieneTelepasePreview ? 0 : (f.monto_peajes || 0)
         const saldoPendiente = f.saldo_anterior || 0
-        const excedentes = (f.subtotal_cargos || 0) - (f.subtotal_descuentos || 0) - actualAlquiler + saldoPendiente
+        const subtotalCargosRecalc = actualAlquiler + (f.subtotal_garantia || 0) + peajesReales + (f.monto_excesos || 0) + (f.monto_penalidades || 0)
+        const excedentes = subtotalCargosRecalc - (f.subtotal_descuentos || 0) - actualAlquiler + saldoPendiente
 
         return {
           anio,
@@ -7446,14 +7468,14 @@ export function ReporteFacturacionTab() {
             subtotalAlquiler: importeContrato,
             subtotalGarantia: f.subtotal_garantia || 0,
             cuotaGarantia: f.cuota_garantia_numero || '',
-            montoPeajes: f.monto_peajes || 0,
+            montoPeajes: peajesReales,
             montoExcesos: f.monto_excesos || 0,
             montoPenalidades: f.monto_penalidades || 0,
             ticketsFavor: f.monto_tickets_favor || 0,
-            subtotalCargos: (f.subtotal_cargos || 0) - actualAlquiler + importeContrato,
+            subtotalCargos: subtotalCargosRecalc - actualAlquiler + importeContrato,
             subtotalDescuentos: f.subtotal_descuentos || 0,
             saldoAnterior: f.saldo_anterior || 0,
-            totalAPagar: (f.total_a_pagar || 0) - actualAlquiler + importeContrato,
+            totalAPagar: subtotalCargosRecalc - (f.subtotal_descuentos || 0) + saldoPendiente - actualAlquiler + importeContrato,
           }
         }
       })
@@ -7602,8 +7624,12 @@ export function ReporteFacturacionTab() {
         }
         
         // EXCEDENTES = resto de productos (sin alquiler) + saldo pendiente
+        // Si tiene telepase, peajes = 0
+        const tieneTelepaseCerrado = f.tiene_telepase === true
+        const peajesRealesCerrado = tieneTelepaseCerrado ? 0 : (f.monto_peajes || 0)
         const saldoPendiente = f.saldo_anterior || 0
-        const excedentes = (f.subtotal_cargos || 0) - (f.subtotal_descuentos || 0) - actualAlquiler + saldoPendiente
+        const subtotalCargosRecalcCerrado = actualAlquiler + (f.subtotal_garantia || 0) + peajesRealesCerrado + (f.monto_excesos || 0) + (f.monto_penalidades || 0)
+        const excedentes = subtotalCargosRecalcCerrado - (f.subtotal_descuentos || 0) - actualAlquiler + saldoPendiente
 
         return {
           anio: periodo.anio,
@@ -7632,14 +7658,14 @@ export function ReporteFacturacionTab() {
             subtotalAlquiler: importeContrato,
             subtotalGarantia: f.subtotal_garantia || 0,
             cuotaGarantia: f.cuota_garantia_numero || '',
-            montoPeajes: f.monto_peajes || 0,
+            montoPeajes: peajesRealesCerrado,
             montoExcesos: f.monto_excesos || 0,
             montoPenalidades: f.monto_penalidades || 0,
             ticketsFavor: f.monto_tickets_favor || 0,
-            subtotalCargos: (f.subtotal_cargos || 0) - actualAlquiler + importeContrato,
+            subtotalCargos: subtotalCargosRecalcCerrado - actualAlquiler + importeContrato,
             subtotalDescuentos: f.subtotal_descuentos || 0,
             saldoAnterior: f.saldo_anterior || 0,
-            totalAPagar: (f.total_a_pagar || 0) - actualAlquiler + importeContrato,
+            totalAPagar: subtotalCargosRecalcCerrado - (f.subtotal_descuentos || 0) + saldoPendiente - actualAlquiler + importeContrato,
           }
         }
       })
@@ -10017,8 +10043,33 @@ export function ReporteFacturacionTab() {
                     </div>
                   )}
 
+                  {/* Peajes faltantes (no guardados como detalle pero incluidos en el total) */}
+                  {conceptosFaltantes.peajes > 0 && (
+                    <div style={{ marginBottom: '12px' }}>
+                      <div style={{
+                        fontSize: '11px', fontWeight: 600, color: 'var(--text-secondary)',
+                        textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '6px',
+                      }}>
+                        Otros Cargos
+                      </div>
+                      <div style={{
+                        display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                        padding: '7px 12px', borderRadius: '6px',
+                        background: 'rgba(255, 0, 51, 0.04)', border: '1px solid rgba(255, 0, 51, 0.12)',
+                      }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <div style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#ff0033', flexShrink: 0 }} />
+                          <span style={{ fontSize: '12px', color: 'var(--text-primary)' }}>Peajes Cabify</span>
+                        </div>
+                        <span style={{ fontSize: '12px', fontWeight: 600, fontFamily: 'monospace', color: '#ff0033' }}>
+                          {formatCurrency(conceptosFaltantes.peajes)}
+                        </span>
+                      </div>
+                    </div>
+                  )}
+
                   {/* Saldo Anterior (si existe y no está ya incluido en los items) */}
-                  {detalleFacturacion.saldo_anterior !== 0 && !detalleItems.some(d => d.concepto_codigo === 'SALDO') && (
+                  {conceptosFaltantes.saldo !== 0 && (
                     <div style={{ marginBottom: '12px' }}>
                       <div style={{
                         fontSize: '11px', fontWeight: 600, color: 'var(--text-secondary)',
@@ -10029,24 +10080,24 @@ export function ReporteFacturacionTab() {
                       <div style={{
                         display: 'flex', justifyContent: 'space-between', alignItems: 'center',
                         padding: '7px 12px', borderRadius: '6px',
-                        background: detalleFacturacion.saldo_anterior > 0 ? 'rgba(255, 0, 51, 0.04)' : 'rgba(16, 185, 129, 0.04)',
-                        border: `1px solid ${detalleFacturacion.saldo_anterior > 0 ? 'rgba(255, 0, 51, 0.12)' : 'rgba(16, 185, 129, 0.12)'}`,
+                        background: conceptosFaltantes.saldo > 0 ? 'rgba(255, 0, 51, 0.04)' : 'rgba(16, 185, 129, 0.04)',
+                        border: `1px solid ${conceptosFaltantes.saldo > 0 ? 'rgba(255, 0, 51, 0.12)' : 'rgba(16, 185, 129, 0.12)'}`,
                       }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                           <div style={{
                             width: '6px', height: '6px', borderRadius: '50%',
-                            background: detalleFacturacion.saldo_anterior > 0 ? '#ff0033' : '#10b981',
+                            background: conceptosFaltantes.saldo > 0 ? '#ff0033' : '#10b981',
                             flexShrink: 0,
                           }} />
                           <span style={{ fontSize: '12px', color: 'var(--text-primary)' }}>
-                            {detalleFacturacion.saldo_anterior > 0 ? 'Deuda pendiente semana anterior' : 'Saldo a favor semana anterior'}
+                            {conceptosFaltantes.saldo > 0 ? 'Deuda pendiente semana anterior' : 'Saldo a favor semana anterior'}
                           </span>
                         </div>
                         <span style={{
                           fontSize: '12px', fontWeight: 600, fontFamily: 'monospace',
-                          color: detalleFacturacion.saldo_anterior > 0 ? '#ff0033' : '#059669',
+                          color: conceptosFaltantes.saldo > 0 ? '#ff0033' : '#059669',
                         }}>
-                          {detalleFacturacion.saldo_anterior > 0 ? '+' : '-'}{formatCurrency(Math.abs(detalleFacturacion.saldo_anterior))}
+                          {conceptosFaltantes.saldo > 0 ? '+' : '-'}{formatCurrency(Math.abs(conceptosFaltantes.saldo))}
                         </span>
                       </div>
                     </div>
@@ -10064,12 +10115,12 @@ export function ReporteFacturacionTab() {
                     <span style={{
                       fontSize: '28px', fontWeight: 700, fontFamily: 'monospace', lineHeight: 1,
                       margin: '6px 0',
-                      color: detalleFacturacion.total_a_pagar > 0 ? '#ff0033' : '#059669',
+                      color: totalRealDetalle > 0 ? '#ff0033' : '#059669',
                     }}>
-                      {formatCurrency(detalleFacturacion.total_a_pagar)}
+                      {formatCurrency(totalRealDetalle)}
                     </span>
                     <span style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>
-                      {detalleFacturacion.total_a_pagar > 0 ? 'El conductor debe pagar' : 'Saldo a favor del conductor'}
+                      {totalRealDetalle > 0 ? 'El conductor debe pagar' : 'Saldo a favor del conductor'}
                     </span>
                   </div>
 

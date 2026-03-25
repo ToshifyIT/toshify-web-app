@@ -253,21 +253,26 @@ export async function checkConflict(
 // --- Transformaciones (puro, sin side effects) ---
 
 /**
- * Convierte un timestamp UTC a un Date que muestre la hora de Argentina (UTC-3)
- * independientemente de la zona horaria del navegador.
- * react-big-calendar siempre usa la hora local del Date, así que necesitamos
- * "engañarlo" para que muestre la hora de Argentina.
+ * Convierte un timestamp a hora Argentina para react-big-calendar.
+ * Extrae año/mes/día/hora/minuto en zona Argentina y crea un Date "local"
+ * con esos valores, así el calendario los muestra correctamente.
  */
-function toArgentinaDate(utcDate: Date): Date {
-  // Obtener la hora en Argentina usando Intl
-  const argStr = utcDate.toLocaleString('en-US', { timeZone: 'America/Buenos_Aires' });
-  return new Date(argStr);
+function toArgentinaDate(isoString: string): Date {
+  const d = new Date(isoString);
+  const fmt = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'America/Argentina/Buenos_Aires',
+    year: 'numeric', month: 'numeric', day: 'numeric',
+    hour: 'numeric', minute: 'numeric', second: 'numeric',
+    hour12: false,
+  });
+  const parts = fmt.formatToParts(d);
+  const get = (type: string) => parseInt(parts.find(p => p.type === type)?.value || '0');
+  return new Date(get('year'), get('month') - 1, get('day'), get('hour'), get('minute'), get('second'));
 }
 
 export function toCalendarEvents(visitas: VisitaCompleta[]): VisitaCalendarEvent[] {
   return visitas.map((v) => {
-    const utcStart = new Date(v.fecha_hora);
-    const start = toArgentinaDate(utcStart);
+    const start = toArgentinaDate(v.fecha_hora);
     const end = new Date(start.getTime() + v.duracion_minutos * 60_000);
     const masked = (v as VisitaCompleta & { _masked?: boolean })._masked;
     return {

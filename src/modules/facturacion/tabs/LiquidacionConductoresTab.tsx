@@ -417,15 +417,30 @@ export function LiquidacionConductoresTab() {
       const garantiaTotalPagada = (garantia as any)?.monto_pagado || 0
       const garantiaCuotasPagadas = (garantia as any)?.cuotas_pagadas || 0
 
-      // Obtener peajes pendientes (última semana)
-      const { data: cabifyData } = await supabase
-        .from(getCabifyTable(sedeActualId))
-        .select('peajes')
-        .eq('conductor_id', conductorId)
-        .gte('fecha', format(lunesSemana, 'yyyy-MM-dd'))
-        .lte('fecha', fechaCorte)
+      // Verificar si el vehículo tiene telepase
+      const patenteVehiculo = (asignacion as any)?.vehiculos?.patente
+      let tieneTelepaseLiq = false
+      if (patenteVehiculo) {
+        const { data: vehFlag } = await supabase
+          .from('vehiculos')
+          .select('telepase')
+          .eq('patente', patenteVehiculo)
+          .single()
+        tieneTelepaseLiq = vehFlag?.telepase === true
+      }
 
-      const peajesPendientes = (cabifyData || []).reduce((sum: number, d: any) => sum + (d.peajes || 0), 0)
+      // Obtener peajes pendientes (última semana) - si tiene telepase, no se cobran
+      let peajesPendientes = 0
+      if (!tieneTelepaseLiq) {
+        const { data: cabifyData } = await supabase
+          .from(getCabifyTable(sedeActualId))
+          .select('peajes')
+          .eq('conductor_id', conductorId)
+          .gte('fecha', format(lunesSemana, 'yyyy-MM-dd'))
+          .lte('fecha', fechaCorte)
+
+        peajesPendientes = (cabifyData || []).reduce((sum: number, d: any) => sum + (d.peajes || 0), 0)
+      }
 
       // Obtener tickets a favor aprobados no aplicados
       const { data: ticketsData } = await supabase

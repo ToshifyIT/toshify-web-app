@@ -369,8 +369,9 @@ export function VisitasFormModal({
 
     setSaving(true);
     try {
+      const fechaHora = buildLocalTimestamp(dataToSave.fecha, dataToSave.hora);
+
       if (categoriaSeleccionada?.tipo_visita !== 'grupal') {
-        const fechaHora = buildLocalTimestamp(dataToSave.fecha, dataToSave.hora);
         const hasConflict = await checkConflict(
           dataToSave.atendedor_id,
           fechaHora,
@@ -386,6 +387,39 @@ export function VisitasFormModal({
             'warning'
           );
           return;
+        }
+      }
+
+      // Verificar si ya existe una cita con el mismo visitante en la misma fecha/hora
+      if (mode === 'create') {
+        const { supabase } = await import('../../../lib/supabase');
+        const nombreVisitante = dataToSave.nombre_visitante.split(';')[0].trim();
+        const { data: existentes } = await supabase
+          .from('visitas')
+          .select('id, nombre_visitante, fecha_hora')
+          .eq('fecha_hora', fechaHora)
+          .neq('estado', 'cancelada');
+
+        const duplicada = (existentes || []).find((v: { nombre_visitante: string }) =>
+          v.nombre_visitante.toUpperCase().includes(nombreVisitante.toUpperCase())
+        );
+
+        if (duplicada) {
+          const result = await Swal.fire({
+            icon: 'warning',
+            title: 'Posible cita duplicada',
+            html: `<div style="text-align:left;font-size:14px;">
+              <p><strong>Ya existe una cita a las ${dataToSave.hora} del ${dataToSave.fecha} para:</strong></p>
+              <p style="color:#ff0033;font-weight:600;font-size:16px;margin:12px 0;">${nombreVisitante}</p>
+              <p>Si continúas se creará una cita duplicada.</p>
+              <p style="margin-top:12px;color:#666;">¿Estás seguro de que querés crear otra cita?</p>
+            </div>`,
+            showCancelButton: true,
+            confirmButtonText: 'Crear de todas formas',
+            cancelButtonText: 'Cancelar',
+            confirmButtonColor: '#ff0033',
+          });
+          if (!result.isConfirmed) return;
         }
       }
 
