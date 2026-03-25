@@ -413,6 +413,22 @@ export function ReporteFacturacionTab() {
   const detalleCargos = useMemo(() => detalleItems.filter(d => !d.es_descuento && d.total !== 0), [detalleItems])
   const detalleDescuentos = useMemo(() => detalleItems.filter(d => d.es_descuento && d.total !== 0), [detalleItems])
 
+  // Saldo implícito: diferencia entre total_a_pagar del backend y los items visibles
+  // Si hay diferencia, es saldo anterior que no aparece como línea
+  const saldoImplicito = useMemo(() => {
+    if (!detalleFacturacion) return 0
+    const sumCargos = detalleCargos.reduce((sum, d) => sum + d.total, 0)
+    const sumDescuentos = detalleDescuentos.reduce((sum, d) => sum + d.total, 0)
+    const netoItems = sumCargos - sumDescuentos
+    const saldoExplicito = detalleFacturacion.saldo_anterior || 0
+    const saldoYaIncluido = detalleItems.some(d => d.concepto_codigo === 'SALDO')
+    // Si ya hay saldo explícito o item SALDO, no calcular implícito
+    if (saldoExplicito !== 0 || saldoYaIncluido) return 0
+    // Diferencia entre el total real y los items visibles
+    const diff = detalleFacturacion.total_a_pagar - netoItems
+    return Math.abs(diff) > 0.01 ? diff : 0
+  }, [detalleCargos, detalleDescuentos, detalleFacturacion, detalleItems])
+
   // Table instance and filters
   const [tableInstance, setTableInstance] = useState<Table<FacturacionConductor> | null>(null)
   const [exportingExcel, setExportingExcel] = useState(false)
@@ -10017,7 +10033,42 @@ export function ReporteFacturacionTab() {
                     </div>
                   )}
 
-                  {/* Saldo Anterior (si existe y no está ya incluido en los items) */}
+                  {/* Saldo implícito: diferencia no explicada entre items visibles y total */}
+                  {saldoImplicito !== 0 && (
+                    <div style={{ marginBottom: '12px' }}>
+                      <div style={{
+                        fontSize: '11px', fontWeight: 600, color: 'var(--text-secondary)',
+                        textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '6px',
+                      }}>
+                        Saldo Anterior
+                      </div>
+                      <div style={{
+                        display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                        padding: '7px 12px', borderRadius: '6px',
+                        background: saldoImplicito > 0 ? 'rgba(255, 0, 51, 0.04)' : 'rgba(16, 185, 129, 0.04)',
+                        border: `1px solid ${saldoImplicito > 0 ? 'rgba(255, 0, 51, 0.12)' : 'rgba(16, 185, 129, 0.12)'}`,
+                      }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <div style={{
+                            width: '6px', height: '6px', borderRadius: '50%',
+                            background: saldoImplicito > 0 ? '#ff0033' : '#10b981',
+                            flexShrink: 0,
+                          }} />
+                          <span style={{ fontSize: '12px', color: 'var(--text-primary)' }}>
+                            {saldoImplicito > 0 ? 'Deuda pendiente semana anterior' : 'Saldo a favor semana anterior'}
+                          </span>
+                        </div>
+                        <span style={{
+                          fontSize: '12px', fontWeight: 600, fontFamily: 'monospace',
+                          color: saldoImplicito > 0 ? '#ff0033' : '#059669',
+                        }}>
+                          {saldoImplicito > 0 ? '+' : '-'}{formatCurrency(Math.abs(saldoImplicito))}
+                        </span>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Saldo Anterior explícito (si existe y no está ya incluido en los items) */}
                   {detalleFacturacion.saldo_anterior !== 0 && !detalleItems.some(d => d.concepto_codigo === 'SALDO') && (
                     <div style={{ marginBottom: '12px' }}>
                       <div style={{
