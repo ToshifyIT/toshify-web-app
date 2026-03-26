@@ -426,12 +426,11 @@ export function ReporteFacturacionTab() {
     }
   }, [detalleFacturacion, detalleItems])
 
-  // Total real: se calcula desde items visibles + conceptos faltantes (NO del backend que puede estar mal)
+  // Total real: usar total_a_pagar del objeto (ya ajustado por peajes/telepase en la tabla)
   const totalRealDetalle = useMemo(() => {
-    const sumCargos = detalleCargos.reduce((sum, d) => sum + d.total, 0)
-    const sumDescuentos = detalleDescuentos.reduce((sum, d) => sum + d.total, 0)
-    return sumCargos - sumDescuentos + conceptosFaltantes.peajes + conceptosFaltantes.saldo
-  }, [detalleCargos, detalleDescuentos, conceptosFaltantes])
+    if (!detalleFacturacion) return 0
+    return detalleFacturacion.total_a_pagar || 0
+  }, [detalleFacturacion])
 
   // Table instance and filters
   const [tableInstance, setTableInstance] = useState<Table<FacturacionConductor> | null>(null)
