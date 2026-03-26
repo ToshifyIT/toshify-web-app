@@ -426,12 +426,11 @@ export function ReporteFacturacionTab() {
     }
   }, [detalleFacturacion, detalleItems])
 
-  // Total real: se calcula desde items visibles + conceptos faltantes (NO del backend que puede estar mal)
+  // Total real: usar el mismo total_a_pagar que muestra la tabla
   const totalRealDetalle = useMemo(() => {
-    const sumCargos = detalleCargos.reduce((sum, d) => sum + d.total, 0)
-    const sumDescuentos = detalleDescuentos.reduce((sum, d) => sum + d.total, 0)
-    return sumCargos - sumDescuentos + conceptosFaltantes.peajes + conceptosFaltantes.saldo
-  }, [detalleCargos, detalleDescuentos, conceptosFaltantes])
+    if (!detalleFacturacion) return 0
+    return detalleFacturacion.total_a_pagar
+  }, [detalleFacturacion])
 
   // Table instance and filters
   const [tableInstance, setTableInstance] = useState<Table<FacturacionConductor> | null>(null)
@@ -1335,18 +1334,11 @@ export function ReporteFacturacionTab() {
               return f
             }
             const flags = flagsMapLoad.get(f.vehiculo_patente)!
-            const peajesOriginal = Number(f.monto_peajes || 0)
-            const peajesAjustado = flags.telepase ? 0 : peajesOriginal
-            const deltaPeaje = peajesOriginal - peajesAjustado
-
             return {
               ...f,
               tiene_gnc: flags.gnc,
               tiene_telepase: flags.telepase,
-              monto_peajes: peajesAjustado,
-              subtotal_cargos: Number(f.subtotal_cargos || 0) - deltaPeaje,
-              subtotal_neto: Number(f.subtotal_neto || 0) - deltaPeaje,
-              total_a_pagar: Number(f.total_a_pagar || 0) - deltaPeaje,
+              monto_peajes: flags.telepase ? 0 : Number(f.monto_peajes || 0),
             }
           })
         }
