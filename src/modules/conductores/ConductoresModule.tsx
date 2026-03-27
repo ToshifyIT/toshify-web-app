@@ -1741,7 +1741,7 @@ export function ConductoresModule() {
       fecha_reincorpoaracion: "",
       fecha_terminacion: "",
       motivo_baja: "",
-      estado_id: "",
+      estado_id: estadosConductor.find(e => e.codigo?.toLowerCase() === 'activo')?.id || "",
       preferencia_turno: "SIN_PREFERENCIA",
       url_documentacion: "",
       numero_ibutton: "",
@@ -2347,7 +2347,7 @@ export function ConductoresModule() {
       },
       {
         id: "acciones",
-        header: "Acciones",
+        header: "",
         cell: ({ row }) => {
           const driveUrl = (row.original as any).drive_folder_url;
           

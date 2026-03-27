@@ -1020,3 +1020,23 @@
   from { transform: rotate(0deg); }
   to { transform: rotate(360deg); }
 }
+
+/* =====================================================
+   STICKY ACTIONS COLUMN
+   ===================================================== */
+
+.cond-module .dt-sticky-col {
+  position: sticky;
+  right: 0;
+  z-index: 1;
+  background: var(--bg-primary);
+}
+
+.cond-module .dt-table thead .dt-sticky-col {
+  z-index: 2;
+  background: var(--table-header-bg);
+}
+
+.cond-module .dt-table tbody tr:hover .dt-sticky-col {
+  background: var(--table-row-hover);
+}
