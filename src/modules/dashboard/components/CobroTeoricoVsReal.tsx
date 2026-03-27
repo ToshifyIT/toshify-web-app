@@ -13,15 +13,26 @@ import { startOfWeek, endOfWeek, addDays, format, setWeek, startOfMonth, endOfMo
 import { es } from 'date-fns/locale'
 import { supabase } from '../../../lib/supabase'
 import { useSede } from '../../../contexts/SedeContext'
-
-const SEDE_BARILOCHE_ID = 'f37193f7-5805-4d87-820d-c4521824860e'
-function getCabifyTable(sedeId: string | null | undefined): string {
-  return sedeId === SEDE_BARILOCHE_ID ? 'cabify_historico_bariloche' : 'cabify_historico'
-}
 import { normalizeDni } from '../../../utils/normalizeDocuments'
 import { PeriodPicker } from './PeriodPicker'
 import { CobroComparativo } from './CobroComparativo'
 import './CobroTeoricoVsReal.css'
+
+// Cache para evitar consultas repetidas a la BD
+const cabifyTableCache = new Map<string, string>()
+
+async function getCabifyTable(sedeId: string | null | undefined): Promise<string> {
+  if (!sedeId) return 'cabify_historico'
+  const cached = cabifyTableCache.get(sedeId)
+  if (cached) return cached
+
+  const { data } = await supabase.from('sedes').select('ciudad').eq('id', sedeId).single()
+  const table = data?.ciudad?.toLowerCase().includes('bariloche')
+    ? 'cabify_historico_bariloche'
+    : 'cabify_historico'
+  cabifyTableCache.set(sedeId, table)
+  return table
+}
 
 type Granularity = 'semana' | 'mes' | 'ano'
 type ActiveTab = 'datos' | 'comparativo'
@@ -337,7 +348,7 @@ async function calcularPipelineMesIndependiente(
   const cobroRealPorDia = new Map<string, number>()
   daysInt.forEach(d => cobroRealPorDia.set(format(d, 'yyyy-MM-dd'), 0))
   if (dnis50k.length > 0) {
-    const { data: hist } = await supabase.from(getCabifyTable(sedeActualId))
+    const { data: hist } = await supabase.from(await getCabifyTable(sedeActualId))
       .select('fecha_inicio, cobro_app, dni, fecha_guardado')
       .in('dni', dnis50k)
       .gte('fecha_inicio', fIniStr)
@@ -964,7 +975,7 @@ export function CobroTeoricoVsReal() {
         if (dnis50k.length > 0) {
             // Consultar histórico (tabla dinámica según sede)
             const { data: historicoData, error: historicoError } = await supabase
-                .from(getCabifyTable(sedeActualId))
+                .from(await getCabifyTable(sedeActualId))
                 .select('fecha_inicio, cobro_app, dni, fecha_guardado, cabify_driver_id')
                 .in('dni', dnis50k)
                 .gte('fecha_inicio', format(startDate, 'yyyy-MM-dd'))
