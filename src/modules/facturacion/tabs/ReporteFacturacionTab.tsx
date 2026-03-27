@@ -479,7 +479,7 @@ export function ReporteFacturacionTab() {
   const [horasCorteTurno, setHorasCorteTurno] = useState({
     diurno: 12,        // Hora corte diurno (si entrega >= esta hora, descuento completo)
     cargo: 14,         // Hora corte a cargo (si entrega >= esta hora, descuento medio turno)
-    descDiurnoAntes: 0,     // No aplica: antes del corte no hay descuento
+    descDiurnoAntes: 0.5,   // Descuento medio turno si entrega diurna antes del corte
     descDiurnoDespues: 1,   // Descuento si entrega después del corte diurno
     descCargoDespues: 0.5,  // Descuento si entrega después del corte cargo
   })
@@ -547,7 +547,7 @@ export function ReporteFacturacionTab() {
       const defaults: Record<string, { valor: string; tipo: string; descripcion: string }> = {
         hora_corte_diurno: { valor: '12', tipo: 'number', descripcion: 'Hora corte entrega diurno. Si entrega >= esta hora, descuento turno completo' },
         hora_corte_cargo: { valor: '14', tipo: 'number', descripcion: 'Hora corte entrega a cargo. Si entrega >= esta hora, descuento medio turno' },
-        descuento_diurno_antes: { valor: '0', tipo: 'number', descripcion: '[No aplica] Entrega diurna antes del corte: sin descuento' },
+        descuento_diurno_antes: { valor: '0.5', tipo: 'number', descripcion: 'Descuento (turnos) si entrega diurna antes del corte (medio turno)' },
         descuento_diurno_despues: { valor: '1', tipo: 'number', descripcion: 'Descuento (turnos) si entrega diurna despues del corte' },
         descuento_cargo_despues: { valor: '0.5', tipo: 'number', descripcion: 'Descuento (turnos) si entrega a cargo despues del corte' },
       }
@@ -840,7 +840,7 @@ export function ReporteFacturacionTab() {
           const hora = parseInt(primeraConEntrega.horaEntrega.split(':')[0])
           const modalidad = primeraConEntrega.horario
           if (modalidad === 'DIURNO' || modalidad === 'TURNO_DIURNO') {
-            return hora >= horasCorteTurno.diurno ? horasCorteTurno.descDiurnoDespues : 0
+            return hora >= horasCorteTurno.diurno ? horasCorteTurno.descDiurnoDespues : horasCorteTurno.descDiurnoAntes
           } else if (modalidad === 'CARGO') {
             return hora >= horasCorteTurno.cargo ? horasCorteTurno.descCargoDespues : 0
           }
@@ -1651,8 +1651,10 @@ export function ReporteFacturacionTab() {
               if (hora >= horasCorteTurno.diurno) {
                 // Entrega después del corte → descuento 1 turno
                 alertasProrrateoVP.set(ac.conductor_id, { tipo: 'dia_completo', hora: horaStr, fecha: fechaStr, descuento: horasCorteTurno.descDiurnoDespues })
+              } else {
+                // Entrega antes del corte → descuento medio turno
+                alertasProrrateoVP.set(ac.conductor_id, { tipo: 'medio_turno', hora: horaStr, fecha: fechaStr, descuento: horasCorteTurno.descDiurnoAntes })
               }
-              // Entrega antes del corte → sin descuento
             } else if (modalidad === 'CARGO') {
               if (hora >= horasCorteTurno.cargo) {
                 alertasProrrateoVP.set(ac.conductor_id, { tipo: 'medio_turno', hora: horaStr, fecha: fechaStr, descuento: horasCorteTurno.descCargoDespues })
@@ -2744,6 +2746,8 @@ export function ReporteFacturacionTab() {
             if (modalidadDescR === 'TURNO_DIURNO') {
               if (horaR >= horasCorteTurno.diurno) {
                 descuentosPorHoraRecalc.set(ac.conductor_id, { descuento: horasCorteTurno.descDiurnoDespues, modalidad: 'TURNO_DIURNO' })
+              } else {
+                descuentosPorHoraRecalc.set(ac.conductor_id, { descuento: horasCorteTurno.descDiurnoAntes, modalidad: 'TURNO_DIURNO' })
               }
             } else if (modalidadDescR === 'CARGO' && horaR >= horasCorteTurno.cargo) {
               descuentosPorHoraRecalc.set(ac.conductor_id, { descuento: horasCorteTurno.descCargoDespues, modalidad: 'CARGO' })
@@ -9490,13 +9494,17 @@ export function ReporteFacturacionTab() {
                             const horario = primeraConHora.horario?.toUpperCase();
                             const esDiurno = horario === 'DIURNO' || horario === 'TURNO_DIURNO';
                             const esCargo = horario === 'CARGO' || horario === 'A CARGO';
-                            if (esDiurno && hh >= (horasCorteTurno?.diurno || 12)) {
+                            if (esDiurno) {
                               const primerDiaTrabajado = diasModalData.dias.find(dd => dd.trabajado);
-                              return { tipo: 'dia_completo', fecha_entrega: primerDiaTrabajado?.fecha, hora_entrega: primeraConHora.horaEntrega, descuento_turnos: 1 };
+                              if (hh >= (horasCorteTurno?.diurno || 12)) {
+                                return { tipo: 'dia_completo', fecha_entrega: primerDiaTrabajado?.fecha, hora_entrega: primeraConHora.horaEntrega, descuento_turnos: horasCorteTurno?.descDiurnoDespues || 1 };
+                              } else {
+                                return { tipo: 'medio_turno', fecha_entrega: primerDiaTrabajado?.fecha, hora_entrega: primeraConHora.horaEntrega, descuento_turnos: horasCorteTurno?.descDiurnoAntes || 0.5 };
+                              }
                             }
                             if (esCargo && hh >= (horasCorteTurno?.cargo || 14)) {
                               const primerDiaTrabajado = diasModalData.dias.find(dd => dd.trabajado);
-                              return { tipo: 'medio_turno', fecha_entrega: primerDiaTrabajado?.fecha, hora_entrega: primeraConHora.horaEntrega, descuento_turnos: 0.5 };
+                              return { tipo: 'medio_turno', fecha_entrega: primerDiaTrabajado?.fecha, hora_entrega: primeraConHora.horaEntrega, descuento_turnos: horasCorteTurno?.descCargoDespues || 0.5 };
                             }
                             return null;
                           })();
