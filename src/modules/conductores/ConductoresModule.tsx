@@ -1328,7 +1328,7 @@ export function ConductoresModule() {
         // --- Paso común: finalizar registro del conductor dado de baja ---
         const { error: errCompletarConductor } = await (supabase as any)
           .from('asignaciones_conductores')
-          .update({ estado: 'completado', fecha_fin: ahora })
+          .update({ estado: 'completado', fecha_fin: new Date(fechaBaja + 'T23:59:59').toISOString() })
           .eq('id', asignacionConductor.id);
         if (errCompletarConductor) throw new Error(`Error al completar conductor: ${errCompletarConductor.message}`);
 
@@ -1419,7 +1419,7 @@ export function ConductoresModule() {
           // Finalizar cualquier otro registro de conductor en esta asignación (residuales)
           await (supabase as any)
             .from('asignaciones_conductores')
-            .update({ estado: 'completado', fecha_fin: ahora })
+            .update({ estado: 'completado', fecha_fin: new Date(fechaBaja + 'T23:59:59').toISOString() })
             .eq('asignacion_id', asignacion.id)
             .neq('id', asignacionConductor.id)
             .in('estado', ['asignado', 'activo']);

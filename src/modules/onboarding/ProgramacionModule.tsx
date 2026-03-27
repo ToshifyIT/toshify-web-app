@@ -937,79 +937,9 @@ export function ProgramacionModule() {
         notasBase = `${notasBase}\n${companeroMeta.join('\n')}`
       }
 
-      // Finalizar asignaciones activas anteriores del mismo vehículo
-      // Esto evita duplicados cuando se hace "pasa turno"
-      const ahora = new Date().toISOString()
-      const { data: asignacionesPrevias } = await (supabase
-        .from('asignaciones') as any)
-        .select(`id, notas,
-          asignaciones_conductores(conductor_id, estado, horario,
-            conductores(nombres, apellidos)
-          )
-        `)
-        .eq('vehiculo_id', prog.vehiculo_entregar_id)
-        .in('estado', ['activa', 'activo'])
-
-      if (asignacionesPrevias && asignacionesPrevias.length > 0) {
-        for (const asigPrevia of asignacionesPrevias as any[]) {
-          // Finalizar conductores de la asignación anterior
-          await (supabase.from('asignaciones_conductores') as any)
-            .update({ estado: 'completado', fecha_fin: ahora })
-            .eq('asignacion_id', asigPrevia.id)
-            .in('estado', ['asignado', 'activo'])
-
-          // Traza de TODOS los conductores al cierre (incluidos completados, para trazabilidad)
-          const conductoresAnteriores = (asigPrevia.asignaciones_conductores || [])
-            .map((ac: any) => {
-              const nombre = ac.conductores ? `${ac.conductores.nombres || ''} ${ac.conductores.apellidos || ''}`.trim() : 'Desconocido'
-              return `${nombre} (${ac.horario || 'sin turno'})`
-            })
-          const notasAnterior = asigPrevia.notas || ''
-          const traza = `\n[AUTO-CERRADA ${new Date().toLocaleDateString('es-AR')}] Pasa turno - nueva programación enviada a entrega.\nConductores al cierre: ${conductoresAnteriores.length > 0 ? conductoresAnteriores.join(', ') : 'ninguno'}`
-
-          await (supabase.from('asignaciones') as any)
-            .update({
-              estado: 'finalizada',
-              fecha_fin: ahora,
-              notas: notasAnterior + traza,
-              updated_by: profile?.full_name || 'Sistema'
-            })
-            .eq('id', asigPrevia.id)
-
-          // Historial: registrar asignación completada para cada conductor de la asignación anterior
-          for (const ac of (asigPrevia.asignaciones_conductores || []) as any[]) {
-            if (ac.conductor_id && ['asignado', 'activo'].includes(ac.estado)) {
-              registrarHistorialConductor({
-                conductorId: ac.conductor_id,
-                tipoEvento: 'asignacion_completada',
-                detalles: {
-                  accion: 'pasa_turno',
-                  asignacion_id: asigPrevia.id,
-                  vehiculo_id: prog.vehiculo_entregar_id,
-                  patente: prog.vehiculo_entregar_patente || prog.vehiculo_entregar_patente_sistema,
-                  horario: ac.horario,
-                },
-                modulo: 'programacion',
-                sedeId: prog.sede_id || sedeActualId || sedeUsuario?.id,
-              })
-            }
-          }
-
-          // Historial: registrar asignación finalizada para el vehículo
-          registrarHistorialVehiculo({
-            vehiculoId: prog.vehiculo_entregar_id!,
-            tipoEvento: 'asignacion_finalizada',
-            detalles: {
-              accion: 'pasa_turno',
-              asignacion_id: asigPrevia.id,
-              patente: prog.vehiculo_entregar_patente || prog.vehiculo_entregar_patente_sistema,
-              conductores_al_cierre: conductoresAnteriores,
-            },
-            modulo: 'programacion',
-            sedeId: prog.sede_id || sedeActualId || sedeUsuario?.id,
-          })
-        }
-      }
+      // NO finalizar asignaciones activas aquí: la asignación se crea como "programado"
+      // y no debe afectar asignaciones existentes. La finalización ocurre en
+      // AsignacionesModule.handleConfirmProgramacion cuando la asignación pasa a "activa".
 
       const { data: asignacion, error: asignacionError } = await (supabase
         .from('asignaciones') as any)

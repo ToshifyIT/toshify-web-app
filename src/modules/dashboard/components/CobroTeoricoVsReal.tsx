@@ -18,6 +18,22 @@ import { PeriodPicker } from './PeriodPicker'
 import { CobroComparativo } from './CobroComparativo'
 import './CobroTeoricoVsReal.css'
 
+// Cache para evitar consultas repetidas a la BD
+const cabifyTableCache = new Map<string, string>()
+
+async function getCabifyTable(sedeId: string | null | undefined): Promise<string> {
+  if (!sedeId) return 'cabify_historico'
+  const cached = cabifyTableCache.get(sedeId)
+  if (cached) return cached
+
+  const { data } = await supabase.from('sedes').select('ciudad').eq('id', sedeId).single()
+  const table = data?.ciudad?.toLowerCase().includes('bariloche')
+    ? 'cabify_historico_bariloche'
+    : 'cabify_historico'
+  cabifyTableCache.set(sedeId, table)
+  return table
+}
+
 type Granularity = 'semana' | 'mes' | 'ano'
 type ActiveTab = 'datos' | 'comparativo'
 
@@ -151,13 +167,13 @@ async function calcularPipelineMesIndependiente(
   const [histRes, nomRes] = await Promise.all([
     (supabase.from('conceptos_facturacion_historial') as any)
       .select('codigo, precio_base, precio_final, fecha_vigencia_desde, fecha_vigencia_hasta')
-      .in('codigo', ['P001', 'P002', 'P003', 'P013'])
+      .in('codigo', ['P001', 'P002', 'P003', 'P013', 'P014', 'P015', 'P016'])
       .lte('fecha_vigencia_desde', fFinStr)
       .gte('fecha_vigencia_hasta', fIniStr),
     supabase.from('conceptos_nomina')
       .select('codigo, precio_base, precio_final')
       .eq('activo', true)
-      .in('codigo', ['P001', 'P002', 'P003', 'P013']),
+      .in('codigo', ['P001', 'P002', 'P003', 'P013', 'P014', 'P015', 'P016']),
   ])
   const pMap = new Map<string, number>()
   ;(nomRes.data || []).forEach((c: any) => pMap.set(c.codigo, c.precio_final ?? c.precio_base ?? 0))
@@ -327,12 +343,12 @@ async function calcularPipelineMesIndependiente(
     for (const [ds] of dias.entries()) { alqTeoPorDia.set(ds, (alqTeoPorDia.get(ds) || 0) + alqDia) }
   })
 
-  // 7. Cobro real (cabify_historico)
+  // 7. Cobro real (cabify_historico / cabify_historico_bariloche según sede)
   const dnis50k = cond50k.map(c => normalizeDni(c.dni)).filter(Boolean)
   const cobroRealPorDia = new Map<string, number>()
   daysInt.forEach(d => cobroRealPorDia.set(format(d, 'yyyy-MM-dd'), 0))
   if (dnis50k.length > 0) {
-    const { data: hist } = await supabase.from('cabify_historico')
+    const { data: hist } = await supabase.from(await getCabifyTable(sedeActualId))
       .select('fecha_inicio, cobro_app, dni, fecha_guardado')
       .in('dni', dnis50k)
       .gte('fecha_inicio', fIniStr)
@@ -461,14 +477,14 @@ export function CobroTeoricoVsReal() {
         const [historialResult, nominaResult] = await Promise.all([
           (supabase.from('conceptos_facturacion_historial') as any)
             .select('codigo, precio_base, precio_final, fecha_vigencia_desde, fecha_vigencia_hasta')
-            .in('codigo', ['P001', 'P002', 'P003', 'P013'])
+            .in('codigo', ['P001', 'P002', 'P003', 'P013', 'P014', 'P015', 'P016'])
             .lte('fecha_vigencia_desde', fechaFinStr)
             .gte('fecha_vigencia_hasta', fechaInicioStr),
           supabase
             .from('conceptos_nomina')
             .select('codigo, precio_base, precio_final')
             .eq('activo', true)
-            .in('codigo', ['P001', 'P002', 'P003', 'P013']),
+            .in('codigo', ['P001', 'P002', 'P003', 'P013', 'P014', 'P015', 'P016']),
         ])
         const historialPrecios = historialResult.data
         const conceptosNomina = nominaResult.data
@@ -957,9 +973,9 @@ export function CobroTeoricoVsReal() {
         })
 
         if (dnis50k.length > 0) {
-            // Consultar histórico
+            // Consultar histórico (tabla dinámica según sede)
             const { data: historicoData, error: historicoError } = await supabase
-                .from('cabify_historico')
+                .from(await getCabifyTable(sedeActualId))
                 .select('fecha_inicio, cobro_app, dni, fecha_guardado, cabify_driver_id')
                 .in('dni', dnis50k)
                 .gte('fecha_inicio', format(startDate, 'yyyy-MM-dd'))
@@ -1218,7 +1234,7 @@ export function CobroTeoricoVsReal() {
 
         setChartData(finalData)
 
-      } catch (_error) {
+      } catch {
         // silently ignored
       } finally {
         setLoading(false)

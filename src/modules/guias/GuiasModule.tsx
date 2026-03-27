@@ -99,9 +99,6 @@ export function GuiasModule() {
   const [cbuSearch] = useState('')
 
 
-  const [_efectivoSearch] = useState('')
-  const [_appSearch] = useState('')
-  const [_totalSearch] = useState('')
 
   // Estados para modal de detalles
   const [showDetailsModal, setShowDetailsModal] = useState(false)
@@ -564,7 +561,7 @@ export function GuiasModule() {
 
       // 2. Obtener datos financieros con consulta directa a cabify_historico (filtrada por DNI)
       const semanas = historyData.map((d: any) => d.semana);
-      let cabifyDataMap = new Map<string, Map<string, { cobroApp: number; cobroEfectivo: number }>>();
+      const cabifyDataMap = new Map<string, Map<string, { cobroApp: number; cobroEfectivo: number }>>();
       const dniNorm = driver.numero_dni ? normalizeDni(String(driver.numero_dni)) : '';
       if (dniNorm && semanas.length > 0) {
         try {
@@ -919,7 +916,7 @@ export function GuiasModule() {
           });
 
           return { assignmentsMap, prevLabel: prevWeekLabel, detailMap };
-        } catch (e) {
+        } catch {
           return { assignmentsMap: new Map(), prevLabel: null, detailMap: new Map() };
         }
       })();
@@ -932,6 +929,13 @@ export function GuiasModule() {
         const [fYearStr, fWeekStr] = targetWeek.split('-W');
         const fYear = parseInt(fYearStr);
         const fWeek = parseInt(fWeekStr);
+
+        // Calcular rango de la semana (lunes → domingo)
+        const jan4 = new Date(Date.UTC(fYear, 0, 4));
+        const dowJ = jan4.getUTCDay() || 7;
+        const mondayW1 = new Date(jan4.getTime() - (dowJ - 1) * 86400000);
+        const mondayDate = new Date(mondayW1.getTime() + (fWeek - 1) * 7 * 86400000);
+        const sundayDate = new Date(mondayDate.getTime() + 6 * 86400000);
 
         // Buscar el periodo_facturacion que coincida con semana y año (filtrado por sede)
         // Solo usar datos guardados si el período está CERRADO (datos definitivos).
@@ -950,20 +954,79 @@ export function GuiasModule() {
         const map = new Map<string, { alquiler: number; garantia: number; total: number; proyectado: number }>();
 
         if (periodoData && (periodoData as any).estado === 'cerrado') {
-          // Periodo cerrado: obtener facturacion_conductores directamente (datos definitivos)
+          // Periodo cerrado: obtener facturacion_conductores + precio_unitario para proyectado
           const { data: facturacionRows } = await supabase
             .from('facturacion_conductores')
-            .select('conductor_id, subtotal_alquiler, subtotal_garantia, turnos_cobrados')
+            .select('id, conductor_id, subtotal_alquiler, subtotal_garantia, turnos_cobrados, estado')
             .eq('periodo_id', periodoData.id)
             .in('conductor_id', conductorIds);
+
+          // Obtener precio_unitario desde facturacion_detalle (para saber si tiene datos de alquiler)
+          const facIds = (facturacionRows || []).map((r: any) => r.id).filter(Boolean)
+          const puMap = new Map<string, number>()
+          if (facIds.length > 0) {
+            const { data: alquilerDetalle } = await (supabase.from('facturacion_detalle') as any)
+              .select('facturacion_id, precio_unitario')
+              .in('facturacion_id', facIds)
+              .in('concepto_codigo', ['P001', 'P002', 'P013', 'P014', 'P015', 'P016'])
+            ;(alquilerDetalle || []).forEach((d: any) => {
+              const pu = Number(d.precio_unitario) || 0
+              if (pu > 0) puMap.set(d.facturacion_id, pu)
+            })
+          }
+
+          // Obtener primera fecha de asignación por conductor y fecha fin del período
+          const { data: periodoFechas } = await supabase
+            .from('periodos_facturacion')
+            .select('fecha_fin')
+            .eq('id', periodoData.id)
+            .single()
+          const fechaFinPeriodo = periodoFechas ? new Date((periodoFechas as any).fecha_fin) : sundayDate
+
+          const asigCondIds = (facturacionRows || []).map((r: any) => r.conductor_id).filter(Boolean)
+          const primeraFechaMap = new Map<string, Date>()
+          if (asigCondIds.length > 0) {
+            const { data: asigData } = await (supabase.from('asignaciones_conductores') as any)
+              .select('conductor_id, fecha_inicio, asignaciones!inner(estado, fecha_inicio)')
+              .in('conductor_id', asigCondIds)
+              .in('estado', ['asignado', 'activo', 'activa', 'finalizado', 'finalizada', 'completado'])
+            ;(asigData || []).forEach((ac: any) => {
+              const asignacion = ac.asignaciones
+              if (!asignacion) return
+              const estadoPadre = (asignacion.estado || '').toLowerCase()
+              if (['programado', 'programada', 'cancelado', 'cancelada'].includes(estadoPadre)) return
+              const acInicioStr = ac.fecha_inicio || asignacion.fecha_inicio
+              if (!acInicioStr) return
+              const acInicio = new Date(acInicioStr)
+              const existing = primeraFechaMap.get(ac.conductor_id)
+              if (!existing || acInicio < existing) {
+                primeraFechaMap.set(ac.conductor_id, acInicio)
+              }
+            })
+          }
 
           (facturacionRows || []).forEach((row: any) => {
             const alquiler = Number(row.subtotal_alquiler) || 0;
             const garantia = Number(row.subtotal_garantia) || 0;
-            const dias = Number(row.turnos_cobrados) || 0;
-            const proyectado = dias > 0 && dias < 7
-              ? Math.round((alquiler / dias) * 7)
-              : alquiler;
+            const diasRaw = Number(row.turnos_cobrados) || 0;
+            const pu = puMap.get(row.id) || 0;
+
+            let proyectado = alquiler;
+            // Misma lógica que ReporteFacturacionTab
+            if (pu > 0 && diasRaw > 0) {
+              const primeraFecha = primeraFechaMap.get(row.conductor_id)
+              let diasCalendario = 7
+              if (primeraFecha) {
+                diasCalendario = Math.min(7, Math.max(1,
+                  Math.round((fechaFinPeriodo.getTime() - primeraFecha.getTime()) / (1000 * 60 * 60 * 24)) + 1
+                ))
+              }
+              const diasProyectados = Math.max(1, diasCalendario)
+              if (diasRaw < diasProyectados) {
+                proyectado = Math.round((alquiler / diasRaw) * diasProyectados)
+              }
+            }
+
             map.set(row.conductor_id, { alquiler, garantia, total: alquiler + garantia, proyectado });
           });
           return map;
@@ -980,19 +1043,13 @@ export function GuiasModule() {
           return argDateFmtFB.format(new Date(ts));
         };
 
-        // Calcular rango de la semana (lunes → domingo) en formato YYYY-MM-DD
-        const jan4 = new Date(Date.UTC(fYear, 0, 4));
-        const dowJ = jan4.getUTCDay() || 7;
-        const mondayW1 = new Date(jan4.getTime() - (dowJ - 1) * 86400000);
-        const mondayDate = new Date(mondayW1.getTime() + (fWeek - 1) * 7 * 86400000);
-        const sundayDate = new Date(mondayDate.getTime() + 6 * 86400000);
+        // Rango de la semana en formato YYYY-MM-DD
         const weekStartStr = mondayDate.toISOString().split('T')[0];
         const weekEndStr = sundayDate.toISOString().split('T')[0];
 
         // Tope de días: MIN(hoy, domingo) — igual que Vista Previa (no proyecta días futuros)
-        const hoyFB = new Date();
-        hoyFB.setHours(0, 0, 0, 0);
-        const hoyStr = hoyFB.toISOString().split('T')[0];
+        // Usar timezone Argentina para "hoy" (consistente sin importar desde dónde se conecte el usuario)
+        const hoyStr = toArgDateFB(new Date().toISOString());
         const weekCapStr = hoyStr < weekEndStr ? hoyStr : weekEndStr;
 
         // Fecha semana como Date para comparaciones
@@ -1005,7 +1062,7 @@ export function GuiasModule() {
             .from('conceptos_nomina')
             .select('codigo, precio_base, precio_final')
             .eq('activo', true)
-            .in('codigo', ['P001', 'P002', 'P003', 'P013']),
+            .in('codigo', ['P001', 'P002', 'P003', 'P013', 'P014', 'P015', 'P016']),
           supabase
             .from('garantias_conductores')
             .select('conductor_id, estado, monto_total, monto_pagado, monto_cuota_semanal, cuotas_pagadas, cuotas_totales')
@@ -1013,7 +1070,7 @@ export function GuiasModule() {
             .in('estado', ['activa', 'pendiente']),
           supabase
             .from('asignaciones_conductores')
-            .select('conductor_id, horario, fecha_inicio, fecha_fin, asignaciones!inner(estado, horario, fecha_inicio, fecha_fin)')
+            .select('conductor_id, horario, fecha_inicio, fecha_fin, asignaciones!inner(estado, horario, fecha_inicio, fecha_fin, vehiculo_id, vehiculos(gnc))')
             .in('conductor_id', conductorIds)
             .in('estado', ['asignado', 'activo', 'activa', 'finalizado', 'finalizada', 'completado', 'cancelado', 'cancelada']),
           supabase
@@ -1044,9 +1101,11 @@ export function GuiasModule() {
 
         const cuotaGarantiaSemanalDefault = Math.round((precios.get('P003') || 7143) * 7);
 
-        // Mapa de código de concepto por modalidad (igual que Vista Previa)
-        const codigosPorModalidad: Record<string, string> = {
-          'CARGO': 'P002', 'TURNO_DIURNO': 'P001', 'TURNO_NOCTURNO': 'P013',
+        // Mapa de código de concepto por modalidad y GNC (igual que Facturación)
+        const getCodigoPorModalidad = (modalidad: string, tieneGnc: boolean): string => {
+          if (modalidad === 'CARGO') return tieneGnc ? 'P002' : 'P016'
+          if (modalidad === 'TURNO_NOCTURNO') return tieneGnc ? 'P013' : 'P015'
+          return tieneGnc ? 'P001' : 'P014'
         };
 
         // Agrupar asignaciones por conductor
@@ -1067,6 +1126,7 @@ export function GuiasModule() {
           const asignaciones = asigPorConductor.get(cid) || [];
           const fechasContadas = new Set<string>();
           let montoTotal = 0;
+          let primeraFechaAsig: Date | null = null;
 
           for (const ac of asignaciones) {
             const asignacion = ac.asignaciones;
@@ -1104,7 +1164,7 @@ export function GuiasModule() {
             const padreFinStr = asignacion.fecha_fin ? toArgDateFB(asignacion.fecha_fin) : '';
             const condFinDate = condFinStr ? new Date(condFinStr + 'T00:00:00') : null;
             const padreFinDate = padreFinStr ? new Date(padreFinStr + 'T00:00:00') : null;
-            let acFinDate = condFinDate && padreFinDate
+            const acFinDate = condFinDate && padreFinDate
               ? (condFinDate < padreFinDate ? condFinDate : padreFinDate)
               : (condFinDate || padreFinDate || weekCapDate);
 
@@ -1123,8 +1183,14 @@ export function GuiasModule() {
 
             if (efectivoInicio > efectivoFin) continue;
 
+            // Rastrear primera fecha de asignación (para proyectado)
+            if (!primeraFechaAsig || efectivoInicio < primeraFechaAsig) {
+              primeraFechaAsig = efectivoInicio;
+            }
+
             // Contar días y sumar montos (deduplicando por fecha)
-            const codigo = codigosPorModalidad[modalidad] || 'P002';
+            const tieneGnc = asignacion.vehiculos?.gnc === true;
+            const codigo = getCodigoPorModalidad(modalidad, tieneGnc);
             const precioDiario = precios.get(codigo) || 0;
             const cursor = new Date(efectivoInicio);
             while (cursor <= efectivoFin) {
@@ -1141,10 +1207,26 @@ export function GuiasModule() {
           const dias = fechasContadas.size;
           if (alquiler === 0 && dias === 0) continue;
 
-          // Proyectado: extrapolación del alquiler a 7 días (misma lógica que Vista Previa)
-          const proyectado = dias > 0 && dias < 7
-            ? (montoTotal / dias) * 7
-            : montoTotal;
+          // Proyectado: misma lógica que ReporteFacturacionTab
+          // diasProyectados = días calendario desde primera asignación hasta domingo
+          let proyectado = alquiler;
+          if (dias > 0) {
+            // Conductor de baja: no proyectar
+            const fechaTermCond = fechaTermFBMap.get(cid);
+            const esDeBaja = fechaTermCond && fechaTermCond <= weekCapDate;
+            if (!esDeBaja) {
+              let diasCalendario = 7;
+              if (primeraFechaAsig) {
+                diasCalendario = Math.min(7, Math.max(1,
+                  Math.round((sundayDate.getTime() - primeraFechaAsig.getTime()) / (1000 * 60 * 60 * 24)) + 1
+                ));
+              }
+              const diasProyectados = Math.max(1, diasCalendario);
+              if (dias < diasProyectados) {
+                proyectado = Math.round((alquiler / dias) * diasProyectados);
+              }
+            }
+          }
 
           // Garantía: usar datos reales si existen, sino cuota por defecto
           let garantia = cuotaGarantiaSemanalDefault;

@@ -1,6 +1,6 @@
 // src/modules/vehiculos/components/VehiculoWizard.tsx
 import { useState } from 'react'
-import { Car, Settings, Wrench, Calendar, Shield, Check, ChevronLeft, ChevronRight, Save } from 'lucide-react'
+import { Car, Settings, Wrench, Calendar, Shield, Check, ChevronLeft, ChevronRight, Save, Info } from 'lucide-react'
 import type { VehiculoEstado } from '../../../types/database.types'
 
 interface VehiculoFormData {
@@ -258,7 +258,11 @@ export function VehiculoWizard({
                       style={{ width: '18px', height: '18px', cursor: 'pointer' }}
                     />
                     <span style={{ color: formData.telepase ? '#3b82f6' : 'var(--text-primary)' }}>
-                      Telepase
+                      Telepase Propio
+                    </span>
+                    <span style={{ position: 'relative', display: 'inline-flex' }} className="telepase-tooltip-wrap">
+                      <Info size={14} style={{ color: '#9CA3AF', cursor: 'help', flexShrink: 0 }} />
+                      <span className="telepase-tooltip">Al activar, el peaje es asumido por el conductor asignado a este vehículo</span>
                     </span>
                   </label>
                 </div>
