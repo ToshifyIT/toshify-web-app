@@ -16,7 +16,6 @@ import { usePermissions } from '../../contexts/PermissionsContext'
 import { useAuth } from '../../contexts/AuthContext'
 import { useSede } from '../../contexts/SedeContext'
 
-import { registrarHistorialVehiculo, registrarHistorialConductor } from '../../services/historialService'
 import { ProgramacionAssignmentWizard } from './components/ProgramacionAssignmentWizard'
 import type { ProgramacionOnboardingCompleta } from '../../types/onboarding.types'
 import Swal from 'sweetalert2'
