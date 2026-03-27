@@ -19,6 +19,7 @@ interface ParametroAsignacion {
 const PARAMS_DEFAULTS: Record<string, { valor: string; descripcion: string }> = {
   hora_corte_diurno: { valor: '12', descripcion: 'Hora corte Diurno - Si entrega >= esta hora, descuento turno completo' },
   hora_corte_cargo: { valor: '14', descripcion: 'Hora corte A Cargo - Si entrega >= esta hora, descuento medio turno' },
+  descuento_diurno_antes: { valor: '0.5', descripcion: 'Descuento (turnos) si entrega diurna antes del corte' },
   descuento_diurno_despues: { valor: '1', descripcion: 'Descuento (turnos) si entrega diurna despues del corte' },
   descuento_cargo_despues: { valor: '0.5', descripcion: 'Descuento (turnos) si entrega a cargo despues del corte' },
 }
