@@ -1371,15 +1371,12 @@ export function GarantiasTab() {
       }
     },
     {
-      accessorKey: 'cuotas_pagadas',
-      header: 'Cuotas',
-      cell: ({ row }) => `${row.original.cuotas_pagadas}/${row.original.cuotas_totales}`
-    },
-    {
       id: 'progreso',
       header: 'Progreso',
       cell: ({ row }) => {
-        const porcentaje = (row.original.monto_pagado / row.original.monto_total) * 100
+        const porcentaje = row.original.monto_total > 0
+          ? (row.original.monto_pagado / row.original.monto_total) * 100
+          : 0
         return (
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
             <div className="fact-progress-bar">
