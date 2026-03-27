@@ -9494,17 +9494,23 @@ export function ReporteFacturacionTab() {
                             const horario = primeraConHora.horario?.toUpperCase();
                             const esDiurno = horario === 'DIURNO' || horario === 'TURNO_DIURNO';
                             const esCargo = horario === 'CARGO' || horario === 'A CARGO';
+                            // Usar la fecha real de inicio de la asignación nueva (no el primer día trabajado de la semana)
+                            // fechaInicio del historial es yyyy-MM-dd, d.fecha es dd/MM/yyyy → convertir para comparar
+                            const fechaInicioPartes = primeraConHora.fechaInicio?.split('-');
+                            const fechaInicioDisplay = fechaInicioPartes?.length === 3
+                              ? `${fechaInicioPartes[2]}/${fechaInicioPartes[1]}/${fechaInicioPartes[0]}`
+                              : null;
+                            const fechaRealEntrega = diasModalData.dias.find(dd => dd.fecha === fechaInicioDisplay)?.fecha
+                              || diasModalData.dias.find(dd => dd.trabajado)?.fecha;
                             if (esDiurno) {
-                              const primerDiaTrabajado = diasModalData.dias.find(dd => dd.trabajado);
                               if (hh >= (horasCorteTurno?.diurno || 12)) {
-                                return { tipo: 'dia_completo', fecha_entrega: primerDiaTrabajado?.fecha, hora_entrega: primeraConHora.horaEntrega, descuento_turnos: horasCorteTurno?.descDiurnoDespues || 1 };
+                                return { tipo: 'dia_completo', fecha_entrega: fechaRealEntrega, hora_entrega: primeraConHora.horaEntrega, descuento_turnos: horasCorteTurno?.descDiurnoDespues || 1 };
                               } else {
-                                return { tipo: 'medio_turno', fecha_entrega: primerDiaTrabajado?.fecha, hora_entrega: primeraConHora.horaEntrega, descuento_turnos: horasCorteTurno?.descDiurnoAntes || 0.5 };
+                                return { tipo: 'medio_turno', fecha_entrega: fechaRealEntrega, hora_entrega: primeraConHora.horaEntrega, descuento_turnos: horasCorteTurno?.descDiurnoAntes || 0.5 };
                               }
                             }
                             if (esCargo && hh >= (horasCorteTurno?.cargo || 14)) {
-                              const primerDiaTrabajado = diasModalData.dias.find(dd => dd.trabajado);
-                              return { tipo: 'medio_turno', fecha_entrega: primerDiaTrabajado?.fecha, hora_entrega: primeraConHora.horaEntrega, descuento_turnos: horasCorteTurno?.descCargoDespues || 0.5 };
+                              return { tipo: 'medio_turno', fecha_entrega: fechaRealEntrega, hora_entrega: primeraConHora.horaEntrega, descuento_turnos: horasCorteTurno?.descCargoDespues || 0.5 };
                             }
                             return null;
                           })();

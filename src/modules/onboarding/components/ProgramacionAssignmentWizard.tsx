@@ -261,7 +261,7 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
             .order('patente'),
           filtrarPorSede(supabase
             .from('asignaciones')
-            .select('vehiculo_id, horario, estado, asignaciones_conductores(horario)')
+            .select('vehiculo_id, horario, estado, asignaciones_conductores(horario, estado)')
             .in('estado', ['activa', 'programado'])),
           filtrarPorSede(supabase
             .from('programaciones_onboarding')
@@ -317,8 +317,9 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
             }
           }
 
-          // Es TURNO - verificar slots libres
-          const conductores = asignacion.asignaciones_conductores || []
+          // Es TURNO - verificar slots libres (solo conductores activos/asignados)
+          const conductores = (asignacion.asignaciones_conductores || [])
+            .filter((c: any) => c.estado === 'asignado' || c.estado === 'activo')
           const turnoDiurnoOcupado = conductores.some((c: any) => c.horario === 'diurno')
           const turnoNocturnoOcupado = conductores.some((c: any) => c.horario === 'nocturno')
 

@@ -2415,21 +2415,50 @@ export function ProgramacionModule() {
                 )}
               </div>
 
-              {/* Conductor */}
+              {/* Conductores */}
               <div className="prog-modal-section">
-                <h3><User size={16} /> Conductor</h3>
-                <div className="prog-modal-grid">
-                  <div>
-                    <label>Nombre</label>
-                    <p>{previewProgramacion.conductor_display || previewProgramacion.conductor_nombre || '-'}</p>
-                  </div>
-                  {previewProgramacion.conductor_dni && (
-                    <div>
-                      <label>DNI</label>
-                      <p>{previewProgramacion.conductor_dni}</p>
+                <h3><User size={16} /> {previewProgramacion.modalidad === 'TURNO' ? 'Conductores' : 'Conductor'}</h3>
+                {previewProgramacion.modalidad === 'TURNO' ? (
+                  <>
+                    <div className="prog-modal-grid">
+                      <div>
+                        <label>Conductor Diurno</label>
+                        <p>{previewProgramacion.conductor_diurno_nombre || 'Sin asignar'}</p>
+                      </div>
+                      {previewProgramacion.conductor_diurno_dni && (
+                        <div>
+                          <label>DNI Diurno</label>
+                          <p>{previewProgramacion.conductor_diurno_dni}</p>
+                        </div>
+                      )}
                     </div>
-                  )}
-                </div>
+                    <div className="prog-modal-grid" style={{ marginTop: 8 }}>
+                      <div>
+                        <label>Conductor Nocturno</label>
+                        <p>{previewProgramacion.conductor_nocturno_nombre || 'Sin asignar'}</p>
+                      </div>
+                      {previewProgramacion.conductor_nocturno_dni && (
+                        <div>
+                          <label>DNI Nocturno</label>
+                          <p>{previewProgramacion.conductor_nocturno_dni}</p>
+                        </div>
+                      )}
+                    </div>
+                  </>
+                ) : (
+                  <div className="prog-modal-grid">
+                    <div>
+                      <label>Nombre</label>
+                      <p>{previewProgramacion.conductor_display || previewProgramacion.conductor_nombre || '-'}</p>
+                    </div>
+                    {previewProgramacion.conductor_dni && (
+                      <div>
+                        <label>DNI</label>
+                        <p>{previewProgramacion.conductor_dni}</p>
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
 
               {/* Tipo y Modalidad */}
