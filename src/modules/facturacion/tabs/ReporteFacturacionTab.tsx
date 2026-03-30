@@ -7839,32 +7839,46 @@ export function ReporteFacturacionTab() {
 
   // Stats calculados - funciona para facturación generada y vista previa
   const stats = useMemo(() => {
+    const applyChipFilter = (data: typeof facturaciones) => {
+      if (!filtroAlerta) return data
+      return data.filter(f => {
+        if (filtroAlerta === 'ingreso' && !f.alerta_prorrateo_ingreso) return false
+        if (filtroAlerta === 'baja' && f.estado_billing !== 'De baja') return false
+        if (filtroAlerta === 'pausa' && f.estado_billing !== 'Pausa') return false
+        if (filtroAlerta === 'sin_gnc' && !(f.tiene_gnc === false && f.vehiculo_patente)) return false
+        if (filtroAlerta === 'telepase' && !(f.tiene_telepase === true && f.vehiculo_patente)) return false
+        if (filtroAlerta === 'efectivo_on' && f.permiso_efectivo !== 'Activado') return false
+        if (filtroAlerta === 'efectivo_off' && f.permiso_efectivo !== 'Desactivado') return false
+        return true
+      })
+    }
+
     // Si estamos en modo vista previa, calcular desde vistaPreviaData
     if (modoVistaPrevia && vistaPreviaData.length > 0) {
+      const src = applyChipFilter(vistaPreviaData as typeof facturaciones)
       return {
-        total_conductores: vistaPreviaData.length,
-        total_proyectado: vistaPreviaData.reduce((sum, f) => sum + (f.proyectado_alquiler || 0), 0),
-        total_cargos: vistaPreviaData.reduce((sum, f) => sum + f.subtotal_cargos + Math.max(0, f.saldo_anterior), 0),
-        // Incluir saldos negativos (créditos a favor del conductor) en descuentos para que Cargos - Descuentos = Neto
-        total_descuentos: vistaPreviaData.reduce((sum, f) => sum + f.subtotal_descuentos + Math.max(0, -(f.saldo_anterior || 0)), 0),
-        total_neto: vistaPreviaData.reduce((sum, f) => sum + f.total_a_pagar, 0),
-        conductores_deben: vistaPreviaData.filter(f => f.total_a_pagar > 0).length,
-        conductores_favor: vistaPreviaData.filter(f => f.total_a_pagar <= 0).length
+        total_conductores: src.length,
+        total_proyectado: src.reduce((sum, f) => sum + (f.proyectado_alquiler || 0), 0),
+        total_cargos: src.reduce((sum, f) => sum + f.subtotal_cargos + Math.max(0, f.saldo_anterior), 0),
+        total_descuentos: src.reduce((sum, f) => sum + f.subtotal_descuentos + Math.max(0, -(f.saldo_anterior || 0)), 0),
+        total_neto: src.reduce((sum, f) => sum + f.total_a_pagar, 0),
+        conductores_deben: src.filter(f => f.total_a_pagar > 0).length,
+        conductores_favor: src.filter(f => f.total_a_pagar <= 0).length
       }
     }
     // Modo normal con período generado
     if (!periodo) return null
+    const src = applyChipFilter(facturaciones)
     return {
-      total_conductores: periodo.total_conductores,
-      total_proyectado: facturaciones.reduce((sum, f) => sum + (f.proyectado_alquiler || 0), 0),
-      total_cargos: facturaciones.reduce((sum, f) => sum + (f.subtotal_cargos || 0) + Math.max(0, f.saldo_anterior || 0), 0),
-      // Incluir saldos negativos (créditos a favor del conductor) en descuentos para que Cargos - Descuentos = Neto
-      total_descuentos: facturaciones.reduce((sum, f) => sum + (f.subtotal_descuentos || 0) + Math.max(0, -(f.saldo_anterior || 0)), 0),
-      total_neto: facturaciones.reduce((sum, f) => sum + (f.total_a_pagar || 0), 0),
-      conductores_deben: facturaciones.filter(f => f.total_a_pagar > 0).length,
-      conductores_favor: facturaciones.filter(f => f.total_a_pagar <= 0).length
+      total_conductores: src.length,
+      total_proyectado: src.reduce((sum, f) => sum + (f.proyectado_alquiler || 0), 0),
+      total_cargos: src.reduce((sum, f) => sum + (f.subtotal_cargos || 0) + Math.max(0, f.saldo_anterior || 0), 0),
+      total_descuentos: src.reduce((sum, f) => sum + (f.subtotal_descuentos || 0) + Math.max(0, -(f.saldo_anterior || 0)), 0),
+      total_neto: src.reduce((sum, f) => sum + (f.total_a_pagar || 0), 0),
+      conductores_deben: src.filter(f => f.total_a_pagar > 0).length,
+      conductores_favor: src.filter(f => f.total_a_pagar <= 0).length
     }
-  }, [periodo, facturaciones, modoVistaPrevia, vistaPreviaData])
+  }, [periodo, facturaciones, modoVistaPrevia, vistaPreviaData, filtroAlerta])
 
   // Info modal para stat cards
   function showStatInfo(stat: string) {
