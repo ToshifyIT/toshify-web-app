@@ -47,6 +47,7 @@ export function VehicleManagement() {
   const [showDetailsModal, setShowDetailsModal] = useState(false)
   const [saving, setSaving] = useState(false)
   const [selectedVehiculo, setSelectedVehiculo] = useState<VehiculoWithRelations | null>(null)
+  const [lastAuditLog, setLastAuditLog] = useState<{ usuario_nombre: string | null; campos_modificados: string[] | null } | null>(null)
 
   const [historialVehiculo, setHistorialVehiculo] = useState<{ id: string; patente: string } | null>(null)
   const [sedes, setSedes] = useState<{ id: string; nombre: string }[]>([])
@@ -252,6 +253,19 @@ export function VehicleManagement() {
       if (!data) return
 
       setSelectedVehiculo(data as VehiculoWithRelations)
+
+      // Traer último audit log de UPDATE para este vehículo
+      const { data: auditData } = await supabase
+        .from('audit_logs')
+        .select('usuario_nombre, campos_modificados')
+        .eq('tabla', 'vehiculos')
+        .eq('registro_id', vehiculoId)
+        .eq('accion', 'UPDATE')
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle()
+      setLastAuditLog(auditData || null)
+
       setShowDetailsModal(true)
     } catch {
       // silently ignored
@@ -1962,13 +1976,13 @@ export function VehicleManagement() {
 
       {/* Modal Ver Detalles */}
       {showDetailsModal && selectedVehiculo && (
-        <div className="modal-overlay" onClick={() => setShowDetailsModal(false)}>
+        <div className="modal-overlay" onClick={() => { setShowDetailsModal(false); setLastAuditLog(null) }}>
           <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '700px' }}>
             <div className="modal-header">
               <h2>Detalles del Vehículo</h2>
               <button
                 className="modal-close"
-                onClick={() => setShowDetailsModal(false)}
+                onClick={() => { setShowDetailsModal(false); setLastAuditLog(null) }}
                 type="button"
               >
                 ×
@@ -2102,6 +2116,16 @@ export function VehicleManagement() {
               <div>
                 <label className="detail-label">ÚLTIMA ACTUALIZACIÓN</label>
                 <div className="detail-value">{formatDateTimeAR(selectedVehiculo.updated_at)}</div>
+                {(lastAuditLog?.usuario_nombre || (selectedVehiculo as any).updated_by) && (
+                  <div className="detail-value" style={{ fontSize: '11px', color: 'var(--text-secondary)', marginTop: '2px' }}>
+                    por {lastAuditLog?.usuario_nombre || (selectedVehiculo as any).updated_by}
+                  </div>
+                )}
+                {lastAuditLog?.campos_modificados && lastAuditLog.campos_modificados.length > 0 && (
+                  <div className="detail-value" style={{ fontSize: '11px', color: 'var(--text-secondary)', marginTop: '2px' }}>
+                    Cambios: {lastAuditLog.campos_modificados.join(', ')}
+                  </div>
+                )}
               </div>
             </div>
             </div>
@@ -2122,7 +2146,7 @@ export function VehicleManagement() {
                   </button>
                   <button
                     className="btn-secondary"
-                    onClick={() => setShowDetailsModal(false)}
+                    onClick={() => { setShowDetailsModal(false); setLastAuditLog(null) }}
                   >
                     Cerrar
                   </button>
