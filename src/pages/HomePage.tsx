@@ -280,7 +280,7 @@ let guiaSyncDone = false
 
 export function HomePage() {
   const { profile, signOut } = useAuth()
-  const { sedes, sedeActual, verTodas, cambiarSede, puedeVerTodasSedes, sedeActualId } = useSede()
+  const { sedes, sedeActual, verTodas, cambiarSede, puedeVerTodasSedes, puedeCambiarSede, sedeActualId } = useSede()
   const navigate = useNavigate()
   const location = useLocation()
   const { getVisibleMenus, getVisibleSubmenusForMenu, loading, isAdmin } = useEffectivePermissions()
@@ -1614,7 +1614,7 @@ export function HomePage() {
               {sedes.length > 0 && (
                 <div style={{ position: 'relative' }}>
                   <button
-                    onClick={() => sedes.length > 1 ? setSedeDropdownOpen(!sedeDropdownOpen) : undefined}
+                    onClick={() => (sedes.length > 1 && puedeCambiarSede) ? setSedeDropdownOpen(!sedeDropdownOpen) : undefined}
                     style={{
                       display: 'flex',
                       alignItems: 'center',
@@ -1623,7 +1623,7 @@ export function HomePage() {
                       borderRadius: '8px',
                       border: '1px solid var(--border-primary)',
                       background: 'var(--bg-secondary)',
-                      cursor: sedes.length > 1 ? 'pointer' : 'default',
+                      cursor: (sedes.length > 1 && puedeCambiarSede) ? 'pointer' : 'default',
                       color: 'var(--text-primary)',
                       fontSize: '13px',
                       fontWeight: 600,
@@ -1649,7 +1649,7 @@ export function HomePage() {
                         {sedeActual.codigo}
                       </span>
                     )}
-                    {sedes.length > 1 && (
+                    {sedes.length > 1 && puedeCambiarSede && (
                       <ChevronRight size={14} style={{
                         color: 'var(--text-secondary)',
                         transform: sedeDropdownOpen ? 'rotate(90deg)' : 'rotate(0deg)',

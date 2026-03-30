@@ -51,6 +51,8 @@ interface SedeContextType {
   cambiarSede: (sedeId: string) => void
   /** Si el usuario puede cambiar de sede (admins) */
   puedeVerTodasSedes: boolean
+  /** Si el usuario puede cambiar de sede (configurado en su perfil) */
+  puedeCambiarSede: boolean
   /**
    * Helper para aplicar filtro de sede a una query de supabase.
    * Si verTodas = true, no agrega filtro.
@@ -75,6 +77,8 @@ export function SedeProvider({ children }: { children: ReactNode }) {
   // Admins y superadmins pueden ver todas las sedes
   const roleName = (profile?.roles?.name || '').toLowerCase()
   const puedeVerTodasSedes = roleName === 'admin' || roleName === 'superadmin' || roleName === 'administrador'
+  // puede_cambiar_sede: true por defecto, false solo si está explícitamente en false
+  const puedeCambiarSede = (profile as any)?.puede_cambiar_sede !== false
 
   // Cargar sedes
   useEffect(() => {
@@ -137,6 +141,8 @@ export function SedeProvider({ children }: { children: ReactNode }) {
   }, [profile, puedeVerTodasSedes])
 
   const cambiarSede = useCallback((sedeId: string) => {
+    // Solo puede cambiar si tiene permiso
+    if (!puedeCambiarSede) return
     // "Todas las sedes" solo para admins
     if (sedeId === TODAS_VALUE && !puedeVerTodasSedes) return
 
@@ -172,8 +178,9 @@ export function SedeProvider({ children }: { children: ReactNode }) {
     loading,
     cambiarSede,
     puedeVerTodasSedes,
+    puedeCambiarSede,
     aplicarFiltroSede,
-  }), [sedes, sedeActual, sedeActualId, verTodas, sedeUsuario, loading, cambiarSede, puedeVerTodasSedes, aplicarFiltroSede])
+  }), [sedes, sedeActual, sedeActualId, verTodas, sedeUsuario, loading, cambiarSede, puedeVerTodasSedes, puedeCambiarSede, aplicarFiltroSede])
 
   return (
     <SedeContext.Provider value={value}>

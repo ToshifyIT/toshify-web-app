@@ -87,6 +87,8 @@ export function UserMenuPermissionsManager() {
   const [saving, setSaving] = useState(false)
   const [globalFilter, setGlobalFilter] = useState('')
   const [sorting, setSorting] = useState<SortingState>([])
+  const [sedes, setSedes] = useState<{ id: string; nombre: string }[]>([])
+  const [savingSedeConfig, setSavingSedeConfig] = useState(false)
   const [userSearchTerm, setUserSearchTerm] = useState('')
   const [showUserDropdown, setShowUserDropdown] = useState(false)
   const [notification, setNotification] = useState<{ type: 'success' | 'error', message: string } | null>(null)
@@ -123,11 +125,14 @@ export function UserMenuPermissionsManager() {
         { data: usersData, error: usersError },
         { data: menusData, error: menusError },
         { data: submenusData, error: submenusError },
+        { data: sedesData },
       ] = await Promise.all([
         supabase.from('user_profiles').select('*, roles(*)').order('full_name'),
         supabase.from('menus').select('*').eq('is_active', true).order('order_index'),
         supabase.from('submenus').select('*, menus(name)').eq('is_active', true).order('order_index'),
+        (supabase as any).from('sedes').select('id, nombre').eq('activa', true).order('nombre'),
       ])
+      if (sedesData) setSedes(sedesData as { id: string; nombre: string }[])
 
       if (usersError) throw usersError
       if (menusError) throw menusError
@@ -1482,13 +1487,72 @@ export function UserMenuPermissionsManager() {
                 <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
                 <circle cx="12" cy="7" r="4"/>
               </svg>
-              <div>
+              <div style={{ flex: 1 }}>
                 <div style={{ fontWeight: 600, color: 'var(--text-primary)', fontSize: '14px' }}>
                   {sanitizeHTML(selectedUserData.full_name || 'Sin nombre')}
                 </div>
                 <div style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>
                   {sanitizeHTML(selectedUserData.roles?.name || 'Sin rol')}
                 </div>
+              </div>
+            </div>
+          )}
+
+          {/* Configuración de sede del usuario */}
+          {selectedUserData && sedes.length > 0 && (
+            <div style={{
+              padding: '12px 16px',
+              background: 'var(--bg-secondary)',
+              borderRadius: '8px',
+              marginBottom: '12px',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '10px',
+              border: '1px solid var(--border-primary)',
+            }}>
+              <div style={{ fontSize: '12px', fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                Configuración de Sede
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                <label style={{ fontSize: '13px', color: 'var(--text-primary)', flex: 1 }}>Sede por defecto</label>
+                <select
+                  value={(selectedUserData as any).sede_id || ''}
+                  onChange={async (e) => {
+                    setSavingSedeConfig(true)
+                    await supabase.from('user_profiles').update({ sede_id: e.target.value || null }).eq('id', selectedUserData.id)
+                    setUsers(prev => prev.map(u => u.id === selectedUserData.id ? { ...u, sede_id: e.target.value || null } as any : u))
+                    setSavingSedeConfig(false)
+                  }}
+                  style={{ fontSize: '13px', padding: '4px 8px', borderRadius: '6px', border: '1px solid var(--border-primary)', background: 'var(--bg-primary)', color: 'var(--text-primary)' }}
+                >
+                  <option value="">Sin sede asignada</option>
+                  {sedes.map(s => <option key={s.id} value={s.id}>{s.nombre}</option>)}
+                </select>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                <label style={{ fontSize: '13px', color: 'var(--text-primary)', flex: 1 }}>Puede cambiar de sede</label>
+                <button
+                  onClick={async () => {
+                    const actual = (selectedUserData as any).puede_cambiar_sede !== false
+                    setSavingSedeConfig(true)
+                    await supabase.from('user_profiles').update({ puede_cambiar_sede: !actual }).eq('id', selectedUserData.id)
+                    setUsers(prev => prev.map(u => u.id === selectedUserData.id ? { ...u, puede_cambiar_sede: !actual } as any : u))
+                    setSavingSedeConfig(false)
+                  }}
+                  disabled={savingSedeConfig}
+                  style={{
+                    padding: '4px 12px',
+                    borderRadius: '6px',
+                    border: 'none',
+                    cursor: 'pointer',
+                    fontSize: '12px',
+                    fontWeight: 600,
+                    background: (selectedUserData as any).puede_cambiar_sede !== false ? '#dcfce7' : '#fee2e2',
+                    color: (selectedUserData as any).puede_cambiar_sede !== false ? '#166534' : '#991b1b',
+                  }}
+                >
+                  {(selectedUserData as any).puede_cambiar_sede !== false ? 'Sí' : 'No'}
+                </button>
               </div>
             </div>
           )}
