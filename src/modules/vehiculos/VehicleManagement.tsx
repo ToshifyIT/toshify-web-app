@@ -61,6 +61,8 @@ export function VehicleManagement() {
     motivo: string
   } | null>(null)
   const finalizarResolveRef = useRef<((confirmed: boolean) => void) | null>(null)
+  const finalizarDataRef = useRef(finalizarData)
+  finalizarDataRef.current = finalizarData
 
   // Stats calculados desde datos cargados (ver calculatedStats useMemo)
 
@@ -481,14 +483,15 @@ export function VehicleManagement() {
             finalizarResolveRef.current = resolve
           })
 
-          if (!confirmed || !finalizarData) {
+          const confirmedData = finalizarDataRef.current
+          if (!confirmed || !confirmedData) {
             setSaving(false)
             return
           }
 
-          motivoFinalizacion = finalizarData.motivo || 'Sin motivo especificado'
-          const fechaFin = finalizarData.fechaFinalizacion
-            ? new Date(finalizarData.fechaFinalizacion + 'T23:59:59-03:00').toISOString()
+          motivoFinalizacion = confirmedData.motivo || 'Sin motivo especificado'
+          const fechaFin = confirmedData.fechaFinalizacion
+            ? new Date(confirmedData.fechaFinalizacion + 'T23:59:59-03:00').toISOString()
             : new Date().toISOString()
 
           // Finalizar asignaciones activas
