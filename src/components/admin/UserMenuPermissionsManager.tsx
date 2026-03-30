@@ -123,14 +123,11 @@ export function UserMenuPermissionsManager() {
         { data: usersData, error: usersError },
         { data: menusData, error: menusError },
         { data: submenusData, error: submenusError },
-        { data: sedesData },
       ] = await Promise.all([
         supabase.from('user_profiles').select('*, roles(*)').order('full_name'),
         supabase.from('menus').select('*').eq('is_active', true).order('order_index'),
         supabase.from('submenus').select('*, menus(name)').eq('is_active', true).order('order_index'),
-        (supabase as any).from('sedes').select('id, nombre').eq('activa', true).order('nombre'),
       ])
-      if (sedesData) setSedes(sedesData as { id: string; nombre: string }[])
 
       if (usersError) throw usersError
       if (menusError) throw menusError
