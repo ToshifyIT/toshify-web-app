@@ -86,16 +86,31 @@ export async function fetchVisitas(
   const { data, error } = await query;
   if (error) throw error;
 
+  // Obtener nombres de citadores desde user_profiles
+  const citadorIds = [...new Set((data ?? []).map((v: any) => v.citador_id).filter(Boolean))]
+  const citadorNombres: Record<string, string> = {}
+  if (citadorIds.length > 0) {
+    const { data: profiles } = await supabase
+      .from('user_profiles')
+      .select('id, full_name')
+      .in('id', citadorIds)
+    for (const p of profiles ?? []) {
+      if ((p as any).full_name) citadorNombres[(p as any).id] = (p as any).full_name
+    }
+  }
+
   return (data ?? []).map((v: Record<string, unknown>) => {
     const cat = v.categoria as { nombre: string; color: string } | null;
     const mot = v.motivo as { nombre: string } | null;
     const ate = v.atendedor as { nombre: string } | null;
+    const citId = (v as any).citador_id
     return {
       ...(v as unknown as VisitaCompleta),
       categoria_nombre: cat?.nombre ?? '',
       categoria_color: cat?.color ?? '#3b82f6',
       motivo_nombre: mot?.nombre ?? null,
       atendedor_nombre: ate?.nombre ?? '',
+      citador_nombre: (citId && citadorNombres[citId]) || (v as any).citador_nombre || '',
     };
   });
 }

@@ -198,8 +198,7 @@ export function VisitasModule() {
       return;
     }
 
-    const citadorNombre = profile?.nombre_completo
-      ?? profile?.nombres
+    const citadorNombre = profile?.full_name
       ?? user.email
       ?? 'Sistema';
 
