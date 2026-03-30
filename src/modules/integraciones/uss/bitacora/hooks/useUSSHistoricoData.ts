@@ -45,7 +45,7 @@ export interface Marcacion {
   duracionMinutos: number | null;
   estado: string;
   horario: string; // diurno, nocturno, todo_dia
-  vehiculoModalidad: string | null; // TURNO, CARGO
+  vehiculoModalidad: string | null; // turno, a_cargo
   gncCargado: boolean;
   lavadoRealizado: boolean;
   naftaCargada: boolean;
@@ -180,8 +180,8 @@ export function useUSSHistoricoData(sedeId?: string | null) {
         if (asignacionesData) {
           for (const ac of asignacionesData as any[]) {
             const asigHorario = ac.asignaciones?.horario;
-            // Si la asignación es CARGO (todo_dia), no filtrar
-            if (asigHorario === 'CARGO') {
+            // Si la asignación es todo_dia (a cargo), no filtrar
+            if (asigHorario === 'todo_dia') {
               horarioMap.set(ac.conductor_id, 'todo_dia');
             } else if (ac.horario && !horarioMap.has(ac.conductor_id)) {
               // TURNO: usar el horario del conductor (diurno/nocturno)

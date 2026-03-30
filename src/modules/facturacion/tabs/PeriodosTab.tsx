@@ -313,7 +313,7 @@ export function PeriodosTab() {
         // Si la asignación terminó antes de la semana o empezó después, no cuenta
         if (acFin < semanaInicioDate || acInicio > semanaFinDate) continue
         
-        const modalidad = asig.horario === 'CARGO' ? 'CARGO' : 'TURNO'
+        const modalidad = asig.horario === 'todo_dia' ? 'CARGO' : 'TURNO'
         const patente = asig.vehiculos?.patente || null
         
         // Si ya está mapeado, no sobreescribir
@@ -684,7 +684,7 @@ export function PeriodosTab() {
 
         // Determinar tipo alquiler principal (el que tiene más días o el inicial)
         const diasTurnoTotal = conductor.dias_turno + conductor.dias_turno_nocturno
-        const tipoAlquilerPrincipal = conductor.dias_cargo >= diasTurnoTotal ? 'CARGO' : 'TURNO'
+        const tipoAlquilerPrincipal = conductor.dias_cargo >= diasTurnoTotal ? 'a_cargo' : 'turno'
 
         // Insertar facturación del conductor
         const { data: factConductor, error: errFact } = await (supabase

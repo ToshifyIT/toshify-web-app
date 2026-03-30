@@ -199,7 +199,7 @@ export function BitacoraTable({
       ),
       cell: ({ row }) => {
         const tipo = row.original.tipo_turno
-        const badgeClass = tipo === 'CARGO' ? 'dt-badge-solid-blue' : tipo === 'TURNO' ? 'dt-badge-solid-green' : 'dt-badge-gray'
+        const badgeClass = tipo === 'a_cargo' ? 'dt-badge-solid-blue' : tipo === 'turno' ? 'dt-badge-solid-green' : 'dt-badge-gray'
         return <span className={`dt-badge ${badgeClass}`}>{tipo || '-'}</span>
       },
       enableSorting: false,
@@ -213,7 +213,7 @@ export function BitacoraTable({
       cell: ({ row }) => {
         const tipo = row.original.tipo_turno
         const turno = row.original.turno_indicador
-        if (tipo !== 'TURNO' || !turno) return <span style={{ color: 'var(--text-tertiary)' }}>-</span>
+        if (tipo !== 'turno' || !turno) return <span style={{ color: 'var(--text-tertiary)' }}>-</span>
         const badgeClass = turno === 'Diurno' ? 'dt-badge-yellow' : 'dt-badge-blue'
         return <span className={`dt-badge ${badgeClass}`}>{turno}</span>
       },
@@ -420,9 +420,9 @@ export function BitacoraTable({
             const turnoInd = parts[3] || ''
             // Construir etiqueta de asignación
             let asignacionLabel = 'Sin asignación'
-            if (tipoTurno === 'TURNO') {
+            if (tipoTurno === 'turno') {
               asignacionLabel = turnoInd ? `TURNO ${turnoInd}` : 'TURNO'
-            } else if (tipoTurno === 'CARGO' || tipoTurno === 'A_CARGO') {
+            } else if (tipoTurno === 'a_cargo') {
               asignacionLabel = 'A CARGO'
             } else if (tipoTurno) {
               asignacionLabel = tipoTurno
@@ -468,12 +468,12 @@ export function BitacoraTable({
           if (row.original.id.startsWith('__resumen__')) {
             const tipo = row.original.tipo_turno
             if (!tipo) return <span className="dt-badge dt-badge-gray">Sin asig.</span>
-            const label = tipo === 'CARGO' || tipo === 'A_CARGO' ? 'A CARGO' : tipo
-            const badgeClass = label === 'A CARGO' ? 'dt-badge-solid-blue' : tipo === 'TURNO' ? 'dt-badge-solid-green' : 'dt-badge-gray'
+            const label = tipo === 'a_cargo' ? 'A CARGO' : tipo
+            const badgeClass = label === 'A CARGO' ? 'dt-badge-solid-blue' : tipo === 'turno' ? 'dt-badge-solid-green' : 'dt-badge-gray'
             return <span className={`dt-badge ${badgeClass}`}>{label}</span>
           }
           const tipo = row.original.tipo_turno
-          const badgeClass = tipo === 'CARGO' ? 'dt-badge-solid-blue' : tipo === 'TURNO' ? 'dt-badge-solid-green' : 'dt-badge-gray'
+          const badgeClass = tipo === 'a_cargo' ? 'dt-badge-solid-blue' : tipo === 'turno' ? 'dt-badge-solid-green' : 'dt-badge-gray'
           return <span className={`dt-badge ${badgeClass}`}>{tipo || '-'}</span>
         }
       }
@@ -483,13 +483,13 @@ export function BitacoraTable({
         colCopy.cell = ({ row }: any) => {
           if (row.original.id.startsWith('__resumen__')) {
             const turno = row.original.turno_indicador
-            if (!turno || row.original.tipo_turno !== 'TURNO') return <span style={{ color: 'var(--text-tertiary)' }}>-</span>
+            if (!turno || row.original.tipo_turno !== 'turno') return <span style={{ color: 'var(--text-tertiary)' }}>-</span>
             const badgeClass = turno === 'Diurno' ? 'dt-badge-yellow' : 'dt-badge-blue'
             return <span className={`dt-badge ${badgeClass}`}>{turno}</span>
           }
           const tipo = row.original.tipo_turno
           const turno = row.original.turno_indicador
-          if (tipo !== 'TURNO' || !turno) return <span style={{ color: 'var(--text-tertiary)' }}>-</span>
+          if (tipo !== 'turno' || !turno) return <span style={{ color: 'var(--text-tertiary)' }}>-</span>
           const badgeClass = turno === 'Diurno' ? 'dt-badge-yellow' : 'dt-badge-blue'
           return <span className={`dt-badge ${badgeClass}`}>{turno}</span>
         }

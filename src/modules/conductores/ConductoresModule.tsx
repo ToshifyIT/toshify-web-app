@@ -991,9 +991,9 @@ export function ConductoresModule() {
 
     for (const asignacionConductor of affectedAssignments) {
       const asignacion = asignacionConductor.asignaciones;
-      const horarioAsignacion = asignacion.horario; // TURNO or CARGO
+      const horarioAsignacion = asignacion.horario; // turno or todo_dia
 
-      if (horarioAsignacion === 'CARGO') {
+      if (horarioAsignacion === 'todo_dia') {
         // CARGO MODE: Cancelar asignación completa
         await handleCargoCancellation(asignacion, asignacionConductor, motivoBaja, ahora);
       } else {
@@ -1322,7 +1322,7 @@ export function ConductoresModule() {
 
       for (const asignacionConductor of affectedAssignments) {
         const asignacion = asignacionConductor.asignaciones;
-        const horarioAsignacion = asignacion.horario; // TURNO o CARGO
+        const horarioAsignacion = asignacion.horario; // turno o todo_dia
         const tieneCompanero = asignacionConductor.otherConductors?.length > 0;
 
         // --- Paso común: finalizar registro del conductor dado de baja ---
@@ -1339,7 +1339,7 @@ export function ConductoresModule() {
           .eq('asignacion_conductor_id', asignacionConductor.id);
         if (errLimpiarTurnos) throw new Error(`Error al limpiar turnos: ${errLimpiarTurnos.message}`);
 
-        if (horarioAsignacion === 'TURNO' && tieneCompanero) {
+        if (horarioAsignacion === 'turno' && tieneCompanero) {
           // ─── TURNO CON COMPAÑERO: asignación continúa, turno queda vacante ───
           const turnoVacante = asignacionConductor.horario === 'diurno' ? 'Turno Diurno' : 'Turno Nocturno';
           const notaVacante = `[VACANTE] ${turnoVacante} - Baja de ${conductorNombre} (${fechaBaja}). Último día de facturación: ${fechaBaja}`;
@@ -1376,7 +1376,7 @@ export function ConductoresModule() {
 
         } else {
           // ─── CARGO o TURNO SOLO: finalizar asignación completa ───
-          const modo = horarioAsignacion === 'CARGO' ? 'CARGO' : 'TURNO';
+          const modo = horarioAsignacion === 'todo_dia' ? 'CARGO' : 'TURNO';
 
           // Finalizar la asignación
           const { error: errFinalizar } = await (supabase as any)
@@ -4015,10 +4015,10 @@ function ModalConfirmBaja({
 
   // Agrupar por tipo de asignación
   const turnoAssignments = affectedAssignments.filter(
-    (a) => a.asignaciones?.horario === 'TURNO'
+    (a) => a.asignaciones?.horario === 'turno'
   );
   const cargoAssignments = affectedAssignments.filter(
-    (a) => a.asignaciones?.horario === 'CARGO'
+    (a) => a.asignaciones?.horario === 'todo_dia'
   );
 
   // TURNO con compañero: no requiere pregunta de finalización, se resuelve automáticamente

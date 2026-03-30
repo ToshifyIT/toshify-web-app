@@ -63,7 +63,7 @@ function generarMensajeAgenda(prog: ProgramacionOnboardingCompleta): string {
   // Generar mensaje según modalidad
   let mensaje = ''
 
-  if (prog.modalidad === 'TURNO') {
+  if (prog.modalidad === 'turno') {
     // Mensaje para modalidad TURNO (formato simple)
     const conductorDiurno = prog.conductor_diurno_nombre || 'Sin asignar'
     const conductorNocturno = prog.conductor_nocturno_nombre || 'Sin asignar'
@@ -517,7 +517,7 @@ export function ProgramacionModule() {
 
     setSavingQuickEdit(true)
     try {
-      const isTurno = editingProgramacion.modalidad === 'TURNO'
+      const isTurno = editingProgramacion.modalidad === 'turno'
 
       // Buscar datos del vehiculo seleccionado
       const vehiculoSeleccionado = vehiculosDisponibles.find(v => v.id === quickEditData.vehiculo_id)
@@ -894,7 +894,7 @@ export function ProgramacionModule() {
     let enviarDiurno = true
     let enviarNocturno = true
     
-    if (prog.modalidad === 'TURNO') {
+    if (prog.modalidad === 'turno') {
       const diurnoConfirmo = prog.confirmacion_diurno === 'confirmo'
       const nocturnoConfirmo = prog.confirmacion_nocturno === 'confirmo'
       
@@ -964,7 +964,7 @@ export function ProgramacionModule() {
 
     // Construir display de conductores según modalidad (solo los que se van a enviar)
     let conductorDisplay = '-'
-    if (prog.modalidad === 'TURNO') {
+    if (prog.modalidad === 'turno') {
       const conductores = []
       if (enviarDiurno && prog.conductor_diurno_nombre) conductores.push(`D: ${prog.conductor_diurno_nombre}`)
       if (enviarNocturno && prog.conductor_nocturno_nombre) conductores.push(`N: ${prog.conductor_nocturno_nombre}`)
@@ -978,8 +978,8 @@ export function ProgramacionModule() {
       html: `
         <div style="text-align: left; font-size: 14px;">
           <p><strong>Vehiculo:</strong> ${prog.vehiculo_entregar_patente || prog.vehiculo_entregar_patente_sistema || '-'}</p>
-          <p><strong>Conductor${prog.modalidad === 'TURNO' && enviarDiurno && enviarNocturno ? 'es' : ''}:</strong><br>${conductorDisplay}</p>
-          <p><strong>Modalidad:</strong> ${prog.modalidad === 'TURNO' ? 'Turno' : 'A Cargo'}</p>
+          <p><strong>Conductor${prog.modalidad === 'turno' && enviarDiurno && enviarNocturno ? 'es' : ''}:</strong><br>${conductorDisplay}</p>
+          <p><strong>Modalidad:</strong> ${prog.modalidad === 'turno' ? 'Turno' : 'A Cargo'}</p>
           <p><strong>Fecha:</strong> ${prog.fecha_cita ? new Date(prog.fecha_cita + 'T12:00:00').toLocaleDateString('es-AR') : 'Sin definir'}</p>
           <p><strong>Hora:</strong> ${horaDisplay}</p>
         </div>
@@ -1013,8 +1013,8 @@ export function ProgramacionModule() {
       const codigo = `ASG-${fecha.getFullYear()}${String(fecha.getMonth() + 1).padStart(2, '0')}${String(fecha.getDate()).padStart(2, '0')}-${String(fecha.getHours()).padStart(2, '0')}${String(fecha.getMinutes()).padStart(2, '0')}${String(fecha.getSeconds()).padStart(2, '0')}`
 
       // Crear asignacion
-      // modalidad en programacion es 'TURNO' o 'CARGO', en asignacion es 'turno' o 'a_cargo'
-      const esTurno = prog.modalidad === 'TURNO'
+      // modalidad en programacion es 'turno' o 'a_cargo', en asignacion también es 'turno' o 'a_cargo'
+      const esTurno = prog.modalidad === 'turno'
 
       // Construir fecha_programada correctamente con la hora de la cita en timezone Argentina (UTC-3)
       let fechaProgramada: string
@@ -1055,7 +1055,7 @@ export function ProgramacionModule() {
           codigo,
           vehiculo_id: prog.vehiculo_entregar_id,
           modalidad: esTurno ? 'turno' : 'a_cargo',
-          horario: esTurno ? 'TURNO' : 'CARGO',
+          horario: esTurno ? 'turno' : 'todo_dia',
           fecha_programada: fechaProgramada,
           estado: 'programado',
           notas: notasBase,
@@ -1217,7 +1217,7 @@ export function ProgramacionModule() {
       header: 'Programados',
       accessorFn: (row) => {
         // Para modalidad A CARGO, usar el conductor legacy o el diurno
-        if (row.modalidad === 'CARGO' || !row.modalidad) {
+        if (row.modalidad === 'a_cargo' || !row.modalidad) {
           return row.conductor_display || row.conductor_nombre || row.conductor_diurno_nombre || ''
         }
         // Para TURNO, concatenar ambos conductores para busqueda
@@ -1229,7 +1229,7 @@ export function ProgramacionModule() {
         const { modalidad, conductor_diurno_nombre, conductor_nocturno_nombre, conductor_display, conductor_nombre, turno } = row.original
 
         // Si es A CARGO, mostrar solo el conductor
-        if (modalidad === 'CARGO' || !modalidad) {
+        if (modalidad === 'a_cargo' || !modalidad) {
           const nombre = conductor_display || conductor_nombre || conductor_diurno_nombre
           if (nombre) {
             return <span className="prog-conductor-cell">{nombre}</span>
@@ -1281,7 +1281,7 @@ export function ProgramacionModule() {
         const prog = row.original
 
         // Para TURNO: mostrar 2 selects (diurno y nocturno)
-        if (prog.modalidad === 'TURNO') {
+        if (prog.modalidad === 'turno') {
           const tipoD = prog.tipo_asignacion_diurno || prog.tipo_asignacion || ''
           const tipoN = prog.tipo_asignacion_nocturno || prog.tipo_asignacion || ''
 
@@ -1346,7 +1346,7 @@ export function ProgramacionModule() {
       header: 'Modalidad',
       cell: ({ row }) => (
         <span className={`prog-modalidad-badge ${row.original.modalidad?.toLowerCase()}`}>
-          {row.original.modalidad === 'TURNO' ? 'Turno' : 'A Cargo'}
+          {row.original.modalidad === 'turno' ? 'Turno' : 'A Cargo'}
         </span>
       )
     },
@@ -1374,7 +1374,7 @@ export function ProgramacionModule() {
         const prog = row.original
 
         // Para TURNO: mostrar 2 selects (diurno y nocturno)
-        if (prog.modalidad === 'TURNO') {
+        if (prog.modalidad === 'turno') {
           const docDiurno = prog.documento_diurno || ''
           const docNocturno = prog.documento_nocturno || ''
 
@@ -1437,7 +1437,7 @@ export function ProgramacionModule() {
         const prog = row.original
 
         // Para TURNO: mostrar 2 selects (diurno y nocturno)
-        if (prog.modalidad === 'TURNO') {
+        if (prog.modalidad === 'turno') {
           const confD = prog.confirmacion_diurno || 'sin_confirmar'
           const confN = prog.confirmacion_nocturno || 'sin_confirmar'
 
@@ -1498,7 +1498,7 @@ export function ProgramacionModule() {
         const prog = row.original
 
         // Para TURNO: mostrar 2 selects (diurno y nocturno)
-        if (prog.modalidad === 'TURNO') {
+        if (prog.modalidad === 'turno') {
           const estadoD = prog.estado_cabify_diurno || 'pendiente'
           const estadoN = prog.estado_cabify_nocturno || 'pendiente'
 
@@ -1619,7 +1619,7 @@ export function ProgramacionModule() {
       id: 'programados',
       header: 'Programados',
       accessorFn: (row) => {
-        if (row.modalidad === 'CARGO' || !row.modalidad) {
+        if (row.modalidad === 'a_cargo' || !row.modalidad) {
           return row.conductor_display || row.conductor_nombre || row.conductor_diurno_nombre || ''
         }
         const d = row.conductor_diurno_nombre || row.conductor_nombre || ''
@@ -1629,7 +1629,7 @@ export function ProgramacionModule() {
       cell: ({ row }) => {
         const { modalidad, conductor_diurno_nombre, conductor_nocturno_nombre, conductor_display, conductor_nombre, turno } = row.original
 
-        if (modalidad === 'CARGO' || !modalidad) {
+        if (modalidad === 'a_cargo' || !modalidad) {
           const nombre = conductor_display || conductor_nombre || conductor_diurno_nombre
           if (nombre) {
             return <span className="prog-conductor-cell" style={{ fontSize: '13px' }}>{nombre}</span>
@@ -1688,7 +1688,7 @@ export function ProgramacionModule() {
           entrega_auto_cargo: 'Entrega cargo'
         }
 
-        if (prog.modalidad === 'TURNO') {
+        if (prog.modalidad === 'turno') {
           const tieneDiurno = !!(prog.conductor_diurno_id || prog.conductor_diurno_nombre)
           const tieneNocturno = !!(prog.conductor_nocturno_id || prog.conductor_nocturno_nombre)
           const tipoD = tieneDiurno ? (prog.tipo_asignacion_diurno || prog.tipo_asignacion || '') : ''
@@ -1726,7 +1726,7 @@ export function ProgramacionModule() {
       header: 'Modalidad',
       cell: ({ row }) => (
         <span className={`prog-modalidad-badge ${row.original.modalidad?.toLowerCase()}`} style={{ fontSize: '12px' }}>
-          {row.original.modalidad === 'TURNO' ? 'Turno' : 'A Cargo'}
+          {row.original.modalidad === 'turno' ? 'Turno' : 'A Cargo'}
         </span>
       )
     },
@@ -1760,7 +1760,7 @@ export function ProgramacionModule() {
           contrato: 'Contrato'
         }
 
-        if (prog.modalidad === 'TURNO') {
+        if (prog.modalidad === 'turno') {
           const docDiurno = prog.documento_diurno || ''
           const docNocturno = prog.documento_nocturno || ''
 
@@ -1805,7 +1805,7 @@ export function ProgramacionModule() {
         }
 
         // Para TURNO: mostrar ambas confirmaciones
-        if (prog.modalidad === 'TURNO') {
+        if (prog.modalidad === 'turno') {
           const confD = prog.confirmacion_diurno || 'sin_confirmar'
           const confN = prog.confirmacion_nocturno || 'sin_confirmar'
           const confDInfo = confLabels[confD] || confLabels.sin_confirmar
@@ -2122,7 +2122,7 @@ export function ProgramacionModule() {
               </div>
 
               {/* Campos segun modalidad */}
-              {editingProgramacion.modalidad === 'TURNO' ? (
+              {editingProgramacion.modalidad === 'turno' ? (
                 <>
                   {/* Conductor Diurno */}
                   <div className="prog-modal-section" style={{ background: '#FEF9C3', padding: '12px', borderRadius: '8px' }}>
@@ -2526,8 +2526,8 @@ export function ProgramacionModule() {
 
               {/* Conductores */}
               <div className="prog-modal-section">
-                <h3><User size={16} /> {previewProgramacion.modalidad === 'TURNO' ? 'Conductores' : 'Conductor'}</h3>
-                {previewProgramacion.modalidad === 'TURNO' ? (
+                <h3><User size={16} /> {previewProgramacion.modalidad === 'turno' ? 'Conductores' : 'Conductor'}</h3>
+                {previewProgramacion.modalidad === 'turno' ? (
                   <>
                     <div className="prog-modal-grid">
                       <div>
@@ -2595,7 +2595,7 @@ export function ProgramacionModule() {
                   </div>
                   <div>
                     <label>Modalidad</label>
-                    <p>{previewProgramacion.modalidad === 'TURNO' ? 'Turno' : 'A Cargo'}</p>
+                    <p>{previewProgramacion.modalidad === 'turno' ? 'Turno' : 'A Cargo'}</p>
                   </div>
                   {previewProgramacion.turno && (
                     <div>
@@ -2690,7 +2690,7 @@ export function ProgramacionModule() {
             </div>
             <div className="prog-modal-body">
               <div className="prog-modal-info">
-                {mensajeModalProg.modalidad === 'TURNO' ? (
+                {mensajeModalProg.modalidad === 'turno' ? (
                   <>
                     <p><strong>Conductor Diurno:</strong> {mensajeModalProg.conductor_diurno_nombre || 'Sin asignar'}</p>
                     <p><strong>Conductor Nocturno:</strong> {mensajeModalProg.conductor_nocturno_nombre || 'Sin asignar'}</p>
@@ -2698,7 +2698,7 @@ export function ProgramacionModule() {
                 ) : (
                   <p><strong>Conductor:</strong> {mensajeModalProg.conductor_display || mensajeModalProg.conductor_nombre || 'Sin asignar'}</p>
                 )}
-                <p><strong>Modalidad:</strong> {mensajeModalProg.modalidad === 'TURNO' ? 'Turno' : 'A Cargo'}</p>
+                <p><strong>Modalidad:</strong> {mensajeModalProg.modalidad === 'turno' ? 'Turno' : 'A Cargo'}</p>
               </div>
               <div className="prog-mensaje-preview">
                 <pre>{generarMensajeAgenda(mensajeModalProg)}</pre>

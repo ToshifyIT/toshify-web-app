@@ -288,8 +288,8 @@ export function ReporteNominasTab() {
         }
 
         // Calcular alquiler según tipo de horario
-        const tipoHorario = asig.horario || 'TURNO'
-        const alquilerSemanal = tipoHorario === 'CARGO' ? precioCargo : precioTurno
+        const tipoHorario = asig.horario || 'turno'
+        const alquilerSemanal = tipoHorario === 'todo_dia' ? precioCargo : precioTurno
 
         // Sumar penalidades del conductor
         const penConductor = penalidadesPorConductor.get(conductor.id) || []
@@ -425,8 +425,8 @@ export function ReporteNominasTab() {
       // Precios
       const precioTurno = conceptos.find(c => c.codigo === 'P001')?.precio_final || 35000
       const precioCargo = conceptos.find(c => c.codigo === 'P002')?.precio_final || 51428.57
-      const tipoHorario = asignacion?.horario || 'TURNO'
-      const precioSemanal = tipoHorario === 'CARGO' ? precioCargo : precioTurno
+      const tipoHorario = asignacion?.horario || 'turno'
+      const precioSemanal = tipoHorario === 'todo_dia' ? precioCargo : precioTurno
       const precioDia = precioSemanal / 7
 
       // Generar detalle diario
@@ -438,7 +438,7 @@ export function ReporteNominasTab() {
       const detalleDiario: DetalleDiario[] = diasSemana.map((dia: Date, idx: number) => ({
         fecha: format(dia, 'yyyy-MM-dd'),
         dia_semana: DIAS_SEMANA[idx],
-        tipo_horario: tipoHorario as 'TURNO' | 'CARGO',
+        tipo_horario: tipoHorario as 'turno' | 'todo_dia',
         precio_dia: precioDia,
         asignacion_id: asignacion?.id || null,
         vehiculo_patente: asignacion?.vehiculos?.patente || null
@@ -489,7 +489,7 @@ export function ReporteNominasTab() {
 
         asignacion_codigo: asignacion?.codigo || null,
         vehiculo_patente: nomina.vehiculo_patente,
-        tipo_horario_predominante: tipoHorario as 'TURNO' | 'CARGO' | 'MIXTO',
+        tipo_horario_predominante: tipoHorario as 'turno' | 'todo_dia' | 'MIXTO',
 
         alquiler_total: precioSemanal,
         alquiler_detalle: detalleDiario,
@@ -509,8 +509,8 @@ export function ReporteNominasTab() {
         saldo: (precioSemanal + totalPenalidades + totalSiniestros + peajesCabify) - efectivoCabify,
 
         dias_trabajados: 7,
-        dias_turno: tipoHorario === 'TURNO' ? 7 : 0,
-        dias_cargo: tipoHorario === 'CARGO' ? 7 : 0
+        dias_turno: tipoHorario === 'turno' ? 7 : 0,
+        dias_cargo: tipoHorario === 'todo_dia' ? 7 : 0
       }
 
       setNominaDetalle(detalle)
@@ -742,7 +742,7 @@ export function ReporteNominasTab() {
         pdf.text(dia.dia_semana.substring(0, 3).toUpperCase(), x, y)
         pdf.setTextColor(negro)
         pdf.text(format(parseISO(dia.fecha), 'dd/MM'), x, y + 4)
-        pdf.setTextColor(dia.tipo_horario === 'CARGO' ? '#1D4ED8' : gris)
+        pdf.setTextColor(dia.tipo_horario === 'todo_dia' ? '#1D4ED8' : gris)
         pdf.text(dia.tipo_horario || '-', x, y + 8)
         pdf.setTextColor(negro)
         pdf.text(formatCurrency(dia.precio_dia), x, y + 12)
@@ -798,7 +798,7 @@ export function ReporteNominasTab() {
   }, [vehiculosUnicos, vehiculoSearch])
 
   const tiposDocUnicos = ['CUIL', 'DNI']
-  const tiposHorarioUnicos = ['TURNO', 'CARGO']
+  const tiposHorarioUnicos = ['turno', 'todo_dia']
 
   // Funciones toggle para filtros
   const toggleConductorFilter = (conductor: string) => {
@@ -907,7 +907,7 @@ export function ReporteNominasTab() {
       // Agregar datos de cada conductor
       dataToExport.forEach(n => {
         // Calcular componentes (aproximados basados en el total)
-        const precioAlquiler = n.tipo_horario === 'CARGO'
+        const precioAlquiler = n.tipo_horario === 'todo_dia'
           ? (conceptos.find(c => c.codigo === 'P002')?.precio_final || 51428.57)
           : (conceptos.find(c => c.codigo === 'P001')?.precio_final || 35000)
 
@@ -1015,11 +1015,11 @@ export function ReporteNominasTab() {
 
       let nro = 1
       dataToExport.forEach(n => {
-        const precioAlquiler = n.tipo_horario === 'CARGO'
+        const precioAlquiler = n.tipo_horario === 'todo_dia'
           ? (conceptos.find(c => c.codigo === 'P002')?.precio_final || 51428.57)
           : (conceptos.find(c => c.codigo === 'P001')?.precio_final || 35000)
-        const codigoAlquiler = n.tipo_horario === 'CARGO' ? 'P002' : 'P001'
-        const descAlquiler = n.tipo_horario === 'CARGO' ? 'Alquiler Semanal Cargo' : 'Alquiler Semanal Turno'
+        const codigoAlquiler = n.tipo_horario === 'todo_dia' ? 'P002' : 'P001'
+        const descAlquiler = n.tipo_horario === 'todo_dia' ? 'Alquiler Semanal Cargo' : 'Alquiler Semanal Turno'
 
         // Línea de alquiler
         facturacionData.push([
@@ -1308,7 +1308,7 @@ export function ReporteNominasTab() {
         </div>
       ),
       cell: ({ row }) => (
-        <span className={`dt-badge ${row.original.tipo_horario === 'CARGO' ? 'dt-badge-solid-blue' : 'dt-badge-solid-gray'}`}>
+        <span className={`dt-badge ${row.original.tipo_horario === 'todo_dia' ? 'dt-badge-solid-blue' : 'dt-badge-solid-gray'}`}>
           {row.original.tipo_horario}
         </span>
       ),
@@ -1585,7 +1585,7 @@ export function ReporteNominasTab() {
                     </div>
                     <div className="nom-info-item">
                       <span className="label">Tipo:</span>
-                      <span className={`dt-badge ${nominaDetalle.tipo_horario_predominante === 'CARGO' ? 'dt-badge-solid-blue' : 'dt-badge-solid-gray'}`}>
+                      <span className={`dt-badge ${nominaDetalle.tipo_horario_predominante === 'todo_dia' ? 'dt-badge-solid-blue' : 'dt-badge-solid-gray'}`}>
                         {nominaDetalle.tipo_horario_predominante}
                       </span>
                     </div>

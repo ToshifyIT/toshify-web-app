@@ -193,7 +193,7 @@ export function ProgramacionWizard({ onClose, onSuccess, initialData, editingDat
         // Tipo y Modalidad requeridos
         // Si modalidad es TURNO, tambien se requiere el turno
         const tipoOk = !!formData.tipo_asignacion && !!formData.modalidad
-        const turnoOk = formData.modalidad === 'CARGO' || !!formData.turno
+        const turnoOk = formData.modalidad === 'a_cargo' || !!formData.turno
         return tipoOk && turnoOk
       case 2:
         return !!formData.vehiculo_entregar_id || !!formData.vehiculo_entregar_patente
@@ -215,7 +215,7 @@ export function ProgramacionWizard({ onClose, onSuccess, initialData, editingDat
       const dataToSave = {
         ...formData,
         // Si modalidad es CARGO, limpiar el turno
-        turno: formData.modalidad === 'CARGO' ? null : formData.turno
+        turno: formData.modalidad === 'a_cargo' ? null : formData.turno
       }
 
       if (isEditing && editingData) {
@@ -316,20 +316,20 @@ export function ProgramacionWizard({ onClose, onSuccess, initialData, editingDat
                   <div className="form-group">
                     <label>Modalidad</label>
                     <div className="option-cards horizontal">
-                      {(['TURNO', 'CARGO'] as ModalidadOnboarding[]).map(mod => (
+                      {(['turno', 'a_cargo'] as ModalidadOnboarding[]).map(mod => (
                         <div
                           key={mod}
                           className={`option-card ${formData.modalidad === mod ? 'selected' : ''}`}
-                          onClick={() => setFormData(prev => ({ ...prev, modalidad: mod, turno: mod === 'CARGO' ? undefined : prev.turno }))}
+                          onClick={() => setFormData(prev => ({ ...prev, modalidad: mod, turno: mod === 'a_cargo' ? undefined : prev.turno }))}
                         >
-                          <span>{mod === 'TURNO' ? 'Turno' : 'A Cargo'}</span>
+                          <span>{mod === 'turno' ? 'Turno' : 'A Cargo'}</span>
                         </div>
                       ))}
                     </div>
                   </div>
 
                   {/* Mostrar selector de Turno si la modalidad es TURNO */}
-                  {formData.modalidad === 'TURNO' && (
+                  {formData.modalidad === 'turno' && (
                     <div className="form-group" style={{ marginTop: '20px' }}>
                       <label>Que turno?</label>
                       <div className="option-cards horizontal">

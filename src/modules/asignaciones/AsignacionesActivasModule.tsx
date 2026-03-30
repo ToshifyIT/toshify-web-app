@@ -246,7 +246,7 @@ export function AsignacionesActivasModule() {
       const conductores = a.asignaciones_conductores || []
 
       // Contar por horario
-      if (a.horario === 'TURNO') {
+      if (a.horario === 'turno') {
         turnoCount++
 
         // Buscar conductores D y N activos (no cancelados)
@@ -350,7 +350,7 @@ export function AsignacionesActivasModule() {
         case 'vacantes':
           // Mostrar asignaciones TURNO con al menos 1 vacante (ignorar conductores cancelados)
           result = result.filter(a => {
-            if (a.horario === 'TURNO') {
+            if (a.horario === 'turno') {
               const conductores = a.asignaciones_conductores || []
               const diurno = conductores.find(ac => (ac.horario === 'diurno' || ac.horario === 'DIURNO' || ac.horario === 'D') && ac.estado !== 'cancelado')
               const nocturno = conductores.find(ac => (ac.horario === 'nocturno' || ac.horario === 'NOCTURNO' || ac.horario === 'N') && ac.estado !== 'cancelado')
@@ -379,7 +379,7 @@ export function AsignacionesActivasModule() {
         fecha_programada: null,
         fecha_inicio: '-',
         modalidad: '-',
-        horario: 'TURNO', // Marcar como TURNO para mostrar que tiene 2 turnos disponibles
+        horario: 'turno', // Marcar como TURNO para mostrar que tiene 2 turnos disponibles
         estado: 'sin_asignacion',
         created_at: '',
         vehiculos: {
@@ -415,7 +415,7 @@ export function AsignacionesActivasModule() {
             fecha_programada: null,
             fecha_inicio: '-',
             modalidad: '-',
-            horario: 'TURNO',
+            horario: 'turno',
             estado: 'sin_asignacion',
             created_at: '',
             vehiculos: {
@@ -458,7 +458,7 @@ export function AsignacionesActivasModule() {
         .filter((ac: any) => ac.estado !== 'completado' && ac.estado !== 'finalizado' && ac.estado !== 'cancelado')
 
       // Para TURNO, organizar conductores por turno
-      if (asignacion.horario === 'TURNO') {
+      if (asignacion.horario === 'turno') {
         const diurno = conductoresActivos.find((ac: any) => ac.horario === 'diurno')
         const nocturno = conductoresActivos.find((ac: any) => ac.horario === 'nocturno')
 
@@ -519,7 +519,7 @@ export function AsignacionesActivasModule() {
         header: 'Asignados',
         accessorFn: (row) => {
           const data = row as any
-          if (data.horario === 'CARGO' || !data.horario) {
+          if (data.horario === 'todo_dia' || !data.horario) {
             return data.conductorCargo?.nombre || ''
           }
           const d = data.conductoresTurno?.diurno?.nombre || ''
@@ -531,7 +531,7 @@ export function AsignacionesActivasModule() {
           const { conductoresTurno, conductorCargo, horario } = data
 
           // Para A CARGO o sin horario definido
-          if (horario === 'CARGO' || !horario) {
+          if (horario === 'todo_dia' || !horario) {
             if (conductorCargo) {
               return <span className="asig-conductor-compacto">{conductorCargo.nombre}</span>
             }
@@ -563,8 +563,8 @@ export function AsignacionesActivasModule() {
         cell: ({ getValue }) => {
           const horario = getValue() as string
           return (
-            <span className={horario === 'CARGO' ? 'dt-badge dt-badge-blue' : 'dt-badge dt-badge-yellow'}>
-              {horario === 'CARGO' ? 'A CARGO' : 'TURNO'}
+            <span className={horario === 'todo_dia' ? 'dt-badge dt-badge-blue' : 'dt-badge dt-badge-yellow'}>
+              {horario === 'todo_dia' ? 'A CARGO' : 'TURNO'}
             </span>
           )
         },
@@ -902,7 +902,7 @@ export function AsignacionesActivasModule() {
                 <div className="detail-item">
                   <span className="detail-label">Modalidad</span>
                   <span className="detail-value">
-                    {selectedAsignacion.horario === 'CARGO' ? 'A CARGO' : 'TURNO'}
+                    {selectedAsignacion.horario === 'todo_dia' ? 'A CARGO' : 'TURNO'}
                   </span>
                 </div>
                 <div className="detail-item">

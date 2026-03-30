@@ -1140,7 +1140,7 @@ export function GuiasModule() {
             const modalidadAsig = (asignacion.horario || '').toUpperCase();
             const horarioCond = (ac.horario || '').toLowerCase().trim();
             let modalidad: string;
-            if (modalidadAsig === 'CARGO' || horarioCond === 'todo_dia') {
+            if (modalidadAsig === 'TODO_DIA' || horarioCond === 'todo_dia') {
               modalidad = 'CARGO';
             } else if (modalidadAsig === 'TURNO') {
               modalidad = (horarioCond === 'nocturno' || horarioCond === 'n') ? 'TURNO_NOCTURNO' : 'TURNO_DIURNO';
@@ -1374,7 +1374,7 @@ export function GuiasModule() {
               
               // Extraer información de turno/modalidad
               baseConductor.asignacion_info = {
-                modalidad: asignacionActiva.asignaciones.horario, // 'TURNO' o 'CARGO'
+                modalidad: asignacionActiva.asignaciones.horario, // 'turno' o 'todo_dia'
                 turno_conductor: asignacionActiva.horario // 'diurno' o 'nocturno'
               };
             }
@@ -1845,7 +1845,7 @@ export function GuiasModule() {
   const getTurnoKeyForFilter = (conductor: any): string => {
     const info = conductor.asignacion_info;
     if (info) {
-      if (info.modalidad === 'CARGO') {
+      if (info.modalidad === 'todo_dia') {
         return 'A_CARGO';
       }
       const turnoAsignado = info.turno_conductor ? info.turno_conductor.toString().toUpperCase() : '';
@@ -2289,7 +2289,7 @@ export function GuiasModule() {
         accessorFn: (row: any) => {
           const asignacionInfo = (row as any).asignacion_info;
           if (asignacionInfo) {
-            if (asignacionInfo.modalidad === 'CARGO') return 'A';
+            if (asignacionInfo.modalidad === 'todo_dia') return 'A';
             if (asignacionInfo.turno_conductor) {
               const t = asignacionInfo.turno_conductor.toUpperCase();
               if (t === 'DIURNO') return 'D';
@@ -2328,7 +2328,7 @@ export function GuiasModule() {
           );
           const asignacionInfo = (row.original as any).asignacion_info;
           if (asignacionInfo) {
-            if (asignacionInfo.modalidad === 'CARGO') {
+            if (asignacionInfo.modalidad === 'todo_dia') {
               return chip('#EDE9FE', '#6D28D9', 'A Cargo');
             }
             const turno = asignacionInfo.turno_conductor?.toLowerCase();

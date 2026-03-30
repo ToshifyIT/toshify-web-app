@@ -10,7 +10,7 @@ export interface VehiculoEstado {
 
 export interface AsignacionActiva {
   id: string;
-  horario: 'TURNO' | 'CARGO';
+  horario: 'turno' | 'todo_dia';
   turnoDiurnoOcupado: boolean;
   turnoNocturnoOcupado: boolean;
 }

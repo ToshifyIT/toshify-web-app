@@ -474,7 +474,7 @@ function createConductorCompactColumn(
 
       const modalidadClass = !asig
         ? 'dt-badge-gray'
-        : asig.horario === 'TURNO' ? 'dt-badge-blue' : 'dt-badge-yellow'
+        : asig.horario === 'turno' ? 'dt-badge-blue' : 'dt-badge-yellow'
       const modalidadLabel = !asig
         ? 'S/A'
         : asig.horario || '?'

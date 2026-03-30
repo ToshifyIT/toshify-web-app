@@ -26,7 +26,7 @@ const GOOGLE_MAPS_API_KEY = import.meta.env.VITE_GOOGLE_MAPS_API_KEY || 'AIzaSyC
 
 interface ProgramacionData {
   sede_id: string
-  modalidad: 'TURNO' | 'CARGO' | ''
+  modalidad: 'turno' | 'a_cargo' | ''
   vehiculo_id: string
   vehiculo_patente: string
   vehiculo_modelo: string
@@ -140,7 +140,7 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
   const [formData, setFormData] = useState<ProgramacionData>(() => {
     // Si hay datos de edición, pre-cargar
     if (editData) {
-      const isCargo = editData.modalidad === 'CARGO'
+      const isCargo = editData.modalidad === 'a_cargo'
       return {
         sede_id: editData.sede_id || '',
         modalidad: editData.modalidad || '',
@@ -305,15 +305,15 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
           }
 
           // Es asignacion activa
-          if (asignacion.horario === 'CARGO') {
-            // CARGO siempre ocupado - si tiene programacion pendiente, marcar como programado
+          if (asignacion.horario === 'todo_dia') {
+            // todo_dia siempre ocupado - si tiene programacion pendiente, marcar como programado
             if (tieneProgramacionPendiente) {
               return { ...vehiculo, disponibilidad: 'programado' as const, asignacionActiva: undefined }
             }
             return {
               ...vehiculo,
               disponibilidad: 'ocupado' as const,
-              asignacionActiva: { id: asignacion.id, horario: 'CARGO' as const, turnoDiurnoOcupado: true, turnoNocturnoOcupado: true }
+              asignacionActiva: { id: asignacion.id, horario: 'todo_dia' as const, turnoDiurnoOcupado: true, turnoNocturnoOcupado: true }
             }
           }
 
@@ -343,7 +343,7 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
             disponibilidad,
             asignacionActiva: {
               id: asignacion.id,
-              horario: 'TURNO' as const,
+              horario: 'turno' as const,
               turnoDiurnoOcupado,
               turnoNocturnoOcupado
             }
@@ -822,11 +822,11 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
 
     // Step 3: Validate conductores segun modalidad
     if (step === 3) {
-      if (formData.modalidad === 'CARGO' && !formData.conductor_id) {
+      if (formData.modalidad === 'a_cargo' && !formData.conductor_id) {
         Swal.fire('Error', 'Debes asignar un conductor', 'error')
         return
       }
-      if (formData.modalidad !== 'CARGO') {
+      if (formData.modalidad !== 'a_cargo') {
         // Modo TURNO - al menos 1 conductor
         if (!formData.conductor_diurno_id && !formData.conductor_nocturno_id) {
           Swal.fire('Error', 'Debes asignar al menos un conductor (Diurno o Nocturno)', 'error')
@@ -848,7 +848,7 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
     setStep(step - 1)
   }
 
-  const handleSelectModality = (modalidad: 'TURNO' | 'CARGO') => {
+  const handleSelectModality = (modalidad: 'turno' | 'a_cargo') => {
     setFormData({
       ...formData,
       modalidad,
@@ -915,7 +915,7 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
         setConductoresDelVehiculoActual(conductorIds)
 
         // Si es devolución o cambio de vehículo y la modalidad aún no fue seteada, usar la modalidad real del vehículo
-        const modalidadVehiculo = asigData.horario as 'CARGO' | 'TURNO'
+        const modalidadVehiculo: 'turno' | 'a_cargo' = asigData.horario === 'todo_dia' ? 'a_cargo' : 'turno'
         if ((formData.devolucion_vehiculo || formData.cambio_vehiculo) && !formData.modalidad && modalidadVehiculo) {
           setFormData(prev => ({ ...prev, modalidad: modalidadVehiculo }))
         }
@@ -929,7 +929,7 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
         if (modalidadSeleccionada === modalidadVehiculo) {
           let updates: Partial<ProgramacionData> = {}
 
-          if (asigData.horario === 'CARGO') {
+          if (asigData.horario === 'todo_dia') {
             const conductorCargo = conductoresAsig[0]?.conductores
             if (conductorCargo) {
               updates = {
@@ -1104,11 +1104,11 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
       const updates: any = {}
       let changed = false
 
-      if (formData.modalidad === 'CARGO' && formData.conductor_id && !formData.tipo_candidato_cargo) {
+      if (formData.modalidad === 'a_cargo' && formData.conductor_id && !formData.tipo_candidato_cargo) {
         updates.tipo_candidato_cargo = await detectarTipoCandidato(formData.conductor_id)
         changed = true
       }
-      if (formData.modalidad === 'TURNO') {
+      if (formData.modalidad === 'turno') {
         if (formData.conductor_diurno_id && !formData.tipo_candidato_diurno) {
           updates.tipo_candidato_diurno = await detectarTipoCandidato(formData.conductor_diurno_id)
           changed = true
@@ -1130,7 +1130,7 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
       const updates: any = { ...prev }
       let changed = false
 
-      if (prev.modalidad === 'CARGO' && prev.conductor_id) {
+      if (prev.modalidad === 'a_cargo' && prev.conductor_id) {
         const c = conductores.find(x => x.id === prev.conductor_id)
         if (c?.zona && !prev.zona_cargo) {
           updates.zona_cargo = c.zona
@@ -1142,7 +1142,7 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
         }
       }
 
-      if (prev.modalidad === 'TURNO') {
+      if (prev.modalidad === 'turno') {
         if (prev.conductor_diurno_id) {
           const c = conductores.find(x => x.id === prev.conductor_diurno_id)
           if (c?.zona && !prev.zona_diurno) {
@@ -1197,7 +1197,7 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
   const validateSubmitFields = (): string | null => {
     if (!formData.fecha_cita) return 'Debes seleccionar una fecha de cita'
 
-    if (formData.modalidad === 'CARGO') {
+    if (formData.modalidad === 'a_cargo') {
       if (!formData.tipo_candidato_cargo) return 'Debes seleccionar el tipo de candidato'
       if (!formData.documento_cargo) return 'Debes seleccionar el tipo de documento'
       if (!formData.zona_cargo) return 'Debes ingresar la zona'
@@ -1238,7 +1238,7 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
       for (const prog of progExistentes) {
         let mismosonductores = false
 
-        if (formData.modalidad === 'CARGO') {
+        if (formData.modalidad === 'a_cargo') {
           mismosonductores = prog.conductor_id === formData.conductor_id
         } else {
           // TURNO: verificar diurno y nocturno
@@ -1308,7 +1308,7 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
         ultimo_dia_cobro: formData.devolucion_vehiculo ? (formData.ultimo_dia_cobro || null) : null
       }
 
-      if (formData.modalidad === 'CARGO') {
+      if (formData.modalidad === 'a_cargo') {
         // A CARGO - usar campos legacy con un solo set de datos
         saveData.conductor_id = formData.conductor_id
         saveData.conductor_nombre = formData.conductor_nombre
@@ -1461,7 +1461,7 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
       case 'turno_nocturno_libre':
         badgeText = 'En Uso'; badgeBg = '#F59E0B'; badgeColor = 'white'; detalleText = 'Nocturno Libre'; break
       case 'ocupado':
-        badgeText = 'En Uso'; badgeBg = '#F59E0B'; badgeColor = 'white'; detalleText = asig?.horario === 'CARGO' ? 'A Cargo' : 'Turnos completos'; break
+        badgeText = 'En Uso'; badgeBg = '#F59E0B'; badgeColor = 'white'; detalleText = asig?.horario === 'todo_dia' ? 'A Cargo' : 'Turnos completos'; break
       case 'programado':
         badgeText = 'Programado'; badgeBg = '#EF4444'; badgeColor = 'white'; detalleText = 'Tiene entrega pendiente'; break
     }
@@ -1509,7 +1509,7 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
     } as Conductor : undefined)
 
   // Modo TURNO o CARGO
-  const isTurnoMode = formData.modalidad === 'TURNO'
+  const isTurnoMode = formData.modalidad === 'turno'
 
   // --- Extracted drag & drop handlers ---
   const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => {
@@ -2684,8 +2684,8 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
 
                 <div className="modality-grid">
                   <div
-                    className={`modality-card ${formData.modalidad === 'TURNO' && !formData.devolucion_vehiculo ? 'selected' : ''}`}
-                    onClick={() => { handleSelectModality('TURNO'); setFormData(prev => ({ ...prev, modalidad: 'TURNO', devolucion_vehiculo: false, cambio_vehiculo: false })) }}
+                    className={`modality-card ${formData.modalidad === 'turno' && !formData.devolucion_vehiculo ? 'selected' : ''}`}
+                    onClick={() => { handleSelectModality('turno'); setFormData(prev => ({ ...prev, modalidad: 'turno', devolucion_vehiculo: false, cambio_vehiculo: false })) }}
                     style={{ padding: '20px 16px' }}
                   >
                     <div className="modality-icon">
@@ -2696,8 +2696,8 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
                   </div>
 
                   <div
-                    className={`modality-card ${formData.modalidad === 'CARGO' && !formData.devolucion_vehiculo ? 'selected' : ''}`}
-                    onClick={() => { handleSelectModality('CARGO'); setFormData(prev => ({ ...prev, modalidad: 'CARGO', devolucion_vehiculo: false, cambio_vehiculo: false })) }}
+                    className={`modality-card ${formData.modalidad === 'a_cargo' && !formData.devolucion_vehiculo ? 'selected' : ''}`}
+                    onClick={() => { handleSelectModality('a_cargo'); setFormData(prev => ({ ...prev, modalidad: 'a_cargo', devolucion_vehiculo: false, cambio_vehiculo: false })) }}
                     style={{ padding: '20px 16px' }}
                   >
                     <div className="modality-icon">

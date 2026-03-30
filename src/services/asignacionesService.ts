@@ -8,7 +8,7 @@ import { normalizeDni } from '../utils/normalizeDocuments'
 
 export interface AsignacionActiva {
   dni: string
-  horario: 'TURNO' | 'CARGO' | null
+  horario: 'turno' | 'todo_dia' | null
   estado: 'activa' | 'programado' | null
   modalidad: string | null
   nombreConductor: string
@@ -72,7 +72,7 @@ class AsignacionesService {
               if (conductor && conductor.numero_dni && dnis.includes(normalizeDni(conductor.numero_dni))) {
                 asignacionesMap.set(normalizeDni(conductor.numero_dni), {
                   dni: conductor.numero_dni,
-                  horario: record.horario as 'TURNO' | 'CARGO' | null,
+                  horario: record.horario as 'turno' | 'todo_dia' | null,
                   estado: record.estado as 'activa' | 'programado' | null,
                   modalidad: record.modalidad,
                   nombreConductor: `${conductor.nombres} ${conductor.apellidos}`,

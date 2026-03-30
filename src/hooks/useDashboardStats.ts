@@ -189,7 +189,7 @@ export function useDashboardStats() {
         let vacantesN = 0
         for (const a of asignaciones) {
           const conductores = a.asignaciones_conductores || []
-          if (a.horario === 'TURNO') {
+          if (a.horario === 'turno') {
             turnoCount++
             const conductorD = conductores.find(
               (ac: any) =>

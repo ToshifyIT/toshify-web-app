@@ -215,7 +215,7 @@ export function useBitacoraData() {
         // Sin tipo_turno del DB: cruzar completamente con asignaciones (registros antiguos)
         if (asignacion) {
           let turnoIndicador: string | null = null
-          if (asignacion.modalidad === 'TURNO' && conductorMatch?.turno) {
+          if (asignacion.modalidad === 'turno' && conductorMatch?.turno) {
             if (conductorMatch.turno === 'diurno') turnoIndicador = 'Diurno'
             else if (conductorMatch.turno === 'nocturno') turnoIndicador = 'Nocturno'
           }

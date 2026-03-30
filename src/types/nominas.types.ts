@@ -16,7 +16,7 @@ export interface PeriodoNomina {
 export interface DetalleDiario {
   fecha: string
   dia_semana: string
-  tipo_horario: 'TURNO' | 'CARGO' | null
+  tipo_horario: 'turno' | 'todo_dia' | null
   precio_dia: number
   asignacion_id: string | null
   vehiculo_patente: string | null
@@ -68,7 +68,7 @@ export interface NominaConductor {
   // Asignación actual
   asignacion_codigo: string | null
   vehiculo_patente: string | null
-  tipo_horario_predominante: 'TURNO' | 'CARGO' | 'MIXTO'
+  tipo_horario_predominante: 'turno' | 'todo_dia' | 'MIXTO'
 
   // Cargos
   alquiler_total: number

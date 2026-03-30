@@ -84,7 +84,7 @@ export function PenalidadForm({ formData, setFormData, tiposPenalidad, tiposCobr
             conductoresData.push({
               id: ac.conductores.id,
               nombre_completo: `${ac.conductores.nombres} ${ac.conductores.apellidos}`,
-              horario: (asig as any).horario === 'TURNO' ? 'Turno' : 'A Cargo',
+              horario: (asig as any).horario === 'turno' ? 'Turno' : 'A Cargo',
               turno: turnoDisplay
             })
           }

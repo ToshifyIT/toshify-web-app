@@ -241,8 +241,8 @@ function countDriversByModalidad(
       ? asignaciones.get(normalizeDni(driver.nationalIdNumber))
       : null
 
-    if (asig?.horario === 'CARGO') conductoresCargo++
-    else if (asig?.horario === 'TURNO') conductoresTurno++
+    if (asig?.horario === 'todo_dia') conductoresCargo++
+    else if (asig?.horario === 'turno') conductoresTurno++
     else conductoresSinAsignacion++
   }
 

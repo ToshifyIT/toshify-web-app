@@ -1318,7 +1318,7 @@ export function GarantiasTab() {
         <div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
             <span className="font-medium">{row.original.conductor_nombre}</span>
-            <span className={`fact-badge ${row.original.tipo_alquiler === 'CARGO' ? 'fact-badge-blue' : 'fact-badge-purple'}`} style={{ fontSize: '9px', padding: '1px 5px' }}>
+            <span className={`fact-badge ${row.original.tipo_alquiler === 'a_cargo' ? 'fact-badge-blue' : 'fact-badge-purple'}`} style={{ fontSize: '9px', padding: '1px 5px' }}>
               {row.original.tipo_alquiler}
             </span>
           </div>

@@ -14,7 +14,7 @@ import { formatPreferencia, getPreferenciaBadge } from '../utils/conductorUtils'
 
 interface AssignmentData {
   modalidad: 'dia_completo' | 'medio_dia' | 'por_horas' | 'semanal' | 'mensual' | ''
-  horario: 'TURNO' | 'CARGO' | ''  // TURNO = modo con pares de conductores
+  horario: 'turno' | 'todo_dia' | ''  // turno = modo con pares de conductores
   vehiculo_id: string
   conductores_ids: string[]
   conductor_diurno_id: string  // Para modo Turno
@@ -150,20 +150,20 @@ export function AssignmentWizard({ onClose, onSuccess }: Props) {
           }
 
           // Si está A CARGO, está ocupado
-          if (asignacionActiva.horario === 'CARGO') {
+          if (asignacionActiva.horario === 'todo_dia') {
             return {
               ...vehiculo,
               disponibilidad: 'ocupado' as const,
               asignacionActiva: {
                 id: asignacionActiva.id,
-                horario: 'CARGO' as const,
+                horario: 'todo_dia' as const,
                 turnoDiurnoOcupado: true,
                 turnoNocturnoOcupado: true
               }
             }
           }
 
-          // Si está en TURNO, verificar qué turnos están ocupados
+          // Si está en turno, verificar qué turnos están ocupados
           const conductoresAsignados = asignacionActiva.asignaciones_conductores || []
           const turnoDiurnoOcupado = conductoresAsignados.some((c: any) => c.horario === 'diurno')
           const turnoNocturnoOcupado = conductoresAsignados.some((c: any) => c.horario === 'nocturno')
@@ -182,7 +182,7 @@ export function AssignmentWizard({ onClose, onSuccess }: Props) {
             disponibilidad,
             asignacionActiva: {
               id: asignacionActiva.id,
-              horario: 'TURNO' as const,
+              horario: 'turno' as const,
               turnoDiurnoOcupado,
               turnoNocturnoOcupado
             }
@@ -310,12 +310,12 @@ export function AssignmentWizard({ onClose, onSuccess }: Props) {
 
     // Step 3: Validate conductores según el modo
     if (step === 3) {
-      if (formData.horario === 'CARGO' && formData.conductores_ids.length === 0) {
+      if (formData.horario === 'todo_dia' && formData.conductores_ids.length === 0) {
         Swal.fire('Error', 'Debes asignar un conductor para A Cargo', 'error')
         return
       }
-      // Modo TURNO - requiere al menos 1 conductor
-      if (formData.horario !== 'CARGO' && !formData.conductor_diurno_id && !formData.conductor_nocturno_id) {
+      // Modo turno - requiere al menos 1 conductor
+      if (formData.horario !== 'todo_dia' && !formData.conductor_diurno_id && !formData.conductor_nocturno_id) {
         Swal.fire('Error', 'Debes asignar al menos un conductor (Diurno o Nocturno)', 'error')
         return
       }
@@ -334,7 +334,7 @@ export function AssignmentWizard({ onClose, onSuccess }: Props) {
       modalidad,
       horario,
       // Distancia por defecto: 0 para A Cargo, vacío para Turno
-      distancia: horario === 'CARGO' ? '0' : ''
+      distancia: horario === 'todo_dia' ? '0' : ''
     })
   }
 
@@ -497,19 +497,19 @@ export function AssignmentWizard({ onClose, onSuccess }: Props) {
     if (loading) return
 
     // Validaciones según modo - A CARGO
-    if (formData.horario === 'CARGO' && formData.conductores_ids.length === 0) {
+    if (formData.horario === 'todo_dia' && formData.conductores_ids.length === 0) {
       Swal.fire('Error', 'Debes asignar un conductor para A Cargo', 'error')
       return
     }
 
-    // Validaciones según modo - TURNO requiere al menos 1 conductor
-    if (formData.horario !== 'CARGO' && !formData.conductor_diurno_id && !formData.conductor_nocturno_id) {
+    // Validaciones según modo - turno requiere al menos 1 conductor
+    if (formData.horario !== 'todo_dia' && !formData.conductor_diurno_id && !formData.conductor_nocturno_id) {
       Swal.fire('Error', 'Debes asignar al menos un conductor (Diurno o Nocturno)', 'error')
       return
     }
 
     // Validar que los conductores seleccionados no tengan asignaciones activas
-    const conductoresSeleccionados = formData.horario === 'CARGO' 
+    const conductoresSeleccionados = formData.horario === 'todo_dia'
       ? formData.conductores_ids 
       : [formData.conductor_diurno_id, formData.conductor_nocturno_id].filter(Boolean)
     
@@ -547,7 +547,7 @@ export function AssignmentWizard({ onClose, onSuccess }: Props) {
       let conductoresIds: string[] = []
       let conductorPrincipalId: string
 
-      if (formData.horario === 'CARGO') {
+      if (formData.horario === 'todo_dia') {
         conductoresIds = formData.conductores_ids
         conductorPrincipalId = formData.conductores_ids[0]
       } else {
@@ -591,7 +591,7 @@ export function AssignmentWizard({ onClose, onSuccess }: Props) {
         let documentoValue: string = 'N/A'
         let ubicacionValue = ''
 
-        if (formData.horario === 'TURNO') {
+        if (formData.horario === 'turno') {
           // Determinar si es conductor diurno o nocturno
           if (conductorId === formData.conductor_diurno_id) {
             horarioTurno = 'diurno'
@@ -602,7 +602,7 @@ export function AssignmentWizard({ onClose, onSuccess }: Props) {
             documentoValue = formData.documento_nocturno || 'N/A'
             ubicacionValue = formData.ubicacion_nocturno
           }
-        } else if (formData.horario === 'CARGO') {
+        } else if (formData.horario === 'todo_dia') {
           // Modo A CARGO
           documentoValue = formData.documento_cargo || 'N/A'
           ubicacionValue = formData.ubicacion_cargo
@@ -642,7 +642,7 @@ export function AssignmentWizard({ onClose, onSuccess }: Props) {
   }
 
   // Conductores seleccionados y disponibles según modo
-  const isTurnoMode = formData.horario === 'TURNO'
+  const isTurnoMode = formData.horario === 'turno'
 
   const conductorDiurno = conductores.find(c => c.id === formData.conductor_diurno_id)
   const conductorNocturno = conductores.find(c => c.id === formData.conductor_nocturno_id)
@@ -1652,8 +1652,8 @@ export function AssignmentWizard({ onClose, onSuccess }: Props) {
 
                 <div className="modality-grid">
                   <div
-                    className={`modality-card ${formData.horario === 'TURNO' ? 'selected' : ''}`}
-                    onClick={() => handleSelectModality('semanal', 'TURNO')}
+                    className={`modality-card ${formData.horario === 'turno' ? 'selected' : ''}`}
+                    onClick={() => handleSelectModality('semanal', 'turno')}
                   >
                     <div className="modality-icon">
                       <Calendar size={48} />
@@ -1663,8 +1663,8 @@ export function AssignmentWizard({ onClose, onSuccess }: Props) {
                   </div>
 
                   <div
-                    className={`modality-card ${formData.horario === 'CARGO' ? 'selected' : ''}`}
-                    onClick={() => handleSelectModality('semanal', 'CARGO')}
+                    className={`modality-card ${formData.horario === 'todo_dia' ? 'selected' : ''}`}
+                    onClick={() => handleSelectModality('semanal', 'todo_dia')}
                   >
                     <div className="modality-icon">
                       <User size={48} />
@@ -1757,7 +1757,7 @@ export function AssignmentWizard({ onClose, onSuccess }: Props) {
                           badgeText = 'En Uso'
                           badgeBg = '#F59E0B'
                           badgeColor = 'white'
-                          detalleText = vehicle.asignacionActiva?.horario === 'CARGO' ? 'A Cargo' : 'Turnos completos'
+                          detalleText = vehicle.asignacionActiva?.horario === 'todo_dia' ? 'A Cargo' : 'Turnos completos'
                           break
                       }
 
@@ -1809,7 +1809,7 @@ export function AssignmentWizard({ onClose, onSuccess }: Props) {
                 <div className="step-description">
                   <h3>Paso 3: Asigna los Conductores</h3>
                   <p>
-                    {formData.horario === 'CARGO'
+                    {formData.horario === 'todo_dia'
                       ? 'Selecciona el conductor que estará a cargo del vehículo.'
                       : 'Asigna conductores para los turnos (al menos uno: Diurno o Nocturno).'}
                   </p>
@@ -2215,7 +2215,7 @@ export function AssignmentWizard({ onClose, onSuccess }: Props) {
                   </div>
 
                   {/* Campos para TURNO - Conductor Diurno */}
-                  {formData.horario === 'TURNO' && formData.conductor_diurno_id && (
+                  {formData.horario === 'turno' && formData.conductor_diurno_id && (
                     <div style={{
                       marginBottom: '24px',
                       padding: '20px',
@@ -2257,7 +2257,7 @@ export function AssignmentWizard({ onClose, onSuccess }: Props) {
                   )}
 
                   {/* Campos para TURNO - Conductor Nocturno */}
-                  {formData.horario === 'TURNO' && formData.conductor_nocturno_id && (
+                  {formData.horario === 'turno' && formData.conductor_nocturno_id && (
                     <div style={{
                       marginBottom: '24px',
                       padding: '20px',
@@ -2299,7 +2299,7 @@ export function AssignmentWizard({ onClose, onSuccess }: Props) {
                   )}
 
                   {/* Campos para CARGO */}
-                  {formData.horario === 'CARGO' && formData.conductores_ids.length > 0 && (
+                  {formData.horario === 'todo_dia' && formData.conductores_ids.length > 0 && (
                     <div style={{
                       marginBottom: '24px',
                       padding: '20px',
@@ -2392,14 +2392,14 @@ export function AssignmentWizard({ onClose, onSuccess }: Props) {
                   loading ||
                   !formData.fecha_programada ||
                   !formData.distancia ||
-                  (formData.horario === 'CARGO' && formData.conductores_ids.length === 0) ||
+                  (formData.horario === 'todo_dia' && formData.conductores_ids.length === 0) ||
                   (isTurnoMode && !formData.conductor_diurno_id && !formData.conductor_nocturno_id) ||
                   // Validar campos para conductor diurno
-                  (formData.horario === 'TURNO' && formData.conductor_diurno_id && (!formData.documento_diurno || !formData.ubicacion_diurno)) ||
+                  (formData.horario === 'turno' && formData.conductor_diurno_id && (!formData.documento_diurno || !formData.ubicacion_diurno)) ||
                   // Validar campos para conductor nocturno
-                  (formData.horario === 'TURNO' && formData.conductor_nocturno_id && (!formData.documento_nocturno || !formData.ubicacion_nocturno)) ||
+                  (formData.horario === 'turno' && formData.conductor_nocturno_id && (!formData.documento_nocturno || !formData.ubicacion_nocturno)) ||
                   // Validar campos para A CARGO
-                  (formData.horario === 'CARGO' && formData.conductores_ids.length > 0 && (!formData.documento_cargo || !formData.ubicacion_cargo))
+                  (formData.horario === 'todo_dia' && formData.conductores_ids.length > 0 && (!formData.documento_cargo || !formData.ubicacion_cargo))
                 )}
               >
                 {loading ? 'Creando...' : 'Programar Asignación'}

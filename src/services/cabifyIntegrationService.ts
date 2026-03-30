@@ -98,7 +98,7 @@ class CabifyIntegrationService {
         let modalidad: 'Turno' | 'A cargo' | 'Sin asignación' = 'Sin asignación'
 
         if (asignacion) {
-          modalidad = asignacion.modalidad === 'Turno' ? 'Turno' : 'A cargo'
+          modalidad = asignacion.modalidad === 'turno' ? 'Turno' : 'A cargo'
           montoAlquiler = modalidad === 'Turno' ? ALQUILER_TURNO : ALQUILER_A_CARGO
         }
 

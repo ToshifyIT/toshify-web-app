@@ -408,7 +408,7 @@ const GestionConductores = ({ isOpen, onClose, onRefresh }: Props) => {
                   const modalidadAsig = (asig.horario || '').toUpperCase();
                   const horarioCond = (ac.horario || '').toUpperCase();
                   let turno = 'N/A';
-                  if (modalidadAsig === 'CARGO' || horarioCond === 'TODO_DIA') {
+                  if (modalidadAsig === 'TODO_DIA' || horarioCond === 'TODO_DIA') {
                     turno = 'A Cargo';
                   } else if (horarioCond === 'DIURNO' || horarioCond === 'D') {
                     turno = 'Diurno';

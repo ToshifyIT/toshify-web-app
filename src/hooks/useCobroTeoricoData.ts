@@ -262,11 +262,11 @@ export async function fetchCobroData(
     let codigoConcepto = 'P002'
     let horarioLabel = 'CARGO'
 
-    if (modalidadAsignacion === 'CARGO' || horarioLower === 'todo_dia') {
+    if (modalidadAsignacion === 'todo_dia' || horarioLower === 'todo_dia') {
       modalidad = 'CARGO'
       codigoConcepto = 'P002'
       horarioLabel = 'CARGO'
-    } else if (modalidadAsignacion === 'TURNO') {
+    } else if (modalidadAsignacion === 'turno') {
       if (horarioLower === 'nocturno' || horarioLower === 'n') {
         modalidad = 'TURNO_NOCTURNO'
         codigoConcepto = 'P013'

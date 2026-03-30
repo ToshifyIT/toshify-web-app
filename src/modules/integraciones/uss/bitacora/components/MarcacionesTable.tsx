@@ -138,7 +138,7 @@ export function MarcacionesTable({
   const getHorarioLabel = (h: string, mod: string | null): string => {
     if (h === 'diurno') return 'Diurno';
     if (h === 'nocturno') return 'Nocturno';
-    if (mod === 'CARGO' || mod === 'A_CARGO') return 'A Cargo';
+    if (mod === 'a_cargo') return 'A Cargo';
     return 'Sin turno';
   };
   const horariosUnicos = useMemo(() =>
@@ -305,13 +305,13 @@ export function MarcacionesTable({
       cell: ({ row }) => {
         const mod = row.original.vehiculoModalidad;
         if (!mod) return <span style={{ fontSize: '12px', color: 'var(--text-tertiary)' }}>-</span>;
-        const color = mod === 'TURNO' ? '#7c3aed' : '#0891b2';
+        const color = mod === 'turno' ? '#7c3aed' : '#0891b2';
         return (
           <span style={{
             fontSize: '11px', fontWeight: 600, padding: '2px 8px',
             borderRadius: '10px', color: '#fff', background: color,
           }}>
-            {mod === 'CARGO' || mod === 'A_CARGO' ? 'A Cargo' : 'Turno'}
+            {mod === 'a_cargo' ? 'A Cargo' : 'Turno'}
           </span>
         );
       },
@@ -331,7 +331,7 @@ export function MarcacionesTable({
           icon = <Sun size={14} />; color = '#d97706'; label = 'Diurno';
         } else if (h === 'nocturno') {
           icon = <Moon size={14} />; color = '#4f46e5'; label = 'Nocturno';
-        } else if (mod === 'CARGO' || mod === 'A_CARGO') {
+        } else if (mod === 'a_cargo') {
           icon = <Clock size={14} />; color = '#0891b2'; label = 'A Cargo';
         } else {
           icon = <Clock size={14} />; color = '#6b7280'; label = '-';
@@ -440,7 +440,7 @@ export function MarcacionesTable({
         : resolverFechaHora(m.periodoFin, m.fecha, m.salida, m.horario),
       'Duración': formatDuracion(m.duracionMinutos),
       'Km Total': m.kmTotal,
-      'Turno': m.vehiculoModalidad === 'CARGO' ? 'A Cargo' : m.vehiculoModalidad === 'TURNO' ? 'Turno' : '-',
+      'Turno': m.vehiculoModalidad === 'a_cargo' ? 'A Cargo' : m.vehiculoModalidad === 'turno' ? 'Turno' : '-',
       'Estado': m.estado,
       'Horario': getHorarioLabel(m.horario, m.vehiculoModalidad),
       'GNC': m.gncCargado ? 'Sí' : 'No',

@@ -336,7 +336,7 @@ function Step1Evento({ formData, setFormData, vehiculos, conductores, onVehiculo
             conductoresData.push({
               id: ac.conductores.id,
               nombre_completo: `${ac.conductores.nombres} ${ac.conductores.apellidos}`,
-              horario: (asig as any).horario === 'TURNO' ? 'Turno' : 'A Cargo',
+              horario: (asig as any).horario === 'turno' ? 'Turno' : 'A Cargo',
               turno: turnoDisplay
             })
           }
@@ -1025,7 +1025,7 @@ function Step5Gestion({ formData, setFormData, vehiculosEstados }: Step5Props) {
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', fontSize: '13px' }}>
               <div>
                 <span style={{ color: 'var(--text-secondary)' }}>Modalidad:</span>{' '}
-                <strong style={{ color: 'var(--text-primary)' }}>{asignacionActiva.horario === 'TURNO' ? 'Por Turno' : 'A Cargo'}</strong>
+                <strong style={{ color: 'var(--text-primary)' }}>{asignacionActiva.horario === 'turno' ? 'Por Turno' : 'A Cargo'}</strong>
               </div>
               <div>
                 <span style={{ color: 'var(--text-secondary)' }}>Desde:</span>{' '}

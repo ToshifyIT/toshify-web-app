@@ -129,7 +129,7 @@ interface FacturacionConductor {
   conductor_cuit: string | null
   vehiculo_id: string | null
   vehiculo_patente: string | null
-  tipo_alquiler: 'CARGO' | 'TURNO'
+  tipo_alquiler: 'a_cargo' | 'turno'
   turnos_base: number
   turnos_cobrados: number
   factor_proporcional: number
@@ -696,7 +696,6 @@ export function ReporteFacturacionTab() {
         const horario = horarioRawDias === 'todo_dia' ? 'CARGO'
           : horarioRawDias === 'diurno' || horarioRawDias === 'd' ? 'DIURNO'
           : horarioRawDias === 'nocturno' || horarioRawDias === 'n' ? 'NOCTURNO'
-          : horarioRawDias === 'cargo' ? 'CARGO'
           : horarioRawDias === 'turno' ? 'TURNO'
           : horarioRawDias.toUpperCase()
         const acInicioStr = ac.fecha_inicio ? toArgDate(ac.fecha_inicio) : 'NULL'
@@ -907,7 +906,6 @@ export function ReporteFacturacionTab() {
         const horarioLabel = horarioRaw === 'todo_dia' ? 'CARGO'
           : horarioRaw === 'diurno' || horarioRaw === 'd' ? 'DIURNO'
           : horarioRaw === 'nocturno' || horarioRaw === 'n' ? 'NOCTURNO'
-          : horarioRaw === 'cargo' ? 'CARGO'
           : horarioRaw === 'turno' ? 'TURNO'
           : horarioRaw.toUpperCase()
 
@@ -1070,11 +1068,11 @@ export function ReporteFacturacionTab() {
           horarioMapLoad.set(ac.conductor_id, { diurno: 0, nocturno: 0, cargo: 0 })
         }
         const h = horarioMapLoad.get(ac.conductor_id)!
-        const modalidadPadre = asignacion.horario // 'TURNO' o 'CARGO'
+        const modalidadPadre = asignacion.horario // 'turno' o 'todo_dia'
         const horarioCond = (ac.horario || '').toLowerCase().trim()
-        if (modalidadPadre === 'CARGO' || horarioCond === 'todo_dia') {
+        if (modalidadPadre === 'todo_dia' || horarioCond === 'todo_dia') {
           h.cargo += diasOverlap
-        } else if (modalidadPadre === 'TURNO') {
+        } else if (modalidadPadre === 'turno') {
           if (horarioCond === 'nocturno' || horarioCond === 'n') h.nocturno += diasOverlap
           else h.diurno += diasOverlap
         } else {
@@ -1422,7 +1420,7 @@ export function ReporteFacturacionTab() {
 
           if (!dnisAgregadosVP.has(cond.numero_dni)) {
             dnisAgregadosVP.add(cond.numero_dni)
-            const modalidad = (asig.horario || '').toUpperCase() === 'CARGO' ? 'CARGO' : 'TURNO'
+            const modalidad = (asig.horario || '') === 'todo_dia' ? 'CARGO' : 'TURNO'
             conductoresControl.push({
               numero_dni: cond.numero_dni,
               estado: 'Activo',
@@ -1561,9 +1559,9 @@ export function ReporteFacturacionTab() {
         const asignacion = ac.asignaciones
         if (!asignacion) return
         
-        const modalidadAsignacion = asignacion.horario // 'TURNO' o 'CARGO'
+        const modalidadAsignacion = asignacion.horario // 'turno' o 'todo_dia'
         const horarioConductor = ac.horario // 'diurno', 'nocturno', 'todo_dia'
-        
+
         // Si la asignación padre está programada → no ha iniciado, no cuenta para facturación
         const estadoPadreVP = (asignacion.estado || '').toLowerCase()
         if (['programado', 'programada'].includes(estadoPadreVP)) return
@@ -1606,9 +1604,9 @@ export function ReporteFacturacionTab() {
         // Determinar modalidad basándose en asignaciones.horario + asignaciones_conductores.horario
         let modalidad: 'CARGO' | 'TURNO_DIURNO' | 'TURNO_NOCTURNO' = 'CARGO'
         const horarioLowerVP = (horarioConductor || '').toLowerCase().trim()
-        if (modalidadAsignacion === 'CARGO' || horarioLowerVP === 'todo_dia') {
+        if (modalidadAsignacion === 'todo_dia' || horarioLowerVP === 'todo_dia') {
           modalidad = 'CARGO'
-        } else if (modalidadAsignacion === 'TURNO') {
+        } else if (modalidadAsignacion === 'turno') {
           if (horarioLowerVP === 'nocturno' || horarioLowerVP === 'n') {
             modalidad = 'TURNO_NOCTURNO'
           } else {
@@ -2136,9 +2134,9 @@ export function ReporteFacturacionTab() {
         // precio_final ya incluye IVA - no se agrega de nuevo
         
         // Determinar tipo de alquiler predominante para garantía
-        const tipoAlquiler: 'CARGO' | 'TURNO' = prorrateo.CARGO > (prorrateo.TURNO_DIURNO + prorrateo.TURNO_NOCTURNO) 
-          ? 'CARGO' 
-          : 'TURNO'
+        const tipoAlquiler: 'a_cargo' | 'turno' = prorrateo.CARGO > (prorrateo.TURNO_DIURNO + prorrateo.TURNO_NOCTURNO)
+          ? 'a_cargo'
+          : 'turno'
 
         // Factor proporcional para garantía (basado en días trabajados)
         const factorProporcional = diasTotales > 0 ? Math.min(1, diasTotales / 7) : 0
@@ -2147,7 +2145,7 @@ export function ReporteFacturacionTab() {
         const garantia = garantiasMap.get(conductorId)
         let subtotalGarantia = 0
         let cuotaGarantiaNumero = ''
-        const cuotasTotales = tipoAlquiler === 'CARGO'
+        const cuotasTotales = tipoAlquiler === 'a_cargo'
           ? FACTURACION_CONFIG.GARANTIA_CUOTAS_CARGO
           : FACTURACION_CONFIG.GARANTIA_CUOTAS_TURNO
 
@@ -2550,7 +2548,7 @@ export function ReporteFacturacionTab() {
 
           if (!dnisAgregadosRecalc.has(cond.numero_dni)) {
             dnisAgregadosRecalc.add(cond.numero_dni)
-            const modalidad = (asig.horario || '').toUpperCase() === 'CARGO' ? 'CARGO' : 'TURNO'
+            const modalidad = (asig.horario || '') === 'todo_dia' ? 'CARGO' : 'TURNO'
             conductoresControl.push({
               numero_dni: cond.numero_dni,
               estado: 'Activo',
@@ -2720,9 +2718,9 @@ export function ReporteFacturacionTab() {
           const key = format(cursorR, 'yyyy-MM-dd')
           if (!fechasContadasR.has(key)) {
             fechasContadasR.add(key)
-            if (modalidadAsignacion === 'CARGO' || horarioLower === 'todo_dia') {
+            if (modalidadAsignacion === 'todo_dia' || horarioLower === 'todo_dia') {
               prorrateo.CARGO++
-            } else if (modalidadAsignacion === 'TURNO') {
+            } else if (modalidadAsignacion === 'turno') {
               if (horarioLower === 'nocturno' || horarioLower === 'n') {
                 prorrateo.TURNO_NOCTURNO++
               } else {
@@ -2736,9 +2734,9 @@ export function ReporteFacturacionTab() {
         }
 
         // Detectar descuento por hora de entrega (mismas reglas que Vista Previa)
-        const modalidadDescR = (modalidadAsignacion === 'CARGO' || horarioLower === 'todo_dia')
+        const modalidadDescR = (modalidadAsignacion === 'todo_dia' || horarioLower === 'todo_dia')
           ? 'CARGO'
-          : (modalidadAsignacion === 'TURNO' && (horarioLower === 'nocturno' || horarioLower === 'n'))
+          : (modalidadAsignacion === 'turno' && (horarioLower === 'nocturno' || horarioLower === 'n'))
             ? 'TURNO_NOCTURNO'
             : 'TURNO_DIURNO'
         if ((modalidadDescR === 'TURNO_DIURNO' || modalidadDescR === 'CARGO') && acInicio >= fechaInicioSemanaRecalc && !descuentosPorHoraRecalc.has(ac.conductor_id)) {
@@ -3188,7 +3186,7 @@ export function ReporteFacturacionTab() {
         totalDescuentosGlobal += subtotalDescuentos
 
         const diasTurnoTotal = conductor.dias_turno_diurno + conductor.dias_turno_nocturno
-        const tipoAlquilerPrincipal = conductor.dias_cargo >= diasTurnoTotal ? 'CARGO' : 'TURNO'
+        const tipoAlquilerPrincipal = conductor.dias_cargo >= diasTurnoTotal ? 'a_cargo' : 'turno'
 
         // UPSERT facturacion_conductores (actualiza si ya existe)
         const { data: factConductor, error: errFact } = await (supabase
@@ -5858,8 +5856,8 @@ export function ReporteFacturacionTab() {
         } else {
           // Sin detalles, crear filas basadas en subtotales (sin IDs de detalle)
           if (fact.subtotal_alquiler > 0) {
-            const codigoAlquiler = fact.tipo_alquiler === 'CARGO' ? 'P002' : 'P001'
-            const descAlquiler = fact.tipo_alquiler === 'CARGO'
+            const codigoAlquiler = fact.tipo_alquiler === 'a_cargo' ? 'P002' : 'P001'
+            const descAlquiler = fact.tipo_alquiler === 'a_cargo'
               ? 'Alquiler a Cargo'
               : 'Alquiler Turno Diurno'
             filasPreview.push(crearFilaPreview(
@@ -6366,8 +6364,8 @@ export function ReporteFacturacionTab() {
       for (const fact of vistaPreviaData) {
         // P001/P002 - Alquiler (TURNO/CARGO)
         if (fact.subtotal_alquiler > 0) {
-          const codigoAlquiler = fact.tipo_alquiler === 'CARGO' ? 'P002' : 'P001'
-          const descAlquilerVP = fact.tipo_alquiler === 'CARGO'
+          const codigoAlquiler = fact.tipo_alquiler === 'a_cargo' ? 'P002' : 'P001'
+          const descAlquilerVP = fact.tipo_alquiler === 'a_cargo'
             ? 'Alquiler a Cargo'
             : 'Alquiler Turno Diurno'
           filasPreview.push(crearFilaPreview(
@@ -6617,7 +6615,7 @@ export function ReporteFacturacionTab() {
             }
           } else {
             // Conductor nuevo sin registro: primera cuota
-            const cuotasTotales = fc.tipo_alquiler === 'CARGO' ? 20 : 16
+            const cuotasTotales = fc.tipo_alquiler === 'a_cargo' ? 20 : 16
             numeroCuota = `1 de ${cuotasTotales}`
           }
         }
@@ -6978,7 +6976,7 @@ export function ReporteFacturacionTab() {
                   conductor_cuit: row.numeroCuil || null,
                   vehiculo_id: null,
                   vehiculo_patente: null,
-                  tipo_alquiler: 'CARGO',
+                  tipo_alquiler: 'a_cargo',
                   turnos_base: 0,
                   turnos_cobrados: 0,
                   factor_proporcional: 0,
@@ -7185,8 +7183,8 @@ export function ReporteFacturacionTab() {
 
         // P001/P002 - Alquiler (IVA dinámico desde conceptos_nomina)
         if (f.subtotal_alquiler > 0) {
-          const codigoAlquiler = f.tipo_alquiler === 'CARGO' ? 'P002' : 'P001'
-          const descAlquiler = f.tipo_alquiler === 'CARGO' ? 'Alquiler a Cargo' : 'Alquiler Turno Diurno'
+          const codigoAlquiler = f.tipo_alquiler === 'a_cargo' ? 'P002' : 'P001'
+          const descAlquiler = f.tipo_alquiler === 'a_cargo' ? 'Alquiler a Cargo' : 'Alquiler Turno Diurno'
           const ivaPctAlq = getIvaPct(codigoAlquiler)
           const netoAlquiler = extraerNeto(f.subtotal_alquiler, ivaPctAlq)
           const ivaAlquiler = Math.round((f.subtotal_alquiler - netoAlquiler) * 100) / 100
@@ -8066,7 +8064,7 @@ export function ReporteFacturacionTab() {
             {(() => {
               const o = row.original
               const bs = { fontSize: '8px', padding: '1px 4px', lineHeight: '12px', borderRadius: '3px', fontWeight: 600 } as const
-              if (o.tipo_alquiler === 'CARGO') {
+              if (o.tipo_alquiler === 'a_cargo') {
                 return <span style={{ ...bs, background: '#d1fae5', color: '#065f46' }}>CARGO</span>
               }
               const diurno = o.prorrateo_diurno_dias || 0
@@ -9900,8 +9898,8 @@ export function ReporteFacturacionTab() {
                       <span style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>Tipo</span>
                       <span style={{
                         fontSize: '10px', fontWeight: 600, padding: '2px 8px', borderRadius: '4px',
-                        background: detalleFacturacion.tipo_alquiler === 'CARGO' ? 'rgba(59,130,246,0.1)' : 'rgba(107,114,128,0.1)',
-                        color: detalleFacturacion.tipo_alquiler === 'CARGO' ? '#2563eb' : '#6b7280',
+                        background: detalleFacturacion.tipo_alquiler === 'a_cargo' ? 'rgba(59,130,246,0.1)' : 'rgba(107,114,128,0.1)',
+                        color: detalleFacturacion.tipo_alquiler === 'a_cargo' ? '#2563eb' : '#6b7280',
                       }}>
                         {detalleFacturacion.tipo_alquiler}
                       </span>

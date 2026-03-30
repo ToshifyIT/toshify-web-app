@@ -265,8 +265,8 @@ async function calcularPipelineMesIndependiente(
     const modA = asignacion.horario
     const hL = (ac.horario || '').toLowerCase().trim()
     let modalidad = 'CARGO', codConc = 'P002', horLabel = 'CARGO'
-    if (modA === 'CARGO' || hL === 'todo_dia') { modalidad = 'CARGO'; codConc = 'P002'; horLabel = 'CARGO' }
-    else if (modA === 'TURNO') {
+    if (modA === 'todo_dia' || hL === 'todo_dia') { modalidad = 'CARGO'; codConc = 'P002'; horLabel = 'CARGO' }
+    else if (modA === 'turno') {
       if (hL === 'nocturno' || hL === 'n') { modalidad = 'TURNO_NOCTURNO'; codConc = 'P013'; horLabel = 'NOCTURNO' }
       else { modalidad = 'TURNO_DIURNO'; codConc = 'P001'; horLabel = 'DIURNO' }
     }
@@ -680,11 +680,11 @@ export function CobroTeoricoVsReal() {
           let codigoConcepto = 'P002'
           let horarioLabel = 'CARGO'
 
-          if (modalidadAsignacion === 'CARGO' || horarioLower === 'todo_dia') {
+          if (modalidadAsignacion === 'todo_dia' || horarioLower === 'todo_dia') {
             modalidad = 'CARGO'
             codigoConcepto = 'P002'
             horarioLabel = 'CARGO'
-          } else if (modalidadAsignacion === 'TURNO') {
+          } else if (modalidadAsignacion === 'turno') {
             if (horarioLower === 'nocturno' || horarioLower === 'n') {
               modalidad = 'TURNO_NOCTURNO'
               codigoConcepto = 'P013'

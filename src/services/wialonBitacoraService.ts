@@ -57,7 +57,7 @@ export interface BitacoraRegistroTransformado {
   gnc_cargado: boolean
   lavado_realizado: boolean
   nafta_cargada: boolean
-  tipo_turno?: string | null // TURNO, CARGO - viene de asignaciones
+  tipo_turno?: string | null // turno, a_cargo - viene de asignaciones
   turno_indicador?: string | null // D, N - indicador diurno/nocturno
 }
 
@@ -82,7 +82,7 @@ interface WialonBitacoraRow {
   lavado_realizado: boolean
   nafta_cargada: boolean
   horario: string | null // 'diurno' | 'nocturno' | 'todo_dia'
-  vehiculo_modalidad: string | null // 'TURNO' | 'A_CARGO'
+  vehiculo_modalidad: string | null // 'turno' | 'a_cargo'
   created_at: string
 }
 
@@ -328,8 +328,7 @@ export const wialonBitacoraService = {
       let turnoIndicador: string | null = null
 
       if (row.vehiculo_modalidad) {
-        // Normalize A_CARGO -> CARGO for display consistency
-        tipoTurno = row.vehiculo_modalidad === 'A_CARGO' ? 'CARGO' : row.vehiculo_modalidad
+        tipoTurno = row.vehiculo_modalidad === 'a_cargo' ? 'a_cargo' : row.vehiculo_modalidad
       }
       if (row.horario) {
         turnoIndicador = row.horario === 'diurno' ? 'diurno' : row.horario === 'nocturno' ? 'nocturno' : 'todo_dia'

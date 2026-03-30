@@ -122,7 +122,7 @@ export function DriverDetailModal({ driver, onClose, onDriverUpdate, accionesImp
     if (driver.asignacion_info) {
       const { modalidad, turno_conductor } = driver.asignacion_info;
       
-      if (modalidad === 'CARGO') {
+      if (modalidad === 'todo_dia') {
         return { icon: <Briefcase size={14} className="text-purple-500" />, label: 'A Cargo' };
       }
       

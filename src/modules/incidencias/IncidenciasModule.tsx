@@ -3992,7 +3992,7 @@ function IncidenciaForm({ formData, setFormData, estados, vehiculos, conductores
       const conductoresData: ConductorAsignado[] = []
       for (const asig of (data || [])) {
         const asigConductores = (asig as any).asignaciones_conductores || []
-        const esAsignacionTurno = (asig as any).horario === 'TURNO'
+        const esAsignacionTurno = (asig as any).horario === 'turno'
         
         for (const ac of asigConductores) {
           if (ac.conductores) {

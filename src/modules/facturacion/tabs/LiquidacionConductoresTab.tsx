@@ -385,8 +385,8 @@ export function LiquidacionConductoresTab() {
       const diasTrabajados = Math.max(diasUnicos.size, 1) // Mínimo 1 día
 
       // Obtener tipo alquiler y valores
-      const tipoAlquiler = (asignacion as any)?.horario || 'CARGO'
-      const valorAlquilerSemanal = tipoAlquiler === 'CARGO'
+      const tipoAlquiler = (asignacion as any)?.horario || 'todo_dia'
+      const valorAlquilerSemanal = tipoAlquiler === 'todo_dia'
         ? FACTURACION_CONFIG.ALQUILER_CARGO
         : FACTURACION_CONFIG.ALQUILER_TURNO
 
