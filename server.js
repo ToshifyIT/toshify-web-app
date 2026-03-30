@@ -194,10 +194,10 @@ app.post('/api/cabify-efectivo', async (req, res) => {
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       body: new URLSearchParams({
         grant_type: 'password',
-        client_id: process.env.CABIFY_CLIENT_ID || 'd14cdae660ad4817a6b20542a61cf5b1',
-        client_secret: process.env.CABIFY_CLIENT_SECRET || 'ebZ45Oj3ln9W5tFC',
-        username: process.env.CABIFY_USERNAME || 'admin.log2@toshify.com.ar',
-        password: process.env.CABIFY_PASSWORD || 'tOSHIBASE2026.',
+        client_id: process.env.CABIFY_CLIENT_ID || process.env.VITE_CABIFY_CLIENT_ID || 'd14cdae660ad4817a6b20542a61cf5b1',
+        client_secret: process.env.CABIFY_CLIENT_SECRET || process.env.VITE_CABIFY_CLIENT_SECRET || 'ebZ45Oj3ln9W5tFC',
+        username: process.env.CABIFY_USERNAME || process.env.VITE_CABIFY_USERNAME || 'admin.log2@toshify.com.ar',
+        password: process.env.CABIFY_PASSWORD || process.env.VITE_CABIFY_PASSWORD || 'tOSHIBASE2026.',
       }),
     })
 
