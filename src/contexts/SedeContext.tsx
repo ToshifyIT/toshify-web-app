@@ -107,8 +107,8 @@ export function SedeProvider({ children }: { children: ReactNode }) {
 
         setSedeUsuario(sedeDelUsuario)
 
-        // Recuperar sede guardada en localStorage
-        const storedSedeId = localStorage.getItem(SEDE_KEY)
+        // Recuperar sede guardada en localStorage (solo si puede cambiar de sede)
+        const storedSedeId = puedeCambiarSede ? localStorage.getItem(SEDE_KEY) : null
         if (storedSedeId) {
           if (storedSedeId === TODAS_VALUE && puedeVerTodasSedes) {
             setSedeActual(null)
