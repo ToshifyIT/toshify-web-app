@@ -761,8 +761,9 @@ export function ReporteFacturacionTab() {
           }
           cursorAc.setDate(cursorAc.getDate() + 1)
         }
-        // Extraer hora de entrega real del timestamp original (padre = entrega del vehículo)
-        const rawTimestampEntrega = asignacion.fecha_inicio || ac.fecha_inicio || ''
+        // Extraer hora de entrega real del timestamp original (asignacion.fecha_inicio = entrega real)
+        // No usar ac.fecha_inicio como fallback: si no hay entrega real, no hay hora conocida
+        const rawTimestampEntrega = asignacion.fecha_inicio || ''
         const horaEntrega = rawTimestampEntrega ? toArgTime(rawTimestampEntrega) : undefined
 
         historial.push({ fechaInicio: acInicioStr, fechaFin: acFinStr, padreEstado: estadoPadre, horario, dias: diasContados, nota: diasContados > 0 ? `${format(efectivoInicio, 'dd/MM')} → ${format(efectivoFin, 'dd/MM')}` : 'Días ya cubiertos', horaEntrega, nuevaEnSemana: acInicio >= semanaInicio, patente: patenteAsig })
@@ -1641,7 +1642,8 @@ export function ReporteFacturacionTab() {
         //   CARGO:    entrega después de hora_corte_cargo → descuento medio turno
         //   NOCTURNO: sin descuento
         if ((modalidad === 'TURNO_DIURNO' || modalidad === 'CARGO') && acInicio >= fechaInicioSemana && !alertasProrrateoVP.has(ac.conductor_id)) {
-          const rawTimestamp = asignacion.fecha_inicio || ac.fecha_inicio
+          // Solo usar fecha_inicio del padre (entrega real) — no el fallback del conductor
+          const rawTimestamp = asignacion.fecha_inicio
           if (rawTimestamp) {
             const hora = getArgHour(rawTimestamp)
             const horaStr = toArgTime(rawTimestamp)
@@ -2740,7 +2742,8 @@ export function ReporteFacturacionTab() {
             ? 'TURNO_NOCTURNO'
             : 'TURNO_DIURNO'
         if ((modalidadDescR === 'TURNO_DIURNO' || modalidadDescR === 'CARGO') && acInicio >= fechaInicioSemanaRecalc && !descuentosPorHoraRecalc.has(ac.conductor_id)) {
-          const rawTs = asignacion.fecha_inicio || ac.fecha_inicio
+          // Solo usar fecha_inicio del padre (entrega real) — no el fallback del conductor
+          const rawTs = asignacion.fecha_inicio
           if (rawTs) {
             const horaR = getArgHour(rawTs)
             if (modalidadDescR === 'TURNO_DIURNO') {
