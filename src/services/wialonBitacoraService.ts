@@ -315,7 +315,7 @@ export const wialonBitacoraService = {
       query = query.limit(options.limit)
     }
 
-    const { data, error, count } = await query
+    const { data, error } = await query
 
     if (error) {
       throw new Error(`Error obteniendo bitácora: ${error.message}`)
