@@ -274,6 +274,7 @@ export function VisitasCalendario({
         scrollToTime={getNowInArgentina()}
         defaultView="week"
         popup
+        popupOffset={10}
         showMultiDayTimes
       />
 
