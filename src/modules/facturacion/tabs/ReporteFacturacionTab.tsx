@@ -7846,7 +7846,8 @@ export function ReporteFacturacionTab() {
         total_conductores: vistaPreviaData.length,
         total_proyectado: vistaPreviaData.reduce((sum, f) => sum + (f.proyectado_alquiler || 0), 0),
         total_cargos: vistaPreviaData.reduce((sum, f) => sum + f.subtotal_cargos + Math.max(0, f.saldo_anterior), 0),
-        total_descuentos: vistaPreviaData.reduce((sum, f) => sum + f.subtotal_descuentos, 0),
+        // Incluir saldos negativos (créditos a favor del conductor) en descuentos para que Cargos - Descuentos = Neto
+        total_descuentos: vistaPreviaData.reduce((sum, f) => sum + f.subtotal_descuentos + Math.max(0, -(f.saldo_anterior || 0)), 0),
         total_neto: vistaPreviaData.reduce((sum, f) => sum + f.total_a_pagar, 0),
         conductores_deben: vistaPreviaData.filter(f => f.total_a_pagar > 0).length,
         conductores_favor: vistaPreviaData.filter(f => f.total_a_pagar <= 0).length
@@ -7858,7 +7859,8 @@ export function ReporteFacturacionTab() {
       total_conductores: periodo.total_conductores,
       total_proyectado: facturaciones.reduce((sum, f) => sum + (f.proyectado_alquiler || 0), 0),
       total_cargos: facturaciones.reduce((sum, f) => sum + (f.subtotal_cargos || 0) + Math.max(0, f.saldo_anterior || 0), 0),
-      total_descuentos: facturaciones.reduce((sum, f) => sum + (f.subtotal_descuentos || 0), 0),
+      // Incluir saldos negativos (créditos a favor del conductor) en descuentos para que Cargos - Descuentos = Neto
+      total_descuentos: facturaciones.reduce((sum, f) => sum + (f.subtotal_descuentos || 0) + Math.max(0, -(f.saldo_anterior || 0)), 0),
       total_neto: facturaciones.reduce((sum, f) => sum + (f.total_a_pagar || 0), 0),
       conductores_deben: facturaciones.filter(f => f.total_a_pagar > 0).length,
       conductores_favor: facturaciones.filter(f => f.total_a_pagar <= 0).length
@@ -7923,12 +7925,14 @@ export function ReporteFacturacionTab() {
         html: (() => {
           const tickets = src.reduce((s, f) => s + (f.monto_tickets_favor || 0), 0)
           const otrosDesc = src.reduce((s, f) => s + (f.subtotal_descuentos || 0) - (f.monto_tickets_favor || 0), 0)
-          const total = src.reduce((s, f) => s + (f.subtotal_descuentos || 0), 0)
+          const saldosNeg = src.reduce((s, f) => s + Math.max(0, -((f.saldo_anterior || 0))), 0)
+          const total = src.reduce((s, f) => s + (f.subtotal_descuentos || 0) + Math.max(0, -(f.saldo_anterior || 0)), 0)
           return `<div style="text-align:left;font-size:13px;">
             <p>Suma de todos los descuentos/créditos:</p>
             <table style="width:100%;border-collapse:collapse;">
               <tr><td>P004 - Tickets a favor</td><td style="text-align:right"><b>${formatCurrency(tickets)}</b></td></tr>
               <tr><td>Otros descuentos</td><td style="text-align:right"><b>${formatCurrency(otrosDesc)}</b></td></tr>
+              ${saldosNeg > 0 ? `<tr><td>Saldos a favor (crédito)</td><td style="text-align:right"><b>${formatCurrency(saldosNeg)}</b></td></tr>` : ''}
               <tr style="border-top:2px solid #ccc;"><td><b>TOTAL DESCUENTOS</b></td><td style="text-align:right"><b>${formatCurrency(total)}</b></td></tr>
             </table>
           </div>`
