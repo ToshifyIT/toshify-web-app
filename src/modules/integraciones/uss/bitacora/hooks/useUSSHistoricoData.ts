@@ -195,6 +195,8 @@ export function useUSSHistoricoData(sedeId?: string | null) {
           if (!m.conductorId) return true;
           const horarioAsignado = horarioMap.get(m.conductorId);
           if (!horarioAsignado || horarioAsignado === 'todo_dia') return true;
+          // Si wialon no reportó horario (null → 'todo_dia'), no filtrar
+          if (!m.horario || m.horario === 'todo_dia') return true;
           // Solo mostrar si el horario de la marcación coincide con el asignado
           return m.horario === horarioAsignado;
         });
