@@ -3612,18 +3612,16 @@ export function ReporteFacturacionTab() {
         ))
       }
 
-      Swal.close()
-      setTimeout(() => {
-        Swal.fire({
-          icon: 'success',
-          title: `Efectivo ${data.enabled ? 'activado' : 'desactivado'}`,
-          text: `Se ${data.enabled ? 'activó' : 'desactivó'} el efectivo de ${conductor_nombre}`,
-          timer: 2500,
-          showConfirmButton: false,
-        })
-      }, 100)
+      await Swal.fire({
+        icon: 'success',
+        title: `Efectivo ${data.enabled ? 'activado' : 'desactivado'}`,
+        text: `Se ${data.enabled ? 'activó' : 'desactivó'} el efectivo de ${conductor_nombre}`,
+        timer: 2500,
+        showConfirmButton: false,
+        didOpen: () => { Swal.hideLoading() },
+      })
     } catch (error: any) {
-      Swal.fire('Error', `No se pudo ${nuevaAccion} el efectivo: ${error.message}`, 'error')
+      await Swal.fire({ icon: 'error', title: 'Error', text: `No se pudo ${nuevaAccion} el efectivo: ${error.message}` })
     }
   }
 
