@@ -244,6 +244,9 @@ export function ProgramacionModule() {
   const [showMensajeModal, setShowMensajeModal] = useState(false)
   const [mensajeModalProg, setMensajeModalProg] = useState<ProgramacionOnboardingCompleta | null>(null)
 
+  // IDs de conductores que están de baja (para mostrar badge en preview)
+  const [conductoresBajaIds, setConductoresBajaIds] = useState<Set<string>>(new Set())
+
   // Handlers para cerrar modales
   const handleCloseQuickEdit = () => {
     setShowQuickEdit(false)
@@ -252,6 +255,32 @@ export function ProgramacionModule() {
 
   const handleClosePreview = () => {
     setPreviewProgramacion(null)
+    setConductoresBajaIds(new Set())
+  }
+
+  const handleOpenPreview = async (prog: ProgramacionOnboardingCompleta) => {
+    setPreviewProgramacion(prog)
+    // Consultar si los conductores asignados están de baja
+    const ids = [prog.conductor_id, prog.conductor_diurno_id, prog.conductor_nocturno_id].filter(Boolean) as string[]
+    if (ids.length === 0) return
+    try {
+      const { data } = await supabase
+        .from('conductores')
+        .select('id, conductores_estados(codigo)')
+        .in('id', ids)
+      if (data) {
+        const bajaIds = new Set<string>()
+        for (const c of data) {
+          const estado = (c as any).conductores_estados
+          if (estado && typeof estado.codigo === 'string' && estado.codigo.toLowerCase().includes('baja')) {
+            bajaIds.add(c.id)
+          }
+        }
+        setConductoresBajaIds(bajaIds)
+      }
+    } catch {
+      // silently ignored
+    }
   }
 
   const handleCloseMensaje = () => {
@@ -1451,7 +1480,7 @@ export function ProgramacionModule() {
           <button
             className="prog-btn prog-btn-view"
             title="Ver detalles"
-            onClick={() => setPreviewProgramacion(row.original)}
+            onClick={() => handleOpenPreview(row.original)}
           >
             <Eye size={16} />
           </button>
@@ -1733,7 +1762,7 @@ export function ProgramacionModule() {
           <button
             className="prog-btn prog-btn-view"
             title="Ver detalles"
-            onClick={() => setPreviewProgramacion(row.original)}
+            onClick={() => handleOpenPreview(row.original)}
           >
             <Eye size={18} />
           </button>
@@ -2423,7 +2452,12 @@ export function ProgramacionModule() {
                     <div className="prog-modal-grid">
                       <div>
                         <label>Conductor Diurno</label>
-                        <p>{previewProgramacion.conductor_diurno_nombre || 'Sin asignar'}</p>
+                        <p>
+                          {previewProgramacion.conductor_diurno_nombre || 'Sin asignar'}
+                          {previewProgramacion.conductor_diurno_id && conductoresBajaIds.has(previewProgramacion.conductor_diurno_id) && (
+                            <span style={{ marginLeft: 8, padding: '2px 8px', fontSize: '11px', fontWeight: 600, color: '#fff', background: '#DC2626', borderRadius: '10px' }}>De baja</span>
+                          )}
+                        </p>
                       </div>
                       {previewProgramacion.conductor_diurno_dni && (
                         <div>
@@ -2435,7 +2469,12 @@ export function ProgramacionModule() {
                     <div className="prog-modal-grid" style={{ marginTop: 8 }}>
                       <div>
                         <label>Conductor Nocturno</label>
-                        <p>{previewProgramacion.conductor_nocturno_nombre || 'Sin asignar'}</p>
+                        <p>
+                          {previewProgramacion.conductor_nocturno_nombre || 'Sin asignar'}
+                          {previewProgramacion.conductor_nocturno_id && conductoresBajaIds.has(previewProgramacion.conductor_nocturno_id) && (
+                            <span style={{ marginLeft: 8, padding: '2px 8px', fontSize: '11px', fontWeight: 600, color: '#fff', background: '#DC2626', borderRadius: '10px' }}>De baja</span>
+                          )}
+                        </p>
                       </div>
                       {previewProgramacion.conductor_nocturno_dni && (
                         <div>
@@ -2449,7 +2488,12 @@ export function ProgramacionModule() {
                   <div className="prog-modal-grid">
                     <div>
                       <label>Nombre</label>
-                      <p>{previewProgramacion.conductor_display || previewProgramacion.conductor_nombre || '-'}</p>
+                      <p>
+                        {previewProgramacion.conductor_display || previewProgramacion.conductor_nombre || '-'}
+                        {previewProgramacion.conductor_id && conductoresBajaIds.has(previewProgramacion.conductor_id) && (
+                          <span style={{ marginLeft: 8, padding: '2px 8px', fontSize: '11px', fontWeight: 600, color: '#fff', background: '#DC2626', borderRadius: '10px' }}>De baja</span>
+                        )}
+                      </p>
                     </div>
                     {previewProgramacion.conductor_dni && (
                       <div>

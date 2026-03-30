@@ -1030,17 +1030,17 @@ export function ConductoresModule() {
       .eq('asignacion_id', asignacion.id)
       .in('estado', ['asignado', 'activo']);
 
-    // 3. Devolver vehículo a DISPONIBLE
-    const { data: estadoDisponible } = await (supabase as any)
+    // 3. Devolver vehículo a PKG_ON_BASE
+    const { data: estadoPkgOn } = await (supabase as any)
       .from('vehiculos_estados')
       .select('id')
-      .eq('codigo', 'DISPONIBLE')
+      .eq('codigo', 'PKG_ON_BASE')
       .single();
 
-    if (estadoDisponible && asignacion.vehiculo_id) {
+    if (estadoPkgOn && asignacion.vehiculo_id) {
       await (supabase as any)
         .from('vehiculos')
-        .update({ estado_id: estadoDisponible.id })
+        .update({ estado_id: estadoPkgOn.id })
         .eq('id', asignacion.vehiculo_id);
     }
 
@@ -1050,12 +1050,12 @@ export function ConductoresModule() {
       .delete()
       .eq('asignacion_conductor_id', asignacionConductor.id);
 
-    // Registrar historial para vehículo (vuelve a DISPONIBLE)
+    // Registrar historial para vehículo (vuelve a PKG_ON_BASE)
     if (asignacion.vehiculo_id) {
       registrarHistorialVehiculo({
         vehiculoId: asignacion.vehiculo_id,
         tipoEvento: 'asignacion_finalizada',
-        estadoNuevo: 'DISPONIBLE',
+        estadoNuevo: 'PKG_ON_BASE',
         detalles: {
           asignacion_id: asignacion.id,
           asignacion_codigo: asignacion.codigo,
@@ -1169,26 +1169,26 @@ export function ConductoresModule() {
       .neq('id', asignacionConductor.id)
       .in('estado', ['asignado', 'activo']);
 
-    // Devolver vehículo a DISPONIBLE
-    const { data: estadoDisponible } = await (supabase as any)
+    // Devolver vehículo a PKG_ON_BASE
+    const { data: estadoPkgOn } = await (supabase as any)
       .from('vehiculos_estados')
       .select('id')
-      .eq('codigo', 'DISPONIBLE')
+      .eq('codigo', 'PKG_ON_BASE')
       .single();
 
-    if (estadoDisponible && asignacion.vehiculo_id) {
+    if (estadoPkgOn && asignacion.vehiculo_id) {
       await (supabase as any)
         .from('vehiculos')
-        .update({ estado_id: estadoDisponible.id })
+        .update({ estado_id: estadoPkgOn.id })
         .eq('id', asignacion.vehiculo_id);
     }
 
-    // Registrar historial para vehículo (vuelve a DISPONIBLE)
+    // Registrar historial para vehículo (vuelve a PKG_ON_BASE)
     if (asignacion.vehiculo_id) {
       registrarHistorialVehiculo({
         vehiculoId: asignacion.vehiculo_id,
         tipoEvento: 'asignacion_finalizada',
-        estadoNuevo: 'DISPONIBLE',
+        estadoNuevo: 'PKG_ON_BASE',
         detalles: {
           asignacion_id: asignacion.id,
           asignacion_codigo: asignacion.codigo,
@@ -1313,11 +1313,11 @@ export function ConductoresModule() {
       const fechaBaja = formData.fecha_terminacion || ahora.split('T')[0];
       const motivoBaja = `[BAJA CONDUCTOR] ${conductorNombre} (${fechaBaja}). Último día de facturación: ${fechaBaja}`;
 
-      // Obtener estado DISPONIBLE una sola vez para todos los vehículos
-      const { data: estadoDisponible } = await (supabase as any)
+      // Obtener estado PKG_ON_BASE una sola vez para todos los vehículos
+      const { data: estadoPkgOn } = await (supabase as any)
         .from('vehiculos_estados')
         .select('id')
-        .eq('codigo', 'DISPONIBLE')
+        .eq('codigo', 'PKG_ON_BASE')
         .single();
 
       for (const asignacionConductor of affectedAssignments) {
@@ -1353,34 +1353,7 @@ export function ConductoresModule() {
             .eq('id', asignacion.id);
           if (errNota) throw new Error(`Error al agregar nota vacante: ${errNota.message}`);
 
-          // Vehículo a DISPONIBLE
-          if (estadoDisponible && asignacion.vehiculo_id) {
-            await (supabase as any)
-              .from('vehiculos')
-              .update({ estado_id: estadoDisponible.id })
-              .eq('id', asignacion.vehiculo_id);
-          }
-
-          // Historial vehículo
-          if (asignacion.vehiculo_id) {
-            registrarHistorialVehiculo({
-              vehiculoId: asignacion.vehiculo_id,
-              tipoEvento: 'conductor_removido',
-              estadoNuevo: 'DISPONIBLE',
-              detalles: {
-                asignacion_id: asignacion.id,
-                asignacion_codigo: asignacion.codigo,
-                patente: asignacion.vehiculos?.patente,
-                conductor_baja: conductorNombre,
-                modo: 'TURNO',
-                turno_vacante: turnoVacante,
-                fecha_baja: fechaBaja,
-                ultimo_dia_facturacion: fechaBaja,
-                asignacion_continua: true,
-              },
-              modulo: 'conductores',
-            });
-          }
+          // Vehículo mantiene su estado (EN_USO) porque la asignación sigue activa
 
           // Historial conductor
           registrarHistorialConductor({
@@ -1424,11 +1397,11 @@ export function ConductoresModule() {
             .neq('id', asignacionConductor.id)
             .in('estado', ['asignado', 'activo']);
 
-          // Vehículo a DISPONIBLE
-          if (estadoDisponible && asignacion.vehiculo_id) {
+          // Vehículo a PKG_ON_BASE
+          if (estadoPkgOn && asignacion.vehiculo_id) {
             await (supabase as any)
               .from('vehiculos')
-              .update({ estado_id: estadoDisponible.id })
+              .update({ estado_id: estadoPkgOn.id })
               .eq('id', asignacion.vehiculo_id);
           }
 
@@ -1437,7 +1410,7 @@ export function ConductoresModule() {
             registrarHistorialVehiculo({
               vehiculoId: asignacion.vehiculo_id,
               tipoEvento: 'asignacion_finalizada',
-              estadoNuevo: 'DISPONIBLE',
+              estadoNuevo: 'PKG_ON_BASE',
               detalles: {
                 asignacion_id: asignacion.id,
                 asignacion_codigo: asignacion.codigo,
@@ -4088,7 +4061,7 @@ function ModalConfirmBaja({
                 {cargoAssignments.length} asignación(es)
               </h4>
               <p className="info-text">
-                Estas asignaciones serán <strong>finalizadas</strong> y los vehículos volverán a estado DISPONIBLE.
+                Estas asignaciones serán <strong>finalizadas</strong> y los vehículos volverán a estado PKG ON.
               </p>
               <div className="assignment-items">
                 {cargoAssignments.map((a: any) => (

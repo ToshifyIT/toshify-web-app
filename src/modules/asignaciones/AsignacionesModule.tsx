@@ -389,7 +389,7 @@ export function AsignacionesModule() {
             vehiculos (patente, marca, modelo),
             asignaciones_conductores (
               id, conductor_id, estado, horario, confirmado, fecha_confirmacion, documento,
-              conductores (nombres, apellidos, numero_licencia)
+              conductores (nombres, apellidos, numero_licencia, estado_id, conductores_estados(codigo))
             )
           `))
           .or(`estado.in.(programado,activa),created_at.gte.${fechaLimiteStr}`)
@@ -544,7 +544,7 @@ export function AsignacionesModule() {
             vehiculos (patente, marca, modelo),
             asignaciones_conductores (
               id, conductor_id, estado, horario, confirmado, fecha_confirmacion, documento,
-              conductores (nombres, apellidos, numero_licencia)
+              conductores (nombres, apellidos, numero_licencia, estado_id, conductores_estados(codigo))
             )
           `))
           .or(`estado.in.(programado,activa),created_at.gte.${fechaLimiteStr}`)
@@ -1163,16 +1163,16 @@ export function AsignacionesModule() {
         .eq('id', id)
       if (asignacionError) throw asignacionError
 
-      // 4. Cambiar estado del vehículo a DISPONIBLE
+      // 4. Cambiar estado del vehículo a PKG_ON_BASE
       if (asignacion?.vehiculo_id) {
-        const { data: estadoDisponible } = await supabase
+        const { data: estadoPkgOn } = await supabase
           .from('vehiculos_estados')
           .select('id')
-          .eq('codigo', 'DISPONIBLE')
+          .eq('codigo', 'PKG_ON_BASE')
           .single() as { data: { id: string } | null }
 
-        if (estadoDisponible) {
-          await (supabase as any).from('vehiculos').update({ estado_id: estadoDisponible.id }).eq('id', asignacion.vehiculo_id)
+        if (estadoPkgOn) {
+          await (supabase as any).from('vehiculos').update({ estado_id: estadoPkgOn.id }).eq('id', asignacion.vehiculo_id)
         }
       }
 
@@ -1183,7 +1183,7 @@ export function AsignacionesModule() {
         registrarHistorialVehiculo({
           vehiculoId: asignacion.vehiculo_id,
           tipoEvento: 'eliminacion_asignacion',
-          estadoNuevo: 'DISPONIBLE',
+          estadoNuevo: 'PKG_ON_BASE',
           detalles: { patente: asignacion.vehiculos?.patente, codigo: asignacion.codigo },
           modulo: 'asignaciones',
           sedeId: sedeActualId,
@@ -1820,29 +1820,9 @@ export function AsignacionesModule() {
         .update({ estado: 'cancelada', notas: `${selectedAsignacion.notas || ''}\n\n[CANCELADA] Motivo: ${cancelMotivo}`, updated_by: profile?.full_name || 'Sistema' })
         .eq('id', selectedAsignacion.id)
 
-      const { data: estadoDisponible } = await supabase
-        .from('vehiculos_estados')
-        .select('id')
-        .eq('codigo', 'DISPONIBLE')
-        .single() as { data: { id: string } | null }
-
-      if (estadoDisponible) {
-        await (supabase as any).from('vehiculos').update({ estado_id: estadoDisponible.id }).eq('id', selectedAsignacion.vehiculo_id)
-      }
+      // Cancelar no modifica el estado del vehículo
 
       showSuccess('Cancelada', 'La programación ha sido cancelada')
-
-      // Historial: asignación cancelada - vehículo a DISPONIBLE
-      if (selectedAsignacion.vehiculo_id) {
-        registrarHistorialVehiculo({
-          vehiculoId: selectedAsignacion.vehiculo_id,
-          tipoEvento: 'asignacion_cancelada',
-          estadoNuevo: 'DISPONIBLE',
-          detalles: { patente: selectedAsignacion.vehiculos?.patente, codigo: selectedAsignacion.codigo, motivo: cancelMotivo },
-          modulo: 'asignaciones',
-          sedeId: sedeActualId,
-        })
-      }
       // Historial: conductores cancelados
       if (selectedAsignacion.asignaciones_conductores) {
         for (const ac of selectedAsignacion.asignaciones_conductores) {
@@ -3068,6 +3048,9 @@ export function AsignacionesModule() {
                     <div className="asig-conductor-card">
                       <p className="asig-conductor-card-name">
                         {(viewAsignacion as any)._conductorNombre || (viewAsignacion.asignaciones_conductores?.[0]?.conductores ? `${viewAsignacion.asignaciones_conductores[0].conductores?.nombres || ''} ${viewAsignacion.asignaciones_conductores[0].conductores?.apellidos || ''}`.trim() : '-')}
+                        {(viewAsignacion.asignaciones_conductores?.[0]?.conductores as any)?.conductores_estados?.codigo?.toLowerCase().includes('baja') && (
+                          <span style={{ marginLeft: 8, padding: '2px 8px', fontSize: '11px', fontWeight: 600, color: '#fff', background: '#DC2626', borderRadius: '10px', verticalAlign: 'middle' }}>De baja</span>
+                        )}
                       </p>
                       <p className="asig-conductor-card-info">Turno: <strong>{viewAsignacion.horario === 'CARGO' ? 'A CARGO' : viewAsignacion.horario}</strong></p>
                       {viewAsignacion.asignaciones_conductores?.[0]?.documento && (
@@ -3176,6 +3159,9 @@ export function AsignacionesModule() {
                           <div key={ac.id} className="asig-conductor-card">
                             <p className="asig-conductor-card-name">
                               {ac.conductores?.nombres || '-'} {ac.conductores?.apellidos || ''}
+                              {(ac.conductores as any)?.conductores_estados?.codigo?.toLowerCase().includes('baja') && (
+                                <span style={{ marginLeft: 8, padding: '2px 8px', fontSize: '11px', fontWeight: 600, color: '#fff', background: '#DC2626', borderRadius: '10px', verticalAlign: 'middle' }}>De baja</span>
+                              )}
                             </p>
                             <p className="asig-conductor-card-info">Licencia: {ac.conductores?.numero_licencia || '-'}</p>
                             {ac.horario !== 'todo_dia' && (
