@@ -5,7 +5,7 @@ import { LoadingOverlay } from '../ui/LoadingOverlay'
 import type { UserWithRole, Role } from '../../types/database.types'
 import { type ColumnDef } from '@tanstack/react-table'
 import { DataTable } from '../ui/DataTable/DataTable'
-import { Users, UserCheck, UserX, Shield, KeyRound, Pencil, ToggleLeft, ToggleRight } from 'lucide-react'
+import { Users, UserCheck, UserX, Shield, KeyRound, Pencil, ToggleLeft, ToggleRight, Building2 } from 'lucide-react'
 import Swal from 'sweetalert2'
 import { showSuccess } from '../../utils/toast'
 import './UserManagement.css'
@@ -14,6 +14,7 @@ import './AdminStyles.css'
 export function UserManagement() {
   const [users, setUsers] = useState<UserWithRole[]>([])
   const [roles, setRoles] = useState<Role[]>([])
+  const [sedes, setSedes] = useState<{ id: string; nombre: string }[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [showCreateModal, setShowCreateModal] = useState(false)
@@ -39,9 +40,11 @@ export function UserManagement() {
       const [
         { data: usersData, error: usersError },
         { data: rolesData, error: rolesError },
+        { data: sedesData },
       ] = await Promise.all([
         supabase.from('user_profiles').select('*, roles(*)').order('created_at', { ascending: false }),
         supabase.from('roles').select('*').order('name'),
+        (supabase as any).from('sedes').select('id, nombre').eq('activa', true).order('nombre'),
       ])
 
       if (usersError) throw usersError
@@ -49,6 +52,7 @@ export function UserManagement() {
 
       setUsers(usersData as UserWithRole[])
       setRoles(rolesData)
+      if (sedesData) setSedes(sedesData as { id: string; nombre: string }[])
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : String(err)
       setError(message)
@@ -186,6 +190,52 @@ export function UserManagement() {
         text: 'Error al cambiar estado: ' + message
       })
     }
+  }
+
+  const configurarSede = async (user: UserWithRole) => {
+    const currentSedeId = (user as any).sede_id || ''
+    const puedeCambiar = (user as any).puede_cambiar_sede !== false
+
+    const sedeOptions = sedes.map(s => `<option value="${s.id}" ${s.id === currentSedeId ? 'selected' : ''}>${s.nombre}</option>`).join('')
+
+    const { value: formValues } = await Swal.fire({
+      title: 'Configurar Sede',
+      html: `
+        <div style="text-align:left; display:flex; flex-direction:column; gap:16px; margin-top:8px">
+          <div>
+            <label style="font-size:13px;font-weight:600;color:#374151;display:block;margin-bottom:6px">Sede por defecto</label>
+            <select id="swal-sede" style="width:100%;padding:8px 12px;border:1px solid #d1d5db;border-radius:8px;font-size:14px">
+              <option value="">Sin sede asignada</option>
+              ${sedeOptions}
+            </select>
+          </div>
+          <div style="display:flex;align-items:center;gap:12px">
+            <label style="font-size:13px;font-weight:600;color:#374151;flex:1">Puede cambiar de sede</label>
+            <input type="checkbox" id="swal-puede" ${puedeCambiar ? 'checked' : ''} style="width:16px;height:16px;cursor:pointer" />
+          </div>
+        </div>
+      `,
+      showCancelButton: true,
+      confirmButtonText: 'Guardar',
+      cancelButtonText: 'Cancelar',
+      preConfirm: () => ({
+        sedeId: (document.getElementById('swal-sede') as HTMLSelectElement).value,
+        puedeCambiar: (document.getElementById('swal-puede') as HTMLInputElement).checked,
+      }),
+    })
+
+    if (!formValues) return
+
+    await supabase.from('user_profiles').update({
+      sede_id: formValues.sedeId || null,
+      puede_cambiar_sede: formValues.puedeCambiar,
+    }).eq('id', user.id)
+
+    setUsers(prev => prev.map(u => u.id === user.id
+      ? { ...u, sede_id: formValues.sedeId || null, puede_cambiar_sede: formValues.puedeCambiar } as any
+      : u
+    ))
+    showSuccess('Configuración de sede guardada')
   }
 
   const editUserName = async (userId: string, currentName: string) => {
@@ -520,6 +570,14 @@ export function UserManagement() {
                 data-tooltip="Editar nombre"
               >
                 <Pencil size={15} />
+              </button>
+              <button
+                className="dt-btn-action"
+                onClick={() => configurarSede(row.original)}
+                data-tooltip="Configurar sede"
+                style={{ color: 'var(--color-primary)' }}
+              >
+                <Building2 size={15} />
               </button>
               <button
                 className="dt-btn-action dt-btn-warning"
