@@ -2237,7 +2237,19 @@ export function ConductoresModule() {
             badgeClass = "dt-badge dt-badge-solid-green";
           }
 
-          return <span className={badgeClass}>{getEstadoConductorDisplay(estado)}</span>;
+          const fechaTerminacion = (row.original as any).fecha_terminacion;
+          const esBaja = codigoLower === "baja";
+
+          return (
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: '2px' }}>
+              <span className={badgeClass}>{getEstadoConductorDisplay(estado)}</span>
+              {esBaja && fechaTerminacion && (
+                <span style={{ fontSize: '10px', color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>
+                  {new Date(fechaTerminacion + 'T12:00:00').toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: '2-digit' })}
+                </span>
+              )}
+            </div>
+          );
         },
         enableSorting: true,
       },
