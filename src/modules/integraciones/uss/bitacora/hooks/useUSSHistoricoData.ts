@@ -84,15 +84,14 @@ function transformarMarcacion(reg: BitacoraRegistroTransformado): Marcacion {
 
 export function useUSSHistoricoData(sedeId?: string | null) {
   const [dateRange, setDateRange] = useState<USSHistoricoDateRange>(() => {
-    const today = getToday();
+    // Default: Ayer (siempre hay datos; el sync de hoy puede no haber corrido aún)
     const d = new Date();
-    const day = d.getDay();
-    const diff = d.getDate() - day + (day === 0 ? -6 : 1);
-    d.setDate(diff);
+    d.setDate(d.getDate() - 1);
+    const yesterday = toArgentinaDateString(d);
     return {
-      startDate: toArgentinaDateString(d),
-      endDate: today,
-      label: 'Esta semana',
+      startDate: yesterday,
+      endDate: yesterday,
+      label: 'Ayer',
     };
   });
 
@@ -240,8 +239,14 @@ export function useUSSHistoricoData(sedeId?: string | null) {
       case 'week': {
         const d = new Date();
         const day = d.getDay();
+        // Lunes de esta semana
         const diff = d.getDate() - day + (day === 0 ? -6 : 1);
         d.setDate(diff);
+        const thisMondayStr = toArgentinaDateString(d);
+        // Si el lunes de esta semana es hoy (es lunes), retroceder 7 días para incluir semana anterior
+        if (thisMondayStr === today) {
+          d.setDate(d.getDate() - 7);
+        }
         setDateRange({ startDate: toArgentinaDateString(d), endDate: today, label: 'Esta semana' });
         break;
       }

@@ -640,7 +640,7 @@ async function syncBitacora(overrideDate?: string): Promise<{ success: boolean; 
               kilometraje: trip.km,
               estado: calcularEstado(trip.horaCierre, trip.km),
               horario: 'todo_dia',
-              vehiculo_modalidad: asig ? 'A_CARGO' : null,
+              vehiculo_modalidad: asig ? 'a_cargo' : null,
             })
           }
         } else {
@@ -655,7 +655,7 @@ async function syncBitacora(overrideDate?: string): Promise<{ success: boolean; 
             kilometraje: vs.km,
             estado: calcularEstado(vs.horaCierre, vs.km),
             horario: 'todo_dia',
-            vehiculo_modalidad: asig ? 'A_CARGO' : null,
+            vehiculo_modalidad: asig ? 'a_cargo' : null,
           })
         }
         continue
@@ -682,7 +682,7 @@ async function syncBitacora(overrideDate?: string): Promise<{ success: boolean; 
             kilometraje: trip.km,
             estado: calcularEstado(trip.horaCierre, trip.km),
             horario: turno,
-            vehiculo_modalidad: 'TURNO',
+            vehiculo_modalidad: 'turno',
           })
         }
       } else {
@@ -700,7 +700,7 @@ async function syncBitacora(overrideDate?: string): Promise<{ success: boolean; 
             kilometraje: vs.km,
             estado: calcularEstado(vs.horaCierre, vs.km),
             horario: 'todo_dia',
-            vehiculo_modalidad: 'TURNO',
+            vehiculo_modalidad: 'turno',
           })
         } else if (nocturno) {
           records.push({
@@ -713,7 +713,7 @@ async function syncBitacora(overrideDate?: string): Promise<{ success: boolean; 
             kilometraje: vs.km,
             estado: calcularEstado(vs.horaCierre, vs.km),
             horario: 'todo_dia',
-            vehiculo_modalidad: 'TURNO',
+            vehiculo_modalidad: 'turno',
           })
         }
       }
@@ -750,7 +750,7 @@ async function syncBitacora(overrideDate?: string): Promise<{ success: boolean; 
             kilometraje: 0,
             estado: 'Sin Actividad',
             horario: 'todo_dia',
-            vehiculo_modalidad: 'A_CARGO',
+            vehiculo_modalidad: 'a_cargo',
           })
         }
       } else {
@@ -767,7 +767,7 @@ async function syncBitacora(overrideDate?: string): Promise<{ success: boolean; 
               kilometraje: 0,
               estado: 'Sin Actividad',
               horario: 'diurno',
-              vehiculo_modalidad: 'TURNO',
+              vehiculo_modalidad: 'turno',
             })
           } else if (cond.horario === 'nocturno') {
             // Madrugada
@@ -781,7 +781,7 @@ async function syncBitacora(overrideDate?: string): Promise<{ success: boolean; 
               kilometraje: 0,
               estado: 'Sin Actividad',
               horario: 'nocturno',
-              vehiculo_modalidad: 'TURNO',
+              vehiculo_modalidad: 'turno',
             })
             // Noche
             records.push({
@@ -794,7 +794,7 @@ async function syncBitacora(overrideDate?: string): Promise<{ success: boolean; 
               kilometraje: 0,
               estado: 'Sin Actividad',
               horario: 'nocturno',
-              vehiculo_modalidad: 'TURNO',
+              vehiculo_modalidad: 'turno',
             })
           } else {
             // todo_dia
@@ -808,7 +808,7 @@ async function syncBitacora(overrideDate?: string): Promise<{ success: boolean; 
               kilometraje: 0,
               estado: 'Sin Actividad',
               horario: 'todo_dia',
-              vehiculo_modalidad: 'TURNO',
+              vehiculo_modalidad: 'turno',
             })
           }
         }
