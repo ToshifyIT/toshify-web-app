@@ -763,6 +763,56 @@ export function ProgramacionModule() {
 
       if (devError) throw devError
 
+      // Crear visita automática con categoría "Asignaciones"
+      try {
+        const CATEGORIA_ASIGNACIONES_ID = '76514b14-b403-4587-993e-d64bad874594'
+        const ATENDEDOR_IVAN_ID = 'd0a03327-f364-48c8-9940-71d2f2793a9e'
+
+        // Resolver nombre real desde tabla conductores para evitar que quede el DNI
+        let visitanteNombre = conductorNombre || ''
+        let visitanteDni = prog.conductor_dni || prog.conductor_diurno_dni || prog.conductor_nocturno_dni || null
+
+        if (conductorId) {
+          const { data: conductorDB } = await (supabase.from('conductores') as any)
+            .select('nombres, apellidos, numero_dni')
+            .eq('id', conductorId)
+            .single()
+          if (conductorDB) {
+            const nombreReal = `${conductorDB.nombres || ''} ${conductorDB.apellidos || ''}`.trim()
+            if (nombreReal) visitanteNombre = nombreReal
+            if (conductorDB.numero_dni) visitanteDni = conductorDB.numero_dni
+          }
+        }
+
+        if (!visitanteNombre) visitanteNombre = 'Conductor por definir'
+
+        if (prog.fecha_cita) {
+          const soloFechaCita = prog.fecha_cita.split('T')[0]
+          const horaCita = prog.hora_cita && prog.hora_cita.trim() !== ''
+            ? prog.hora_cita.substring(0, 5)
+            : '10:00'
+          const fechaHoraVisita = new Date(`${soloFechaCita}T${horaCita}:00-03:00`).toISOString()
+
+          await (supabase.from('visitas') as any).insert({
+            categoria_id: CATEGORIA_ASIGNACIONES_ID,
+            motivo_id: null,
+            atendedor_id: ATENDEDOR_IVAN_ID,
+            sede_id: prog.sede_id || sedeActualId || sedeUsuario?.id,
+            nombre_visitante: visitanteNombre,
+            dni_visitante: visitanteDni,
+            patente: prog.vehiculo_entregar_patente || null,
+            fecha_hora: fechaHoraVisita,
+            duracion_minutos: 30,
+            nota: `Devolución de Vehículo — ${prog.modalidad || ''} — ${prog.vehiculo_entregar_patente || ''}`,
+            estado: 'pendiente',
+            citador_id: user?.id || null,
+            citador_nombre: profile?.full_name || 'Sistema',
+          })
+        }
+      } catch (_visitaErr) {
+        // No bloquear el flujo principal si falla la creación de visita
+      }
+
       // Marcar programación como completada
       await (supabase.from('programaciones_onboarding') as any)
         .update({
