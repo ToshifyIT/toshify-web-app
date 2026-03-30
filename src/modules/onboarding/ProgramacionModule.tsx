@@ -378,11 +378,13 @@ export function ProgramacionModule() {
 
   const handleEdit = async (prog: ProgramacionOnboardingCompleta) => {
     setEditingProgramacion(prog)
-    setVehiculoSearch('') // Reset busqueda
+    // Inicializar búsquedas con valores actuales como fallback visual
+    // (si el ID no resuelve en la lista, el input muestra estos valores)
+    setVehiculoSearch(prog.vehiculo_entregar_patente || prog.vehiculo_entregar_patente_sistema || '')
     setShowVehiculoDropdown(false)
-    setConductorDiurnoSearch('')
-    setConductorNocturnoSearch('')
-    setConductorSearch('')
+    setConductorDiurnoSearch(prog.conductor_diurno_nombre || '')
+    setConductorNocturnoSearch(prog.conductor_nocturno_nombre || '')
+    setConductorSearch(prog.conductor_nombre || prog.conductor_display || '')
     setShowConductorDiurnoDropdown(false)
     setShowConductorNocturnoDropdown(false)
     setShowConductorDropdown(false)
@@ -447,12 +449,24 @@ export function ProgramacionModule() {
         (!vehiculosProgramados.has(v.id) || v.id === prog.vehiculo_entregar_id)
       )
 
-      setVehiculosDisponibles(vehiculosFiltrados.map((v: any) => ({
+      const listaVehiculos = vehiculosFiltrados.map((v: any) => ({
         id: v.id,
         patente: v.patente,
         marca: v.marca,
         modelo: v.modelo
-      })))
+      }))
+
+      // Inyectar el vehículo actual si no está en la lista filtrada (ej. en reparación/taller)
+      if (prog.vehiculo_entregar_id && !listaVehiculos.find((v: any) => v.id === prog.vehiculo_entregar_id)) {
+        const vehiculoActual = (vehiculosData || []).find((v: any) => v.id === prog.vehiculo_entregar_id)
+        if (vehiculoActual) {
+          listaVehiculos.unshift({ id: vehiculoActual.id, patente: vehiculoActual.patente, marca: vehiculoActual.marca, modelo: vehiculoActual.modelo })
+        } else if (prog.vehiculo_entregar_patente) {
+          listaVehiculos.unshift({ id: prog.vehiculo_entregar_id, patente: prog.vehiculo_entregar_patente, marca: prog.vehiculo_entregar_marca || '', modelo: prog.vehiculo_entregar_modelo || prog.vehiculo_entregar_modelo_sistema || '' })
+        }
+      }
+
+      setVehiculosDisponibles(listaVehiculos)
     } catch {
       // silently ignored
     } finally {
@@ -469,11 +483,27 @@ export function ProgramacionModule() {
 
       if (conductoresError) throw conductoresError
 
-      setConductoresDisponibles((conductoresData || []).map((c: any) => ({
+      const listaConductores = (conductoresData || []).map((c: any) => ({
         id: c.id,
         nombre: `${c.nombres || ''} ${c.apellidos || ''}`.trim(),
         dni: c.numero_dni || ''
-      })))
+      }))
+
+      // Inyectar conductores actuales si no están en la lista (ej. baja, otra sede)
+      const idsEnLista = new Set(listaConductores.map((c: any) => c.id))
+      const conductoresAInyectar = [
+        { id: prog.conductor_diurno_id, nombre: prog.conductor_diurno_nombre, dni: prog.conductor_diurno_dni },
+        { id: prog.conductor_nocturno_id, nombre: prog.conductor_nocturno_nombre, dni: prog.conductor_nocturno_dni },
+        { id: prog.conductor_id, nombre: prog.conductor_nombre || prog.conductor_display, dni: prog.conductor_dni },
+      ]
+      for (const c of conductoresAInyectar) {
+        if (c.id && !idsEnLista.has(c.id) && c.nombre) {
+          listaConductores.unshift({ id: c.id, nombre: c.nombre, dni: c.dni || '' })
+          idsEnLista.add(c.id)
+        }
+      }
+
+      setConductoresDisponibles(listaConductores)
     } catch {
       // silently ignored
     } finally {

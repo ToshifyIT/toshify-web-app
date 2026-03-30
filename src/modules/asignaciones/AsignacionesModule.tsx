@@ -409,7 +409,7 @@ export function AsignacionesModule() {
         // Devoluciones pendientes y completadas
         aplicarFiltroSede((supabase as any)
           .from('devoluciones')
-          .select('id, vehiculo_id, conductor_nombre, programado_por, fecha_programada, fecha_devolucion, estado, observaciones, created_at, programacion_id, vehiculos:vehiculo_id(patente, marca, modelo), programaciones_onboarding:programacion_id(conductor_nombre, conductor_diurno_nombre, conductor_nocturno_nombre, documento_diurno, documento_nocturno, tipo_documento)'))
+          .select('id, vehiculo_id, conductor_nombre, programado_por, fecha_programada, fecha_devolucion, estado, observaciones, created_at, programacion_id, sede_id, vehiculos:vehiculo_id(patente, marca, modelo), programaciones_onboarding:programacion_id(conductor_nombre, conductor_diurno_nombre, conductor_nocturno_nombre, documento_diurno, documento_nocturno, tipo_documento)'))
           .in('estado', ['pendiente', 'completado'])
           .order('fecha_programada', { ascending: true })
       ])
@@ -498,6 +498,7 @@ export function AsignacionesModule() {
           _conductorNombre: conductorNombre,
           _programadoPor: d.programado_por,
           motivoDetalle: { observaciones: d.observaciones, programadoPor: d.programado_por },
+          sede_id: d.sede_id || '',
         }
       })
 
@@ -552,7 +553,7 @@ export function AsignacionesModule() {
           .limit(500),
         aplicarFiltroSede((supabase as any)
           .from('devoluciones')
-          .select('id, vehiculo_id, conductor_nombre, programado_por, fecha_programada, fecha_devolucion, estado, observaciones, created_at, programacion_id, vehiculos:vehiculo_id(patente, marca, modelo), programaciones_onboarding:programacion_id(conductor_nombre, conductor_diurno_nombre, conductor_nocturno_nombre, documento_diurno, documento_nocturno, tipo_documento)'))
+          .select('id, vehiculo_id, conductor_nombre, programado_por, fecha_programada, fecha_devolucion, estado, observaciones, created_at, programacion_id, sede_id, vehiculos:vehiculo_id(patente, marca, modelo), programaciones_onboarding:programacion_id(conductor_nombre, conductor_diurno_nombre, conductor_nocturno_nombre, documento_diurno, documento_nocturno, tipo_documento)'))
           .in('estado', ['pendiente', 'completado'])
           .order('fecha_programada', { ascending: true })
       ])
@@ -629,6 +630,7 @@ export function AsignacionesModule() {
           asignaciones_conductores: doc ? [{ id: d.id, conductor_id: '', estado: 'asignado', horario: horarioReal === 'CARGO' ? 'CARGO' : 'diurno', documento: doc === 'carta_oferta' ? 'CARTA_OFERTA' : doc === 'anexo' ? 'ANEXO' : doc?.toUpperCase() }] : [],
           esDevolucion: true, devolucionId: d.id, _conductorNombre: condNombre, _programadoPor: d.programado_por,
           motivoDetalle: { observaciones: d.observaciones, programadoPor: d.programado_por },
+          sede_id: d.sede_id || '',
         }
       })
 
@@ -1872,51 +1874,157 @@ export function AsignacionesModule() {
     setRegularizarAsignacion(asignacion)
     setLoadingRegularizar(true)
     setShowRegularizarModal(true)
-    
+
+    const esDevolucionVirtual = !!(asignacion as any).esDevolucion
+
     // Cargar vehículos, conductores disponibles Y conductores de esta asignación
-    const [vehiculosRes, conductoresRes, asignacionConductoresRes] = await Promise.all([
+    const queries: [any, any, any] = [
       aplicarFiltroSede(supabase.from('vehiculos').select('id, patente, marca, modelo, vehiculos_estados(codigo)').is('deleted_at', null)).order('patente'),
       aplicarFiltroSede(supabase.from('conductores').select('id, nombres, apellidos')).order('apellidos'),
-      supabase.from('asignaciones_conductores').select('conductor_id, horario, estado, documento').eq('asignacion_id', asignacion.id)
-    ])
-    
+      // Para devoluciones el ID es de la tabla devoluciones, no de asignaciones
+      // Buscar conductores desde la asignación real del vehículo
+      esDevolucionVirtual && asignacion.vehiculo_id
+        ? (supabase as any).from('asignaciones')
+            .select('asignaciones_conductores(conductor_id, horario, estado, documento, conductores(nombres, apellidos))')
+            .eq('vehiculo_id', asignacion.vehiculo_id)
+            .in('estado', ['activa', 'activo', 'completada', 'finalizada'])
+            .order('created_at', { ascending: false })
+            .limit(3)
+        : supabase.from('asignaciones_conductores').select('conductor_id, horario, estado, documento').eq('asignacion_id', asignacion.id)
+    ]
+
+    const [vehiculosRes, conductoresRes, asignacionConductoresRes] = await Promise.all(queries)
+
     // Filtrar solo vehículos disponibles o el vehículo actual de la asignación
     const estadosDisponibles = ['PKG_ON_BASE', 'EN_USO', 'DISPONIBLE']
-    const vehiculosFiltrados = (vehiculosRes.data || []).filter((v: any) => 
+    const vehiculosFiltrados = (vehiculosRes.data || []).filter((v: any) =>
       estadosDisponibles.includes(v.vehiculos_estados?.codigo) || v.id === asignacion.vehiculo_id
     )
-    
+
+    // Si el vehículo actual no está en la lista (soft-deleted u otro estado), inyectarlo desde los datos de la fila
+    if (asignacion.vehiculo_id && !vehiculosFiltrados.find((v: any) => v.id === asignacion.vehiculo_id)) {
+      const vehInfo = (asignacion as any).vehiculos
+      if (vehInfo) {
+        vehiculosFiltrados.unshift({ id: asignacion.vehiculo_id, patente: vehInfo.patente || '', marca: vehInfo.marca || '', modelo: vehInfo.modelo || '' })
+      }
+    }
+
     setVehiculosDisponibles(vehiculosFiltrados)
     setConductoresDisponibles(conductoresRes.data || [])
-    
-    // Obtener conductores actuales de la asignación (priorizar activos/asignados)
-    const conductoresAsig = (asignacionConductoresRes.data || []) as any[]
+
+    // Para devoluciones: consultar datos propios de la tabla devoluciones (conductor_id, conductor_nombre)
+    // y usarlos como fuente principal; asignaciones del vehículo solo como fallback
+    let devConductorId: string | null = null
+    let devConductorNombre: string | null = null
+    if (esDevolucionVirtual) {
+      const devId = (asignacion as any).devolucionId || asignacion.id
+      const { data: devData } = await (supabase as any)
+        .from('devoluciones')
+        .select('conductor_id, conductor_nombre')
+        .eq('id', devId)
+        .single()
+      if (devData) {
+        devConductorId = devData.conductor_id || null
+        devConductorNombre = devData.conductor_nombre || null
+      }
+    }
+
+    // Obtener conductores desde asignaciones del vehículo (fallback para devoluciones)
+    let conductoresAsig: any[] = []
+    if (esDevolucionVirtual) {
+      const asigs = (asignacionConductoresRes.data || []) as any[]
+      for (const asig of asigs) {
+        const conds = (asig.asignaciones_conductores || []).filter((c: any) => c.estado !== 'cancelado')
+        if (conds.length > 0) {
+          conductoresAsig = conds
+          break
+        }
+      }
+    } else {
+      conductoresAsig = (asignacionConductoresRes.data || []) as any[]
+    }
+
     const esDiurno = (c: any) => c.horario === 'diurno' || c.horario === 'DIURNO' || c.horario === 'D'
     const esNocturno = (c: any) => c.horario === 'nocturno' || c.horario === 'NOCTURNO' || c.horario === 'N'
     const esCargo = (c: any) => c.horario === 'CARGO' || c.horario === 'cargo' || c.horario === 'A CARGO' || c.horario === 'todo_dia'
     const esActivo = (c: any) => c.estado === 'asignado' || c.estado === 'activo'
     const esFinalizada = asignacion.estado === 'finalizada' || asignacion.estado === 'completada'
-    // Priorizar conductor activo; solo en finalizadas usar fallback al último del historial
     const diurno = conductoresAsig.find(c => esDiurno(c) && esActivo(c)) || (esFinalizada ? conductoresAsig.filter(esDiurno).pop() : null)
     const nocturno = conductoresAsig.find(c => esNocturno(c) && esActivo(c)) || (esFinalizada ? conductoresAsig.filter(esNocturno).pop() : null)
     const cargo = conductoresAsig.find(c => esCargo(c) && esActivo(c)) || (esFinalizada ? conductoresAsig.filter(esCargo).pop() : null)
-    
+
+    // Resolver conductor para devoluciones: priorizar datos propios de devoluciones, fallback a asignaciones
+    let conductorIdFinal = ''
+    if (esDevolucionVirtual) {
+      // 1. Datos propios de la devolución
+      if (devConductorId) {
+        conductorIdFinal = devConductorId
+      }
+      // 2. Fallback: conductor de la asignación del vehículo
+      if (!conductorIdFinal) {
+        if (asignacion.horario === 'CARGO') {
+          conductorIdFinal = cargo?.conductor_id || diurno?.conductor_id || ''
+        } else {
+          conductorIdFinal = diurno?.conductor_id || ''
+        }
+      }
+
+      // Asegurar que el conductor esté en la lista disponible
+      const listaActual = [...(conductoresRes.data || [])]
+      const idsEnLista = new Set(listaActual.map((c: any) => c.id))
+
+      // Inyectar conductor propio de la devolución si no está en la lista
+      if (conductorIdFinal && !idsEnLista.has(conductorIdFinal)) {
+        // Buscar nombre en conductores de asignaciones o usar el nombre de la devolución
+        const condAsig = [diurno, nocturno, cargo].find(c => c?.conductor_id === conductorIdFinal)
+        if (condAsig?.conductores) {
+          listaActual.unshift({ id: conductorIdFinal, nombres: condAsig.conductores.nombres || '', apellidos: condAsig.conductores.apellidos || '' })
+        } else if (devConductorNombre) {
+          const partes = devConductorNombre.split(' ')
+          listaActual.unshift({ id: conductorIdFinal, nombres: partes.slice(0, -1).join(' ') || devConductorNombre, apellidos: partes.slice(-1).join(' ') || '' })
+        }
+        idsEnLista.add(conductorIdFinal)
+      }
+
+      // Inyectar conductores de asignaciones que no estén en la lista
+      for (const c of [diurno, nocturno, cargo].filter(Boolean)) {
+        if (c?.conductor_id && !idsEnLista.has(c.conductor_id) && c.conductores) {
+          listaActual.unshift({ id: c.conductor_id, nombres: c.conductores.nombres || '', apellidos: c.conductores.apellidos || '' })
+          idsEnLista.add(c.conductor_id)
+        }
+      }
+
+      setConductoresDisponibles(listaActual)
+    }
+
+    // Para devoluciones: tomar el documento de la fila virtual (viene de la programación)
+    // Mapear al formato del select del modal: CARTA_OFERTA, ANEXO, N/A
+    // Default 'N/A' para devoluciones (las devoluciones siempre tienen doc N/A)
+    let docVirtual: string | null = null
+    if (esDevolucionVirtual) {
+      const docRaw = ((asignacion.asignaciones_conductores || [])[0] as any)?.documento || ''
+      const docUpper = docRaw.toUpperCase()
+      if (docUpper === 'CARTA_OFERTA') docVirtual = 'CARTA_OFERTA'
+      else if (docUpper === 'ANEXO') docVirtual = 'ANEXO'
+      else docVirtual = 'N/A'
+    }
+
     setRegularizarData({
       fecha_inicio: asignacion.fecha_inicio ? asignacion.fecha_inicio.split('T')[0] : '',
       fecha_fin: asignacion.fecha_fin ? asignacion.fecha_fin.split('T')[0] : '',
       notas: asignacion.notas || '',
       vehiculo_id: asignacion.vehiculo_id || '',
       horario: asignacion.horario || 'TURNO',
-      conductor_diurno_id: diurno?.conductor_id || '',
-      conductor_nocturno_id: nocturno?.conductor_id || '',
-      conductor_cargo_id: cargo?.conductor_id || '',
+      conductor_diurno_id: esDevolucionVirtual ? conductorIdFinal : (diurno?.conductor_id || ''),
+      conductor_nocturno_id: esDevolucionVirtual ? '' : (nocturno?.conductor_id || ''),
+      conductor_cargo_id: esDevolucionVirtual ? conductorIdFinal : (cargo?.conductor_id || ''),
       estado: asignacion.estado || 'programado',
-      documento_diurno: diurno?.documento || '',
-      documento_nocturno: nocturno?.documento || '',
-      documento_cargo: cargo?.documento || '',
+      documento_diurno: docVirtual ?? (diurno?.documento || ''),
+      documento_nocturno: docVirtual != null ? '' : (nocturno?.documento || ''),
+      documento_cargo: docVirtual ?? (cargo?.documento || ''),
       sede_id: (asignacion as any).sede_id || '',
     })
-    
+
     // Reset search states
     setSearchDiurno('')
     setSearchNocturno('')
@@ -1926,13 +2034,76 @@ export function AsignacionesModule() {
     setShowDropdownDiurno(false)
     setShowDropdownNocturno(false)
     setShowDropdownCargo(false)
-    
+
     setLoadingRegularizar(false)
   }
 
   // Guardar regularización con trazabilidad (optimizado: queries en paralelo)
   const handleSaveRegularizacion = async () => {
     if (!regularizarAsignacion || isSubmitting) return
+
+    // Flujo separado para devoluciones virtuales (tabla devoluciones, no asignaciones)
+    if ((regularizarAsignacion as any).esDevolucion) {
+      setIsSubmitting(true)
+      try {
+        const devId = (regularizarAsignacion as any).devolucionId || regularizarAsignacion.id
+        const usuario = profile?.full_name || 'Sistema'
+
+        // Resolver nombre del conductor seleccionado
+        const conductorId = regularizarData.horario === 'CARGO'
+          ? regularizarData.conductor_cargo_id
+          : regularizarData.conductor_diurno_id
+        const conductorInfo = conductorId ? conductoresDisponibles.find((c: any) => c.id === conductorId) : null
+        const conductorNombre = conductorInfo ? `${conductorInfo.nombres || ''} ${conductorInfo.apellidos || ''}`.trim() : (regularizarAsignacion as any)._conductorNombre || null
+
+        const devUpdate: Record<string, unknown> = {
+          vehiculo_id: regularizarData.vehiculo_id || regularizarAsignacion.vehiculo_id,
+          conductor_id: conductorId || null,
+          conductor_nombre: conductorNombre,
+          estado: regularizarData.estado === 'finalizada' || regularizarData.estado === 'completada' ? 'completado' : regularizarData.estado === 'cancelada' ? 'cancelado' : 'pendiente',
+          observaciones: regularizarData.notas || null,
+          fecha_programada: regularizarData.fecha_inicio ? new Date(regularizarData.fecha_inicio + 'T12:00:00').toISOString() : undefined,
+          fecha_devolucion: regularizarData.fecha_fin ? new Date(regularizarData.fecha_fin + 'T12:00:00').toISOString() : null,
+          sede_id: regularizarData.sede_id || undefined,
+        }
+        // Remover campos undefined
+        Object.keys(devUpdate).forEach(k => devUpdate[k] === undefined && delete devUpdate[k])
+
+        const { error: devError } = await (supabase as any).from('devoluciones').update(devUpdate).eq('id', devId)
+        if (devError) throw devError
+
+        // Persistir documento en programaciones_onboarding (es donde se lee al cargar la tabla)
+        const docModal = regularizarData.horario === 'CARGO'
+          ? regularizarData.documento_cargo
+          : regularizarData.documento_diurno
+        if (docModal) {
+          // Mapear formato del modal (CARTA_OFERTA, ANEXO, N/A) al formato de programación (carta_oferta, anexo, na)
+          const docDB = docModal === 'CARTA_OFERTA' ? 'carta_oferta' : docModal === 'ANEXO' ? 'anexo' : 'na'
+          // Obtener programacion_id de la devolución
+          const { data: devRow } = await (supabase as any)
+            .from('devoluciones')
+            .select('programacion_id')
+            .eq('id', devId)
+            .single()
+          if (devRow?.programacion_id) {
+            await (supabase as any)
+              .from('programaciones_onboarding')
+              .update({ tipo_documento: docDB, documento_diurno: docDB, documento_nocturno: docDB })
+              .eq('id', devRow.programacion_id)
+          }
+        }
+
+        showSuccess('Devolución Editada', `Datos actualizados por ${usuario}`)
+        setShowRegularizarModal(false)
+        setRegularizarAsignacion(null)
+        loadAsignaciones()
+      } catch (err: any) {
+        Swal.fire('Error', err.message || 'Error al editar la devolución', 'error')
+      } finally {
+        setIsSubmitting(false)
+      }
+      return
+    }
 
     setIsSubmitting(true)
     try {
@@ -2091,21 +2262,15 @@ export function AsignacionesModule() {
 
       // Solo recrear conductores si cambiaron
       if (conductoresCambiaron && nuevoConductores.length > 0) {
-        // Verificar duplicados en BD antes de insertar (guard anti-duplicados)
-        const existentesSet = new Set(
-          conductoresActuales.map((e: any) => `${e.conductor_id}_${e.horario?.toLowerCase()}`)
+        // Identificar conductores que se mantienen (mismo conductor_id, sin importar horario)
+        const conductoresQueSeQuedan = conductoresActuales.filter((a: any) =>
+          nuevoConductores.find((n: any) => n.conductor_id === a.conductor_id)
         )
-        const conductoresAInsertar = nuevoConductores.filter((n: any) =>
-          !existentesSet.has(`${n.conductor_id}_${n.horario?.toLowerCase()}`)
+        const conductoresAReemplazar = conductoresActuales.filter((a: any) =>
+          !nuevoConductores.find((n: any) => n.conductor_id === a.conductor_id)
         )
-        const conductoresAReemplazar = conductoresActuales.filter((a: any) => {
-          const seMantuvo = nuevoConductores.find((n: any) =>
-            n.conductor_id === a.conductor_id && n.horario?.toLowerCase() === a.horario?.toLowerCase()
-          )
-          return !seMantuvo
-        })
 
-        // Solo soft-delete los que realmente fueron reemplazados
+        // Soft-delete todos los que no se mantienen
         if (conductoresAReemplazar.length > 0) {
           const idsAReemplazar = conductoresAReemplazar.map((c: any) => c.id)
           const { error: softDeleteError } = await (supabase as any)
@@ -2115,7 +2280,30 @@ export function AsignacionesModule() {
           if (softDeleteError) throw softDeleteError
         }
 
-        // Solo insertar conductores que no existen ya como activos
+        // Para los que se quedan: actualizar horario y documento si cambiaron
+        for (const actual of conductoresQueSeQuedan) {
+          const nuevo = nuevoConductores.find((n: any) => n.conductor_id === actual.conductor_id)
+          if (nuevo && (actual.horario?.toLowerCase() !== nuevo.horario?.toLowerCase() || actual.documento !== nuevo.documento)) {
+            await (supabase as any)
+              .from('asignaciones_conductores')
+              .update({ horario: nuevo.horario, documento: nuevo.documento, estado: nuevo.estado })
+              .eq('id', actual.id)
+          }
+        }
+
+        // Si A CARGO tiene duplicados que se quedaron, soft-delete los extras (dejar solo el más reciente)
+        if (regularizarData.horario === 'CARGO' && conductoresQueSeQuedan.length > 1) {
+          const extras = conductoresQueSeQuedan.slice(0, -1)
+          const idsExtras = extras.map((c: any) => c.id)
+          await (supabase as any)
+            .from('asignaciones_conductores')
+            .update({ estado: 'reemplazado', fecha_fin: ahora })
+            .in('id', idsExtras)
+        }
+
+        // Solo insertar conductores que no existen en BD (por conductor_id)
+        const idsQueSeQuedan = new Set(conductoresQueSeQuedan.map((c: any) => c.conductor_id))
+        const conductoresAInsertar = nuevoConductores.filter((n: any) => !idsQueSeQuedan.has(n.conductor_id))
         if (conductoresAInsertar.length > 0) {
           const { error: insertError } = await (supabase.from('asignaciones_conductores') as any).insert(conductoresAInsertar)
           if (insertError) throw insertError
@@ -2600,15 +2788,18 @@ export function AsignacionesModule() {
           c.estado === 'asignado' || c.estado === 'activo' || (esFinalizadaOCancelada && c.estado === 'completado')
         )
         if (conductores.length === 0) return <span className="text-muted">-</span>
-        // Ordenar: diurno primero, nocturno después
-        const sorted = [...conductores].sort((a: any, b: any) => {
+
+        // Para A CARGO: mostrar solo 1 badge (el último conductor activo)
+        const esCargo = row.original.horario === 'CARGO'
+        const listaDoc = esCargo ? [conductores[conductores.length - 1]] : [...conductores].sort((a: any, b: any) => {
           if (a.horario === 'diurno') return -1
           if (b.horario === 'diurno') return 1
           return 0
         })
+
         return (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-            {sorted.map((c: any, idx: number) => {
+            {listaDoc.map((c: any, idx: number) => {
               const doc = c.documento
               const label = doc === 'CARTA_OFERTA' ? 'C.Oferta' : doc === 'ANEXO' ? 'Anexo' : 'N/A'
               const badgeClass = doc === 'CARTA_OFERTA' ? 'asig-doc-carta' : doc === 'ANEXO' ? 'asig-doc-anexo' : 'asig-doc-na'
