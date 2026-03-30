@@ -232,7 +232,7 @@ app.post('/api/cabify-efectivo', async (req, res) => {
           companyId: cabify_company_id,
           name: 'PAYMENT_CASH',
           enabled,
-          canWrite: true, // siempre true: mantiene el toggle "Permitir viajes" ON en Cabify
+          canWrite: enabled, // false al desactivar = muestra candado 🔒; true al activar = habilita normal
         },
       }),
     })
