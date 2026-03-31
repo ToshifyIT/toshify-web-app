@@ -112,12 +112,13 @@ class LazyErrorBoundary extends Component<{ children: ReactNode }, LazyErrorBoun
 
   componentDidCatch(error: Error, _errorInfo: ErrorInfo) {
     if (isChunkLoadError(error)) {
-      // Auto-recargar una sola vez para obtener los chunks nuevos
-      const lastReload = sessionStorage.getItem('chunk_reload')
+      // Tracking por chunk: cada módulo puede auto-recargar de forma independiente.
+      // Usamos los últimos 30 chars del mensaje como clave única del chunk.
+      const chunkKey = 'chunk_' + error.message.replace(/[^a-z0-9]/gi, '').slice(-30)
       const now = Date.now()
-      // Solo auto-recargar si no se recargó en los últimos 60 segundos
-      if (!lastReload || now - parseInt(lastReload) > 60000) {
-        sessionStorage.setItem('chunk_reload', now.toString())
+      const lastReload = parseInt(localStorage.getItem(chunkKey) || '0')
+      if (now - lastReload > 30000) {
+        localStorage.setItem(chunkKey, now.toString())
         window.location.reload()
         return
       }
