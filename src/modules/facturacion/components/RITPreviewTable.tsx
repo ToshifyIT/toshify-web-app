@@ -384,8 +384,8 @@ export function RITPreviewTable({
 
         // Alquiler (P002=Cargo, P001=Turno Diurno)
         if (row.valorAlquiler > 0) {
-          const codigo = row.tipo === 'a_cargo' ? 'P002' : 'P001'
-          const desc = row.tipo === 'a_cargo' ? 'Alquiler a Cargo' : 'Alquiler a Turno'
+          const codigo = row.tipo === 'CARGO' ? 'P002' : 'P001'
+          const desc = row.tipo === 'CARGO' ? 'Alquiler a Cargo' : 'Alquiler a Turno'
           const ivaPctAlq = getIvaPct(codigo)
           const neto = extraerNeto(row.valorAlquiler, ivaPctAlq)
           const iva = Math.round((row.valorAlquiler - neto) * 100) / 100
@@ -664,7 +664,7 @@ export function RITPreviewTable({
                 <td>{row.cuit || '-'}</td>
                 <td>{row.patente || '-'}</td>
                 <td>
-                  <span className={`badge ${row.tipo === 'a_cargo' ? 'badge-blue' : 'badge-gray'}`}>
+                  <span className={`badge ${row.tipo === 'CARGO' ? 'badge-blue' : 'badge-gray'}`}>
                     {row.tipo}
                   </span>
                 </td>

@@ -170,7 +170,7 @@ export function ExcesosKmTab() {
       conductor_nombre: `${a.conductores.nombres} ${a.conductores.apellidos}`,
       vehiculo_id: a.vehiculo_id,
       vehiculo_patente: a.vehiculos.patente,
-      tipo_alquiler: a.horario === 'todo_dia' ? 'a_cargo' : 'turno'
+      tipo_alquiler: a.horario === 'todo_dia' ? 'CARGO' : 'TURNO'
     }))
 
     const periodosOptions = periodos
@@ -309,10 +309,10 @@ export function ExcesosKmTab() {
 
         const updatePreview = () => {
           const km = parseFloat(kmInput.value) || 0
-          const tipoAlquiler = tipoAlquilerInput.value || 'a_cargo'
+          const tipoAlquiler = tipoAlquilerInput.value || 'CARGO'
 
           if (km > KM_BASE_SEMANAL && conductorIdInput.value) {
-            const valorAlquiler = tipoAlquiler === 'a_cargo'
+            const valorAlquiler = tipoAlquiler === 'CARGO'
               ? FACTURACION_CONFIG.ALQUILER_CARGO
               : FACTURACION_CONFIG.ALQUILER_TURNO
 
@@ -339,7 +339,7 @@ export function ExcesosKmTab() {
         const periodoId = (document.getElementById('swal-periodo') as HTMLSelectElement).value
         const conductorId = (document.getElementById('swal-conductor-id') as HTMLInputElement).value
         const vehiculoId = (document.getElementById('swal-vehiculo-id') as HTMLInputElement).value
-        const tipoAlquiler = (document.getElementById('swal-tipo-alquiler') as HTMLInputElement).value || 'a_cargo'
+        const tipoAlquiler = (document.getElementById('swal-tipo-alquiler') as HTMLInputElement).value || 'CARGO'
         const km = parseFloat((document.getElementById('swal-km') as HTMLInputElement).value)
 
         if (!periodoId) {
@@ -365,7 +365,7 @@ export function ExcesosKmTab() {
     if (!formValues) return
 
     try {
-      const valorAlquiler = formValues.tipoAlquiler === 'a_cargo'
+      const valorAlquiler = formValues.tipoAlquiler === 'CARGO'
         ? FACTURACION_CONFIG.ALQUILER_CARGO
         : FACTURACION_CONFIG.ALQUILER_TURNO
 
