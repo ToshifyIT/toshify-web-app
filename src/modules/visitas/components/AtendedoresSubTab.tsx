@@ -287,10 +287,9 @@ export function AtendedoresSubTab() {
             <Clock size={14} />
           </button>
           <button
-            className="dt-btn-action dt-btn-view"
+            className="dt-btn-action dt-btn-purple"
             onClick={() => handleOpenMotivos(row.original)}
             title="Motivos asociados"
-            style={{ color: '#8b5cf6' }}
           >
             <Tag size={14} />
           </button>
@@ -372,20 +371,18 @@ export function AtendedoresSubTab() {
               <button className="visitas-modal-close" onClick={() => setShowMotivosModal(false)}><X size={20} /></button>
             </div>
             <div className="visitas-modal-body">
-              <p style={{ fontSize: '13px', color: '#6B7280', marginBottom: '12px' }}>
+              <p className="visitas-motivos-hint">
                 Seleccioná los motivos que atiende este anfitrión. Cuando se cree una cita con ese motivo, se asignará automáticamente.
               </p>
               {allCategorias.map((cat) => {
                 const motivosCat = allMotivos.filter((m) => m.categoria_id === cat.id);
                 if (motivosCat.length === 0) return null;
                 return (
-                  <div key={cat.id} style={{ marginBottom: '16px' }}>
-                    <div style={{ fontSize: '12px', fontWeight: 600, color: '#374151', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '6px', borderBottom: '1px solid #e5e7eb', paddingBottom: '4px' }}>
-                      {cat.nombre}
-                    </div>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                  <div key={cat.id} className="visitas-motivo-categoria">
+                    <div className="visitas-motivo-cat-header">{cat.nombre}</div>
+                    <div className="visitas-motivo-list">
                       {motivosCat.map((m) => (
-                        <label key={m.id} style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '14px', padding: '4px 0' }}>
+                        <label key={m.id} className="visitas-motivo-item">
                           <input
                             type="checkbox"
                             checked={selectedMotivos.has(m.id)}
@@ -399,7 +396,8 @@ export function AtendedoresSubTab() {
                 );
               })}
               {selectedMotivos.size > 0 && (
-                <div style={{ marginTop: '8px', padding: '8px 12px', background: '#f0fdf4', borderRadius: '6px', fontSize: '13px', color: '#15803d' }}>
+                <div className="visitas-motivos-selected">
+                  <Tag size={14} />
                   {selectedMotivos.size} motivo(s) seleccionado(s)
                 </div>
               )}
