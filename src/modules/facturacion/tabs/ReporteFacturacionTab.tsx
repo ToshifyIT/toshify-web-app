@@ -93,6 +93,10 @@ const ARG_TZ = 'America/Argentina/Buenos_Aires'
 const argDateFmt = new Intl.DateTimeFormat('en-CA', { timeZone: ARG_TZ, year: 'numeric', month: '2-digit', day: '2-digit' })
 function toArgDate(timestamp: string | null | undefined): string {
   if (!timestamp) return '-'
+  // Strings date-only (YYYY-MM-DD) no tienen timezone: new Date('2026-03-28') los interpreta
+  // como UTC midnight y al convertir a Argentina (UTC-3) genera '2026-03-27' (un día antes).
+  // Devolverlos tal cual evita el desfase.
+  if (/^\d{4}-\d{2}-\d{2}$/.test(timestamp)) return timestamp
   return argDateFmt.format(new Date(timestamp))
 }
 // Helper: extraer hora (0-23) en timezone Argentina desde un timestamp
