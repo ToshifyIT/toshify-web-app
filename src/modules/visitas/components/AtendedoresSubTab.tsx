@@ -92,22 +92,22 @@ export function AtendedoresSubTab() {
 
   async function handleDelete(item: VisitaAtendedor) {
     const res = await Swal.fire({
-      title: 'Eliminar anfitrión',
-      text: `¿Eliminar "${item.nombre}"? Si tiene citas o horarios asociados, la eliminación fallará.`,
+      title: 'Desactivar anfitrión',
+      text: `¿Desactivar a "${item.nombre}"? Dejará de aparecer en el sistema pero sus citas históricas se conservan.`,
       icon: 'warning',
       showCancelButton: true,
       confirmButtonColor: '#ff0033',
       cancelButtonColor: '#6B7280',
-      confirmButtonText: 'Sí, eliminar',
+      confirmButtonText: 'Sí, desactivar',
       cancelButtonText: 'Cancelar',
     });
     if (!res.isConfirmed) return;
     try {
       await deleteAtendedor(item.id);
-      showSuccess('Anfitrión eliminado');
+      showSuccess('Anfitrión desactivado');
       cargar();
     } catch {
-      Swal.fire('Error', 'No se pudo eliminar. Verifique que no tenga citas asociadas.', 'error');
+      Swal.fire('Error', 'No se pudo desactivar el anfitrión', 'error');
     }
   }
 

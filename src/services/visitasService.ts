@@ -409,7 +409,7 @@ export async function updateAtendedor(
 }
 
 export async function deleteAtendedor(id: string): Promise<void> {
-  const { error } = await supabase.from('visitas_atendedores').delete().eq('id', id);
+  const { error } = await supabase.from('visitas_atendedores').update({ activo: false }).eq('id', id);
   if (error) throw error;
 }
 
