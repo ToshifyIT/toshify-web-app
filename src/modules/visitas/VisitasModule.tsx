@@ -176,6 +176,8 @@ export function VisitasModule() {
     setPrefillResourceId(slotInfo.resourceId?.toString());
     setModalMode('create');
     setSelectedVisita(null);
+    // Refrescar mapa motivo→anfitrión para capturar cambios hechos en Parámetros
+    fetchMotivoAtendedores(sedeActualId).then(setMotivoAtendedorMap).catch(() => {});
     setShowFormModal(true);
   }
 
@@ -301,11 +303,13 @@ export function VisitasModule() {
     setShowFormModal(true);
   }
 
-  function handleNuevaCita() {
+  async function handleNuevaCita() {
     setModalMode('create');
     setSelectedVisita(null);
     setPrefillDate(undefined);
     setPrefillResourceId(undefined);
+    // Refrescar mapa motivo→anfitrión para capturar cambios hechos en Parámetros
+    fetchMotivoAtendedores(sedeActualId).then(setMotivoAtendedorMap).catch(() => {});
     setShowFormModal(true);
   }
 

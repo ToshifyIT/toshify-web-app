@@ -47,6 +47,7 @@ const ANFITRION_DEFAULT_MAP: Record<string, string> = {
   'asignaciones::*': 'Iván',
   'siniestros::declaración de siniestro': 'Eugenia',
   'logística::checklist': 'Emiliano',
+  'logística::gps': 'Emiliano',
   'logística::incidencia': 'Emiliano',
   'logística::service': 'Emiliano',
   'autos del pueblo::inducción': 'Manuel/Marina',
