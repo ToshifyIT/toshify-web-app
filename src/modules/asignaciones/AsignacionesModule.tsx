@@ -2791,11 +2791,14 @@ export function AsignacionesModule() {
 
         // Para A CARGO: mostrar solo 1 badge (el último conductor activo)
         const esCargo = row.original.horario === 'todo_dia'
-        const listaDoc = esCargo ? [conductores[conductores.length - 1]] : [...conductores].sort((a: any, b: any) => {
-          if (a.horario === 'diurno') return -1
-          if (b.horario === 'diurno') return 1
-          return 0
-        })
+        const listaDoc = esCargo ? [conductores[conductores.length - 1]] : (() => {
+          const diurnos = conductores.filter((c: any) => c.horario === 'diurno')
+          const nocturnos = conductores.filter((c: any) => c.horario === 'nocturno')
+          const result: any[] = []
+          if (diurnos.length > 0) result.push(diurnos[diurnos.length - 1])
+          if (nocturnos.length > 0) result.push(nocturnos[nocturnos.length - 1])
+          return result
+        })()
 
         return (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
@@ -2827,7 +2830,7 @@ export function AsignacionesModule() {
           <span style={{ fontSize: '11px' }}>
             {d.toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: '2-digit', timeZone: 'America/Argentina/Buenos_Aires' })}
             <span style={{ display: 'block', fontSize: '9px', color: 'var(--text-tertiary)' }}>
-              {d.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Argentina/Buenos_Aires' })}
+              {d.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'America/Argentina/Buenos_Aires' })}
             </span>
           </span>
         )
@@ -3025,14 +3028,18 @@ export function AsignacionesModule() {
           if (!filterValue || typeof filterValue !== 'string' || filterValue.trim() === '') return true
           const search = filterValue.toLowerCase().trim()
           const a = row.original as any
-          // Buscar solo en patente, código, motivo y nombres de conductores
+          // Buscar en patente, código, motivo y nombres de conductores (raw + procesados)
           const patente = (a.vehiculos?.patente || a._patente || '').toLowerCase()
           const codigo = (a.codigo || '').toLowerCase()
           const motivo = (a.motivo || '').toLowerCase()
-          const conductores = (a.asignaciones_conductores || [])
+          const conductoresRaw = (a.asignaciones_conductores || [])
             .map((c: any) => `${c.conductores?.apellidos || ''} ${c.conductores?.nombres || ''}`.toLowerCase())
             .join(' ')
-          const text = `${patente} ${codigo} ${motivo} ${conductores}`
+          const conductorCargo = (a.conductorCargo?.nombre || '').toLowerCase()
+          const conductorDiurno = (a.conductoresTurno?.diurno?.nombre || '').toLowerCase()
+          const conductorNocturno = (a.conductoresTurno?.nocturno?.nombre || '').toLowerCase()
+          const conductorNombre = (a._conductorNombre || '').toLowerCase()
+          const text = `${patente} ${codigo} ${motivo} ${conductoresRaw} ${conductorCargo} ${conductorDiurno} ${conductorNocturno} ${conductorNombre}`
           return search.split(/\s+/).every(word => text.includes(word))
         }}
         emptyIcon={<FileText size={48} />}
@@ -3346,7 +3353,24 @@ export function AsignacionesModule() {
                     <label className="asig-detail-label">Conductores Asignados</label>
                     {viewAsignacion.asignaciones_conductores?.length ? (
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                        {viewAsignacion.asignaciones_conductores.map((ac) => (
+                        {(() => {
+                          const esFinalizadaOCancelada = viewAsignacion.estado === 'finalizada' || viewAsignacion.estado === 'completada' || viewAsignacion.estado === 'cancelada'
+                          const conductoresFiltrados = viewAsignacion.asignaciones_conductores.filter((c) =>
+                            c.estado === 'asignado' || c.estado === 'activo' || (esFinalizadaOCancelada && c.estado === 'completado')
+                          )
+                          const esCargo = viewAsignacion.horario === 'todo_dia'
+                          const lista = esCargo
+                            ? [conductoresFiltrados[conductoresFiltrados.length - 1]]
+                            : (() => {
+                                const diurnos = conductoresFiltrados.filter((c: any) => c.horario === 'diurno')
+                                const nocturnos = conductoresFiltrados.filter((c: any) => c.horario === 'nocturno')
+                                const result: any[] = []
+                                if (diurnos.length > 0) result.push(diurnos[diurnos.length - 1])
+                                if (nocturnos.length > 0) result.push(nocturnos[nocturnos.length - 1])
+                                return result
+                              })()
+                          return lista
+                        })().map((ac) => (
                           <div key={ac.id} className="asig-conductor-card">
                             <p className="asig-conductor-card-name">
                               {ac.conductores?.nombres || '-'} {ac.conductores?.apellidos || ''}
