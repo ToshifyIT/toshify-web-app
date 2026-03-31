@@ -703,7 +703,11 @@ export function ReporteFacturacionTab() {
           : horarioRawDias === 'turno' ? 'TURNO'
           : horarioRawDias.toUpperCase()
         const acInicioStr = ac.fecha_inicio ? toArgDate(ac.fecha_inicio) : 'NULL'
-        const acFinStr = ac.fecha_fin ? toArgDate(ac.fecha_fin) : 'NULL'
+        // Mostrar fecha_fin del padre si es posterior a la del conductor (consistencia con módulo asignaciones)
+        const acFinRaw = ac.fecha_fin || asignacion.fecha_fin || null
+        const padreFinRaw = asignacion.fecha_fin || null
+        const fechaFinMostrar = (acFinRaw && padreFinRaw && padreFinRaw > acFinRaw) ? padreFinRaw : acFinRaw
+        const acFinStr = fechaFinMostrar ? toArgDate(fechaFinMostrar) : 'NULL'
 
         // Skip PROGRAMADO — asignación no ha iniciado, no cuenta para facturación
         if (['programado', 'programada'].includes(estadoPadre)) {
@@ -815,10 +819,10 @@ export function ReporteFacturacionTab() {
         let maxFin = ''
         for (const ac of (asignacionesCond || []) as any[]) {
           const asig = ac.asignaciones
-          const fin = ac.fecha_fin || asig?.fecha_fin || ''
+          const fin = asig?.fecha_fin || ac.fecha_fin || ''
           if (fin && fin > maxFin) maxFin = fin
         }
-        return maxFin ? toArgDate(maxFin) : null
+        return maxFin || null
       })()
 
       const devolucionInfo = devProg
@@ -2811,7 +2815,7 @@ export function ReporteFacturacionTab() {
 
         // Ajustar días por modalidad restando el descuento de la modalidad correspondiente
         let diasDiurnoAjustados = prorrateo.TURNO_DIURNO
-        let diasNocturnoAjustados = prorrateo.TURNO_NOCTURNO
+        const diasNocturnoAjustados = prorrateo.TURNO_NOCTURNO
         let diasCargoAjustados = prorrateo.CARGO
         if (descInfoRecalc) {
           if (descInfoRecalc.modalidad === 'TURNO_DIURNO') diasDiurnoAjustados = Math.max(0, diasDiurnoAjustados - descInfoRecalc.descuento)
@@ -9706,7 +9710,7 @@ export function ReporteFacturacionTab() {
                             )}
                             {diasModalData.devolucion.fecha_devolucion && (
                               <div style={{ fontSize: '10px', color: 'var(--text-secondary)', marginTop: '2px', paddingLeft: '16px' }}>
-                                Devuelto: {(() => { try { return format(parseISO(diasModalData.devolucion.fecha_devolucion), 'dd/MM/yyyy') } catch { return '-' } })()}
+                                Devuelto: {(() => { try { const raw = diasModalData.devolucion.fecha_devolucion || ''; const dateStr = raw.includes('T') ? toArgDate(raw) : raw.slice(0, 10); return dateStr && dateStr !== '-' ? dateStr.split('-').reverse().join('/') : '-' } catch { return '-' } })()}
                               </div>
                             )}
                             {diasModalData.devolucion.ultimo_dia_cobro && (
