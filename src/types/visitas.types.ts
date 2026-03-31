@@ -50,6 +50,12 @@ export interface VisitaHorario {
   activo: boolean;
 }
 
+export interface VisitaMotivoAtendedor {
+  motivo_id: string;
+  atendedor_id: string;
+  sede_id: string;
+}
+
 // --- Entidad principal ---
 
 export type VisitaEstado = 'pendiente' | 'en_curso' | 'completada' | 'no_asistio' | 'cancelada';

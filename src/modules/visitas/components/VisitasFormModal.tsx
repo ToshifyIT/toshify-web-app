@@ -77,6 +77,8 @@ interface VisitasFormModalProps {
   categorias: VisitaCategoria[];
   motivos: VisitaMotivo[];
   atendedores: VisitaAtendedor[];
+  /** Mapa motivo_id → atendedor_id cargado desde BD (tiene prioridad sobre el hardcode) */
+  motivoAtendedorMap?: Map<string, string>;
   prefillDate?: Date;
   prefillResourceId?: string;
   onSave: (data: VisitaFormData) => Promise<void>;
@@ -152,6 +154,7 @@ export function VisitasFormModal({
   categorias,
   motivos,
   atendedores,
+  motivoAtendedorMap,
   prefillDate,
   prefillResourceId,
   onSave,
@@ -248,13 +251,21 @@ export function VisitasFormModal({
 
   // Auto-asignar anfitrión cuando cambia categoría o motivo
   useEffect(() => {
-    // Solo auto-asignar en modo create o si el usuario cambió la categoría
+    // Solo auto-asignar en modo create
     if (mode === 'edit') return;
     if (!categoriaSeleccionada) return;
 
     const catKey = categoriaSeleccionada.nombre.trim().toLowerCase();
     if (CATEGORIAS_ANFITRION_MANUAL.includes(catKey)) return;
 
+    // 1. Prioridad: mapa desde BD (motivo_id → atendedor_id)
+    if (motivoSeleccionado && motivoAtendedorMap && motivoAtendedorMap.has(motivoSeleccionado.id)) {
+      const atendedorId = motivoAtendedorMap.get(motivoSeleccionado.id)!;
+      setFormData((prev) => ({ ...prev, atendedor_id: atendedorId }));
+      return;
+    }
+
+    // 2. Fallback: mapa hardcodeado por nombre
     const motNombre = motivoSeleccionado?.nombre;
     const resolved = resolveDefaultAnfitrion(
       categoriaSeleccionada.nombre,
@@ -264,7 +275,7 @@ export function VisitasFormModal({
     if (resolved) {
       setFormData((prev) => ({ ...prev, atendedor_id: resolved }));
     }
-  }, [categoriaSeleccionada, motivoSeleccionado, atendedores, mode]);
+  }, [categoriaSeleccionada, motivoSeleccionado, atendedores, motivoAtendedorMap, mode]);
 
   // Al cambiar categoría: duración default, limpiar motivo, auto-asignar anfitrión
   function handleCategoriaChange(categoriaId: string) {

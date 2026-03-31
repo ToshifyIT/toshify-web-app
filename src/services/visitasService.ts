@@ -449,3 +449,45 @@ export async function upsertHorarios(
   const { error: insError } = await supabase.from('visitas_horarios').insert(rows);
   if (insError) throw insError;
 }
+
+// --- ABM: Motivo → Atendedor (auto-asignación) ---
+
+/** Devuelve mapa motivo_id → atendedor_id para una sede */
+export async function fetchMotivoAtendedores(sedeId: string | null): Promise<Map<string, string>> {
+  let query = (supabase as any)
+    .from('visitas_motivo_atendedor')
+    .select('motivo_id, atendedor_id');
+  if (sedeId) query = query.eq('sede_id', sedeId);
+  const { data, error } = await query;
+  if (error) throw error;
+  return new Map((data ?? []).map((r: any) => [r.motivo_id, r.atendedor_id]));
+}
+
+/** Devuelve los motivo_ids asignados a un atendedor */
+export async function fetchMotivosDeAtendedor(atendedorId: string): Promise<string[]> {
+  const { data, error } = await (supabase as any)
+    .from('visitas_motivo_atendedor')
+    .select('motivo_id')
+    .eq('atendedor_id', atendedorId);
+  if (error) throw error;
+  return (data ?? []).map((r: any) => r.motivo_id);
+}
+
+/** Reemplaza los motivos del atendedor: borra los anteriores e inserta los nuevos */
+export async function saveMotivoAtendedores(
+  atendedorId: string,
+  motivoIds: string[],
+  sedeId: string
+): Promise<void> {
+  const { error: delErr } = await (supabase as any)
+    .from('visitas_motivo_atendedor')
+    .delete()
+    .eq('atendedor_id', atendedorId);
+  if (delErr) throw delErr;
+
+  if (motivoIds.length === 0) return;
+
+  const rows = motivoIds.map((motivo_id) => ({ atendedor_id: atendedorId, motivo_id, sede_id: sedeId }));
+  const { error: insErr } = await (supabase as any).from('visitas_motivo_atendedor').insert(rows);
+  if (insErr) throw insErr;
+}

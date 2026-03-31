@@ -29,6 +29,7 @@ import {
   fetchCategorias,
   fetchMotivos,
   fetchAtendedores,
+  fetchMotivoAtendedores,
   fetchVisitas,
   createVisita,
   updateVisita,
@@ -67,6 +68,7 @@ export function VisitasModule() {
   const [categorias, setCategorias] = useState<VisitaCategoria[]>([]);
   const [motivos, setMotivos] = useState<VisitaMotivo[]>([]);
   const [atendedores, setAtendedores] = useState<VisitaAtendedor[]>([]);
+  const [motivoAtendedorMap, setMotivoAtendedorMap] = useState<Map<string, string>>(new Map());
   const [visitas, setVisitas] = useState<VisitaCompleta[]>([]);
 
   // === STATE: calendar ===
@@ -106,13 +108,15 @@ export function VisitasModule() {
 
   // === CARGA DE DATOS ===
   const cargarCatalogos = useCallback(async () => {
-    const [cats, mots, atends] = await Promise.all([
+    const [cats, mots, atends, motivoMap] = await Promise.all([
       fetchCategorias(),
       fetchMotivos(),
       fetchAtendedores(sedeActualId),
+      fetchMotivoAtendedores(sedeActualId),
     ]);
     setCategorias(cats);
     setMotivos(mots);
+    setMotivoAtendedorMap(motivoMap);
     setAtendedores(atends);
     setCalendarResources(toCalendarResources(atends));
   }, [sedeActualId]);
@@ -586,6 +590,7 @@ export function VisitasModule() {
               categorias={categorias}
               motivos={motivos}
               atendedores={atendedores}
+              motivoAtendedorMap={motivoAtendedorMap}
               prefillDate={prefillDate}
               prefillResourceId={prefillResourceId}
               onSave={handleSaveVisita}

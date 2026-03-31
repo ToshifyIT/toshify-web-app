@@ -4,13 +4,13 @@
 // ============================================================
 
 import { useState, useEffect, useMemo } from 'react';
-import { Plus, Edit2, Trash2, X, Check, Loader2, Users, Clock } from 'lucide-react';
+import { Plus, Edit2, Trash2, X, Check, Loader2, Users, Clock, Tag } from 'lucide-react';
 import Swal from 'sweetalert2';
 import { showSuccess } from '../../../utils/toast';
 import { useSede } from '../../../contexts/SedeContext';
 import { DataTable } from '../../../components/ui/DataTable';
 import type { ColumnDef } from '@tanstack/react-table';
-import type { VisitaAtendedor, VisitaHorario } from '../../../types/visitas.types';
+import type { VisitaAtendedor, VisitaHorario, VisitaMotivo, VisitaCategoria } from '../../../types/visitas.types';
 import {
   fetchAllAtendedores,
   createAtendedor,
@@ -18,7 +18,10 @@ import {
   deleteAtendedor,
   fetchHorariosByAtendedor,
   upsertHorarios,
+  fetchMotivosDeAtendedor,
+  saveMotivoAtendedores,
 } from '../../../services/visitasService';
+import { supabase } from '../../../lib/supabase';
 
 const DIAS_SEMANA = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo'];
 
@@ -58,6 +61,14 @@ export function AtendedoresSubTab() {
   const [horariosAtendedor, setHorariosAtendedor] = useState<VisitaAtendedor | null>(null);
   const [horarios, setHorarios] = useState<HorarioRow[]>([]);
   const [savingHorarios, setSavingHorarios] = useState(false);
+
+  // Modal Motivos
+  const [showMotivosModal, setShowMotivosModal] = useState(false);
+  const [motivosAtendedor, setMotivosAtendedor] = useState<VisitaAtendedor | null>(null);
+  const [allMotivos, setAllMotivos] = useState<(VisitaMotivo & { categoria_nombre: string })[]>([]);
+  const [allCategorias, setAllCategorias] = useState<VisitaCategoria[]>([]);
+  const [selectedMotivos, setSelectedMotivos] = useState<Set<string>>(new Set());
+  const [savingMotivos, setSavingMotivos] = useState(false);
 
   useEffect(() => { cargar(); }, [sedeActualId]);
 
@@ -147,6 +158,54 @@ export function AtendedoresSubTab() {
     }
   }
 
+  // --- Motivos ---
+  async function handleOpenMotivos(item: VisitaAtendedor) {
+    setMotivosAtendedor(item);
+    try {
+      // Cargar todos los motivos+categorias y los ya asignados en paralelo
+      const [{ data: motData }, { data: catData }, asignados] = await Promise.all([
+        supabase.from('visitas_motivos').select('id, nombre, categoria_id, activo').eq('activo', true).order('categoria_id'),
+        supabase.from('visitas_categorias').select('id, nombre').order('nombre'),
+        fetchMotivosDeAtendedor(item.id),
+      ]);
+      const cats = (catData ?? []) as VisitaCategoria[];
+      const catMap = new Map(cats.map((c) => [c.id, c.nombre]));
+      const motivosConCat = ((motData ?? []) as VisitaMotivo[]).map((m) => ({
+        ...m,
+        categoria_nombre: catMap.get(m.categoria_id) ?? '',
+      }));
+      setAllMotivos(motivosConCat);
+      setAllCategorias(cats);
+      setSelectedMotivos(new Set(asignados));
+      setShowMotivosModal(true);
+    } catch {
+      Swal.fire('Error', 'No se pudieron cargar los motivos', 'error');
+    }
+  }
+
+  function toggleMotivo(motivoId: string) {
+    setSelectedMotivos((prev) => {
+      const next = new Set(prev);
+      if (next.has(motivoId)) next.delete(motivoId);
+      else next.add(motivoId);
+      return next;
+    });
+  }
+
+  async function handleSaveMotivos() {
+    if (!motivosAtendedor || !sedeActualId) return;
+    setSavingMotivos(true);
+    try {
+      await saveMotivoAtendedores(motivosAtendedor.id, [...selectedMotivos], sedeActualId);
+      showSuccess('Motivos actualizados');
+      setShowMotivosModal(false);
+    } catch {
+      Swal.fire('Error', 'No se pudieron guardar los motivos', 'error');
+    } finally {
+      setSavingMotivos(false);
+    }
+  }
+
   // --- Horarios ---
   async function handleOpenHorarios(item: VisitaAtendedor) {
     setHorariosAtendedor(item);
@@ -227,10 +286,18 @@ export function AtendedoresSubTab() {
           >
             <Clock size={14} />
           </button>
+          <button
+            className="dt-btn-action dt-btn-view"
+            onClick={() => handleOpenMotivos(row.original)}
+            title="Motivos asociados"
+            style={{ color: '#8b5cf6' }}
+          >
+            <Tag size={14} />
+          </button>
           <button className="dt-btn-action dt-btn-edit" onClick={() => handleEdit(row.original)} title="Editar">
             <Edit2 size={14} />
           </button>
-          <button className="dt-btn-action dt-btn-delete" onClick={() => handleDelete(row.original)} title="Eliminar">
+          <button className="dt-btn-action dt-btn-delete" onClick={() => handleDelete(row.original)} title="Desactivar">
             <Trash2 size={14} />
           </button>
         </div>
@@ -290,6 +357,57 @@ export function AtendedoresSubTab() {
               <button className="visitas-btn-secondary" onClick={() => setShowModal(false)} disabled={saving}>Cancelar</button>
               <button className="visitas-btn-primary" onClick={handleSave} disabled={saving}>
                 {saving ? <><Loader2 size={16} className="spinning" /> Guardando...</> : <><Check size={16} /> Guardar</>}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Motivos */}
+      {showMotivosModal && motivosAtendedor && (
+        <div className="visitas-modal-overlay" onClick={() => setShowMotivosModal(false)}>
+          <div className="visitas-modal-content visitas-modal-wide" onClick={(e) => e.stopPropagation()}>
+            <div className="visitas-modal-header">
+              <h2>Motivos → {motivosAtendedor.nombre}</h2>
+              <button className="visitas-modal-close" onClick={() => setShowMotivosModal(false)}><X size={20} /></button>
+            </div>
+            <div className="visitas-modal-body">
+              <p style={{ fontSize: '13px', color: '#6B7280', marginBottom: '12px' }}>
+                Seleccioná los motivos que atiende este anfitrión. Cuando se cree una cita con ese motivo, se asignará automáticamente.
+              </p>
+              {allCategorias.map((cat) => {
+                const motivosCat = allMotivos.filter((m) => m.categoria_id === cat.id);
+                if (motivosCat.length === 0) return null;
+                return (
+                  <div key={cat.id} style={{ marginBottom: '16px' }}>
+                    <div style={{ fontSize: '12px', fontWeight: 600, color: '#374151', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '6px', borderBottom: '1px solid #e5e7eb', paddingBottom: '4px' }}>
+                      {cat.nombre}
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                      {motivosCat.map((m) => (
+                        <label key={m.id} style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '14px', padding: '4px 0' }}>
+                          <input
+                            type="checkbox"
+                            checked={selectedMotivos.has(m.id)}
+                            onChange={() => toggleMotivo(m.id)}
+                          />
+                          <span>{m.nombre}</span>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })}
+              {selectedMotivos.size > 0 && (
+                <div style={{ marginTop: '8px', padding: '8px 12px', background: '#f0fdf4', borderRadius: '6px', fontSize: '13px', color: '#15803d' }}>
+                  {selectedMotivos.size} motivo(s) seleccionado(s)
+                </div>
+              )}
+            </div>
+            <div className="visitas-modal-footer">
+              <button className="visitas-btn-secondary" onClick={() => setShowMotivosModal(false)} disabled={savingMotivos}>Cancelar</button>
+              <button className="visitas-btn-primary" onClick={handleSaveMotivos} disabled={savingMotivos}>
+                {savingMotivos ? <><Loader2 size={16} className="spinning" /> Guardando...</> : <><Check size={16} /> Guardar</>}
               </button>
             </div>
           </div>
