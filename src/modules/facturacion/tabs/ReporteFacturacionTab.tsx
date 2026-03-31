@@ -133,7 +133,7 @@ interface FacturacionConductor {
   conductor_cuit: string | null
   vehiculo_id: string | null
   vehiculo_patente: string | null
-  tipo_alquiler: 'a_cargo' | 'turno'
+  tipo_alquiler: 'CARGO' | 'TURNO'
   turnos_base: number
   turnos_cobrados: number
   factor_proporcional: number
@@ -2142,9 +2142,9 @@ export function ReporteFacturacionTab() {
         // precio_final ya incluye IVA - no se agrega de nuevo
         
         // Determinar tipo de alquiler predominante para garantía
-        const tipoAlquiler: 'a_cargo' | 'turno' = prorrateo.CARGO > (prorrateo.TURNO_DIURNO + prorrateo.TURNO_NOCTURNO)
-          ? 'a_cargo'
-          : 'turno'
+        const tipoAlquiler: 'CARGO' | 'TURNO' = prorrateo.CARGO > (prorrateo.TURNO_DIURNO + prorrateo.TURNO_NOCTURNO)
+          ? 'CARGO'
+          : 'TURNO'
 
         // Factor proporcional para garantía (basado en días trabajados)
         const factorProporcional = diasTotales > 0 ? Math.min(1, diasTotales / 7) : 0
@@ -2153,7 +2153,7 @@ export function ReporteFacturacionTab() {
         const garantia = garantiasMap.get(conductorId)
         let subtotalGarantia = 0
         let cuotaGarantiaNumero = ''
-        const cuotasTotales = tipoAlquiler === 'a_cargo'
+        const cuotasTotales = tipoAlquiler === 'CARGO'
           ? FACTURACION_CONFIG.GARANTIA_CUOTAS_CARGO
           : FACTURACION_CONFIG.GARANTIA_CUOTAS_TURNO
 
@@ -3194,7 +3194,7 @@ export function ReporteFacturacionTab() {
         totalDescuentosGlobal += subtotalDescuentos
 
         const diasTurnoTotal = conductor.dias_turno_diurno + conductor.dias_turno_nocturno
-        const tipoAlquilerPrincipal = conductor.dias_cargo >= diasTurnoTotal ? 'a_cargo' : 'turno'
+        const tipoAlquilerPrincipal = conductor.dias_cargo >= diasTurnoTotal ? 'CARGO' : 'TURNO'
 
         // UPSERT facturacion_conductores (actualiza si ya existe)
         const { data: factConductor, error: errFact } = await (supabase
@@ -5864,8 +5864,8 @@ export function ReporteFacturacionTab() {
         } else {
           // Sin detalles, crear filas basadas en subtotales (sin IDs de detalle)
           if (fact.subtotal_alquiler > 0) {
-            const codigoAlquiler = fact.tipo_alquiler === 'a_cargo' ? 'P002' : 'P001'
-            const descAlquiler = fact.tipo_alquiler === 'a_cargo'
+            const codigoAlquiler = fact.tipo_alquiler === 'CARGO' ? 'P002' : 'P001'
+            const descAlquiler = fact.tipo_alquiler === 'CARGO'
               ? 'Alquiler a Cargo'
               : 'Alquiler Turno Diurno'
             filasPreview.push(crearFilaPreview(
@@ -6372,8 +6372,8 @@ export function ReporteFacturacionTab() {
       for (const fact of vistaPreviaData) {
         // P001/P002 - Alquiler (TURNO/CARGO)
         if (fact.subtotal_alquiler > 0) {
-          const codigoAlquiler = fact.tipo_alquiler === 'a_cargo' ? 'P002' : 'P001'
-          const descAlquilerVP = fact.tipo_alquiler === 'a_cargo'
+          const codigoAlquiler = fact.tipo_alquiler === 'CARGO' ? 'P002' : 'P001'
+          const descAlquilerVP = fact.tipo_alquiler === 'CARGO'
             ? 'Alquiler a Cargo'
             : 'Alquiler Turno Diurno'
           filasPreview.push(crearFilaPreview(
@@ -6623,7 +6623,7 @@ export function ReporteFacturacionTab() {
             }
           } else {
             // Conductor nuevo sin registro: primera cuota
-            const cuotasTotales = fc.tipo_alquiler === 'a_cargo' ? 20 : 16
+            const cuotasTotales = fc.tipo_alquiler === 'CARGO' ? 20 : 16
             numeroCuota = `1 de ${cuotasTotales}`
           }
         }
@@ -6984,7 +6984,7 @@ export function ReporteFacturacionTab() {
                   conductor_cuit: row.numeroCuil || null,
                   vehiculo_id: null,
                   vehiculo_patente: null,
-                  tipo_alquiler: 'a_cargo',
+                  tipo_alquiler: 'CARGO',
                   turnos_base: 0,
                   turnos_cobrados: 0,
                   factor_proporcional: 0,
@@ -7191,8 +7191,8 @@ export function ReporteFacturacionTab() {
 
         // P001/P002 - Alquiler (IVA dinámico desde conceptos_nomina)
         if (f.subtotal_alquiler > 0) {
-          const codigoAlquiler = f.tipo_alquiler === 'a_cargo' ? 'P002' : 'P001'
-          const descAlquiler = f.tipo_alquiler === 'a_cargo' ? 'Alquiler a Cargo' : 'Alquiler Turno Diurno'
+          const codigoAlquiler = f.tipo_alquiler === 'CARGO' ? 'P002' : 'P001'
+          const descAlquiler = f.tipo_alquiler === 'CARGO' ? 'Alquiler a Cargo' : 'Alquiler Turno Diurno'
           const ivaPctAlq = getIvaPct(codigoAlquiler)
           const netoAlquiler = extraerNeto(f.subtotal_alquiler, ivaPctAlq)
           const ivaAlquiler = Math.round((f.subtotal_alquiler - netoAlquiler) * 100) / 100
@@ -8086,7 +8086,7 @@ export function ReporteFacturacionTab() {
             {(() => {
               const o = row.original
               const bs = { fontSize: '8px', padding: '1px 4px', lineHeight: '12px', borderRadius: '3px', fontWeight: 600 } as const
-              if (o.tipo_alquiler === 'a_cargo') {
+              if (o.tipo_alquiler === 'CARGO') {
                 return <span style={{ ...bs, background: '#d1fae5', color: '#065f46' }}>CARGO</span>
               }
               const diurno = o.prorrateo_diurno_dias || 0
@@ -9920,8 +9920,8 @@ export function ReporteFacturacionTab() {
                       <span style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>Tipo</span>
                       <span style={{
                         fontSize: '10px', fontWeight: 600, padding: '2px 8px', borderRadius: '4px',
-                        background: detalleFacturacion.tipo_alquiler === 'a_cargo' ? 'rgba(59,130,246,0.1)' : 'rgba(107,114,128,0.1)',
-                        color: detalleFacturacion.tipo_alquiler === 'a_cargo' ? '#2563eb' : '#6b7280',
+                        background: detalleFacturacion.tipo_alquiler === 'CARGO' ? 'rgba(59,130,246,0.1)' : 'rgba(107,114,128,0.1)',
+                        color: detalleFacturacion.tipo_alquiler === 'CARGO' ? '#2563eb' : '#6b7280',
                       }}>
                         {detalleFacturacion.tipo_alquiler}
                       </span>

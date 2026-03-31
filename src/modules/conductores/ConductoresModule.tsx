@@ -3949,8 +3949,8 @@ function ModalDetalles({
                     <div className="vehiculo-fecha">
                       {(item.fecha_inicio || asig?.fecha_inicio) && (
                         <span>
-                          {new Date(item.fecha_inicio || asig.fecha_inicio).toLocaleDateString('es-AR')}
-                          {(item.fecha_fin || asig?.fecha_fin) && ` - ${new Date(item.fecha_fin || asig.fecha_fin).toLocaleDateString('es-AR')}`}
+                          {new Date(item.fecha_inicio || asig.fecha_inicio).toLocaleDateString('es-AR', { timeZone: 'America/Argentina/Buenos_Aires' })}
+                          {(item.fecha_fin || asig?.fecha_fin) && ` - ${new Date(item.fecha_fin || asig.fecha_fin).toLocaleDateString('es-AR', { timeZone: 'America/Argentina/Buenos_Aires' })}`}
                         </span>
                       )}
                     </div>

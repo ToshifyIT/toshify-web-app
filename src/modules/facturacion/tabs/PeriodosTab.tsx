@@ -684,7 +684,7 @@ export function PeriodosTab() {
 
         // Determinar tipo alquiler principal (el que tiene más días o el inicial)
         const diasTurnoTotal = conductor.dias_turno + conductor.dias_turno_nocturno
-        const tipoAlquilerPrincipal = conductor.dias_cargo >= diasTurnoTotal ? 'a_cargo' : 'turno'
+        const tipoAlquilerPrincipal = conductor.dias_cargo >= diasTurnoTotal ? 'CARGO' : 'TURNO'
 
         // Insertar facturación del conductor
         const { data: factConductor, error: errFact } = await (supabase

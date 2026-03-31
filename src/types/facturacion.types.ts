@@ -44,7 +44,7 @@ export interface FacturacionConductor {
   conductor_cuit: string | null
   vehiculo_id: string | null
   vehiculo_patente: string | null
-  tipo_alquiler: 'a_cargo' | 'turno'
+  tipo_alquiler: 'CARGO' | 'TURNO'
   turnos_base: number
   turnos_cobrados: number
   factor_proporcional: number
@@ -77,7 +77,7 @@ export interface FacturacionResumen {
   conductor_dni: string
   conductor_cuit: string | null
   vehiculo_patente: string | null
-  tipo_alquiler: 'a_cargo' | 'turno'
+  tipo_alquiler: 'CARGO' | 'TURNO'
   turnos_cobrados: number
   total_cargos: number
   total_descuentos: number
@@ -130,7 +130,7 @@ export interface GarantiaConductor {
   conductor_nombre: string | null
   conductor_dni: string | null
   conductor_cuit: string | null
-  tipo_alquiler: 'a_cargo' | 'turno'
+  tipo_alquiler: 'CARGO' | 'TURNO'
   monto_total: number
   monto_cuota_semanal: number
   cuotas_totales: number
@@ -158,7 +158,7 @@ export interface GarantiaPago {
 
 export interface GarantiaFormData {
   conductor_id: string
-  tipo_alquiler: 'a_cargo' | 'turno'
+  tipo_alquiler: 'CARGO' | 'TURNO'
   fecha_inicio: string
 }
 
@@ -485,10 +485,10 @@ export function calcularMora(
 }
 
 export function calcularAlquilerProporcional(
-  tipoAlquiler: 'a_cargo' | 'turno',
+  tipoAlquiler: 'CARGO' | 'TURNO',
   turnosCobrados: number
 ): number {
-  const montoSemanal = tipoAlquiler === 'a_cargo'
+  const montoSemanal = tipoAlquiler === 'CARGO'
     ? FACTURACION_CONFIG.ALQUILER_CARGO
     : FACTURACION_CONFIG.ALQUILER_TURNO
 
