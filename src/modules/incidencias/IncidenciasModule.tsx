@@ -2152,32 +2152,50 @@ export function IncidenciasModule() {
           .single()
         if (error) throw error
         
-        // Si es incidencia de cobro, crear automáticamente la penalidad (enviar a "Por Aplicar")
+        // Si es incidencia de cobro, vincular/crear penalidad → Estado "Por Aplicar"
         if (esCobro && incidenciaCreada?.id) {
           const vehiculo = vehiculos.find(v => v.id === incidenciaForm.vehiculo_id)
           const conductor = conductores.find(c => c.id === incidenciaForm.conductor_id)
-          
-          await (supabase.from('penalidades' as any) as any)
-            .insert({
-              incidencia_id: incidenciaCreada.id,
-              vehiculo_id: incidenciaForm.vehiculo_id || null,
-              conductor_id: incidenciaForm.conductor_id || null,
-              tipo_cobro_descuento_id: incidenciaForm.tipo_cobro_descuento_id || null,
-              semana: semanaCalculada,
-              fecha: incidenciaForm.fecha,
-              turno: incidenciaForm.turno || null,
-              area_responsable: getAreaResponsablePorRol(profile?.roles?.name) || 'ADMINISTRACION',
-              detalle: 'Cobro por incidencia',
-              monto: incidenciaForm.monto || 0,
-              observaciones: incidenciaForm.descripcion || '',
-              aplicado: false,
-              conductor_nombre: conductor ? `${conductor.nombres} ${conductor.apellidos}` : null,
-              vehiculo_patente: vehiculo?.patente || null,
-              created_by: user?.id,
-              created_by_name: profile?.full_name || 'Sistema',
-              sede_id: sedeActualId || sedeUsuario?.id,
-            })
-          // penError silently ignored - la incidencia ya se creó
+
+          // El trigger de DB crea la penalidad automáticamente pero sin incidencia_id.
+          // Buscamos esa penalidad huérfana y la vinculamos; si no existe, la creamos.
+          const { data: penHuerfana } = await (supabase.from('penalidades' as any) as any)
+            .select('id')
+            .is('incidencia_id', null)
+            .eq('vehiculo_id', incidenciaForm.vehiculo_id || '')
+            .eq('fecha', incidenciaForm.fecha)
+            .order('created_at', { ascending: false })
+            .limit(1)
+            .maybeSingle()
+
+          if (penHuerfana?.id) {
+            // Vincular la penalidad creada por el trigger
+            await (supabase.from('penalidades' as any) as any)
+              .update({ incidencia_id: incidenciaCreada.id })
+              .eq('id', penHuerfana.id)
+          } else {
+            // No existe penalidad del trigger → crearla directamente
+            await (supabase.from('penalidades' as any) as any)
+              .insert({
+                incidencia_id: incidenciaCreada.id,
+                vehiculo_id: incidenciaForm.vehiculo_id || null,
+                conductor_id: incidenciaForm.conductor_id || null,
+                tipo_cobro_descuento_id: incidenciaForm.tipo_cobro_descuento_id || null,
+                semana: semanaCalculada,
+                fecha: incidenciaForm.fecha,
+                turno: incidenciaForm.turno || null,
+                area_responsable: getAreaResponsablePorRol(profile?.roles?.name) || 'ADMINISTRACION',
+                detalle: 'Cobro por incidencia',
+                monto: incidenciaForm.monto || 0,
+                observaciones: incidenciaForm.descripcion || '',
+                aplicado: false,
+                conductor_nombre: conductor ? `${conductor.nombres} ${conductor.apellidos}` : null,
+                vehiculo_patente: vehiculo?.patente || null,
+                created_by: user?.id,
+                created_by_name: profile?.full_name || 'Sistema',
+                sede_id: sedeActualId || sedeUsuario?.id,
+              })
+          }
         }
         
         showSuccess('Guardado', esCobro 
