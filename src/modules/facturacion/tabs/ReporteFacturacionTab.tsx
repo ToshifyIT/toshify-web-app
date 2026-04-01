@@ -1863,9 +1863,14 @@ export function ReporteFacturacionTab() {
         { data: excesosData },
         { data: dniMapeoData },
       ] = await Promise.all([
-        (supabase.from('saldos_conductores') as any)
-          .select('conductor_id, saldo_actual')
-          .in('conductor_id', conductorIds),
+        // Saldo anterior: último movimiento de un período anterior (semana/anio) en control_saldos
+        (supabase.from('control_saldos') as any)
+          .select('conductor_id, saldo_pendiente, semana, anio')
+          .in('conductor_id', conductorIds)
+          .or(`anio.lt.${anioDelPeriodo},and(anio.eq.${anioDelPeriodo},semana.lt.${semanaDelPeriodo})`)
+          .order('anio', { ascending: false })
+          .order('semana', { ascending: false })
+          .order('created_at', { ascending: false }),
         (supabase.from('garantias_conductores') as any)
           .select('conductor_id, conductor_nombre, estado, cuotas_pagadas, cuotas_totales, tipo_alquiler, monto_cuota_semanal, monto_pagado, monto_total')
           .in('conductor_id', conductorIds),
@@ -1897,9 +1902,13 @@ export function ReporteFacturacionTab() {
       )
 
       // Construir mapas
-      const saldosMap = new Map<string, { conductor_id: string; saldo_actual: number }>(
-        (saldos || []).map((s: any) => [s.conductor_id, s])
-      )
+      // Agrupar por conductor_id y tomar solo el más reciente (ya ordenado por created_at desc)
+      const saldosMap = new Map<string, { conductor_id: string; saldo_pendiente: number }>()
+      for (const s of (saldos || []) as any[]) {
+        if (!saldosMap.has(s.conductor_id)) {
+          saldosMap.set(s.conductor_id, s)
+        }
+      }
 
       const garantiasMap = new Map<string, {
         conductor_id: string | null;
@@ -2219,9 +2228,9 @@ export function ReporteFacturacionTab() {
         // Tickets a favor (descuentos) + P004 de penalidades
         const subtotalDescuentos = (ticketsMap.get(conductorId) || 0) + montoPenalidadesDescuento
 
-        // Saldo anterior: se LEE del tab Saldos (solo lectura, no se escribe de vuelta)
+        // Saldo anterior: se LEE de control_saldos de la semana anterior (solo lectura)
         const saldo = saldosMap.get(conductorId)
-        const saldoAnteriorRaw = diasTotales === 0 ? 0 : -(saldo?.saldo_actual || 0)
+        const saldoAnteriorRaw = diasTotales === 0 ? 0 : -(saldo?.saldo_pendiente || 0)
         const saldoAnterior = Math.abs(saldoAnteriorRaw) < 0.01 ? 0 : Math.round(saldoAnteriorRaw * 100) / 100
         const diasMora = 0
         const montoMora = 0
@@ -2920,7 +2929,14 @@ export function ReporteFacturacionTab() {
       const [penalidadesRes, ticketsRes, saldosRes, excesosRes, cabifyRes, garantiasRes, cobrosRes, multasRes, dniMapeoResRecalc] = await Promise.all([
         (supabase.from('penalidades') as any).select('*, tipos_cobro_descuento(categoria, es_a_favor, nombre), incidencias(descripcion)').in('conductor_id', conductorIds).eq('semana_aplicacion', semanaNum).eq('anio_aplicacion', anioNum).eq('aplicado', true).eq('fraccionado', false).neq('rechazado', true),
         (supabase.from('tickets_favor') as any).select('*').in('conductor_id', conductorIds).eq('estado', 'aprobado'),
-        (supabase.from('saldos_conductores') as any).select('conductor_id, saldo_actual').in('conductor_id', conductorIds),
+        // Saldo anterior: último movimiento de un período anterior (semana/anio) en control_saldos
+        (supabase.from('control_saldos') as any)
+          .select('conductor_id, saldo_pendiente, semana, anio')
+          .in('conductor_id', conductorIds)
+          .or(`anio.lt.${anioNum},and(anio.eq.${anioNum},semana.lt.${semanaNum})`)
+          .order('anio', { ascending: false })
+          .order('semana', { ascending: false })
+          .order('created_at', { ascending: false }),
         (supabase.from('excesos_kilometraje') as any).select('*').in('conductor_id', conductorIds).eq('aplicado', false),
         // Peajes de la SEMANA ANTERIOR
         (() => {
@@ -3024,9 +3040,13 @@ export function ReporteFacturacionTab() {
         arr.push(pc)
         cuotasGrouped.set(cid, arr)
       })
-      const saldosMapById = new Map<string, any>(
-        (saldos as any[]).map((s: any) => [s.conductor_id, s])
-      )
+      // Agrupar por conductor_id y tomar solo el más reciente (ya ordenado por created_at desc)
+      const saldosMapById = new Map<string, any>()
+      for (const s of (saldos as any[])) {
+        if (!saldosMapById.has(s.conductor_id)) {
+          saldosMapById.set(s.conductor_id, s)
+        }
+      }
       // ─────────────────────────────────────────────────────────────────────────────
 
       // Mapa de CABIFY_hash → DNI real para resolver hashes de Cabify
@@ -3194,9 +3214,9 @@ export function ReporteFacturacionTab() {
         const montoMultas = multasVehiculo?.monto || 0
         const cantidadMultas = multasVehiculo?.cantidad || 0
 
-        // Saldo anterior: se LEE del tab Saldos (solo lectura, no se escribe de vuelta)
+        // Saldo anterior: se LEE de control_saldos de la semana anterior (solo lectura)
         const saldoConductor = saldosMapById.get(conductor.conductor_id)
-        const saldoAnteriorRaw = conductor.total_dias === 0 ? 0 : -(saldoConductor?.saldo_actual || 0)
+        const saldoAnteriorRaw = conductor.total_dias === 0 ? 0 : -(saldoConductor?.saldo_pendiente || 0)
         const saldoAnterior = Math.abs(saldoAnteriorRaw) < 0.01 ? 0 : Math.round(saldoAnteriorRaw * 100) / 100
         const diasMora = 0
         const montoMora = 0
