@@ -164,3 +164,48 @@ export async function registrarHistorialAsignacion(params: {
     }),
   ]);
 }
+
+// ─── Historial de Bajas / Reactivaciones ─────────────────────────────────────
+
+export type TipoEventoBaja = 'baja' | 'reactivacion';
+
+interface HistorialBajaParams {
+  conductorId: string;
+  conductorNombre: string;
+  conductorDni: string;
+  tipoEvento: TipoEventoBaja;
+  estadoAnterior?: string | null;
+  estadoNuevo?: string | null;
+  fechaTerminacionAnterior?: string | null;
+  fechaTerminacionNueva?: string | null;
+  motivoBaja?: string | null;
+  sedeId?: string | null;
+}
+
+/**
+ * Registra un evento de baja o reactivación en conductores_historial_bajas.
+ * No lanza errores — falla silenciosamente para no interrumpir el flujo principal.
+ */
+export async function registrarHistorialBaja(params: HistorialBajaParams): Promise<void> {
+  try {
+    const usuario = await getUsuarioActual();
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    await (supabase.from('conductores_historial_bajas') as any).insert({
+      conductor_id: params.conductorId,
+      conductor_nombre: params.conductorNombre,
+      conductor_dni: params.conductorDni,
+      tipo_evento: params.tipoEvento,
+      estado_anterior: params.estadoAnterior || null,
+      estado_nuevo: params.estadoNuevo || null,
+      fecha_terminacion_anterior: params.fechaTerminacionAnterior || null,
+      fecha_terminacion_nueva: params.fechaTerminacionNueva || null,
+      motivo_baja: params.motivoBaja || null,
+      usuario_id: usuario.id,
+      usuario_nombre: usuario.nombre,
+      sede_id: params.sedeId || null,
+    });
+  } catch {
+    // Falla silenciosa — el historial no debe bloquear operaciones
+  }
+}

@@ -703,10 +703,12 @@ export function ReporteFacturacionTab() {
           : horarioRawDias === 'turno' ? 'TURNO'
           : horarioRawDias.toUpperCase()
         const acInicioStr = ac.fecha_inicio ? toArgDate(ac.fecha_inicio) : 'NULL'
-        // Mostrar fecha_fin del padre si es posterior a la del conductor (consistencia con módulo asignaciones)
+        // Mostrar fecha_fin del conductor si la tiene, sino la del padre (consistente con conteo de días)
         const acFinRaw = ac.fecha_fin || asignacion.fecha_fin || null
         const padreFinRaw = asignacion.fecha_fin || null
-        const fechaFinMostrar = (acFinRaw && padreFinRaw && padreFinRaw > acFinRaw) ? padreFinRaw : acFinRaw
+        const fechaFinMostrar = acFinRaw && padreFinRaw
+          ? (acFinRaw < padreFinRaw ? acFinRaw : padreFinRaw)
+          : (acFinRaw || padreFinRaw)
         const acFinStr = fechaFinMostrar ? toArgDate(fechaFinMostrar) : 'NULL'
 
         // Skip PROGRAMADO — asignación no ha iniciado, no cuenta para facturación
@@ -732,11 +734,14 @@ export function ReporteFacturacionTab() {
         const acInicio = conductorInicioD && padreInicioD
           ? (conductorInicioD > padreInicioD ? conductorInicioD : padreInicioD)
           : (conductorInicioD || padreInicioD || semanaInicio)
-        // Fin: usar la fecha_fin de la asignación padre (no del conductor)
-        // Los días se cuentan hasta el fin de la asignación independientemente
-        // de si el conductor se dio de baja o no
+        // Fin: usar el MENOR entre fecha_fin del conductor y fecha_fin del padre
+        // Si el conductor se dio de baja antes que termine la asignación padre,
+        // solo se cuentan días hasta su propia fecha_fin
+        const conductorFinD = ac.fecha_fin ? parseISO(toArgDate(ac.fecha_fin)) : null
         const padreFinD = asignacion.fecha_fin ? parseISO(toArgDate(asignacion.fecha_fin)) : null
-        const acFin = padreFinD || semanaFin
+        const acFin = conductorFinD && padreFinD
+          ? (conductorFinD < padreFinD ? conductorFinD : padreFinD)
+          : (conductorFinD || padreFinD || semanaFin)
 
         if (acFin < semanaInicio || acInicio > limiteConteo) {
           historial.push({ fechaInicio: acInicioStr, fechaFin: acFinStr, padreEstado: estadoPadre, horario, dias: 0, nota: 'Fuera de rango', patente: patenteAsig })
@@ -755,6 +760,17 @@ export function ReporteFacturacionTab() {
           while (cursorBaja <= efectivoFinOriginal) {
             diasPostBaja.add(format(cursorBaja, 'yyyy-MM-dd'))
             cursorBaja.setDate(cursorBaja.getDate() + 1)
+          }
+        }
+        // Marcar visualmente días post-baja basándose en padre.fecha_fin (fecha devolución real)
+        // Aplica cuando min(conductor,padre) ya recortó acFin pero el padre extiende más allá de fecha_baja
+        if (fechaTermDesglose && usarFechaBajaDesglose && padreFinD && padreFinD > fechaTermDesglose && acInicio <= fechaTermDesglose) {
+          const cursorPostBaja = new Date(fechaTermDesglose)
+          cursorPostBaja.setDate(cursorPostBaja.getDate() + 1)
+          const limitePostBaja = padreFinD > limiteConteo ? limiteConteo : padreFinD
+          while (cursorPostBaja <= limitePostBaja) {
+            diasPostBaja.add(format(cursorPostBaja, 'yyyy-MM-dd'))
+            cursorPostBaja.setDate(cursorPostBaja.getDate() + 1)
           }
         }
         let diasContados = 0
@@ -2699,10 +2715,12 @@ export function ReporteFacturacionTab() {
         const acInicio = conductorInicioR && padreInicioR
           ? (conductorInicioR > padreInicioR ? conductorInicioR : padreInicioR)
           : (conductorInicioR || padreInicioR || fechaInicioSemanaRecalc)
-        // Fin: usar la fecha_fin de la asignación padre (no del conductor)
-        // Los días se cuentan hasta el fin de la asignación independientemente del estado del conductor
+        // Fin: usar el MENOR entre fecha_fin del conductor y fecha_fin del padre
+        const conductorFinR = ac.fecha_fin ? parseISO(toArgDate(ac.fecha_fin)) : null
         const padreFinR = asignacion.fecha_fin ? parseISO(toArgDate(asignacion.fecha_fin)) : null
-        const acFin = padreFinR || fechaFinSemanaRecalc
+        const acFin = conductorFinR && padreFinR
+          ? (conductorFinR < padreFinR ? conductorFinR : padreFinR)
+          : (conductorFinR || padreFinR || fechaFinSemanaRecalc)
 
         if (acFin < fechaInicioSemanaRecalc || acInicio > fechaFinSemanaRecalc) continue
 

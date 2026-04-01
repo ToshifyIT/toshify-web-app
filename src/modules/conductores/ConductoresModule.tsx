@@ -31,7 +31,7 @@ import { ConductorWizard } from "./components/ConductorWizard";
 
 import { createConductorDriveFolder } from "../../services/driveService";
 import { AddressAutocomplete } from "../../components/ui/AddressAutocomplete";
-import { registrarHistorialConductor, registrarHistorialVehiculo } from "../../services/historialService";
+import { registrarHistorialConductor, registrarHistorialVehiculo, registrarHistorialBaja } from "../../services/historialService";
 import { getEstadoConductorDisplay, getEstadoConductorBadgeStyle } from "../../utils/conductorUtils";
 import { normalizeDni } from "../../utils/normalizeDocuments";
 
@@ -1277,6 +1277,26 @@ export function ConductoresModule() {
         modulo: 'conductores',
         sedeId: formData.sede_id || null,
       });
+
+      // Registrar en conductores_historial_bajas si el cambio involucra el estado BAJA
+      const codigoBaja = 'BAJA';
+      const esReactivacion = estadoAnterior?.codigo?.toUpperCase() === codigoBaja && estadoNuevo?.codigo?.toUpperCase() !== codigoBaja;
+      const esBaja = estadoNuevo?.codigo?.toUpperCase() === codigoBaja && estadoAnterior?.codigo?.toUpperCase() !== codigoBaja;
+
+      if (esReactivacion || esBaja) {
+        registrarHistorialBaja({
+          conductorId: selectedConductor!.id,
+          conductorNombre: `${formData.nombres} ${formData.apellidos}`,
+          conductorDni: formData.numero_dni || '',
+          tipoEvento: esReactivacion ? 'reactivacion' : 'baja',
+          estadoAnterior: estadoAnterior?.codigo || null,
+          estadoNuevo: estadoNuevo?.codigo || null,
+          fechaTerminacionAnterior: selectedConductor!.fecha_terminacion || null,
+          fechaTerminacionNueva: formData.fecha_terminacion || null,
+          motivoBaja: esBaja ? (formData.motivo_baja || null) : null,
+          sedeId: formData.sede_id || null,
+        });
+      }
     }
 
     // Actualizar categorías de licencia
@@ -1518,6 +1538,8 @@ export function ConductoresModule() {
         sedeId: selectedConductor.sede_id,
       });
 
+      // Nota: el registro en conductores_historial_bajas se hace dentro de performConductorUpdate()
+
       showSuccess("Baja registrada", "El conductor fue dado de baja. Las asignaciones quedan activas para gestión de Onboarding/Logística.");
     } catch (err: any) {
       Swal.fire({
@@ -1570,6 +1592,8 @@ export function ConductoresModule() {
         modulo: 'conductores',
         sedeId: selectedConductor.sede_id,
       });
+
+      // Nota: el registro en conductores_historial_bajas se hace dentro de performConductorUpdate()
 
       showSuccess("Baja procesada", "El conductor y sus asignaciones fueron actualizados");
     } catch (err: any) {
