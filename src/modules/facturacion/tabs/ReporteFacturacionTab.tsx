@@ -347,6 +347,7 @@ export function ReporteFacturacionTab() {
       horario: string
       trabajado: boolean
       postBaja?: boolean
+      gnc?: boolean
     }[]
     historial: {
       fechaInicio: string
@@ -367,6 +368,7 @@ export function ReporteFacturacionTab() {
       observaciones: string | null
       fecha_baja: string | null
     } | null
+    preciosPorCodigo?: Record<string, number>
   } | null>(null)
   const [loadingDias, setLoadingDias] = useState(false)
 
@@ -661,7 +663,7 @@ export function ReporteFacturacionTab() {
           .from('asignaciones_conductores') as any)
           .select(`
             id, conductor_id, horario, fecha_inicio, fecha_fin, estado,
-            asignaciones!inner(id, horario, estado, fecha_inicio, fecha_fin, vehiculo_id, vehiculos(patente))
+            asignaciones!inner(id, horario, estado, fecha_inicio, fecha_fin, vehiculo_id, vehiculos(patente, gnc))
           `)
           .eq('conductor_id', realConductorId)
           .in('estado', ['asignado', 'activo', 'activa', 'finalizado', 'finalizada', 'completado', 'cancelado', 'cancelada']),
@@ -687,7 +689,7 @@ export function ReporteFacturacionTab() {
 
       // Construir un Set de fechas cubiertas con su horario
       const diasNombres = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado']
-      const diasCubiertos = new Map<string, string>() // fecha -> horario
+      const diasCubiertos = new Map<string, { horario: string; gnc: boolean }>() // fecha -> horario + gnc del vehículo
       const historial: { fechaInicio: string; fechaFin: string; padreEstado: string; horario: string; dias: number; nota: string; horaEntrega?: string; nuevaEnSemana?: boolean; patente?: string }[] = []
 
       for (const ac of (asignacionesCond || []) as any[]) {
@@ -775,11 +777,12 @@ export function ReporteFacturacionTab() {
         }
         let diasContados = 0
 
+        const vehiculoGncDesglose = asignacion.vehiculos?.gnc === true
         const cursorAc = new Date(efectivoInicio)
         while (cursorAc <= efectivoFin) {
           const key = format(cursorAc, 'yyyy-MM-dd')
           if (!diasCubiertos.has(key)) {
-            diasCubiertos.set(key, horario)
+            diasCubiertos.set(key, { horario, gnc: vehiculoGncDesglose })
             diasContados++
           }
           cursorAc.setDate(cursorAc.getDate() + 1)
@@ -795,7 +798,7 @@ export function ReporteFacturacionTab() {
       // Generar los 7 días de la semana con su estado
       // Solo días hasta hoy se marcan como trabajados, futuros quedan como pendientes
       // Días excluidos por fecha de baja se marcan como postBaja (rojo)
-      const diasSemana: { fecha: string; diaSemana: string; horario: string; trabajado: boolean; postBaja?: boolean }[] = []
+      const diasSemana: { fecha: string; diaSemana: string; horario: string; trabajado: boolean; postBaja?: boolean; gnc?: boolean }[] = []
       const cursor = new Date(semanaInicio)
       while (cursor <= semanaFin) {
         const key = format(cursor, 'yyyy-MM-dd')
@@ -804,9 +807,10 @@ export function ReporteFacturacionTab() {
         diasSemana.push({
           fecha: format(cursor, 'dd/MM/yyyy'),
           diaSemana: diasNombres[cursor.getDay()],
-          horario: cubierto || (esPostBaja ? 'BAJA' : '-'),
+          horario: cubierto?.horario || (esPostBaja ? 'BAJA' : '-'),
           trabajado: !!cubierto,
           postBaja: esPostBaja,
+          gnc: cubierto?.gnc,
         })
         cursor.setDate(cursor.getDate() + 1)
       }
@@ -852,13 +856,28 @@ export function ReporteFacturacionTab() {
           }
         : null
 
+      // Cargar precios de conceptos de alquiler para mostrar precio real por día
+      const { data: conceptosPreciosDias } = await supabase
+        .from('conceptos_nomina')
+        .select('codigo, precio_final')
+        .eq('activo', true)
+        .in('codigo', ['P001', 'P002', 'P013', 'P014', 'P015', 'P016'])
+      const preciosPorCodigoDias: Record<string, number> = {}
+      ;(conceptosPreciosDias || []).forEach((c: any) => {
+        preciosPorCodigoDias[c.codigo] = c.precio_final || 0
+      })
+
       setDiasModalData({
         conductorId: realConductorId,
         conductorNombre,
         conductorDni,
+        preciosPorCodigo: preciosPorCodigoDias,
         totalDias: Math.max(0, Math.min(7, diasCubiertos.size) - (() => {
           // Calcular descuento por hora de entrega directamente desde el historial
           // Solo aplica si la asignación es NUEVA en esta semana (misma lógica que tabla/recalcular)
+          // Si el conductor ya tenía asignación activa antes de esta semana, no aplicar descuento (cambio de vehículo)
+          const tieneAsignacionPrevia = historialFiltrado.some(h => h.dias > 0 && !h.nuevaEnSemana)
+          if (tieneAsignacionPrevia) return 0
           const primeraConEntrega = historialFiltrado.find(h => h.horaEntrega && h.dias > 0 && h.nuevaEnSemana)
           if (!primeraConEntrega || !primeraConEntrega.horaEntrega) return 0
           const hora = parseInt(primeraConEntrega.horaEntrega.split(':')[0])
@@ -1511,7 +1530,7 @@ export function ReporteFacturacionTab() {
           fecha_fin,
           estado,
           asignacion_id,
-          asignaciones!inner(id, horario, estado, fecha_inicio, fecha_fin)
+          asignaciones!inner(id, horario, estado, fecha_inicio, fecha_fin, vehiculo_id, vehiculos(gnc))
         `)
         .in('conductor_id', conductorIds)
         .in('estado', ['asignado', 'activo', 'activa', 'finalizado', 'finalizada', 'completado', 'cancelado', 'cancelada'])
@@ -1566,6 +1585,7 @@ export function ReporteFacturacionTab() {
         modalidad: 'CARGO' | 'TURNO_DIURNO' | 'TURNO_NOCTURNO';
         fechaInicio: Date;
         fechaFin: Date;
+        tieneGnc: boolean;
       }>>()
       conductorIds.forEach((id: string) => asignacionesPorConductorVP.set(id, []))
 
@@ -1578,7 +1598,25 @@ export function ReporteFacturacionTab() {
 
       // Alertas de prorrateo por ingreso: conductor diurno con entrega nueva en la semana
       const alertasProrrateoVP = new Map<string, { tipo: 'medio_turno' | 'dia_completo'; hora: string; fecha: string; descuento: number }>()
-      
+
+      // Pre-scan: detectar conductores que ya tenían asignación activa ANTES de esta semana
+      // Si un conductor ya estaba trabajando (cambio de vehículo), NO se le aplica descuento por hora de entrega
+      const conductoresConAsignacionPreviaVP = new Set<string>()
+      for (const ac of (asignacionesConductores || []) as any[]) {
+        const asignacion = ac.asignaciones
+        if (!asignacion) continue
+        const estadoPadre = (asignacion.estado || '').toLowerCase()
+        if (['programado', 'programada'].includes(estadoPadre)) continue
+        if (['finalizada', 'cancelada', 'finalizado', 'cancelado'].includes(estadoPadre) && !asignacion.fecha_fin) continue
+        if (!ac.fecha_inicio && !asignacion.fecha_inicio) continue
+        const cIni = ac.fecha_inicio ? parseISO(toArgDate(ac.fecha_inicio)) : null
+        const pIni = asignacion.fecha_inicio ? parseISO(toArgDate(asignacion.fecha_inicio)) : null
+        const inicioEfectivo = cIni && pIni ? (cIni > pIni ? cIni : pIni) : (cIni || pIni)
+        if (inicioEfectivo && inicioEfectivo < fechaInicioSemana) {
+          conductoresConAsignacionPreviaVP.add(ac.conductor_id)
+        }
+      }
+
       ;(asignacionesConductores || []).forEach((ac: any) => {
         const asignacion = ac.asignaciones
         if (!asignacion) return
@@ -1663,7 +1701,7 @@ export function ReporteFacturacionTab() {
         //             entrega después de hora_corte_diurno → descuento turno completo
         //   CARGO:    entrega después de hora_corte_cargo → descuento medio turno
         //   NOCTURNO: sin descuento
-        if ((modalidad === 'TURNO_DIURNO' || modalidad === 'CARGO') && acInicio >= fechaInicioSemana && !alertasProrrateoVP.has(ac.conductor_id)) {
+        if ((modalidad === 'TURNO_DIURNO' || modalidad === 'CARGO') && acInicio >= fechaInicioSemana && !alertasProrrateoVP.has(ac.conductor_id) && !conductoresConAsignacionPreviaVP.has(ac.conductor_id)) {
           // Solo usar fecha_inicio del padre (entrega real) — no el fallback del conductor
           const rawTimestamp = asignacion.fecha_inicio
           if (rawTimestamp) {
@@ -1691,7 +1729,7 @@ export function ReporteFacturacionTab() {
         // Guardar asignación para cálculo de montos
         const asigs = asignacionesPorConductorVP.get(ac.conductor_id)
         if (asigs) {
-          asigs.push({ modalidad, fechaInicio: efectivoInicio, fechaFin: efectivoFin })
+          asigs.push({ modalidad, fechaInicio: efectivoInicio, fechaFin: efectivoFin, tieneGnc: asignacion.vehiculos?.gnc === true })
         }
 
         // Rastrear la fecha_fin más tardía de la asignación (no la efectiva, la real del registro)
@@ -1790,8 +1828,7 @@ export function ReporteFacturacionTab() {
         const montosContados = new Set<string>()
 
         for (const asig of asignaciones) {
-          const tieneGnc = conductorTieneGncVP.get(conductorId) !== false
-          const codigo = getCodigoPorModalidadVP(asig.modalidad, tieneGnc)
+          const codigo = getCodigoPorModalidadVP(asig.modalidad, asig.tieneGnc)
           const montoKey = `monto_${asig.modalidad}` as keyof ProrrateoVistaPrevia
           
           // Rastrear fecha de inicio más temprana para este conductor
@@ -2642,7 +2679,7 @@ export function ReporteFacturacionTab() {
         .from('asignaciones_conductores') as any)
         .select(`
           id, conductor_id, horario, fecha_inicio, fecha_fin, estado,
-          asignaciones!inner(id, horario, estado, fecha_inicio, fecha_fin)
+          asignaciones!inner(id, horario, estado, fecha_inicio, fecha_fin, vehiculo_id, vehiculos(gnc))
         `)
         .in('conductor_id', conductorIdsTemp)
         .in('estado', ['asignado', 'activo', 'activa', 'finalizado', 'finalizada', 'completado', 'cancelado', 'cancelada'])
@@ -2650,13 +2687,15 @@ export function ReporteFacturacionTab() {
       // Rastrear la fecha_fin más tardía de asignaciones por conductor
       const maxAsigFinRecalc = new Map<string, string>()
 
-      // Calcular días reales por conductor por modalidad
+      // Calcular días reales por conductor por modalidad+GNC
+      // Cada combinación modalidad+GNC genera una línea de alquiler separada
       interface ProrrateoRecalc {
         CARGO: number; TURNO_DIURNO: number; TURNO_NOCTURNO: number;
+        CARGO_SIN_GNC: number; TURNO_DIURNO_SIN_GNC: number; TURNO_NOCTURNO_SIN_GNC: number;
       }
       const prorrateoRecalcMap = new Map<string, ProrrateoRecalc>()
       conductorIdsTemp.forEach((id: string) => {
-        prorrateoRecalcMap.set(id, { CARGO: 0, TURNO_DIURNO: 0, TURNO_NOCTURNO: 0 })
+        prorrateoRecalcMap.set(id, { CARGO: 0, TURNO_DIURNO: 0, TURNO_NOCTURNO: 0, CARGO_SIN_GNC: 0, TURNO_DIURNO_SIN_GNC: 0, TURNO_NOCTURNO_SIN_GNC: 0 })
       })
 
       // Set de fechas ya contadas por conductor para deduplicar registros duplicados
@@ -2695,6 +2734,24 @@ export function ReporteFacturacionTab() {
 
       // Descuentos por hora de entrega (misma lógica que Vista Previa)
       const descuentosPorHoraRecalc = new Map<string, { descuento: number; modalidad: string }>()
+
+      // Pre-scan: detectar conductores que ya tenían asignación activa ANTES de esta semana
+      // Si un conductor ya estaba trabajando (cambio de vehículo), NO se le aplica descuento por hora de entrega
+      const conductoresConAsignacionPreviaRecalc = new Set<string>()
+      for (const ac of (asignacionesConductoresRecalc || []) as any[]) {
+        const asignacion = ac.asignaciones
+        if (!asignacion) continue
+        const estadoPadre = (asignacion.estado || '').toLowerCase()
+        if (['programado', 'programada'].includes(estadoPadre)) continue
+        if (['finalizada', 'cancelada', 'finalizado', 'cancelado'].includes(estadoPadre) && !asignacion.fecha_fin) continue
+        if (!ac.fecha_inicio && !asignacion.fecha_inicio) continue
+        const cIni = ac.fecha_inicio ? parseISO(toArgDate(ac.fecha_inicio)) : null
+        const pIni = asignacion.fecha_inicio ? parseISO(toArgDate(asignacion.fecha_inicio)) : null
+        const inicioEfectivo = cIni && pIni ? (cIni > pIni ? cIni : pIni) : (cIni || pIni)
+        if (inicioEfectivo && inicioEfectivo < fechaInicioSemanaRecalc) {
+          conductoresConAsignacionPreviaRecalc.add(ac.conductor_id)
+        }
+      }
 
       for (const ac of (asignacionesConductoresRecalc || []) as any[]) {
         const asignacion = ac.asignaciones
@@ -2736,8 +2793,10 @@ export function ReporteFacturacionTab() {
 
         const modalidadAsignacion = asignacion.horario
         const horarioLower = (ac.horario || '').toLowerCase().trim()
+        const vehiculoGnc = asignacion.vehiculos?.gnc === true
 
         // Contar días deduplicando por fecha (evita doble conteo con registros duplicados)
+        // Separa por modalidad+GNC para generar líneas de alquiler correctas
         const fechasContadasR = diasContadosRecalc.get(ac.conductor_id)!
         const cursorR = new Date(efectivoInicio)
         while (cursorR <= efectivoFin) {
@@ -2745,15 +2804,15 @@ export function ReporteFacturacionTab() {
           if (!fechasContadasR.has(key)) {
             fechasContadasR.add(key)
             if (modalidadAsignacion === 'todo_dia' || horarioLower === 'todo_dia') {
-              prorrateo.CARGO++
+              if (vehiculoGnc) prorrateo.CARGO++; else prorrateo.CARGO_SIN_GNC++
             } else if (modalidadAsignacion === 'turno') {
               if (horarioLower === 'nocturno' || horarioLower === 'n') {
-                prorrateo.TURNO_NOCTURNO++
+                if (vehiculoGnc) prorrateo.TURNO_NOCTURNO++; else prorrateo.TURNO_NOCTURNO_SIN_GNC++
               } else {
-                prorrateo.TURNO_DIURNO++
+                if (vehiculoGnc) prorrateo.TURNO_DIURNO++; else prorrateo.TURNO_DIURNO_SIN_GNC++
               }
             } else {
-              prorrateo.CARGO++
+              if (vehiculoGnc) prorrateo.CARGO++; else prorrateo.CARGO_SIN_GNC++
             }
           }
           cursorR.setDate(cursorR.getDate() + 1)
@@ -2765,7 +2824,7 @@ export function ReporteFacturacionTab() {
           : (modalidadAsignacion === 'turno' && (horarioLower === 'nocturno' || horarioLower === 'n'))
             ? 'TURNO_NOCTURNO'
             : 'TURNO_DIURNO'
-        if ((modalidadDescR === 'TURNO_DIURNO' || modalidadDescR === 'CARGO') && acInicio >= fechaInicioSemanaRecalc && !descuentosPorHoraRecalc.has(ac.conductor_id)) {
+        if ((modalidadDescR === 'TURNO_DIURNO' || modalidadDescR === 'CARGO') && acInicio >= fechaInicioSemanaRecalc && !descuentosPorHoraRecalc.has(ac.conductor_id) && !conductoresConAsignacionPreviaRecalc.has(ac.conductor_id)) {
           // Solo usar fecha_inicio del padre (entrega real) — no el fallback del conductor
           const rawTs = asignacion.fecha_inicio
           if (rawTs) {
@@ -2811,7 +2870,10 @@ export function ReporteFacturacionTab() {
         conductor_cuit: string | null; vehiculo_patente: string | null;
         tiene_gnc: boolean;
         tiene_telepase: boolean;
-        dias_turno_diurno: number; dias_turno_nocturno: number; dias_cargo: number; total_dias: number;
+        dias_turno_diurno: number; dias_turno_diurno_sin_gnc: number;
+        dias_turno_nocturno: number; dias_turno_nocturno_sin_gnc: number;
+        dias_cargo: number; dias_cargo_sin_gnc: number;
+        total_dias: number;
         estado_billing: 'Activo' | 'Pausa' | 'De baja';
         fecha_baja_no_coincide?: boolean;
       }[] = []
@@ -2824,20 +2886,34 @@ export function ReporteFacturacionTab() {
         const conductorData = conductoresMap.get(control.numero_dni)
         if (!conductorData) continue
 
-        const prorrateo = prorrateoRecalcMap.get(conductorData.id) || { CARGO: 0, TURNO_DIURNO: 0, TURNO_NOCTURNO: 0 }
-        const totalDiasBrutos = Math.min(7, prorrateo.CARGO + prorrateo.TURNO_DIURNO + prorrateo.TURNO_NOCTURNO)
+        const prorrateo = prorrateoRecalcMap.get(conductorData.id) || { CARGO: 0, TURNO_DIURNO: 0, TURNO_NOCTURNO: 0, CARGO_SIN_GNC: 0, TURNO_DIURNO_SIN_GNC: 0, TURNO_NOCTURNO_SIN_GNC: 0 }
+        const totalDiasBrutos = Math.min(7, prorrateo.CARGO + prorrateo.TURNO_DIURNO + prorrateo.TURNO_NOCTURNO + prorrateo.CARGO_SIN_GNC + prorrateo.TURNO_DIURNO_SIN_GNC + prorrateo.TURNO_NOCTURNO_SIN_GNC)
         // Descuento por hora de entrega: restar turnos descontados
         const descInfoRecalc = descuentosPorHoraRecalc.get(conductorData.id)
         const descuentoRecalc = descInfoRecalc?.descuento || 0
         const totalDias = Math.max(0, totalDiasBrutos - descuentoRecalc)
 
         // Ajustar días por modalidad restando el descuento de la modalidad correspondiente
+        // El descuento se aplica a la variante con GNC primero, luego sin GNC
         let diasDiurnoAjustados = prorrateo.TURNO_DIURNO
+        let diasDiurnoSinGncAjustados = prorrateo.TURNO_DIURNO_SIN_GNC
         const diasNocturnoAjustados = prorrateo.TURNO_NOCTURNO
+        const diasNocturnoSinGncAjustados = prorrateo.TURNO_NOCTURNO_SIN_GNC
         let diasCargoAjustados = prorrateo.CARGO
+        let diasCargoSinGncAjustados = prorrateo.CARGO_SIN_GNC
         if (descInfoRecalc) {
-          if (descInfoRecalc.modalidad === 'TURNO_DIURNO') diasDiurnoAjustados = Math.max(0, diasDiurnoAjustados - descInfoRecalc.descuento)
-          else if (descInfoRecalc.modalidad === 'CARGO') diasCargoAjustados = Math.max(0, diasCargoAjustados - descInfoRecalc.descuento)
+          let descRestante = descInfoRecalc.descuento
+          if (descInfoRecalc.modalidad === 'TURNO_DIURNO') {
+            const descGnc = Math.min(descRestante, diasDiurnoAjustados)
+            diasDiurnoAjustados = Math.max(0, diasDiurnoAjustados - descGnc)
+            descRestante -= descGnc
+            if (descRestante > 0) diasDiurnoSinGncAjustados = Math.max(0, diasDiurnoSinGncAjustados - descRestante)
+          } else if (descInfoRecalc.modalidad === 'CARGO') {
+            const descGnc = Math.min(descRestante, diasCargoAjustados)
+            diasCargoAjustados = Math.max(0, diasCargoAjustados - descGnc)
+            descRestante -= descGnc
+            if (descRestante > 0) diasCargoSinGncAjustados = Math.max(0, diasCargoSinGncAjustados - descRestante)
+          }
         }
 
         // Excluir conductores con 0 días, SALVO que tengan penalidades pendientes
@@ -2864,8 +2940,11 @@ export function ReporteFacturacionTab() {
           tiene_gnc: control.tiene_gnc === true,
           tiene_telepase: control.tiene_telepase,
           dias_turno_diurno: diasDiurnoAjustados,
+          dias_turno_diurno_sin_gnc: diasDiurnoSinGncAjustados,
           dias_turno_nocturno: diasNocturnoAjustados,
+          dias_turno_nocturno_sin_gnc: diasNocturnoSinGncAjustados,
           dias_cargo: diasCargoAjustados,
+          dias_cargo_sin_gnc: diasCargoSinGncAjustados,
           total_dias: totalDias,
           estado_billing: estadoBilling,
           fecha_baja_no_coincide: fechaBajaNoCoincide,
@@ -3088,40 +3167,31 @@ export function ReporteFacturacionTab() {
         let alquilerTotal = 0
         const detallesAlquiler: { codigo: string; descripcion: string; dias: number; monto: number }[] = []
 
-        // Turno Diurno (P001 con GNC / P014 sin GNC)
-        if (conductor.dias_turno_diurno > 0) {
-          const codigoDiurno = getCodigoAlquiler('DIURNO', tieneGncVehiculo)
-          const precioDiurno = preciosActuales[codigoDiurno] || 0
-          const montoDiurno = Math.round(precioDiurno * conductor.dias_turno_diurno * 100) / 100
-          alquilerTotal += montoDiurno
-          detallesAlquiler.push({
-            codigo: codigoDiurno,
-            descripcion: tieneGncVehiculo ? 'Alquiler Turno Diurno' : 'Alquiler Turno Diurno Sin GNC',
-            dias: conductor.dias_turno_diurno, monto: montoDiurno
-          })
+        // Generar líneas de alquiler separadas por modalidad+GNC
+        // Cada combinación de modalidad y flag GNC genera su propia línea con su precio
+        const lineasAlquiler: { modalidad: 'DIURNO' | 'NOCTURNO' | 'CARGO'; gnc: boolean; dias: number }[] = [
+          { modalidad: 'DIURNO', gnc: true, dias: conductor.dias_turno_diurno },
+          { modalidad: 'DIURNO', gnc: false, dias: conductor.dias_turno_diurno_sin_gnc },
+          { modalidad: 'NOCTURNO', gnc: true, dias: conductor.dias_turno_nocturno },
+          { modalidad: 'NOCTURNO', gnc: false, dias: conductor.dias_turno_nocturno_sin_gnc },
+          { modalidad: 'CARGO', gnc: true, dias: conductor.dias_cargo },
+          { modalidad: 'CARGO', gnc: false, dias: conductor.dias_cargo_sin_gnc },
+        ]
+        const labelModalidad: Record<string, string> = {
+          DIURNO: 'Alquiler Turno Diurno',
+          NOCTURNO: 'Alquiler Turno Nocturno',
+          CARGO: 'Alquiler a Cargo',
         }
-        // Turno Nocturno (P013 con GNC / P015 sin GNC)
-        if (conductor.dias_turno_nocturno > 0) {
-          const codigoNocturno = getCodigoAlquiler('NOCTURNO', tieneGncVehiculo)
-          const precioNocturno = preciosActuales[codigoNocturno] || 0
-          const montoNocturno = Math.round(precioNocturno * conductor.dias_turno_nocturno * 100) / 100
-          alquilerTotal += montoNocturno
+        for (const linea of lineasAlquiler) {
+          if (linea.dias <= 0) continue
+          const codigo = getCodigoAlquiler(linea.modalidad, linea.gnc)
+          const precio = preciosActuales[codigo] || 0
+          const monto = Math.round(precio * linea.dias * 100) / 100
+          alquilerTotal += monto
           detallesAlquiler.push({
-            codigo: codigoNocturno,
-            descripcion: tieneGncVehiculo ? 'Alquiler Turno Nocturno' : 'Alquiler Turno Nocturno Sin GNC',
-            dias: conductor.dias_turno_nocturno, monto: montoNocturno
-          })
-        }
-        // A Cargo (P002 con GNC / P016 sin GNC)
-        if (conductor.dias_cargo > 0) {
-          const codigoCargo = getCodigoAlquiler('CARGO', tieneGncVehiculo)
-          const precioCargoConductor = preciosActuales[codigoCargo] || 0
-          const montoCargo = Math.round(precioCargoConductor * conductor.dias_cargo)
-          alquilerTotal += montoCargo
-          detallesAlquiler.push({
-            codigo: codigoCargo,
-            descripcion: tieneGncVehiculo ? 'Alquiler a Cargo' : 'Alquiler a Cargo Sin GNC',
-            dias: conductor.dias_cargo, monto: montoCargo
+            codigo,
+            descripcion: linea.gnc ? labelModalidad[linea.modalidad] : `${labelModalidad[linea.modalidad]} Sin GNC`,
+            dias: linea.dias, monto
           })
         }
 
@@ -3211,8 +3281,9 @@ export function ReporteFacturacionTab() {
         totalCargosGlobal += subtotalCargos
         totalDescuentosGlobal += subtotalDescuentos
 
-        const diasTurnoTotal = conductor.dias_turno_diurno + conductor.dias_turno_nocturno
-        const tipoAlquilerPrincipal = conductor.dias_cargo >= diasTurnoTotal ? 'CARGO' : 'TURNO'
+        const diasTurnoTotal = conductor.dias_turno_diurno + conductor.dias_turno_diurno_sin_gnc + conductor.dias_turno_nocturno + conductor.dias_turno_nocturno_sin_gnc
+        const diasCargoTotal = conductor.dias_cargo + conductor.dias_cargo_sin_gnc
+        const tipoAlquilerPrincipal = diasCargoTotal >= diasTurnoTotal ? 'CARGO' : 'TURNO'
 
         // UPSERT facturacion_conductores (actualiza si ya existe)
         const { data: factConductor, error: errFact } = await (supabase
@@ -9533,6 +9604,9 @@ export function ReporteFacturacionTab() {
                           // Solo aplica si la asignación es nueva en esta semana (no re-aplicar descuentos de semanas anteriores)
                           const alertaLocal = (() => {
                             if (alerta) return alerta;
+                            // Si el conductor ya tenía asignación activa antes de esta semana, no aplicar descuento (cambio de vehículo)
+                            const tieneAsignacionPreviaModal = diasModalData.historial.some(h => h.dias > 0 && !h.nuevaEnSemana);
+                            if (tieneAsignacionPreviaModal) return null;
                             // Buscar primera asignación NUEVA EN LA SEMANA con hora de entrega
                             const primeraConHora = diasModalData.historial.find(h => h.horaEntrega && h.dias > 0 && h.nuevaEnSemana);
                             if (!primeraConHora?.horaEntrega) return null;
@@ -9560,6 +9634,24 @@ export function ReporteFacturacionTab() {
                             }
                             return null;
                           })();
+                          // Calcular precio diario por día según modalidad+GNC del vehículo de cada día
+                          // Usa prorrateo por modalidad (Vista Previa) o subtotal/días como fallback
+                          // Precio diario real según modalidad+GNC del vehículo de cada día
+                          const precios = diasModalData.preciosPorCodigo || {}
+                          const getPrecioDia = (horario: string, gnc?: boolean): number => {
+                            const h = horario?.toUpperCase()
+                            const conGnc = gnc === true
+                            let codigo = ''
+                            if (h === 'CARGO') codigo = conGnc ? 'P002' : 'P016'
+                            else if (h === 'NOCTURNO' || h === 'TURNO_NOCTURNO') codigo = conGnc ? 'P013' : 'P015'
+                            else codigo = conGnc ? 'P001' : 'P014' // DIURNO default
+                            if (precios[codigo]) return precios[codigo]
+                            // Fallback: subtotal_alquiler / turnos_cobrados
+                            if (!conductorData) return 0
+                            const dias = conductorData.turnos_cobrados || 0
+                            return dias > 0 ? Math.round((conductorData.subtotal_alquiler || 0) / dias) : 0
+                          }
+
                           return diasModalData.dias.map((d, i) => {
                             // Detectar si este día es el de la entrega con descuento
                             const esDiaDescuento = alertaLocal && d.trabajado && alertaLocal.fecha_entrega === d.fecha;
@@ -9607,7 +9699,14 @@ export function ReporteFacturacionTab() {
                                     Desc. entrega fuera de turno ({alertaLocal?.descuento_turnos === 1 ? '1' : '1/2'})
                                   </span>
                                 ) : d.trabajado ? (
-                                  <span style={{ fontSize: '10px', color: '#10b981', fontWeight: 600 }}>{d.horario}</span>
+                                  <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                    <span style={{ fontSize: '10px', color: '#10b981', fontWeight: 600 }}>{d.horario}</span>
+                                    {getPrecioDia(d.horario, d.gnc) > 0 && (
+                                      <span style={{ fontSize: '10px', color: 'var(--text-secondary)', fontWeight: 500 }}>
+                                        {formatCurrency(getPrecioDia(d.horario, d.gnc))}
+                                      </span>
+                                    )}
+                                  </span>
                                 ) : (
                                   <span style={{ fontSize: '10px', color: 'var(--text-secondary)' }}>-</span>
                                 )}
