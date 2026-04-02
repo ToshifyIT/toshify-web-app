@@ -10,10 +10,11 @@
  */
 
 import { useState, useEffect } from 'react'
-import { ChevronDown, ChevronUp, DollarSign, Eye } from 'lucide-react'
+import { ChevronDown, ChevronUp, DollarSign, Eye, RotateCcw } from 'lucide-react'
 import { supabase } from '../../../lib/supabase'
 import { useSede } from '../../../contexts/SedeContext'
 import { useAuth } from '../../../contexts/AuthContext'
+import { usePermissions } from '../../../contexts/PermissionsContext'
 import { insertControlSaldo } from '../../../services/controlSaldosService'
 import { showSuccess } from '../../../utils/toast'
 import { formatCurrency } from '../../../types/facturacion.types'
@@ -110,6 +111,7 @@ export function CobrosFraccionadosTab({ periodoActual }: CobrosFraccionadosTabPr
   void periodoActual
   const { sedeActualId, aplicarFiltroSede } = useSede()
   const { profile } = useAuth()
+  const { isAdmin, isAdministrativo } = usePermissions()
   const [cobros, setCobros] = useState<PenalidadFraccionada[]>([])
   const [loading, setLoading] = useState(true)
   const [expandidos, setExpandidos] = useState<Record<string, boolean>>({})
@@ -437,6 +439,105 @@ export function CobrosFraccionadosTab({ periodoActual }: CobrosFraccionadosTabPr
   }
 
   // ==========================================
+  // DESMARCAR PAGO DE CUOTA
+  // ==========================================
+  const desmarcarPagoCuota = async (cobro: PenalidadFraccionada, cuota: Cuota) => {
+    const esPenalidad = !cobro.id.startsWith('saldo-')
+    const cuotaTabla = esPenalidad ? 'penalidades_cuotas' : 'cobros_fraccionados'
+    const tipoCobro = esPenalidad ? 'penalidad_cuota' : 'cobro_fraccionado'
+    const conductorNombre = cobro.conductor?.nombre_completo || cobro.conductor_nombre || 'Sin nombre'
+
+    const confirm = await Swal.fire({
+      title: 'Desmarcar pago',
+      html: `
+        <div style="text-align: left; font-size: 13px;">
+          <p>¿Desmarcar como pagada la <strong>cuota #${cuota.numero_cuota}</strong> de <strong>${conductorNombre}</strong>?</p>
+          <p style="color: #6B7280; font-size: 12px; margin-top: 8px;">Monto: <strong>${formatCurrency(cuota.monto_cuota)}</strong> — Semana ${cuota.semana}/${cuota.anio || '?'}</p>
+          <p style="color: #dc2626; font-size: 12px; margin-top: 8px;">Esto eliminará el registro de pago y la cuota volverá a estado pendiente.</p>
+        </div>
+      `,
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonText: 'Sí, desmarcar',
+      cancelButtonText: 'Cancelar',
+      confirmButtonColor: '#dc2626',
+      width: 400,
+    })
+
+    if (!confirm.isConfirmed) return
+
+    try {
+      // 1. Buscar y eliminar el pago en pagos_conductores
+      const { data: pagosExistentes } = await (supabase.from('pagos_conductores') as any)
+        .select('id, monto, semana, anio')
+        .eq('referencia_id', cuota.id)
+        .eq('tipo_cobro', tipoCobro)
+
+      const pagoEliminado = pagosExistentes?.[0]
+
+      if (pagosExistentes && pagosExistentes.length > 0) {
+        const pagoIds = pagosExistentes.map((p: any) => p.id)
+        await (supabase.from('pagos_conductores') as any)
+          .delete()
+          .in('id', pagoIds)
+      }
+
+      // 2. Desmarcar cuota como aplicada en tabla origen
+      await (supabase.from(cuotaTabla) as any)
+        .update({ aplicado: false, fecha_aplicacion: null })
+        .eq('id', cuota.id)
+
+      // 3. Revertir saldo si es cobro_fraccionado (no penalidad)
+      if (!esPenalidad && pagoEliminado) {
+        const { data: saldoExistente } = await (supabase.from('saldos_conductores') as any)
+          .select('id, saldo_actual')
+          .eq('conductor_id', cobro.conductor_id)
+          .single()
+
+        if (saldoExistente) {
+          const nuevoSaldo = saldoExistente.saldo_actual - pagoEliminado.monto
+          await (supabase.from('saldos_conductores') as any)
+            .update({
+              saldo_actual: nuevoSaldo,
+              ultima_actualizacion: new Date().toISOString()
+            })
+            .eq('id', saldoExistente.id)
+
+          await insertControlSaldo({
+            conductorId: cobro.conductor_id || '',
+            semana: pagoEliminado.semana || cuota.semana,
+            anio: pagoEliminado.anio || cuota.anio || new Date().getFullYear(),
+            tipoMovimiento: 'eliminacion_pago',
+            montoMovimiento: pagoEliminado.monto,
+            saldoPendiente: nuevoSaldo,
+            referencia: `Desmarcar cuota #${cuota.numero_cuota} - Saldo fraccionado`,
+            userName: profile?.full_name,
+          })
+        }
+      }
+
+      // 4. Si es penalidad, registrar en kardex como eliminacion_pago
+      if (esPenalidad && pagoEliminado) {
+        await insertControlSaldo({
+          conductorId: cobro.conductor_id || '',
+          semana: pagoEliminado.semana || cuota.semana,
+          anio: pagoEliminado.anio || cuota.anio || new Date().getFullYear(),
+          tipoMovimiento: 'eliminacion_pago',
+          montoMovimiento: pagoEliminado.monto,
+          saldoPendiente: 0,
+          referencia: `Desmarcar cuota #${cuota.numero_cuota} - Penalidad fraccionada`,
+          userName: profile?.full_name,
+        })
+      }
+
+      showSuccess('Cuota desmarcada', `Cuota #${cuota.numero_cuota} volvió a pendiente`)
+      cargarCobrosFraccionados()
+    } catch (error: any) {
+      Swal.fire('Error', error.message || 'No se pudo desmarcar la cuota', 'error')
+    }
+  }
+
+  // ==========================================
   // VER HISTORIAL DE PAGOS
   // ==========================================
   const verHistorialPagos = (cobro: PenalidadFraccionada) => {
@@ -668,9 +769,28 @@ export function CobrosFraccionadosTab({ periodoActual }: CobrosFraccionadosTabPr
                                 </button>
                               )}
                               {cuota.aplicado && cuota.pagado && (
-                                <span style={{ color: '#16a34a', fontSize: '11px', fontWeight: 600 }}>
-                                  Pagado
-                                </span>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                  <span style={{ color: '#16a34a', fontSize: '11px', fontWeight: 600 }}>
+                                    Pagado
+                                  </span>
+                                  {(isAdmin || isAdministrativo) && (
+                                    <button
+                                      onClick={(e) => {
+                                        e.stopPropagation()
+                                        desmarcarPagoCuota(cobro, cuota)
+                                      }}
+                                      title="Desmarcar como pagado"
+                                      style={{
+                                        background: 'none', border: '1px solid #fca5a5', borderRadius: '4px',
+                                        padding: '2px 6px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '3px',
+                                        color: '#dc2626', fontSize: '10px', fontWeight: 600,
+                                      }}
+                                    >
+                                      <RotateCcw size={10} />
+                                      Desmarcar
+                                    </button>
+                                  )}
+                                </div>
                               )}
                             </td>
                           </tr>
