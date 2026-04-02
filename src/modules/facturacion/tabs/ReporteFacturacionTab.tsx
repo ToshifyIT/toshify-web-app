@@ -1900,9 +1900,13 @@ export function ReporteFacturacionTab() {
         { data: excesosData },
         { data: dniMapeoData },
       ] = await Promise.all([
-        (supabase.from('saldos_conductores') as any)
-          .select('conductor_id, saldo_actual')
-          .in('conductor_id', conductorIds),
+        // Saldos: leer desde control_saldos el último saldo de la semana ANTERIOR (pre-pagos de esta semana)
+        (supabase.from('control_saldos') as any)
+          .select('conductor_id, saldo_pendiente, semana, anio, created_at')
+          .in('conductor_id', conductorIds)
+          .or(`semana.lt.${semanaDelPeriodo},and(semana.eq.${semanaDelPeriodo},tipo_movimiento.eq.regularizado)`)
+          .eq('anio', anioDelPeriodo)
+          .order('created_at', { ascending: false }),
         (supabase.from('garantias_conductores') as any)
           .select('conductor_id, conductor_nombre, estado, cuotas_pagadas, cuotas_totales, tipo_alquiler, monto_cuota_semanal, monto_pagado, monto_total')
           .in('conductor_id', conductorIds),
@@ -1934,9 +1938,13 @@ export function ReporteFacturacionTab() {
       )
 
       // Construir mapas
-      const saldosMap = new Map<string, { conductor_id: string; saldo_actual: number }>(
-        (saldos || []).map((s: any) => [s.conductor_id, s])
-      )
+      // Tomar el saldo más reciente (pre-pagos) por conductor
+      const saldosMap = new Map<string, { conductor_id: string; saldo_actual: number }>()
+      for (const s of (saldos || []) as any[]) {
+        if (!saldosMap.has(s.conductor_id)) {
+          saldosMap.set(s.conductor_id, { conductor_id: s.conductor_id, saldo_actual: s.saldo_pendiente || 0 })
+        }
+      }
 
       const garantiasMap = new Map<string, {
         conductor_id: string | null;
@@ -2999,7 +3007,14 @@ export function ReporteFacturacionTab() {
       const [penalidadesRes, ticketsRes, saldosRes, excesosRes, cabifyRes, garantiasRes, cobrosRes, multasRes, dniMapeoResRecalc] = await Promise.all([
         (supabase.from('penalidades') as any).select('*, tipos_cobro_descuento(categoria, es_a_favor, nombre), incidencias(descripcion)').in('conductor_id', conductorIds).eq('semana_aplicacion', semanaNum).eq('anio_aplicacion', anioNum).eq('aplicado', true).eq('fraccionado', false).neq('rechazado', true),
         (supabase.from('tickets_favor') as any).select('*').in('conductor_id', conductorIds).eq('estado', 'aprobado'),
-        (supabase.from('saldos_conductores') as any).select('conductor_id, saldo_actual').in('conductor_id', conductorIds),
+        // Saldos: leer desde control_saldos el último saldo de la semana ANTERIOR (pre-pagos de esta semana)
+        // Esto evita que al recalcular un período reabierto se use un saldo ya modificado por pagos
+        (supabase.from('control_saldos') as any)
+          .select('conductor_id, saldo_pendiente, semana, anio, created_at')
+          .in('conductor_id', conductorIds)
+          .or(`semana.lt.${semanaNum},and(semana.eq.${semanaNum},tipo_movimiento.eq.regularizado)`)
+          .eq('anio', anioNum)
+          .order('created_at', { ascending: false }),
         (supabase.from('excesos_kilometraje') as any).select('*').in('conductor_id', conductorIds).eq('aplicado', false),
         // Peajes de la SEMANA ANTERIOR
         (() => {
@@ -3103,9 +3118,14 @@ export function ReporteFacturacionTab() {
         arr.push(pc)
         cuotasGrouped.set(cid, arr)
       })
-      const saldosMapById = new Map<string, any>(
-        (saldos as any[]).map((s: any) => [s.conductor_id, s])
-      )
+      // Tomar el saldo más reciente (pre-pagos) por conductor — el primer registro de cada conductor
+      // ya que la query viene ordenada por created_at DESC
+      const saldosMapById = new Map<string, any>()
+      for (const s of (saldos as any[])) {
+        if (!saldosMapById.has(s.conductor_id)) {
+          saldosMapById.set(s.conductor_id, { conductor_id: s.conductor_id, saldo_actual: s.saldo_pendiente || 0 })
+        }
+      }
       // ─────────────────────────────────────────────────────────────────────────────
 
       // Mapa de CABIFY_hash → DNI real para resolver hashes de Cabify
