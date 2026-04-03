@@ -655,7 +655,11 @@ export function ReporteFacturacionTab() {
       const semanaFin = parseISO(fechaFin)
 
       // Solo contar días hasta hoy (no proyectar días futuros)
-      const hoyDesglose = startOfDay(new Date())
+      // Obtener "hoy" en timezone Argentina (no del navegador) y parsearlo como fecha local
+      // toArgDate(new Date().toISOString()) da "YYYY-MM-DD" en Argentina
+      // Sumar T00:00:00 para que parseISO lo interprete como medianoche local, no UTC
+      const hoyArgStr = argDateFmt.format(new Date())
+      const hoyDesglose = parseISO(hoyArgStr + 'T00:00:00')
       const limiteConteo = hoyDesglose < semanaFin ? hoyDesglose : semanaFin
 
       const [{ data: asignacionesCond }, { data: conductorDesglose }, { data: devolucionProgData }] = await Promise.all([
