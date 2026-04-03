@@ -655,7 +655,7 @@ export function ReporteFacturacionTab() {
       const semanaFin = parseISO(fechaFin)
 
       // Solo contar días hasta hoy (no proyectar días futuros)
-      const hoyDesglose = parseISO(toArgDate(new Date().toISOString()))
+      const hoyDesglose = startOfDay(new Date())
       const limiteConteo = hoyDesglose < semanaFin ? hoyDesglose : semanaFin
 
       const [{ data: asignacionesCond }, { data: conductorDesglose }, { data: devolucionProgData }] = await Promise.all([
