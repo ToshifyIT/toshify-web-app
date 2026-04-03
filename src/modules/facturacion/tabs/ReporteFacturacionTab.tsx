@@ -1559,7 +1559,8 @@ export function ReporteFacturacionTab() {
       // Calcular días por modalidad/horario para cada conductor
       const fechaInicioSemana = semanaActual.inicio
       // Vista Previa capa los días hasta HOY (no proyecta). El Preview Cabify sí proyecta semana completa.
-      const hoyVP = startOfDay(new Date())
+      // Hoy en timezone Argentina (no del navegador) para capar días correctamente
+      const hoyVP = parseISO(argDateFmt.format(new Date()) + 'T00:00:00')
       const fechaFinSemana = hoyVP < semanaActual.fin ? hoyVP : semanaActual.fin
 
       // Map de conductor_id → fecha_terminacion (tope de días para conductores de baja)
@@ -2715,8 +2716,8 @@ export function ReporteFacturacionTab() {
       conductorIdsTemp.forEach((id: string) => diasContadosRecalc.set(id, new Set()))
 
       const fechaInicioSemanaRecalc = parseISO(fechaInicio)
-      // Recalcular capa los días hasta HOY (no proyecta). El Preview Cabify sí proyecta semana completa.
-      const hoyRecalc = startOfDay(new Date())
+      // Recalcular capa los días hasta HOY en timezone Argentina (no del navegador)
+      const hoyRecalc = parseISO(argDateFmt.format(new Date()) + 'T00:00:00')
       const finSemanaRecalc = parseISO(fechaFin)
       const fechaFinSemanaRecalc = hoyRecalc < finSemanaRecalc ? hoyRecalc : finSemanaRecalc
 
