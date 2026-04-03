@@ -773,7 +773,7 @@ export function CobrosFraccionadosTab({ periodoActual }: CobrosFraccionadosTabPr
                                   <span style={{ color: '#16a34a', fontSize: '11px', fontWeight: 600 }}>
                                     Pagado
                                   </span>
-                                  {(isAdmin || isAdministrativo) && (
+                                  {(isAdmin() || isAdministrativo()) && (
                                     <button
                                       onClick={(e) => {
                                         e.stopPropagation()

@@ -3182,7 +3182,6 @@ export function ReporteFacturacionTab() {
 
       for (const conductor of conductoresProcesados) {
         const flagsVeh = conductor.vehiculo_patente ? flagsVehiculoMap.get(conductor.vehiculo_patente) : undefined
-        const tieneGncVehiculo = flagsVeh ? flagsVeh.gnc : conductor.tiene_gnc
         const tieneTelepaseVehiculo = flagsVeh ? flagsVeh.telepase : conductor.tiene_telepase
 
         // Mostrar progreso con nombre del conductor actual
