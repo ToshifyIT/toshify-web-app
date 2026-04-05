@@ -2136,7 +2136,8 @@ export function ReporteFacturacionTab() {
           const detalles = detalleMap.get(p.conductor_id) || []
           const incDesc = (p as any).incidencias?.descripcion
           const tipoNombre = p.tipos_cobro_descuento?.nombre || ''
-          let detalleTexto = tipoNombre || p.detalle || p.observaciones || 'Cobro por incidencia'
+          const fallbackDetalle = categoria === 'P004' ? 'Descuento a favor' : 'Cargo por incidencia'
+          let detalleTexto = tipoNombre || p.detalle || p.observaciones || fallbackDetalle
           if (incDesc) detalleTexto += ` - ${incDesc}`
           detalles.push({
             monto: p.monto || 0,
@@ -3394,10 +3395,10 @@ export function ReporteFacturacionTab() {
             const incDescSave = (pen as any).incidencias?.descripcion
             const detalleCompleto = incDescSave ? `${tipoNombre} - ${incDescSave}` : tipoNombre
             const descripcion = grupo.codigo === 'P004'
-              ? `Ticket: ${detalleCompleto}`
+              ? `Descuento a Favor: ${detalleCompleto}`
               : grupo.codigo === 'P006'
                 ? `Exceso KM: ${detalleCompleto}`
-                : `Penalidad: ${detalleCompleto}`
+                : `Cargo: ${detalleCompleto}`
             todosDetalles.push({
               facturacion_id: facturacionId, concepto_codigo: grupo.codigo,
               concepto_descripcion: descripcion,
@@ -5959,7 +5960,7 @@ export function ReporteFacturacionTab() {
             } else if (det.concepto_codigo === 'P007') {
               descripcionAdicional = det.concepto_descripcion || 'Penalidades'
             } else if (det.concepto_codigo === 'P004') {
-              descripcionAdicional = det.concepto_descripcion || 'Tickets/Descuentos a Favor'
+              descripcionAdicional = det.concepto_descripcion || 'Descuento a Favor'
             } else if (det.concepto_descripcion) {
               descripcionAdicional = det.concepto_descripcion
             }
