@@ -3,11 +3,11 @@
 // Responsabilidad: renderizar el calendario con react-big-calendar
 // ============================================================
 
-import { useState, useMemo, useCallback } from 'react';
+import { useState, useMemo, useCallback, useRef } from 'react';
 import { Calendar, dateFnsLocalizer } from 'react-big-calendar';
 import { format, parse, startOfWeek, getDay } from 'date-fns';
 import { es } from 'date-fns/locale/es';
-import { X, Clock } from 'lucide-react';
+import { X, Clock, User, Tag, FileText, Timer } from 'lucide-react';
 import type { VisitaCalendarEvent, VisitaCompleta, CalendarResource, VisitaEstado } from '../../../types/visitas.types';
 import { VISITA_ESTADOS } from '../../../types/visitas.types';
 
@@ -235,12 +235,40 @@ export function VisitasCalendario({
     return eventStyleGetter(event);
   }, [eventStyleGetter]);
 
-  // Tooltip
-  const enhancedTooltipAccessor = useCallback((event: VisitaCalendarEvent) => {
+  // --- Hover tooltip state ---
+  const [hoveredEvent, setHoveredEvent] = useState<VisitaCalendarEvent | null>(null);
+  const [tooltipPos, setTooltipPos] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
+  const tooltipTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const handleEventMouseEnter = useCallback((event: VisitaCalendarEvent, e: React.MouseEvent) => {
     // deno-lint-ignore no-explicit-any
-    if ((event.visita as any)._synthetic) return 'Click para ver todas las citas';
-    return tooltipAccessor(event);
-  }, [tooltipAccessor]);
+    if ((event.visita as any)._synthetic || (event.visita as any)._masked) return;
+    if (tooltipTimeout.current) clearTimeout(tooltipTimeout.current);
+    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    setTooltipPos({ x: rect.right + 8, y: rect.top });
+    setHoveredEvent(event);
+  }, []);
+
+  const handleEventMouseLeave = useCallback(() => {
+    tooltipTimeout.current = setTimeout(() => setHoveredEvent(null), 150);
+  }, []);
+
+  // Custom event wrapper que captura hover
+  const EventWrapperComponent = useMemo(() => {
+    return function EventWrapper({ event, children }: { event: VisitaCalendarEvent; children: React.ReactNode }) {
+      return (
+        <div
+          onMouseEnter={(e) => handleEventMouseEnter(event, e)}
+          onMouseLeave={handleEventMouseLeave}
+        >
+          {children}
+        </div>
+      );
+    };
+  }, [handleEventMouseEnter, handleEventMouseLeave]);
+
+  // Desactivar tooltip nativo del browser
+  const noTooltip = useCallback(() => '', []);
 
   return (
     <div className="visitas-calendario-wrapper">
@@ -265,7 +293,10 @@ export function VisitasCalendario({
         onDrillDown={handleDrillDown}
         drilldownView={null}
         eventPropGetter={enhancedEventStyleGetter}
-        tooltipAccessor={enhancedTooltipAccessor}
+        tooltipAccessor={noTooltip}
+        components={{
+          eventWrapper: EventWrapperComponent as any,
+        }}
         step={60}
         timeslots={1}
         min={minTime}
@@ -277,6 +308,54 @@ export function VisitasCalendario({
         popupOffset={10}
         showMultiDayTimes
       />
+
+      {/* Tooltip hover estilo Google Calendar */}
+      {hoveredEvent && (() => {
+        const v = hoveredEvent.visita;
+        const estadoInfo = VISITA_ESTADOS[v.estado as VisitaEstado];
+        const color = v.categoria_color || '#3b82f6';
+        // Ajustar posición para que no se salga de la pantalla
+        const adjustedX = tooltipPos.x + 300 > window.innerWidth ? tooltipPos.x - 316 : tooltipPos.x;
+        const adjustedY = tooltipPos.y + 200 > window.innerHeight ? window.innerHeight - 210 : tooltipPos.y;
+        return (
+          <div
+            className="visita-hover-tooltip"
+            style={{ left: adjustedX, top: adjustedY }}
+            onMouseEnter={() => { if (tooltipTimeout.current) clearTimeout(tooltipTimeout.current); }}
+            onMouseLeave={() => setHoveredEvent(null)}
+          >
+            <div className="visita-hover-tooltip-color" style={{ backgroundColor: color }} />
+            <div className="visita-hover-tooltip-content">
+              <div className="visita-hover-tooltip-title">{v.nombre_visitante}</div>
+              <div className="visita-hover-tooltip-time">
+                <Clock size={13} />
+                {format(hoveredEvent.start, 'HH:mm')} - {format(hoveredEvent.end, 'HH:mm')} ({v.duracion_minutos} min)
+              </div>
+              <div className="visita-hover-tooltip-row">
+                <Tag size={13} />
+                <span>{v.categoria_nombre}{v.motivo_nombre ? ` - ${v.motivo_nombre}` : ''}</span>
+              </div>
+              <div className="visita-hover-tooltip-row">
+                <User size={13} />
+                <span>{v.atendedor_nombre}</span>
+              </div>
+              {v.observaciones && (
+                <div className="visita-hover-tooltip-row">
+                  <FileText size={13} />
+                  <span className="visita-hover-tooltip-obs">{v.observaciones}</span>
+                </div>
+              )}
+              <div className="visita-hover-tooltip-estado" style={{
+                backgroundColor: estadoInfo?.color ? `${estadoInfo.color}20` : '#f0f0f0',
+                color: estadoInfo?.color || '#666'
+              }}>
+                {estadoInfo?.icon && <Timer size={12} />}
+                {estadoInfo?.label || v.estado}
+              </div>
+            </div>
+          </div>
+        );
+      })()}
 
       {/* Modal de citas del día */}
       {slotModalDate && (
