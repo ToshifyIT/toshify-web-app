@@ -7,7 +7,7 @@ import { useState, useMemo, useCallback, useRef } from 'react';
 import { Calendar, dateFnsLocalizer } from 'react-big-calendar';
 import { format, parse, startOfWeek, getDay } from 'date-fns';
 import { es } from 'date-fns/locale/es';
-import { X, Clock, User, Tag, FileText, Timer } from 'lucide-react';
+import { X, Clock, User, Tag, FileText } from 'lucide-react';
 import type { VisitaCalendarEvent, VisitaCompleta, CalendarResource, VisitaEstado } from '../../../types/visitas.types';
 import { VISITA_ESTADOS } from '../../../types/visitas.types';
 
@@ -109,16 +109,6 @@ export function VisitasCalendario({
         fontWeight: 500 as const,
       },
     };
-  }, []);
-
-  // Tooltip content
-  const tooltipAccessor = useCallback((event: VisitaCalendarEvent) => {
-    const v = event.visita;
-    // Citas Directivo enmascaradas: tooltip genérico
-    const masked = (v as VisitaCompleta & { _masked?: boolean })._masked;
-    if (masked) return 'Reservado';
-    const estadoInfo = VISITA_ESTADOS[v.estado];
-    return `${v.nombre_visitante}\n${v.categoria_nombre}${v.motivo_nombre ? ' - ' + v.motivo_nombre : ''}\nAnfitrión: ${v.atendedor_nombre}\nEstado: ${estadoInfo.label}\nDuración: ${v.duracion_minutos} min`;
   }, []);
 
   // Horario visible del calendario (8am - 20pm)
@@ -339,17 +329,16 @@ export function VisitasCalendario({
                 <User size={13} />
                 <span>{v.atendedor_nombre}</span>
               </div>
-              {v.observaciones && (
+              {v.nota && (
                 <div className="visita-hover-tooltip-row">
                   <FileText size={13} />
-                  <span className="visita-hover-tooltip-obs">{v.observaciones}</span>
+                  <span className="visita-hover-tooltip-obs">{v.nota}</span>
                 </div>
               )}
               <div className="visita-hover-tooltip-estado" style={{
                 backgroundColor: estadoInfo?.color ? `${estadoInfo.color}20` : '#f0f0f0',
                 color: estadoInfo?.color || '#666'
               }}>
-                {estadoInfo?.icon && <Timer size={12} />}
                 {estadoInfo?.label || v.estado}
               </div>
             </div>
