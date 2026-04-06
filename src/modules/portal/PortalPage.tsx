@@ -87,7 +87,7 @@ const CONCEPTO_LABELS: Record<string, string> = {
   P001: 'Alquiler Turno Diurno',
   P002: 'Alquiler a Cargo',
   P003: 'Cuota de Garantía',
-  P004: 'Descuento a Favor',
+  P004: 'Tickets',
   P005: 'Peajes',
   P006: 'Combustible',
   P007: 'Penalidades',
@@ -118,11 +118,11 @@ function getConceptoLabel(item: PortalDetalle): string {
     return `${baseLabel} - ${desc}`
   }
 
-  // P004 = Descuentos a Favor: mostrar detalle descriptivo
+  // P004 = Tickets: mostrar detalle descriptivo, eliminando prefijo redundante "Ticket:"
   if (item.concepto_codigo === 'P004') {
     if (desc) {
-      // Quitar prefijos redundantes
-      const cleanDesc = desc.replace(/^(Ticket|Descuento a favor|Cobro por incidencia):\s*/i, '').trim()
+      // Quitar prefijo "Ticket:" o "Ticket: " para no repetir
+      const cleanDesc = desc.replace(/^Ticket:\s*/i, '').trim()
       if (cleanDesc && cleanDesc !== baseLabel) return `${baseLabel} (${cleanDesc})`
     }
     return baseLabel

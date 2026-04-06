@@ -59,5 +59,6 @@ export async function insertControlSaldo(params: {
 
   if (error) {
     console.error('Error insertando control_saldos:', error);
+    throw new Error(`Error registrando movimiento en kardex: ${error.message || 'desconocido'}`)
   }
 }

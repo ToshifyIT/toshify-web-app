@@ -3007,20 +3007,28 @@ export function ReporteFacturacionTab() {
       // Garantía: precio en conceptos_nomina es DIARIO, multiplicar por 7 para obtener cuota semanal
       const cuotaGarantia = Math.round(preciosActuales['P003'] * 7)
       
+      // 4b. Limpiar entradas regularizado anteriores de este período (idempotencia del recálculo)
+      // Esto evita que un recálculo previo deje una entrada regularizado que infle el saldo_anterior
+      if (conductorIds.length > 0) {
+        await (supabase.from('control_saldos') as any)
+          .delete()
+          .in('conductor_id', conductorIds)
+          .eq('semana', semanaNum)
+          .eq('anio', anioNum)
+          .eq('tipo_movimiento', 'regularizado')
+      }
+
       // 5. Obtener datos adicionales en paralelo
       // NOTA: multas_historico DESACTIVADO temporalmente — reactivar cuando se defina el flujo
       const MULTAS_HABILITADAS = false
       const [penalidadesRes, ticketsRes, saldosRes, excesosRes, cabifyRes, garantiasRes, cobrosRes, multasRes, dniMapeoResRecalc] = await Promise.all([
         (supabase.from('penalidades') as any).select('*, tipos_cobro_descuento(categoria, es_a_favor, nombre), incidencias(descripcion)').in('conductor_id', conductorIds).eq('semana_aplicacion', semanaNum).eq('anio_aplicacion', anioNum).eq('aplicado', true).eq('fraccionado', false).neq('rechazado', true),
         (supabase.from('tickets_favor') as any).select('*').in('conductor_id', conductorIds).eq('estado', 'aprobado'),
-        // Saldos: leer desde control_saldos el último saldo de la semana ANTERIOR (pre-pagos de esta semana)
-        // Esto evita que al recalcular un período reabierto se use un saldo ya modificado por pagos
-        (supabase.from('control_saldos') as any)
-          .select('conductor_id, saldo_pendiente, semana, anio, created_at')
-          .in('conductor_id', conductorIds)
-          .or(`semana.lt.${semanaNum},and(semana.eq.${semanaNum},tipo_movimiento.eq.regularizado)`)
-          .eq('anio', anioNum)
-          .order('created_at', { ascending: false }),
+        // Saldos: leer desde saldos_conductores (fuente de verdad del saldo acumulado)
+        // NO se lee de control_saldos porque su historial puede estar incompleto
+        (supabase.from('saldos_conductores') as any)
+          .select('conductor_id, saldo_actual')
+          .in('conductor_id', conductorIds),
         (supabase.from('excesos_kilometraje') as any).select('*').in('conductor_id', conductorIds).eq('aplicado', false),
         // Peajes de la SEMANA ANTERIOR
         (() => {
@@ -3124,13 +3132,10 @@ export function ReporteFacturacionTab() {
         arr.push(pc)
         cuotasGrouped.set(cid, arr)
       })
-      // Tomar el saldo más reciente (pre-pagos) por conductor — el primer registro de cada conductor
-      // ya que la query viene ordenada por created_at DESC
+      // Saldo acumulado por conductor (fuente: saldos_conductores)
       const saldosMapById = new Map<string, any>()
       for (const s of (saldos as any[])) {
-        if (!saldosMapById.has(s.conductor_id)) {
-          saldosMapById.set(s.conductor_id, { conductor_id: s.conductor_id, saldo_actual: s.saldo_pendiente || 0 })
-        }
+        saldosMapById.set(s.conductor_id, { conductor_id: s.conductor_id, saldo_actual: s.saldo_actual || 0 })
       }
       // ─────────────────────────────────────────────────────────────────────────────
 
@@ -3531,6 +3536,29 @@ export function ReporteFacturacionTab() {
         }
         if (batchUpdates.length > 0) {
           await Promise.all(batchUpdates)
+        }
+
+        // 6b. Registrar movimiento "regularizado" en kardex y actualizar saldo del conductor
+        // Esto crea la trazabilidad del cargo del período en control_saldos
+        // El saldo resultante es -(total_a_pagar): negativo = deuda, positivo = a favor
+        const saldoResultanteRecalc = -totalAPagar
+        try {
+          await insertControlSaldo({
+            conductorId: conductor.conductor_id,
+            semana: semanaNum,
+            anio: anioNum,
+            tipoMovimiento: 'regularizado',
+            montoMovimiento: Math.abs(totalAPagar),
+            saldoPendiente: saldoResultanteRecalc,
+            referencia: `Facturación S${semanaNum}/${anioNum}`,
+            userName: 'Sistema',
+          })
+          // NO se actualiza saldos_conductores aquí — ese saldo lo gestionan
+          // exclusivamente las funciones de pago. El recálculo solo lee el saldo
+          // y registra el movimiento regularizado en control_saldos (auditoría).
+        } catch (errKardex) {
+          // No interrumpir el recálculo si falla el kardex — solo loguear
+          console.error('Error registrando regularizado/saldo para conductor:', conductor.conductor_id, errKardex)
         }
 
         conductoresProcesadosCount++

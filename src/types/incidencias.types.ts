@@ -224,7 +224,6 @@ export interface VehiculoSimple {
   patente: string
   marca: string
   modelo: string
-  gnc?: boolean
 }
 
 // Tipo para conductor simplificado

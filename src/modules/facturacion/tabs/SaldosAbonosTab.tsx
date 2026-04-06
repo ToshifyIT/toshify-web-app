@@ -1285,6 +1285,25 @@ export function SaldosAbonosTab() {
 
       if (error) throw error
 
+      // Registrar movimiento en kardex (control_saldos) para trazabilidad
+      const semMora = getWeekNumber(new Date().toISOString().split('T')[0])
+      const anioMora = new Date().getFullYear()
+      try {
+        await insertControlSaldo({
+          conductorId: saldo.conductor_id,
+          semana: semMora,
+          anio: anioMora,
+          tipoMovimiento: 'ajuste_mora',
+          montoMovimiento: formValues.moraAcum,
+          saldoPendiente: saldo.saldo_actual,
+          referencia: `Edición mora: ${formValues.diasMora} días, $${formValues.moraAcum}`,
+          userName: profile?.full_name || 'Sistema',
+        })
+      } catch {
+        // No interrumpir si falla el kardex — la mora ya se actualizó
+        console.error('No se pudo registrar movimiento de mora en kardex')
+      }
+
       showSuccess('Actualizado', 'Mora actualizada correctamente')
       cargarSaldos()
     // eslint-disable-next-line @typescript-eslint/no-explicit-any

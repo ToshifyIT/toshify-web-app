@@ -7,18 +7,8 @@
   display: flex;
   flex-direction: column;
   gap: 16px;
-  min-height: calc(100vh - 170px);
-}
-
-/* Vista semana: altura fija al viewport para que las horas quepan sin scroll externo */
-.visitas-module:has(.rbc-time-view) {
   height: calc(100vh - 170px);
   min-height: 0;
-}
-
-/* Vista mes: crece naturalmente para mostrar todas las semanas */
-.visitas-module:has(.rbc-month-view) {
-  height: auto;
 }
 
 .visitas-tab-content {
@@ -441,12 +431,14 @@
 .visitas-calendario-wrapper .rbc-month-view {
   border: 1px solid var(--border-secondary);
   border-radius: 10px;
-  overflow: visible;
+  overflow: hidden;
+  flex: 1;
+  min-height: 0;
 }
 
 .visitas-calendario-wrapper .rbc-month-row {
   border-bottom: 1px solid var(--border-secondary);
-  min-height: 130px;
+  min-height: 110px;
 }
 
 .visitas-calendario-wrapper .rbc-month-row + .rbc-month-row {
@@ -622,91 +614,6 @@
 
 .visitas-calendario-wrapper .rbc-overlay .rbc-event {
   margin-bottom: 4px;
-}
-
-/* --- Hover Tooltip (estilo Google Calendar) --- */
-.visita-hover-tooltip {
-  position: fixed;
-  z-index: 9999;
-  width: 300px;
-  background: var(--card-bg, #fff);
-  border-radius: 10px;
-  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.18), 0 2px 8px rgba(0, 0, 0, 0.08);
-  display: flex;
-  overflow: hidden;
-  pointer-events: auto;
-  animation: tooltipFadeIn 0.15s ease-out;
-}
-
-@keyframes tooltipFadeIn {
-  from { opacity: 0; transform: translateY(4px); }
-  to { opacity: 1; transform: translateY(0); }
-}
-
-.visita-hover-tooltip-color {
-  width: 5px;
-  flex-shrink: 0;
-}
-
-.visita-hover-tooltip-content {
-  padding: 12px 14px;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  flex: 1;
-  min-width: 0;
-}
-
-.visita-hover-tooltip-title {
-  font-size: 14px;
-  font-weight: 600;
-  color: var(--text-primary);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.visita-hover-tooltip-time {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 12px;
-  color: var(--text-secondary);
-  font-weight: 500;
-}
-
-.visita-hover-tooltip-row {
-  display: flex;
-  align-items: flex-start;
-  gap: 6px;
-  font-size: 12px;
-  color: var(--text-secondary);
-}
-
-.visita-hover-tooltip-row svg {
-  flex-shrink: 0;
-  margin-top: 1px;
-  color: var(--text-tertiary);
-}
-
-.visita-hover-tooltip-obs {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-}
-
-.visita-hover-tooltip-estado {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  font-size: 11px;
-  font-weight: 600;
-  padding: 3px 8px;
-  border-radius: 4px;
-  width: fit-content;
-  margin-top: 2px;
 }
 
 /* --- Resource header --- */
