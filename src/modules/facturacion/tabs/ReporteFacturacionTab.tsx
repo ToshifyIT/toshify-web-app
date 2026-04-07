@@ -1240,9 +1240,8 @@ export function ReporteFacturacionTab() {
           .eq('tipo_cobro', 'facturacion_semanal')
           .in('referencia_id', facIds),
         (supabase.from('facturacion_detalle') as any)
-          .select('facturacion_id, concepto_codigo, concepto_descripcion, total')
-          .in('facturacion_id', facIds)
-          .in('concepto_codigo', ['P004', 'P005', 'P007']),
+          .select('facturacion_id, concepto_codigo, concepto_descripcion, total, es_descuento')
+          .in('facturacion_id', facIds),
         (supabase.from('excesos_kilometraje') as any)
           .select('id, conductor_id, km_exceso, monto_total, aplicado')
           .eq('periodo_id', (periodoData as any).id),
@@ -1265,6 +1264,13 @@ export function ReporteFacturacionTab() {
             fecha_pago: p.fecha_pago || null,
           })
         }
+      })
+
+      // Agrupar detalles raw por facturacion_id (para popup de stats)
+      const detallesRawMap = new Map<string, any[]>()
+      ;(detallesData || []).forEach((d: any) => {
+        if (!detallesRawMap.has(d.facturacion_id)) detallesRawMap.set(d.facturacion_id, [])
+        detallesRawMap.get(d.facturacion_id)!.push(d)
       })
 
       // Agrupar por facturacion_id
@@ -1312,6 +1318,7 @@ export function ReporteFacturacionTab() {
           penalidades_detalle: detalle?.penalidades_detalle || [],
           monto_tickets_favor: detalle?.monto_tickets || 0,
           tickets_detalle: detalle?.tickets_detalle || [],
+          _detalles: detallesRawMap.get(f.id) || [],
         }
       })
 
@@ -2520,7 +2527,7 @@ export function ReporteFacturacionTab() {
         html: `
           <p>Esto <strong>eliminará y regenerará TODA la facturación</strong> del período:</p>
           <ul style="text-align:left; margin-top:10px;">
-            <li>Alquiler (P001/P002/P013)</li>
+            <li>Alquiler (P001/P002/P013/P014/P015/P016)</li>
             <li>Garantía (P003)</li>
             <li>Tickets a favor (P004)</li>
             <li>Peajes Cabify (P005)</li>
@@ -2528,7 +2535,9 @@ export function ReporteFacturacionTab() {
             <li>Penalidades (P007)</li>
             <li>Multas de Tránsito (P008)</li>
             <li>Mora (P009)</li>
-            <li>Cobros Fraccionados (P010)</li>
+            <li>Repuestos/Daños (P010)</li>
+            <li>Publicidad Cabify (P011)</li>
+            <li>Publicidad Tablet (P012)</li>
           </ul>
           <p style="margin-top:10px; color:#b91c1c;"><small>No cierre ni refresque la página durante el proceso.</small></p>
         `,
@@ -8067,22 +8076,60 @@ export function ReporteFacturacionTab() {
       cargos: {
         title: 'Total Cargos',
         html: (() => {
-          const alquiler = src.reduce((s, f) => s + (f.subtotal_alquiler || 0), 0)
-          const garantia = src.reduce((s, f) => s + (f.subtotal_garantia || 0), 0)
-          const peajes = src.reduce((s, f) => s + (f.monto_peajes || 0), 0)
-          const excesosKm = src.reduce((s, f) => s + (f.monto_excesos || 0), 0)
-          const penalidades = src.reduce((s, f) => s + (f.monto_penalidades || 0), 0)
+          // Agrupar por concepto_codigo desde facturacion_detalle si hay datos guardados
+          const codeMap: Record<string, number> = {}
+          for (const f of src) {
+            const detalles = (f as any)._detalles || []
+            for (const d of detalles) {
+              const code = d.concepto_codigo || 'OTRO'
+              if (!d.es_descuento) {
+                codeMap[code] = (codeMap[code] || 0) + (parseFloat(d.total) || 0)
+              }
+            }
+          }
+          const tieneDetalles = Object.keys(codeMap).length > 0
+
+          // Si hay detalles por P-code, desglosar desde ahí (datos reales)
+          // Si no (vista previa sin _detalles), usar campos del objeto
+          const alqConGnc = tieneDetalles
+            ? (codeMap['P001'] || 0) + (codeMap['P002'] || 0) + (codeMap['P013'] || 0)
+            : 0
+          const alqSinGnc = tieneDetalles
+            ? (codeMap['P014'] || 0) + (codeMap['P015'] || 0) + (codeMap['P016'] || 0)
+            : 0
+          const alquiler = tieneDetalles
+            ? alqConGnc + alqSinGnc
+            : src.reduce((s, f) => s + (f.subtotal_alquiler || 0), 0)
+          const garantia = tieneDetalles ? (codeMap['P003'] || 0) : src.reduce((s, f) => s + (f.subtotal_garantia || 0), 0)
+          const peajes = tieneDetalles ? (codeMap['P005'] || 0) : src.reduce((s, f) => s + (f.monto_peajes || 0), 0)
+          const excesosKm = tieneDetalles ? (codeMap['P006'] || 0) : src.reduce((s, f) => s + (f.monto_excesos || 0), 0)
+          const penalidades = tieneDetalles ? (codeMap['P007'] || 0) : src.reduce((s, f) => s + (f.monto_penalidades || 0), 0)
+          const multas = tieneDetalles ? (codeMap['P008'] || 0) : 0
+          const mora = tieneDetalles ? (codeMap['P009'] || 0) : src.reduce((s, f) => s + (f.monto_mora || 0), 0)
+          const repuestos = tieneDetalles ? (codeMap['P010'] || 0) : 0
+          const cobrosF = tieneDetalles ? 0 : src.reduce((s, f) => s + (f.monto_cobros_fraccionados || 0), 0)
           const saldos = src.reduce((s, f) => s + Math.max(0, f.saldo_anterior || 0), 0)
-          const total = alquiler + garantia + peajes + excesosKm + penalidades + saldos
+          const subtotalCargos = src.reduce((s, f) => s + (f.subtotal_cargos || 0), 0)
+          const conocidos = alquiler + garantia + peajes + excesosKm + penalidades + multas + mora + repuestos + cobrosF
+          const otrosCargos = Math.max(0, subtotalCargos - conocidos)
+          const total = subtotalCargos + saldos
+          const rows: string[] = []
+          if (tieneDetalles && alqConGnc > 0) rows.push(`<tr><td>Alquiler con GNC (P001/P002/P013)</td><td style="text-align:right"><b>${formatCurrency(alqConGnc)}</b></td></tr>`)
+          if (tieneDetalles && alqSinGnc > 0) rows.push(`<tr><td>Alquiler sin GNC (P014/P015/P016)</td><td style="text-align:right"><b>${formatCurrency(alqSinGnc)}</b></td></tr>`)
+          if (!tieneDetalles && alquiler > 0) rows.push(`<tr><td>Alquiler</td><td style="text-align:right"><b>${formatCurrency(alquiler)}</b></td></tr>`)
+          if (garantia > 0) rows.push(`<tr><td>Garantía (P003)</td><td style="text-align:right"><b>${formatCurrency(garantia)}</b></td></tr>`)
+          if (peajes > 0) rows.push(`<tr><td>Peajes (P005)</td><td style="text-align:right"><b>${formatCurrency(peajes)}</b></td></tr>`)
+          if (excesosKm > 0) rows.push(`<tr><td>Exceso de KM (P006)</td><td style="text-align:right"><b>${formatCurrency(excesosKm)}</b></td></tr>`)
+          if (penalidades > 0) rows.push(`<tr><td>Penalidades (P007)</td><td style="text-align:right"><b>${formatCurrency(penalidades)}</b></td></tr>`)
+          if (multas > 0) rows.push(`<tr><td>Multas (P008)</td><td style="text-align:right"><b>${formatCurrency(multas)}</b></td></tr>`)
+          if (mora > 0) rows.push(`<tr><td>Mora (P009)</td><td style="text-align:right"><b>${formatCurrency(mora)}</b></td></tr>`)
+          if (repuestos > 0) rows.push(`<tr><td>Repuestos/Daños (P010)</td><td style="text-align:right"><b>${formatCurrency(repuestos)}</b></td></tr>`)
+          if (cobrosF > 0) rows.push(`<tr><td>Cobros fraccionados</td><td style="text-align:right"><b>${formatCurrency(cobrosF)}</b></td></tr>`)
+          if (saldos > 0) rows.push(`<tr><td>Saldos pendientes (+)</td><td style="text-align:right"><b>${formatCurrency(saldos)}</b></td></tr>`)
           return `<div style="text-align:left;font-size:13px;">
             <p>Suma de todos los cobros a conductores:</p>
             <table style="width:100%;border-collapse:collapse;">
-              <tr><td>P001/P002/P013 - Alquiler</td><td style="text-align:right"><b>${formatCurrency(alquiler)}</b></td></tr>
-              <tr><td>P003 - Garantía</td><td style="text-align:right"><b>${formatCurrency(garantia)}</b></td></tr>
-              <tr><td>P005 - Peajes</td><td style="text-align:right"><b>${formatCurrency(peajes)}</b></td></tr>
-              <tr><td>P006 - Exceso KM</td><td style="text-align:right"><b>${formatCurrency(excesosKm)}</b></td></tr>
-              <tr><td>P007 - Penalidades</td><td style="text-align:right"><b>${formatCurrency(penalidades)}</b></td></tr>
-              <tr><td>Saldos pendientes (+)</td><td style="text-align:right"><b>${formatCurrency(saldos)}</b></td></tr>
+              ${rows.join('\n              ')}
               <tr style="border-top:2px solid #ccc;"><td><b>TOTAL CARGOS</b></td><td style="text-align:right"><b>${formatCurrency(total)}</b></td></tr>
             </table>
           </div>`
@@ -8091,17 +8138,33 @@ export function ReporteFacturacionTab() {
       descuentos: {
         title: 'Total Descuentos',
         html: (() => {
-          const tickets = src.reduce((s, f) => s + (f.monto_tickets_favor || 0), 0)
-          const otrosDesc = src.reduce((s, f) => s + (f.subtotal_descuentos || 0) - (f.monto_tickets_favor || 0), 0)
-          const saldosNeg = src.reduce((s, f) => s + Math.max(0, -((f.saldo_anterior || 0))), 0)
-          const total = src.reduce((s, f) => s + (f.subtotal_descuentos || 0) + Math.max(0, -(f.saldo_anterior || 0)), 0)
+          // Agrupar descuentos desde facturacion_detalle
+          const descMap: Record<string, number> = {}
+          for (const f of src) {
+            const detalles = (f as any)._detalles || []
+            for (const d of detalles) {
+              if (d.es_descuento) {
+                const code = d.concepto_codigo || 'OTRO'
+                descMap[code] = (descMap[code] || 0) + (parseFloat(d.total) || 0)
+              }
+            }
+          }
+          const tieneDetalles = Object.keys(descMap).length > 0
+
+          const tickets = tieneDetalles ? (descMap['P004'] || 0) : src.reduce((s, f) => s + (f.monto_tickets_favor || 0), 0)
+          const pubCabify = tieneDetalles ? (descMap['P011'] || 0) : 0
+          const pubTablet = tieneDetalles ? (descMap['P012'] || 0) : 0
+          const descTotal = src.reduce((s, f) => s + (f.subtotal_descuentos || 0), 0)
+          const conocidos = tickets + pubCabify + pubTablet
+          const otrosDesc = Math.max(0, descTotal - conocidos)
           return `<div style="text-align:left;font-size:13px;">
-            <p>Suma de todos los descuentos/créditos:</p>
+            <p>Suma de todos los descuentos a conductores esta semana:</p>
             <table style="width:100%;border-collapse:collapse;">
-              <tr><td>P004 - Tickets a favor</td><td style="text-align:right"><b>${formatCurrency(tickets)}</b></td></tr>
-              <tr><td>Otros descuentos</td><td style="text-align:right"><b>${formatCurrency(otrosDesc)}</b></td></tr>
-              ${saldosNeg > 0 ? `<tr><td>Saldos a favor (crédito)</td><td style="text-align:right"><b>${formatCurrency(saldosNeg)}</b></td></tr>` : ''}
-              <tr style="border-top:2px solid #ccc;"><td><b>TOTAL DESCUENTOS</b></td><td style="text-align:right"><b>${formatCurrency(total)}</b></td></tr>
+              ${tickets > 0 ? `<tr><td>P004 - Descuentos a favor</td><td style="text-align:right"><b>${formatCurrency(tickets)}</b></td></tr>` : ''}
+              ${pubCabify > 0 ? `<tr><td>P011 - Publicidad Cabify</td><td style="text-align:right"><b>${formatCurrency(pubCabify)}</b></td></tr>` : ''}
+              ${pubTablet > 0 ? `<tr><td>P012 - Publicidad Tablet</td><td style="text-align:right"><b>${formatCurrency(pubTablet)}</b></td></tr>` : ''}
+              ${otrosDesc > 0 ? `<tr><td>Otros descuentos</td><td style="text-align:right"><b>${formatCurrency(otrosDesc)}</b></td></tr>` : ''}
+              <tr style="border-top:2px solid #ccc;"><td><b>TOTAL DESCUENTOS</b></td><td style="text-align:right"><b>${formatCurrency(descTotal)}</b></td></tr>
             </table>
           </div>`
         })()
