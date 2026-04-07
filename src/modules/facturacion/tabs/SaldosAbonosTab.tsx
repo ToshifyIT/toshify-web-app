@@ -107,6 +107,65 @@ export function SaldosAbonosTab() {
     loading: boolean
   }>({ open: false, saldo: null, rows: [], loading: false })
 
+  // Estado para edición de fila del kardex
+  const [kardexEdit, setKardexEdit] = useState<{
+    open: boolean
+    row: any
+    nuevoMonto: string
+    motivo: string
+    saving: boolean
+  }>({ open: false, row: null, nuevoMonto: '', motivo: '', saving: false })
+
+  const handleKardexEditSave = async () => {
+    if (!kardexEdit.row || !kardexEdit.motivo.trim()) return
+    const nuevoMonto = parseFloat(kardexEdit.nuevoMonto)
+    if (isNaN(nuevoMonto)) return
+    setKardexEdit(prev => ({ ...prev, saving: true }))
+    try {
+      const row = kardexEdit.row
+      const montoAnterior = row.monto_movimiento || 0
+      const referenciaOriginal = row.referencia || ''
+      // Marcar en la referencia quién editó, cuándo y por qué
+      const ahora = new Date().toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric' })
+      const usuario = profile?.full_name || 'Sistema'
+      const marcaEdicion = `[Editado: ${kardexEdit.motivo.trim()} - ${usuario} ${ahora}]`
+      const nuevaReferencia = referenciaOriginal
+        ? `${referenciaOriginal} ${marcaEdicion}`
+        : marcaEdicion
+
+      const montoAnteriorReal = row.monto_movimiento || 0
+      const updateData: any = {
+        referencia: nuevaReferencia,
+        updated_at: new Date().toISOString(),
+      }
+      if (montoAnteriorReal > 0) {
+        updateData.monto_movimiento = nuevoMonto
+      } else {
+        updateData.saldo_pendiente = nuevoMonto
+      }
+      const { error } = await (supabase.from('control_saldos') as any)
+        .update(updateData)
+        .eq('id', row.id)
+
+      if (error) throw error
+
+      // Actualizar la fila en el modal sin recargar
+      setKardexModal(prev => ({
+        ...prev,
+        rows: prev.rows.map((r: any) =>
+          r.id === row.id
+            ? { ...r, ...(montoAnteriorReal > 0 ? { monto_movimiento: nuevoMonto } : { saldo_pendiente: nuevoMonto }), referencia: nuevaReferencia }
+            : r
+        ),
+      }))
+      setKardexEdit({ open: false, row: null, nuevoMonto: '', motivo: '', saving: false })
+      showSuccess(`Monto actualizado: ${formatCurrency(montoAnterior)} → ${formatCurrency(nuevoMonto)}`)
+    } catch (err: any) {
+      Swal.fire('Error', err.message || 'No se pudo actualizar', 'error')
+      setKardexEdit(prev => ({ ...prev, saving: false }))
+    }
+  }
+
   // Estados para filtros Excel
   const [openColumnFilter, setOpenColumnFilter] = useState<string | null>(null)
   const [conductorFilter, setConductorFilter] = useState<string[]>([])
@@ -2313,7 +2372,7 @@ export function SaldosAbonosTab() {
                     <table style={{ width: '100%', fontSize: '11px', borderCollapse: 'collapse' }}>
                       <thead>
                         <tr style={{ background: 'var(--bg-secondary)', position: 'sticky', top: 0, zIndex: 1 }}>
-                          {['Fecha', 'Semana', 'Tipo', 'Referencia', 'Monto', 'Saldo', 'Usuario'].map((h, hi) => (
+                          {['Fecha', 'Semana', 'Tipo', 'Referencia', 'Monto', 'Saldo', 'Usuario', ...(isAdmin() ? [''] : [])].map((h, hi) => (
                             <th key={hi} style={{
                               padding: '6px 8px', fontWeight: 600, color: 'var(--text-secondary)',
                               borderBottom: '1px solid var(--border-primary)',
@@ -2370,6 +2429,24 @@ export function SaldosAbonosTab() {
                               <td style={{ padding: '5px 8px', color: 'var(--text-secondary)', fontSize: '10px', whiteSpace: 'nowrap' }}>
                                 {r.created_by_name || 'Sistema'}
                               </td>
+                              {isAdmin() && <td style={{ padding: '5px 4px', textAlign: 'center' }}>
+                                <button
+                                  title="Editar movimiento"
+                                  onClick={() => setKardexEdit({
+                                    open: true,
+                                    row: r,
+                                    nuevoMonto: String(montoMov > 0 ? montoMov : (r.saldo_pendiente || 0)),
+                                    motivo: '',
+                                    saving: false,
+                                  })}
+                                  style={{
+                                    background: 'none', border: 'none', cursor: 'pointer',
+                                    color: 'var(--text-tertiary)', padding: '2px',
+                                  }}
+                                >
+                                  <Edit3 size={13} />
+                                </button>
+                              </td>}
                             </tr>
                           )
                         })}
@@ -2378,6 +2455,72 @@ export function SaldosAbonosTab() {
                   </div>
                 )}
               </div>
+
+              {/* Mini-modal edición de fila */}
+              {kardexEdit.open && kardexEdit.row && (
+                <div style={{
+                  position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', zIndex: 1001,
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                }} onClick={() => setKardexEdit(prev => ({ ...prev, open: false }))}>
+                  <div style={{
+                    background: 'var(--card-bg, #fff)', borderRadius: '10px', padding: '20px', width: '380px',
+                    boxShadow: '0 8px 30px rgba(0,0,0,0.2)',
+                  }} onClick={e => e.stopPropagation()}>
+                    <h3 style={{ margin: '0 0 12px', fontSize: '14px', fontWeight: 700 }}>Editar Movimiento</h3>
+                    <div style={{ fontSize: '11px', color: 'var(--text-secondary)', marginBottom: '12px' }}>
+                      {kardexEdit.row.anio} S{String(kardexEdit.row.semana).padStart(2, '0')} &middot; {kardexEdit.row.tipo_movimiento || 'regularizado'}
+                      <br />{kardexEdit.row.referencia || '-'}
+                    </div>
+                    <label style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-secondary)', display: 'block', marginBottom: '4px' }}>
+                      {(kardexEdit.row.monto_movimiento || 0) > 0
+                        ? `Monto actual: ${formatCurrency(kardexEdit.row.monto_movimiento)}`
+                        : `Saldo actual: ${formatCurrency(kardexEdit.row.saldo_pendiente || 0)}`
+                      }
+                    </label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      value={kardexEdit.nuevoMonto}
+                      onChange={e => setKardexEdit(prev => ({ ...prev, nuevoMonto: e.target.value }))}
+                      style={{
+                        width: '100%', padding: '8px', borderRadius: '6px', border: '1px solid var(--border-primary)',
+                        fontSize: '13px', marginBottom: '10px', boxSizing: 'border-box',
+                      }}
+                    />
+                    <label style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-secondary)', display: 'block', marginBottom: '4px' }}>
+                      Motivo del cambio <span style={{ color: '#dc2626' }}>*</span>
+                    </label>
+                    <textarea
+                      value={kardexEdit.motivo}
+                      onChange={e => setKardexEdit(prev => ({ ...prev, motivo: e.target.value }))}
+                      placeholder="Ej: Corrección de monto por error de carga"
+                      rows={2}
+                      style={{
+                        width: '100%', padding: '8px', borderRadius: '6px', border: '1px solid var(--border-primary)',
+                        fontSize: '12px', resize: 'vertical', marginBottom: '14px', boxSizing: 'border-box',
+                      }}
+                    />
+                    <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
+                      <button
+                        onClick={() => setKardexEdit(prev => ({ ...prev, open: false }))}
+                        style={{
+                          padding: '7px 16px', borderRadius: '6px', border: '1px solid var(--border-primary)',
+                          background: 'var(--bg-secondary)', cursor: 'pointer', fontSize: '12px',
+                        }}
+                      >Cancelar</button>
+                      <button
+                        onClick={handleKardexEditSave}
+                        disabled={kardexEdit.saving || !kardexEdit.motivo.trim()}
+                        style={{
+                          padding: '7px 16px', borderRadius: '6px', border: 'none',
+                          background: !kardexEdit.motivo.trim() ? '#ccc' : 'var(--color-primary)', color: '#fff',
+                          cursor: !kardexEdit.motivo.trim() ? 'not-allowed' : 'pointer', fontSize: '12px', fontWeight: 600,
+                        }}
+                      >{kardexEdit.saving ? 'Guardando...' : 'Guardar'}</button>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         )

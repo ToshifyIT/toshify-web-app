@@ -1917,12 +1917,13 @@ export function ReporteFacturacionTab() {
         { data: excesosData },
         { data: dniMapeoData },
       ] = await Promise.all([
-        // Saldos: leer desde control_saldos el último saldo de la semana ANTERIOR (pre-pagos de esta semana)
+        // Saldos: leer último saldo del kardex (control_saldos) de semanas anteriores
         (supabase.from('control_saldos') as any)
           .select('conductor_id, saldo_pendiente, semana, anio, created_at')
           .in('conductor_id', conductorIds)
-          .or(`semana.lt.${semanaDelPeriodo},and(semana.eq.${semanaDelPeriodo},tipo_movimiento.eq.regularizado)`)
-          .eq('anio', anioDelPeriodo)
+          .or(`anio.lt.${anioDelPeriodo},and(anio.eq.${anioDelPeriodo},semana.lt.${semanaDelPeriodo})`)
+          .order('anio', { ascending: false })
+          .order('semana', { ascending: false })
           .order('created_at', { ascending: false }),
         (supabase.from('garantias_conductores') as any)
           .select('conductor_id, conductor_nombre, estado, cuotas_pagadas, cuotas_totales, tipo_alquiler, monto_cuota_semanal, monto_pagado, monto_total')
@@ -3038,11 +3039,14 @@ export function ReporteFacturacionTab() {
       const [penalidadesRes, ticketsRes, saldosRes, excesosRes, cabifyRes, garantiasRes, cobrosRes, multasRes, dniMapeoResRecalc] = await Promise.all([
         (supabase.from('penalidades') as any).select('*, tipos_cobro_descuento(categoria, es_a_favor, nombre), incidencias(descripcion)').in('conductor_id', conductorIds).eq('semana_aplicacion', semanaNum).eq('anio_aplicacion', anioNum).eq('aplicado', true).eq('fraccionado', false).neq('rechazado', true),
         (supabase.from('tickets_favor') as any).select('*').in('conductor_id', conductorIds).eq('estado', 'aprobado'),
-        // Saldos: leer desde saldos_conductores (fuente de verdad del saldo acumulado)
-        // NO se lee de control_saldos porque su historial puede estar incompleto
-        (supabase.from('saldos_conductores') as any)
-          .select('conductor_id, saldo_actual')
-          .in('conductor_id', conductorIds),
+        // Saldos: leer último saldo del kardex (control_saldos) de semanas anteriores
+        (supabase.from('control_saldos') as any)
+          .select('conductor_id, saldo_pendiente, semana, anio, created_at')
+          .in('conductor_id', conductorIds)
+          .or(`anio.lt.${anioNum},and(anio.eq.${anioNum},semana.lt.${semanaNum})`)
+          .order('anio', { ascending: false })
+          .order('semana', { ascending: false })
+          .order('created_at', { ascending: false }),
         (supabase.from('excesos_kilometraje') as any).select('*').in('conductor_id', conductorIds).eq('aplicado', false),
         // Peajes de la SEMANA ANTERIOR
         (() => {
@@ -3146,10 +3150,13 @@ export function ReporteFacturacionTab() {
         arr.push(pc)
         cuotasGrouped.set(cid, arr)
       })
-      // Saldo acumulado por conductor (fuente: saldos_conductores)
+      // Saldo acumulado por conductor (fuente: último registro de control_saldos de semanas anteriores)
       const saldosMapById = new Map<string, any>()
       for (const s of (saldos as any[])) {
-        saldosMapById.set(s.conductor_id, { conductor_id: s.conductor_id, saldo_actual: s.saldo_actual || 0 })
+        // Solo tomar el primer registro por conductor (ya viene ordenado desc)
+        if (!saldosMapById.has(s.conductor_id)) {
+          saldosMapById.set(s.conductor_id, { conductor_id: s.conductor_id, saldo_actual: s.saldo_pendiente || 0 })
+        }
       }
       // ─────────────────────────────────────────────────────────────────────────────
 
