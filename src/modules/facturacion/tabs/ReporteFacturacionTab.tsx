@@ -654,13 +654,18 @@ export function ReporteFacturacionTab() {
       const semanaInicio = parseISO(fechaInicio)
       const semanaFin = parseISO(fechaFin)
 
-      // Solo contar días hasta hoy (no proyectar días futuros)
-      // Obtener "hoy" en timezone Argentina (no del navegador) y parsearlo como fecha local
-      // toArgDate(new Date().toISOString()) da "YYYY-MM-DD" en Argentina
-      // Sumar T00:00:00 para que parseISO lo interprete como medianoche local, no UTC
-      const hoyArgStr = argDateFmt.format(new Date())
-      const hoyDesglose = parseISO(hoyArgStr + 'T00:00:00')
-      const limiteConteo = hoyDesglose < semanaFin ? hoyDesglose : semanaFin
+      // Si la tabla está mostrando datos ya guardados (turnos_cobrados viene de BD),
+      // el desglose debe contar los mismos días: hasta fin de semana.
+      // Solo topar en "hoy" cuando es vista previa pura (ID empieza con 'preview-').
+      const esVistaPrevia = conductorId.startsWith('preview-')
+      let limiteConteo: Date
+      if (esVistaPrevia) {
+        const hoyArgStr = argDateFmt.format(new Date())
+        const hoyDesglose = parseISO(hoyArgStr + 'T00:00:00')
+        limiteConteo = hoyDesglose < semanaFin ? hoyDesglose : semanaFin
+      } else {
+        limiteConteo = semanaFin
+      }
 
       const [{ data: asignacionesCond }, { data: conductorDesglose }, { data: devolucionProgData }] = await Promise.all([
         (supabase
