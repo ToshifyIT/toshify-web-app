@@ -8107,11 +8107,8 @@ export function ReporteFacturacionTab() {
           const multas = tieneDetalles ? (codeMap['P008'] || 0) : 0
           const mora = tieneDetalles ? (codeMap['P009'] || 0) : src.reduce((s, f) => s + (f.monto_mora || 0), 0)
           const repuestos = tieneDetalles ? (codeMap['P010'] || 0) : 0
-          const cobrosF = tieneDetalles ? 0 : src.reduce((s, f) => s + (f.monto_cobros_fraccionados || 0), 0)
           const saldos = src.reduce((s, f) => s + Math.max(0, f.saldo_anterior || 0), 0)
           const subtotalCargos = src.reduce((s, f) => s + (f.subtotal_cargos || 0), 0)
-          const conocidos = alquiler + garantia + peajes + excesosKm + penalidades + multas + mora + repuestos + cobrosF
-          const otrosCargos = Math.max(0, subtotalCargos - conocidos)
           const total = subtotalCargos + saldos
           const rows: string[] = []
           if (tieneDetalles && alqConGnc > 0) rows.push(`<tr><td>Alquiler con GNC (P001/P002/P013)</td><td style="text-align:right"><b>${formatCurrency(alqConGnc)}</b></td></tr>`)
@@ -8124,7 +8121,6 @@ export function ReporteFacturacionTab() {
           if (multas > 0) rows.push(`<tr><td>Multas (P008)</td><td style="text-align:right"><b>${formatCurrency(multas)}</b></td></tr>`)
           if (mora > 0) rows.push(`<tr><td>Mora (P009)</td><td style="text-align:right"><b>${formatCurrency(mora)}</b></td></tr>`)
           if (repuestos > 0) rows.push(`<tr><td>Repuestos/Daños (P010)</td><td style="text-align:right"><b>${formatCurrency(repuestos)}</b></td></tr>`)
-          if (cobrosF > 0) rows.push(`<tr><td>Cobros fraccionados</td><td style="text-align:right"><b>${formatCurrency(cobrosF)}</b></td></tr>`)
           if (saldos > 0) rows.push(`<tr><td>Saldos pendientes (+)</td><td style="text-align:right"><b>${formatCurrency(saldos)}</b></td></tr>`)
           return `<div style="text-align:left;font-size:13px;">
             <p>Suma de todos los cobros a conductores:</p>
