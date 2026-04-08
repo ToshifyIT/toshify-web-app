@@ -117,6 +117,31 @@ function displayArgDate(d: string | null | undefined): string {
   return `${parts[2]}/${parts[1]}/${parts[0]}`
 }
 
+// Helper: evaluar si un vehículo tiene GNC en una fecha dada, según historial
+// Regla: CARGO/DIURNO → GNC aplica desde el día siguiente a instalacion
+//        NOCTURNO → GNC aplica desde el mismo día de instalacion
+type GncHistorialEntry = { vehiculo_id: string; accion: string; fecha: string }
+function tieneGncEnFecha(
+  vehiculoId: string,
+  fechaStr: string,
+  modalidad: 'CARGO' | 'TURNO_DIURNO' | 'TURNO_NOCTURNO',
+  historialMap: Map<string, GncHistorialEntry[]>,
+  gncActual: boolean,
+): boolean {
+  const historial = historialMap.get(vehiculoId)
+  if (!historial || historial.length === 0) return gncActual // sin historial → usar valor actual
+  // Buscar último evento con fecha <= fechaStr (ya viene ordenado desc)
+  let ultimoEvento: GncHistorialEntry | null = null
+  for (const h of historial) {
+    if (h.fecha <= fechaStr) { ultimoEvento = h; break }
+  }
+  if (!ultimoEvento) return false // antes del primer evento → no tenía GNC
+  if (ultimoEvento.accion === 'desinstalacion') return false
+  // accion = 'instalacion': aplicar regla según modalidad
+  if (modalidad === 'TURNO_NOCTURNO') return fechaStr >= ultimoEvento.fecha // mismo día
+  return fechaStr > ultimoEvento.fecha // día siguiente para CARGO/DIURNO
+}
+
 // Helper: tabla de cabify según sede (Bariloche usa tabla separada)
 const SEDE_BARILOCHE_ID = 'f37193f7-5805-4d87-820d-c4521824860e'
 function getCabifyTable(sedeId: string | null | undefined): string {
@@ -667,7 +692,7 @@ export function ReporteFacturacionTab() {
         limiteConteo = semanaFin
       }
 
-      const [{ data: asignacionesCond }, { data: conductorDesglose }, { data: devolucionProgData }] = await Promise.all([
+      const [{ data: asignacionesCond }, { data: conductorDesglose }, { data: devolucionProgData }, { data: gncHistorialDesglose }] = await Promise.all([
         (supabase
           .from('asignaciones_conductores') as any)
           .select(`
@@ -684,7 +709,20 @@ export function ReporteFacturacionTab() {
           .eq('devolucion_vehiculo', true)
           .or(`conductor_id.eq.${realConductorId},conductor_diurno_id.eq.${realConductorId},conductor_nocturno_id.eq.${realConductorId}`)
           .order('created_at', { ascending: false })
-          .limit(1)
+          .limit(1),
+        // Historial GNC de vehículos asignados a este conductor
+        (async () => {
+          const { data: acsForGnc } = await (supabase.from('asignaciones_conductores') as any)
+            .select('asignaciones!inner(vehiculo_id)')
+            .eq('conductor_id', realConductorId)
+            .in('estado', ['asignado', 'activo', 'activa', 'finalizado', 'finalizada', 'completado'])
+          const vids = [...new Set((acsForGnc || []).map((a: any) => a.asignaciones?.vehiculo_id).filter(Boolean))]
+          if (vids.length === 0) return { data: [] }
+          return (supabase.from('vehiculos_gnc_historial') as any)
+            .select('vehiculo_id, accion, fecha')
+            .in('vehiculo_id', vids)
+            .order('fecha', { ascending: false })
+        })()
       ])
 
       // Tope por fecha_terminacion del conductor
@@ -692,6 +730,13 @@ export function ReporteFacturacionTab() {
       // Verificar si la devolución indica ultimo_dia_cobro='fecha_baja'
       const devProgDesglose = devolucionProgData && devolucionProgData.length > 0 ? devolucionProgData[0] : null
       const usarFechaBajaDesglose = devProgDesglose?.ultimo_dia_cobro === 'fecha_baja'
+
+      // Mapa historial GNC para desglose
+      const gncHistorialMapDesglose = new Map<string, GncHistorialEntry[]>()
+      for (const h of (gncHistorialDesglose || []) as GncHistorialEntry[]) {
+        if (!gncHistorialMapDesglose.has(h.vehiculo_id)) gncHistorialMapDesglose.set(h.vehiculo_id, [])
+        gncHistorialMapDesglose.get(h.vehiculo_id)!.push(h)
+      }
 
       // Set de fechas que estaban en el rango de asignación pero se excluyeron por fecha de baja
       const diasPostBaja = new Set<string>()
@@ -786,12 +831,16 @@ export function ReporteFacturacionTab() {
         }
         let diasContados = 0
 
-        const vehiculoGncDesglose = asignacion.vehiculos?.gnc === true
+        const vehiculoGncActualDesglose = asignacion.vehiculos?.gnc === true
+        const vehiculoIdDesglose = asignacion.vehiculo_id
+        const modalidadGncDesglose: 'CARGO' | 'TURNO_DIURNO' | 'TURNO_NOCTURNO' =
+          horario === 'CARGO' ? 'CARGO' : horario === 'NOCTURNO' ? 'TURNO_NOCTURNO' : 'TURNO_DIURNO'
         const cursorAc = new Date(efectivoInicio)
         while (cursorAc <= efectivoFin) {
           const key = format(cursorAc, 'yyyy-MM-dd')
           if (!diasCubiertos.has(key)) {
-            diasCubiertos.set(key, { horario, gnc: vehiculoGncDesglose })
+            const gncEsteDiaDesglose = tieneGncEnFecha(vehiculoIdDesglose, key, modalidadGncDesglose, gncHistorialMapDesglose, vehiculoGncActualDesglose)
+            diasCubiertos.set(key, { horario, gnc: gncEsteDiaDesglose })
             diasContados++
           }
           cursorAc.setDate(cursorAc.getDate() + 1)
@@ -1551,6 +1600,24 @@ export function ReporteFacturacionTab() {
         .in('conductor_id', conductorIds)
         .in('estado', ['asignado', 'activo', 'activa', 'finalizado', 'finalizada', 'completado', 'cancelado', 'cancelada'])
 
+      // Cargar historial GNC de vehículos para evaluar por fecha
+      const vehiculoIdsVP = new Set<string>()
+      for (const ac of (asignacionesConductores || []) as any[]) {
+        const vid = ac.asignaciones?.vehiculo_id
+        if (vid) vehiculoIdsVP.add(vid)
+      }
+      const { data: gncHistorialVP } = vehiculoIdsVP.size > 0
+        ? await (supabase.from('vehiculos_gnc_historial') as any)
+            .select('vehiculo_id, accion, fecha')
+            .in('vehiculo_id', [...vehiculoIdsVP])
+            .order('fecha', { ascending: false })
+        : { data: [] }
+      const gncHistorialMapVP = new Map<string, GncHistorialEntry[]>()
+      for (const h of (gncHistorialVP || []) as GncHistorialEntry[]) {
+        if (!gncHistorialMapVP.has(h.vehiculo_id)) gncHistorialMapVP.set(h.vehiculo_id, [])
+        gncHistorialMapVP.get(h.vehiculo_id)!.push(h)
+      }
+
       // Crear mapa de prorrateo con días y montos para precios históricos
       interface ProrrateoVistaPrevia {
         CARGO: number; TURNO_DIURNO: number; TURNO_NOCTURNO: number;
@@ -1746,7 +1813,7 @@ export function ReporteFacturacionTab() {
         // Guardar asignación para cálculo de montos
         const asigs = asignacionesPorConductorVP.get(ac.conductor_id)
         if (asigs) {
-          asigs.push({ modalidad, fechaInicio: efectivoInicio, fechaFin: efectivoFin, tieneGnc: asignacion.vehiculos?.gnc === true })
+          asigs.push({ modalidad, fechaInicio: efectivoInicio, fechaFin: efectivoFin, tieneGnc: asignacion.vehiculos?.gnc === true, vehiculoId: asignacion.vehiculo_id })
         }
 
         // Rastrear la fecha_fin más tardía de la asignación (no la efectiva, la real del registro)
@@ -1845,9 +1912,8 @@ export function ReporteFacturacionTab() {
         const montosContados = new Set<string>()
 
         for (const asig of asignaciones) {
-          const codigo = getCodigoPorModalidadVP(asig.modalidad, asig.tieneGnc)
           const montoKey = `monto_${asig.modalidad}` as keyof ProrrateoVistaPrevia
-          
+
           // Rastrear fecha de inicio más temprana para este conductor
           const existing = primeraFechaPorConductor.get(conductorId)
           if (!existing || asig.fechaInicio < existing) {
@@ -1859,6 +1925,9 @@ export function ReporteFacturacionTab() {
             const dateKey = format(currentDate, 'yyyy-MM-dd')
             if (!montosContados.has(dateKey)) {
               montosContados.add(dateKey)
+              // Evaluar GNC por fecha usando historial (regla: CARGO/DIURNO día siguiente, NOCTURNO mismo día)
+              const gncEsteDia = tieneGncEnFecha(asig.vehiculoId, dateKey, asig.modalidad, gncHistorialMapVP, asig.tieneGnc)
+              const codigo = getCodigoPorModalidadVP(asig.modalidad, gncEsteDia)
               const precioDiario = getPrecioEnFechaVP(codigo, currentDate)
               ;(prorrateo as any)[montoKey] += precioDiario
             }
@@ -2713,6 +2782,24 @@ export function ReporteFacturacionTab() {
         .in('conductor_id', conductorIdsTemp)
         .in('estado', ['asignado', 'activo', 'activa', 'finalizado', 'finalizada', 'completado', 'cancelado', 'cancelada'])
 
+      // Cargar historial GNC de vehículos para evaluar por fecha
+      const vehiculoIdsRecalc = new Set<string>()
+      for (const ac of (asignacionesConductoresRecalc || []) as any[]) {
+        const vid = ac.asignaciones?.vehiculo_id
+        if (vid) vehiculoIdsRecalc.add(vid)
+      }
+      const { data: gncHistorialRecalc } = vehiculoIdsRecalc.size > 0
+        ? await (supabase.from('vehiculos_gnc_historial') as any)
+            .select('vehiculo_id, accion, fecha')
+            .in('vehiculo_id', [...vehiculoIdsRecalc])
+            .order('fecha', { ascending: false })
+        : { data: [] }
+      const gncHistorialMapRecalc = new Map<string, GncHistorialEntry[]>()
+      for (const h of (gncHistorialRecalc || []) as GncHistorialEntry[]) {
+        if (!gncHistorialMapRecalc.has(h.vehiculo_id)) gncHistorialMapRecalc.set(h.vehiculo_id, [])
+        gncHistorialMapRecalc.get(h.vehiculo_id)!.push(h)
+      }
+
       // Rastrear la fecha_fin más tardía de asignaciones por conductor
       const maxAsigFinRecalc = new Map<string, string>()
 
@@ -2822,7 +2909,14 @@ export function ReporteFacturacionTab() {
 
         const modalidadAsignacion = asignacion.horario
         const horarioLower = (ac.horario || '').toLowerCase().trim()
-        const vehiculoGnc = asignacion.vehiculos?.gnc === true
+        const vehiculoGncActual = asignacion.vehiculos?.gnc === true
+        const vehiculoIdR = asignacion.vehiculo_id
+
+        // Determinar modalidad para regla GNC
+        const modalidadGnc: 'CARGO' | 'TURNO_DIURNO' | 'TURNO_NOCTURNO' =
+          (modalidadAsignacion === 'todo_dia' || horarioLower === 'todo_dia') ? 'CARGO'
+          : (modalidadAsignacion === 'turno' && (horarioLower === 'nocturno' || horarioLower === 'n')) ? 'TURNO_NOCTURNO'
+          : 'TURNO_DIURNO'
 
         // Contar días deduplicando por fecha (evita doble conteo con registros duplicados)
         // Separa por modalidad+GNC para generar líneas de alquiler correctas
@@ -2832,16 +2926,14 @@ export function ReporteFacturacionTab() {
           const key = format(cursorR, 'yyyy-MM-dd')
           if (!fechasContadasR.has(key)) {
             fechasContadasR.add(key)
-            if (modalidadAsignacion === 'todo_dia' || horarioLower === 'todo_dia') {
-              if (vehiculoGnc) prorrateo.CARGO++; else prorrateo.CARGO_SIN_GNC++
-            } else if (modalidadAsignacion === 'turno') {
-              if (horarioLower === 'nocturno' || horarioLower === 'n') {
-                if (vehiculoGnc) prorrateo.TURNO_NOCTURNO++; else prorrateo.TURNO_NOCTURNO_SIN_GNC++
-              } else {
-                if (vehiculoGnc) prorrateo.TURNO_DIURNO++; else prorrateo.TURNO_DIURNO_SIN_GNC++
-              }
+            // Evaluar GNC por fecha usando historial
+            const gncEsteDia = tieneGncEnFecha(vehiculoIdR, key, modalidadGnc, gncHistorialMapRecalc, vehiculoGncActual)
+            if (modalidadGnc === 'CARGO') {
+              if (gncEsteDia) prorrateo.CARGO++; else prorrateo.CARGO_SIN_GNC++
+            } else if (modalidadGnc === 'TURNO_NOCTURNO') {
+              if (gncEsteDia) prorrateo.TURNO_NOCTURNO++; else prorrateo.TURNO_NOCTURNO_SIN_GNC++
             } else {
-              if (vehiculoGnc) prorrateo.CARGO++; else prorrateo.CARGO_SIN_GNC++
+              if (gncEsteDia) prorrateo.TURNO_DIURNO++; else prorrateo.TURNO_DIURNO_SIN_GNC++
             }
           }
           cursorR.setDate(cursorR.getDate() + 1)

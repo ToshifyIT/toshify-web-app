@@ -390,6 +390,17 @@ export function VehicleManagement() {
         .single()
 
       if (vehiculoCreado) {
+        // Si se crea con GNC, registrar en historial
+        if (formData.gnc) {
+          const hoy = new Date().toISOString().split('T')[0]
+          await (supabase.from('vehiculos_gnc_historial') as any).insert({
+            vehiculo_id: vehiculoCreado.id,
+            accion: 'instalacion',
+            fecha: hoy,
+            created_by: user?.id,
+            created_by_name: profile?.full_name || 'Sistema',
+          })
+        }
         registrarHistorialVehiculo({
           vehiculoId: vehiculoCreado.id,
           tipoEvento: 'cambio_estado',
@@ -569,6 +580,20 @@ export function VehicleManagement() {
         .eq('id', selectedVehiculo.id)
 
       if (updateError) throw updateError
+
+      // Registrar historial GNC si cambió
+      const gncAnterior = !!(selectedVehiculo as any).gnc
+      const gncNuevo = formData.gnc || false
+      if (gncAnterior !== gncNuevo) {
+        const hoy = new Date().toISOString().split('T')[0]
+        await (supabase.from('vehiculos_gnc_historial') as any).insert({
+          vehiculo_id: selectedVehiculo.id,
+          accion: gncNuevo ? 'instalacion' : 'desinstalacion',
+          fecha: hoy,
+          created_by: user?.id,
+          created_by_name: profile?.full_name || 'Sistema',
+        })
+      }
 
       // Registrar historial: cambio de estado del vehículo
       if (estadoAnteriorCodigo !== nuevoEstadoCodigo && nuevoEstadoCodigo) {
