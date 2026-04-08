@@ -744,7 +744,7 @@ export function ReporteFacturacionTab() {
       // Construir un Set de fechas cubiertas con su horario
       const diasNombres = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado']
       const diasCubiertos = new Map<string, { horario: string; gnc: boolean }>() // fecha -> horario + gnc del vehículo
-      const historial: { fechaInicio: string; fechaFin: string; padreEstado: string; horario: string; dias: number; nota: string; horaEntrega?: string; nuevaEnSemana?: boolean; patente?: string }[] = []
+      const historial: { fechaInicio: string; fechaFin: string; padreEstado: string; conductorEstado?: string; horario: string; dias: number; nota: string; horaEntrega?: string; nuevaEnSemana?: boolean; patente?: string }[] = []
 
       for (const ac of (asignacionesCond || []) as any[]) {
         const asignacion = ac.asignaciones
@@ -850,7 +850,7 @@ export function ReporteFacturacionTab() {
         const rawTimestampEntrega = asignacion.fecha_inicio || ''
         const horaEntrega = rawTimestampEntrega ? toArgTime(rawTimestampEntrega) : undefined
 
-        historial.push({ fechaInicio: acInicioStr, fechaFin: acFinStr, padreEstado: estadoPadre, horario, dias: diasContados, nota: diasContados > 0 ? `${format(efectivoInicio, 'dd/MM')} → ${format(efectivoFin, 'dd/MM')}` : 'Días ya cubiertos', horaEntrega, nuevaEnSemana: acInicio >= semanaInicio, patente: patenteAsig })
+        historial.push({ fechaInicio: acInicioStr, fechaFin: acFinStr, padreEstado: estadoPadre, conductorEstado: ac.estado || '', horario, dias: diasContados, nota: diasContados > 0 ? `${format(efectivoInicio, 'dd/MM')} → ${format(efectivoFin, 'dd/MM')}` : 'Días ya cubiertos', horaEntrega, nuevaEnSemana: acInicio >= semanaInicio, patente: patenteAsig })
       }
 
       // Generar los 7 días de la semana con su estado
@@ -9950,20 +9950,26 @@ export function ReporteFacturacionTab() {
                             ) : (
                               <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', maxHeight: '320px', overflowY: 'auto' }}>
                                 {asignacionesValidas.map((h, i) => {
-                            const esActiva = h.padreEstado.toLowerCase().includes('activ')
-                            const esCancelada = h.padreEstado.toLowerCase().includes('cancel')
-                            const esProgramada = h.padreEstado.toLowerCase().includes('program')
+                            // Usar estado del conductor (asignaciones_conductores) en vez del padre
+                            const estadoRef = (h.conductorEstado || h.padreEstado).toLowerCase()
+                            const esActiva = estadoRef.includes('activ') || estadoRef === 'asignado'
+                            const esCompletada = estadoRef.includes('completad') || estadoRef.includes('finaliz')
+                            const esCancelada = estadoRef.includes('cancel')
+                            const esProgramada = estadoRef.includes('program')
 
                             const estadoColor = esActiva ? '#10b981'
+                              : esCompletada ? '#6b7280'
                               : esCancelada ? '#ef4444'
                               : esProgramada ? '#3b82f6'
                               : '#6b7280'
 
                             const bgColor = esActiva ? 'rgba(16, 185, 129, 0.06)'
+                              : esCompletada ? 'rgba(107, 114, 128, 0.04)'
                               : esCancelada ? 'rgba(239, 68, 68, 0.04)'
                               : 'transparent'
 
                             const borderColor = esActiva ? 'rgba(16, 185, 129, 0.15)'
+                              : esCompletada ? 'rgba(107, 114, 128, 0.12)'
                               : esCancelada ? 'rgba(239, 68, 68, 0.12)'
                               : 'var(--border-primary)'
 
@@ -10005,7 +10011,7 @@ export function ReporteFacturacionTab() {
                                     fontSize: '9px', padding: '1px 5px', borderRadius: '3px', fontWeight: 500,
                                     background: `${estadoColor}15`, color: estadoColor,
                                   }}>
-                                    {h.padreEstado}
+                                    {h.conductorEstado || h.padreEstado}
                                   </span>
                                 </div>
                               </div>
