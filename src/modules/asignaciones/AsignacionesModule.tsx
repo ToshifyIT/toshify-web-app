@@ -3354,9 +3354,8 @@ export function AsignacionesModule() {
                     {viewAsignacion.asignaciones_conductores?.length ? (
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                         {(() => {
-                          const esFinalizadaOCancelada = viewAsignacion.estado === 'finalizada' || viewAsignacion.estado === 'completada' || viewAsignacion.estado === 'cancelada'
                           const conductoresFiltrados = viewAsignacion.asignaciones_conductores.filter((c) =>
-                            c.estado === 'asignado' || c.estado === 'activo' || (esFinalizadaOCancelada && c.estado === 'completado')
+                            c.estado === 'asignado' || c.estado === 'activo' || c.estado === 'completado'
                           )
                           const esCargo = viewAsignacion.horario === 'todo_dia'
                           const lista = esCargo
