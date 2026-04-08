@@ -397,7 +397,7 @@ export function VehicleManagement() {
             vehiculo_id: vehiculoCreado.id,
             accion: 'instalacion',
             fecha: hoy,
-            created_by: user?.id,
+            created_by: profile?.id,
             created_by_name: profile?.full_name || 'Sistema',
           })
         }
@@ -590,7 +590,7 @@ export function VehicleManagement() {
           vehiculo_id: selectedVehiculo.id,
           accion: gncNuevo ? 'instalacion' : 'desinstalacion',
           fecha: hoy,
-          created_by: user?.id,
+          created_by: profile?.id,
           created_by_name: profile?.full_name || 'Sistema',
         })
       }

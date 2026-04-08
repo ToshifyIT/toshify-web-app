@@ -378,6 +378,7 @@ export function ReporteFacturacionTab() {
       fechaInicio: string
       fechaFin: string
       padreEstado: string
+      conductorEstado?: string
       horario: string
       dias: number
       nota: string
@@ -1670,6 +1671,7 @@ export function ReporteFacturacionTab() {
         fechaInicio: Date;
         fechaFin: Date;
         tieneGnc: boolean;
+        vehiculoId: string;
       }>>()
       conductorIds.forEach((id: string) => asignacionesPorConductorVP.set(id, []))
 

@@ -161,7 +161,7 @@ export function SaldosAbonosTab() {
             : r
         ),
       }))
-      setKardexEdit({ open: false, row: null, nuevoMonto: '', motivo: '', saving: false })
+      setKardexEdit({ open: false, row: null, nuevoMonto: '', nuevaSemana: '', motivo: '', saving: false })
       showSuccess(`Monto actualizado: ${formatCurrency(montoAnterior)} → ${formatCurrency(nuevoMonto)}`)
     } catch (err: any) {
       Swal.fire('Error', err.message || 'No se pudo actualizar', 'error')
