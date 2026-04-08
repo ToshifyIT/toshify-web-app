@@ -112,9 +112,10 @@ export function SaldosAbonosTab() {
     open: boolean
     row: any
     nuevoMonto: string
+    nuevaSemana: string
     motivo: string
     saving: boolean
-  }>({ open: false, row: null, nuevoMonto: '', motivo: '', saving: false })
+  }>({ open: false, row: null, nuevoMonto: '', nuevaSemana: '', motivo: '', saving: false })
 
   const handleKardexEditSave = async () => {
     if (!kardexEdit.row || !kardexEdit.motivo.trim()) return
@@ -134,8 +135,10 @@ export function SaldosAbonosTab() {
         : marcaEdicion
 
       const montoAnteriorReal = row.monto_movimiento || 0
+      const nuevaSemana = parseInt(kardexEdit.nuevaSemana) || row.semana
       const updateData: any = {
         referencia: nuevaReferencia,
+        semana: nuevaSemana,
         updated_at: new Date().toISOString(),
       }
       if (montoAnteriorReal > 0) {
@@ -154,7 +157,7 @@ export function SaldosAbonosTab() {
         ...prev,
         rows: prev.rows.map((r: any) =>
           r.id === row.id
-            ? { ...r, ...(montoAnteriorReal > 0 ? { monto_movimiento: nuevoMonto } : { saldo_pendiente: nuevoMonto }), referencia: nuevaReferencia }
+            ? { ...r, ...(montoAnteriorReal > 0 ? { monto_movimiento: nuevoMonto } : { saldo_pendiente: nuevoMonto }), referencia: nuevaReferencia, semana: nuevaSemana }
             : r
         ),
       }))
@@ -1659,7 +1662,7 @@ export function SaldosAbonosTab() {
     try {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { data: rows, error } = await (supabase.from('control_saldos') as any)
-        .select('semana, anio, tipo_movimiento, monto_movimiento, referencia, saldo_adeudado, saldo_a_favor, saldo_pendiente, dias_mora, interes_mora, created_at, created_by_name')
+        .select('id, semana, anio, tipo_movimiento, monto_movimiento, referencia, saldo_adeudado, saldo_a_favor, saldo_pendiente, dias_mora, interes_mora, created_at, created_by_name')
         .eq('conductor_id', saldo.conductor_id)
         .order('anio', { ascending: false })
         .order('semana', { ascending: false })
@@ -2348,17 +2351,28 @@ export function SaldosAbonosTab() {
                       DNI: {s.conductor_dni || '-'} &middot; CUIT: {s.conductor_cuit || '-'}
                     </div>
                   </div>
-                  <div style={{ textAlign: 'right' }}>
-                    <div style={{ fontSize: '16px', fontWeight: 700, color: sColor, lineHeight: 1 }}>
-                      {formatCurrency(s.saldo_actual)}
+                  <div style={{ textAlign: 'right', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <div>
+                      <div style={{ fontSize: '16px', fontWeight: 700, color: sColor, lineHeight: 1 }}>
+                        {formatCurrency(s.saldo_actual)}
+                      </div>
+                      <span style={{
+                        display: 'inline-block', marginTop: '3px', padding: '1px 6px', borderRadius: '3px',
+                        fontSize: '10px', fontWeight: 600,
+                        background: s.saldo_actual >= 0 ? '#DCFCE7' : '#FEE2E2', color: sColor,
+                      }}>
+                        {s.saldo_actual >= 0 ? 'A Favor' : 'Deuda'}
+                      </span>
                     </div>
-                    <span style={{
-                      display: 'inline-block', marginTop: '3px', padding: '1px 6px', borderRadius: '3px',
-                      fontSize: '10px', fontWeight: 600,
-                      background: s.saldo_actual >= 0 ? '#DCFCE7' : '#FEE2E2', color: sColor,
-                    }}>
-                      {s.saldo_actual >= 0 ? 'A Favor' : 'Deuda'}
-                    </span>
+                    {isAdmin() && (
+                      <button
+                        title="Editar saldo"
+                        onClick={() => editarSaldo(s)}
+                        style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-tertiary)', padding: '4px' }}
+                      >
+                        <Edit3 size={16} />
+                      </button>
+                    )}
                   </div>
                 </div>
 
@@ -2436,6 +2450,7 @@ export function SaldosAbonosTab() {
                                     open: true,
                                     row: r,
                                     nuevoMonto: String(montoMov > 0 ? montoMov : (r.saldo_pendiente || 0)),
+                                    nuevaSemana: String(r.semana || ''),
                                     motivo: '',
                                     saving: false,
                                   })}
@@ -2471,22 +2486,42 @@ export function SaldosAbonosTab() {
                       {kardexEdit.row.anio} S{String(kardexEdit.row.semana).padStart(2, '0')} &middot; {kardexEdit.row.tipo_movimiento || 'regularizado'}
                       <br />{kardexEdit.row.referencia || '-'}
                     </div>
-                    <label style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-secondary)', display: 'block', marginBottom: '4px' }}>
-                      {(kardexEdit.row.monto_movimiento || 0) > 0
-                        ? `Monto actual: ${formatCurrency(kardexEdit.row.monto_movimiento)}`
-                        : `Saldo actual: ${formatCurrency(kardexEdit.row.saldo_pendiente || 0)}`
-                      }
-                    </label>
-                    <input
-                      type="number"
-                      step="0.01"
-                      value={kardexEdit.nuevoMonto}
-                      onChange={e => setKardexEdit(prev => ({ ...prev, nuevoMonto: e.target.value }))}
-                      style={{
-                        width: '100%', padding: '8px', borderRadius: '6px', border: '1px solid var(--border-primary)',
-                        fontSize: '13px', marginBottom: '10px', boxSizing: 'border-box',
-                      }}
-                    />
+                    <div style={{ display: 'flex', gap: '10px', marginBottom: '10px' }}>
+                      <div style={{ flex: 1 }}>
+                        <label style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-secondary)', display: 'block', marginBottom: '4px' }}>
+                          {(kardexEdit.row.monto_movimiento || 0) > 0
+                            ? `Monto actual: ${formatCurrency(kardexEdit.row.monto_movimiento)}`
+                            : `Saldo actual: ${formatCurrency(kardexEdit.row.saldo_pendiente || 0)}`
+                          }
+                        </label>
+                        <input
+                          type="number"
+                          step="0.01"
+                          value={kardexEdit.nuevoMonto}
+                          onChange={e => setKardexEdit(prev => ({ ...prev, nuevoMonto: e.target.value }))}
+                          style={{
+                            width: '100%', padding: '8px', borderRadius: '6px', border: '1px solid var(--border-primary)',
+                            fontSize: '13px', boxSizing: 'border-box',
+                          }}
+                        />
+                      </div>
+                      <div style={{ width: '90px' }}>
+                        <label style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-secondary)', display: 'block', marginBottom: '4px' }}>
+                          Semana
+                        </label>
+                        <input
+                          type="number"
+                          min="1"
+                          max="52"
+                          value={kardexEdit.nuevaSemana}
+                          onChange={e => setKardexEdit(prev => ({ ...prev, nuevaSemana: e.target.value }))}
+                          style={{
+                            width: '100%', padding: '8px', borderRadius: '6px', border: '1px solid var(--border-primary)',
+                            fontSize: '13px', boxSizing: 'border-box',
+                          }}
+                        />
+                      </div>
+                    </div>
                     <label style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-secondary)', display: 'block', marginBottom: '4px' }}>
                       Motivo del cambio <span style={{ color: '#dc2626' }}>*</span>
                     </label>

@@ -1986,11 +1986,12 @@ export function ReporteFacturacionTab() {
         { data: excesosData },
         { data: dniMapeoData },
       ] = await Promise.all([
-        // Saldos: leer último saldo del kardex (control_saldos) de semanas anteriores
+        // Saldos: leer último saldo del kardex (control_saldos) incluyendo pagos de la misma semana
+        // Si hay pagos manuales/efectivo dentro de la semana, se reflejan en el saldo
         (supabase.from('control_saldos') as any)
-          .select('conductor_id, saldo_pendiente, semana, anio, created_at')
+          .select('conductor_id, saldo_pendiente, semana, anio, tipo_movimiento, created_at')
           .in('conductor_id', conductorIds)
-          .or(`anio.lt.${anioDelPeriodo},and(anio.eq.${anioDelPeriodo},semana.lt.${semanaDelPeriodo})`)
+          .or(`anio.lt.${anioDelPeriodo},and(anio.eq.${anioDelPeriodo},semana.lte.${semanaDelPeriodo})`)
           .order('anio', { ascending: false })
           .order('semana', { ascending: false })
           .order('created_at', { ascending: false }),
@@ -3131,11 +3132,11 @@ export function ReporteFacturacionTab() {
       const [penalidadesRes, ticketsRes, saldosRes, excesosRes, cabifyRes, garantiasRes, cobrosRes, multasRes, dniMapeoResRecalc] = await Promise.all([
         (supabase.from('penalidades') as any).select('*, tipos_cobro_descuento(categoria, es_a_favor, nombre), incidencias(descripcion)').in('conductor_id', conductorIds).eq('semana_aplicacion', semanaNum).eq('anio_aplicacion', anioNum).eq('aplicado', true).eq('fraccionado', false).neq('rechazado', true),
         (supabase.from('tickets_favor') as any).select('*').in('conductor_id', conductorIds).eq('estado', 'aprobado'),
-        // Saldos: leer último saldo del kardex (control_saldos) de semanas anteriores
+        // Saldos: leer último saldo del kardex (control_saldos) incluyendo pagos de la misma semana
         (supabase.from('control_saldos') as any)
-          .select('conductor_id, saldo_pendiente, semana, anio, created_at')
+          .select('conductor_id, saldo_pendiente, semana, anio, tipo_movimiento, created_at')
           .in('conductor_id', conductorIds)
-          .or(`anio.lt.${anioNum},and(anio.eq.${anioNum},semana.lt.${semanaNum})`)
+          .or(`anio.lt.${anioNum},and(anio.eq.${anioNum},semana.lte.${semanaNum})`)
           .order('anio', { ascending: false })
           .order('semana', { ascending: false })
           .order('created_at', { ascending: false }),
