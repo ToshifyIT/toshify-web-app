@@ -385,6 +385,7 @@ export function ReporteFacturacionTab() {
       horaEntrega?: string
       nuevaEnSemana?: boolean
       patente?: string
+      tieneGnc?: boolean
     }[]
     devolucion?: {
       fecha_programada: string | null
@@ -745,7 +746,7 @@ export function ReporteFacturacionTab() {
       // Construir un Set de fechas cubiertas con su horario
       const diasNombres = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado']
       const diasCubiertos = new Map<string, { horario: string; gnc: boolean }>() // fecha -> horario + gnc del vehículo
-      const historial: { fechaInicio: string; fechaFin: string; padreEstado: string; conductorEstado?: string; horario: string; dias: number; nota: string; horaEntrega?: string; nuevaEnSemana?: boolean; patente?: string }[] = []
+      const historial: { fechaInicio: string; fechaFin: string; padreEstado: string; conductorEstado?: string; horario: string; dias: number; nota: string; horaEntrega?: string; nuevaEnSemana?: boolean; patente?: string; tieneGnc?: boolean }[] = []
 
       for (const ac of (asignacionesCond || []) as any[]) {
         const asignacion = ac.asignaciones
@@ -851,7 +852,7 @@ export function ReporteFacturacionTab() {
         const rawTimestampEntrega = asignacion.fecha_inicio || ''
         const horaEntrega = rawTimestampEntrega ? toArgTime(rawTimestampEntrega) : undefined
 
-        historial.push({ fechaInicio: acInicioStr, fechaFin: acFinStr, padreEstado: estadoPadre, conductorEstado: ac.estado || '', horario, dias: diasContados, nota: diasContados > 0 ? `${format(efectivoInicio, 'dd/MM')} → ${format(efectivoFin, 'dd/MM')}` : 'Días ya cubiertos', horaEntrega, nuevaEnSemana: acInicio >= semanaInicio, patente: patenteAsig })
+        historial.push({ fechaInicio: acInicioStr, fechaFin: acFinStr, padreEstado: estadoPadre, conductorEstado: ac.estado || '', horario, dias: diasContados, nota: diasContados > 0 ? `${format(efectivoInicio, 'dd/MM')} → ${format(efectivoFin, 'dd/MM')}` : 'Días ya cubiertos', horaEntrega, nuevaEnSemana: acInicio >= semanaInicio, patente: patenteAsig, tieneGnc: asignacion.vehiculos?.gnc === true })
       }
 
       // Generar los 7 días de la semana con su estado
@@ -9994,6 +9995,11 @@ export function ReporteFacturacionTab() {
                                   {h.patente && (
                                     <span style={{ fontSize: '9px', padding: '1px 5px', borderRadius: '3px', background: 'rgba(107, 114, 128, 0.1)', color: 'var(--text-secondary)', fontWeight: 600, fontFamily: 'monospace' }}>
                                       {h.patente}
+                                    </span>
+                                  )}
+                                  {h.patente && (
+                                    <span style={{ fontSize: '8px', padding: '1px 4px', borderRadius: '3px', fontWeight: 600, background: h.tieneGnc ? 'rgba(16, 185, 129, 0.1)' : 'rgba(239, 68, 68, 0.1)', color: h.tieneGnc ? '#10b981' : '#ef4444' }}>
+                                      {h.tieneGnc ? 'GNC' : 'Sin GNC'}
                                     </span>
                                   )}
                                   <span style={{ fontSize: '10px', color: estadoColor, fontWeight: 600 }}>
