@@ -132,7 +132,7 @@ export function IncidenciasModule() {
   const [tiposPenalidad, setTiposPenalidad] = useState<TipoPenalidad[]>([])
   const [tiposCobroDescuento, setTiposCobroDescuento] = useState<TipoCobroDescuento[]>([])
   const [conceptosNomina, setConceptosNomina] = useState<{ id: string; codigo: string; descripcion: string; precio_final: number }[]>([])
-  const [preciosAlquiler, setPreciosAlquiler] = useState<{ P001: number; P002: number; P013: number }>({ P001: 0, P002: 0, P013: 0 })
+  const [preciosAlquiler, setPreciosAlquiler] = useState<{ P001: number; P002: number; P013: number; P014: number; P015: number; P016: number }>({ P001: 0, P002: 0, P013: 0, P014: 0, P015: 0, P016: 0 })
   const [vehiculos, setVehiculos] = useState<VehiculoSimple[]>([])
   const [conductores, setConductores] = useState<ConductorSimple[]>([])
   // Mapa de penalidades fraccionadas: penalidad_id -> { total_cuotas, cuotas_pendientes }
@@ -377,7 +377,7 @@ export function IncidenciasModule() {
         (supabase.from('incidencias_estados' as any) as any).select('id, codigo, nombre, color, orden').eq('is_active', true).order('orden'),
         (supabase.from('tipos_penalidad' as any) as any).select('id, codigo, nombre, descripcion, orden').eq('is_active', true).order('orden'),
         (supabase.from('tipos_cobro_descuento' as any) as any).select('id, codigo, nombre, descripcion, categoria, es_a_favor, orden').eq('is_active', true).order('orden'),
-        aplicarFiltroSede(supabase.from('vehiculos').select('id, patente, marca, modelo').is('deleted_at', null)).order('patente'),
+        aplicarFiltroSede(supabase.from('vehiculos').select('id, patente, marca, modelo, gnc').is('deleted_at', null)).order('patente'),
         aplicarFiltroSede(supabase.from('conductores').select('id, nombres, apellidos')).order('apellidos'),
         aplicarFiltroSede((supabase.from('v_incidencias_completas' as any) as any).select('*')).order('fecha', { ascending: false }).limit(2000),
         aplicarFiltroSede((supabase.from('v_penalidades_completas' as any) as any).select('*')).order('fecha', { ascending: false }).limit(2000),
@@ -401,14 +401,12 @@ export function IncidenciasModule() {
       const { data: preciosData } = await supabase
         .from('conceptos_nomina')
         .select('codigo, precio_final')
-        .in('codigo', ['P001', 'P002', 'P013'])
+        .in('codigo', ['P001', 'P002', 'P013', 'P014', 'P015', 'P016'])
         .eq('activo', true)
       if (preciosData) {
-        const precios = { P001: 0, P002: 0, P013: 0 }
+        const precios = { P001: 0, P002: 0, P013: 0, P014: 0, P015: 0, P016: 0 }
         for (const p of preciosData) {
-          if (p.codigo === 'P001') precios.P001 = Number(p.precio_final) || 0
-          else if (p.codigo === 'P002') precios.P002 = Number(p.precio_final) || 0
-          else if (p.codigo === 'P013') precios.P013 = Number(p.precio_final) || 0
+          if (p.codigo in precios) precios[p.codigo as keyof typeof precios] = Number(p.precio_final) || 0
         }
         setPreciosAlquiler(precios)
       }
@@ -3915,7 +3913,7 @@ interface IncidenciaFormProps {
   conductores: ConductorSimple[]
   tiposCobroDescuento: TipoCobroDescuento[]
   conceptosNomina?: { id: string; codigo: string; descripcion: string; precio_final: number }[]
-  preciosAlquiler?: { P001: number; P002: number; P013: number }
+  preciosAlquiler?: { P001: number; P002: number; P013: number; P014: number; P015: number; P016: number }
   disabled?: boolean
   esCobro?: boolean  // Indica si es incidencia de cobro (muestra campo monto)
   sedes?: any[]
@@ -3936,7 +3934,7 @@ interface PatenteAsignada {
   fechaHasta: string
 }
 
-function IncidenciaForm({ formData, setFormData, estados, vehiculos, conductores, tiposCobroDescuento, conceptosNomina = [], preciosAlquiler = { P001: 0, P002: 0, P013: 0 }, disabled, esCobro = false, sedes }: IncidenciaFormProps) {
+function IncidenciaForm({ formData, setFormData, estados, vehiculos, conductores, tiposCobroDescuento, conceptosNomina = [], preciosAlquiler = { P001: 0, P002: 0, P013: 0, P014: 0, P015: 0, P016: 0 }, disabled, esCobro = false, sedes }: IncidenciaFormProps) {
   const [vehiculoSearch, setVehiculoSearch] = useState('')
   const [conductorSearch, setConductorSearch] = useState('')
   const [showVehiculoDropdown, setShowVehiculoDropdown] = useState(false)
@@ -3953,6 +3951,17 @@ function IncidenciaForm({ formData, setFormData, estados, vehiculos, conductores
 
   const selectedVehiculo = vehiculos.find(v => v.id === formData.vehiculo_id)
   const selectedConductor = conductores.find(c => c.id === formData.conductor_id)
+
+  // Historial GNC del vehículo seleccionado
+  const [gncHistorial, setGncHistorial] = useState<{ accion: string; fecha: string }[]>([])
+  useEffect(() => {
+    if (!formData.vehiculo_id) { setGncHistorial([]); return }
+    ;(supabase.from('vehiculos_gnc_historial') as any)
+      .select('accion, fecha')
+      .eq('vehiculo_id', formData.vehiculo_id)
+      .order('fecha', { ascending: false })
+      .then(({ data }: any) => setGncHistorial(data || []))
+  }, [formData.vehiculo_id])
 
   // Tipos categorizados memoizados
   const { tiposP006, tiposP004, tiposP007, tiposSinCategoria } = useCategorizedTipos(tiposCobroDescuento)
@@ -4439,11 +4448,26 @@ function IncidenciaForm({ formData, setFormData, estados, vehiculos, conductores
                   { label: '1½', value: 1.5 },
                   { label: '2', value: 2 },
                 ].map(opt => {
+                  // Evaluar GNC según historial + fecha de incidencia + modalidad
+                  const modalidadGnc = formData.turno === 'A cargo' ? 'CARGO' : formData.turno === 'Nocturno' ? 'TURNO_NOCTURNO' : 'TURNO_DIURNO'
+                  const fechaInc = formData.fecha || new Date().toISOString().split('T')[0]
+                  const gncActual = !!selectedVehiculo?.gnc
+                  let tieneGnc = gncActual
+                  if (gncHistorial.length > 0) {
+                    const ultimo = gncHistorial.find(h => h.fecha <= fechaInc)
+                    if (ultimo) {
+                      if (ultimo.accion === 'desinstalacion') tieneGnc = false
+                      else if (modalidadGnc === 'TURNO_NOCTURNO') tieneGnc = fechaInc >= ultimo.fecha
+                      else tieneGnc = fechaInc > ultimo.fecha
+                    } else {
+                      tieneGnc = false
+                    }
+                  }
                   const precioTurno = formData.turno === 'A cargo'
-                    ? preciosAlquiler.P002
+                    ? (tieneGnc ? preciosAlquiler.P002 : preciosAlquiler.P016)
                     : formData.turno === 'Nocturno'
-                      ? preciosAlquiler.P013
-                      : preciosAlquiler.P001
+                      ? (tieneGnc ? preciosAlquiler.P013 : preciosAlquiler.P015)
+                      : (tieneGnc ? preciosAlquiler.P001 : preciosAlquiler.P014)
                   const montoCalculado = Math.round(precioTurno * opt.value * 100) / 100
                   const isSelected = formData.monto === montoCalculado && montoCalculado > 0
                   return (
