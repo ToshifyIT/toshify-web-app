@@ -87,14 +87,19 @@ const CONCEPTO_LABELS: Record<string, string> = {
   P001: 'Alquiler Turno Diurno',
   P002: 'Alquiler a Cargo',
   P003: 'Cuota de Garantía',
-  P004: 'Tickets',
+  P004: 'Descuento a Favor',
   P005: 'Peajes',
-  P006: 'Combustible',
+  P006: 'Exceso de KM',
   P007: 'Penalidades',
   P008: 'Multas de Tránsito',
   P009: 'Mora',
-  P010: 'Plan de Pagos',
+  P010: 'Repuestos/Daños',
+  P011: 'Publicidad Cabify',
+  P012: 'Publicidad Tablet',
   P013: 'Alquiler Turno Nocturno',
+  P014: 'Alquiler Turno Diurno Sin GNC',
+  P015: 'Alquiler Turno Nocturno Sin GNC',
+  P016: 'Alquiler a Cargo Sin GNC',
 }
 
 /** Siempre mostrar el label del concepto para códigos conocidos.
@@ -176,16 +181,35 @@ export function PortalPage() {
   const [loginError, setLoginError] = useState('')
   const [loadingFacturas, setLoadingFacturas] = useState(false)
   const [loadingDetalle, setLoadingDetalle] = useState(false)
+  const [detalleError, setDetalleError] = useState('')
   const [exportingPdf, setExportingPdf] = useState(false)
 
   // =====================================================
   // LOGIN
   // =====================================================
 
+  // Rate limiting: máximo 5 intentos por minuto
+  const [loginAttempts, setLoginAttempts] = useState<number[]>([])
+
   async function handleLogin(e: React.FormEvent) {
     e.preventDefault()
     const input = loginInput.trim()
     if (!input) return
+
+    // Validar que solo tenga números, puntos, guiones o espacios
+    if (!/^[\d.\-\s]+$/.test(input)) {
+      setLoginError('Ingresá solo números (DNI o CUIT)')
+      return
+    }
+
+    // Rate limiting
+    const ahora = Date.now()
+    const intentosRecientes = loginAttempts.filter(t => ahora - t < 60000)
+    if (intentosRecientes.length >= 5) {
+      setLoginError('Demasiados intentos. Esperá un minuto.')
+      return
+    }
+    setLoginAttempts([...intentosRecientes, ahora])
 
     setLoginLoading(true)
     setLoginError('')
@@ -195,11 +219,30 @@ export function PortalPage() {
       const normalizedDni = normalizeDni(input)
       const normalizedCuit = normalizeCuit(input)
 
-      const { data, error } = await supabase
+      // Buscar primero por DNI exacto, luego por CUIT
+      let data: any[] | null = null
+      let error: any = null
+
+      // Intentar por DNI normalizado
+      const resDni = await supabase
         .from('conductores')
         .select('id, nombres, apellidos, numero_dni, numero_cuit')
-        .or(`numero_dni.eq.${normalizedDni},numero_cuit.eq.${normalizedCuit},numero_cuit.eq.${input}`)
+        .eq('numero_dni', normalizedDni)
         .limit(1)
+
+      if (resDni.data && resDni.data.length > 0) {
+        data = resDni.data
+        error = resDni.error
+      } else {
+        // Intentar por CUIT normalizado
+        const resCuit = await supabase
+          .from('conductores')
+          .select('id, nombres, apellidos, numero_dni, numero_cuit')
+          .eq('numero_cuit', normalizedCuit)
+          .limit(1)
+        data = resCuit.data
+        error = resCuit.error
+      }
 
       if (error) throw error
 
@@ -348,6 +391,7 @@ export function PortalPage() {
     setSelectedFactura(factura)
     setView('detail')
     setLoadingDetalle(true)
+    setDetalleError('')
 
     try {
       const { data, error } = await supabase
@@ -442,6 +486,7 @@ export function PortalPage() {
       setDetalleItems(items)
     } catch {
       setDetalleItems([])
+      setDetalleError('No se pudo cargar el detalle. Intentá de nuevo.')
     } finally {
       setLoadingDetalle(false)
     }
@@ -543,8 +588,10 @@ export function PortalPage() {
       y += 8
 
       // CONCEPTOS (cargos + descuentos unificados, sin subtotales)
-      const cargos = detalleItems.filter(d => !d.es_descuento && d.total !== 0)
-      const descuentos = detalleItems.filter(d => d.es_descuento && d.total !== 0)
+      const cargos = detalleItems.filter(d => !d.es_descuento && d.total !== 0 && d.concepto_codigo !== 'SALDO')
+      const descuentos = detalleItems.filter(d => d.es_descuento && d.total !== 0 && d.concepto_codigo !== 'SALDO')
+      const saldoItemPdf = detalleItems.find(d => d.concepto_codigo === 'SALDO')
+      const saldoAntPdf = saldoItemPdf ? (saldoItemPdf.es_descuento ? -saldoItemPdf.total : saldoItemPdf.total) : 0
 
       pdf.setFontSize(11)
       pdf.setTextColor(negro)
@@ -576,6 +623,21 @@ export function PortalPage() {
         y += 5
       })
 
+      // SALDO ANTERIOR en PDF
+      if (saldoAntPdf !== 0) {
+        y += 4
+        pdf.setFont('helvetica', 'bold')
+        pdf.setFontSize(10)
+        pdf.setTextColor(negro)
+        pdf.text('SALDO ANTERIOR', margin, y)
+        y += 5
+        pdf.setFont('helvetica', 'normal')
+        pdf.text(saldoAntPdf > 0 ? 'Deuda pendiente semana anterior' : 'Saldo a favor semana anterior', margin, y)
+        pdf.setTextColor(saldoAntPdf > 0 ? rojo : verde)
+        pdf.text(`${saldoAntPdf > 0 ? '+' : '-'}${formatCurrency(Math.abs(saldoAntPdf))}`, pageWidth - margin, y, { align: 'right' })
+        y += 5
+      }
+
       // TOTAL
       y += 5
       pdf.setDrawColor(200, 200, 200)
@@ -585,7 +647,7 @@ export function PortalPage() {
 
       const subtotalCargos = cargos.reduce((sum, c) => sum + c.total, 0)
       const subtotalDescPdf = descuentos.reduce((sum, d) => sum + d.total, 0)
-      const totalFinal = subtotalCargos - subtotalDescPdf
+      const totalFinal = subtotalCargos - subtotalDescPdf + saldoAntPdf
       const saldoColor = totalFinal > 0 ? rojo : verde
 
       pdf.setFontSize(14)
@@ -613,7 +675,7 @@ export function PortalPage() {
       const nombreArchivo = `Proforma_${selectedFactura.conductor_nombre.replace(/\s+/g, '_')}_Semana${periodo.semana}_${periodo.anio}.pdf`
       pdf.save(nombreArchivo)
     } catch {
-      // Silent fail - el PDF se intenta descargar igual
+      alert('No se pudo generar el PDF. Intentá de nuevo.')
     } finally {
       setExportingPdf(false)
     }
@@ -727,11 +789,13 @@ export function PortalPage() {
 
   if (view === 'detail' && selectedFactura) {
     const periodo = selectedFactura.periodos_facturacion
-    const cargos = detalleItems.filter(d => !d.es_descuento && d.total !== 0)
-    const descuentos = detalleItems.filter(d => d.es_descuento && d.total !== 0)
+    const cargos = detalleItems.filter(d => !d.es_descuento && d.total !== 0 && d.concepto_codigo !== 'SALDO')
+    const descuentos = detalleItems.filter(d => d.es_descuento && d.total !== 0 && d.concepto_codigo !== 'SALDO')
+    const saldoAnteriorItem = detalleItems.find(d => d.concepto_codigo === 'SALDO')
+    const saldoAnterior = saldoAnteriorItem ? (saldoAnteriorItem.es_descuento ? -saldoAnteriorItem.total : saldoAnteriorItem.total) : 0
     const subtotalCargos = cargos.reduce((sum, d) => sum + d.total, 0)
     const subtotalDescuentos = descuentos.reduce((sum, d) => sum + d.total, 0)
-    const totalAPagar = subtotalCargos - subtotalDescuentos
+    const totalAPagar = subtotalCargos - subtotalDescuentos + saldoAnterior
 
     return (
       <div className="portal">
@@ -786,12 +850,23 @@ export function PortalPage() {
                   <span className="portal-detail-info-value">{selectedFactura.tipo_alquiler}</span>
                 </div>
                 <div className="portal-detail-info-item">
+                  <span className="portal-detail-info-label">Combustible</span>
+                  <span className="portal-detail-info-value" style={{ color: detalleItems.some(d => ['P014','P015','P016'].includes(d.concepto_codigo)) ? '#ef4444' : '#10b981' }}>
+                    {detalleItems.some(d => ['P014','P015','P016'].includes(d.concepto_codigo)) ? 'Sin GNC' : 'GNC'}
+                  </span>
+                </div>
+                <div className="portal-detail-info-item">
                   <span className="portal-detail-info-label">Turnos</span>
                   <span className="portal-detail-info-value">{selectedFactura.turnos_cobrados}/{selectedFactura.turnos_base}</span>
                 </div>
               </div>
 
               <div className="portal-detail-body">
+                {detalleError && (
+                  <div style={{ padding: '12px', background: '#FEE2E2', color: '#dc2626', borderRadius: '6px', fontSize: '12px', marginBottom: '8px' }}>
+                    {detalleError}
+                  </div>
+                )}
                 {/* CONCEPTOS (cargos + descuentos unificados) */}
                 <div className="portal-detail-section">
                   <div className="portal-detail-section-title cargos">Conceptos</div>
@@ -819,6 +894,38 @@ export function PortalPage() {
                     ))}
                   </div>
                 </div>
+
+                {/* SUBTOTALES */}
+                <div className="portal-detail-items" style={{ borderTop: '1px solid var(--border-primary)', paddingTop: '8px', marginTop: '4px' }}>
+                  <div className="portal-detail-item">
+                    <span className="portal-detail-item-name" style={{ fontWeight: 600, fontSize: '12px' }}>Subtotal Cargos</span>
+                    <span className="portal-detail-item-amount" style={{ fontWeight: 600 }}>{formatCurrency(subtotalCargos)}</span>
+                  </div>
+                  {subtotalDescuentos > 0 && (
+                    <div className="portal-detail-item">
+                      <span className="portal-detail-item-name" style={{ fontWeight: 600, fontSize: '12px' }}>Subtotal Descuentos</span>
+                      <span className="portal-detail-item-amount" style={{ fontWeight: 600, color: '#059669' }}>-{formatCurrency(subtotalDescuentos)}</span>
+                    </div>
+                  )}
+                </div>
+
+                {/* SALDO ANTERIOR */}
+                {saldoAnterior !== 0 && (
+                  <div className="portal-detail-section" style={{ marginTop: '8px' }}>
+                    <div className="portal-detail-section-title" style={{ color: saldoAnterior > 0 ? '#dc2626' : '#059669' }}>Saldo Anterior</div>
+                    <div className="portal-detail-items">
+                      <div className="portal-detail-item">
+                        <span className="portal-detail-item-name">
+                          <span className="portal-detail-item-dot" style={{ background: saldoAnterior > 0 ? '#dc2626' : '#059669' }} />
+                          {saldoAnterior > 0 ? 'Deuda pendiente semana anterior' : 'Saldo a favor semana anterior'}
+                        </span>
+                        <span className="portal-detail-item-amount" style={{ color: saldoAnterior > 0 ? '#dc2626' : '#059669' }}>
+                          {saldoAnterior > 0 ? '+' : '-'}{formatCurrency(Math.abs(saldoAnterior))}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                )}
 
                 {/* TOTAL */}
                 <div className="portal-detail-total">

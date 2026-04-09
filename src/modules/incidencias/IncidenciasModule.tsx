@@ -377,7 +377,7 @@ export function IncidenciasModule() {
         (supabase.from('incidencias_estados' as any) as any).select('id, codigo, nombre, color, orden').eq('is_active', true).order('orden'),
         (supabase.from('tipos_penalidad' as any) as any).select('id, codigo, nombre, descripcion, orden').eq('is_active', true).order('orden'),
         (supabase.from('tipos_cobro_descuento' as any) as any).select('id, codigo, nombre, descripcion, categoria, es_a_favor, orden').eq('is_active', true).order('orden'),
-        aplicarFiltroSede(supabase.from('vehiculos').select('id, patente, marca, modelo, gnc').is('deleted_at', null)).order('patente'),
+        aplicarFiltroSede(supabase.from('vehiculos').select('id, patente, marca, modelo, gnc, updated_at').is('deleted_at', null)).order('patente'),
         aplicarFiltroSede(supabase.from('conductores').select('id, nombres, apellidos')).order('apellidos'),
         aplicarFiltroSede((supabase.from('v_incidencias_completas' as any) as any).select('*')).order('fecha', { ascending: false }).limit(2000),
         aplicarFiltroSede((supabase.from('v_penalidades_completas' as any) as any).select('*')).order('fecha', { ascending: false }).limit(2000),
@@ -4462,6 +4462,11 @@ function IncidenciaForm({ formData, setFormData, estados, vehiculos, conductores
                     } else {
                       tieneGnc = false
                     }
+                  } else if (gncActual && (selectedVehiculo as any)?.updated_at) {
+                    // Sin historial pero gnc=true: usar updated_at como fecha aprox de instalación
+                    const updatedDate = (selectedVehiculo as any).updated_at.substring(0, 10)
+                    if (modalidadGnc === 'TURNO_NOCTURNO') tieneGnc = fechaInc >= updatedDate
+                    else tieneGnc = fechaInc > updatedDate
                   }
                   const precioTurno = formData.turno === 'A cargo'
                     ? (tieneGnc ? preciosAlquiler.P002 : preciosAlquiler.P016)
