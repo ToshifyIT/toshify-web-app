@@ -65,6 +65,11 @@ export function VehicleManagement() {
   const finalizarDataRef = useRef(finalizarData)
   finalizarDataRef.current = finalizarData
 
+  // Historial GNC / Telepase
+  const [showHistorialModal, setShowHistorialModal] = useState<'gnc' | 'telepase' | null>(null)
+  const [historialCambios, setHistorialCambios] = useState<{ accion: string; fecha: string; created_by_name: string; created_at: string }[]>([])
+  const [loadingHistorial, setLoadingHistorial] = useState(false)
+
   // Stats calculados desde datos cargados (ver calculatedStats useMemo)
 
   // Removed TanStack Table states - now handled by DataTable component
@@ -84,8 +89,8 @@ export function VehicleManagement() {
   const [activeStatCard, setActiveStatCard] = useState<string | null>(null)
   const [statCardEstadoFilter, setStatCardEstadoFilter] = useState<string[]>([]) // Filtro separado para stat cards
   const [statCardExcludeMode, setStatCardExcludeMode] = useState(false) // true = excluir los estados del filtro en vez de incluir
-  const [gncFilter, setGncFilter] = useState<string | null>(null) // 'sinGnc' para filtrar sin GNC
-  const [telepaseFilter, setTelepaseFilter] = useState<boolean>(false) // true = filtrar con telepase
+  const [gncFilter, setGncFilter] = useState<string | null>(null) // 'sinGnc' | 'conGnc'
+  const [telepaseFilter, setTelepaseFilter] = useState<string | null>(null) // 'propio' | 'toshify'
 
   // Excel filter hook for portal-based dropdowns
   const { openFilterId, setOpenFilterId } = useExcelFilters()
@@ -146,7 +151,9 @@ export function VehicleManagement() {
     let vehiculosCorporativos = 0
     let vehiculosDevueltos = 0
     let vehiculosSinGnc = 0
+    let vehiculosConGnc = 0
     let vehiculosConTelepase = 0
+    let vehiculosTelepaseToshify = 0
 
     // UNA SOLA PASADA sobre los vehículos
     for (const v of vehiculos) {
@@ -157,14 +164,22 @@ export function VehicleManagement() {
         totalVehiculos++
       }
 
-      // Contar sin GNC (solo entre flota activa)
-      if (!(v as any).gnc && !estadosExcluidos.includes(estadoCodigo)) {
-        vehiculosSinGnc++
+      // Contar GNC (solo entre flota activa)
+      if (!estadosExcluidos.includes(estadoCodigo)) {
+        if ((v as any).gnc) {
+          vehiculosConGnc++
+        } else {
+          vehiculosSinGnc++
+        }
       }
 
-      // Contar con Telepase (solo entre flota activa)
-      if ((v as any).telepase && !estadosExcluidos.includes(estadoCodigo)) {
-        vehiculosConTelepase++
+      // Contar Telepase (solo entre flota activa)
+      if (!estadosExcluidos.includes(estadoCodigo)) {
+        if ((v as any).telepase) {
+          vehiculosConTelepase++
+        } else {
+          vehiculosTelepaseToshify++
+        }
       }
 
       // Contar por estado
@@ -192,7 +207,9 @@ export function VehicleManagement() {
       vehiculosCorporativos,
       vehiculosDevueltos,
       vehiculosSinGnc,
+      vehiculosConGnc,
       vehiculosConTelepase,
+      vehiculosTelepaseToshify,
     }
   }, [vehiculos])
 
@@ -266,10 +283,25 @@ export function VehicleManagement() {
         .maybeSingle()
       setLastAuditLog(auditData || null)
 
+      setShowHistorialModal(null)
       setShowDetailsModal(true)
     } catch {
       // silently ignored
     }
+  }
+
+  const cargarHistorialCambios = async (tipo: 'gnc' | 'telepase') => {
+    if (!selectedVehiculo) return
+    setLoadingHistorial(true)
+    setHistorialCambios([])
+    const tabla = tipo === 'gnc' ? 'vehiculos_gnc_historial' : 'vehiculos_telepase_historial'
+    const { data } = await (supabase.from(tabla) as any)
+      .select('accion, fecha, created_by_name, created_at')
+      .eq('vehiculo_id', selectedVehiculo.id)
+      .order('fecha', { ascending: false })
+    setHistorialCambios(data || [])
+    setLoadingHistorial(false)
+    setShowHistorialModal(tipo)
   }
 
   const loadVehiculos = async (silent = false) => {
@@ -595,6 +627,20 @@ export function VehicleManagement() {
         })
       }
 
+      // Registrar historial Telepase si cambió
+      const telepaseAnterior = !!(selectedVehiculo as any).telepase
+      const telepaseNuevo = formData.telepase || false
+      if (telepaseAnterior !== telepaseNuevo) {
+        const hoyTp = new Date().toISOString().split('T')[0]
+        await (supabase.from('vehiculos_telepase_historial') as any).insert({
+          vehiculo_id: selectedVehiculo.id,
+          accion: telepaseNuevo ? 'activacion' : 'desactivacion',
+          fecha: hoyTp,
+          created_by: profile?.id,
+          created_by_name: profile?.full_name || 'Sistema',
+        })
+      }
+
       // Registrar historial: cambio de estado del vehículo
       if (estadoAnteriorCodigo !== nuevoEstadoCodigo && nuevoEstadoCodigo) {
         registrarHistorialVehiculo({
@@ -821,13 +867,13 @@ export function VehicleManagement() {
       setStatCardEstadoFilter([]) // Solo limpiar el filtro del stat card, NO el de columna
       setStatCardExcludeMode(false)
       setGncFilter(null)
-      setTelepaseFilter(false)
+      setTelepaseFilter(null)
       return
     }
 
     setActiveStatCard(cardType)
     setGncFilter(null) // Limpiar filtro GNC al cambiar de card
-    setTelepaseFilter(false) // Limpiar filtro Telepase al cambiar de card
+    setTelepaseFilter(null) // Limpiar filtro Telepase al cambiar de card
 
     // Definir estados para cada categoría (usando labels formateados)
     const estadosEnCochera = ['PKG ON'] // Solo disponibles (listos para usar)
@@ -872,13 +918,25 @@ export function VehicleManagement() {
         setStatCardEstadoFilter([])
         setStatCardExcludeMode(false)
         setGncFilter('sinGnc')
-        setTelepaseFilter(false)
+        setTelepaseFilter(null)
+        break
+      case 'conGnc':
+        setStatCardEstadoFilter([])
+        setStatCardExcludeMode(false)
+        setGncFilter('conGnc')
+        setTelepaseFilter(null)
         break
       case 'telepase':
         setStatCardEstadoFilter([])
         setStatCardExcludeMode(false)
         setGncFilter(null)
-        setTelepaseFilter(true)
+        setTelepaseFilter('propio')
+        break
+      case 'telepaseToshify':
+        setStatCardEstadoFilter([])
+        setStatCardExcludeMode(false)
+        setGncFilter(null)
+        setTelepaseFilter('toshify')
         break
       default:
         setStatCardEstadoFilter([])
@@ -901,6 +959,9 @@ export function VehicleManagement() {
         corporativos: 'Corporativos',
         devueltos: 'Dev. Proveedor',
         sinGnc: 'Sin GNC',
+        conGnc: 'Con GNC',
+        telepase: 'Telepase Propio',
+        telepaseToshify: 'Telepase Toshify',
       }
       filters.push({
         id: 'statCard',
@@ -978,7 +1039,7 @@ export function VehicleManagement() {
     setActiveStatCard(null)
     setStatCardEstadoFilter([])
     setGncFilter(null)
-    setTelepaseFilter(false)
+    setTelepaseFilter(null)
     setPatenteFilter([])
     setMarcaFilter([])
     setModeloFilter([])
@@ -1124,11 +1185,15 @@ export function VehicleManagement() {
     // Filtro de GNC
     if (gncFilter === 'sinGnc') {
       result = result.filter(v => !(v as any).gnc)
+    } else if (gncFilter === 'conGnc') {
+      result = result.filter(v => (v as any).gnc === true)
     }
 
     // Filtro de Telepase
-    if (telepaseFilter) {
+    if (telepaseFilter === 'propio') {
       result = result.filter(v => (v as any).telepase === true)
+    } else if (telepaseFilter === 'toshify') {
+      result = result.filter(v => !(v as any).telepase)
     }
 
     // Ordenar por estado: En Uso, PKG ON, PKG OFF, Chapa&Pintura, luego el resto
@@ -1253,8 +1318,31 @@ export function VehicleManagement() {
           />
         ),
         cell: ({ getValue }) => {
-          const color = getValue() as string
-          if (!color) return <span style={{ color: 'var(--text-tertiary)' }}>-</span>
+          const rawColor = getValue() as string
+          if (!rawColor || !rawColor.trim()) return <span style={{ color: 'var(--text-tertiary)' }}>-</span>
+          const colorNorm = rawColor.trim().toLowerCase()
+          const colorDisplay = rawColor.trim().toUpperCase()
+          const colorMap: Record<string, string> = {
+            'blanco': '#ffffff',
+            'negro': '#1a1a1a',
+            'gris': '#808080',
+            'plata': '#c0c0c0',
+            'plateado': '#c0c0c0',
+            'rojo': '#dc2626',
+            'azul': '#2563eb',
+            'celeste': '#38bdf8',
+            'verde': '#16a34a',
+            'amarillo': '#eab308',
+            'naranja': '#ea580c',
+            'marron': '#78350f',
+            'marrón': '#78350f',
+            'beige': '#d4c4a8',
+            'bordo': '#800020',
+            'bordó': '#800020',
+            'champagne': '#f7e7ce',
+            'dorado': '#d4a017',
+            'champán': '#f7e7ce',
+          }
           return (
             <div style={{ display: 'inline-flex', alignItems: 'center', gap: '8px' }}>
               <span
@@ -1262,24 +1350,13 @@ export function VehicleManagement() {
                   width: '16px',
                   height: '16px',
                   borderRadius: '50%',
-                  background: color.toLowerCase() === 'blanco' ? '#f5f5f5' :
-                              color.toLowerCase() === 'negro' ? '#1a1a1a' :
-                              color.toLowerCase() === 'gris' ? '#808080' :
-                              color.toLowerCase() === 'plata' ? '#c0c0c0' :
-                              color.toLowerCase() === 'rojo' ? '#dc2626' :
-                              color.toLowerCase() === 'azul' ? '#2563eb' :
-                              color.toLowerCase() === 'verde' ? '#16a34a' :
-                              color.toLowerCase() === 'amarillo' ? '#eab308' :
-                              color.toLowerCase() === 'naranja' ? '#ea580c' :
-                              color.toLowerCase() === 'marron' || color.toLowerCase() === 'marrón' ? '#78350f' :
-                              color.toLowerCase() === 'beige' ? '#d4c4a8' :
-                              '#9ca3af',
-                  border: '2px solid var(--border-secondary)',
-                  boxShadow: 'inset 0 0 0 1px rgba(0,0,0,0.1)',
+                  background: colorMap[colorNorm] || '#9ca3af',
+                  border: colorNorm === 'blanco' ? '2px solid #d1d5db' : '2px solid var(--border-secondary)',
+                  boxShadow: colorNorm === 'blanco' ? 'inset 0 0 0 1px rgba(0,0,0,0.15)' : 'inset 0 0 0 1px rgba(0,0,0,0.1)',
                   flexShrink: 0,
                 }}
               />
-              <span style={{ fontWeight: 500 }}>{color}</span>
+              <span style={{ fontWeight: 500 }}>{colorDisplay}</span>
             </div>
           )
         },
@@ -1540,6 +1617,17 @@ export function VehicleManagement() {
             </div>
           </div>
           <div
+            className={`stat-card stat-card-clickable ${activeStatCard === 'conGnc' ? 'stat-card-active' : ''}`}
+            onClick={() => handleStatCardClick('conGnc')}
+            title="Click para filtrar: Vehiculos con GNC"
+          >
+            <Fuel size={18} className="stat-icon" />
+            <div className="stat-content">
+              <span className="stat-value">{calculatedStats.vehiculosConGnc}</span>
+              <span className="stat-label">Con GNC</span>
+            </div>
+          </div>
+          <div
             className={`stat-card stat-card-clickable ${activeStatCard === 'telepase' ? 'stat-card-active' : ''}`}
             onClick={() => handleStatCardClick('telepase')}
             title="Click para filtrar: Vehiculos con Telepase propio"
@@ -1547,7 +1635,18 @@ export function VehicleManagement() {
             <CreditCard size={18} className="stat-icon" />
             <div className="stat-content">
               <span className="stat-value">{calculatedStats.vehiculosConTelepase}</span>
-              <span className="stat-label">Telepase</span>
+              <span className="stat-label">Telepase Propio</span>
+            </div>
+          </div>
+          <div
+            className={`stat-card stat-card-clickable ${activeStatCard === 'telepaseToshify' ? 'stat-card-active' : ''}`}
+            onClick={() => handleStatCardClick('telepaseToshify')}
+            title="Click para filtrar: Vehiculos con Telepase Toshify"
+          >
+            <CreditCard size={18} className="stat-icon" />
+            <div className="stat-content">
+              <span className="stat-value">{calculatedStats.vehiculosTelepaseToshify}</span>
+              <span className="stat-label">Telepase Toshify</span>
             </div>
           </div>
         </div>
@@ -2039,7 +2138,7 @@ export function VehicleManagement() {
               </div>
               <div>
                 <label className="detail-label">COLOR</label>
-                <div className="detail-value">{selectedVehiculo.color || 'N/A'}</div>
+                <div className="detail-value">{selectedVehiculo.color ? selectedVehiculo.color.trim().toUpperCase() : 'N/A'}</div>
               </div>
             </div>
 
@@ -2062,11 +2161,92 @@ export function VehicleManagement() {
               </div>
               <div>
                 <label className="detail-label">GNC</label>
-                <div className="detail-value" style={{ color: (selectedVehiculo as any).gnc ? '#10B981' : 'inherit' }}>
-                  {(selectedVehiculo as any).gnc ? 'Sí' : 'No'}
+                <div className="detail-value" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <span style={{ color: (selectedVehiculo as any).gnc ? '#10B981' : 'inherit' }}>
+                    {(selectedVehiculo as any).gnc ? 'Sí' : 'No'}
+                  </span>
+                  <button
+                    onClick={() => cargarHistorialCambios('gnc')}
+                    title="Ver historial de cambios GNC"
+                    style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '2px', color: '#9CA3AF', display: 'flex', alignItems: 'center' }}
+                    onMouseEnter={(e) => (e.currentTarget.style.color = '#6B7280')}
+                    onMouseLeave={(e) => (e.currentTarget.style.color = '#9CA3AF')}
+                  >
+                    <History size={14} />
+                  </button>
+                </div>
+              </div>
+              <div>
+                <label className="detail-label">TELEPASE</label>
+                <div className="detail-value" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <span style={{ color: (selectedVehiculo as any).telepase ? '#3b82f6' : 'inherit' }}>
+                    {(selectedVehiculo as any).telepase ? 'Telepase Propio' : 'No'}
+                  </span>
+                  <button
+                    onClick={() => cargarHistorialCambios('telepase')}
+                    title="Ver historial de cambios Telepase"
+                    style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '2px', color: '#9CA3AF', display: 'flex', alignItems: 'center' }}
+                    onMouseEnter={(e) => (e.currentTarget.style.color = '#6B7280')}
+                    onMouseLeave={(e) => (e.currentTarget.style.color = '#9CA3AF')}
+                  >
+                    <History size={14} />
+                  </button>
                 </div>
               </div>
             </div>
+
+            {/* Mini-modal historial GNC / Telepase */}
+            {showHistorialModal && (
+              <div style={{ marginTop: '8px', marginBottom: '12px', padding: '12px 16px', borderRadius: '8px', background: 'var(--bg-secondary, #f9fafb)', border: '1px solid var(--border-primary, #e5e7eb)' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
+                  <span style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-primary)' }}>
+                    Historial de {showHistorialModal === 'gnc' ? 'GNC' : 'Telepase'}
+                  </span>
+                  <button
+                    onClick={() => setShowHistorialModal(null)}
+                    style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '18px', color: '#9CA3AF', lineHeight: 1 }}
+                  >
+                    &times;
+                  </button>
+                </div>
+                {loadingHistorial ? (
+                  <div style={{ textAlign: 'center', padding: '12px', color: 'var(--text-secondary)', fontSize: '12px' }}>Cargando...</div>
+                ) : historialCambios.length === 0 ? (
+                  <div style={{ textAlign: 'center', padding: '12px', color: 'var(--text-secondary)', fontSize: '12px' }}>Sin registros de cambios</div>
+                ) : (
+                  <table style={{ width: '100%', fontSize: '12px', borderCollapse: 'collapse' }}>
+                    <thead>
+                      <tr style={{ borderBottom: '1px solid var(--border-primary, #e5e7eb)' }}>
+                        <th style={{ textAlign: 'left', padding: '4px 8px', color: 'var(--text-secondary)', fontWeight: 600 }}>Fecha</th>
+                        <th style={{ textAlign: 'left', padding: '4px 8px', color: 'var(--text-secondary)', fontWeight: 600 }}>Cambio</th>
+                        <th style={{ textAlign: 'left', padding: '4px 8px', color: 'var(--text-secondary)', fontWeight: 600 }}>Realizado por</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {historialCambios.map((h, i) => (
+                        <tr key={i} style={{ borderBottom: '1px solid var(--border-primary, #f3f4f6)' }}>
+                          <td style={{ padding: '6px 8px' }}>
+                            {h.fecha ? h.fecha.split('-').reverse().join('/') : '-'}
+                          </td>
+                          <td style={{ padding: '6px 8px' }}>
+                            <span style={{
+                              padding: '1px 6px', borderRadius: '4px', fontWeight: 600, fontSize: '11px',
+                              background: h.accion === 'instalacion' || h.accion === 'activacion' ? 'rgba(16, 185, 129, 0.1)' : 'rgba(239, 68, 68, 0.1)',
+                              color: h.accion === 'instalacion' || h.accion === 'activacion' ? '#059669' : '#dc2626',
+                            }}>
+                              {h.accion === 'instalacion' ? 'Instalado' : h.accion === 'desinstalacion' ? 'Desinstalado' : h.accion === 'activacion' ? 'Activado' : 'Desactivado'}
+                            </span>
+                          </td>
+                          <td style={{ padding: '6px 8px', color: 'var(--text-secondary)' }}>
+                            {h.created_by_name || '-'}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
+              </div>
+            )}
 
             {/* Datos Técnicos */}
             <div className="section-title">Datos Técnicos</div>
