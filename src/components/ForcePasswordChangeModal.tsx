@@ -376,9 +376,9 @@ export function ForcePasswordChangeModal({ onSuccess }: Props) {
             </svg>
           </div>
 
-          <h2 className="fpc-title">Cambiar Contraseña</h2>
+          <h2 className="fpc-title">Crear Nueva Contraseña</h2>
           <p className="fpc-subtitle">
-            Tu contraseña actual es temporal. Por seguridad, debés crear una nueva contraseña para continuar.
+            Ingresaste con una contraseña temporal. Ahora elegí una contraseña nueva y personal para tu cuenta. No repitas la contraseña temporal.
           </p>
 
           {profile && (
