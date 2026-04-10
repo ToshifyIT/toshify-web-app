@@ -4567,7 +4567,7 @@ export function ReporteFacturacionTab() {
       }
 
       // P001/P002/P013 - Alquiler: mostrar desglose por días
-      if ((codigo === 'P001' || codigo === 'P002' || codigo === 'P013') && detalleFacturacion) {
+      if (['P001', 'P002', 'P013', 'P014', 'P015', 'P016'].includes(codigo) && detalleFacturacion) {
         titleExtra = 'Detalle de Alquiler'
         const tipoLabel = codigo === 'P001' ? 'Turno Diurno' : codigo === 'P013' ? 'Turno Nocturno' : 'A Cargo'
         htmlExtra = `
@@ -6109,6 +6109,12 @@ export function ReporteFacturacionTab() {
               descripcionAdicional = 'Alquiler a Cargo'
             } else if (det.concepto_codigo === 'P013') {
               descripcionAdicional = 'Alquiler Turno Nocturno'
+            } else if (det.concepto_codigo === 'P014') {
+              descripcionAdicional = 'Alquiler Turno Diurno Sin GNC'
+            } else if (det.concepto_codigo === 'P015') {
+              descripcionAdicional = 'Alquiler Turno Nocturno Sin GNC'
+            } else if (det.concepto_codigo === 'P016') {
+              descripcionAdicional = 'Alquiler a Cargo Sin GNC'
             } else if (det.concepto_codigo === 'P003') {
               descripcionAdicional = `Cuota de Garantía ${fact.cuota_garantia_numero || '1 de 16'}`
             } else if (det.concepto_codigo === 'P005') {
@@ -6136,10 +6142,13 @@ export function ReporteFacturacionTab() {
         } else {
           // Sin detalles, crear filas basadas en subtotales (sin IDs de detalle)
           if (fact.subtotal_alquiler > 0) {
-            const codigoAlquiler = fact.tipo_alquiler === 'CARGO' ? 'P002' : 'P001'
+            const tieneGncFallback = fact.tiene_gnc !== false
+            const codigoAlquiler = fact.tipo_alquiler === 'CARGO'
+              ? (tieneGncFallback ? 'P002' : 'P016')
+              : (tieneGncFallback ? 'P001' : 'P014')
             const descAlquiler = fact.tipo_alquiler === 'CARGO'
-              ? 'Alquiler a Cargo'
-              : 'Alquiler Turno Diurno'
+              ? (tieneGncFallback ? 'Alquiler a Cargo' : 'Alquiler a Cargo Sin GNC')
+              : (tieneGncFallback ? 'Alquiler Turno Diurno' : 'Alquiler Turno Diurno Sin GNC')
             filasPreview.push(crearFilaPreview(
               numeroFactura++,
               fact,
