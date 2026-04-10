@@ -18,6 +18,15 @@ const PORT = process.env.PORT || 80
 app.use(express.json())
 app.use(express.urlencoded({ extended: true }))
 
+// Security headers (los que el browser ignora cuando van en <meta>)
+app.use((_req, res, next) => {
+  res.setHeader('X-Frame-Options', 'DENY')
+  res.setHeader('X-Content-Type-Options', 'nosniff')
+  res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin')
+  res.setHeader('Content-Security-Policy', "frame-ancestors 'none'")
+  next()
+})
+
 // Google Drive service
 function getDriveService(writeAccess = false) {
   const clientEmail = process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL

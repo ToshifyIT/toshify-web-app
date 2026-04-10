@@ -459,20 +459,20 @@ export function AsignacionesActivasModule() {
 
       // Para TURNO, organizar conductores por turno
       if (asignacion.horario === 'turno') {
-        const diurno = conductoresActivos.find((ac: any) => ac.horario === 'diurno')
-        const nocturno = conductoresActivos.find((ac: any) => ac.horario === 'nocturno')
+        const diurno = conductoresActivos.find((ac: any) => ac.horario === 'diurno' && ac.conductores)
+        const nocturno = conductoresActivos.find((ac: any) => ac.horario === 'nocturno' && ac.conductores)
 
         return {
           ...asignacion,
           conductoresTurno: {
-            diurno: diurno ? {
+            diurno: diurno?.conductores ? {
               id: diurno.conductores.id,
-              nombre: `${diurno.conductores.nombres} ${diurno.conductores.apellidos}`,
+              nombre: `${diurno.conductores.nombres || ''} ${diurno.conductores.apellidos || ''}`.trim(),
               confirmado: diurno.confirmado
             } : null,
-            nocturno: nocturno ? {
+            nocturno: nocturno?.conductores ? {
               id: nocturno.conductores.id,
-              nombre: `${nocturno.conductores.nombres} ${nocturno.conductores.apellidos}`,
+              nombre: `${nocturno.conductores.nombres || ''} ${nocturno.conductores.apellidos || ''}`.trim(),
               confirmado: nocturno.confirmado
             } : null
           },
@@ -480,14 +480,14 @@ export function AsignacionesActivasModule() {
         }
       }
 
-      // Para A CARGO, tomar el primer conductor activo
-      const conductor = conductoresActivos[0]
+      // Para A CARGO, tomar el primer conductor activo (con datos válidos)
+      const conductor = conductoresActivos.find((c: any) => c.conductores)
       return {
         ...asignacion,
         conductoresTurno: null,
-        conductorCargo: conductor ? {
+        conductorCargo: conductor?.conductores ? {
           id: conductor.conductores.id,
-          nombre: `${conductor.conductores.nombres} ${conductor.conductores.apellidos}`,
+          nombre: `${conductor.conductores.nombres || ''} ${conductor.conductores.apellidos || ''}`.trim(),
           confirmado: conductor.confirmado
         } : null
       }
@@ -984,15 +984,16 @@ export function AsignacionesActivasModule() {
               {selectedAsignacion.asignaciones_conductores && selectedAsignacion.asignaciones_conductores.length > 0 ? (
                 <div>
                   {selectedAsignacion.asignaciones_conductores
+                    .filter(asigConductor => asigConductor.conductores)
                     .map((asigConductor, idx) => (
                       <div key={idx} className="conductor-card">
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start', marginBottom: '12px' }}>
                           <div>
                             <div style={{ fontSize: '16px', fontWeight: 700, color: 'var(--text-primary)', marginBottom: '4px' }}>
-                              {asigConductor.conductores.nombres} {asigConductor.conductores.apellidos}
+                              {asigConductor.conductores?.nombres} {asigConductor.conductores?.apellidos}
                             </div>
                             <div style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>
-                              Licencia: {asigConductor.conductores.numero_licencia}
+                              Licencia: {asigConductor.conductores?.numero_licencia}
                             </div>
                           </div>
                           {asigConductor.confirmado && (
@@ -1014,7 +1015,7 @@ export function AsignacionesActivasModule() {
                           <div className="detail-item">
                             <span className="detail-label">Teléfono</span>
                             <span className="detail-value" style={{ fontSize: '14px' }}>
-                              {asigConductor.conductores.telefono_contacto || 'No especificado'}
+                              {asigConductor.conductores?.telefono_contacto || 'No especificado'}
                             </span>
                           </div>
                           <div className="detail-item">
