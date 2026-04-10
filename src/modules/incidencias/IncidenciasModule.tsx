@@ -182,16 +182,18 @@ export function IncidenciasModule() {
   const [penPatenteFilter, setPenPatenteFilter] = useState<string[]>([])
   const [penConductorFilter, setPenConductorFilter] = useState<string[]>([])
   const [penTipoFilter, setPenTipoFilter] = useState<string[]>([])
+  const [penCodIncFilter, setPenCodIncFilter] = useState<string[]>([])
   const [penAplicadoFilter, setPenAplicadoFilter] = useState<string[]>([])
   
   // Helper: ¿Hay filtros activos en penalidades?
-  const hayFiltrosPenalidadesActivos = penPatenteFilter.length > 0 || penConductorFilter.length > 0 || penTipoFilter.length > 0 || penAplicadoFilter.length > 0
+  const hayFiltrosPenalidadesActivos = penPatenteFilter.length > 0 || penConductorFilter.length > 0 || penTipoFilter.length > 0 || penCodIncFilter.length > 0 || penAplicadoFilter.length > 0
   
   // Limpiar todos los filtros de penalidades
   function limpiarFiltrosPenalidades() {
     setPenPatenteFilter([])
     setPenConductorFilter([])
     setPenTipoFilter([])
+    setPenCodIncFilter([])
     setPenAplicadoFilter([])
   }
 
@@ -539,10 +541,6 @@ export function IncidenciasModule() {
     [...new Set(penalidades.map(p => p.conductor_display).filter(Boolean))].sort() as string[]
   , [penalidades])
 
-  const penTiposUnicos = useMemo(() =>
-    [...new Set(penalidades.map(p => p.tipo_nombre).filter(Boolean))].sort() as string[]
-  , [penalidades])
-
 
   // Filtrar incidencias LOGÍSTICAS (sin tipo o tipo='logistica')
   const incidenciasLogisticas = useMemo(() => {
@@ -586,6 +584,31 @@ export function IncidenciasModule() {
     () => new Map<string, (typeof tiposCobroDescuento)[0]>(tiposCobroDescuento.map(t => [t.id, t])),
     [tiposCobroDescuento]
   )
+
+  const penTiposUnicos = useMemo(() => {
+    const nombres = penalidades.map(p => {
+      if (p.tipo_nombre) return p.tipo_nombre
+      if (p.tipo_cobro_descuento_id) {
+        const tipo = tiposCobroDescuentoMap.get(p.tipo_cobro_descuento_id)
+        return tipo?.nombre || null
+      }
+      return null
+    }).filter(Boolean) as string[]
+    return [...new Set(nombres)].sort()
+  }, [penalidades, tiposCobroDescuentoMap])
+
+  // Codigos de incidencia unicos (P004, P006, P007) para filtro de penalidades
+  const codIncLabels: Record<string, string> = { 'P006': 'P006 - Exceso KM', 'P004': 'P004 - Tickets a Favor', 'P007': 'P007 - Multas/Penalidades' }
+  const penCodIncUnicos = useMemo(() => {
+    const codigos = penalidades.map(p => {
+      if (p.tipo_cobro_descuento_id) {
+        const tipo = tiposCobroDescuentoMap.get(p.tipo_cobro_descuento_id)
+        return tipo?.categoria || null
+      }
+      return null
+    }).filter(Boolean) as string[]
+    return [...new Set(codigos)].sort().map(c => codIncLabels[c] || c)
+  }, [penalidades, tiposCobroDescuentoMap])
 
   // Filtrar incidencias de COBRO (tipo='cobro')
   const incidenciasCobro = useMemo(() => {
@@ -665,6 +688,38 @@ export function IncidenciasModule() {
   const handleDeseleccionarTodas = () => {
     setIncidenciasSeleccionadas(new Set())
   }
+
+  // Incidencias de cobro SIN ENVIAR → convertidas a formato PenalidadCompleta virtual
+  const incidenciasSinEnviarVirtuales = useMemo<PenalidadCompleta[]>(() => {
+    return incidenciasCobro
+      .filter(i => !penalidadesPorIncidencia.has(i.id) && (i.monto || 0) > 0)
+      .map(i => ({
+        id: `virtual_${i.id}`,
+        incidencia_id: i.id,
+        vehiculo_id: i.vehiculo_id,
+        conductor_id: i.conductor_id,
+        tipo_cobro_descuento_id: i.tipo_cobro_descuento_id,
+        semana: i.semana,
+        fecha: i.fecha,
+        turno: i.turno,
+        area_responsable: i.area?.toUpperCase() || '',
+        detalle: i.descripcion || 'Cobro por incidencia',
+        monto: i.monto || 0,
+        observaciones: i.descripcion || '',
+        aplicado: false,
+        rechazado: false,
+        conductor_nombre: i.conductor_display || '',
+        vehiculo_patente: i.patente_display || '',
+        created_by: i.created_by,
+        created_at: i.created_at,
+        updated_at: i.updated_at,
+        conductor_display: i.conductor_display || '',
+        patente_display: i.patente_display || '',
+        tipo_nombre: i.tipo_cobro_nombre || '',
+        _origen: 'incidencia',
+        _incidenciaOriginal: i,
+      } as PenalidadCompleta & { _origen: string; _incidenciaOriginal: any }))
+  }, [incidenciasCobro, penalidadesPorIncidencia])
 
   // Penalidades seleccionables en "Por Aplicar" (deben tener conductor)
   const penalidadesPorAplicar = useMemo(() => {
@@ -1063,6 +1118,8 @@ export function IncidenciasModule() {
 
     if (activeTab === 'por_aplicar') {
       filtered = filtered.filter(p => !p.aplicado && !p.rechazado)
+      // Agregar incidencias SIN ENVIAR como penalidades virtuales
+      filtered = [...filtered, ...incidenciasSinEnviarVirtuales]
     } else if (activeTab === 'aplicadas') {
       filtered = filtered.filter(p => p.aplicado && !p.rechazado)
     } else if (activeTab === 'rechazados') {
@@ -1076,7 +1133,19 @@ export function IncidenciasModule() {
       filtered = filtered.filter(p => penConductorFilter.includes(p.conductor_display || ''))
     }
     if (penTipoFilter.length > 0) {
-      filtered = filtered.filter(p => penTipoFilter.includes(p.tipo_nombre || ''))
+      filtered = filtered.filter(p => {
+        const nombre = p.tipo_nombre || (p.tipo_cobro_descuento_id ? tiposCobroDescuentoMap.get(p.tipo_cobro_descuento_id)?.nombre : null) || ''
+        return penTipoFilter.includes(nombre)
+      })
+    }
+    if (penCodIncFilter.length > 0) {
+      filtered = filtered.filter(p => {
+        if (!p.tipo_cobro_descuento_id) return false
+        const tipo = tiposCobroDescuentoMap.get(p.tipo_cobro_descuento_id)
+        if (!tipo?.categoria) return false
+        const label = codIncLabels[tipo.categoria] || tipo.categoria
+        return penCodIncFilter.includes(label)
+      })
     }
     if (penAplicadoFilter.length > 0) {
       filtered = filtered.filter(p => {
@@ -1086,7 +1155,7 @@ export function IncidenciasModule() {
     }
 
     return filtered
-  }, [penalidades, activeTab, penPatenteFilter, penConductorFilter, penTipoFilter, penAplicadoFilter])
+  }, [penalidades, activeTab, penPatenteFilter, penConductorFilter, penTipoFilter, penCodIncFilter, penAplicadoFilter, incidenciasSinEnviarVirtuales, tiposCobroDescuentoMap])
 
   // Columnas para tabla de incidencias
   const incidenciasColumns = useMemo<ColumnDef<IncidenciaCompleta>[]>(() => [
@@ -1327,12 +1396,25 @@ export function IncidenciasModule() {
       }
     },
     {
-      accessorKey: 'monto',
-      header: 'Monto',
+      id: 'cod_incidencia_cobro',
+      header: 'Cod Inc.',
+      accessorFn: (row) => {
+        if (row.tipo_cobro_descuento_id) {
+          const tipo = tiposCobroDescuentoMap.get(row.tipo_cobro_descuento_id)
+          if (tipo?.categoria) return codIncLabels[tipo.categoria] || tipo.categoria
+        }
+        return '-'
+      },
+      enableSorting: true,
+      size: 160,
       cell: ({ row }) => {
-        const monto = row.original.monto || row.original.monto_penalidades
-        if (!monto) return '-'
-        return <span style={{ fontWeight: 600, color: '#F59E0B' }}>{formatMoney(monto)}</span>
+        const tipoId = row.original.tipo_cobro_descuento_id
+        if (!tipoId) return '-'
+        const tipo = tiposCobroDescuentoMap.get(tipoId)
+        if (!tipo?.categoria) return '-'
+        const label = codIncLabels[tipo.categoria] || tipo.categoria
+        const bg = tipo.categoria === 'P004' ? '#dcfce7' : '#fee2e2'
+        return <span style={{ fontWeight: 600, color: '#1a1a1a', fontSize: '12px', background: bg, padding: '2px 8px', borderRadius: '4px' }}>{label}</span>
       }
     },
     {
@@ -1351,8 +1433,25 @@ export function IncidenciasModule() {
       cell: ({ row }) => {
         const tipoId = row.original.tipo_cobro_descuento_id
         if (!tipoId) return '-'
-        const tipo = tiposCobroDescuento.find(t => t.id === tipoId)
-        return tipo?.nombre || '-'
+        const tipo = tiposCobroDescuentoMap.get(tipoId)
+        const nombre = tipo?.nombre || '-'
+        if (!tipo?.categoria) return nombre
+        const bg = tipo.categoria === 'P004' ? '#dcfce7' : '#fee2e2'
+        return <span style={{ fontWeight: 500, color: '#1a1a1a', background: bg, padding: '2px 8px', borderRadius: '4px' }}>{nombre}</span>
+      }
+    },
+    {
+      id: 'monto',
+      header: 'Monto',
+      accessorFn: (row) => row.monto || (row as any).monto_penalidades || 0,
+      enableSorting: true,
+      cell: ({ row }) => {
+        const monto = row.original.monto || (row.original as any).monto_penalidades
+        if (!monto) return '-'
+        const tipoId = row.original.tipo_cobro_descuento_id
+        const tipo = tipoId ? tiposCobroDescuentoMap.get(tipoId) : null
+        const bg = tipo?.categoria === 'P004' ? '#dcfce7' : '#fee2e2'
+        return <span style={{ fontWeight: 600, color: '#1a1a1a', background: bg, padding: '2px 8px', borderRadius: '4px' }}>{formatMoney(monto)}</span>
       }
     },
     {
@@ -1373,22 +1472,29 @@ export function IncidenciasModule() {
     {
       id: 'estado_facturacion',
       header: 'Estado Fact.',
+      accessorFn: (row) => {
+        const penalidad = penalidades.find(p => p.incidencia_id === row.id)
+        if (!penalidad) return 'Sin enviar'
+        if (penalidad.rechazado) return 'Rechazado'
+        if (penalidad.aplicado) return 'Aplicado'
+        return 'Por Aplicar'
+      },
+      enableSorting: true,
       cell: ({ row }) => {
-        // Buscar penalidad asociada para mostrar el estado de facturación
         const penalidad = penalidades.find(p => p.incidencia_id === row.original.id)
-        
+
         if (!penalidad) {
           return <span className="dt-badge dt-badge-gray">Sin enviar</span>
         }
-        
+
         if (penalidad.rechazado) {
           return <span className="dt-badge dt-badge-red"><XCircle size={12} /> Rechazado</span>
         }
-        
+
         if (penalidad.aplicado) {
           return <span className="dt-badge dt-badge-green"><CheckCircle size={12} /> Aplicado</span>
         }
-        
+
         return <span className="dt-badge dt-badge-yellow"><Clock size={12} /> Por Aplicar</span>
       }
     },
@@ -1534,10 +1640,42 @@ export function IncidenciasModule() {
       cell: ({ row }) => row.original.conductor_display || '-'
     },
     {
-      accessorKey: 'tipo_nombre',
+      id: 'cod_incidencia',
       header: () => (
         <ExcelColumnFilter
-          label="Tipo"
+          label="Cod Inc."
+          options={penCodIncUnicos}
+          selectedValues={penCodIncFilter}
+          onSelectionChange={setPenCodIncFilter}
+          filterId="pen_cod_inc"
+          openFilterId={openFilterId}
+          onOpenChange={setOpenFilterId}
+        />
+      ),
+      accessorFn: (row) => {
+        if (row.tipo_cobro_descuento_id) {
+          const tipo = tiposCobroDescuentoMap.get(row.tipo_cobro_descuento_id)
+          if (tipo?.categoria) return codIncLabels[tipo.categoria] || tipo.categoria
+        }
+        return '-'
+      },
+      enableSorting: true,
+      size: 160,
+      cell: ({ row }) => {
+        const tipoId = row.original.tipo_cobro_descuento_id
+        if (!tipoId) return '-'
+        const tipo = tiposCobroDescuentoMap.get(tipoId)
+        if (!tipo?.categoria) return '-'
+        const label = codIncLabels[tipo.categoria] || tipo.categoria
+        const bg = tipo.categoria === 'P004' ? '#dcfce7' : '#fee2e2'
+        return <span style={{ fontWeight: 600, color: '#1a1a1a', fontSize: '12px', background: bg, padding: '2px 8px', borderRadius: '4px' }}>{label}</span>
+      }
+    },
+    {
+      id: 'tipo_incidencia',
+      header: () => (
+        <ExcelColumnFilter
+          label="Tipo Inc."
           options={penTiposUnicos}
           selectedValues={penTipoFilter}
           onSelectionChange={setPenTipoFilter}
@@ -1546,12 +1684,33 @@ export function IncidenciasModule() {
           onOpenChange={setOpenFilterId}
         />
       ),
-      cell: ({ row }) => row.original.tipo_nombre || '-'
+      accessorFn: (row) => {
+        if (row.tipo_nombre) return row.tipo_nombre
+        if (row.tipo_cobro_descuento_id) {
+          const tipo = tiposCobroDescuentoMap.get(row.tipo_cobro_descuento_id)
+          return tipo?.nombre || '-'
+        }
+        return '-'
+      },
+      enableSorting: true,
+      cell: ({ row }) => {
+        const tipoId = row.original.tipo_cobro_descuento_id
+        const tipo = tipoId ? tiposCobroDescuentoMap.get(tipoId) : null
+        const nombre = row.original.tipo_nombre || tipo?.nombre || '-'
+        if (!tipo?.categoria) return nombre
+        const bg = tipo.categoria === 'P004' ? '#dcfce7' : '#fee2e2'
+        return <span style={{ fontWeight: 500, color: '#1a1a1a', background: bg, padding: '2px 8px', borderRadius: '4px' }}>{nombre}</span>
+      }
     },
     {
       accessorKey: 'monto',
       header: 'Monto',
-      cell: ({ row }) => <span style={{ fontWeight: 600, color: '#F59E0B' }}>{formatMoney(row.original.monto)}</span>
+      cell: ({ row }) => {
+        const tipoId = row.original.tipo_cobro_descuento_id
+        const tipo = tipoId ? tiposCobroDescuentoMap.get(tipoId) : null
+        const bg = tipo?.categoria === 'P004' ? '#dcfce7' : '#fee2e2'
+        return <span style={{ fontWeight: 600, color: '#1a1a1a', background: bg, padding: '2px 8px', borderRadius: '4px' }}>{formatMoney(row.original.monto)}</span>
+      }
     },
     {
       accessorKey: 'aplicado',
@@ -1567,6 +1726,10 @@ export function IncidenciasModule() {
         />
       ),
       cell: ({ row }) => {
+        const esVirtual = (row.original as any)._origen === 'incidencia'
+        if (esVirtual) {
+          return <span className="dt-badge dt-badge-gray"><Clock size={12} /> Sin enviar</span>
+        }
         // Si está rechazado, siempre mostrar "No" (rechazado = no aplicado)
         const estaAplicado = row.original.rechazado ? false : row.original.aplicado
         return (
@@ -1579,6 +1742,12 @@ export function IncidenciasModule() {
     {
       id: 'fraccionado',
       header: 'Fracc.',
+      accessorFn: (row) => {
+        const fracInfo = fraccionamientoMap.get(row.id)
+        if (!fracInfo) return ''
+        return `${fracInfo.cuotas_pendientes}/${fracInfo.total_cuotas}`
+      },
+      enableSorting: true,
       cell: ({ row }) => {
         const fracInfo = fraccionamientoMap.get(row.original.id)
         if (!fracInfo) {
@@ -1604,6 +1773,8 @@ export function IncidenciasModule() {
     {
       id: 'incidencia',
       header: 'Inc.',
+      accessorFn: (row) => row.incidencia_id ? 'Sí' : '-',
+      enableSorting: true,
       cell: ({ row }) => {
         const tieneIncidencia = !!row.original.incidencia_id
         return tieneIncidencia ? (
@@ -1624,8 +1795,21 @@ export function IncidenciasModule() {
       header: 'Acciones',
       size: 120,
       cell: ({ row }) => {
+        const esVirtual = (row.original as any)._origen === 'incidencia'
         const esRechazado = row.original.rechazado
         const esAplicado = row.original.aplicado
+
+        // Penalidad virtual (incidencia SIN ENVIAR): solo permitir enviar a facturación
+        if (esVirtual) {
+          const incOriginal = (row.original as any)._incidenciaOriginal
+          return (
+            <ActionsMenu actions={[
+              { icon: <Send size={14} />, label: 'Enviar a facturación', onClick: () => handleEnviarAFacturacion(incOriginal), variant: 'success' as const, hidden: !canEdit },
+              { icon: <Eye size={14} />, label: 'Ver incidencia', onClick: () => handleVerIncidencia(incOriginal) },
+              { icon: <Trash2 size={14} />, label: 'Eliminar incidencia', onClick: () => handleEliminarIncidencia(incOriginal), variant: 'danger' as const, hidden: !canDelete },
+            ]} />
+          )
+        }
 
         const actions = [
           // Aplicar - solo en Por Aplicar
@@ -2022,7 +2206,7 @@ export function IncidenciasModule() {
       
       if (errorPenalidad) throw errorPenalidad
       
-      showSuccess('Rechazado', 'La penalidad fue rechazada y volverá a Incidencia (Cobro) para revisión')
+      showSuccess('Rechazado', 'La penalidad fue rechazada y volverá a Incidencia Facturación para revisión')
       
       setShowRechazoModal(false)
       setPenalidadRechazar(null)
@@ -2677,7 +2861,8 @@ export function IncidenciasModule() {
       'Semana': p.semana || '',
       'Patente': p.patente_display || '',
       'Conductor': p.conductor_display || '',
-      'Tipo': p.tipo_nombre || '',
+      'Cod Inc.': p.tipo_cobro_descuento_id ? (codIncLabels[tiposCobroDescuentoMap.get(p.tipo_cobro_descuento_id)?.categoria || ''] || '') : '',
+      'Tipo Inc.': p.tipo_nombre || (p.tipo_cobro_descuento_id ? tiposCobroDescuentoMap.get(p.tipo_cobro_descuento_id)?.nombre : '') || '',
       'Detalle': p.detalle || '',
       'Monto': p.monto || 0,
       'Turno': p.turno || '',
@@ -2705,7 +2890,7 @@ export function IncidenciasModule() {
   }
 
   // Contadores para tabs
-  const countPorAplicar = penalidades.filter(p => !p.aplicado && !p.rechazado).length
+  const countPorAplicar = penalidades.filter(p => !p.aplicado && !p.rechazado).length + incidenciasSinEnviarVirtuales.length
   const countAplicadas = penalidades.filter(p => p.aplicado && !p.rechazado).length
   const countRechazados = penalidades.filter(p => p.rechazado).length
 
@@ -2736,6 +2921,19 @@ export function IncidenciasModule() {
 
   return (
     <div className="incidencias-module">
+      <style>{`
+        .incidencias-module .dt-wrapper {
+          flex: 1;
+          display: flex;
+          flex-direction: column;
+          min-height: 0;
+          overflow: hidden;
+        }
+        .incidencias-module .dt-table-wrapper {
+          flex: 1;
+          min-height: 0;
+        }
+      `}</style>
       {/* Loading Overlay - bloquea toda la pantalla */}
       <LoadingOverlay show={loading} message="Cargando incidencias..." size="lg" />
 
@@ -2785,7 +2983,7 @@ export function IncidenciasModule() {
               onClick={() => setActiveTab('cobro')}
             >
               <DollarSign size={16} />
-              Incidencia (Cobro)
+              Incidencia Facturación
               <span className="tab-badge">{incidenciasCobro.length}</span>
             </button>
           )}
@@ -3447,6 +3645,7 @@ export function IncidenciasModule() {
                     onEdit={selectedPenalidad.rechazado ? undefined : () => handleEditarPenalidad(selectedPenalidad)}
                     historialRechazos={historialRechazos}
                     loadingHistorial={loadingHistorial}
+                    tiposCobroDescuentoMap={tiposCobroDescuentoMap}
                   />
                 ) : null
               ) : modalType === 'incidencia' ? (
@@ -4623,17 +4822,38 @@ function IncidenciaDetailView({ incidencia, onEdit, tiposCobroDescuento }: Incid
     return `${day}/${month}/${year}`
   }
 
-  // Obtener nombre del tipo de incidencia
-  const tipoIncidenciaNombre = incidencia.tipo_cobro_descuento_id
-    ? tiposCobroDescuento.find(t => t.id === incidencia.tipo_cobro_descuento_id)?.nombre || '-'
-    : '-'
+  function formatMoney(amount: number | undefined | null) {
+    if (!amount) return '-'
+    return `$ ${amount.toLocaleString('es-AR', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}`
+  }
+
+  // Resolver tipo de incidencia
+  const tipoObj = incidencia.tipo_cobro_descuento_id
+    ? tiposCobroDescuento.find(t => t.id === incidencia.tipo_cobro_descuento_id)
+    : null
+  const tipoIncidenciaNombre = tipoObj?.nombre || '-'
+  const codIncLabels: Record<string, string> = { 'P006': 'P006 - Exceso KM', 'P004': 'P004 - Tickets a Favor', 'P007': 'P007 - Multas/Penalidades' }
+  const codInc = tipoObj?.categoria ? (codIncLabels[tipoObj.categoria] || tipoObj.categoria) : '-'
+  const esCobro = incidencia.tipo === 'cobro'
+  const esAFavor = tipoObj?.es_a_favor || false
+
+  // Estilos inline para el detalle
+  const sectionStyle = { marginBottom: '20px' }
+  const titleStyle = { fontSize: '11px', fontWeight: 700 as const, textTransform: 'uppercase' as const, color: 'var(--text-tertiary)', letterSpacing: '0.5px', marginBottom: '12px', paddingBottom: '8px', borderBottom: '2px solid var(--border-primary)' }
+  const tableStyle = { border: '1px solid var(--border-primary)', borderRadius: '8px', overflow: 'hidden' as const }
+  const rowStyle = { display: 'flex', borderBottom: '1px solid var(--border-primary)' }
+  const cellStyle = { flex: 1, display: 'flex', justifyContent: 'space-between', padding: '10px 14px' }
+  const cellLeftStyle = { ...cellStyle, borderRight: '1px solid var(--border-primary)' }
+  const labelStyle = { fontSize: '13px', color: 'var(--text-secondary)', fontWeight: 500 as const }
+  const valueStyle = { fontSize: '13px', color: 'var(--text-primary)', fontWeight: 600 as const, textAlign: 'right' as const }
+  const fullCellStyle = { ...cellStyle, flex: 'unset' as any, width: '100%' }
 
   return (
     <div className="incidencia-detail">
       <div className="detail-header">
         <div>
-          <p className="detail-id">ID: {incidencia.id.slice(0, 8)}...</p>
-          <h3 className="detail-title">{incidencia.patente_display || 'Sin patente'}</h3>
+          <p className="detail-id" style={{ fontSize: '11px', color: 'var(--text-tertiary)', marginBottom: '4px' }}>ID: {incidencia.id.slice(0, 8)}...</p>
+          <h3 className="detail-title" style={{ fontSize: '18px', fontWeight: 700, marginBottom: '8px' }}>{incidencia.patente_display || 'Sin patente'}</h3>
           <span className={`estado-badge estado-${incidencia.estado_color}`}>{incidencia.estado_nombre}</span>
         </div>
         <button className="btn-secondary" onClick={onEdit}>
@@ -4642,73 +4862,137 @@ function IncidenciaDetailView({ incidencia, onEdit, tiposCobroDescuento }: Incid
         </button>
       </div>
 
-      <div className="detail-cards">
-        <div className="detail-card">
-          <div className="detail-card-title">Información General</div>
-          <div className="detail-item">
-            <span className="detail-item-label">Fecha</span>
-            <span className="detail-item-value">{formatDate(incidencia.fecha)}</span>
+      {/* Card 1: Datos de la Incidencia */}
+      <div style={sectionStyle}>
+        <div style={titleStyle}>Datos de la Incidencia</div>
+        <div style={tableStyle}>
+          <div style={rowStyle}>
+            <div style={cellLeftStyle}>
+              <span style={labelStyle}>Fecha</span>
+              <span style={valueStyle}>{formatDate(incidencia.fecha)}</span>
+            </div>
+            <div style={cellStyle}>
+              <span style={labelStyle}>Semana</span>
+              <span style={valueStyle}>{incidencia.semana || '-'}</span>
+            </div>
           </div>
-          <div className="detail-item">
-            <span className="detail-item-label">Semana</span>
-            <span className="detail-item-value">{incidencia.semana || '-'}</span>
+          <div style={rowStyle}>
+            <div style={cellLeftStyle}>
+              <span style={labelStyle}>Modalidad</span>
+              <span style={valueStyle}>{incidencia.turno || '-'}</span>
+            </div>
+            <div style={cellStyle}>
+              <span style={labelStyle}>Estado</span>
+              <span style={valueStyle}>
+                <span className={`estado-badge estado-${incidencia.estado_color}`} style={{ fontSize: '11px', padding: '2px 8px' }}>{incidencia.estado_nombre}</span>
+              </span>
+            </div>
           </div>
-          <div className="detail-item">
-            <span className="detail-item-label">Turno</span>
-            <span className="detail-item-value">{incidencia.turno || '-'}</span>
-          </div>
-          <div className="detail-item">
-            <span className="detail-item-label">Tipo de Incidencia</span>
-            <span className="detail-item-value">{tipoIncidenciaNombre}</span>
-          </div>
-          <div className="detail-item">
-            <span className="detail-item-label">Área</span>
-            <span className="detail-item-value">{incidencia.area || '-'}</span>
-          </div>
-          <div className="detail-item">
-            <span className="detail-item-label">Registrado por</span>
-            <span className="detail-item-value">{incidencia.registrado_por || '-'}</span>
-          </div>
-        </div>
-
-        <div className="detail-card">
-          <div className="detail-card-title">Vehículo y Conductor</div>
-          <div className="detail-item">
-            <span className="detail-item-label">Patente</span>
-            <span className="detail-item-value">{incidencia.patente_display || '-'}</span>
-          </div>
-          <div className="detail-item">
-            <span className="detail-item-label">Vehículo</span>
-            <span className="detail-item-value">{incidencia.vehiculo_marca} {incidencia.vehiculo_modelo}</span>
-          </div>
-          <div className="detail-item">
-            <span className="detail-item-label">Conductor</span>
-            <span className="detail-item-value">{incidencia.conductor_display || '-'}</span>
-          </div>
-          <div className="detail-item">
-            <span className="detail-item-label">Estado vehículo</span>
-            <span className="detail-item-value">{incidencia.estado_vehiculo || '-'}</span>
-          </div>
-          <div className="detail-item">
-            <span className="detail-item-label">Penalidades</span>
-            <span className="detail-item-value">{incidencia.total_penalidades}</span>
+          <div style={{ ...rowStyle, borderBottom: 'none' }}>
+            <div style={cellLeftStyle}>
+              <span style={labelStyle}>Area</span>
+              <span style={valueStyle}>{incidencia.area || '-'}</span>
+            </div>
+            <div style={cellStyle}>
+              <span style={labelStyle}>Registrado por</span>
+              <span style={valueStyle}>{incidencia.registrado_por || incidencia.created_by_name || '-'}</span>
+            </div>
           </div>
         </div>
       </div>
 
-      {incidencia.descripcion && (
-        <div className="detail-description">
-          <div className="detail-description-title">Descripción</div>
-          <p>{incidencia.descripcion}</p>
+      {/* Card 2: Vehiculo y Conductor */}
+      <div style={sectionStyle}>
+        <div style={titleStyle}>Vehículo y Conductor</div>
+        <div style={tableStyle}>
+          <div style={rowStyle}>
+            <div style={cellLeftStyle}>
+              <span style={labelStyle}>Patente</span>
+              <span style={valueStyle}>{incidencia.patente_display || '-'}</span>
+            </div>
+            <div style={cellStyle}>
+              <span style={labelStyle}>Vehículo</span>
+              <span style={valueStyle}>{[incidencia.vehiculo_marca, incidencia.vehiculo_modelo].filter(Boolean).join(' ') || '-'}</span>
+            </div>
+          </div>
+          <div style={{ ...rowStyle, borderBottom: 'none' }}>
+            <div style={cellLeftStyle}>
+              <span style={labelStyle}>Conductor</span>
+              <span style={valueStyle}>{incidencia.conductor_display || '-'}</span>
+            </div>
+            <div style={cellStyle} />
+          </div>
         </div>
-      )}
+      </div>
 
-      {incidencia.accion_ejecutada && (
-        <div className="detail-description">
-          <div className="detail-description-title">Acción Ejecutada</div>
-          <p>{incidencia.accion_ejecutada}</p>
+      {/* Card 3: Clasificacion y Cobro */}
+      <div style={sectionStyle}>
+        <div style={titleStyle}>Clasificación y Cobro</div>
+        <div style={tableStyle}>
+          <div style={rowStyle}>
+            <div style={cellLeftStyle}>
+              <span style={labelStyle}>Cod Inc.</span>
+              <span style={valueStyle}>
+                {codInc !== '-' ? (
+                  <span style={{ background: tipoObj?.categoria === 'P004' ? '#dcfce7' : '#fee2e2', padding: '2px 8px', borderRadius: '4px', fontWeight: 600, fontSize: '12px' }}>{codInc}</span>
+                ) : '-'}
+              </span>
+            </div>
+            <div style={cellStyle}>
+              <span style={labelStyle}>Tipo de Incidencia</span>
+              <span style={valueStyle}>{tipoIncidenciaNombre}</span>
+            </div>
+          </div>
+          <div style={{ ...rowStyle, borderBottom: (incidencia.estado_vehiculo ? undefined : 'none') }}>
+            {esCobro ? (
+              <div style={cellLeftStyle}>
+                <span style={labelStyle}>Monto</span>
+                <span style={{ ...valueStyle, fontSize: '14px', color: esAFavor ? '#16a34a' : '#dc2626' }}>{formatMoney(incidencia.monto)}</span>
+              </div>
+            ) : (
+              <div style={cellLeftStyle}>
+                <span style={labelStyle}>Penalidades</span>
+                <span style={valueStyle}>{incidencia.total_penalidades}</span>
+              </div>
+            )}
+            {esCobro ? (
+              <div style={cellStyle}>
+                <span style={labelStyle}>Penalidades</span>
+                <span style={valueStyle}>{incidencia.total_penalidades}</span>
+              </div>
+            ) : (
+              <div style={cellStyle}>
+                <span style={labelStyle}>Estado vehículo</span>
+                <span style={valueStyle}>{incidencia.estado_vehiculo || '-'}</span>
+              </div>
+            )}
+          </div>
+          {esCobro && incidencia.estado_vehiculo && (
+            <div style={{ ...rowStyle, borderBottom: 'none' }}>
+              <div style={fullCellStyle}>
+                <span style={labelStyle}>Estado vehículo</span>
+                <span style={valueStyle}>{incidencia.estado_vehiculo}</span>
+              </div>
+            </div>
+          )}
         </div>
-      )}
+      </div>
+
+      {/* Descripcion */}
+      <div style={sectionStyle}>
+        <div style={titleStyle}>Descripción</div>
+        <div style={{ padding: '12px', background: 'var(--bg-secondary)', borderRadius: '8px', fontSize: '13px', lineHeight: '1.5', color: 'var(--text-primary)' }}>
+          {incidencia.descripcion || 'Sin descripción'}
+        </div>
+      </div>
+
+      {/* Accion Ejecutada */}
+      <div style={sectionStyle}>
+        <div style={titleStyle}>Acción Ejecutada</div>
+        <div style={{ padding: '12px', background: 'var(--bg-secondary)', borderRadius: '8px', fontSize: '13px', lineHeight: '1.5', color: 'var(--text-primary)' }}>
+          {incidencia.accion_ejecutada || 'Sin acción ejecutada'}
+        </div>
+      </div>
     </div>
   )
 }
@@ -4718,9 +5002,10 @@ interface PenalidadDetailViewProps {
   onEdit?: () => void
   historialRechazos?: Array<{id: string; motivo: string; rechazado_por_nombre: string; created_at: string}>
   loadingHistorial?: boolean
+  tiposCobroDescuentoMap?: Map<string, TipoCobroDescuento>
 }
 
-function PenalidadDetailView({ penalidad, onEdit, historialRechazos = [], loadingHistorial = false }: PenalidadDetailViewProps) {
+function PenalidadDetailView({ penalidad, onEdit, historialRechazos = [], loadingHistorial = false, tiposCobroDescuentoMap }: PenalidadDetailViewProps) {
   function formatDate(dateStr: string | undefined | null) {
     if (!dateStr) return '-'
     const [year, month, day] = dateStr.split('T')[0].split('-')
@@ -4741,6 +5026,12 @@ function PenalidadDetailView({ penalidad, onEdit, historialRechazos = [], loadin
   }
   
   const esRechazado = penalidad.rechazado
+  const tipoObj = penalidad.tipo_cobro_descuento_id && tiposCobroDescuentoMap ? tiposCobroDescuentoMap.get(penalidad.tipo_cobro_descuento_id) : null
+  const codIncLabelsLocal: Record<string, string> = { 'P006': 'P006 - Exceso KM', 'P004': 'P004 - Tickets a Favor', 'P007': 'P007 - Multas/Penalidades' }
+  const codInc = tipoObj?.categoria ? (codIncLabelsLocal[tipoObj.categoria] || tipoObj.categoria) : '-'
+  const tipoNombreResuelto = penalidad.tipo_nombre || tipoObj?.nombre || '-'
+  const colorBg = tipoObj?.categoria === 'P004' ? '#dcfce7' : tipoObj?.categoria ? '#fee2e2' : undefined
+  const vehiculoDesc = [penalidad.vehiculo_marca, penalidad.vehiculo_modelo].filter(Boolean).join(' ') || '-'
 
   return (
     <div className="incidencia-detail">
@@ -4768,8 +5059,24 @@ function PenalidadDetailView({ penalidad, onEdit, historialRechazos = [], loadin
             <span className="detail-item-value">{formatDate(penalidad.fecha)}</span>
           </div>
           <div className="detail-item">
-            <span className="detail-item-label">Tipo</span>
-            <span className="detail-item-value">{penalidad.tipo_nombre || '-'}</span>
+            <span className="detail-item-label">Semana</span>
+            <span className="detail-item-value">{penalidad.semana || '-'}</span>
+          </div>
+          <div className="detail-item">
+            <span className="detail-item-label">Cod Inc.</span>
+            <span className="detail-item-value">
+              {codInc !== '-' ? (
+                <span style={{ background: colorBg, padding: '2px 8px', borderRadius: '4px', fontWeight: 600, fontSize: '12px', color: '#1a1a1a' }}>{codInc}</span>
+              ) : '-'}
+            </span>
+          </div>
+          <div className="detail-item">
+            <span className="detail-item-label">Tipo Inc.</span>
+            <span className="detail-item-value">
+              {tipoNombreResuelto !== '-' && colorBg ? (
+                <span style={{ background: colorBg, padding: '2px 8px', borderRadius: '4px', fontWeight: 500, color: '#1a1a1a' }}>{tipoNombreResuelto}</span>
+              ) : tipoNombreResuelto}
+            </span>
           </div>
           <div className="detail-item">
             <span className="detail-item-label">Detalle</span>
@@ -4777,12 +5084,22 @@ function PenalidadDetailView({ penalidad, onEdit, historialRechazos = [], loadin
           </div>
           <div className="detail-item">
             <span className="detail-item-label">Monto</span>
-            <span className="detail-item-value" style={{ fontWeight: 600, color: '#F59E0B' }}>{formatMoney(penalidad.monto)}</span>
+            <span className="detail-item-value">
+              {penalidad.monto ? (
+                <span style={{ fontWeight: 600, color: '#1a1a1a', background: colorBg || undefined, padding: colorBg ? '2px 8px' : undefined, borderRadius: colorBg ? '4px' : undefined }}>{formatMoney(penalidad.monto)}</span>
+              ) : '-'}
+            </span>
           </div>
           <div className="detail-item">
             <span className="detail-item-label">Área responsable</span>
             <span className="detail-item-value">{penalidad.area_responsable || '-'}</span>
           </div>
+          {penalidad.fraccionado && (
+            <div className="detail-item">
+              <span className="detail-item-label">Fraccionamiento</span>
+              <span className="detail-item-value" style={{ fontWeight: 600, color: '#7c3aed' }}>{penalidad.cantidad_cuotas || '-'} cuotas</span>
+            </div>
+          )}
         </div>
 
         <div className="detail-card">
@@ -4794,6 +5111,10 @@ function PenalidadDetailView({ penalidad, onEdit, historialRechazos = [], loadin
           <div className="detail-item">
             <span className="detail-item-label">Patente</span>
             <span className="detail-item-value">{penalidad.patente_display || '-'}</span>
+          </div>
+          <div className="detail-item">
+            <span className="detail-item-label">Vehículo</span>
+            <span className="detail-item-value">{vehiculoDesc}</span>
           </div>
           <div className="detail-item">
             <span className="detail-item-label">Turno</span>
