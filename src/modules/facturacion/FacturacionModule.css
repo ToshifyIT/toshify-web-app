@@ -201,20 +201,40 @@
 @media (max-width: 480px) {
   .fact-stats-grid {
     grid-template-columns: repeat(2, 1fr);
-    gap: 8px;
+    gap: 6px;
   }
 
   .fact-stats .stat-card {
-    padding: 10px;
-    gap: 8px;
+    padding: 8px 10px;
+    gap: 6px;
+  }
+
+  .fact-stats .stat-card .stat-icon {
+    width: 14px;
+    height: 14px;
+    flex-shrink: 0;
+  }
+
+  .fact-stats .stat-content {
+    min-width: 0;
+    flex: 1;
   }
 
   .fact-stats .stat-value {
-    font-size: 14px;
+    font-size: 13px !important;
+    font-weight: 700;
+    line-height: 1.1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
   .fact-stats .stat-label {
-    font-size: 10px;
+    font-size: 9px !important;
+    line-height: 1.2;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 }
 
@@ -561,13 +581,15 @@
   .fact-tabs {
     flex-wrap: nowrap;
     overflow-x: auto;
+    overflow-y: hidden;
     -webkit-overflow-scrolling: touch;
     scrollbar-width: none;
     -ms-overflow-style: none;
     padding-bottom: 8px;
-    margin: 0 -16px;
-    padding-left: 16px;
-    padding-right: 16px;
+    margin: 0;
+    padding-left: 0;
+    padding-right: 0;
+    max-width: 100%;
   }
 
   .fact-tabs::-webkit-scrollbar {

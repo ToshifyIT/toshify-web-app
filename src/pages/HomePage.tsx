@@ -1666,7 +1666,7 @@ export function HomePage() {
                         style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, zIndex: 998 }}
                         onClick={() => setSedeDropdownOpen(false)}
                       />
-                      <div style={{
+                      <div className="sede-dropdown-menu" style={{
                         position: 'absolute',
                         top: 'calc(100% + 6px)',
                         right: 0,
@@ -1674,8 +1674,9 @@ export function HomePage() {
                         border: '1px solid var(--border-primary)',
                         borderRadius: '12px',
                         boxShadow: '0 8px 32px rgba(0,0,0,0.15)',
-                        zIndex: 999,
+                        zIndex: 9999,
                         minWidth: '260px',
+                        maxWidth: 'calc(100vw - 24px)',
                         padding: '8px',
                         overflow: 'hidden',
                       }}>

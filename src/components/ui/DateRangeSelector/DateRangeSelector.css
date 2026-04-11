@@ -51,6 +51,23 @@
   box-shadow: 0 10px 40px rgba(0, 0, 0, 0.15);
   padding: 12px;
   min-width: 300px;
+  max-width: calc(100vw - 20px);
+}
+
+/* Mobile: dropdown full-width centrado */
+@media (max-width: 480px) {
+  .date-range-dropdown {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    right: auto;
+    transform: translate(-50%, -50%);
+    min-width: 0;
+    width: calc(100vw - 24px);
+    max-width: 360px;
+    max-height: 85vh;
+    overflow-y: auto;
+  }
 }
 
 /* Tabs Día/Semana */
