@@ -120,7 +120,8 @@ function displayArgDate(d: string | null | undefined): string {
 // Helper: evaluar si un vehículo tiene GNC en una fecha dada, según historial
 // Regla: CARGO/DIURNO → GNC aplica desde el día siguiente a instalacion
 //        NOCTURNO → GNC aplica desde el mismo día de instalacion
-// Si no hay historial y gnc=true, usar updatedAt del vehículo como fecha de referencia
+// Sin historial → usar vehiculos.gnc tal cual (feat nuevo: hasta que se regularicen
+// historiales retroactivos, el boolean actual es la fuente de verdad)
 type GncHistorialEntry = { vehiculo_id: string; accion: string; fecha: string }
 function tieneGncEnFecha(
   vehiculoId: string,
@@ -128,26 +129,23 @@ function tieneGncEnFecha(
   modalidad: 'CARGO' | 'TURNO_DIURNO' | 'TURNO_NOCTURNO',
   historialMap: Map<string, GncHistorialEntry[]>,
   gncActual: boolean,
-  vehiculoUpdatedAt?: string,
 ): boolean {
   const historial = historialMap.get(vehiculoId)
   if (!historial || historial.length === 0) {
-    // Sin historial: si gnc=false → nunca tuvo GNC
-    if (!gncActual) return false
-    // gnc=true sin historial → usar updated_at como fecha aproximada de instalación
-    if (vehiculoUpdatedAt) {
-      const updatedDate = vehiculoUpdatedAt.substring(0, 10) // 'YYYY-MM-DD'
-      if (modalidad === 'TURNO_NOCTURNO') return fechaStr >= updatedDate
-      return fechaStr > updatedDate
-    }
-    return gncActual // sin updated_at → fallback al boolean
+    // Sin historial: usar boolean actual del vehículo (fuente de verdad mientras
+    // no se cargue historial retroactivo)
+    return gncActual
   }
   // Buscar último evento con fecha <= fechaStr (ya viene ordenado desc)
   let ultimoEvento: GncHistorialEntry | null = null
   for (const h of historial) {
     if (h.fecha <= fechaStr) { ultimoEvento = h; break }
   }
-  if (!ultimoEvento) return false // antes del primer evento → no tenía GNC
+  if (!ultimoEvento) {
+    // Antes del primer evento del historial → usar boolean actual del vehículo
+    // (no asumimos que antes del historial no tenía GNC: el historial puede estar incompleto)
+    return gncActual
+  }
   if (ultimoEvento.accion === 'desinstalacion') return false
   // accion = 'instalacion': aplicar regla según modalidad
   if (modalidad === 'TURNO_NOCTURNO') return fechaStr >= ultimoEvento.fecha // mismo día
@@ -853,7 +851,7 @@ export function ReporteFacturacionTab() {
         while (cursorAc <= efectivoFin) {
           const key = format(cursorAc, 'yyyy-MM-dd')
           if (!diasCubiertos.has(key)) {
-            const gncEsteDiaDesglose = tieneGncEnFecha(vehiculoIdDesglose, key, modalidadGncDesglose, gncHistorialMapDesglose, vehiculoGncActualDesglose, asignacion.vehiculos?.updated_at)
+            const gncEsteDiaDesglose = tieneGncEnFecha(vehiculoIdDesglose, key, modalidadGncDesglose, gncHistorialMapDesglose, vehiculoGncActualDesglose)
             diasCubiertos.set(key, { horario, gnc: gncEsteDiaDesglose })
             diasContados++
           }
@@ -1685,7 +1683,6 @@ export function ReporteFacturacionTab() {
         fechaFin: Date;
         tieneGnc: boolean;
         vehiculoId: string;
-        vehiculoUpdatedAt?: string;
       }>>()
       conductorIds.forEach((id: string) => asignacionesPorConductorVP.set(id, []))
 
@@ -1829,7 +1826,7 @@ export function ReporteFacturacionTab() {
         // Guardar asignación para cálculo de montos
         const asigs = asignacionesPorConductorVP.get(ac.conductor_id)
         if (asigs) {
-          asigs.push({ modalidad, fechaInicio: efectivoInicio, fechaFin: efectivoFin, tieneGnc: asignacion.vehiculos?.gnc === true, vehiculoId: asignacion.vehiculo_id, vehiculoUpdatedAt: asignacion.vehiculos?.updated_at })
+          asigs.push({ modalidad, fechaInicio: efectivoInicio, fechaFin: efectivoFin, tieneGnc: asignacion.vehiculos?.gnc === true, vehiculoId: asignacion.vehiculo_id })
         }
 
         // Rastrear la fecha_fin más tardía de la asignación (no la efectiva, la real del registro)
@@ -1942,7 +1939,7 @@ export function ReporteFacturacionTab() {
             if (!montosContados.has(dateKey)) {
               montosContados.add(dateKey)
               // Evaluar GNC por fecha usando historial (regla: CARGO/DIURNO día siguiente, NOCTURNO mismo día)
-              const gncEsteDia = tieneGncEnFecha(asig.vehiculoId, dateKey, asig.modalidad, gncHistorialMapVP, asig.tieneGnc, asig.vehiculoUpdatedAt)
+              const gncEsteDia = tieneGncEnFecha(asig.vehiculoId, dateKey, asig.modalidad, gncHistorialMapVP, asig.tieneGnc)
               const codigo = getCodigoPorModalidadVP(asig.modalidad, gncEsteDia)
               const precioDiario = getPrecioEnFechaVP(codigo, currentDate)
               ;(prorrateo as any)[montoKey] += precioDiario
@@ -2944,7 +2941,7 @@ export function ReporteFacturacionTab() {
           if (!fechasContadasR.has(key)) {
             fechasContadasR.add(key)
             // Evaluar GNC por fecha usando historial
-            const gncEsteDia = tieneGncEnFecha(vehiculoIdR, key, modalidadGnc, gncHistorialMapRecalc, vehiculoGncActual, asignacion.vehiculos?.updated_at)
+            const gncEsteDia = tieneGncEnFecha(vehiculoIdR, key, modalidadGnc, gncHistorialMapRecalc, vehiculoGncActual)
             if (modalidadGnc === 'CARGO') {
               if (gncEsteDia) prorrateo.CARGO++; else prorrateo.CARGO_SIN_GNC++
             } else if (modalidadGnc === 'TURNO_NOCTURNO') {
@@ -9943,6 +9940,18 @@ export function ReporteFacturacionTab() {
                                 ) : d.trabajado ? (
                                   <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                                     <span style={{ fontSize: '10px', color: '#10b981', fontWeight: 600 }}>{d.horario}</span>
+                                    <span style={{
+                                      fontSize: '9px',
+                                      fontWeight: 700,
+                                      padding: '1px 6px',
+                                      borderRadius: '999px',
+                                      background: d.gnc ? 'rgba(16, 185, 129, 0.12)' : 'rgba(148, 163, 184, 0.15)',
+                                      color: d.gnc ? '#059669' : '#64748b',
+                                      border: `1px solid ${d.gnc ? 'rgba(16, 185, 129, 0.3)' : 'rgba(148, 163, 184, 0.3)'}`,
+                                      letterSpacing: '0.2px',
+                                    }}>
+                                      {d.gnc ? 'CON GNC' : 'SIN GNC'}
+                                    </span>
                                     {getPrecioDia(d.horario, d.gnc) > 0 && (
                                       <span style={{ fontSize: '10px', color: 'var(--text-secondary)', fontWeight: 500 }}>
                                         {formatCurrency(getPrecioDia(d.horario, d.gnc))}

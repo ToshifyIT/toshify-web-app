@@ -2482,16 +2482,9 @@ export function IncidenciasModule() {
     const semanaActual = getWeekNumber(hoy.toISOString().split('T')[0])
     const anioActual = hoy.getFullYear()
     
-    // Por defecto usar semana anterior para regularización
-    let semanaAnterior = semanaActual - 1
-    let anioAnterior = anioActual
-    if (semanaAnterior < 1) {
-      semanaAnterior = 52
-      anioAnterior = anioActual - 1
-    }
-    
-    setSemanaInicio(semanaAnterior)
-    setAnioInicio(anioAnterior)
+    // Por defecto usar semana actual
+    setSemanaInicio(semanaActual)
+    setAnioInicio(anioActual)
     
     // Generar períodos disponibles (4 semanas anteriores + semana actual + próximas 20 semanas)
     const periodos: Array<{semana: number, anio: number, label: string}> = []
@@ -4658,15 +4651,12 @@ function IncidenciaForm({ formData, setFormData, estados, vehiculos, conductores
                       if (ultimo.accion === 'desinstalacion') tieneGnc = false
                       else if (modalidadGnc === 'TURNO_NOCTURNO') tieneGnc = fechaInc >= ultimo.fecha
                       else tieneGnc = fechaInc > ultimo.fecha
-                    } else {
-                      tieneGnc = false
                     }
-                  } else if (gncActual && (selectedVehiculo as any)?.updated_at) {
-                    // Sin historial pero gnc=true: usar updated_at como fecha aprox de instalación
-                    const updatedDate = (selectedVehiculo as any).updated_at.substring(0, 10)
-                    if (modalidadGnc === 'TURNO_NOCTURNO') tieneGnc = fechaInc >= updatedDate
-                    else tieneGnc = fechaInc > updatedDate
+                    // Si no hay evento anterior a fechaInc, dejamos gncActual como fallback
+                    // (el historial puede estar incompleto — no asumimos ausencia de GNC)
                   }
+                  // Sin historial → usar gncActual tal cual (fuente de verdad mientras
+                  // no se cargue historial retroactivo)
                   const precioTurno = formData.turno === 'A cargo'
                     ? (tieneGnc ? preciosAlquiler.P002 : preciosAlquiler.P016)
                     : formData.turno === 'Nocturno'
