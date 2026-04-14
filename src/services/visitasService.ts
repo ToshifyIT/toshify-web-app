@@ -179,6 +179,19 @@ export async function updateVisitaEstado(id: string, estado: VisitaEstado): Prom
   if (error) throw error;
 }
 
+export async function marcarArriboVisita(id: string, arriboPorNombre: string): Promise<void> {
+  const { error } = await supabase
+    .from('visitas')
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    .update({
+      hora_arribo: new Date().toISOString(),
+      arribo_por_nombre: arriboPorNombre,
+      estado: 'en_curso' as VisitaEstado,
+    } as any)
+    .eq('id', id);
+  if (error) throw error;
+}
+
 export async function cancelarVisitaConMotivo(id: string, motivo: string, notaActual: string | null): Promise<void> {
   const nuevaNota = notaActual
     ? `${notaActual}\n[Cancelada: ${motivo}]`

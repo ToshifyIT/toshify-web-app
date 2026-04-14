@@ -85,6 +85,8 @@ export interface Visita {
   citador_nombre: string;
   created_at: string;
   updated_at: string;
+  hora_arribo: string | null;
+  arribo_por_nombre: string | null;
 }
 
 // Visita con relaciones resueltas (para display)

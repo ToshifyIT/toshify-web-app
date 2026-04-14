@@ -18,8 +18,8 @@ import { VISITA_ESTADOS } from '../../../types/visitas.types';
 
 // Transiciones válidas de estado
 const TRANSICIONES: Record<VisitaEstado, VisitaEstado[]> = {
-  pendiente: ['cancelada'],
-  en_curso: ['cancelada'],
+  pendiente: ['no_asistio', 'cancelada'],
+  en_curso: ['completada', 'cancelada'],
   completada: [],
   no_asistio: [],
   cancelada: [],
@@ -32,6 +32,7 @@ interface VisitaDetalleModalProps {
   canEdit: boolean;
   onEdit: () => void;
   onChangeEstado: (estado: VisitaEstado) => void;
+  onMarcarPresente?: () => void;
   onDelete: () => void;
   onClose: () => void;
 }
@@ -41,6 +42,7 @@ export function VisitaDetalleModal({
   canEdit,
   onEdit,
   onChangeEstado,
+  onMarcarPresente,
   onDelete,
   onClose,
 }: VisitaDetalleModalProps) {
@@ -57,6 +59,16 @@ export function VisitaDetalleModal({
   const estadoInfo = VISITA_ESTADOS[estadoActual];
   const transicionesDisponibles = TRANSICIONES[estadoActual];
   const isPast = estadoActual === 'completada' || estadoActual === 'cancelada' || estadoActual === 'no_asistio';
+
+  // Lógica para marcar presente: solo si está pendiente y la cita no terminó aún
+  // Ventana de tolerancia = fecha_hora + duracion_minutos (B. duración de la cita)
+  const finVentana = new Date(new Date(visita.fecha_hora).getTime() + visita.duracion_minutos * 60_000);
+  const ventanaCerrada = new Date() >= finVentana;
+  const puedeMarcarPresente = estadoActual === 'pendiente' && !ventanaCerrada && !!onMarcarPresente;
+  const yaMarcadoPresente = !!visita.hora_arribo;
+  const horaArriboFmt = visita.hora_arribo
+    ? format(toArgDate(new Date(visita.hora_arribo)), 'HH:mm')
+    : '';
 
   // Parsear visitantes
   const nombres = visita.nombre_visitante?.split(';').map((n) => n.trim()).filter(Boolean) ?? [];
@@ -128,6 +140,44 @@ export function VisitaDetalleModal({
                 <div>{horaInicio} - {horaFin} ({visita.duracion_minutos} min)</div>
               </div>
             </div>
+
+            {/* Bloque de arribo: confirmado, pendiente (con botón), o atrasado */}
+            {yaMarcadoPresente && (
+              <div className="visita-detalle-row" style={{ background: 'rgba(16, 185, 129, 0.08)', padding: '10px 12px', borderRadius: '8px', border: '1px solid rgba(16, 185, 129, 0.25)' }}>
+                <Clock size={16} style={{ color: '#10b981' }} />
+                <div>
+                  <strong style={{ color: '#10b981' }}>Presente</strong>
+                  <div style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>
+                    Llegó {horaArriboFmt}
+                    {visita.arribo_por_nombre && <> · Registrado por <strong>{visita.arribo_por_nombre}</strong></>}
+                  </div>
+                </div>
+              </div>
+            )}
+            {!yaMarcadoPresente && puedeMarcarPresente && (
+              <div style={{ padding: '8px 0' }}>
+                <button
+                  onClick={onMarcarPresente}
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: '8px',
+                    width: '100%', justifyContent: 'center',
+                    background: '#10b981', color: '#fff', border: 'none',
+                    padding: '10px 16px', borderRadius: '8px',
+                    fontSize: '14px', fontWeight: 600, cursor: 'pointer',
+                  }}
+                >
+                  <Clock size={16} /> Marcar Presente
+                </button>
+              </div>
+            )}
+            {!yaMarcadoPresente && estadoActual === 'pendiente' && ventanaCerrada && (
+              <div className="visita-detalle-row" style={{ background: 'rgba(239, 68, 68, 0.08)', padding: '10px 12px', borderRadius: '8px', border: '1px solid rgba(239, 68, 68, 0.25)' }}>
+                <Clock size={16} style={{ color: '#ef4444' }} />
+                <div style={{ fontSize: '13px', color: '#ef4444' }}>
+                  La ventana de arribo terminó (cita + duración). Cambiá el estado a "No asistió" si corresponde.
+                </div>
+              </div>
+            )}
 
             <div className="visita-detalle-row">
               <Tag size={16} />

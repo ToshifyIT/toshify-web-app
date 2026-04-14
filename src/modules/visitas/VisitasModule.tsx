@@ -34,6 +34,7 @@ import {
   createVisita,
   updateVisita,
   updateVisitaEstado,
+  marcarArriboVisita,
   cancelarVisitaConMotivo,
   deleteVisita,
   toCalendarEvents,
@@ -271,6 +272,46 @@ export function VisitasModule() {
       } catch {
         Swal.fire('Error', 'No se pudo cambiar el estado', 'error');
       }
+    }
+  }
+
+  async function handleMarcarPresente(visita?: VisitaCompleta) {
+    const target = visita || selectedVisita;
+    if (!target) return;
+    // Validar ventana de tolerancia = fecha_hora + duracion_minutos
+    const ahora = new Date();
+    const finVentana = new Date(
+      new Date(target.fecha_hora).getTime() + target.duracion_minutos * 60_000
+    );
+    if (ahora >= finVentana) {
+      Swal.fire('Ventana cerrada', 'La ventana de arribo ya terminó (cita + duración). Marcá la cita como "No asistió" si corresponde.', 'warning');
+      return;
+    }
+
+    // Detectar si llega con atraso
+    const fechaCita = new Date(target.fecha_hora);
+    const minutosAtraso = Math.max(0, Math.floor((ahora.getTime() - fechaCita.getTime()) / 60000));
+    const mensajeExtra = minutosAtraso > 0 ? ` (llegó ${minutosAtraso} min tarde)` : '';
+
+    const result = await Swal.fire({
+      title: 'Confirmar arribo',
+      text: `¿Confirmás que ${target.nombre_visitante} llegó?${mensajeExtra}`,
+      icon: 'question',
+      showCancelButton: true,
+      confirmButtonText: 'Sí, llegó',
+      cancelButtonText: 'Cancelar',
+      confirmButtonColor: '#10b981',
+    });
+    if (!result.isConfirmed) return;
+
+    try {
+      const nombreUsuario = profile?.full_name || 'Sistema';
+      await marcarArriboVisita(target.id, nombreUsuario);
+      showSuccess('Arribo confirmado');
+      setShowDetalleModal(false);
+      await cargarVisitas();
+    } catch {
+      Swal.fire('Error', 'No se pudo confirmar el arribo', 'error');
     }
   }
 
@@ -577,6 +618,7 @@ export function VisitasModule() {
               onViewChange={handleViewChange}
               onSelectSlot={handleSelectSlot}
               onSelectEvent={handleSelectEvent}
+              onMarcarPresente={(event) => handleMarcarPresente(event.visita as VisitaCompleta)}
             />
           ) : (
             <DataTable
@@ -608,6 +650,7 @@ export function VisitasModule() {
               canEdit={canEdit}
               onEdit={handleEditFromDetalle}
               onChangeEstado={handleChangeEstado}
+              onMarcarPresente={handleMarcarPresente}
               onDelete={handleDeleteVisita}
               onClose={() => setShowDetalleModal(false)}
             />
