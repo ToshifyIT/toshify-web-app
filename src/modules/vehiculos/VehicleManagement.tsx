@@ -448,10 +448,15 @@ export function VehicleManagement() {
       resetForm()
       await loadVehiculos(true)
     } catch (err: any) {
+      const isDuplicatePatente =
+        err?.code === '23505' ||
+        (typeof err?.message === 'string' && err.message.includes('vehiculos_patente_key'))
       Swal.fire({
         icon: 'error',
-        title: 'Error',
-        text: err.message,
+        title: isDuplicatePatente ? 'Patente duplicada' : 'Error',
+        text: isDuplicatePatente
+          ? `Ya existe un vehículo registrado con la patente ${formData.patente.toUpperCase()}.`
+          : err.message,
         confirmButtonColor: '#ff0033'
       })
     } finally {
@@ -691,10 +696,15 @@ export function VehicleManagement() {
       resetForm()
       await loadVehiculos(true)
     } catch (err: any) {
+      const isDuplicatePatente =
+        err?.code === '23505' ||
+        (typeof err?.message === 'string' && err.message.includes('vehiculos_patente_key'))
       Swal.fire({
         icon: 'error',
-        title: 'Error',
-        text: err.message,
+        title: isDuplicatePatente ? 'Patente duplicada' : 'Error',
+        text: isDuplicatePatente
+          ? `Ya existe un vehículo registrado con la patente ${formData.patente.toUpperCase()}.`
+          : err.message,
         confirmButtonColor: '#ff0033'
       })
     } finally {
