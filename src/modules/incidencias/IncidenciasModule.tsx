@@ -4895,7 +4895,7 @@ function IncidenciaDetailView({ incidencia, onEdit, tiposCobroDescuento }: Incid
             </div>
             <div style={cellStyle}>
               <span style={labelStyle}>Registrado por</span>
-              <span style={valueStyle}>{incidencia.registrado_por || incidencia.created_by_name || '-'}</span>
+              <span style={valueStyle}>{incidencia.registrado_por || '-'}</span>
             </div>
           </div>
         </div>
