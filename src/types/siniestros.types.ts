@@ -223,4 +223,5 @@ export interface ConductorSimple {
   nombres: string
   apellidos: string
   nombre_completo: string
+  estado_codigo?: string
 }

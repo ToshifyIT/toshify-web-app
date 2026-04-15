@@ -148,9 +148,14 @@ export function SiniestroSeguimiento({ siniestro, onReload }: SiniestroSeguimien
           .select('id, patente, marca, modelo').is('deleted_at', null))
           .order('patente'),
         aplicarFiltroSede(supabase.from('conductores')
-          .select('id, nombres, apellidos'))
+          .select('id, nombres, apellidos, estado_id'))
           .order('apellidos'),
       ])
+
+      // Mapa de estados para marcar conductores BAJA con etiqueta visual
+      const { data: estadosCond } = await supabase.from('conductores_estados').select('id, codigo')
+      const estadosCondMap = new Map<string, string>()
+      for (const e of (estadosCond || [])) estadosCondMap.set((e as any).id, (e as any).codigo)
 
       setTiposCobroDescuento(tiposData || [])
       setIncidenciasEstados(estadosData || [])
@@ -174,12 +179,19 @@ export function SiniestroSeguimiento({ siniestro, onReload }: SiniestroSeguimien
       }
       setVehiculos(vehiculosList)
 
-      let conductoresFormatted: ConductorSimple[] = (condData || []).map((c: any) => ({
-        id: c.id,
-        nombres: c.nombres,
-        apellidos: c.apellidos,
-        nombre_completo: `${c.nombres} ${c.apellidos}`
-      }))
+      let conductoresFormatted: ConductorSimple[] = (condData || []).map((c: any) => {
+        const estadoCodigo = c.estado_id ? estadosCondMap.get(c.estado_id) : undefined
+        const isBaja = estadoCodigo?.toUpperCase() === 'BAJA'
+        return {
+          id: c.id,
+          nombres: c.nombres,
+          apellidos: c.apellidos,
+          nombre_completo: isBaja
+            ? `${c.nombres} ${c.apellidos} [BAJA]`
+            : `${c.nombres} ${c.apellidos}`,
+          estado_codigo: estadoCodigo,
+        }
+      })
 
       if (siniestro.conductor_id && !conductoresFormatted.find(c => c.id === siniestro.conductor_id)) {
         conductoresFormatted = [{

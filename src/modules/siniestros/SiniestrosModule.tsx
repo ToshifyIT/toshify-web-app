@@ -159,17 +159,17 @@ export function SiniestrosModule() {
         supabase.from('vehiculos_estados').select('id, codigo, descripcion').eq('activo', true).order('descripcion')
       ])
 
-      // Use estados result to query conductors with active state filter
-      const estadoActivoId = estadosCondRes.data?.find(e => e.codigo.toLowerCase() === 'activo')?.id
-      const conductoresRes = estadoActivoId
-        ? await aplicarFiltroSede(supabase.from('conductores').select('id, nombres, apellidos').eq('estado_id', estadoActivoId)).order('apellidos')
-        : await aplicarFiltroSede(supabase.from('conductores').select('id, nombres, apellidos')).order('apellidos')
+      // Traer TODOS los conductores (activos y de baja) con su estado — siniestros/cobros
+      // son hechos históricos y pueden requerir referenciar a un conductor ya dado de baja
+      const estadosMap = new Map<string, string>()
+      for (const e of (estadosCondRes.data || [])) estadosMap.set(e.id, e.codigo)
+      const conductoresRes = await aplicarFiltroSede(supabase.from('conductores').select('id, nombres, apellidos, estado_id')).order('apellidos')
 
       const categoriasData = categoriasRes.data as SiniestroCategoria[] | null
       const estadosData = estadosRes.data as SiniestroEstado[] | null
       const segurosData = segurosRes.data as Seguro[] | null
       const vehiculosData = vehiculosRes.data as VehiculoSimple[] | null
-      const conductoresData = conductoresRes.data as { id: string; nombres: string; apellidos: string }[] | null
+      const conductoresData = conductoresRes.data as { id: string; nombres: string; apellidos: string; estado_id: string | null }[] | null
       const siniestrosData = siniestrosRes.data as SiniestroCompleto[] | null
       const vehiculosEstadosData = vehiculosEstadosRes.data as VehiculoEstado[] | null
 
@@ -177,12 +177,19 @@ export function SiniestrosModule() {
       setEstados(estadosData || [])
       setSeguros(segurosData || [])
       setVehiculos(vehiculosData || [])
-      setConductores((conductoresData || []).map(c => ({
-        id: c.id,
-        nombres: c.nombres,
-        apellidos: c.apellidos,
-        nombre_completo: `${c.nombres} ${c.apellidos}`
-      })))
+      setConductores((conductoresData || []).map(c => {
+        const estadoCodigo = c.estado_id ? estadosMap.get(c.estado_id) : undefined
+        const isBaja = estadoCodigo?.toUpperCase() === 'BAJA'
+        return {
+          id: c.id,
+          nombres: c.nombres,
+          apellidos: c.apellidos,
+          nombre_completo: isBaja
+            ? `${c.nombres} ${c.apellidos} [BAJA]`
+            : `${c.nombres} ${c.apellidos}`,
+          estado_codigo: estadoCodigo,
+        }
+      }))
       setSiniestros(siniestrosData || [])
       setVehiculosEstados(vehiculosEstadosData || [])
 

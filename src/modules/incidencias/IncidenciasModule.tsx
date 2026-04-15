@@ -380,7 +380,7 @@ export function IncidenciasModule() {
         (supabase.from('tipos_penalidad' as any) as any).select('id, codigo, nombre, descripcion, orden').eq('is_active', true).order('orden'),
         (supabase.from('tipos_cobro_descuento' as any) as any).select('id, codigo, nombre, descripcion, categoria, es_a_favor, orden').eq('is_active', true).order('orden'),
         aplicarFiltroSede(supabase.from('vehiculos').select('id, patente, marca, modelo, gnc, updated_at').is('deleted_at', null)).order('patente'),
-        aplicarFiltroSede(supabase.from('conductores').select('id, nombres, apellidos')).order('apellidos'),
+        aplicarFiltroSede(supabase.from('conductores').select('id, nombres, apellidos, estado_id')).order('apellidos'),
         aplicarFiltroSede((supabase.from('v_incidencias_completas' as any) as any).select('*')).order('fecha', { ascending: false }).limit(2000),
         aplicarFiltroSede((supabase.from('v_penalidades_completas' as any) as any).select('*')).order('fecha', { ascending: false }).limit(2000),
         // Obtener campos adicionales de la tabla incidencias (tipo, monto)
@@ -413,12 +413,22 @@ export function IncidenciasModule() {
         setPreciosAlquiler(precios)
       }
       setVehiculos(vehiculosRes.data || [])
-      setConductores((conductoresRes.data || []).map((c: any) => ({
-        id: c.id,
-        nombres: c.nombres,
-        apellidos: c.apellidos,
-        nombre_completo: `${c.nombres} ${c.apellidos}`
-      })))
+      // Cargar estados para identificar conductores de BAJA con etiqueta visual
+      const { data: estadosCondData } = await supabase.from('conductores_estados').select('id, codigo')
+      const estadosCondMap = new Map<string, string>()
+      for (const e of (estadosCondData || [])) estadosCondMap.set((e as any).id, (e as any).codigo)
+      setConductores((conductoresRes.data || []).map((c: any) => {
+        const estadoCodigo = c.estado_id ? estadosCondMap.get(c.estado_id) : undefined
+        const isBaja = estadoCodigo?.toUpperCase() === 'BAJA'
+        return {
+          id: c.id,
+          nombres: c.nombres,
+          apellidos: c.apellidos,
+          nombre_completo: isBaja
+            ? `${c.nombres} ${c.apellidos} [BAJA]`
+            : `${c.nombres} ${c.apellidos}`
+        }
+      }))
       
       // Combinar datos de la vista con campos de la tabla (tipo, monto)
       const extraDataMap = new Map<string, { tipo: string; tipo_cobro_descuento_id: string | null; monto: number | null }>((incidenciasTipoRes.data || []).map((i: any) => [i.id, { tipo: i.tipo, tipo_cobro_descuento_id: i.tipo_cobro_descuento_id, monto: i.monto }]))
