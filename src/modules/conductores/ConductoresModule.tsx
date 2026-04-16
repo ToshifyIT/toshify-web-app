@@ -1014,7 +1014,7 @@ export function ConductoresModule() {
     await (supabase as any)
       .from('asignaciones')
       .update({
-        estado: 'completada',
+        estado: 'finalizada',
         notas: appendNota(asignacion.notas, motivoBaja),
         updated_at: ahora
       })
@@ -1154,7 +1154,7 @@ export function ConductoresModule() {
     await (supabase as any)
       .from('asignaciones')
       .update({
-        estado: 'completada',
+        estado: 'finalizada',
         notas: appendNota(asignacion.notas, motivoBaja),
         updated_at: ahora
       })
@@ -1402,7 +1402,7 @@ export function ConductoresModule() {
           const { error: errFinalizar } = await (supabase as any)
             .from('asignaciones')
             .update({
-              estado: 'completada',
+              estado: 'finalizada',
               notas: appendNota(asignacion.notas, motivoBaja),
               updated_at: ahora
             })
