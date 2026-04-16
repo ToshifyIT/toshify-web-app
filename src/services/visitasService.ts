@@ -214,34 +214,24 @@ export async function deleteVisita(id: string): Promise<void> {
 /**
  * Auto-actualiza estados de visitas según la hora actual:
  * - pendiente + hora_inicio ya pasó → en_curso
- * - pendiente/en_curso + hora_fin ya pasó → completada
- * No toca las canceladas (estado terminal manual).
- * Retorna las visitas con el estado ya corregido.
+ * La transición a "completada" es SOLO manual (Marcar Presente o cambio de estado
+ * en el detalle). Si pasó la hora de fin y nadie marcó nada, queda en en_curso
+ * hasta que un usuario decida (completada o no_asistió).
+ * No toca canceladas/completadas/no_asistio (estados terminales).
  */
 export async function autoUpdateEstados(visitas: VisitaCompleta[]): Promise<VisitaCompleta[]> {
   const now = new Date();
   const updates: { id: string; estado: VisitaEstado }[] = [];
 
   const result = visitas.map(v => {
-    // Solo auto-transicionar pendiente y en_curso
-    if (v.estado !== 'pendiente' && v.estado !== 'en_curso') return v;
+    // Solo auto-transicionar pendiente → en_curso
+    if (v.estado !== 'pendiente') return v;
 
     const inicio = new Date(v.fecha_hora);
-    const fin = new Date(inicio.getTime() + v.duracion_minutos * 60_000);
 
-    let nuevoEstado: VisitaEstado = v.estado as VisitaEstado;
-
-    if (now >= fin) {
-      // Ya pasó la hora de fin → completada
-      nuevoEstado = 'completada';
-    } else if (now >= inicio && v.estado === 'pendiente') {
-      // Ya empezó pero no terminó → en_curso
-      nuevoEstado = 'en_curso';
-    }
-
-    if (nuevoEstado !== v.estado) {
-      updates.push({ id: v.id, estado: nuevoEstado });
-      return { ...v, estado: nuevoEstado };
+    if (now >= inicio) {
+      updates.push({ id: v.id, estado: 'en_curso' as VisitaEstado });
+      return { ...v, estado: 'en_curso' as VisitaEstado };
     }
     return v;
   });
