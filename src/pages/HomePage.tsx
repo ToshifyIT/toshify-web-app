@@ -6,7 +6,7 @@ import {
   Menu, AlertCircle, RefreshCw, PanelLeftClose, PanelLeft,
   Car, Users, AlertTriangle, FileWarning, BarChart3, Receipt,
   Truck, Link2, Settings, CreditCard, Activity, Package,
-  Calendar, CalendarCheck, MapPin, Gauge, FileText, Shield, UserCog, List, ClipboardList, History, Compass, GraduationCap, Building2, ChevronRight, Check, Globe, Target
+  Calendar, CalendarCheck, MapPin, Gauge, FileText, Shield, UserCog, List, ClipboardList, History, Compass, GraduationCap, Building2, ChevronRight, Check, Globe, Target, UserPlus
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
@@ -67,6 +67,7 @@ const menuIcons: Record<string, LucideIcon> = {
   'registro-vencimientos': FileWarning,
   'visitas': CalendarCheck,
   'integraciones-tokens': Link2,
+  'leads': UserPlus,
 }
 
 // Función para obtener icono de un menú
@@ -221,6 +222,7 @@ const LazyPage = ({ children }: { children: ReactNode }) => (
 
 // Todas las páginas son lazy — el bundle inicial solo carga el shell de navegación
 const ConductoresPage = lazy(() => import('./conductores/ConductoresPage').then(m => ({ default: m.ConductoresPage })))
+const LeadsPage = lazy(() => import('./leads/LeadsPage').then(m => ({ default: m.LeadsPage })))
 const FacturacionPage = lazy(() => import('./facturacion/FacturacionPage').then(m => ({ default: m.FacturacionPage })))
 const IncidenciasPage = lazy(() => import('./incidencias/IncidenciasPage').then(m => ({ default: m.IncidenciasPage })))
 const ProgramacionPage = lazy(() => import('./onboarding/ProgramacionPage'))
@@ -1854,6 +1856,13 @@ export function HomePage() {
                 <ProtectedRoute menuName="conductores" action="view">
                   <LazyPage>
                     <ConductoresPage />
+                  </LazyPage>
+                </ProtectedRoute>
+              } />
+              <Route path="/leads" element={
+                <ProtectedRoute menuName="leads" action="view">
+                  <LazyPage>
+                    <LeadsPage />
                   </LazyPage>
                 </ProtectedRoute>
               } />
