@@ -274,6 +274,7 @@ export function VisitasCalendario({
   // --- Hover tooltip state (estilo Google Calendar) ---
   const [hoveredEvent, setHoveredEvent] = useState<VisitaCalendarEvent | null>(null);
   const [tooltipPos, setTooltipPos] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
+  const tooltipRef = useRef<HTMLDivElement | null>(null);
   const tooltipTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const handleEventMouseEnter = useCallback((event: VisitaCalendarEvent, e: React.MouseEvent) => {
@@ -350,13 +351,16 @@ export function VisitasCalendario({
         const v = hoveredEvent.visita;
         const estadoInfo = VISITA_ESTADOS[v.estado as VisitaEstado];
         const color = v.categoria_color || '#3b82f6';
-        const adjustedX = tooltipPos.x + 320 > window.innerWidth ? tooltipPos.x - 336 : tooltipPos.x;
-        const adjustedY = tooltipPos.y + 240 > window.innerHeight ? window.innerHeight - 250 : tooltipPos.y;
+        const tooltipHeight = tooltipRef.current?.offsetHeight || 300;
+        const tooltipWidth = 320;
+        const adjustedX = tooltipPos.x + tooltipWidth > window.innerWidth ? tooltipPos.x - tooltipWidth - 16 : tooltipPos.x;
+        const adjustedY = tooltipPos.y + tooltipHeight > window.innerHeight ? Math.max(8, window.innerHeight - tooltipHeight - 10) : tooltipPos.y;
         const horaArribo = v.hora_arribo
           ? new Date(v.hora_arribo).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Argentina/Buenos_Aires' })
           : null;
         return (
           <div
+            ref={tooltipRef}
             className="visita-hover-tooltip"
             style={{ left: adjustedX, top: adjustedY }}
             onMouseEnter={() => { if (tooltipTimeout.current) clearTimeout(tooltipTimeout.current); }}

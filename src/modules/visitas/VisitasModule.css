@@ -289,6 +289,7 @@
   position: fixed;
   z-index: 9999;
   width: 310px;
+  max-height: calc(100vh - 20px);
   background: var(--card-bg, #fff);
   border-radius: 10px;
   box-shadow: 0 10px 32px rgba(0, 0, 0, 0.2), 0 2px 8px rgba(0, 0, 0, 0.08);
