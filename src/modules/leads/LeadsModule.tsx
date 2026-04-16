@@ -687,7 +687,7 @@ export function LeadsModule() {
       size: 60,
       cell: ({ row }) => {
         const lead = row.original
-        const actions: Array<{ label: string; icon: React.ReactElement; onClick: () => void; variant?: string }> = [
+        const actions: Array<{ label: string; icon: React.ReactElement; onClick: () => void; variant?: 'default' | 'info' | 'success' | 'warning' | 'danger' }> = [
           { label: 'Ver detalle', icon: <Eye size={15} />, onClick: () => handleOpenDetails(lead) },
         ]
         if (canEdit) {
@@ -722,28 +722,24 @@ export function LeadsModule() {
 
   const externalFilters = useMemo(() => {
     if (!hasActiveFilters) return undefined
-    const chips: React.ReactNode[] = []
-    const addChips = (values: string[], label: string, setter: (v: string[]) => void) => {
+    const filters: Array<{ id: string; label: string; onClear: () => void }> = []
+    const addFilters = (values: string[], labelPrefix: string, setter: (v: string[]) => void) => {
       values.forEach(val => {
-        chips.push(
-          <div key={`${label}-${val}`} className="dt-active-filter-chip">
-            <span className="dt-chip-label">{label}:</span>
-            <span className="dt-chip-value">{val}</span>
-            <button className="dt-chip-remove" onClick={() => setter(values.filter(v => v !== val))} title="Quitar filtro">
-              <X size={12} />
-            </button>
-          </div>
-        )
+        filters.push({
+          id: `${labelPrefix}-${val}`,
+          label: `${labelPrefix}: ${val}`,
+          onClear: () => setter(values.filter(v => v !== val)),
+        })
       })
     }
-    addChips(nombreFilter, 'Candidato', setNombreFilter)
-    addChips(procesoFilter, 'Proceso', setProcesoFilter)
-    addChips(entrevistaFilter, 'Entrevista', setEntrevistaFilter)
-    addChips(zonaFilter, 'Zona', setZonaFilter)
-    addChips(turnoFilter, 'Turno', setTurnoFilter)
-    addChips(disponibilidadFilter, 'Disponibilidad', setDisponibilidadFilter)
-    addChips(fuenteFilter, 'Fuente', setFuenteFilter)
-    return <>{chips}</>
+    addFilters(nombreFilter, 'Candidato', setNombreFilter)
+    addFilters(procesoFilter, 'Proceso', setProcesoFilter)
+    addFilters(entrevistaFilter, 'Entrevista', setEntrevistaFilter)
+    addFilters(zonaFilter, 'Zona', setZonaFilter)
+    addFilters(turnoFilter, 'Turno', setTurnoFilter)
+    addFilters(disponibilidadFilter, 'Disponibilidad', setDisponibilidadFilter)
+    addFilters(fuenteFilter, 'Fuente', setFuenteFilter)
+    return filters
   }, [hasActiveFilters, nombreFilter, procesoFilter, entrevistaFilter, zonaFilter, turnoFilter, disponibilidadFilter, fuenteFilter])
 
   // ---------- RENDER ----------
