@@ -561,3 +561,38 @@
 .leads-module td:last-child {
   background: var(--bg-primary);
 }
+
+/* =====================================================
+   TOOLTIP INSTANTÁNEO PARA ZONA BADGE
+   ===================================================== */
+
+.lead-zona-badge[data-tooltip]:hover::after {
+  content: attr(data-tooltip);
+  position: absolute;
+  bottom: calc(100% + 6px);
+  left: 0;
+  background: #1F2937;
+  color: #FFFFFF;
+  font-size: 11px;
+  font-weight: 400;
+  padding: 6px 10px;
+  border-radius: 6px;
+  white-space: nowrap;
+  max-width: 320px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  z-index: 9999;
+  pointer-events: none;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+}
+
+.lead-zona-badge[data-tooltip]:hover::before {
+  content: '';
+  position: absolute;
+  bottom: calc(100% + 2px);
+  left: 12px;
+  border: 4px solid transparent;
+  border-top-color: #1F2937;
+  z-index: 9999;
+  pointer-events: none;
+}

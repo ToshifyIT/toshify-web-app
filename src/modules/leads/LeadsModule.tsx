@@ -2,8 +2,9 @@
 import { useState, useEffect, useMemo, useCallback } from 'react'
 import {
   Eye, Edit2, Trash2, Users, UserCheck, UserPlus, Clock, RefreshCw,
-  CheckCircle, XCircle, AlertTriangle, X, Download,
+  CheckCircle, XCircle, AlertTriangle, X, Download, MapPin, ExternalLink,
 } from 'lucide-react'
+import { GoogleMap, useJsApiLoader, Marker, Polygon } from '@react-google-maps/api'
 import { ActionsMenu } from '../../components/ui/ActionsMenu'
 import { supabase } from '../../lib/supabase'
 import { usePermissions } from '../../contexts/PermissionsContext'
@@ -17,6 +18,78 @@ import { LoadingOverlay } from '../../components/ui/LoadingOverlay'
 import { ExcelColumnFilter } from '../../components/ui/DataTable/ExcelColumnFilter'
 import './LeadsModule.css'
 import { LeadWizard } from './components/LeadWizard'
+
+// =====================================================
+// GOOGLE MAPS GEOCODING
+// =====================================================
+
+const GOOGLE_MAPS_API_KEY = import.meta.env.VITE_GOOGLE_MAPS_API_KEY || 'AIzaSyCCiqk9jWZghUq5rBtSyo6ZjLuMORblY-w'
+const GMAP_LIBRARIES: ('places')[] = ['places']
+
+const detailMapStyle = {
+  width: '100%',
+  height: '220px',
+  borderRadius: '8px',
+}
+
+function loadGoogleMapsAPI(): Promise<void> {
+  return new Promise((resolve, reject) => {
+    if ((window as any).google?.maps) {
+      resolve()
+      return
+    }
+    const existingScript = document.querySelector('script[src*="maps.googleapis.com"]')
+    if (existingScript) {
+      existingScript.addEventListener('load', () => resolve())
+      return
+    }
+    const script = document.createElement('script')
+    script.src = `https://maps.googleapis.com/maps/api/js?key=${GOOGLE_MAPS_API_KEY}&libraries=places`
+    script.async = true
+    script.onload = () => resolve()
+    script.onerror = () => reject(new Error('Error cargando Google Maps'))
+    document.head.appendChild(script)
+  })
+}
+
+function geocodificarDireccion(direccion: string): Promise<{ lat: number; lng: number } | null> {
+  return new Promise((resolve) => {
+    const geocoder = new (window as any).google.maps.Geocoder()
+    geocoder.geocode(
+      { address: direccion, region: 'ar' },
+      (results: any, status: string) => {
+        if (status === 'OK' && results && results[0]) {
+          const location = results[0].geometry.location
+          resolve({ lat: location.lat(), lng: location.lng() })
+        } else {
+          resolve(null)
+        }
+      }
+    )
+  })
+}
+
+// =====================================================
+// ZONA PELIGROSA – Ray casting algorithm
+// =====================================================
+
+interface ZonaPeligrosa {
+  id: string
+  nombre: string
+  poligono: { lat: number; lng: number }[]
+}
+
+function isPointInPolygon(point: { lat: number; lng: number }, polygon: { lat: number; lng: number }[]): boolean {
+  let inside = false
+  for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
+    const xi = polygon[i].lat, yi = polygon[i].lng
+    const xj = polygon[j].lat, yj = polygon[j].lng
+    const intersect = ((yi > point.lng) !== (yj > point.lng)) &&
+      (point.lat < (xj - xi) * (point.lng - yi) / (yj - yi) + xi)
+    if (intersect) inside = !inside
+  }
+  return inside
+}
 
 // =====================================================
 // HELPERS
@@ -135,6 +208,9 @@ export function LeadsModule() {
   const canEdit = canEditInMenu('leads')
   const canDelete = canDeleteInMenu('leads')
 
+  // Zonas peligrosas
+  const [zonasPeligrosas, setZonasPeligrosas] = useState<ZonaPeligrosa[]>([])
+
   // State principal
   const [leads, setLeads] = useState<Lead[]>([])
   const [loading, setLoading] = useState(true)
@@ -158,6 +234,7 @@ export function LeadsModule() {
   const [turnoFilter, setTurnoFilter] = useState<string[]>([])
   const [disponibilidadFilter, setDisponibilidadFilter] = useState<string[]>([])
   const [fuenteFilter, setFuenteFilter] = useState<string[]>([])
+  const [estadoFilter, setEstadoFilter] = useState<string[]>([])
   const [openFilterId, setOpenFilterId] = useState<string | null>(null)
 
   // Stat card filter
@@ -190,6 +267,77 @@ export function LeadsModule() {
   }, [aplicarFiltroSede])
 
   useEffect(() => { loadLeads() }, [loadLeads])
+
+  // ---------- GEOCODIFICAR LEADS SIN COORDENADAS ----------
+  const geocodificarLeadsSinCoordenadas = useCallback(async (leadsList: Lead[]) => {
+    const sinCoords = leadsList.filter(
+      l => l.direccion && (l.latitud == null || l.longitud == null)
+    )
+    if (sinCoords.length === 0) return
+
+    try {
+      await loadGoogleMapsAPI()
+    } catch {
+      return
+    }
+
+    let actualizado = false
+    for (const lead of sinCoords) {
+      try {
+        const coords = await geocodificarDireccion(lead.direccion || '')
+        if (coords) {
+          await supabase
+            .from('leads')
+            .update({ latitud: coords.lat, longitud: coords.lng })
+            .eq('id', lead.id)
+          actualizado = true
+        }
+      } catch {
+        // silently ignored
+      }
+    }
+
+    if (actualizado) {
+      loadLeads()
+    }
+  }, [loadLeads])
+
+  useEffect(() => {
+    if (leads.length > 0) {
+      geocodificarLeadsSinCoordenadas(leads)
+    }
+  // Solo correr cuando leads cambie de 0 a >0 (carga inicial)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [leads.length > 0])
+
+  // ---------- CARGAR ZONAS PELIGROSAS ----------
+  useEffect(() => {
+    async function loadZonas() {
+      const { data } = await supabase
+        .from('zonas_peligrosas')
+        .select('id, nombre, poligono')
+        .eq('activo', true)
+      if (data) setZonasPeligrosas(data as ZonaPeligrosa[])
+    }
+    loadZonas()
+  }, [])
+
+  // ---------- MAPA: lead_id -> nombre de zona peligrosa ----------
+  const leadsEnZona = useMemo(() => {
+    const map = new Map<string, string>()
+    if (zonasPeligrosas.length === 0) return map
+    for (const lead of leads) {
+      if (lead.latitud == null || lead.longitud == null) continue
+      const punto = { lat: lead.latitud, lng: lead.longitud }
+      for (const zona of zonasPeligrosas) {
+        if (zona.poligono && isPointInPolygon(punto, zona.poligono)) {
+          map.set(lead.id, zona.nombre)
+          break
+        }
+      }
+    }
+    return map
+  }, [leads, zonasPeligrosas])
 
   // ---------- STATS ----------
   const stats = useMemo(() => {
@@ -230,6 +378,10 @@ export function LeadsModule() {
 
   const uniqueNombres = useMemo(() =>
     [...new Set(leads.map(l => l.nombre_completo).filter(Boolean))].sort() as string[]
+  , [leads])
+
+  const uniqueEstados = useMemo(() =>
+    [...new Set(leads.map(l => l.estado_de_lead).filter(Boolean))].sort() as string[]
   , [leads])
 
   // ---------- FILTERED DATA ----------
@@ -273,9 +425,13 @@ export function LeadsModule() {
       const set = new Set(fuenteFilter)
       result = result.filter(l => set.has(l.fuente_de_lead || ''))
     }
+    if (estadoFilter.length > 0) {
+      const set = new Set(estadoFilter)
+      result = result.filter(l => set.has(l.estado_de_lead || ''))
+    }
 
     return result
-  }, [leads, activeStatCard, nombreFilter, procesoFilter, entrevistaFilter, zonaFilter, turnoFilter, disponibilidadFilter, fuenteFilter])
+  }, [leads, activeStatCard, nombreFilter, procesoFilter, entrevistaFilter, zonaFilter, turnoFilter, disponibilidadFilter, fuenteFilter, estadoFilter])
 
   // ---------- HANDLERS ----------
   function handleOpenDetails(lead: Lead) {
@@ -525,27 +681,106 @@ export function LeadsModule() {
         const nombre = row.original.nombre_completo || '-'
         const dni = row.original.dni || ''
         const phone = row.original.phone || ''
+        const direccion = row.original.direccion || ''
+        const zonaPeligrosa = leadsEnZona.get(row.original.id)
+        const enZonaPeligrosa = !!zonaPeligrosa
+        const tieneCoordenadas = row.original.latitud != null && row.original.longitud != null
+
         return (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-            <a
-              href={`/leads?id=${row.original.id}`}
-              onClick={(e) => {
-                if (!e.ctrlKey && !e.metaKey) {
-                  e.preventDefault()
-                  handleOpenDetails(row.original)
-                }
-              }}
-              style={{ fontWeight: 600, color: 'var(--color-primary)', textDecoration: 'none', fontSize: '13px' }}
-            >
-              {nombre}
-            </a>
-            <span style={{ fontSize: '11px', color: 'var(--text-tertiary)' }}>
-              {dni ? `DNI: ${dni}` : ''}{dni && phone ? ' · ' : ''}{phone ? phone : ''}
-            </span>
+          <div
+            title={enZonaPeligrosa ? `Zona peligrosa: ${zonaPeligrosa}` : tieneCoordenadas ? 'Fuera de zona peligrosa' : undefined}
+            style={{
+              background: enZonaPeligrosa ? '#FFF1F2' : undefined,
+              borderLeft: enZonaPeligrosa ? '3px solid #FF0033' : tieneCoordenadas ? '3px solid #22C55E' : undefined,
+              padding: '6px 8px',
+              borderRadius: '6px',
+            }}
+          >
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+              <a
+                href={`/leads?id=${row.original.id}`}
+                onClick={(e) => {
+                  if (!e.ctrlKey && !e.metaKey) {
+                    e.preventDefault()
+                    handleOpenDetails(row.original)
+                  }
+                }}
+                style={{ fontWeight: 600, color: enZonaPeligrosa ? '#BE123C' : 'var(--color-primary)', textDecoration: 'none', fontSize: '13px' }}
+              >
+                {nombre}
+              </a>
+              <span style={{ fontSize: '11px', color: 'var(--text-tertiary)' }}>
+                {dni ? `DNI: ${dni}` : ''}{dni && phone ? ' · ' : ''}{phone ? phone : ''}
+              </span>
+              {enZonaPeligrosa && (
+                <span
+                  className="lead-zona-badge"
+                  style={{
+                    fontSize: '9px',
+                    padding: '2px 6px',
+                    borderRadius: '4px',
+                    fontWeight: 600,
+                    marginTop: '2px',
+                    display: 'inline-block',
+                    background: '#FFE4E6',
+                    color: '#BE123C',
+                    width: 'fit-content',
+                    cursor: 'default',
+                    position: 'relative',
+                  }}
+                  data-tooltip={direccion || undefined}
+                >
+                  ⚠ Zona peligrosa: {zonaPeligrosa}
+                </span>
+              )}
+              {tieneCoordenadas && !enZonaPeligrosa && (
+                <span
+                  className="lead-zona-badge"
+                  style={{
+                    fontSize: '9px',
+                    padding: '2px 6px',
+                    borderRadius: '4px',
+                    fontWeight: 600,
+                    marginTop: '2px',
+                    display: 'inline-block',
+                    background: '#DCFCE7',
+                    color: '#16A34A',
+                    width: 'fit-content',
+                    cursor: 'default',
+                    position: 'relative',
+                  }}
+                  data-tooltip={direccion || undefined}
+                >
+                  ✓ Zona segura
+                </span>
+              )}
+            </div>
           </div>
         )
       },
-      size: 220,
+      size: 260,
+      enableSorting: true,
+    },
+    {
+      id: 'estado',
+      accessorFn: (row) => row.estado_de_lead || '-',
+      header: () => (
+        <ExcelColumnFilter
+          label="Estado"
+          options={uniqueEstados}
+          selectedValues={estadoFilter}
+          onSelectionChange={setEstadoFilter}
+          filterId="lead_estado"
+          openFilterId={openFilterId}
+          onOpenChange={setOpenFilterId}
+        />
+      ),
+      cell: ({ row }) => {
+        const estado = row.original.estado_de_lead
+        if (!estado) return <span style={{ color: 'var(--text-tertiary)' }}>-</span>
+        return <span className={`lead-estado-badge`}>{estado}</span>
+      },
+      size: 120,
       enableSorting: true,
     },
     {
@@ -655,24 +890,6 @@ export function LeadsModule() {
       enableSorting: true,
     },
     {
-      id: 'fuente',
-      accessorFn: (row) => row.fuente_de_lead || '-',
-      header: () => (
-        <ExcelColumnFilter
-          label="Fuente"
-          options={uniqueFuentes}
-          selectedValues={fuenteFilter}
-          onSelectionChange={setFuenteFilter}
-          filterId="lead_fuente"
-          openFilterId={openFilterId}
-          onOpenChange={setOpenFilterId}
-        />
-      ),
-      cell: ({ row }) => row.original.fuente_de_lead || '-',
-      size: 100,
-      enableSorting: true,
-    },
-    {
       id: 'fecha',
       accessorFn: (row) => row.created_at,
       header: 'Fecha',
@@ -703,14 +920,15 @@ export function LeadsModule() {
       },
     },
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  ], [uniqueNombres, nombreFilter, uniqueProcesos, procesoFilter, uniqueEntrevistas, entrevistaFilter, uniqueDisponibilidades, disponibilidadFilter, uniqueZonas, zonaFilter, uniqueTurnos, turnoFilter, uniqueFuentes, fuenteFilter, openFilterId, canEdit, canDelete])
+  ], [uniqueNombres, nombreFilter, uniqueEstados, estadoFilter, uniqueProcesos, procesoFilter, uniqueEntrevistas, entrevistaFilter, uniqueDisponibilidades, disponibilidadFilter, uniqueZonas, zonaFilter, uniqueTurnos, turnoFilter, uniqueFuentes, fuenteFilter, openFilterId, canEdit, canDelete, leadsEnZona])
 
   // ---------- EXTERNAL FILTERS (chips) ----------
-  const hasActiveFilters = nombreFilter.length > 0 || procesoFilter.length > 0 || entrevistaFilter.length > 0 ||
+  const hasActiveFilters = nombreFilter.length > 0 || estadoFilter.length > 0 || procesoFilter.length > 0 || entrevistaFilter.length > 0 ||
     zonaFilter.length > 0 || turnoFilter.length > 0 || disponibilidadFilter.length > 0 || fuenteFilter.length > 0
 
   function clearAllFilters() {
     setNombreFilter([])
+    setEstadoFilter([])
     setProcesoFilter([])
     setEntrevistaFilter([])
     setZonaFilter([])
@@ -926,6 +1144,8 @@ export function LeadsModule() {
                 lead={selectedLead}
                 onEdit={canEdit ? () => { setShowDetailsModal(false); handleOpenEdit(selectedLead) } : undefined}
                 onConvert={canEdit && selectedLead.proceso !== 'Convertido' ? () => { setShowDetailsModal(false); handleConvertir(selectedLead) } : undefined}
+                zonasPeligrosas={zonasPeligrosas}
+                enZonaPeligrosa={leadsEnZona.get(selectedLead.id) || null}
               />
             </div>
           </div>
@@ -943,9 +1163,11 @@ interface LeadDetailViewProps {
   lead: Lead
   onEdit?: () => void
   onConvert?: () => void
+  zonasPeligrosas?: ZonaPeligrosa[]
+  enZonaPeligrosa?: string | null
 }
 
-function LeadDetailView({ lead, onEdit, onConvert }: LeadDetailViewProps) {
+function LeadDetailView({ lead, onEdit, onConvert, zonasPeligrosas = [], enZonaPeligrosa }: LeadDetailViewProps) {
   return (
     <div className="lead-detail">
       <div className="lead-detail-header">
@@ -1029,6 +1251,20 @@ function LeadDetailView({ lead, onEdit, onConvert }: LeadDetailViewProps) {
             <span className="lead-detail-item-label">Dirección</span>
             <span className="lead-detail-item-value" style={{ fontSize: '12px' }}>{lead.direccion || '-'}</span>
           </div>
+          {lead.latitud != null && lead.longitud != null && (
+            <LeadDetailMap
+              lat={lead.latitud}
+              lng={lead.longitud}
+              zonasPeligrosas={zonasPeligrosas}
+              enZonaPeligrosa={!!enZonaPeligrosa}
+              nombreZona={enZonaPeligrosa || undefined}
+            />
+          )}
+          {lead.direccion && lead.latitud == null && (
+            <div style={{ marginTop: '8px', padding: '8px 12px', background: '#FEF3C7', borderRadius: '6px', fontSize: '11px', color: '#92400E', display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <MapPin size={12} /> Geocodificando dirección...
+            </div>
+          )}
         </div>
 
         {/* Proceso */}
@@ -1113,6 +1349,101 @@ function LeadDetailView({ lead, onEdit, onConvert }: LeadDetailViewProps) {
           </p>
         </div>
       )}
+    </div>
+  )
+}
+
+// =====================================================
+// LEAD DETAIL MAP (mapa interactivo con zonas peligrosas)
+// =====================================================
+
+interface LeadDetailMapProps {
+  lat: number
+  lng: number
+  zonasPeligrosas: ZonaPeligrosa[]
+  enZonaPeligrosa: boolean
+  nombreZona?: string
+}
+
+function LeadDetailMap({ lat, lng, zonasPeligrosas, enZonaPeligrosa, nombreZona }: LeadDetailMapProps) {
+  const { isLoaded } = useJsApiLoader({
+    googleMapsApiKey: GOOGLE_MAPS_API_KEY,
+    libraries: GMAP_LIBRARIES,
+  })
+
+  if (!isLoaded) {
+    return (
+      <div style={{ marginTop: '8px', height: '220px', borderRadius: '8px', border: '1px solid #e5e7eb', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#f9fafb' }}>
+        <span style={{ fontSize: '12px', color: 'var(--text-tertiary)' }}>Cargando mapa...</span>
+      </div>
+    )
+  }
+
+  return (
+    <div style={{ marginTop: '8px' }}>
+      {enZonaPeligrosa && nombreZona && (
+        <div style={{ marginBottom: '6px', padding: '6px 10px', background: '#FFF1F2', borderRadius: '6px', border: '1px solid #FECDD3', fontSize: '12px', color: '#BE123C', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '6px' }}>
+          <AlertTriangle size={14} /> Zona Peligrosa: {nombreZona}
+        </div>
+      )}
+      <div style={{ borderRadius: '8px', overflow: 'hidden', border: `2px solid ${enZonaPeligrosa ? '#FF0033' : '#22C55E'}` }}>
+        <GoogleMap
+          mapContainerStyle={detailMapStyle}
+          center={{ lat, lng }}
+          zoom={14}
+          options={{
+            disableDefaultUI: true,
+            zoomControl: true,
+            mapTypeControl: false,
+            streetViewControl: false,
+            fullscreenControl: false,
+          }}
+        >
+          <Marker
+            position={{ lat, lng }}
+            icon={{
+              path: 0, // google.maps.SymbolPath.CIRCLE
+              scale: 10,
+              fillColor: enZonaPeligrosa ? '#FF0033' : '#22C55E',
+              fillOpacity: 1,
+              strokeColor: '#FFFFFF',
+              strokeWeight: 3,
+            }}
+            title={enZonaPeligrosa ? 'Zona Peligrosa' : 'Ubicación del lead'}
+          />
+          {zonasPeligrosas.map(zona => (
+            zona.poligono && (
+              <Polygon
+                key={zona.id}
+                paths={zona.poligono.map(p => ({ lat: p.lat, lng: p.lng }))}
+                options={{
+                  fillColor: '#FF0033',
+                  fillOpacity: 0.15,
+                  strokeColor: '#FF0033',
+                  strokeOpacity: 0.6,
+                  strokeWeight: 2,
+                }}
+              />
+            )
+          ))}
+        </GoogleMap>
+      </div>
+      <div style={{ marginTop: '6px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        {!enZonaPeligrosa && (
+          <span style={{ fontSize: '11px', color: '#16A34A', fontWeight: 500 }}>Fuera de zona peligrosa</span>
+        )}
+        <a
+          href={`https://www.google.com/maps?q=${lat},${lng}`}
+          target="_blank"
+          rel="noopener noreferrer"
+          style={{
+            display: 'inline-flex', alignItems: 'center', gap: '4px', marginLeft: 'auto',
+            fontSize: '12px', color: 'var(--color-primary)', textDecoration: 'none', fontWeight: 500,
+          }}
+        >
+          <ExternalLink size={12} /> Abrir en Google Maps
+        </a>
+      </div>
     </div>
   )
 }
