@@ -375,6 +375,80 @@ export function VehicleManagement() {
     try {
       const { data: { user } } = await supabase.auth.getUser()
 
+      // Verificar si existe una patente soft-deleted con la misma patente
+      const { data: vehiculoEliminado } = await (supabase as any)
+        .from('vehiculos')
+        .select('id, patente, marca, modelo, deleted_at')
+        .eq('patente', formData.patente.toUpperCase())
+        .not('deleted_at', 'is', null)
+        .maybeSingle()
+
+      if (vehiculoEliminado) {
+        setSaving(false)
+        const resultado = await Swal.fire({
+          icon: 'warning',
+          title: 'Patente encontrada',
+          html: `
+            <p>La patente <strong>${formData.patente.toUpperCase()}</strong> fue eliminada anteriormente.</p>
+            <div style="text-align:left; padding:12px; background:#f9fafb; border-radius:8px; margin-top:12px;">
+              <p style="margin:4px 0;"><strong>Marca:</strong> ${vehiculoEliminado.marca || '-'}</p>
+              <p style="margin:4px 0;"><strong>Modelo:</strong> ${vehiculoEliminado.modelo || '-'}</p>
+              <p style="margin:4px 0;"><strong>Eliminado el:</strong> ${new Date(vehiculoEliminado.deleted_at).toLocaleDateString('es-AR')}</p>
+            </div>
+            <p style="margin-top:12px;">¿Desea restaurar este vehículo y actualizar sus datos con los que ingresó?</p>
+          `,
+          showCancelButton: true,
+          confirmButtonText: 'Restaurar y actualizar',
+          cancelButtonText: 'Cancelar',
+          confirmButtonColor: '#16a34a',
+        })
+
+        if (!resultado.isConfirmed) return
+        setSaving(true)
+
+        // Restaurar: quitar deleted_at y actualizar con los nuevos datos
+        const defaultEstadoIdRestore = vehiculosEstados.find((e: VehiculoEstado) => e.codigo === 'PKG_ON_BASE')?.id || null
+        const { error: restoreError } = await supabase
+          .from('vehiculos')
+          .update({
+            deleted_at: null,
+            marca: formData.marca || null,
+            modelo: formData.modelo || null,
+            anio: formData.anio || null,
+            color: formData.color || null,
+            tipo_vehiculo: formData.tipo_vehiculo || null,
+            tipo_combustible: formData.tipo_combustible || null,
+            tipo_gps: formData.tipo_gps || null,
+            gps_uss: formData.gps_uss,
+            numero_motor: formData.numero_motor || null,
+            numero_chasis: formData.numero_chasis || null,
+            provisoria: formData.provisoria || null,
+            estado_id: formData.estado_id || defaultEstadoIdRestore,
+            kilometraje_actual: formData.kilometraje_actual,
+            fecha_adquisicion: formData.fecha_adquisicion || null,
+            fecha_ulti_inspeccion: formData.fecha_ulti_inspeccion || null,
+            fecha_prox_inspeccion: formData.fecha_prox_inspeccion || null,
+            seguro_numero: formData.seguro_numero || null,
+            seguro_vigencia: formData.seguro_vigencia || null,
+            titular: formData.titular || null,
+            notas: formData.notas || null,
+            gnc: formData.gnc || false,
+            telepase: formData.telepase || false,
+            url_documentacion: formData.url_documentacion || null,
+            sede_id: formData.sede_id,
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', vehiculoEliminado.id)
+
+        if (restoreError) throw restoreError
+
+        showSuccess('Vehículo restaurado', 'El vehículo fue restaurado y sus datos actualizados.')
+        setShowCreateModal(false)
+        resetForm()
+        await loadVehiculos(true)
+        return
+      }
+
       // Estado por defecto: PKG_ON_BASE si no se seleccionó otro
       const defaultEstadoId = vehiculosEstados.find((e: VehiculoEstado) => e.codigo === 'PKG_ON_BASE')?.id || null
 

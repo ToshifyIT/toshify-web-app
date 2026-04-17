@@ -1653,7 +1653,7 @@
   display: flex;
   flex-direction: column;
   gap: 8px;
-  max-height: 220px;
+  max-height: 280px;
   overflow-y: auto;
   padding-right: 4px;
 }
@@ -1811,4 +1811,57 @@
 .dt-btn-action.dt-btn-purple:hover {
   background: #f5f3ff;
   color: #7c3aed;
+}
+
+/* =====================================================
+   AUTOCOMPLETE SUGERENCIAS VISITANTES
+   ===================================================== */
+
+.visitante-sugerencias-dropdown {
+  background: #FFFFFF;
+  border: 1px solid #E5E7EB;
+  border-radius: 8px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
+  z-index: 99999;
+  max-height: 240px;
+  overflow-y: auto;
+}
+
+.sugerencia-grupo-header {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: #6B7280;
+  padding: 8px 12px 4px;
+  background: #F9FAFB;
+  border-bottom: 1px solid #F3F4F6;
+  position: sticky;
+  top: 0;
+}
+
+.sugerencia-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  cursor: pointer;
+  transition: background 0.1s;
+}
+
+.sugerencia-item:hover {
+  background: #F3F4F6;
+}
+
+.sugerencia-nombre {
+  font-size: 13px;
+  font-weight: 500;
+  color: #111827;
+}
+
+.sugerencia-dni {
+  font-size: 11px;
+  color: #9CA3AF;
+  margin-left: 8px;
+  flex-shrink: 0;
 }

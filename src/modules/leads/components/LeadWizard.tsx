@@ -2,6 +2,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { useState } from 'react'
 import { Check, ChevronLeft, ChevronRight } from 'lucide-react'
+import { AddressAutocomplete } from '../../../components/ui/AddressAutocomplete'
 import type { LeadFormData } from '../../../types/leads.types'
 
 interface LeadWizardProps {
@@ -212,11 +213,14 @@ export function LeadWizard({ formData, setFormData, onSave, onCancel, saving = f
             <div className="lead-wizard-form-group full-width">
               <div className="lead-wizard-field">
                 <label>Dirección</label>
-                <input
-                  type="text"
+                <AddressAutocomplete
                   value={formData.direccion || ''}
-                  onChange={e => updateField('direccion', e.target.value)}
-                  placeholder="Calle, número, localidad"
+                  onChange={(address, lat, lng) => {
+                    updateField('direccion', address)
+                    if (lat !== undefined) updateField('latitud', lat)
+                    if (lng !== undefined) updateField('longitud', lng)
+                  }}
+                  placeholder="Buscar dirección..."
                 />
               </div>
             </div>

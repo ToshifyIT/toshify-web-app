@@ -5,9 +5,12 @@
 // Auto-asigna anfitrión según categoría+motivo (excepto Directivo)
 // ============================================================
 
-import { useState, useEffect, useMemo, useCallback } from 'react';
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { X, Plus, Trash2, User } from 'lucide-react';
 import Swal from 'sweetalert2';
+import { supabase } from '../../../lib/supabase';
+import { useSede } from '../../../contexts/SedeContext';
 import type {
   VisitaCategoria,
   VisitaMotivo,
@@ -70,6 +73,14 @@ const VISITANTES_SEPARATOR = '; ';
 interface VisitanteEntry {
   nombre: string;
   dni: string;
+}
+
+interface SugerenciaPersona {
+  tipo: 'lead' | 'conductor';
+  nombre: string;
+  dni: string;
+  conductorId?: string;
+  patenteAsignada?: string;
 }
 
 interface VisitasFormModalProps {
@@ -166,6 +177,201 @@ export function VisitasFormModal({
   const [errors, setErrors] = useState<Partial<Record<keyof VisitaFormData, string>>>({});
   const [visitantes, setVisitantes] = useState<VisitanteEntry[]>([{ nombre: '', dni: '' }]);
 
+  // Autocomplete para visitantes (Inducción)
+  const { aplicarFiltroSede } = useSede();
+  const [sugerencias, setSugerencias] = useState<SugerenciaPersona[]>([]);
+  const [activeDropdown, setActiveDropdown] = useState<number | null>(null);
+  const [dropdownPos, setDropdownPos] = useState<{ top: number; left: number; width: number }>({ top: 0, left: 0, width: 0 });
+  const inputRefs = useRef<Map<number, HTMLInputElement>>(new Map());
+  const dropdownRef = useRef<HTMLDivElement | null>(null);
+  const singleInputRef = useRef<HTMLInputElement | null>(null);
+  const [singleDropdownOpen, setSingleDropdownOpen] = useState(false);
+  const [singleDropdownPos, setSingleDropdownPos] = useState<{ top: number; left: number; width: number }>({ top: 0, left: 0, width: 0 });
+  const [patenteConductoresMap, setPatenteConductoresMap] = useState<Map<string, { nombre: string; dni: string }[]>>(new Map());
+
+  // Cargar leads + conductores para autocomplete cuando es Inducción
+  useEffect(() => {
+    async function loadSugerencias() {
+      const personas: SugerenciaPersona[] = [];
+
+      // Leads
+      let queryLeads = supabase
+        .from('leads')
+        .select('nombre_completo, dni')
+        .order('nombre_completo');
+      queryLeads = aplicarFiltroSede(queryLeads, 'sede_id');
+      const { data: leads } = await queryLeads;
+      if (leads) {
+        for (const l of leads) {
+          if (l.nombre_completo) {
+            personas.push({ tipo: 'lead', nombre: l.nombre_completo, dni: l.dni || '' });
+          }
+        }
+      }
+
+      // Conductores
+      let queryCond = supabase
+        .from('conductores')
+        .select('id, nombres, apellidos, numero_dni')
+        .order('apellidos');
+      queryCond = aplicarFiltroSede(queryCond, 'sede_id');
+      const { data: conductores } = await queryCond;
+
+      // Mapear conductor -> patente de asignación activa
+      const conductorPatenteMap = new Map<string, string>();
+      if (conductores && conductores.length > 0) {
+        // 1. Obtener asignaciones activas con sus conductores
+        const { data: asigActivas } = await supabase
+          .from('asignaciones')
+          .select('vehiculo_id, asignaciones_conductores(conductor_id)')
+          .eq('estado', 'activa');
+
+        if (asigActivas && asigActivas.length > 0) {
+          // 2. Obtener patentes de los vehiculos en esas asignaciones
+          const vehiculoIds = [...new Set(asigActivas.map((a: any) => a.vehiculo_id).filter(Boolean))];
+          const { data: vehiculos } = await supabase
+            .from('vehiculos')
+            .select('id, patente')
+            .in('id', vehiculoIds);
+
+          const vehiculoPatenteMap = new Map<string, string>();
+          if (vehiculos) {
+            for (const v of vehiculos) {
+              vehiculoPatenteMap.set(v.id, v.patente);
+            }
+          }
+
+          // 3. Mapear conductor_id -> patente
+          for (const asig of asigActivas as any[]) {
+            const patente = vehiculoPatenteMap.get(asig.vehiculo_id);
+            if (patente && asig.asignaciones_conductores) {
+              for (const ac of asig.asignaciones_conductores) {
+                conductorPatenteMap.set(ac.conductor_id, patente);
+              }
+            }
+          }
+        }
+      }
+
+      // Construir mapa conductor_id -> { nombre, dni }
+      const conductorInfoMap = new Map<string, { nombre: string; dni: string }>();
+      if (conductores) {
+        for (const c of conductores as any[]) {
+          const nombre = `${c.apellidos || ''} ${c.nombres || ''}`.trim();
+          if (nombre) {
+            conductorInfoMap.set(c.id, { nombre, dni: c.numero_dni || '' });
+            personas.push({
+              tipo: 'conductor',
+              nombre,
+              dni: c.numero_dni || '',
+              conductorId: c.id,
+              patenteAsignada: conductorPatenteMap.get(c.id) || '',
+            });
+          }
+        }
+      }
+
+      // Mapa inverso: patente -> conductores asignados (para búsqueda instantánea)
+      const patenteMap = new Map<string, { nombre: string; dni: string }[]>();
+      for (const [conductorId, patente] of conductorPatenteMap.entries()) {
+        const info = conductorInfoMap.get(conductorId);
+        if (info) {
+          const arr = patenteMap.get(patente) || [];
+          arr.push(info);
+          patenteMap.set(patente, arr);
+        }
+      }
+      setPatenteConductoresMap(patenteMap);
+
+      setSugerencias(personas);
+    }
+    loadSugerencias();
+  }, [aplicarFiltroSede]);
+
+  // Cerrar dropdown al hacer click afuera
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
+        setActiveDropdown(null);
+        setSingleDropdownOpen(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  // Posicionar dropdown debajo del input activo
+  const updateDropdownPos = useCallback((index: number) => {
+    const input = inputRefs.current.get(index);
+    if (input) {
+      const rect = input.getBoundingClientRect();
+      setDropdownPos({ top: rect.bottom + 4, left: rect.left, width: rect.width });
+    }
+  }, []);
+
+  // Filtrar sugerencias según lo que el usuario escribió
+  const getSugerenciasFiltradas = useCallback((query: string, soloConductores = false) => {
+    if (!query || query.length < 1) return [];
+    const q = query.toLowerCase();
+    const base = soloConductores ? sugerencias.filter(s => s.tipo === 'conductor') : sugerencias;
+    return base.filter(s => s.nombre.toLowerCase().includes(q) || s.dni.includes(q));
+  }, [sugerencias]);
+
+  // Búsqueda inversa: patente -> conductor(es) asignado(s) (instantánea desde mapa local)
+  const buscarConductorPorPatente = useCallback(async (patente: string) => {
+    if (!patente || patente.length < 6) return;
+    // No sobreescribir si ya hay un visitante ingresado
+    if (formData.nombre_visitante.trim()) return;
+
+    const conductoresInfo = patenteConductoresMap.get(patente.toUpperCase());
+    if (!conductoresInfo || conductoresInfo.length === 0) return;
+
+    if (conductoresInfo.length === 1) {
+      setFormData((prev) => ({
+        ...prev,
+        nombre_visitante: conductoresInfo[0].nombre,
+        dni_visitante: conductoresInfo[0].dni,
+      }));
+    } else {
+      const htmlList = conductoresInfo
+        .map((c, i) =>
+          `<div style="padding:10px 14px;border:1px solid #E5E7EB;border-radius:8px;margin-bottom:8px;cursor:pointer;transition:background 0.15s;"
+                onmouseover="this.style.background='#F3F4F6'" onmouseout="this.style.background='#fff'"
+                onclick="document.querySelector('#swal-conductor-selected').value='${i}';document.querySelector('.swal2-confirm').click()">
+            <div style="font-weight:600;font-size:14px;">${c.nombre}</div>
+            <div style="font-size:12px;color:#6B7280;">DNI: ${c.dni || 'Sin DNI'}</div>
+          </div>`
+        )
+        .join('');
+
+      const { isConfirmed, value } = await Swal.fire({
+        title: 'Seleccionar conductor',
+        html: `
+          <p style="font-size:13px;color:#6B7280;margin-bottom:12px;">La patente <strong>${patente}</strong> tiene ${conductoresInfo.length} conductores asignados:</p>
+          ${htmlList}
+          <input type="hidden" id="swal-conductor-selected" value="0" />
+        `,
+        showCancelButton: true,
+        cancelButtonText: 'Cancelar',
+        confirmButtonText: 'Seleccionar',
+        confirmButtonColor: '#ff0033',
+        preConfirm: () => {
+          const el = document.querySelector('#swal-conductor-selected') as HTMLInputElement;
+          return parseInt(el?.value || '0', 10);
+        },
+      });
+
+      if (isConfirmed && value !== undefined) {
+        const selected = conductoresInfo[value];
+        setFormData((prev) => ({
+          ...prev,
+          nombre_visitante: selected.nombre,
+          dni_visitante: selected.dni,
+        }));
+      }
+    }
+  }, [formData.nombre_visitante, patenteConductoresMap]);
+
   // Prefill on open
   useEffect(() => {
     if (mode === 'edit' && visita) {
@@ -228,6 +434,11 @@ export function VisitasFormModal({
     return catNombre === 'inducción' && motNombre === 'inducción';
   }, [categoriaSeleccionada, motivoSeleccionado]);
 
+  const esSiniestrosOLogistica = useMemo(() => {
+    const catNombre = categoriaSeleccionada?.nombre?.trim().toLowerCase();
+    return catNombre === 'siniestros' || catNombre === 'logística' || catNombre === 'logistica';
+  }, [categoriaSeleccionada]);
+
   // Anfitriones filtrados: para Directivo solo Josué/Sara, para el resto todos
   const anfitrionesDisponibles = useMemo(() => {
     if (esDirectivo) {
@@ -286,6 +497,9 @@ export function VisitasFormModal({
       categoria_id: categoriaId,
       motivo_id: '',
       atendedor_id: '', // Se re-asigna via useEffect
+      nombre_visitante: '',
+      dni_visitante: '',
+      patente: '',
       duracion_minutos: cat?.duracion_default ?? 30,
     }));
     setVisitantes([{ nombre: '', dni: '' }]);
@@ -562,10 +776,20 @@ export function VisitasFormModal({
                     <div className="visitante-fields">
                       <input
                         type="text"
+                        ref={(el) => { if (el) inputRefs.current.set(index, el); }}
                         value={v.nombre}
-                        onChange={(e) => handleVisitanteChange(index, 'nombre', e.target.value)}
+                        onChange={(e) => {
+                          handleVisitanteChange(index, 'nombre', e.target.value);
+                          setActiveDropdown(index);
+                          updateDropdownPos(index);
+                        }}
+                        onFocus={() => {
+                          setActiveDropdown(index);
+                          updateDropdownPos(index);
+                        }}
                         placeholder={`Nombre completo ${index + 1}`}
                         className="visitante-nombre"
+                        autoComplete="off"
                       />
                       <input
                         type="text"
@@ -588,20 +812,100 @@ export function VisitasFormModal({
                   </div>
                 ))}
               </div>
+              {activeDropdown !== null && (() => {
+                const filtradas = getSugerenciasFiltradas(visitantes[activeDropdown]?.nombre || '');
+                const leadsF = filtradas.filter(s => s.tipo === 'lead');
+                const conductoresF = filtradas.filter(s => s.tipo === 'conductor');
+                if (filtradas.length === 0) return null;
+                return createPortal(
+                  <div
+                    ref={dropdownRef}
+                    className="visitante-sugerencias-dropdown"
+                    style={{
+                      position: 'fixed',
+                      top: dropdownPos.top,
+                      left: dropdownPos.left,
+                      width: dropdownPos.width,
+                    }}
+                  >
+                    {leadsF.length > 0 && (
+                      <>
+                        <div className="sugerencia-grupo-header">Leads</div>
+                        {leadsF.map((s, i) => (
+                          <div
+                            key={`lead-${i}`}
+                            className="sugerencia-item"
+                            onMouseDown={(e) => {
+                              e.preventDefault();
+                              handleVisitanteChange(activeDropdown, 'nombre', s.nombre);
+                              handleVisitanteChange(activeDropdown, 'dni', s.dni);
+                              setActiveDropdown(null);
+                            }}
+                          >
+                            <span className="sugerencia-nombre">{s.nombre}</span>
+                            {s.dni && <span className="sugerencia-dni">DNI: {s.dni}</span>}
+                          </div>
+                        ))}
+                      </>
+                    )}
+                    {conductoresF.length > 0 && (
+                      <>
+                        <div className="sugerencia-grupo-header">Conductores</div>
+                        {conductoresF.map((s, i) => (
+                          <div
+                            key={`cond-${i}`}
+                            className="sugerencia-item"
+                            onMouseDown={(e) => {
+                              e.preventDefault();
+                              handleVisitanteChange(activeDropdown, 'nombre', s.nombre);
+                              handleVisitanteChange(activeDropdown, 'dni', s.dni);
+                              setActiveDropdown(null);
+                            }}
+                          >
+                            <span className="sugerencia-nombre">{s.nombre}</span>
+                            {s.dni && <span className="sugerencia-dni">DNI: {s.dni}</span>}
+                          </div>
+                        ))}
+                      </>
+                    )}
+                  </div>,
+                  document.body
+                );
+              })()}
               <span className="visitantes-count">
                 {visitantes.filter((v) => v.nombre.trim()).length} visitante(s)
               </span>
             </div>
           ) : (
             <div className="vf-visitante-row">
-              <div className="form-group vf-visitante-nombre">
+              <div className="form-group vf-visitante-nombre" style={{ position: 'relative' }}>
                 <label className="vf-label-sm">Visitante <span className="required">*</span></label>
                 <input
                   type="text"
+                  ref={esSiniestrosOLogistica ? singleInputRef : undefined}
                   value={formData.nombre_visitante}
-                  onChange={(e) => handleChange('nombre_visitante', e.target.value)}
+                  onChange={(e) => {
+                    handleChange('nombre_visitante', e.target.value);
+                    if (esSiniestrosOLogistica) {
+                      setSingleDropdownOpen(true);
+                      if (singleInputRef.current) {
+                        const rect = singleInputRef.current.getBoundingClientRect();
+                        setSingleDropdownPos({ top: rect.bottom + 4, left: rect.left, width: rect.width });
+                      }
+                    }
+                  }}
+                  onFocus={() => {
+                    if (esSiniestrosOLogistica && formData.nombre_visitante.length >= 1) {
+                      setSingleDropdownOpen(true);
+                      if (singleInputRef.current) {
+                        const rect = singleInputRef.current.getBoundingClientRect();
+                        setSingleDropdownPos({ top: rect.bottom + 4, left: rect.left, width: rect.width });
+                      }
+                    }
+                  }}
                   className={errors.nombre_visitante ? 'input-error' : ''}
                   placeholder="Nombre completo"
+                  autoComplete="off"
                 />
                 {errors.nombre_visitante && <span className="error-message">{errors.nombre_visitante}</span>}
               </div>
@@ -622,6 +926,19 @@ export function VisitasFormModal({
                     type="text"
                     value={formData.patente}
                     onChange={(e) => handleChange('patente', e.target.value.toUpperCase())}
+                    onBlur={(e) => {
+                      if (esSiniestrosOLogistica) {
+                        buscarConductorPorPatente(e.target.value);
+                      }
+                    }}
+                    onPaste={(e) => {
+                      e.preventDefault();
+                      const pasted = e.clipboardData.getData('text').trim().toUpperCase();
+                      handleChange('patente', pasted);
+                      if (esSiniestrosOLogistica && pasted.length >= 6) {
+                        setTimeout(() => buscarConductorPorPatente(pasted), 0);
+                      }
+                    }}
                     className={errors.patente ? 'input-error' : ''}
                     placeholder="AB123CD"
                     style={{ textTransform: 'uppercase', letterSpacing: '1px' }}
@@ -629,6 +946,43 @@ export function VisitasFormModal({
                   {errors.patente && <span className="error-message">{errors.patente}</span>}
                 </div>
               )}
+              {/* Dropdown autocomplete conductores para Siniestros/Logística */}
+              {esSiniestrosOLogistica && singleDropdownOpen && (() => {
+                const filtradas = getSugerenciasFiltradas(formData.nombre_visitante, true);
+                if (filtradas.length === 0) return null;
+                return createPortal(
+                  <div
+                    ref={dropdownRef}
+                    className="visitante-sugerencias-dropdown"
+                    style={{
+                      position: 'fixed',
+                      top: singleDropdownPos.top,
+                      left: singleDropdownPos.left,
+                      width: singleDropdownPos.width,
+                    }}
+                  >
+                    <div className="sugerencia-grupo-header">Conductores</div>
+                    {filtradas.map((s, i) => (
+                      <div
+                        key={`cond-${i}`}
+                        className="sugerencia-item"
+                        onMouseDown={(e) => {
+                          e.preventDefault();
+                          handleChange('nombre_visitante', s.nombre);
+                          handleChange('dni_visitante', s.dni);
+                          handleChange('patente', s.patenteAsignada || '');
+                          setSingleDropdownOpen(false);
+                        }}
+                      >
+                        <span className="sugerencia-nombre">{s.nombre}</span>
+                        {s.dni && <span className="sugerencia-dni">DNI: {s.dni}</span>}
+                        {s.patenteAsignada && <span className="sugerencia-dni" style={{ color: '#059669', fontWeight: 600 }}>{s.patenteAsignada}</span>}
+                      </div>
+                    ))}
+                  </div>,
+                  document.body
+                );
+              })()}
             </div>
           )}
 
