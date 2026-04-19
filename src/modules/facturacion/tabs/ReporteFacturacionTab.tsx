@@ -142,9 +142,12 @@ function tieneGncEnFecha(
     if (h.fecha <= fechaStr) { ultimoEvento = h; break }
   }
   if (!ultimoEvento) {
-    // Antes del primer evento del historial → usar boolean actual del vehículo
-    // (no asumimos que antes del historial no tenía GNC: el historial puede estar incompleto)
-    return gncActual
+    // fecha es ANTES del primer evento del historial.
+    // historial viene ordenado DESC por fecha → último elemento es el más antiguo.
+    const primerEvento = historial[historial.length - 1]
+    // Si el primer evento fue una instalación, antes de esa fecha el GNC no existía.
+    // Si fue una desinstalación, significa que antes tenía GNC.
+    return primerEvento.accion !== 'instalacion'
   }
   if (ultimoEvento.accion === 'desinstalacion') return false
   // accion = 'instalacion': aplicar regla según modalidad

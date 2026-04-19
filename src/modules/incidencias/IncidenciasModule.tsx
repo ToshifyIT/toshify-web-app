@@ -4661,9 +4661,13 @@ function IncidenciaForm({ formData, setFormData, estados, vehiculos, conductores
                       if (ultimo.accion === 'desinstalacion') tieneGnc = false
                       else if (modalidadGnc === 'TURNO_NOCTURNO') tieneGnc = fechaInc >= ultimo.fecha
                       else tieneGnc = fechaInc > ultimo.fecha
+                    } else {
+                      // fechaInc < primer evento del historial. gncHistorial viene desc;
+                      // el primer evento cronológico está al final del array.
+                      const primerEvento = gncHistorial[gncHistorial.length - 1]
+                      // Instalación → antes no había GNC. Desinstalación → tenía antes.
+                      tieneGnc = primerEvento.accion !== 'instalacion'
                     }
-                    // Si no hay evento anterior a fechaInc, dejamos gncActual como fallback
-                    // (el historial puede estar incompleto — no asumimos ausencia de GNC)
                   }
                   // Sin historial → usar gncActual tal cual (fuente de verdad mientras
                   // no se cargue historial retroactivo)
