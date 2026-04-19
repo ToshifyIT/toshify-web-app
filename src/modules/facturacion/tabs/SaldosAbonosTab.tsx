@@ -2402,7 +2402,7 @@ export function SaldosAbonosTab() {
                           const pend = r.saldo_pendiente || 0
                           const tipo = r.tipo_movimiento || 'regularizado'
                           const tipoLabel: Record<string, string> = {
-                            regularizado: 'Regularizado',
+                            regularizado: 'Facturación',
                             pago_cabify: 'Pago Cabify',
                             pago: 'Pago',
                             pago_manual: 'Pago Manual',
@@ -2413,7 +2413,7 @@ export function SaldosAbonosTab() {
                             cargo: 'Cargo',
                             abono: 'Abono',
                             eliminacion_saldo: 'Elim. Saldo',
-                            importacion: 'Importacion',
+                            importacion: 'Importación',
                           }
                           const montoMov = r.monto_movimiento || 0
                           const fecha = r.created_at ? new Date(r.created_at).toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: '2-digit' }) : '-'
