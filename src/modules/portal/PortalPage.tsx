@@ -171,6 +171,7 @@ export function PortalPage() {
   const [facturas, setFacturas] = useState<PortalFacturacion[]>([])
   const [selectedFactura, setSelectedFactura] = useState<PortalFacturacion | null>(null)
   const [detalleItems, setDetalleItems] = useState<PortalDetalle[]>([])
+  const [detallePagos, setDetallePagos] = useState<Array<{ id: string; tipo: string; monto: number; referencia: string | null; fecha: string }>>([])
   const [saldo, setSaldo] = useState<PortalSaldo | null>(null)
   const [fraccionamientos, setFraccionamientos] = useState<PortalFraccionamiento[]>([])
   const [cabifyPorSemana, setCabifyPorSemana] = useState<Record<string, number>>({})
@@ -392,6 +393,28 @@ export function PortalPage() {
     setView('detail')
     setLoadingDetalle(true)
     setDetalleError('')
+    setDetallePagos([])
+
+    // Pagos del conductor en esa semana/año desde control_saldos (kardex)
+    const periodo = factura.periodos_facturacion
+    supabase
+      .from('control_saldos')
+      .select('id, tipo_movimiento, monto_movimiento, referencia, created_at')
+      .eq('conductor_id', factura.conductor_id)
+      .eq('semana', periodo.semana)
+      .eq('anio', periodo.anio)
+      .in('tipo_movimiento', ['pago_cabify', 'pago_manual', 'pago', 'pago_cuota', 'ajuste_manual'])
+      .order('created_at', { ascending: true })
+      .then(({ data }) => {
+        if (!data) return
+        setDetallePagos((data as Array<{ id: string; tipo_movimiento: string; monto_movimiento: number; referencia: string | null; created_at: string }>).map(p => ({
+          id: p.id,
+          tipo: p.tipo_movimiento,
+          monto: Number(p.monto_movimiento) || 0,
+          referencia: p.referencia,
+          fecha: p.created_at,
+        })))
+      })
 
     try {
       const { data, error } = await supabase
@@ -926,6 +949,48 @@ export function PortalPage() {
                     </div>
                   </div>
                 )}
+
+                {/* PAGOS REALIZADOS EN ESTA SEMANA */}
+                {detallePagos.length > 0 && (() => {
+                  const tipoLabel: Record<string, string> = {
+                    pago_cabify: 'Pago Cabify',
+                    pago_manual: 'Pago Manual',
+                    pago: 'Pago',
+                    pago_cuota: 'Pago Cuota',
+                    ajuste_manual: 'Ajuste',
+                  }
+                  const totalPagado = detallePagos.reduce((s, p) => s + p.monto, 0)
+                  return (
+                    <div className="portal-detail-section" style={{ marginTop: '8px' }}>
+                      <div className="portal-detail-section-title" style={{ color: '#059669' }}>
+                        Pagos / Ajustes
+                      </div>
+                      <div className="portal-detail-items">
+                        {detallePagos.map((p) => {
+                          const fecha = new Date(p.fecha).toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: '2-digit' })
+                          return (
+                            <div key={p.id} className="portal-detail-item">
+                              <span className="portal-detail-item-name">
+                                <span className="portal-detail-item-dot" style={{ background: '#059669' }} />
+                                {tipoLabel[p.tipo] || p.tipo}
+                                <span style={{ color: 'var(--text-secondary)', marginLeft: '6px', fontSize: '11px' }}>
+                                  {p.referencia ? `· ${p.referencia}` : ''} · {fecha}
+                                </span>
+                              </span>
+                              <span className="portal-detail-item-amount" style={{ color: '#059669' }}>
+                                -{formatCurrency(p.monto)}
+                              </span>
+                            </div>
+                          )
+                        })}
+                        <div className="portal-detail-item" style={{ borderTop: '1px solid var(--border-primary)', paddingTop: '6px', marginTop: '4px' }}>
+                          <span className="portal-detail-item-name" style={{ fontWeight: 600, fontSize: '12px' }}>Total pagado</span>
+                          <span className="portal-detail-item-amount" style={{ fontWeight: 600, color: '#059669' }}>-{formatCurrency(totalPagado)}</span>
+                        </div>
+                      </div>
+                    </div>
+                  )
+                })()}
 
                 {/* TOTAL */}
                 <div className="portal-detail-total">

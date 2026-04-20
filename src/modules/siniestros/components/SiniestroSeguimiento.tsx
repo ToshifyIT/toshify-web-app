@@ -363,7 +363,7 @@ export function SiniestroSeguimiento({ siniestro, onReload }: SiniestroSeguimien
 
       // Auto-crear penalidad para que la incidencia vaya directo a "Por Aplicar"
       if ((incidenciaData as any)?.id) {
-        await (supabase.from('penalidades' as any) as any)
+        const { error: penError } = await (supabase.from('penalidades' as any) as any)
           .insert({
             incidencia_id: (incidenciaData as any).id,
             vehiculo_id: incidenciaForm.vehiculo_id || null,
@@ -377,12 +377,15 @@ export function SiniestroSeguimiento({ siniestro, onReload }: SiniestroSeguimien
             monto: incidenciaForm.monto || 0,
             observaciones: incidenciaForm.descripcion || '',
             aplicado: false,
+            rechazado: false,
             conductor_nombre: selectedConductor?.nombre_completo || null,
             vehiculo_patente: selectedVehiculo?.patente || null,
             created_by: user?.id,
             created_by_name: profile?.full_name || 'Sistema',
             sede_id: sedeActualId || sedeUsuario?.id,
           })
+
+        if (penError) throw penError
       }
 
       showSuccess('Incidencia registrada', 'Se ha creado la incidencia y enviado a facturación')
