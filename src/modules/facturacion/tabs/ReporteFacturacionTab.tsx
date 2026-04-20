@@ -188,6 +188,7 @@ interface FacturacionConductor {
   created_at: string
   // Datos de Cabify (Vista Previa)
   ganancia_cabify?: number
+  cabify_tiene_registros?: boolean
   cubre_cuota?: boolean
   cuota_garantia_numero?: string // ej: "15/20"
   // Datos detallados para RIT export (P005, P006, P007)
@@ -437,6 +438,7 @@ export function ReporteFacturacionTab() {
     cobroApp: number
     alquiler: number
     garantia: number
+    tieneRegistroCabify: boolean
   } | null>(null)
 
   // Modal de detalle
@@ -1245,10 +1247,12 @@ export function ReporteFacturacionTab() {
 
       // Agrupar cobro_app por DNI (semana actual) - lo que Cabify cobra al conductor
       const cobroAppPorDni = new Map<string, number>()
+      const dnisConRegistroCabify = new Set<string>()
       const cabifyEfectivoMapPeriodo = new Map<string, { permiso_efectivo: string | null; cabify_driver_id: string | null; cabify_company_id: string | null }>()
       ;(cabifyGanancias || []).forEach((c: any) => {
         if (c.dni) {
           const dniNorm = normalizeDni(c.dni)
+          dnisConRegistroCabify.add(dniNorm)
           cobroAppPorDni.set(dniNorm, (cobroAppPorDni.get(dniNorm) || 0) + (parseFloat(c.cobro_app) || 0))
           // Guardar permiso_efectivo y IDs Cabify (último registro gana)
           if (c.cabify_driver_id) {
@@ -1286,6 +1290,7 @@ export function ReporteFacturacionTab() {
         return {
           ...f,
           ganancia_cabify: cobroApp,
+          cabify_tiene_registros: dniNorm ? dnisConRegistroCabify.has(dniNorm) : false,
           cubre_cuota: cobroApp >= cuotaFija,
           permiso_efectivo: efectivoInfo?.permiso_efectivo || null,
           cabify_driver_id: efectivoInfo?.cabify_driver_id || null,
@@ -2423,6 +2428,7 @@ export function ReporteFacturacionTab() {
           created_at: new Date().toISOString(),
           // Datos de Cabify - cobro_app (Vista Previa)
           ganancia_cabify: cobroAppCabify,
+          cabify_tiene_registros: cabifyRawDniMap.has(dniConductor),
           cubre_cuota: cubreCuota,
           cuota_garantia_numero: cuotaGarantiaNumero,
           // Datos detallados para RIT export
@@ -8527,6 +8533,7 @@ export function ReporteFacturacionTab() {
             cobroApp,
             alquiler,
             garantia: row.original.subtotal_garantia,
+            tieneRegistroCabify: row.original.cabify_tiene_registros === true,
           })
         }
 
@@ -9738,7 +9745,9 @@ export function ReporteFacturacionTab() {
                     padding: '8px 12px', fontSize: '11px', color: '#92400e', marginBottom: '8px',
                     lineHeight: '1.4'
                   }}>
-                    No se encontraron datos de cobro en Cabify para este conductor. Esto puede deberse a que el DNI no coincide con el registro en Cabify o a que aun no se sincronizaron los datos de esta semana.
+                    {cobroAppPopup.tieneRegistroCabify
+                      ? 'El conductor está sincronizado con Cabify, pero aún no se registraron cobros para esta semana.'
+                      : 'No se encontraron datos de cobro en Cabify para este conductor. Esto puede deberse a que el DNI no coincide con el registro en Cabify o a que aun no se sincronizaron los datos de esta semana.'}
                   </div>
                 )}
                 {/* Barra de progreso */}
