@@ -205,6 +205,7 @@ interface FacturacionConductor {
     tipo: 'completa' | 'cuota'
     cuotaNum?: number
     totalCuotas?: number
+    categoria?: string
   }>
   // Detalle de tickets a favor para el modal
   tickets_detalle?: Array<{
@@ -694,12 +695,13 @@ export function ReporteFacturacionTab() {
       const semanaInicio = parseISO(fechaInicio)
       const semanaFin = parseISO(fechaFin)
 
-      // Si la tabla está mostrando datos ya guardados (turnos_cobrados viene de BD),
-      // el desglose debe contar los mismos días: hasta fin de semana.
-      // Solo topar en "hoy" cuando es vista previa pura (ID empieza con 'preview-').
-      const esVistaPrevia = conductorId.startsWith('preview-')
+      // Si el período está ABIERTO (vista previa / en curso), contar solo hasta hoy.
+      // Si está CERRADO, mostrar la semana completa. Esto es independiente del ID:
+      // después de Recalcular el ID deja de ser 'preview-' pero el período sigue abierto
+      // y debe seguir mostrando solo lo transcurrido.
+      const periodoAbierto = (periodo?.estado || 'abierto').toLowerCase() !== 'cerrado'
       let limiteConteo: Date
-      if (esVistaPrevia) {
+      if (periodoAbierto) {
         const hoyArgStr = argDateFmt.format(new Date())
         const hoyDesglose = parseISO(hoyArgStr + 'T00:00:00')
         limiteConteo = hoyDesglose < semanaFin ? hoyDesglose : semanaFin
@@ -2212,6 +2214,7 @@ export function ReporteFacturacionTab() {
         tipo: 'completa' | 'cuota'
         cuotaNum?: number
         totalCuotas?: number
+        categoria?: string
       }>>()
       
       // Sumar penalidades completas - segmentadas por categoría
@@ -2241,7 +2244,8 @@ export function ReporteFacturacionTab() {
           detalles.push({
             monto: p.monto || 0,
             detalle: detalleTexto,
-            tipo: 'completa'
+            tipo: 'completa',
+            categoria,
           })
           detalleMap.set(p.conductor_id, detalles)
         }
@@ -2267,7 +2271,8 @@ export function ReporteFacturacionTab() {
             detalle: penPadre?.observaciones || 'Cobro fraccionado',
             tipo: 'cuota',
             cuotaNum: c.numero_cuota,
-            totalCuotas: penalidadCuotasMap.get(c.penalidad_id) || 1
+            totalCuotas: penalidadCuotasMap.get(c.penalidad_id) || 1,
+            categoria: 'P007',
           })
           detalleMap.set(conductorId, detalles)
         }
@@ -8145,14 +8150,19 @@ export function ReporteFacturacionTab() {
     }
 
     // Si estamos en modo vista previa, calcular desde vistaPreviaData
+    // En Vista Previa los totales reflejan lo REAL hasta hoy (sin saldo anterior,
+    // que es arrastre de semana anterior). El Total Proyectado sí se mantiene
+    // como la proyección del alquiler a fin de semana.
     if (modoVistaPrevia && vistaPreviaData.length > 0) {
       const src = applyChipFilter(vistaPreviaData as typeof facturaciones)
+      const totalCargos = src.reduce((sum, f) => sum + (f.subtotal_cargos || 0), 0)
+      const totalDescuentos = src.reduce((sum, f) => sum + (f.subtotal_descuentos || 0), 0)
       return {
         total_conductores: src.length,
         total_proyectado: src.reduce((sum, f) => sum + (f.proyectado_alquiler || 0), 0),
-        total_cargos: src.reduce((sum, f) => sum + f.subtotal_cargos + Math.max(0, f.saldo_anterior), 0),
-        total_descuentos: src.reduce((sum, f) => sum + f.subtotal_descuentos + Math.max(0, -(f.saldo_anterior || 0)), 0),
-        total_neto: src.reduce((sum, f) => sum + f.total_a_pagar, 0),
+        total_cargos: totalCargos,
+        total_descuentos: totalDescuentos,
+        total_neto: totalCargos - totalDescuentos,
         conductores_deben: src.filter(f => f.total_a_pagar > 0).length,
         conductores_favor: src.filter(f => f.total_a_pagar <= 0).length
       }
@@ -8575,19 +8585,18 @@ export function ReporteFacturacionTab() {
       enableSorting: true,
       cell: ({ row }) => {
         const proyectado = row.original.proyectado_alquiler || 0
-        const diasTrabajados = row.original.turnos_cobrados || 0
-        const diasProyectados = (row.original as any)._diasProyectados || 0
+        const cobroApp = row.original.ganancia_cabify || 0
         if (proyectado === 0) return <span style={{ color: 'var(--text-muted)' }}>-</span>
-        // Barra de progreso: dias trabajados / dias proyectados
-        const porcentaje = diasProyectados > 0 ? Math.min(100, Math.round((diasTrabajados / diasProyectados) * 100)) : 0
-        const completo = diasTrabajados >= diasProyectados && diasTrabajados > 0
+        // Barra de progreso: cobro app Cabify / proyectado (cuánto del proyectado cubre lo ya generado)
+        const porcentaje = proyectado > 0 ? Math.min(100, Math.round((cobroApp / proyectado) * 100)) : 0
+        const cubre = cobroApp >= proyectado && cobroApp > 0
         return (
           <div>
             <div style={{ fontWeight: 600 }}>{formatCurrency(proyectado)}</div>
             <div style={{ width: '60px', height: '5px', backgroundColor: '#e5e7eb', borderRadius: '3px', overflow: 'hidden', marginTop: '2px' }}>
-              <div style={{ width: `${porcentaje}%`, height: '100%', backgroundColor: completo ? '#10b981' : porcentaje >= 70 ? '#f59e0b' : '#ef4444', borderRadius: '3px' }} />
+              <div style={{ width: `${porcentaje}%`, height: '100%', backgroundColor: cubre ? '#10b981' : porcentaje >= 70 ? '#f59e0b' : '#ef4444', borderRadius: '3px' }} />
             </div>
-            <span style={{ fontSize: '9px', color: completo ? '#10b981' : '#6b7280' }}>{porcentaje}%</span>
+            <span style={{ fontSize: '9px', color: cubre ? '#10b981' : '#6b7280' }}>{cobroApp === 0 ? 'Sin datos' : `${porcentaje}%`}{cubre ? ' ✓' : ''}</span>
           </div>
         )
       }
@@ -8650,7 +8659,10 @@ export function ReporteFacturacionTab() {
       header: 'Inc.',
       accessorFn: (row) => row.monto_penalidades || 0,
       cell: ({ row }) => {
-        const penalidades = row.original.penalidades_detalle || []
+        // Solo mostrar penalidades "en contra" (P006/P007). Las P004 (a favor)
+        // ya se muestran en la columna Tickets a Favor.
+        const penalidades = (row.original.penalidades_detalle || [])
+          .filter(p => !p.categoria || p.categoria === 'P006' || p.categoria === 'P007')
         const montoPen = row.original.monto_penalidades || 0
 
         if (penalidades.length === 0 && montoPen === 0) {
