@@ -400,9 +400,23 @@ export function ConductoresModule() {
         onClear: () => setAsignacionFilter([])
       });
     }
+    if (vencimientoFilter.length > 0) {
+      filters.push({
+        id: 'vencimiento',
+        label: `Vencimiento: ${vencimientoFilter.length === 1 ? vencimientoFilter[0] : `${vencimientoFilter.length} seleccionados`}`,
+        onClear: () => setVencimientoFilter([])
+      });
+    }
+    if (telefonoFilter.length > 0) {
+      filters.push({
+        id: 'telefono',
+        label: `Teléfono: ${telefonoFilter.length === 1 ? telefonoFilter[0] : `${telefonoFilter.length} seleccionados`}`,
+        onClear: () => setTelefonoFilter([])
+      });
+    }
 
     return filters;
-  }, [activeStatCard, nombreFilter, dniFilter, cbuFilter, turnoFilter, estadoFilter, categoriaFilter, asignacionFilter]);
+  }, [activeStatCard, nombreFilter, dniFilter, cbuFilter, turnoFilter, estadoFilter, categoriaFilter, asignacionFilter, vencimientoFilter, telefonoFilter]);
 
   const handleClearAllFilters = () => {
     setActiveStatCard(null);
@@ -416,6 +430,8 @@ export function ConductoresModule() {
     setTurnoFilter([]);
     setCategoriaFilter([]);
     setAsignacionFilter([]);
+    setVencimientoFilter([]);
+    setTelefonoFilter([]);
   };
 
   // ✅ OPTIMIZADO: Carga TODO en paralelo (conductores + catálogos)
