@@ -3,7 +3,7 @@
 // Responsabilidad: renderizar el calendario con react-big-calendar
 // ============================================================
 
-import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import { useState, useEffect, useLayoutEffect, useMemo, useCallback, useRef } from 'react';
 import { Calendar, dateFnsLocalizer } from 'react-big-calendar';
 import { format, parse, startOfWeek, getDay } from 'date-fns';
 import { es } from 'date-fns/locale/es';
@@ -273,8 +273,31 @@ export function VisitasCalendario({
 
   // --- Hover tooltip state (estilo Google Calendar) ---
   const [hoveredEvent, setHoveredEvent] = useState<VisitaCalendarEvent | null>(null);
-  const [tooltipPos, setTooltipPos] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
+  // anchorRect: bounding rect del evento que disparó el hover
+  const [anchorRect, setAnchorRect] = useState<DOMRect | null>(null);
+  // tooltipPos: posición final ya clampeada dentro del viewport
+  const [tooltipPos, setTooltipPos] = useState<{ x: number; y: number }>({ x: -9999, y: -9999 });
   const tooltipRef = useRef<HTMLDivElement | null>(null);
+
+  // Recalcula la posición del tooltip una vez que se renderizó y conocemos su tamaño real.
+  // Clampea dentro del viewport con un margen de 8px. Si no entra a la derecha del evento,
+  // lo flipea a la izquierda; si no entra abajo, lo sube.
+  useLayoutEffect(() => {
+    if (!hoveredEvent || !anchorRect || !tooltipRef.current) return;
+    const margin = 8;
+    const tt = tooltipRef.current.getBoundingClientRect();
+    const vw = window.innerWidth;
+    const vh = window.innerHeight;
+    // X: intentar a la derecha del evento; si no entra, a la izquierda; clamp final al viewport
+    let x = anchorRect.right + margin;
+    if (x + tt.width + margin > vw) x = anchorRect.left - tt.width - margin;
+    x = Math.max(margin, Math.min(x, vw - tt.width - margin));
+    // Y: intentar alinear al top del evento; si se sale por abajo, subir
+    let y = anchorRect.top;
+    if (y + tt.height + margin > vh) y = vh - tt.height - margin;
+    y = Math.max(margin, y);
+    setTooltipPos({ x, y });
+  }, [hoveredEvent, anchorRect]);
   const tooltipTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const handleEventMouseEnter = useCallback((event: VisitaCalendarEvent, e: React.MouseEvent) => {
@@ -282,13 +305,22 @@ export function VisitasCalendario({
     const v = event.visita as any;
     if (v._synthetic || v._masked) return;
     if (tooltipTimeout.current) clearTimeout(tooltipTimeout.current);
-    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
-    setTooltipPos({ x: rect.right + 8, y: rect.top });
+    // Usar el elemento visual real del evento (.rbc-event) en lugar del wrapper,
+    // porque el wrapper con height: 100% puede abarcar toda la celda del día
+    const wrapper = e.currentTarget as HTMLElement;
+    const realEvent = wrapper.querySelector('.rbc-event') as HTMLElement | null;
+    const rect = (realEvent || wrapper).getBoundingClientRect();
+    setAnchorRect(rect);
+    // Posición inicial fuera de pantalla hasta que useLayoutEffect clampee con el tamaño real
+    setTooltipPos({ x: -9999, y: -9999 });
     setHoveredEvent(event);
   }, []);
 
   const handleEventMouseLeave = useCallback(() => {
-    tooltipTimeout.current = setTimeout(() => setHoveredEvent(null), 150);
+    tooltipTimeout.current = setTimeout(() => {
+      setHoveredEvent(null);
+      setAnchorRect(null);
+    }, 150);
   }, []);
 
   // Custom event wrapper que captura hover
@@ -351,10 +383,9 @@ export function VisitasCalendario({
         const v = hoveredEvent.visita;
         const estadoInfo = VISITA_ESTADOS[v.estado as VisitaEstado];
         const color = v.categoria_color || '#3b82f6';
-        const tooltipHeight = tooltipRef.current?.offsetHeight || 300;
-        const tooltipWidth = 320;
-        const adjustedX = tooltipPos.x + tooltipWidth > window.innerWidth ? tooltipPos.x - tooltipWidth - 16 : tooltipPos.x;
-        const adjustedY = tooltipPos.y + tooltipHeight > window.innerHeight ? Math.max(8, window.innerHeight - tooltipHeight - 10) : tooltipPos.y;
+        // Hasta que useLayoutEffect calcule la posición final, el tooltip queda fuera de pantalla
+        // (posición inicial -9999,-9999). Lo ocultamos con visibility para evitar parpadeo.
+        const isReady = tooltipPos.x > -9000 && tooltipPos.y > -9000;
         const horaArribo = v.hora_arribo
           ? new Date(v.hora_arribo).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Argentina/Buenos_Aires' })
           : null;
@@ -362,7 +393,7 @@ export function VisitasCalendario({
           <div
             ref={tooltipRef}
             className="visita-hover-tooltip"
-            style={{ left: adjustedX, top: adjustedY }}
+            style={{ left: tooltipPos.x, top: tooltipPos.y, visibility: isReady ? 'visible' : 'hidden' }}
             onMouseEnter={() => { if (tooltipTimeout.current) clearTimeout(tooltipTimeout.current); }}
             onMouseLeave={() => setHoveredEvent(null)}
           >
