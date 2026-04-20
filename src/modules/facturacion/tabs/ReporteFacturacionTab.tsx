@@ -3673,30 +3673,9 @@ export function ReporteFacturacionTab() {
           await Promise.all(batchUpdates)
         }
 
-        // 6b. Registrar movimiento "regularizado" en kardex y sincronizar saldo actual
-        // El saldo resultante es -(total_a_pagar): negativo = deuda, positivo = a favor
-        const saldoResultanteRecalc = -totalAPagar
-        try {
-          await insertControlSaldo({
-            conductorId: conductor.conductor_id,
-            semana: semanaNum,
-            anio: anioNum,
-            tipoMovimiento: 'regularizado',
-            montoMovimiento: Math.abs(totalAPagar),
-            saldoPendiente: saldoResultanteRecalc,
-            referencia: `Facturación S${semanaNum}/${anioNum}`,
-            userName: 'Sistema',
-          })
-          // Sincronizar saldos_conductores.saldo_actual con el kardex — evita drift
-          // entre el kardex (auditoría) y el saldo visible del conductor.
-          await (supabase as any)
-            .from('saldos_conductores')
-            .update({ saldo_actual: saldoResultanteRecalc, updated_at: new Date().toISOString() })
-            .eq('conductor_id', conductor.conductor_id)
-        } catch (errKardex) {
-          // No interrumpir el recálculo si falla el kardex — solo loguear
-          console.error('Error registrando regularizado/saldo para conductor:', conductor.conductor_id, errKardex)
-        }
+        // El kardex (control_saldos) + saldos_conductores se materializan al CERRAR
+        // el período (cerrarPeriodo), no aquí. Durante recalcular el período sigue
+        // abierto y el total_a_pagar es un preview en curso.
 
         conductoresProcesadosCount++
         setRecalculandoProgreso({ actual: conductoresProcesadosCount, total: conductoresProcesados.length, nombre: '' })
