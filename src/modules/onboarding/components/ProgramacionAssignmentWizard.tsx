@@ -20,6 +20,8 @@ import type { TipoCandidato, TipoDocumento, TipoAsignacion } from '../../../type
 import type { Vehicle } from '../../../types/vehiculo.types'
 import type { Conductor } from '../../../types/conductor.types'
 import { formatPreferencia, getPreferenciaBadge, PROGRAMACION_ESTADO_LABELS } from '../../../utils/conductorUtils'
+import { generateContracts } from '../../../services/contractService'
+import type { GeneratedDocument } from '../../../services/contractService'
 
 // Google Maps API Key
 const GOOGLE_MAPS_API_KEY = import.meta.env.VITE_GOOGLE_MAPS_API_KEY || 'AIzaSyCCiqk9jWZghUq5rBtSyo6ZjLuMORblY-w'
@@ -1371,6 +1373,8 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
       }
 
       let error
+      let insertedId: string | null = null
+
       if (isEditMode && editData) {
         // ACTUALIZAR
         const result = await (supabase
@@ -1388,14 +1392,74 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
         saveData.created_by = user?.id
         saveData.created_by_name = profile?.full_name || 'Sistema'
         saveData.sede_id = sedeActualId || sedeUsuario?.id
-        
+
         const result = await (supabase
           .from('programaciones_onboarding') as any)
           .insert(saveData)
+          .select('id')
+          .single()
         error = result.error
+        insertedId = result.data?.id || null
       }
 
       if (error) throw error
+
+      // Generar documentos de contrato si corresponde (solo al crear, no al editar)
+      if (!isEditMode && insertedId) {
+        const needsDocGeneration = formData.modalidad === 'a_cargo'
+          ? (formData.documento_cargo && formData.documento_cargo !== 'na')
+          : ((formData.documento_diurno && formData.documento_diurno !== 'na') ||
+             (formData.documento_nocturno && formData.documento_nocturno !== 'na'))
+
+        if (needsDocGeneration) {
+          // Lanzar generación en background (no bloquea el cierre del wizard)
+          const contractParams = {
+            conductor_id: formData.modalidad === 'a_cargo' ? formData.conductor_id : null,
+            conductor_diurno_id: formData.modalidad === 'turno' ? formData.conductor_diurno_id : null,
+            conductor_nocturno_id: formData.modalidad === 'turno' ? formData.conductor_nocturno_id : null,
+            vehiculo_id: formData.vehiculo_id,
+            tipo_documento: formData.modalidad === 'a_cargo' ? formData.documento_cargo : null,
+            documento_diurno: formData.modalidad === 'turno' ? formData.documento_diurno : null,
+            documento_nocturno: formData.modalidad === 'turno' ? formData.documento_nocturno : null,
+            modalidad: formData.modalidad as 'turno' | 'a_cargo',
+            sede_id: saveData.sede_id || null,
+            programacion_id: insertedId,
+            created_by: user?.id || null,
+            created_by_name: profile?.full_name || 'Sistema'
+          }
+
+          generateContracts(contractParams).then((contractResult) => {
+            if (contractResult.success && contractResult.documents.length > 0) {
+              const docLinks = contractResult.documents.map((d: GeneratedDocument) => {
+                const label = d.turno ? `${d.conductor_nombre} (${d.turno})` : d.conductor_nombre
+                return `<li><strong>${label}</strong>: <a href="${d.folderUrl}" target="_blank" rel="noopener">Ver carpeta en Drive</a></li>`
+              }).join('')
+
+              Swal.fire({
+                icon: 'success',
+                title: 'Documentos generados',
+                html: `<p>Se generaron los siguientes documentos:</p><ul style="text-align:left;margin-top:8px">${docLinks}</ul>`,
+                confirmButtonText: 'Entendido'
+              })
+            } else if (!contractResult.success) {
+              Swal.fire({
+                icon: 'warning',
+                title: 'Error al generar documentos',
+                text: contractResult.error || 'No se pudieron generar los documentos. Puede reintentarlo desde el detalle de la programación.',
+                confirmButtonText: 'Entendido'
+              })
+            }
+          }).catch((err: Error) => {
+            console.error('[Contract] Error:', err)
+            Swal.fire({
+              icon: 'warning',
+              title: 'Error al generar documentos',
+              text: 'Ocurrió un error al generar los documentos. La programación se creó correctamente.',
+              confirmButtonText: 'Entendido'
+            })
+          })
+        }
+      }
 
       showSuccess(isEditMode ? 'Programación actualizada' : 'Programación creada', isEditMode ? 'Los cambios se guardaron correctamente' : 'La programación se agregó al tablero')
 
