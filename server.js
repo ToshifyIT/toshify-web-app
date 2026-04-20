@@ -54,6 +54,28 @@ function getDriveService(writeAccess = false) {
   return google.drive({ version: 'v3', auth })
 }
 
+// Drive service con scope completo (lectura + escritura de cualquier archivo compartido)
+// Se usa exclusivamente para generación de contratos, donde se necesita leer plantillas
+// que no fueron creadas por el service account.
+function getDriveServiceFull() {
+  const clientEmail = process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL
+  const privateKey = process.env.GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY?.replace(/\\n/g, '\n')
+
+  if (!clientEmail || !privateKey) {
+    throw new Error('Missing Google Service Account credentials')
+  }
+
+  const auth = new google.auth.GoogleAuth({
+    credentials: {
+      client_email: clientEmail,
+      private_key: privateKey
+    },
+    scopes: ['https://www.googleapis.com/auth/drive']
+  })
+
+  return google.drive({ version: 'v3', auth })
+}
+
 function extractFolderId(input) {
   if (!input) return null
   if (!input.includes('/')) return input
@@ -970,7 +992,7 @@ app.post('/api/generate-contract', async (req, res) => {
       return res.status(400).json({ error: 'Falta vehiculo_id' })
     }
 
-    const drive = getDriveService(true)
+    const drive = getDriveServiceFull()
     const sedeCode = await fetchSedeCode(sede_id)
     const vehiculo = await fetchVehiculoData(vehiculo_id)
 
