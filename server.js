@@ -7,6 +7,9 @@ import express from 'express'
 import { fileURLToPath } from 'url'
 import { dirname, join } from 'path'
 import { google } from 'googleapis'
+import PizZip from 'pizzip'
+import Docxtemplater from 'docxtemplater'
+import { Readable } from 'stream'
 // API REST removida - reemplazada por MCP Server (mcp/server.js)
 
 const __filename = fileURLToPath(import.meta.url)
@@ -575,6 +578,493 @@ app.post('/api/admin/toggle-function', async (req, res) => {
     res.json({ success: true, function: updated[0] })
   } catch (error) {
     res.status(500).json({ error: 'Error interno del servidor' })
+  }
+})
+
+// =====================================================
+// CONTRACT GENERATION
+// =====================================================
+
+const CONTRACT_CONFIG = {
+  templates: {
+    cartaOfertaTurno: '1nhZY3Lk4V-3PhaBAiFr-_0B-4oAkTxIdI5DWmzDS9Gk',
+    actualizacionTurno: '1dIF48_QchY5mPl3H4SaE8KoZMdM_OjL6O667HENXEKw',
+    cartaOfertaAutoCargo: '1IYK4z_0L8m0vM49FI_IKR-EmSnYOIs9WxYtlLdRU7XQ',
+    actualizacionAutoCargo: '197gvFlYzb2csrjyzJ_r40OCv-1pEBjYO0uaOmYKLZXI',
+    cartaOfertaPedidosYa: '1Zo6INIVFjdZWhuOF8F91iEjAWkIBg61lcxMCxcoRRQY',
+    cartaOfertaAutoCargoBariloche: '1hAVB6eQ6LcCE_7YfB9llQLdGXN7EByHLvy0lG5YRQ5I'
+  },
+  folders: {
+    principal: '1qQCnLb5OB1RioLcZOK8s5nKqaIhA7Kt7',
+    pedidosYa: '1UkINzRmBvmwEVZRtoa61V4EtNl3dRNRY',
+    bariloche: '1RZfsv-xU_zJSBX26Vwj3-0hHuI9qV1M4'
+  },
+  nameToshify: 'MARCIAL JOSUE CARIDE GUZMAN',
+  amounts: { diurno: '299.000', nocturno: '229.000' }
+}
+
+/**
+ * Determina qué plantilla usar según tipo_documento + modalidad + sede
+ */
+function resolveTemplateKey(tipoDocumento, modalidad, sedeCode) {
+  if (tipoDocumento === 'na') return null
+
+  const isBariloche = sedeCode && sedeCode.toUpperCase() === 'BARI'
+
+  if (tipoDocumento === 'carta_oferta') {
+    if (isBariloche) return 'cartaOfertaAutoCargoBariloche'
+    if (modalidad === 'a_cargo') return 'cartaOfertaAutoCargo'
+    return 'cartaOfertaTurno'
+  }
+
+  if (tipoDocumento === 'anexo') {
+    if (modalidad === 'a_cargo') return 'actualizacionAutoCargo'
+    return 'actualizacionTurno'
+  }
+
+  return null
+}
+
+/**
+ * Determina la carpeta raíz según sede
+ */
+function resolveRootFolder(sedeCode) {
+  if (sedeCode && sedeCode.toUpperCase() === 'BARI') return CONTRACT_CONFIG.folders.bariloche
+  return CONTRACT_CONFIG.folders.principal
+}
+
+/**
+ * Busca o crea la carpeta del conductor en Drive
+ */
+async function findOrCreateConductorFolder(drive, conductorDni, conductorNombre, rootFolderId) {
+  const folderName = `${conductorDni} - ${conductorNombre}`
+
+  // Buscar carpeta existente
+  const searchRes = await drive.files.list({
+    q: `name='${folderName.replace(/'/g, "\\'")}' and '${rootFolderId}' in parents and mimeType='application/vnd.google-apps.folder' and trashed=false`,
+    fields: 'files(id, name, webViewLink)',
+    supportsAllDrives: true,
+    includeItemsFromAllDrives: true
+  })
+
+  if (searchRes.data.files && searchRes.data.files.length > 0) {
+    const folder = searchRes.data.files[0]
+    return { folderId: folder.id, folderUrl: folder.webViewLink, folderName: folder.name, created: false }
+  }
+
+  // Crear carpeta nueva
+  const createRes = await drive.files.create({
+    requestBody: {
+      name: folderName,
+      mimeType: 'application/vnd.google-apps.folder',
+      parents: [rootFolderId]
+    },
+    fields: 'id, webViewLink',
+    supportsAllDrives: true
+  })
+
+  return {
+    folderId: createRes.data.id,
+    folderUrl: createRes.data.webViewLink,
+    folderName,
+    created: true
+  }
+}
+
+/**
+ * Obtiene datos del conductor desde Supabase (con JOINs para estado_civil y nacionalidad)
+ */
+async function fetchConductorData(conductorId) {
+  const supabaseUrl = process.env.VITE_SUPABASE_URL
+  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+
+  const res = await fetch(
+    `${supabaseUrl}/rest/v1/conductores?id=eq.${conductorId}&select=*,estados_civiles(nombre),nacionalidades(nombre)`,
+    {
+      headers: {
+        'apikey': serviceKey,
+        'Authorization': `Bearer ${serviceKey}`
+      }
+    }
+  )
+
+  if (!res.ok) throw new Error(`Error fetching conductor: ${res.statusText}`)
+  const data = await res.json()
+  if (!data || data.length === 0) throw new Error(`Conductor ${conductorId} no encontrado`)
+  return data[0]
+}
+
+/**
+ * Obtiene datos del vehículo desde Supabase
+ */
+async function fetchVehiculoData(vehiculoId) {
+  const supabaseUrl = process.env.VITE_SUPABASE_URL
+  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+
+  const res = await fetch(
+    `${supabaseUrl}/rest/v1/vehiculos?id=eq.${vehiculoId}&select=patente,marca,modelo,color,anio,numero_motor,numero_chasis,km`,
+    {
+      headers: {
+        'apikey': serviceKey,
+        'Authorization': `Bearer ${serviceKey}`
+      }
+    }
+  )
+
+  if (!res.ok) throw new Error(`Error fetching vehiculo: ${res.statusText}`)
+  const data = await res.json()
+  if (!data || data.length === 0) throw new Error(`Vehiculo ${vehiculoId} no encontrado`)
+  return data[0]
+}
+
+/**
+ * Obtiene el código de la sede desde Supabase
+ */
+async function fetchSedeCode(sedeId) {
+  if (!sedeId) return 'BSAS'
+  const supabaseUrl = process.env.VITE_SUPABASE_URL
+  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+
+  const res = await fetch(
+    `${supabaseUrl}/rest/v1/sedes?id=eq.${sedeId}&select=codigo`,
+    {
+      headers: {
+        'apikey': serviceKey,
+        'Authorization': `Bearer ${serviceKey}`
+      }
+    }
+  )
+
+  if (!res.ok) return 'BSAS'
+  const data = await res.json()
+  return data[0]?.codigo || 'BSAS'
+}
+
+/**
+ * Actualiza drive_folder_url del conductor en Supabase
+ */
+async function updateConductorDriveUrl(conductorId, folderUrl) {
+  const supabaseUrl = process.env.VITE_SUPABASE_URL
+  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+
+  await fetch(
+    `${supabaseUrl}/rest/v1/conductores?id=eq.${conductorId}`,
+    {
+      method: 'PATCH',
+      headers: {
+        'apikey': serviceKey,
+        'Authorization': `Bearer ${serviceKey}`,
+        'Content-Type': 'application/json',
+        'Prefer': 'return=minimal'
+      },
+      body: JSON.stringify({ drive_folder_url: folderUrl })
+    }
+  )
+}
+
+/**
+ * Registra el documento generado en la tabla documentos_generados
+ */
+async function saveDocumentoGenerado(record) {
+  const supabaseUrl = process.env.VITE_SUPABASE_URL
+  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+
+  const res = await fetch(
+    `${supabaseUrl}/rest/v1/documentos_generados`,
+    {
+      method: 'POST',
+      headers: {
+        'apikey': serviceKey,
+        'Authorization': `Bearer ${serviceKey}`,
+        'Content-Type': 'application/json',
+        'Prefer': 'return=representation'
+      },
+      body: JSON.stringify(record)
+    }
+  )
+
+  if (!res.ok) {
+    console.error('Error saving documento_generado:', await res.text())
+  }
+}
+
+/**
+ * Formatea fecha de nacimiento a DD/MM/YYYY
+ */
+function formatDate(dateStr) {
+  if (!dateStr) return ''
+  const d = new Date(dateStr)
+  if (isNaN(d.getTime())) return dateStr
+  return `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`
+}
+
+/**
+ * Genera un documento (docx + pdf) para un conductor específico
+ * Retorna { docxUrl, pdfUrl, folderUrl, folderId }
+ */
+async function generateContractForConductor({
+  drive, conductor, vehiculo, templateKey, turno, sedeCode
+}) {
+  const templateId = CONTRACT_CONFIG.templates[templateKey]
+  if (!templateId) throw new Error(`Template no encontrada para key: ${templateKey}`)
+
+  console.log(`[Contract] Generando ${templateKey} para ${conductor.nombres} ${conductor.apellidos}`)
+
+  // 1. Exportar plantilla como .docx desde Drive
+  const exportRes = await drive.files.export(
+    { fileId: templateId, mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' },
+    { responseType: 'arraybuffer' }
+  )
+
+  const templateBuffer = Buffer.from(exportRes.data)
+
+  // 2. Reemplazar variables con docxtemplater
+  //    Las plantillas usan {{VARIABLE}}, docxtemplater por defecto usa { y }
+  //    Configuramos delimitadores personalizados
+  const zip = new PizZip(templateBuffer)
+  const doc = new Docxtemplater(zip, {
+    delimiters: { start: '{{', end: '}}' },
+    paragraphLoop: true,
+    linebreaks: true,
+    nullGetter: () => ''  // Variables no encontradas se reemplazan con string vacío
+  })
+
+  const fullName = `${conductor.nombres || ''} ${conductor.apellidos || ''}`.trim().toUpperCase()
+  const amount = turno === 'nocturno' ? CONTRACT_CONFIG.amounts.nocturno : CONTRACT_CONFIG.amounts.diurno
+
+  doc.render({
+    'NAME': fullName,
+    'DNI': (conductor.numero_dni || '').toUpperCase(),
+    'ADDRESS': (conductor.direccion || '').toUpperCase(),
+    'MAIL': (conductor.email || '').toUpperCase(),
+    'PHONENUMBER': (conductor.telefono_contacto || '').toUpperCase(),
+    'DATEOFBIRTH': formatDate(conductor.fecha_nacimiento),
+    'CITIZEN': (conductor.nacionalidades?.nombre || '').toUpperCase(),
+    'MARITALSTATUS': (conductor.estados_civiles?.nombre || '').toUpperCase(),
+    'PLATE': (vehiculo.patente || '').toUpperCase(),
+    'SHIFT': (turno || '').toUpperCase(),
+    'MAKE': (vehiculo.marca || '').toUpperCase(),
+    'MODEL': (vehiculo.modelo || '').toUpperCase(),
+    'COLOR': (vehiculo.color || '').toUpperCase(),
+    'YEAR': String(vehiculo.anio || '').toUpperCase(),
+    'ENGINE NUMBER': (vehiculo.numero_motor || '').toUpperCase(),
+    'CHASSIS NUMBER': (vehiculo.numero_chasis || '').toUpperCase(),
+    'AMOUNT': amount,
+    'NAMETOSHIFY': CONTRACT_CONFIG.nameToshify,
+    'ACTUALYEAR': String(new Date().getFullYear()),
+    'KM': String(vehiculo.km || ''),
+    'LTNAFTA': '',
+    'OBSERVATIONS': '',
+    'COVERAGE': '',
+    'TYPE': ''
+  })
+
+  const docxBuffer = doc.getZip().generate({ type: 'nodebuffer' })
+
+  // 3. Buscar o crear carpeta del conductor
+  const rootFolderId = resolveRootFolder(sedeCode)
+  const folder = await findOrCreateConductorFolder(
+    drive,
+    conductor.numero_dni || '',
+    fullName,
+    rootFolderId
+  )
+
+  // 4. Generar nombre de archivo
+  const now = new Date()
+  const dateStr = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}`
+  const templateLabel = templateKey.replace(/([A-Z])/g, ' $1').trim()
+  const fileName = `${fullName} - ${templateLabel} - ${dateStr}`
+
+  // 5. Subir .docx a la carpeta del conductor
+  const docxUpload = await drive.files.create({
+    requestBody: {
+      name: `${fileName}.docx`,
+      parents: [folder.folderId],
+      mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+    },
+    media: {
+      mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      body: Readable.from(docxBuffer)
+    },
+    fields: 'id, webViewLink',
+    supportsAllDrives: true
+  })
+
+  // 6. Subir como Google Doc (para convertir a PDF)
+  const tempGoogleDoc = await drive.files.create({
+    requestBody: {
+      name: `${fileName} (temp)`,
+      parents: [folder.folderId],
+      mimeType: 'application/vnd.google-apps.document'  // Convierte automáticamente a Google Doc
+    },
+    media: {
+      mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      body: Readable.from(docxBuffer)
+    },
+    fields: 'id',
+    supportsAllDrives: true
+  })
+
+  // 7. Exportar Google Doc como PDF
+  const pdfExport = await drive.files.export(
+    { fileId: tempGoogleDoc.data.id, mimeType: 'application/pdf' },
+    { responseType: 'arraybuffer' }
+  )
+
+  // 8. Subir PDF a la carpeta del conductor
+  const pdfUpload = await drive.files.create({
+    requestBody: {
+      name: `${fileName}.pdf`,
+      parents: [folder.folderId],
+      mimeType: 'application/pdf'
+    },
+    media: {
+      mimeType: 'application/pdf',
+      body: Readable.from(Buffer.from(pdfExport.data))
+    },
+    fields: 'id, webViewLink',
+    supportsAllDrives: true
+  })
+
+  // 9. Eliminar Google Doc temporal
+  await drive.files.delete({
+    fileId: tempGoogleDoc.data.id,
+    supportsAllDrives: true
+  }).catch(err => console.warn('[Contract] Error deleting temp doc:', err.message))
+
+  // 10. Si el conductor no tenía drive_folder_url, actualizar
+  if (!conductor.drive_folder_url && folder.folderUrl) {
+    await updateConductorDriveUrl(conductor.id, folder.folderUrl)
+  }
+
+  console.log(`[Contract] OK: ${fileName} → docx: ${docxUpload.data.id}, pdf: ${pdfUpload.data.id}`)
+
+  return {
+    docxUrl: docxUpload.data.webViewLink,
+    pdfUrl: pdfUpload.data.webViewLink,
+    folderUrl: folder.folderUrl || `https://drive.google.com/drive/folders/${folder.folderId}`,
+    folderId: folder.folderId
+  }
+}
+
+// API: Generate contract documents
+app.post('/api/generate-contract', async (req, res) => {
+  try {
+    const {
+      conductor_id,        // UUID (modo a_cargo) o null
+      conductor_diurno_id, // UUID (modo turno) o null
+      conductor_nocturno_id, // UUID (modo turno) o null
+      vehiculo_id,
+      tipo_documento,      // 'carta_oferta' | 'anexo' (modo a_cargo)
+      documento_diurno,    // 'carta_oferta' | 'anexo' | 'na' (modo turno)
+      documento_nocturno,  // 'carta_oferta' | 'anexo' | 'na' (modo turno)
+      modalidad,           // 'turno' | 'a_cargo'
+      sede_id,
+      programacion_id,     // UUID de la programación creada
+      created_by,
+      created_by_name
+    } = req.body
+
+    if (!vehiculo_id) {
+      return res.status(400).json({ error: 'Falta vehiculo_id' })
+    }
+
+    const drive = getDriveService(true)
+    const sedeCode = await fetchSedeCode(sede_id)
+    const vehiculo = await fetchVehiculoData(vehiculo_id)
+
+    const results = []
+
+    if (modalidad === 'a_cargo' && conductor_id) {
+      // Modo A CARGO: un solo conductor
+      if (tipo_documento && tipo_documento !== 'na') {
+        const templateKey = resolveTemplateKey(tipo_documento, 'a_cargo', sedeCode)
+        if (templateKey) {
+          const conductor = await fetchConductorData(conductor_id)
+          const result = await generateContractForConductor({
+            drive, conductor, vehiculo, templateKey, turno: null, sedeCode
+          })
+
+          await saveDocumentoGenerado({
+            programacion_id,
+            conductor_id,
+            tipo_documento,
+            plantilla_usada: templateKey,
+            turno: null,
+            url_docx: result.docxUrl,
+            url_pdf: result.pdfUrl,
+            drive_folder_url: result.folderUrl,
+            drive_folder_id: result.folderId,
+            estado: 'generado',
+            sede_id,
+            created_by,
+            created_by_name
+          })
+
+          results.push({
+            conductor_id,
+            conductor_nombre: `${conductor.nombres} ${conductor.apellidos}`,
+            turno: null,
+            ...result
+          })
+        }
+      }
+    } else if (modalidad === 'turno') {
+      // Modo TURNO: hasta 2 conductores
+      const turnoConfigs = [
+        { id: conductor_diurno_id, doc: documento_diurno, turno: 'diurno' },
+        { id: conductor_nocturno_id, doc: documento_nocturno, turno: 'nocturno' }
+      ]
+
+      for (const cfg of turnoConfigs) {
+        if (cfg.id && cfg.doc && cfg.doc !== 'na') {
+          const templateKey = resolveTemplateKey(cfg.doc, 'turno', sedeCode)
+          if (templateKey) {
+            const conductor = await fetchConductorData(cfg.id)
+            const result = await generateContractForConductor({
+              drive, conductor, vehiculo, templateKey, turno: cfg.turno, sedeCode
+            })
+
+            await saveDocumentoGenerado({
+              programacion_id,
+              conductor_id: cfg.id,
+              tipo_documento: cfg.doc,
+              plantilla_usada: templateKey,
+              turno: cfg.turno,
+              url_docx: result.docxUrl,
+              url_pdf: result.pdfUrl,
+              drive_folder_url: result.folderUrl,
+              drive_folder_id: result.folderId,
+              estado: 'generado',
+              sede_id,
+              created_by,
+              created_by_name
+            })
+
+            results.push({
+              conductor_id: cfg.id,
+              conductor_nombre: `${conductor.nombres} ${conductor.apellidos}`,
+              turno: cfg.turno,
+              ...result
+            })
+          }
+        }
+      }
+    }
+
+    if (results.length === 0) {
+      return res.json({
+        success: true,
+        message: 'No se generaron documentos (tipo_documento es "na" o no se proporcionaron conductores)',
+        documents: []
+      })
+    }
+
+    res.json({ success: true, documents: results })
+  } catch (error) {
+    console.error('[Contract] Error:', error.message)
+    res.status(500).json({ error: error.message })
   }
 })
 
