@@ -679,7 +679,7 @@ async function fetchConductorData(conductorId) {
   const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
 
   const res = await fetch(
-    `${supabaseUrl}/rest/v1/conductores?id=eq.${conductorId}&select=*,estados_civiles(nombre),nacionalidades(nombre)`,
+    `${supabaseUrl}/rest/v1/conductores?id=eq.${conductorId}&select=*,estados_civiles(descripcion),nacionalidades(descripcion)`,
     {
       headers: {
         'apikey': serviceKey,
@@ -702,7 +702,7 @@ async function fetchVehiculoData(vehiculoId) {
   const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
 
   const res = await fetch(
-    `${supabaseUrl}/rest/v1/vehiculos?id=eq.${vehiculoId}&select=patente,marca,modelo,color,anio,numero_motor,numero_chasis,km`,
+    `${supabaseUrl}/rest/v1/vehiculos?id=eq.${vehiculoId}&select=patente,marca,modelo,color,anio,numero_motor,numero_chasis,kilometraje_actual`,
     {
       headers: {
         'apikey': serviceKey,
@@ -839,8 +839,8 @@ async function generateContractForConductor({
     'MAIL': (conductor.email || '').toUpperCase(),
     'PHONENUMBER': (conductor.telefono_contacto || '').toUpperCase(),
     'DATEOFBIRTH': formatDate(conductor.fecha_nacimiento),
-    'CITIZEN': (conductor.nacionalidades?.nombre || '').toUpperCase(),
-    'MARITALSTATUS': (conductor.estados_civiles?.nombre || '').toUpperCase(),
+    'CITIZEN': (conductor.nacionalidades?.descripcion || '').toUpperCase(),
+    'MARITALSTATUS': (conductor.estados_civiles?.descripcion || '').toUpperCase(),
     'PLATE': (vehiculo.patente || '').toUpperCase(),
     'SHIFT': (turno || '').toUpperCase(),
     'MAKE': (vehiculo.marca || '').toUpperCase(),
@@ -852,7 +852,7 @@ async function generateContractForConductor({
     'AMOUNT': amount,
     'NAMETOSHIFY': CONTRACT_CONFIG.nameToshify,
     'ACTUALYEAR': String(new Date().getFullYear()),
-    'KM': String(vehiculo.km || ''),
+    'KM': String(vehiculo.kilometraje_actual || ''),
     'LTNAFTA': '',
     'OBSERVATIONS': '',
     'COVERAGE': '',
