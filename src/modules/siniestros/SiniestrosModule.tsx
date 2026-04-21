@@ -1096,8 +1096,6 @@ export function SiniestrosModule() {
               <span className="stat-label">Procesando Pago</span>
             </div>
           </div>
-        </div>
-        <div className="stats-grid" style={{ marginTop: 12 }}>
           <div className="stat-card">
             <Shield size={20} className="stat-icon" />
             <div className="stat-content">
