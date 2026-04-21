@@ -24,7 +24,8 @@ import {
   ExternalLink,
   FolderOpen,
   Download,
-  CheckCircle
+  CheckCircle,
+  History
 } from 'lucide-react'
 import { ActionsMenu } from '../../components/ui/ActionsMenu'
 import { DateRangeSelector } from '../../components/ui/DateRangeSelector'
@@ -119,6 +120,7 @@ export function SiniestrosModule() {
 
   // Modal
   const [showModal, setShowModal] = useState(false)
+  const [seguimientoSiniestro, setSeguimientoSiniestro] = useState<SiniestroCompleto | null>(null)
   const [modalMode, setModalMode] = useState<'create' | 'edit' | 'view'>('create')
   const [selectedSiniestro, setSelectedSiniestro] = useState<SiniestroCompleto | null>(null)
   const [formData, setFormData] = useState<SiniestroFormData>({
@@ -575,6 +577,11 @@ export function SiniestrosModule() {
                 label: 'Editar',
                 onClick: () => handleEditarSiniestro(row.original),
                 variant: 'info'
+              },
+              {
+                icon: <History size={15} />,
+                label: 'Seguimiento',
+                onClick: () => setSeguimientoSiniestro(row.original)
               },
               {
                 icon: <FolderOpen size={15} />,
@@ -1262,6 +1269,30 @@ export function SiniestrosModule() {
           </div>
         </div>
       )}
+
+      {/* Modal Seguimiento (desde ActionsMenu) */}
+      {seguimientoSiniestro && (
+        <div className="modal-overlay" onClick={() => setSeguimientoSiniestro(null)}>
+          <div
+            className="modal-content"
+            style={{ maxWidth: '700px', maxHeight: '90vh', overflow: 'auto' }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="modal-header">
+              <h2>Seguimiento del Siniestro</h2>
+              <button className="modal-close" onClick={() => setSeguimientoSiniestro(null)}>
+                <X size={18} />
+              </button>
+            </div>
+            <div className="modal-body">
+              <SiniestroSeguimiento
+                siniestro={seguimientoSiniestro}
+                onReload={cargarDatos}
+              />
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
@@ -1790,7 +1821,6 @@ interface SiniestroDetailViewProps {
 
 function SiniestroDetailView({ siniestro, onEdit, onReload }: SiniestroDetailViewProps) {
   const [activeTab, setActiveTab] = useState<'info' | 'reparacion'>('info')
-  const [showSeguimiento, setShowSeguimiento] = useState(false)
 
   function formatMoney(value: number | undefined | null) {
     if (!value) return '-'
@@ -1837,14 +1867,6 @@ function SiniestroDetailView({ siniestro, onEdit, onReload }: SiniestroDetailVie
             </div>
           </div>
           <div style={{ display: 'flex', gap: '8px' }}>
-            <button
-              className="btn-primary"
-              onClick={() => setShowSeguimiento(true)}
-              style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
-            >
-              <Clock size={14} />
-              Seguimiento
-            </button>
             {siniestro.carpeta_drive_url && (
               <a
                 href={siniestro.carpeta_drive_url}
@@ -2007,6 +2029,11 @@ function SiniestroDetailView({ siniestro, onEdit, onReload }: SiniestroDetailVie
             <p style={{ margin: 0, fontSize: '13px' }}>{siniestro.observaciones}</p>
           </div>
         )}
+
+        {/* Historial de Gestión (readonly) */}
+        <div className="detail-card" style={{ gridColumn: '1 / -1' }}>
+          <SiniestroSeguimiento siniestro={siniestro} onReload={onReload} readonly />
+        </div>
       </div>
       ) : (
         <ReparacionTicket
@@ -2024,31 +2051,6 @@ function SiniestroDetailView({ siniestro, onEdit, onReload }: SiniestroDetailVie
         />
       )}
 
-      {/* Modal Seguimiento */}
-      {showSeguimiento && (
-        <div className="modal-overlay" onClick={() => setShowSeguimiento(false)}>
-          <div
-            className="modal-content"
-            style={{ maxWidth: '700px', maxHeight: '90vh', overflow: 'auto' }}
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="modal-header">
-              <h2>Seguimiento del Siniestro</h2>
-              <button className="modal-close" onClick={() => setShowSeguimiento(false)}>
-                <X size={18} />
-              </button>
-            </div>
-            <div className="modal-body">
-              <SiniestroSeguimiento
-                siniestro={siniestro}
-                onReload={() => {
-                  onReload()
-                }}
-              />
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   )
 }

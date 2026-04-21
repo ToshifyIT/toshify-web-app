@@ -14,11 +14,13 @@ import type { VehiculoSimple, ConductorSimple } from '../../../types/incidencias
 interface SiniestroSeguimientoProps {
   siniestro: SiniestroCompleto
   onReload: () => void
+  readonly?: boolean
 }
 
 interface SeguimientoFormData {
   tipo_evento: 'nota' | 'pago' | 'cobro_conductor'
   descripcion: string
+  notas?: string
   monto?: number
   cobrar_conductor: boolean
 }
@@ -81,7 +83,7 @@ function getWeekNumber(dateStr: string): number {
   return weekNumber
 }
 
-export function SiniestroSeguimiento({ siniestro, onReload }: SiniestroSeguimientoProps) {
+export function SiniestroSeguimiento({ siniestro, onReload, readonly = false }: SiniestroSeguimientoProps) {
   const { user, profile } = useAuth()
   const { sedeActualId, aplicarFiltroSede, sedeUsuario } = useSede()
   const navigate = useNavigate()
@@ -92,6 +94,7 @@ export function SiniestroSeguimiento({ siniestro, onReload }: SiniestroSeguimien
   const [formData, setFormData] = useState<SeguimientoFormData>({
     tipo_evento: 'nota',
     descripcion: '',
+    notas: '',
     cobrar_conductor: false
   })
 
@@ -211,6 +214,7 @@ export function SiniestroSeguimiento({ siniestro, onReload }: SiniestroSeguimien
     setFormData({
       tipo_evento: 'nota',
       descripcion: '',
+      notas: '',
       cobrar_conductor: false
     })
     setShowForm(false)
@@ -228,7 +232,7 @@ export function SiniestroSeguimiento({ siniestro, onReload }: SiniestroSeguimien
       conductor_id: siniestro.conductor_id || undefined,
       fecha: getLocalDateString(),
       monto: formData.monto || undefined,
-      descripcion: `[SINIESTRO] ${formData.descripcion}`,
+      descripcion: formData.descripcion,
       area: 'Siniestros',
       estado_id: incidenciaForm.estado_id, // Mantener el estado pre-seleccionado
       tipo_cobro_descuento_id: tipoReparacionSiniestro?.id || undefined
@@ -373,9 +377,9 @@ export function SiniestroSeguimiento({ siniestro, onReload }: SiniestroSeguimien
             fecha: incidenciaForm.fecha,
             turno: incidenciaForm.turno || null,
             area_responsable: incidenciaForm.area || 'Siniestros',
-            detalle: 'Cobro por siniestro',
+            detalle: incidenciaForm.descripcion || 'Cobro por siniestro',
             monto: incidenciaForm.monto || 0,
-            observaciones: incidenciaForm.descripcion || '',
+            observaciones: formData.notas?.trim() || '',
             aplicado: false,
             rechazado: false,
             conductor_nombre: selectedConductor?.nombre_completo || null,
@@ -455,14 +459,16 @@ export function SiniestroSeguimiento({ siniestro, onReload }: SiniestroSeguimien
             Registro de notas, pagos y cobros relacionados al siniestro
           </p>
         </div>
-        <button
-          className="btn-primary"
-          onClick={() => setShowForm(true)}
-          style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
-        >
-          <Plus size={16} />
-          Agregar
-        </button>
+        {!readonly && (
+          <button
+            className="btn-primary"
+            onClick={() => setShowForm(true)}
+            style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
+          >
+            <Plus size={16} />
+            Agregar
+          </button>
+        )}
       </div>
 
       {/* Formulario nuevo seguimiento */}
@@ -507,16 +513,31 @@ export function SiniestroSeguimiento({ siniestro, onReload }: SiniestroSeguimien
 
           <div className="form-group" style={{ marginBottom: '12px' }}>
             <label style={{ fontSize: '13px', fontWeight: 500, marginBottom: '4px', display: 'block', color: 'var(--text-secondary)' }}>
-              Descripcion / Notas <span style={{ color: '#dc2626' }}>*</span>
+              Descripción <span style={{ color: '#dc2626' }}>*</span>
             </label>
             <textarea
               value={formData.descripcion}
               onChange={(e) => setFormData(prev => ({ ...prev, descripcion: e.target.value }))}
-              placeholder="Detalle de la gestion realizada..."
+              placeholder={formData.tipo_evento === 'cobro_conductor' ? 'Detalle del siniestro...' : 'Detalle de la gestion realizada...'}
               rows={3}
               style={{ width: '100%', padding: '8px 12px', borderRadius: '6px', border: '1px solid var(--border-primary)', background: 'var(--bg-tertiary)', color: 'var(--text-primary)', resize: 'vertical' }}
             />
           </div>
+
+          {formData.tipo_evento === 'cobro_conductor' && (
+            <div className="form-group" style={{ marginBottom: '12px' }}>
+              <label style={{ fontSize: '13px', fontWeight: 500, marginBottom: '4px', display: 'block', color: 'var(--text-secondary)' }}>
+                Notas <span style={{ color: 'var(--text-tertiary)', fontSize: '11px', fontWeight: 400 }}>(opcional, mensaje para administración)</span>
+              </label>
+              <textarea
+                value={formData.notas || ''}
+                onChange={(e) => setFormData(prev => ({ ...prev, notas: e.target.value }))}
+                placeholder="Mensaje adicional para administración..."
+                rows={2}
+                style={{ width: '100%', padding: '8px 12px', borderRadius: '6px', border: '1px solid var(--border-primary)', background: 'var(--bg-tertiary)', color: 'var(--text-primary)', resize: 'vertical' }}
+              />
+            </div>
+          )}
 
           {(formData.tipo_evento === 'pago' || formData.tipo_evento === 'cobro_conductor') && (
             <div className="form-group" style={{ marginBottom: '12px' }}>

@@ -5103,6 +5103,10 @@ function PenalidadDetailView({ penalidad, onEdit, historialRechazos = [], loadin
             <span className="detail-item-label">Fecha aplicación</span>
             <span className="detail-item-value">{formatDate(penalidad.fecha_aplicacion)}</span>
           </div>
+          <div className="detail-item">
+            <span className="detail-item-label">Creado por</span>
+            <span className="detail-item-value">{penalidad.created_by_name || '-'}</span>
+          </div>
         </div>
       </div>
 

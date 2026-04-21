@@ -98,6 +98,7 @@ export interface Penalidad {
   conductor_nombre?: string
   vehiculo_patente?: string
   created_by?: string
+  created_by_name?: string
   created_at: string
   updated_at: string
   // Campos de fraccionamiento
