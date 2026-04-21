@@ -1371,7 +1371,6 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
       }
 
       let error
-      let insertedId: string | null = null
 
       if (isEditMode && editData) {
         // ACTUALIZAR
@@ -1394,10 +1393,7 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
         const result = await (supabase
           .from('programaciones_onboarding') as any)
           .insert(saveData)
-          .select('id')
-          .single()
         error = result.error
-        insertedId = result.data?.id || null
       }
 
       if (error) throw error
