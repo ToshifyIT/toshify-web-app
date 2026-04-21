@@ -659,9 +659,10 @@ function resolveRootFolder(sedeCode) {
  * Busca o crea la carpeta del conductor en Drive
  */
 async function findOrCreateConductorFolder(drive, conductorDni, conductorNombre, rootFolderId) {
-  const folderName = `${conductorDni} - ${conductorNombre}`
+  const folderName = conductorNombre
+  const folderNameLegacy = `${conductorDni} - ${conductorNombre}`
 
-  // Buscar carpeta existente
+  // Buscar carpeta con formato nuevo (solo nombre)
   const searchRes = await drive.files.list({
     q: `name='${folderName.replace(/'/g, "\\'")}' and '${rootFolderId}' in parents and mimeType='application/vnd.google-apps.folder' and trashed=false`,
     fields: 'files(id, name, webViewLink)',
@@ -674,7 +675,22 @@ async function findOrCreateConductorFolder(drive, conductorDni, conductorNombre,
     return { folderId: folder.id, folderUrl: folder.webViewLink, folderName: folder.name, created: false }
   }
 
-  // Crear carpeta nueva
+  // Buscar carpeta con formato legacy (DNI - nombre) para no crear duplicados
+  if (conductorDni) {
+    const searchLegacy = await drive.files.list({
+      q: `name='${folderNameLegacy.replace(/'/g, "\\'")}' and '${rootFolderId}' in parents and mimeType='application/vnd.google-apps.folder' and trashed=false`,
+      fields: 'files(id, name, webViewLink)',
+      supportsAllDrives: true,
+      includeItemsFromAllDrives: true
+    })
+
+    if (searchLegacy.data.files && searchLegacy.data.files.length > 0) {
+      const folder = searchLegacy.data.files[0]
+      return { folderId: folder.id, folderUrl: folder.webViewLink, folderName: folder.name, created: false }
+    }
+  }
+
+  // Crear carpeta nueva (solo nombre, sin DNI)
   const createRes = await drive.files.create({
     requestBody: {
       name: folderName,
@@ -851,38 +867,38 @@ async function generateContractForConductor({
     delimiters: { start: '{{', end: '}}' },
     paragraphLoop: true,
     linebreaks: true,
-    nullGetter: () => ''  // Variables no encontradas se reemplazan con string vacío
+    nullGetter: (part) => `{{${part.value}}}`  // Variables sin dato se dejan como placeholder
   })
 
   const fullName = `${conductor.nombres || ''} ${conductor.apellidos || ''}`.trim().toUpperCase()
   const amount = turno === 'nocturno' ? CONTRACT_CONFIG.amounts.nocturno : CONTRACT_CONFIG.amounts.diurno
 
-  doc.render({
-    'NAME': fullName,
-    'DNI': (conductor.numero_dni || '').toUpperCase(),
-    'ADDRESS': (conductor.direccion || '').toUpperCase(),
-    'MAIL': (conductor.email || '').toUpperCase(),
-    'PHONENUMBER': (conductor.telefono_contacto || '').toUpperCase(),
-    'DATEOFBIRTH': formatDate(conductor.fecha_nacimiento),
-    'CITIZEN': (conductor.nacionalidades?.descripcion || '').toUpperCase(),
-    'MARITALSTATUS': (conductor.estados_civiles?.descripcion || '').toUpperCase(),
-    'PLATE': (vehiculo.patente || '').toUpperCase(),
-    'SHIFT': (turno || '').toUpperCase(),
-    'MAKE': (vehiculo.marca || '').toUpperCase(),
-    'MODEL': (vehiculo.modelo || '').toUpperCase(),
-    'COLOR': (vehiculo.color || '').toUpperCase(),
-    'YEAR': String(vehiculo.anio || '').toUpperCase(),
-    'ENGINE NUMBER': (vehiculo.numero_motor || '').toUpperCase(),
-    'CHASSIS NUMBER': (vehiculo.numero_chasis || '').toUpperCase(),
-    'AMOUNT': amount,
-    'NAMETOSHIFY': CONTRACT_CONFIG.nameToshify,
-    'ACTUALYEAR': String(new Date().getFullYear()),
-    'KM': String(vehiculo.kilometraje_actual || ''),
-    'LTNAFTA': '',
-    'OBSERVATIONS': '',
-    'COVERAGE': '',
-    'TYPE': ''
-  })
+  // Solo incluir variables que tengan dato real, las vacías las maneja nullGetter
+  const renderData = {}
+  const addIfPresent = (key, value) => { if (value) renderData[key] = value }
+
+  addIfPresent('NAME', fullName)
+  addIfPresent('DNI', conductor.numero_dni?.toUpperCase())
+  addIfPresent('ADDRESS', conductor.direccion?.toUpperCase())
+  addIfPresent('MAIL', conductor.email?.toUpperCase())
+  addIfPresent('PHONENUMBER', conductor.telefono_contacto?.toUpperCase())
+  addIfPresent('DATEOFBIRTH', formatDate(conductor.fecha_nacimiento))
+  addIfPresent('CITIZEN', conductor.nacionalidades?.descripcion?.toUpperCase())
+  addIfPresent('MARITALSTATUS', conductor.estados_civiles?.descripcion?.toUpperCase())
+  addIfPresent('PLATE', vehiculo.patente?.toUpperCase())
+  addIfPresent('SHIFT', turno?.toUpperCase())
+  addIfPresent('MAKE', vehiculo.marca?.toUpperCase())
+  addIfPresent('MODEL', vehiculo.modelo?.toUpperCase())
+  addIfPresent('COLOR', vehiculo.color?.toUpperCase())
+  addIfPresent('YEAR', vehiculo.anio ? String(vehiculo.anio) : null)
+  addIfPresent('ENGINE NUMBER', vehiculo.numero_motor?.toUpperCase())
+  addIfPresent('CHASSIS NUMBER', vehiculo.numero_chasis?.toUpperCase())
+  addIfPresent('AMOUNT', amount)
+  addIfPresent('NAMETOSHIFY', CONTRACT_CONFIG.nameToshify)
+  addIfPresent('ACTUALYEAR', String(new Date().getFullYear()))
+  addIfPresent('KM', vehiculo.kilometraje_actual ? String(vehiculo.kilometraje_actual) : null)
+
+  doc.render(renderData)
 
   const docxBuffer = doc.getZip().generate({ type: 'nodebuffer' })
 
@@ -896,10 +912,12 @@ async function generateContractForConductor({
   )
 
   // 4. Generar nombre de archivo
-  const now = new Date()
-  const dateStr = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}`
-  const templateLabel = templateKey.replace(/([A-Z])/g, ' $1').trim()
-  const fileName = `${fullName} - ${templateLabel} - ${dateStr}`
+  // Formato: "Carta Oferta - Auto a Cargo Bariloche - Cargo - Nombre Conductor"
+  const tipoLabel = templateKey.includes('cartaOferta') ? 'Carta Oferta' : 'Anexo'
+  const sedeLabel = sedeCode?.toUpperCase() === 'BRC' ? ' Bariloche' : ''
+  const modalidadLabel = templateKey.includes('AutoCargo') ? `Auto a Cargo${sedeLabel}` : `Turno${sedeLabel}`
+  const turnoLabel = turno ? (turno === 'diurno' ? 'Diurno' : 'Nocturno') : 'Cargo'
+  const fileName = `${tipoLabel} - ${modalidadLabel} - ${turnoLabel} - ${fullName}`
 
   // 5. Subir .docx a la carpeta del conductor
   const docxUpload = await drive.files.create({
