@@ -3357,7 +3357,7 @@ export function ReporteFacturacionTab() {
           if (linea.dias <= 0) continue
           const codigo = getCodigoAlquiler(linea.modalidad, linea.gnc)
           const precio = preciosActuales[codigo] || 0
-          const monto = Math.round(precio * linea.dias * 100) / 100
+          const monto = Math.round(precio * linea.dias)
           alquilerTotal += monto
           detallesAlquiler.push({
             codigo,
@@ -5040,7 +5040,8 @@ export function ReporteFacturacionTab() {
       // total_a_pagar ya incluye el saldo anterior, así que el nuevo saldo
       // es simplemente lo que queda sin pagar (negativo = deuda, 0 = saldado)
       const pendienteAntesPago = totalAbsoluto - yaCobrado
-      const nuevoSaldo = -(pendienteAntesPago - formValues.monto)
+      const saldoCrudoManual = -(pendienteAntesPago - formValues.monto)
+      const nuevoSaldo = Math.abs(saldoCrudoManual) < 1 ? 0 : saldoCrudoManual
 
       await upsertSaldoConductor({
         conductorId: facturacion.conductor_id,
@@ -5328,7 +5329,10 @@ export function ReporteFacturacionTab() {
         // total_a_pagar ya incluye el saldo anterior, así que el nuevo saldo
         // es lo que queda sin pagar (negativo = deuda, 0 = saldado)
         const pendienteCabify = pago.total_a_pagar - yaCobrado
-        const nuevoSaldoCabify = -(pendienteCabify - monto)
+        const saldoCrudo = -(pendienteCabify - monto)
+        // Write-off de residuos < $1 (redondeos distintos entre Cabify y la facturación
+        // dejan diferencias de centavos que no queremos arrastrar).
+        const nuevoSaldoCabify = Math.abs(saldoCrudo) < 1 ? 0 : saldoCrudo
 
         await upsertSaldoConductor({
           conductorId: pago.conductor_id,
