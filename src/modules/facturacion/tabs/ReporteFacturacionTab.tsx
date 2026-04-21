@@ -1210,9 +1210,10 @@ export function ReporteFacturacionTab() {
           : ((f.turnos_cobrados >= 7 || tieneAsignacionCierreLoad) ? 'Activo' : 'Pausa')
         const horarioInfo = horarioMapLoad.get(f.conductor_id)
         // Detectar si fecha_terminacion no coincide con fecha_fin de asignación
+        // Solo aplica si el conductor está de baja — si está ACTIVO, fecha_terminacion es residuo.
         const ftStrLoad = f.conductor?.fecha_terminacion ? f.conductor.fecha_terminacion.substring(0, 10) : null
         const maxFinAsigLoad = maxAsigFinLoad.get(f.conductor_id)
-        const fechaBajaNoCoincideLoad = !!(ftStrLoad && maxFinAsigLoad && ftStrLoad !== maxFinAsigLoad)
+        const fechaBajaNoCoincideLoad = esDeBajaLoad && !!(ftStrLoad && maxFinAsigLoad && ftStrLoad !== maxFinAsigLoad)
         return {
           ...f,
           conductor_nombre: f.conductor 
@@ -2466,7 +2467,9 @@ export function ReporteFacturacionTab() {
              // Discrepancia de formato DNI
             dni_discrepancy: dniDiscrepancy ? { conductorRaw: conductorRawDni, cabifyRaw: cabifyRawDni } : null,
             // Detectar si fecha_terminacion no coincide con fecha_fin de asignación
+            // Solo aplica si el conductor está de baja — si está ACTIVO, fecha_terminacion es residuo.
             fecha_baja_no_coincide: (() => {
+              if (conductor.estado_id === ESTADO_ACTIVO_ID) return false
               if (!conductor.fecha_terminacion) return false
               const ftStr = conductor.fecha_terminacion.substring(0, 10)
               const maxFinAsig = maxAsigFinVP.get(conductorId)
@@ -3076,9 +3079,10 @@ export function ReporteFacturacionTab() {
           : ((totalDias >= 7 || tieneAsignacionCierreRecalc) ? 'Activo' : 'Pausa')
 
         // Detectar si fecha_terminacion no coincide con fecha_fin de asignación
+        // Solo aplica si el conductor está de baja — si está ACTIVO, fecha_terminacion es residuo.
         const maxFinAsigR = maxAsigFinRecalc.get(conductorData.id)
         const ftStrR = conductorData.fecha_terminacion ? conductorData.fecha_terminacion.substring(0, 10) : null
-        const fechaBajaNoCoincide = !!(ftStrR && maxFinAsigR && ftStrR !== maxFinAsigR)
+        const fechaBajaNoCoincide = esDeBaja && !!(ftStrR && maxFinAsigR && ftStrR !== maxFinAsigR)
 
         conductoresProcesados.push({
           conductor_id: conductorData.id,
