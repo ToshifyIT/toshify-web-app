@@ -169,6 +169,7 @@ export function PortalPage() {
   const [view, setView] = useState<View>('login')
   const [conductor, setConductor] = useState<PortalConductor | null>(null)
   const [facturas, setFacturas] = useState<PortalFacturacion[]>([])
+  const [pagadoPorSemana, setPagadoPorSemana] = useState<Record<string, number>>({})
   const [selectedFactura, setSelectedFactura] = useState<PortalFacturacion | null>(null)
   const [detalleItems, setDetalleItems] = useState<PortalDetalle[]>([])
   const [detallePagos, setDetallePagos] = useState<Array<{ id: string; tipo: string; monto: number; referencia: string | null; fecha: string }>>([])
@@ -328,8 +329,22 @@ export function PortalPage() {
       }
 
       setFacturas(facturasData)
+
+      // Cargar total pagado por semana/año desde control_saldos
+      const { data: pagosData } = await supabase
+        .from('control_saldos')
+        .select('semana, anio, monto_movimiento')
+        .eq('conductor_id', conductorId)
+        .in('tipo_movimiento', ['pago_cabify', 'pago_manual', 'pago', 'pago_cuota'])
+      const map: Record<string, number> = {}
+      ;(pagosData || []).forEach((p: { semana: number; anio: number; monto_movimiento: number }) => {
+        const key = `${p.semana}-${p.anio}`
+        map[key] = (map[key] || 0) + Number(p.monto_movimiento || 0)
+      })
+      setPagadoPorSemana(map)
     } catch {
       setFacturas([])
+      setPagadoPorSemana({})
     } finally {
       setLoadingFacturas(false)
     }
@@ -756,6 +771,7 @@ export function PortalPage() {
           label: `S${p.semana}`,
           facturacion: f.total_a_pagar,
           ganancia,
+          pagos: pagadoPorSemana[`${p.semana}-${p.anio}`] || 0,
         }
       })
       .reverse()
@@ -764,7 +780,7 @@ export function PortalPage() {
     const ultimaGanancia = chartData.length > 0 ? chartData[chartData.length - 1].ganancia : 0
 
     return { sum, promedio, ultima, variacion, totalSemanas: facturas.length, chartData, ultimaGanancia }
-  }, [facturas, cabifyPorSemana])
+  }, [facturas, cabifyPorSemana, pagadoPorSemana])
 
 
 
@@ -1174,6 +1190,68 @@ export function PortalPage() {
                   </div>
                 </div>
 
+                {/* Chart: Proforma vs Pagos */}
+                <div className="portal-chart-card" style={{ marginTop: '12px' }}>
+                  <div className="portal-chart-header">
+                    <div className="portal-chart-title">Proforma vs Pagos</div>
+                    <div className="portal-chart-legend">
+                      <span className="portal-legend-item">
+                        <span className="portal-legend-dot" style={{ background: '#ff0033' }} /> Proforma
+                      </span>
+                      <span className="portal-legend-item">
+                        <span className="portal-legend-dot" style={{ background: '#2563eb' }} /> Pagos
+                        <span className="portal-stat-tooltip" data-tooltip="Total pagado cada semana (Cabify, efectivo, transferencia, cuotas)">&#9432;</span>
+                      </span>
+                    </div>
+                  </div>
+                  <div className="portal-chart-container">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <LineChart data={stats.chartData} margin={{ top: 8, right: 8, left: -10, bottom: 0 }}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="var(--border-primary)" />
+                        <XAxis
+                          dataKey="label"
+                          tick={{ fontSize: 11, fill: 'var(--text-tertiary)' }}
+                          axisLine={false}
+                          tickLine={false}
+                        />
+                        <YAxis
+                          tick={{ fontSize: 10, fill: 'var(--text-tertiary)' }}
+                          axisLine={false}
+                          tickLine={false}
+                          tickFormatter={(v: number) => v >= 1000 ? `$${(v / 1000).toFixed(0)}K` : `$${v}`}
+                        />
+                        <Tooltip
+                          formatter={(value: string | number, name: string) => [formatCurrency(Number(value)), name === 'facturacion' ? 'Proforma' : 'Pagos']}
+                          contentStyle={{
+                            background: 'var(--bg-tertiary)',
+                            border: '1px solid var(--border-primary)',
+                            borderRadius: '8px',
+                            fontSize: '12px',
+                            color: 'var(--text-primary)',
+                          }}
+                          labelStyle={{ color: 'var(--text-secondary)' }}
+                        />
+                        <Line
+                          type="monotone"
+                          dataKey="facturacion"
+                          stroke="#ff0033"
+                          strokeWidth={2}
+                          dot={{ r: 4, fill: '#ff0033', strokeWidth: 2, stroke: 'var(--card-bg)' }}
+                          activeDot={{ r: 6, fill: '#ff0033', strokeWidth: 2, stroke: 'var(--card-bg)' }}
+                        />
+                        <Line
+                          type="monotone"
+                          dataKey="pagos"
+                          stroke="#2563eb"
+                          strokeWidth={2}
+                          dot={{ r: 4, fill: '#2563eb', strokeWidth: 2, stroke: 'var(--card-bg)' }}
+                          activeDot={{ r: 6, fill: '#2563eb', strokeWidth: 2, stroke: 'var(--card-bg)' }}
+                        />
+                      </LineChart>
+                    </ResponsiveContainer>
+                  </div>
+                </div>
+
                 {/* Fraccionamientos */}
                 {fraccionamientos.length > 0 && (
                   <div className="portal-fraccionamientos-card">
@@ -1197,6 +1275,7 @@ export function PortalPage() {
                 <div className="portal-weeks">
                   {facturas.map((f) => {
                     const p = f.periodos_facturacion
+                    const pagado = pagadoPorSemana[`${p.semana}-${p.anio}`] || 0
                     return (
                       <div key={f.id} className="portal-week-card" onClick={() => openDetail(f)}>
                         <div className="portal-week-left">
@@ -1207,6 +1286,11 @@ export function PortalPage() {
                           <div className="portal-week-info">
                             {f.vehiculo_patente || '-'} · {f.tipo_alquiler} · {f.turnos_cobrados}/{f.turnos_base} turnos
                           </div>
+                          {pagado > 0 && (
+                            <div className="portal-week-info" style={{ color: '#059669', fontWeight: 500, marginTop: '2px' }}>
+                              Pagado: {formatCurrency(pagado)}
+                            </div>
+                          )}
                         </div>
                         <div className="portal-week-right">
                           <div className={`portal-week-total ${f.total_a_pagar > 0 ? 'debit' : 'credit'}`}>
