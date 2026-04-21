@@ -449,25 +449,11 @@ export function SiniestrosModule() {
       cell: ({ row }) => formatDate(row.original.fecha_siniestro)
     },
     {
-      accessorKey: 'vehiculo_patente',
-      header: () => (
-        <ExcelColumnFilter
-          label="Patente"
-          options={patentesUnicas}
-          selectedValues={patenteFilter}
-          onSelectionChange={setPatenteFilter}
-          filterId="patente"
-          openFilterId={openFilterId}
-          onOpenChange={setOpenFilterId}
-        />
-      ),
-      cell: ({ row }) => <span className="dt-badge dt-badge-gray">{row.original.vehiculo_patente || '-'}</span>
-    },
-    {
+      id: 'patente_conductor',
       accessorKey: 'conductor_display',
       header: () => (
         <ExcelColumnFilter
-          label="Conductor"
+          label="Patente / Conductor"
           options={conductoresUnicos}
           selectedValues={conductorFilter}
           onSelectionChange={setConductorFilter}
@@ -481,9 +467,23 @@ export function SiniestrosModule() {
         const color = resp === 'tercero' ? 'green' : resp === 'conductor' ? 'red' : resp === 'compartida' ? 'yellow' : 'gray'
         const labels: Record<string, string> = { tercero: 'Tercero', conductor: 'Conductor', sin_info: 'Sin Info', compartida: 'Compartida' }
         return (
-          <div>
-            <div style={{ fontSize: '12px' }}>{row.original.conductor_display || '-'}</div>
-            {resp && <span className={`dt-badge dt-badge-${color}`} style={{ fontSize: '9px', padding: '1px 5px' }}>{labels[resp] || resp}</span>}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', minWidth: 0 }}>
+            <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+              {row.original.conductor_display || '-'}
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '11px', color: 'var(--text-tertiary)' }}>
+              <span style={{ fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace', fontWeight: 500 }}>
+                {row.original.vehiculo_patente || '-'}
+              </span>
+              {resp && (
+                <>
+                  <span style={{ opacity: 0.4 }}>·</span>
+                  <span className={`dt-badge dt-badge-${color}`} style={{ fontSize: '9px', padding: '1px 6px' }}>
+                    {labels[resp] || resp}
+                  </span>
+                </>
+              )}
+            </div>
           </div>
         )
       }
@@ -566,6 +566,7 @@ export function SiniestrosModule() {
         
         return (
           <ActionsMenu
+            maxVisible={999}
             actions={[
               {
                 icon: <Eye size={15} />,
