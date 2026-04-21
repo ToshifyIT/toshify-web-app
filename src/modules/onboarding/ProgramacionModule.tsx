@@ -20,6 +20,8 @@ import { ProgramacionAssignmentWizard } from './components/ProgramacionAssignmen
 import type { ProgramacionOnboardingCompleta } from '../../types/onboarding.types'
 import Swal from 'sweetalert2'
 import { showSuccess } from '../../utils/toast'
+import { generateContracts } from '../../services/contractService'
+import type { GeneratedDocument } from '../../services/contractService'
 import './ProgramacionModule.css'
 import { PROGRAMACION_ESTADO_LABELS } from '../../utils/conductorUtils'
 
@@ -1176,6 +1178,60 @@ export function ProgramacionModule() {
         }
       } catch (_visitaErr) {
         // No bloquear el flujo principal si falla la creación de visita
+      }
+
+      // Generar documentos de contrato si corresponde
+      const needsDocGeneration = prog.modalidad === 'a_cargo'
+        ? (prog.tipo_documento && prog.tipo_documento !== 'na')
+        : ((prog.documento_diurno && prog.documento_diurno !== 'na') ||
+           (prog.documento_nocturno && prog.documento_nocturno !== 'na'))
+
+      if (needsDocGeneration) {
+        const contractParams = {
+          conductor_id: prog.modalidad === 'a_cargo' ? prog.conductor_id : null,
+          conductor_diurno_id: prog.modalidad === 'turno' ? prog.conductor_diurno_id : null,
+          conductor_nocturno_id: prog.modalidad === 'turno' ? prog.conductor_nocturno_id : null,
+          vehiculo_id: prog.vehiculo_entregar_id,
+          tipo_documento: prog.modalidad === 'a_cargo' ? prog.tipo_documento : null,
+          documento_diurno: prog.modalidad === 'turno' ? prog.documento_diurno : null,
+          documento_nocturno: prog.modalidad === 'turno' ? prog.documento_nocturno : null,
+          modalidad: prog.modalidad as 'turno' | 'a_cargo',
+          sede_id: prog.sede_id || sedeActualId || sedeUsuario?.id || null,
+          programacion_id: prog.id,
+          created_by: user?.id || null,
+          created_by_name: profile?.full_name || 'Sistema'
+        }
+
+        generateContracts(contractParams).then((contractResult) => {
+          if (contractResult.success && contractResult.documents.length > 0) {
+            const docLinks = contractResult.documents.map((d: GeneratedDocument) => {
+              const label = d.turno ? `${d.conductor_nombre} (${d.turno})` : d.conductor_nombre
+              return `<li><strong>${label}</strong>: <a href="${d.folderUrl}" target="_blank" rel="noopener">Ver carpeta en Drive</a></li>`
+            }).join('')
+
+            Swal.fire({
+              icon: 'success',
+              title: 'Documentos generados',
+              html: `<p>Se generaron los siguientes documentos:</p><ul style="text-align:left;margin-top:8px">${docLinks}</ul>`,
+              confirmButtonText: 'Entendido'
+            })
+          } else if (!contractResult.success) {
+            Swal.fire({
+              icon: 'warning',
+              title: 'Error al generar documentos',
+              text: contractResult.error || 'No se pudieron generar los documentos.',
+              confirmButtonText: 'Entendido'
+            })
+          }
+        }).catch((err: Error) => {
+          console.error('[Contract] Error:', err)
+          Swal.fire({
+            icon: 'warning',
+            title: 'Error al generar documentos',
+            text: 'Ocurrió un error al generar los documentos. La asignación se creó correctamente.',
+            confirmButtonText: 'Entendido'
+          })
+        })
       }
 
       // Remover de la lista local (ya no debe aparecer)

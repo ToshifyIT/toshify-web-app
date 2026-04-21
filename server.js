@@ -631,7 +631,7 @@ const CONTRACT_CONFIG = {
 function resolveTemplateKey(tipoDocumento, modalidad, sedeCode) {
   if (tipoDocumento === 'na') return null
 
-  const isBariloche = sedeCode && sedeCode.toUpperCase() === 'BARI'
+  const isBariloche = sedeCode && sedeCode.toUpperCase() === 'BRC'
 
   if (tipoDocumento === 'carta_oferta') {
     if (isBariloche) return 'cartaOfertaAutoCargoBariloche'
@@ -651,7 +651,7 @@ function resolveTemplateKey(tipoDocumento, modalidad, sedeCode) {
  * Determina la carpeta raíz según sede
  */
 function resolveRootFolder(sedeCode) {
-  if (sedeCode && sedeCode.toUpperCase() === 'BARI') return CONTRACT_CONFIG.folders.bariloche
+  if (sedeCode && sedeCode.toUpperCase() === 'BRC') return CONTRACT_CONFIG.folders.bariloche
   return CONTRACT_CONFIG.folders.principal
 }
 
@@ -757,7 +757,10 @@ async function fetchSedeCode(sedeId) {
     }
   )
 
-  if (!res.ok) return 'BSAS'
+  if (!res.ok) {
+    console.error(`[fetchSedeCode] Error al consultar sede ${sedeId}: HTTP ${res.status}`)
+    return 'BSAS'
+  }
   const data = await res.json()
   return data[0]?.codigo || 'BSAS'
 }
