@@ -373,22 +373,29 @@ export function SiniestrosModule() {
   const siniestrosFiltrados = useMemo(() => {
     let filtered = [...siniestrosSemana]
 
-    if (patenteFilter.length > 0) {
-      filtered = filtered.filter(s => patenteFilter.includes(s.vehiculo_patente || ''))
+    // Sets para lookup O(1) en vez de Array.includes() O(m) en cada fila.
+    const patenteSet = new Set(patenteFilter)
+    const conductorSet = new Set(conductorFilter)
+    const categoriaSet = new Set(categoriaFilter)
+    const responsableSet = new Set(responsableFilter)
+    const estadoSet = new Set(estadoFilter)
+
+    if (patenteSet.size > 0) {
+      filtered = filtered.filter(s => patenteSet.has(s.vehiculo_patente || ''))
     }
-    if (conductorFilter.length > 0) {
-      filtered = filtered.filter(s => conductorFilter.includes(s.conductor_display || ''))
+    if (conductorSet.size > 0) {
+      filtered = filtered.filter(s => conductorSet.has(s.conductor_display || ''))
     }
-    if (categoriaFilter.length > 0) {
-      filtered = filtered.filter(s => categoriaFilter.includes(s.categoria_nombre || ''))
+    if (categoriaSet.size > 0) {
+      filtered = filtered.filter(s => categoriaSet.has(s.categoria_nombre || ''))
     }
-    if (responsableFilter.length > 0) {
-      filtered = filtered.filter(s => responsableFilter.includes(s.responsable || ''))
+    if (responsableSet.size > 0) {
+      filtered = filtered.filter(s => responsableSet.has(s.responsable || ''))
     }
-    if (estadoFilter.length > 0) {
-      filtered = filtered.filter(s => estadoFilter.includes(s.estado_nombre || ''))
+    if (estadoSet.size > 0) {
+      filtered = filtered.filter(s => estadoSet.has(s.estado_nombre || ''))
     }
-    
+
     return filtered
   }, [siniestrosSemana, patenteFilter, conductorFilter, categoriaFilter, responsableFilter, estadoFilter])
 

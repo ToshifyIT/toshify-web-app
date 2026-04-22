@@ -1927,6 +1927,18 @@ export function GuiasModule() {
   const filteredDrivers = useMemo(() => {
     let result = drivers;
 
+    // Sets para lookup O(1) — evita Array.includes() O(m) dentro de .filter() sobre N conductores.
+    const nombreSet = new Set(nombreFilter);
+    const cbuSet = new Set(cbuFilter);
+    const estadoSet = new Set(estadoFilter);
+    const turnoSet = new Set(turnoFilter);
+    const categoriaSet = new Set(categoriaFilter);
+    const asignacionSet = new Set(asignacionFilter);
+    const efectivoSet = new Set(efectivoFilter);
+    const appSet = new Set(appFilter);
+    const totalSet = new Set(totalFilter);
+    const cabifyDataSet = new Set(cabifyDataFilter);
+
     // Por defecto solo mostrar conductores activos; si showAllDrivers, mostrar todos (activos + baja)
     if (!showAllDrivers) {
       result = result.filter(c => {
@@ -1935,73 +1947,77 @@ export function GuiasModule() {
       });
     }
 
-    if (nombreFilter.length > 0) {
+    if (nombreSet.size > 0) {
       result = result.filter(c =>
-        nombreFilter.includes(`${c.nombres} ${c.apellidos}`)
+        nombreSet.has(`${c.nombres} ${c.apellidos}`)
       );
     }
 
-    if (cbuFilter.length > 0) {
+    if (cbuSet.size > 0) {
       result = result.filter(c =>
-        cbuFilter.includes(c.numero_cuit || '')
+        cbuSet.has(c.numero_cuit || '')
       );
     }
 
-    if (estadoFilter.length > 0) {
+    if (estadoSet.size > 0) {
       result = result.filter(c => {
         const codigo = c.conductores_estados?.codigo || '';
-        return estadoFilter.includes(codigo);
+        return estadoSet.has(codigo);
       });
     }
 
-    if (turnoFilter.length > 0) {
-      result = result.filter(c => turnoFilter.includes(getTurnoKeyForFilter(c as any)));
+    if (turnoSet.size > 0) {
+      result = result.filter(c => turnoSet.has(getTurnoKeyForFilter(c as any)));
     }
 
-    if (categoriaFilter.length > 0) {
+    if (categoriaSet.size > 0) {
       result = result.filter(c => {
         const categorias = c.licencias_categorias;
         if (!Array.isArray(categorias) || categorias.length === 0) return false;
-        return categorias.some((cat: any) => categoriaFilter.includes(cat.codigo));
+        return categorias.some((cat: any) => categoriaSet.has(cat.codigo));
       });
     }
 
-    if (asignacionFilter.length > 0) {
+    if (asignacionSet.size > 0) {
+      const wantAsignado = asignacionSet.has('asignado');
+      const wantDisponible = asignacionSet.has('disponible');
       result = result.filter(c => {
         const tieneAsignacion = !!(c as any).vehiculo_asignado;
         const esActivo = c.conductores_estados?.codigo?.toLowerCase() === 'activo';
-        if (asignacionFilter.includes('asignado') && tieneAsignacion) return true;
-        if (asignacionFilter.includes('disponible') && !tieneAsignacion && esActivo) return true;
+        if (wantAsignado && tieneAsignacion) return true;
+        if (wantDisponible && !tieneAsignacion && esActivo) return true;
         return false;
       });
     }
 
-    if (efectivoFilter.length > 0) {
+    if (efectivoSet.size > 0) {
       result = result.filter(c => {
          const val = (c as any).facturacion_efectivo_filter || "N/A";
-         return efectivoFilter.includes(val);
+         return efectivoSet.has(val);
       });
     }
 
-    if (appFilter.length > 0) {
+    if (appSet.size > 0) {
       result = result.filter(c => {
          const val = (c as any).facturacion_app_filter || "N/A";
-         return appFilter.includes(val);
+         return appSet.has(val);
       });
     }
 
-    if (totalFilter.length > 0) {
+    if (totalSet.size > 0) {
       result = result.filter(c => {
          const val = (c as any).facturacion_total_filter || "N/A";
-         return totalFilter.includes(val);
+         return totalSet.has(val);
       });
     }
 
-    if (cabifyDataFilter.length > 0) {
+    if (cabifyDataSet.size > 0) {
+      const wantCon = cabifyDataSet.has('con_datos');
+      const wantSin = cabifyDataSet.has('sin_datos');
       result = result.filter(c => {
         const hasCabify = !!(c as any).hasCabifyData;
-        if (cabifyDataFilter.includes('con_datos') && hasCabify) return true;
-        if (cabifyDataFilter.includes('sin_datos') && !hasCabify) return true;
+        if (wantCon && hasCabify) return true;
+        if (wantSin && !hasCabify) return true;
         return false;
       });
     }

@@ -106,6 +106,9 @@ export const getCabifyDatosPorSemanas = async (
 
     const semanaResults = await Promise.all(semanaPromises);
 
+    // Set para lookup O(1) en vez de Array.includes() O(n) dentro del loop de drivers
+    const conductorIdsSet = new Set(conductorIds);
+
     // Mapear resultados: DNI del driver → UUID del conductor
     for (const { semana, drivers } of semanaResults) {
       if (drivers.length === 0) continue;
@@ -119,7 +122,7 @@ export const getCabifyDatosPorSemanas = async (
         if (!dniNorm) continue;
 
         const conductorId = dniToConductorId.get(dniNorm);
-        if (conductorId && conductorIds.includes(conductorId)) {
+        if (conductorId && conductorIdsSet.has(conductorId)) {
           semanaMap.set(conductorId, {
             cobroApp: driver.cobroApp,
             cobroEfectivo: driver.cobroEfectivo,
@@ -131,23 +134,31 @@ export const getCabifyDatosPorSemanas = async (
       // Paso 2: Fallback por nombre/apellido para conductores no encontrados por DNI
       if (conductorNames && conductorNames.size > 0) {
         const unmatchedIds = conductorIds.filter(id => !matchedConductorIds.has(id));
-        for (const conductorId of unmatchedIds) {
-          const nameInfo = conductorNames.get(conductorId);
-          if (!nameInfo) continue;
-          const nombresLower = nameInfo.nombres.trim().toLowerCase();
-          const apellidosLower = nameInfo.apellidos.trim().toLowerCase();
-          if (!nombresLower || !apellidosLower) continue;
+        if (unmatchedIds.length > 0) {
+          // Precomputar el nombre completo lowercase de cada driver UNA SOLA VEZ
+          // (antes se recomputaba para cada conductor × cada driver → trabajo duplicado).
+          const driversLower = drivers.map(d => ({
+            driver: d,
+            cabifyFull: `${(d.name || '')} ${(d.surname || '')}`.trim().toLowerCase(),
+          }));
 
-          const matched = drivers.find(d => {
-            const cabifyFull = `${(d.name || '')} ${(d.surname || '')}`.trim().toLowerCase();
-            return cabifyFull.includes(nombresLower) && cabifyFull.includes(apellidosLower);
-          });
+          for (const conductorId of unmatchedIds) {
+            const nameInfo = conductorNames.get(conductorId);
+            if (!nameInfo) continue;
+            const nombresLower = nameInfo.nombres.trim().toLowerCase();
+            const apellidosLower = nameInfo.apellidos.trim().toLowerCase();
+            if (!nombresLower || !apellidosLower) continue;
 
-          if (matched) {
-            semanaMap.set(conductorId, {
-              cobroApp: matched.cobroApp,
-              cobroEfectivo: matched.cobroEfectivo,
-            });
+            const matched = driversLower.find(dl =>
+              dl.cabifyFull.includes(nombresLower) && dl.cabifyFull.includes(apellidosLower)
+            );
+
+            if (matched) {
+              semanaMap.set(conductorId, {
+                cobroApp: matched.driver.cobroApp,
+                cobroEfectivo: matched.driver.cobroEfectivo,
+              });
+            }
           }
         }
       }
