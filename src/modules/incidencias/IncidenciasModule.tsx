@@ -1223,7 +1223,13 @@ export function IncidenciasModule() {
       header: 'Tipo',
       cell: ({ row }) => {
         const tipoId = row.original.tipo_cobro_descuento_id
-        if (!tipoId) return '-'
+        if (!tipoId) {
+          // Fallback: parsear código de concepto nómina desde el detalle de la penalidad asociada
+          const pen = penalidadesPorIncidencia.get(row.original.id)
+          const match = pen?.detalle?.match(/^\[([A-Z0-9]+)\]/)
+          if (match) return match[1]
+          return '-'
+        }
         // Para logística, los tipos empiezan con "__"
         if (tipoId.startsWith('__')) {
           // Mapear tipos de logística a nombres legibles
@@ -1327,7 +1333,7 @@ export function IncidenciasModule() {
         />
       )
     }
-  ], [patentesUnicas, patenteFilter, conductoresUnicos, conductorFilter, turnosUnicos, turnoFilter, areasUnicas, areaFilter, estadosUnicos, estadoFilter, openFilterId, canDelete, tiposCobroDescuento])
+  ], [patentesUnicas, patenteFilter, conductoresUnicos, conductorFilter, turnosUnicos, turnoFilter, areasUnicas, areaFilter, estadosUnicos, estadoFilter, openFilterId, canDelete, tiposCobroDescuento, penalidadesPorIncidencia])
 
   // Columnas específicas para incidencias de COBRO (incluye botón generar cobro/descuento)
   const incidenciasCobroColumns = useMemo<ColumnDef<IncidenciaCompleta>[]>(() => {
