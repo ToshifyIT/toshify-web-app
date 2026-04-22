@@ -841,7 +841,7 @@ function formatDate(dateStr) {
 
 /**
  * Genera un documento (docx + pdf) para un conductor específico
- * Retorna { docxUrl, pdfUrl, folderUrl, folderId }
+ * Retorna { googleDocUrl, pdfUrl, folderUrl, folderId }
  */
 async function generateContractForConductor({
   drive, conductor, vehiculo, templateKey, turno, sedeCode
@@ -912,19 +912,23 @@ async function generateContractForConductor({
   )
 
   // 4. Generar nombre de archivo
-  // Formato: "Carta Oferta - Auto a Cargo Bariloche - Cargo - Nombre Conductor"
+  // Formato: "TIPO - MODALIDAD[ - TURNO] - NOMBRE"
+  // Turno solo se incluye cuando la modalidad es "turno" (Diurno/Nocturno)
   const tipoLabel = templateKey.includes('cartaOferta') ? 'Carta Oferta' : 'Anexo'
   const sedeLabel = sedeCode?.toUpperCase() === 'BRC' ? ' Bariloche' : ''
-  const modalidadLabel = templateKey.includes('AutoCargo') ? `Auto a Cargo${sedeLabel}` : `Turno${sedeLabel}`
-  const turnoLabel = turno ? (turno === 'diurno' ? 'Diurno' : 'Nocturno') : 'Cargo'
-  const fileName = `${tipoLabel} - ${modalidadLabel} - ${turnoLabel} - ${fullName}`
+  const isAutoCargo = templateKey.includes('AutoCargo')
+  const modalidadLabel = isAutoCargo ? `Auto a Cargo${sedeLabel}` : `Turno${sedeLabel}`
+  const turnoLabel = (!isAutoCargo && turno) ? (turno === 'diurno' ? 'Diurno' : 'Nocturno') : ''
+  const fileName = turnoLabel
+    ? `${tipoLabel} - ${modalidadLabel} - ${turnoLabel} - ${fullName}`
+    : `${tipoLabel} - ${modalidadLabel} - ${fullName}`
 
-  // 5. Subir .docx a la carpeta del conductor
-  const docxUpload = await drive.files.create({
+  // 5. Subir como Google Doc (documento definitivo, editable por Apps Script)
+  const googleDoc = await drive.files.create({
     requestBody: {
-      name: `${fileName}.docx`,
+      name: fileName,
       parents: [folder.folderId],
-      mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+      mimeType: 'application/vnd.google-apps.document'
     },
     media: {
       mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
@@ -934,28 +938,13 @@ async function generateContractForConductor({
     supportsAllDrives: true
   })
 
-  // 6. Subir como Google Doc (para convertir a PDF)
-  const tempGoogleDoc = await drive.files.create({
-    requestBody: {
-      name: `${fileName} (temp)`,
-      parents: [folder.folderId],
-      mimeType: 'application/vnd.google-apps.document'  // Convierte automáticamente a Google Doc
-    },
-    media: {
-      mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-      body: Readable.from(docxBuffer)
-    },
-    fields: 'id',
-    supportsAllDrives: true
-  })
-
-  // 7. Exportar Google Doc como PDF
+  // 6. Exportar Google Doc como PDF
   const pdfExport = await drive.files.export(
-    { fileId: tempGoogleDoc.data.id, mimeType: 'application/pdf' },
+    { fileId: googleDoc.data.id, mimeType: 'application/pdf' },
     { responseType: 'arraybuffer' }
   )
 
-  // 8. Subir PDF a la carpeta del conductor
+  // 7. Subir PDF a la carpeta del conductor
   const pdfUpload = await drive.files.create({
     requestBody: {
       name: `${fileName}.pdf`,
@@ -970,21 +959,15 @@ async function generateContractForConductor({
     supportsAllDrives: true
   })
 
-  // 9. Eliminar Google Doc temporal
-  await drive.files.delete({
-    fileId: tempGoogleDoc.data.id,
-    supportsAllDrives: true
-  }).catch(err => console.warn('[Contract] Error deleting temp doc:', err.message))
-
-  // 10. Si el conductor no tenía drive_folder_url, actualizar
+  // 8. Si el conductor no tenía drive_folder_url, actualizar
   if (!conductor.drive_folder_url && folder.folderUrl) {
     await updateConductorDriveUrl(conductor.id, folder.folderUrl)
   }
 
-  console.log(`[Contract] OK: ${fileName} → docx: ${docxUpload.data.id}, pdf: ${pdfUpload.data.id}`)
+  console.log(`[Contract] OK: ${fileName} → doc: ${googleDoc.data.id}, pdf: ${pdfUpload.data.id}`)
 
   return {
-    docxUrl: docxUpload.data.webViewLink,
+    googleDocUrl: googleDoc.data.webViewLink,
     pdfUrl: pdfUpload.data.webViewLink,
     folderUrl: folder.folderUrl || `https://drive.google.com/drive/folders/${folder.folderId}`,
     folderId: folder.folderId
@@ -1035,7 +1018,7 @@ app.post('/api/generate-contract', async (req, res) => {
             tipo_documento,
             plantilla_usada: templateKey,
             turno: null,
-            url_docx: result.docxUrl,
+            url_docx: result.googleDocUrl,
             url_pdf: result.pdfUrl,
             drive_folder_url: result.folderUrl,
             drive_folder_id: result.folderId,
@@ -1075,7 +1058,7 @@ app.post('/api/generate-contract', async (req, res) => {
               tipo_documento: cfg.doc,
               plantilla_usada: templateKey,
               turno: cfg.turno,
-              url_docx: result.docxUrl,
+              url_docx: result.googleDocUrl,
               url_pdf: result.pdfUrl,
               drive_folder_url: result.folderUrl,
               drive_folder_id: result.folderId,
