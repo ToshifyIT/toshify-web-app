@@ -2345,7 +2345,7 @@ export function IncidenciasModule() {
               incidencia_id: incidenciaCreada.id,
               vehiculo_id: incidenciaForm.vehiculo_id || null,
               conductor_id: incidenciaForm.conductor_id || null,
-              tipo_cobro_descuento_id: incidenciaForm.tipo_cobro_descuento_id || null,
+              tipo_cobro_descuento_id: tipoCobroId && !esLogisticaTipo ? tipoCobroId : null,
               semana: semanaCalculada,
               fecha: incidenciaForm.fecha,
               turno: incidenciaForm.turno || null,

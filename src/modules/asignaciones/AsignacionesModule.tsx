@@ -3260,7 +3260,7 @@ export function AsignacionesModule() {
                       )}
                       {(viewAsignacion.asignaciones_conductores?.[0]?.conductores as any)?.drive_folder_url && (
                         <a
-                          href={(viewAsignacion.asignaciones_conductores[0].conductores as any).drive_folder_url}
+                          href={(viewAsignacion.asignaciones_conductores?.[0]?.conductores as any).drive_folder_url}
                           target="_blank"
                           rel="noopener noreferrer"
                           style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', fontSize: '12px', color: '#2563EB', textDecoration: 'none', marginTop: '4px', fontWeight: 500 }}
