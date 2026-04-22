@@ -398,42 +398,30 @@ export function AsignacionesActivasModule() {
       result = [...result, ...vehiculosSinAsignacionRows]
     }
     
-    // Si el filtro es disponibles, mostrar TODOS los PKG_ON_BASE
+    // Si el filtro es disponibles, mostrar solo PKG_ON_BASE SIN asignación
     if (activeStatFilter === 'disponibles') {
-      // Crear filas para TODOS los vehículos PKG_ON_BASE
-      const todosVehiculosPkgOnRows = todosVehiculosPkgOn.map(v => {
-        // Ver si tiene asignación
-        const asignacion = asignaciones.find(a => a.vehiculo_id === v.id)
-        
-        if (asignacion) {
-          // Si tiene asignación, devolver la asignación existente
-          return asignacion
-        } else {
-          // Si no tiene asignación, crear fila "fake"
-          return {
-            id: `sin-asignacion-${v.id}`,
-            codigo: '-',
-            vehiculo_id: v.id,
-            fecha_programada: null,
-            fecha_inicio: '-',
-            modalidad: '-',
-            horario: 'turno',
-            estado: 'sin_asignacion',
-            created_at: '',
-            vehiculos: {
-              patente: v.patente,
-              marca: v.marca,
-              modelo: v.modelo,
-              anio: v.anio,
-              vehiculos_tipos: v.vehiculos_tipos,
-              vehiculos_estados: v.vehiculos_estados
-            },
-            asignaciones_conductores: []
-          } as AsignacionActiva
-        }
-      })
-      
-      result = todosVehiculosPkgOnRows
+      const vehiculosDisponiblesRows = vehiculosPkgOnSinAsignacion.map(v => ({
+        id: `sin-asignacion-${v.id}`,
+        codigo: '-',
+        vehiculo_id: v.id,
+        fecha_programada: null,
+        fecha_inicio: '-',
+        modalidad: '-',
+        horario: 'turno',
+        estado: 'sin_asignacion',
+        created_at: '',
+        vehiculos: {
+          patente: v.patente,
+          marca: v.marca,
+          modelo: v.modelo,
+          anio: v.anio,
+          vehiculos_tipos: v.vehiculos_tipos,
+          vehiculos_estados: v.vehiculos_estados
+        },
+        asignaciones_conductores: []
+      } as AsignacionActiva))
+
+      result = vehiculosDisponiblesRows
     }
 
     return result
