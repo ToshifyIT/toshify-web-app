@@ -23,6 +23,7 @@ interface VehiculoFormData {
   fecha_adquisicion: string
   fecha_ulti_inspeccion: string
   fecha_prox_inspeccion: string
+  cobertura: string
   seguro_numero: string
   seguro_vigencia: string
   titular: string
@@ -71,12 +72,37 @@ export function VehiculoWizard({
     const newErrors: Record<string, string> = {}
 
     if (stepIndex === 0) {
-      // Paso 1: Básico - sede y patente son requeridos
+      // Paso 1: Básico - sede, patente, marca, modelo, año, color y tipo son requeridos
       if (!formData.sede_id) {
         newErrors.sede_id = 'La sede es requerida'
       }
       if (!formData.patente.trim()) {
         newErrors.patente = 'La patente es requerida'
+      }
+      if (!formData.marca.trim()) {
+        newErrors.marca = 'La marca es requerida'
+      }
+      if (!formData.modelo.trim()) {
+        newErrors.modelo = 'El modelo es requerido'
+      }
+      if (!formData.anio) {
+        newErrors.anio = 'El año es requerido'
+      }
+      if (!formData.color.trim()) {
+        newErrors.color = 'El color es requerido'
+      }
+      if (!formData.tipo_vehiculo.trim()) {
+        newErrors.tipo_vehiculo = 'El tipo es requerido'
+      }
+    }
+
+    if (stepIndex === 2) {
+      // Paso 3: Técnico - número motor y número chasis son requeridos
+      if (!formData.numero_motor.trim()) {
+        newErrors.numero_motor = 'El número de motor es requerido'
+      }
+      if (!formData.numero_chasis.trim()) {
+        newErrors.numero_chasis = 'El número de chasis es requerido'
       }
     }
 
@@ -138,70 +164,91 @@ export function VehiculoWizard({
               {errors.sede_id && <span className="error-message">{errors.sede_id}</span>}
             </div>
 
-            <div className="form-group">
-              <label className="form-label">Patente *</label>
-              <input
-                type="text"
-                className={`form-input ${errors.patente ? 'input-error' : ''}`}
-                value={formData.patente}
-                onChange={(e) => setFormData({ ...formData, patente: e.target.value.toUpperCase() })}
-                placeholder="ABC123"
-                disabled={saving}
-                maxLength={10}
-              />
-              {errors.patente && <span className="error-message">{errors.patente}</span>}
-            </div>
-
             <div className="form-row">
               <div className="form-group">
-                <label className="form-label">Marca</label>
+                <label className="form-label">Patente *</label>
                 <input
                   type="text"
-                  className="form-input"
+                  className={`form-input ${errors.patente ? 'input-error' : ''}`}
+                  value={formData.patente}
+                  onChange={(e) => setFormData({ ...formData, patente: e.target.value.toUpperCase() })}
+                  placeholder="ABC123"
+                  disabled={saving}
+                  maxLength={10}
+                />
+                {errors.patente && <span className="error-message">{errors.patente}</span>}
+              </div>
+
+              <div className="form-group">
+                <label className="form-label">Marca *</label>
+                <input
+                  type="text"
+                  className={`form-input ${errors.marca ? 'input-error' : ''}`}
                   value={formData.marca}
                   onChange={(e) => setFormData({ ...formData, marca: e.target.value })}
                   placeholder={marcasExistentes.length > 0 ? marcasExistentes.slice(0, 3).join(', ') + '...' : 'Toyota, Ford, etc.'}
                   disabled={saving}
                 />
-              </div>
-
-              <div className="form-group">
-                <label className="form-label">Modelo</label>
-                <input
-                  type="text"
-                  className="form-input"
-                  value={formData.modelo}
-                  onChange={(e) => setFormData({ ...formData, modelo: e.target.value })}
-                  placeholder={modelosExistentes.length > 0 ? modelosExistentes.slice(0, 3).join(', ') + '...' : 'Hilux, Ranger, etc.'}
-                  disabled={saving}
-                />
+                {errors.marca && <span className="error-message">{errors.marca}</span>}
               </div>
             </div>
 
             <div className="form-row">
               <div className="form-group">
-                <label className="form-label">Año</label>
+                <label className="form-label">Modelo *</label>
+                <input
+                  type="text"
+                  className={`form-input ${errors.modelo ? 'input-error' : ''}`}
+                  value={formData.modelo}
+                  onChange={(e) => setFormData({ ...formData, modelo: e.target.value })}
+                  placeholder={modelosExistentes.length > 0 ? modelosExistentes.slice(0, 3).join(', ') + '...' : 'Hilux, Ranger, etc.'}
+                  disabled={saving}
+                />
+                {errors.modelo && <span className="error-message">{errors.modelo}</span>}
+              </div>
+
+              <div className="form-group">
+                <label className="form-label">Año *</label>
                 <input
                   type="number"
-                  className="form-input"
+                  className={`form-input ${errors.anio ? 'input-error' : ''}`}
                   value={formData.anio}
                   onChange={(e) => setFormData({ ...formData, anio: parseInt(e.target.value) || new Date().getFullYear() })}
                   min="1900"
                   max={new Date().getFullYear() + 1}
                   disabled={saving}
                 />
+                {errors.anio && <span className="error-message">{errors.anio}</span>}
               </div>
+            </div>
 
+            <div className="form-row">
               <div className="form-group">
-                <label className="form-label">Color</label>
+                <label className="form-label">Color *</label>
                 <input
                   type="text"
-                  className="form-input"
+                  className={`form-input ${errors.color ? 'input-error' : ''}`}
                   value={formData.color}
                   onChange={(e) => setFormData({ ...formData, color: e.target.value })}
                   placeholder="Blanco, Negro, etc."
                   disabled={saving}
                 />
+                {errors.color && <span className="error-message">{errors.color}</span>}
+              </div>
+
+              <div className="form-group">
+                <label className="form-label">Tipo *</label>
+                <select
+                  className={`form-input ${errors.tipo_vehiculo ? 'input-error' : ''}`}
+                  value={formData.tipo_vehiculo}
+                  onChange={(e) => setFormData({ ...formData, tipo_vehiculo: e.target.value })}
+                  disabled={saving}
+                >
+                  <option value="">Seleccionar...</option>
+                  <option value="SEDAN 5 PUERTAS">SEDAN 5 PUERTAS</option>
+                  <option value="SEDAN 4 PUERTAS">SEDAN 4 PUERTAS</option>
+                </select>
+                {errors.tipo_vehiculo && <span className="error-message">{errors.tipo_vehiculo}</span>}
               </div>
             </div>
           </div>
@@ -316,25 +363,27 @@ export function VehiculoWizard({
 
             <div className="form-row">
               <div className="form-group">
-                <label className="form-label">Número Motor</label>
+                <label className="form-label">Número Motor *</label>
                 <input
                   type="text"
-                  className="form-input"
+                  className={`form-input ${errors.numero_motor ? 'input-error' : ''}`}
                   value={formData.numero_motor}
                   onChange={(e) => setFormData({ ...formData, numero_motor: e.target.value })}
                   disabled={saving}
                 />
+                {errors.numero_motor && <span className="error-message">{errors.numero_motor}</span>}
               </div>
 
               <div className="form-group">
-                <label className="form-label">Número Chasis</label>
+                <label className="form-label">Número Chasis *</label>
                 <input
                   type="text"
-                  className="form-input"
+                  className={`form-input ${errors.numero_chasis ? 'input-error' : ''}`}
                   value={formData.numero_chasis}
                   onChange={(e) => setFormData({ ...formData, numero_chasis: e.target.value })}
                   disabled={saving}
                 />
+                {errors.numero_chasis && <span className="error-message">{errors.numero_chasis}</span>}
               </div>
             </div>
 
@@ -453,6 +502,18 @@ export function VehiculoWizard({
             <p className="step-description">
               Datos del seguro y notas adicionales sobre el vehículo.
             </p>
+
+            <div className="form-group">
+              <label className="form-label">Cobertura</label>
+              <input
+                type="text"
+                className="form-input"
+                value={formData.cobertura}
+                onChange={(e) => setFormData({ ...formData, cobertura: e.target.value })}
+                disabled={saving}
+                placeholder="Tipo de cobertura del seguro"
+              />
+            </div>
 
             <div className="form-row">
               <div className="form-group">

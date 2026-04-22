@@ -100,6 +100,12 @@ export function ConductorWizard({
       if (!formData.licencia_vencimiento) newErrors.licencia_vencimiento = 'Requerido'
     }
 
+    if (step === 4) {
+      if (!formData.telefono_contacto.trim()) newErrors.telefono_contacto = 'El teléfono es requerido'
+      if (!formData.email.trim()) newErrors.email = 'El email es requerido'
+      if (!formData.direccion.trim()) newErrors.direccion = 'La dirección es requerida'
+    }
+
     setErrors(newErrors)
     return Object.keys(newErrors).length === 0
   }
@@ -381,35 +387,37 @@ export function ConductorWizard({
             <div className="wizard-step-header">
               <Phone size={20} />
               <h3>Información de Contacto</h3>
-              <span className="optional-badge">Opcional</span>
             </div>
             <p className="step-description">Datos de contacto del conductor y contacto de emergencia.</p>
 
             <div className="form-row">
               <div className="form-group">
-                <label className="form-label">Teléfono</label>
+                <label className="form-label">Teléfono *</label>
                 <input
                   type="tel"
-                  className="form-input"
+                  className={`form-input ${errors.telefono_contacto ? 'input-error' : ''}`}
                   value={formData.telefono_contacto}
                   onChange={(e) => setFormData({ ...formData, telefono_contacto: e.target.value })}
                   disabled={saving}
                 />
+                {errors.telefono_contacto && <span className="error-message">{errors.telefono_contacto}</span>}
               </div>
               <div className="form-group">
-                <label className="form-label">Email</label>
+                <label className="form-label">Email *</label>
                 <input
                   type="email"
-                  className="form-input"
+                  className={`form-input ${errors.email ? 'input-error' : ''}`}
                   value={formData.email}
                   onChange={(e) => setFormData({ ...formData, email: e.target.value })}
                   disabled={saving}
                 />
+                {errors.email && <span className="error-message">{errors.email}</span>}
               </div>
             </div>
 
             <div className="form-group" style={{ width: '100%' }}>
-              <label className="form-label">Dirección</label>
+              <label className="form-label">Dirección *</label>
+              {errors.direccion && <span className="error-message">{errors.direccion}</span>}
               <AddressAutocomplete
                 value={formData.direccion}
                 onChange={(address, lat, lng) => {
