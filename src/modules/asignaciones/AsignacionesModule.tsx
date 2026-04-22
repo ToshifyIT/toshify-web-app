@@ -1,7 +1,7 @@
 // src/modules/asignaciones/AsignacionesModule.tsx
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { useState, useEffect, useMemo } from 'react'
-import { Eye, Trash2, CheckCircle, XCircle, FileText, Calendar, UserPlus, UserCheck, Ban, Plus, Pencil, ArrowLeftRight } from 'lucide-react'
+import { Eye, Trash2, CheckCircle, XCircle, FileText, Calendar, UserPlus, UserCheck, Ban, Plus, Pencil, ArrowLeftRight, FolderOpen } from 'lucide-react'
 import { type ColumnDef } from '@tanstack/react-table'
 import { DataTable } from '../../components/ui/DataTable/DataTable'
 import { LoadingOverlay } from '../../components/ui/LoadingOverlay'
@@ -545,7 +545,7 @@ export function AsignacionesModule() {
             vehiculos (patente, marca, modelo),
             asignaciones_conductores (
               id, conductor_id, estado, horario, confirmado, fecha_confirmacion, documento,
-              conductores (nombres, apellidos, numero_licencia, estado_id, conductores_estados(codigo))
+              conductores (nombres, apellidos, numero_licencia, estado_id, drive_folder_url, conductores_estados(codigo))
             )
           `))
           .or(`estado.in.(programado,activa),created_at.gte.${fechaLimiteStr}`)
@@ -3258,6 +3258,16 @@ export function AsignacionesModule() {
                           </strong>
                         </p>
                       )}
+                      {(viewAsignacion.asignaciones_conductores?.[0]?.conductores as any)?.drive_folder_url && (
+                        <a
+                          href={(viewAsignacion.asignaciones_conductores[0].conductores as any).drive_folder_url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', fontSize: '12px', color: '#2563EB', textDecoration: 'none', marginTop: '4px', fontWeight: 500 }}
+                        >
+                          <FolderOpen size={13} /> Ver documentos en Drive
+                        </a>
+                      )}
                     </div>
                   </div>
 
@@ -3419,6 +3429,16 @@ export function AsignacionesModule() {
                                 <span style={{ color: '#F59E0B', fontWeight: 600 }}>Pendiente</span>
                               )}
                             </p>
+                            {(ac.conductores as any)?.drive_folder_url && (
+                              <a
+                                href={(ac.conductores as any).drive_folder_url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', fontSize: '12px', color: '#2563EB', textDecoration: 'none', marginTop: '4px', fontWeight: 500 }}
+                              >
+                                <FolderOpen size={13} /> Ver documentos en Drive
+                              </a>
+                            )}
                           </div>
                         ))}
                       </div>

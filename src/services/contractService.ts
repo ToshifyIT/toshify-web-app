@@ -23,7 +23,7 @@ export interface GeneratedDocument {
   conductor_id: string
   conductor_nombre: string
   turno: string | null
-  docxUrl: string
+  googleDocUrl: string
   pdfUrl: string
   folderUrl: string
   folderId: string

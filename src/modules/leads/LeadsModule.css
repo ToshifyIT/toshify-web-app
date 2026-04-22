@@ -539,4 +539,21 @@
   border-radius: 8px;
   color: #92400E;
   font-size: 13px;
+}
+
+/* =====================================================
+   STICKY ACTIONS COLUMN (solo en leads)
+   ===================================================== */
+
+.leads-module .dt-sticky-col {
+  position: sticky;
+  right: 0;
+  z-index: 2;
+  background: var(--bg-primary, #fff);
+  box-shadow: -2px 0 4px rgba(0, 0, 0, 0.06);
+}
+
+.leads-module .dt-table thead .dt-sticky-col {
+  background: var(--table-header-bg);
+  z-index: 5;
 }

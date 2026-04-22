@@ -1,5 +1,5 @@
 // src/modules/leads/LeadsModule.tsx
-import { useState, useEffect, useMemo, useCallback } from 'react'
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import {
   Eye, Edit2, Trash2, Users, UserCheck, UserPlus, Clock, RefreshCw,
   CheckCircle, XCircle, AlertTriangle, X, Download, MapPin, ExternalLink,
@@ -8,6 +8,7 @@ import { GoogleMap, useJsApiLoader, Marker, Polygon } from '@react-google-maps/a
 import { ActionsMenu } from '../../components/ui/ActionsMenu'
 import { supabase } from '../../lib/supabase'
 import { usePermissions } from '../../contexts/PermissionsContext'
+import { useAuth } from '../../contexts/AuthContext'
 import { useSede } from '../../contexts/SedeContext'
 import Swal from 'sweetalert2'
 import { showSuccess } from '../../utils/toast'
@@ -203,7 +204,8 @@ function getEntrevistaClass(entrevista: string | undefined | null): string {
 
 export function LeadsModule() {
   const { canCreateInMenu, canEditInMenu, canDeleteInMenu } = usePermissions()
-  const { sedeActual, aplicarFiltroSede } = useSede()
+  const { profile } = useAuth()
+  const { sedes, sedeActual, aplicarFiltroSede } = useSede()
   const canCreate = canCreateInMenu('leads')
   const canEdit = canEditInMenu('leads')
   const canDelete = canDeleteInMenu('leads')
@@ -248,6 +250,7 @@ export function LeadsModule() {
       let query = supabase
         .from('leads')
         .select('*')
+        .or('proceso.is.null,proceso.neq.Convertido')
         .order('created_at', { ascending: false })
         .limit(2000)
 
@@ -309,6 +312,46 @@ export function LeadsModule() {
   // Solo correr cuando leads cambie de 0 a >0 (carga inicial)
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [leads.length > 0])
+
+  // ---------- ASIGNAR SEDE A LEADS SIN sede_id ----------
+  const asignarSedeALeadsSinSede = useCallback(async (leadsList: Lead[]) => {
+    if (sedes.length === 0) return
+    const sinSede = leadsList.filter(l => !l.sede_id)
+    if (sinSede.length === 0) return
+
+    const sedePrincipal = sedes.find(s => s.es_principal) || sedes[0]
+    let actualizado = false
+
+    for (const lead of sinSede) {
+      const textoSede = (lead.sede || '').trim().toLowerCase()
+      const sedeMatch = textoSede
+        ? sedes.find(s => s.nombre.toLowerCase() === textoSede || s.codigo.toLowerCase() === textoSede)
+        : null
+      const sedeAsignada = sedeMatch || sedePrincipal
+
+      try {
+        await supabase
+          .from('leads')
+          .update({ sede_id: sedeAsignada.id, sede: sedeAsignada.nombre })
+          .eq('id', lead.id)
+        actualizado = true
+      } catch {
+        // silently ignored
+      }
+    }
+
+    if (actualizado) {
+      loadLeads()
+    }
+  }, [sedes, loadLeads])
+
+  useEffect(() => {
+    if (leads.length > 0 && sedes.length > 0) {
+      asignarSedeALeadsSinSede(leads)
+    }
+  // Solo correr en carga inicial cuando ambos estén disponibles
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [leads.length > 0, sedes.length > 0])
 
   // ---------- CARGAR ZONAS PELIGROSAS ----------
   useEffect(() => {
@@ -525,6 +568,30 @@ export function LeadsModule() {
 
   // ---------- CONVERTIR A CONDUCTOR ----------
   async function handleConvertir(lead: Lead) {
+    // Validar campos obligatorios para conductores
+    const camposFaltantes: string[] = []
+    if (!lead.nombre_completo?.trim()) camposFaltantes.push('Nombre completo')
+    if (!lead.dni?.trim()) camposFaltantes.push('DNI')
+    if (!lead.phone?.trim()) camposFaltantes.push('Teléfono')
+    if (!lead.email?.trim()) camposFaltantes.push('Email')
+    if (!lead.fecha_de_nacimiento) camposFaltantes.push('Fecha de nacimiento')
+    if (!lead.direccion?.trim()) camposFaltantes.push('Dirección')
+    if (!lead.vencimiento_licencia) camposFaltantes.push('Vencimiento de licencia')
+
+    if (camposFaltantes.length > 0) {
+      await Swal.fire({
+        icon: 'warning',
+        title: 'Faltan campos obligatorios',
+        html: `<p>Para convertir a conductor se requieren los siguientes campos:</p>
+          <ul style="text-align:left; margin-top:8px; color:#DC2626;">
+            ${camposFaltantes.map(c => `<li>${c}</li>`).join('')}
+          </ul>
+          <p style="margin-top:12px; font-size:13px; color:#6B7280;">Edite el lead para completar estos datos antes de convertirlo.</p>`,
+        confirmButtonText: 'Entendido'
+      })
+      return
+    }
+
     const nombre = lead.nombre_completo || 'Sin nombre'
     const dni = lead.dni || 'Sin DNI'
 
@@ -559,12 +626,12 @@ export function LeadsModule() {
       const { data: estados } = await supabase
         .from('conductores_estados')
         .select('id')
-        .eq('codigo', 'EN_ESPERA')
+        .eq('codigo', 'ACTIVO')
         .limit(1)
       const estadoId = estados?.[0]?.id
 
       if (!estadoId) {
-        throw new Error('No se encontró el estado EN_ESPERA para conductores. Verifique la tabla conductores_estados.')
+        throw new Error('No se encontró el estado ACTIVO para conductores. Verifique la tabla conductores_estados.')
       }
 
       let turnoMapped = 'SIN_PREFERENCIA'
@@ -615,6 +682,8 @@ export function LeadsModule() {
       await supabase.from('leads').update({
         proceso: 'Convertido',
         estado_de_lead: 'Convertido',
+        fecha_convertido: new Date().toLocaleString('sv-SE', { timeZone: 'America/Argentina/Buenos_Aires' }).replace(' ', 'T'),
+        usuario: profile?.full_name || 'Sistema',
       }).eq('id', lead.id)
 
       showSuccess('Convertido', `El lead "${nombre}" fue convertido a conductor exitosamente.`)
@@ -691,7 +760,7 @@ export function LeadsModule() {
             title={enZonaPeligrosa ? `Zona peligrosa: ${zonaPeligrosa}` : tieneCoordenadas ? 'Fuera de zona peligrosa' : undefined}
             style={{
               background: enZonaPeligrosa ? '#FFF1F2' : undefined,
-              borderLeft: enZonaPeligrosa ? '3px solid #FF0033' : tieneCoordenadas ? '3px solid #22C55E' : undefined,
+              borderLeft: enZonaPeligrosa ? '3px solid #FF0033' : undefined,
               padding: '6px 8px',
               borderRadius: '6px',
             }}
@@ -705,7 +774,7 @@ export function LeadsModule() {
                     handleOpenDetails(row.original)
                   }
                 }}
-                style={{ fontWeight: 600, color: enZonaPeligrosa ? '#BE123C' : 'var(--color-primary)', textDecoration: 'none', fontSize: '13px' }}
+                style={{ fontWeight: 600, color: enZonaPeligrosa ? '#BE123C' : 'var(--text-primary)', textDecoration: 'none', fontSize: '13px' }}
               >
                 {nombre}
               </a>
@@ -1142,8 +1211,6 @@ export function LeadsModule() {
             <div className="modal-body">
               <LeadDetailView
                 lead={selectedLead}
-                onEdit={canEdit ? () => { setShowDetailsModal(false); handleOpenEdit(selectedLead) } : undefined}
-                onConvert={canEdit && selectedLead.proceso !== 'Convertido' ? () => { setShowDetailsModal(false); handleConvertir(selectedLead) } : undefined}
                 zonasPeligrosas={zonasPeligrosas}
                 enZonaPeligrosa={leadsEnZona.get(selectedLead.id) || null}
               />
@@ -1168,6 +1235,15 @@ interface LeadDetailViewProps {
 }
 
 function LeadDetailView({ lead, onEdit, onConvert, zonasPeligrosas = [], enZonaPeligrosa }: LeadDetailViewProps) {
+  const mapRef = useRef<google.maps.Map | null>(null)
+
+  const handleRecenter = () => {
+    if (mapRef.current && lead.latitud != null && lead.longitud != null) {
+      mapRef.current.panTo({ lat: lead.latitud, lng: lead.longitud })
+      mapRef.current.setZoom(14)
+    }
+  }
+
   return (
     <div className="lead-detail">
       <div className="lead-detail-header">
@@ -1249,7 +1325,16 @@ function LeadDetailView({ lead, onEdit, onConvert, zonasPeligrosas = [], enZonaP
           </div>
           <div className="lead-detail-item">
             <span className="lead-detail-item-label">Dirección</span>
-            <span className="lead-detail-item-value" style={{ fontSize: '12px' }}>{lead.direccion || '-'}</span>
+            <span className="lead-detail-item-value" style={{ fontSize: '12px' }}>
+              {lead.direccion && lead.latitud != null && lead.longitud != null ? (
+                <span
+                  onClick={handleRecenter}
+                  style={{ color: 'var(--color-primary)', cursor: 'pointer' }}
+                >
+                  {lead.direccion}
+                </span>
+              ) : (lead.direccion || '-')}
+            </span>
           </div>
           {lead.latitud != null && lead.longitud != null && (
             <LeadDetailMap
@@ -1258,6 +1343,7 @@ function LeadDetailView({ lead, onEdit, onConvert, zonasPeligrosas = [], enZonaP
               zonasPeligrosas={zonasPeligrosas}
               enZonaPeligrosa={!!enZonaPeligrosa}
               nombreZona={enZonaPeligrosa || undefined}
+              mapRef={mapRef}
             />
           )}
           {lead.direccion && lead.latitud == null && (
@@ -1363,9 +1449,10 @@ interface LeadDetailMapProps {
   zonasPeligrosas: ZonaPeligrosa[]
   enZonaPeligrosa: boolean
   nombreZona?: string
+  mapRef?: React.MutableRefObject<google.maps.Map | null>
 }
 
-function LeadDetailMap({ lat, lng, zonasPeligrosas, enZonaPeligrosa, nombreZona }: LeadDetailMapProps) {
+function LeadDetailMap({ lat, lng, zonasPeligrosas, enZonaPeligrosa, nombreZona, mapRef }: LeadDetailMapProps) {
   const { isLoaded } = useJsApiLoader({
     googleMapsApiKey: GOOGLE_MAPS_API_KEY,
     libraries: GMAP_LIBRARIES,
@@ -1391,6 +1478,8 @@ function LeadDetailMap({ lat, lng, zonasPeligrosas, enZonaPeligrosa, nombreZona 
           mapContainerStyle={detailMapStyle}
           center={{ lat, lng }}
           zoom={14}
+          onLoad={(map) => { if (mapRef) mapRef.current = map }}
+          onUnmount={() => { if (mapRef) mapRef.current = null }}
           options={{
             disableDefaultUI: true,
             zoomControl: true,
@@ -1429,17 +1518,14 @@ function LeadDetailMap({ lat, lng, zonasPeligrosas, enZonaPeligrosa, nombreZona 
         </GoogleMap>
       </div>
       <div style={{ marginTop: '6px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        {!enZonaPeligrosa && (
+        {!enZonaPeligrosa ? (
           <span style={{ fontSize: '11px', color: '#16A34A', fontWeight: 500 }}>Fuera de zona peligrosa</span>
-        )}
+        ) : <span />}
         <a
           href={`https://www.google.com/maps?q=${lat},${lng}`}
           target="_blank"
           rel="noopener noreferrer"
-          style={{
-            display: 'inline-flex', alignItems: 'center', gap: '4px', marginLeft: 'auto',
-            fontSize: '12px', color: 'var(--color-primary)', textDecoration: 'none', fontWeight: 500,
-          }}
+          style={{ fontSize: '11px', color: 'var(--color-primary)', textDecoration: 'none', display: 'flex', alignItems: 'center', gap: '4px' }}
         >
           <ExternalLink size={12} /> Abrir en Google Maps
         </a>
