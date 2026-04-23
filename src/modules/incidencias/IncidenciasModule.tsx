@@ -2340,9 +2340,6 @@ export function IncidenciasModule() {
           const vehiculo = vehiculos.find(v => v.id === incidenciaForm.vehiculo_id)
           const conductor = conductores.find(c => c.id === incidenciaForm.conductor_id)
 
-          const esConceptoNomina = tipoCobroId?.startsWith('__CONCEPTO__')
-          const codigoConcepto = esConceptoNomina ? tipoCobroId!.replace('__CONCEPTO__', '') : null
-
           const { error: penError } = await (supabase.from('penalidades' as any) as any)
             .insert({
               incidencia_id: incidenciaCreada.id,
@@ -2353,7 +2350,7 @@ export function IncidenciasModule() {
               fecha: incidenciaForm.fecha,
               turno: incidenciaForm.turno || null,
               area_responsable: getAreaResponsablePorRol(profile?.roles?.name) || 'ADMINISTRACION',
-              detalle: codigoConcepto ? `[${codigoConcepto}] Cobro por incidencia` : 'Cobro por incidencia',
+              detalle: 'Cobro por incidencia',
               monto: incidenciaForm.monto || 0,
               observaciones: incidenciaForm.descripcion || '',
               aplicado: false,
