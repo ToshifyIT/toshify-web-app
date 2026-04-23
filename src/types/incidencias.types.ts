@@ -44,6 +44,7 @@ export interface Incidencia {
   area?: string
   estado_vehiculo?: string
   descripcion?: string
+  notas?: string
   accion_ejecutada?: string
   registrado_por?: string
   conductor_nombre?: string
@@ -152,6 +153,7 @@ export interface IncidenciaFormData {
   area?: string
   estado_vehiculo?: string
   descripcion?: string
+  notas?: string
   accion_ejecutada?: string
   registrado_por?: string
   conductor_nombre?: string

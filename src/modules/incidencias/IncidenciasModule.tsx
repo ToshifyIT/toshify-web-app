@@ -389,8 +389,8 @@ export function IncidenciasModule() {
         (supabase.from('penalidades' as any) as any).select('id, incidencia_id, aplicado, rechazado, fecha_rechazo, motivo_rechazo'),
         // Obtener historial de rechazos
         (supabase.from('penalidades_rechazos' as any) as any).select('penalidad_id, motivo, rechazado_por, created_at').order('created_at', { ascending: false }),
-        // Conceptos de facturación (para dropdown de incidencias, excluir alquileres P001/P002/P013)
-        supabase.from('conceptos_nomina').select('id, codigo, descripcion, precio_final').eq('activo', true).not('codigo', 'in', '("P001","P002","P003","P013")').order('orden')
+        // Conceptos de facturación (para dropdown de incidencias, excluir alquileres y conceptos no aplicables)
+        supabase.from('conceptos_nomina').select('id, codigo, descripcion, precio_final').eq('activo', true).not('codigo', 'in', '("P001","P002","P003","P013","P014","P015","P016")').order('orden')
       ])
 
       setEstados(estadosRes.data || [])
@@ -1858,7 +1858,8 @@ export function IncidenciasModule() {
       estado_id: estadoPendiente?.id || '',
       fecha: getLocalDateString(),
       registrado_por: profile?.full_name || '',
-      area: areaUsuario || undefined
+      area: areaUsuario || undefined,
+      sede_id: sedeActualId || sedeUsuario?.id,
     })
     setSelectedIncidencia(null)
     setModalMode('create')
@@ -2024,6 +2025,7 @@ export function IncidenciasModule() {
       area: incidencia.area,
       estado_vehiculo: incidencia.estado_vehiculo,
       descripcion: incidencia.descripcion,
+      notas: incidencia.notas,
       accion_ejecutada: incidencia.accion_ejecutada,
       registrado_por: incidencia.registrado_por,
       conductor_nombre: incidencia.conductor_nombre,
@@ -2317,6 +2319,7 @@ export function IncidenciasModule() {
         area: incidenciaForm.area || null,
         estado_vehiculo: incidenciaForm.estado_vehiculo || null,
         descripcion: incidenciaForm.descripcion || null,
+        notas: incidenciaForm.notas || null,
         accion_ejecutada: incidenciaForm.accion_ejecutada || null,
         registrado_por: incidenciaForm.registrado_por || null,
         created_by: user?.id,
@@ -4485,7 +4488,7 @@ function IncidenciaForm({ formData, setFormData, estados, vehiculos, conductores
             </select>
           </div>
         </div>
-        <div className="form-row three-cols">
+        <div className="form-row" style={{ display: 'grid', gridTemplateColumns: esCobro ? '1fr 1fr' : '1fr 1fr 1fr', gap: '16px' }}>
           <div className="form-group">
             <label>Tipo de Incidencia <span className="required">*</span></label>
             <select 
@@ -4577,15 +4580,17 @@ function IncidenciaForm({ formData, setFormData, estados, vehiculos, conductores
               <option value="Marketing">Marketing</option>
             </select>
           </div>
-          <div className="form-group">
-            <label>Estado <span className="required">*</span></label>
-            <select value={formData.estado_id} onChange={e => setFormData(prev => ({ ...prev, estado_id: e.target.value }))} disabled={disabled}>
-              <option value="">Seleccionar</option>
-              {estados.map(e => (
-                <option key={e.id} value={e.id}>{e.nombre}</option>
-              ))}
-            </select>
-          </div>
+          {!esCobro && (
+            <div className="form-group">
+              <label>Estado <span className="required">*</span></label>
+              <select value={formData.estado_id} onChange={e => setFormData(prev => ({ ...prev, estado_id: e.target.value }))} disabled={disabled}>
+                <option value="">Seleccionar</option>
+                {estados.map(e => (
+                  <option key={e.id} value={e.id}>{e.nombre}</option>
+                ))}
+              </select>
+            </div>
+          )}
         </div>
         <div className="form-row" style={{ gridTemplateColumns: '1fr 1fr' }}>
           <div className="form-group">
@@ -4627,68 +4632,94 @@ function IncidenciaForm({ formData, setFormData, estados, vehiculos, conductores
             )}
             <div className="form-group">
               <label>Calcular por turno</label>
-              <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
-                {[
-                  { label: '½', value: 0.5 },
-                  { label: '1', value: 1 },
-                  { label: '1½', value: 1.5 },
-                  { label: '2', value: 2 },
-                ].map(opt => {
-                  // Evaluar GNC según historial + fecha de incidencia + modalidad
-                  const modalidadGnc = formData.turno === 'A cargo' ? 'CARGO' : formData.turno === 'Nocturno' ? 'TURNO_NOCTURNO' : 'TURNO_DIURNO'
-                  const fechaInc = formData.fecha || new Date().toISOString().split('T')[0]
-                  const gncActual = !!selectedVehiculo?.gnc
-                  let tieneGnc = gncActual
-                  if (gncHistorial.length > 0) {
-                    const ultimo = gncHistorial.find(h => h.fecha <= fechaInc)
-                    if (ultimo) {
-                      if (ultimo.accion === 'desinstalacion') tieneGnc = false
-                      else if (modalidadGnc === 'TURNO_NOCTURNO') tieneGnc = fechaInc >= ultimo.fecha
-                      else tieneGnc = fechaInc > ultimo.fecha
-                    } else {
-                      // fechaInc < primer evento del historial. gncHistorial viene desc;
-                      // el primer evento cronológico está al final del array.
-                      const primerEvento = gncHistorial[gncHistorial.length - 1]
-                      // Instalación → antes no había GNC. Desinstalación → tenía antes.
-                      tieneGnc = primerEvento.accion !== 'instalacion'
-                    }
+              {(() => {
+                // Evaluar GNC una sola vez (antes se calculaba por cada botón)
+                const modalidadGnc = formData.turno === 'A cargo' ? 'CARGO' : formData.turno === 'Nocturno' ? 'TURNO_NOCTURNO' : 'TURNO_DIURNO'
+                const fechaInc = formData.fecha || new Date().toISOString().split('T')[0]
+                const gncActual = !!selectedVehiculo?.gnc
+                let tieneGnc = gncActual
+                if (gncHistorial.length > 0) {
+                  const ultimo = gncHistorial.find(h => h.fecha <= fechaInc)
+                  if (ultimo) {
+                    if (ultimo.accion === 'desinstalacion') tieneGnc = false
+                    else if (modalidadGnc === 'TURNO_NOCTURNO') tieneGnc = fechaInc >= ultimo.fecha
+                    else tieneGnc = fechaInc > ultimo.fecha
+                  } else {
+                    const primerEvento = gncHistorial[gncHistorial.length - 1]
+                    tieneGnc = primerEvento.accion !== 'instalacion'
                   }
-                  // Sin historial → usar gncActual tal cual (fuente de verdad mientras
-                  // no se cargue historial retroactivo)
-                  const precioTurno = formData.turno === 'A cargo'
-                    ? (tieneGnc ? preciosAlquiler.P002 : preciosAlquiler.P016)
-                    : formData.turno === 'Nocturno'
-                      ? (tieneGnc ? preciosAlquiler.P013 : preciosAlquiler.P015)
-                      : (tieneGnc ? preciosAlquiler.P001 : preciosAlquiler.P014)
-                  const montoCalculado = Math.round(precioTurno * opt.value * 100) / 100
-                  const isSelected = formData.monto === montoCalculado && montoCalculado > 0
-                  return (
-                    <button
-                      key={opt.label}
-                      type="button"
-                      disabled={disabled || !formData.turno || precioTurno === 0}
-                      onClick={() => setFormData(prev => ({ ...prev, monto: montoCalculado }))}
-                      style={{
-                        padding: '4px 8px', borderRadius: '4px', fontSize: '11px', fontWeight: 600,
-                        border: '1px solid var(--border-primary)',
-                        background: isSelected ? 'var(--color-primary)' : 'var(--bg-secondary)',
-                        color: isSelected ? 'white' : 'var(--text-primary)',
-                        cursor: disabled || !formData.turno || precioTurno === 0 ? 'not-allowed' : 'pointer',
-                        opacity: disabled || !formData.turno || precioTurno === 0 ? 0.5 : 1,
-                        display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1px', minWidth: '70px',
-                      }}
-                      title={formData.turno ? `${opt.label} turno = $${montoCalculado.toLocaleString('es-AR')}` : 'Seleccione modalidad primero'}
-                    >
-                      <span>{opt.label}</span>
-                      {formData.turno && precioTurno > 0 && (
-                        <span style={{ fontSize: '9px', fontWeight: 400, opacity: 0.85 }}>
-                          ${Math.round(montoCalculado).toLocaleString('es-AR')}
-                        </span>
-                      )}
-                    </button>
-                  )
-                })}
-              </div>
+                }
+                const precioTurno = formData.turno === 'A cargo'
+                  ? (tieneGnc ? preciosAlquiler.P002 : preciosAlquiler.P016)
+                  : formData.turno === 'Nocturno'
+                    ? (tieneGnc ? preciosAlquiler.P013 : preciosAlquiler.P015)
+                    : (tieneGnc ? preciosAlquiler.P001 : preciosAlquiler.P014)
+                const turnosDisabled = disabled || !formData.turno || precioTurno === 0
+                return (
+                  <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', alignItems: 'flex-end' }}>
+                    <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
+                      {[
+                        { label: '½', value: 0.5 },
+                        { label: '1', value: 1 },
+                        { label: '1½', value: 1.5 },
+                        { label: '2', value: 2 },
+                      ].map(opt => {
+                        const montoCalculado = Math.round(precioTurno * opt.value * 100) / 100
+                        const isSelected = formData.monto === montoCalculado && montoCalculado > 0
+                        return (
+                          <button
+                            key={opt.label}
+                            type="button"
+                            disabled={turnosDisabled}
+                            onClick={() => setFormData(prev => ({ ...prev, monto: montoCalculado }))}
+                            style={{
+                              padding: '4px 8px', borderRadius: '4px', fontSize: '11px', fontWeight: 600,
+                              border: '1px solid var(--border-primary)',
+                              background: isSelected ? 'var(--color-primary)' : 'var(--bg-secondary)',
+                              color: isSelected ? 'white' : 'var(--text-primary)',
+                              cursor: turnosDisabled ? 'not-allowed' : 'pointer',
+                              opacity: turnosDisabled ? 0.5 : 1,
+                              display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1px', minWidth: '70px',
+                            }}
+                            title={formData.turno ? `${opt.label} turno = $${montoCalculado.toLocaleString('es-AR')}` : 'Seleccione modalidad primero'}
+                          >
+                            <span>{opt.label}</span>
+                            {formData.turno && precioTurno > 0 && (
+                              <span style={{ fontSize: '9px', fontWeight: 400, opacity: 0.85 }}>
+                                ${Math.round(montoCalculado).toLocaleString('es-AR')}
+                              </span>
+                            )}
+                          </button>
+                        )
+                      })}
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '11px' }}>
+                      <span style={{ color: 'var(--text-secondary)' }}>Otro:</span>
+                      <input
+                        type="number"
+                        min="0"
+                        step="0.5"
+                        placeholder="N° turnos"
+                        disabled={turnosDisabled}
+                        onChange={e => {
+                          const n = parseFloat(e.target.value)
+                          if (!isNaN(n) && n > 0) {
+                            const montoCalculado = Math.round(precioTurno * n * 100) / 100
+                            setFormData(prev => ({ ...prev, monto: montoCalculado }))
+                          }
+                        }}
+                        style={{
+                          width: '90px', padding: '4px 6px', fontSize: '11px',
+                          borderRadius: '4px', border: '1px solid var(--border-primary)',
+                          background: 'var(--bg-secondary)', color: 'var(--text-primary)',
+                          opacity: turnosDisabled ? 0.5 : 1,
+                        }}
+                        title={formData.turno ? `Precio por turno: $${precioTurno.toLocaleString('es-AR')}` : 'Seleccione modalidad primero'}
+                      />
+                    </div>
+                  </div>
+                )
+              })()}
             </div>
             <div className="form-group">
               <label>Monto <span className="required">*</span></label>
@@ -4718,6 +4749,17 @@ function IncidenciaForm({ formData, setFormData, estados, vehiculos, conductores
               value={formData.descripcion || ''}
               onChange={e => setFormData(prev => ({ ...prev, descripcion: e.target.value }))}
               placeholder="Describa la incidencia..."
+              disabled={disabled}
+            />
+          </div>
+        </div>
+        <div className="form-row">
+          <div className="form-group full-width">
+            <label>Notas</label>
+            <textarea
+              value={formData.notas || ''}
+              onChange={e => setFormData(prev => ({ ...prev, notas: e.target.value }))}
+              placeholder="Notas internas, aclaraciones, referencias..."
               disabled={disabled}
             />
           </div>
