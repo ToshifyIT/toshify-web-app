@@ -608,13 +608,22 @@ app.post('/api/admin/toggle-function', async (req, res) => {
 // =====================================================
 
 const CONTRACT_CONFIG = {
+  // Flag para alternar entre plantillas de producción y de prueba (TB)
+  // true = usa plantillas TB (prueba) | false = usa plantillas de producción
+  useTestTemplates: true,
   templates: {
     cartaOfertaTurno: '1nhZY3Lk4V-3PhaBAiFr-_0B-4oAkTxIdI5DWmzDS9Gk',
     actualizacionTurno: '1dIF48_QchY5mPl3H4SaE8KoZMdM_OjL6O667HENXEKw',
     cartaOfertaAutoCargo: '1IYK4z_0L8m0vM49FI_IKR-EmSnYOIs9WxYtlLdRU7XQ',
     actualizacionAutoCargo: '197gvFlYzb2csrjyzJ_r40OCv-1pEBjYO0uaOmYKLZXI',
     cartaOfertaPedidosYa: '1Zo6INIVFjdZWhuOF8F91iEjAWkIBg61lcxMCxcoRRQY',
-    cartaOfertaAutoCargoBariloche: '1hAVB6eQ6LcCE_7YfB9llQLdGXN7EByHLvy0lG5YRQ5I'
+    cartaOfertaAutoCargoBariloche: '1hAVB6eQ6LcCE_7YfB9llQLdGXN7EByHLvy0lG5YRQ5I',
+    // Plantillas de prueba (TB)
+    cartaOfertaTurnoTB: '1rjSKaYDUqls9T-NQU22CvR6TDfhCeX_rSlPREXh8CRQ',
+    actualizacionTurnoTB: '1xSfKu0QzyOUBiP3tSBoQkm79pFK1b9XVr0-JNlNdOoo',
+    cartaOfertaAutoCargoTB: '1_amfmBuFNIS_JtiAVvVAmWJXWET2tPhqpxQdORqMEOM',
+    actualizacionAutoCargoTB: '1IB7Dstd_9t8JDSjHIBsiaIsZfKbhknLQWNWzktU2iyY',
+    cartaOfertaAutoCargoBarilocheTB: '1_4DID8aqv3JvB7Xri1OV3EOHNfSi-0nDWC0rxTMDeVE'
   },
   folders: {
     principal: '1qQCnLb5OB1RioLcZOK8s5nKqaIhA7Kt7',
@@ -623,6 +632,22 @@ const CONTRACT_CONFIG = {
   },
   nameToshify: 'MARCIAL JOSUE CARIDE GUZMAN',
   amounts: { diurno: '299.000', nocturno: '229.000' }
+}
+
+/**
+ * Resuelve el ID de la plantilla según la key y el flag useTestTemplates.
+ * Si useTestTemplates es true, busca key + 'TB'. Si no existe, usa la original como fallback.
+ */
+function getTemplateId(templateKey) {
+  if (CONTRACT_CONFIG.useTestTemplates) {
+    const testKey = templateKey + 'TB'
+    if (CONTRACT_CONFIG.templates[testKey]) {
+      console.log(`[Contract] Usando plantilla TB: ${testKey}`)
+      return CONTRACT_CONFIG.templates[testKey]
+    }
+    console.log(`[Contract] Plantilla TB no encontrada para ${testKey}, usando producción: ${templateKey}`)
+  }
+  return CONTRACT_CONFIG.templates[templateKey]
 }
 
 /**
@@ -740,7 +765,7 @@ async function fetchVehiculoData(vehiculoId) {
   const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
 
   const res = await fetch(
-    `${supabaseUrl}/rest/v1/vehiculos?id=eq.${vehiculoId}&select=patente,marca,modelo,color,anio,numero_motor,numero_chasis,kilometraje_actual`,
+    `${supabaseUrl}/rest/v1/vehiculos?id=eq.${vehiculoId}&select=patente,marca,modelo,color,anio,numero_motor,numero_chasis,kilometraje_actual,gnc`,
     {
       headers: {
         'apikey': serviceKey,
@@ -840,13 +865,69 @@ function formatDate(dateStr) {
 }
 
 /**
+ * Determina el código del concepto de facturación según turno, modalidad y GNC del vehículo.
+ * Mapeo:
+ *   Diurno  + GNC → P001 | Diurno  sin GNC → P014
+ *   Nocturno + GNC → P013 | Nocturno sin GNC → P015
+ *   A Cargo + GNC → P002 | A Cargo sin GNC → P016
+ */
+function resolveConceptoCodigo(turno, modalidad, gnc) {
+  const tieneGnc = !!gnc
+  if (modalidad === 'a_cargo' || !turno) {
+    return tieneGnc ? 'P002' : 'P016'
+  }
+  if (turno === 'nocturno') {
+    return tieneGnc ? 'P013' : 'P015'
+  }
+  // diurno (default)
+  return tieneGnc ? 'P001' : 'P014'
+}
+
+/**
+ * Consulta la tabla conceptos_nomina y devuelve el precio_final formateado en pesos argentinos.
+ * Ej: 42714.29 → "42.714,29"
+ */
+async function fetchAmountFromConceptos(turno, modalidad, gnc) {
+  const codigo = resolveConceptoCodigo(turno, modalidad, gnc)
+  const supabaseUrl = process.env.VITE_SUPABASE_URL
+  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+
+  const res = await fetch(
+    `${supabaseUrl}/rest/v1/conceptos_nomina?codigo=eq.${codigo}&select=precio_final`,
+    {
+      headers: {
+        'apikey': serviceKey,
+        'Authorization': `Bearer ${serviceKey}`
+      }
+    }
+  )
+
+  if (!res.ok) {
+    console.error(`[Contract] Error fetching concepto ${codigo}: ${res.statusText}`)
+    return null
+  }
+
+  const data = await res.json()
+  if (!data || data.length === 0 || data[0].precio_final == null) {
+    console.error(`[Contract] Concepto ${codigo} no encontrado o sin precio_final`)
+    return null
+  }
+
+  const precio = data[0].precio_final
+  // Formatear como pesos argentinos: 42714.29 → "42.714,29"
+  const formatted = precio.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+  console.log(`[Contract] AMOUNT: concepto ${codigo} → $${formatted}`)
+  return formatted
+}
+
+/**
  * Genera un documento (docx + pdf) para un conductor específico
  * Retorna { googleDocUrl, pdfUrl, folderUrl, folderId }
  */
 async function generateContractForConductor({
-  drive, conductor, vehiculo, templateKey, turno, sedeCode
+  drive, conductor, vehiculo, templateKey, turno, sedeCode, modalidad
 }) {
-  const templateId = CONTRACT_CONFIG.templates[templateKey]
+  const templateId = getTemplateId(templateKey)
   if (!templateId) throw new Error(`Template no encontrada para key: ${templateKey}`)
 
   console.log(`[Contract] Generando ${templateKey} para ${conductor.nombres} ${conductor.apellidos}`)
@@ -871,7 +952,7 @@ async function generateContractForConductor({
   })
 
   const fullName = `${conductor.nombres || ''} ${conductor.apellidos || ''}`.trim().toUpperCase()
-  const amount = turno === 'nocturno' ? CONTRACT_CONFIG.amounts.nocturno : CONTRACT_CONFIG.amounts.diurno
+  const amount = await fetchAmountFromConceptos(turno, modalidad, vehiculo.gnc)
 
   // Solo incluir variables que tengan dato real, las vacías las maneja nullGetter
   const renderData = {}
@@ -913,11 +994,14 @@ async function generateContractForConductor({
 
   // 4. Generar nombre de archivo
   // Formato: "TIPO - MODALIDAD[ - TURNO] - NOMBRE"
-  // Turno solo se incluye cuando la modalidad es "turno" (Diurno/Nocturno)
+  // Ejemplos:
+  //   Carta Oferta - A Cargo - NOMBRE
+  //   Carta Oferta - Turno - Diurno - NOMBRE
+  //   Anexo - A Cargo Bariloche - NOMBRE
   const tipoLabel = templateKey.includes('cartaOferta') ? 'Carta Oferta' : 'Anexo'
   const sedeLabel = sedeCode?.toUpperCase() === 'BRC' ? ' Bariloche' : ''
-  const isAutoCargo = templateKey.includes('AutoCargo')
-  const modalidadLabel = isAutoCargo ? `Auto a Cargo${sedeLabel}` : `Turno${sedeLabel}`
+  const isAutoCargo = modalidad === 'a_cargo'
+  const modalidadLabel = isAutoCargo ? `A Cargo${sedeLabel}` : `Turno${sedeLabel}`
   const turnoLabel = (!isAutoCargo && turno) ? (turno === 'diurno' ? 'Diurno' : 'Nocturno') : ''
   const fileName = turnoLabel
     ? `${tipoLabel} - ${modalidadLabel} - ${turnoLabel} - ${fullName}`
@@ -938,37 +1022,18 @@ async function generateContractForConductor({
     supportsAllDrives: true
   })
 
-  // 6. Exportar Google Doc como PDF
-  const pdfExport = await drive.files.export(
-    { fileId: googleDoc.data.id, mimeType: 'application/pdf' },
-    { responseType: 'arraybuffer' }
-  )
+  // 6. (PDF deshabilitado por ahora - se implementará más adelante)
 
-  // 7. Subir PDF a la carpeta del conductor
-  const pdfUpload = await drive.files.create({
-    requestBody: {
-      name: `${fileName}.pdf`,
-      parents: [folder.folderId],
-      mimeType: 'application/pdf'
-    },
-    media: {
-      mimeType: 'application/pdf',
-      body: Readable.from(Buffer.from(pdfExport.data))
-    },
-    fields: 'id, webViewLink',
-    supportsAllDrives: true
-  })
-
-  // 8. Si el conductor no tenía drive_folder_url, actualizar
+  // 7. Si el conductor no tenía drive_folder_url, actualizar
   if (!conductor.drive_folder_url && folder.folderUrl) {
     await updateConductorDriveUrl(conductor.id, folder.folderUrl)
   }
 
-  console.log(`[Contract] OK: ${fileName} → doc: ${googleDoc.data.id}, pdf: ${pdfUpload.data.id}`)
+  console.log(`[Contract] OK: ${fileName} → doc: ${googleDoc.data.id}`)
 
   return {
     googleDocUrl: googleDoc.data.webViewLink,
-    pdfUrl: pdfUpload.data.webViewLink,
+    pdfUrl: null,
     folderUrl: folder.folderUrl || `https://drive.google.com/drive/folders/${folder.folderId}`,
     folderId: folder.folderId
   }
@@ -1009,7 +1074,7 @@ app.post('/api/generate-contract', async (req, res) => {
         if (templateKey) {
           const conductor = await fetchConductorData(conductor_id)
           const result = await generateContractForConductor({
-            drive, conductor, vehiculo, templateKey, turno: null, sedeCode
+            drive, conductor, vehiculo, templateKey, turno: null, sedeCode, modalidad: 'a_cargo'
           })
 
           await saveDocumentoGenerado({
@@ -1049,7 +1114,7 @@ app.post('/api/generate-contract', async (req, res) => {
           if (templateKey) {
             const conductor = await fetchConductorData(cfg.id)
             const result = await generateContractForConductor({
-              drive, conductor, vehiculo, templateKey, turno: cfg.turno, sedeCode
+              drive, conductor, vehiculo, templateKey, turno: cfg.turno, sedeCode, modalidad: 'turno'
             })
 
             await saveDocumentoGenerado({
