@@ -1892,6 +1892,22 @@ export function VehicleManagement() {
               </div>
             </div>
 
+            <div className="form-row">
+              <div className="form-group">
+                <label className="form-label">Tipo</label>
+                <select
+                  className="form-input"
+                  value={formData.tipo_vehiculo}
+                  onChange={(e) => setFormData({ ...formData, tipo_vehiculo: e.target.value })}
+                  disabled={saving}
+                >
+                  <option value="">Seleccionar...</option>
+                  <option value="SEDAN 5 PUERTAS">SEDAN 5 PUERTAS</option>
+                  <option value="SEDAN 4 PUERTAS">SEDAN 4 PUERTAS</option>
+                </select>
+              </div>
+            </div>
+
             <div className="section-title">Combustible y GPS</div>
 
             <div className="form-row">
@@ -2103,6 +2119,18 @@ export function VehicleManagement() {
 
             <div className="section-title">Seguro</div>
 
+            <div className="form-group">
+              <label className="form-label">Cobertura</label>
+              <input
+                type="text"
+                className="form-input"
+                value={formData.cobertura}
+                onChange={(e) => setFormData({ ...formData, cobertura: e.target.value })}
+                disabled={saving}
+                placeholder="Tipo de cobertura del seguro"
+              />
+            </div>
+
             <div className="form-row">
               <div className="form-group">
                 <label className="form-label">Número Seguro</label>
@@ -2229,6 +2257,10 @@ export function VehicleManagement() {
               <div>
                 <label className="detail-label">COLOR</label>
                 <div className="detail-value">{selectedVehiculo.color ? selectedVehiculo.color.trim().toUpperCase() : 'N/A'}</div>
+              </div>
+              <div>
+                <label className="detail-label">TIPO</label>
+                <div className="detail-value">{(selectedVehiculo as any).tipo_vehiculo || 'N/A'}</div>
               </div>
             </div>
 
@@ -2379,6 +2411,10 @@ export function VehicleManagement() {
             {/* Seguro */}
             <div className="section-title">Seguro</div>
             <div className="details-grid">
+              <div>
+                <label className="detail-label">COBERTURA</label>
+                <div className="detail-value">{(selectedVehiculo as any).cobertura || 'N/A'}</div>
+              </div>
               <div>
                 <label className="detail-label">NÚMERO PÓLIZA</label>
                 <div className="detail-value">{selectedVehiculo.seguro_numero || 'N/A'}</div>

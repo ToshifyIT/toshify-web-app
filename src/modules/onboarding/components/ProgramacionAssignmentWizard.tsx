@@ -791,16 +791,16 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
       setLoading(true)
       await loadConductoresDelVehiculo(formData.vehiculo_id)
 
-      // Si es devolución, auto-setear tipo de asignación y documento (anexo por defecto)
+      // Si es devolución, auto-setear tipo de asignación y documento N/A (no genera documentos)
       if (formData.devolucion_vehiculo) {
         setFormData(prev => ({
           ...prev,
           tipo_asignacion_cargo: 'devolucion_vehiculo' as TipoAsignacion,
-          documento_cargo: 'anexo' as TipoDocumento,
+          documento_cargo: 'na' as TipoDocumento,
           tipo_asignacion_diurno: prev.conductor_diurno_id ? 'devolucion_vehiculo' as TipoAsignacion : prev.tipo_asignacion_diurno,
-          documento_diurno: prev.conductor_diurno_id ? 'anexo' as TipoDocumento : prev.documento_diurno,
+          documento_diurno: prev.conductor_diurno_id ? 'na' as TipoDocumento : prev.documento_diurno,
           tipo_asignacion_nocturno: prev.conductor_nocturno_id ? 'devolucion_vehiculo' as TipoAsignacion : prev.tipo_asignacion_nocturno,
-          documento_nocturno: prev.conductor_nocturno_id ? 'anexo' as TipoDocumento : prev.documento_nocturno,
+          documento_nocturno: prev.conductor_nocturno_id ? 'na' as TipoDocumento : prev.documento_nocturno,
         }))
       }
 
@@ -1066,15 +1066,12 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
   }
 
   // Auto-detectar tipo de candidato basándose en datos del conductor
-  // Nuevo: creado a partir del 01/02/2025 y nunca tuvo asignación
-  // Antiguo: ya ha tenido asignaciones y/o creado antes del 01/02/2025
-  // Reingreso: se dio de baja y se reactivó
+  // Nuevo: nunca tuvo asignación (o estuvo de baja sin asignaciones previas)
+  // Antiguo: ya ha tenido asignaciones y no está de baja
+  // Reingreso: estuvo de baja Y tuvo asignaciones anteriores
   async function detectarTipoCandidato(conductorId: string): Promise<'nuevo' | 'antiguo' | 'reingreso'> {
     const conductor = conductores.find(c => c.id === conductorId) as any
     if (!conductor) return 'nuevo'
-
-    // Reingreso: tiene motivo_baja (se dio de baja y volvió a activarse)
-    if (conductor.motivo_baja) return 'reingreso'
 
     // Verificar si tuvo asignaciones previas (cualquier estado)
     const { count } = await supabase
@@ -1083,38 +1080,71 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
       .eq('conductor_id', conductorId)
     const tuvoAsignaciones = (count || 0) > 0
 
-    // Fecha de corte: 01/02/2025
-    const fechaCorte = new Date('2025-02-01T00:00:00')
-    const createdAt = conductor.created_at ? new Date(conductor.created_at) : null
-    const esCreadoDespuesCorte = createdAt && createdAt >= fechaCorte
+    // Si estuvo de baja (tiene motivo_baja)
+    if (conductor.motivo_baja) {
+      // Reingreso: estuvo de baja Y tuvo asignaciones anteriores
+      if (tuvoAsignaciones) return 'reingreso'
+      // Nuevo: estuvo de baja pero nunca tuvo asignación
+      return 'nuevo'
+    }
 
-    // Nuevo: creado después del corte Y sin asignaciones previas
-    if (esCreadoDespuesCorte && !tuvoAsignaciones) return 'nuevo'
+    // Sin baja: si tuvo asignaciones → antiguo, si no → nuevo
+    if (tuvoAsignaciones) return 'antiguo'
+    return 'nuevo'
+  }
 
-    // Antiguo: todo lo demás
-    return 'antiguo'
+  // Obtener defaults de tipo_asignacion y documento según tipo de candidato
+  function getDefaultsPorCandidato(tipo: 'nuevo' | 'antiguo' | 'reingreso'): { asignacion: TipoAsignacion; documento: TipoDocumento } {
+    switch (tipo) {
+      case 'nuevo':
+        return { asignacion: 'entrega_auto', documento: 'carta_oferta' }
+      case 'antiguo':
+        return { asignacion: 'asignacion_companero', documento: 'anexo' }
+      case 'reingreso':
+        return { asignacion: 'entrega_auto', documento: 'carta_oferta' }
+    }
   }
 
   // Auto-rellenar zona y tipo de candidato al entrar al paso 4
   useEffect(() => {
     if (step !== 4) return
 
-    // Auto-detectar tipo de candidato para cada conductor seleccionado
+    // Auto-detectar tipo de candidato siempre (incluso en devolución/cambio)
+    // Solo setear defaults de asignación/documento si NO es devolución ni cambio (esos ya tienen sus defaults del paso 2)
     async function autoDetectarTipos() {
+      const isDevolucionOCambio = formData.devolucion_vehiculo || formData.cambio_vehiculo
       const updates: any = {}
       let changed = false
 
       if (formData.modalidad === 'a_cargo' && formData.conductor_id && !formData.tipo_candidato_cargo) {
-        updates.tipo_candidato_cargo = await detectarTipoCandidato(formData.conductor_id)
+        const tipo = await detectarTipoCandidato(formData.conductor_id)
+        updates.tipo_candidato_cargo = tipo
+        if (!isDevolucionOCambio) {
+          const defaults = getDefaultsPorCandidato(tipo)
+          updates.tipo_asignacion_cargo = defaults.asignacion
+          updates.documento_cargo = defaults.documento
+        }
         changed = true
       }
       if (formData.modalidad === 'turno') {
         if (formData.conductor_diurno_id && !formData.tipo_candidato_diurno) {
-          updates.tipo_candidato_diurno = await detectarTipoCandidato(formData.conductor_diurno_id)
+          const tipo = await detectarTipoCandidato(formData.conductor_diurno_id)
+          updates.tipo_candidato_diurno = tipo
+          if (!isDevolucionOCambio) {
+            const defaults = getDefaultsPorCandidato(tipo)
+            updates.tipo_asignacion_diurno = defaults.asignacion
+            updates.documento_diurno = defaults.documento
+          }
           changed = true
         }
         if (formData.conductor_nocturno_id && !formData.tipo_candidato_nocturno) {
-          updates.tipo_candidato_nocturno = await detectarTipoCandidato(formData.conductor_nocturno_id)
+          const tipo = await detectarTipoCandidato(formData.conductor_nocturno_id)
+          updates.tipo_candidato_nocturno = tipo
+          if (!isDevolucionOCambio) {
+            const defaults = getDefaultsPorCandidato(tipo)
+            updates.tipo_asignacion_nocturno = defaults.asignacion
+            updates.documento_nocturno = defaults.documento
+          }
           changed = true
         }
       }
@@ -1601,7 +1631,7 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
 
   const handleTipoAsignacionChange = (field: 'tipo_asignacion_cargo' | 'tipo_asignacion_diurno' | 'tipo_asignacion_nocturno', docField: 'documento_cargo' | 'documento_diurno' | 'documento_nocturno') => (e: React.ChangeEvent<HTMLSelectElement>) => {
     const val = e.target.value as TipoAsignacion
-    setFormData({ ...formData, [field]: val, ...(val === 'devolucion_vehiculo' ? { [docField]: 'anexo' as TipoDocumento } : {}) })
+    setFormData({ ...formData, [field]: val, ...(val === 'devolucion_vehiculo' ? { [docField]: 'na' as TipoDocumento } : {}) })
   }
 
   // Ray casting - verifica si un punto está dentro de un polígono
@@ -3622,7 +3652,15 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
                           <label>Tipo de Candidato *</label>
                           <select
                             value={formData.tipo_candidato_cargo}
-                            onChange={(e) => setFormData({ ...formData, tipo_candidato_cargo: e.target.value as TipoCandidato })}
+                            onChange={(e) => {
+                              const tipo = e.target.value as TipoCandidato
+                              if (tipo && !formData.devolucion_vehiculo && !formData.cambio_vehiculo) {
+                                const defaults = getDefaultsPorCandidato(tipo)
+                                setFormData({ ...formData, tipo_candidato_cargo: tipo, tipo_asignacion_cargo: defaults.asignacion, documento_cargo: defaults.documento })
+                              } else {
+                                setFormData({ ...formData, tipo_candidato_cargo: tipo })
+                              }
+                            }}
                           >
                             <option value="">Seleccionar...</option>
                             <option value="nuevo">Nuevo</option>
@@ -3652,6 +3690,7 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
                           <select
                             value={formData.documento_cargo}
                             onChange={(e) => setFormData({ ...formData, documento_cargo: e.target.value as TipoDocumento })}
+                            disabled={formData.tipo_asignacion_cargo === 'devolucion_vehiculo'}
                           >
                             <option value="">Seleccionar...</option>
                             <option value="anexo">Anexo</option>
@@ -3707,7 +3746,15 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
                           <label>Tipo de Candidato *</label>
                           <select
                             value={formData.tipo_candidato_diurno}
-                            onChange={(e) => setFormData({ ...formData, tipo_candidato_diurno: e.target.value as TipoCandidato })}
+                            onChange={(e) => {
+                              const tipo = e.target.value as TipoCandidato
+                              if (tipo && !formData.devolucion_vehiculo && !formData.cambio_vehiculo) {
+                                const defaults = getDefaultsPorCandidato(tipo)
+                                setFormData({ ...formData, tipo_candidato_diurno: tipo, tipo_asignacion_diurno: defaults.asignacion, documento_diurno: defaults.documento })
+                              } else {
+                                setFormData({ ...formData, tipo_candidato_diurno: tipo })
+                              }
+                            }}
                           >
                             <option value="">Seleccionar...</option>
                             <option value="nuevo">Nuevo</option>
@@ -3737,6 +3784,7 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
                           <select
                             value={formData.documento_diurno}
                             onChange={(e) => setFormData({ ...formData, documento_diurno: e.target.value as TipoDocumento })}
+                            disabled={formData.tipo_asignacion_diurno === 'devolucion_vehiculo'}
                           >
                             <option value="">Seleccionar...</option>
                             <option value="anexo">Anexo</option>
@@ -3794,7 +3842,15 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
                           <label>Tipo de Candidato *</label>
                           <select
                             value={formData.tipo_candidato_nocturno}
-                            onChange={(e) => setFormData({ ...formData, tipo_candidato_nocturno: e.target.value as TipoCandidato })}
+                            onChange={(e) => {
+                              const tipo = e.target.value as TipoCandidato
+                              if (tipo && !formData.devolucion_vehiculo && !formData.cambio_vehiculo) {
+                                const defaults = getDefaultsPorCandidato(tipo)
+                                setFormData({ ...formData, tipo_candidato_nocturno: tipo, tipo_asignacion_nocturno: defaults.asignacion, documento_nocturno: defaults.documento })
+                              } else {
+                                setFormData({ ...formData, tipo_candidato_nocturno: tipo })
+                              }
+                            }}
                           >
                             <option value="">Seleccionar...</option>
                             <option value="nuevo">Nuevo</option>
@@ -3808,7 +3864,7 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
                             value={formData.tipo_asignacion_nocturno}
                             onChange={(e) => {
                               const val = e.target.value as TipoAsignacion
-                              setFormData({ ...formData, tipo_asignacion_nocturno: val, ...(val === 'devolucion_vehiculo' ? { documento_nocturno: 'anexo' as TipoDocumento } : {}) })
+                              setFormData({ ...formData, tipo_asignacion_nocturno: val, ...(val === 'devolucion_vehiculo' ? { documento_nocturno: 'na' as TipoDocumento } : {}) })
                             }}
                             disabled={formData.devolucion_vehiculo || formData.cambio_vehiculo}
                           >
@@ -3827,6 +3883,7 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
                           <select
                             value={formData.documento_nocturno}
                             onChange={(e) => setFormData({ ...formData, documento_nocturno: e.target.value as TipoDocumento })}
+                            disabled={formData.tipo_asignacion_nocturno === 'devolucion_vehiculo'}
                           >
                             <option value="">Seleccionar...</option>
                             <option value="anexo">Anexo</option>
