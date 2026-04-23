@@ -975,6 +975,7 @@ async function generateContractForConductor({
   addIfPresent('ENGINE NUMBER', vehiculo.numero_motor?.toUpperCase())
   addIfPresent('CHASSIS NUMBER', vehiculo.numero_chasis?.toUpperCase())
   addIfPresent('AMOUNT', amount)
+  addIfPresent('AMMOUNT', amount)
   addIfPresent('NAMETOSHIFY', CONTRACT_CONFIG.nameToshify)
   addIfPresent('ACTUALYEAR', String(new Date().getFullYear()))
   addIfPresent('KM', vehiculo.kilometraje_actual ? String(vehiculo.kilometraje_actual) : null)
