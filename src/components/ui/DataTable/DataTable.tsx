@@ -547,9 +547,9 @@ export function DataTable<T>({
 
   // Max-height set via CSS (.dt-table-wrapper max-height: calc(100vh - 340px))
 
-  // Detectar mobile/tablet (vista cards) - debe coincidir con DataTable.css
+  // Detectar mobile
   useEffect(() => {
-    const checkMobile = () => setIsMobile(window.innerWidth < 1024);
+    const checkMobile = () => setIsMobile(window.innerWidth < 768);
     checkMobile();
     window.addEventListener('resize', checkMobile);
     return () => window.removeEventListener('resize', checkMobile);

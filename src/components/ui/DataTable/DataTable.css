@@ -359,12 +359,8 @@
   border: 1px solid var(--border-primary);
   border-radius: 12px;
   overflow: visible;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+  box-shadow: none;
   position: relative;
-}
-
-[data-theme="dark"] .dt-container {
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
 }
 
 /* Table Wrapper for scroll */
@@ -429,48 +425,21 @@
   background: var(--table-header-bg);
 }
 
-/* First column (left) — sticky horizontal cuando stickyFirstColumn=true */
+/* First column (left) */
 .dt-sticky-col-left {
-  position: sticky;
-  left: 0;
-  z-index: 2;
-  background: var(--table-bg, #fff);
-}
-
-.dt-table thead .dt-sticky-col-left {
-  z-index: 3;
-  background: var(--table-header-bg);
-}
-
-/* Sombra sutil al hacer scroll horizontal para separar visualmente */
-.dt-sticky-col-left::after {
-  content: '';
-  position: absolute;
-  top: 0;
-  right: 0;
-  bottom: 0;
-  width: 6px;
-  pointer-events: none;
-  box-shadow: inset 6px 0 6px -6px rgba(0, 0, 0, 0.08);
-  opacity: 0;
-  transition: opacity 0.15s ease;
-}
-
-.dt-table-wrapper:hover .dt-sticky-col-left::after,
-.dt-scrolled .dt-sticky-col-left::after {
-  opacity: 1;
+  /* No sticky behavior */
 }
 
 /* Header - Toshify Design System */
 .dt-table th {
   background: var(--table-header-bg);
-  padding: 12px 14px;
+  padding: 8px 8px;
   text-align: left;
-  font-size: 11px;
-  font-weight: 600;
+  font-size: 10px;
+  font-weight: 700;
   color: var(--text-tertiary);
   text-transform: uppercase;
-  letter-spacing: 0.06em;
+  letter-spacing: 0.05em;
   border-bottom: 1px solid var(--border-primary);
   white-space: nowrap;
   user-select: none;
@@ -510,33 +479,22 @@
 
 /* Body - Toshify Design System */
 .dt-table td {
-  padding: 12px 14px;
+  padding: 8px 8px;
   border-bottom: 1px solid var(--table-border);
   color: var(--text-primary);
-  font-size: 13px;
+  font-size: 12px;
   vertical-align: middle;
   text-align: left;
-  font-variant-numeric: tabular-nums;
 }
 
 .dt-table tbody tr {
-  transition: background 0.15s ease, box-shadow 0.15s ease;
+  transition: background 0.15s;
   content-visibility: auto;
-  contain-intrinsic-size: 0 48px;
-  position: relative;
-}
-
-.dt-table tbody tr:nth-child(even) {
-  background: rgba(0, 0, 0, 0.015);
-}
-
-[data-theme="dark"] .dt-table tbody tr:nth-child(even) {
-  background: rgba(255, 255, 255, 0.02);
+  contain-intrinsic-size: 0 42px;
 }
 
 .dt-table tbody tr:hover {
   background: var(--table-row-hover);
-  box-shadow: inset 3px 0 0 var(--color-primary);
 }
 
 .dt-table tbody tr:last-child td {
@@ -648,7 +606,7 @@
 /* Action Buttons Container - Toshify Design System */
 .dt-actions {
   display: flex;
-  gap: 8px;
+  gap: 6px;
   justify-content: center;
   align-items: center;
   flex-wrap: nowrap;
@@ -1257,7 +1215,7 @@
 @media (max-width: 1440px) {
   .dt-table th,
   .dt-table td {
-    padding: 10px 12px;
+    padding: 7px 10px;
   }
 }
 
@@ -1265,7 +1223,7 @@
 @media (max-width: 1280px) {
   .dt-table th,
   .dt-table td {
-    padding: 9px 11px;
+    padding: 6px 10px;
     font-size: 12px;
   }
 
@@ -1930,23 +1888,23 @@
   color: var(--text-primary);
 }
 
-/* Hide table wrapper on tablet/mobile, show cards */
-@media (max-width: 1023px) {
+/* Hide table wrapper on mobile, show cards */
+@media (max-width: 767px) {
   .dt-table-wrapper {
     display: none;
   }
-
+  
   .dt-cards-container {
     display: flex;
   }
 }
 
 /* Show table on desktop, hide cards */
-@media (min-width: 1024px) {
+@media (min-width: 768px) {
   .dt-cards-container {
     display: none;
   }
-
+  
   .dt-table-wrapper {
     display: block;
   }
