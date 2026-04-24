@@ -2907,6 +2907,9 @@ export function ReporteFacturacionTab() {
       // Pre-scan: detectar conductores que ya tenían asignación activa ANTES de esta semana
       // Si un conductor ya estaba trabajando (cambio de vehículo), NO se le aplica descuento por hora de entrega
       const conductoresConAsignacionPreviaRecalc = new Set<string>()
+      // Set de fechas_inicio de asignaciones por conductor — para resolver overlap en día de entrega
+      // Regla: si asig A termina el día X y asig B empieza el día X (del mismo conductor), el día X cuenta para B
+      const fechasInicioAsigRecalc = new Map<string, Set<string>>()
       for (const ac of (asignacionesConductoresRecalc || []) as any[]) {
         const asignacion = ac.asignaciones
         if (!asignacion) continue
@@ -2919,6 +2922,11 @@ export function ReporteFacturacionTab() {
         const inicioEfectivo = cIni && pIni ? (cIni > pIni ? cIni : pIni) : (cIni || pIni)
         if (inicioEfectivo && inicioEfectivo < fechaInicioSemanaRecalc) {
           conductoresConAsignacionPreviaRecalc.add(ac.conductor_id)
+        }
+        if (inicioEfectivo) {
+          const setFechas = fechasInicioAsigRecalc.get(ac.conductor_id) || new Set<string>()
+          setFechas.add(format(inicioEfectivo, 'yyyy-MM-dd'))
+          fechasInicioAsigRecalc.set(ac.conductor_id, setFechas)
         }
       }
 
@@ -2952,6 +2960,20 @@ export function ReporteFacturacionTab() {
 
         const efectivoInicio = acInicio < fechaInicioSemanaRecalc ? fechaInicioSemanaRecalc : acInicio
         let efectivoFin = acFin > fechaFinSemanaRecalc ? fechaFinSemanaRecalc : acFin
+
+        // Regla: si otra asignación del mismo conductor EMPIEZA el día en que esta TERMINA,
+        // ese día cuenta para la nueva. Recortamos efectivoFin en 1 día.
+        const fechasInicioSetR = fechasInicioAsigRecalc.get(ac.conductor_id)
+        if (fechasInicioSetR) {
+          const finKeyR = format(efectivoFin, 'yyyy-MM-dd')
+          const inicioKeyR = format(efectivoInicio, 'yyyy-MM-dd')
+          if (fechasInicioSetR.has(finKeyR) && finKeyR !== inicioKeyR) {
+            const nuevoFinR = new Date(efectivoFin)
+            nuevoFinR.setDate(nuevoFinR.getDate() - 1)
+            efectivoFin = nuevoFinR
+          }
+        }
+
         // Aplicar fecha_terminacion como tope si el conductor tiene devolución con ultimo_dia_cobro='fecha_baja'
         const fechaTermRecalc = fechaTerminacionMap.get(ac.conductor_id)
         if (fechaTermRecalc && conductoresConFechaBajaRecalc.has(ac.conductor_id) && efectivoFin > fechaTermRecalc && acInicio <= fechaTermRecalc) {
