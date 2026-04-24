@@ -106,37 +106,43 @@ export function truncateLocation(location: string, maxLength: number = 40): stri
  * Calcula el rango de fechas para un período específico
  */
 export function getDateRangeForPeriod(period: 'today' | 'yesterday' | 'week' | 'month'): { start: string; end: string } {
+  // Usar formato local (YYYY-MM-DD) para evitar desfase por zona horaria
+  // toISOString() convierte a UTC, lo que puede cambiar el día en zonas horarias negativas (ej: Argentina UTC-3)
+  const toLocalDateStr = (d: Date): string => {
+    const y = d.getFullYear()
+    const m = String(d.getMonth() + 1).padStart(2, '0')
+    const day = String(d.getDate()).padStart(2, '0')
+    return `${y}-${m}-${day}`
+  }
+
   const today = new Date()
-  today.setHours(0, 0, 0, 0)
+  const todayStr = toLocalDateStr(today)
 
   switch (period) {
     case 'today':
-      return {
-        start: today.toISOString().split('T')[0],
-        end: today.toISOString().split('T')[0],
-      }
+      return { start: todayStr, end: todayStr }
     case 'yesterday': {
       const yesterday = new Date(today)
       yesterday.setDate(yesterday.getDate() - 1)
       return {
-        start: yesterday.toISOString().split('T')[0],
-        end: yesterday.toISOString().split('T')[0],
+        start: toLocalDateStr(yesterday),
+        end: toLocalDateStr(yesterday),
       }
     }
     case 'week': {
       const weekAgo = new Date(today)
       weekAgo.setDate(weekAgo.getDate() - 7)
       return {
-        start: weekAgo.toISOString().split('T')[0],
-        end: today.toISOString().split('T')[0],
+        start: toLocalDateStr(weekAgo),
+        end: todayStr,
       }
     }
     case 'month': {
       const monthAgo = new Date(today)
       monthAgo.setDate(monthAgo.getDate() - 30)
       return {
-        start: monthAgo.toISOString().split('T')[0],
-        end: today.toISOString().split('T')[0],
+        start: toLocalDateStr(monthAgo),
+        end: todayStr,
       }
     }
   }

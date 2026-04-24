@@ -111,6 +111,10 @@ export const ussService = {
       conductor?: string
       minExceso?: number
       sedeId?: string | null
+      sortField?: string
+      sortDirection?: 'asc' | 'desc'
+      velocidadMin?: number
+      velocidadMax?: number
     }
   ): Promise<{ data: ExcesoVelocidad[]; count: number }> {
     const cacheKey = `excesos_${startDate}_${endDate}_${options?.sedeId || 'all'}_${JSON.stringify(options)}`
@@ -120,12 +124,19 @@ export const ussService = {
       return { data: cached, count: cached.length }
     }
 
+    // Determinar campo y dirección de ordenamiento
+    const orderField = options?.sortField || 'fecha_evento'
+    const orderAsc = options?.sortDirection === 'asc'
+
+    // Usar offset -03:00 (Argentina) para que medianoche local sea correcta en UTC
+    // startDate 00:00 Argentina = startDate 03:00 UTC
+    // endDate 23:59:59 Argentina = endDate+1 02:59:59 UTC
     let query = supabase
       .from('uss_excesos_velocidad')
       .select('*', { count: 'exact' })
-      .gte('fecha_evento', `${startDate}T00:00:00`)
-      .lte('fecha_evento', `${endDate}T23:59:59`)
-      .order('fecha_evento', { ascending: false })
+      .gte('fecha_evento', `${startDate}T00:00:00-03:00`)
+      .lte('fecha_evento', `${endDate}T23:59:59-03:00`)
+      .order(orderField, { ascending: orderAsc })
 
     if (options?.sedeId) {
       query = query.eq('sede_id', options.sedeId)
@@ -143,8 +154,20 @@ export const ussService = {
       query = query.gte('exceso', options.minExceso)
     }
 
+    if (options?.velocidadMin) {
+      query = query.gte('velocidad_maxima', options.velocidadMin)
+    }
+
+    if (options?.velocidadMax) {
+      query = query.lte('velocidad_maxima', options.velocidadMax)
+    }
+
+    // Traer todos los registros del rango (Supabase limita a 1000 por defecto)
+    // Usamos range para asegurar que traiga todo
     if (options?.limit) {
       query = query.limit(options.limit)
+    } else {
+      query = query.range(0, 9999)
     }
 
     if (options?.offset) {
@@ -207,8 +230,8 @@ export const ussService = {
     let statsQ = supabase
       .from('uss_excesos_velocidad')
       .select('velocidad_maxima, exceso, duracion_segundos, patente, conductor_wialon')
-      .gte('fecha_evento', `${startDate}T00:00:00`)
-      .lte('fecha_evento', `${endDate}T23:59:59`)
+      .gte('fecha_evento', `${startDate}T00:00:00-03:00`)
+      .lte('fecha_evento', `${endDate}T23:59:59-03:00`)
       .limit(5000)
     if (sedeId) {
       statsQ = statsQ.eq('sede_id', sedeId)
@@ -258,8 +281,8 @@ export const ussService = {
     let vehQ = supabase
       .from('uss_excesos_velocidad')
       .select('patente, vehiculo_id, velocidad_maxima, exceso, duracion_segundos')
-      .gte('fecha_evento', `${startDate}T00:00:00`)
-      .lte('fecha_evento', `${endDate}T23:59:59`)
+      .gte('fecha_evento', `${startDate}T00:00:00-03:00`)
+      .lte('fecha_evento', `${endDate}T23:59:59-03:00`)
       .limit(1000)
     if (sedeId) {
       vehQ = vehQ.eq('sede_id', sedeId)
@@ -322,8 +345,8 @@ export const ussService = {
     let condQ = supabase
       .from('uss_excesos_velocidad')
       .select('conductor_wialon, conductor_id, velocidad_maxima, patente')
-      .gte('fecha_evento', `${startDate}T00:00:00`)
-      .lte('fecha_evento', `${endDate}T23:59:59`)
+      .gte('fecha_evento', `${startDate}T00:00:00-03:00`)
+      .lte('fecha_evento', `${endDate}T23:59:59-03:00`)
       .limit(1000)
     if (sedeId) {
       condQ = condQ.eq('sede_id', sedeId)

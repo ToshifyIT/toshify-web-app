@@ -765,7 +765,7 @@ async function fetchVehiculoData(vehiculoId) {
   const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
 
   const res = await fetch(
-    `${supabaseUrl}/rest/v1/vehiculos?id=eq.${vehiculoId}&select=patente,marca,modelo,color,anio,numero_motor,numero_chasis,kilometraje_actual,gnc`,
+    `${supabaseUrl}/rest/v1/vehiculos?id=eq.${vehiculoId}&select=patente,marca,modelo,color,anio,numero_motor,numero_chasis,kilometraje_actual,gnc,cobertura,notas`,
     {
       headers: {
         'apikey': serviceKey,
@@ -913,10 +913,12 @@ async function fetchAmountFromConceptos(turno, modalidad, gnc) {
     return null
   }
 
-  const precio = data[0].precio_final
-  // Formatear como pesos argentinos: 42714.29 → "42.714,29"
-  const formatted = precio.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-  console.log(`[Contract] AMOUNT: concepto ${codigo} → $${formatted}`)
+  const precioSemanal = data[0].precio_final
+  // Multiplicar x 7 (valor semanal → valor que va en el documento)
+  const precioFinal = precioSemanal * 7
+  // Formatear como pesos argentinos: 299000.03 → "299.000,03"
+  const formatted = precioFinal.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+  console.log(`[Contract] AMOUNT: concepto ${codigo} → semanal $${precioSemanal} x 7 = $${formatted}`)
   return formatted
 }
 
@@ -976,6 +978,9 @@ async function generateContractForConductor({
   addIfPresent('CHASSIS NUMBER', vehiculo.numero_chasis?.toUpperCase())
   addIfPresent('AMOUNT', amount)
   addIfPresent('AMMOUNT', amount)
+  addIfPresent('COVERAGE', vehiculo.cobertura?.toUpperCase())
+  addIfPresent('MODE', modalidad === 'a_cargo' ? 'A CARGO' : (turno === 'nocturno' ? 'NOCTURNO' : 'DIURNO'))
+  addIfPresent('OBSERVATIONS', vehiculo.notas)
   addIfPresent('NAMETOSHIFY', CONTRACT_CONFIG.nameToshify)
   addIfPresent('ACTUALYEAR', String(new Date().getFullYear()))
   addIfPresent('KM', vehiculo.kilometraje_actual ? String(vehiculo.kilometraje_actual) : null)
