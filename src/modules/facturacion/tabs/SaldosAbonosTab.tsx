@@ -1664,6 +1664,7 @@ export function SaldosAbonosTab() {
       const { data: rows, error } = await (supabase.from('control_saldos') as any)
         .select('id, semana, anio, tipo_movimiento, monto_movimiento, referencia, saldo_adeudado, saldo_a_favor, saldo_pendiente, dias_mora, interes_mora, created_at, created_by_name')
         .eq('conductor_id', saldo.conductor_id)
+        .neq('tipo_movimiento', 'regularizado')
         .order('anio', { ascending: false })
         .order('semana', { ascending: false })
         .order('created_at', { ascending: false })

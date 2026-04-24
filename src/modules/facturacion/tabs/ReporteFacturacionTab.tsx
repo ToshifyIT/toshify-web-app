@@ -1511,7 +1511,8 @@ export function ReporteFacturacionTab() {
             asignaciones!inner(horario, estado, fecha_fin, vehiculo_id, vehiculos(patente, gnc, telepase, updated_at)),
             conductores!inner(numero_dni, sede_id)
           `)
-          .in('estado', ['asignado', 'activo', 'activa', 'finalizado', 'finalizada', 'completado', 'cancelado', 'cancelada']),
+          .in('estado', ['asignado', 'activo', 'activa', 'finalizado', 'finalizada', 'completado', 'cancelado', 'cancelada'])
+          .order('fecha_inicio', { ascending: false }),
         (supabase.from('penalidades') as any)
           .select('conductor_id, conductores!inner(numero_dni, sede_id)')
           .gte('fecha', fechaInicio)
@@ -2736,6 +2737,7 @@ export function ReporteFacturacionTab() {
             conductores!inner(numero_dni, sede_id)
           `)
           .in('estado', ['asignado', 'activo', 'activa', 'finalizado', 'finalizada', 'completado', 'cancelado', 'cancelada'])
+          .order('fecha_inicio', { ascending: false })
 
         const semInicioRecalc = parseISO(fechaInicio)
         const semFinRecalc = parseISO(fechaFin)
@@ -8241,7 +8243,7 @@ export function ReporteFacturacionTab() {
       total_conductores: src.length,
       total_proyectado: src.reduce((sum, f) => sum + (f.proyectado_alquiler || 0), 0),
       total_cargos: src.reduce((sum, f) => sum + (f.subtotal_cargos || 0) + Math.max(0, f.saldo_anterior || 0), 0),
-      total_descuentos: src.reduce((sum, f) => sum + (f.subtotal_descuentos || 0) + Math.max(0, -(f.saldo_anterior || 0)), 0),
+      total_descuentos: src.reduce((sum, f) => sum + (f.subtotal_descuentos || 0), 0),
       total_neto: src.reduce((sum, f) => sum + (f.total_a_pagar || 0), 0),
       conductores_deben: src.filter(f => f.total_a_pagar > 0).length,
       conductores_favor: src.filter(f => f.total_a_pagar <= 0).length
