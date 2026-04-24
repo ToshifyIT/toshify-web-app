@@ -6,7 +6,7 @@
  */
 
 import type { AsignacionActiva } from '../../../../services/asignacionesService'
-import { normalizeDni } from '../../../../utils/normalizeDocuments'
+import { findAsignacionEnIndex } from '../../../../services/asignacionesService'
 import type {
   CabifyDriver,
   RatingLevel,
@@ -116,9 +116,12 @@ export function getDriverPatente(
   asignaciones: Map<string, AsignacionActiva>
 ): string {
   // Early return: Priorizar patente del sistema
-  const asignacion = driver.nationalIdNumber
-    ? asignaciones.get(normalizeDni(driver.nationalIdNumber))
-    : null
+  const nombre = [driver.name, driver.surname].filter(Boolean).join(' ').trim()
+  const asignacion = findAsignacionEnIndex(asignaciones, {
+    dni: driver.nationalIdNumber,
+    licencia: driver.driverLicense,
+    nombre,
+  })
 
   if (asignacion?.patente) {
     return asignacion.patente
@@ -146,8 +149,12 @@ export function filterDriversWithAssignment(
   asignaciones: Map<string, AsignacionActiva>
 ): CabifyDriver[] {
   return drivers.filter((driver) => {
-    if (!driver.nationalIdNumber) return false
-    return asignaciones.has(normalizeDni(driver.nationalIdNumber))
+    const nombre = [driver.name, driver.surname].filter(Boolean).join(' ').trim()
+    return !!findAsignacionEnIndex(asignaciones, {
+      dni: driver.nationalIdNumber,
+      licencia: driver.driverLicense,
+      nombre,
+    })
   })
 }
 
@@ -237,9 +244,12 @@ function countDriversByModalidad(
   let conductoresSinAsignacion = 0
 
   for (const driver of drivers) {
-    const asig = driver.nationalIdNumber
-      ? asignaciones.get(normalizeDni(driver.nationalIdNumber))
-      : null
+    const nombre = [driver.name, driver.surname].filter(Boolean).join(' ').trim()
+    const asig = findAsignacionEnIndex(asignaciones, {
+      dni: driver.nationalIdNumber,
+      licencia: driver.driverLicense,
+      nombre,
+    })
 
     if (asig?.horario === 'todo_dia') conductoresCargo++
     else if (asig?.horario === 'turno') conductoresTurno++

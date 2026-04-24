@@ -42,6 +42,37 @@ export function normalizePatente(value: string | null | undefined): string {
 }
 
 /**
+ * Normalize licencia de conducir for cross-source comparisons.
+ * Strips spaces and dashes, uppercase, removes leading zeros.
+ */
+export function normalizeLicencia(value: string | number | null | undefined): string {
+  if (value == null || value === '') return '';
+  return String(value)
+    .trim()
+    .replace(/[\s\-.]/g, '')
+    .toUpperCase()
+    .replace(/^0+/, '') || '';
+}
+
+/**
+ * Normalize nombre completo for cross-source comparisons.
+ * - uppercase
+ * - strip accents (á→a, ñ→n, etc.)
+ * - collapse spaces
+ * - strip non-alphanumeric
+ */
+export function normalizeNombre(value: string | null | undefined): string {
+  if (!value) return '';
+  return String(value)
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+    .toUpperCase()
+    .replace(/[^A-Z0-9\s]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+/**
  * Normalize CUIT for cross-source comparisons.
  * Strips dashes, dots, and spaces.
  *

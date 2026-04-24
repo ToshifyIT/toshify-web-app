@@ -21,7 +21,6 @@ import type {
   DataSource,
   LoadingProgress,
 } from '../types/cabify.types'
-import { extractValidDNIs } from '../utils/cabify.utils'
 import {
   WEEKS_TO_LOAD,
   INITIAL_LOADING_PROGRESS,
@@ -97,15 +96,11 @@ export function useCabifyData(): UseCabifyDataReturn {
   const isReloadingRef = useRef(false)
 
   const loadAsignaciones = useCallback(async (driverData: CabifyDriver[]): Promise<void> => {
-    const dnis = extractValidDNIs(driverData)
-
-    if (dnis.length === 0) {
-      setAsignaciones(new Map())
-      return
-    }
-
-    const asignacionesMap = await asignacionesService.getAsignacionesByDNIs(dnis)
-    setAsignaciones(asignacionesMap)
+    // Usar índice multi-clave (DNI + licencia + nombre) para que el match con Cabify
+    // no falle si el DNI tiene formato distinto o no coincide.
+    void driverData
+    const asignacionesIndex = await asignacionesService.getAllAsignacionesActivasIndex()
+    setAsignaciones(asignacionesIndex)
   }, [])
 
   const executeDataLoad = useCallback(async (week: WeekOption, showLoading: boolean): Promise<void> => {

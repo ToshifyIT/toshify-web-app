@@ -27,6 +27,20 @@ import { CabifyHeader, type DateRange, StatsAccordion, TopDriversSection } from 
 
 // Utilidades y constantes
 import { getScoreLevel, getRateLevel, buildLoadingMessage, getDriverPatente } from './utils/cabify.utils'
+import { findAsignacionEnIndex } from '../../../services/asignacionesService'
+
+// Helper: busca la asignación de un driver de Cabify por DNI, licencia o nombre.
+function findAsignacionForCabifyDriver(
+  driver: CabifyDriver,
+  index: Map<string, import('../../../services/asignacionesService').AsignacionActiva>,
+) {
+  const nombre = [driver.name, driver.surname].filter(Boolean).join(' ').trim()
+  return findAsignacionEnIndex(index, {
+    dni: driver.nationalIdNumber,
+    licencia: driver.driverLicense,
+    nombre,
+  })
+}
 import {
   INITIAL_ACCORDION_STATE,
   ACCEPTANCE_RATE_THRESHOLDS,
@@ -140,10 +154,11 @@ export function CabifyModule() {
     const withAssignment: CabifyDriver[] = []
     const withoutAssignment: CabifyDriver[] = []
     for (const driver of drivers) {
-      if (!driver.nationalIdNumber || !asignaciones.has(driver.nationalIdNumber)) {
-        withoutAssignment.push(driver)
-      } else {
+      const asig = findAsignacionForCabifyDriver(driver, asignaciones)
+      if (asig) {
         withAssignment.push(driver)
+      } else {
+        withoutAssignment.push(driver)
       }
     }
     return { driversWithAssignment: withAssignment, driversWithoutAssignment: withoutAssignment }
@@ -468,16 +483,16 @@ function createConductorCompactColumn(
       const driver = row.original
       const fullName = `${driver.name || ''} ${driver.surname || ''}`.trim() || '-'
       const dni = driver.nationalIdNumber || '-'
-      const asig = driver.nationalIdNumber
-        ? asignaciones.get(driver.nationalIdNumber)
-        : null
+      const asig = findAsignacionForCabifyDriver(driver, asignaciones) || null
 
       const modalidadClass = !asig
         ? 'dt-badge-gray'
         : asig.horario === 'turno' ? 'dt-badge-blue' : 'dt-badge-yellow'
       const modalidadLabel = !asig
         ? 'S/A'
-        : asig.horario || '?'
+        : asig.horario === 'todo_dia' ? 'A CARGO'
+        : asig.horario === 'turno' ? 'TURNO'
+        : (asig.horario || '?')
 
       const isActive = !driver.disabled
       const estadoClass = isActive ? 'dt-badge-solid-green' : 'dt-badge-solid-gray'
