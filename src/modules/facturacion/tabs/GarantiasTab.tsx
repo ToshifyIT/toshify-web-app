@@ -1363,6 +1363,20 @@ export function GarantiasTab() {
       cell: ({ row }) => <span className="fact-precio" style={{ color: '#16a34a' }}>{formatCurrency(row.original.monto_pagado)}</span>
     },
     {
+      id: 'cuotas_pagadas',
+      header: 'Cuotas',
+      accessorFn: (row) => Math.floor((row.monto_pagado || 0) / 50000),
+      cell: ({ row }) => {
+        const cuotasTotales = Math.ceil((row.original.monto_total || 0) / 50000)
+        const cuotasPagadas = Math.floor((row.original.monto_pagado || 0) / 50000)
+        return (
+          <span className="dt-badge dt-badge-blue" style={{ fontSize: '11px' }} title={`${cuotasPagadas} de ${cuotasTotales} cuotas de $50.000`}>
+            {cuotasPagadas}/{cuotasTotales}
+          </span>
+        )
+      }
+    },
+    {
       id: 'pendiente',
       header: 'Pendiente',
       cell: ({ row }) => {
