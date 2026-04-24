@@ -1696,20 +1696,33 @@ export function AsignacionesModule() {
               .eq('id', selectedAsignacion.vehiculo_id)
           }
 
-          // Si es cambio de vehículo: cambiar el vehículo viejo a PKG_ON_BASE
+          // Si es cambio de vehículo: verificar si el vehículo viejo tiene asignaciones activas antes de cambiar estado
           if (selectedAsignacion?.motivoDetalle?.cambioVehiculo && selectedAsignacion?.motivoDetalle?.vehiculoCambioId) {
-            const { data: estadoPkgOn } = await supabase
-              .from('vehiculos_estados')
-              .select('id')
-              .eq('codigo', 'PKG_ON_BASE')
-              .single()
+            const vehiculoViejoId = selectedAsignacion.motivoDetalle!.vehiculoCambioId
 
-            if (estadoPkgOn) {
-              await (supabase
-                .from('vehiculos') as any)
-                .update({ estado_id: (estadoPkgOn as any).id })
-                .eq('id', selectedAsignacion.motivoDetalle!.vehiculoCambioId)
+            // Consultar si el vehículo viejo todavía tiene asignaciones activas
+            const { count: asignacionesActivas } = await supabase
+              .from('asignaciones_conductores')
+              .select('id', { count: 'exact', head: true })
+              .eq('vehiculo_id', vehiculoViejoId)
+              .eq('estado', 'activo')
+
+            if ((asignacionesActivas || 0) === 0) {
+              // Sin asignaciones activas → ponerlo como disponible
+              const { data: estadoPkgOn } = await supabase
+                .from('vehiculos_estados')
+                .select('id')
+                .eq('codigo', 'PKG_ON_BASE')
+                .single()
+
+              if (estadoPkgOn) {
+                await (supabase
+                  .from('vehiculos') as any)
+                  .update({ estado_id: (estadoPkgOn as any).id })
+                  .eq('id', vehiculoViejoId)
+              }
             }
+            // Si tiene asignaciones activas → se deja en EN_USO (no se modifica)
           }
 
           if (fechaProgramada) {
@@ -3813,3 +3826,5 @@ export function AsignacionesModule() {
     </div>
   )
 }
+
+export default AsignacionesModule

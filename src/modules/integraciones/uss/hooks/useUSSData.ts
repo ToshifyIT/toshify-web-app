@@ -40,28 +40,16 @@ interface UseUSSDataReturn {
   // Filtros
   dateRange: DateRange
   setDateRange: (range: DateRange) => void
-  patenteFilter: string
-  setPatenteFilter: (value: string) => void
-  conductorFilter: string
-  setConductorFilter: (value: string) => void
-  minExcesoFilter: number
-  setMinExcesoFilter: (value: number) => void
 
-  // Paginación
-  page: number
-  setPage: (page: number) => void
-  pageSize: number
-  setPageSize: (size: number) => void
+  // Filtro de rango de velocidad
+  setVelocidadRange: (min: number | undefined, max: number | undefined) => void
 
   // Acciones
   refresh: () => Promise<void>
-  loadMore: () => Promise<void>
 
   // Realtime
   isRealtime: boolean
 }
-
-const DEFAULT_PAGE_SIZE = 50
 
 export function useUSSData(options: UseUSSDataOptions = {}): UseUSSDataReturn {
   const { autoLoad = true, defaultPeriod = 'week', sedeId } = options
@@ -85,52 +73,37 @@ export function useUSSData(options: UseUSSDataOptions = {}): UseUSSDataReturn {
   const [dateRange, setDateRange] = useState<DateRange>({
     startDate: defaultRange.start,
     endDate: defaultRange.end,
-    label: defaultPeriod === 'week' ? 'Última semana' : defaultPeriod,
+    label: defaultPeriod === 'week' ? 'Última semana' : defaultPeriod === 'yesterday' ? 'Ayer' : defaultPeriod === 'today' ? 'Hoy' : defaultPeriod === 'month' ? 'Últimos 30 días' : defaultPeriod,
   })
-  const [patenteFilter, setPatenteFilter] = useState('')
-  const [conductorFilter, setConductorFilter] = useState('')
-  const [minExcesoFilter, setMinExcesoFilter] = useState(0)
+  // Filtro de rango de velocidad (servidor)
+  const [velocidadMin, setVelocidadMin] = useState<number | undefined>(undefined)
+  const [velocidadMax, setVelocidadMax] = useState<number | undefined>(undefined)
 
-  // Paginación
-  const [page, setPage] = useState(1)
-  const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE)
+  const setVelocidadRange = useCallback((min: number | undefined, max: number | undefined) => {
+    setVelocidadMin(min)
+    setVelocidadMax(max)
+  }, [])
 
-  // Función interna de carga (con opción de mostrar loading o no)
-  const fetchData = useCallback(async (showLoading: boolean) => {
+  // Carga todos los excesos del rango (sin paginación servidor)
+  // El DataTable maneja paginación, filtros y sorting del lado del cliente
+  const fetchExcesos = useCallback(async (showLoading: boolean) => {
     if (showLoading) {
       setQueryState((prev) => ({ ...prev, loading: true, error: null }))
     }
 
     try {
-      // Cargar excesos con filtros y paginación
       const { data, count } = await ussService.getExcesos(
         dateRange.startDate,
         dateRange.endDate,
         {
-          limit: pageSize,
-          offset: (page - 1) * pageSize,
-          patente: patenteFilter || undefined,
-          conductor: conductorFilter || undefined,
-          minExceso: minExcesoFilter || undefined,
           sedeId,
+          velocidadMin,
+          velocidadMax,
         }
       )
 
       setExcesos(data)
       setTotalCount(count)
-
-      // Cargar estadísticas
-      const statsData = await ussService.getStats(dateRange.startDate, dateRange.endDate, sedeId)
-      setStats(statsData)
-
-      // Cargar rankings
-      const [vehiculos, conductores] = await Promise.all([
-        ussService.getVehiculosRanking(dateRange.startDate, dateRange.endDate, 10, sedeId),
-        ussService.getConductoresRanking(dateRange.startDate, dateRange.endDate, 10, sedeId),
-      ])
-
-      setVehiculosRanking(vehiculos)
-      setConductoresRanking(conductores)
 
       setQueryState({
         loading: false,
@@ -138,59 +111,51 @@ export function useUSSData(options: UseUSSDataOptions = {}): UseUSSDataReturn {
         lastUpdate: new Date(),
       })
     } catch (error) {
-      // Solo mostrar error si era una carga con loading visible
       if (showLoading) {
         const errorMessage = error instanceof Error ? error.message : 'Error desconocido'
-        setQueryState({
-          loading: false,
-          error: errorMessage,
-          lastUpdate: null,
-        })
+        setQueryState({ loading: false, error: errorMessage, lastUpdate: null })
       } else {
-        // En actualizaciones silenciosas, solo actualizar lastUpdate
         setQueryState((prev) => ({ ...prev, lastUpdate: new Date() }))
       }
     }
-  }, [dateRange, page, pageSize, patenteFilter, conductorFilter, minExcesoFilter, sedeId])
+  }, [dateRange, sedeId, velocidadMin, velocidadMax])
 
-  // Cargar datos con loading visible (para carga inicial y cambios de filtros)
-  const loadData = useCallback(() => fetchData(true), [fetchData])
+  // Carga stats y rankings - solo se ejecuta al cambiar dateRange o sedeId
+  const fetchStatsAndRankings = useCallback(async () => {
+    try {
+      const [statsData, vehiculos, conductores] = await Promise.all([
+        ussService.getStats(dateRange.startDate, dateRange.endDate, sedeId),
+        ussService.getVehiculosRanking(dateRange.startDate, dateRange.endDate, 10, sedeId),
+        ussService.getConductoresRanking(dateRange.startDate, dateRange.endDate, 10, sedeId),
+      ])
+
+      setStats(statsData)
+      setVehiculosRanking(vehiculos)
+      setConductoresRanking(conductores)
+    } catch {
+      // Stats/rankings son secundarios, no bloquean la UI
+    }
+  }, [dateRange, sedeId])
+
+  // Cargar datos con loading visible
+  const loadData = useCallback(() => fetchExcesos(true), [fetchExcesos])
 
   // Cargar datos silenciosamente (para tiempo real, sin parpadeo)
-  const loadDataSilent = useCallback(() => fetchData(false), [fetchData])
+  const loadDataSilent = useCallback(() => fetchExcesos(false), [fetchExcesos])
 
-  // Cargar más datos
-  const loadMore = useCallback(async () => {
-    if (queryState.loading) return
-
-    const nextPage = page + 1
-    const { data } = await ussService.getExcesos(
-      dateRange.startDate,
-      dateRange.endDate,
-      {
-        limit: pageSize,
-        offset: (nextPage - 1) * pageSize,
-        patente: patenteFilter || undefined,
-        conductor: conductorFilter || undefined,
-        minExceso: minExcesoFilter || undefined,
-      }
-    )
-
-    setExcesos((prev) => [...prev, ...data])
-    setPage(nextPage)
-  }, [dateRange, page, pageSize, patenteFilter, conductorFilter, minExcesoFilter, queryState.loading])
-
-  // Efecto para carga inicial y cuando cambian filtros
+  // Efecto para carga de excesos
   useEffect(() => {
     if (autoLoad) {
       loadData()
     }
   }, [loadData, autoLoad])
 
-  // Reset page cuando cambian filtros
+  // Efecto para carga de stats y rankings (solo cuando cambia dateRange o sedeId)
   useEffect(() => {
-    setPage(1)
-  }, [dateRange, patenteFilter, conductorFilter, minExcesoFilter])
+    if (autoLoad) {
+      fetchStatsAndRankings()
+    }
+  }, [fetchStatsAndRankings, autoLoad])
 
   // Determinar si estamos en modo realtime (Hoy o Última semana)
   const isRealtime = dateRange.label === 'Hoy' || dateRange.label === 'Última semana'
@@ -258,18 +223,8 @@ export function useUSSData(options: UseUSSDataOptions = {}): UseUSSDataReturn {
     totalCount,
     dateRange,
     setDateRange,
-    patenteFilter,
-    setPatenteFilter,
-    conductorFilter,
-    setConductorFilter,
-    minExcesoFilter,
-    setMinExcesoFilter,
-    page,
-    setPage,
-    pageSize,
-    setPageSize,
+    setVelocidadRange,
     refresh: loadData,
-    loadMore,
     isRealtime,
   }
 }

@@ -1,13 +1,13 @@
 // src/modules/integraciones/uss/components/ExcesosTable.tsx
 /**
- * Tabla de excesos de velocidad usando DataTable con filtros Excel
+ * Tabla de excesos de velocidad usando DataTable con filtros automáticos
+ * Toda la data viene del servidor, DataTable maneja paginación/filtros/sorting del cliente
  */
 
-import { useState, useMemo } from 'react'
-import { type ColumnDef } from '@tanstack/react-table'
+import { useState, useMemo, useCallback, useEffect, useRef } from 'react'
+import { type ColumnDef, type Table } from '@tanstack/react-table'
 import { DataTable } from '../../../../components/ui/DataTable/DataTable'
-import { ExcelColumnFilter, useExcelFilters } from '../../../../components/ui/DataTable/ExcelColumnFilter'
-import { Search, MapPin, Gauge, ChevronsLeft, ChevronLeft, ChevronRight, ChevronsRight } from 'lucide-react'
+import { Search, MapPin, Gauge } from 'lucide-react'
 import type { ExcesoVelocidad } from '../types/uss.types'
 import { normalizePatente } from '../../../../utils/normalizeDocuments'
 import {
@@ -18,85 +18,92 @@ import {
   truncateLocation,
   getSeverityColor,
 } from '../utils/uss.utils'
-import { PAGE_SIZES } from '../constants/uss.constants'
 
 interface ExcesosTableProps {
   readonly excesos: ExcesoVelocidad[]
   readonly totalCount: number
   readonly isLoading: boolean
-  readonly page: number
-  readonly pageSize: number
-  readonly onPageChange: (page: number) => void
-  readonly onPageSizeChange: (size: number) => void
   readonly searchTerm: string
   readonly onSearchChange: (term: string) => void
   readonly headerControls?: React.ReactNode
+  readonly onVelocidadRangeChange?: (min: number | undefined, max: number | undefined) => void
+  readonly onFilteredDataChange?: (data: ExcesoVelocidad[]) => void
 }
 
 export function ExcesosTable({
   excesos,
   totalCount,
   isLoading,
-  page,
-  pageSize,
-  onPageChange,
-  onPageSizeChange,
   searchTerm,
   onSearchChange,
   headerControls,
+  onVelocidadRangeChange,
+  onFilteredDataChange,
 }: ExcesosTableProps) {
-  const totalPages = Math.ceil(totalCount / pageSize)
 
-  // Estados para filtros Excel
-  const { openFilterId, setOpenFilterId } = useExcelFilters()
-  const [patenteFilter, setPatenteFilter] = useState<string[]>([])
-  const [conductorFilter, setConductorFilter] = useState<string[]>([])
+  // Observar datos filtrados del DataTable para actualizar stats
+  const tableRef = useRef<Table<ExcesoVelocidad> | null>(null)
+  const lastFilteredKeyRef = useRef<string>('')
+  const onFilteredDataChangeRef = useRef(onFilteredDataChange)
+  onFilteredDataChangeRef.current = onFilteredDataChange
 
-  // Listas únicas para filtros
-  const patentesUnicas = useMemo(() =>
-    [...new Set(excesos.map(e => e.patente).filter(Boolean))].sort()
-  , [excesos])
+  const handleTableReady = useCallback((table: Table<ExcesoVelocidad>) => {
+    tableRef.current = table
+  }, [])
 
-  const conductoresUnicos = useMemo(() =>
-    [...new Set(excesos.map(e => extractConductorName(e.conductor_wialon)).filter(Boolean) as string[])].sort()
-  , [excesos])
+  // Polling: verificar cada 300ms si los datos filtrados del DataTable cambiaron
+  // Necesario porque los filtros internos del DataTable no disparan re-renders en este componente
+  useEffect(() => {
+    const checkFiltered = () => {
+      if (!tableRef.current || !onFilteredDataChangeRef.current) return
+      const filteredRows = tableRef.current.getFilteredRowModel().rows
+      const key = filteredRows.length + '_' + (filteredRows.length > 0 ? filteredRows[0].id + '_' + filteredRows[filteredRows.length - 1].id : '')
+      if (key !== lastFilteredKeyRef.current) {
+        lastFilteredKeyRef.current = key
+        onFilteredDataChangeRef.current(filteredRows.map(r => r.original))
+      }
+    }
+    // Check inmediato al montar
+    checkFiltered()
+    const interval = setInterval(checkFiltered, 300)
+    return () => clearInterval(interval)
+  }, [excesos])
 
-  // Datos filtrados
-  const excesosFiltrados = useMemo(() => {
-    return excesos.filter(e => {
-      if (patenteFilter.length > 0 && !patenteFilter.includes(e.patente)) return false
-      if (conductorFilter.length > 0 && !conductorFilter.includes(extractConductorName(e.conductor_wialon) || '')) return false
-      return true
-    })
-  }, [excesos, patenteFilter, conductorFilter])
+  // Estado para filtro de rango de velocidad (servidor)
+  const [velMin, setVelMin] = useState('')
+  const [velMax, setVelMax] = useState('')
+  const [showVelFilter, setShowVelFilter] = useState(false)
+  const velFilterActive = velMin !== '' || velMax !== ''
 
-  // Columnas con filtros Excel
+  const applyVelocidadFilter = () => {
+    const min = velMin !== '' ? Number(velMin) : undefined
+    const max = velMax !== '' ? Number(velMax) : undefined
+    onVelocidadRangeChange?.(min, max)
+    setShowVelFilter(false)
+  }
+
+  const clearVelocidadFilter = () => {
+    setVelMin('')
+    setVelMax('')
+    onVelocidadRangeChange?.(undefined, undefined)
+    setShowVelFilter(false)
+  }
+
+  // Columnas — headers como texto plano para que DataTable aplique filtros automáticos
   const columns = useMemo<ColumnDef<ExcesoVelocidad, unknown>[]>(() => [
     {
       accessorKey: 'fecha_evento',
       header: 'Fecha/Hora',
       cell: ({ row }) => formatDateTime(row.original.fecha_evento),
-      enableSorting: true,
     },
     {
       accessorKey: 'patente',
-      header: () => (
-        <ExcelColumnFilter
-          label="Patente"
-          options={patentesUnicas}
-          selectedValues={patenteFilter}
-          onSelectionChange={setPatenteFilter}
-          filterId="patente"
-          openFilterId={openFilterId}
-          onOpenChange={setOpenFilterId}
-        />
-      ),
+      header: 'Patente',
       cell: ({ row }) => (
         <span style={{ fontWeight: 600, color: 'var(--color-primary)' }}>
           {normalizePatente(row.original.patente)}
         </span>
       ),
-      enableSorting: false,
     },
     {
       accessorKey: 'ibutton',
@@ -106,23 +113,11 @@ export function ExcesosTable({
           {row.original.ibutton || '-'}
         </span>
       ),
-      enableSorting: false,
     },
     {
       accessorKey: 'conductor_wialon',
-      header: () => (
-        <ExcelColumnFilter
-          label="Conductor"
-          options={conductoresUnicos}
-          selectedValues={conductorFilter}
-          onSelectionChange={setConductorFilter}
-          filterId="conductor"
-          openFilterId={openFilterId}
-          onOpenChange={setOpenFilterId}
-        />
-      ),
+      header: 'Conductor',
       cell: ({ row }) => extractConductorName(row.original.conductor_wialon) || '-',
-      enableSorting: false,
     },
     {
       accessorKey: 'velocidad_maxima',
@@ -132,13 +127,11 @@ export function ExcesosTable({
           {formatSpeed(row.original.velocidad_maxima)}
         </span>
       ),
-      enableSorting: true,
     },
     {
       accessorKey: 'limite_velocidad',
       header: 'Limite',
       cell: ({ row }) => formatSpeed(row.original.limite_velocidad),
-      enableSorting: true,
     },
     {
       accessorKey: 'exceso',
@@ -158,13 +151,11 @@ export function ExcesosTable({
           </span>
         )
       },
-      enableSorting: true,
     },
     {
       accessorKey: 'duracion_segundos',
       header: 'Duracion',
       cell: ({ row }) => formatDuration(row.original.duracion_segundos),
-      enableSorting: true,
     },
     {
       accessorKey: 'localizacion',
@@ -179,44 +170,7 @@ export function ExcesosTable({
       ),
       enableSorting: false,
     },
-  ], [
-    patentesUnicas, patenteFilter,
-    conductoresUnicos, conductorFilter,
-    openFilterId,
-  ])
-
-  // Paginación manual del servidor
-  const paginationControls = (
-    <div className="dt-pagination" style={{ borderTop: 'none', background: 'transparent', padding: '12px 0' }}>
-      <div className="dt-pagination-info">
-        Mostrando {((page - 1) * pageSize) + 1}-{Math.min(page * pageSize, totalCount)} de {totalCount.toLocaleString()} registros
-      </div>
-      <div className="dt-pagination-controls">
-        <select
-          value={pageSize}
-          onChange={(e) => onPageSizeChange(Number(e.target.value))}
-          className="dt-pagination-select"
-        >
-          {PAGE_SIZES.map((size) => (
-            <option key={size} value={size}>{size} por página</option>
-          ))}
-        </select>
-        <button onClick={() => onPageChange(1)} disabled={page === 1 || isLoading} className="dt-pagination-btn">
-          <ChevronsLeft size={14} />
-        </button>
-        <button onClick={() => onPageChange(page - 1)} disabled={page === 1 || isLoading} className="dt-pagination-btn">
-          <ChevronLeft size={14} />
-        </button>
-        <span className="dt-pagination-text">Página {page} de {totalPages || 1}</span>
-        <button onClick={() => onPageChange(page + 1)} disabled={page >= totalPages || isLoading} className="dt-pagination-btn">
-          <ChevronRight size={14} />
-        </button>
-        <button onClick={() => onPageChange(totalPages)} disabled={page >= totalPages || isLoading} className="dt-pagination-btn">
-          <ChevronsRight size={14} />
-        </button>
-      </div>
-    </div>
-  )
+  ], [])
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
@@ -240,28 +194,84 @@ export function ExcesosTable({
               fontSize: '11px',
               color: 'var(--text-tertiary)'
             }}>
-              {excesos.length} resultado{excesos.length !== 1 ? 's' : ''}
+              {totalCount.toLocaleString()} registros cargados
             </span>
           )}
         </div>
+
+        {/* Filtro de rango de velocidad (servidor) */}
+        <div style={{ position: 'relative' }}>
+          <button
+            onClick={() => setShowVelFilter(!showVelFilter)}
+            style={{
+              display: 'flex', alignItems: 'center', gap: '6px',
+              padding: '8px 14px', fontSize: '13px', fontWeight: 500,
+              background: velFilterActive ? 'var(--color-primary, #ef4444)' : 'var(--bg-secondary, #f3f4f6)',
+              color: velFilterActive ? 'white' : 'var(--text-secondary)',
+              border: velFilterActive ? 'none' : '1px solid var(--border-primary, #e5e7eb)',
+              borderRadius: '8px', cursor: 'pointer', whiteSpace: 'nowrap',
+            }}
+          >
+            <Gauge size={15} />
+            {velFilterActive ? `${velMin || '0'} - ${velMax || '∞'} km/h` : 'Rango velocidad'}
+          </button>
+          {showVelFilter && (
+            <div style={{
+              position: 'absolute', top: '100%', right: 0, zIndex: 50, marginTop: '6px',
+              background: 'var(--bg-primary, white)', border: '1px solid var(--border-primary, #e5e7eb)',
+              borderRadius: '10px', padding: '14px', boxShadow: '0 4px 16px rgba(0,0,0,0.12)', minWidth: '220px',
+            }}>
+              <div style={{ fontSize: '12px', fontWeight: 600, marginBottom: '10px', color: 'var(--text-primary)' }}>Filtrar por velocidad (km/h)</div>
+              <div style={{ display: 'flex', gap: '8px', marginBottom: '12px', alignItems: 'center' }}>
+                <input
+                  type="number"
+                  placeholder="Min"
+                  value={velMin}
+                  onChange={(e) => setVelMin(e.target.value)}
+                  style={{ flex: 1, padding: '8px 10px', fontSize: '13px', border: '1px solid var(--border-primary, #e5e7eb)', borderRadius: '6px', background: 'var(--bg-secondary, #f9fafb)', outline: 'none' }}
+                />
+                <span style={{ color: 'var(--text-tertiary)', fontSize: '14px', fontWeight: 600 }}>—</span>
+                <input
+                  type="number"
+                  placeholder="Max"
+                  value={velMax}
+                  onChange={(e) => setVelMax(e.target.value)}
+                  style={{ flex: 1, padding: '8px 10px', fontSize: '13px', border: '1px solid var(--border-primary, #e5e7eb)', borderRadius: '6px', background: 'var(--bg-secondary, #f9fafb)', outline: 'none' }}
+                />
+              </div>
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <button
+                  onClick={applyVelocidadFilter}
+                  style={{ flex: 1, padding: '8px', fontSize: '12px', fontWeight: 600, background: 'var(--color-primary, #ef4444)', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer' }}
+                >
+                  Aplicar
+                </button>
+                <button
+                  onClick={clearVelocidadFilter}
+                  style={{ flex: 1, padding: '8px', fontSize: '12px', fontWeight: 600, background: 'var(--bg-secondary, #f3f4f6)', color: 'var(--text-secondary)', border: '1px solid var(--border-primary, #e5e7eb)', borderRadius: '6px', cursor: 'pointer' }}
+                >
+                  Limpiar
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+
         {headerControls}
       </div>
 
-      {/* DataTable */}
+      {/* DataTable — maneja paginación, filtros y sorting sobre toda la data */}
       <DataTable
-        data={excesosFiltrados}
+        data={excesos}
         columns={columns}
         loading={isLoading}
         showSearch={false}
-        showPagination={false}
+        pageSize={50}
+        onTableReady={handleTableReady}
         emptyIcon={<Gauge size={48} />}
         emptyTitle="Sin excesos"
         emptyDescription="No se encontraron excesos de velocidad para el período seleccionado"
-        pageSize={pageSize}
       />
-
-      {/* Paginación del servidor */}
-      {excesosFiltrados.length > 0 && paginationControls}
     </div>
   )
 }

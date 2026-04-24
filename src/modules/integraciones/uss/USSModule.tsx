@@ -3,30 +3,33 @@
  * Módulo principal de USS - Excesos de Velocidad
  */
 
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useCallback } from 'react'
 import { useSede } from '../../../contexts/SedeContext'
 import { useUSSData } from './hooks'
 import { USSHeader, ExcesosStats, ExcesosTable } from './components'
-import type { ExcesoStats } from './types/uss.types'
+import type { ExcesoStats, ExcesoVelocidad } from './types/uss.types'
 import './styles/uss.css'
 
 export function USSModule() {
   const { sedeActualId } = useSede()
   const {
     excesos,
-    stats,
     queryState,
     totalCount,
     dateRange,
     setDateRange,
-    page,
-    setPage,
-    pageSize,
-    setPageSize,
+    setVelocidadRange,
     isRealtime,
-  } = useUSSData({ sedeId: sedeActualId })
+  } = useUSSData({ sedeId: sedeActualId, defaultPeriod: 'yesterday' })
 
   const [searchTerm, setSearchTerm] = useState('')
+
+  // Datos filtrados por la tabla (incluye filtros internos del DataTable)
+  const [tableFilteredData, setTableFilteredData] = useState<ExcesoVelocidad[] | null>(null)
+
+  const handleFilteredDataChange = useCallback((data: ExcesoVelocidad[]) => {
+    setTableFilteredData(data)
+  }, [])
 
   // Filtrar excesos por búsqueda
   const filteredExcesos = useMemo(() => {
@@ -39,10 +42,14 @@ export function USSModule() {
     )
   }, [excesos, searchTerm])
 
-  // Calcular stats de datos filtrados
-  const filteredStats = useMemo((): ExcesoStats | null => {
-    if (!searchTerm.trim()) return stats
-    if (filteredExcesos.length === 0) {
+  // Datos para calcular stats: usar los datos filtrados del DataTable si están disponibles,
+  // sino usar los filtrados por búsqueda
+  const statsData = tableFilteredData ?? filteredExcesos
+
+  // Calcular stats desde los datos que realmente se muestran en la tabla
+  const computedStats = useMemo((): ExcesoStats => {
+    const data = statsData
+    if (data.length === 0) {
       return {
         totalExcesos: 0,
         vehiculosUnicos: 0,
@@ -54,22 +61,22 @@ export function USSModule() {
       }
     }
 
-    const patentes = new Set(filteredExcesos.map(e => e.patente).filter(Boolean))
-    const conductores = new Set(filteredExcesos.map(e => e.conductor_wialon).filter(Boolean))
-    const velocidades = filteredExcesos.map(e => e.velocidad_maxima || 0)
-    const excesosArr = filteredExcesos.map(e => e.exceso || 0)
-    const duraciones = filteredExcesos.map(e => e.duracion_segundos || 0)
+    const patentes = new Set(data.map(e => e.patente).filter(Boolean))
+    const conductores = new Set(data.map(e => e.conductor_wialon).filter(Boolean))
+    const velocidades = data.map(e => e.velocidad_maxima || 0)
+    const excesosArr = data.map(e => e.exceso || 0)
+    const duraciones = data.map(e => e.duracion_segundos || 0)
 
     return {
-      totalExcesos: filteredExcesos.length,
+      totalExcesos: data.length,
       vehiculosUnicos: patentes.size,
       conductoresUnicos: conductores.size,
-      velocidadPromedio: velocidades.reduce((a, b) => a + b, 0) / velocidades.length,
+      velocidadPromedio: Math.round(velocidades.reduce((a, b) => a + b, 0) / velocidades.length),
       velocidadMaxima: Math.max(...velocidades),
-      excesoPromedio: excesosArr.reduce((a, b) => a + b, 0) / excesosArr.length,
-      duracionPromedio: duraciones.reduce((a, b) => a + b, 0) / duraciones.length,
+      excesoPromedio: Math.round(excesosArr.reduce((a, b) => a + b, 0) / excesosArr.length),
+      duracionPromedio: Math.round(duraciones.reduce((a, b) => a + b, 0) / duraciones.length),
     }
-  }, [stats, filteredExcesos, searchTerm])
+  }, [statsData])
 
   return (
     <div className="uss-module">
@@ -79,16 +86,14 @@ export function USSModule() {
         </div>
       )}
 
-      <ExcesosStats stats={filteredStats} isLoading={queryState.loading} />
+      <ExcesosStats stats={computedStats} isLoading={queryState.loading} />
 
       <ExcesosTable
         excesos={filteredExcesos}
-        totalCount={searchTerm.trim() ? filteredExcesos.length : totalCount}
+        totalCount={totalCount}
         isLoading={queryState.loading}
-        page={page}
-        pageSize={pageSize}
-        onPageChange={setPage}
-        onPageSizeChange={setPageSize}
+        onVelocidadRangeChange={setVelocidadRange}
+        onFilteredDataChange={handleFilteredDataChange}
         searchTerm={searchTerm}
         onSearchChange={setSearchTerm}
         headerControls={
