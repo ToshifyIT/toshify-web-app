@@ -1710,6 +1710,9 @@ export function ReporteFacturacionTab() {
       // Pre-scan: detectar conductores que ya tenían asignación activa ANTES de esta semana
       // Si un conductor ya estaba trabajando (cambio de vehículo), NO se le aplica descuento por hora de entrega
       const conductoresConAsignacionPreviaVP = new Set<string>()
+      // Set de fechas_inicio de asignaciones por conductor — para resolver overlap en día de entrega
+      // Regla: si asig A termina el día X y asig B empieza el día X (del mismo conductor), el día X cuenta para B
+      const fechasInicioAsigPorConductor = new Map<string, Set<string>>()
       for (const ac of (asignacionesConductores || []) as any[]) {
         const asignacion = ac.asignaciones
         if (!asignacion) continue
@@ -1722,6 +1725,11 @@ export function ReporteFacturacionTab() {
         const inicioEfectivo = cIni && pIni ? (cIni > pIni ? cIni : pIni) : (cIni || pIni)
         if (inicioEfectivo && inicioEfectivo < fechaInicioSemana) {
           conductoresConAsignacionPreviaVP.add(ac.conductor_id)
+        }
+        if (inicioEfectivo) {
+          const setFechas = fechasInicioAsigPorConductor.get(ac.conductor_id) || new Set<string>()
+          setFechas.add(format(inicioEfectivo, 'yyyy-MM-dd'))
+          fechasInicioAsigPorConductor.set(ac.conductor_id, setFechas)
         }
       }
 
@@ -1759,6 +1767,20 @@ export function ReporteFacturacionTab() {
         // Rango efectivo dentro de la semana
         const efectivoInicio = acInicio < fechaInicioSemana ? fechaInicioSemana : acInicio
         let efectivoFin = acFin > fechaFinSemana ? fechaFinSemana : acFin
+
+        // Regla: si otra asignación del mismo conductor EMPIEZA el día en que esta TERMINA,
+        // ese día cuenta para la nueva. Recortamos efectivoFin en 1 día.
+        const fechasInicioSet = fechasInicioAsigPorConductor.get(ac.conductor_id)
+        if (fechasInicioSet) {
+          const finKey = format(efectivoFin, 'yyyy-MM-dd')
+          const inicioKey = format(efectivoInicio, 'yyyy-MM-dd')
+          // Solo recortar si finKey es inicio de otra asig Y no es el inicio de esta misma asig
+          if (fechasInicioSet.has(finKey) && finKey !== inicioKey) {
+            const nuevoFin = new Date(efectivoFin)
+            nuevoFin.setDate(nuevoFin.getDate() - 1)
+            efectivoFin = nuevoFin
+          }
+        }
 
         // Aplicar fecha_terminacion como tope si:
         // - La asignación NO tiene fecha_fin propia, O
