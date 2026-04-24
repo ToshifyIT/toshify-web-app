@@ -41,6 +41,13 @@ function findAsignacionForCabifyDriver(
     nombre,
   })
 }
+
+// Helper: devuelve el DNI real del conductor (o "-" si es un ID técnico "CABIFY_xxx").
+function getDniDisplay(raw: string | undefined | null, fallback = '-'): string {
+  if (!raw) return fallback
+  if (raw.toUpperCase().startsWith('CABIFY_')) return fallback
+  return raw
+}
 import {
   INITIAL_ACCORDION_STATE,
   ACCEPTANCE_RATE_THRESHOLDS,
@@ -349,7 +356,7 @@ function DriversWithoutAssignmentSection({
                 <span className="driver-name">
                   {driver.name} {driver.surname}
                 </span>
-                <span className="driver-dni">{driver.nationalIdNumber || 'Sin DNI'}</span>
+                <span className="driver-dni">{getDniDisplay(driver.nationalIdNumber, 'Sin DNI')}</span>
               </div>
               <div className="driver-stats">
                 <span className="stat-viajes">{driver.viajesFinalizados || 0} viajes</span>
@@ -482,8 +489,9 @@ function createConductorCompactColumn(
     cell: ({ row }) => {
       const driver = row.original
       const fullName = `${driver.name || ''} ${driver.surname || ''}`.trim() || '-'
-      const dni = driver.nationalIdNumber || '-'
       const asig = findAsignacionForCabifyDriver(driver, asignaciones) || null
+      // Mostrar DNI del sistema si hay asig (match limpio), sino el de Cabify (filtrando IDs técnicos)
+      const dni = asig?.dni || getDniDisplay(driver.nationalIdNumber)
 
       const modalidadClass = !asig
         ? 'dt-badge-gray'
