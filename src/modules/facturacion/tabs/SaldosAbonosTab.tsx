@@ -24,6 +24,7 @@ import {
   Banknote,
   Download,
   Upload,
+  Split,
   X
 } from 'lucide-react'
 import { type ColumnDef } from '@tanstack/react-table'
@@ -797,6 +798,163 @@ export function SaldosAbonosTab() {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } catch (error: any) {
       Swal.fire('Error', error.message || 'No se pudo agregar el saldo', 'error')
+    }
+  }
+
+  async function fraccionarSaldo(saldo: SaldoConductor) {
+    if (saldo.saldo_actual >= 0) {
+      Swal.fire('Sin deuda', 'Solo se puede fraccionar un saldo en deuda.', 'info')
+      return
+    }
+    if (conductoresConFraccionado.has(saldo.conductor_id)) {
+      Swal.fire('No disponible', 'Este conductor ya tiene un cobro fraccionado pendiente. Debe completarlo antes de crear otro.', 'info')
+      return
+    }
+
+    const montoDeuda = Math.abs(saldo.saldo_actual)
+
+    const hoy = new Date()
+    const hoyStr = `${hoy.getFullYear()}-${String(hoy.getMonth() + 1).padStart(2, '0')}-${String(hoy.getDate()).padStart(2, '0')}`
+    const semanaActual = getWeekNumber(hoyStr)
+    const anioActual = hoy.getFullYear()
+
+    let semanaOptions = ''
+    let sem = semanaActual
+    let anio = anioActual
+    for (let i = 0; i < 13; i++) {
+      const selected = i === 0 ? 'selected' : ''
+      const label = i === 0 ? `Semana ${sem} - ${anio} (actual)` : `Semana ${sem} - ${anio}`
+      semanaOptions += `<option value="${sem}-${anio}" ${selected}>${label}</option>`
+      sem++
+      if (sem > 52) { sem = 1; anio++ }
+    }
+
+    const { value: formValues } = await Swal.fire({
+      title: '<span style="font-size:16px;font-weight:600;">Fraccionar Saldo</span>',
+      html: `
+        <div style="text-align:left;font-size:13px;">
+          <div style="background:#F3F4F6;padding:10px 12px;border-radius:6px;margin-bottom:12px;">
+            <div style="font-weight:600;color:#111827;">${saldo.conductor_nombre}</div>
+            <div style="color:#DC2626;font-size:12px;margin-top:4px;">
+              Deuda a fraccionar: <strong>${formatCurrency(montoDeuda)}</strong>
+            </div>
+          </div>
+          <div style="margin-bottom:10px;">
+            <label style="display:block;font-size:12px;color:#374151;margin-bottom:4px;font-weight:500;">Cantidad de cuotas:</label>
+            <input id="swal-frac-cuotas" type="number" class="swal2-input" style="font-size:14px;margin:0;width:100%;" min="2" max="52" value="4">
+          </div>
+          <div style="margin-bottom:10px;">
+            <label style="display:block;font-size:12px;color:#374151;margin-bottom:4px;font-weight:500;">Semana de inicio:</label>
+            <select id="swal-frac-semana" class="swal2-select" style="font-size:14px;margin:0;width:100%;padding:8px;">
+              ${semanaOptions}
+            </select>
+          </div>
+          <div id="swal-frac-preview" style="background:#FEF3C7;padding:8px 12px;border-radius:6px;font-size:12px;color:#92400E;">
+            Cada cuota: <strong>${formatCurrency(Math.ceil(montoDeuda / 4))}</strong>
+          </div>
+          <div style="margin-top:10px;font-size:11px;color:#6B7280;line-height:1.4;">
+            Al confirmar, el saldo actual del conductor quedará en <strong>$0</strong> y la deuda se facturará semana a semana como cuotas.
+          </div>
+        </div>
+      `,
+      focusConfirm: false,
+      showCancelButton: true,
+      confirmButtonText: 'Fraccionar',
+      cancelButtonText: 'Cancelar',
+      confirmButtonColor: '#6366F1',
+      cancelButtonColor: '#6B7280',
+      width: 420,
+      customClass: { popup: 'swal-compact', title: 'swal-title-compact', htmlContainer: 'swal-html-compact' },
+      didOpen: () => {
+        const cuotasInput = document.getElementById('swal-frac-cuotas') as HTMLInputElement
+        const preview = document.getElementById('swal-frac-preview') as HTMLElement
+        const updatePreview = () => {
+          const n = Math.max(2, Math.min(52, parseInt(cuotasInput.value) || 2))
+          preview.innerHTML = `Cada cuota: <strong>${formatCurrency(Math.ceil(montoDeuda / n))}</strong>`
+        }
+        cuotasInput.addEventListener('input', updatePreview)
+      },
+      preConfirm: () => {
+        const cuotas = parseInt((document.getElementById('swal-frac-cuotas') as HTMLInputElement).value)
+        const semanaValue = (document.getElementById('swal-frac-semana') as HTMLSelectElement).value
+        if (!cuotas || cuotas < 2) {
+          Swal.showValidationMessage('Mínimo 2 cuotas')
+          return false
+        }
+        if (cuotas > 52) {
+          Swal.showValidationMessage('Máximo 52 cuotas')
+          return false
+        }
+        const [semana, anio] = semanaValue.split('-').map(Number)
+        return { cuotas, semana, anio }
+      }
+    })
+
+    if (!formValues) return
+
+    try {
+      // Re-verificar concurrencia: que no se haya creado otro plan entre apertura y confirmación
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data: pendientes } = await (supabase.from('cobros_fraccionados') as any)
+        .select('id')
+        .eq('conductor_id', saldo.conductor_id)
+        .eq('aplicado', false)
+        .limit(1)
+
+      if (pendientes && pendientes.length > 0) {
+        Swal.fire('No disponible', 'Este conductor ya tiene un cobro fraccionado pendiente.', 'info')
+        return
+      }
+
+      const montoCuota = Math.ceil(montoDeuda / formValues.cuotas)
+
+      let semIter = formValues.semana
+      let anioIter = formValues.anio
+      for (let i = 1; i <= formValues.cuotas; i++) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { error } = await (supabase.from('cobros_fraccionados') as any).insert({
+          conductor_id: saldo.conductor_id,
+          descripcion: `Fraccionamiento de saldo - Cuota ${i}/${formValues.cuotas}`,
+          monto_total: montoDeuda,
+          monto_cuota: montoCuota,
+          numero_cuota: i,
+          total_cuotas: formValues.cuotas,
+          semana: semIter,
+          anio: anioIter,
+          aplicado: false
+        })
+        if (error) throw error
+        semIter++
+        if (semIter > 52) { semIter = 1; anioIter++ }
+      }
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { error: errorUpdate } = await (supabase.from('saldos_conductores') as any)
+        .update({
+          saldo_actual: 0,
+          dias_mora: 0,
+          monto_mora_acumulada: 0,
+          ultima_actualizacion: new Date().toISOString()
+        })
+        .eq('id', saldo.id)
+      if (errorUpdate) throw errorUpdate
+
+      await insertControlSaldo({
+        conductorId: saldo.conductor_id,
+        semana: formValues.semana,
+        anio: formValues.anio,
+        tipoMovimiento: 'ajuste_manual',
+        montoMovimiento: montoDeuda,
+        saldoPendiente: 0,
+        referencia: `Fraccionamiento de saldo en ${formValues.cuotas} cuotas de ${formatCurrency(montoCuota)}`,
+        userName: profile?.full_name,
+      })
+
+      showSuccess('Saldo Fraccionado', `${formValues.cuotas} cuotas de ${formatCurrency(montoCuota)}`)
+      cargarSaldos()
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    } catch (error: any) {
+      Swal.fire('Error', error.message || 'No se pudo fraccionar el saldo', 'error')
     }
   }
 
@@ -1786,6 +1944,11 @@ export function SaldosAbonosTab() {
     }
   }
 
+  // IDs de conductores con cobros fraccionados pendientes
+  const conductoresConFraccionado = useMemo(() => {
+    return new Set(cobrosFraccionados.map(c => c.conductor_id))
+  }, [cobrosFraccionados])
+
   const columns = useMemo<ColumnDef<SaldoConductor>[]>(() => [
     {
       accessorKey: 'conductor_nombre',
@@ -1950,33 +2113,40 @@ export function SaldosAbonosTab() {
     {
       id: 'acciones',
       header: '',
-      cell: ({ row }) => (
-        <div className="fact-table-actions">
-          <button className="fact-table-btn fact-table-btn-view" onClick={() => verHistorial(row.original)} data-tooltip="Ver historial">
-            <Eye size={14} />
-          </button>
-          <button className="fact-table-btn" onClick={() => registrarPago(row.original)} data-tooltip="Registrar pago" style={{ color: '#16a34a' }}>
-            <Banknote size={14} />
-          </button>
-          {(isAdmin() || isAdministrativo()) && (
-            <button className="fact-table-btn fact-table-btn-edit" onClick={() => editarSaldo(row.original)} data-tooltip="Editar saldo">
-              <Edit3 size={14} />
-            </button>
-          )}
-          {isAdmin() && (
-            <button className="fact-table-btn fact-table-btn-danger" onClick={() => eliminarSaldo(row.original)} data-tooltip="Eliminar">
-              <Trash2 size={14} />
-            </button>
-          )}
-        </div>
-      )
-    }
-  ], [conductorFilter, conductorSearch, conductoresFiltrados, estadoFilter, openColumnFilter])
+      cell: ({ row }) => {
+        const esActivo = row.original.conductor_estado?.toUpperCase() === 'ACTIVO'
+        const tieneDeuda = row.original.saldo_actual < 0
+        const yaFraccionado = conductoresConFraccionado.has(row.original.conductor_id)
+        const puedeFraccionar = esActivo && tieneDeuda && !yaFraccionado && (isAdmin() || isAdministrativo())
 
-  // IDs de conductores con cobros fraccionados pendientes
-  const conductoresConFraccionado = useMemo(() => {
-    return new Set(cobrosFraccionados.map(c => c.conductor_id))
-  }, [cobrosFraccionados])
+        return (
+          <div className="fact-table-actions">
+            <button className="fact-table-btn fact-table-btn-view" onClick={() => verHistorial(row.original)} data-tooltip="Ver historial">
+              <Eye size={14} />
+            </button>
+            <button className="fact-table-btn" onClick={() => registrarPago(row.original)} data-tooltip="Registrar pago" style={{ color: '#16a34a' }}>
+              <Banknote size={14} />
+            </button>
+            {puedeFraccionar && (
+              <button className="fact-table-btn" onClick={() => fraccionarSaldo(row.original)} data-tooltip="Fraccionar saldo" style={{ color: '#6366F1' }}>
+                <Split size={14} />
+              </button>
+            )}
+            {(isAdmin() || isAdministrativo()) && (
+              <button className="fact-table-btn fact-table-btn-edit" onClick={() => editarSaldo(row.original)} data-tooltip="Editar saldo">
+                <Edit3 size={14} />
+              </button>
+            )}
+            {isAdmin() && (
+              <button className="fact-table-btn fact-table-btn-danger" onClick={() => eliminarSaldo(row.original)} data-tooltip="Eliminar">
+                <Trash2 size={14} />
+              </button>
+            )}
+          </div>
+        )
+      }
+    }
+  ], [conductorFilter, conductorSearch, conductoresFiltrados, estadoFilter, openColumnFilter, conductoresConFraccionado])
 
   const saldosFiltrados = useMemo(() => {
     return saldos.filter(s => {
