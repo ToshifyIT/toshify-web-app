@@ -429,9 +429,36 @@
   background: var(--table-header-bg);
 }
 
-/* First column (left) */
+/* First column (left) — sticky horizontal cuando stickyFirstColumn=true */
 .dt-sticky-col-left {
-  /* No sticky behavior */
+  position: sticky;
+  left: 0;
+  z-index: 2;
+  background: var(--table-bg, #fff);
+}
+
+.dt-table thead .dt-sticky-col-left {
+  z-index: 3;
+  background: var(--table-header-bg);
+}
+
+/* Sombra sutil al hacer scroll horizontal para separar visualmente */
+.dt-sticky-col-left::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 6px;
+  pointer-events: none;
+  box-shadow: inset 6px 0 6px -6px rgba(0, 0, 0, 0.08);
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+
+.dt-table-wrapper:hover .dt-sticky-col-left::after,
+.dt-scrolled .dt-sticky-col-left::after {
+  opacity: 1;
 }
 
 /* Header - Toshify Design System */
