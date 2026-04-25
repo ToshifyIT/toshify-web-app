@@ -2,7 +2,7 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import {
   Eye, Edit2, Trash2, Users, UserCheck, UserPlus, Clock, RefreshCw,
-  CheckCircle, XCircle, AlertTriangle, X, Download, Upload, MapPin, ExternalLink,
+  CheckCircle, XCircle, AlertTriangle, X, Download, Upload, MapPin, ExternalLink, FolderOpen,
 } from 'lucide-react'
 import { GoogleMap, useJsApiLoader, Marker, Polygon } from '@react-google-maps/api'
 import { ActionsMenu } from '../../components/ui/ActionsMenu'
@@ -316,7 +316,6 @@ export function LeadsModule() {
         const batchSize = 100
         for (let i = 0; i < actualizaciones.length; i += batchSize) {
           const batch = actualizaciones.slice(i, i + batchSize)
-          const ids = batch.map(b => b.id)
           // Agrupar por estado para hacer menos queries
           const porEstado = batch.reduce<Record<string, string[]>>((acc, b) => {
             if (!acc[b.estado]) acc[b.estado] = []
@@ -508,10 +507,8 @@ export function LeadsModule() {
 
   // ---------- FILTERED DATA ----------
   const filteredLeads = useMemo(() => {
-    // Por defecto ocultar leads ya convertidos a conductor
-    let result = activeStatCard === 'conductores'
-      ? leads.filter(l => l.estado_de_lead === 'Conductor')
-      : leads.filter(l => l.estado_de_lead !== 'Conductor')
+    // Ocultar leads "Conductor" siempre (ya no son leads)
+    let result = leads.filter(l => l.estado_de_lead !== 'Conductor')
 
     // Stat card filter (todos basados en estado_de_lead)
     if (activeStatCard === 'pendientes') result = result.filter(l => l.estado_de_lead === 'Pendiente')
@@ -1578,14 +1575,22 @@ export function LeadsModule() {
       size: 60,
       cell: ({ row }) => {
         const lead = row.original
-        const actions: Array<{ label: string; icon: React.ReactElement; onClick: () => void; variant?: 'default' | 'info' | 'success' | 'warning' | 'danger' }> = [
+        const tieneFolder = !!lead.url_folder?.trim()
+        const actions: Array<{ label: string; icon: React.ReactElement; onClick: () => void; variant?: 'default' | 'info' | 'success' | 'warning' | 'danger'; disabled?: boolean }> = [
           { label: 'Ver detalle', icon: <Eye size={15} />, onClick: () => handleOpenDetails(lead) },
         ]
         if (canEdit) {
           actions.push({ label: 'Editar', icon: <Edit2 size={15} />, onClick: () => handleOpenEdit(lead), variant: 'info' })
-          if (lead.proceso !== 'Convertido') {
-            actions.push({ label: 'Convertir a Conductor', icon: <UserPlus size={15} />, onClick: () => handleConvertir(lead), variant: 'success' })
-          }
+        }
+        actions.push({
+          label: 'Documentos',
+          icon: <FolderOpen size={15} />,
+          onClick: () => { if (tieneFolder) window.open(lead.url_folder!, '_blank') },
+          variant: tieneFolder ? 'success' : undefined,
+          disabled: !tieneFolder,
+        })
+        if (canEdit && lead.proceso !== 'Convertido') {
+          actions.push({ label: 'Convertir a Conductor', icon: <UserPlus size={15} />, onClick: () => handleConvertir(lead), variant: 'success' })
         }
         if (canDelete) {
           actions.push({ label: 'Eliminar', icon: <Trash2 size={15} />, onClick: () => handleOpenDelete(lead), variant: 'danger' })
@@ -1598,7 +1603,7 @@ export function LeadsModule() {
 
   // ---------- EXTERNAL FILTERS (chips) ----------
   const hasActiveFilters = nombreFilter.length > 0 || estadoFilter.length > 0 || procesoFilter.length > 0 || entrevistaFilter.length > 0 ||
-    zonaFilter.length > 0 || turnoFilter.length > 0 || disponibilidadFilter.length > 0 || fuenteFilter.length > 0
+    zonaFilter.length > 0 || turnoFilter.length > 0 || disponibilidadFilter.length > 0 || fuenteFilter.length > 0 || activeStatCard !== null
 
   function clearAllFilters() {
     setNombreFilter([])
@@ -1631,8 +1636,24 @@ export function LeadsModule() {
     addFilters(turnoFilter, 'Turno', setTurnoFilter)
     addFilters(disponibilidadFilter, 'Disponibilidad', setDisponibilidadFilter)
     addFilters(fuenteFilter, 'Fuente', setFuenteFilter)
+    addFilters(estadoFilter, 'Estado', setEstadoFilter)
+    if (activeStatCard) {
+      const labelMap: Record<string, string> = {
+        pendientes: 'Pendientes',
+        aptos: 'Aptos',
+        noAptos: 'No Aptos',
+        enOnBoarding: 'En OnBoarding',
+        descartados: 'Descartados',
+        conductores: 'Conductores',
+      }
+      filters.push({
+        id: `stat-${activeStatCard}`,
+        label: labelMap[activeStatCard] || activeStatCard,
+        onClear: () => setActiveStatCard(null),
+      })
+    }
     return filters
-  }, [hasActiveFilters, nombreFilter, procesoFilter, entrevistaFilter, zonaFilter, turnoFilter, disponibilidadFilter, fuenteFilter])
+  }, [hasActiveFilters, nombreFilter, procesoFilter, entrevistaFilter, zonaFilter, turnoFilter, disponibilidadFilter, fuenteFilter, estadoFilter, activeStatCard])
 
   // ---------- RENDER ----------
   return (
