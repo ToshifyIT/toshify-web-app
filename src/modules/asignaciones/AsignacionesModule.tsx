@@ -939,13 +939,13 @@ export function AsignacionesModule() {
           ...asignacion,
           conductoresTurno: {
             diurno: diurno ? {
-              id: diurno.id,
+              id: diurno.conductor_id,
               nombre: `${diurno.conductores?.nombres || ''} ${diurno.conductores?.apellidos || ''}`.trim() || 'Sin datos',
               confirmado: diurno.confirmado || false,
               cancelado: !esAsignacionFinalizada && diurno.estado === 'cancelado'
             } : null,
             nocturno: nocturno ? {
-              id: nocturno.id,
+              id: nocturno.conductor_id,
               nombre: `${nocturno.conductores?.nombres || ''} ${nocturno.conductores?.apellidos || ''}`.trim() || 'Sin datos',
               confirmado: nocturno.confirmado || false,
               cancelado: !esAsignacionFinalizada && nocturno.estado === 'cancelado'
@@ -966,7 +966,7 @@ export function AsignacionesModule() {
       let conductorCargoInfo: { id: string; nombre: string; confirmado: boolean; cancelado?: boolean } | null = null
       if (primerConductor && primerConductor.conductores) {
         conductorCargoInfo = {
-          id: String(primerConductor.id),
+          id: String(primerConductor.conductor_id),
           nombre: `${primerConductor.conductores.nombres} ${primerConductor.conductores.apellidos}`,
           confirmado: primerConductor.confirmado || false,
           cancelado: !esAsignacionFinalizada && primerConductor.estado === 'cancelado'
