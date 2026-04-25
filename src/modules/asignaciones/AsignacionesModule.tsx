@@ -118,7 +118,7 @@ function buildAsignacionesConMotivo(asignaciones: any[], programaciones: any[]) 
 
 export function AsignacionesModule() {
   const { canEditInMenu, canDeleteInMenu } = usePermissions()
-  const { profile } = useAuth()
+  const { user, profile } = useAuth()
   const { sedeActualId, aplicarFiltroSede, sedes } = useSede()
   const canEdit = canEditInMenu('asignaciones')
   const canDelete = canDeleteInMenu('asignaciones')
