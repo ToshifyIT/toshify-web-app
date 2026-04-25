@@ -77,12 +77,16 @@ interface FilterHeaderProps {
   isOpen: boolean;
   hasFilter: boolean;
   isDate: boolean;
+  isNumber?: boolean;
+  isMoney?: boolean;
   uniqueValues: string[];
   selectedValues: string[];
   dateFilter: { from?: string; to?: string } | undefined;
+  numberFilter?: { min?: number; max?: number };
   onToggle: (colId: string) => void;
   onSelectValue: (colId: string, value: string) => void;
   onDateChange: (colId: string, field: 'from' | 'to', value: string) => void;
+  onNumberChange?: (colId: string, field: 'min' | 'max', value: number | undefined) => void;
   onClearFilter: (colId: string) => void;
 }
 
@@ -92,12 +96,16 @@ function FilterHeader({
   isOpen,
   hasFilter,
   isDate,
+  isNumber = false,
+  isMoney = false,
   uniqueValues,
   selectedValues,
   dateFilter,
+  numberFilter,
   onToggle,
   onSelectValue,
   onDateChange,
+  onNumberChange,
   onClearFilter,
 }: FilterHeaderProps) {
   const buttonRef = useRef<HTMLButtonElement>(null);
@@ -409,6 +417,40 @@ function FilterHeader({
                 ))}
               </div>
             </div>
+          ) : isNumber && onNumberChange ? (
+            <div className="dt-filter-number-range">
+              <div className="dt-filter-number-row">
+                <label className="dt-filter-number-label">
+                  <span>Desde</span>
+                  <div className="dt-filter-number-input-wrap">
+                    {isMoney && <span className="dt-filter-number-prefix">$</span>}
+                    <input
+                      type="number"
+                      placeholder={isMoney ? '0,00' : '0'}
+                      step={isMoney ? '0.01' : '1'}
+                      value={numberFilter?.min ?? ''}
+                      onChange={e => onNumberChange(colId, 'min', e.target.value === '' ? undefined : Number(e.target.value))}
+                      className="dt-filter-number-input"
+                      autoFocus
+                    />
+                  </div>
+                </label>
+                <label className="dt-filter-number-label">
+                  <span>Hasta</span>
+                  <div className="dt-filter-number-input-wrap">
+                    {isMoney && <span className="dt-filter-number-prefix">$</span>}
+                    <input
+                      type="number"
+                      placeholder={isMoney ? '0,00' : '0'}
+                      step={isMoney ? '0.01' : '1'}
+                      value={numberFilter?.max ?? ''}
+                      onChange={e => onNumberChange(colId, 'max', e.target.value === '' ? undefined : Number(e.target.value))}
+                      className="dt-filter-number-input"
+                    />
+                  </div>
+                </label>
+              </div>
+            </div>
           ) : (
             <>
               <input
@@ -558,6 +600,7 @@ export function DataTable<T>({
   // Column filter state
   const [columnFilters, setColumnFilters] = useState<ColumnFilters>({});
   const [dateFilters, setDateFilters] = useState<DateFilters>({});
+  const [numberFilters, setNumberFilters] = useState<Record<string, { min?: number; max?: number }>>({});
   const [openFilterId, setOpenFilterId] = useState<string | null>(null);
 
   // Refs that mirror filter state - used inside header callbacks to avoid
@@ -566,6 +609,8 @@ export function DataTable<T>({
   columnFiltersRef.current = columnFilters;
   const dateFiltersRef = useRef(dateFilters);
   dateFiltersRef.current = dateFilters;
+  const numberFiltersRef = useRef(numberFilters);
+  numberFiltersRef.current = numberFilters;
 
   // Helper: Check if column is date type based on accessor key or data
   const isDateColumn = useCallback((colId: string): boolean => {
@@ -576,6 +621,23 @@ export function DataTable<T>({
     const dateKeywords = ['fecha', 'date', 'created', 'updated', 'vencimiento', 'inicio', 'fin', 'cita', 'entrega'];
     return dateKeywords.some(keyword => lowerColId.includes(keyword));
   }, []);
+
+  // Helper: Check if column is money type — sampleo de datos + fallback a keywords.
+  const isMoneyColumn = useCallback((colId: string): boolean => {
+    const l = colId.toLowerCase();
+    if (l === 'estado' || l === 'estado_billing' || l === 'tipo' || l === 'modalidad') return false;
+    const moneyKeywords = ['monto', 'saldo', 'total', 'precio', 'presupuesto', 'pagado', 'cobrado', 'gastos', 'mora', 'valor', 'costo', 'subtotal', 'descuento', 'peajes', 'garantia', 'alquiler', 'cuota', 'recaudado', 'proyectado', 'cargo', 'abono', 'importe', 'deuda', 'tickets', 'favor', 'incidencias', 'penalidades', 'multas', 'comision', 'ingreso', 'egreso'];
+    return moneyKeywords.some(k => l.includes(k));
+  }, []);
+
+  const isNumberColumn = useCallback((colId: string): boolean => {
+    const l = colId.toLowerCase();
+    // Excluir IDs y campos identificadores que no son rangos
+    if (l === 'id' || l.endsWith('_id') || l === 'numero_dni' || l === 'dni' || l === 'cuit' || l === 'patente' || l === 'telefono' || l === 'numero_cuota') return false;
+    if (isMoneyColumn(colId)) return true;
+    const numberKeywords = ['dias', 'cantidad', 'qty', 'kms', 'kilometros', 'viajes', 'puntos', 'score', 'cant_', 'count', 'num_'];
+    return numberKeywords.some(k => l.includes(k));
+  }, [isMoneyColumn]);
 
   // Build a map of colId -> accessorFn for columns that use accessorFn
   const accessorFnMap = useMemo(() => {
@@ -611,6 +673,21 @@ export function DataTable<T>({
     return value;
   }, [accessorFnMap]);
 
+  // Helper: Sample data to detect if column values are numeric (fallback when name-based detection misses).
+  const isNumericByData = useCallback((colId: string): boolean => {
+    if (!data || data.length === 0) return false;
+    const sampleSize = Math.min(10, data.length);
+    let numericCount = 0;
+    let nonEmptyCount = 0;
+    for (let i = 0; i < sampleSize; i++) {
+      const value = getNestedValueForFilter(data[i] as Record<string, unknown>, colId);
+      if (value === null || value === undefined || value === '') continue;
+      nonEmptyCount++;
+      if (typeof value === 'number' && Number.isFinite(value)) numericCount++;
+    }
+    return nonEmptyCount > 0 && numericCount === nonEmptyCount;
+  }, [data, getNestedValueForFilter]);
+
   // Reset filters when resetFiltersKey changes
   useEffect(() => {
     if (resetFiltersKey !== undefined) {
@@ -619,6 +696,31 @@ export function DataTable<T>({
       setOpenFilterId(null);
     }
   }, [resetFiltersKey]);
+
+  // Helper: parse a possibly formatted numeric value (handles "$1.234,56", "1234.56", numbers)
+  const parseNumericValue = useCallback((value: unknown): number | null => {
+    if (value === null || value === undefined || value === '') return null;
+    if (typeof value === 'number') return Number.isFinite(value) ? value : null;
+    const raw = String(value).replace(/[^\d.,-]/g, '');
+    if (!raw) return null;
+    // Detect format: if both ',' and '.' present, the LAST is decimal separator
+    const lastComma = raw.lastIndexOf(',');
+    const lastDot = raw.lastIndexOf('.');
+    let normalized = raw;
+    if (lastComma > -1 && lastDot > -1) {
+      const decSep = lastComma > lastDot ? ',' : '.';
+      const thouSep = decSep === ',' ? '.' : ',';
+      normalized = raw.split(thouSep).join('').replace(decSep, '.');
+    } else if (lastComma > -1) {
+      // Only commas — treat as decimal if a single comma with <=2 trailing digits, else thousands
+      const after = raw.length - lastComma - 1;
+      normalized = (raw.match(/,/g) || []).length === 1 && after <= 2
+        ? raw.replace(',', '.')
+        : raw.split(',').join('');
+    }
+    const n = parseFloat(normalized);
+    return Number.isFinite(n) ? n : null;
+  }, []);
 
   // Get data filtered by all columns EXCEPT the specified one (Excel behavior)
   const getDataFilteredExcluding = useCallback((excludeColId: string): T[] => {
@@ -634,6 +736,20 @@ export function DataTable<T>({
             ? String(value).trim().replace(/\s+/g, ' ').toUpperCase()
             : '';
           return normalizedSelected.has(strValue);
+        });
+      }
+    });
+
+    // Apply number-range filters except the excluded column
+    Object.entries(numberFilters).forEach(([colId, range]) => {
+      if (colId !== excludeColId && (range.min !== undefined || range.max !== undefined)) {
+        result = result.filter((row) => {
+          const value = getNestedValueForFilter(row as Record<string, unknown>, colId);
+          const n = parseNumericValue(value);
+          if (n === null) return false;
+          if (range.min !== undefined && n < range.min) return false;
+          if (range.max !== undefined && n > range.max) return false;
+          return true;
         });
       }
     });
@@ -675,7 +791,7 @@ export function DataTable<T>({
     });
 
     return result;
-  }, [data, columnFilters, dateFilters, getNestedValueForFilter]);
+  }, [data, columnFilters, dateFilters, numberFilters, getNestedValueForFilter, parseNumericValue]);
 
   // Get unique values for a column from data filtered by OTHER columns (Excel behavior)
   const getUniqueValues = useCallback((colId: string): string[] => {
@@ -756,8 +872,22 @@ export function DataTable<T>({
       }
     });
 
+    // Apply number-range filters
+    Object.entries(numberFilters).forEach(([colId, range]) => {
+      if (range.min !== undefined || range.max !== undefined) {
+        result = result.filter((row) => {
+          const value = getNestedValueForFilter(row as Record<string, unknown>, colId);
+          const n = parseNumericValue(value);
+          if (n === null) return false;
+          if (range.min !== undefined && n < range.min) return false;
+          if (range.max !== undefined && n > range.max) return false;
+          return true;
+        });
+      }
+    });
+
     return result;
-  }, [data, columnFilters, dateFilters, getNestedValueForFilter]);
+  }, [data, columnFilters, dateFilters, numberFilters, getNestedValueForFilter, parseNumericValue]);
 
   // Close filter on Escape
   useEffect(() => {
@@ -818,9 +948,33 @@ export function DataTable<T>({
     }));
   }, []);
 
+  const handleNumberChange = useCallback((colId: string, field: 'min' | 'max', value: number | undefined) => {
+    setNumberFilters(prev => {
+      const next = { ...prev };
+      const current = { ...(next[colId] || {}) };
+      if (value === undefined) {
+        delete current[field];
+      } else {
+        current[field] = value;
+      }
+      if (current.min === undefined && current.max === undefined) {
+        delete next[colId];
+      } else {
+        next[colId] = current;
+      }
+      return next;
+    });
+  }, []);
+
   const handleClearFilter = useCallback((colId: string) => {
     if (isDateColumn(colId)) {
       setDateFilters(prev => {
+        const newFilters = { ...prev };
+        delete newFilters[colId];
+        return newFilters;
+      });
+    } else if (isNumberColumn(colId)) {
+      setNumberFilters(prev => {
         const newFilters = { ...prev };
         delete newFilters[colId];
         return newFilters;
@@ -832,7 +986,7 @@ export function DataTable<T>({
         return newFilters;
       });
     }
-  }, [isDateColumn]);
+  }, [isDateColumn, isNumberColumn]);
 
   // Wrap columns with auto-filters (if enabled)
   // IMPORTANT: This memo intentionally uses refs for dateFilters/columnFilters instead of state.
@@ -869,6 +1023,9 @@ export function DataTable<T>({
       }
 
       const isDate = isDateColumn(colId);
+      // Numeric: keyword match OR all sampled values are numbers
+      const isNumber = !isDate && (isNumberColumn(colId) || isNumericByData(colId));
+      const isMoney = !isDate && isMoneyColumn(colId);
 
       return {
         ...col,
@@ -877,10 +1034,13 @@ export function DataTable<T>({
           // Read current values from refs (not state) to avoid triggering memo recalculation
           const currentDateFilters = dateFiltersRef.current;
           const currentColumnFilters = columnFiltersRef.current;
+          const currentNumberFilters = numberFiltersRef.current;
           const isOpen = openFilterId === colId;
           const hasFilter = isDate
             ? !!(currentDateFilters[colId]?.from || currentDateFilters[colId]?.to)
-            : (currentColumnFilters[colId]?.length || 0) > 0;
+            : isNumber
+              ? (currentNumberFilters[colId]?.min !== undefined || currentNumberFilters[colId]?.max !== undefined)
+              : (currentColumnFilters[colId]?.length || 0) > 0;
 
           return (
             <FilterHeader
@@ -889,19 +1049,23 @@ export function DataTable<T>({
               isOpen={isOpen}
               hasFilter={hasFilter}
               isDate={isDate}
-              uniqueValues={isDate ? [] : (isOpen ? getUniqueValues(colId) : [])}
+              isNumber={isNumber}
+              isMoney={isMoney}
+              uniqueValues={isDate || isNumber ? [] : (isOpen ? getUniqueValues(colId) : [])}
               selectedValues={currentColumnFilters[colId] || []}
               dateFilter={currentDateFilters[colId]}
+              numberFilter={currentNumberFilters[colId]}
               onToggle={handleFilterToggle}
               onSelectValue={handleSelectValue}
               onDateChange={handleDateChange}
+              onNumberChange={handleNumberChange}
               onClearFilter={handleClearFilter}
             />
           );
         },
       } as ColumnDef<T, unknown>;
     });
-  }, [regularColumns, disableAutoFilters, isDateColumn, openFilterId, getUniqueValues, handleFilterToggle, handleSelectValue, handleDateChange, handleClearFilter]);
+  }, [regularColumns, disableAutoFilters, isDateColumn, isNumberColumn, isMoneyColumn, isNumericByData, openFilterId, getUniqueValues, handleFilterToggle, handleSelectValue, handleDateChange, handleNumberChange, handleClearFilter]);
 
   // Memoize final columns — all regular columns with filters + actions
   const finalColumns = useMemo<ColumnDef<T, unknown>[]>(() => {

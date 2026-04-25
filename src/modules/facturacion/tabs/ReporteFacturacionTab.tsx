@@ -8645,7 +8645,7 @@ export function ReporteFacturacionTab() {
             <div style={{ width: '60px', height: '5px', backgroundColor: '#e5e7eb', borderRadius: '3px', overflow: 'hidden', marginTop: '2px' }}>
               <div style={{ width: `${porcentajeCubierto}%`, height: '100%', backgroundColor: cubreGarantia ? '#10b981' : porcentajeCubierto >= 70 ? '#f59e0b' : '#ef4444', borderRadius: '3px' }} />
             </div>
-            <span style={{ fontSize: '9px', color: cubreGarantia ? '#10b981' : '#6b7280' }}>{cuotaNum}{cubreGarantia ? ' ✓' : ''}</span>
+            <span style={{ fontSize: '9px', color: cubreGarantia ? '#10b981' : '#6b7280' }}>{cobroApp === 0 ? 'Sin datos' : `${porcentajeCubierto}%`}{cubreGarantia ? ' ✓' : ''}</span>
           </div>
         )
       }
