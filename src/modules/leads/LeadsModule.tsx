@@ -2,7 +2,7 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import {
   Eye, Edit2, Trash2, Users, UserCheck, UserPlus, Clock, RefreshCw,
-  CheckCircle, XCircle, AlertTriangle, X, Download, MapPin, ExternalLink,
+  CheckCircle, XCircle, AlertTriangle, X, Download, Upload, MapPin, ExternalLink,
 } from 'lucide-react'
 import { GoogleMap, useJsApiLoader, Marker, Polygon } from '@react-google-maps/api'
 import { ActionsMenu } from '../../components/ui/ActionsMenu'
@@ -242,6 +242,39 @@ export function LeadsModule() {
   // Stat card filter
   const [activeStatCard, setActiveStatCard] = useState<string | null>(null)
 
+  // Inline estado dropdown
+  const [estadoDropdownId, setEstadoDropdownId] = useState<string | null>(null)
+
+  const ESTADOS_LEAD = ['Pendiente', 'Apto', 'No Apto', 'En OnBoarding', 'Descartado'] as const
+
+  /** Calcula el estado correcto de un lead basándose en proceso y entrevista_ia */
+  function calcularEstadoLead(lead: Lead): string {
+    const proceso = (lead.proceso || '').toLowerCase()
+    const entrevista = lead.entrevista_ia || ''
+
+    if (proceso.includes('descartado')) return 'Descartado'
+    if (proceso === 'convertido' || proceso === 'conductor') return 'Conductor'
+    if (proceso.includes('onboarding')) return 'En OnBoarding'
+    if (entrevista === 'No Apto') return 'No Apto'
+    if (entrevista === 'Apto') return 'Apto'
+    return 'Pendiente'
+  }
+
+  async function handleChangeEstadoInline(leadId: string, nuevoEstado: string) {
+    setEstadoDropdownId(null)
+    try {
+      const { error } = await supabase
+        .from('leads')
+        .update({ estado_de_lead: nuevoEstado })
+        .eq('id', leadId)
+      if (error) throw error
+      setLeads(prev => prev.map(l => l.id === leadId ? { ...l, estado_de_lead: nuevoEstado } : l))
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Error desconocido'
+      Swal.fire('Error', `No se pudo cambiar el estado: ${msg}`, 'error')
+    }
+  }
+
   // ---------- DATA LOADING ----------
   const loadLeads = useCallback(async () => {
     setLoading(true)
@@ -252,7 +285,7 @@ export function LeadsModule() {
         .select('*')
         .or('proceso.is.null,proceso.neq.Convertido')
         .order('created_at', { ascending: false })
-        .limit(2000)
+        .limit(10000)
 
       // Filtro por sede usando la FK sede_id (UUID), igual que el resto del sistema.
       // aplicarFiltroSede respeta el modo "Todas las sedes" para usuarios admin.
@@ -260,7 +293,45 @@ export function LeadsModule() {
 
       const { data, error: err } = await query
       if (err) throw err
-      setLeads((data || []) as Lead[])
+      const leadsData = (data || []) as Lead[]
+
+      // Calcular estado correcto y detectar desactualizados
+      const leadsConEstado: Lead[] = []
+      const actualizaciones: { id: string; estado: string }[] = []
+
+      for (const lead of leadsData) {
+        const estadoCorrecto = calcularEstadoLead(lead)
+        if (lead.estado_de_lead !== estadoCorrecto) {
+          actualizaciones.push({ id: lead.id, estado: estadoCorrecto })
+          leadsConEstado.push({ ...lead, estado_de_lead: estadoCorrecto })
+        } else {
+          leadsConEstado.push(lead)
+        }
+      }
+
+      setLeads(leadsConEstado)
+
+      // Sincronizar en DB en lotes de 100 (en background, sin bloquear UI)
+      if (actualizaciones.length > 0) {
+        const batchSize = 100
+        for (let i = 0; i < actualizaciones.length; i += batchSize) {
+          const batch = actualizaciones.slice(i, i + batchSize)
+          const ids = batch.map(b => b.id)
+          // Agrupar por estado para hacer menos queries
+          const porEstado = batch.reduce<Record<string, string[]>>((acc, b) => {
+            if (!acc[b.estado]) acc[b.estado] = []
+            acc[b.estado].push(b.id)
+            return acc
+          }, {})
+          for (const [estado, batchIds] of Object.entries(porEstado)) {
+            await supabase
+              .from('leads')
+              .update({ estado_de_lead: estado })
+              .in('id', batchIds)
+          }
+        }
+
+      }
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Error al cargar leads'
       setError(msg)
@@ -270,6 +341,14 @@ export function LeadsModule() {
   }, [aplicarFiltroSede])
 
   useEffect(() => { loadLeads() }, [loadLeads])
+
+  // Cerrar dropdown de estado al hacer click fuera
+  useEffect(() => {
+    if (!estadoDropdownId) return
+    const handleClick = () => setEstadoDropdownId(null)
+    document.addEventListener('click', handleClick)
+    return () => document.removeEventListener('click', handleClick)
+  }, [estadoDropdownId])
 
   // ---------- GEOCODIFICAR LEADS SIN COORDENADAS ----------
   const geocodificarLeadsSinCoordenadas = useCallback(async (leadsList: Lead[]) => {
@@ -385,13 +464,13 @@ export function LeadsModule() {
   // ---------- STATS ----------
   const stats = useMemo(() => {
     const total = leads.length
-    const aptos = leads.filter(l => l.entrevista_ia === 'Apto').length
-    const enProceso = leads.filter(l => l.proceso?.toLowerCase().includes('proceso')).length
-    const descartados = leads.filter(l => l.proceso?.toLowerCase().includes('descartado')).length
-    const disponibilidadInmediata = leads.filter(l => l.disponibilidad?.toLowerCase().includes('inmediata')).length
-    const exConductores = leads.filter(l => l.proceso?.toLowerCase().includes('ex conductor')).length
-    const sinEntrevistar = leads.filter(l => !l.entrevista_ia).length
-    return { total, aptos, enProceso, descartados, disponibilidadInmediata, exConductores, sinEntrevistar }
+    const pendientes = leads.filter(l => l.estado_de_lead === 'Pendiente').length
+    const aptos = leads.filter(l => l.estado_de_lead === 'Apto').length
+    const noAptos = leads.filter(l => l.estado_de_lead === 'No Apto').length
+    const enOnBoarding = leads.filter(l => l.estado_de_lead === 'En OnBoarding').length
+    const descartados = leads.filter(l => l.estado_de_lead === 'Descartado').length
+    const conductores = leads.filter(l => l.estado_de_lead === 'Conductor').length
+    return { total, pendientes, aptos, noAptos, enOnBoarding, descartados, conductores }
   }, [leads])
 
   // ---------- UNIQUE VALUES PARA FILTROS ----------
@@ -429,15 +508,17 @@ export function LeadsModule() {
 
   // ---------- FILTERED DATA ----------
   const filteredLeads = useMemo(() => {
-    let result = [...leads]
+    // Por defecto ocultar leads ya convertidos a conductor
+    let result = activeStatCard === 'conductores'
+      ? leads.filter(l => l.estado_de_lead === 'Conductor')
+      : leads.filter(l => l.estado_de_lead !== 'Conductor')
 
-    // Stat card filter
-    if (activeStatCard === 'aptos') result = result.filter(l => l.entrevista_ia === 'Apto')
-    else if (activeStatCard === 'enProceso') result = result.filter(l => l.proceso?.toLowerCase().includes('proceso'))
-    else if (activeStatCard === 'descartados') result = result.filter(l => l.proceso?.toLowerCase().includes('descartado'))
-    else if (activeStatCard === 'disponibles') result = result.filter(l => l.disponibilidad?.toLowerCase().includes('inmediata'))
-    else if (activeStatCard === 'exConductores') result = result.filter(l => l.proceso?.toLowerCase().includes('ex conductor'))
-    else if (activeStatCard === 'sinEntrevistar') result = result.filter(l => !l.entrevista_ia)
+    // Stat card filter (todos basados en estado_de_lead)
+    if (activeStatCard === 'pendientes') result = result.filter(l => l.estado_de_lead === 'Pendiente')
+    else if (activeStatCard === 'aptos') result = result.filter(l => l.estado_de_lead === 'Apto')
+    else if (activeStatCard === 'noAptos') result = result.filter(l => l.estado_de_lead === 'No Apto')
+    else if (activeStatCard === 'enOnBoarding') result = result.filter(l => l.estado_de_lead === 'En OnBoarding')
+    else if (activeStatCard === 'descartados') result = result.filter(l => l.estado_de_lead === 'Descartado')
 
     // Column filters
     if (nombreFilter.length > 0) {
@@ -681,7 +762,7 @@ export function LeadsModule() {
 
       await supabase.from('leads').update({
         proceso: 'Convertido',
-        estado_de_lead: 'Convertido',
+        estado_de_lead: 'Conductor',
         fecha_convertido: new Date().toLocaleString('sv-SE', { timeZone: 'America/Argentina/Buenos_Aires' }).replace(' ', 'T'),
         usuario: profile?.full_name || 'Sistema',
       }).eq('id', lead.id)
@@ -722,6 +803,460 @@ export function LeadsModule() {
       XLSX.writeFile(wb, `leads_export_${new Date().toISOString().split('T')[0]}.xlsx`)
     } catch {
       Swal.fire('Error', 'No se pudo exportar', 'error')
+    }
+  }
+
+  // ---------- CARGA MASIVA EXCEL ----------
+  const fileInputRef = useRef<HTMLInputElement>(null)
+
+  // Mapeo estricto: columna Excel → columna DB
+  const EXCEL_TO_DB_MAP: Record<string, string> = {
+    'Fecha': 'fecha_carga',
+    'NOMBRE CANDIDATO': 'nombre_completo',
+    'CONTACTO': 'phone',
+    'PROCESO': 'proceso',
+    'ENTREVISTA IA': 'entrevista_ia',
+    'INDUCCIÓN': 'induccion',
+    'DISPONIBILIDAD': 'disponibilidad',
+    'DIRECCIÓN': 'direccion',
+    'DIRECCION COMPLEMENTARIA': 'direccion_complementaria',
+    'ZONA': 'zona',
+    'TURNO': 'turno',
+    'N° DNI': 'dni',
+    'EXP.': 'experiencia_previa',
+    'EDAD': 'edad',
+    'FECHA DE NACIMIENTO': 'fecha_de_nacimiento',
+    'DNI': 'dni_archivo',
+    'D1': 'd1',
+    'LICENCIA - CLASES': 'licencia',
+    'VENCIMIENTO LICENCIA': 'vencimiento_licencia',
+    'RNR': 'rnr',
+    'FECHA RNR': 'fecha_rnr',
+    'CERTIFICADO DIRECCIÓN': 'certificado_direccion',
+    'CTA CABIFY': 'cuenta_cabify',
+    'COCHERA': 'cochera',
+    'RUEDA': 'rueda',
+    'MONOTRIBUTO': 'monotributo',
+    'CORREO': 'email',
+    'OBSERVACIONES': 'observaciones',
+    'PROCEDENCIA': 'fuente_de_lead',
+    'ASESOR': 'agente_asignado',
+    'ENTREVISTADOR': 'entrevistador_asignado',
+    'DESCARTADO': 'causal_de_cierre',
+    'DOMICILIO': 'clasificacion_domicilio',
+    'BCRA': 'bcra',
+    'CUIT': 'cuit',
+    'CBU': 'cbu',
+    'FECHA DE INICIO': 'fecha_de_inicio',
+    'MAIL DE RESPALDO': 'mail_de_respaldo',
+    'DATOS DE EMERGENCIA': 'datos_de_emergencia',
+    'TEL. EMERGENCIA': 'telefono_emergencia',
+    'PARENTESCO EMERGENCIA': 'parentesco_emergencia',
+    'DIRECCION DE EMERGENCIA': 'direccion_emergencia',
+    'Llamada de corroborrar Cont. de Emerg.': 'verificacion_emergencia',
+    'LATITUD': 'latitud',
+    'LONGITUD': 'longitud',
+    'ESTADO DIRECCIÓN': 'estado_direccion',
+    'ESTADO CIVIL': 'estado_civil',
+    'NACIONALIDAD': 'nacionalidad',
+  }
+
+  function formatExcelDate(value: unknown): string | null {
+    if (value == null || value === '') return null
+    // Si es número (serial date de Excel), convertir
+    if (typeof value === 'number') {
+      const date = new Date((value - 25569) * 86400 * 1000)
+      if (!isNaN(date.getTime())) {
+        const y = date.getUTCFullYear()
+        // Descartar años inválidos (muy antiguos o futuros lejanos)
+        if (y < 1900 || y > 2100) return null
+        return date.toISOString().split('T')[0]
+      }
+      return null
+    }
+    // Si es string, intentar parsear
+    if (typeof value === 'string') {
+      const s = value.trim()
+      // Descartar basura evidente (guiones, letras sueltas, símbolos)
+      if (s.length < 6 || /^[^0-9]+$/.test(s)) return null
+      // Intentar parsear dd/mm/yyyy o d/m/yyyy (con posibles errores de formato)
+      const match = s.match(/^(\d{1,2})\/?(\d{1,2})\/?(\d{2,5})$/)
+      if (match) {
+        const day = parseInt(match[1])
+        let month = parseInt(match[2])
+        let year = parseInt(match[3])
+        // Corregir años con dígitos extra (ej: 20025 → 2025, 0205 → 2005)
+        if (year > 2100) year = parseInt(String(year).substring(0, 4))
+        if (year < 100) year += 2000
+        if (year < 1900 || year > 2100) return null
+        if (month < 1 || month > 12) return null
+        if (day < 1 || day > 31) return null
+        return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`
+      }
+      // Intentar formato ISO directo
+      const d = new Date(s)
+      if (!isNaN(d.getTime())) {
+        const y = d.getFullYear()
+        if (y >= 1900 && y <= 2100) return d.toISOString().split('T')[0]
+      }
+      // Si no se puede parsear, devolver null en vez de un string inválido
+      return null
+    }
+    return null
+  }
+
+  function normalizeExcelValue(dbCol: string, value: unknown): unknown {
+    if (value == null || value === '') return null
+    // Columnas que son fechas
+    const dateCols = ['fecha_carga', 'fecha_de_nacimiento', 'vencimiento_licencia', 'fecha_rnr', 'fecha_de_inicio']
+    if (dateCols.includes(dbCol)) return formatExcelDate(value)
+    // Columnas numéricas
+    if (dbCol === 'edad') {
+      const n = typeof value === 'number' ? value : Number(value)
+      return !isNaN(n) && n > 0 && n < 150 ? n : null
+    }
+    // Lat/Lng: pueden venir como enteros sin punto decimal (ej: -347790167 → -34.7790167)
+    if (dbCol === 'latitud' || dbCol === 'longitud') {
+      let n = typeof value === 'number' ? value : Number(value)
+      if (isNaN(n)) return null
+      // Si el valor absoluto es mayor a 180, probablemente le falta el punto decimal
+      if (Math.abs(n) > 180) {
+        // Normalizar: dividir progresivamente hasta que esté en rango válido
+        while (Math.abs(n) > 180) n = n / 10
+      }
+      return n
+    }
+    // CBU puede venir como número científico, siempre guardar como string
+    if (dbCol === 'cbu') {
+      if (typeof value === 'number') {
+        try { return BigInt(Math.round(value)).toString() } catch { return String(value) }
+      }
+      return String(value).trim()
+    }
+    // CUIT y DNI siempre como string
+    if (dbCol === 'cuit' || dbCol === 'dni') return String(value).trim()
+    // Columnas boolean en la DB: convertir "Si"/"No"/"TRUE"/"FALSE" a true/false
+    const boolCols = ['verificacion_emergencia', 'antecedentes_penales', 'acepta_oferta', 'cerrado_timeout_wpp']
+    if (boolCols.includes(dbCol)) {
+      if (typeof value === 'boolean') return value
+      const s = String(value).trim().toUpperCase()
+      if (s === 'SI' || s === 'SÍ' || s === 'TRUE' || s === '1') return true
+      if (s === 'NO' || s === 'FALSE' || s === '0') return false
+      return null
+    }
+    return String(value).trim()
+  }
+
+  async function handleCargaMasiva(event: React.ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0]
+    // Reset el input para permitir cargar el mismo archivo de nuevo
+    if (fileInputRef.current) fileInputRef.current.value = ''
+    if (!file) return
+
+    try {
+      // Mostrar loading mientras se lee y procesa el archivo
+      Swal.fire({
+        title: 'Leyendo archivo...',
+        html: `<p>${file.name}</p>`,
+        allowOutsideClick: false,
+        didOpen: () => Swal.showLoading(),
+      })
+      const XLSX = await import('xlsx')
+      const buffer = await file.arrayBuffer()
+      const wb = XLSX.read(buffer, { type: 'array' })
+      const ws = wb.Sheets[wb.SheetNames[0]]
+      const jsonData = XLSX.utils.sheet_to_json<Record<string, unknown>>(ws, { defval: null })
+
+      if (jsonData.length === 0) {
+        Swal.fire('Error', 'El archivo está vacío o no tiene datos.', 'error')
+        return
+      }
+
+      Swal.close() // Cerrar loading de lectura
+
+      // Obtener headers del Excel (excluir columnas vacías, null, y __EMPTY generadas por SheetJS)
+      const excelHeaders = Object.keys(jsonData[0]).filter(h =>
+        h != null && h !== 'null' && h.trim() !== '' && !h.startsWith('__EMPTY')
+      )
+      const expectedHeaders = Object.keys(EXCEL_TO_DB_MAP)
+
+      // Verificar columnas
+      const columnasNoReconocidas = excelHeaders.filter(h => !expectedHeaders.includes(h))
+      const columnasFaltantes = expectedHeaders.filter(h => !excelHeaders.includes(h))
+
+      if (columnasNoReconocidas.length > 0 || columnasFaltantes.length > 0) {
+        let html = '<div style="text-align: left; font-size: 13px; max-height: 350px; overflow-y: auto;">'
+        if (columnasNoReconocidas.length > 0) {
+          html += '<p style="font-weight: 600; color: #EF4444; margin-bottom: 6px;">Columnas no reconocidas en el Excel:</p>'
+          html += '<ul style="margin: 0 0 12px 0; padding-left: 20px;">'
+          html += columnasNoReconocidas.map(c => `<li>${c}</li>`).join('')
+          html += '</ul>'
+        }
+        if (columnasFaltantes.length > 0) {
+          html += '<p style="font-weight: 600; color: #F59E0B; margin-bottom: 6px;">Columnas faltantes en el Excel:</p>'
+          html += '<ul style="margin: 0 0 12px 0; padding-left: 20px;">'
+          html += columnasFaltantes.map(c => `<li>${c}</li>`).join('')
+          html += '</ul>'
+        }
+        html += '<p style="color: #6B7280; margin-top: 8px;">Todas las columnas del Excel deben coincidir exactamente con el formato esperado.</p>'
+        html += '</div>'
+
+        Swal.fire({
+          title: 'Columnas incorrectas',
+          html,
+          icon: 'error',
+          confirmButtonText: 'Entendido',
+          width: 520,
+        })
+        return
+      }
+
+      // Columnas OK — Mapear datos Excel → DB (excluyendo filas completamente vacías)
+      const dbRows = jsonData
+        .filter(row => {
+          // Una fila es válida si al menos tiene nombre o DNI
+          const nombre = row['NOMBRE CANDIDATO']
+          const dni = row['N° DNI']
+          return (nombre != null && String(nombre).trim() !== '') ||
+                 (dni != null && String(dni).trim() !== '')
+        })
+        .map(row => {
+          const dbRow: Record<string, unknown> = {}
+          for (const [excelCol, dbCol] of Object.entries(EXCEL_TO_DB_MAP)) {
+            dbRow[dbCol] = normalizeExcelValue(dbCol, row[excelCol])
+          }
+          if (sedeActual?.id) {
+            dbRow.sede_id = sedeActual.id
+            dbRow.sede = sedeActual.nombre
+          }
+          return dbRow
+        })
+
+      if (dbRows.length === 0) {
+        Swal.fire('Error', 'No se encontraron filas con datos válidos en el archivo.', 'error')
+        return
+      }
+
+      // ─── Detectar duplicados por DNI ───
+      Swal.fire({
+        title: 'Verificando duplicados...',
+        html: '<p>Comparando registros con la base de datos</p>',
+        allowOutsideClick: false,
+        didOpen: () => Swal.showLoading(),
+      })
+      const excelDnis = dbRows
+        .map(r => String(r.dni || '').trim())
+        .filter(d => d !== '' && d !== 'null')
+      const uniqueExcelDnis = [...new Set(excelDnis)]
+
+      let duplicados: { dni: string; nombre: string }[] = []
+
+      if (uniqueExcelDnis.length > 0) {
+        // Consultar en batches de 100 DNIs (límite de Supabase para .in())
+        const existingDnis = new Map<string, string>()
+        for (let i = 0; i < uniqueExcelDnis.length; i += 100) {
+          const dniBatch = uniqueExcelDnis.slice(i, i + 100)
+          const { data: existentes } = await supabase
+            .from('leads')
+            .select('dni, nombre_completo')
+            .in('dni', dniBatch)
+          if (existentes) {
+            for (const e of existentes) {
+              if (e.dni) existingDnis.set(String(e.dni).trim(), e.nombre_completo || 'Sin nombre')
+            }
+          }
+        }
+
+        duplicados = uniqueExcelDnis
+          .filter(d => existingDnis.has(d))
+          .map(d => ({ dni: d, nombre: existingDnis.get(d) || 'Sin nombre' }))
+      }
+
+      Swal.close() // Cerrar loading de verificación
+
+      // Variable para controlar el modo de inserción
+      let modoInsercion: 'insertar' | 'reemplazar' | 'duplicar' = 'insertar'
+
+      if (duplicados.length > 0) {
+        // Mostrar lista de duplicados con opciones
+        const listaHtml = duplicados.length <= 20
+          ? duplicados.map(d => `<li><strong>${d.nombre}</strong> — DNI: ${d.dni}</li>`).join('')
+          : duplicados.slice(0, 20).map(d => `<li><strong>${d.nombre}</strong> — DNI: ${d.dni}</li>`).join('')
+            + `<li style="color: var(--text-tertiary);">... y ${duplicados.length - 20} más</li>`
+
+        const dupResult = await Swal.fire({
+          title: `${duplicados.length} lead${duplicados.length > 1 ? 's' : ''} ya existe${duplicados.length > 1 ? 'n' : ''} en la base de datos`,
+          html: `
+            <div style="text-align: left; font-size: 13px; max-height: 300px; overflow-y: auto;">
+              <p style="margin-bottom: 8px; color: #6B7280;">Los siguientes leads del Excel ya están registrados:</p>
+              <ul style="margin: 0 0 12px 0; padding-left: 20px; list-style: disc;">${listaHtml}</ul>
+              <p style="margin-top: 12px; color: #6B7280; font-size: 12px;">
+                Total en el archivo: <strong>${dbRows.length}</strong> registros
+                (${dbRows.length - duplicados.length} nuevos + ${duplicados.length} duplicados)
+              </p>
+            </div>
+          `,
+          icon: 'warning',
+          showCancelButton: true,
+          showDenyButton: true,
+          confirmButtonColor: '#10B981',
+          denyButtonColor: '#3B82F6',
+          confirmButtonText: 'Subir y reemplazar',
+          denyButtonText: 'Subir y duplicar',
+          cancelButtonText: 'Cancelar subida',
+          width: 540,
+        })
+
+        if (dupResult.isDismissed) return
+        modoInsercion = dupResult.isConfirmed ? 'reemplazar' : 'duplicar'
+      } else {
+        // Sin duplicados — confirmar carga normal
+        const confirmResult = await Swal.fire({
+          title: '¿Estás seguro que quieres subir los datos?',
+          html: `<p style="font-size: 14px;">Se cargarán <strong>${jsonData.length.toLocaleString()}</strong> registros a la base de datos.</p>`,
+          icon: 'question',
+          showCancelButton: true,
+          confirmButtonColor: '#10B981',
+          confirmButtonText: 'Sí, subir datos',
+          cancelButtonText: 'Cancelar',
+        })
+        if (!confirmResult.isConfirmed) return
+      }
+
+      // ─── Ejecutar inserción según modo ───
+      const duplicadoDnis = new Set(duplicados.map(d => d.dni))
+      const rowsNuevos = duplicadoDnis.size > 0
+        ? dbRows.filter(r => !duplicadoDnis.has(String(r.dni || '').trim()))
+        : dbRows
+      const rowsDuplicados = duplicadoDnis.size > 0
+        ? dbRows.filter(r => duplicadoDnis.has(String(r.dni || '').trim()))
+        : []
+
+      const BATCH_SIZE = 500
+      let insertados = 0
+      let actualizados = 0
+      let errores = 0
+      const erroresDetalle: string[] = [] // Guardar errores descriptivos (max 10)
+      const totalOps = modoInsercion === 'reemplazar'
+        ? rowsNuevos.length + rowsDuplicados.length
+        : dbRows.length
+
+      Swal.fire({
+        title: 'Cargando datos...',
+        html: `<p>Procesando 0 de ${totalOps} registros</p>`,
+        allowOutsideClick: false,
+        didOpen: () => Swal.showLoading(),
+      })
+
+      // Insertar registros nuevos
+      const rowsToInsert = modoInsercion === 'reemplazar' ? rowsNuevos : dbRows
+      for (let i = 0; i < rowsToInsert.length; i += BATCH_SIZE) {
+        const batch = rowsToInsert.slice(i, i + BATCH_SIZE)
+        const { error: insertError } = await supabase.from('leads').insert(batch as any)
+        if (insertError) {
+          console.error(`[CargaMasiva] Error en batch insert ${i}:`, insertError)
+          // Si el batch falla, reintentar las primeras filas para identificar el error
+          // y marcar el resto como error sin reintentarlas (para no demorar)
+          const maxRetry = Math.min(batch.length, erroresDetalle.length < 10 ? 20 : 0)
+          for (let j = 0; j < batch.length; j++) {
+            if (j < maxRetry) {
+              const { error: rowError } = await supabase.from('leads').insert(batch[j] as any)
+              if (rowError) {
+                errores++
+                if (erroresDetalle.length < 10) {
+                  const nombre = batch[j].nombre_completo || 'Sin nombre'
+                  const dni = batch[j].dni || 'Sin DNI'
+                  erroresDetalle.push(`<strong>${nombre}</strong> (DNI: ${dni}): ${rowError.message}`)
+                }
+              } else {
+                insertados++
+              }
+            } else {
+              errores++
+            }
+          }
+        } else {
+          insertados += batch.length
+        }
+        Swal.update({
+          html: `<p>Procesando ${Math.min(insertados + actualizados + errores, totalOps)} de ${totalOps} registros</p>`,
+        })
+      }
+
+      // Si modo "reemplazar", actualizar los duplicados por DNI
+      if (modoInsercion === 'reemplazar' && rowsDuplicados.length > 0) {
+        for (const row of rowsDuplicados) {
+          const dni = String(row.dni || '').trim()
+          if (!dni) continue
+          const updateFields = { ...row }
+          delete updateFields.dni // No actualizar el campo clave
+          const { error: updateError } = await supabase
+            .from('leads')
+            .update(updateFields as any)
+            .eq('dni', dni)
+          if (updateError) {
+            console.error(`[CargaMasiva] Error al actualizar DNI ${dni}:`, updateError)
+            errores++
+            if (erroresDetalle.length < 10) {
+              const nombre = String(row.nombre_completo || 'Sin nombre')
+              erroresDetalle.push(`<strong>${nombre}</strong> (DNI: ${dni}): ${updateError.message}`)
+            }
+          } else {
+            actualizados++
+          }
+          if ((actualizados + errores) % 50 === 0) {
+            Swal.update({
+              html: `<p>Procesando ${insertados + actualizados + errores} de ${totalOps} registros</p>`,
+            })
+          }
+        }
+      }
+
+      Swal.close()
+
+      // Resultado final
+      if (errores > 0) {
+        const detalleHtml = erroresDetalle.length > 0
+          ? `<div style="margin-top: 12px; padding: 10px; background: #FEF2F2; border: 1px solid #FECACA; border-radius: 6px; font-size: 12px; color: #991B1B; text-align: left; max-height: 200px; overflow-y: auto;">
+              <p style="font-weight: 600; margin-bottom: 6px;">Detalle de errores:</p>
+              <ul style="margin: 0; padding-left: 16px; list-style: disc;">
+                ${erroresDetalle.map(e => `<li style="margin-bottom: 4px; word-break: break-word;">${e}</li>`).join('')}
+              </ul>
+              ${errores > erroresDetalle.length ? `<p style="margin-top: 6px; color: #9CA3AF;">...y ${errores - erroresDetalle.length} errores más</p>` : ''}
+            </div>`
+          : ''
+
+        Swal.fire({
+          title: insertados > 0 || actualizados > 0 ? 'Carga parcial' : 'Error en la carga',
+          html: `
+            <div style="font-size: 14px; text-align: left;">
+              ${insertados > 0 ? `<p>Insertados: <strong>${insertados}</strong></p>` : ''}
+              ${actualizados > 0 ? `<p>Actualizados: <strong>${actualizados}</strong></p>` : ''}
+              <p style="color: #EF4444;">Errores: <strong>${errores}</strong></p>
+              ${detalleHtml}
+            </div>
+          `,
+          icon: 'warning',
+          width: 560,
+        })
+      } else {
+        const resumenParts = []
+        if (insertados > 0) resumenParts.push(`<strong>${insertados.toLocaleString()}</strong> insertados`)
+        if (actualizados > 0) resumenParts.push(`<strong>${actualizados.toLocaleString()}</strong> actualizados`)
+
+        await Swal.fire({
+          title: 'Carga exitosa',
+          html: `<p style="font-size: 14px;">${resumenParts.join(' y ')} correctamente.</p>`,
+          icon: 'success',
+          confirmButtonColor: '#10B981',
+        })
+      }
+
+      loadLeads()
+    } catch (err) {
+      Swal.close()
+      const msg = err instanceof Error ? err.message : 'Error al procesar el archivo'
+      Swal.fire('Error', msg, 'error')
     }
   }
 
@@ -828,6 +1363,7 @@ export function LeadsModule() {
         )
       },
       size: 260,
+      meta: { expand: true },
       enableSorting: true,
     },
     {
@@ -845,11 +1381,48 @@ export function LeadsModule() {
         />
       ),
       cell: ({ row }) => {
-        const estado = row.original.estado_de_lead
-        if (!estado) return <span style={{ color: 'var(--text-tertiary)' }}>-</span>
-        return <span className={`lead-estado-badge`}>{estado}</span>
+        const lead = row.original
+        const estado = lead.estado_de_lead
+        const isOpen = estadoDropdownId === lead.id
+
+        const badgeClass = estado
+          ? `lead-estado-badge lead-estado-${estado.toLowerCase().replace(/\s/g, '-')}`
+          : ''
+
+        return (
+          <div className="lead-estado-inline" style={{ position: 'relative' }}>
+            <span
+              className={badgeClass}
+              style={{ cursor: canEdit ? 'pointer' : 'default' }}
+              onClick={canEdit ? (e) => {
+                e.stopPropagation()
+                setEstadoDropdownId(isOpen ? null : lead.id)
+              } : undefined}
+            >
+              {estado || '-'}
+            </span>
+            {isOpen && canEdit && (
+              <div className="lead-estado-dropdown">
+                {ESTADOS_LEAD.map(est => (
+                  <button
+                    key={est}
+                    className={`lead-estado-dropdown-item ${est === estado ? 'active' : ''}`}
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      if (est !== estado) handleChangeEstadoInline(lead.id, est)
+                      else setEstadoDropdownId(null)
+                    }}
+                  >
+                    <span className={`lead-estado-dot lead-estado-dot-${est.toLowerCase().replace(/\s/g, '-')}`} />
+                    {est}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        )
       },
-      size: 120,
+      size: 130,
       enableSorting: true,
     },
     {
@@ -954,16 +1527,48 @@ export function LeadsModule() {
       id: 'licencia',
       accessorFn: (row) => row.licencia || '-',
       header: 'Licencia',
-      cell: ({ row }) => row.original.licencia || '-',
+      cell: ({ row }) => {
+        const val = row.original.licencia || '-'
+        const isLong = val.length > 16
+        return (
+          <span
+            className="lead-licencia-cell"
+            onMouseEnter={isLong ? (e) => {
+              const rect = e.currentTarget.getBoundingClientRect()
+              const tip = document.createElement('div')
+              tip.className = 'lead-licencia-tooltip'
+              tip.textContent = val
+              tip.style.left = `${rect.left}px`
+              tip.style.top = `${rect.top - 8}px`
+              document.body.appendChild(tip)
+              e.currentTarget.dataset.tipActive = 'true'
+            } : undefined}
+            onMouseLeave={isLong ? () => {
+              const tip = document.querySelector('.lead-licencia-tooltip')
+              if (tip) tip.remove()
+            } : undefined}
+          >
+            {val}
+          </span>
+        )
+      },
       size: 130,
       enableSorting: true,
     },
     {
-      id: 'fecha',
+      id: 'fecha_entrevista',
+      accessorFn: (row) => row.fecha_carga,
+      header: 'Fecha Entrevista',
+      cell: ({ row }) => formatDate(row.original.fecha_carga),
+      size: 120,
+      enableSorting: true,
+    },
+    {
+      id: 'fecha_creacion',
       accessorFn: (row) => row.created_at,
-      header: 'Fecha',
+      header: 'Fecha Creación',
       cell: ({ row }) => formatDate(row.original.created_at),
-      size: 100,
+      size: 120,
       enableSorting: true,
     },
     {
@@ -989,7 +1594,7 @@ export function LeadsModule() {
       },
     },
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  ], [uniqueNombres, nombreFilter, uniqueEstados, estadoFilter, uniqueProcesos, procesoFilter, uniqueEntrevistas, entrevistaFilter, uniqueDisponibilidades, disponibilidadFilter, uniqueZonas, zonaFilter, uniqueTurnos, turnoFilter, uniqueFuentes, fuenteFilter, openFilterId, canEdit, canDelete, leadsEnZona])
+  ], [uniqueNombres, nombreFilter, uniqueEstados, estadoFilter, uniqueProcesos, procesoFilter, uniqueEntrevistas, entrevistaFilter, uniqueDisponibilidades, disponibilidadFilter, uniqueZonas, zonaFilter, uniqueTurnos, turnoFilter, uniqueFuentes, fuenteFilter, openFilterId, canEdit, canDelete, leadsEnZona, estadoDropdownId])
 
   // ---------- EXTERNAL FILTERS (chips) ----------
   const hasActiveFilters = nombreFilter.length > 0 || estadoFilter.length > 0 || procesoFilter.length > 0 || entrevistaFilter.length > 0 ||
@@ -1036,55 +1641,65 @@ export function LeadsModule() {
 
       {/* Stats */}
       <div className="leads-stats">
-        <div className="leads-stats-grid">
+        <div className="leads-stats-grid" style={{ gridTemplateColumns: 'repeat(6, 1fr)' }}>
+          <div
+            className={`stat-card stat-card-clickable ${activeStatCard === 'pendientes' ? 'stat-card-active' : ''}`}
+            onClick={() => handleStatClick('pendientes')}
+          >
+            <Clock size={18} className="stat-icon" style={{ color: '#f59e0b' }} />
+            <div className="stat-content">
+              <span className="stat-value">{stats.pendientes}</span>
+              <span className="stat-label">Pendientes</span>
+            </div>
+          </div>
           <div
             className={`stat-card stat-card-clickable ${activeStatCard === 'aptos' ? 'stat-card-active' : ''}`}
             onClick={() => handleStatClick('aptos')}
           >
-            <CheckCircle size={18} className="stat-icon" />
+            <CheckCircle size={18} className="stat-icon" style={{ color: '#16a34a' }} />
             <div className="stat-content">
               <span className="stat-value">{stats.aptos}</span>
               <span className="stat-label">Aptos</span>
             </div>
           </div>
           <div
-            className={`stat-card stat-card-clickable ${activeStatCard === 'enProceso' ? 'stat-card-active' : ''}`}
-            onClick={() => handleStatClick('enProceso')}
+            className={`stat-card stat-card-clickable ${activeStatCard === 'noAptos' ? 'stat-card-active' : ''}`}
+            onClick={() => handleStatClick('noAptos')}
           >
-            <Clock size={18} className="stat-icon" />
+            <XCircle size={18} className="stat-icon" style={{ color: '#dc2626' }} />
             <div className="stat-content">
-              <span className="stat-value">{stats.enProceso}</span>
-              <span className="stat-label">En Proceso</span>
+              <span className="stat-value">{stats.noAptos}</span>
+              <span className="stat-label">No Aptos</span>
             </div>
           </div>
           <div
-            className={`stat-card stat-card-clickable ${activeStatCard === 'disponibles' ? 'stat-card-active' : ''}`}
-            onClick={() => handleStatClick('disponibles')}
+            className={`stat-card stat-card-clickable ${activeStatCard === 'enOnBoarding' ? 'stat-card-active' : ''}`}
+            onClick={() => handleStatClick('enOnBoarding')}
           >
-            <UserCheck size={18} className="stat-icon" />
+            <UserCheck size={18} className="stat-icon" style={{ color: '#2563eb' }} />
             <div className="stat-content">
-              <span className="stat-value">{stats.disponibilidadInmediata}</span>
-              <span className="stat-label">Disp. Inmediata</span>
-            </div>
-          </div>
-          <div
-            className={`stat-card stat-card-clickable ${activeStatCard === 'exConductores' ? 'stat-card-active' : ''}`}
-            onClick={() => handleStatClick('exConductores')}
-          >
-            <Users size={18} className="stat-icon" />
-            <div className="stat-content">
-              <span className="stat-value">{stats.exConductores}</span>
-              <span className="stat-label">Ex Conductores</span>
+              <span className="stat-value">{stats.enOnBoarding}</span>
+              <span className="stat-label">En OnBoarding</span>
             </div>
           </div>
           <div
             className={`stat-card stat-card-clickable ${activeStatCard === 'descartados' ? 'stat-card-active' : ''}`}
             onClick={() => handleStatClick('descartados')}
           >
-            <XCircle size={18} className="stat-icon" />
+            <XCircle size={18} className="stat-icon" style={{ color: '#6b7280' }} />
             <div className="stat-content">
               <span className="stat-value">{stats.descartados}</span>
               <span className="stat-label">Descartados</span>
+            </div>
+          </div>
+          <div
+            className={`stat-card stat-card-clickable ${activeStatCard === 'conductores' ? 'stat-card-active' : ''}`}
+            onClick={() => handleStatClick('conductores')}
+          >
+            <Users size={18} className="stat-icon" style={{ color: '#7c3aed' }} />
+            <div className="stat-content">
+              <span className="stat-value">{stats.conductores}</span>
+              <span className="stat-label">Conductores</span>
             </div>
           </div>
         </div>
@@ -1108,6 +1723,20 @@ export function LeadsModule() {
             <button className="btn-secondary btn-sm" onClick={handleExportExcel} title="Exportar Excel">
               <Download size={14} /> Exportar
             </button>
+            {canCreate && (
+              <>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept=".xlsx,.xls"
+                  style={{ display: 'none' }}
+                  onChange={handleCargaMasiva}
+                />
+                <button className="btn-secondary btn-sm" onClick={() => fileInputRef.current?.click()} title="Carga Masiva">
+                  <Upload size={14} /> Carga Masiva
+                </button>
+              </>
+            )}
             {canCreate && (
               <button className="btn-primary btn-sm" onClick={handleOpenCreate}>
                 <UserPlus size={14} /> Nuevo Lead

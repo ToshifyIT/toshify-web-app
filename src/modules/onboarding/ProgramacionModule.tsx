@@ -892,6 +892,86 @@ export function ProgramacionModule() {
       return
     }
 
+    // ─── Validar campos obligatorios de vehículo y conductor(es) ───
+    // Antes de crear la asignación, verificar que los datos necesarios para
+    // las plantillas de contrato estén completos en la base de datos.
+    {
+      const camposFaltantes: string[] = []
+
+      // 1) Validar vehículo
+      if (prog.vehiculo_entregar_id) {
+        const { data: veh } = await supabase
+          .from('vehiculos')
+          .select('numero_motor, numero_chasis, marca, modelo, anio, color, titular')
+          .eq('id', prog.vehiculo_entregar_id)
+          .single() as { data: { numero_motor: string | null; numero_chasis: string | null; marca: string | null; modelo: string | null; anio: number | null; color: string | null; titular: string | null } | null }
+
+        if (veh) {
+          if (!veh.numero_motor?.trim()) camposFaltantes.push('Vehículo → Número de Motor')
+          if (!veh.numero_chasis?.trim()) camposFaltantes.push('Vehículo → Número de Chasis')
+          if (!veh.marca?.trim()) camposFaltantes.push('Vehículo → Marca')
+          if (!veh.modelo?.trim()) camposFaltantes.push('Vehículo → Modelo')
+          if (!veh.anio) camposFaltantes.push('Vehículo → Año')
+          if (!veh.color?.trim()) camposFaltantes.push('Vehículo → Color')
+          if (!veh.titular?.trim()) camposFaltantes.push('Vehículo → Titular')
+        }
+      }
+
+      // 2) Validar conductor(es)
+      const conductorIds: { id: string; label: string }[] = []
+      if (prog.conductor_id) {
+        conductorIds.push({ id: prog.conductor_id, label: 'Conductor' })
+      }
+      if (prog.conductor_diurno_id) {
+        conductorIds.push({ id: prog.conductor_diurno_id, label: 'Conductor Diurno' })
+      }
+      if (prog.conductor_nocturno_id) {
+        conductorIds.push({ id: prog.conductor_nocturno_id, label: 'Conductor Nocturno' })
+      }
+
+      for (const { id, label } of conductorIds) {
+        const { data: cond } = await supabase
+          .from('conductores')
+          .select('numero_dni, fecha_nacimiento, direccion, email, telefono_contacto, nacionalidad_id, estado_civil_id')
+          .eq('id', id)
+          .single() as { data: { numero_dni: string | null; fecha_nacimiento: string | null; direccion: string | null; email: string | null; telefono_contacto: string | null; nacionalidad_id: string | null; estado_civil_id: string | null } | null }
+
+        if (cond) {
+          if (!cond.numero_dni?.trim()) camposFaltantes.push(`${label} → DNI`)
+          if (!cond.fecha_nacimiento) camposFaltantes.push(`${label} → Fecha de Nacimiento`)
+          if (!cond.direccion?.trim()) camposFaltantes.push(`${label} → Dirección`)
+          if (!cond.email?.trim()) camposFaltantes.push(`${label} → Email`)
+          if (!cond.telefono_contacto?.trim()) camposFaltantes.push(`${label} → Teléfono`)
+          if (!cond.nacionalidad_id) camposFaltantes.push(`${label} → Nacionalidad`)
+          if (!cond.estado_civil_id) camposFaltantes.push(`${label} → Estado Civil`)
+        }
+      }
+
+      if (camposFaltantes.length > 0) {
+        await Swal.fire({
+          title: 'Datos obligatorios incompletos',
+          html: `
+            <div style="text-align: left; font-size: 13px; max-height: 300px; overflow-y: auto;">
+              <p style="margin-bottom: 10px; color: #6B7280;">
+                No se puede enviar la programación porque faltan los siguientes datos obligatorios:
+              </p>
+              <ul style="list-style: none; padding: 0; margin: 0;">
+                ${camposFaltantes.map(c => `<li style="padding: 4px 0; border-bottom: 1px solid #f3f4f6;">&#x2022; <strong>${c}</strong></li>`).join('')}
+              </ul>
+              <p style="margin-top: 12px; color: #9CA3AF; font-size: 12px;">
+                Complete estos datos en el módulo correspondiente (Vehículos o Conductores) antes de enviar.
+              </p>
+            </div>
+          `,
+          icon: 'warning',
+          confirmButtonText: 'Entendido',
+          confirmButtonColor: '#F59E0B',
+          width: 480,
+        })
+        return
+      }
+    }
+
     // Para TURNO: verificar confirmaciones y determinar qué conductores enviar
     let enviarDiurno = true
     let enviarNocturno = true

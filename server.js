@@ -915,10 +915,11 @@ async function fetchAmountFromConceptos(turno, modalidad, gnc) {
 
   const precioSemanal = data[0].precio_final
   // Multiplicar x 7 (valor semanal → valor que va en el documento)
-  const precioFinal = precioSemanal * 7
-  // Formatear como pesos argentinos: 299000.03 → "299.000,03"
-  const formatted = precioFinal.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-  console.log(`[Contract] AMOUNT: concepto ${codigo} → semanal $${precioSemanal} x 7 = $${formatted}`)
+  // Redondear a entero para evitar decimales por aritmética de punto flotante
+  const precioFinal = Math.round(precioSemanal * 7)
+  // Formatear como pesos argentinos: 299000 → "$299.000,00"
+  const formatted = '$' + precioFinal.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+  console.log(`[Contract] AMOUNT: concepto ${codigo} → semanal $${precioSemanal} x 7 = ${formatted}`)
   return formatted
 }
 

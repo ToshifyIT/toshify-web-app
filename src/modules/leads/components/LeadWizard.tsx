@@ -30,25 +30,18 @@ export function LeadWizard({ formData, setFormData, onSave, onCancel, saving = f
     setFormData(prev => ({ ...prev, [field]: value }))
   }
 
-  function validateStep(step: number): boolean {
-    if (step === 1) {
-      return !!formData.nombre_completo?.trim()
-    }
-    return true
-  }
-
   function handleNext() {
-    if (currentStep < STEPS.length && validateStep(currentStep)) {
-      setCurrentStep(prev => prev + 1)
+    if (currentStep < STEPS.length) {
+      setCurrentStep(currentStep + 1)
     }
   }
 
   function handlePrev() {
-    if (currentStep > 1) setCurrentStep(prev => prev - 1)
+    if (currentStep > 1) setCurrentStep(currentStep - 1)
   }
 
   function goToStep(step: number) {
-    if (step <= currentStep || validateStep(currentStep)) {
+    if (step >= 1 && step <= STEPS.length) {
       setCurrentStep(step)
     }
   }
@@ -462,12 +455,11 @@ export function LeadWizard({ formData, setFormData, onSave, onCancel, saving = f
                 <label>Estado de Lead</label>
                 <select value={formData.estado_de_lead || ''} onChange={e => updateField('estado_de_lead', e.target.value)}>
                   <option value="">Seleccionar</option>
-                  <option value="Nuevo">Nuevo</option>
-                  <option value="Contactado">Contactado</option>
-                  <option value="Entrevistado">Entrevistado</option>
-                  <option value="Aprobado">Aprobado</option>
-                  <option value="Rechazado">Rechazado</option>
-                  <option value="Convertido">Convertido</option>
+                  <option value="Pendiente">Pendiente</option>
+                  <option value="Apto">Apto</option>
+                  <option value="No Apto">No Apto</option>
+                  <option value="En OnBoarding">En OnBoarding</option>
+                  <option value="Descartado">Descartado</option>
                 </select>
               </div>
               <div className="lead-wizard-field">
@@ -600,15 +592,21 @@ export function LeadWizard({ formData, setFormData, onSave, onCancel, saving = f
             <><ChevronLeft size={14} /> Anterior</>
           )}
         </button>
-        {currentStep < STEPS.length ? (
-          <button className="btn-primary" onClick={handleNext}>
-            Siguiente <ChevronRight size={14} />
+        <div style={{ display: 'flex', gap: '8px' }}>
+          <button
+            className="btn-success"
+            onClick={onSave}
+            disabled={saving}
+            style={{ minWidth: '100px' }}
+          >
+            {saving ? 'Guardando...' : 'Guardar'}
           </button>
-        ) : (
-          <button className="btn-primary" onClick={onSave} disabled={saving}>
-            {saving ? 'Guardando...' : 'Guardar Lead'}
-          </button>
-        )}
+          {currentStep < STEPS.length && (
+            <button className="btn-primary" onClick={handleNext}>
+              Siguiente <ChevronRight size={14} />
+            </button>
+          )}
+        </div>
       </div>
     </div>
   )
