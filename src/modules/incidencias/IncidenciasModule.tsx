@@ -1127,9 +1127,9 @@ export function IncidenciasModule() {
     let filtered = [...penalidades]
 
     if (activeTab === 'por_aplicar') {
+      // Solo penalidades realmente enviadas (con registro en penalidades, sin aplicar y sin rechazar).
+      // Las incidencias SIN ENVIAR aparecen en el tab Incidencia Facturación, no acá.
       filtered = filtered.filter(p => !p.aplicado && !p.rechazado)
-      // Agregar incidencias SIN ENVIAR como penalidades virtuales
-      filtered = [...filtered, ...incidenciasSinEnviarVirtuales]
     } else if (activeTab === 'aplicadas') {
       filtered = filtered.filter(p => p.aplicado && !p.rechazado)
     } else if (activeTab === 'rechazados') {
@@ -1490,7 +1490,7 @@ export function IncidenciasModule() {
       header: 'Estado Fact.',
       accessorFn: (row) => {
         const penalidad = penalidades.find(p => p.incidencia_id === row.id)
-        if (!penalidad) return 'Sin enviar'
+        if (!penalidad) return 'Sin Aplicar'
         if (penalidad.rechazado) return 'Rechazado'
         if (penalidad.aplicado) return 'Aplicado'
         return 'Por Aplicar'
@@ -1500,7 +1500,7 @@ export function IncidenciasModule() {
         const penalidad = penalidades.find(p => p.incidencia_id === row.original.id)
 
         if (!penalidad) {
-          return <span className="dt-badge dt-badge-gray">Sin enviar</span>
+          return <span className="dt-badge dt-badge-gray">Sin Aplicar</span>
         }
 
         if (penalidad.rechazado) {
@@ -1744,7 +1744,7 @@ export function IncidenciasModule() {
       cell: ({ row }) => {
         const esVirtual = (row.original as any)._origen === 'incidencia'
         if (esVirtual) {
-          return <span className="dt-badge dt-badge-gray"><Clock size={12} /> Sin enviar</span>
+          return <span className="dt-badge dt-badge-gray"><Clock size={12} /> Sin Aplicar</span>
         }
         // Si está rechazado, siempre mostrar "No" (rechazado = no aplicado)
         const estaAplicado = row.original.rechazado ? false : row.original.aplicado
@@ -2877,7 +2877,7 @@ export function IncidenciasModule() {
   }
 
   // Contadores para tabs
-  const countPorAplicar = penalidades.filter(p => !p.aplicado && !p.rechazado).length + incidenciasSinEnviarVirtuales.length
+  const countPorAplicar = penalidades.filter(p => !p.aplicado && !p.rechazado).length
   const countAplicadas = penalidades.filter(p => p.aplicado && !p.rechazado).length
   const countRechazados = penalidades.filter(p => p.rechazado).length
 
