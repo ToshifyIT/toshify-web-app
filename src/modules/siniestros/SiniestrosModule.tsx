@@ -566,11 +566,12 @@ export function SiniestrosModule() {
 
     {
       id: 'acciones',
-      header: '',
+      header: 'Acciones',
       cell: ({ row }) => {
         const isHabilitado = row.original.habilitado_circular;
         const hasVehiculo = !!row.original.vehiculo_id;
-        
+        const hasDrive = !!row.original.carpeta_drive_url;
+
         return (
           <ActionsMenu
             maxVisible={999}
@@ -593,16 +594,16 @@ export function SiniestrosModule() {
               },
               {
                 icon: <FolderOpen size={15} />,
-                label: 'Ver en Drive',
-                onClick: () => window.open(row.original.carpeta_drive_url!, '_blank'),
-                hidden: !row.original.carpeta_drive_url,
+                label: hasDrive ? 'Ver en Drive' : 'Sin carpeta de Drive',
+                onClick: () => { if (hasDrive) window.open(row.original.carpeta_drive_url!, '_blank') },
+                disabled: !hasDrive,
                 variant: 'success'
               },
               {
                 icon: <CheckCircle size={15} />,
-                label: 'Habilitar vehiculo',
+                label: !hasVehiculo ? 'Sin vehículo asignado' : isHabilitado ? 'Vehículo ya habilitado' : 'Habilitar vehiculo',
                 onClick: () => handleHabilitarVehiculo(row.original),
-                hidden: isHabilitado || !hasVehiculo,
+                disabled: isHabilitado || !hasVehiculo,
                 variant: 'warning'
               }
             ]}

@@ -34,6 +34,7 @@ interface IncidenciaFormData {
   area?: string
   estado_vehiculo?: string
   descripcion?: string
+  notas?: string
   monto?: number
   tipo_cobro_descuento_id?: string
 }
@@ -233,6 +234,7 @@ export function SiniestroSeguimiento({ siniestro, onReload, readonly = false }: 
       fecha: getLocalDateString(),
       monto: formData.monto || undefined,
       descripcion: formData.descripcion,
+      notas: formData.notas,
       area: 'Siniestros',
       estado_id: incidenciaForm.estado_id, // Mantener el estado pre-seleccionado
       tipo_cobro_descuento_id: tipoReparacionSiniestro?.id || undefined
@@ -335,6 +337,7 @@ export function SiniestroSeguimiento({ siniestro, onReload, readonly = false }: 
           area: incidenciaForm.area || 'Siniestros',
           estado_vehiculo: incidenciaForm.estado_vehiculo || null,
           descripcion: incidenciaForm.descripcion || null,
+          notas: incidenciaForm.notas?.trim() || formData.notas?.trim() || null,
           conductor_nombre: selectedConductor?.nombre_completo || null,
           vehiculo_patente: selectedVehiculo?.patente || null,
           tipo: 'cobro',
@@ -379,7 +382,7 @@ export function SiniestroSeguimiento({ siniestro, onReload, readonly = false }: 
             area_responsable: incidenciaForm.area || 'Siniestros',
             detalle: incidenciaForm.descripcion || 'Cobro por siniestro',
             monto: incidenciaForm.monto || 0,
-            observaciones: formData.notas?.trim() || '',
+            observaciones: incidenciaForm.notas?.trim() || formData.notas?.trim() || '',
             aplicado: false,
             rechazado: false,
             conductor_nombre: selectedConductor?.nombre_completo || null,
@@ -953,6 +956,20 @@ export function SiniestroSeguimiento({ siniestro, onReload, readonly = false }: 
                     onChange={e => setIncidenciaForm(prev => ({ ...prev, descripcion: e.target.value }))}
                     placeholder="Describa la incidencia..."
                     rows={4}
+                    disabled={savingIncidencia}
+                    style={{ width: '100%', padding: '10px 12px', borderRadius: '6px', border: '1px solid var(--border-primary)', background: 'var(--bg-tertiary)', color: 'var(--text-primary)', resize: 'vertical' }}
+                  />
+                </div>
+
+                <div className="form-group" style={{ marginTop: '16px' }}>
+                  <label style={{ fontSize: '13px', fontWeight: 500, marginBottom: '6px', display: 'block', color: 'var(--text-secondary)' }}>
+                    Notas <span style={{ color: 'var(--text-tertiary)', fontSize: '11px', fontWeight: 400 }}>(opcional, mensaje para administración)</span>
+                  </label>
+                  <textarea
+                    value={incidenciaForm.notas || ''}
+                    onChange={e => setIncidenciaForm(prev => ({ ...prev, notas: e.target.value }))}
+                    placeholder="Mensaje adicional para administración..."
+                    rows={2}
                     disabled={savingIncidencia}
                     style={{ width: '100%', padding: '10px 12px', borderRadius: '6px', border: '1px solid var(--border-primary)', background: 'var(--bg-tertiary)', color: 'var(--text-primary)', resize: 'vertical' }}
                   />
