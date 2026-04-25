@@ -361,7 +361,8 @@ export function CobrosFraccionadosTab({ periodoActual }: CobrosFraccionadosTabPr
           referencia: formValues.referencia || null,
           semana: formValues.semana,
           anio: formValues.anio,
-          conductor_nombre: conductorNombre
+          conductor_nombre: conductorNombre,
+          created_by_name: profile?.full_name || 'Sistema'
         })
 
       if (errorPago) throw errorPago

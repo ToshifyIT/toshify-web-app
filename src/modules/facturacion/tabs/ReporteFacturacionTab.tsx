@@ -5081,7 +5081,8 @@ export function ReporteFacturacionTab() {
           referencia: formValues.referencia || null,
           semana: formValues.semana,
           anio: formValues.anio,
-          conductor_nombre: facturacion.conductor_nombre
+          conductor_nombre: facturacion.conductor_nombre,
+          created_by_name: profile?.full_name || 'Sistema'
         })
 
       if (errorPago) throw errorPago
@@ -5370,7 +5371,8 @@ export function ReporteFacturacionTab() {
             referencia: `Pago Cabify S${semanaNum}/${anioNum}`,
             semana: semanaHoy,
             anio: anioHoy,
-            conductor_nombre: pago.conductor_nombre
+            conductor_nombre: pago.conductor_nombre,
+            created_by_name: profile?.full_name || 'Sistema'
           })
 
         if (errorPago) throw errorPago
