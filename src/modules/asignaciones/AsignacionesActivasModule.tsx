@@ -980,15 +980,18 @@ export function AsignacionesActivasModule() {
               )}
 
               {/* Conductores Asignados */}
-              <div className="section-title" style={{ marginTop: '32px' }}>
-                <User size={20} />
-                Conductores Asignados ({selectedAsignacion.asignaciones_conductores?.length || 0})
-              </div>
-              {selectedAsignacion.asignaciones_conductores && selectedAsignacion.asignaciones_conductores.length > 0 ? (
-                <div>
-                  {selectedAsignacion.asignaciones_conductores
-                    .filter(asigConductor => asigConductor.conductores)
-                    .map((asigConductor, idx) => (
+              {(() => {
+                const conductoresActivos = (selectedAsignacion.asignaciones_conductores || [])
+                  .filter(ac => ac.conductores && !['completado', 'finalizado', 'cancelado'].includes(ac.estado))
+                return (
+                  <>
+                    <div className="section-title" style={{ marginTop: '32px' }}>
+                      <User size={20} />
+                      Conductores Asignados ({conductoresActivos.length})
+                    </div>
+                    {conductoresActivos.length > 0 ? (
+                      <div>
+                        {conductoresActivos.map((asigConductor, idx) => (
                       <div key={idx} className="conductor-card">
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start', marginBottom: '12px' }}>
                           <div>
@@ -1030,10 +1033,13 @@ export function AsignacionesActivasModule() {
                         </div>
                       </div>
                     ))}
-                </div>
-              ) : (
-                <p style={{ color: 'var(--text-tertiary)', fontStyle: 'italic' }}>No hay conductores asignados actualmente</p>
-              )}
+                    </div>
+                    ) : (
+                      <p style={{ color: 'var(--text-tertiary)', fontStyle: 'italic' }}>No hay conductores asignados actualmente</p>
+                    )}
+                  </>
+                )
+              })()}
             </div>
 
             <div className="modal-footer">

@@ -184,6 +184,7 @@
    BADGES - Específicos de Leads
    ===================================================== */
 
+/* Badges de estado */
 .lead-estado-badge {
   display: inline-flex;
   align-items: center;
@@ -192,6 +193,16 @@
   font-size: 11px;
   font-weight: 600;
   white-space: nowrap;
+  transition: opacity 0.15s;
+}
+
+.lead-estado-badge:hover {
+  opacity: 0.85;
+}
+
+.lead-estado-pendiente {
+  background: var(--badge-yellow-bg, #fef3c7);
+  color: var(--badge-yellow-text, #92400e);
 }
 
 .lead-estado-apto {
@@ -204,29 +215,124 @@
   color: var(--badge-red-text, #991b1b);
 }
 
-.lead-estado-pendiente {
-  background: var(--badge-yellow-bg, #fef3c7);
-  color: var(--badge-yellow-text, #92400e);
-}
-
-.lead-estado-proceso {
-  background: var(--badge-blue-bg, #dbeafe);
-  color: var(--badge-blue-text, #1e40af);
-}
-
 .lead-estado-descartado {
   background: var(--badge-gray-bg, #f3f4f6);
   color: var(--badge-gray-text, #374151);
 }
 
-.lead-estado-convertido {
+.lead-estado-en-onboarding {
+  background: var(--badge-blue-bg, #dbeafe);
+  color: var(--badge-blue-text, #1e40af);
+}
+
+.lead-estado-convertido,
+.lead-estado-conductor {
   background: var(--badge-purple-bg, #f3e8ff);
   color: var(--badge-purple-text, #6b21a8);
 }
 
-.lead-estado-ex-conductor {
-  background: var(--badge-orange-bg, #ffedd5);
-  color: var(--badge-orange-text, #9a3412);
+/* Inline dropdown de estado */
+.lead-estado-inline {
+  position: relative;
+}
+
+.lead-estado-dropdown {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  min-width: 160px;
+  padding: 4px;
+  background: var(--bg-primary, #fff);
+  border: 1px solid var(--border-primary, #e5e7eb);
+  border-radius: 8px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+  z-index: 9999;
+  animation: lead-dropdown-in 0.12s ease-out;
+}
+
+[data-theme="dark"] .lead-estado-dropdown {
+  background: var(--bg-secondary);
+  border-color: var(--border-primary);
+}
+
+@keyframes lead-dropdown-in {
+  from { opacity: 0; transform: translateY(-4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.lead-estado-dropdown-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 8px 12px;
+  border: none;
+  background: transparent;
+  color: var(--text-primary, #1f2937);
+  font-size: 12px;
+  font-weight: 500;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 0.1s;
+}
+
+.lead-estado-dropdown-item:hover {
+  background: var(--bg-secondary, #f9fafb);
+}
+
+.lead-estado-dropdown-item.active {
+  background: var(--color-primary-light, #ffe5ea);
+  font-weight: 600;
+}
+
+.lead-estado-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.lead-estado-dot-pendiente { background: #f59e0b; }
+.lead-estado-dot-apto { background: #16a34a; }
+.lead-estado-dot-no-apto { background: #dc2626; }
+.lead-estado-dot-en-onboarding { background: #2563eb; }
+.lead-estado-dot-descartado { background: #6b7280; }
+.lead-estado-dot-convertido,
+.lead-estado-dot-conductor { background: #7c3aed; }
+
+/* =====================================================
+   LICENCIA CELL - Truncate + tooltip
+   ===================================================== */
+
+.lead-licencia-cell {
+  display: block;
+  max-width: 120px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: default;
+}
+
+.lead-licencia-tooltip {
+  position: fixed;
+  transform: translateY(-100%);
+  padding: 8px 12px;
+  background: #1f2937;
+  color: #fff;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.4;
+  border-radius: 6px;
+  white-space: nowrap;
+  z-index: 99999;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+  pointer-events: none;
+  animation: lead-tip-in 0.15s ease-out;
+}
+
+@keyframes lead-tip-in {
+  from { opacity: 0; transform: translateY(-100%) translateY(4px); }
+  to   { opacity: 1; transform: translateY(-100%); }
 }
 
 /* =====================================================
@@ -496,6 +602,31 @@
   .lead-wizard-step-label {
     display: none;
   }
+}
+
+.lead-wizard .btn-success {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 16px;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  border: 1px solid #059669;
+  background: #059669;
+  color: white;
+  transition: background 0.2s, border-color 0.2s;
+}
+
+.lead-wizard .btn-success:hover:not(:disabled) {
+  background: #047857;
+  border-color: #047857;
+}
+
+.lead-wizard .btn-success:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 /* =====================================================
