@@ -57,11 +57,11 @@ export function AsignacionesActivasModule() {
   const { sedeActualId, aplicarFiltroSede } = useSede()
   const [asignaciones, setAsignaciones] = useState<AsignacionActiva[]>([])
   const [totalVehiculosFlota, setTotalVehiculosFlota] = useState(0)
-  const [vehiculosOperativos, setVehiculosOperativos] = useState(0) // PKG_ON_BASE + EN_USO
-  const [vehiculosPkgOn, setVehiculosPkgOn] = useState(0) // Solo PKG_ON_BASE
-  const [vehiculosEnUso, setVehiculosEnUso] = useState(0) // Solo EN_USO
-  const [vehiculosPkgOnSinAsignacion, setVehiculosPkgOnSinAsignacion] = useState<any[]>([]) // PKG_ON_BASE sin asignación
-  const [todosVehiculosPkgOn, setTodosVehiculosPkgOn] = useState<any[]>([]) // TODOS los PKG_ON_BASE
+  const [vehiculosOperativos, setVehiculosOperativos] = useState(0)
+  const [vehiculosPkgOn, setVehiculosPkgOn] = useState(0)
+  const [vehiculosEnUso, setVehiculosEnUso] = useState(0)
+  const [vehiculosPkgOnSinAsignacion, setVehiculosPkgOnSinAsignacion] = useState<any[]>([])
+  const [todosVehiculosPkgOn, setTodosVehiculosPkgOn] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [selectedAsignacion, setSelectedAsignacion] = useState<AsignacionActiva | null>(null)
   const [showDetailsModal, setShowDetailsModal] = useState(false)
@@ -1053,6 +1053,7 @@ export function AsignacionesActivasModule() {
           </div>
         </div>
       )}
+
     </div>
   )
 }

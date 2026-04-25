@@ -1,7 +1,7 @@
 // src/modules/asignaciones/AsignacionesModule.tsx
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { useState, useEffect, useMemo } from 'react'
-import { Eye, Trash2, CheckCircle, XCircle, FileText, Calendar, UserPlus, UserCheck, Ban, Plus, Pencil, ArrowLeftRight, FolderOpen } from 'lucide-react'
+import { Eye, Trash2, CheckCircle, XCircle, FileText, Calendar, UserPlus, UserCheck, Ban, Plus, Pencil, ArrowLeftRight, FolderOpen, ClipboardCheck, Car } from 'lucide-react'
 import { type ColumnDef } from '@tanstack/react-table'
 import { DataTable } from '../../components/ui/DataTable/DataTable'
 import { LoadingOverlay } from '../../components/ui/LoadingOverlay'
@@ -15,6 +15,7 @@ import { AssignmentWizard } from '../../components/AssignmentWizard'
 import Swal from 'sweetalert2'
 import { showSuccess } from '../../utils/toast'
 import { registrarHistorialVehiculo, registrarHistorialConductor } from '../../services/historialService'
+import { generateControlDocument } from '../../services/controlService'
 import './AsignacionesModule.css'
 
 interface Asignacion {
@@ -29,6 +30,7 @@ interface Asignacion {
   horario: string
   estado: string
   notas: string | null
+  control_completado?: boolean
   created_at: string
   created_by?: string | null
   motivo?: string | null
@@ -169,7 +171,94 @@ export function AsignacionesModule() {
   const [showDropdownDiurno, setShowDropdownDiurno] = useState(false)
   const [showDropdownNocturno, setShowDropdownNocturno] = useState(false)
   const [showDropdownCargo, setShowDropdownCargo] = useState(false)
-  
+
+  // --- Completar Control ---
+  const [showControlModal, setShowControlModal] = useState(false)
+  const [controlAsignacion, setControlAsignacion] = useState<ExpandedAsignacion | null>(null)
+  const [controlConductorId, setControlConductorId] = useState<string>('')
+  const [controlSaving, setControlSaving] = useState(false)
+  const [controlForm, setControlForm] = useState({
+    km: '',
+    ltnafta: '',
+    cristal_status: '',
+    carter: '',
+    tires: '',
+  })
+
+  function openControlModal(asig: ExpandedAsignacion) {
+    setControlAsignacion(asig)
+    setControlForm({ km: '', ltnafta: '', cristal_status: '', carter: '', tires: '' })
+    // Pre-seleccionar conductor
+    const isAutoCargo = asig.horario === 'todo_dia'
+    if (isAutoCargo && asig.conductorCargo) {
+      setControlConductorId(asig.conductorCargo.id)
+    } else if (!isAutoCargo && asig.conductoresTurno?.diurno) {
+      setControlConductorId(asig.conductoresTurno.diurno.id)
+    } else {
+      setControlConductorId('')
+    }
+    setShowControlModal(true)
+  }
+
+  async function handleSubmitControl() {
+    if (!controlAsignacion || !controlConductorId) return
+    const isAutoCargo = controlAsignacion.horario === 'todo_dia'
+
+    if (!controlForm.km.trim() || !controlForm.ltnafta.trim()) {
+      Swal.fire('Campos requeridos', 'Kilometraje y Litros de Nafta son obligatorios.', 'warning')
+      return
+    }
+    if (isAutoCargo && (!controlForm.cristal_status.trim() || !controlForm.carter.trim() || !controlForm.tires.trim())) {
+      Swal.fire('Campos requeridos', 'Estado de Cristales, Bajos/Carter y Neumáticos son obligatorios.', 'warning')
+      return
+    }
+
+    // Determinar turno del conductor seleccionado
+    let turnoValue: string | null = null
+    if (!isAutoCargo) {
+      const condAsig = controlAsignacion.asignaciones_conductores?.find(
+        ac => (ac as any).conductores?.id === controlConductorId || ac.conductor_id === controlConductorId
+      )
+      turnoValue = condAsig?.horario === 'diurno' ? 'diurno' : 'nocturno'
+    }
+
+    setControlSaving(true)
+    try {
+      const result = await generateControlDocument({
+        conductor_id: controlConductorId,
+        vehiculo_id: controlAsignacion.vehiculo_id,
+        modalidad: isAutoCargo ? 'a_cargo' : 'turno',
+        turno: turnoValue,
+        sede_id: sedeActualId || null,
+        asignacion_id: controlAsignacion.id,
+        created_by: user?.id || null,
+        created_by_name: user?.user_metadata?.full_name || user?.email || null,
+        km: controlForm.km.trim(),
+        ltnafta: controlForm.ltnafta.trim(),
+        cristal_status: isAutoCargo ? controlForm.cristal_status.trim() : null,
+        carter: isAutoCargo ? controlForm.carter.trim() : null,
+        tires: isAutoCargo ? controlForm.tires.trim() : null,
+      })
+
+      if (!result.success) throw new Error(result.error || 'Error desconocido')
+
+      // Marcar control como completado en la asignación
+      await supabase
+        .from('asignaciones')
+        .update({ control_completado: true })
+        .eq('id', controlAsignacion.id)
+
+      setShowControlModal(false)
+      showSuccess('Se guardó los datos y se generó el documento PDF')
+      loadAsignaciones()
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Error desconocido'
+      Swal.fire('Error', `No se pudo generar el control: ${msg}`, 'error')
+    } finally {
+      setControlSaving(false)
+    }
+  }
+
   // Maps O(1) para lookup de conductores/vehículos por id (evita .find() O(n) en JSX)
   const conductoresMap = useMemo(() => {
     const m = new Map<string, any>()
@@ -385,7 +474,7 @@ export function AsignacionesModule() {
         aplicarFiltroSede(supabase
           .from('asignaciones')
           .select(`
-            id, codigo, vehiculo_id, horario, fecha_programada, fecha_inicio, fecha_fin, estado, created_at, sede_id,
+            id, codigo, vehiculo_id, horario, fecha_programada, fecha_inicio, fecha_fin, estado, control_completado, created_at, sede_id,
             vehiculos (patente, marca, modelo),
             asignaciones_conductores (
               id, conductor_id, estado, horario, confirmado, fecha_confirmacion, documento,
@@ -541,7 +630,7 @@ export function AsignacionesModule() {
         aplicarFiltroSede(supabase
           .from('asignaciones')
           .select(`
-            id, codigo, vehiculo_id, horario, fecha_programada, fecha_inicio, fecha_fin, estado, created_at, sede_id,
+            id, codigo, vehiculo_id, horario, fecha_programada, fecha_inicio, fecha_fin, estado, control_completado, created_at, sede_id,
             vehiculos (patente, marca, modelo),
             asignaciones_conductores (
               id, conductor_id, estado, horario, confirmado, fecha_confirmacion, documento,
@@ -2934,6 +3023,14 @@ export function AsignacionesModule() {
             onClick: () => handleOpenRegularizar(row.original),
             hidden: !canCreateManualAssignment,
           },
+          // Completar Control (visible solo si no se ha completado)
+          {
+            icon: <ClipboardCheck size={15} />,
+            label: 'Completar Control',
+            onClick: () => openControlModal(row.original),
+            hidden: row.original.control_completado === true,
+            variant: 'info' as const,
+          },
           // Eliminar
           {
             icon: <Trash2 size={15} />,
@@ -3823,6 +3920,163 @@ export function AsignacionesModule() {
           </div>
         </div>
       )}
+
+      {/* Modal Completar Control */}
+      {showControlModal && controlAsignacion && (() => {
+        const isAutoCargo = controlAsignacion.horario === 'todo_dia'
+        const patente = controlAsignacion.vehiculos?.patente || '-'
+        const marca = controlAsignacion.vehiculos?.marca || ''
+        const modelo = controlAsignacion.vehiculos?.modelo || ''
+        const vehiculoLabel = `${patente} ${marca && modelo ? `- ${marca} ${modelo}` : ''}`.trim()
+
+        const conductoresAsig = controlAsignacion.asignaciones_conductores?.map(ac => ({
+          id: (ac as any).conductores?.id || ac.conductor_id,
+          nombre: `${(ac as any).conductores?.nombres || ''} ${(ac as any).conductores?.apellidos || ''}`.trim(),
+          horario: ac.horario,
+        })).filter(c => c.id && c.nombre) || []
+
+        const inputStyle: React.CSSProperties = {
+          padding: '10px 12px', border: '1px solid var(--border-primary)', borderRadius: '8px',
+          background: 'var(--bg-primary)', color: 'var(--text-primary)', fontSize: '13px',
+          width: '100%', outline: 'none', transition: 'border-color 0.2s',
+        }
+        const labelStyle: React.CSSProperties = {
+          fontSize: '12px', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '6px', display: 'block',
+        }
+        const sectionTitleStyle: React.CSSProperties = {
+          fontSize: '11px', fontWeight: 700, textTransform: 'uppercase' as const, letterSpacing: '0.05em',
+          color: 'var(--text-tertiary)', marginBottom: '12px', paddingBottom: '8px',
+          borderBottom: '1px solid var(--border-primary)', display: 'flex', alignItems: 'center', gap: '6px',
+        }
+
+        return (
+          <div className="asig-modal-overlay" onClick={() => !controlSaving && setShowControlModal(false)}>
+            <div className="asig-modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '480px', padding: 0, overflow: 'hidden' }}>
+
+              {/* Header */}
+              <div style={{ padding: '20px 24px', borderBottom: '1px solid var(--border-primary)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  <div style={{ width: '36px', height: '36px', borderRadius: '10px', background: 'var(--color-primary-light, #ffe5ea)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <ClipboardCheck size={18} style={{ color: 'var(--color-primary)' }} />
+                  </div>
+                  <div>
+                    <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 700, color: 'var(--text-primary)' }}>Completar Control</h3>
+                    <span style={{ fontSize: '11px', color: 'var(--text-tertiary)' }}>{controlAsignacion.codigo}</span>
+                  </div>
+                </div>
+                <button
+                  onClick={() => !controlSaving && setShowControlModal(false)}
+                  style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-tertiary)', padding: '4px', borderRadius: '6px', display: 'flex' }}
+                >
+                  <XCircle size={20} />
+                </button>
+              </div>
+
+              {/* Body */}
+              <div style={{ padding: '20px 24px', maxHeight: '60vh', overflowY: 'auto' }}>
+
+                {/* Sección: Vehículo y Conductor */}
+                <div style={sectionTitleStyle}>
+                  <Car size={14} /> Asignación
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '20px' }}>
+                  <div style={{ padding: '10px 12px', background: 'var(--bg-secondary)', borderRadius: '8px', border: '1px solid var(--border-primary)' }}>
+                    <span style={{ fontSize: '10px', fontWeight: 600, color: 'var(--text-tertiary)', textTransform: 'uppercase' as const, letterSpacing: '0.04em' }}>Vehículo</span>
+                    <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-primary)', marginTop: '2px' }}>{vehiculoLabel}</div>
+                  </div>
+                  <div style={{ padding: '10px 12px', background: 'var(--bg-secondary)', borderRadius: '8px', border: '1px solid var(--border-primary)' }}>
+                    <span style={{ fontSize: '10px', fontWeight: 600, color: 'var(--text-tertiary)', textTransform: 'uppercase' as const, letterSpacing: '0.04em' }}>Modalidad</span>
+                    <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-primary)', marginTop: '2px' }}>{isAutoCargo ? 'A Cargo' : 'Turno'}</div>
+                  </div>
+                </div>
+
+                {/* Conductor */}
+                {conductoresAsig.length > 1 ? (
+                  <div style={{ marginBottom: '20px' }}>
+                    <label style={labelStyle}>Conductor <span style={{ color: '#dc2626' }}>*</span></label>
+                    <select
+                      value={controlConductorId}
+                      onChange={(e) => setControlConductorId(e.target.value)}
+                      disabled={controlSaving}
+                      style={{ ...inputStyle, cursor: 'pointer' }}
+                    >
+                      {conductoresAsig.map(c => (
+                        <option key={c.id} value={c.id}>{c.nombre} ({c.horario})</option>
+                      ))}
+                    </select>
+                  </div>
+                ) : conductoresAsig.length === 1 ? (
+                  <div style={{ marginBottom: '20px', padding: '10px 12px', background: 'var(--bg-secondary)', borderRadius: '8px', border: '1px solid var(--border-primary)' }}>
+                    <span style={{ fontSize: '10px', fontWeight: 600, color: 'var(--text-tertiary)', textTransform: 'uppercase' as const, letterSpacing: '0.04em' }}>Conductor</span>
+                    <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-primary)', marginTop: '2px' }}>{conductoresAsig[0].nombre}</div>
+                  </div>
+                ) : null}
+
+                {/* Sección: Datos del Vehículo */}
+                <div style={sectionTitleStyle}>
+                  <FileText size={14} /> Datos del control
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: isAutoCargo ? '16px' : '0' }}>
+                  <div>
+                    <label style={labelStyle}>Kilometraje <span style={{ color: '#dc2626' }}>*</span></label>
+                    <input type="text" placeholder="Ej: 45.000" value={controlForm.km} onChange={(e) => setControlForm(p => ({ ...p, km: e.target.value }))} disabled={controlSaving} style={inputStyle} />
+                  </div>
+                  <div>
+                    <label style={labelStyle}>Litros de Nafta <span style={{ color: '#dc2626' }}>*</span></label>
+                    <input type="text" placeholder="Ej: 30" value={controlForm.ltnafta} onChange={(e) => setControlForm(p => ({ ...p, ltnafta: e.target.value }))} disabled={controlSaving} style={inputStyle} />
+                  </div>
+                </div>
+
+                {isAutoCargo && (
+                  <>
+                    <div style={{ marginBottom: '12px' }}>
+                      <label style={labelStyle}>Estado de Cristales <span style={{ color: '#dc2626' }}>*</span></label>
+                      <input type="text" placeholder="Ej: Buen estado, sin rajaduras" value={controlForm.cristal_status} onChange={(e) => setControlForm(p => ({ ...p, cristal_status: e.target.value }))} disabled={controlSaving} style={inputStyle} />
+                    </div>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                      <div>
+                        <label style={labelStyle}>Bajos y Carter <span style={{ color: '#dc2626' }}>*</span></label>
+                        <input type="text" placeholder="Ej: Sin pérdidas" value={controlForm.carter} onChange={(e) => setControlForm(p => ({ ...p, carter: e.target.value }))} disabled={controlSaving} style={inputStyle} />
+                      </div>
+                      <div>
+                        <label style={labelStyle}>Neumáticos <span style={{ color: '#dc2626' }}>*</span></label>
+                        <input type="text" placeholder="Ej: Buen estado" value={controlForm.tires} onChange={(e) => setControlForm(p => ({ ...p, tires: e.target.value }))} disabled={controlSaving} style={inputStyle} />
+                      </div>
+                    </div>
+                  </>
+                )}
+              </div>
+
+              {/* Footer */}
+              <div style={{ padding: '16px 24px', borderTop: '1px solid var(--border-primary)', display: 'flex', justifyContent: 'flex-end', gap: '10px', background: 'var(--bg-secondary)' }}>
+                <button
+                  className="btn-secondary"
+                  onClick={() => setShowControlModal(false)}
+                  disabled={controlSaving}
+                  style={{ padding: '9px 18px', borderRadius: '8px', fontSize: '13px', fontWeight: 600 }}
+                >
+                  Cancelar
+                </button>
+                <button
+                  onClick={handleSubmitControl}
+                  disabled={controlSaving || !controlConductorId}
+                  style={{
+                    display: 'inline-flex', alignItems: 'center', gap: '6px',
+                    padding: '9px 22px', borderRadius: '8px', fontSize: '13px', fontWeight: 600,
+                    cursor: (controlSaving || !controlConductorId) ? 'not-allowed' : 'pointer',
+                    border: 'none', background: 'var(--color-primary)', color: 'white',
+                    opacity: (controlSaving || !controlConductorId) ? 0.5 : 1,
+                    transition: 'opacity 0.2s',
+                  }}
+                >
+                  <ClipboardCheck size={15} />
+                  {controlSaving ? 'Generando documento...' : 'Guardar Datos'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )
+      })()}
     </div>
   )
 }

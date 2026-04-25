@@ -1,7 +1,7 @@
 // src/modules/leads/LeadsModule.tsx
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import {
-  Eye, Edit2, Trash2, Users, UserCheck, UserPlus, Clock, RefreshCw,
+  Eye, Edit2, Trash2, Users, UserPlus, Clock, RefreshCw,
   CheckCircle, XCircle, AlertTriangle, X, Download, Upload, MapPin, ExternalLink, FolderOpen,
 } from 'lucide-react'
 import { GoogleMap, useJsApiLoader, Marker, Polygon } from '@react-google-maps/api'
@@ -245,19 +245,21 @@ export function LeadsModule() {
   // Inline estado dropdown
   const [estadoDropdownId, setEstadoDropdownId] = useState<string | null>(null)
 
-  const ESTADOS_LEAD = ['Pendiente', 'Apto', 'No Apto', 'En OnBoarding', 'Descartado'] as const
+  // Estados visibles para cambio manual (Conductor se asigna solo automáticamente)
+  const ESTADOS_LEAD = [
+    'Inicio conversación', 'Apto', 'No apto', 'Documentos enviados',
+    'Auto del pueblo', 'No le interesa', 'No cumple edad',
+  ] as const
 
   /** Calcula el estado correcto de un lead basándose en proceso y entrevista_ia */
   function calcularEstadoLead(lead: Lead): string {
     const proceso = (lead.proceso || '').toLowerCase()
     const entrevista = lead.entrevista_ia || ''
 
-    if (proceso.includes('descartado')) return 'Descartado'
     if (proceso === 'convertido' || proceso === 'conductor') return 'Conductor'
-    if (proceso.includes('onboarding')) return 'En OnBoarding'
-    if (entrevista === 'No Apto') return 'No Apto'
+    if (entrevista === 'No Apto') return 'No apto'
     if (entrevista === 'Apto') return 'Apto'
-    return 'Pendiente'
+    return 'Inicio conversación'
   }
 
   async function handleChangeEstadoInline(leadId: string, nuevoEstado: string) {
@@ -463,13 +465,14 @@ export function LeadsModule() {
   // ---------- STATS ----------
   const stats = useMemo(() => {
     const total = leads.length
-    const pendientes = leads.filter(l => l.estado_de_lead === 'Pendiente').length
+    const inicio = leads.filter(l => l.estado_de_lead === 'Inicio conversación').length
     const aptos = leads.filter(l => l.estado_de_lead === 'Apto').length
-    const noAptos = leads.filter(l => l.estado_de_lead === 'No Apto').length
-    const enOnBoarding = leads.filter(l => l.estado_de_lead === 'En OnBoarding').length
-    const descartados = leads.filter(l => l.estado_de_lead === 'Descartado').length
-    const conductores = leads.filter(l => l.estado_de_lead === 'Conductor').length
-    return { total, pendientes, aptos, noAptos, enOnBoarding, descartados, conductores }
+    const noAptos = leads.filter(l => l.estado_de_lead === 'No apto').length
+    const docsEnviados = leads.filter(l => l.estado_de_lead === 'Documentos enviados').length
+    const autoPueblo = leads.filter(l => l.estado_de_lead === 'Auto del pueblo').length
+    const noInteresa = leads.filter(l => l.estado_de_lead === 'No le interesa').length
+    const noCumpleEdad = leads.filter(l => l.estado_de_lead === 'No cumple edad').length
+    return { total, inicio, aptos, noAptos, docsEnviados, autoPueblo, noInteresa, noCumpleEdad }
   }, [leads])
 
   // ---------- UNIQUE VALUES PARA FILTROS ----------
@@ -511,11 +514,13 @@ export function LeadsModule() {
     let result = leads.filter(l => l.estado_de_lead !== 'Conductor')
 
     // Stat card filter (todos basados en estado_de_lead)
-    if (activeStatCard === 'pendientes') result = result.filter(l => l.estado_de_lead === 'Pendiente')
+    if (activeStatCard === 'inicio') result = result.filter(l => l.estado_de_lead === 'Inicio conversación')
     else if (activeStatCard === 'aptos') result = result.filter(l => l.estado_de_lead === 'Apto')
-    else if (activeStatCard === 'noAptos') result = result.filter(l => l.estado_de_lead === 'No Apto')
-    else if (activeStatCard === 'enOnBoarding') result = result.filter(l => l.estado_de_lead === 'En OnBoarding')
-    else if (activeStatCard === 'descartados') result = result.filter(l => l.estado_de_lead === 'Descartado')
+    else if (activeStatCard === 'noAptos') result = result.filter(l => l.estado_de_lead === 'No apto')
+    else if (activeStatCard === 'docsEnviados') result = result.filter(l => l.estado_de_lead === 'Documentos enviados')
+    else if (activeStatCard === 'autoPueblo') result = result.filter(l => l.estado_de_lead === 'Auto del pueblo')
+    else if (activeStatCard === 'noInteresa') result = result.filter(l => l.estado_de_lead === 'No le interesa')
+    else if (activeStatCard === 'noCumpleEdad') result = result.filter(l => l.estado_de_lead === 'No cumple edad')
 
     // Column filters
     if (nombreFilter.length > 0) {
@@ -1480,8 +1485,22 @@ export function LeadsModule() {
           onOpenChange={setOpenFilterId}
         />
       ),
-      cell: ({ row }) => row.original.disponibilidad || '-',
-      size: 120,
+      cell: ({ row }) => {
+        const val = row.original.disponibilidad || '-'
+        return (
+          <span style={{
+            display: 'block',
+            maxWidth: '180px',
+            whiteSpace: 'normal',
+            wordBreak: 'break-word',
+            lineHeight: '1.3',
+            fontSize: '12px',
+          }}>
+            {val}
+          </span>
+        )
+      },
+      size: 190,
       enableSorting: true,
     },
     {
@@ -1639,12 +1658,13 @@ export function LeadsModule() {
     addFilters(estadoFilter, 'Estado', setEstadoFilter)
     if (activeStatCard) {
       const labelMap: Record<string, string> = {
-        pendientes: 'Pendientes',
+        inicio: 'Inicio conversación',
         aptos: 'Aptos',
-        noAptos: 'No Aptos',
-        enOnBoarding: 'En OnBoarding',
-        descartados: 'Descartados',
-        conductores: 'Conductores',
+        noAptos: 'No aptos',
+        docsEnviados: 'Docs enviados',
+        autoPueblo: 'Auto del pueblo',
+        noInteresa: 'No le interesa',
+        noCumpleEdad: 'No cumple edad',
       }
       filters.push({
         id: `stat-${activeStatCard}`,
@@ -1662,15 +1682,15 @@ export function LeadsModule() {
 
       {/* Stats */}
       <div className="leads-stats">
-        <div className="leads-stats-grid" style={{ gridTemplateColumns: 'repeat(6, 1fr)' }}>
+        <div className="leads-stats-grid" style={{ gridTemplateColumns: 'repeat(4, 1fr)' }}>
           <div
-            className={`stat-card stat-card-clickable ${activeStatCard === 'pendientes' ? 'stat-card-active' : ''}`}
-            onClick={() => handleStatClick('pendientes')}
+            className={`stat-card stat-card-clickable ${activeStatCard === 'inicio' ? 'stat-card-active' : ''}`}
+            onClick={() => handleStatClick('inicio')}
           >
             <Clock size={18} className="stat-icon" style={{ color: '#f59e0b' }} />
             <div className="stat-content">
-              <span className="stat-value">{stats.pendientes}</span>
-              <span className="stat-label">Pendientes</span>
+              <span className="stat-value">{stats.inicio}</span>
+              <span className="stat-label">Inicio conversación</span>
             </div>
           </div>
           <div
@@ -1694,33 +1714,43 @@ export function LeadsModule() {
             </div>
           </div>
           <div
-            className={`stat-card stat-card-clickable ${activeStatCard === 'enOnBoarding' ? 'stat-card-active' : ''}`}
-            onClick={() => handleStatClick('enOnBoarding')}
+            className={`stat-card stat-card-clickable ${activeStatCard === 'docsEnviados' ? 'stat-card-active' : ''}`}
+            onClick={() => handleStatClick('docsEnviados')}
           >
-            <UserCheck size={18} className="stat-icon" style={{ color: '#2563eb' }} />
+            <FolderOpen size={18} className="stat-icon" style={{ color: '#2563eb' }} />
             <div className="stat-content">
-              <span className="stat-value">{stats.enOnBoarding}</span>
-              <span className="stat-label">En OnBoarding</span>
+              <span className="stat-value">{stats.docsEnviados}</span>
+              <span className="stat-label">Docs enviados</span>
             </div>
           </div>
           <div
-            className={`stat-card stat-card-clickable ${activeStatCard === 'descartados' ? 'stat-card-active' : ''}`}
-            onClick={() => handleStatClick('descartados')}
+            className={`stat-card stat-card-clickable ${activeStatCard === 'autoPueblo' ? 'stat-card-active' : ''}`}
+            onClick={() => handleStatClick('autoPueblo')}
+          >
+            <MapPin size={18} className="stat-icon" style={{ color: '#8b5cf6' }} />
+            <div className="stat-content">
+              <span className="stat-value">{stats.autoPueblo}</span>
+              <span className="stat-label">Auto del pueblo</span>
+            </div>
+          </div>
+          <div
+            className={`stat-card stat-card-clickable ${activeStatCard === 'noInteresa' ? 'stat-card-active' : ''}`}
+            onClick={() => handleStatClick('noInteresa')}
           >
             <XCircle size={18} className="stat-icon" style={{ color: '#6b7280' }} />
             <div className="stat-content">
-              <span className="stat-value">{stats.descartados}</span>
-              <span className="stat-label">Descartados</span>
+              <span className="stat-value">{stats.noInteresa}</span>
+              <span className="stat-label">No le interesa</span>
             </div>
           </div>
           <div
-            className={`stat-card stat-card-clickable ${activeStatCard === 'conductores' ? 'stat-card-active' : ''}`}
-            onClick={() => handleStatClick('conductores')}
+            className={`stat-card stat-card-clickable ${activeStatCard === 'noCumpleEdad' ? 'stat-card-active' : ''}`}
+            onClick={() => handleStatClick('noCumpleEdad')}
           >
-            <Users size={18} className="stat-icon" style={{ color: '#7c3aed' }} />
+            <AlertTriangle size={18} className="stat-icon" style={{ color: '#ea580c' }} />
             <div className="stat-content">
-              <span className="stat-value">{stats.conductores}</span>
-              <span className="stat-label">Conductores</span>
+              <span className="stat-value">{stats.noCumpleEdad}</span>
+              <span className="stat-label">No cumple edad</span>
             </div>
           </div>
         </div>
