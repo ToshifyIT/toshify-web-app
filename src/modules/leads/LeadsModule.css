@@ -73,7 +73,7 @@
 
 .leads-stats-grid {
   display: grid;
-  grid-template-columns: repeat(5, 1fr);
+  grid-template-columns: repeat(4, 1fr);
   gap: 12px;
 }
 
@@ -200,7 +200,7 @@
   opacity: 0.85;
 }
 
-.lead-estado-pendiente {
+.lead-estado-inicio-conversación {
   background: var(--badge-yellow-bg, #fef3c7);
   color: var(--badge-yellow-text, #92400e);
 }
@@ -215,17 +215,26 @@
   color: var(--badge-red-text, #991b1b);
 }
 
-.lead-estado-descartado {
-  background: var(--badge-gray-bg, #f3f4f6);
-  color: var(--badge-gray-text, #374151);
-}
-
-.lead-estado-en-onboarding {
+.lead-estado-documentos-enviados {
   background: var(--badge-blue-bg, #dbeafe);
   color: var(--badge-blue-text, #1e40af);
 }
 
-.lead-estado-convertido,
+.lead-estado-auto-del-pueblo {
+  background: var(--badge-purple-bg, #f3e8ff);
+  color: var(--badge-purple-text, #6b21a8);
+}
+
+.lead-estado-no-le-interesa {
+  background: var(--badge-gray-bg, #f3f4f6);
+  color: var(--badge-gray-text, #374151);
+}
+
+.lead-estado-no-cumple-edad {
+  background: #fff7ed;
+  color: #9a3412;
+}
+
 .lead-estado-conductor {
   background: var(--badge-purple-bg, #f3e8ff);
   color: var(--badge-purple-text, #6b21a8);
@@ -240,7 +249,7 @@
   position: absolute;
   top: calc(100% + 4px);
   left: 0;
-  min-width: 160px;
+  min-width: 190px;
   padding: 4px;
   background: var(--bg-primary, #fff);
   border: 1px solid var(--border-primary, #e5e7eb);
@@ -274,6 +283,7 @@
   border-radius: 6px;
   cursor: pointer;
   transition: background 0.1s;
+  white-space: nowrap;
 }
 
 .lead-estado-dropdown-item:hover {
@@ -292,12 +302,13 @@
   flex-shrink: 0;
 }
 
-.lead-estado-dot-pendiente { background: #f59e0b; }
+.lead-estado-dot-inicio-conversación { background: #f59e0b; }
 .lead-estado-dot-apto { background: #16a34a; }
 .lead-estado-dot-no-apto { background: #dc2626; }
-.lead-estado-dot-en-onboarding { background: #2563eb; }
-.lead-estado-dot-descartado { background: #6b7280; }
-.lead-estado-dot-convertido,
+.lead-estado-dot-documentos-enviados { background: #2563eb; }
+.lead-estado-dot-auto-del-pueblo { background: #8b5cf6; }
+.lead-estado-dot-no-le-interesa { background: #6b7280; }
+.lead-estado-dot-no-cumple-edad { background: #ea580c; }
 .lead-estado-dot-conductor { background: #7c3aed; }
 
 /* =====================================================
