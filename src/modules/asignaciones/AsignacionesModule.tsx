@@ -177,6 +177,7 @@ export function AsignacionesModule() {
   const [controlAsignacion, setControlAsignacion] = useState<ExpandedAsignacion | null>(null)
   const [controlConductorId, setControlConductorId] = useState<string>('')
   const [controlSaving, setControlSaving] = useState(false)
+  const [isControlBariloche, setIsControlBariloche] = useState(false)
   const [controlForm, setControlForm] = useState({
     km: '',
     ltnafta: '',
@@ -191,27 +192,45 @@ export function AsignacionesModule() {
     others_kit: '',
   })
 
-  function openControlModal(asig: ExpandedAsignacion) {
+  async function openControlModal(asig: ExpandedAsignacion) {
     setControlAsignacion(asig)
     setControlForm({ km: '', ltnafta: '', cristal_status: '', carter: '', tires: '', others_docs: '', other_accesory: '', make_chains: '', status_chains: '', tensioners_chains: '', others_kit: '' })
     // Pre-seleccionar conductor
     const isAutoCargo = asig.horario === 'todo_dia'
+    let conductorId = ''
     if (isAutoCargo && asig.conductorCargo) {
-      setControlConductorId(asig.conductorCargo.id)
+      conductorId = asig.conductorCargo.id
     } else if (!isAutoCargo && asig.conductoresTurno?.diurno) {
-      setControlConductorId(asig.conductoresTurno.diurno.id)
-    } else {
-      setControlConductorId('')
+      conductorId = asig.conductoresTurno.diurno.id
     }
+    setControlConductorId(conductorId)
+
+    // Determinar si es Bariloche consultando la plantilla real del documento generado
+    let esBRC = false
+    if (conductorId) {
+      try {
+        const { data } = await supabase
+          .from('documentos_generados')
+          .select('plantilla_usada')
+          .eq('conductor_id', conductorId)
+          .not('google_doc_id', 'is', null)
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .single()
+        if (data?.plantilla_usada) {
+          esBRC = data.plantilla_usada.toLowerCase().includes('bariloche')
+        }
+      } catch {
+        // Si falla la consulta, fallback a la sede actual
+        if (sedeActualId) {
+          const sede = sedes.find(s => s.id === sedeActualId)
+          esBRC = sede?.codigo?.toUpperCase() === 'BRC'
+        }
+      }
+    }
+    setIsControlBariloche(esBRC)
     setShowControlModal(true)
   }
-
-  // Determinar si la sede actual es Bariloche
-  const isSedeBariloche = useMemo(() => {
-    if (!sedeActualId) return false
-    const sede = sedes.find(s => s.id === sedeActualId)
-    return sede?.codigo?.toUpperCase() === 'BRC'
-  }, [sedeActualId, sedes])
 
   async function handleSubmitControl() {
     if (!controlAsignacion || !controlConductorId) return
@@ -229,15 +248,15 @@ export function AsignacionesModule() {
         km: controlForm.km.trim(),
         ltnafta: controlForm.ltnafta.trim(),
         // Campos Bariloche
-        cristal_status: isSedeBariloche ? (controlForm.cristal_status.trim() || null) : null,
-        carter: isSedeBariloche ? (controlForm.carter.trim() || null) : null,
-        tires: isSedeBariloche ? (controlForm.tires.trim() || null) : null,
-        others_docs: isSedeBariloche ? (controlForm.others_docs.trim() || null) : null,
-        other_accesory: isSedeBariloche ? (controlForm.other_accesory.trim() || null) : null,
-        make_chains: isSedeBariloche ? (controlForm.make_chains.trim() || null) : null,
-        status_chains: isSedeBariloche ? (controlForm.status_chains.trim() || null) : null,
-        tensioners_chains: isSedeBariloche ? (controlForm.tensioners_chains.trim() || null) : null,
-        others_kit: isSedeBariloche ? (controlForm.others_kit.trim() || null) : null,
+        cristal_status: isControlBariloche ? (controlForm.cristal_status.trim() || null) : null,
+        carter: isControlBariloche ? (controlForm.carter.trim() || null) : null,
+        tires: isControlBariloche ? (controlForm.tires.trim() || null) : null,
+        others_docs: isControlBariloche ? (controlForm.others_docs.trim() || null) : null,
+        other_accesory: isControlBariloche ? (controlForm.other_accesory.trim() || null) : null,
+        make_chains: isControlBariloche ? (controlForm.make_chains.trim() || null) : null,
+        status_chains: isControlBariloche ? (controlForm.status_chains.trim() || null) : null,
+        tensioners_chains: isControlBariloche ? (controlForm.tensioners_chains.trim() || null) : null,
+        others_kit: isControlBariloche ? (controlForm.others_kit.trim() || null) : null,
       })
 
       if (!result.success) throw new Error(result.error || 'Error desconocido')
@@ -4010,7 +4029,7 @@ export function AsignacionesModule() {
                 <div style={sectionTitleStyle}>
                   <FileText size={14} /> Datos del control
                 </div>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: isSedeBariloche ? '16px' : '0' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: isControlBariloche ? '16px' : '0' }}>
                   <div>
                     <label style={labelStyle}>Kilometraje <span style={{ color: '#dc2626' }}>*</span></label>
                     <input type="text" placeholder="Ej: 45.000" value={controlForm.km} onChange={(e) => setControlForm(p => ({ ...p, km: e.target.value }))} disabled={controlSaving} style={inputStyle} />
@@ -4021,7 +4040,7 @@ export function AsignacionesModule() {
                   </div>
                 </div>
 
-                {isSedeBariloche && (
+                {isControlBariloche && (
                   <>
                     <div style={{ marginTop: '12px', marginBottom: '12px' }}>
                       <label style={labelStyle}>Estado de Cristales</label>
