@@ -1,44 +1,43 @@
 // src/services/controlService.ts
-// Servicio para generación de documentos de control desde Asignaciones Activas
+// Servicio para completar control de documentos existentes en Google Drive
 
-export interface ControlGenerationRequest {
+export interface ControlCompletionRequest {
   conductor_id: string
-  vehiculo_id: string
-  modalidad: 'turno' | 'a_cargo'
-  turno?: string | null
-  sede_id?: string | null
   asignacion_id?: string | null
-  created_by?: string | null
-  created_by_name?: string | null
-  // Campos de control manuales
+  // Campos comunes (todas las sedes)
   km: string
   ltnafta: string
-  cristal_status?: string | null  // solo a_cargo
-  carter?: string | null          // solo a_cargo
-  tires?: string | null           // solo a_cargo
+  // Campos adicionales (solo Bariloche)
+  cristal_status?: string | null
+  carter?: string | null
+  tires?: string | null
+  others_docs?: string | null
+  other_accesory?: string | null
+  make_chains?: string | null
+  status_chains?: string | null
+  tensioners_chains?: string | null
+  others_kit?: string | null
 }
 
-export interface ControlGenerationResponse {
+export interface ControlCompletionResponse {
   success: boolean
   document?: {
-    googleDocUrl: string
+    googleDocId: string
     pdfUrl: string | null
-    folderUrl: string
-    folderId: string
-    fileName: string
+    plantillaUsada: string
   }
   error?: string
 }
 
 /**
- * Invoca el endpoint de generación de control en el servidor.
- * Genera el documento con los campos de control completados y sube PDF a Drive.
+ * Completa el control editando el Google Doc existente y generando el PDF.
+ * Usa Google Docs API (replaceAllText) para reemplazar placeholders directamente.
  */
-export async function generateControlDocument(
-  params: ControlGenerationRequest
-): Promise<ControlGenerationResponse> {
+export async function completeControl(
+  params: ControlCompletionRequest
+): Promise<ControlCompletionResponse> {
   try {
-    const response = await fetch('/api/generate-control', {
+    const response = await fetch('/api/complete-control', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(params)
@@ -49,7 +48,7 @@ export async function generateControlDocument(
     if (!response.ok) {
       return {
         success: false,
-        error: data.error || 'Error al generar documento de control'
+        error: data.error || 'Error al completar control'
       }
     }
 

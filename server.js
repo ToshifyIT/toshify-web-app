@@ -1040,6 +1040,7 @@ async function generateContractForConductor({
 
   return {
     googleDocUrl: googleDoc.data.webViewLink,
+    googleDocId: googleDoc.data.id,
     pdfUrl: null,
     folderUrl: folder.folderUrl || `https://drive.google.com/drive/folders/${folder.folderId}`,
     folderId: folder.folderId
@@ -1092,6 +1093,7 @@ app.post('/api/generate-contract', async (req, res) => {
             turno: null,
             url_docx: result.googleDocUrl,
             url_pdf: result.pdfUrl,
+            google_doc_id: result.googleDocId,
             drive_folder_url: result.folderUrl,
             drive_folder_id: result.folderId,
             estado: 'generado',
@@ -1132,6 +1134,7 @@ app.post('/api/generate-contract', async (req, res) => {
               turno: cfg.turno,
               url_docx: result.googleDocUrl,
               url_pdf: result.pdfUrl,
+              google_doc_id: result.googleDocId,
               drive_folder_url: result.folderUrl,
               drive_folder_id: result.folderId,
               estado: 'generado',
@@ -1166,140 +1169,132 @@ app.post('/api/generate-contract', async (req, res) => {
   }
 })
 
-// API: Generate control document (Completar Control desde Asignaciones)
-app.post('/api/generate-control', async (req, res) => {
+// Servicio Google Docs API (para editar documentos existentes)
+function getDocsService() {
+  const clientEmail = process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL
+  const privateKey = process.env.GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY?.replace(/\\n/g, '\n')
+  if (!clientEmail || !privateKey) throw new Error('Missing Google Service Account credentials')
+
+  const auth = new google.auth.GoogleAuth({
+    credentials: { client_email: clientEmail, private_key: privateKey },
+    scopes: ['https://www.googleapis.com/auth/documents', 'https://www.googleapis.com/auth/drive']
+  })
+
+  return google.docs({ version: 'v1', auth })
+}
+
+// API: Completar Control — edita el Google Doc existente y genera PDF
+app.post('/api/complete-control', async (req, res) => {
   try {
     const {
       conductor_id,
-      vehiculo_id,
-      modalidad,       // 'turno' | 'a_cargo'
-      turno,           // 'diurno' | 'nocturno' | null
-      sede_id,
       asignacion_id,
-      created_by,
-      created_by_name,
-      // Campos de control manuales
+      // Campos de control
       km,
       ltnafta,
-      cristal_status,  // solo a_cargo
-      carter,          // solo a_cargo
-      tires            // solo a_cargo
+      cristal_status,
+      carter,
+      tires,
+      others_docs,
+      other_accesory,
+      make_chains,
+      status_chains,
+      tensioners_chains,
+      others_kit
     } = req.body
 
-    if (!conductor_id || !vehiculo_id || !modalidad) {
-      return res.status(400).json({ error: 'Faltan campos requeridos: conductor_id, vehiculo_id, modalidad' })
+    if (!conductor_id) {
+      return res.status(400).json({ error: 'Falta campo requerido: conductor_id' })
+    }
+    if (!km || !ltnafta) {
+      return res.status(400).json({ error: 'KM y LTNAFTA son obligatorios' })
     }
 
+    // 1. Buscar el documento generado para este conductor (el más reciente con google_doc_id)
+    const supabaseUrl = process.env.VITE_SUPABASE_URL
+    const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+
+    const docQuery = await fetch(
+      `${supabaseUrl}/rest/v1/documentos_generados?conductor_id=eq.${conductor_id}&google_doc_id=not.is.null&order=created_at.desc&limit=1`,
+      {
+        headers: {
+          'apikey': serviceKey,
+          'Authorization': `Bearer ${serviceKey}`
+        }
+      }
+    )
+    const docs = await docQuery.json()
+    if (!docs || docs.length === 0) {
+      return res.status(404).json({ error: 'No se encontró documento generado para este conductor. Primero debe generarse el contrato desde Programaciones.' })
+    }
+
+    const docRecord = docs[0]
+    const googleDocId = docRecord.google_doc_id
+    const plantillaUsada = docRecord.plantilla_usada
+
+    console.log(`[Control] Editando doc ${googleDocId} (plantilla: ${plantillaUsada}) para conductor ${conductor_id}`)
+
+    // 2. Usar Google Docs API para reemplazar placeholders en el documento existente
+    const docsService = getDocsService()
+
+    // Construir lista de reemplazos
+    const replacements = [
+      { find: '{{KM}}', replace: km },
+      { find: '{{LTNAFTA}}', replace: ltnafta }
+    ]
+
+    // Campos adicionales para Bariloche
+    const isBariloche = plantillaUsada && plantillaUsada.toLowerCase().includes('bariloche')
+    if (isBariloche) {
+      replacements.push(
+        { find: '{{CRISTAL STATUS}}', replace: cristal_status || '-' },
+        { find: '{{CARTER}}', replace: carter || '-' },
+        { find: '{{TIRES}}', replace: tires || '-' },
+        { find: '{{OTHERS DOCS}}', replace: others_docs || '-' },
+        { find: '{{OTHER ACCESORY}}', replace: other_accesory || '-' },
+        { find: '{{MAKE CHAINS}}', replace: make_chains || '-' },
+        { find: '{{STATUS CAHINS}}', replace: status_chains || '-' },
+        { find: '{{TENSIONERS CHAINS}}', replace: tensioners_chains || '-' },
+        { find: '{{OTHERS KIT}}', replace: others_kit || '-' }
+      )
+    }
+
+    // Ejecutar replaceAllText para cada placeholder
+    const requests = replacements.map(r => ({
+      replaceAllText: {
+        containsText: { text: r.find, matchCase: false },
+        replaceText: r.replace
+      }
+    }))
+
+    await docsService.documents.batchUpdate({
+      documentId: googleDocId,
+      requestBody: { requests }
+    })
+
+    console.log(`[Control] Placeholders reemplazados: ${replacements.length} variables`)
+
+    // 3. Exportar como PDF y subir a Drive
     const drive = getDriveServiceFull()
-    const sedeCode = await fetchSedeCode(sede_id)
-    const conductor = await fetchConductorData(conductor_id)
-    const vehiculo = await fetchVehiculoData(vehiculo_id)
-
-    // Determinar plantilla según modalidad
-    const templateKey = modalidad === 'a_cargo' ? 'actualizacionAutoCargo' : 'actualizacionTurno'
-    const templateId = getTemplateId(templateKey)
-    if (!templateId) throw new Error(`Template no encontrada para key: ${templateKey}`)
-
-    console.log(`[Control] Generando control para ${conductor.nombres} ${conductor.apellidos} - ${templateKey}`)
-
-    // 1. Exportar plantilla como .docx
-    const exportRes = await drive.files.export(
-      { fileId: templateId, mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' },
-      { responseType: 'arraybuffer' }
-    )
-    const templateBuffer = Buffer.from(exportRes.data)
-
-    // 2. Reemplazar variables con docxtemplater
-    const zip = new PizZip(templateBuffer)
-    const doc = new Docxtemplater(zip, {
-      delimiters: { start: '{{', end: '}}' },
-      paragraphLoop: true,
-      linebreaks: true,
-      nullGetter: (part) => `{{${part.value}}}`
-    })
-
-    const fullName = `${conductor.nombres || ''} ${conductor.apellidos || ''}`.trim().toUpperCase()
-    const amount = await fetchAmountFromConceptos(turno, modalidad, vehiculo.gnc)
-
-    const renderData = {}
-    const addIfPresent = (key, value) => { if (value) renderData[key] = value }
-
-    // Variables del conductor/vehículo (mismas que contratos)
-    addIfPresent('NAME', fullName)
-    addIfPresent('DNI', conductor.numero_dni?.toUpperCase())
-    addIfPresent('ADDRESS', conductor.direccion?.toUpperCase())
-    addIfPresent('MAIL', conductor.email?.toUpperCase())
-    addIfPresent('PHONENUMBER', conductor.telefono_contacto?.toUpperCase())
-    addIfPresent('DATEOFBIRTH', formatDate(conductor.fecha_nacimiento))
-    addIfPresent('CITIZEN', conductor.nacionalidades?.descripcion?.toUpperCase())
-    addIfPresent('MARITALSTATUS', conductor.estados_civiles?.descripcion?.toUpperCase())
-    addIfPresent('PLATE', vehiculo.patente?.toUpperCase())
-    addIfPresent('SHIFT', turno?.toUpperCase())
-    addIfPresent('MAKE', vehiculo.marca?.toUpperCase())
-    addIfPresent('MODEL', vehiculo.modelo?.toUpperCase())
-    addIfPresent('COLOR', vehiculo.color?.toUpperCase())
-    addIfPresent('YEAR', vehiculo.anio ? String(vehiculo.anio) : null)
-    addIfPresent('ENGINE NUMBER', vehiculo.numero_motor?.toUpperCase())
-    addIfPresent('CHASSIS NUMBER', vehiculo.numero_chasis?.toUpperCase())
-    addIfPresent('AMOUNT', amount)
-    addIfPresent('AMMOUNT', amount)
-    addIfPresent('COVERAGE', vehiculo.cobertura?.toUpperCase())
-    addIfPresent('MODE', modalidad === 'a_cargo' ? 'A CARGO' : (turno === 'nocturno' ? 'NOCTURNO' : 'DIURNO'))
-    addIfPresent('OBSERVATIONS', vehiculo.notas)
-    addIfPresent('NAMETOSHIFY', CONTRACT_CONFIG.nameToshify)
-    addIfPresent('ACTUALYEAR', String(new Date().getFullYear()))
-
-    // Variables de control (campos manuales)
-    addIfPresent('KM', km)
-    addIfPresent('LTNAFTA', ltnafta)
-    addIfPresent('CRISTAL STATUS', cristal_status)
-    addIfPresent('CARTER', carter)
-    addIfPresent('TIRES', tires)
-
-    doc.render(renderData)
-    const docxBuffer = doc.getZip().generate({ type: 'nodebuffer' })
-
-    // 3. Buscar o crear carpeta del conductor
-    const rootFolderId = resolveRootFolder(sedeCode)
-    const folder = await findOrCreateConductorFolder(
-      drive, conductor.numero_dni || '', fullName, rootFolderId
-    )
-
-    // 4. Nombre del archivo: "Control - MODALIDAD - NOMBRE"
-    const sedeLabel = sedeCode?.toUpperCase() === 'BRC' ? ' Bariloche' : ''
-    const isAutoCargo = modalidad === 'a_cargo'
-    const modalidadLabel = isAutoCargo ? `A Cargo${sedeLabel}` : `Turno${sedeLabel}`
-    const turnoLabel = (!isAutoCargo && turno) ? (turno === 'diurno' ? ' - Diurno' : ' - Nocturno') : ''
-    const fileName = `Control - ${modalidadLabel}${turnoLabel} - ${fullName}`
-
-    // 5. Subir como Google Doc
-    const googleDoc = await drive.files.create({
-      requestBody: {
-        name: fileName,
-        parents: [folder.folderId],
-        mimeType: 'application/vnd.google-apps.document'
-      },
-      media: {
-        mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-        body: Readable.from(docxBuffer)
-      },
-      fields: 'id, webViewLink',
-      supportsAllDrives: true
-    })
-
-    // 6. Exportar como PDF
     let pdfUrl = null
     try {
       const pdfExport = await drive.files.export(
-        { fileId: googleDoc.data.id, mimeType: 'application/pdf' },
+        { fileId: googleDocId, mimeType: 'application/pdf' },
         { responseType: 'arraybuffer' }
       )
       const pdfBuffer = Buffer.from(pdfExport.data)
 
+      // Obtener info del archivo para el nombre del PDF
+      const fileInfo = await drive.files.get({
+        fileId: googleDocId,
+        fields: 'name, parents',
+        supportsAllDrives: true
+      })
+
       const pdfFile = await drive.files.create({
         requestBody: {
-          name: `${fileName}.pdf`,
-          parents: [folder.folderId],
+          name: `${fileInfo.data.name}.pdf`,
+          parents: fileInfo.data.parents || [],
           mimeType: 'application/pdf'
         },
         media: {
@@ -1314,38 +1309,46 @@ app.post('/api/generate-control', async (req, res) => {
       console.warn(`[Control] No se pudo generar PDF: ${pdfErr.message}`)
     }
 
-    // 7. Guardar registro en documentos_generados
-    await saveDocumentoGenerado({
-      programacion_id: null,
-      conductor_id,
-      tipo_documento: 'control',
-      plantilla_usada: templateKey,
-      turno: turno || null,
-      url_docx: googleDoc.data.webViewLink,
-      url_pdf: pdfUrl,
-      drive_folder_url: folder.folderUrl || `https://drive.google.com/drive/folders/${folder.folderId}`,
-      drive_folder_id: folder.folderId,
-      estado: 'generado',
-      sede_id,
-      created_by,
-      created_by_name
-    })
-
-    // 8. Actualizar drive_folder_url del conductor si no tenía
-    if (!conductor.drive_folder_url && folder.folderUrl) {
-      await updateConductorDriveUrl(conductor.id, folder.folderUrl)
+    // 4. Actualizar registro en documentos_generados con la URL del PDF
+    if (pdfUrl) {
+      await fetch(
+        `${supabaseUrl}/rest/v1/documentos_generados?id=eq.${docRecord.id}`,
+        {
+          method: 'PATCH',
+          headers: {
+            'apikey': serviceKey,
+            'Authorization': `Bearer ${serviceKey}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ url_pdf: pdfUrl, estado: 'completado' })
+        }
+      )
     }
 
-    console.log(`[Control] OK: ${fileName} → doc: ${googleDoc.data.id}, pdf: ${pdfUrl ? 'si' : 'no'}`)
+    // 5. Marcar control_completado en la asignación
+    if (asignacion_id) {
+      await fetch(
+        `${supabaseUrl}/rest/v1/asignaciones?id=eq.${asignacion_id}`,
+        {
+          method: 'PATCH',
+          headers: {
+            'apikey': serviceKey,
+            'Authorization': `Bearer ${serviceKey}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ control_completado: true })
+        }
+      )
+    }
+
+    console.log(`[Control] OK: doc ${googleDocId} actualizado, pdf: ${pdfUrl ? 'si' : 'no'}`)
 
     res.json({
       success: true,
       document: {
-        googleDocUrl: googleDoc.data.webViewLink,
+        googleDocId,
         pdfUrl,
-        folderUrl: folder.folderUrl || `https://drive.google.com/drive/folders/${folder.folderId}`,
-        folderId: folder.folderId,
-        fileName
+        plantillaUsada
       }
     })
   } catch (error) {

@@ -15,7 +15,7 @@ import { AssignmentWizard } from '../../components/AssignmentWizard'
 import Swal from 'sweetalert2'
 import { showSuccess } from '../../utils/toast'
 import { registrarHistorialVehiculo, registrarHistorialConductor } from '../../services/historialService'
-import { generateControlDocument } from '../../services/controlService'
+import { completeControl } from '../../services/controlService'
 import './AsignacionesModule.css'
 
 interface Asignacion {
@@ -183,11 +183,17 @@ export function AsignacionesModule() {
     cristal_status: '',
     carter: '',
     tires: '',
+    others_docs: '',
+    other_accesory: '',
+    make_chains: '',
+    status_chains: '',
+    tensioners_chains: '',
+    others_kit: '',
   })
 
   function openControlModal(asig: ExpandedAsignacion) {
     setControlAsignacion(asig)
-    setControlForm({ km: '', ltnafta: '', cristal_status: '', carter: '', tires: '' })
+    setControlForm({ km: '', ltnafta: '', cristal_status: '', carter: '', tires: '', others_docs: '', other_accesory: '', make_chains: '', status_chains: '', tensioners_chains: '', others_kit: '' })
     // Pre-seleccionar conductor
     const isAutoCargo = asig.horario === 'todo_dia'
     if (isAutoCargo && asig.conductorCargo) {
@@ -200,60 +206,48 @@ export function AsignacionesModule() {
     setShowControlModal(true)
   }
 
+  // Determinar si la sede actual es Bariloche
+  const isSedeBariloche = useMemo(() => {
+    if (!sedeActualId) return false
+    const sede = sedes.find(s => s.id === sedeActualId)
+    return sede?.codigo?.toUpperCase() === 'BRC'
+  }, [sedeActualId, sedes])
+
   async function handleSubmitControl() {
     if (!controlAsignacion || !controlConductorId) return
-    const isAutoCargo = controlAsignacion.horario === 'todo_dia'
 
     if (!controlForm.km.trim() || !controlForm.ltnafta.trim()) {
       Swal.fire('Campos requeridos', 'Kilometraje y Litros de Nafta son obligatorios.', 'warning')
       return
     }
-    if (isAutoCargo && (!controlForm.cristal_status.trim() || !controlForm.carter.trim() || !controlForm.tires.trim())) {
-      Swal.fire('Campos requeridos', 'Estado de Cristales, Bajos/Carter y Neumáticos son obligatorios.', 'warning')
-      return
-    }
-
-    // Determinar turno del conductor seleccionado
-    let turnoValue: string | null = null
-    if (!isAutoCargo) {
-      const condAsig = controlAsignacion.asignaciones_conductores?.find(
-        ac => (ac as any).conductores?.id === controlConductorId || ac.conductor_id === controlConductorId
-      )
-      turnoValue = condAsig?.horario === 'diurno' ? 'diurno' : 'nocturno'
-    }
 
     setControlSaving(true)
     try {
-      const result = await generateControlDocument({
+      const result = await completeControl({
         conductor_id: controlConductorId,
-        vehiculo_id: controlAsignacion.vehiculo_id,
-        modalidad: isAutoCargo ? 'a_cargo' : 'turno',
-        turno: turnoValue,
-        sede_id: sedeActualId || null,
         asignacion_id: controlAsignacion.id,
-        created_by: user?.id || null,
-        created_by_name: user?.user_metadata?.full_name || user?.email || null,
         km: controlForm.km.trim(),
         ltnafta: controlForm.ltnafta.trim(),
-        cristal_status: isAutoCargo ? controlForm.cristal_status.trim() : null,
-        carter: isAutoCargo ? controlForm.carter.trim() : null,
-        tires: isAutoCargo ? controlForm.tires.trim() : null,
+        // Campos Bariloche
+        cristal_status: isSedeBariloche ? (controlForm.cristal_status.trim() || null) : null,
+        carter: isSedeBariloche ? (controlForm.carter.trim() || null) : null,
+        tires: isSedeBariloche ? (controlForm.tires.trim() || null) : null,
+        others_docs: isSedeBariloche ? (controlForm.others_docs.trim() || null) : null,
+        other_accesory: isSedeBariloche ? (controlForm.other_accesory.trim() || null) : null,
+        make_chains: isSedeBariloche ? (controlForm.make_chains.trim() || null) : null,
+        status_chains: isSedeBariloche ? (controlForm.status_chains.trim() || null) : null,
+        tensioners_chains: isSedeBariloche ? (controlForm.tensioners_chains.trim() || null) : null,
+        others_kit: isSedeBariloche ? (controlForm.others_kit.trim() || null) : null,
       })
 
       if (!result.success) throw new Error(result.error || 'Error desconocido')
 
-      // Marcar control como completado en la asignación
-      await supabase
-        .from('asignaciones')
-        .update({ control_completado: true })
-        .eq('id', controlAsignacion.id)
-
       setShowControlModal(false)
-      showSuccess('Se guardó los datos y se generó el documento PDF')
+      showSuccess('Control completado y PDF generado correctamente')
       loadAsignaciones()
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Error desconocido'
-      Swal.fire('Error', `No se pudo generar el control: ${msg}`, 'error')
+      Swal.fire('Error', `No se pudo completar el control: ${msg}`, 'error')
     } finally {
       setControlSaving(false)
     }
@@ -4012,11 +4006,11 @@ export function AsignacionesModule() {
                   </div>
                 ) : null}
 
-                {/* Sección: Datos del Vehículo */}
+                {/* Sección: Datos del Control */}
                 <div style={sectionTitleStyle}>
                   <FileText size={14} /> Datos del control
                 </div>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: isAutoCargo ? '16px' : '0' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: isSedeBariloche ? '16px' : '0' }}>
                   <div>
                     <label style={labelStyle}>Kilometraje <span style={{ color: '#dc2626' }}>*</span></label>
                     <input type="text" placeholder="Ej: 45.000" value={controlForm.km} onChange={(e) => setControlForm(p => ({ ...p, km: e.target.value }))} disabled={controlSaving} style={inputStyle} />
@@ -4027,21 +4021,49 @@ export function AsignacionesModule() {
                   </div>
                 </div>
 
-                {isAutoCargo && (
+                {isSedeBariloche && (
                   <>
-                    <div style={{ marginBottom: '12px' }}>
-                      <label style={labelStyle}>Estado de Cristales <span style={{ color: '#dc2626' }}>*</span></label>
+                    <div style={{ marginTop: '12px', marginBottom: '12px' }}>
+                      <label style={labelStyle}>Estado de Cristales</label>
                       <input type="text" placeholder="Ej: Buen estado, sin rajaduras" value={controlForm.cristal_status} onChange={(e) => setControlForm(p => ({ ...p, cristal_status: e.target.value }))} disabled={controlSaving} style={inputStyle} />
                     </div>
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '12px' }}>
                       <div>
-                        <label style={labelStyle}>Bajos y Carter <span style={{ color: '#dc2626' }}>*</span></label>
+                        <label style={labelStyle}>Bajos y Carter</label>
                         <input type="text" placeholder="Ej: Sin pérdidas" value={controlForm.carter} onChange={(e) => setControlForm(p => ({ ...p, carter: e.target.value }))} disabled={controlSaving} style={inputStyle} />
                       </div>
                       <div>
-                        <label style={labelStyle}>Neumáticos <span style={{ color: '#dc2626' }}>*</span></label>
+                        <label style={labelStyle}>Neumáticos</label>
                         <input type="text" placeholder="Ej: Buen estado" value={controlForm.tires} onChange={(e) => setControlForm(p => ({ ...p, tires: e.target.value }))} disabled={controlSaving} style={inputStyle} />
                       </div>
+                    </div>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '12px' }}>
+                      <div>
+                        <label style={labelStyle}>Otros Documentos</label>
+                        <input type="text" placeholder="Ej: VTV, seguro" value={controlForm.others_docs} onChange={(e) => setControlForm(p => ({ ...p, others_docs: e.target.value }))} disabled={controlSaving} style={inputStyle} />
+                      </div>
+                      <div>
+                        <label style={labelStyle}>Otros Accesorios</label>
+                        <input type="text" placeholder="Ej: Matafuegos, baliza" value={controlForm.other_accesory} onChange={(e) => setControlForm(p => ({ ...p, other_accesory: e.target.value }))} disabled={controlSaving} style={inputStyle} />
+                      </div>
+                    </div>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '12px', marginBottom: '12px' }}>
+                      <div>
+                        <label style={labelStyle}>Marca Cadenas</label>
+                        <input type="text" placeholder="-" value={controlForm.make_chains} onChange={(e) => setControlForm(p => ({ ...p, make_chains: e.target.value }))} disabled={controlSaving} style={inputStyle} />
+                      </div>
+                      <div>
+                        <label style={labelStyle}>Estado Cadenas</label>
+                        <input type="text" placeholder="-" value={controlForm.status_chains} onChange={(e) => setControlForm(p => ({ ...p, status_chains: e.target.value }))} disabled={controlSaving} style={inputStyle} />
+                      </div>
+                      <div>
+                        <label style={labelStyle}>Tensores Cadenas</label>
+                        <input type="text" placeholder="-" value={controlForm.tensioners_chains} onChange={(e) => setControlForm(p => ({ ...p, tensioners_chains: e.target.value }))} disabled={controlSaving} style={inputStyle} />
+                      </div>
+                    </div>
+                    <div>
+                      <label style={labelStyle}>Kit Otros</label>
+                      <input type="text" placeholder="-" value={controlForm.others_kit} onChange={(e) => setControlForm(p => ({ ...p, others_kit: e.target.value }))} disabled={controlSaving} style={inputStyle} />
                     </div>
                   </>
                 )}
