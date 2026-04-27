@@ -604,7 +604,8 @@ export function DataTable<T>({
       const el = tableWrapperRef.current;
       if (!el) return;
       const top = el.getBoundingClientRect().top;
-      const PAGINATION_RESERVE = 80; // espacio para paginación + padding
+      // Reserva: paginación (~60px) + bottom padding del content-area (~32px) + buffer (~30px)
+      const PAGINATION_RESERVE = 140;
       const available = window.innerHeight - top - PAGINATION_RESERVE;
       setDynamicMaxHeight(available > 200 ? available : 200);
     };

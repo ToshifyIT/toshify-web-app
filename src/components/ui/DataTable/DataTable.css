@@ -375,6 +375,13 @@
   max-height: calc(100dvh - 280px);
 }
 
+/* Cuando .content-area contiene una tabla, eliminar el scroll de página: la tabla
+   ya gestiona su propio scroll interno con max-height dinámico. Si el contenido
+   por encima (stats/buscador) crece, la tabla se reduce automáticamente. */
+.content-area:has(.dt-table-wrapper) {
+  overflow: hidden !important;
+}
+
 
 .dt-table-wrapper::-webkit-scrollbar {
   height: 12px;
