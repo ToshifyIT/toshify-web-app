@@ -297,8 +297,8 @@ export function LeadsModule() {
 
   // Estados visibles para cambio manual (Conductor se asigna solo automáticamente)
   const ESTADOS_LEAD = [
-    'Inicio conversación', 'Apto - Hireflix', 'No Apto - Hireflix', 'Documentos enviados',
-    'Auto del pueblo', 'No le interesa', 'No cumple edad',
+    'Inicio conversación', 'Apto - Hireflix', 'No Apto - Hireflix', 'Ayuda - Hireflix',
+    'Documentos enviados', 'Auto del pueblo', 'No le interesa', 'No cumple edad',
     'Convocatoria Induccion', 'Descartado',
   ] as const
 
@@ -311,6 +311,8 @@ export function LeadsModule() {
     if (proceso === 'convertido' || proceso === 'conductor') return 'Conductor'
     if (entrevista === 'No Apto') return 'No Apto - Hireflix'
     if (entrevista === 'Apto') return 'Apto - Hireflix'
+    // Si tiene dato en ayuda_entrevista, asignar "Ayuda - Hireflix"
+    if (lead.ayuda_entrevista && lead.ayuda_entrevista.trim() !== '') return 'Ayuda - Hireflix'
     // Si ya tiene un estado asignado (no vacío y no "Inicio conversación"), respetarlo
     if (lead.estado_de_lead && lead.estado_de_lead !== 'Inicio conversación') return lead.estado_de_lead
     return 'Inicio conversación'
@@ -2564,7 +2566,7 @@ function LeadDetailView({ lead, onEdit, onConvert, zonasPeligrosas = [], enZonaP
       {lead.observaciones && (
         <div className="lead-detail-description">
           <div className="lead-detail-description-title">Observaciones</div>
-          <p>{lead.observaciones}</p>
+          <p style={{ whiteSpace: 'pre-line' }}>{lead.observaciones}</p>
         </div>
       )}
 

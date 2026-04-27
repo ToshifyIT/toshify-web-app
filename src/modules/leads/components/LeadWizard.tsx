@@ -493,6 +493,7 @@ export function LeadWizard({ formData, setFormData, onSave, onCancel, saving = f
                   <option value="Inicio conversación">Inicio conversación</option>
                   <option value="Apto - Hireflix">Apto - Hireflix</option>
                   <option value="No Apto - Hireflix">No Apto - Hireflix</option>
+                  <option value="Ayuda - Hireflix">Ayuda - Hireflix</option>
                   <option value="Documentos enviados">Documentos enviados</option>
                   <option value="Auto del pueblo">Auto del pueblo</option>
                   <option value="No le interesa">No le interesa</option>

@@ -175,7 +175,6 @@ export function AsignacionesModule() {
   // --- Completar Control ---
   const [showControlModal, setShowControlModal] = useState(false)
   const [controlAsignacion, setControlAsignacion] = useState<ExpandedAsignacion | null>(null)
-  const [controlConductorId, setControlConductorId] = useState<string>('')
   const [controlSaving, setControlSaving] = useState(false)
   const [isControlBariloche, setIsControlBariloche] = useState(false)
   const [controlForm, setControlForm] = useState({
@@ -195,7 +194,7 @@ export function AsignacionesModule() {
   async function openControlModal(asig: ExpandedAsignacion) {
     setControlAsignacion(asig)
     setControlForm({ km: '', ltnafta: '', cristal_status: '', carter: '', tires: '', others_docs: '', other_accesory: '', make_chains: '', status_chains: '', tensioners_chains: '', others_kit: '' })
-    // Pre-seleccionar conductor
+    // Obtener un conductor para consultar si la plantilla es Bariloche
     const isAutoCargo = asig.horario === 'todo_dia'
     let conductorId = ''
     if (isAutoCargo && asig.conductorCargo) {
@@ -203,8 +202,6 @@ export function AsignacionesModule() {
     } else if (!isAutoCargo && asig.conductoresTurno?.diurno) {
       conductorId = asig.conductoresTurno.diurno.id
     }
-    setControlConductorId(conductorId)
-
     // Determinar si es Bariloche consultando la plantilla real del documento generado
     let esBRC = false
     if (conductorId) {
@@ -233,7 +230,16 @@ export function AsignacionesModule() {
   }
 
   async function handleSubmitControl() {
-    if (!controlAsignacion || !controlConductorId) return
+    if (!controlAsignacion) return
+
+    // Obtener los conductores de la asignación
+    const conductoresAsig = controlAsignacion.asignaciones_conductores?.map(ac => ({
+      id: (ac as any).conductores?.id || ac.conductor_id,
+      nombre: `${(ac as any).conductores?.nombres || ''} ${(ac as any).conductores?.apellidos || ''}`.trim(),
+      horario: ac.horario,
+    })).filter(c => c.id && c.nombre) || []
+
+    if (conductoresAsig.length === 0) return
 
     // Validar que todos los campos visibles estén completos
     const camposBase = [controlForm.km, controlForm.ltnafta]
@@ -246,12 +252,15 @@ export function AsignacionesModule() {
       return
     }
 
+    const cantConductores = conductoresAsig.length
     const confirmacion = await Swal.fire({
       icon: 'warning',
       title: 'Confirmar generacion',
-      text: 'Tenga en cuenta que despues de guardar estos datos ya no se podra revertir ni editar el documento generado.',
+      text: cantConductores > 1
+        ? `Se generará el documento de control para los ${cantConductores} conductores asignados. Tenga en cuenta que despues de guardar estos datos ya no se podra revertir ni editar los documentos generados.`
+        : 'Tenga en cuenta que despues de guardar estos datos ya no se podra revertir ni editar el documento generado.',
       showCancelButton: true,
-      confirmButtonText: 'Generar Documento',
+      confirmButtonText: cantConductores > 1 ? `Generar ${cantConductores} Documentos` : 'Generar Documento',
       cancelButtonText: 'Cancelar',
       confirmButtonColor: 'var(--color-primary)',
     })
@@ -260,12 +269,10 @@ export function AsignacionesModule() {
 
     setControlSaving(true)
     try {
-      const result = await completeControl({
-        conductor_id: controlConductorId,
+      const payload = {
         asignacion_id: controlAsignacion.id,
         km: controlForm.km.trim(),
         ltnafta: controlForm.ltnafta.trim(),
-        // Campos Bariloche
         cristal_status: isControlBariloche ? (controlForm.cristal_status.trim() || null) : null,
         carter: isControlBariloche ? (controlForm.carter.trim() || null) : null,
         tires: isControlBariloche ? (controlForm.tires.trim() || null) : null,
@@ -275,12 +282,21 @@ export function AsignacionesModule() {
         status_chains: isControlBariloche ? (controlForm.status_chains.trim() || null) : null,
         tensioners_chains: isControlBariloche ? (controlForm.tensioners_chains.trim() || null) : null,
         others_kit: isControlBariloche ? (controlForm.others_kit.trim() || null) : null,
-      })
+      }
 
-      if (!result.success) throw new Error(result.error || 'Error desconocido')
+      // Enviar control para cada conductor
+      for (const conductor of conductoresAsig) {
+        const result = await completeControl({
+          conductor_id: conductor.id,
+          ...payload,
+        })
+        if (!result.success) throw new Error(result.error || `Error al generar control para ${conductor.nombre}`)
+      }
 
       setShowControlModal(false)
-      showSuccess('Control completado y PDF generado correctamente')
+      showSuccess(cantConductores > 1
+        ? `Control completado y ${cantConductores} PDFs generados correctamente`
+        : 'Control completado y PDF generado correctamente')
       loadAsignaciones()
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Error desconocido'
@@ -4021,20 +4037,15 @@ export function AsignacionesModule() {
                   </div>
                 </div>
 
-                {/* Conductor */}
+                {/* Conductor(es) */}
                 {conductoresAsig.length > 1 ? (
-                  <div style={{ marginBottom: '20px' }}>
-                    <label style={labelStyle}>Conductor <span style={{ color: '#dc2626' }}>*</span></label>
-                    <select
-                      value={controlConductorId}
-                      onChange={(e) => setControlConductorId(e.target.value)}
-                      disabled={controlSaving}
-                      style={{ ...inputStyle, cursor: 'pointer' }}
-                    >
-                      {conductoresAsig.map(c => (
-                        <option key={c.id} value={c.id}>{c.nombre} ({c.horario})</option>
-                      ))}
-                    </select>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '20px' }}>
+                    {conductoresAsig.map(c => (
+                      <div key={c.id} style={{ padding: '10px 12px', background: 'var(--bg-secondary)', borderRadius: '8px', border: '1px solid var(--border-primary)' }}>
+                        <span style={{ fontSize: '10px', fontWeight: 600, color: 'var(--text-tertiary)', textTransform: 'uppercase' as const, letterSpacing: '0.04em' }}>{c.horario === 'diurno' ? 'Conductor Diurno' : 'Conductor Nocturno'}</span>
+                        <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-primary)', marginTop: '2px' }}>{c.nombre}</div>
+                      </div>
+                    ))}
                   </div>
                 ) : conductoresAsig.length === 1 ? (
                   <div style={{ marginBottom: '20px', padding: '10px 12px', background: 'var(--bg-secondary)', borderRadius: '8px', border: '1px solid var(--border-primary)' }}>
@@ -4118,13 +4129,13 @@ export function AsignacionesModule() {
                 </button>
                 <button
                   onClick={handleSubmitControl}
-                  disabled={controlSaving || !controlConductorId}
+                  disabled={controlSaving || conductoresAsig.length === 0}
                   style={{
                     display: 'inline-flex', alignItems: 'center', gap: '6px',
                     padding: '9px 22px', borderRadius: '8px', fontSize: '13px', fontWeight: 600,
-                    cursor: (controlSaving || !controlConductorId) ? 'not-allowed' : 'pointer',
+                    cursor: (controlSaving || conductoresAsig.length === 0) ? 'not-allowed' : 'pointer',
                     border: 'none', background: 'var(--color-primary)', color: 'white',
-                    opacity: (controlSaving || !controlConductorId) ? 0.5 : 1,
+                    opacity: (controlSaving || conductoresAsig.length === 0) ? 0.5 : 1,
                     transition: 'opacity 0.2s',
                   }}
                 >
