@@ -362,11 +362,11 @@ export function VehicleManagement() {
       return
     }
 
-    if (!formData.patente || !formData.marca || !formData.modelo || !formData.sede_id || !formData.titular?.trim()) {
+    if (!formData.patente || !formData.marca || !formData.modelo || !formData.sede_id || !formData.titular?.trim() || !formData.cobertura?.trim()) {
       Swal.fire({
         icon: 'warning',
         title: 'Campos requeridos',
-        text: 'Complete todos los campos requeridos: Patente, Marca, Modelo, Sede y Titular',
+        text: 'Complete todos los campos requeridos: Patente, Marca, Modelo, Sede, Titular y Cobertura',
         confirmButtonColor: '#ff0033'
       })
       return
@@ -559,6 +559,16 @@ export function VehicleManagement() {
         icon: 'warning',
         title: 'Titular obligatorio',
         text: 'El campo Titular es requerido',
+        confirmButtonColor: '#ff0033'
+      })
+      return
+    }
+
+    if (!formData.cobertura?.trim()) {
+      Swal.fire({
+        icon: 'warning',
+        title: 'Cobertura obligatoria',
+        text: 'El campo Cobertura del seguro es requerido',
         confirmButtonColor: '#ff0033'
       })
       return
@@ -2120,7 +2130,7 @@ export function VehicleManagement() {
             <div className="section-title">Seguro</div>
 
             <div className="form-group">
-              <label className="form-label">Cobertura</label>
+              <label className="form-label">Cobertura <span className="required">*</span></label>
               <input
                 type="text"
                 className="form-input"
