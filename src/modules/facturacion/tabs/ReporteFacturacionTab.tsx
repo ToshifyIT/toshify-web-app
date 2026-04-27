@@ -8949,7 +8949,7 @@ export function ReporteFacturacionTab() {
     },
     {
       id: 'acciones',
-      header: '',
+      header: 'Acciones',
       cell: ({ row }) => (
         <div style={{ display: 'flex', gap: '4px', justifyContent: 'center' }}>
           <button
@@ -9538,7 +9538,8 @@ export function ReporteFacturacionTab() {
             columns={columns}
             loading={loadingVistaPrevia}
             searchPlaceholder="Buscar..."
-            emptyIcon={<Calculator size={48} />}
+            emptyIcon={<Calculator size={48}
+          />}
              emptyTitle="Sin conductores registrados"
              emptyDescription="No hay conductores con asignación activa para esta semana"
             pageSize={100}
@@ -9739,7 +9740,8 @@ export function ReporteFacturacionTab() {
               columns={columns}
               loading={loading}
               searchPlaceholder="Buscar por conductor, DNI, patente..."
-              emptyIcon={<FileText size={48} />}
+              emptyIcon={<FileText size={48}
+            />}
               emptyTitle="Sin facturaciones"
               emptyDescription="No hay conductores facturados en este período"
               pageSize={100}

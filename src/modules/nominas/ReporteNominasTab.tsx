@@ -1532,7 +1532,8 @@ export function ReporteNominasTab() {
         columns={columns}
         loading={loading}
         searchPlaceholder="Buscar por conductor, DNI, patente..."
-        emptyIcon={<FileText size={48} />}
+        emptyIcon={<FileText size={48}
+      />}
         emptyTitle="No hay facturación"
         emptyDescription="No hay conductores con asignaciones activas para esta semana"
         pageSize={100}

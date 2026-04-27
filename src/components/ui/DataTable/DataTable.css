@@ -363,15 +363,18 @@
   position: relative;
 }
 
-/* Table Wrapper for scroll */
+/* Table Wrapper for scroll. La altura máxima la calcula el componente DataTable
+   dinámicamente vía JS (ResizeObserver) en función de la posición real del wrapper
+   dentro del viewport. El fallback CSS es por si JS no se ejecuta aún. */
 .dt-table-wrapper {
   overflow: auto;
   -webkit-overflow-scrolling: touch;
   padding: 0 8px 4px 8px;
   scrollbar-width: auto;
   max-width: 100%;
-  max-height: calc(100vh - 340px);
+  max-height: calc(100dvh - 280px);
 }
+
 
 .dt-table-wrapper::-webkit-scrollbar {
   height: 12px;
@@ -416,13 +419,25 @@
   white-space: nowrap;
 }
 
-/* Sticky column for actions (right) */
+/* Sticky column for actions (right). Mantiene la columna de acciones visible
+   durante scroll horizontal. La sombra a la izquierda da feedback visual de que
+   hay contenido oculto detrás. */
 .dt-sticky-col {
   text-align: center;
+  position: sticky;
+  right: 0;
+  z-index: 3;
+  background: var(--bg-primary);
+  box-shadow: -4px 0 6px -2px rgba(0, 0, 0, 0.08);
 }
 
 .dt-table thead .dt-sticky-col {
   background: var(--table-header-bg);
+  z-index: 5;
+}
+
+.dt-table tbody tr:hover .dt-sticky-col {
+  background: var(--table-row-hover-bg, var(--bg-secondary));
 }
 
 /* First column (left) */

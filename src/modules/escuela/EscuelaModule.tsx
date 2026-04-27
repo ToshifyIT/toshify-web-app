@@ -475,7 +475,8 @@ export function EscuelaModule() {
               data={filteredData}
               loading={loading}
               showSearch={false}
-              emptyIcon={<Users size={64} />}
+              emptyIcon={<Users size={64}
+            />}
               emptyTitle="No hay conductores"
               emptyDescription="No se encontraron registros de capacitación con los filtros actuales."
             />

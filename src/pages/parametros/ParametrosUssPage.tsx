@@ -280,7 +280,7 @@ export function ParametrosUssPage() {
     },
     {
       id: 'acciones',
-      header: 'ACCIONES',
+      header: 'Acciones',
       size: 80,
       cell: ({ row }) => (
         <div style={{ display: 'flex', gap: '8px' }}>
@@ -328,7 +328,8 @@ export function ParametrosUssPage() {
               whiteSpace: 'nowrap',
             }}
           >
-            <Plus size={18} />
+            <Plus size={18}
+          />
             Nuevo Parametro
           </button>
         }

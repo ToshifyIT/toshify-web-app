@@ -1196,7 +1196,8 @@ export function SiniestrosModule() {
         columns={siniestrosColumns}
         loading={loading}
         searchPlaceholder="Buscar por patente, conductor..."
-        emptyIcon={<Shield size={40} />}
+        emptyIcon={<Shield size={40}
+      />}
         emptyTitle="No hay siniestros para mostrar"
         emptyDescription="Los siniestros aparecerán aquí cuando se registren."
         globalFilterFn={customGlobalFilter}

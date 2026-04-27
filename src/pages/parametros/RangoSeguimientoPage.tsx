@@ -315,7 +315,7 @@ export function RangoSeguimientoPage() {
     },
     {
       id: 'acciones',
-      header: 'ACCIONES',
+      header: 'Acciones',
       size: 120,
       cell: ({ row }) => (
         <div style={{ display: 'flex', gap: '8px' }}>
@@ -375,7 +375,8 @@ export function RangoSeguimientoPage() {
             whiteSpace: 'nowrap',
           }}
         >
-          <Plus size={18} />
+          <Plus size={18}
+        />
           Nuevo Rango
         </button>
       }

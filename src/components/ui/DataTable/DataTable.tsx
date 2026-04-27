@@ -586,8 +586,7 @@ export function DataTable<T>({
   const [sorting, setSorting] = useState<SortingState>([]);
   const tableWrapperRef = useRef<HTMLDivElement>(null);
   const [isMobile, setIsMobile] = useState(false);
-
-  // Max-height set via CSS (.dt-table-wrapper max-height: calc(100vh - 340px))
+  const [dynamicMaxHeight, setDynamicMaxHeight] = useState<number | null>(null);
 
   // Detectar mobile
   useEffect(() => {
@@ -595,6 +594,31 @@ export function DataTable<T>({
     checkMobile();
     window.addEventListener('resize', checkMobile);
     return () => window.removeEventListener('resize', checkMobile);
+  }, []);
+
+  // Cálculo dinámico de altura máxima de la tabla. Se ajusta al viewport real:
+  // viewport - top del wrapper - margen para paginación. Esto evita el doble
+  // scroll en módulos con headers altos sin necesidad de tocar cada uno.
+  useEffect(() => {
+    const recalc = () => {
+      const el = tableWrapperRef.current;
+      if (!el) return;
+      const top = el.getBoundingClientRect().top;
+      const PAGINATION_RESERVE = 80; // espacio para paginación + padding
+      const available = window.innerHeight - top - PAGINATION_RESERVE;
+      setDynamicMaxHeight(available > 200 ? available : 200);
+    };
+    recalc();
+    window.addEventListener('resize', recalc);
+    // Observa cambios en el layout (filtros que se abren/cierran, etc.)
+    const ro = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(recalc) : null;
+    if (ro && tableWrapperRef.current?.parentElement) {
+      ro.observe(tableWrapperRef.current.parentElement);
+    }
+    return () => {
+      window.removeEventListener('resize', recalc);
+      ro?.disconnect();
+    };
   }, []);
 
   // Column filter state
@@ -1545,7 +1569,11 @@ export function DataTable<T>({
           </div>
         ) : (
           /* Desktop Table View */
-          <div className="dt-table-wrapper" ref={tableWrapperRef}>
+          <div
+            className="dt-table-wrapper"
+            ref={tableWrapperRef}
+            style={dynamicMaxHeight ? { maxHeight: `${dynamicMaxHeight}px` } : undefined}
+          >
             <table className="dt-table">
               <thead>
                 {table.getHeaderGroups().map((headerGroup) => (

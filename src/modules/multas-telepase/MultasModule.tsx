@@ -872,7 +872,8 @@ export default function MultasModule() {
         headerAction={
           <div style={{ display: 'flex', gap: '8px' }}>
             <button className="btn-secondary" onClick={handleExportar}>
-              <Download size={16} />
+              <Download size={16}
+            />
               Exportar
             </button>
             <button className="btn-primary" onClick={crearMulta}>

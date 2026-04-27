@@ -885,7 +885,7 @@ export function PedidosUnificadoModule() {
     },
     {
       id: 'acciones',
-      header: 'Accion',
+      header: 'Acciones',
       cell: ({ row }) => (
         <div style={{ textAlign: 'center' }}>
           <button
@@ -1372,7 +1372,8 @@ export function PedidosUnificadoModule() {
             columns={entradasColumns}
             loading={loadingPedidos}
             searchPlaceholder="Buscar por producto o proveedor..."
-            emptyIcon={<ArrowDownCircle size={48} />}
+            emptyIcon={<ArrowDownCircle size={48}
+          />}
             emptyTitle="No hay entradas pendientes de recepcion"
             emptyDescription="Las entradas aprobadas pendientes de recepcionar apareceran aqui"
 pageSize={100}

@@ -654,7 +654,8 @@ export function UserManagement() {
         loading={loading}
         error={error}
         searchPlaceholder="Buscar por nombre, email, ID..."
-        emptyIcon={<Users size={48} />}
+        emptyIcon={<Users size={48}
+      />}
         emptyTitle="No hay usuarios registrados"
         emptyDescription="Crea el primero usando el botón '+ Crear Usuario'"
 pageSize={100}

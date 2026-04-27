@@ -312,7 +312,8 @@ export function HistoricoTable({
         showSearch={false}
         showPagination={false}
         disableAutoFilters
-        emptyIcon={<ClipboardList size={48} />}
+        emptyIcon={<ClipboardList size={48}
+      />}
         emptyTitle="Sin registros"
         emptyDescription="No hay registros de USS Histórico para mostrar"
         pageSize={999}

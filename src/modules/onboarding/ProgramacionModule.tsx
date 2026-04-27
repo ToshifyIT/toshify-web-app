@@ -2119,7 +2119,8 @@ export function ProgramacionModule() {
           loading={loading}
           error={error}
           searchPlaceholder="Buscar por patente, conductor..."
-          emptyIcon={<Calendar size={48} />}
+          emptyIcon={<Calendar size={48}
+        />}
           emptyTitle="No hay programaciones"
           emptyDescription={canCreate ? "Crea una nueva programacion para comenzar" : "No tienes programaciones asignadas"}
           pageSize={100}
@@ -2150,7 +2151,8 @@ export function ProgramacionModule() {
           columns={enviadosColumns}
           loading={loadingHistorico}
           searchPlaceholder="Buscar en enviados..."
-          emptyIcon={<Send size={48} />}
+          emptyIcon={<Send size={48}
+        />}
           emptyTitle="No hay programaciones enviadas"
           emptyDescription="Las programaciones enviadas a Entrega aparecerán aquí"
           pageSize={100}

@@ -2372,7 +2372,7 @@ export function ConductoresModule() {
       },
       {
         id: "acciones",
-        header: "",
+        header: 'Acciones',
         cell: ({ row }) => {
           const driveUrl = (row.original as any).drive_folder_url;
           
@@ -2497,7 +2497,8 @@ export function ConductoresModule() {
         loading={loading}
         error={error}
         searchPlaceholder="Buscar por nombre, DNI, licencia..."
-        emptyIcon={<Users size={64} />}
+        emptyIcon={<Users size={64}
+      />}
         emptyTitle="No hay conductores registrados"
         emptyDescription={
           canCreate

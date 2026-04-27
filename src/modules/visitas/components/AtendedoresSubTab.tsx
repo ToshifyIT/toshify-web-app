@@ -311,7 +311,8 @@ export function AtendedoresSubTab() {
         columns={columns}
         loading={loading}
         searchPlaceholder="Buscar anfitriones..."
-        emptyIcon={<Users size={48} />}
+        emptyIcon={<Users size={48}
+      />}
         emptyTitle="No hay anfitriones"
         emptyDescription="Agregue un nuevo anfitrión."
         headerAction={

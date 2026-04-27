@@ -100,7 +100,8 @@ export function IncidenciaLogisticaTab({
         emptyDescription="Las incidencias logísticas registradas aparecerán aquí"
         headerAction={
           <button className="btn-primary" style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-            <Plus size={16} />
+            <Plus size={16}
+          />
             Nueva Incidencia
           </button>
         }

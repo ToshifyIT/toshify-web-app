@@ -450,7 +450,8 @@ export function HistorialMovimientosModule() {
         loading={loading}
         error={error}
         searchPlaceholder="Buscar por producto, usuario o vehículo..."
-        emptyIcon={<Package size={48} />}
+        emptyIcon={<Package size={48}
+      />}
         emptyTitle="No hay movimientos"
         emptyDescription="No se encontraron movimientos en el historial"
 pageSize={100}

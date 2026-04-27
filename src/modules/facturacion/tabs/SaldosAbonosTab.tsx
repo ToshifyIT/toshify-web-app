@@ -2112,7 +2112,7 @@ export function SaldosAbonosTab() {
     },
     {
       id: 'acciones',
-      header: '',
+      header: 'Acciones',
       cell: ({ row }) => {
         const esActivo = row.original.conductor_estado?.toUpperCase() === 'ACTIVO'
         const tieneDeuda = row.original.saldo_actual < 0
@@ -2287,7 +2287,7 @@ export function SaldosAbonosTab() {
     },
     {
       id: 'acciones',
-      header: '',
+      header: 'Acciones',
       cell: ({ row }) => (
         <div className="fact-table-actions">
           <button 
@@ -2491,7 +2491,8 @@ export function SaldosAbonosTab() {
             columns={columns}
             loading={loading}
             searchPlaceholder="Buscar conductor..."
-            emptyIcon={<Wallet size={48} />}
+            emptyIcon={<Wallet size={48}
+          />}
             emptyTitle="Sin saldos"
             emptyDescription="No hay saldos registrados"
             pageSize={100}

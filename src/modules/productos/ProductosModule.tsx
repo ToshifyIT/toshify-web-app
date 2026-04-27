@@ -882,7 +882,8 @@ export function ProductosModule() {
         columns={columns}
         loading={loading}
         searchPlaceholder="Buscar por codigo, nombre, proveedor, categoria..."
-        emptyIcon={<Package size={64} />}
+        emptyIcon={<Package size={64}
+      />}
         emptyTitle="No hay productos registrados"
         emptyDescription={canCreate ? 'Crea el primero usando el boton "+ Crear Producto".' : ''}
         headerAction={

@@ -547,7 +547,8 @@ export function MarcacionesTable({
         columns={columns}
         loading={isLoading}
         showSearch={false}
-        emptyIcon={<ClipboardList size={48} />}
+        emptyIcon={<ClipboardList size={48}
+      />}
         emptyTitle="Sin marcaciones"
         emptyDescription="No hay marcaciones para mostrar en este rango de fechas"
         pageSize={50}

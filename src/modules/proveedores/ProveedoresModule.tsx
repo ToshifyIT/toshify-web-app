@@ -743,7 +743,8 @@ export function ProveedoresModule() {
         columns={columns}
         loading={loading}
         searchPlaceholder="Buscar por razon social, documento, email, telefono..."
-        emptyIcon={<Building2 size={64} />}
+        emptyIcon={<Building2 size={64}
+      />}
         emptyTitle="No hay proveedores registrados"
         emptyDescription={canCreate ? 'Crea el primero usando el boton "+ Crear Proveedor".' : ''}
         headerAction={

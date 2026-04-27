@@ -1316,7 +1316,7 @@ export function IncidenciasModule() {
     },
     {
       id: 'acciones',
-      header: '',
+      header: 'Acciones',
       cell: ({ row }) => (
         <ActionsMenu
           actions={[
@@ -1539,7 +1539,7 @@ export function IncidenciasModule() {
     },
     {
       id: 'acciones',
-      header: '',
+      header: 'Acciones',
       cell: ({ row }) => {
         const penalidad = penalidades.find(p => p.incidencia_id === row.original.id)
         const fueRechazada = penalidad?.rechazado === true
@@ -3162,7 +3162,8 @@ export function IncidenciasModule() {
             globalFilterFn={customGlobalFilter}
             loading={loading}
             searchPlaceholder="Buscar por patente, conductor..."
-            emptyIcon={<Shield size={48} />}
+            emptyIcon={<Shield size={48}
+          />}
             emptyTitle="Sin incidencias logísticas"
             emptyDescription="No hay incidencias logísticas registradas"
             pageSize={100}
@@ -3341,7 +3342,8 @@ export function IncidenciasModule() {
             globalFilterFn={customGlobalFilter}
             loading={loading}
             searchPlaceholder="Buscar por patente, conductor..."
-            emptyIcon={<DollarSign size={48} />}
+            emptyIcon={<DollarSign size={48}
+          />}
             emptyTitle="Sin incidencias de cobro"
             emptyDescription="Las incidencias que generan cobros aparecerán aquí"
             pageSize={100}
@@ -3484,7 +3486,8 @@ export function IncidenciasModule() {
             columns={penalidadesColumns}
             loading={loading}
             searchPlaceholder="Buscar por patente, conductor..."
-            emptyIcon={<Shield size={48} />}
+            emptyIcon={<Shield size={48}
+          />}
             emptyTitle={hayFiltrosPenalidadesActivos ? "Sin resultados con los filtros actuales" : "Sin cobros/descuentos pendientes"}
             emptyDescription={hayFiltrosPenalidadesActivos ? "Intenta limpiar los filtros para ver todos los registros" : "Los cobros generados desde incidencias aparecerán aquí"}
             pageSize={100}
@@ -3576,7 +3579,8 @@ export function IncidenciasModule() {
             columns={penalidadesColumns}
             loading={loading}
             searchPlaceholder="Buscar por patente, conductor..."
-            emptyIcon={<CheckCircle size={48} />}
+            emptyIcon={<CheckCircle size={48}
+          />}
             emptyTitle={hayFiltrosPenalidadesActivos ? "Sin resultados con los filtros actuales" : "Sin cobros aplicados"}
             emptyDescription={hayFiltrosPenalidadesActivos ? "Intenta limpiar los filtros para ver todos los registros" : "Los cobros que se apliquen aparecerán aquí"}
             pageSize={100}
@@ -3612,7 +3616,8 @@ export function IncidenciasModule() {
             columns={penalidadesColumns}
             loading={loading}
             searchPlaceholder="Buscar por patente, conductor..."
-            emptyIcon={<XCircle size={48} />}
+            emptyIcon={<XCircle size={48}
+          />}
             emptyTitle="Sin rechazos"
             emptyDescription="Los cobros rechazados aparecerán aquí"
             pageSize={100}

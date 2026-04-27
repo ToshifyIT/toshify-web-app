@@ -1768,7 +1768,8 @@ export function VehicleManagement() {
         pageSize={100}
         pageSizeOptions={[50, 100, 200]}
         searchPlaceholder="Buscar por patente, marca, modelo..."
-        emptyIcon={<Car size={64} />}
+        emptyIcon={<Car size={64}
+      />}
         emptyTitle="No hay vehiculos registrados"
         emptyDescription={canCreate ? 'Crea el primero usando el boton "+ Crear Vehiculo".' : ''}
         headerAction={

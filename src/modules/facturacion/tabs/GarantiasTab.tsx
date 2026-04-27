@@ -64,13 +64,11 @@ export function GarantiasTab() {
   const [garantias, setGarantias] = useState<GarantiaConductor[]>([])
   const [todosLosPagos, setTodosLosPagos] = useState<PagoGarantiaRow[]>([])
   const [loading, setLoading] = useState(true)
-  const [filtroEstado] = useState<string>('todos')
 
   // Estados para filtros Excel - Garantías
   const [openColumnFilter, setOpenColumnFilter] = useState<string | null>(null)
   const [conductorFilter, setConductorFilter] = useState<string[]>([])
   const [conductorSearch, setConductorSearch] = useState('')
-  const [tipoFilter, setTipoFilter] = useState<string[]>([])
   const [estadoFilter, setEstadoFilter] = useState<string[]>([])
   const [estadoCondFilter, setEstadoCondFilter] = useState<'todos' | 'activo' | 'baja'>('todos')
   const [asignadoFilter, setAsignadoFilter] = useState<'todos' | 'asignado' | 'no_asignado'>('todos')
@@ -121,10 +119,6 @@ export function GarantiasTab() {
   const toggleConductorFilter = (val: string) => setConductorFilter(prev =>
     prev.includes(val) ? prev.filter(v => v !== val) : [...prev, val]
   )
-  const _toggleTipoFilter = (val: string) => setTipoFilter(prev =>
-    prev.includes(val) ? prev.filter(v => v !== val) : [...prev, val]
-  )
-  void _toggleTipoFilter
   const toggleEstadoFilter = (val: string) => setEstadoFilter(prev =>
     prev.includes(val) ? prev.filter(v => v !== val) : [...prev, val]
   )
@@ -459,20 +453,12 @@ export function GarantiasTab() {
             <div style="font-weight: 600; color: #111827;">${garantia.conductor_nombre}</div>
           </div>
           <div style="margin-bottom: 12px;">
-            <label style="display: block; font-size: 12px; color: #374151; margin-bottom: 4px;">Cuotas Pagadas:</label>
-            <input id="swal-cuotas-pagadas" type="number" min="0" class="swal2-input" style="font-size: 14px; margin: 0; width: 100%;" value="${garantia.cuotas_pagadas}">
-          </div>
-          <div style="margin-bottom: 12px;">
-            <label style="display: block; font-size: 12px; color: #374151; margin-bottom: 4px;">Cuotas Totales:</label>
-            <input id="swal-cuotas-totales" type="number" min="1" class="swal2-input" style="font-size: 14px; margin: 0; width: 100%;" value="${garantia.cuotas_totales}">
-          </div>
-          <div style="margin-bottom: 12px;">
             <label style="display: block; font-size: 12px; color: #374151; margin-bottom: 4px;">Monto Pagado:</label>
-            <input id="swal-monto-pagado" type="number" min="0" class="swal2-input" style="font-size: 14px; margin: 0; width: 100%;" value="${garantia.monto_pagado}">
+            <input id="swal-monto-pagado" type="number" min="0" class="swal2-input" style="font-size: 14px; margin: 0; width: 100%;" value="${Math.round(garantia.monto_pagado)}">
           </div>
           <div>
             <label style="display: block; font-size: 12px; color: #374151; margin-bottom: 4px;">Monto Total:</label>
-            <input id="swal-monto-total" type="number" min="0" class="swal2-input" style="font-size: 14px; margin: 0; width: 100%;" value="${garantia.monto_total}">
+            <input id="swal-monto-total" type="number" min="0" class="swal2-input" style="font-size: 14px; margin: 0; width: 100%;" value="${Math.round(garantia.monto_total)}">
           </div>
         </div>
       `,
@@ -483,25 +469,19 @@ export function GarantiasTab() {
       confirmButtonColor: '#ff0033',
       width: 340,
       preConfirm: () => {
-        const cuotasPagadas = parseInt((document.getElementById('swal-cuotas-pagadas') as HTMLInputElement).value)
-        const cuotasTotales = parseInt((document.getElementById('swal-cuotas-totales') as HTMLInputElement).value)
-        const montoPagado = parseFloat((document.getElementById('swal-monto-pagado') as HTMLInputElement).value)
-        const montoTotal = parseFloat((document.getElementById('swal-monto-total') as HTMLInputElement).value)
+        const montoPagado = Math.round(parseFloat((document.getElementById('swal-monto-pagado') as HTMLInputElement).value))
+        const montoTotal = Math.round(parseFloat((document.getElementById('swal-monto-total') as HTMLInputElement).value))
 
-        if (isNaN(cuotasPagadas) || cuotasPagadas < 0) {
-          Swal.showValidationMessage('Cuotas pagadas debe ser un número válido')
+        if (isNaN(montoPagado) || montoPagado < 0) {
+          Swal.showValidationMessage('Monto pagado debe ser un número válido')
           return false
         }
-        if (isNaN(cuotasTotales) || cuotasTotales < 1) {
-          Swal.showValidationMessage('Cuotas totales debe ser al menos 1')
-          return false
-        }
-        if (cuotasPagadas > cuotasTotales) {
-          Swal.showValidationMessage('Cuotas pagadas no puede ser mayor que cuotas totales')
+        if (isNaN(montoTotal) || montoTotal <= 0) {
+          Swal.showValidationMessage('Monto total debe ser mayor a 0')
           return false
         }
 
-        return { cuotasPagadas, cuotasTotales, montoPagado, montoTotal }
+        return { montoPagado, montoTotal }
       }
     })
 
@@ -511,7 +491,7 @@ export function GarantiasTab() {
       let nuevoEstado = garantia.estado
       if (formValues.montoPagado >= formValues.montoTotal) {
         nuevoEstado = 'completada'
-      } else if (formValues.montoPagado > 0 || formValues.cuotasPagadas > 0) {
+      } else if (formValues.montoPagado > 0) {
         nuevoEstado = 'en_curso'
       } else {
         nuevoEstado = 'pendiente'
@@ -519,8 +499,6 @@ export function GarantiasTab() {
 
       const { error } = await (supabase.from('garantias_conductores') as any)
         .update({
-          cuotas_pagadas: formValues.cuotasPagadas,
-          cuotas_totales: formValues.cuotasTotales,
           monto_pagado: formValues.montoPagado,
           monto_total: formValues.montoTotal,
           estado: nuevoEstado
@@ -573,15 +551,15 @@ export function GarantiasTab() {
   }
 
   async function registrarPago(garantia: GarantiaConductor) {
-    const pendiente = garantia.monto_total - garantia.monto_pagado
-    const siguienteCuota = garantia.cuotas_pagadas + 1
+    const CUOTA_SEMANAL = 50000
+    const pendiente = Math.round(garantia.monto_total - garantia.monto_pagado)
+    const sugerido = Math.min(CUOTA_SEMANAL, pendiente)
 
     // Generar opciones de semana
     const hoy = new Date()
     const semanaActual = Math.ceil((hoy.getTime() - new Date(hoy.getFullYear(), 0, 1).getTime()) / (7 * 24 * 60 * 60 * 1000))
     const anioActual = hoy.getFullYear()
-    
-    // Generar opciones de año y semana por separado
+
     const anioOptions = `<option value="2025">2025</option><option value="${anioActual}" selected>${anioActual}</option>`
     let semanaOptionsHtml = ''
     for (let s = 1; s <= 52; s++) {
@@ -597,9 +575,6 @@ export function GarantiasTab() {
         <div style="text-align: left; font-size: 13px;">
           <div style="background: #F3F4F6; padding: 10px 12px; border-radius: 6px; margin-bottom: 12px;">
             <div style="font-weight: 600; color: #111827;">${garantia.conductor_nombre}</div>
-            <div style="display: flex; gap: 12px; margin-top: 4px;">
-              <span style="color: #6B7280; font-size: 12px;">Cuota: <strong style="color: #374151;">${siguienteCuota}/${garantia.cuotas_totales}</strong></span>
-            </div>
             <div style="display: flex; gap: 12px; margin-top: 4px;">
               <span style="color: #16a34a; font-size: 12px;">Pagado: <strong>${formatCurrency(garantia.monto_pagado)}</strong></span>
               <span style="color: #ff0033; font-size: 12px;">Pendiente: <strong>${formatCurrency(pendiente)}</strong></span>
@@ -624,8 +599,8 @@ export function GarantiasTab() {
             </div>
           </div>
           <div style="margin-bottom: 12px;">
-            <label style="display: block; font-size: 12px; color: #374151; margin-bottom: 4px;">Monto a pagar:</label>
-            <input id="swal-monto" type="number" class="swal2-input" style="font-size: 14px; margin: 0; width: 100%;" value="${FACTURACION_CONFIG.GARANTIA_CUOTA_SEMANAL}">
+            <label style="display: block; font-size: 12px; color: #374151; margin-bottom: 4px;">Monto a pagar (sugerido: ${formatCurrency(sugerido)}):</label>
+            <input id="swal-monto" type="number" min="0" class="swal2-input" style="font-size: 14px; margin: 0; width: 100%;" value="${sugerido}">
           </div>
           <div>
             <label style="display: block; font-size: 12px; color: #374151; margin-bottom: 4px;">Referencia (opcional):</label>
@@ -642,24 +617,32 @@ export function GarantiasTab() {
       preConfirm: () => {
         const semana = parseInt((document.getElementById('swal-semana') as HTMLSelectElement).value)
         const anio = parseInt((document.getElementById('swal-anio') as HTMLSelectElement).value)
-        const monto = (document.getElementById('swal-monto') as HTMLInputElement).value
+        const montoRaw = (document.getElementById('swal-monto') as HTMLInputElement).value
         const referencia = (document.getElementById('swal-ref') as HTMLInputElement).value
-        if (!monto || parseFloat(monto) <= 0) {
+        const monto = Math.round(parseFloat(montoRaw))
+        if (!montoRaw || isNaN(monto) || monto <= 0) {
           Swal.showValidationMessage('Ingrese un monto válido')
           return false
         }
-        return { monto: parseFloat(monto), referencia, semana, anio }
+        if (monto > pendiente) {
+          Swal.showValidationMessage(`El monto no puede superar el pendiente (${formatCurrency(pendiente)})`)
+          return false
+        }
+        return { monto, referencia, semana, anio }
       }
     })
 
     if (!formValues) return
 
     try {
+      const nuevoMontoPagado = Math.round(garantia.monto_pagado) + formValues.monto
+      const numeroCuota = Math.floor(nuevoMontoPagado / CUOTA_SEMANAL)
+
       const { error: errorPago } = await (supabase.from('garantias_pagos') as any)
         .insert({
           garantia_id: garantia.id,
           conductor_id: garantia.conductor_id,
-          numero_cuota: garantia.cuotas_pagadas + 1,
+          numero_cuota: numeroCuota,
           monto: formValues.monto,
           fecha_pago: new Date().toISOString(),
           referencia: formValues.referencia || null,
@@ -669,21 +652,18 @@ export function GarantiasTab() {
 
       if (errorPago) throw errorPago
 
-      const nuevoMontoPagado = garantia.monto_pagado + formValues.monto
-      const nuevasCuotasPagadas = garantia.cuotas_pagadas + 1
-      const completada = nuevoMontoPagado >= garantia.monto_total
+      const completada = nuevoMontoPagado >= Math.round(garantia.monto_total)
 
       const { error: errorUpdate } = await (supabase.from('garantias_conductores') as any)
         .update({
           monto_pagado: nuevoMontoPagado,
-          cuotas_pagadas: nuevasCuotasPagadas,
           estado: completada ? 'completada' : 'en_curso'
         })
         .eq('id', garantia.id)
 
       if (errorUpdate) throw errorUpdate
 
-      showSuccess('Pago Registrado', completada ? '¡Garantía completada!' : `Cuota ${nuevasCuotasPagadas} registrada`)
+      showSuccess('Pago Registrado', completada ? '¡Garantía completada!' : `Pago aplicado`)
 
       cargarGarantias()
     } catch (error: any) {
@@ -741,17 +721,18 @@ export function GarantiasTab() {
       confirmButtonColor: '#2563eb',
       width: 380,
       preConfirm: () => {
-        const monto = (document.getElementById('swal-monto-dev') as HTMLInputElement).value
+        const montoRaw = (document.getElementById('swal-monto-dev') as HTMLInputElement).value
         const referencia = (document.getElementById('swal-ref-dev') as HTMLInputElement).value
-        if (!monto || parseFloat(monto) <= 0) {
+        const monto = Math.round(parseFloat(montoRaw))
+        if (!montoRaw || isNaN(monto) || monto <= 0) {
           Swal.showValidationMessage('Ingrese un monto válido')
           return false
         }
-        if (parseFloat(monto) > pendienteDevolver) {
+        if (monto > Math.round(pendienteDevolver)) {
           Swal.showValidationMessage(`El monto no puede superar ${formatCurrency(pendienteDevolver)}`)
           return false
         }
-        return { monto: parseFloat(monto), referencia }
+        return { monto, referencia }
       }
     })
 
@@ -1089,7 +1070,7 @@ export function GarantiasTab() {
             estado = 'en_devolucion'
           } else if (montoPagado >= montoTotal && montoTotal > 0) {
             estado = 'completada'
-          } else if (montoPagado > 0 || cuotasPagadas > 0) {
+          } else if (montoPagado > 0) {
             estado = 'en_curso'
           } else {
             estado = 'pendiente'
@@ -1329,6 +1310,7 @@ export function GarantiasTab() {
     {
       id: 'estado_conductor',
       header: 'Estado Cond.',
+      accessorFn: (row) => (row as any).estado_conductor || 'ACTIVO',
       cell: ({ row }) => {
         const estado = (row.original as any).estado_conductor || 'ACTIVO'
         return (
@@ -1341,6 +1323,11 @@ export function GarantiasTab() {
     {
       id: 'dias_desde_baja',
       header: 'Días Baja',
+      accessorFn: (row) => {
+        const fechaBaja = (row as any).fecha_baja
+        if (!fechaBaja) return 0
+        return Math.floor((new Date().getTime() - new Date(fechaBaja).getTime()) / (1000 * 60 * 60 * 24))
+      },
       cell: ({ row }) => {
         const fechaBaja = (row.original as any).fecha_baja
         if (!fechaBaja) return <span style={{ color: 'var(--text-secondary)', fontSize: '11px' }}>N/A</span>
@@ -1364,13 +1351,13 @@ export function GarantiasTab() {
     },
     {
       id: 'cuotas_pagadas',
-      header: 'Cuotas',
+      header: 'Cuotas (ref.)',
       accessorFn: (row) => Math.floor((row.monto_pagado || 0) / 50000),
       cell: ({ row }) => {
         const cuotasTotales = Math.ceil((row.original.monto_total || 0) / 50000)
         const cuotasPagadas = Math.floor((row.original.monto_pagado || 0) / 50000)
         return (
-          <span className="dt-badge dt-badge-blue" style={{ fontSize: '11px' }} title={`${cuotasPagadas} de ${cuotasTotales} cuotas de $50.000`}>
+          <span className="dt-badge dt-badge-blue" style={{ fontSize: '11px' }} title={`${cuotasPagadas} de ${cuotasTotales} cuotas de $50.000 (referencial)`}>
             {cuotasPagadas}/{cuotasTotales}
           </span>
         )
@@ -1379,6 +1366,7 @@ export function GarantiasTab() {
     {
       id: 'pendiente',
       header: 'Pendiente',
+      accessorFn: (row) => Math.round((row.monto_total || 0) - (row.monto_pagado || 0)),
       cell: ({ row }) => {
         const pendiente = row.original.monto_total - row.original.monto_pagado
         return <span className={`fact-precio ${pendiente > 0 ? 'fact-precio-negative' : ''}`}>{formatCurrency(pendiente)}</span>
@@ -1387,6 +1375,7 @@ export function GarantiasTab() {
     {
       id: 'progreso',
       header: 'Progreso',
+      accessorFn: (row) => row.monto_total > 0 ? Math.round((row.monto_pagado / row.monto_total) * 100) : 0,
       cell: ({ row }) => {
         const porcentaje = row.original.monto_total > 0
           ? (row.original.monto_pagado / row.original.monto_total) * 100
@@ -1464,7 +1453,7 @@ export function GarantiasTab() {
     },
     {
       id: 'acciones',
-      header: '',
+      header: 'Acciones',
       cell: ({ row }) => {
         const esBaja = (row.original as any).estado_conductor === 'BAJA'
         const esDevolucion = row.original.estado === 'en_devolucion'
@@ -1498,7 +1487,7 @@ export function GarantiasTab() {
         )
       }
     }
-  ], [conductorFilter, conductorSearch, conductoresFiltrados, tipoFilter, estadoFilter, openColumnFilter])
+  ], [conductorFilter, conductorSearch, conductoresFiltrados, estadoFilter, openColumnFilter])
 
   // ========== COLUMNAS TABLA MOVIMIENTOS ==========
 
@@ -1582,7 +1571,7 @@ export function GarantiasTab() {
     },
     {
       id: 'acciones',
-      header: '',
+      header: 'Acciones',
       cell: ({ row }) => (
         <div className="fact-table-actions">
           <button className="fact-table-btn fact-table-btn-edit" onClick={() => editarMovimiento(row.original)} data-tooltip="Editar">
@@ -1597,9 +1586,7 @@ export function GarantiasTab() {
 
   const garantiasFiltradas = useMemo(() => {
     return garantias.filter(g => {
-      if (filtroEstado !== 'todos' && g.estado !== filtroEstado) return false
       if (conductorFilter.length > 0 && !conductorFilter.includes(g.conductor_nombre || '')) return false
-      if (tipoFilter.length > 0 && !tipoFilter.includes(g.tipo_alquiler)) return false
       if (estadoFilter.length > 0 && !estadoFilter.includes(g.estado)) return false
       // Filtro estado conductor
       if (estadoCondFilter !== 'todos') {
@@ -1612,7 +1599,7 @@ export function GarantiasTab() {
       if (asignadoFilter === 'no_asignado' && conductoresAsignados.has(g.conductor_id)) return false
       return true
     })
-  }, [garantias, filtroEstado, conductorFilter, tipoFilter, estadoFilter, estadoCondFilter, asignadoFilter, conductoresAsignados])
+  }, [garantias, conductorFilter, estadoFilter, estadoCondFilter, asignadoFilter, conductoresAsignados])
 
   const movimientosFiltrados = useMemo(() => {
     return todosLosPagos.filter(p => {
@@ -1781,7 +1768,8 @@ export function GarantiasTab() {
             columns={columnsGarantias}
             loading={loading}
             searchPlaceholder="Buscar conductor..."
-            emptyIcon={<Shield size={48} />}
+            emptyIcon={<Shield size={48}
+          />}
             emptyTitle="Sin garantías"
             emptyDescription="No hay garantías registradas"
             pageSize={100}
@@ -1829,7 +1817,8 @@ export function GarantiasTab() {
             columns={columnsMovimientos}
             loading={loading}
             searchPlaceholder="Buscar movimiento..."
-            emptyIcon={<Receipt size={48} />}
+            emptyIcon={<Receipt size={48}
+          />}
             emptyTitle="Sin movimientos"
             emptyDescription="No hay pagos de garantía registrados"
             pageSize={50}

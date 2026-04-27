@@ -268,7 +268,8 @@ export function ExcesosTable({
         showSearch={false}
         pageSize={50}
         onTableReady={handleTableReady}
-        emptyIcon={<Gauge size={48} />}
+        emptyIcon={<Gauge size={48}
+      />}
         emptyTitle="Sin excesos"
         emptyDescription="No se encontraron excesos de velocidad para el período seleccionado"
       />

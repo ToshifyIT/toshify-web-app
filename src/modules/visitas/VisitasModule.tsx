@@ -512,7 +512,7 @@ export function VisitasModule() {
     },
     {
       id: 'acciones',
-      header: '',
+      header: 'Acciones',
       size: 50,
       cell: ({ row }) => {
         if (isMasked(row.original)) return null;
@@ -625,7 +625,7 @@ export function VisitasModule() {
               data={visitas}
               columns={columns}
               searchPlaceholder="Buscar visitas..."
-            />
+/>
           )}
 
           {/* Modales */}

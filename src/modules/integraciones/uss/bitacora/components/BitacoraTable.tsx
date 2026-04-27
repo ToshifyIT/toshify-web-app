@@ -695,7 +695,8 @@ export function BitacoraTable({
         loading={isLoading}
         showSearch={false}
         showPagination={false}
-        emptyIcon={<ClipboardList size={48} />}
+        emptyIcon={<ClipboardList size={48}
+      />}
         emptyTitle="Sin registros"
         emptyDescription="No hay registros de bitácora para mostrar"
         pageSize={999}

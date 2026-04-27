@@ -233,9 +233,13 @@ export function UserDashboard() {
 
         .content-area {
           flex: 1;
+          min-width: 0;
+          min-height: 0;
           overflow-y: auto;
           background: #F9FAFB;
           padding: 32px;
+          display: flex;
+          flex-direction: column;
         }
 
         .welcome-card {

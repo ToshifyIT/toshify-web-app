@@ -949,7 +949,7 @@ export function LiquidacionConductoresTab() {
     },
     {
       id: 'acciones',
-      header: '',
+      header: 'Acciones',
       cell: ({ row }) => (
         <div className="fact-table-actions">
           <button
@@ -1066,7 +1066,8 @@ export function LiquidacionConductoresTab() {
         columns={columns}
         loading={loading}
         searchPlaceholder="Buscar conductor..."
-        emptyIcon={<UserMinus size={48} />}
+        emptyIcon={<UserMinus size={48}
+      />}
         emptyTitle="Sin liquidaciones"
         emptyDescription="No hay liquidaciones registradas. Use el botón 'Nueva Liquidación' para dar de baja a un conductor."
         pageSize={100}

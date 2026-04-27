@@ -637,7 +637,8 @@ export default function TelepaseHistoricoModule() {
         onClearAllFilters={clearAllFilters}
         headerAction={
           <button className="btn-secondary" onClick={handleExportar}>
-            <Download size={16} />
+            <Download size={16}
+          />
             Exportar
           </button>
         }

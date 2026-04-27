@@ -586,7 +586,7 @@ export function ConceptosFacturacionTab() {
     },
     {
       id: 'acciones',
-      header: '',
+      header: 'Acciones',
       cell: ({ row }) => (
         <div style={{ display: 'flex', gap: '4px', justifyContent: 'flex-end' }}>
           <button
@@ -649,7 +649,8 @@ pageSize={100}
             cursor: 'pointer'
           }}
         >
-          <Plus size={16} />
+          <Plus size={16}
+        />
           Nuevo Concepto
         </button>
       }

@@ -425,7 +425,8 @@ export function MenuHierarchyManager() {
         loading={loading}
         error={error}
         searchPlaceholder="Buscar por nombre, etiqueta o ruta..."
-        emptyIcon={<MenuIcon size={48} />}
+        emptyIcon={<MenuIcon size={48}
+      />}
         emptyTitle="No hay menús"
         emptyDescription="Crea el primer menú usando el botón '+ Menú'"
 pageSize={100}

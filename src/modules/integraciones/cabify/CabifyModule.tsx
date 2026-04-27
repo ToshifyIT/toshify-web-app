@@ -213,7 +213,8 @@ export function CabifyModule() {
           loading={isLoading && !hasDrivers}
           error={null}
           searchPlaceholder={UI_TEXT.SEARCH_PLACEHOLDER}
-          emptyIcon={<Users size={48} />}
+          emptyIcon={<Users size={48}
+        />}
           emptyTitle={UI_TEXT.NO_DRIVERS}
           emptyDescription={UI_TEXT.SELECT_WEEK}
           pageSize={DEFAULT_PAGE_SIZE}

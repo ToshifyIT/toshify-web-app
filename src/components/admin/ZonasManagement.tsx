@@ -771,7 +771,7 @@ export function ZonasManagement() {
           searchPlaceholder="Buscar zonas..."
           emptyTitle="No hay zonas"
           emptyDescription="No se encontraron zonas peligrosas registradas"
-        />
+/>
       </div>
 
       {/* Create Modal */}
