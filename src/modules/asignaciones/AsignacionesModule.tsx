@@ -240,6 +240,18 @@ export function AsignacionesModule() {
       return
     }
 
+    const confirmacion = await Swal.fire({
+      icon: 'warning',
+      title: 'Confirmar generacion',
+      text: 'Tenga en cuenta que despues de guardar estos datos ya no se podra revertir ni editar el documento generado.',
+      showCancelButton: true,
+      confirmButtonText: 'Generar Documento',
+      cancelButtonText: 'Cancelar',
+      confirmButtonColor: 'var(--color-primary)',
+    })
+
+    if (!confirmacion.isConfirmed) return
+
     setControlSaving(true)
     try {
       const result = await completeControl({
