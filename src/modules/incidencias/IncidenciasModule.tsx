@@ -184,9 +184,10 @@ export function IncidenciasModule() {
   const [penTipoFilter, setPenTipoFilter] = useState<string[]>([])
   const [penCodIncFilter, setPenCodIncFilter] = useState<string[]>([])
   const [penAplicadoFilter, setPenAplicadoFilter] = useState<string[]>([])
-  
+  const [penFraccFilter, setPenFraccFilter] = useState<string[]>([])
+
   // Helper: ¿Hay filtros activos en penalidades?
-  const hayFiltrosPenalidadesActivos = penPatenteFilter.length > 0 || penConductorFilter.length > 0 || penTipoFilter.length > 0 || penCodIncFilter.length > 0 || penAplicadoFilter.length > 0
+  const hayFiltrosPenalidadesActivos = penPatenteFilter.length > 0 || penConductorFilter.length > 0 || penTipoFilter.length > 0 || penCodIncFilter.length > 0 || penAplicadoFilter.length > 0 || penFraccFilter.length > 0
   
   // Limpiar todos los filtros de penalidades
   function limpiarFiltrosPenalidades() {
@@ -195,6 +196,7 @@ export function IncidenciasModule() {
     setPenTipoFilter([])
     setPenCodIncFilter([])
     setPenAplicadoFilter([])
+    setPenFraccFilter([])
   }
 
   // Selección masiva para envío a facturación
@@ -1163,9 +1165,16 @@ export function IncidenciasModule() {
         return penAplicadoFilter.includes(aplicadoStr)
       })
     }
+    if (penFraccFilter.length > 0) {
+      filtered = filtered.filter(p => {
+        const tieneFracc = fraccionamientoMap.has(p.id)
+        const label = tieneFracc ? 'Con Fracc.' : 'Sin Fracc.'
+        return penFraccFilter.includes(label)
+      })
+    }
 
     return filtered
-  }, [penalidades, activeTab, penPatenteFilter, penConductorFilter, penTipoFilter, penCodIncFilter, penAplicadoFilter, incidenciasSinEnviarVirtuales, tiposCobroDescuentoMap])
+  }, [penalidades, activeTab, penPatenteFilter, penConductorFilter, penTipoFilter, penCodIncFilter, penAplicadoFilter, penFraccFilter, fraccionamientoMap, incidenciasSinEnviarVirtuales, tiposCobroDescuentoMap])
 
   // Columnas para tabla de incidencias
   const incidenciasColumns = useMemo<ColumnDef<IncidenciaCompleta>[]>(() => [
@@ -1757,11 +1766,21 @@ export function IncidenciasModule() {
     },
     {
       id: 'fraccionado',
-      header: 'Fracc.',
+      header: () => (
+        <ExcelColumnFilter
+          label="Fracc."
+          options={['Con Fracc.', 'Sin Fracc.']}
+          selectedValues={penFraccFilter}
+          onSelectionChange={setPenFraccFilter}
+          filterId="pen_fracc"
+          openFilterId={openFilterId}
+          onOpenChange={setOpenFilterId}
+        />
+      ),
       accessorFn: (row) => {
         const fracInfo = fraccionamientoMap.get(row.id)
-        if (!fracInfo) return ''
-        return `${fracInfo.cuotas_pendientes}/${fracInfo.total_cuotas}`
+        if (!fracInfo) return 'Sin Fracc.'
+        return 'Con Fracc.'
       },
       enableSorting: true,
       cell: ({ row }) => {
@@ -1849,7 +1868,7 @@ export function IncidenciasModule() {
     })
 
     return cols
-  }, [penPatentesUnicas, penPatenteFilter, penConductoresUnicos, penConductorFilter, penTiposUnicos, penTipoFilter, penAplicadoFilter, openFilterId, canDelete, canEdit, fraccionamientoMap, activeTab, penalidadesSeleccionadas, penalidadesPorAplicar])
+  }, [penPatentesUnicas, penPatenteFilter, penConductoresUnicos, penConductorFilter, penTiposUnicos, penTipoFilter, penAplicadoFilter, penFraccFilter, openFilterId, canDelete, canEdit, fraccionamientoMap, activeTab, penalidadesSeleccionadas, penalidadesPorAplicar])
 
   function handleNuevaIncidencia() {
     const estadoPendiente = estados.find(e => e.codigo === 'PENDIENTE')

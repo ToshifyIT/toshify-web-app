@@ -1301,9 +1301,8 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
 
   const handleSubmit = async () => {
     if (loading || isSubmittingRef.current) return
-    isSubmittingRef.current = true
 
-    // Validaciones
+    // Validaciones (antes de marcar isSubmitting para no bloquear reintentos)
     const validationError = validateSubmitFields()
     if (validationError) {
       Swal.fire('Error', validationError, 'error')
@@ -1314,6 +1313,7 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
     const isDuplicate = await checkDuplicateProgramacion()
     if (isDuplicate) return
 
+    isSubmittingRef.current = true
     setLoading(true)
 
     try {

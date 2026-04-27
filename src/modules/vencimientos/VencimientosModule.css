@@ -226,7 +226,7 @@
 
 .vencimientos-table .dt-table th,
 .vencimientos-table .dt-table td {
-  text-align: center;
+  text-align: left;
 }
 
 .vencimientos-table .venc-cell {

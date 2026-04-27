@@ -1630,3 +1630,20 @@ tr:hover .pen-check-cell,
 [role="row"]:hover .pen-check-cell {
   opacity: 1;
 }
+
+/* =====================================================
+   STICKY ACTIONS COLUMN (solo en incidencias)
+   ===================================================== */
+
+.incidencias-module .dt-sticky-col {
+  position: sticky;
+  right: 0;
+  z-index: 2;
+  background: var(--bg-primary, #fff);
+  box-shadow: -2px 0 4px rgba(0, 0, 0, 0.06);
+}
+
+.incidencias-module .dt-table thead .dt-sticky-col {
+  background: var(--table-header-bg);
+  z-index: 5;
+}

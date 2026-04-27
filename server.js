@@ -1210,19 +1210,40 @@ app.post('/api/complete-control', async (req, res) => {
       return res.status(400).json({ error: 'KM y LTNAFTA son obligatorios' })
     }
 
-    // 1. Buscar el documento generado para este conductor (el más reciente con google_doc_id)
+    // 1. Buscar el documento generado para este conductor
+    // Si hay asignacion_id, buscar por programacion_id de esa asignacion para encontrar el documento correcto
     const supabaseUrl = process.env.VITE_SUPABASE_URL
     const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
 
-    const docQuery = await fetch(
-      `${supabaseUrl}/rest/v1/documentos_generados?conductor_id=eq.${conductor_id}&google_doc_id=not.is.null&order=created_at.desc&limit=1`,
-      {
-        headers: {
-          'apikey': serviceKey,
-          'Authorization': `Bearer ${serviceKey}`
+    let docQueryUrl = `${supabaseUrl}/rest/v1/documentos_generados?conductor_id=eq.${conductor_id}&google_doc_id=not.is.null&order=created_at.desc&limit=1`
+
+    if (asignacion_id) {
+      // Obtener programacion_id de la asignacion
+      const asigQuery = await fetch(
+        `${supabaseUrl}/rest/v1/asignaciones?id=eq.${asignacion_id}&select=programacion_id`,
+        {
+          headers: {
+            'apikey': serviceKey,
+            'Authorization': `Bearer ${serviceKey}`
+          }
         }
+      )
+      const asigData = await asigQuery.json()
+      if (asigData && asigData.length > 0 && asigData[0].programacion_id) {
+        const progId = asigData[0].programacion_id
+        docQueryUrl = `${supabaseUrl}/rest/v1/documentos_generados?conductor_id=eq.${conductor_id}&programacion_id=eq.${progId}&google_doc_id=not.is.null&order=created_at.desc&limit=1`
+        console.log(`[Control] Buscando documento por programacion_id=${progId} y conductor_id=${conductor_id}`)
+      } else {
+        console.log(`[Control] No se encontro programacion_id para asignacion ${asignacion_id}, buscando por conductor_id solamente`)
       }
-    )
+    }
+
+    const docQuery = await fetch(docQueryUrl, {
+      headers: {
+        'apikey': serviceKey,
+        'Authorization': `Bearer ${serviceKey}`
+      }
+    })
     const docs = await docQuery.json()
     if (!docs || docs.length === 0) {
       return res.status(404).json({ error: 'No se encontró documento generado para este conductor. Primero debe generarse el contrato desde Programaciones.' })
