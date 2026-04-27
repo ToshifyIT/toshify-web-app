@@ -504,7 +504,7 @@ export function VehiculoWizard({
             </p>
 
             <div className="form-group">
-              <label className="form-label">Cobertura</label>
+              <label className="form-label">Cobertura <span className="required">*</span></label>
               <input
                 type="text"
                 className="form-input"

@@ -902,9 +902,9 @@ export function ProgramacionModule() {
       if (prog.vehiculo_entregar_id) {
         const { data: veh } = await supabase
           .from('vehiculos')
-          .select('numero_motor, numero_chasis, marca, modelo, anio, color, titular')
+          .select('numero_motor, numero_chasis, marca, modelo, anio, color, titular, cobertura')
           .eq('id', prog.vehiculo_entregar_id)
-          .single() as { data: { numero_motor: string | null; numero_chasis: string | null; marca: string | null; modelo: string | null; anio: number | null; color: string | null; titular: string | null } | null }
+          .single() as { data: { numero_motor: string | null; numero_chasis: string | null; marca: string | null; modelo: string | null; anio: number | null; color: string | null; titular: string | null; cobertura: string | null } | null }
 
         if (veh) {
           if (!veh.numero_motor?.trim()) camposFaltantes.push('Vehículo → Número de Motor')
@@ -914,6 +914,7 @@ export function ProgramacionModule() {
           if (!veh.anio) camposFaltantes.push('Vehículo → Año')
           if (!veh.color?.trim()) camposFaltantes.push('Vehículo → Color')
           if (!veh.titular?.trim()) camposFaltantes.push('Vehículo → Titular')
+          if (!veh.cobertura?.trim()) camposFaltantes.push('Vehículo → Cobertura')
         }
       }
 
