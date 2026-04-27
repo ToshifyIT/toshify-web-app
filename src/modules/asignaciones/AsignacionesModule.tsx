@@ -235,8 +235,14 @@ export function AsignacionesModule() {
   async function handleSubmitControl() {
     if (!controlAsignacion || !controlConductorId) return
 
-    if (!controlForm.km.trim() || !controlForm.ltnafta.trim()) {
-      Swal.fire('Campos requeridos', 'Kilometraje y Litros de Nafta son obligatorios.', 'warning')
+    // Validar que todos los campos visibles estén completos
+    const camposBase = [controlForm.km, controlForm.ltnafta]
+    const camposBariloche = isControlBariloche
+      ? [controlForm.cristal_status, controlForm.carter, controlForm.tires, controlForm.others_docs, controlForm.other_accesory, controlForm.make_chains, controlForm.status_chains, controlForm.tensioners_chains, controlForm.others_kit]
+      : []
+    const todosLosCampos = [...camposBase, ...camposBariloche]
+    if (todosLosCampos.some(c => !c.trim())) {
+      Swal.fire('Campos requeridos', 'Todos los campos son obligatorios. En caso de no tener el dato, ingresa N/A o Sin observación.', 'warning')
       return
     }
 

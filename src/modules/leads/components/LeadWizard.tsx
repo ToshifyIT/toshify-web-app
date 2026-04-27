@@ -1,6 +1,6 @@
 // src/modules/leads/components/LeadWizard.tsx
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Check, ChevronLeft, ChevronRight } from 'lucide-react'
 import { AddressAutocomplete } from '../../../components/ui/AddressAutocomplete'
 import type { LeadFormData } from '../../../types/leads.types'
@@ -23,8 +23,46 @@ const STEPS = [
   { id: 6, label: 'Emergencia' },
 ]
 
+// Calcula la edad a partir de una fecha de nacimiento (formato YYYY-MM-DD)
+function calcularEdad(fechaNac: string): number | undefined {
+  if (!fechaNac) return undefined
+  const hoy = new Date()
+  const nac = new Date(fechaNac + 'T00:00:00')
+  if (isNaN(nac.getTime())) return undefined
+  let edad = hoy.getFullYear() - nac.getFullYear()
+  const mesActual = hoy.getMonth()
+  const mesNac = nac.getMonth()
+  if (mesActual < mesNac || (mesActual === mesNac && hoy.getDate() < nac.getDate())) {
+    edad--
+  }
+  return edad >= 0 ? edad : undefined
+}
+
+// Infiere zona geográfica a partir del texto de la dirección
+function inferZonaFromAddress(address: string): string {
+  const lower = address.toLowerCase()
+  const cabaKeywords = ['capital federal', 'caba', 'ciudad autónoma', 'ciudad autonoma', 'cdad. autónoma', 'cdad. autonoma', 'autónoma de buenos aires', 'autonoma de buenos aires', 'c.a.b.a']
+  if (cabaKeywords.some(k => lower.includes(k))) return 'CABA'
+  const norteKeywords = ['san isidro', 'vicente lópez', 'vicente lopez', 'tigre', 'san fernando', 'pilar', 'escobar', 'campana', 'zárate', 'zarate', 'zona norte']
+  if (norteKeywords.some(k => lower.includes(k))) return 'Norte'
+  const surKeywords = ['avellaneda', 'quilmes', 'lanús', 'lanus', 'lomas de zamora', 'almirante brown', 'berazategui', 'florencio varela', 'zona sur']
+  if (surKeywords.some(k => lower.includes(k))) return 'Sur'
+  const oesteKeywords = ['morón', 'moron', 'merlo', 'moreno', 'la matanza', 'ituzaingó', 'ituzaingo', 'hurlingham', 'tres de febrero', 'san martín', 'san martin', 'zona oeste', 'josé c. paz', 'jose c. paz', 'malvinas argentinas', 'san miguel']
+  if (oesteKeywords.some(k => lower.includes(k))) return 'Oeste'
+  return ''
+}
+
 export function LeadWizard({ formData, setFormData, onSave, onCancel, saving = false, errors = {} }: LeadWizardProps) {
   const [currentStep, setCurrentStep] = useState(1)
+
+  // Al abrir el wizard, si hay teléfono pero no WhatsApp, copiar el teléfono
+  useEffect(() => {
+    if (formData.phone && !formData.whatsapp_number) {
+      setFormData(prev => ({ ...prev, whatsapp_number: prev.phone }))
+    }
+    // Solo al montar
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   function updateField(field: keyof LeadFormData, value: any) {
     setFormData(prev => ({ ...prev, [field]: value }))
@@ -110,7 +148,12 @@ export function LeadWizard({ formData, setFormData, onSave, onCancel, saving = f
                 <input
                   type="date"
                   value={formData.fecha_de_nacimiento || ''}
-                  onChange={e => updateField('fecha_de_nacimiento', e.target.value)}
+                  onChange={e => {
+                    const fecha = e.target.value
+                    updateField('fecha_de_nacimiento', fecha)
+                    const edad = calcularEdad(fecha)
+                    if (edad !== undefined) updateField('edad', edad)
+                  }}
                 />
               </div>
             </div>
@@ -127,12 +170,17 @@ export function LeadWizard({ formData, setFormData, onSave, onCancel, saving = f
               </div>
               <div className="lead-wizard-field">
                 <label>Nacionalidad</label>
-                <input
-                  type="text"
-                  value={formData.nacionalidad || ''}
-                  onChange={e => updateField('nacionalidad', e.target.value)}
-                  placeholder="Ej: Argentina"
-                />
+                <select value={formData.nacionalidad || ''} onChange={e => updateField('nacionalidad', e.target.value)}>
+                  <option value="">Seleccionar</option>
+                  <option value="ARGENTINA">ARGENTINA</option>
+                  <option value="BOLIVIANA">BOLIVIANA</option>
+                  <option value="PARAGUAYA">PARAGUAYA</option>
+                  <option value="PERUANA">PERUANA</option>
+                  <option value="URUGUAYA">URUGUAYA</option>
+                  <option value="VENEZOLANA">VENEZOLANA</option>
+                  <option value="CHILENA">CHILENA</option>
+                  <option value="COLOMBIANA">COLOMBIANA</option>
+                </select>
               </div>
             </div>
             <div className="lead-wizard-form-group">
@@ -140,11 +188,11 @@ export function LeadWizard({ formData, setFormData, onSave, onCancel, saving = f
                 <label>Estado Civil</label>
                 <select value={formData.estado_civil || ''} onChange={e => updateField('estado_civil', e.target.value)}>
                   <option value="">Seleccionar</option>
-                  <option value="Soltero">Soltero</option>
-                  <option value="Casado">Casado</option>
-                  <option value="Divorciado">Divorciado</option>
-                  <option value="Viudo">Viudo</option>
-                  <option value="Union de hecho">Union de hecho</option>
+                  <option value="CASADO">CASADO</option>
+                  <option value="DIVORCIADO">DIVORCIADO</option>
+                  <option value="EN CONCUBINATO">EN CONCUBINATO</option>
+                  <option value="SOLTERO">SOLTERO</option>
+                  <option value="VIUDO">VIUDO</option>
                 </select>
               </div>
               <div className="lead-wizard-field">
@@ -169,7 +217,14 @@ export function LeadWizard({ formData, setFormData, onSave, onCancel, saving = f
                 <input
                   type="text"
                   value={formData.phone || ''}
-                  onChange={e => updateField('phone', e.target.value)}
+                  onChange={e => {
+                    const val = e.target.value
+                    updateField('phone', val)
+                    // Auto-fill WhatsApp si está vacío o coincide con el teléfono anterior
+                    if (!formData.whatsapp_number || formData.whatsapp_number === formData.phone) {
+                      updateField('whatsapp_number', val)
+                    }
+                  }}
                   placeholder="Ej: 11-1234-5678"
                 />
               </div>
@@ -212,6 +267,9 @@ export function LeadWizard({ formData, setFormData, onSave, onCancel, saving = f
                     updateField('direccion', address)
                     if (lat !== undefined) updateField('latitud', lat)
                     if (lng !== undefined) updateField('longitud', lng)
+                    // Auto-detectar zona desde la dirección
+                    const zonaInferida = inferZonaFromAddress(address)
+                    if (zonaInferida) updateField('zona', zonaInferida)
                   }}
                   placeholder="Buscar dirección..."
                 />
@@ -238,26 +296,7 @@ export function LeadWizard({ formData, setFormData, onSave, onCancel, saving = f
                 </select>
               </div>
             </div>
-            <div className="lead-wizard-form-group">
-              <div className="lead-wizard-field">
-                <label>Clasificación Domicilio</label>
-                <select value={formData.clasificacion_domicilio || ''} onChange={e => updateField('clasificacion_domicilio', e.target.value)}>
-                  <option value="">Seleccionar</option>
-                  <option value="Zona Buena">Zona Buena</option>
-                  <option value="Zona Barrio">Zona Barrio</option>
-                  <option value="Zona Peligrosa">Zona Peligrosa</option>
-                </select>
-              </div>
-              <div className="lead-wizard-field">
-                <label>Estado Dirección</label>
-                <select value={formData.estado_direccion || ''} onChange={e => updateField('estado_direccion', e.target.value)}>
-                  <option value="">Seleccionar</option>
-                  <option value="Permitido">Permitido</option>
-                  <option value="No permitido">No permitido</option>
-                  <option value="Pendiente">Pendiente</option>
-                </select>
-              </div>
-            </div>
+            {/* Clasificación Domicilio y Estado Dirección ocultos */}
           </>
         )}
 
@@ -270,7 +309,12 @@ export function LeadWizard({ formData, setFormData, onSave, onCancel, saving = f
                 <input
                   type="text"
                   value={formData.licencia || ''}
-                  onChange={e => updateField('licencia', e.target.value)}
+                  onChange={e => {
+                    const val = e.target.value.toUpperCase()
+                    updateField('licencia', val)
+                    // Auto-detectar D1 según las clases de licencia
+                    updateField('d1', val.includes('D1') ? 'Si' : 'No')
+                  }}
                   placeholder="Ej: A1.4.B2.D1"
                 />
               </div>
@@ -356,13 +400,11 @@ export function LeadWizard({ formData, setFormData, onSave, onCancel, saving = f
               </div>
               <div className="lead-wizard-field">
                 <label>Disponibilidad</label>
-                <select value={formData.disponibilidad || ''} onChange={e => updateField('disponibilidad', e.target.value)}>
-                  <option value="">Seleccionar</option>
-                  <option value="Inmediata">Inmediata</option>
-                  <option value="1 Semana">1 Semana</option>
-                  <option value="2 Semanas">2 Semanas</option>
-                  <option value="1 Mes">1 Mes</option>
-                </select>
+                <input
+                  type="date"
+                  value={formData.disponibilidad || ''}
+                  onChange={e => updateField('disponibilidad', e.target.value)}
+                />
               </div>
             </div>
             <div className="lead-wizard-form-group">
@@ -370,8 +412,10 @@ export function LeadWizard({ formData, setFormData, onSave, onCancel, saving = f
                 <label>Cuenta Cabify</label>
                 <select value={formData.cuenta_cabify || ''} onChange={e => updateField('cuenta_cabify', e.target.value)}>
                   <option value="">Seleccionar</option>
+                  <option value="En proceso">En proceso</option>
                   <option value="Activa">Activa</option>
                   <option value="No tiene">No tiene</option>
+                  <option value="en revision">en revision</option>
                   <option value="Verificar Activa">Verificar Activa</option>
                 </select>
               </div>
@@ -379,8 +423,8 @@ export function LeadWizard({ formData, setFormData, onSave, onCancel, saving = f
                 <label>Monotributo</label>
                 <select value={formData.monotributo || ''} onChange={e => updateField('monotributo', e.target.value)}>
                   <option value="">Seleccionar</option>
-                  <option value="Tiene">Tiene</option>
-                  <option value="No tiene">No tiene</option>
+                  <option value="Si">Si</option>
+                  <option value="No">No</option>
                 </select>
               </div>
             </div>
@@ -429,17 +473,8 @@ export function LeadWizard({ formData, setFormData, onSave, onCancel, saving = f
         {/* Step 5: Proceso */}
         {currentStep === 5 && (
           <>
+            {/* Campo Proceso oculto */}
             <div className="lead-wizard-form-group">
-              <div className="lead-wizard-field">
-                <label>Proceso</label>
-                <select value={formData.proceso || ''} onChange={e => updateField('proceso', e.target.value)}>
-                  <option value="">Seleccionar</option>
-                  <option value="En Proceso">En Proceso</option>
-                  <option value="Ex Conductor">Ex Conductor</option>
-                  <option value="Descartado">Descartado</option>
-                  <option value="Convertido">Convertido</option>
-                </select>
-              </div>
               <div className="lead-wizard-field">
                 <label>Entrevista IA</label>
                 <select value={formData.entrevista_ia || ''} onChange={e => updateField('entrevista_ia', e.target.value)}>
@@ -456,18 +491,21 @@ export function LeadWizard({ formData, setFormData, onSave, onCancel, saving = f
                 <select value={formData.estado_de_lead || ''} onChange={e => updateField('estado_de_lead', e.target.value)}>
                   <option value="">Seleccionar</option>
                   <option value="Inicio conversación">Inicio conversación</option>
-                  <option value="Apto">Apto</option>
-                  <option value="No apto">No apto</option>
+                  <option value="Apto - Hireflix">Apto - Hireflix</option>
+                  <option value="No Apto - Hireflix">No Apto - Hireflix</option>
                   <option value="Documentos enviados">Documentos enviados</option>
                   <option value="Auto del pueblo">Auto del pueblo</option>
                   <option value="No le interesa">No le interesa</option>
                   <option value="No cumple edad">No cumple edad</option>
+                  <option value="Convocatoria Induccion">Convocatoria Induccion</option>
+                  <option value="Descartado">Descartado</option>
                 </select>
               </div>
               <div className="lead-wizard-field">
                 <label>Fuente del Lead</label>
-                <select value={formData.fuente_de_lead || ''} onChange={e => updateField('fuente_de_lead', e.target.value)}>
-                  <option value="">Seleccionar</option>
+                <select value={formData.fuente_de_lead || 'Intercom'} onChange={e => updateField('fuente_de_lead', e.target.value)}>
+                  <option value="Intercom">Intercom</option>
+                  <option value="Damaro">Damaro</option>
                   <option value="Facebook">Facebook</option>
                   <option value="Instagram">Instagram</option>
                   <option value="WhatsApp">WhatsApp</option>
@@ -487,7 +525,7 @@ export function LeadWizard({ formData, setFormData, onSave, onCancel, saving = f
                 />
               </div>
               <div className="lead-wizard-field">
-                <label>Entrevistador</label>
+                <label>Guia</label>
                 <input
                   type="text"
                   value={formData.entrevistador_asignado || ''}
@@ -497,21 +535,14 @@ export function LeadWizard({ formData, setFormData, onSave, onCancel, saving = f
             </div>
             <div className="lead-wizard-form-group">
               <div className="lead-wizard-field">
-                <label>Código Referido</label>
+                <label>Codigo Referido</label>
                 <input
                   type="text"
                   value={formData.codigo_referido || ''}
                   onChange={e => updateField('codigo_referido', e.target.value)}
                 />
               </div>
-              <div className="lead-wizard-field">
-                <label>Fecha de Inicio</label>
-                <input
-                  type="date"
-                  value={formData.fecha_de_inicio || ''}
-                  onChange={e => updateField('fecha_de_inicio', e.target.value)}
-                />
-              </div>
+              {/* Fecha de Inicio oculto */}
             </div>
             <div className="lead-wizard-form-group full-width">
               <div className="lead-wizard-field">
@@ -554,13 +585,26 @@ export function LeadWizard({ formData, setFormData, onSave, onCancel, saving = f
                   <option value="">Seleccionar</option>
                   <option value="Padre/Madre">Padre/Madre</option>
                   <option value="Hermano/a">Hermano/a</option>
-                  <option value="Cónyuge">Cónyuge</option>
+                  <option value="Cónyuge">Conyuge</option>
                   <option value="Hijo/a">Hijo/a</option>
+                  <option value="Abuelo/a">Abuelo/a</option>
+                  <option value="Amigo/a">Amigo/a</option>
+                  <option value="Compadre">Compadre</option>
+                  <option value="Comadre">Comadre</option>
+                  <option value="Concubino/a">Concubino/a</option>
+                  <option value="Conviviente">Conviviente</option>
+                  <option value="Cuñado/a">Cuñado/a</option>
+                  <option value="Ex Esposo/a">Ex Esposo/a</option>
+                  <option value="Padrastro">Padrastro</option>
+                  <option value="Madrastra">Madrastra</option>
+                  <option value="Primo/a">Primo/a</option>
+                  <option value="Vecino/a">Vecino/a</option>
+                  <option value="Tío/a">Tio/a</option>
                   <option value="Otro">Otro</option>
                 </select>
               </div>
               <div className="lead-wizard-field">
-                <label>Verificación Emergencia</label>
+                <label>Verificación de contacto de emergencia</label>
                 <select
                   value={formData.verificacion_emergencia ? 'Si' : 'No'}
                   onChange={e => updateField('verificacion_emergencia', e.target.value === 'Si')}

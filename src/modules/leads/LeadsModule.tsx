@@ -1,7 +1,8 @@
 // src/modules/leads/LeadsModule.tsx
-import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
+import { useState, useEffect, useMemo, useCallback, useRef, useLayoutEffect } from 'react'
+import { createPortal } from 'react-dom'
 import {
-  Eye, Edit2, Trash2, Users, UserPlus, Clock, RefreshCw,
+  Eye, Edit2, Trash2, Users, UserPlus, Clock, RefreshCw, MessageCircle,
   CheckCircle, XCircle, AlertTriangle, X, Download, Upload, MapPin, ExternalLink, FolderOpen,
 } from 'lucide-react'
 import { GoogleMap, useJsApiLoader, Marker, Polygon } from '@react-google-maps/api'
@@ -96,6 +97,62 @@ function isPointInPolygon(point: { lat: number; lng: number }, polygon: { lat: n
 // HELPERS
 // =====================================================
 
+/**
+ * Normaliza un número de teléfono argentino al formato +549XXXXXXXXXX (13 dígitos total).
+ * Formato final: +54 9 [código área sin 0] [número sin 15]
+ * Ejemplos:
+ *   02944140422   -> +5492944140422  (0 removido)
+ *   02944-15-140422 -> +5492944140422 (0 y 15 removidos)
+ *   1155551234    -> +5491155551234
+ *   +54 9 11 5555 1234 -> +5491155551234
+ */
+function formatPhoneAR(raw: unknown): string | null {
+  if (raw == null) return null
+  let digits = String(raw).replace(/[^\d]/g, '')
+  if (!digits || digits.length < 6) return String(raw).trim() || null
+
+  // Si empieza con 54, quitarlo para normalizar
+  if (digits.startsWith('54')) {
+    digits = digits.slice(2)
+  }
+
+  // Quitar 9 del inicio (marcador de celular en formato internacional)
+  if (digits.startsWith('9') && digits.length >= 11) {
+    digits = digits.slice(1)
+  }
+
+  // Quitar 0 del código de área (011, 0351, 02944, etc.)
+  if (digits.startsWith('0')) {
+    digits = digits.slice(1)
+  }
+
+  // Detectar y quitar el 15 intercalado (código de área + 15 + número)
+  // Códigos de área de 2 dígitos: 11
+  // Códigos de área de 3 dígitos: 2xx, 3xx (ej: 351, 261, 299)
+  // Códigos de área de 4 dígitos: 2xxx, 3xxx (ej: 2944, 3541)
+  // Después del código de área, si hay un 15, se quita
+  if (digits.length >= 12) {
+    // Probar con código de área de 4 dígitos (ej: 2944-15-XXXXXX)
+    if (/^[23]\d{3}15\d+/.test(digits)) {
+      digits = digits.slice(0, 4) + digits.slice(6)
+    }
+    // Probar con código de área de 3 dígitos (ej: 351-15-XXXXXXX)
+    else if (/^[23]\d{2}15\d+/.test(digits)) {
+      digits = digits.slice(0, 3) + digits.slice(5)
+    }
+    // Probar con código de área de 2 dígitos (ej: 11-15-XXXXXXXX)
+    else if (/^11\s*15\d+/.test(digits)) {
+      digits = '11' + digits.slice(4)
+    }
+  }
+
+  // El número nacional debe tener 10 dígitos (código área + número)
+  // Si tiene más, puede ser que el 15 no se haya detectado, truncar no es seguro
+  // Si tiene menos de 10, dejarlo tal cual
+
+  return `+549${digits}`
+}
+
 function leadToFormData(lead: Lead): LeadFormData {
   return {
     nombre_completo: lead.nombre_completo || '',
@@ -171,6 +228,7 @@ function formDataToDbFields(fd: LeadFormData): Record<string, unknown> {
 
 const emptyFormData: LeadFormData = {
   nombre_completo: '',
+  fuente_de_lead: 'Intercom',
 }
 
 function formatDate(dateStr: string | undefined | null): string {
@@ -230,8 +288,6 @@ export function LeadsModule() {
 
   // Filtros de columna
   const [nombreFilter, setNombreFilter] = useState<string[]>([])
-  const [procesoFilter, setProcesoFilter] = useState<string[]>([])
-  const [entrevistaFilter, setEntrevistaFilter] = useState<string[]>([])
   const [zonaFilter, setZonaFilter] = useState<string[]>([])
   const [turnoFilter, setTurnoFilter] = useState<string[]>([])
   const [disponibilidadFilter, setDisponibilidadFilter] = useState<string[]>([])
@@ -244,22 +300,41 @@ export function LeadsModule() {
 
   // Inline estado dropdown
   const [estadoDropdownId, setEstadoDropdownId] = useState<string | null>(null)
+  const [sinoDropdownKey, setSinoDropdownKey] = useState<string | null>(null) // "leadId::field"
 
   // Estados visibles para cambio manual (Conductor se asigna solo automáticamente)
   const ESTADOS_LEAD = [
-    'Inicio conversación', 'Apto', 'No apto', 'Documentos enviados',
+    'Inicio conversación', 'Apto - Hireflix', 'No Apto - Hireflix', 'Documentos enviados',
     'Auto del pueblo', 'No le interesa', 'No cumple edad',
+    'Convocatoria Induccion', 'Descartado',
   ] as const
 
-  /** Calcula el estado correcto de un lead basándose en proceso y entrevista_ia */
+  /** Calcula el estado correcto de un lead basándose en proceso y entrevista_ia.
+   *  Si el lead tiene un estado asignado manualmente (ej: DAMARO), lo respeta. */
   function calcularEstadoLead(lead: Lead): string {
     const proceso = (lead.proceso || '').toLowerCase()
     const entrevista = lead.entrevista_ia || ''
 
     if (proceso === 'convertido' || proceso === 'conductor') return 'Conductor'
-    if (entrevista === 'No Apto') return 'No apto'
-    if (entrevista === 'Apto') return 'Apto'
+    if (entrevista === 'No Apto') return 'No Apto - Hireflix'
+    if (entrevista === 'Apto') return 'Apto - Hireflix'
+    // Si ya tiene un estado asignado (no vacío y no "Inicio conversación"), respetarlo
+    if (lead.estado_de_lead && lead.estado_de_lead !== 'Inicio conversación') return lead.estado_de_lead
     return 'Inicio conversación'
+  }
+
+  async function handleInlineUpdate(leadId: string, field: keyof Lead, value: string) {
+    try {
+      const { error } = await supabase
+        .from('leads')
+        .update({ [field]: value || null })
+        .eq('id', leadId)
+      if (error) throw error
+      setLeads(prev => prev.map(l => l.id === leadId ? { ...l, [field]: value || null } : l))
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Error desconocido'
+      Swal.fire('Error', `No se pudo actualizar: ${msg}`, 'error')
+    }
   }
 
   async function handleChangeEstadoInline(leadId: string, nuevoEstado: string) {
@@ -333,6 +408,7 @@ export function LeadsModule() {
         }
 
       }
+
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Error al cargar leads'
       setError(msg)
@@ -405,7 +481,7 @@ export function LeadsModule() {
     for (const lead of sinSede) {
       const textoSede = (lead.sede || '').trim().toLowerCase()
       const sedeMatch = textoSede
-        ? sedes.find(s => s.nombre.toLowerCase() === textoSede || s.codigo.toLowerCase() === textoSede)
+        ? sedes.find(s => s.nombre?.toLowerCase() === textoSede || s.codigo?.toLowerCase() === textoSede)
         : null
       const sedeAsignada = sedeMatch || sedePrincipal
 
@@ -466,24 +542,15 @@ export function LeadsModule() {
   const stats = useMemo(() => {
     const total = leads.length
     const inicio = leads.filter(l => l.estado_de_lead === 'Inicio conversación').length
-    const aptos = leads.filter(l => l.estado_de_lead === 'Apto').length
-    const noAptos = leads.filter(l => l.estado_de_lead === 'No apto').length
-    const docsEnviados = leads.filter(l => l.estado_de_lead === 'Documentos enviados').length
-    const autoPueblo = leads.filter(l => l.estado_de_lead === 'Auto del pueblo').length
-    const noInteresa = leads.filter(l => l.estado_de_lead === 'No le interesa').length
-    const noCumpleEdad = leads.filter(l => l.estado_de_lead === 'No cumple edad').length
-    return { total, inicio, aptos, noAptos, docsEnviados, autoPueblo, noInteresa, noCumpleEdad }
-  }, [leads])
+    const aptos = leads.filter(l => l.estado_de_lead === 'Apto - Hireflix').length
+    const noAptos = leads.filter(l => l.estado_de_lead === 'No Apto - Hireflix').length
+    const conCoordenadas = leads.filter(l => l.latitud != null && l.longitud != null)
+    const enZonaPeligrosa = conCoordenadas.filter(l => leadsEnZona.has(l.id)).length
+    const enZonaSegura = conCoordenadas.filter(l => !leadsEnZona.has(l.id)).length
+    return { total, inicio, aptos, noAptos, enZonaPeligrosa, enZonaSegura }
+  }, [leads, leadsEnZona])
 
   // ---------- UNIQUE VALUES PARA FILTROS ----------
-  const uniqueProcesos = useMemo(() =>
-    [...new Set(leads.map(l => l.proceso).filter(Boolean))].sort() as string[]
-  , [leads])
-
-  const uniqueEntrevistas = useMemo(() =>
-    [...new Set(leads.map(l => l.entrevista_ia).filter(Boolean))].sort() as string[]
-  , [leads])
-
   const uniqueZonas = useMemo(() =>
     [...new Set(leads.map(l => l.zona).filter(Boolean))].sort() as string[]
   , [leads])
@@ -496,16 +563,8 @@ export function LeadsModule() {
     [...new Set(leads.map(l => l.disponibilidad).filter(Boolean))].sort() as string[]
   , [leads])
 
-  const uniqueFuentes = useMemo(() =>
-    [...new Set(leads.map(l => l.fuente_de_lead).filter(Boolean))].sort() as string[]
-  , [leads])
-
   const uniqueNombres = useMemo(() =>
     [...new Set(leads.map(l => l.nombre_completo).filter(Boolean))].sort() as string[]
-  , [leads])
-
-  const uniqueEstados = useMemo(() =>
-    [...new Set(leads.map(l => l.estado_de_lead).filter(Boolean))].sort() as string[]
   , [leads])
 
   // ---------- FILTERED DATA ----------
@@ -515,25 +574,15 @@ export function LeadsModule() {
 
     // Stat card filter (todos basados en estado_de_lead)
     if (activeStatCard === 'inicio') result = result.filter(l => l.estado_de_lead === 'Inicio conversación')
-    else if (activeStatCard === 'aptos') result = result.filter(l => l.estado_de_lead === 'Apto')
-    else if (activeStatCard === 'noAptos') result = result.filter(l => l.estado_de_lead === 'No apto')
-    else if (activeStatCard === 'docsEnviados') result = result.filter(l => l.estado_de_lead === 'Documentos enviados')
-    else if (activeStatCard === 'autoPueblo') result = result.filter(l => l.estado_de_lead === 'Auto del pueblo')
-    else if (activeStatCard === 'noInteresa') result = result.filter(l => l.estado_de_lead === 'No le interesa')
-    else if (activeStatCard === 'noCumpleEdad') result = result.filter(l => l.estado_de_lead === 'No cumple edad')
+    else if (activeStatCard === 'aptos') result = result.filter(l => l.estado_de_lead === 'Apto - Hireflix')
+    else if (activeStatCard === 'noAptos') result = result.filter(l => l.estado_de_lead === 'No Apto - Hireflix')
+    else if (activeStatCard === 'zonaSegura') result = result.filter(l => l.latitud != null && l.longitud != null && !leadsEnZona.has(l.id))
+    else if (activeStatCard === 'zonaPeligrosa') result = result.filter(l => l.latitud != null && l.longitud != null && leadsEnZona.has(l.id))
 
     // Column filters
     if (nombreFilter.length > 0) {
       const set = new Set(nombreFilter)
       result = result.filter(l => set.has(l.nombre_completo || ''))
-    }
-    if (procesoFilter.length > 0) {
-      const set = new Set(procesoFilter)
-      result = result.filter(l => set.has(l.proceso || ''))
-    }
-    if (entrevistaFilter.length > 0) {
-      const set = new Set(entrevistaFilter)
-      result = result.filter(l => set.has(l.entrevista_ia || ''))
     }
     if (zonaFilter.length > 0) {
       const set = new Set(zonaFilter)
@@ -557,7 +606,7 @@ export function LeadsModule() {
     }
 
     return result
-  }, [leads, activeStatCard, nombreFilter, procesoFilter, entrevistaFilter, zonaFilter, turnoFilter, disponibilidadFilter, fuenteFilter, estadoFilter])
+  }, [leads, activeStatCard, nombreFilter, zonaFilter, turnoFilter, disponibilidadFilter, fuenteFilter, estadoFilter])
 
   // ---------- HANDLERS ----------
   function handleOpenDetails(lead: Lead) {
@@ -811,7 +860,17 @@ export function LeadsModule() {
   // ---------- CARGA MASIVA EXCEL ----------
   const fileInputRef = useRef<HTMLInputElement>(null)
 
-  // Mapeo estricto: columna Excel → columna DB
+  // Mapeo formato Damaro: columna Excel → columna DB
+  const DAMARO_TO_DB_MAP: Record<string, string> = {
+    'NOMBRE': 'nombre_completo',
+    'CIUDAD': 'sede',
+    'DNI': 'dni',
+    'CELULAR': 'phone',
+    'OBSERVACIONES': 'observaciones',
+    'FEEDBACK DAMARO': '_feedback_damaro',
+  }
+
+  // Mapeo estricto formato original: columna Excel → columna DB
   const EXCEL_TO_DB_MAP: Record<string, string> = {
     'Fecha': 'fecha_carga',
     'NOMBRE CANDIDATO': 'nombre_completo',
@@ -967,75 +1026,231 @@ export function LeadsModule() {
       const buffer = await file.arrayBuffer()
       const wb = XLSX.read(buffer, { type: 'array' })
       const ws = wb.Sheets[wb.SheetNames[0]]
-      const jsonData = XLSX.utils.sheet_to_json<Record<string, unknown>>(ws, { defval: null })
+      let jsonData = XLSX.utils.sheet_to_json<Record<string, unknown>>(ws, { defval: null })
 
       if (jsonData.length === 0) {
         Swal.fire('Error', 'El archivo está vacío o no tiene datos.', 'error')
         return
       }
 
-      Swal.close() // Cerrar loading de lectura
-
-      // Obtener headers del Excel (excluir columnas vacías, null, y __EMPTY generadas por SheetJS)
-      const excelHeaders = Object.keys(jsonData[0]).filter(h =>
-        h != null && h !== 'null' && h.trim() !== '' && !h.startsWith('__EMPTY')
-      )
-      const expectedHeaders = Object.keys(EXCEL_TO_DB_MAP)
-
-      // Verificar columnas
-      const columnasNoReconocidas = excelHeaders.filter(h => !expectedHeaders.includes(h))
-      const columnasFaltantes = expectedHeaders.filter(h => !excelHeaders.includes(h))
-
-      if (columnasNoReconocidas.length > 0 || columnasFaltantes.length > 0) {
-        let html = '<div style="text-align: left; font-size: 13px; max-height: 350px; overflow-y: auto;">'
-        if (columnasNoReconocidas.length > 0) {
-          html += '<p style="font-weight: 600; color: #EF4444; margin-bottom: 6px;">Columnas no reconocidas en el Excel:</p>'
-          html += '<ul style="margin: 0 0 12px 0; padding-left: 20px;">'
-          html += columnasNoReconocidas.map(c => `<li>${c}</li>`).join('')
-          html += '</ul>'
+      // Detectar si la primera fila es un título/banner (headers son todos __EMPTY)
+      // En ese caso, re-parsear saltando la primera fila para que los headers reales se usen
+      const rawHeaders = Object.keys(jsonData[0])
+      const allEmpty = rawHeaders.every(h => h.startsWith('__EMPTY') || h.trim() === '' || h === 'null')
+      if (allEmpty && jsonData.length > 1) {
+        jsonData = XLSX.utils.sheet_to_json<Record<string, unknown>>(ws, { defval: null, range: 1 })
+        if (jsonData.length === 0) {
+          Swal.fire('Error', 'El archivo está vacío o no tiene datos.', 'error')
+          return
         }
-        if (columnasFaltantes.length > 0) {
-          html += '<p style="font-weight: 600; color: #F59E0B; margin-bottom: 6px;">Columnas faltantes en el Excel:</p>'
-          html += '<ul style="margin: 0 0 12px 0; padding-left: 20px;">'
-          html += columnasFaltantes.map(c => `<li>${c}</li>`).join('')
-          html += '</ul>'
-        }
-        html += '<p style="color: #6B7280; margin-top: 8px;">Todas las columnas del Excel deben coincidir exactamente con el formato esperado.</p>'
-        html += '</div>'
-
-        Swal.fire({
-          title: 'Columnas incorrectas',
-          html,
-          icon: 'error',
-          confirmButtonText: 'Entendido',
-          width: 520,
-        })
-        return
       }
 
-      // Columnas OK — Mapear datos Excel → DB (excluyendo filas completamente vacías)
+      Swal.close() // Cerrar loading de lectura
+
+      // Obtener headers del Excel, trimear espacios (excluir columnas vacías, null, y __EMPTY)
+      const excelHeadersRaw = Object.keys(jsonData[0]).filter(h =>
+        h != null && h !== 'null' && h.trim() !== '' && !h.startsWith('__EMPTY')
+      )
+      // Crear mapa de header trimmed -> header original para acceder a los datos
+      const headerTrimMap = new Map<string, string>()
+      for (const h of excelHeadersRaw) {
+        headerTrimMap.set(h.trim(), h)
+      }
+      const excelHeaders = [...headerTrimMap.keys()]
+
+      // Re-mapear jsonData para usar headers trimmed
+      jsonData = jsonData.map(row => {
+        const newRow: Record<string, unknown> = {}
+        for (const [trimmed, original] of headerTrimMap.entries()) {
+          newRow[trimmed] = row[original]
+        }
+        return newRow
+      })
+
+      // Detectar formato usando columnas EXCLUSIVAS de cada formato
+      // Damaro tiene: NOMBRE, CIUDAD, CELULAR, FEEDBACK DAMARO (no existen en Original)
+      // Original tiene: NOMBRE CANDIDATO, CONTACTO, PROCESO (no existen en Damaro)
+      const headersNorm = excelHeaders.map(h => h.trim().toUpperCase())
+      const columnasExclusivasDamaro = ['NOMBRE', 'CELULAR', 'CIUDAD', 'FEEDBACK DAMARO']
+      const isDamaro = columnasExclusivasDamaro.some(c => headersNorm.includes(c.toUpperCase()))
+      const originalKeys = Object.keys(EXCEL_TO_DB_MAP)
+
+      // Para formato Damaro: solo validar que haya al menos NOMBRE o DNI (los campos son flexibles)
+      // Para formato Original: validación estricta como antes
+      if (isDamaro) {
+        const tieneNombre = headersNorm.includes('NOMBRE')
+        const tieneDni = headersNorm.includes('DNI')
+        if (!tieneNombre && !tieneDni) {
+          Swal.fire('Error', 'El archivo formato Damaro debe tener al menos la columna NOMBRE o DNI.', 'error')
+          return
+        }
+      } else {
+        const columnasNoReconocidas = excelHeaders.filter(h => !originalKeys.includes(h))
+        const columnasFaltantes = originalKeys.filter(h => !excelHeaders.includes(h))
+
+        if (columnasNoReconocidas.length > 0 || columnasFaltantes.length > 0) {
+          let html = '<div style="text-align: left; font-size: 13px; max-height: 350px; overflow-y: auto;">'
+          html += '<p style="font-weight: 600; color: #2563EB; margin-bottom: 8px;">Formato detectado: <strong>Original</strong></p>'
+          if (columnasNoReconocidas.length > 0) {
+            html += '<p style="font-weight: 600; color: #EF4444; margin-bottom: 6px;">Columnas no reconocidas en el Excel:</p>'
+            html += '<ul style="margin: 0 0 12px 0; padding-left: 20px;">'
+            html += columnasNoReconocidas.map(c => `<li>${c}</li>`).join('')
+            html += '</ul>'
+          }
+          if (columnasFaltantes.length > 0) {
+            html += '<p style="font-weight: 600; color: #F59E0B; margin-bottom: 6px;">Columnas faltantes en el Excel:</p>'
+            html += '<ul style="margin: 0 0 12px 0; padding-left: 20px;">'
+            html += columnasFaltantes.map(c => `<li>${c}</li>`).join('')
+            html += '</ul>'
+          }
+          html += '<p style="color: #6B7280; margin-top: 8px;">Todas las columnas del Excel deben coincidir exactamente con el formato esperado.</p>'
+          html += '</div>'
+
+          Swal.fire({
+            title: 'Columnas incorrectas',
+            html,
+            icon: 'error',
+            confirmButtonText: 'Entendido',
+            width: 520,
+          })
+          return
+        }
+      }
+
+      // Mapear datos Excel → DB (excluyendo filas completamente vacías)
+      // Para Damaro: crear mapa de header real del Excel -> header esperado (case-insensitive)
+      let resolveHeader: (key: string) => string | undefined
+      if (isDamaro) {
+        const headerMap = new Map<string, string>()
+        for (const realHeader of excelHeaders) {
+          const upper = realHeader.trim().toUpperCase()
+          for (const damaroKey of Object.keys(DAMARO_TO_DB_MAP)) {
+            if (upper === damaroKey.toUpperCase()) {
+              headerMap.set(damaroKey, realHeader)
+              break
+            }
+          }
+        }
+        resolveHeader = (key: string) => headerMap.get(key)
+      } else {
+        resolveHeader = (key: string) => key
+      }
+
+      const nombreCol = isDamaro ? (resolveHeader('NOMBRE') || 'NOMBRE') : 'NOMBRE CANDIDATO'
+      const dniCol = isDamaro ? (resolveHeader('DNI') || 'DNI') : 'N° DNI'
+      const activeMap = isDamaro ? DAMARO_TO_DB_MAP : EXCEL_TO_DB_MAP
+
       const dbRows = jsonData
         .filter(row => {
-          // Una fila es válida si al menos tiene nombre o DNI
-          const nombre = row['NOMBRE CANDIDATO']
-          const dni = row['N° DNI']
+          const nombre = row[nombreCol]
+          const dni = row[dniCol]
           return (nombre != null && String(nombre).trim() !== '') ||
                  (dni != null && String(dni).trim() !== '')
         })
         .map(row => {
           const dbRow: Record<string, unknown> = {}
-          for (const [excelCol, dbCol] of Object.entries(EXCEL_TO_DB_MAP)) {
-            dbRow[dbCol] = normalizeExcelValue(dbCol, row[excelCol])
+          for (const [excelCol, dbCol] of Object.entries(activeMap)) {
+            if (dbCol === '_feedback_damaro') continue
+            const realCol = isDamaro ? resolveHeader(excelCol) : excelCol
+            if (!realCol || !(realCol in row)) continue
+            dbRow[dbCol] = normalizeExcelValue(dbCol, row[realCol])
           }
-          if (sedeActual?.id) {
-            dbRow.sede_id = sedeActual.id
-            dbRow.sede = sedeActual.nombre
+
+          // Formato Damaro: concatenar FEEDBACK DAMARO en observaciones y setear fuente
+          if (isDamaro) {
+            const obsCol = resolveHeader('OBSERVACIONES')
+            const feedbackCol = resolveHeader('FEEDBACK DAMARO')
+            const obs = obsCol && row[obsCol] != null ? String(row[obsCol]).trim() : ''
+            const feedback = feedbackCol && row[feedbackCol] != null ? String(row[feedbackCol]).trim() : ''
+            if (obs && feedback) {
+              dbRow.observaciones = `${obs}\n\nFeedback Damaro: ${feedback}`
+            } else if (feedback) {
+              dbRow.observaciones = `Feedback Damaro: ${feedback}`
+            } else if (obs) {
+              dbRow.observaciones = obs
+            }
+            dbRow.fuente_de_lead = 'DAMARO'
+            dbRow.estado_de_lead = 'Apto - Hireflix'
           }
+
+          // Asignar sede: para Damaro usar CIUDAD para buscar la sede correcta
+          if (isDamaro) {
+            const ciudadCol = resolveHeader('CIUDAD')
+            const ciudad = ciudadCol && row[ciudadCol] ? String(row[ciudadCol]).trim().toLowerCase() : ''
+            if (ciudad) {
+              const sedeMatch = sedes.find(s => s.nombre?.toLowerCase() === ciudad || s.codigo?.toLowerCase() === ciudad)
+              if (sedeMatch) {
+                dbRow.sede_id = sedeMatch.id
+                dbRow.sede = sedeMatch.nombre
+              } else {
+                // Si no matchea ninguna sede, guardar el texto y dejar sin sede_id para que se asigne después
+                dbRow.sede = String(row[ciudadCol]).trim()
+              }
+            } else if (sedeActual?.id) {
+              dbRow.sede_id = sedeActual.id
+              dbRow.sede = sedeActual.nombre
+            }
+          } else {
+            if (sedeActual?.id) {
+              dbRow.sede_id = sedeActual.id
+              dbRow.sede = sedeActual.nombre
+            }
+          }
+
+          // Calcular edad automáticamente si hay fecha de nacimiento y no hay edad
+          if (dbRow.fecha_de_nacimiento && !dbRow.edad) {
+            const fechaStr = String(dbRow.fecha_de_nacimiento)
+            const nac = new Date(fechaStr + 'T00:00:00')
+            if (!isNaN(nac.getTime())) {
+              const hoy = new Date()
+              let edad = hoy.getFullYear() - nac.getFullYear()
+              if (hoy.getMonth() < nac.getMonth() || (hoy.getMonth() === nac.getMonth() && hoy.getDate() < nac.getDate())) {
+                edad--
+              }
+              if (edad >= 0 && edad < 150) dbRow.edad = edad
+            }
+          }
+
+          // Formatear teléfono con prefijo argentino +549
+          if (dbRow.phone) {
+            dbRow.phone = formatPhoneAR(dbRow.phone)
+          }
+          if (dbRow.whatsapp_number) {
+            dbRow.whatsapp_number = formatPhoneAR(dbRow.whatsapp_number)
+          }
+
           return dbRow
         })
 
       if (dbRows.length === 0) {
         Swal.fire('Error', 'No se encontraron filas con datos válidos en el archivo.', 'error')
+        return
+      }
+
+      // ─── Validar DNI obligatorio ───
+      const sinDni = dbRows
+        .map((r, idx) => ({ idx: idx + 1, nombre: String(r.nombre_completo || r.nombre_completo_2 || 'Sin nombre'), dni: String(r.dni || '').trim() }))
+        .filter(r => !r.dni || r.dni === 'null')
+      if (sinDni.length > 0) {
+        const listaItems = sinDni.length <= 30
+          ? sinDni.map(r => `<li>Fila ${r.idx}: <strong>${r.nombre}</strong></li>`).join('')
+          : sinDni.slice(0, 30).map(r => `<li>Fila ${r.idx}: <strong>${r.nombre}</strong></li>`).join('')
+            + `<li style="color:#9CA3AF;">... y ${sinDni.length - 30} más</li>`
+        Swal.fire({
+          title: `${sinDni.length} lead${sinDni.length > 1 ? 's' : ''} sin DNI`,
+          html: `
+            <div style="text-align:left;font-size:13px;">
+              <p style="margin-bottom:8px;color:#6B7280;">Todos los leads deben tener DNI para poder ser cargados.</p>
+              <div style="max-height:280px;overflow-y:auto;">
+                <ul style="margin:0;padding-left:20px;list-style:disc;">${listaItems}</ul>
+              </div>
+              <p style="margin-top:12px;color:#EF4444;font-weight:600;">Corrige el archivo y vuelve a intentar.</p>
+            </div>
+          `,
+          icon: 'error',
+          confirmButtonText: 'Entendido',
+          width: 520,
+        })
         return
       }
 
@@ -1270,6 +1485,14 @@ export function LeadsModule() {
   // ---------- COLUMNS ----------
   const columns = useMemo<ColumnDef<Lead>[]>(() => [
     {
+      id: 'fecha_creacion',
+      accessorFn: (row) => row.created_at,
+      header: 'Creación',
+      cell: ({ row }) => formatDate(row.original.created_at),
+      size: 120,
+      enableSorting: true,
+    },
+    {
       id: 'nombre',
       accessorFn: (row) => row.nombre_completo || '-',
       header: () => (
@@ -1374,7 +1597,7 @@ export function LeadsModule() {
       header: () => (
         <ExcelColumnFilter
           label="Estado"
-          options={uniqueEstados}
+          options={[...ESTADOS_LEAD]}
           selectedValues={estadoFilter}
           onSelectionChange={setEstadoFilter}
           filterId="lead_estado"
@@ -1392,85 +1615,23 @@ export function LeadsModule() {
           : ''
 
         return (
-          <div className="lead-estado-inline" style={{ position: 'relative' }}>
-            <span
-              className={badgeClass}
-              style={{ cursor: canEdit ? 'pointer' : 'default' }}
-              onClick={canEdit ? (e) => {
-                e.stopPropagation()
-                setEstadoDropdownId(isOpen ? null : lead.id)
-              } : undefined}
-            >
-              {estado || '-'}
-            </span>
-            {isOpen && canEdit && (
-              <div className="lead-estado-dropdown">
-                {ESTADOS_LEAD.map(est => (
-                  <button
-                    key={est}
-                    className={`lead-estado-dropdown-item ${est === estado ? 'active' : ''}`}
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      if (est !== estado) handleChangeEstadoInline(lead.id, est)
-                      else setEstadoDropdownId(null)
-                    }}
-                  >
-                    <span className={`lead-estado-dot lead-estado-dot-${est.toLowerCase().replace(/\s/g, '-')}`} />
-                    {est}
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
+          <EstadoDropdownCell
+            leadId={lead.id}
+            estado={estado}
+            badgeClass={badgeClass}
+            isOpen={isOpen}
+            canEdit={canEdit}
+            onToggle={(id) => setEstadoDropdownId(isOpen ? null : id)}
+            estados={ESTADOS_LEAD as unknown as string[]}
+            onChangeEstado={handleChangeEstadoInline}
+            onClose={() => setEstadoDropdownId(null)}
+          />
         )
       },
       size: 130,
       enableSorting: true,
     },
-    {
-      id: 'proceso',
-      accessorFn: (row) => row.proceso || '-',
-      header: () => (
-        <ExcelColumnFilter
-          label="Proceso"
-          options={uniqueProcesos}
-          selectedValues={procesoFilter}
-          onSelectionChange={setProcesoFilter}
-          filterId="lead_proceso"
-          openFilterId={openFilterId}
-          onOpenChange={setOpenFilterId}
-        />
-      ),
-      cell: ({ row }) => {
-        const proceso = row.original.proceso
-        if (!proceso) return <span style={{ color: 'var(--text-tertiary)' }}>-</span>
-        return <span className={`lead-estado-badge ${getProcesoClass(proceso)}`}>{proceso}</span>
-      },
-      size: 130,
-      enableSorting: true,
-    },
-    {
-      id: 'entrevista_ia',
-      accessorFn: (row) => row.entrevista_ia || '-',
-      header: () => (
-        <ExcelColumnFilter
-          label="Entrevista IA"
-          options={uniqueEntrevistas}
-          selectedValues={entrevistaFilter}
-          onSelectionChange={setEntrevistaFilter}
-          filterId="lead_entrevista"
-          openFilterId={openFilterId}
-          onOpenChange={setOpenFilterId}
-        />
-      ),
-      cell: ({ row }) => {
-        const ei = row.original.entrevista_ia
-        if (!ei) return <span style={{ color: 'var(--text-tertiary)' }}>-</span>
-        return <span className={`lead-estado-badge ${getEntrevistaClass(ei)}`}>{ei}</span>
-      },
-      size: 120,
-      enableSorting: true,
-    },
+    /* Columnas Proceso y Entrevista IA ocultas */
     {
       id: 'disponibilidad',
       accessorFn: (row) => row.disponibilidad || '-',
@@ -1572,21 +1733,144 @@ export function LeadsModule() {
       enableSorting: true,
     },
     {
-      id: 'fecha_entrevista',
-      accessorFn: (row) => row.fecha_carga,
-      header: 'Fecha Entrevista',
-      cell: ({ row }) => formatDate(row.original.fecha_carga),
-      size: 120,
+      id: 'fuente',
+      accessorFn: (row) => row.fuente_de_lead || '-',
+      header: 'Fuente',
+      cell: ({ row }) => {
+        const v = row.original.fuente_de_lead || '-'
+        return <span style={{ fontSize: '11px' }}>{v}</span>
+      },
+      size: 90,
       enableSorting: true,
     },
     {
-      id: 'fecha_creacion',
-      accessorFn: (row) => row.created_at,
-      header: 'Fecha Creación',
-      cell: ({ row }) => formatDate(row.original.created_at),
-      size: 120,
+      id: 'turno_col',
+      accessorFn: (row) => row.turno || '-',
+      header: 'Turno',
+      cell: ({ row }) => <span style={{ fontSize: '11px' }}>{row.original.turno || '-'}</span>,
+      size: 70,
       enableSorting: true,
     },
+    {
+      id: 'exp_manejo',
+      accessorFn: (row) => row.experiencia_manejo || '-',
+      header: 'Exp. Manejo',
+      cell: ({ row }) => <span style={{ fontSize: '11px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', display: 'block', maxWidth: '80px' }} title={row.original.experiencia_manejo || ''}>{row.original.experiencia_manejo || '-'}</span>,
+      size: 85,
+      enableSorting: true,
+    },
+    {
+      id: 'd1',
+      accessorFn: (row) => row.d1 || '-',
+      header: 'D1',
+      cell: ({ row }) => (
+        <SiNoDropdownCell
+          leadId={row.original.id}
+          field="d1"
+          value={row.original.d1}
+          isOpen={sinoDropdownKey === `${row.original.id}::d1`}
+          canEdit={canEdit}
+          onToggle={(k) => setSinoDropdownKey(sinoDropdownKey === k ? null : k)}
+          onChange={handleInlineUpdate}
+          onClose={() => setSinoDropdownKey(null)}
+        />
+      ),
+      size: 55,
+      enableSorting: true,
+    },
+    {
+      id: 'rnr',
+      accessorFn: (row) => row.rnr || '-',
+      header: 'RNR',
+      cell: ({ row }) => (
+        <SiNoDropdownCell
+          leadId={row.original.id}
+          field="rnr"
+          value={row.original.rnr}
+          isOpen={sinoDropdownKey === `${row.original.id}::rnr`}
+          canEdit={canEdit}
+          onToggle={(k) => setSinoDropdownKey(sinoDropdownKey === k ? null : k)}
+          onChange={handleInlineUpdate}
+          onClose={() => setSinoDropdownKey(null)}
+        />
+      ),
+      size: 55,
+      enableSorting: true,
+    },
+    {
+      id: 'cert_dir',
+      accessorFn: (row) => row.certificado_direccion || '-',
+      header: 'Cert. Dir.',
+      cell: ({ row }) => (
+        <SiNoDropdownCell
+          leadId={row.original.id}
+          field="certificado_direccion"
+          value={row.original.certificado_direccion}
+          isOpen={sinoDropdownKey === `${row.original.id}::certificado_direccion`}
+          canEdit={canEdit}
+          onToggle={(k) => setSinoDropdownKey(sinoDropdownKey === k ? null : k)}
+          onChange={handleInlineUpdate}
+          onClose={() => setSinoDropdownKey(null)}
+        />
+      ),
+      size: 70,
+      enableSorting: true,
+    },
+    {
+      id: 'cta_cabify',
+      accessorFn: (row) => row.cuenta_cabify || '-',
+      header: 'Cta. Cabify',
+      cell: ({ row }) => <span style={{ fontSize: '11px' }}>{row.original.cuenta_cabify || '-'}</span>,
+      size: 85,
+      enableSorting: true,
+    },
+    {
+      id: 'cochera',
+      accessorFn: (row) => row.cochera || '-',
+      header: 'Cochera',
+      cell: ({ row }) => (
+        <SiNoDropdownCell
+          leadId={row.original.id}
+          field="cochera"
+          value={row.original.cochera}
+          isOpen={sinoDropdownKey === `${row.original.id}::cochera`}
+          canEdit={canEdit}
+          onToggle={(k) => setSinoDropdownKey(sinoDropdownKey === k ? null : k)}
+          onChange={handleInlineUpdate}
+          onClose={() => setSinoDropdownKey(null)}
+        />
+      ),
+      size: 70,
+      enableSorting: true,
+    },
+    {
+      id: 'monotributo',
+      accessorFn: (row) => row.monotributo || '-',
+      header: 'Mono.',
+      cell: ({ row }) => (
+        <SiNoDropdownCell
+          leadId={row.original.id}
+          field="monotributo"
+          value={row.original.monotributo}
+          isOpen={sinoDropdownKey === `${row.original.id}::monotributo`}
+          canEdit={canEdit}
+          onToggle={(k) => setSinoDropdownKey(sinoDropdownKey === k ? null : k)}
+          onChange={handleInlineUpdate}
+          onClose={() => setSinoDropdownKey(null)}
+        />
+      ),
+      size: 55,
+      enableSorting: true,
+    },
+    {
+      id: 'guia',
+      accessorFn: (row) => row.guia_asignado || '-',
+      header: 'Guia',
+      cell: ({ row }) => <span style={{ fontSize: '11px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', display: 'block', maxWidth: '90px' }} title={row.original.guia_asignado || ''}>{row.original.guia_asignado || '-'}</span>,
+      size: 90,
+      enableSorting: true,
+    },
+    /* Columna Fecha Entrevista oculta */
     {
       id: 'acciones',
       header: '',
@@ -1595,12 +1879,21 @@ export function LeadsModule() {
       cell: ({ row }) => {
         const lead = row.original
         const tieneFolder = !!lead.url_folder?.trim()
-        const actions: Array<{ label: string; icon: React.ReactElement; onClick: () => void; variant?: 'default' | 'info' | 'success' | 'warning' | 'danger'; disabled?: boolean }> = [
-          { label: 'Ver detalle', icon: <Eye size={15} />, onClick: () => handleOpenDetails(lead) },
-        ]
+        const tieneConversacion = !!lead.id_conversation?.trim()
+        const actions: Array<{ label: string; icon: React.ReactElement; onClick: () => void; variant?: 'default' | 'info' | 'success' | 'warning' | 'danger'; disabled?: boolean }> = []
         if (canEdit) {
           actions.push({ label: 'Editar', icon: <Edit2 size={15} />, onClick: () => handleOpenEdit(lead), variant: 'info' })
         }
+        actions.push(
+          { label: 'Ver detalle', icon: <Eye size={15} />, onClick: () => handleOpenDetails(lead) },
+          {
+            label: 'Abrir conversación',
+            icon: <MessageCircle size={15} />,
+            onClick: () => { if (tieneConversacion) window.open(`https://app.intercom.com/a/inbox/ogv74k5c/inbox/conversation/${lead.id_conversation}`, '_blank') },
+            variant: tieneConversacion ? 'info' : undefined,
+            disabled: !tieneConversacion,
+          },
+        )
         actions.push({
           label: 'Documentos',
           icon: <FolderOpen size={15} />,
@@ -1618,17 +1911,15 @@ export function LeadsModule() {
       },
     },
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  ], [uniqueNombres, nombreFilter, uniqueEstados, estadoFilter, uniqueProcesos, procesoFilter, uniqueEntrevistas, entrevistaFilter, uniqueDisponibilidades, disponibilidadFilter, uniqueZonas, zonaFilter, uniqueTurnos, turnoFilter, uniqueFuentes, fuenteFilter, openFilterId, canEdit, canDelete, leadsEnZona, estadoDropdownId])
+  ], [uniqueNombres, nombreFilter, estadoFilter, uniqueDisponibilidades, disponibilidadFilter, uniqueZonas, zonaFilter, uniqueTurnos, turnoFilter, openFilterId, canEdit, canDelete, leadsEnZona, estadoDropdownId, sinoDropdownKey])
 
   // ---------- EXTERNAL FILTERS (chips) ----------
-  const hasActiveFilters = nombreFilter.length > 0 || estadoFilter.length > 0 || procesoFilter.length > 0 || entrevistaFilter.length > 0 ||
+  const hasActiveFilters = nombreFilter.length > 0 || estadoFilter.length > 0 ||
     zonaFilter.length > 0 || turnoFilter.length > 0 || disponibilidadFilter.length > 0 || fuenteFilter.length > 0 || activeStatCard !== null
 
   function clearAllFilters() {
     setNombreFilter([])
     setEstadoFilter([])
-    setProcesoFilter([])
-    setEntrevistaFilter([])
     setZonaFilter([])
     setTurnoFilter([])
     setDisponibilidadFilter([])
@@ -1649,8 +1940,6 @@ export function LeadsModule() {
       })
     }
     addFilters(nombreFilter, 'Candidato', setNombreFilter)
-    addFilters(procesoFilter, 'Proceso', setProcesoFilter)
-    addFilters(entrevistaFilter, 'Entrevista', setEntrevistaFilter)
     addFilters(zonaFilter, 'Zona', setZonaFilter)
     addFilters(turnoFilter, 'Turno', setTurnoFilter)
     addFilters(disponibilidadFilter, 'Disponibilidad', setDisponibilidadFilter)
@@ -1661,10 +1950,8 @@ export function LeadsModule() {
         inicio: 'Inicio conversación',
         aptos: 'Aptos',
         noAptos: 'No aptos',
-        docsEnviados: 'Docs enviados',
-        autoPueblo: 'Auto del pueblo',
-        noInteresa: 'No le interesa',
-        noCumpleEdad: 'No cumple edad',
+        zonaSegura: 'Zona segura',
+        zonaPeligrosa: 'Zona peligrosa',
       }
       filters.push({
         id: `stat-${activeStatCard}`,
@@ -1673,7 +1960,7 @@ export function LeadsModule() {
       })
     }
     return filters
-  }, [hasActiveFilters, nombreFilter, procesoFilter, entrevistaFilter, zonaFilter, turnoFilter, disponibilidadFilter, fuenteFilter, estadoFilter, activeStatCard])
+  }, [hasActiveFilters, nombreFilter, zonaFilter, turnoFilter, disponibilidadFilter, fuenteFilter, estadoFilter, activeStatCard])
 
   // ---------- RENDER ----------
   return (
@@ -1682,7 +1969,7 @@ export function LeadsModule() {
 
       {/* Stats */}
       <div className="leads-stats">
-        <div className="leads-stats-grid" style={{ gridTemplateColumns: 'repeat(4, 1fr)' }}>
+        <div className="leads-stats-grid" style={{ gridTemplateColumns: 'repeat(5, 1fr)' }}>
           <div
             className={`stat-card stat-card-clickable ${activeStatCard === 'inicio' ? 'stat-card-active' : ''}`}
             onClick={() => handleStatClick('inicio')}
@@ -1714,43 +2001,23 @@ export function LeadsModule() {
             </div>
           </div>
           <div
-            className={`stat-card stat-card-clickable ${activeStatCard === 'docsEnviados' ? 'stat-card-active' : ''}`}
-            onClick={() => handleStatClick('docsEnviados')}
+            className={`stat-card stat-card-clickable ${activeStatCard === 'zonaSegura' ? 'stat-card-active' : ''}`}
+            onClick={() => handleStatClick('zonaSegura')}
           >
-            <FolderOpen size={18} className="stat-icon" style={{ color: '#2563eb' }} />
+            <CheckCircle size={18} className="stat-icon" style={{ color: '#16a34a' }} />
             <div className="stat-content">
-              <span className="stat-value">{stats.docsEnviados}</span>
-              <span className="stat-label">Docs enviados</span>
+              <span className="stat-value">{stats.enZonaSegura}</span>
+              <span className="stat-label">Zona segura</span>
             </div>
           </div>
           <div
-            className={`stat-card stat-card-clickable ${activeStatCard === 'autoPueblo' ? 'stat-card-active' : ''}`}
-            onClick={() => handleStatClick('autoPueblo')}
+            className={`stat-card stat-card-clickable ${activeStatCard === 'zonaPeligrosa' ? 'stat-card-active' : ''}`}
+            onClick={() => handleStatClick('zonaPeligrosa')}
           >
-            <MapPin size={18} className="stat-icon" style={{ color: '#8b5cf6' }} />
+            <AlertTriangle size={18} className="stat-icon" style={{ color: '#dc2626' }} />
             <div className="stat-content">
-              <span className="stat-value">{stats.autoPueblo}</span>
-              <span className="stat-label">Auto del pueblo</span>
-            </div>
-          </div>
-          <div
-            className={`stat-card stat-card-clickable ${activeStatCard === 'noInteresa' ? 'stat-card-active' : ''}`}
-            onClick={() => handleStatClick('noInteresa')}
-          >
-            <XCircle size={18} className="stat-icon" style={{ color: '#6b7280' }} />
-            <div className="stat-content">
-              <span className="stat-value">{stats.noInteresa}</span>
-              <span className="stat-label">No le interesa</span>
-            </div>
-          </div>
-          <div
-            className={`stat-card stat-card-clickable ${activeStatCard === 'noCumpleEdad' ? 'stat-card-active' : ''}`}
-            onClick={() => handleStatClick('noCumpleEdad')}
-          >
-            <AlertTriangle size={18} className="stat-icon" style={{ color: '#ea580c' }} />
-            <div className="stat-content">
-              <span className="stat-value">{stats.noCumpleEdad}</span>
-              <span className="stat-label">No cumple edad</span>
+              <span className="stat-value">{stats.enZonaPeligrosa}</span>
+              <span className="stat-label">Zona peligrosa</span>
             </div>
           </div>
         </div>
@@ -1903,6 +2170,218 @@ export function LeadsModule() {
 }
 
 // =====================================================
+// SI/NO DROPDOWN CELL (portal-based, reutilizable)
+// =====================================================
+
+interface SiNoDropdownCellProps {
+  leadId: string
+  field: keyof Lead
+  value: string | null | undefined
+  isOpen: boolean
+  canEdit: boolean
+  onToggle: (key: string) => void
+  onChange: (leadId: string, field: keyof Lead, value: string) => void
+  onClose: () => void
+}
+
+function SiNoDropdownCell({ leadId, field, value, isOpen, canEdit, onToggle, onChange, onClose }: SiNoDropdownCellProps) {
+  const cellRef = useRef<HTMLSpanElement>(null)
+  const dropdownRef = useRef<HTMLDivElement>(null)
+  const [pos, setPos] = useState({ top: 0, left: 0 })
+  const dropdownKey = `${leadId}::${String(field)}`
+  const display = value || '-'
+  const color = value === 'Si' ? '#16a34a' : value === 'No' ? '#dc2626' : '#9ca3af'
+
+  useLayoutEffect(() => {
+    if (!isOpen || !cellRef.current) return
+    const rect = cellRef.current.getBoundingClientRect()
+    const dropdownH = 120
+    const vh = window.innerHeight
+    let top = rect.bottom + 4
+    if (top + dropdownH > vh - 8) top = rect.top - dropdownH - 4
+    if (top < 8) top = 8
+    setPos({ top, left: rect.left })
+  }, [isOpen])
+
+  useEffect(() => {
+    if (!isOpen) return
+    const handler = (e: MouseEvent) => {
+      const t = e.target as HTMLElement
+      if (dropdownRef.current && !dropdownRef.current.contains(t) && cellRef.current && !cellRef.current.contains(t)) {
+        onClose()
+      }
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [isOpen, onClose])
+
+  const options: { val: string; label: string; dot: string }[] = [
+    { val: 'Si', label: 'Si', dot: '#16a34a' },
+    { val: 'No', label: 'No', dot: '#dc2626' },
+  ]
+
+  return (
+    <span style={{ display: 'inline-block' }}>
+      <span
+        ref={cellRef}
+        style={{
+          display: 'inline-flex',
+          alignItems: 'center',
+          gap: '3px',
+          fontSize: '11px',
+          fontWeight: 600,
+          color,
+          cursor: canEdit ? 'pointer' : 'default',
+          padding: '2px 8px',
+          borderRadius: '4px',
+          background: value === 'Si' ? '#DCFCE7' : value === 'No' ? '#FEE2E2' : 'transparent',
+          border: canEdit ? '1px dashed #d1d5db' : 'none',
+        }}
+        onClick={canEdit ? (e) => { e.stopPropagation(); onToggle(dropdownKey) } : undefined}
+      >
+        {display}
+        {canEdit && <svg width="10" height="10" viewBox="0 0 10 10" style={{ opacity: 0.4, flexShrink: 0 }}><path d="M2.5 4L5 6.5L7.5 4" stroke="currentColor" strokeWidth="1.5" fill="none" strokeLinecap="round" strokeLinejoin="round"/></svg>}
+      </span>
+      {isOpen && canEdit && createPortal(
+        <div
+          ref={dropdownRef}
+          style={{
+            position: 'fixed',
+            top: pos.top,
+            left: pos.left,
+            zIndex: 99999,
+            background: '#fff',
+            borderRadius: '8px',
+            boxShadow: '0 4px 20px rgba(0,0,0,.15)',
+            padding: '4px 0',
+            minWidth: '100px',
+          }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          {options.map(opt => (
+            <button
+              key={opt.val}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+                width: '100%',
+                padding: '8px 14px',
+                border: 'none',
+                background: opt.val === value ? '#F3F4F6' : 'transparent',
+                cursor: 'pointer',
+                fontSize: '13px',
+                fontWeight: opt.val === value ? 600 : 400,
+                textAlign: 'left',
+              }}
+              onMouseEnter={e => (e.currentTarget.style.background = '#F3F4F6')}
+              onMouseLeave={e => (e.currentTarget.style.background = opt.val === value ? '#F3F4F6' : 'transparent')}
+              onClick={(e) => {
+                e.stopPropagation()
+                if (opt.val !== value) onChange(leadId, field, opt.val)
+                onClose()
+              }}
+            >
+              <span style={{ width: 8, height: 8, borderRadius: '50%', background: opt.dot, flexShrink: 0 }} />
+              {opt.label}
+            </button>
+          ))}
+        </div>,
+        document.body
+      )}
+    </span>
+  )
+}
+
+// =====================================================
+// ESTADO DROPDOWN CELL (portal-based to avoid clipping)
+// =====================================================
+
+interface EstadoDropdownCellProps {
+  leadId: string
+  estado: string | undefined | null
+  badgeClass: string
+  isOpen: boolean
+  canEdit: boolean
+  onToggle: (id: string) => void
+  estados: string[]
+  onChangeEstado: (leadId: string, estado: string) => void
+  onClose: () => void
+}
+
+function EstadoDropdownCell({ leadId, estado, badgeClass, isOpen, canEdit, onToggle, estados, onChangeEstado, onClose }: EstadoDropdownCellProps) {
+  const badgeRef = useRef<HTMLSpanElement>(null)
+  const dropdownRef = useRef<HTMLDivElement>(null)
+  const [pos, setPos] = useState({ top: 0, left: 0 })
+
+  useLayoutEffect(() => {
+    if (!isOpen || !badgeRef.current) return
+    const rect = badgeRef.current.getBoundingClientRect()
+    const dropdownHeight = 340 // estimated max
+    const viewportHeight = window.innerHeight
+    let top = rect.bottom + 4
+    if (top + dropdownHeight > viewportHeight - 8) {
+      top = rect.top - dropdownHeight - 4
+      if (top < 8) top = 8
+    }
+    setPos({ top, left: rect.left })
+  }, [isOpen])
+
+  // Close on click outside
+  useEffect(() => {
+    if (!isOpen) return
+    const handler = (e: MouseEvent) => {
+      const target = e.target as HTMLElement
+      if (
+        dropdownRef.current && !dropdownRef.current.contains(target) &&
+        badgeRef.current && !badgeRef.current.contains(target)
+      ) {
+        onClose()
+      }
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [isOpen, onClose])
+
+  return (
+    <div className="lead-estado-inline">
+      <span
+        ref={badgeRef}
+        className={badgeClass}
+        style={{ cursor: canEdit ? 'pointer' : 'default' }}
+        onClick={canEdit ? (e) => { e.stopPropagation(); onToggle(leadId) } : undefined}
+      >
+        {estado || '-'}
+      </span>
+      {isOpen && canEdit && createPortal(
+        <div
+          ref={dropdownRef}
+          className="lead-estado-dropdown"
+          style={{ position: 'fixed', top: pos.top, left: pos.left, zIndex: 99999 }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          {estados.map(est => (
+            <button
+              key={est}
+              className={`lead-estado-dropdown-item ${est === estado ? 'active' : ''}`}
+              onClick={(e) => {
+                e.stopPropagation()
+                if (est !== estado) onChangeEstado(leadId, est)
+                else onClose()
+              }}
+            >
+              <span className={`lead-estado-dot lead-estado-dot-${est.toLowerCase().replace(/\s/g, '-')}`} />
+              {est}
+            </button>
+          ))}
+        </div>,
+        document.body
+      )}
+    </div>
+  )
+}
+
+// =====================================================
 // LEAD DETAIL VIEW (inline component)
 // =====================================================
 
@@ -1937,6 +2416,14 @@ function LeadDetailView({ lead, onEdit, onConvert, zonasPeligrosas = [], enZonaP
           )}
         </div>
         <div style={{ display: 'flex', gap: '8px' }}>
+          <button
+            className={`btn-sm ${lead.id_lead?.trim() ? 'btn-primary' : 'btn-secondary'}`}
+            disabled={!lead.id_lead?.trim()}
+            onClick={() => { if (lead.id_lead?.trim()) window.open(`https://app.intercom.com/a/apps/ogv74k5c/users/${lead.id_lead}`, '_blank') }}
+            title={lead.id_lead?.trim() ? 'Abrir en Intercom' : 'Sin ID de Intercom'}
+          >
+            <MessageCircle size={14} /> Ver Perfil Intercom
+          </button>
           {onConvert && (
             <button className="btn-primary btn-sm" onClick={onConvert}>
               <UserPlus size={14} /> Convertir a Conductor
@@ -1988,20 +2475,16 @@ function LeadDetailView({ lead, onEdit, onConvert, zonasPeligrosas = [], enZonaP
             <span className="lead-detail-item-value">{lead.phone || '-'}</span>
           </div>
           <div className="lead-detail-item">
+            <span className="lead-detail-item-label">WhatsApp</span>
+            <span className="lead-detail-item-value">{lead.whatsapp_number || '-'}</span>
+          </div>
+          <div className="lead-detail-item">
             <span className="lead-detail-item-label">Email</span>
             <span className="lead-detail-item-value">{lead.email || '-'}</span>
           </div>
           <div className="lead-detail-item">
             <span className="lead-detail-item-label">Zona</span>
             <span className="lead-detail-item-value">{lead.zona || '-'}</span>
-          </div>
-          <div className="lead-detail-item">
-            <span className="lead-detail-item-label">Turno</span>
-            <span className="lead-detail-item-value">{lead.turno || '-'}</span>
-          </div>
-          <div className="lead-detail-item">
-            <span className="lead-detail-item-label">Disponibilidad</span>
-            <span className="lead-detail-item-value">{lead.disponibilidad || '-'}</span>
           </div>
           <div className="lead-detail-item">
             <span className="lead-detail-item-label">Dirección</span>
@@ -2037,18 +2520,6 @@ function LeadDetailView({ lead, onEdit, onConvert, zonasPeligrosas = [], enZonaP
         <div className="lead-detail-card">
           <div className="lead-detail-card-title">Proceso y Evaluación</div>
           <div className="lead-detail-item">
-            <span className="lead-detail-item-label">Proceso</span>
-            <span className="lead-detail-item-value">
-              {lead.proceso ? <span className={`lead-estado-badge ${getProcesoClass(lead.proceso)}`}>{lead.proceso}</span> : '-'}
-            </span>
-          </div>
-          <div className="lead-detail-item">
-            <span className="lead-detail-item-label">Entrevista IA</span>
-            <span className="lead-detail-item-value">
-              {lead.entrevista_ia ? <span className={`lead-estado-badge ${getEntrevistaClass(lead.entrevista_ia)}`}>{lead.entrevista_ia}</span> : '-'}
-            </span>
-          </div>
-          <div className="lead-detail-item">
             <span className="lead-detail-item-label">Estado de Lead</span>
             <span className="lead-detail-item-value">{lead.estado_de_lead || '-'}</span>
           </div>
@@ -2061,7 +2532,7 @@ function LeadDetailView({ lead, onEdit, onConvert, zonasPeligrosas = [], enZonaP
             <span className="lead-detail-item-value">{lead.agente_asignado || '-'}</span>
           </div>
           <div className="lead-detail-item">
-            <span className="lead-detail-item-label">Entrevistador</span>
+            <span className="lead-detail-item-label">Guia</span>
             <span className="lead-detail-item-value">{lead.entrevistador_asignado || '-'}</span>
           </div>
         </div>
@@ -2105,13 +2576,17 @@ function LeadDetailView({ lead, onEdit, onConvert, zonasPeligrosas = [], enZonaP
       )}
 
       {/* Emergencia */}
-      {(lead.datos_de_emergencia || lead.telefono_emergencia || lead.contacto_de_emergencia) && (
+      {(lead.datos_de_emergencia || lead.telefono_emergencia || lead.contacto_de_emergencia || lead.direccion_emergencia || lead.verificacion_emergencia != null) && (
         <div className="lead-detail-description">
           <div className="lead-detail-description-title">Contacto de Emergencia</div>
           <p>
             {lead.datos_de_emergencia || lead.contacto_de_emergencia || '-'}
             {lead.telefono_emergencia ? ` · Tel: ${lead.telefono_emergencia}` : ''}
             {lead.parentesco_emergencia ? ` · ${lead.parentesco_emergencia}` : ''}
+            {lead.direccion_emergencia ? ` · Dir: ${lead.direccion_emergencia}` : ''}
+          </p>
+          <p style={{ marginTop: '4px', fontSize: '12px', color: lead.verificacion_emergencia ? '#16a34a' : '#dc2626' }}>
+            Verificación de contacto de emergencia: {lead.verificacion_emergencia ? 'Sí' : 'No'}
           </p>
         </div>
       )}
