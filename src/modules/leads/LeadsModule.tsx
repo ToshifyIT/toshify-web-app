@@ -249,13 +249,6 @@ function getProcesoClass(proceso: string | undefined | null): string {
   return 'lead-estado-pendiente'
 }
 
-function getEntrevistaClass(entrevista: string | undefined | null): string {
-  if (!entrevista) return 'lead-estado-pendiente'
-  if (entrevista === 'Apto') return 'lead-estado-apto'
-  if (entrevista === 'No Apto') return 'lead-estado-no-apto'
-  return 'lead-estado-pendiente'
-}
-
 // =====================================================
 // LEADS MODULE
 // =====================================================
@@ -1184,7 +1177,7 @@ export function LeadsModule() {
                 dbRow.sede = sedeMatch.nombre
               } else {
                 // Si no matchea ninguna sede, guardar el texto y dejar sin sede_id para que se asigne después
-                dbRow.sede = String(row[ciudadCol]).trim()
+                dbRow.sede = ciudadCol ? String(row[ciudadCol]).trim() : ''
               }
             } else if (sedeActual?.id) {
               dbRow.sede_id = sedeActual.id
