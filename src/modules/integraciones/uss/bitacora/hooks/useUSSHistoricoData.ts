@@ -168,39 +168,10 @@ export function useUSSHistoricoData(sedeId?: string | null) {
           if (m.conductorId) m.conductorDni = dniMap.get(m.conductorId) ?? null;
         });
 
-        // Horario asignado: buscar en asignaciones_conductores el turno de cada conductor
-        const { data: asignacionesData } = await (supabase
-          .from('asignaciones_conductores') as any)
-          .select('conductor_id, horario, asignaciones!inner(horario)')
-          .in('conductor_id', conductorIds)
-          .in('estado', ['activo', 'completado']);
-        // Mapa conductor_id → horario asignado (diurno/nocturno/todo_dia)
-        const horarioMap = new Map<string, string>();
-        if (asignacionesData) {
-          for (const ac of asignacionesData as any[]) {
-            const asigHorario = ac.asignaciones?.horario;
-            // Si la asignación es todo_dia (a cargo), no filtrar
-            if (asigHorario === 'todo_dia') {
-              horarioMap.set(ac.conductor_id, 'todo_dia');
-            } else if (ac.horario && !horarioMap.has(ac.conductor_id)) {
-              // TURNO: usar el horario del conductor (diurno/nocturno)
-              horarioMap.set(ac.conductor_id, ac.horario);
-            }
-          }
-        }
-
-        // Filtrar: para vehículos TURNO, solo mostrar el turno asignado al conductor
-        const marcacionesFiltradas = marcacionesTransformadas.filter(m => {
-          if (!m.conductorId) return true;
-          const horarioAsignado = horarioMap.get(m.conductorId);
-          if (!horarioAsignado || horarioAsignado === 'todo_dia') return true;
-          // Si wialon no reportó horario (null → 'todo_dia'), no filtrar
-          if (!m.horario || m.horario === 'todo_dia') return true;
-          // Solo mostrar si el horario de la marcación coincide con el asignado
-          return m.horario === horarioAsignado;
-        });
-
-        setMarcaciones(marcacionesFiltradas);
+        // No filtrar por asignación: bitácora muestra TODO lo que hay en wialon_bitacora.
+        // El horario de cada marcación ya viene resuelto por el sync según la asignación
+        // vigente en la fecha procesada.
+        setMarcaciones(marcacionesTransformadas);
       } else {
         setMarcaciones(marcacionesTransformadas);
       }

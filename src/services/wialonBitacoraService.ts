@@ -358,11 +358,10 @@ export const wialonBitacoraService = {
       }
     })
 
-    // Consolidar: agrupar trips del mismo día/conductor/patente en 1 registro
-    const consolidados = consolidarRegistros(registros)
-
-    bitacoraCache.set(cacheKey, consolidados)
-    return { data: consolidados, count: consolidados.length }
+    // No consolidar: el sync ya entrega 1 fila por marcación.
+    // Re-consolidar acá unía marcaciones distintas del mismo conductor en el mismo día.
+    bitacoraCache.set(cacheKey, registros)
+    return { data: registros, count: registros.length }
   },
 
   /**
