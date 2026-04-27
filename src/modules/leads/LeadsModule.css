@@ -215,6 +215,11 @@
   color: var(--badge-red-text, #991b1b);
 }
 
+.lead-estado-ayuda---hireflix {
+  background: #fef3c7;
+  color: #92400e;
+}
+
 .lead-estado-documentos-enviados {
   background: var(--badge-blue-bg, #dbeafe);
   color: var(--badge-blue-text, #1e40af);
@@ -312,6 +317,7 @@
 .lead-estado-dot-inicio-conversación { background: #f59e0b; }
 .lead-estado-dot-apto---hireflix { background: #16a34a; }
 .lead-estado-dot-no-apto---hireflix { background: #dc2626; }
+.lead-estado-dot-ayuda---hireflix { background: #d97706; }
 .lead-estado-dot-documentos-enviados { background: #2563eb; }
 .lead-estado-dot-auto-del-pueblo { background: #8b5cf6; }
 .lead-estado-dot-no-le-interesa { background: #6b7280; }

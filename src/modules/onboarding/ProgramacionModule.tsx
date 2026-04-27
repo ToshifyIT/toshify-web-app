@@ -960,7 +960,7 @@ export function ProgramacionModule() {
                 ${camposFaltantes.map(c => `<li style="padding: 4px 0; border-bottom: 1px solid #f3f4f6;">&#x2022; <strong>${c}</strong></li>`).join('')}
               </ul>
               <p style="margin-top: 12px; color: #9CA3AF; font-size: 12px;">
-                Complete estos datos en el módulo correspondiente (Vehículos o Conductores) antes de enviar.
+                Complete estos datos en el módulo correspondiente (Vehículos o Conductores) antes de enviar, para generar el documento Carta Oferta.
               </p>
             </div>
           `,
@@ -1067,6 +1067,7 @@ export function ProgramacionModule() {
           <p><strong>Hora:</strong> ${horaDisplay}</p>
         </div>
         <p style="margin-top: 16px; color: #6B7280;">Se creara una asignacion en estado <strong>Programado</strong></p>
+        <p style="margin-top: 8px; color: #6B7280; font-size: 13px;">Se creará el documento carta oferta correspondiente por cada conductor.</p>
       `,
       icon: 'question',
       showCancelButton: true,
@@ -1261,11 +1262,18 @@ export function ProgramacionModule() {
         // No bloquear el flujo principal si falla la creación de visita
       }
 
-      // Generar documentos de contrato si corresponde
-      const needsDocGeneration = prog.modalidad === 'a_cargo'
-        ? (prog.tipo_documento && prog.tipo_documento !== 'na')
-        : ((prog.documento_diurno && prog.documento_diurno !== 'na') ||
-           (prog.documento_nocturno && prog.documento_nocturno !== 'na'))
+      // Generar documentos si corresponde
+      // Bariloche no tiene plantillas para turnos, se excluye de la generación
+      const SEDE_BARILOCHE_ID = 'f37193f7-5805-4d87-820d-c4521824860e'
+      const sedeDelProg = prog.sede_id || sedeActualId || sedeUsuario?.id || null
+      const esBarilocheTurno = sedeDelProg === SEDE_BARILOCHE_ID && prog.modalidad === 'turno'
+
+      const needsDocGeneration = esBarilocheTurno ? false : (
+        prog.modalidad === 'a_cargo'
+          ? (prog.tipo_documento && prog.tipo_documento !== 'na')
+          : ((prog.documento_diurno && prog.documento_diurno !== 'na') ||
+             (prog.documento_nocturno && prog.documento_nocturno !== 'na'))
+      )
 
       if (needsDocGeneration) {
         const contractParams = {
@@ -1894,7 +1902,7 @@ export function ProgramacionModule() {
           carta_oferta: 'Carta Ofert.',
           anexo: 'Anexo',
           na: 'N/A',
-          contrato: 'Contrato'
+          contrato: 'Carta Oferta'
         }
 
         if (prog.modalidad === 'turno') {
@@ -2347,7 +2355,7 @@ export function ProgramacionModule() {
                           className="prog-input"
                         >
                           <option value="">Seleccionar...</option>
-                          <option value="contrato">Contrato</option>
+                          <option value="contrato">Carta Oferta</option>
                           <option value="carta_oferta">Carta Oferta</option>
                           <option value="anexo">Anexo</option>
                           <option value="na">N/A</option>
@@ -2460,7 +2468,7 @@ export function ProgramacionModule() {
                           className="prog-input"
                         >
                           <option value="">Seleccionar...</option>
-                          <option value="contrato">Contrato</option>
+                          <option value="contrato">Carta Oferta</option>
                           <option value="carta_oferta">Carta Oferta</option>
                           <option value="anexo">Anexo</option>
                           <option value="na">N/A</option>
@@ -2557,7 +2565,7 @@ export function ProgramacionModule() {
                         className="prog-input"
                       >
                         <option value="">Seleccionar...</option>
-                        <option value="contrato">Contrato</option>
+                        <option value="contrato">Carta Oferta</option>
                         <option value="carta_oferta">Carta Oferta</option>
                         <option value="anexo">Anexo</option>
                         <option value="na">N/A</option>
