@@ -66,6 +66,7 @@ export function ParametrosUssPage() {
       const { data, error } = await (supabase
         .from('parametros_sistema') as any)
         .select('*')
+        .neq('modulo', 'facturacion')
         .order('modulo', { ascending: true })
         .order('clave', { ascending: true })
 

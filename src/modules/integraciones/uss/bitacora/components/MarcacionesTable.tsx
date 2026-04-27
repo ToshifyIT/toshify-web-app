@@ -39,8 +39,8 @@ function formatPeriodo(iso: string | null): string {
   if (!iso) return '-';
   const d = new Date(iso);
   if (isNaN(d.getTime())) return '-';
-  // Restar 6 horas para coincidir con hora real Argentina
-  const ar = new Date(d.getTime() - 6 * 60 * 60 * 1000);
+  // Restar 3 horas para coincidir con hora real Argentina (UTC-3)
+  const ar = new Date(d.getTime() - 3 * 60 * 60 * 1000);
   const dd = String(ar.getUTCDate()).padStart(2, '0');
   const mm = String(ar.getUTCMonth() + 1).padStart(2, '0');
   const yy = String(ar.getUTCFullYear()).slice(2);
