@@ -127,6 +127,9 @@ export interface Lead {
   tipo?: string | null
   tiempo_de_antiguedad?: string | null
 
+  // Intercom
+  id_conversation?: string | null
+
   // Sistema
   created_at: string
   updated_at?: string | null

@@ -1166,7 +1166,7 @@
 .dt-excel-filter-list {
   flex: 1;
   overflow-y: auto;
-  max-height: 200px;
+  max-height: 300px;
   border: 1px solid var(--border-primary);
   border-radius: 4px;
   background: var(--bg-secondary);

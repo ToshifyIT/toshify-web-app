@@ -205,12 +205,12 @@
   color: var(--badge-yellow-text, #92400e);
 }
 
-.lead-estado-apto {
+.lead-estado-apto---hireflix {
   background: var(--badge-green-bg, #dcfce7);
   color: var(--badge-green-text, #166534);
 }
 
-.lead-estado-no-apto {
+.lead-estado-no-apto---hireflix {
   background: var(--badge-red-bg, #fee2e2);
   color: var(--badge-red-text, #991b1b);
 }
@@ -235,6 +235,16 @@
   color: #9a3412;
 }
 
+.lead-estado-convocatoria-induccion {
+  background: #e0f2fe;
+  color: #0c4a6e;
+}
+
+.lead-estado-descartado {
+  background: #fecaca;
+  color: #7f1d1d;
+}
+
 .lead-estado-conductor {
   background: var(--badge-purple-bg, #f3e8ff);
   color: var(--badge-purple-text, #6b21a8);
@@ -246,16 +256,13 @@
 }
 
 .lead-estado-dropdown {
-  position: absolute;
-  top: calc(100% + 4px);
-  left: 0;
   min-width: 190px;
   padding: 4px;
   background: var(--bg-primary, #fff);
   border: 1px solid var(--border-primary, #e5e7eb);
   border-radius: 8px;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
-  z-index: 9999;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
+  z-index: 99999;
   animation: lead-dropdown-in 0.12s ease-out;
 }
 
@@ -303,12 +310,14 @@
 }
 
 .lead-estado-dot-inicio-conversación { background: #f59e0b; }
-.lead-estado-dot-apto { background: #16a34a; }
-.lead-estado-dot-no-apto { background: #dc2626; }
+.lead-estado-dot-apto---hireflix { background: #16a34a; }
+.lead-estado-dot-no-apto---hireflix { background: #dc2626; }
 .lead-estado-dot-documentos-enviados { background: #2563eb; }
 .lead-estado-dot-auto-del-pueblo { background: #8b5cf6; }
 .lead-estado-dot-no-le-interesa { background: #6b7280; }
 .lead-estado-dot-no-cumple-edad { background: #ea580c; }
+.lead-estado-dot-convocatoria-induccion { background: #0891b2; }
+.lead-estado-dot-descartado { background: #991b1b; }
 .lead-estado-dot-conductor { background: #7c3aed; }
 
 /* =====================================================

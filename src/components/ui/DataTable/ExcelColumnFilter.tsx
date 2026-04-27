@@ -92,7 +92,9 @@ export function ExcelColumnFilter({
 
     const rect = buttonRef.current.getBoundingClientRect()
     const dropdownWidth = dropdownRef.current?.getBoundingClientRect().width || 260
+    const dropdownHeight = dropdownRef.current?.getBoundingClientRect().height || 300
     const viewportWidth = window.innerWidth
+    const viewportHeight = window.innerHeight
     let left = rect.left
     // Si no cabe a la derecha, alinear al borde derecho del viewport
     if (left + dropdownWidth > viewportWidth - 8) {
@@ -100,7 +102,14 @@ export function ExcelColumnFilter({
     }
     if (left < 8) left = 8
 
-    const top = rect.bottom + 4
+    // Si no cabe abajo, abrir hacia arriba
+    let top = rect.bottom + 4
+    if (top + dropdownHeight > viewportHeight - 8) {
+      top = rect.top - dropdownHeight - 4
+      // Si tampoco cabe arriba, posicionar lo más alto posible
+      if (top < 8) top = 8
+    }
+
     return { top, left }
   }, [])
 
