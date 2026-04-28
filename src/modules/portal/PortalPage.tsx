@@ -281,7 +281,17 @@ export function PortalPage() {
         .order('created_at', { ascending: false })
 
       if (error) throw error
-      const facturasData = (data || []) as unknown as PortalFacturacion[]
+      // Mostrar solo desde S11/2026 en adelante (decisión del cliente — los
+      // periodos anteriores tenían pagos duplicados/datos sucios y no son
+      // representativos en el portal)
+      const PORTAL_ANIO_MIN = 2026
+      const PORTAL_SEMANA_MIN = 11
+      const facturasData = ((data || []) as unknown as PortalFacturacion[]).filter(f => {
+        const a = f.periodos_facturacion?.anio
+        const s = f.periodos_facturacion?.semana
+        if (!a || !s) return false
+        return a > PORTAL_ANIO_MIN || (a === PORTAL_ANIO_MIN && s >= PORTAL_SEMANA_MIN)
+      })
 
       // Backfill missing vehiculo_patente from assignment history
       const missingPatente = facturasData.filter(f => !f.vehiculo_patente)
@@ -978,8 +988,12 @@ export function PortalPage() {
                   const totalPagado = detallePagos.reduce((s, p) => s + p.monto, 0)
                   return (
                     <div className="portal-detail-section" style={{ marginTop: '8px' }}>
-                      <div className="portal-detail-section-title" style={{ color: '#059669' }}>
-                        Pagos / Ajustes
+                      <div
+                        className="portal-detail-section-title"
+                        style={{ color: '#059669' }}
+                        title="Cobros directos de Cabify (app) y/o transferencias del conductor a las cuentas de Toshify."
+                      >
+                        Pagos
                       </div>
                       <div className="portal-detail-items">
                         {detallePagos.map((p) => {
@@ -1103,7 +1117,7 @@ export function PortalPage() {
                 <div className="portal-stat-label">Saldo actual</div>
                 {saldo ? (
                   <>
-                    <div className={`portal-stat-value ${saldo.saldo_actual < 0 ? 'debit' : ''}`}>
+                    <div className={`portal-stat-value ${saldo.saldo_actual < 0 ? 'debit' : 'credit'}`}>
                       {saldo.saldo_actual < 0 ? '-' : ''}{formatCurrency(Math.abs(saldo.saldo_actual))}
                     </div>
                     <div className="portal-stat-sub">
@@ -1271,7 +1285,7 @@ export function PortalPage() {
               </div>
 
               <div className="portal-right">
-                <div className="portal-weeks-header">Historial de liquidaciones</div>
+                <div className="portal-weeks-header">Historial</div>
                 <div className="portal-weeks">
                   {facturas.map((f) => {
                     const p = f.periodos_facturacion
