@@ -175,6 +175,9 @@ export function PortalPage() {
   const [detallePagos, setDetallePagos] = useState<Array<{ id: string; tipo: string; monto: number; referencia: string | null; fecha: string }>>([])
   const [saldo, setSaldo] = useState<PortalSaldo | null>(null)
   const [fraccionamientos, setFraccionamientos] = useState<PortalFraccionamiento[]>([])
+  // El bloque UI que muestra `fraccionamientos` está oculto (comentado), pero
+  // mantenemos el state + query para reactivarlo rápido si se decide volver.
+  void fraccionamientos
   const [cabifyPorSemana, setCabifyPorSemana] = useState<Record<string, number>>({})
 
   // UI state
@@ -1266,7 +1269,9 @@ export function PortalPage() {
                   </div>
                 </div>
 
-                {/* Fraccionamientos */}
+                {/* Fraccionamientos / Cuotas — oculto a pedido del cliente.
+                    Bloque comentado en lugar de eliminado para poder reactivarlo
+                    rápido si fuera necesario.
                 {fraccionamientos.length > 0 && (
                   <div className="portal-fraccionamientos-card">
                     <div className="portal-chart-title">Fraccionamientos pendientes</div>
@@ -1282,6 +1287,7 @@ export function PortalPage() {
                     </div>
                   </div>
                 )}
+                */}
               </div>
 
               <div className="portal-right">
