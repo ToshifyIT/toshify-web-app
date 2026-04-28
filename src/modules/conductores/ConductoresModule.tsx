@@ -1822,18 +1822,42 @@ export function ConductoresModule() {
     else if (turno === 'todo_dia' || turno === 'A_CARGO') turnoLabel = 'A Cargo'
     else if (turno === 'SIN_PREFERENCIA') turnoLabel = 'Sin Pref.'
 
-    // Normalizar teléfono a formato E.164 para Intercom (+54...)
-    let telefonoNorm = String(condFull.telefono_contacto || '').replace(/[^0-9]/g, '')
-    if (telefonoNorm.startsWith('54')) {
-      telefonoNorm = '+' + telefonoNorm
-    } else if (telefonoNorm.startsWith('0')) {
-      telefonoNorm = '+54' + telefonoNorm.substring(1)
-    } else if (telefonoNorm.startsWith('15') || telefonoNorm.startsWith('11')) {
-      telefonoNorm = '+549' + telefonoNorm
-    } else if (telefonoNorm.length >= 10) {
-      telefonoNorm = '+54' + telefonoNorm
+    // Normalizar teléfono a formato E.164 para Intercom (+549XXXXXXXXXX)
+    let telefonoNorm = String(condFull.telefono_contacto || '').replace(/[^0-9+]/g, '')
+    // Si ya viene con + y tiene al menos 12 dígitos, dejarlo
+    if (telefonoNorm.startsWith('+') && telefonoNorm.length >= 13) {
+      // ya está en formato internacional, ok
     } else {
-      telefonoNorm = '+54' + telefonoNorm
+      // Quitar el + si quedó
+      telefonoNorm = telefonoNorm.replace(/\+/g, '')
+      // Si empieza con 549 y tiene 13 dígitos, ya es correcto
+      if (telefonoNorm.startsWith('549') && telefonoNorm.length === 13) {
+        telefonoNorm = '+' + telefonoNorm
+      }
+      // Si empieza con 54 (sin el 9), agregar 9 para celular
+      else if (telefonoNorm.startsWith('54') && telefonoNorm.length >= 12) {
+        telefonoNorm = '+' + telefonoNorm
+      }
+      // Si empieza con 0 (prefijo local), quitar 0 y agregar +54
+      else if (telefonoNorm.startsWith('0')) {
+        telefonoNorm = '+54' + telefonoNorm.substring(1)
+      }
+      // Si empieza con 15 (celular viejo), quitar 15 y agregar +5411
+      else if (telefonoNorm.startsWith('15') && telefonoNorm.length <= 10) {
+        telefonoNorm = '+5411' + telefonoNorm.substring(2)
+      }
+      // Si tiene 10 dígitos (ej: 1136679706), agregar +54
+      else if (telefonoNorm.length === 10) {
+        telefonoNorm = '+54' + telefonoNorm
+      }
+      // Si tiene 8-9 dígitos (ej: 36679706), asumir Buenos Aires, agregar +5411
+      else if (telefonoNorm.length >= 8 && telefonoNorm.length <= 9) {
+        telefonoNorm = '+5411' + telefonoNorm
+      }
+      // Cualquier otro caso, agregar +54 y esperar lo mejor
+      else {
+        telefonoNorm = '+54' + telefonoNorm
+      }
     }
 
     const payload = {
