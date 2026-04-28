@@ -22,6 +22,7 @@ interface MenuPermission {
     can_edit: boolean
     can_delete: boolean
   }
+  
   permission_source: 'user_override' | 'role_inherited'
 }
 
