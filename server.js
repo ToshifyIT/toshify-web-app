@@ -1398,7 +1398,7 @@ app.post('/api/intercom/create-contact', async (req, res) => {
     const userData = {
       email,
       name,
-      user_id,
+      external_id: user_id,
       phone,
       role: 'user',
       custom_attributes: {
