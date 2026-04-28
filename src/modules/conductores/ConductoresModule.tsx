@@ -1,7 +1,7 @@
 // src/modules/conductores/ConductoresModule.tsx
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { useState, useEffect, useMemo } from "react";
-import { Eye, Edit2, Trash2, AlertTriangle, Users, UserCheck, UserX, Clock, Filter, FolderOpen, FolderPlus, Loader2, History, RefreshCw, ShieldX } from "lucide-react";
+import { Eye, Edit2, Trash2, AlertTriangle, Users, UserCheck, UserX, Clock, Filter, FolderOpen, FolderPlus, Loader2, History, RefreshCw, ShieldX, MessageSquare } from "lucide-react";
 import { ActionsMenu } from "../../components/ui/ActionsMenu";
 import { VerLogsButton } from "../../components/ui/VerLogsButton";
 
@@ -12,6 +12,7 @@ import { useAuth } from "../../contexts/AuthContext";
 import { useSede } from "../../contexts/SedeContext";
 import Swal from "sweetalert2";
 import { showSuccess } from "../../utils/toast";
+import { createIntercomContact } from "../../services/intercomService";
 
 import type {
   ConductorWithRelations,
@@ -1724,6 +1725,175 @@ export function ConductoresModule() {
     setShowDeleteModal(true);
   };
 
+  const handleCrearIntercom = async (conductor: ConductorWithRelations) => {
+    // 1. Obtener datos completos del conductor
+    let condFull: any = null
+    try {
+      const { data, error: condErr } = await supabase
+        .from('conductores')
+        .select('*')
+        .eq('id', conductor.id)
+        .single()
+      if (condErr) {
+        Swal.fire('Error BD', `Error al consultar conductor: ${condErr.message}`, 'error')
+        return
+      }
+      condFull = data
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err)
+      Swal.fire('Error', `Excepción al consultar conductor: ${msg}`, 'error')
+      return
+    }
+    if (!condFull) {
+      Swal.fire('Error', 'No se encontró el conductor en la base de datos', 'error')
+      return
+    }
+
+    // 2. Verificar si ya tiene intercom_id (columna puede no existir en cache PostgREST)
+    let intercomIdExistente: string | null = null
+    try {
+      const { data: icData } = await supabase.from('conductores').select('intercom_id').eq('id', conductor.id).single()
+      intercomIdExistente = icData?.intercom_id || null
+    } catch {
+      // PostgREST aún no reconoce la columna, ignorar
+    }
+
+    if (intercomIdExistente) {
+      const confirmar = await Swal.fire({
+        icon: 'warning',
+        title: 'Contacto ya existe',
+        html: `Este conductor ya tiene un ID de Intercom: <strong>${intercomIdExistente}</strong><br><br>Si continúas, se actualizarán sus datos en Intercom.`,
+        showCancelButton: true,
+        confirmButtonText: 'Actualizar datos',
+        cancelButtonText: 'Cancelar',
+        confirmButtonColor: '#2563eb',
+      })
+      if (!confirmar.isConfirmed) return
+    }
+
+    // 3. Validar campos mínimos
+    const dniLimpio = String(condFull.numero_dni || '').replace(/[^0-9]/g, '')
+    if (!dniLimpio) {
+      Swal.fire('Error', 'El conductor no tiene DNI registrado', 'error')
+      return
+    }
+    if (!condFull.telefono_contacto) {
+      Swal.fire('Error', 'El conductor no tiene teléfono registrado', 'error')
+      return
+    }
+
+    // 4. Obtener patente y compañero desde asignación activa
+    let patente = 'N/A'
+    let companero = 'N/A'
+    try {
+      const { data: asigData } = await supabase
+        .from('asignaciones_conductores')
+        .select(`conductor_id, horario, asignacion_id, asignaciones!inner (id, estado, vehiculos (patente))`)
+        .eq('conductor_id', conductor.id)
+        .in('asignaciones.estado', ['activo', 'activa'])
+        .limit(1)
+      if (asigData && asigData.length > 0) {
+        const asig = asigData[0] as any
+        patente = asig.asignaciones?.vehiculos?.patente || 'N/A'
+        if (asig.asignacion_id) {
+          const { data: companeros } = await supabase
+            .from('asignaciones_conductores')
+            .select('conductores (nombres, apellidos)')
+            .eq('asignacion_id', asig.asignacion_id)
+            .neq('conductor_id', conductor.id)
+          if (companeros && companeros.length > 0) {
+            const comp = (companeros[0] as any).conductores
+            companero = comp ? `${comp.nombres} ${comp.apellidos}`.trim() : 'N/A'
+          }
+        }
+      }
+    } catch { /* sin asignación activa */ }
+
+    // 5. Construir payload
+    const nombreCompleto = `${condFull.nombres} ${condFull.apellidos}`.trim()
+    const primerNombre = condFull.nombres
+      ? condFull.nombres.split(/\s+/)[0].charAt(0).toUpperCase() + condFull.nombres.split(/\s+/)[0].slice(1).toLowerCase()
+      : ''
+
+    let turnoLabel = 'N/A'
+    const turno = condFull.preferencia_turno || conductor.preferencia_turno
+    if (turno === 'DIURNO' || turno === 'diurno') turnoLabel = 'Diurno'
+    else if (turno === 'NOCTURNO' || turno === 'nocturno') turnoLabel = 'Nocturno'
+    else if (turno === 'todo_dia' || turno === 'A_CARGO') turnoLabel = 'A Cargo'
+    else if (turno === 'SIN_PREFERENCIA') turnoLabel = 'Sin Pref.'
+
+    const payload = {
+      conductor_id: conductor.id,
+      email: `dni_${dniLimpio}@toshify.com`,
+      name: nombreCompleto,
+      user_id: dniLimpio,
+      phone: condFull.telefono_contacto,
+      patente,
+      turno: turnoLabel,
+      companero,
+      direccion: condFull.direccion || 'N/A',
+      tiempo_de_antiguedad: condFull.fecha_contratacion || 'N/A',
+      dni: dniLimpio,
+      primer_nombre: primerNombre,
+    }
+
+    // 6. Mostrar preview en tabla
+    const filas = [
+      ['Email', payload.email],
+      ['Nombre', payload.name],
+      ['User ID (DNI)', payload.user_id],
+      ['Teléfono', payload.phone],
+      ['Patente', payload.patente || 'N/A'],
+      ['Turno', payload.turno],
+      ['Compañero', payload.companero],
+      ['Dirección', payload.direccion],
+      ['Antigüedad', payload.tiempo_de_antiguedad],
+      ['DNI', payload.dni],
+      ['Primer Nombre', payload.primer_nombre],
+    ]
+
+    const tablaHtml = `<table style="width:100%;border-collapse:collapse;font-size:13px;text-align:left"><thead><tr style="background:#f1f5f9"><th style="padding:8px 10px;border-bottom:2px solid #e2e8f0;font-weight:600;color:#475569">Campo</th><th style="padding:8px 10px;border-bottom:2px solid #e2e8f0;font-weight:600;color:#475569">Valor</th></tr></thead><tbody>${filas.map(([campo, valor], idx) => `<tr style="background:${idx % 2 === 0 ? '#fff' : '#f8fafc'}"><td style="padding:6px 10px;border-bottom:1px solid #e2e8f0;color:#64748b;white-space:nowrap">${campo}</td><td style="padding:6px 10px;border-bottom:1px solid #e2e8f0;color:#1e293b;word-break:break-all">${valor || '<span style="color:#94a3b8">-</span>'}</td></tr>`).join('')}</tbody></table>`
+
+    const confirm = await Swal.fire({
+      icon: 'info',
+      title: intercomIdExistente ? 'Actualizar contacto en Intercom' : 'Crear contacto en Intercom',
+      html: tablaHtml,
+      width: 520,
+      showCancelButton: true,
+      confirmButtonText: intercomIdExistente ? 'Actualizar' : 'Crear en Intercom',
+      cancelButtonText: 'Cancelar',
+      confirmButtonColor: '#2563eb',
+    })
+    if (!confirm.isConfirmed) return
+
+    // 7. Enviar a la API
+    Swal.fire({ title: 'Creando contacto...', allowOutsideClick: false, didOpen: () => Swal.showLoading() })
+
+    const result = await createIntercomContact(payload)
+
+    if (!result.success) {
+      Swal.fire('Error', result.error || 'Error desconocido', 'error')
+      return
+    }
+
+    // 8. Guardar intercom_id en la BD
+    if (result.intercom_id) {
+      await supabase
+        .from('conductores')
+        .update({ intercom_id: result.intercom_id, intercom_status: result.status || 'Creado' })
+        .eq('id', conductor.id)
+    }
+
+    Swal.fire({
+      icon: 'success',
+      title: result.status === 'Actualizado' ? 'Contacto actualizado' : 'Contacto creado',
+      html: `<div style="text-align:left;font-size:13px;line-height:1.6">${result.message}<br><strong>Intercom ID:</strong> ${result.intercom_id}</div>`,
+      confirmButtonColor: '#2563eb',
+    })
+
+    await loadConductores(true)
+  }
+
   const resetForm = () => {
     setFormData({
       nombres: "",
@@ -2405,6 +2575,12 @@ export function ConductoresModule() {
                   label: 'Historial',
                   onClick: () => setHistorialConductor({ id: row.original.id, nombre: `${row.original.apellidos}, ${row.original.nombres}` }),
                   hidden: !isAdmin(),
+                  variant: 'info'
+                },
+                {
+                  icon: <MessageSquare size={15} />,
+                  label: 'Crear usuario Intercom',
+                  onClick: () => handleCrearIntercom(row.original),
                   variant: 'info'
                 },
                 {

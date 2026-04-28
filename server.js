@@ -1378,6 +1378,128 @@ app.post('/api/complete-control', async (req, res) => {
   }
 })
 
+// =====================================================
+// INTERCOM INTEGRATION
+// =====================================================
+
+app.post('/api/intercom/create-contact', async (req, res) => {
+  try {
+    const accessToken = process.env.INTERCOM_ACCESS_TOKEN
+    if (!accessToken) {
+      return res.status(500).json({ error: 'INTERCOM_ACCESS_TOKEN no configurado en el servidor' })
+    }
+
+    const { conductor_id, email, name, user_id, phone, patente, turno, companero, direccion, tiempo_de_antiguedad, dni, primer_nombre } = req.body
+
+    if (!email || !name || !user_id || !phone) {
+      return res.status(400).json({ error: 'Faltan campos obligatorios: email, name, user_id, phone' })
+    }
+
+    const userData = {
+      email,
+      name,
+      user_id,
+      phone,
+      role: 'user',
+      custom_attributes: {
+        'Patente': patente || 'N/A',
+        'Turno': turno || 'N/A',
+        'Compañero': companero || 'N/A',
+        'Dirección': direccion || 'N/A',
+        'Tiempo de antiguedad': tiempo_de_antiguedad || 'N/A',
+        'DNI': dni || '',
+        'Primer nombre': primer_nombre || ''
+      }
+    }
+
+    console.log(`[Intercom] Creando contacto para conductor ${conductor_id}: ${name}`)
+
+    const intercomRes = await fetch('https://api.intercom.io/contacts', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${accessToken}`,
+        'Accept': 'application/json',
+        'Content-Type': 'application/json',
+        'Intercom-Version': '2.10'
+      },
+      body: JSON.stringify(userData)
+    })
+
+    const responseText = await intercomRes.text()
+    let responseData
+    try { responseData = JSON.parse(responseText) } catch { responseData = null }
+
+    if (intercomRes.status === 409) {
+      const existingId = extractIdFrom409(responseData)
+      if (existingId) {
+        console.log(`[Intercom] Contacto ya existe (${existingId}), actualizando...`)
+        const updateData = { name, phone, custom_attributes: userData.custom_attributes }
+        const updateRes = await fetch(`https://api.intercom.io/contacts/${existingId}`, {
+          method: 'PUT',
+          headers: {
+            'Authorization': `Bearer ${accessToken}`,
+            'Accept': 'application/json',
+            'Content-Type': 'application/json',
+            'Intercom-Version': '2.10'
+          },
+          body: JSON.stringify(updateData)
+        })
+
+        if (updateRes.status >= 400) {
+          const updateError = await updateRes.text()
+          console.error(`[Intercom] Error al actualizar: ${updateError}`)
+          return res.status(updateRes.status).json({ error: `Error al actualizar contacto existente: ${simplifyIntercomError(updateError)}` })
+        }
+
+        const updateResult = await updateRes.json()
+        return res.json({
+          intercom_id: updateResult.id || existingId,
+          status: 'Actualizado',
+          message: 'El contacto ya existía en Intercom y fue actualizado con los datos actuales'
+        })
+      }
+    }
+
+    if (intercomRes.status >= 400) {
+      console.error(`[Intercom] Error ${intercomRes.status}: ${responseText}`)
+      return res.status(intercomRes.status).json({ error: simplifyIntercomError(responseText) })
+    }
+
+    console.log(`[Intercom] Contacto creado: ${responseData?.id}`)
+    return res.json({
+      intercom_id: responseData?.id,
+      status: 'Creado',
+      message: 'Contacto creado exitosamente en Intercom'
+    })
+  } catch (error) {
+    console.error('[Intercom] Error:', error.message)
+    res.status(500).json({ error: error.message })
+  }
+})
+
+function extractIdFrom409(errorObj) {
+  try {
+    if (errorObj?.errors?.length > 0) {
+      const msg = errorObj.errors[0].message || ''
+      const match = msg.match(/id[=:\s]+([a-f0-9]+)/i)
+      if (match) return match[1]
+    }
+  } catch { /* ignore */ }
+  return null
+}
+
+function simplifyIntercomError(text) {
+  if (typeof text !== 'string') text = JSON.stringify(text)
+  if (text.includes('409') && text.includes('conflict')) return 'Conflicto: contacto duplicado'
+  if (text.includes('400')) return 'Datos inválidos enviados a Intercom'
+  if (text.includes('401')) return 'Error de autorización con Intercom. Verificar token.'
+  if (text.includes('422')) return 'Formato de datos no válido para Intercom'
+  if (text.includes('429')) return 'Límite de solicitudes excedido. Intentar más tarde.'
+  if (text.includes('500')) return 'Error interno del servidor de Intercom'
+  if (text.length > 100) return text.substring(0, 97) + '...'
+  return text
+}
+
 // Health check
 app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() })
