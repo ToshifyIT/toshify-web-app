@@ -60,19 +60,15 @@ function formatFecha(fecha: string | null): string {
   }
 }
 
-function formatDateTime(dateStr: string | null): string {
-  if (!dateStr) return '-'
+function splitDateTime(dateStr: string | null): { date: string; time: string } {
+  if (!dateStr) return { date: '-', time: '' }
   try {
-    const date = new Date(dateStr)
-    return date.toLocaleString('es-AR', { 
-      day: '2-digit', 
-      month: '2-digit', 
-      year: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit'
-    })
+    const d = new Date(dateStr)
+    const date = d.toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric' })
+    const time = d.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' })
+    return { date, time }
   } catch {
-    return dateStr
+    return { date: '-', time: '' }
   }
 }
 
@@ -564,11 +560,15 @@ export default function MultasModule() {
           onOpenChange={setOpenFilterId}
         />
       ),
-      cell: ({ row }) => (
-        <span style={{ fontSize: '12px', whiteSpace: 'nowrap' }}>
-          {formatDateTime(row.original.created_at)}
-        </span>
-      )
+      cell: ({ row }) => {
+        const { date, time } = splitDateTime(row.original.created_at)
+        return (
+          <div style={{ fontSize: '12px', whiteSpace: 'nowrap', lineHeight: '1.2' }}>
+            <div>{date}</div>
+            {time && <div style={{ color: 'var(--text-tertiary)', fontSize: '11px' }}>{time}</div>}
+          </div>
+        )
+      }
     },
     {
       id: 'semana',
@@ -606,11 +606,15 @@ export default function MultasModule() {
           onOpenChange={setOpenFilterId}
         />
       ),
-      cell: ({ row }) => (
-        <span style={{ fontSize: '12px', whiteSpace: 'nowrap' }}>
-          {formatDateTime(row.original.fecha_infraccion)}
-        </span>
-      )
+      cell: ({ row }) => {
+        const { date, time } = splitDateTime(row.original.fecha_infraccion)
+        return (
+          <div style={{ fontSize: '12px', whiteSpace: 'nowrap', lineHeight: '1.2' }}>
+            <div>{date}</div>
+            {time && <div style={{ color: 'var(--text-tertiary)', fontSize: '11px' }}>{time}</div>}
+          </div>
+        )
+      }
     },
     {
       accessorKey: 'patente',
