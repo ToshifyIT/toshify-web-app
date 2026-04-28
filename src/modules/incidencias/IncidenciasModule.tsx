@@ -4144,7 +4144,7 @@ interface PatenteAsignada {
   fechaHasta: string
 }
 
-function IncidenciaForm({ formData, setFormData, vehiculos, conductores, tiposCobroDescuento, conceptosNomina = [], preciosAlquiler = { P001: 0, P002: 0, P013: 0, P014: 0, P015: 0, P016: 0 }, disabled, esCobro = false, sedes }: IncidenciaFormProps) {
+function IncidenciaForm({ formData, setFormData, estados, vehiculos, conductores, tiposCobroDescuento, conceptosNomina = [], preciosAlquiler = { P001: 0, P002: 0, P013: 0, P014: 0, P015: 0, P016: 0 }, disabled, esCobro = false, sedes }: IncidenciaFormProps) {
   const [vehiculoSearch, setVehiculoSearch] = useState('')
   const [conductorSearch, setConductorSearch] = useState('')
   const [showVehiculoDropdown, setShowVehiculoDropdown] = useState(false)
@@ -4601,8 +4601,17 @@ function IncidenciaForm({ formData, setFormData, vehiculos, conductores, tiposCo
               <option value="Marketing">Marketing</option>
             </select>
           </div>
-          {/* Campo Estado oculto a pedido del usuario (ITCODE-75): no se necesita
-              en este módulo. El estado se asigna automáticamente al crear (Pendiente). */}
+          {!esCobro && (
+            <div className="form-group">
+              <label>Estado <span className="required">*</span></label>
+              <select value={formData.estado_id} onChange={e => setFormData(prev => ({ ...prev, estado_id: e.target.value }))} disabled={disabled}>
+                <option value="">Seleccionar</option>
+                {estados.map(e => (
+                  <option key={e.id} value={e.id}>{e.nombre}</option>
+                ))}
+              </select>
+            </div>
+          )}
         </div>
         <div className="form-row" style={{ gridTemplateColumns: '1fr 1fr' }}>
           <div className="form-group">
