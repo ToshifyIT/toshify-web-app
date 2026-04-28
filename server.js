@@ -1260,7 +1260,7 @@ app.post('/api/complete-control', async (req, res) => {
 
     // Construir lista de reemplazos
     const replacements = [
-      { find: '{{KM}}', replace: km },
+      { find: '{{KM}}', replace: `${km} KM` },
       { find: '{{LTNAFTA}}', replace: ltnafta }
     ]
 
