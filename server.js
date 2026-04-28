@@ -690,28 +690,28 @@ async function findOrCreateConductorFolder(drive, conductorDni, conductorNombre,
   // Buscar carpeta con formato nuevo (solo nombre)
   const searchRes = await drive.files.list({
     q: `name='${folderName.replace(/'/g, "\\'")}' and '${rootFolderId}' in parents and mimeType='application/vnd.google-apps.folder' and trashed=false`,
-    fields: 'files(id, name, webViewLink)',
+    fields: 'files(id, name)',
     supportsAllDrives: true,
     includeItemsFromAllDrives: true
   })
 
   if (searchRes.data.files && searchRes.data.files.length > 0) {
     const folder = searchRes.data.files[0]
-    return { folderId: folder.id, folderUrl: folder.webViewLink, folderName: folder.name, created: false }
+    return { folderId: folder.id, folderUrl: `https://drive.google.com/drive/folders/${folder.id}`, folderName: folder.name, created: false }
   }
 
   // Buscar carpeta con formato legacy (DNI - nombre) para no crear duplicados
   if (conductorDni) {
     const searchLegacy = await drive.files.list({
       q: `name='${folderNameLegacy.replace(/'/g, "\\'")}' and '${rootFolderId}' in parents and mimeType='application/vnd.google-apps.folder' and trashed=false`,
-      fields: 'files(id, name, webViewLink)',
+      fields: 'files(id, name)',
       supportsAllDrives: true,
       includeItemsFromAllDrives: true
     })
 
     if (searchLegacy.data.files && searchLegacy.data.files.length > 0) {
       const folder = searchLegacy.data.files[0]
-      return { folderId: folder.id, folderUrl: folder.webViewLink, folderName: folder.name, created: false }
+      return { folderId: folder.id, folderUrl: `https://drive.google.com/drive/folders/${folder.id}`, folderName: folder.name, created: false }
     }
   }
 
@@ -722,13 +722,29 @@ async function findOrCreateConductorFolder(drive, conductorDni, conductorNombre,
       mimeType: 'application/vnd.google-apps.folder',
       parents: [rootFolderId]
     },
-    fields: 'id, webViewLink',
+    fields: 'id',
     supportsAllDrives: true
   })
 
+  // Compartir carpeta con el dominio toshify.com.ar
+  try {
+    await drive.permissions.create({
+      fileId: createRes.data.id,
+      requestBody: {
+        role: 'writer',
+        type: 'domain',
+        domain: 'toshify.com.ar'
+      },
+      supportsAllDrives: true,
+      sendNotificationEmail: false
+    })
+  } catch (permErr) {
+    console.warn(`[Drive] No se pudo compartir carpeta ${createRes.data.id}: ${permErr.message}`)
+  }
+
   return {
     folderId: createRes.data.id,
-    folderUrl: createRes.data.webViewLink,
+    folderUrl: `https://drive.google.com/drive/folders/${createRes.data.id}`,
     folderName,
     created: true
   }
@@ -1004,11 +1020,11 @@ async function generateContractForConductor({
   // Ejemplos:
   //   Carta Oferta - A Cargo - NOMBRE
   //   Carta Oferta - Turno - Diurno - NOMBRE
-  //   Anexo - A Cargo Bariloche - NOMBRE
-  const tipoLabel = templateKey.includes('cartaOferta') ? 'Carta Oferta' : 'Anexo'
+  //   Actualizacion Carta Oferta - Auto a Cargo Bariloche - NOMBRE
+  const tipoLabel = templateKey.includes('cartaOferta') ? 'Carta Oferta' : 'Actualizacion Carta Oferta'
   const sedeLabel = sedeCode?.toUpperCase() === 'BRC' ? ' Bariloche' : ''
   const isAutoCargo = modalidad === 'a_cargo'
-  const modalidadLabel = isAutoCargo ? `A Cargo${sedeLabel}` : `Turno${sedeLabel}`
+  const modalidadLabel = isAutoCargo ? `Auto a Cargo${sedeLabel}` : `Turno${sedeLabel}`
   const turnoLabel = (!isAutoCargo && turno) ? (turno === 'diurno' ? 'Diurno' : 'Nocturno') : ''
   const fileName = turnoLabel
     ? `${tipoLabel} - ${modalidadLabel} - ${turnoLabel} - ${fullName}`
@@ -1031,10 +1047,9 @@ async function generateContractForConductor({
 
   // 6. (PDF deshabilitado por ahora - se implementará más adelante)
 
-  // 7. Si el conductor no tenía drive_folder_url, actualizar
-  if (!conductor.drive_folder_url && folder.folderUrl) {
-    await updateConductorDriveUrl(conductor.id, folder.folderUrl)
-  }
+  // 7. Siempre actualizar drive_folder_url del conductor
+  const finalFolderUrl = `https://drive.google.com/drive/folders/${folder.folderId}`
+  await updateConductorDriveUrl(conductor.id, finalFolderUrl)
 
   console.log(`[Contract] OK: ${fileName} → doc: ${googleDoc.data.id}`)
 
@@ -1042,7 +1057,7 @@ async function generateContractForConductor({
     googleDocUrl: googleDoc.data.webViewLink,
     googleDocId: googleDoc.data.id,
     pdfUrl: null,
-    folderUrl: folder.folderUrl || `https://drive.google.com/drive/folders/${folder.folderId}`,
+    folderUrl: `https://drive.google.com/drive/folders/${folder.folderId}`,
     folderId: folder.folderId
   }
 }
