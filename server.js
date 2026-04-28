@@ -122,7 +122,7 @@ app.post('/api/list-drive-files', async (req, res) => {
 // API: Create Drive folder
 app.post('/api/create-drive-folder', async (req, res) => {
   try {
-    const { tipo = 'conductor', conductorId, conductorNombre, conductorDni, vehiculoId, vehiculoPatente } = req.body
+    const { tipo = 'conductor', conductorId, conductorNombre, vehiculoId, vehiculoPatente } = req.body
 
     // Get parent folder ID based on type
     const parentFolderId = tipo === 'vehiculo'
@@ -138,19 +138,68 @@ app.post('/api/create-drive-folder', async (req, res) => {
       if (!vehiculoPatente) {
         return res.status(400).json({ error: 'Falta parametro: vehiculoPatente' })
       }
-      folderName = vehiculoPatente.toUpperCase()
+      folderName = vehiculoPatente.toUpperCase().trim()
     } else {
       if (!conductorNombre) {
         return res.status(400).json({ error: 'Falta parametro: conductorNombre' })
       }
-      folderName = conductorDni
-        ? `${conductorDni} - ${conductorNombre}`
-        : conductorNombre
+      // Solo NOMBRE COMPLETO en MAYUSCULAS (sin DNI)
+      folderName = conductorNombre.toUpperCase().trim().replace(/\s+/g, ' ')
     }
 
-    console.log(`Creating ${tipo} folder: ${folderName}`)
+    // Config para persistir URL en BD (Supabase REST)
+    const supabaseUrl = process.env.VITE_SUPABASE_URL
+    const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+    const supabaseEnabled = !!(supabaseUrl && serviceKey)
+    const tabla = tipo === 'vehiculo' ? 'vehiculos' : 'conductores'
+    const recordId = tipo === 'vehiculo' ? vehiculoId : conductorId
+    // conductores solo tiene drive_folder_url; vehiculos tiene url + id
+    const tieneFolderId = tipo === 'vehiculo'
 
+    // 1) Drive es la fuente de verdad: buscar carpeta con mismo nombre dentro del parent
     const drive = getDriveService(true)
+    const escapedName = folderName.replace(/'/g, "\\'")
+    const searchQ = `name='${escapedName}' and '${parentFolderId}' in parents and mimeType='application/vnd.google-apps.folder' and trashed=false`
+    const searchRes = await drive.files.list({
+      q: searchQ,
+      fields: 'files(id, webViewLink, name)',
+      pageSize: 1
+    })
+    const existing = searchRes.data.files && searchRes.data.files[0]
+    if (existing) {
+      console.log(`[create-drive-folder] Drive ya tiene carpeta '${folderName}': ${existing.id}`)
+      // Persistir en BD para que el frontend pueda mostrar el link sin re-consultar Drive
+      if (supabaseEnabled && recordId) {
+        try {
+          await fetch(`${supabaseUrl}/rest/v1/${tabla}?id=eq.${recordId}`, {
+            method: 'PATCH',
+            headers: {
+              apikey: serviceKey,
+              Authorization: `Bearer ${serviceKey}`,
+              'Content-Type': 'application/json',
+              Prefer: 'return=minimal'
+            },
+            body: JSON.stringify(
+              tieneFolderId
+                ? { drive_folder_id: existing.id, drive_folder_url: existing.webViewLink }
+                : { drive_folder_url: existing.webViewLink }
+            )
+          })
+        } catch (dbErr) {
+          console.warn('[create-drive-folder] No se pudo persistir URL existente:', dbErr.message)
+        }
+      }
+      return res.json({
+        success: true,
+        folderId: existing.id,
+        folderUrl: existing.webViewLink,
+        folderName,
+        source: 'drive'
+      })
+    }
+
+    // 2) No existe en Drive: crear nueva
+    console.log(`[create-drive-folder] Creating ${tipo} folder: ${folderName}`)
     const response = await drive.files.create({
       requestBody: {
         name: folderName,
@@ -163,11 +212,34 @@ app.post('/api/create-drive-folder', async (req, res) => {
     const folder = response.data
     console.log('Folder created:', folder)
 
+    // Persistir en BD
+    if (supabaseEnabled && recordId) {
+      try {
+        await fetch(`${supabaseUrl}/rest/v1/${tabla}?id=eq.${recordId}`, {
+          method: 'PATCH',
+          headers: {
+            apikey: serviceKey,
+            Authorization: `Bearer ${serviceKey}`,
+            'Content-Type': 'application/json',
+            Prefer: 'return=minimal'
+          },
+          body: JSON.stringify(
+            tieneFolderId
+              ? { drive_folder_id: folder.id, drive_folder_url: folder.webViewLink }
+              : { drive_folder_url: folder.webViewLink }
+          )
+        })
+      } catch (dbErr) {
+        console.warn('[create-drive-folder] No se pudo persistir URL nueva:', dbErr.message)
+      }
+    }
+
     res.json({
       success: true,
       folderId: folder.id,
       folderUrl: folder.webViewLink,
-      folderName
+      folderName,
+      source: 'created'
     })
   } catch (error) {
     console.error('Error creating folder:', error.message)
