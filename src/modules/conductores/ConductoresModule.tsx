@@ -1822,12 +1822,26 @@ export function ConductoresModule() {
     else if (turno === 'todo_dia' || turno === 'A_CARGO') turnoLabel = 'A Cargo'
     else if (turno === 'SIN_PREFERENCIA') turnoLabel = 'Sin Pref.'
 
+    // Normalizar teléfono a formato E.164 para Intercom (+54...)
+    let telefonoNorm = String(condFull.telefono_contacto || '').replace(/[^0-9]/g, '')
+    if (telefonoNorm.startsWith('54')) {
+      telefonoNorm = '+' + telefonoNorm
+    } else if (telefonoNorm.startsWith('0')) {
+      telefonoNorm = '+54' + telefonoNorm.substring(1)
+    } else if (telefonoNorm.startsWith('15') || telefonoNorm.startsWith('11')) {
+      telefonoNorm = '+549' + telefonoNorm
+    } else if (telefonoNorm.length >= 10) {
+      telefonoNorm = '+54' + telefonoNorm
+    } else {
+      telefonoNorm = '+54' + telefonoNorm
+    }
+
     const payload = {
       conductor_id: conductor.id,
       email: `dni_${dniLimpio}@toshify.com`,
       name: nombreCompleto,
       user_id: dniLimpio,
-      phone: condFull.telefono_contacto,
+      phone: telefonoNorm,
       patente,
       turno: turnoLabel,
       companero,
