@@ -392,7 +392,7 @@ export function IncidenciasModule() {
         // Obtener historial de rechazos
         (supabase.from('penalidades_rechazos' as any) as any).select('penalidad_id, motivo, rechazado_por, created_at').order('created_at', { ascending: false }),
         // Conceptos de facturación (para dropdown de incidencias, excluir alquileres y conceptos no aplicables)
-        supabase.from('conceptos_nomina').select('id, codigo, descripcion, precio_final').eq('activo', true).not('codigo', 'in', '("P001","P002","P003","P013","P014","P015","P016")').order('orden')
+        supabase.from('conceptos_nomina').select('id, codigo, descripcion, precio_final').eq('activo', true).not('codigo', 'in', '(P001,P002,P003,P013,P014,P015,P016)').order('orden')
       ])
 
       setEstados(estadosRes.data || [])
