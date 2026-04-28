@@ -80,6 +80,43 @@ export function MenuHierarchyManager() {
     }
   }
 
+  // Reordena los menús del mismo nivel cuando se inserta uno nuevo o se cambia
+  // un order_index existente. Mantiene la secuencia sin huecos ni duplicados.
+  const shiftMenuOrders = async (
+    fromOrder: number,
+    toOrder: number | null,
+    excludeId?: string
+  ) => {
+    // INSERT en posición fromOrder: empuja +1 a todos con order >= fromOrder
+    if (toOrder === null) {
+      const affected = menus.filter(m =>
+        m.order_index >= fromOrder && m.id !== excludeId
+      )
+      for (const m of affected) {
+        await supabase.from('menus').update({ order_index: m.order_index + 1 }).eq('id', m.id)
+      }
+      return
+    }
+    // UPDATE: mover de fromOrder a toOrder, ajustar a los del medio
+    if (toOrder > fromOrder) {
+      // Bajó en la lista: los del rango (fromOrder, toOrder] suben -1
+      const affected = menus.filter(m =>
+        m.order_index > fromOrder && m.order_index <= toOrder && m.id !== excludeId
+      )
+      for (const m of affected) {
+        await supabase.from('menus').update({ order_index: m.order_index - 1 }).eq('id', m.id)
+      }
+    } else if (toOrder < fromOrder) {
+      // Subió en la lista: los del rango [toOrder, fromOrder) bajan +1
+      const affected = menus.filter(m =>
+        m.order_index >= toOrder && m.order_index < fromOrder && m.id !== excludeId
+      )
+      for (const m of affected) {
+        await supabase.from('menus').update({ order_index: m.order_index + 1 }).eq('id', m.id)
+      }
+    }
+  }
+
   const handleCreateMenu = async () => {
     if (!menuForm.name || !menuForm.label) {
       Swal.fire('Error', 'Nombre y etiqueta son requeridos', 'error')
@@ -88,6 +125,9 @@ export function MenuHierarchyManager() {
 
     setSaving(true)
     try {
+      // Abrir hueco en el order_index pedido
+      await shiftMenuOrders(menuForm.order_index, null)
+
       const { error } = await supabase
         .from('menus')
         .insert([menuForm])
@@ -110,6 +150,11 @@ export function MenuHierarchyManager() {
 
     setSaving(true)
     try {
+      // Si cambió el order_index, reordenar los demás
+      if (editingMenu.order_index !== menuForm.order_index) {
+        await shiftMenuOrders(editingMenu.order_index, menuForm.order_index, editingMenu.id)
+      }
+
       const { error } = await supabase
         .from('menus')
         .update(menuForm)
@@ -154,6 +199,41 @@ export function MenuHierarchyManager() {
     }
   }
 
+  // Reordena los submenús del mismo scope (mismo menu_id + mismo parent_id).
+  const shiftSubmenuOrders = async (
+    menuId: string,
+    parentId: string | null,
+    fromOrder: number,
+    toOrder: number | null,
+    excludeId?: string
+  ) => {
+    const sameScope = (s: Submenu) =>
+      s.menu_id === menuId && (s.parent_id ?? null) === parentId && s.id !== excludeId
+
+    if (toOrder === null) {
+      const affected = submenus.filter(s => sameScope(s) && s.order_index >= fromOrder)
+      for (const s of affected) {
+        await supabase.from('submenus').update({ order_index: s.order_index + 1 }).eq('id', s.id)
+      }
+      return
+    }
+    if (toOrder > fromOrder) {
+      const affected = submenus.filter(s =>
+        sameScope(s) && s.order_index > fromOrder && s.order_index <= toOrder
+      )
+      for (const s of affected) {
+        await supabase.from('submenus').update({ order_index: s.order_index - 1 }).eq('id', s.id)
+      }
+    } else if (toOrder < fromOrder) {
+      const affected = submenus.filter(s =>
+        sameScope(s) && s.order_index >= toOrder && s.order_index < fromOrder
+      )
+      for (const s of affected) {
+        await supabase.from('submenus').update({ order_index: s.order_index + 1 }).eq('id', s.id)
+      }
+    }
+  }
+
   const handleCreateSubmenu = async () => {
     if (!submenuForm.name || !submenuForm.label || !submenuForm.menu_id) {
       Swal.fire('Error', 'Completa todos los campos requeridos', 'error')
@@ -172,6 +252,9 @@ export function MenuHierarchyManager() {
           level = (parentSubmenu.level || 1) + 1
         }
       }
+
+      // Abrir hueco en el order_index pedido dentro del mismo scope
+      await shiftSubmenuOrders(submenuForm.menu_id, parentId, submenuForm.order_index, null)
 
       const { error } = await supabase
         .from('submenus')
@@ -203,6 +286,38 @@ export function MenuHierarchyManager() {
 
     setSaving(true)
     try {
+      const newParentId = submenuForm.parent_id || null
+      const oldParentId = editingSubmenu.parent_id ?? null
+      const oldMenuId = editingSubmenu.menu_id
+      const newMenuId = submenuForm.menu_id
+
+      // Si cambió de scope (menú o padre), cerrar hueco viejo y abrir hueco nuevo
+      const scopeChanged = oldMenuId !== newMenuId || oldParentId !== newParentId
+
+      if (scopeChanged) {
+        // Compactar el scope antiguo (los que estaban después suben -1)
+        const affected = submenus.filter(s =>
+          s.menu_id === oldMenuId &&
+          (s.parent_id ?? null) === oldParentId &&
+          s.id !== editingSubmenu.id &&
+          s.order_index > editingSubmenu.order_index
+        )
+        for (const s of affected) {
+          await supabase.from('submenus').update({ order_index: s.order_index - 1 }).eq('id', s.id)
+        }
+        // Abrir hueco en el scope nuevo
+        await shiftSubmenuOrders(newMenuId, newParentId, submenuForm.order_index, null, editingSubmenu.id)
+      } else if (editingSubmenu.order_index !== submenuForm.order_index) {
+        // Mismo scope, solo cambió el orden
+        await shiftSubmenuOrders(
+          newMenuId,
+          newParentId,
+          editingSubmenu.order_index,
+          submenuForm.order_index,
+          editingSubmenu.id
+        )
+      }
+
       const { error } = await supabase
         .from('submenus')
         .update({
@@ -210,8 +325,8 @@ export function MenuHierarchyManager() {
           label: submenuForm.label,
           route: submenuForm.route,
           order_index: submenuForm.order_index,
-          menu_id: submenuForm.menu_id,
-          parent_id: submenuForm.parent_id || null
+          menu_id: newMenuId,
+          parent_id: newParentId
         })
         .eq('id', editingSubmenu.id)
 
@@ -425,7 +540,8 @@ export function MenuHierarchyManager() {
         loading={loading}
         error={error}
         searchPlaceholder="Buscar por nombre, etiqueta o ruta..."
-        emptyIcon={<MenuIcon size={48} />}
+        emptyIcon={<MenuIcon size={48}
+      />}
         emptyTitle="No hay menús"
         emptyDescription="Crea el primer menú usando el botón '+ Menú'"
 pageSize={100}

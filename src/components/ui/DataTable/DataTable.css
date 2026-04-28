@@ -363,15 +363,19 @@
   position: relative;
 }
 
-/* Table Wrapper for scroll */
+/* Table Wrapper for scroll. La altura máxima la calcula el componente DataTable
+   dinámicamente vía JS (ResizeObserver) en función de la posición real del wrapper
+   dentro del viewport. El fallback CSS es por si JS no se ejecuta aún. */
 .dt-table-wrapper {
   overflow: auto;
   -webkit-overflow-scrolling: touch;
   padding: 0 8px 4px 8px;
   scrollbar-width: auto;
   max-width: 100%;
-  max-height: calc(100vh - 340px);
+  max-height: calc(100dvh - 280px);
 }
+
+
 
 .dt-table-wrapper::-webkit-scrollbar {
   height: 12px;
@@ -416,18 +420,90 @@
   white-space: nowrap;
 }
 
-/* Sticky column for actions (right) */
-.dt-sticky-col {
+/* Sticky column for actions (right). Como Excel: la columna queda fija al
+   borde derecho durante scroll horizontal, y el header queda fijo arriba
+   durante scroll vertical. La intersección (esquina superior derecha) queda
+   siempre visible.
+
+   Solo aplica a la columna que el componente identifica como "acciones"
+   (clase `.dt-sticky-col`). Las demás columnas mantienen comportamiento normal. */
+
+.dt-table th.dt-sticky-col,
+.dt-table td.dt-sticky-col {
+  min-width: 100px;
+  white-space: nowrap;
+}
+
+/* Body cells: sticky right */
+.dt-table tbody tr > td.dt-sticky-col {
+  position: sticky !important;
+  right: 0 !important;
+  z-index: 3;
+  background-color: var(--bg-primary) !important;
   text-align: center;
+  box-shadow: -4px 0 6px -2px rgba(0, 0, 0, 0.08);
 }
 
-.dt-table thead .dt-sticky-col {
-  background: var(--table-header-bg);
+.dt-table tbody tr:hover > td.dt-sticky-col {
+  background-color: var(--table-row-hover) !important;
 }
 
-/* First column (left) */
-.dt-sticky-col-left {
-  /* No sticky behavior */
+/* Header: sticky top + right (intersección) */
+.dt-table thead tr > th.dt-sticky-col {
+  position: sticky !important;
+  top: 0 !important;
+  right: 0 !important;
+  z-index: 6 !important;
+  background-color: var(--table-header-bg) !important;
+  color: var(--text-tertiary) !important;
+  text-align: center;
+  padding: 8px 12px;
+  box-shadow: -4px 0 6px -2px rgba(0, 0, 0, 0.08);
+  overflow: visible !important;
+}
+
+/* Asegurar que el contenido del header de Acciones (texto + sort indicator)
+   sea visible y se centre dentro de la celda sticky. */
+.dt-table thead tr > th.dt-sticky-col > .dt-header-content {
+  justify-content: center;
+  color: var(--text-tertiary);
+  font-weight: 700;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  white-space: nowrap;
+}
+
+/* Columnas fijas a la izquierda durante scroll horizontal. Como Excel:
+   se mantienen visibles tanto al scrollear horizontal como vertical.
+   - Body cells: sticky left, z-index 2
+   - Header cells normales: sticky top, z-index 4 (regla existente .dt-table th)
+   - Header cells sticky-left: sticky top + left, z-index 6 (intersección, debe
+     quedar sobre todo lo demás)
+*/
+.dt-table th.dt-sticky-col-left,
+.dt-table td.dt-sticky-col-left {
+  position: sticky;
+  z-index: 2;
+  background-color: var(--bg-primary);
+  white-space: nowrap;
+}
+
+.dt-table thead th.dt-sticky-col-left {
+  position: sticky;
+  top: 0;
+  background-color: var(--table-header-bg);
+  z-index: 6;
+}
+
+.dt-table tbody tr:hover td.dt-sticky-col-left {
+  background-color: var(--table-row-hover);
+}
+
+/* Sombra a la derecha de la última columna sticky-left para indicar el corte. */
+.dt-table th.dt-sticky-col-left-last,
+.dt-table td.dt-sticky-col-left-last {
+  box-shadow: 4px 0 6px -2px rgba(0, 0, 0, 0.12);
 }
 
 /* Header - Toshify Design System */

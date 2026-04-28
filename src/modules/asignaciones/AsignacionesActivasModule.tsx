@@ -865,7 +865,8 @@ export function AsignacionesActivasModule() {
         columns={columns}
         loading={loading}
         searchPlaceholder="Buscar por vehiculo, conductor, numero de asignacion..."
-        emptyIcon={<ClipboardList size={64} />}
+        emptyIcon={<ClipboardList size={64}
+      />}
         emptyTitle="No hay asignaciones activas"
         emptyDescription="Actualmente no hay asignaciones en estado activo"
         resetFiltersKey={resetFiltersKey}

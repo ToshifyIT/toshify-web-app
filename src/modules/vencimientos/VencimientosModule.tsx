@@ -643,7 +643,7 @@ export function VencimientosModule() {
     },
     {
       id: 'acciones',
-      header: '',
+      header: 'Acciones',
       cell: ({ row }) => (
         <div className="table-actions">
           <button
@@ -862,7 +862,8 @@ export function VencimientosModule() {
           loading={false}
           showSearch={false}
           pageSize={100}
-          emptyIcon={<Shield size={40} />}
+          emptyIcon={<Shield size={40}
+        />}
           emptyTitle="No hay vencimientos para mostrar"
           emptyDescription="Los vencimientos aparecerán aquí cuando se registren."
           externalFilters={activeFiltersList}

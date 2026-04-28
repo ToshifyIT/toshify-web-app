@@ -174,7 +174,8 @@ export function MotivosSubTab() {
         columns={columns}
         loading={loading}
         searchPlaceholder="Buscar motivos..."
-        emptyIcon={<FileText size={48} />}
+        emptyIcon={<FileText size={48}
+      />}
         emptyTitle="No hay motivos"
         emptyDescription="Agregue un nuevo motivo de visita"
         headerAction={

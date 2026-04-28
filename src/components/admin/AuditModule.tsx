@@ -529,7 +529,8 @@ export function AuditModule() {
         loading={loading}
         error={error}
         searchPlaceholder="Buscar en registros..."
-        emptyIcon={<History size={48} />}
+        emptyIcon={<History size={48}
+      />}
         emptyTitle={activeTab === 'usuarios' ? 'No hay logs de usuarios' : 'No hay logs de sistema'}
         emptyDescription={activeTab === 'usuarios' ? 'Las acciones realizadas por usuarios aparecerán aquí' : 'Los cambios automáticos del sistema aparecerán aquí'}
         pageSize={PAGE_SIZE}

@@ -575,7 +575,7 @@ export function BloqueosConductoresTab() {
     },
     {
       id: 'acciones',
-      header: '',
+      header: 'Acciones',
       cell: ({ row }) => (
         <div className="fact-table-actions">
           <button
@@ -697,7 +697,8 @@ export function BloqueosConductoresTab() {
         columns={columns}
         loading={loading}
         searchPlaceholder="Buscar conductor..."
-        emptyIcon={<Users size={48} />}
+        emptyIcon={<Users size={48}
+      />}
         emptyTitle="Sin conductores en esta categoría"
         emptyDescription={
           filtroEstado === 'candidatos'

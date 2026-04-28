@@ -209,6 +209,6 @@ export function ParametrosAsignacionesPage() {
       emptyTitle="Sin parametros"
       emptyDescription="No se encontraron parametros de asignacion"
       pageSize={10}
-    />
+/>
   )
 }

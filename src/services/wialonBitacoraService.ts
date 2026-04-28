@@ -157,101 +157,6 @@ function formatearHora(hora: string | null): string | null {
 }
 
 // =====================================================
-// CONSOLIDACIÓN: Agrupar trips del mismo día/conductor/patente
-// =====================================================
-
-function consolidarRegistros(registros: BitacoraRegistroTransformado[]): BitacoraRegistroTransformado[] {
-  const grupos = new Map<string, BitacoraRegistroTransformado[]>()
-
-  for (const reg of registros) {
-    // Clave: fecha + patente + conductor (normalizado)
-    const conductor = (reg.conductor_wialon || 'sin_conductor').toLowerCase().trim()
-    const key = `${reg.fecha_turno}_${reg.patente_normalizada}_${conductor}`
-    if (!grupos.has(key)) {
-      grupos.set(key, [])
-    }
-    grupos.get(key)!.push(reg)
-  }
-
-  const resultado: BitacoraRegistroTransformado[] = []
-
-  for (const [, trips] of grupos) {
-    if (trips.length === 1) {
-      resultado.push(trips[0])
-      continue
-    }
-
-    // Ordenar por hora_inicio
-    trips.sort((a, b) => (a.hora_inicio || '').localeCompare(b.hora_inicio || ''))
-
-    const primero = trips[0]
-    const ultimo = trips[trips.length - 1]
-
-    // Sumar km
-    const kmTotal = trips.reduce((sum, t) => sum + t.kilometraje, 0)
-
-    // Hora inicio = la más temprana, hora cierre = la más tardía
-    const horaInicio = primero.hora_inicio
-    const horaCierre = ultimo.hora_cierre || ultimo.hora_inicio
-
-    // Calcular duración real entre primera entrada y última salida
-    let duracionMinutos: number | null = null
-    if (horaInicio && horaCierre) {
-      const [h1, m1] = horaInicio.split(':').map(Number)
-      const [h2, m2] = horaCierre.split(':').map(Number)
-      duracionMinutos = (h2 * 60 + m2) - (h1 * 60 + m1)
-      if (duracionMinutos < 0) duracionMinutos += 24 * 60 // cruce de medianoche
-    }
-
-    // Periodo inicio = el más temprano, periodo fin = el más tardío
-    const periodos = trips.map(t => t.periodo_inicio).filter(Boolean).sort()
-    const periodosFin = trips.map(t => t.periodo_fin).filter(Boolean).sort()
-
-    // Estado: usar el más relevante (Finalizado > En Curso > Poco Km > Pendiente)
-    const estadoPrioridad: Record<string, number> = {
-      'Turno Finalizado': 1,
-      'Finalizado': 1,
-      'En Curso': 2,
-      'Poco Km': 3,
-      'Pendiente': 4,
-    }
-    const mejorEstado = trips.reduce((best, t) => {
-      const pBest = estadoPrioridad[best.estado] || 99
-      const pCurrent = estadoPrioridad[t.estado] || 99
-      return pCurrent < pBest ? t : best
-    })
-
-    // Checklist: true si alguno tiene true
-    const gncCargado = trips.some(t => t.gnc_cargado)
-    const lavadoRealizado = trips.some(t => t.lavado_realizado)
-    const naftaCargada = trips.some(t => t.nafta_cargada)
-
-    resultado.push({
-      ...primero,
-      hora_inicio: horaInicio,
-      hora_cierre: horaCierre,
-      periodo_inicio: periodos[0] || null,
-      periodo_fin: periodosFin[periodosFin.length - 1] || null,
-      duracion_minutos: duracionMinutos,
-      kilometraje: Math.round(kmTotal * 100) / 100,
-      estado: mejorEstado.estado,
-      gnc_cargado: gncCargado,
-      lavado_realizado: lavadoRealizado,
-      nafta_cargada: naftaCargada,
-    })
-  }
-
-  // Ordenar por fecha desc, hora desc
-  resultado.sort((a, b) => {
-    const fechaCmp = b.fecha_turno.localeCompare(a.fecha_turno)
-    if (fechaCmp !== 0) return fechaCmp
-    return (b.hora_inicio || '').localeCompare(a.hora_inicio || '')
-  })
-
-  return resultado
-}
-
-// =====================================================
 // SERVICIO PRINCIPAL
 // =====================================================
 
@@ -358,11 +263,10 @@ export const wialonBitacoraService = {
       }
     })
 
-    // Consolidar: agrupar trips del mismo día/conductor/patente en 1 registro
-    const consolidados = consolidarRegistros(registros)
-
-    bitacoraCache.set(cacheKey, consolidados)
-    return { data: consolidados, count: consolidados.length }
+    // No consolidar: el sync ya entrega 1 fila por marcación.
+    // Re-consolidar acá unía marcaciones distintas del mismo conductor en el mismo día.
+    bitacoraCache.set(cacheKey, registros)
+    return { data: registros, count: registros.length }
   },
 
   /**

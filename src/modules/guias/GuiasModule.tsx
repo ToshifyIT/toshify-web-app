@@ -3437,7 +3437,8 @@ export function GuiasModule() {
                     globalFilter={globalSearch}
                     onGlobalFilterChange={setGlobalSearch}
                     stickyFirstColumn
-                    emptyIcon={<Users size={64} />}
+                    emptyIcon={<Users size={64}
+                  />}
                     emptyTitle="No hay conductores asignados"
                     emptyDescription="Este guía no tiene conductores asignados o no cumplen con los filtros."
                   />

@@ -557,7 +557,7 @@ export function MultasTab() {
     },
     {
       id: 'acciones',
-      header: '',
+      header: 'Acciones',
       cell: ({ row }) => (
         <div className="fact-table-actions">
           <button
@@ -694,7 +694,8 @@ export function MultasTab() {
         columns={columns}
         loading={loading}
         searchPlaceholder="Buscar por patente, conductor, lugar..."
-        emptyIcon={<AlertTriangle size={48} />}
+        emptyIcon={<AlertTriangle size={48}
+      />}
         emptyTitle="Sin multas registradas"
         emptyDescription="No hay multas de transito. Use el boton 'Registrar Multa' para agregar una."
         pageSize={100}

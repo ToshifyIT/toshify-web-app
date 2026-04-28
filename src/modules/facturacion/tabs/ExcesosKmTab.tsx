@@ -754,7 +754,7 @@ export function ExcesosKmTab() {
     },
     {
       id: 'acciones',
-      header: '',
+      header: 'Acciones',
       cell: ({ row }) => (
         <div className="fact-table-actions">
           <button
@@ -908,7 +908,8 @@ export function ExcesosKmTab() {
         columns={columns}
         loading={loading}
         searchPlaceholder="Buscar conductor o vehículo..."
-        emptyIcon={<Gauge size={48} />}
+        emptyIcon={<Gauge size={48}
+      />}
         emptyTitle="Sin excesos de kilometraje"
         emptyDescription="No hay excesos registrados. Use el botón 'Registrar Exceso' para agregar uno."
         pageSize={100}

@@ -1868,7 +1868,7 @@ export function LeadsModule() {
     /* Columna Fecha Entrevista oculta */
     {
       id: 'acciones',
-      header: '',
+      header: 'Acciones',
       enableSorting: false,
       size: 60,
       cell: ({ row }) => {
@@ -2025,7 +2025,8 @@ export function LeadsModule() {
         loading={loading}
         error={error}
         searchPlaceholder="Buscar lead por nombre, DNI, teléfono..."
-        emptyIcon={<Users size={64} />}
+        emptyIcon={<Users size={64}
+      />}
         emptyTitle="No hay leads"
         emptyDescription="No se encontraron leads con los filtros aplicados"
         headerAction={

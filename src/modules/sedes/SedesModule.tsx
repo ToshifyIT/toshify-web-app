@@ -658,7 +658,8 @@ export function SedesModule() {
         columns={columns}
         data={filteredSedes}
         loading={loading}
-        emptyIcon={<Building2 size={64} />}
+        emptyIcon={<Building2 size={64}
+      />}
         emptyTitle="No hay sedes"
         emptyDescription="Crea la primera sede para comenzar"
       />

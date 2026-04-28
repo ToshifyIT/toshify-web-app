@@ -304,7 +304,8 @@ export function AsignacionesActivasModule() {
         loading={loading}
         error={error}
         searchPlaceholder="Buscar por patente, codigo o herramienta..."
-        emptyIcon={<Package size={48} />}
+        emptyIcon={<Package size={48}
+      />}
         emptyTitle="No hay herramientas asignadas"
         emptyDescription="Las herramientas asignadas a vehiculos apareceran aqui"
         pageSize={100}

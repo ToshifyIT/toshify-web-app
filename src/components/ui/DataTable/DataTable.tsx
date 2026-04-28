@@ -5,7 +5,7 @@
  * con filas expandibles, columna de acciones sticky y filtros automáticos por columna.
  */
 
-import React, { useState, useEffect, useRef, useMemo, useCallback, useLayoutEffect, type ReactNode } from "react";
+import React, { useState, useEffect, useRef, useMemo, useCallback, useLayoutEffect, type ReactNode, type CSSProperties } from "react";
 import { createPortal } from "react-dom";
 import {
   useReactTable,
@@ -528,6 +528,8 @@ export interface DataTableProps<T> {
   disableAutoFilters?: boolean;
   /** Fija la primera columna a la izquierda durante scroll horizontal */
   stickyFirstColumn?: boolean;
+  /** Cantidad de columnas a fijar a la izquierda (sobreescribe stickyFirstColumn). */
+  stickyLeftColumns?: number;
   /** Filtros externos (ej: desde stat cards) para mostrar en la barra de filtros activos */
   externalFilters?: Array<{ id: string; label: string; onClear: () => void }>;
   /** Callback para limpiar todos los filtros (internos y externos) */
@@ -565,6 +567,7 @@ export function DataTable<T>({
   headerAction,
   alwaysVisibleColumns = ["acciones", "actions"],
   stickyFirstColumn = false,
+  stickyLeftColumns,
   resetFiltersKey,
   disableAutoFilters = false,
   externalFilters = [],
@@ -586,8 +589,15 @@ export function DataTable<T>({
   const [sorting, setSorting] = useState<SortingState>([]);
   const tableWrapperRef = useRef<HTMLDivElement>(null);
   const [isMobile, setIsMobile] = useState(false);
+  const [dynamicMaxHeight, setDynamicMaxHeight] = useState<number | null>(null);
 
-  // Max-height set via CSS (.dt-table-wrapper max-height: calc(100vh - 340px))
+  // Cantidad efectiva de columnas sticky a la izquierda. Combina ambos props
+  // para mantener compatibilidad: stickyLeftColumns gana si está definido.
+  const stickyLeftCount = stickyLeftColumns ?? (stickyFirstColumn ? 1 : 0);
+  // Dimensiones medidas de las primeras N columnas: { left, width }.
+  // Se miden en el primer render (sin sticky aplicado) para evitar que el
+  // sticky colapse el ancho. Como Excel: la columna fija mantiene su ancho.
+  const [stickyDims, setStickyDims] = useState<{ left: number; width: number }[]>([]);
 
   // Detectar mobile
   useEffect(() => {
@@ -595,6 +605,89 @@ export function DataTable<T>({
     checkMobile();
     window.addEventListener('resize', checkMobile);
     return () => window.removeEventListener('resize', checkMobile);
+  }, []);
+
+  // Medir solo el `left` acumulado de las primeras N columnas.
+  // No aplicamos width: dejamos que el navegador asigne el ancho natural según
+  // el contenido más grande de cada columna (header o body). Position:sticky
+  // respeta ese ancho.
+  useEffect(() => {
+    if (stickyLeftCount <= 0) {
+      setStickyDims([]);
+      return;
+    }
+    const recalc = () => {
+      const wrapper = tableWrapperRef.current;
+      if (!wrapper) return;
+      const headerRow = wrapper.querySelector('thead tr');
+      if (!headerRow) return;
+      const cells = Array.from(headerRow.children) as HTMLElement[];
+      const dims: { left: number; width: number }[] = [];
+      let acc = 0;
+      for (let i = 0; i < stickyLeftCount && i < cells.length; i++) {
+        const w = cells[i].getBoundingClientRect().width;
+        dims.push({ left: acc, width: w });
+        acc += w;
+      }
+      setStickyDims(prev => {
+        if (prev.length !== dims.length) return dims;
+        for (let i = 0; i < dims.length; i++) {
+          if (Math.abs(prev[i].left - dims[i].left) > 0.5) return dims;
+        }
+        return prev;
+      });
+    };
+    recalc();
+    const wrapper = tableWrapperRef.current;
+    if (!wrapper) return;
+    const ro = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(recalc) : null;
+    ro?.observe(wrapper);
+    return () => ro?.disconnect();
+  }, [stickyLeftCount, data]);
+
+  // Altura máxima de la tabla = alto de la ventana - top del wrapper - reserva
+  // para paginación. Simple y predecible: la tabla siempre ocupa lo que falta
+  // del viewport. Se recalcula al redimensionar.
+  useLayoutEffect(() => {
+    const recalc = () => {
+      const el = tableWrapperRef.current;
+      if (!el) return;
+      const top = el.getBoundingClientRect().top;
+      const RESERVE = 100; // paginación (~60) + padding/buffer (~40)
+      const available = window.innerHeight - top - RESERVE;
+      const newHeight = available > 200 ? Math.floor(available) : 200;
+      setDynamicMaxHeight(prev => (prev !== null && Math.abs(prev - newHeight) < 2) ? prev : newHeight);
+    };
+    recalc();
+    const raf = requestAnimationFrame(recalc);
+    // Múltiples reintentos para captar layouts que cargan async (stats, datos
+    // de API, fuentes web). Cubre desde el primer paint hasta 2s después.
+    const timers = [50, 200, 500, 1000, 2000].map(ms => setTimeout(recalc, ms));
+
+    let resizeTimer: ReturnType<typeof setTimeout> | null = null;
+    const onResize = () => {
+      if (resizeTimer) clearTimeout(resizeTimer);
+      resizeTimer = setTimeout(recalc, 80);
+    };
+    window.addEventListener('resize', onResize);
+
+    // Observa cambios en el DOM del módulo (cuando aparecen stats async, etc).
+    // Observamos el body completo, así cualquier mutation que afecte el layout
+    // dispara un recalc. El cambio del maxHeight de la tabla NO dispara
+    // mutations del body, así que no hay loop.
+    const mo = new MutationObserver(() => {
+      if (resizeTimer) clearTimeout(resizeTimer);
+      resizeTimer = setTimeout(recalc, 80);
+    });
+    mo.observe(document.body, { childList: true, subtree: true });
+
+    return () => {
+      cancelAnimationFrame(raf);
+      timers.forEach(clearTimeout);
+      if (resizeTimer) clearTimeout(resizeTimer);
+      window.removeEventListener('resize', onResize);
+      mo.disconnect();
+    };
   }, []);
 
   // Column filter state
@@ -1545,26 +1638,37 @@ export function DataTable<T>({
           </div>
         ) : (
           /* Desktop Table View */
-          <div className="dt-table-wrapper" ref={tableWrapperRef}>
+          <div
+            className="dt-table-wrapper"
+            ref={tableWrapperRef}
+            style={dynamicMaxHeight ? { maxHeight: `${dynamicMaxHeight}px` } : undefined}
+          >
             <table className="dt-table">
               <thead>
                 {table.getHeaderGroups().map((headerGroup) => (
                   <tr key={headerGroup.id}>
                     {headerGroup.headers.map((header, headerIndex) => {
                       const isActionsColumn = alwaysVisibleColumns.includes(header.id);
-                      const isFirstColumn = stickyFirstColumn && headerIndex === 0;
+                      const wantsStickyLeft = headerIndex < stickyLeftCount;
+                      const isStickyLeft = wantsStickyLeft && !!stickyDims[headerIndex];
+                      const isLastStickyLeft = isStickyLeft && headerIndex === stickyLeftCount - 1;
                       const hasExplicitSize = columnsWithUserSize.has(header.id);
                       const isExpandColumn = !!(header.column.columnDef.meta as Record<string, unknown>)?.expand;
                       const shouldShrink = !hasExplicitSize && !isExpandColumn;
                       const shouldExpand = isExpandColumn;
+                      const stickyLeftStyle: CSSProperties | undefined = isStickyLeft
+                        ? { left: stickyDims[headerIndex].left }
+                        : undefined;
                       return (
                         <th
                           key={header.id}
                           onClick={header.column.getCanSort() ? header.column.getToggleSortingHandler() : undefined}
+                          style={stickyLeftStyle}
                           className={`
                             ${header.column.getCanSort() ? "dt-sortable" : ""}
                             ${isActionsColumn ? "dt-sticky-col" : ""}
-                            ${isFirstColumn ? "dt-sticky-col-left" : ""}
+                            ${isStickyLeft ? "dt-sticky-col-left" : ""}
+                            ${isLastStickyLeft ? "dt-sticky-col-left-last" : ""}
                             ${shouldShrink ? "dt-col-shrink" : ""}
                             ${shouldExpand ? "dt-col-expand" : ""}
                           `}
@@ -1605,15 +1709,21 @@ export function DataTable<T>({
                     <tr key={row.id}>
                       {row.getVisibleCells().map((cell, cellIndex) => {
                         const isActionsColumn = alwaysVisibleColumns.includes(cell.column.id);
-                        const isFirstColumn = stickyFirstColumn && cellIndex === 0;
+                        const wantsStickyLeft = cellIndex < stickyLeftCount;
+                        const isStickyLeft = wantsStickyLeft && !!stickyDims[cellIndex];
+                        const isLastStickyLeft = isStickyLeft && cellIndex === stickyLeftCount - 1;
                         const hasExplicitSize = columnsWithUserSize.has(cell.column.id);
                         const isExpandColumn = !!(cell.column.columnDef.meta as Record<string, unknown>)?.expand;
                         const shouldShrink = !hasExplicitSize && !isExpandColumn;
                         const shouldExpand = isExpandColumn;
+                        const stickyLeftStyle: CSSProperties | undefined = isStickyLeft
+                          ? { left: stickyDims[cellIndex].left }
+                          : undefined;
                         return (
                           <td
                             key={cell.id}
-                            className={`${isActionsColumn ? "dt-sticky-col" : ""} ${isFirstColumn ? "dt-sticky-col-left" : ""} ${shouldShrink ? "dt-col-shrink" : ""} ${shouldExpand ? "dt-col-expand" : ""}`}
+                            style={stickyLeftStyle}
+                            className={`${isActionsColumn ? "dt-sticky-col" : ""} ${isStickyLeft ? "dt-sticky-col-left" : ""} ${isLastStickyLeft ? "dt-sticky-col-left-last" : ""} ${shouldShrink ? "dt-col-shrink" : ""} ${shouldExpand ? "dt-col-expand" : ""}`}
                           >
                             {flexRender(
                               cell.column.columnDef.cell,

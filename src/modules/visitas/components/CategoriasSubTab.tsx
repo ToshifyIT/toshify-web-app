@@ -219,7 +219,8 @@ export function CategoriasSubTab() {
         columns={columns}
         loading={loading}
         searchPlaceholder="Buscar categorías..."
-        emptyIcon={<Tag size={48} />}
+        emptyIcon={<Tag size={48}
+      />}
         emptyTitle="No hay categorías"
         emptyDescription="Agregue una nueva categoría de visita"
         headerAction={

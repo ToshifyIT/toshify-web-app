@@ -478,7 +478,8 @@ export function InventarioDashboardModule() {
         columns={columns}
         loading={loading}
         searchPlaceholder="Buscar por código o producto..."
-        emptyIcon={<Package size={64} />}
+        emptyIcon={<Package size={64}
+      />}
         emptyTitle="No hay productos en inventario"
         emptyDescription=""
         showSearch={true}

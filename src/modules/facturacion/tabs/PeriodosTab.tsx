@@ -1164,7 +1164,7 @@ export function PeriodosTab() {
     },
     {
       id: 'acciones',
-      header: '',
+      header: 'Acciones',
       cell: ({ row }) => {
         const sem = row.original
         const isGenerando = generando === `${sem.semana}-${sem.anio}`
@@ -1298,7 +1298,8 @@ export function PeriodosTab() {
         columns={columns}
         loading={loading}
         searchPlaceholder="Buscar semana..."
-        emptyIcon={<FileText size={48} />}
+        emptyIcon={<FileText size={48}
+      />}
         emptyTitle="Sin semanas"
         emptyDescription="No hay semanas para mostrar"
         pageSize={52}

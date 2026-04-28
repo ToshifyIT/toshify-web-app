@@ -79,7 +79,7 @@ export function IncidenciaCobroTab({
      },
     {
       id: 'acciones',
-      header: 'ACCIONES',
+      header: 'Acciones',
       enableSorting: false,
       cell: (info) => {
         const incidencia = info.row.original
@@ -118,7 +118,7 @@ export function IncidenciaCobroTab({
         showPagination
         emptyTitle="No hay incidencias de cobro pendientes"
         emptyDescription="Las incidencias que generan cobros aparecerán aquí"
-      />
+/>
     </div>
   )
 }

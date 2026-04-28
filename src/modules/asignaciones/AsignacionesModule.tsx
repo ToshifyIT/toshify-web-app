@@ -3022,7 +3022,7 @@ export function AsignacionesModule() {
     },
     {
       id: 'acciones',
-      header: '',
+      header: 'Acciones',
       enableSorting: false,
       cell: ({ row }) => {
         const esDevolucion = row.original.esDevolucion || row.original.motivo === 'devolucion_vehiculo'
@@ -3199,7 +3199,8 @@ export function AsignacionesModule() {
           const text = `${patente} ${codigo} ${motivo} ${conductoresRaw} ${conductorCargo} ${conductorDiurno} ${conductorNocturno} ${conductorNombre}`
           return search.split(/\s+/).every(word => text.includes(word))
         }}
-        emptyIcon={<FileText size={48} />}
+        emptyIcon={<FileText size={48}
+      />}
         emptyTitle="No hay asignaciones"
         emptyDescription="Las asignaciones se crean desde la pestaña Programacion"
         pageSize={100}

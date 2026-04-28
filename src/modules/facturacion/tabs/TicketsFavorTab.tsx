@@ -520,7 +520,7 @@ export function TicketsFavorTab() {
     },
     {
       id: 'acciones',
-      header: '',
+      header: 'Acciones',
       cell: ({ row }) => {
         const ticket = row.original
         return (
@@ -644,7 +644,8 @@ export function TicketsFavorTab() {
         columns={columns}
         loading={loading}
         searchPlaceholder="Buscar ticket..."
-        emptyIcon={<Ticket size={48} />}
+        emptyIcon={<Ticket size={48}
+      />}
         emptyTitle="Sin tickets"
         emptyDescription="No hay tickets registrados"
         pageSize={100}

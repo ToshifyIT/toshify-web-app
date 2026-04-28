@@ -527,7 +527,8 @@ export function ConceptosTab() {
         columns={columns}
         loading={loading}
         searchPlaceholder="Buscar por código, descripción..."
-        emptyIcon={<Package size={48} />}
+        emptyIcon={<Package size={48}
+      />}
         emptyTitle="No hay conceptos"
         emptyDescription="Agregue un nuevo concepto de nómina"
         pageSize={100}
