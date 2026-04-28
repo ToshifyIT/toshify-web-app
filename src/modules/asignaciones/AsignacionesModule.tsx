@@ -3075,7 +3075,7 @@ export function AsignacionesModule() {
             icon: <ClipboardCheck size={15} />,
             label: 'Completar Control',
             onClick: () => openControlModal(row.original),
-            hidden: row.original.control_completado === true || (row.original.created_at && new Date(row.original.created_at) <= new Date('2026-04-27T23:59:59')),
+            hidden: row.original.control_completado === true || Boolean(row.original.created_at && new Date(row.original.created_at) <= new Date('2026-04-27T23:59:59')),
             variant: 'info' as const,
           },
           // Eliminar
