@@ -1758,18 +1758,7 @@ export function ConductoresModule() {
       // PostgREST aún no reconoce la columna, ignorar
     }
 
-    if (intercomIdExistente) {
-      const confirmar = await Swal.fire({
-        icon: 'warning',
-        title: 'Contacto ya existe',
-        html: `Este conductor ya tiene un ID de Intercom: <strong>${intercomIdExistente}</strong><br><br>Si continúas, se actualizarán sus datos en Intercom.`,
-        showCancelButton: true,
-        confirmButtonText: 'Actualizar datos',
-        cancelButtonText: 'Cancelar',
-        confirmButtonColor: '#2563eb',
-      })
-      if (!confirmar.isConfirmed) return
-    }
+    // Si ya tiene intercom_id, el botón ya dice "Actualizar", no hace falta popup extra
 
     // 3. Validar campos mínimos
     const dniLimpio = String(condFull.numero_dni || '').replace(/[^0-9]/g, '')
@@ -1905,9 +1894,11 @@ export function ConductoresModule() {
     if (!confirm.isConfirmed) return
 
     // 7. Enviar a la API
-    Swal.fire({ title: 'Creando contacto...', allowOutsideClick: false, didOpen: () => Swal.showLoading() })
+    Swal.fire({ title: intercomIdExistente ? 'Actualizando contacto...' : 'Creando contacto...', allowOutsideClick: false, didOpen: () => Swal.showLoading() })
 
     const result = await createIntercomContact(payload)
+
+    Swal.close()
 
     if (!result.success) {
       Swal.fire('Error', result.error || 'Error desconocido', 'error')
@@ -1922,12 +1913,8 @@ export function ConductoresModule() {
         .eq('id', conductor.id)
     }
 
-    Swal.fire({
-      icon: 'success',
-      title: result.status === 'Actualizado' ? 'Contacto actualizado' : 'Contacto creado',
-      html: `<div style="text-align:left;font-size:13px;line-height:1.6">${result.message}<br><strong>Intercom ID:</strong> ${result.intercom_id}</div>`,
-      confirmButtonColor: '#2563eb',
-    })
+    const label = result.status === 'Actualizado' ? 'Contacto actualizado' : 'Contacto creado'
+    showSuccess(`${label} en Intercom`)
 
     await loadConductores(true)
   }
@@ -2616,8 +2603,12 @@ export function ConductoresModule() {
                   variant: 'info'
                 },
                 {
-                  icon: <MessageSquare size={15} />,
-                  label: 'Crear usuario Intercom',
+                  icon: (row.original as any).intercom_id
+                    ? <RefreshCw size={15} />
+                    : <MessageSquare size={15} />,
+                  label: (row.original as any).intercom_id
+                    ? 'Actualizar usuario Intercom'
+                    : 'Crear usuario Intercom',
                   onClick: () => handleCrearIntercom(row.original),
                   variant: 'info'
                 },
