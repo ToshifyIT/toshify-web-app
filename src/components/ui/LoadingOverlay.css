@@ -98,7 +98,7 @@
 
 /* Mensaje de carga */
 .loading-message {
-  font-family: 'Inter', sans-serif;
+  font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
   font-size: 14px;
   font-weight: 500;
   color: #374151;
@@ -134,7 +134,7 @@
 }
 
 .progress-text {
-  font-family: 'Inter', sans-serif;
+  font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
   font-size: 13px;
   font-weight: 600;
   color: #f90637;
@@ -156,7 +156,7 @@
 }
 
 .spinner-message {
-  font-family: 'Inter', sans-serif;
+  font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
   font-size: 14px;
   font-weight: 500;
   color: #6B7280;
@@ -173,7 +173,7 @@
 }
 
 .linear-progress-message {
-  font-family: 'Inter', sans-serif;
+  font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
   font-size: 14px;
   font-weight: 600;
   color: #374151;
@@ -202,7 +202,7 @@
 }
 
 .linear-progress-text {
-  font-family: 'Inter', sans-serif;
+  font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
   font-size: 13px;
   font-weight: 600;
   color: #f90637;

@@ -10,9 +10,15 @@ body {
   margin: 0;
   min-width: 320px;
   min-height: 100vh;
-  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'SF Pro Display', 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+}
+
+/* Stack del sistema: en Mac/iOS toma San Francisco, en Windows Segoe UI,
+   en Android Roboto. Carga instantánea, look nativo. */
+body, button, input, select, textarea, table {
+  font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'SF Pro Display', 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
 }
 
 /* ============================================
@@ -260,4 +266,137 @@ body.device-mobile .show-mobile-only {
 }
 body.device-touch .show-touch-only {
   display: block !important;
+}
+
+/* ============================================
+   VIEWPORT-BASED RESPONSIVE (no depende de user-agent)
+   Cubre cuando el navegador se redimensiona en desktop también.
+   ============================================ */
+
+/* Modales SweetAlert2 en pantallas chicas: ancho fluido */
+@media (max-width: 640px) {
+  .swal2-popup {
+    width: 92vw !important;
+    max-width: 92vw !important;
+    padding: 1rem 1.25rem !important;
+  }
+  .swal2-title {
+    font-size: 1.1rem !important;
+  }
+  .swal2-html-container {
+    font-size: 0.85rem !important;
+    padding: 0 !important;
+  }
+  .swal2-input,
+  .swal2-select,
+  .swal2-textarea {
+    font-size: 14px !important;
+    margin: 0.4rem 0 !important;
+  }
+  .swal2-actions {
+    gap: 0.4rem !important;
+    flex-wrap: wrap;
+  }
+  .swal2-confirm,
+  .swal2-cancel {
+    padding: 0.6rem 1rem !important;
+    font-size: 0.9rem !important;
+    min-height: 44px;
+  }
+}
+
+/* Stats cards: una sola columna en pantallas muy chicas */
+@media (max-width: 480px) {
+  .stat-card,
+  .fact-stat-card,
+  .cond-stat-card {
+    padding: 8px 10px;
+    min-width: 0;
+  }
+  .stat-value {
+    font-size: 1.1rem !important;
+  }
+  .stat-label {
+    font-size: 0.65rem !important;
+  }
+  /* Forzar grids de stats a 2 columnas máximo */
+  .asig-stats-grid,
+  .fact-stats-grid,
+  .cond-stats-grid,
+  .veh-stats-grid {
+    grid-template-columns: repeat(2, 1fr) !important;
+    gap: 6px !important;
+  }
+}
+
+/* Pantallas extra chicas: stats en 1 columna */
+@media (max-width: 360px) {
+  .asig-stats-grid,
+  .fact-stats-grid,
+  .cond-stats-grid,
+  .veh-stats-grid {
+    grid-template-columns: 1fr !important;
+  }
+}
+
+/* DataTable mobile: scroll horizontal y mantener acciones tocables */
+@media (max-width: 768px) {
+  .dt-table-wrapper {
+    -webkit-overflow-scrolling: touch;
+  }
+  .dt-table th,
+  .dt-table td {
+    padding: 6px 8px;
+    font-size: 12px;
+  }
+  .fact-table-btn,
+  .dt-actions button {
+    min-width: 36px;
+    min-height: 36px;
+  }
+}
+
+/* Inputs/selects: evitar zoom de iOS en focus (font-size >= 16px) */
+@media (max-width: 480px) {
+  input[type="text"],
+  input[type="number"],
+  input[type="email"],
+  input[type="tel"],
+  input[type="search"],
+  input[type="date"],
+  select,
+  textarea {
+    font-size: 16px !important;
+  }
+}
+
+/* Reducir densidad general en pantallas extra chicas (iPhone SE, etc.) */
+@media (max-width: 375px) {
+  body {
+    font-size: 13px;
+  }
+  h1, .card-title { font-size: 1rem !important; }
+  h2 { font-size: 0.95rem !important; }
+  h3 { font-size: 0.9rem !important; }
+  /* Botones secundarios: padding reducido pero target táctil mantenido */
+  button:not(.swal2-confirm):not(.swal2-cancel),
+  .btn {
+    padding: 8px 12px;
+    font-size: 13px;
+  }
+}
+
+/* Modales / contenedores con padding excesivo: limitarlo en mobile */
+@media (max-width: 640px) {
+  .modal-overlay > .modal,
+  .modal-content {
+    width: 95vw;
+    max-width: 95vw;
+    margin: 8px auto;
+  }
+  .modal-header,
+  .modal-body,
+  .modal-footer {
+    padding: 12px 16px;
+  }
 }

@@ -550,7 +550,7 @@ export function HomePage() {
 
       <style>{`
         * { margin: 0; padding: 0; box-sizing: border-box; }
-        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'SF Pro Display', 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; }
 
         .app-layout {
           display: flex;
@@ -1348,18 +1348,37 @@ export function HomePage() {
           .sidebar-logo-subtitle {
             font-size: 10px;
           }
-          .nav-item {
-            padding: 12px;
-            font-size: 14px;
-            min-height: 44px;
-          }
+          /* Items uniformes: mismo tamaño y peso visual entre nav-item y
+             section-header. Más densos (margin-bottom 0) para que entren
+             todos sin scroll. */
+          .nav-item,
           .nav-section-header {
-            padding: 10px 12px;
-            font-size: 10px;
-            min-height: 40px;
+            padding: 7px 12px;
+            font-size: 11px;
+            min-height: 32px;
+            margin-bottom: 0;
+            letter-spacing: 0.4px;
           }
           .nav-section-items {
+            padding-left: 6px;
+            margin-left: 4px;
+          }
+          .nav-nested-header {
+            padding: 6px 10px;
+            font-size: 10px;
+            min-height: 28px;
+            letter-spacing: 0.3px;
+            margin-bottom: 0;
+          }
+          .nav-nested-items {
+            margin-left: 4px;
             padding-left: 8px;
+          }
+          .nav-item.nested {
+            padding: 6px 10px;
+            font-size: 11px;
+            min-height: 28px;
+            margin-bottom: 0;
           }
           .user-avatar {
             width: 34px;
@@ -1399,6 +1418,14 @@ export function HomePage() {
           .nav-item {
             padding: 10px 12px;
             font-size: 13px;
+          }
+          .nav-nested-header {
+            padding: 8px 10px;
+            font-size: 10px;
+          }
+          .nav-item.nested {
+            padding: 8px 10px;
+            font-size: 12px;
           }
         }
 
