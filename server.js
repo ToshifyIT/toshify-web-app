@@ -1462,7 +1462,12 @@ app.post('/api/intercom/create-contact', async (req, res) => {
 
     if (intercomRes.status >= 400) {
       console.error(`[Intercom] Error ${intercomRes.status}: ${responseText}`)
-      return res.status(intercomRes.status).json({ error: simplifyIntercomError(responseText) })
+      // Extraer mensaje legible de la respuesta de Intercom
+      let errorMsg = simplifyIntercomError(responseText)
+      if (responseData?.errors?.length > 0) {
+        errorMsg = responseData.errors.map(e => `${e.code || 'error'}: ${e.message || ''}`).join(' | ')
+      }
+      return res.status(intercomRes.status).json({ error: errorMsg })
     }
 
     console.log(`[Intercom] Contacto creado: ${responseData?.id}`)
