@@ -624,6 +624,7 @@ export function ConductoresModule() {
             estado_id,
             created_at,
             drive_folder_url,
+            intercom_id,
             conductores_estados (id, codigo, descripcion),
             conductores_licencias_categorias (
               licencias_categorias (id, codigo, descripcion)
