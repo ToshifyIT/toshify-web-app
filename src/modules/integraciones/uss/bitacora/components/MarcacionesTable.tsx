@@ -245,6 +245,12 @@ export function MarcacionesTable({
         );
       },
       enableSorting: true,
+      // Ordenar por timestamp ISO completo (fecha+hora), no solo por la hora
+      sortingFn: (a, b) => {
+        const av = a.original.periodoInicio || `${a.original.fecha}T${a.original.entrada}`;
+        const bv = b.original.periodoInicio || `${b.original.fecha}T${b.original.entrada}`;
+        return av.localeCompare(bv);
+      },
     },
     {
       accessorKey: 'salida',
@@ -275,6 +281,11 @@ export function MarcacionesTable({
         );
       },
       enableSorting: true,
+      sortingFn: (a, b) => {
+        const av = a.original.periodoFin || `${a.original.fecha}T${a.original.salida}`;
+        const bv = b.original.periodoFin || `${b.original.fecha}T${b.original.salida}`;
+        return av.localeCompare(bv);
+      },
     },
     {
       accessorKey: 'duracionMinutos',
