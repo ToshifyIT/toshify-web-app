@@ -768,67 +768,29 @@ export function GarantiasTab() {
   }
 
   async function verHistorial(garantia: GarantiaConductor) {
-    try {
-      const { data: pagos, error } = await supabase
-        .from('garantias_pagos')
-        .select('*')
-        .eq('garantia_id', garantia.id)
-        .order('numero_cuota', { ascending: true })
+    const porcentaje = Math.round((garantia.monto_pagado / garantia.monto_total) * 100)
 
-      if (error) throw error
-
-      const pagosHtml = pagos && pagos.length > 0
-        ? (pagos as any[]).map((p: any) => `
-            <tr>
-              <td style="padding: 6px 8px; border-bottom: 1px solid #E5E7EB;">${p.numero_cuota}</td>
-              <td style="padding: 6px 8px; border-bottom: 1px solid #E5E7EB;">${p.semana && p.anio ? `S${p.semana}/${p.anio}` : '-'}</td>
-              <td style="padding: 6px 8px; border-bottom: 1px solid #E5E7EB;">${formatDate(p.fecha_pago)}</td>
-              <td style="padding: 6px 8px; border-bottom: 1px solid #E5E7EB; text-align: right; color: #16a34a;">${formatCurrency(p.monto)}</td>
-              <td style="padding: 6px 8px; border-bottom: 1px solid #E5E7EB; color: #6B7280;">${p.referencia || '-'}</td>
-            </tr>
-          `).join('')
-        : '<tr><td colspan="5" style="padding: 16px; text-align: center; color: #9CA3AF;">Sin pagos registrados</td></tr>'
-
-      const porcentaje = Math.round((garantia.monto_pagado / garantia.monto_total) * 100)
-
-      Swal.fire({
-        title: `<span style="font-size: 16px; font-weight: 600;">Historial de Garantía</span>`,
-        html: `
-          <div style="text-align: left; font-size: 13px;">
-            <div style="background: #F3F4F6; padding: 10px 12px; border-radius: 6px; margin-bottom: 12px;">
-              <div style="font-weight: 600; color: #111827;">${garantia.conductor_nombre}</div>
-              <div style="display: flex; gap: 12px; margin-top: 4px;">
-                <span style="color: #16a34a; font-size: 12px;">Pagado: <strong>${formatCurrency(garantia.monto_pagado)}</strong></span>
-                <span style="color: #ff0033; font-size: 12px;">Pendiente: <strong>${formatCurrency(garantia.monto_total - garantia.monto_pagado)}</strong></span>
-              </div>
-              <div style="background: #E5E7EB; height: 6px; border-radius: 3px; margin-top: 8px; overflow: hidden;">
-                <div style="background: #16a34a; height: 100%; width: ${porcentaje}%;"></div>
-              </div>
-              <div style="text-align: center; font-size: 11px; color: #6B7280; margin-top: 2px;">${porcentaje}%</div>
+    Swal.fire({
+      title: `<span style="font-size: 16px; font-weight: 600;">Historial de Garantía</span>`,
+      html: `
+        <div style="text-align: left; font-size: 13px;">
+          <div style="background: #F3F4F6; padding: 10px 12px; border-radius: 6px;">
+            <div style="font-weight: 600; color: #111827;">${garantia.conductor_nombre}</div>
+            <div style="display: flex; gap: 12px; margin-top: 4px;">
+              <span style="color: #16a34a; font-size: 12px;">Pagado: <strong>${formatCurrency(garantia.monto_pagado)}</strong></span>
+              <span style="color: #ff0033; font-size: 12px;">Pendiente: <strong>${formatCurrency(garantia.monto_total - garantia.monto_pagado)}</strong></span>
             </div>
-            <div style="max-height: 200px; overflow-y: auto; border: 1px solid #E5E7EB; border-radius: 6px;">
-              <table style="width: 100%; border-collapse: collapse; font-size: 12px;">
-                <thead>
-                  <tr style="background: #F9FAFB;">
-                    <th style="padding: 6px 8px; text-align: left; font-weight: 600;">Cuota</th>
-                    <th style="padding: 6px 8px; text-align: left; font-weight: 600;">Semana</th>
-                    <th style="padding: 6px 8px; text-align: left; font-weight: 600;">Fecha</th>
-                    <th style="padding: 6px 8px; text-align: right; font-weight: 600;">Monto</th>
-                    <th style="padding: 6px 8px; text-align: left; font-weight: 600;">Ref.</th>
-                  </tr>
-                </thead>
-                <tbody>${pagosHtml}</tbody>
-              </table>
+            <div style="background: #E5E7EB; height: 6px; border-radius: 3px; margin-top: 8px; overflow: hidden;">
+              <div style="background: #16a34a; height: 100%; width: ${porcentaje}%;"></div>
             </div>
+            <div style="text-align: center; font-size: 11px; color: #6B7280; margin-top: 2px;">${porcentaje}%</div>
           </div>
-        `,
-        width: 450,
-        confirmButtonText: 'Cerrar',
-        confirmButtonColor: '#6B7280'
-      })
-    } catch {
-      // silently ignored
-    }
+        </div>
+      `,
+      width: 450,
+      confirmButtonText: 'Cerrar',
+      confirmButtonColor: '#6B7280'
+    })
   }
 
   // ========== FUNCIONES PARA MOVIMIENTOS ==========
