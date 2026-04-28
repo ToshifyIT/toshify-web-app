@@ -3070,12 +3070,12 @@ export function AsignacionesModule() {
             onClick: () => handleOpenRegularizar(row.original),
             hidden: !canCreateManualAssignment,
           },
-          // Completar Control (visible solo si no se ha completado)
+          // Completar Control (visible solo si no se ha completado y creada después del 27/04/2026)
           {
             icon: <ClipboardCheck size={15} />,
             label: 'Completar Control',
             onClick: () => openControlModal(row.original),
-            hidden: row.original.control_completado === true,
+            hidden: row.original.control_completado === true || (row.original.created_at && new Date(row.original.created_at) <= new Date('2026-04-27T23:59:59')),
             variant: 'info' as const,
           },
           // Eliminar
@@ -3416,16 +3416,22 @@ export function AsignacionesModule() {
                           </strong>
                         </p>
                       )}
-                      {(viewAsignacion.asignaciones_conductores?.[0]?.conductores as any)?.drive_folder_url && (
-                        <a
-                          href={(viewAsignacion.asignaciones_conductores?.[0]?.conductores as any).drive_folder_url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', fontSize: '12px', color: '#2563EB', textDecoration: 'none', marginTop: '4px', fontWeight: 500 }}
-                        >
-                          <FolderOpen size={13} /> Ver documentos en Drive
-                        </a>
-                      )}
+                      {(() => {
+                        const driveUrl = (viewAsignacion.asignaciones_conductores?.[0]?.conductores as any)?.drive_folder_url
+                        if (!driveUrl) return null
+                        return (
+                          <div style={{ marginTop: '4px', display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                            <a href={driveUrl} target="_blank" rel="noopener noreferrer" style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', fontSize: '12px', color: '#2563EB', textDecoration: 'none', fontWeight: 500 }}>
+                              <FolderOpen size={13} /> Ver documentos en Drive
+                            </a>
+                            <span
+                              onClick={() => { navigator.clipboard.writeText(driveUrl); showSuccess('URL copiada') }}
+                              style={{ fontSize: '10px', color: '#9CA3AF', cursor: 'pointer', wordBreak: 'break-all' }}
+                              title="Click para copiar"
+                            >{driveUrl}</span>
+                          </div>
+                        )
+                      })()}
                     </div>
                   </div>
 
@@ -3587,16 +3593,22 @@ export function AsignacionesModule() {
                                 <span style={{ color: '#F59E0B', fontWeight: 600 }}>Pendiente</span>
                               )}
                             </p>
-                            {(ac.conductores as any)?.drive_folder_url && (
-                              <a
-                                href={(ac.conductores as any).drive_folder_url}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', fontSize: '12px', color: '#2563EB', textDecoration: 'none', marginTop: '4px', fontWeight: 500 }}
-                              >
-                                <FolderOpen size={13} /> Ver documentos en Drive
-                              </a>
-                            )}
+                            {(() => {
+                              const driveUrl = (ac.conductores as any)?.drive_folder_url
+                              if (!driveUrl) return null
+                              return (
+                                <div style={{ marginTop: '4px', display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                                  <a href={driveUrl} target="_blank" rel="noopener noreferrer" style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', fontSize: '12px', color: '#2563EB', textDecoration: 'none', fontWeight: 500 }}>
+                                    <FolderOpen size={13} /> Ver documentos en Drive
+                                  </a>
+                                  <span
+                                    onClick={() => { navigator.clipboard.writeText(driveUrl); showSuccess('URL copiada') }}
+                                    style={{ fontSize: '10px', color: '#9CA3AF', cursor: 'pointer', wordBreak: 'break-all' }}
+                                    title="Click para copiar"
+                                  >{driveUrl}</span>
+                                </div>
+                              )
+                            })()}
                           </div>
                         ))}
                       </div>
