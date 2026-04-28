@@ -392,7 +392,7 @@ export function IncidenciasModule() {
         // Obtener historial de rechazos
         (supabase.from('penalidades_rechazos' as any) as any).select('penalidad_id, motivo, rechazado_por, created_at').order('created_at', { ascending: false }),
         // Conceptos de facturación (para dropdown de incidencias, excluir alquileres y conceptos no aplicables)
-        supabase.from('conceptos_nomina').select('id, codigo, descripcion, precio_final').eq('activo', true).not('codigo', 'in', '("P001","P002","P003","P013","P014","P015","P016")').order('orden')
+        supabase.from('conceptos_nomina').select('id, codigo, descripcion, precio_final').eq('activo', true).not('codigo', 'in', '(P001,P002,P003,P013,P014,P015,P016)').order('orden')
       ])
 
       setEstados(estadosRes.data || [])
@@ -4144,7 +4144,7 @@ interface PatenteAsignada {
   fechaHasta: string
 }
 
-function IncidenciaForm({ formData, setFormData, estados, vehiculos, conductores, tiposCobroDescuento, conceptosNomina = [], preciosAlquiler = { P001: 0, P002: 0, P013: 0, P014: 0, P015: 0, P016: 0 }, disabled, esCobro = false, sedes }: IncidenciaFormProps) {
+function IncidenciaForm({ formData, setFormData, vehiculos, conductores, tiposCobroDescuento, conceptosNomina = [], preciosAlquiler = { P001: 0, P002: 0, P013: 0, P014: 0, P015: 0, P016: 0 }, disabled, esCobro = false, sedes }: IncidenciaFormProps) {
   const [vehiculoSearch, setVehiculoSearch] = useState('')
   const [conductorSearch, setConductorSearch] = useState('')
   const [showVehiculoDropdown, setShowVehiculoDropdown] = useState(false)
@@ -4601,17 +4601,8 @@ function IncidenciaForm({ formData, setFormData, estados, vehiculos, conductores
               <option value="Marketing">Marketing</option>
             </select>
           </div>
-          {!esCobro && (
-            <div className="form-group">
-              <label>Estado <span className="required">*</span></label>
-              <select value={formData.estado_id} onChange={e => setFormData(prev => ({ ...prev, estado_id: e.target.value }))} disabled={disabled}>
-                <option value="">Seleccionar</option>
-                {estados.map(e => (
-                  <option key={e.id} value={e.id}>{e.nombre}</option>
-                ))}
-              </select>
-            </div>
-          )}
+          {/* Campo Estado oculto a pedido del usuario (ITCODE-75): no se necesita
+              en este módulo. El estado se asigna automáticamente al crear (Pendiente). */}
         </div>
         <div className="form-row" style={{ gridTemplateColumns: '1fr 1fr' }}>
           <div className="form-group">
