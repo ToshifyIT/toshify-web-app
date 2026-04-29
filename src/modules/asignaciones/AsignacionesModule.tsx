@@ -138,6 +138,7 @@ export function AsignacionesModule() {
   const [cancelMotivo, setCancelMotivo] = useState('')
   const [showViewModal, setShowViewModal] = useState(false)
   const [viewAsignacion, setViewAsignacion] = useState<Asignacion | null>(null)
+  const [viewDriveUrls, setViewDriveUrls] = useState<Record<string, string>>({})
   const [conductoresToConfirm, setConductoresToConfirm] = useState<string[]>([])
   const [isSubmitting, setIsSubmitting] = useState(false)
   
@@ -782,6 +783,31 @@ export function AsignacionesModule() {
   useEffect(() => {
     loadAllData()
   }, [sedeActualId])
+
+  // Cargar drive_folder_url directo de conductores cuando se abre el modal de detalle
+  useEffect(() => {
+    if (!showViewModal || !viewAsignacion) {
+      setViewDriveUrls({})
+      return
+    }
+    const conductorIds = (viewAsignacion.asignaciones_conductores || [])
+      .map(ac => ac.conductor_id)
+      .filter(Boolean)
+    if (conductorIds.length === 0) return
+    supabase
+      .from('conductores')
+      .select('id, drive_folder_url')
+      .in('id', conductorIds)
+      .then(({ data }) => {
+        if (data) {
+          const urls: Record<string, string> = {}
+          for (const c of data) {
+            if (c.drive_folder_url) urls[c.id] = c.drive_folder_url
+          }
+          setViewDriveUrls(urls)
+        }
+      })
+  }, [showViewModal, viewAsignacion])
 
   // Programacion de entregas movida a /onboarding/programacion
 
@@ -3417,8 +3443,14 @@ export function AsignacionesModule() {
                         </p>
                       )}
                       {(() => {
-                        const driveUrl = (viewAsignacion.asignaciones_conductores?.[0]?.conductores as any)?.drive_folder_url
-                        if (!driveUrl) return null
+                        const cId = viewAsignacion.asignaciones_conductores?.[0]?.conductor_id
+                        const driveUrl = (cId && viewDriveUrls[cId]) || (viewAsignacion.asignaciones_conductores?.[0]?.conductores as any)?.drive_folder_url
+                        if (!driveUrl) return (
+                          <div style={{ marginTop: '4px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                            <FolderOpen size={13} style={{ color: '#9CA3AF' }} />
+                            <span style={{ fontSize: '12px', color: '#9CA3AF', fontWeight: 500 }}>Sin Carpeta</span>
+                          </div>
+                        )
                         return (
                           <div style={{ marginTop: '4px', display: 'flex', flexDirection: 'column', gap: '2px' }}>
                             <a href={driveUrl} target="_blank" rel="noopener noreferrer" style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', fontSize: '12px', color: '#2563EB', textDecoration: 'none', fontWeight: 500 }}>
@@ -3562,6 +3594,27 @@ export function AsignacionesModule() {
                                 </strong>
                               </p>
                             )}
+                            {(() => {
+                              const driveUrl = viewDriveUrls[ac.conductor_id] || (ac.conductores as any)?.drive_folder_url
+                              if (!driveUrl) return (
+                                <div style={{ marginTop: '4px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                  <FolderOpen size={13} style={{ color: '#9CA3AF' }} />
+                                  <span style={{ fontSize: '12px', color: '#9CA3AF', fontWeight: 500 }}>Sin Carpeta</span>
+                                </div>
+                              )
+                              return (
+                                <div style={{ marginTop: '4px', display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                                  <a href={driveUrl} target="_blank" rel="noopener noreferrer" style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', fontSize: '12px', color: '#2563EB', textDecoration: 'none', fontWeight: 500 }}>
+                                    <FolderOpen size={13} /> Ver documentos en Drive
+                                  </a>
+                                  <span
+                                    onClick={() => { navigator.clipboard.writeText(driveUrl); showSuccess('URL copiada') }}
+                                    style={{ fontSize: '10px', color: '#9CA3AF', cursor: 'pointer', wordBreak: 'break-all' }}
+                                    title="Click para copiar"
+                                  >{driveUrl}</span>
+                                </div>
+                              )
+                            })()}
                             <p className="asig-conductor-status">
                               {ac.confirmado ? (
                                 <>

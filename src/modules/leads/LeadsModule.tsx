@@ -3,7 +3,7 @@ import { useState, useEffect, useMemo, useCallback, useRef, useLayoutEffect } fr
 import { createPortal } from 'react-dom'
 import {
   Eye, Edit2, Trash2, Users, UserPlus, Clock, RefreshCw, MessageCircle,
-  CheckCircle, XCircle, AlertTriangle, X, Download, Upload, MapPin, ExternalLink, FolderOpen,
+  CheckCircle, AlertTriangle, X, Download, Upload, MapPin, ExternalLink, FolderOpen,
 } from 'lucide-react'
 import { GoogleMap, useJsApiLoader, Marker, Polygon } from '@react-google-maps/api'
 import { ActionsMenu } from '../../components/ui/ActionsMenu'
@@ -320,12 +320,22 @@ export function LeadsModule() {
 
   async function handleInlineUpdate(leadId: string, field: keyof Lead, value: string) {
     try {
+      const updateData: Record<string, unknown> = { [field]: value || null, updated_at: new Date().toISOString() }
+      // Si se edita el campo sede, resolver sede_id
+      if (field === 'sede' && value && sedes.length > 0) {
+        const textoSede = value.trim().toLowerCase()
+        const sedeMatch = sedes.find(s => s.nombre?.toLowerCase() === textoSede || s.codigo?.toLowerCase() === textoSede)
+        if (sedeMatch) {
+          updateData.sede_id = sedeMatch.id
+          updateData.sede = sedeMatch.nombre
+        }
+      }
       const { error } = await supabase
         .from('leads')
-        .update({ [field]: value || null })
+        .update(updateData)
         .eq('id', leadId)
       if (error) throw error
-      setLeads(prev => prev.map(l => l.id === leadId ? { ...l, [field]: value || null } : l))
+      setLeads(prev => prev.map(l => l.id === leadId ? { ...l, ...updateData } as Lead : l))
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Error desconocido'
       Swal.fire('Error', `No se pudo actualizar: ${msg}`, 'error')
@@ -337,10 +347,10 @@ export function LeadsModule() {
     try {
       const { error } = await supabase
         .from('leads')
-        .update({ estado_de_lead: nuevoEstado })
+        .update({ estado_de_lead: nuevoEstado, updated_at: new Date().toISOString() })
         .eq('id', leadId)
       if (error) throw error
-      setLeads(prev => prev.map(l => l.id === leadId ? { ...l, estado_de_lead: nuevoEstado } : l))
+      setLeads(prev => prev.map(l => l.id === leadId ? { ...l, estado_de_lead: nuevoEstado, updated_at: new Date().toISOString() } : l))
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Error desconocido'
       Swal.fire('Error', `No se pudo cambiar el estado: ${msg}`, 'error')
@@ -356,7 +366,7 @@ export function LeadsModule() {
         .from('leads')
         .select('*')
         .or('proceso.is.null,proceso.neq.Convertido')
-        .order('created_at', { ascending: false })
+        .order('updated_at', { ascending: false })
         .limit(10000)
 
       // Filtro por sede usando la FK sede_id (UUID), igual que el resto del sistema.
@@ -397,7 +407,7 @@ export function LeadsModule() {
           for (const [estado, batchIds] of Object.entries(porEstado)) {
             await supabase
               .from('leads')
-              .update({ estado_de_lead: estado })
+              .update({ estado_de_lead: estado, updated_at: new Date().toISOString() })
               .in('id', batchIds)
           }
         }
@@ -464,26 +474,54 @@ export function LeadsModule() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [leads.length > 0])
 
-  // ---------- ASIGNAR SEDE A LEADS SIN sede_id ----------
-  const asignarSedeALeadsSinSede = useCallback(async (leadsList: Lead[]) => {
+  // ---------- SINCRONIZAR SEDE Y FUENTE DE LEADS ----------
+  const sincronizarSedeLeads = useCallback(async () => {
     if (sedes.length === 0) return
-    const sinSede = leadsList.filter(l => !l.sede_id)
-    if (sinSede.length === 0) return
+
+    // Traer todos los leads no convertidos
+    const { data: allLeads } = await supabase
+      .from('leads')
+      .select('id, sede, sede_id, fuente_de_lead')
+      .or('proceso.is.null,proceso.neq.Convertido')
+      .limit(5000)
+
+    if (!allLeads || allLeads.length === 0) return
 
     const sedePrincipal = sedes.find(s => s.es_principal) || sedes[0]
+    const sedeMap = new Map(sedes.map(s => [s.id, s.nombre?.toLowerCase() || '']))
     let actualizado = false
 
-    for (const lead of sinSede) {
+    for (const lead of allLeads) {
+      const updateData: Record<string, unknown> = {}
+
+      // --- Sede: asignar o corregir ---
       const textoSede = (lead.sede || '').trim().toLowerCase()
-      const sedeMatch = textoSede
-        ? sedes.find(s => s.nombre?.toLowerCase() === textoSede || s.codigo?.toLowerCase() === textoSede)
-        : null
-      const sedeAsignada = sedeMatch || sedePrincipal
+      const sedeActualNombre = lead.sede_id ? sedeMap.get(lead.sede_id) : null
+      const necesitaUpdateSede = !lead.sede_id || (textoSede && sedeActualNombre && textoSede !== sedeActualNombre)
+
+      if (necesitaUpdateSede) {
+        const sedeMatch = textoSede
+          ? sedes.find(s => s.nombre?.toLowerCase() === textoSede || s.codigo?.toLowerCase() === textoSede)
+          : null
+        const sedeAsignada = sedeMatch || sedePrincipal
+        if (lead.sede_id !== sedeAsignada.id) {
+          updateData.sede_id = sedeAsignada.id
+          updateData.sede = sedeAsignada.nombre
+        }
+      }
+
+      // --- Fuente: asignar Intercom si está vacía ---
+      if (!lead.fuente_de_lead) {
+        updateData.fuente_de_lead = 'Intercom'
+      }
+
+      // Si no hay nada que actualizar, seguir
+      if (Object.keys(updateData).length === 0) continue
 
       try {
         await supabase
           .from('leads')
-          .update({ sede_id: sedeAsignada.id, sede: sedeAsignada.nombre })
+          .update(updateData)
           .eq('id', lead.id)
         actualizado = true
       } catch {
@@ -497,12 +535,11 @@ export function LeadsModule() {
   }, [sedes, loadLeads])
 
   useEffect(() => {
-    if (leads.length > 0 && sedes.length > 0) {
-      asignarSedeALeadsSinSede(leads)
+    if (sedes.length > 0) {
+      sincronizarSedeLeads()
     }
-  // Solo correr en carga inicial cuando ambos estén disponibles
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [leads.length > 0, sedes.length > 0])
+  }, [sedes.length > 0])
 
   // ---------- CARGAR ZONAS PELIGROSAS ----------
   useEffect(() => {
@@ -542,7 +579,9 @@ export function LeadsModule() {
     const conCoordenadas = leads.filter(l => l.latitud != null && l.longitud != null)
     const enZonaPeligrosa = conCoordenadas.filter(l => leadsEnZona.has(l.id)).length
     const enZonaSegura = conCoordenadas.filter(l => !leadsEnZona.has(l.id)).length
-    return { total, inicio, aptos, noAptos, enZonaPeligrosa, enZonaSegura }
+    const intercom = leads.filter(l => (l.fuente_de_lead || '').toLowerCase() === 'intercom').length
+    const damaro = leads.filter(l => (l.fuente_de_lead || '').toLowerCase() === 'damaro').length
+    return { total, inicio, aptos, noAptos, enZonaPeligrosa, enZonaSegura, intercom, damaro }
   }, [leads, leadsEnZona])
 
   // ---------- UNIQUE VALUES PARA FILTROS ----------
@@ -573,6 +612,8 @@ export function LeadsModule() {
     else if (activeStatCard === 'noAptos') result = result.filter(l => l.estado_de_lead === 'No Apto - Hireflix')
     else if (activeStatCard === 'zonaSegura') result = result.filter(l => l.latitud != null && l.longitud != null && !leadsEnZona.has(l.id))
     else if (activeStatCard === 'zonaPeligrosa') result = result.filter(l => l.latitud != null && l.longitud != null && leadsEnZona.has(l.id))
+    else if (activeStatCard === 'intercom') result = result.filter(l => (l.fuente_de_lead || '').toLowerCase() === 'intercom')
+    else if (activeStatCard === 'damaro') result = result.filter(l => (l.fuente_de_lead || '').toLowerCase() === 'damaro')
 
     // Column filters
     if (nombreFilter.length > 0) {
@@ -662,7 +703,16 @@ export function LeadsModule() {
     setSaving(true)
     try {
       const fields = formDataToDbFields(formData)
-      const { error: err } = await supabase.from('leads').update(fields).eq('id', selectedLead.id)
+      // Resolver sede_id si el campo sede texto cambió
+      const textoSede = (formData.sede || '').trim().toLowerCase()
+      if (textoSede && sedes.length > 0) {
+        const sedeMatch = sedes.find(s => s.nombre?.toLowerCase() === textoSede || s.codigo?.toLowerCase() === textoSede)
+        if (sedeMatch) {
+          fields.sede_id = sedeMatch.id
+          fields.sede = sedeMatch.nombre
+        }
+      }
+      const { error: err } = await supabase.from('leads').update({ ...fields, updated_at: new Date().toISOString() }).eq('id', selectedLead.id)
       if (err) throw err
       showSuccess('Lead actualizado', 'Los cambios se guardaron correctamente')
       setShowEditModal(false)
@@ -939,7 +989,7 @@ export function LeadsModule() {
       const match = s.match(/^(\d{1,2})\/?(\d{1,2})\/?(\d{2,5})$/)
       if (match) {
         const day = parseInt(match[1])
-        let month = parseInt(match[2])
+        const month = parseInt(match[2])
         let year = parseInt(match[3])
         // Corregir años con dígitos extra (ej: 20025 → 2025, 0205 → 2005)
         if (year > 2100) year = parseInt(String(year).substring(0, 4))
@@ -1400,7 +1450,7 @@ export function LeadsModule() {
         for (const row of rowsDuplicados) {
           const dni = String(row.dni || '').trim()
           if (!dni) continue
-          const updateFields = { ...row }
+          const updateFields = { ...row, updated_at: new Date().toISOString() }
           delete updateFields.dni // No actualizar el campo clave
           const { error: updateError } = await supabase
             .from('leads')
@@ -1512,7 +1562,7 @@ export function LeadsModule() {
 
         return (
           <div
-            title={enZonaPeligrosa ? `Zona peligrosa: ${zonaPeligrosa}` : tieneCoordenadas ? 'Fuera de zona peligrosa' : undefined}
+            title={enZonaPeligrosa ? `Zona Restringida: ${zonaPeligrosa}` : tieneCoordenadas ? 'Zona Aprobada' : undefined}
             style={{
               background: enZonaPeligrosa ? '#FFF1F2' : undefined,
               borderLeft: enZonaPeligrosa ? '3px solid #FF0033' : undefined,
@@ -1554,7 +1604,7 @@ export function LeadsModule() {
                   }}
                   data-tooltip={direccion || undefined}
                 >
-                  ⚠ Zona peligrosa: {zonaPeligrosa}
+                  ⚠ Zona Restringida: {zonaPeligrosa}
                 </span>
               )}
               {tieneCoordenadas && !enZonaPeligrosa && (
@@ -1575,7 +1625,7 @@ export function LeadsModule() {
                   }}
                   data-tooltip={direccion || undefined}
                 >
-                  ✓ Zona segura
+                  ✓ Zona Aprobada
                 </span>
               )}
             </div>
@@ -1733,7 +1783,7 @@ export function LeadsModule() {
       header: 'Fuente',
       cell: ({ row }) => {
         const v = row.original.fuente_de_lead || '-'
-        return <span style={{ fontSize: '11px' }}>{v}</span>
+        return <span style={{ fontSize: '11px', textTransform: 'uppercase' }}>{v}</span>
       },
       size: 90,
       enableSorting: true,
@@ -1945,8 +1995,8 @@ export function LeadsModule() {
         inicio: 'Inicio conversación',
         aptos: 'Aptos',
         noAptos: 'No aptos',
-        zonaSegura: 'Zona segura',
-        zonaPeligrosa: 'Zona peligrosa',
+        zonaSegura: 'Zona Aprobada',
+        zonaPeligrosa: 'Zona Restringida',
       }
       filters.push({
         id: `stat-${activeStatCard}`,
@@ -1986,13 +2036,23 @@ export function LeadsModule() {
             </div>
           </div>
           <div
-            className={`stat-card stat-card-clickable ${activeStatCard === 'noAptos' ? 'stat-card-active' : ''}`}
-            onClick={() => handleStatClick('noAptos')}
+            className={`stat-card stat-card-clickable ${activeStatCard === 'intercom' ? 'stat-card-active' : ''}`}
+            onClick={() => handleStatClick('intercom')}
           >
-            <XCircle size={18} className="stat-icon" style={{ color: '#dc2626' }} />
+            <MessageCircle size={18} className="stat-icon" style={{ color: '#6366f1' }} />
             <div className="stat-content">
-              <span className="stat-value">{stats.noAptos}</span>
-              <span className="stat-label">No Aptos</span>
+              <span className="stat-value">{stats.intercom}</span>
+              <span className="stat-label">Intercom</span>
+            </div>
+          </div>
+          <div
+            className={`stat-card stat-card-clickable ${activeStatCard === 'damaro' ? 'stat-card-active' : ''}`}
+            onClick={() => handleStatClick('damaro')}
+          >
+            <Users size={18} className="stat-icon" style={{ color: '#f59e0b' }} />
+            <div className="stat-content">
+              <span className="stat-value">{stats.damaro}</span>
+              <span className="stat-label">Damaro</span>
             </div>
           </div>
           <div
@@ -2002,17 +2062,7 @@ export function LeadsModule() {
             <CheckCircle size={18} className="stat-icon" style={{ color: '#16a34a' }} />
             <div className="stat-content">
               <span className="stat-value">{stats.enZonaSegura}</span>
-              <span className="stat-label">Zona segura</span>
-            </div>
-          </div>
-          <div
-            className={`stat-card stat-card-clickable ${activeStatCard === 'zonaPeligrosa' ? 'stat-card-active' : ''}`}
-            onClick={() => handleStatClick('zonaPeligrosa')}
-          >
-            <AlertTriangle size={18} className="stat-icon" style={{ color: '#dc2626' }} />
-            <div className="stat-content">
-              <span className="stat-value">{stats.enZonaPeligrosa}</span>
-              <span className="stat-label">Zona peligrosa</span>
+              <span className="stat-label">Zona Aprobada</span>
             </div>
           </div>
         </div>
@@ -2621,7 +2671,7 @@ function LeadDetailMap({ lat, lng, zonasPeligrosas, enZonaPeligrosa, nombreZona,
     <div style={{ marginTop: '8px' }}>
       {enZonaPeligrosa && nombreZona && (
         <div style={{ marginBottom: '6px', padding: '6px 10px', background: '#FFF1F2', borderRadius: '6px', border: '1px solid #FECDD3', fontSize: '12px', color: '#BE123C', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '6px' }}>
-          <AlertTriangle size={14} /> Zona Peligrosa: {nombreZona}
+          <AlertTriangle size={14} /> Zona Restringida: {nombreZona}
         </div>
       )}
       <div style={{ borderRadius: '8px', overflow: 'hidden', border: `2px solid ${enZonaPeligrosa ? '#FF0033' : '#22C55E'}` }}>
@@ -2649,7 +2699,7 @@ function LeadDetailMap({ lat, lng, zonasPeligrosas, enZonaPeligrosa, nombreZona,
               strokeColor: '#FFFFFF',
               strokeWeight: 3,
             }}
-            title={enZonaPeligrosa ? 'Zona Peligrosa' : 'Ubicación del lead'}
+            title={enZonaPeligrosa ? 'Zona Restringida' : 'Ubicación del lead'}
           />
           {zonasPeligrosas.map(zona => (
             zona.poligono && (
@@ -2670,7 +2720,7 @@ function LeadDetailMap({ lat, lng, zonasPeligrosas, enZonaPeligrosa, nombreZona,
       </div>
       <div style={{ marginTop: '6px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         {!enZonaPeligrosa ? (
-          <span style={{ fontSize: '11px', color: '#16A34A', fontWeight: 500 }}>Fuera de zona peligrosa</span>
+          <span style={{ fontSize: '11px', color: '#16A34A', fontWeight: 500 }}>Zona Aprobada</span>
         ) : <span />}
         <a
           href={`https://www.google.com/maps?q=${lat},${lng}`}
