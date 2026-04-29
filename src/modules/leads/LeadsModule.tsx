@@ -1450,7 +1450,7 @@ export function LeadsModule() {
         for (const row of rowsDuplicados) {
           const dni = String(row.dni || '').trim()
           if (!dni) continue
-          const updateFields = { ...row, updated_at: new Date().toISOString() }
+          const updateFields: Record<string, unknown> = { ...row, updated_at: new Date().toISOString() }
           delete updateFields.dni // No actualizar el campo clave
           const { error: updateError } = await supabase
             .from('leads')
@@ -2074,6 +2074,7 @@ export function LeadsModule() {
         columns={columns}
         loading={loading}
         error={error}
+        stickyLeftColumns={3}
         searchPlaceholder="Buscar lead por nombre, DNI, teléfono..."
         emptyIcon={<Users size={64}
       />}
