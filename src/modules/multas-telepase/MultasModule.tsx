@@ -553,10 +553,10 @@ export default function MultasModule() {
   const columns = useMemo<ColumnDef<Multa>[]>(() => [
     {
       accessorKey: 'created_at',
-      size: 110,
+      size: 95,
       header: () => (
         <ExcelDateRangeFilter
-          label="Fecha Carga"
+          label="F. Carga"
           startDate={fechaCargaDesde}
           endDate={fechaCargaHasta}
           onRangeChange={(start, end) => {
@@ -580,7 +580,7 @@ export default function MultasModule() {
     },
     {
       id: 'semana',
-      size: 50,
+      size: 45,
       header: () => (
         <ExcelColumnFilter
           label="Sem."
@@ -599,10 +599,10 @@ export default function MultasModule() {
     },
     {
       accessorKey: 'fecha_infraccion',
-      size: 110,
+      size: 95,
       header: () => (
         <ExcelDateRangeFilter
-          label="Fecha Infraccion"
+          label="F. Infracción"
           startDate={fechaInfraccionDesde}
           endDate={fechaInfraccionHasta}
           onRangeChange={(start, end) => {
@@ -626,7 +626,7 @@ export default function MultasModule() {
     },
     {
       accessorKey: 'patente',
-      size: 80,
+      size: 75,
       header: () => (
         <ExcelColumnFilter
           label="Patente"
@@ -644,7 +644,7 @@ export default function MultasModule() {
     },
     {
       accessorKey: 'lugar',
-      size: 70,
+      size: 80,
       header: () => (
         <ExcelColumnFilter
           label="Lugar"
@@ -656,16 +656,20 @@ export default function MultasModule() {
           onOpenChange={setOpenFilterId}
         />
       ),
-      cell: ({ row }) => (
-        <span style={{ fontSize: '12px' }}>{row.original.lugar || '-'}</span>
-      )
+      cell: ({ row }) => {
+        const lugar = row.original.lugar || '-'
+        const abrev = lugar === 'Provincia de Buenos Aires' ? 'Pcia. BA' : lugar
+        return (
+          <span title={lugar} style={{ fontSize: '12px', whiteSpace: 'nowrap' }}>{abrev}</span>
+        )
+      }
     },
     {
       accessorKey: 'infraccion',
-      size: 100,
+      size: 95,
       header: () => (
         <ExcelColumnFilter
-          label="Infraccion"
+          label="Infracción"
           options={infraccionesUnicas}
           selectedValues={infraccionFilter}
           onSelectionChange={setInfraccionFilter}
@@ -675,17 +679,17 @@ export default function MultasModule() {
         />
       ),
       cell: ({ row }) => (
-        <span style={{ fontSize: '12px', maxWidth: '100px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'block' }}>
+        <span title={row.original.infraccion || '-'} style={{ fontSize: '12px', maxWidth: '95px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'block' }}>
           {row.original.infraccion || '-'}
         </span>
       )
     },
     {
       accessorKey: 'detalle',
-      size: 150,
+      size: 140,
       header: () => (
         <ExcelColumnFilter
-          label="Detalle Infraccion"
+          label="Detalle"
           options={detallesUnicos}
           selectedValues={detalleFilter}
           onSelectionChange={setDetalleFilter}
@@ -695,9 +699,9 @@ export default function MultasModule() {
         />
       ),
       cell: ({ row }) => (
-        <span 
+        <span
           title={row.original.detalle || '-'}
-          style={{ fontSize: '12px', maxWidth: '150px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'block' }}
+          style={{ fontSize: '12px', maxWidth: '140px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'block' }}
         >
           {row.original.detalle || '-'}
         </span>
@@ -705,7 +709,7 @@ export default function MultasModule() {
     },
     {
       accessorKey: 'importe',
-      size: 80,
+      size: 90,
       header: () => (
         <ExcelColumnFilter
           label="Importe"
@@ -725,7 +729,7 @@ export default function MultasModule() {
     },
     {
       accessorKey: 'conductor_responsable',
-      size: 130,
+      size: 110,
       header: () => (
         <ExcelColumnFilter
           label="Conductor"
@@ -738,17 +742,17 @@ export default function MultasModule() {
         />
       ),
       cell: ({ row }) => (
-        <span style={{ fontSize: '12px', maxWidth: '130px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'block' }}>
+        <span title={row.original.conductor_responsable || '-'} style={{ fontSize: '12px', maxWidth: '110px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'block' }}>
           {row.original.conductor_responsable || '-'}
         </span>
       )
     },
     {
       accessorKey: 'ibutton',
-      size: 55,
+      size: 50,
       header: () => (
         <ExcelColumnFilter
-          label="iButton"
+          label="iBtn"
           options={ibuttonsUnicos}
           selectedValues={ibuttonFilter}
           onSelectionChange={setIbuttonFilter}
@@ -789,7 +793,7 @@ export default function MultasModule() {
     {
       id: 'acciones',
       size: 90,
-      header: 'Acciones',
+      header: 'Acc.',
       cell: ({ row }) => (
         <div className="dt-actions">
           <button
