@@ -3101,7 +3101,7 @@ export function AsignacionesModule() {
           // Completar Control (visible solo si no se ha completado y creada después del 27/04/2026)
           {
             icon: <ClipboardCheck size={15} />,
-            label: 'Completar Control',
+            label: 'Completar Carta Oferta',
             onClick: () => openControlModal(row.original),
             hidden: row.original.control_completado === true || Boolean(row.original.created_at && new Date(row.original.created_at) <= new Date('2026-04-27T23:59:59')),
             variant: 'info' as const,
