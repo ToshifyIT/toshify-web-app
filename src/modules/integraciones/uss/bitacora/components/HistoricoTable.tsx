@@ -10,6 +10,7 @@ import { DataTable } from '../../../../../components/ui/DataTable/DataTable';
 import { ExcelColumnFilter, useExcelFilters } from '../../../../../components/ui/DataTable/ExcelColumnFilter';
 import { Search, ChevronsLeft, ChevronLeft, ChevronRight, ChevronsRight, ClipboardList, Download, ChevronDown, X } from 'lucide-react';
 import type { USSHistoricoRegistro } from '../../../../../services/ussHistoricoService';
+import { normalizePatente } from '../../../../../utils/normalizeDocuments';
 import * as XLSX from 'xlsx';
 
 interface HistoricoTableProps {
@@ -76,7 +77,7 @@ export function HistoricoTable({
     const set = new Set<string>();
     for (const r of registros) {
       const conductor = r.conductor || 'Sin conductor';
-      const patente = r.patente || '-';
+      const patente = r.patente ? normalizePatente(r.patente) : '-';
       set.add(`${conductor} | ${patente}`);
     }
     return [...set].sort();
@@ -92,7 +93,7 @@ export function HistoricoTable({
   // Helper para obtener la clave combinada de un registro
   const getConductorPatenteKey = (r: USSHistoricoRegistro) => {
     const conductor = r.conductor || 'Sin conductor';
-    const patente = r.patente || '-';
+    const patente = r.patente ? normalizePatente(r.patente) : '-';
     return `${conductor} | ${patente}`;
   };
 

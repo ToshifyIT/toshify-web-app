@@ -10,6 +10,7 @@ import { DataTable } from '../../../../../components/ui/DataTable/DataTable';
 import { ExcelColumnFilter, useExcelFilters } from '../../../../../components/ui/DataTable/ExcelColumnFilter';
 import { Search, ClipboardList, Download, ChevronDown, Fuel, Droplets, Sun, Moon, Clock, X } from 'lucide-react';
 import type { Marcacion } from '../hooks/useUSSHistoricoData';
+import { normalizePatente } from '../../../../../utils/normalizeDocuments';
 import * as XLSX from 'xlsx';
 
 interface MarcacionesTableProps {
@@ -121,7 +122,7 @@ export function MarcacionesTable({
   const conductorPatenteUnicos = useMemo(() => {
     const set = new Set<string>();
     for (const m of marcaciones) {
-      set.add(`${m.conductor} | ${m.patente}`);
+      set.add(`${m.conductor} | ${normalizePatente(m.patente)}`);
     }
     return [...set].sort();
   }, [marcaciones]);
@@ -164,7 +165,7 @@ export function MarcacionesTable({
     let filtered = marcaciones;
 
     if (conductorFilter.length > 0) {
-      filtered = filtered.filter(m => conductorFilter.includes(`${m.conductor} | ${m.patente}`));
+      filtered = filtered.filter(m => conductorFilter.includes(`${m.conductor} | ${normalizePatente(m.patente)}`));
     }
     if (fechaFilter.length > 0) {
       filtered = filtered.filter(m => fechaFilter.includes(formatFecha(m.fecha)));
@@ -181,9 +182,10 @@ export function MarcacionesTable({
 
     if (searchTerm.trim()) {
       const term = searchTerm.toLowerCase();
+      const termPatente = normalizePatente(searchTerm).toLowerCase();
       filtered = filtered.filter(m =>
         m.conductor.toLowerCase().includes(term) ||
-        m.patente.toLowerCase().includes(term)
+        normalizePatente(m.patente).toLowerCase().includes(termPatente)
       );
     }
 
