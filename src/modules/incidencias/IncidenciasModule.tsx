@@ -148,7 +148,9 @@ export function IncidenciasModule() {
   const [turnoFilter, setTurnoFilter] = useState<string[]>([])
   const [areaFilter, setAreaFilter] = useState<string[]>([])
   const [tipoIncFilter, setTipoIncFilter] = useState<string[]>([])
-  
+  // Quick filter por categoría/P-code en tab Cobro
+  const [quickCategoriaFilter, setQuickCategoriaFilter] = useState<string | null>(null)
+
   // Filtro especial: Solo pendientes de enviar a facturación
   const [soloPendientesEnviar, setSoloPendientesEnviar] = useState(false)
   
@@ -663,9 +665,16 @@ export function IncidenciasModule() {
         return tipoNombre && tipoIncFilter.includes(tipoNombre)
       })
     }
+    if (quickCategoriaFilter) {
+      filtered = filtered.filter(i => {
+        if (!i.tipo_cobro_descuento_id) return quickCategoriaFilter === 'sin'
+        const cat = tiposCobroDescuentoMap.get(i.tipo_cobro_descuento_id)?.categoria || null
+        return quickCategoriaFilter === 'sin' ? !cat : cat === quickCategoriaFilter
+      })
+    }
 
     return filtered
-  }, [incidencias, patenteFilter, conductorFilter, estadoFilter, turnoFilter, areaFilter, tipoIncFilter, dateRangeCobro, soloPendientesEnviar, penalidadesPorIncidencia, tiposCobroDescuentoMap])
+  }, [incidencias, patenteFilter, conductorFilter, estadoFilter, turnoFilter, areaFilter, tipoIncFilter, quickCategoriaFilter, dateRangeCobro, soloPendientesEnviar, penalidadesPorIncidencia, tiposCobroDescuentoMap])
 
   // Incidencias que pueden enviarse a facturación (no tienen penalidad y tienen monto)
   const incidenciasEnviables = useMemo(() => {
@@ -3215,6 +3224,67 @@ export function IncidenciasModule() {
               </button>
             )}
           </div>
+
+          {/* Quick filter por categoría P-code */}
+          {(() => {
+            const categorias: Array<{ key: string; label: string; color: string }> = [
+              { key: 'P004', label: 'P004 · Tickets a Favor', color: '#10b981' },
+              { key: 'P006', label: 'P006 · Exceso KM', color: '#3b82f6' },
+              { key: 'P007', label: 'P007 · Multas/Penalidades', color: '#ef4444' },
+              { key: 'sin', label: 'Sin categoría', color: '#6b7280' }
+            ]
+            // Conteo por categoría sobre las incidencias de cobro vigentes (sin el quick filter aplicado)
+            const baseCobro = incidencias.filter(i => i.tipo === 'cobro')
+            const conteo = (key: string) => baseCobro.filter(i => {
+              if (!i.tipo_cobro_descuento_id) return key === 'sin'
+              const cat = tiposCobroDescuentoMap.get(i.tipo_cobro_descuento_id)?.categoria || null
+              return key === 'sin' ? !cat : cat === key
+            }).length
+            return (
+              <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', padding: '0 0 12px 0', alignItems: 'center' }}>
+                <span style={{ fontSize: '12px', color: 'var(--text-tertiary)', fontWeight: 500, textTransform: 'uppercase', letterSpacing: '0.5px', marginRight: '4px' }}>
+                  Filtro rápido:
+                </span>
+                <button
+                  onClick={() => setQuickCategoriaFilter(null)}
+                  style={{
+                    padding: '6px 12px', borderRadius: '999px', fontSize: '12px', fontWeight: 600,
+                    border: `1px solid ${quickCategoriaFilter === null ? 'var(--color-primary)' : 'var(--border-primary)'}`,
+                    background: quickCategoriaFilter === null ? 'var(--color-primary)' : 'transparent',
+                    color: quickCategoriaFilter === null ? '#fff' : 'var(--text-secondary)',
+                    cursor: 'pointer', whiteSpace: 'nowrap'
+                  }}
+                >
+                  Todos ({baseCobro.length})
+                </button>
+                {categorias.map(c => {
+                  const active = quickCategoriaFilter === c.key
+                  const count = conteo(c.key)
+                  if (count === 0) return null
+                  return (
+                    <button
+                      key={c.key}
+                      onClick={() => setQuickCategoriaFilter(active ? null : c.key)}
+                      style={{
+                        padding: '6px 12px', borderRadius: '999px', fontSize: '12px', fontWeight: 600,
+                        border: `1px solid ${active ? c.color : 'var(--border-primary)'}`,
+                        background: active ? c.color : 'transparent',
+                        color: active ? '#fff' : 'var(--text-secondary)',
+                        cursor: 'pointer', whiteSpace: 'nowrap',
+                        display: 'inline-flex', alignItems: 'center', gap: '6px'
+                      }}
+                    >
+                      {!active && (
+                        <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: c.color, display: 'inline-block' }} />
+                      )}
+                      {c.label}
+                      <span style={{ opacity: 0.85, fontWeight: 500 }}>({count})</span>
+                    </button>
+                  )
+                })}
+              </div>
+            )
+          })()}
 
           {/* Barra de filtros activos con estilo de chips */}
           {hayFiltrosIncidenciasActivos && (
