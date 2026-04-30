@@ -15,6 +15,7 @@ export interface ContractGenerationRequest {
   modalidad: 'turno' | 'a_cargo'
   sede_id?: string | null
   programacion_id?: string | null
+  propietario?: string | null
   created_by?: string | null
   created_by_name?: string | null
 }

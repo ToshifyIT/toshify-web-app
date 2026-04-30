@@ -16,7 +16,7 @@ import { useSede } from '../../../contexts/SedeContext'
 import { TimeInput24h } from '../../../components/ui/TimeInput24h'
 import Swal from 'sweetalert2'
 import { showSuccess } from '../../../utils/toast'
-import type { TipoCandidato, TipoDocumento, TipoAsignacion } from '../../../types/onboarding.types'
+import type { TipoCandidato, TipoDocumento, TipoAsignacion, Propietario } from '../../../types/onboarding.types'
 import type { Vehicle } from '../../../types/vehiculo.types'
 import type { Conductor } from '../../../types/conductor.types'
 import { formatPreferencia, getPreferenciaBadge, PROGRAMACION_ESTADO_LABELS } from '../../../utils/conductorUtils'
@@ -73,6 +73,8 @@ interface ProgramacionData {
   ultimo_dia_cobro: 'dia_entrega' | 'fecha_baja' | ''
   // Cambio de vehículo
   cambio_vehiculo: boolean
+  // Propietario
+  propietario: Propietario
   // Otros
   observaciones: string
 }
@@ -188,6 +190,7 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
         devolucion_vehiculo: editData.devolucion_vehiculo ?? false,
         ultimo_dia_cobro: editData.ultimo_dia_cobro || '',
         cambio_vehiculo: editData.cambio_vehiculo ?? false,
+        propietario: (editData.propietario as Propietario) || 'grupo_cg',
         observaciones: editData.observaciones || ''
       }
     }
@@ -234,6 +237,7 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
     devolucion_vehiculo: false,
     ultimo_dia_cobro: '',
     cambio_vehiculo: false,
+    propietario: 'grupo_cg',
     observaciones: ''
     }
   })
@@ -1335,7 +1339,8 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
         observaciones: formData.observaciones || null,
         devolucion_vehiculo: formData.devolucion_vehiculo || false,
         cambio_vehiculo: formData.cambio_vehiculo || false,
-        ultimo_dia_cobro: formData.devolucion_vehiculo ? (formData.ultimo_dia_cobro || null) : null
+        ultimo_dia_cobro: formData.devolucion_vehiculo ? (formData.ultimo_dia_cobro || null) : null,
+        propietario: formData.propietario || 'grupo_cg'
       }
 
       if (formData.modalidad === 'a_cargo') {
@@ -3734,6 +3739,18 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
                           />
                         </div>
                       </div>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginTop: '16px' }}>
+                        <div>
+                          <label>Propietario</label>
+                          <select
+                            value={formData.propietario}
+                            onChange={(e) => setFormData({ ...formData, propietario: e.target.value as Propietario })}
+                          >
+                            <option value="grupo_cg">GRUPO CG</option>
+                            <option value="44_dreams">44 DREAMS</option>
+                          </select>
+                        </div>
+                      </div>
                     </div>
                   )}
 
@@ -3829,6 +3846,18 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
                           />
                         </div>
                         )}
+                      </div>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginTop: '16px' }}>
+                        <div>
+                          <label>Propietario</label>
+                          <select
+                            value={formData.propietario}
+                            onChange={(e) => setFormData({ ...formData, propietario: e.target.value as Propietario })}
+                          >
+                            <option value="grupo_cg">GRUPO CG</option>
+                            <option value="44_dreams">44 DREAMS</option>
+                          </select>
+                        </div>
                       </div>
                     </div>
                   )}

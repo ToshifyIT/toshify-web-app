@@ -7,6 +7,7 @@ export interface ControlCompletionRequest {
   // Campos comunes (todas las sedes)
   km: string
   ltnafta: string
+  observations: string
   // Campos adicionales (solo Bariloche)
   cristal_status?: string | null
   carter?: string | null

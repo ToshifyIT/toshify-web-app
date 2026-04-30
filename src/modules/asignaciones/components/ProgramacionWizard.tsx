@@ -16,7 +16,8 @@ import type {
   TurnoOnboarding,
   ModalidadOnboarding,
   ZonaOnboarding,
-  TipoDocumento
+  TipoDocumento,
+  Propietario
 } from '../../../types/onboarding.types'
 import type { ConductorBasic } from '../../../types/conductor.types'
 
@@ -80,6 +81,7 @@ export function ProgramacionWizard({ onClose, onSuccess, initialData, editingDat
         citado_ypf: editingData.citado_ypf || false,
         estado_cabify: editingData.estado_cabify || 'pendiente',
         especialista_nombre: editingData.especialista_nombre || '',
+        propietario: (editingData.propietario as Propietario) || 'grupo_cg',
         observaciones: editingData.observaciones || '',
         ...initialData
       }
@@ -108,6 +110,7 @@ export function ProgramacionWizard({ onClose, onSuccess, initialData, editingDat
       citado_ypf: false,
       estado_cabify: 'pendiente',
         especialista_nombre: '',
+      propietario: 'grupo_cg',
       observaciones: '',
       ...initialData
     }
@@ -596,6 +599,19 @@ export function ProgramacionWizard({ onClose, onSuccess, initialData, editingDat
                         onChange={e => setFormData(prev => ({ ...prev, especialista_nombre: e.target.value }))}
                         placeholder="Nombre del especialista..."
                       />
+                    </div>
+                  </div>
+
+                  <div className="form-row">
+                    <div className="form-group">
+                      <label>Propietario</label>
+                      <select
+                        value={formData.propietario || 'grupo_cg'}
+                        onChange={e => setFormData(prev => ({ ...prev, propietario: e.target.value as Propietario }))}
+                      >
+                        <option value="grupo_cg">GRUPO CG</option>
+                        <option value="44_dreams">44 DREAMS</option>
+                      </select>
                     </div>
                   </div>
 
