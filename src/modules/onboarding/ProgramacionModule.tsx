@@ -1276,6 +1276,16 @@ export function ProgramacionModule() {
       )
 
       if (needsDocGeneration) {
+        // Si la vista no trae propietario, consultar la tabla base
+        let propietarioValue = prog.propietario
+        if (!propietarioValue) {
+          const { data: progDB } = await (supabase.from('programaciones_onboarding') as any)
+            .select('propietario')
+            .eq('id', prog.id)
+            .single()
+          propietarioValue = progDB?.propietario || 'grupo_cg'
+        }
+
         const contractParams = {
           conductor_id: prog.modalidad === 'a_cargo' ? prog.conductor_id : null,
           conductor_diurno_id: (prog.modalidad === 'turno' && enviarDiurno) ? prog.conductor_diurno_id : null,
@@ -1287,7 +1297,7 @@ export function ProgramacionModule() {
           modalidad: (prog.modalidad || 'turno') as 'turno' | 'a_cargo',
           sede_id: prog.sede_id || sedeActualId || sedeUsuario?.id || null,
           programacion_id: prog.id,
-          propietario: prog.propietario || 'grupo_cg',
+          propietario: propietarioValue,
           created_by: user?.id || null,
           created_by_name: profile?.full_name || 'Sistema'
         }

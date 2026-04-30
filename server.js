@@ -1089,7 +1089,9 @@ async function generateContractForConductor({
   addIfPresent('KM', vehiculo.kilometraje_actual ? String(vehiculo.kilometraje_actual) : null)
 
   // Variables de propietario
+  console.log(`[Contract] propietario recibido: '${propietario}' (tipo: ${typeof propietario})`)
   const ownerData = CONTRACT_CONFIG.propietarios[propietario] || CONTRACT_CONFIG.propietarios['grupo_cg']
+  console.log(`[Contract] ownerData resuelto: ${JSON.stringify(ownerData)}`)
   addIfPresent('OWNER', ownerData.owner)
   addIfPresent('CUIT_OWNER', ownerData.cuit_owner)
   addIfPresent('NAME_OWNER', ownerData.name_owner)
