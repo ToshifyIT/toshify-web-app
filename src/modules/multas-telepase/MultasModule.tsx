@@ -6,12 +6,15 @@ import { LoadingOverlay } from '../../components/ui/LoadingOverlay'
 import { ExcelColumnFilter } from '../../components/ui/DataTable/ExcelColumnFilter'
 import { ExcelDateRangeFilter } from '../../components/ui/DataTable/ExcelDateRangeFilter'
 import { DataTable } from '../../components/ui/DataTable'
-import { Download, AlertTriangle, Eye, Edit2, Trash2, Plus, X, Car, Users, DollarSign, CheckCircle, AlertCircle, FileText } from 'lucide-react'
+import { Download, AlertTriangle, Eye, Edit2, Trash2, Plus, X, Car, Users, DollarSign, CheckCircle, AlertCircle, FileText, Receipt } from 'lucide-react'
+import { CrearCobroMultaModal } from './components/CrearCobroMultaModal'
 import { type ColumnDef } from '@tanstack/react-table'
 import * as XLSX from 'xlsx'
 import Swal from 'sweetalert2'
 import { showSuccess } from '../../utils/toast'
 import { useSede } from '../../contexts/SedeContext'
+import { useAuth } from '../../contexts/AuthContext'
+import { crearCobroDesdeMulta } from './services/crearCobroDesdeMulta'
 import { format } from 'date-fns'
 import { es } from 'date-fns/locale'
 import './MultasTelepase.css'
@@ -92,12 +95,15 @@ function getWeekNumber(dateStr: string): number {
 
 export default function MultasModule() {
   const { aplicarFiltroSede, sedeActualId, sedeUsuario, sedes } = useSede()
+  const { user, profile } = useAuth()
   const [loading, setLoading] = useState(true)
   const [multas, setMultas] = useState<Multa[]>([])
   const [vehiculos, setVehiculos] = useState<Vehiculo[]>([])
   const [selectedMulta, setSelectedMulta] = useState<Multa | null>(null)
   const [showModal, setShowModal] = useState(false)
   const [showEditModal, setShowEditModal] = useState(false)
+  const [showCobroModal, setShowCobroModal] = useState(false)
+  const [multaParaCobro, setMultaParaCobro] = useState<Multa | null>(null)
   const [editingMulta, setEditingMulta] = useState<Multa | null>(null)
   const [onlyActiveConductors, setOnlyActiveConductors] = useState(false)
 
@@ -474,6 +480,38 @@ export default function MultasModule() {
     }
   }
 
+  // Crear cobro directo (sin modal). Si falta info auto-detectable cae al modal.
+  async function handleCrearCobroDirecto(multa: Multa) {
+    const result = await crearCobroDesdeMulta(multa, {
+      userId: user?.id,
+      userName: profile?.full_name || 'Sistema',
+      sedeId: sedeActualId || sedeUsuario?.id,
+      areaResponsable: 'ADMINISTRACION'
+    })
+    if (result.ok) {
+      Swal.fire({
+        icon: 'success',
+        title: 'Cobro generado',
+        text: 'La incidencia fue creada y enviada a "Por Aplicar".',
+        timer: 2200,
+        showConfirmButton: false
+      })
+      return
+    }
+    if ('needsManualInput' in result) {
+      Swal.fire({
+        icon: 'info',
+        title: 'Carga manual requerida',
+        text: result.reason
+      }).then(() => {
+        setMultaParaCobro(multa)
+        setShowCobroModal(true)
+      })
+      return
+    }
+    Swal.fire('Error', result.error, 'error')
+  }
+
   // Filtros activos
   const activeFilters = [
     ...(fechaCargaDesde || fechaCargaHasta ? [{
@@ -792,7 +830,7 @@ export default function MultasModule() {
     },
     {
       id: 'acciones',
-      size: 90,
+      size: 115,
       header: 'Acc.',
       cell: ({ row }) => (
         <div className="dt-actions">
@@ -809,6 +847,14 @@ export default function MultasModule() {
             onClick={() => handleVerDetalle(row.original)}
           >
             <Eye size={14} />
+          </button>
+          <button
+            className="dt-btn-action"
+            data-tooltip="Crear cobro"
+            style={{ color: '#10b981' }}
+            onClick={() => handleCrearCobroDirecto(row.original)}
+          >
+            <Receipt size={14} />
           </button>
           <button
             className="dt-btn-action dt-btn-delete"
@@ -1045,8 +1091,15 @@ export default function MultasModule() {
                           Editar
                         </button>
                         <button
+                          onClick={() => { setShowModal(false); handleCrearCobroDirecto(selectedMulta); }}
+                          style={btnGreen}
+                        >
+                          <Receipt size={14} />
+                          Crear Cobro
+                        </button>
+                        <button
                           onClick={() => setShowModal(false)}
-                          style={btnSecondary}
+                          style={{ ...btnSecondary, gridColumn: '1 / -1' }}
                         >
                           Cerrar
                         </button>
@@ -1064,6 +1117,14 @@ export default function MultasModule() {
                   <button className="multas-btn-primary" onClick={() => { setShowModal(false); editarMulta(selectedMulta); }}>
                     <Edit2 size={14} style={{ marginRight: '6px' }} />
                     Editar
+                  </button>
+                  <button
+                    className="multas-btn-primary"
+                    style={{ background: '#10b981', borderColor: '#10b981' }}
+                    onClick={() => { setShowModal(false); handleCrearCobroDirecto(selectedMulta); }}
+                  >
+                    <Receipt size={14} style={{ marginRight: '6px' }} />
+                    Crear Cobro
                   </button>
                   <button className="multas-btn-secondary" onClick={() => setShowModal(false)}>
                     Cerrar
@@ -1390,6 +1451,13 @@ export default function MultasModule() {
           </div>
         </div>
       )}
+
+      <CrearCobroMultaModal
+        isOpen={showCobroModal}
+        multa={multaParaCobro}
+        onClose={() => { setShowCobroModal(false); setMultaParaCobro(null) }}
+        onSaved={cargarDatos}
+      />
     </div>
   )
 }
