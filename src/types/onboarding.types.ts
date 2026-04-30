@@ -34,6 +34,9 @@ export type EstadoCabify = 'pendiente' | 'listo_cabify' | 'asignar_auto' | 'crea
 // Tipo documento
 export type TipoDocumento = 'carta_oferta' | 'anexo' | 'na'
 
+// Propietario
+export type Propietario = 'grupo_cg' | '44_dreams'
+
 // Interfaz principal de Programación Onboarding
 export interface ProgramacionOnboarding {
   id: string
@@ -106,9 +109,12 @@ export interface ProgramacionOnboarding {
   especialista_id?: string
   especialista_nombre?: string
   
+  // Propietario
+  propietario?: Propietario
+
   // Observaciones
   observaciones?: string
-  
+
   // Relación con asignación
   asignacion_id?: string
   fecha_asignacion_creada?: string
@@ -218,7 +224,10 @@ export interface ProgramacionOnboardingFormData {
   // Especialista
   especialista_id?: string
   especialista_nombre?: string
-  
+
+  // Propietario
+  propietario?: Propietario
+
   // Observaciones
   observaciones?: string
 }

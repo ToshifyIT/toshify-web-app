@@ -703,7 +703,21 @@ const CONTRACT_CONFIG = {
     bariloche: '1RZfsv-xU_zJSBX26Vwj3-0hHuI9qV1M4'
   },
   nameToshify: 'MARCIAL JOSUE CARIDE GUZMAN',
-  amounts: { diurno: '299.000', nocturno: '229.000' }
+  amounts: { diurno: '299.000', nocturno: '229.000' },
+  propietarios: {
+    grupo_cg: {
+      owner: 'GRUPO CG S.A.S.',
+      cuit_owner: '30-71834000-0',
+      name_owner: 'MARCIAL JOSUE CARIDE GUZMAN',
+      dni_owner: '36.802.416'
+    },
+    '44_dreams': {
+      owner: '44 DREAMS S.R.L.',
+      cuit_owner: '30-71934409-3',
+      name_owner: 'RAUL GONZALO QUILODRAN LLAMAS',
+      dni_owner: '27.175.143'
+    }
+  }
 }
 
 /**
@@ -1016,7 +1030,7 @@ async function fetchAmountFromConceptos(turno, modalidad, gnc) {
  * Retorna { googleDocUrl, pdfUrl, folderUrl, folderId }
  */
 async function generateContractForConductor({
-  drive, conductor, vehiculo, templateKey, turno, sedeCode, modalidad
+  drive, conductor, vehiculo, templateKey, turno, sedeCode, modalidad, propietario
 }) {
   const templateId = getTemplateId(templateKey)
   if (!templateId) throw new Error(`Template no encontrada para key: ${templateKey}`)
@@ -1073,6 +1087,15 @@ async function generateContractForConductor({
   addIfPresent('NAMETOSHIFY', CONTRACT_CONFIG.nameToshify)
   addIfPresent('ACTUALYEAR', String(new Date().getFullYear()))
   addIfPresent('KM', vehiculo.kilometraje_actual ? String(vehiculo.kilometraje_actual) : null)
+
+  // Variables de propietario
+  const ownerData = CONTRACT_CONFIG.propietarios[propietario] || CONTRACT_CONFIG.propietarios['grupo_cg']
+  addIfPresent('OWNER', ownerData.owner)
+  addIfPresent('CUIT_OWNER', ownerData.cuit_owner)
+  addIfPresent('NAME_OWNER', ownerData.name_owner)
+  addIfPresent('DNI_OWNER', ownerData.dni_owner)
+  // Mantener NAMETOSHIFY por compatibilidad con plantillas existentes
+  addIfPresent('NAMETOSHIFY', ownerData.name_owner)
 
   doc.render(renderData)
 
@@ -1148,6 +1171,7 @@ app.post('/api/generate-contract', async (req, res) => {
       modalidad,           // 'turno' | 'a_cargo'
       sede_id,
       programacion_id,     // UUID de la programación creada
+      propietario,         // 'grupo_cg' | '44_dreams'
       created_by,
       created_by_name
     } = req.body
@@ -1169,7 +1193,7 @@ app.post('/api/generate-contract', async (req, res) => {
         if (templateKey) {
           const conductor = await fetchConductorData(conductor_id)
           const result = await generateContractForConductor({
-            drive, conductor, vehiculo, templateKey, turno: null, sedeCode, modalidad: 'a_cargo'
+            drive, conductor, vehiculo, templateKey, turno: null, sedeCode, modalidad: 'a_cargo', propietario
           })
 
           await saveDocumentoGenerado({
@@ -1210,7 +1234,7 @@ app.post('/api/generate-contract', async (req, res) => {
           if (templateKey) {
             const conductor = await fetchConductorData(cfg.id)
             const result = await generateContractForConductor({
-              drive, conductor, vehiculo, templateKey, turno: cfg.turno, sedeCode, modalidad: 'turno'
+              drive, conductor, vehiculo, templateKey, turno: cfg.turno, sedeCode, modalidad: 'turno', propietario
             })
 
             await saveDocumentoGenerado({
@@ -1279,6 +1303,7 @@ app.post('/api/complete-control', async (req, res) => {
       // Campos de control
       km,
       ltnafta,
+      observations,
       cristal_status,
       carter,
       tires,
@@ -1348,7 +1373,8 @@ app.post('/api/complete-control', async (req, res) => {
     // Construir lista de reemplazos
     const replacements = [
       { find: '{{KM}}', replace: `${km} KM` },
-      { find: '{{LTNAFTA}}', replace: ltnafta }
+      { find: '{{LTNAFTA}}', replace: ltnafta },
+      { find: '{{OBSERVATIONS}}', replace: observations || '-' }
     ]
 
     // Campos adicionales para Bariloche

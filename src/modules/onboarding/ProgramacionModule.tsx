@@ -1287,6 +1287,7 @@ export function ProgramacionModule() {
           modalidad: (prog.modalidad || 'turno') as 'turno' | 'a_cargo',
           sede_id: prog.sede_id || sedeActualId || sedeUsuario?.id || null,
           programacion_id: prog.id,
+          propietario: prog.propietario || 'grupo_cg',
           created_by: user?.id || null,
           created_by_name: profile?.full_name || 'Sistema'
         }

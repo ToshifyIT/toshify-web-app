@@ -181,6 +181,7 @@ export function AsignacionesModule() {
   const [controlForm, setControlForm] = useState({
     km: '',
     ltnafta: '',
+    observations: '',
     cristal_status: '',
     carter: '',
     tires: '',
@@ -194,7 +195,7 @@ export function AsignacionesModule() {
 
   async function openControlModal(asig: ExpandedAsignacion) {
     setControlAsignacion(asig)
-    setControlForm({ km: '', ltnafta: '', cristal_status: '', carter: '', tires: '', others_docs: '', other_accesory: '', make_chains: '', status_chains: '', tensioners_chains: '', others_kit: '' })
+    setControlForm({ km: '', ltnafta: '', observations: '', cristal_status: '', carter: '', tires: '', others_docs: '', other_accesory: '', make_chains: '', status_chains: '', tensioners_chains: '', others_kit: '' })
     // Obtener un conductor para consultar si la plantilla es Bariloche
     const isAutoCargo = asig.horario === 'todo_dia'
     let conductorId = ''
@@ -243,7 +244,7 @@ export function AsignacionesModule() {
     if (conductoresAsig.length === 0) return
 
     // Validar que todos los campos visibles estén completos
-    const camposBase = [controlForm.km, controlForm.ltnafta]
+    const camposBase = [controlForm.km, controlForm.ltnafta, controlForm.observations]
     const camposBariloche = isControlBariloche
       ? [controlForm.cristal_status, controlForm.carter, controlForm.tires, controlForm.others_docs, controlForm.other_accesory, controlForm.make_chains, controlForm.status_chains, controlForm.tensioners_chains, controlForm.others_kit]
       : []
@@ -274,6 +275,7 @@ export function AsignacionesModule() {
         asignacion_id: controlAsignacion.id,
         km: controlForm.km.trim(),
         ltnafta: controlForm.ltnafta.trim(),
+        observations: controlForm.observations.trim(),
         cristal_status: isControlBariloche ? (controlForm.cristal_status.trim() || null) : null,
         carter: isControlBariloche ? (controlForm.carter.trim() || null) : null,
         tires: isControlBariloche ? (controlForm.tires.trim() || null) : null,
@@ -3443,6 +3445,8 @@ export function AsignacionesModule() {
                         </p>
                       )}
                       {(() => {
+                        const docTipo = viewAsignacion.asignaciones_conductores?.[0]?.documento
+                        if (docTipo === 'NA' || docTipo === 'N/A') return null
                         const cId = viewAsignacion.asignaciones_conductores?.[0]?.conductor_id
                         const driveUrl = (cId && viewDriveUrls[cId]) || (viewAsignacion.asignaciones_conductores?.[0]?.conductores as any)?.drive_folder_url
                         if (!driveUrl) return (
@@ -3595,6 +3599,7 @@ export function AsignacionesModule() {
                               </p>
                             )}
                             {(() => {
+                              if (ac.documento === 'NA' || ac.documento === 'N/A') return null
                               const driveUrl = viewDriveUrls[ac.conductor_id] || (ac.conductores as any)?.drive_folder_url
                               if (!driveUrl) return (
                                 <div style={{ marginTop: '4px', display: 'flex', alignItems: 'center', gap: '4px' }}>
@@ -3647,6 +3652,7 @@ export function AsignacionesModule() {
                               )}
                             </p>
                             {(() => {
+                              if (ac.documento === 'NA' || ac.documento === 'N/A') return null
                               const driveUrl = (ac.conductores as any)?.drive_folder_url
                               if (!driveUrl) return null
                               return (
@@ -4133,6 +4139,18 @@ export function AsignacionesModule() {
                     <label style={labelStyle}>Litros de Nafta <span style={{ color: '#dc2626' }}>*</span></label>
                     <input type="text" placeholder="Ej: 30" value={controlForm.ltnafta} onChange={(e) => setControlForm(p => ({ ...p, ltnafta: e.target.value }))} disabled={controlSaving} style={inputStyle} />
                   </div>
+                </div>
+
+                <div style={{ marginTop: '12px', marginBottom: isControlBariloche ? '16px' : '0' }}>
+                  <label style={labelStyle}>Observaciones <span style={{ color: '#dc2626' }}>*</span></label>
+                  <textarea
+                    placeholder="Ingrese observaciones del control..."
+                    value={controlForm.observations}
+                    onChange={(e) => setControlForm(p => ({ ...p, observations: e.target.value }))}
+                    disabled={controlSaving}
+                    rows={3}
+                    style={{ ...inputStyle, resize: 'vertical', minHeight: '60px' }}
+                  />
                 </div>
 
                 {isControlBariloche && (
