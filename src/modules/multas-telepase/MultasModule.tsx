@@ -6,7 +6,7 @@ import { LoadingOverlay } from '../../components/ui/LoadingOverlay'
 import { ExcelColumnFilter } from '../../components/ui/DataTable/ExcelColumnFilter'
 import { ExcelDateRangeFilter } from '../../components/ui/DataTable/ExcelDateRangeFilter'
 import { DataTable } from '../../components/ui/DataTable'
-import { Download, AlertTriangle, Eye, Edit2, Trash2, Plus, X, Car, Users, DollarSign, CheckCircle, AlertCircle } from 'lucide-react'
+import { Download, AlertTriangle, Eye, Edit2, Trash2, Plus, X, Car, Users, DollarSign, CheckCircle, AlertCircle, FileText } from 'lucide-react'
 import { type ColumnDef } from '@tanstack/react-table'
 import * as XLSX from 'xlsx'
 import Swal from 'sweetalert2'
@@ -31,6 +31,7 @@ interface Multa {
   lugar_detalle: string
   ibutton: string
   sede_id?: string
+  drive_url?: string | null
 }
 
 interface Vehiculo {
@@ -38,17 +39,24 @@ interface Vehiculo {
   patente: string
 }
 
-function formatMoney(value: string | number | null | undefined): string {
-  if (!value) return '$ 0'
-  const num = typeof value === 'string' ? parseFloat(value.replace(/[^0-9.-]/g, '')) : value
-  if (isNaN(num)) return '$ 0'
-  return `$ ${num.toLocaleString('es-AR', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`
+function parseImporte(importe: string | number | null | undefined): number {
+  if (importe == null || importe === '') return 0
+  if (typeof importe === 'number') return importe
+  let s = importe.replace(/[^\d,.-]/g, '')
+  const lastComma = s.lastIndexOf(',')
+  const lastDot = s.lastIndexOf('.')
+  if (lastComma > lastDot) {
+    s = s.replace(/\./g, '').replace(',', '.')
+  } else if (lastDot !== -1 && lastComma !== -1) {
+    s = s.replace(/,/g, '')
+  }
+  const num = parseFloat(s)
+  return isNaN(num) ? 0 : num
 }
 
-function parseImporte(importe: string | number | null | undefined): number {
-  if (!importe) return 0
-  const num = typeof importe === 'string' ? parseFloat(importe.replace(/[^0-9.-]/g, '')) : importe
-  return isNaN(num) ? 0 : num
+function formatMoney(value: string | number | null | undefined): string {
+  const num = parseImporte(value)
+  return `$ ${num.toLocaleString('es-AR', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`
 }
 
 function formatFecha(fecha: string | null): string {
@@ -889,86 +897,180 @@ export default function MultasModule() {
       />
 
       {/* Modal Detalle */}
-      {showModal && selectedMulta && (
+      {showModal && selectedMulta && (() => {
+        const driveFileId = selectedMulta.drive_url?.match(/\/file\/d\/([^/]+)/)?.[1] || null
+        const hasPdf = !!driveFileId
+        const detailsTable = (
+          <table className="multas-detail-table">
+            <tbody>
+              <tr>
+                <td className="multas-detail-label">Patente</td>
+                <td className="multas-detail-value">
+                  <span className="patente-badge">{selectedMulta.patente || '-'}</span>
+                </td>
+              </tr>
+              <tr>
+                <td className="multas-detail-label">Fecha Infraccion</td>
+                <td className="multas-detail-value">{formatFecha(selectedMulta.fecha_infraccion)}</td>
+              </tr>
+              <tr>
+                <td className="multas-detail-label">Importe</td>
+                <td className="multas-detail-value" style={{ fontWeight: 700, color: '#ff0033', fontSize: '18px' }}>
+                  {formatMoney(selectedMulta.importe)}
+                </td>
+              </tr>
+              <tr>
+                <td className="multas-detail-label">Infraccion</td>
+                <td className="multas-detail-value">{selectedMulta.infraccion || '-'}</td>
+              </tr>
+              <tr>
+                <td className="multas-detail-label">Lugar</td>
+                <td className="multas-detail-value">{selectedMulta.lugar || '-'}</td>
+              </tr>
+              {selectedMulta.lugar_detalle && (
+                <tr>
+                  <td className="multas-detail-label">Lugar Detalle</td>
+                  <td className="multas-detail-value">{selectedMulta.lugar_detalle}</td>
+                </tr>
+              )}
+              <tr>
+                <td className="multas-detail-label">Conductor</td>
+                <td className="multas-detail-value">{selectedMulta.conductor_responsable || '-'}</td>
+              </tr>
+              {selectedMulta.ibutton && (
+                <tr>
+                  <td className="multas-detail-label">iButton</td>
+                  <td className="multas-detail-value" style={{ fontFamily: 'monospace', fontSize: '12px' }}>{selectedMulta.ibutton}</td>
+                </tr>
+              )}
+              {(selectedMulta.observaciones || selectedMulta.detalle) && (
+                <tr>
+                  <td className="multas-detail-label">Observaciones</td>
+                  <td className="multas-detail-value" style={{
+                    padding: '12px',
+                    background: 'rgba(239, 68, 68, 0.1)',
+                    borderRadius: '6px',
+                    border: '1px solid rgba(239, 68, 68, 0.2)'
+                  }}>
+                    {selectedMulta.observaciones || selectedMulta.detalle}
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        )
+
+        return (
         <div className="multas-modal-overlay" onClick={() => setShowModal(false)}>
-          <div className="multas-modal-container" onClick={e => e.stopPropagation()} style={{ maxWidth: '550px' }}>
+          <div
+            className="multas-modal-container"
+            onClick={e => e.stopPropagation()}
+            style={hasPdf
+              ? { maxWidth: '1300px', width: '90vw', height: '88vh', display: 'flex', flexDirection: 'column' }
+              : { maxWidth: '550px' }}
+          >
             <div className="multas-modal-header">
-              <h2 className="multas-modal-title">Detalle de Multa</h2>
+              <h2 className="multas-modal-title">
+                Detalle de Multa{hasPdf && selectedMulta.patente ? ` — ${selectedMulta.patente}` : ''}
+              </h2>
               <button className="multas-modal-close" onClick={() => setShowModal(false)}>
                 <X size={18} />
               </button>
             </div>
-            <div className="multas-modal-body">
-              <table className="multas-detail-table">
-                <tbody>
-                  <tr>
-                    <td className="multas-detail-label">Patente</td>
-                    <td className="multas-detail-value">
-                      <span className="patente-badge">{selectedMulta.patente || '-'}</span>
-                    </td>
-                  </tr>
-                  <tr>
-                    <td className="multas-detail-label">Fecha Infraccion</td>
-                    <td className="multas-detail-value">{formatFecha(selectedMulta.fecha_infraccion)}</td>
-                  </tr>
-                  <tr>
-                    <td className="multas-detail-label">Importe</td>
-                    <td className="multas-detail-value" style={{ fontWeight: 700, color: '#ff0033', fontSize: '18px' }}>
-                      {formatMoney(selectedMulta.importe)}
-                    </td>
-                  </tr>
-                  <tr>
-                    <td className="multas-detail-label">Infraccion</td>
-                    <td className="multas-detail-value">{selectedMulta.infraccion || '-'}</td>
-                  </tr>
-                  <tr>
-                    <td className="multas-detail-label">Lugar</td>
-                    <td className="multas-detail-value">{selectedMulta.lugar || '-'}</td>
-                  </tr>
-                  {selectedMulta.lugar_detalle && (
-                    <tr>
-                      <td className="multas-detail-label">Lugar Detalle</td>
-                      <td className="multas-detail-value">{selectedMulta.lugar_detalle}</td>
-                    </tr>
-                  )}
-                  <tr>
-                    <td className="multas-detail-label">Conductor</td>
-                    <td className="multas-detail-value">{selectedMulta.conductor_responsable || '-'}</td>
-                  </tr>
-                  {selectedMulta.ibutton && (
-                    <tr>
-                      <td className="multas-detail-label">iButton</td>
-                      <td className="multas-detail-value" style={{ fontFamily: 'monospace', fontSize: '12px' }}>{selectedMulta.ibutton}</td>
-                    </tr>
-                  )}
-                  {(selectedMulta.observaciones || selectedMulta.detalle) && (
-                    <tr>
-                      <td className="multas-detail-label">Observaciones</td>
-                      <td className="multas-detail-value" style={{
-                        padding: '12px',
-                        background: 'rgba(239, 68, 68, 0.1)',
-                        borderRadius: '6px',
-                        border: '1px solid rgba(239, 68, 68, 0.2)'
+            {hasPdf ? (
+              <div style={{ display: 'flex', flex: 1, minHeight: 0, overflow: 'hidden' }}>
+                <div style={{ flex: '1 1 65%', borderRight: '1px solid rgba(148,163,184,0.2)', minWidth: 0, padding: '16px', background: 'rgba(15,23,42,0.4)' }}>
+                  <iframe
+                    src={`https://drive.google.com/file/d/${driveFileId}/preview`}
+                    title="PDF de la multa"
+                    style={{ width: '100%', height: '100%', border: 'none', display: 'block', borderRadius: '8px', background: '#fff' }}
+                    allow="autoplay"
+                  />
+                </div>
+                <div style={{ flex: '1 1 35%', minWidth: '340px', display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+                  <div style={{ flex: 1, overflowY: 'auto', padding: '20px' }}>
+                    {detailsTable}
+                  </div>
+                  {(() => {
+                    const btnBase: React.CSSProperties = {
+                      height: '40px',
+                      padding: '0 14px',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: '6px',
+                      fontSize: '13px',
+                      fontWeight: 600,
+                      borderRadius: '6px',
+                      border: '1px solid transparent',
+                      cursor: 'pointer',
+                      lineHeight: 1,
+                      whiteSpace: 'nowrap',
+                      margin: 0
+                    }
+                    const btnPrimary: React.CSSProperties = { ...btnBase, background: '#ef4444', color: '#fff', borderColor: '#ef4444' }
+                    const btnGreen: React.CSSProperties = { ...btnBase, background: '#10b981', color: '#fff', borderColor: '#10b981' }
+                    const btnSecondary: React.CSSProperties = { ...btnBase, background: 'transparent', color: 'inherit', borderColor: 'rgba(148,163,184,0.4)' }
+                    return (
+                      <div style={{
+                        padding: '16px 20px',
+                        borderTop: '1px solid rgba(148,163,184,0.2)',
+                        display: 'grid',
+                        gridTemplateColumns: '1fr 1fr',
+                        gap: '8px'
                       }}>
-                        {selectedMulta.observaciones || selectedMulta.detalle}
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
-            <div className="multas-modal-footer">
-              <button className="multas-btn-primary" onClick={() => { setShowModal(false); editarMulta(selectedMulta); }}>
-                <Edit2 size={14} style={{ marginRight: '6px' }} />
-                Editar
-              </button>
-              <button className="multas-btn-secondary" onClick={() => setShowModal(false)}>
-                Cerrar
-              </button>
-            </div>
+                        <button
+                          onClick={() => window.open(selectedMulta.drive_url!, '_blank', 'noopener,noreferrer')}
+                          style={btnGreen}
+                        >
+                          <FileText size={14} />
+                          Abrir en Drive
+                        </button>
+                        <button
+                          onClick={() => window.open(`https://drive.google.com/uc?export=download&id=${driveFileId}`, '_blank', 'noopener,noreferrer')}
+                          style={btnSecondary}
+                        >
+                          <Download size={14} />
+                          Descargar
+                        </button>
+                        <button
+                          onClick={() => { setShowModal(false); editarMulta(selectedMulta); }}
+                          style={btnPrimary}
+                        >
+                          <Edit2 size={14} />
+                          Editar
+                        </button>
+                        <button
+                          onClick={() => setShowModal(false)}
+                          style={btnSecondary}
+                        >
+                          Cerrar
+                        </button>
+                      </div>
+                    )
+                  })()}
+                </div>
+              </div>
+            ) : (
+              <>
+                <div className="multas-modal-body">
+                  {detailsTable}
+                </div>
+                <div className="multas-modal-footer">
+                  <button className="multas-btn-primary" onClick={() => { setShowModal(false); editarMulta(selectedMulta); }}>
+                    <Edit2 size={14} style={{ marginRight: '6px' }} />
+                    Editar
+                  </button>
+                  <button className="multas-btn-secondary" onClick={() => setShowModal(false)}>
+                    Cerrar
+                  </button>
+                </div>
+              </>
+            )}
           </div>
         </div>
-      )}
+        )
+      })()}
 
       {/* Modal Editar */}
       {showEditModal && editingMulta && (
