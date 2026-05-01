@@ -40,16 +40,6 @@ interface USSExcesoRow {
   created_at: string
 }
 
-interface USSStatsRPCResult {
-  total_excesos: number
-  vehiculos_unicos: number
-  conductores_unicos: number
-  velocidad_promedio: number
-  velocidad_maxima: number
-  exceso_promedio: number
-  duracion_promedio: number
-}
-
 interface USSSyncLogRow {
   completed_at: string | null
   records_synced: number
@@ -131,57 +121,63 @@ export const ussService = {
     // Usar offset -03:00 (Argentina) para que medianoche local sea correcta en UTC
     // startDate 00:00 Argentina = startDate 03:00 UTC
     // endDate 23:59:59 Argentina = endDate+1 02:59:59 UTC
-    let query = supabase
-      .from('uss_excesos_velocidad')
-      .select('*', { count: 'exact' })
-      .gte('fecha_evento', `${startDate}T00:00:00-03:00`)
-      .lte('fecha_evento', `${endDate}T23:59:59-03:00`)
-      .order(orderField, { ascending: orderAsc })
+    // Builder de query reutilizable para uss_excesos_velocidad y geotab_excesos_velocidad
+    const buildQuery = (tabla: 'uss_excesos_velocidad' | 'geotab_excesos_velocidad') => {
+      let q = supabase
+        .from(tabla)
+        .select('*', { count: 'exact' })
+        .gte('fecha_evento', `${startDate}T00:00:00-03:00`)
+        .lte('fecha_evento', `${endDate}T23:59:59-03:00`)
+        .order(orderField, { ascending: orderAsc })
 
-    if (options?.sedeId) {
-      query = query.eq('sede_id', options.sedeId)
+      if (options?.sedeId) q = q.eq('sede_id', options.sedeId)
+      if (options?.patente) q = q.ilike('patente', `%${options.patente}%`)
+      if (options?.conductor) q = q.ilike('conductor_wialon', `%${options.conductor}%`)
+      if (options?.minExceso) q = q.gte('exceso', options.minExceso)
+      if (options?.velocidadMin) q = q.gte('velocidad_maxima', options.velocidadMin)
+      if (options?.velocidadMax) q = q.lte('velocidad_maxima', options.velocidadMax)
+
+      if (options?.limit) {
+        q = q.limit(options.limit)
+      } else {
+        q = q.range(0, 9999)
+      }
+      if (options?.offset) {
+        q = q.range(options.offset, options.offset + (options.limit || 25) - 1)
+      }
+      return q
     }
 
-    if (options?.patente) {
-      query = query.ilike('patente', `%${options.patente}%`)
+    // Ejecutar ambas queries en paralelo: USS + GEOTAB
+    const [ussRes, geotabRes] = await Promise.all([
+      buildQuery('uss_excesos_velocidad'),
+      buildQuery('geotab_excesos_velocidad'),
+    ])
+
+    if (ussRes.error) {
+      throw new Error(`Error obteniendo excesos (USS): ${ussRes.error.message}`)
+    }
+    // geotab_excesos_velocidad puede fallar si la tabla aún no está propagada en algún ambiente; no romper la pantalla
+    if (geotabRes.error) {
+      console.warn('[ussService] geotab_excesos_velocidad query falló:', geotabRes.error.message)
     }
 
-    if (options?.conductor) {
-      query = query.ilike('conductor_wialon', `%${options.conductor}%`)
-    }
+    const ussData = (ussRes.data || []).map((r: any) => ({ ...r, gps_origen: 'USS' as const }))
+    const geotabData = (geotabRes.data || []).map((r: any) => ({ ...r, gps_origen: 'GEOTAB' as const }))
+    const data = [...ussData, ...geotabData]
 
-    if (options?.minExceso) {
-      query = query.gte('exceso', options.minExceso)
-    }
+    // Re-ordenar combinado en cliente
+    data.sort((a: any, b: any) => {
+      const va = a[orderField]
+      const vb = b[orderField]
+      if (va === vb) return 0
+      if (va == null) return 1
+      if (vb == null) return -1
+      return orderAsc ? (va < vb ? -1 : 1) : (va < vb ? 1 : -1)
+    })
 
-    if (options?.velocidadMin) {
-      query = query.gte('velocidad_maxima', options.velocidadMin)
-    }
-
-    if (options?.velocidadMax) {
-      query = query.lte('velocidad_maxima', options.velocidadMax)
-    }
-
-    // Traer todos los registros del rango (Supabase limita a 1000 por defecto)
-    // Usamos range para asegurar que traiga todo
-    if (options?.limit) {
-      query = query.limit(options.limit)
-    } else {
-      query = query.range(0, 9999)
-    }
-
-    if (options?.offset) {
-      query = query.range(options.offset, options.offset + (options.limit || 25) - 1)
-    }
-
-    const { data, error, count } = await query
-
-    if (error) {
-      throw new Error(`Error obteniendo excesos: ${error.message}`)
-    }
-
-    excesosCache.set(cacheKey, data || [])
-    return { data: data || [], count: count || 0 }
+    excesosCache.set(cacheKey, data)
+    return { data, count: data.length }
   },
 
   /**
@@ -195,50 +191,42 @@ export const ussService = {
       return cached
     }
 
-    // Si hay filtro de sede, no usar RPC (no soporta sede), calcular manualmente
-    if (sedeId) {
-      return this.calculateStatsManually(startDate, endDate, sedeId)
-    }
-
-    const { data, error } = await (supabase.rpc as Function)('get_uss_excesos_stats', {
-      p_start_date: startDate,
-      p_end_date: endDate,
-    }) as { data: USSStatsRPCResult | null; error: unknown }
-
-    if (error) {
-      return this.calculateStatsManually(startDate, endDate)
-    }
-
-    const stats: ExcesoStats = {
-      totalExcesos: data?.total_excesos || 0,
-      vehiculosUnicos: data?.vehiculos_unicos || 0,
-      conductoresUnicos: data?.conductores_unicos || 0,
-      velocidadPromedio: data?.velocidad_promedio || 0,
-      velocidadMaxima: data?.velocidad_maxima || 0,
-      excesoPromedio: data?.exceso_promedio || 0,
-      duracionPromedio: data?.duracion_promedio || 0,
-    }
-
-    statsCache.set(cacheKey, stats)
-    return stats
+    // Calcular siempre manualmente (combinado USS + GEOTAB).
+    // El RPC solo lee uss_excesos_velocidad, por eso no se usa.
+    return this.calculateStatsManually(startDate, endDate, sedeId)
   },
 
   /**
    * Calcula stats manualmente si no hay RPC
    */
   async calculateStatsManually(startDate: string, endDate: string, sedeId?: string | null): Promise<ExcesoStats> {
-    let statsQ = supabase
-      .from('uss_excesos_velocidad')
-      .select('velocidad_maxima, exceso, duracion_segundos, patente, conductor_wialon')
-      .gte('fecha_evento', `${startDate}T00:00:00-03:00`)
-      .lte('fecha_evento', `${endDate}T23:59:59-03:00`)
-      .limit(5000)
-    if (sedeId) {
-      statsQ = statsQ.eq('sede_id', sedeId)
+    const buildStatsQuery = (tabla: 'uss_excesos_velocidad' | 'geotab_excesos_velocidad') => {
+      let q = supabase
+        .from(tabla)
+        .select('velocidad_maxima, exceso, duracion_segundos, patente, conductor_wialon')
+        .gte('fecha_evento', `${startDate}T00:00:00-03:00`)
+        .lte('fecha_evento', `${endDate}T23:59:59-03:00`)
+        .limit(5000)
+      if (sedeId) q = q.eq('sede_id', sedeId)
+      return q
     }
-    const { data, error } = await statsQ as { data: Pick<USSExcesoRow, 'velocidad_maxima' | 'exceso' | 'duracion_segundos' | 'patente' | 'conductor_wialon'>[] | null; error: unknown }
 
-    if (error || !data) {
+    const [ussRes, geotabRes] = await Promise.all([
+      buildStatsQuery('uss_excesos_velocidad'),
+      buildStatsQuery('geotab_excesos_velocidad'),
+    ])
+
+    if (geotabRes.error) {
+      console.warn('[ussService] geotab_excesos_velocidad stats falló:', geotabRes.error.message)
+    }
+
+    type StatsRow = Pick<USSExcesoRow, 'velocidad_maxima' | 'exceso' | 'duracion_segundos' | 'patente' | 'conductor_wialon'>
+    const data: StatsRow[] = [
+      ...((ussRes.data || []) as StatsRow[]),
+      ...((geotabRes.data || []) as StatsRow[]),
+    ]
+
+    if (ussRes.error && geotabRes.error) {
       return {
         totalExcesos: 0,
         vehiculosUnicos: 0,
@@ -278,18 +266,30 @@ export const ussService = {
     limit: number = 10,
     sedeId?: string | null
   ): Promise<VehiculoRanking[]> {
-    let vehQ = supabase
-      .from('uss_excesos_velocidad')
-      .select('patente, vehiculo_id, velocidad_maxima, exceso, duracion_segundos')
-      .gte('fecha_evento', `${startDate}T00:00:00-03:00`)
-      .lte('fecha_evento', `${endDate}T23:59:59-03:00`)
-      .limit(1000)
-    if (sedeId) {
-      vehQ = vehQ.eq('sede_id', sedeId)
+    const buildVehQuery = (tabla: 'uss_excesos_velocidad' | 'geotab_excesos_velocidad') => {
+      let q = supabase
+        .from(tabla)
+        .select('patente, vehiculo_id, velocidad_maxima, exceso, duracion_segundos')
+        .gte('fecha_evento', `${startDate}T00:00:00-03:00`)
+        .lte('fecha_evento', `${endDate}T23:59:59-03:00`)
+        .limit(1000)
+      if (sedeId) q = q.eq('sede_id', sedeId)
+      return q
     }
-    const { data, error } = await vehQ as { data: Pick<USSExcesoRow, 'patente' | 'vehiculo_id' | 'velocidad_maxima' | 'exceso' | 'duracion_segundos'>[] | null; error: unknown }
+    const [ussRes, geotabRes] = await Promise.all([
+      buildVehQuery('uss_excesos_velocidad'),
+      buildVehQuery('geotab_excesos_velocidad'),
+    ])
+    if (geotabRes.error) {
+      console.warn('[ussService] geotab vehiculos ranking falló:', geotabRes.error.message)
+    }
+    type VehRow = Pick<USSExcesoRow, 'patente' | 'vehiculo_id' | 'velocidad_maxima' | 'exceso' | 'duracion_segundos'>
+    const data: VehRow[] = [
+      ...((ussRes.data || []) as VehRow[]),
+      ...((geotabRes.data || []) as VehRow[]),
+    ]
 
-    if (error || !data) {
+    if (ussRes.error && geotabRes.error) {
       return []
     }
 
@@ -342,18 +342,30 @@ export const ussService = {
     limit: number = 10,
     sedeId?: string | null
   ): Promise<ConductorRanking[]> {
-    let condQ = supabase
-      .from('uss_excesos_velocidad')
-      .select('conductor_wialon, conductor_id, velocidad_maxima, patente')
-      .gte('fecha_evento', `${startDate}T00:00:00-03:00`)
-      .lte('fecha_evento', `${endDate}T23:59:59-03:00`)
-      .limit(1000)
-    if (sedeId) {
-      condQ = condQ.eq('sede_id', sedeId)
+    const buildCondQuery = (tabla: 'uss_excesos_velocidad' | 'geotab_excesos_velocidad') => {
+      let q = supabase
+        .from(tabla)
+        .select('conductor_wialon, conductor_id, velocidad_maxima, patente')
+        .gte('fecha_evento', `${startDate}T00:00:00-03:00`)
+        .lte('fecha_evento', `${endDate}T23:59:59-03:00`)
+        .limit(1000)
+      if (sedeId) q = q.eq('sede_id', sedeId)
+      return q
     }
-    const { data, error } = await condQ as { data: Pick<USSExcesoRow, 'conductor_wialon' | 'conductor_id' | 'velocidad_maxima' | 'patente'>[] | null; error: unknown }
+    const [ussRes, geotabRes] = await Promise.all([
+      buildCondQuery('uss_excesos_velocidad'),
+      buildCondQuery('geotab_excesos_velocidad'),
+    ])
+    if (geotabRes.error) {
+      console.warn('[ussService] geotab conductores ranking falló:', geotabRes.error.message)
+    }
+    type CondRow = Pick<USSExcesoRow, 'conductor_wialon' | 'conductor_id' | 'velocidad_maxima' | 'patente'>
+    const data: CondRow[] = [
+      ...((ussRes.data || []) as CondRow[]),
+      ...((geotabRes.data || []) as CondRow[]),
+    ]
 
-    if (error || !data) {
+    if (ussRes.error && geotabRes.error) {
       return []
     }
 
@@ -408,13 +420,16 @@ export const ussService = {
       .limit(1)
       .single() as { data: USSSyncLogRow | null }
 
-    const { count } = await supabase
-      .from('uss_excesos_velocidad')
-      .select('*', { count: 'exact', head: true })
+    const [ussCountRes, geotabCountRes] = await Promise.all([
+      supabase.from('uss_excesos_velocidad').select('*', { count: 'exact', head: true }),
+      supabase.from('geotab_excesos_velocidad').select('*', { count: 'exact', head: true }),
+    ])
+
+    const totalRecords = (ussCountRes.count || 0) + (geotabCountRes.count || 0)
 
     return {
       lastSync: syncLog?.completed_at || null,
-      totalRecords: count || 0,
+      totalRecords,
       status: syncLog?.status || 'unknown',
     }
   },

@@ -24,6 +24,7 @@ export interface ExcesoVelocidad {
   periodo_inicio: string
   periodo_fin: string
   created_at: string
+  gps_origen?: 'USS' | 'GEOTAB'
 }
 
 export interface ExcesoStats {

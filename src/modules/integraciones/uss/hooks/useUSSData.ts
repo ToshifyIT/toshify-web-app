@@ -168,38 +168,37 @@ export function useUSSData(options: UseUSSDataOptions = {}): UseUSSDataReturn {
   useEffect(() => {
     if (!isRealtime) return
 
-    const channel = supabase
-      .channel('uss_excesos_velocidad_changes')
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'uss_excesos_velocidad',
-        },
-        () => {
-          // Debounce: agrupar múltiples eventos en una sola recarga
-          if (realtimeDebounceRef.current) {
-            clearTimeout(realtimeDebounceRef.current)
-          }
+    const onChange = () => {
+      // Debounce: agrupar múltiples eventos en una sola recarga
+      if (realtimeDebounceRef.current) {
+        clearTimeout(realtimeDebounceRef.current)
+      }
+      if (!isReloadingRef.current) {
+        realtimeDebounceRef.current = setTimeout(() => {
+          isReloadingRef.current = true
+          loadDataSilent().finally(() => {
+            isReloadingRef.current = false
+          })
+        }, REALTIME_DEBOUNCE_MS)
+      }
+    }
 
-          if (!isReloadingRef.current) {
-            realtimeDebounceRef.current = setTimeout(() => {
-              isReloadingRef.current = true
-              loadDataSilent().finally(() => {
-                isReloadingRef.current = false
-              })
-            }, REALTIME_DEBOUNCE_MS)
-          }
-        }
-      )
+    const channelUss = supabase
+      .channel('uss_excesos_velocidad_changes')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'uss_excesos_velocidad' }, onChange)
+      .subscribe()
+
+    const channelGeotab = supabase
+      .channel('geotab_excesos_velocidad_changes')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'geotab_excesos_velocidad' }, onChange)
       .subscribe()
 
     return () => {
       if (realtimeDebounceRef.current) {
         clearTimeout(realtimeDebounceRef.current)
       }
-      supabase.removeChannel(channel)
+      supabase.removeChannel(channelUss)
+      supabase.removeChannel(channelGeotab)
     }
   }, [isRealtime, loadDataSilent])
 
