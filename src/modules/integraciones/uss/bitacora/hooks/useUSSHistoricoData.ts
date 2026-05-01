@@ -49,6 +49,7 @@ export interface Marcacion {
   gncCargado: boolean;
   lavadoRealizado: boolean;
   naftaCargada: boolean;
+  gpsOrigen: 'USS' | 'GEOTAB';
 }
 
 export interface USSHistoricoDateRange {
@@ -79,6 +80,7 @@ function transformarMarcacion(reg: BitacoraRegistroTransformado): Marcacion {
     gncCargado: reg.gnc_cargado,
     lavadoRealizado: reg.lavado_realizado,
     naftaCargada: reg.nafta_cargada,
+    gpsOrigen: reg.gps_origen || 'USS',
   };
 }
 

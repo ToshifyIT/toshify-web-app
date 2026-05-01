@@ -117,6 +117,18 @@ export function MarcacionesTable({
   const [estadoFilter, setEstadoFilter] = useState<string[]>([]);
   const [horarioFilter, setHorarioFilter] = useState<string[]>([]);
   const [turnoFilter, setTurnoFilter] = useState<string[]>([]);
+  // Quick filter por proveedor GPS
+  const [gpsFilter, setGpsFilter] = useState<'USS' | 'GEOTAB' | null>(null);
+
+  // Conteos por proveedor GPS (sobre el universo cargado, no afectado por otros filtros)
+  const gpsCounts = useMemo(() => {
+    let uss = 0, geotab = 0;
+    for (const m of marcaciones) {
+      if (m.gpsOrigen === 'GEOTAB') geotab++;
+      else uss++;
+    }
+    return { uss, geotab };
+  }, [marcaciones]);
 
   // Listas únicas
   const conductorPatenteUnicos = useMemo(() => {
@@ -149,7 +161,7 @@ export function MarcacionesTable({
     [...new Set(marcaciones.map(m => m.vehiculoModalidad || 'Sin asignar'))].filter(Boolean).sort()
   , [marcaciones]);
 
-  const hasActiveFilters = conductorFilter.length > 0 || fechaFilter.length > 0 || estadoFilter.length > 0 || horarioFilter.length > 0 || turnoFilter.length > 0 || searchTerm.trim() !== '';
+  const hasActiveFilters = conductorFilter.length > 0 || fechaFilter.length > 0 || estadoFilter.length > 0 || horarioFilter.length > 0 || turnoFilter.length > 0 || gpsFilter !== null || searchTerm.trim() !== '';
 
   const clearAllFilters = () => {
     setConductorFilter([]);
@@ -157,6 +169,7 @@ export function MarcacionesTable({
     setEstadoFilter([]);
     setHorarioFilter([]);
     setTurnoFilter([]);
+    setGpsFilter(null);
     onSearchChange('');
   };
 
@@ -179,6 +192,9 @@ export function MarcacionesTable({
     if (turnoFilter.length > 0) {
       filtered = filtered.filter(m => turnoFilter.includes(m.vehiculoModalidad || 'Sin asignar'));
     }
+    if (gpsFilter !== null) {
+      filtered = filtered.filter(m => (m.gpsOrigen || 'USS') === gpsFilter);
+    }
 
     if (searchTerm.trim()) {
       const term = searchTerm.toLowerCase();
@@ -190,10 +206,34 @@ export function MarcacionesTable({
     }
 
     return filtered;
-  }, [marcaciones, conductorFilter, fechaFilter, estadoFilter, horarioFilter, turnoFilter, searchTerm]);
+  }, [marcaciones, conductorFilter, fechaFilter, estadoFilter, horarioFilter, turnoFilter, gpsFilter, searchTerm]);
 
   // Columnas
   const columns = useMemo<ColumnDef<Marcacion, unknown>[]>(() => [
+    {
+      id: 'gps_col',
+      header: 'GPS',
+      cell: ({ row }) => {
+        const origen = row.original.gpsOrigen || 'USS'
+        const isGeotab = origen === 'GEOTAB'
+        return (
+          <span style={{
+            fontSize: '10px',
+            fontWeight: 600,
+            color: '#fff',
+            background: isGeotab ? '#3b82f6' : '#10b981',
+            padding: '2px 8px',
+            borderRadius: '3px',
+            whiteSpace: 'nowrap',
+            letterSpacing: '0.5px'
+          }}>
+            {origen}
+          </span>
+        )
+      },
+      enableSorting: false,
+      size: 70,
+    },
     {
       id: 'patente_col',
       accessorFn: (row) => row.patenteNormalizada || row.patente.replace(/\s/g, ''),
@@ -552,6 +592,47 @@ export function MarcacionesTable({
         <span style={{ color: 'var(--text-secondary)', fontSize: '13px', whiteSpace: 'nowrap' }}>
           {marcacionesFiltradas.length} registros
         </span>
+      </div>
+
+      {/* Quick filters por proveedor GPS */}
+      <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', padding: '0 0 12px 0', alignItems: 'center' }}>
+        <span style={{ fontSize: '12px', color: 'var(--text-tertiary)', fontWeight: 500, textTransform: 'uppercase', letterSpacing: '0.5px', marginRight: '4px' }}>
+          GPS:
+        </span>
+        {[
+          { key: null as null | 'USS' | 'GEOTAB', label: 'Todos', color: 'var(--color-primary)', count: marcaciones.length },
+          { key: 'USS' as const, label: 'USS', color: '#10b981', count: gpsCounts.uss },
+          { key: 'GEOTAB' as const, label: 'Geotab', color: '#3b82f6', count: gpsCounts.geotab },
+        ].map(opt => {
+          const active = gpsFilter === opt.key
+          if (opt.key !== null && opt.count === 0) return null
+          return (
+            <button
+              key={opt.label}
+              onClick={() => setGpsFilter(opt.key)}
+              style={{
+                padding: '6px 12px',
+                borderRadius: '999px',
+                fontSize: '12px',
+                fontWeight: 600,
+                border: `1px solid ${active ? opt.color : 'var(--border-primary)'}`,
+                background: active ? opt.color : 'transparent',
+                color: active ? '#fff' : 'var(--text-secondary)',
+                cursor: 'pointer',
+                whiteSpace: 'nowrap',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '6px'
+              }}
+            >
+              {!active && opt.key !== null && (
+                <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: opt.color, display: 'inline-block' }} />
+              )}
+              {opt.label}
+              <span style={{ opacity: 0.85, fontWeight: 500 }}>({opt.count})</span>
+            </button>
+          )
+        })}
       </div>
 
       {/* DataTable */}

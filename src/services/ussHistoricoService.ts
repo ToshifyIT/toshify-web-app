@@ -10,6 +10,8 @@ function normalizarPatente(p: string): string {
   return p.replace(/[\s\-]/g, '').toUpperCase();
 }
 
+export type GpsOrigen = 'USS' | 'GEOTAB';
+
 export interface USSHistoricoRegistro {
   id: number;
   patente: string;
@@ -19,6 +21,7 @@ export interface USSHistoricoRegistro {
   fecha_hora_inicio: string | null;
   fecha_hora_final: string | null;
   kilometraje: string | null;
+  gps_origen: GpsOrigen;
 }
 
 export interface USSHistoricoQueryOptions {
@@ -29,30 +32,54 @@ export interface USSHistoricoQueryOptions {
   sedeId?: string | null;
 }
 
+function buildHistoricoQuery(
+  table: 'uss_historico' | 'geotab_historico',
+  startDate: string,
+  endStr: string,
+  sedePatentes: string[] | null,
+  options?: USSHistoricoQueryOptions
+) {
+  let query = supabase
+    .from(table)
+    .select('id, patente, conductor, ibutton, observaciones, fecha_hora_inicio, fecha_hora_final, kilometraje', { count: 'exact' })
+    .gte('fecha_hora_inicio', `${startDate}T00:00:00`)
+    .lt('fecha_hora_inicio', `${endStr}T00:00:00`);
+
+  if (sedePatentes !== null && sedePatentes.length > 0) {
+    query = query.in('patente', sedePatentes);
+  }
+
+  if (options?.patente) {
+    const term = options.patente.trim();
+    query = query.or(
+      `patente.ilike.%${term}%,conductor.ilike.%${term}%,ibutton.ilike.%${term}%`
+    );
+  }
+
+  if (options?.conductor) {
+    query = query.ilike('conductor', `%${options.conductor}%`);
+  }
+
+  return query;
+}
+
 export const ussHistoricoService = {
   /**
-   * Obtiene registros crudos de uss_historico en un rango de fechas
+   * Obtiene registros crudos combinando uss_historico + geotab_historico,
+   * taggeando el origen (gps_origen) de cada fila.
    */
   async getRegistros(
     startDate: string,
     endDate: string,
     options?: USSHistoricoQueryOptions
   ): Promise<{ data: USSHistoricoRegistro[]; count: number }> {
-    // Las fechas en uss_historico ya vienen en hora Argentina (sin offset)
+    // Las fechas en estas tablas ya vienen en hora Argentina (sin offset)
     const endDatePlusOne = new Date(endDate + 'T00:00:00');
     endDatePlusOne.setDate(endDatePlusOne.getDate() + 1);
     const endStr = endDatePlusOne.toISOString().slice(0, 10);
 
-    let query = supabase
-      .from('uss_historico')
-      .select('*', { count: 'exact' })
-      .gte('fecha_hora_inicio', `${startDate}T00:00:00`)
-      .lt('fecha_hora_inicio', `${endStr}T00:00:00`)
-      .order('fecha_hora_inicio', { ascending: false });
-
-    // uss_historico no tiene sede_id: filtrar por patentes de vehículos de la sede.
-    // Las patentes en uss_historico están normalizadas (sin guiones/espacios),
-    // así que normalizamos las de vehiculos antes de comparar.
+    // Resolver patentes de la sede una sola vez
+    let sedePatentes: string[] | null = null;
     if (options?.sedeId) {
       const { data: vehiculos } = await supabase
         .from('vehiculos')
@@ -61,41 +88,41 @@ export const ussHistoricoService = {
         .is('deleted_at', null);
 
       if (vehiculos && vehiculos.length > 0) {
-        const patentes = vehiculos.map((v: { patente: string }) => normalizarPatente(v.patente));
-        query = query.in('patente', patentes);
+        sedePatentes = vehiculos.map((v: { patente: string }) => normalizarPatente(v.patente));
       } else {
         return { data: [], count: 0 };
       }
     }
 
-    if (options?.patente) {
-      const term = options.patente.trim();
-      query = query.or(
-        `patente.ilike.%${term}%,conductor.ilike.%${term}%,ibutton.ilike.%${term}%`
-      );
-    }
+    // Consultar ambas tablas en paralelo
+    const [ussRes, geotabRes] = await Promise.all([
+      buildHistoricoQuery('uss_historico', startDate, endStr, sedePatentes, options),
+      buildHistoricoQuery('geotab_historico', startDate, endStr, sedePatentes, options),
+    ]);
 
-    if (options?.conductor) {
-      query = query.ilike('conductor', `%${options.conductor}%`);
-    }
+    if (ussRes.error) throw new Error(`Error obteniendo uss_historico: ${ussRes.error.message}`);
+    if (geotabRes.error) throw new Error(`Error obteniendo geotab_historico: ${geotabRes.error.message}`);
 
+    // Mergear y taggear origen
+    const ussRows: USSHistoricoRegistro[] = (ussRes.data || []).map((r: any) => ({ ...r, gps_origen: 'USS' as GpsOrigen }));
+    const geotabRows: USSHistoricoRegistro[] = (geotabRes.data || []).map((r: any) => ({ ...r, gps_origen: 'GEOTAB' as GpsOrigen }));
+
+    const combined = [...ussRows, ...geotabRows].sort((a, b) => {
+      const av = a.fecha_hora_inicio || '';
+      const bv = b.fecha_hora_inicio || '';
+      return bv.localeCompare(av);
+    });
+
+    const totalCount = (ussRes.count || 0) + (geotabRes.count || 0);
+
+    // Paginación en memoria
+    let paginated = combined;
     if (options?.offset !== undefined && options?.limit !== undefined) {
-      query = query.range(options.offset, options.offset + options.limit - 1);
+      paginated = combined.slice(options.offset, options.offset + options.limit);
     } else if (options?.limit) {
-      query = query.limit(options.limit);
+      paginated = combined.slice(0, options.limit);
     }
 
-    const { data, error, count } = await query;
-
-    if (error) {
-      throw new Error(`Error obteniendo uss_historico: ${error.message}`);
-    }
-
-    return {
-      data: (data || []) as USSHistoricoRegistro[],
-      count: count || 0,
-    };
+    return { data: paginated, count: totalCount };
   },
-
-
 };

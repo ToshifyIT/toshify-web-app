@@ -59,6 +59,7 @@ export interface BitacoraRegistroTransformado {
   nafta_cargada: boolean
   tipo_turno?: string | null // turno, a_cargo - viene de asignaciones
   turno_indicador?: string | null // D, N - indicador diurno/nocturno
+  gps_origen?: 'USS' | 'GEOTAB' // proveedor GPS de origen
 }
 
 // Tipo para fila de wialon_bitacora
@@ -177,57 +178,64 @@ export const wialonBitacoraService = {
       return { data: cached, count: cached.length }
     }
 
-    // Query a wialon_bitacora (tabla con turnos ya procesados)
-    let query = supabase
-      .from('wialon_bitacora')
-      .select('*', { count: 'exact' })
-      .gte('fecha_turno', startDate)
-      .lte('fecha_turno', endDate)
-      .order('fecha_turno', { ascending: false })
-      .order('hora_inicio', { ascending: false })
-
-    // wialon_bitacora no tiene sede_id: filtrar por patentes normalizadas de la sede
+    // Resolver patentes de sede una sola vez (compartido por ambas queries)
+    let patentesSede: string[] | null = null
     if (options?.sedeId) {
-      const patentes = await getPatentesPorSede(options.sedeId)
-      if (patentes) {
-        query = query.in('patente_normalizada', patentes)
-      } else {
+      patentesSede = await getPatentesPorSede(options.sedeId)
+      if (!patentesSede) {
         return { data: [], count: 0 }
       }
     }
 
-    // Aplicar filtros en la query
-    if (options?.patente) {
-      // Buscar en patente, patente_normalizada, conductor e ibutton con OR
-      const term = options.patente.replace(/[\s\-.]/g, '').toUpperCase()
-      query = query.or(
-        `patente.ilike.%${options.patente}%,patente_normalizada.ilike.%${term}%,conductor_wialon.ilike.%${options.patente}%,ibutton.ilike.%${options.patente}%`
-      )
+    // Builder de query reutilizable para wialon_bitacora y geotab_bitacora
+    const buildQuery = (tabla: 'wialon_bitacora' | 'geotab_bitacora') => {
+      let q = supabase
+        .from(tabla)
+        .select('*', { count: 'exact' })
+        .gte('fecha_turno', startDate)
+        .lte('fecha_turno', endDate)
+        .order('fecha_turno', { ascending: false })
+        .order('hora_inicio', { ascending: false })
+
+      if (patentesSede) {
+        q = q.in('patente_normalizada', patentesSede)
+      }
+
+      if (options?.patente) {
+        const term = options.patente.replace(/[\s\-.]/g, '').toUpperCase()
+        q = q.or(
+          `patente.ilike.%${options.patente}%,patente_normalizada.ilike.%${term}%,conductor_wialon.ilike.%${options.patente}%,ibutton.ilike.%${options.patente}%`
+        )
+      }
+      if (options?.conductor) {
+        q = q.ilike('conductor_wialon', `%${options.conductor}%`)
+      }
+      if (options?.estado) {
+        q = q.eq('estado', options.estado)
+      }
+      if (options?.offset !== undefined && options?.limit !== undefined) {
+        q = q.range(options.offset, options.offset + options.limit - 1)
+      } else if (options?.limit) {
+        q = q.limit(options.limit)
+      }
+      return q
     }
 
-    if (options?.conductor) {
-      query = query.ilike('conductor_wialon', `%${options.conductor}%`)
+    // Ejecutar ambas queries en paralelo: USS (wialon_bitacora) + GEOTAB (geotab_bitacora)
+    const [wialonRes, geotabRes] = await Promise.all([
+      buildQuery('wialon_bitacora'),
+      buildQuery('geotab_bitacora'),
+    ])
+
+    if (wialonRes.error) {
+      throw new Error(`Error obteniendo bitácora (USS): ${wialonRes.error.message}`)
+    }
+    // geotab_bitacora puede fallar si la tabla aún no está propagada en algún ambiente; no romper la pantalla
+    if (geotabRes.error) {
+      console.warn('[wialonBitacoraService] geotab_bitacora query falló:', geotabRes.error.message)
     }
 
-    if (options?.estado) {
-      query = query.eq('estado', options.estado)
-    }
-
-    // Aplicar paginación
-    if (options?.offset !== undefined && options?.limit !== undefined) {
-      query = query.range(options.offset, options.offset + options.limit - 1)
-    } else if (options?.limit) {
-      query = query.limit(options.limit)
-    }
-
-    const { data, error } = await query
-
-    if (error) {
-      throw new Error(`Error obteniendo bitácora: ${error.message}`)
-    }
-
-    // Transformar a registros
-    const registros: BitacoraRegistroTransformado[] = ((data || []) as WialonBitacoraRow[]).map((row) => {
+    const mapRow = (row: WialonBitacoraRow, origen: 'USS' | 'GEOTAB'): BitacoraRegistroTransformado => {
       // Map DB columns to display fields
       let tipoTurno: string | null = null
       let turnoIndicador: string | null = null
@@ -260,7 +268,21 @@ export const wialonBitacoraService = {
         nafta_cargada: row.nafta_cargada,
         tipo_turno: tipoTurno,
         turno_indicador: turnoIndicador,
+        gps_origen: origen,
       }
+    }
+
+    // Combinar filas de ambas fuentes
+    const registrosWialon = ((wialonRes.data || []) as WialonBitacoraRow[]).map(r => mapRow(r, 'USS'))
+    const registrosGeotab = ((geotabRes.data || []) as WialonBitacoraRow[]).map(r => mapRow(r, 'GEOTAB'))
+    const registros: BitacoraRegistroTransformado[] = [...registrosWialon, ...registrosGeotab]
+
+    // Ordenar combinado por fecha_turno desc, hora_inicio desc
+    registros.sort((a, b) => {
+      if (a.fecha_turno !== b.fecha_turno) return a.fecha_turno < b.fecha_turno ? 1 : -1
+      const ha = a.hora_inicio || ''
+      const hb = b.hora_inicio || ''
+      return ha < hb ? 1 : ha > hb ? -1 : 0
     })
 
     // No consolidar: el sync ya entrega 1 fila por marcación.

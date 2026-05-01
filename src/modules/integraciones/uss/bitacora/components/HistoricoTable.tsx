@@ -71,6 +71,8 @@ export function HistoricoTable({
 
   // Filtros Excel
   const [conductorFilter, setConductorFilter] = useState<string[]>([]);
+  // Quick filter por proveedor GPS
+  const [gpsFilter, setGpsFilter] = useState<'USS' | 'GEOTAB' | null>(null);
 
   // Lista única: "CONDUCTOR | PATENTE" para filtro combinado
   const conductorPatenteUnicos = useMemo(() => {
@@ -83,10 +85,21 @@ export function HistoricoTable({
     return [...set].sort();
   }, [registros]);
 
-  const hasActiveFilters = conductorFilter.length > 0 || searchTerm.trim() !== '';
+  // Conteos por proveedor GPS (sobre el universo cargado, no afectado por otros filtros)
+  const gpsCounts = useMemo(() => {
+    let uss = 0, geotab = 0;
+    for (const r of registros) {
+      if ((r as any).gps_origen === 'GEOTAB') geotab++;
+      else uss++;
+    }
+    return { uss, geotab };
+  }, [registros]);
+
+  const hasActiveFilters = conductorFilter.length > 0 || gpsFilter !== null || searchTerm.trim() !== '';
 
   const clearAllFilters = () => {
     setConductorFilter([]);
+    setGpsFilter(null);
     onSearchChange('');
   };
 
@@ -101,12 +114,37 @@ export function HistoricoTable({
   const registrosFiltrados = useMemo(() => {
     return registros.filter(r => {
       if (conductorFilter.length > 0 && !conductorFilter.includes(getConductorPatenteKey(r))) return false;
+      if (gpsFilter !== null && (r as any).gps_origen !== gpsFilter) return false;
       return true;
     });
-  }, [registros, conductorFilter]);
+  }, [registros, conductorFilter, gpsFilter]);
 
   // Columnas
   const columns = useMemo<ColumnDef<USSHistoricoRegistro, unknown>[]>(() => [
+    {
+      id: 'gps_col',
+      header: 'GPS',
+      cell: ({ row }) => {
+        const origen = (row.original as any).gps_origen || 'USS'
+        const isGeotab = origen === 'GEOTAB'
+        return (
+          <span style={{
+            fontSize: '10px',
+            fontWeight: 600,
+            color: '#fff',
+            background: isGeotab ? '#3b82f6' : '#10b981',
+            padding: '2px 8px',
+            borderRadius: '3px',
+            whiteSpace: 'nowrap',
+            letterSpacing: '0.5px'
+          }}>
+            {origen}
+          </span>
+        )
+      },
+      enableSorting: false,
+      size: 70,
+    },
     {
       id: 'conductor_patente',
       accessorKey: 'conductor',
@@ -303,6 +341,47 @@ export function HistoricoTable({
         <span style={{ color: 'var(--text-secondary)', fontSize: '13px', whiteSpace: 'nowrap' }}>
           {totalCount.toLocaleString()} registros
         </span>
+      </div>
+
+      {/* Quick filters por proveedor GPS */}
+      <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', padding: '0 0 12px 0', alignItems: 'center' }}>
+        <span style={{ fontSize: '12px', color: 'var(--text-tertiary)', fontWeight: 500, textTransform: 'uppercase', letterSpacing: '0.5px', marginRight: '4px' }}>
+          GPS:
+        </span>
+        {[
+          { key: null as null | 'USS' | 'GEOTAB', label: 'Todos', color: 'var(--color-primary)', count: registros.length },
+          { key: 'USS' as const, label: 'USS', color: '#10b981', count: gpsCounts.uss },
+          { key: 'GEOTAB' as const, label: 'Geotab', color: '#3b82f6', count: gpsCounts.geotab },
+        ].map(opt => {
+          const active = gpsFilter === opt.key
+          if (opt.key !== null && opt.count === 0) return null
+          return (
+            <button
+              key={opt.label}
+              onClick={() => setGpsFilter(opt.key)}
+              style={{
+                padding: '6px 12px',
+                borderRadius: '999px',
+                fontSize: '12px',
+                fontWeight: 600,
+                border: `1px solid ${active ? opt.color : 'var(--border-primary)'}`,
+                background: active ? opt.color : 'transparent',
+                color: active ? '#fff' : 'var(--text-secondary)',
+                cursor: 'pointer',
+                whiteSpace: 'nowrap',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '6px'
+              }}
+            >
+              {!active && opt.key !== null && (
+                <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: opt.color, display: 'inline-block' }} />
+              )}
+              {opt.label}
+              <span style={{ opacity: 0.85, fontWeight: 500 }}>({opt.count})</span>
+            </button>
+          )
+        })}
       </div>
 
       {/* DataTable */}

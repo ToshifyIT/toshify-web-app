@@ -1980,16 +1980,19 @@ export function HomePage() {
               } />
 
               {/* Integraciones */}
-              <Route path="/integraciones/uss" element={
+              <Route path="/integraciones/gps" element={
                 <ProtectedRoute submenuName="ctrl-exceso-vel" action="view">
                   <LazyPage><USSPage /></LazyPage>
                 </ProtectedRoute>
               } />
-              <Route path="/integraciones/uss/bitacora" element={
+              <Route path="/integraciones/gps/bitacora" element={
                 <ProtectedRoute submenuName="bitacora-uss" action="view">
                   <LazyPage><BitacoraPage /></LazyPage>
                 </ProtectedRoute>
               } />
+              {/* Redirects para compatibilidad con URLs viejas */}
+              <Route path="/integraciones/uss" element={<Navigate to="/integraciones/gps" replace />} />
+              <Route path="/integraciones/uss/bitacora" element={<Navigate to="/integraciones/gps/bitacora" replace />} />
               <Route path="/integraciones/cabify" element={
                 <ProtectedRoute submenuName="cabify" action="view">
                   <LazyPage><CabifyPage /></LazyPage>
