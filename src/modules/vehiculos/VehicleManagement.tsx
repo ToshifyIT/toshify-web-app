@@ -224,7 +224,7 @@ export function VehicleManagement() {
         aplicarFiltroSede(supabase
           .from('vehiculos')
           .select(`
-            id, patente, marca, modelo, anio, color, kilometraje_actual, estado_id, created_at,
+            id, patente, marca, modelo, anio, color, kilometraje_actual, kilometraje_geotab, kilometraje_geotab_updated_at, estado_id, created_at,
             drive_folder_id, drive_folder_url, url_documentacion, gnc, telepase, titular,
             vehiculos_estados (id, codigo, descripcion)
           `)
@@ -1475,7 +1475,33 @@ export function VehicleManagement() {
             onOpenChange={setOpenFilterId}
           />
         ),
-        cell: ({ getValue }) => `${(getValue() as number).toLocaleString()} km`,
+        cell: ({ row, getValue }) => {
+          const kmManual = (getValue() as number) || 0
+          const kmGeotab = (row.original as any).kilometraje_geotab as number | null
+          const updatedAt = (row.original as any).kilometraje_geotab_updated_at as string | null
+          return (
+            <div style={{ display: 'flex', flexDirection: 'column', lineHeight: 1.3 }}>
+              <span style={{ fontSize: '13px', fontWeight: 500 }}>{kmManual.toLocaleString()} km</span>
+              {kmGeotab != null && (
+                <span
+                  title={updatedAt ? `Actualizado: ${new Date(updatedAt).toLocaleString('es-AR', { timeZone: 'America/Argentina/Buenos_Aires' })}` : 'Geotab'}
+                  style={{
+                    fontSize: '10px',
+                    color: '#3b82f6',
+                    fontWeight: 600,
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '4px',
+                    marginTop: '2px',
+                  }}
+                >
+                  <span style={{ background: '#3b82f6', color: '#fff', padding: '1px 5px', borderRadius: '3px', fontSize: '9px', letterSpacing: '0.5px' }}>GEOTAB</span>
+                  {kmGeotab.toLocaleString()} km
+                </span>
+              )}
+            </div>
+          )
+        },
         enableSorting: true,
       },
       {
