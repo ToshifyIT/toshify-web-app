@@ -518,6 +518,9 @@ export interface DataTableProps<T> {
   showPagination?: boolean;
   /** Callback ejecutado cuando la tabla está inicializada */
   onTableReady?: (table: Table<T>) => void;
+  /** Callback opcional para retornar className/style por fila (ej. para resaltar) */
+  getRowClassName?: (row: T) => string | undefined;
+  getRowStyle?: (row: T) => CSSProperties | undefined;
   /** Acción a mostrar en el header junto al buscador (ej: botón de crear) */
   headerAction?: ReactNode;
   /** IDs de columnas que siempre deben estar visibles (ej: ['acciones']) */
@@ -564,6 +567,8 @@ export function DataTable<T>({
   showSearch = true,
   showPagination = true,
   onTableReady,
+  getRowClassName,
+  getRowStyle,
   headerAction,
   alwaysVisibleColumns = ["acciones", "actions"],
   stickyFirstColumn = false,
@@ -1705,8 +1710,11 @@ export function DataTable<T>({
                     </td>
                   </tr>
                 ) : (
-                  table.getRowModel().rows.map((row) => (
-                    <tr key={row.id}>
+                  table.getRowModel().rows.map((row) => {
+                    const customRowClass = getRowClassName?.(row.original) || "";
+                    const customRowStyle = getRowStyle?.(row.original);
+                    return (
+                    <tr key={row.id} className={customRowClass} style={customRowStyle}>
                       {row.getVisibleCells().map((cell, cellIndex) => {
                         const isActionsColumn = alwaysVisibleColumns.includes(cell.column.id);
                         const wantsStickyLeft = cellIndex < stickyLeftCount;
@@ -1733,7 +1741,8 @@ export function DataTable<T>({
                         );
                       })}
                     </tr>
-                  ))
+                    );
+                  })
                 )}
               </tbody>
             </table>

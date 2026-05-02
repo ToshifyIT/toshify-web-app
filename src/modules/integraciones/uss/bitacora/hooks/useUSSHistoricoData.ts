@@ -50,6 +50,10 @@ export interface Marcacion {
   lavadoRealizado: boolean;
   naftaCargada: boolean;
   gpsOrigen: 'USS' | 'GEOTAB';
+  // Acumulado semanal del conductor (para alerta de limite km)
+  kmSemanaConductor?: number;
+  limiteSemanal?: number;
+  excedeLimite?: boolean;
 }
 
 export interface USSHistoricoDateRange {
@@ -156,7 +160,70 @@ export function useUSSHistoricoData(sedeId?: string | null) {
       setRegistros(paginatedResult.data);
       setTotalCount(paginatedResult.count);
       const marcacionesTransformadas = bitacoraResult.data.map(transformarMarcacion).filter(m => m.estado !== 'Sin Actividad');
-      
+
+      // ===== ALERTA LIMITE KM SEMANAL =====
+      // 1) Cargar limites configurables (parametros_sistema)
+      const { data: limiteParams } = await supabase
+        .from('parametros_sistema')
+        .select('clave, valor')
+        .in('clave', ['limite_km_semanal_turno', 'limite_km_semanal_a_cargo']);
+      let limiteTurno = 1800;
+      let limiteACargo = 3600;
+      for (const p of (limiteParams || []) as any[]) {
+        const v = parseFloat(p.valor);
+        if (!isNaN(v) && v > 0) {
+          if (p.clave === 'limite_km_semanal_turno') limiteTurno = v;
+          if (p.clave === 'limite_km_semanal_a_cargo') limiteACargo = v;
+        }
+      }
+
+      // 2) Calcular semana ISO actual (lunes 00:00 -> domingo 23:59 ART)
+      const hoy = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Argentina/Buenos_Aires' }));
+      const dow = hoy.getDay() === 0 ? 7 : hoy.getDay(); // domingo=7
+      const lunes = new Date(hoy); lunes.setDate(hoy.getDate() - (dow - 1)); lunes.setHours(0, 0, 0, 0);
+      const domingo = new Date(lunes); domingo.setDate(lunes.getDate() + 6); domingo.setHours(23, 59, 59, 999);
+      const fmtAr = (d: Date) => d.toLocaleDateString('en-CA', { timeZone: 'America/Argentina/Buenos_Aires' });
+
+      // 3) Traer SUMA de km semanales por conductor desde wialon_bitacora + geotab_bitacora
+      const semanaInicio = fmtAr(lunes);
+      const semanaFin = fmtAr(domingo);
+      const sumKmPorConductor = new Map<string, { km: number; modalidad: string }>(); // key = conductor_id || conductor_wialon
+      const fetchSemanaTabla = async (tabla: 'wialon_bitacora' | 'geotab_bitacora') => {
+        const { data } = await supabase
+          .from(tabla)
+          .select('conductor_id, conductor_wialon, kilometraje, vehiculo_modalidad')
+          .gte('fecha_turno', semanaInicio)
+          .lte('fecha_turno', semanaFin)
+          .neq('estado', 'Sin Actividad');
+        for (const r of (data || []) as any[]) {
+          const key = r.conductor_id || r.conductor_wialon || '';
+          if (!key) continue;
+          const prev = sumKmPorConductor.get(key) || { km: 0, modalidad: r.vehiculo_modalidad || 'turno' };
+          prev.km += Number(r.kilometraje) || 0;
+          // Si la modalidad varía, gana 'a_cargo' (limite mas alto)
+          if (r.vehiculo_modalidad === 'a_cargo') prev.modalidad = 'a_cargo';
+          sumKmPorConductor.set(key, prev);
+        }
+      };
+      await Promise.all([fetchSemanaTabla('wialon_bitacora'), fetchSemanaTabla('geotab_bitacora')]);
+
+      // 4) Aplicar a cada marcación
+      for (const m of marcacionesTransformadas) {
+        const key = m.conductorId || m.conductor || '';
+        const acc = sumKmPorConductor.get(key);
+        if (acc) {
+          const limite = acc.modalidad === 'a_cargo' ? limiteACargo : limiteTurno;
+          m.kmSemanaConductor = Math.round(acc.km * 100) / 100;
+          m.limiteSemanal = limite;
+          m.excedeLimite = acc.km > limite;
+        } else {
+          m.limiteSemanal = (m.vehiculoModalidad === 'a_cargo') ? limiteACargo : limiteTurno;
+          m.kmSemanaConductor = 0;
+          m.excedeLimite = false;
+        }
+      }
+      // ===== FIN ALERTA LIMITE KM =====
+
       // Lookup DNIs + horario asignado en batch
       const conductorIds = [...new Set(marcacionesTransformadas.map(m => m.conductorId).filter(Boolean))] as string[];
       if (conductorIds.length > 0) {

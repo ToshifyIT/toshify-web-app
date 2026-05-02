@@ -8,7 +8,7 @@ import { useMemo, useState, useRef, useEffect } from 'react';
 import { type ColumnDef } from '@tanstack/react-table';
 import { DataTable } from '../../../../../components/ui/DataTable/DataTable';
 import { ExcelColumnFilter, useExcelFilters } from '../../../../../components/ui/DataTable/ExcelColumnFilter';
-import { Search, ClipboardList, Download, ChevronDown, Fuel, Droplets, Sun, Moon, Clock, X } from 'lucide-react';
+import { Search, ClipboardList, Download, ChevronDown, Fuel, Droplets, Sun, Moon, Clock, X, AlertTriangle } from 'lucide-react';
 import type { Marcacion } from '../hooks/useUSSHistoricoData';
 import { normalizePatente } from '../../../../../utils/normalizeDocuments';
 import * as XLSX from 'xlsx';
@@ -119,6 +119,8 @@ export function MarcacionesTable({
   const [turnoFilter, setTurnoFilter] = useState<string[]>([]);
   // Quick filter por proveedor GPS
   const [gpsFilter, setGpsFilter] = useState<'USS' | 'GEOTAB' | null>(null);
+  // Quick filter "Solo conductores que exceden limite km semanal"
+  const [excedeFilter, setExcedeFilter] = useState<boolean>(false);
 
   // Conteos por proveedor GPS (sobre el universo cargado, no afectado por otros filtros)
   const gpsCounts = useMemo(() => {
@@ -129,6 +131,9 @@ export function MarcacionesTable({
     }
     return { uss, geotab };
   }, [marcaciones]);
+
+  // Conteo de filas que exceden el limite semanal
+  const excedeCount = useMemo(() => marcaciones.filter(m => m.excedeLimite).length, [marcaciones]);
 
   // Listas únicas
   const conductorPatenteUnicos = useMemo(() => {
@@ -161,7 +166,7 @@ export function MarcacionesTable({
     [...new Set(marcaciones.map(m => m.vehiculoModalidad || 'Sin asignar'))].filter(Boolean).sort()
   , [marcaciones]);
 
-  const hasActiveFilters = conductorFilter.length > 0 || fechaFilter.length > 0 || estadoFilter.length > 0 || horarioFilter.length > 0 || turnoFilter.length > 0 || gpsFilter !== null || searchTerm.trim() !== '';
+  const hasActiveFilters = conductorFilter.length > 0 || fechaFilter.length > 0 || estadoFilter.length > 0 || horarioFilter.length > 0 || turnoFilter.length > 0 || gpsFilter !== null || excedeFilter || searchTerm.trim() !== '';
 
   const clearAllFilters = () => {
     setConductorFilter([]);
@@ -170,6 +175,7 @@ export function MarcacionesTable({
     setHorarioFilter([]);
     setTurnoFilter([]);
     setGpsFilter(null);
+    setExcedeFilter(false);
     onSearchChange('');
   };
 
@@ -195,6 +201,9 @@ export function MarcacionesTable({
     if (gpsFilter !== null) {
       filtered = filtered.filter(m => (m.gpsOrigen || 'USS') === gpsFilter);
     }
+    if (excedeFilter) {
+      filtered = filtered.filter(m => m.excedeLimite === true);
+    }
 
     if (searchTerm.trim()) {
       const term = searchTerm.toLowerCase();
@@ -206,7 +215,7 @@ export function MarcacionesTable({
     }
 
     return filtered;
-  }, [marcaciones, conductorFilter, fechaFilter, estadoFilter, horarioFilter, turnoFilter, gpsFilter, searchTerm]);
+  }, [marcaciones, conductorFilter, fechaFilter, estadoFilter, horarioFilter, turnoFilter, gpsFilter, excedeFilter, searchTerm]);
 
   // Columnas
   const columns = useMemo<ColumnDef<Marcacion, unknown>[]>(() => [
@@ -254,15 +263,30 @@ export function MarcacionesTable({
       ),
       cell: ({ row }) => {
         const m = row.original;
+        const tooltipExcede = m.excedeLimite
+          ? `EXCEDE LIMITE SEMANAL — Acumulado: ${(m.kmSemanaConductor || 0).toLocaleString('es-AR')} km / Limite: ${(m.limiteSemanal || 0).toLocaleString('es-AR')} km (${m.vehiculoModalidad === 'a_cargo' ? 'a cargo' : 'turno'})`
+          : '';
         return (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '1px', lineHeight: 1.3 }}>
-            <span style={{ fontWeight: 600, fontSize: '13px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{m.conductor}</span>
+            <span style={{ fontWeight: 600, fontSize: '13px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+              {m.excedeLimite && (
+                <span title={tooltipExcede} style={{ color: '#dc2626', display: 'inline-flex' }}>
+                  <AlertTriangle size={13} />
+                </span>
+              )}
+              {m.conductor}
+            </span>
             <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
               {m.conductorDni && (
                 <span style={{ color: 'var(--text-secondary)', fontSize: '10px' }}>{m.conductorDni}</span>
               )}
               {m.ibutton && (
                 <span style={{ color: 'var(--text-tertiary)', fontSize: '10px', whiteSpace: 'nowrap' }}>#{m.ibutton}</span>
+              )}
+              {m.excedeLimite && (
+                <span title={tooltipExcede} style={{ color: '#dc2626', fontSize: '10px', fontWeight: 600 }}>
+                  {(m.kmSemanaConductor || 0).toLocaleString('es-AR')} / {(m.limiteSemanal || 0).toLocaleString('es-AR')} km sem
+                </span>
               )}
             </div>
           </div>
@@ -633,6 +657,35 @@ export function MarcacionesTable({
             </button>
           )
         })}
+
+        {/* Separador y chip de exceso de km semanal */}
+        {excedeCount > 0 && (
+          <>
+            <span style={{ width: '1px', height: '20px', background: 'var(--border-primary)', margin: '0 4px' }} />
+            <button
+              onClick={() => setExcedeFilter(!excedeFilter)}
+              title="Filtrar conductores que superaron el limite de km semanal (turno: 1.800 / a cargo: 3.600)"
+              style={{
+                padding: '6px 12px',
+                borderRadius: '999px',
+                fontSize: '12px',
+                fontWeight: 600,
+                border: `1px solid ${excedeFilter ? '#dc2626' : '#dc2626'}`,
+                background: excedeFilter ? '#dc2626' : 'rgba(220, 38, 38, 0.08)',
+                color: excedeFilter ? '#fff' : '#dc2626',
+                cursor: 'pointer',
+                whiteSpace: 'nowrap',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '6px',
+              }}
+            >
+              <AlertTriangle size={13} />
+              Exceden km semanal
+              <span style={{ opacity: 0.9, fontWeight: 500 }}>({excedeCount})</span>
+            </button>
+          </>
+        )}
       </div>
 
       {/* DataTable */}
@@ -647,6 +700,7 @@ export function MarcacionesTable({
         emptyDescription="No hay marcaciones para mostrar en este rango de fechas"
         pageSize={50}
         pageSizeOptions={[25, 50, 100]}
+        getRowStyle={(m) => m.excedeLimite ? { background: 'rgba(220, 38, 38, 0.06)', boxShadow: 'inset 3px 0 0 #dc2626' } : undefined}
       />
     </div>
   );
