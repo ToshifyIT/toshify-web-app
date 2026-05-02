@@ -24,6 +24,7 @@ interface MarcacionesTableProps {
     lavado_realizado?: boolean;
     nafta_cargada?: boolean;
   }) => Promise<void>;
+  onActivarSemanaActual?: () => void;
 }
 
 function formatFecha(fecha: string): string {
@@ -108,6 +109,7 @@ export function MarcacionesTable({
   onSearchChange,
   headerControls,
   onUpdateChecklist,
+  onActivarSemanaActual,
 }: MarcacionesTableProps) {
   const { openFilterId, setOpenFilterId } = useExcelFilters();
 
@@ -121,6 +123,8 @@ export function MarcacionesTable({
   const [gpsFilter, setGpsFilter] = useState<'USS' | 'GEOTAB' | null>(null);
   // Quick filter "Solo conductores que exceden limite km semanal"
   const [excedeFilter, setExcedeFilter] = useState<boolean>(false);
+  // Modal de detalle al hacer click en km (cuando filtro exceso esta activo)
+  const [detalleConductor, setDetalleConductor] = useState<Marcacion | null>(null);
 
   // Conteos por proveedor GPS (sobre el universo cargado, no afectado por otros filtros)
   const gpsCounts = useMemo(() => {
@@ -132,8 +136,17 @@ export function MarcacionesTable({
     return { uss, geotab };
   }, [marcaciones]);
 
-  // Conteo de filas que exceden el limite semanal
-  const excedeCount = useMemo(() => marcaciones.filter(m => m.excedeLimite).length, [marcaciones]);
+  // Conteo de CONDUCTORES UNICOS que exceden el limite semanal (no de marcaciones)
+  const excedeCount = useMemo(() => {
+    const set = new Set<string>();
+    for (const m of marcaciones) {
+      if (m.excedeLimite) {
+        const key = m.conductorId || m.conductor || '';
+        if (key) set.add(key);
+      }
+    }
+    return set.size;
+  }, [marcaciones]);
 
   // Listas únicas
   const conductorPatenteUnicos = useMemo(() => {
@@ -202,7 +215,48 @@ export function MarcacionesTable({
       filtered = filtered.filter(m => (m.gpsOrigen || 'USS') === gpsFilter);
     }
     if (excedeFilter) {
+      // Filtrar solo los que exceden
       filtered = filtered.filter(m => m.excedeLimite === true);
+      // Agrupar por conductor y construir 1 fila resumen semanal por cada uno
+      const grupos = new Map<string, typeof filtered>();
+      for (const m of filtered) {
+        const key = m.conductorId || m.conductor || '';
+        if (!key) continue;
+        if (!grupos.has(key)) grupos.set(key, []);
+        grupos.get(key)!.push(m);
+      }
+      const resumen: typeof filtered = [];
+      for (const [, lista] of grupos) {
+        const ordenadas = [...lista].sort((a, b) => {
+          if (a.fecha !== b.fecha) return a.fecha < b.fecha ? -1 : 1;
+          return (a.entrada || '').localeCompare(b.entrada || '');
+        });
+        const primera = ordenadas[0];
+        const ultima = ordenadas[ordenadas.length - 1];
+        const duracionTotal = ordenadas.reduce((s, m) => s + (m.duracionMinutos || 0), 0);
+        const kmTotalSemana = ordenadas.reduce((s, m) => s + (m.kmTotal || 0), 0);
+        const detalle = ordenadas.map(m => ({
+          fecha: m.fecha,
+          entrada: m.entrada,
+          salida: m.salida,
+          kmTotal: m.kmTotal,
+          duracionMinutos: m.duracionMinutos,
+          patente: m.patente,
+          estado: m.estado,
+          gpsOrigen: m.gpsOrigen,
+        }));
+        // Crear fila resumen basada en la última marcación pero con valores agregados
+        resumen.push({
+          ...ultima,
+          duracionSemanaMinutos: duracionTotal,
+          entradaSemana: { fecha: primera.fecha, hora: primera.entrada, periodoInicio: primera.periodoInicio },
+          salidaSemana: { fecha: ultima.fecha, hora: ultima.salida, periodoFin: ultima.periodoFin },
+          marcacionesDetalle: detalle,
+          // sobreescribir kmTotal con el semanal para que la columna kmTotal sea coherente
+          kmTotal: Math.round(kmTotalSemana * 100) / 100,
+        });
+      }
+      filtered = resumen;
     }
 
     if (searchTerm.trim()) {
@@ -300,7 +354,11 @@ export function MarcacionesTable({
       header: 'Entrada',
       cell: ({ row }) => {
         const m = row.original;
-        const texto = resolverFechaHora(m.periodoInicio, m.fecha, m.entrada, m.horario);
+        // En modo exceso, usar la entrada de la SEMANA (primer trip de la semana del conductor)
+        const fechaUsar = excedeFilter && m.entradaSemana ? m.entradaSemana.fecha : m.fecha;
+        const horaUsar = excedeFilter && m.entradaSemana ? m.entradaSemana.hora : m.entrada;
+        const periodoUsar = excedeFilter && m.entradaSemana ? m.entradaSemana.periodoInicio : m.periodoInicio;
+        const texto = resolverFechaHora(periodoUsar, fechaUsar, horaUsar, m.horario);
         if (texto === '-') return <span style={{ fontSize: '12px', color: 'var(--text-tertiary)' }}>-</span>;
         const [fechaPart, horaPart] = texto.split(' ');
         return (
@@ -323,8 +381,12 @@ export function MarcacionesTable({
       header: 'Salida',
       cell: ({ row }) => {
         const m = row.original;
-        if (m.estado === 'En Curso') {
-          const texto = resolverFechaHora(m.periodoFin, m.fecha, m.salida, m.horario);
+        // En modo exceso, usar la salida de la SEMANA (último trip de la semana del conductor)
+        const fechaUsar = excedeFilter && m.salidaSemana ? m.salidaSemana.fecha : m.fecha;
+        const horaUsar = excedeFilter && m.salidaSemana ? m.salidaSemana.hora : m.salida;
+        const periodoUsar = excedeFilter && m.salidaSemana ? m.salidaSemana.periodoFin : m.periodoFin;
+        if (m.estado === 'En Curso' && !excedeFilter) {
+          const texto = resolverFechaHora(periodoUsar, fechaUsar, horaUsar, m.horario);
           if (texto !== '-') {
             const [fechaPart, horaPart] = texto.split(' ');
             return (
@@ -336,7 +398,7 @@ export function MarcacionesTable({
           }
           return <span style={{ fontSize: '12px', fontWeight: 600, fontStyle: 'italic', color: '#2563eb' }}>En curso</span>;
         }
-        const texto = resolverFechaHora(m.periodoFin, m.fecha, m.salida, m.horario);
+        const texto = resolverFechaHora(periodoUsar, fechaUsar, horaUsar, m.horario);
         if (texto === '-') return <span style={{ fontSize: '12px', color: 'var(--text-tertiary)' }}>-</span>;
         const [fechaPart, horaPart] = texto.split(' ');
         return (
@@ -356,21 +418,63 @@ export function MarcacionesTable({
     {
       accessorKey: 'duracionMinutos',
       header: 'Duración',
-      cell: ({ row }) => (
-        <span style={{ color: 'var(--text-secondary)', fontSize: '12px' }}>
-          {formatDuracion(row.original.duracionMinutos)}
-        </span>
-      ),
+      cell: ({ row }) => {
+        const m = row.original;
+        // En modo exceso, mostrar la duracion ACUMULADA semanal
+        if (excedeFilter && m.duracionSemanaMinutos != null) {
+          return (
+            <div style={{ display: 'flex', flexDirection: 'column', lineHeight: 1.2 }}>
+              <span style={{ fontWeight: 700, fontSize: '12px', color: 'var(--text-primary)' }}>
+                {formatDuracion(m.duracionSemanaMinutos)}
+              </span>
+              <span style={{ fontSize: '10px', color: 'var(--text-tertiary)', fontWeight: 500 }}>semana</span>
+            </div>
+          );
+        }
+        return (
+          <span style={{ color: 'var(--text-secondary)', fontSize: '12px' }}>
+            {formatDuracion(m.duracionMinutos)}
+          </span>
+        );
+      },
       enableSorting: true,
     },
     {
       accessorKey: 'kmTotal',
       header: 'Km',
-      cell: ({ row }) => (
-        <span style={{ fontWeight: 600 }}>
-          {row.original.kmTotal.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-        </span>
-      ),
+      cell: ({ row }) => {
+        const m = row.original;
+        // Si el filtro de exceso esta activo, mostrar el TOTAL SEMANAL clickable -> abre modal con detalle
+        if (excedeFilter && m.kmSemanaConductor != null) {
+          return (
+            <button
+              type="button"
+              onClick={() => setDetalleConductor(m)}
+              title="Ver detalle de marcaciones de la semana"
+              style={{
+                display: 'flex', flexDirection: 'column', lineHeight: 1.2,
+                background: 'transparent', border: '1px solid transparent',
+                borderRadius: '6px', padding: '4px 8px', cursor: 'pointer',
+                textAlign: 'left',
+              }}
+              onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(220, 38, 38, 0.06)'; e.currentTarget.style.border = '1px solid rgba(220, 38, 38, 0.2)' }}
+              onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.border = '1px solid transparent' }}
+            >
+              <span style={{ fontWeight: 700, fontSize: '13px', color: m.excedeLimite ? '#dc2626' : 'var(--text-primary)' }}>
+                {m.kmSemanaConductor.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              </span>
+              <span style={{ fontSize: '10px', color: 'var(--text-tertiary)', fontWeight: 500 }}>
+                semana · ver detalle
+              </span>
+            </button>
+          );
+        }
+        return (
+          <span style={{ fontWeight: 600 }}>
+            {m.kmTotal.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+          </span>
+        );
+      },
       enableSorting: true,
     },
     {
@@ -490,7 +594,7 @@ export function MarcacionesTable({
       enableSorting: false,
     },
   ], [conductorPatenteUnicos, conductorFilter, fechasUnicas, fechaFilter,
-      estadosUnicos, estadoFilter, horariosUnicos, horarioFilter, turnosUnicos, turnoFilter, openFilterId, onUpdateChecklist]);
+      estadosUnicos, estadoFilter, horariosUnicos, horarioFilter, turnosUnicos, turnoFilter, openFilterId, onUpdateChecklist, excedeFilter]);
 
   // Exportar
   const [showExportMenu, setShowExportMenu] = useState(false);
@@ -658,26 +762,35 @@ export function MarcacionesTable({
           )
         })}
 
-        {/* Separador y chip de exceso de km semanal */}
-        {excedeCount > 0 && (
+        {/* Separador y chip de exceso de km semanal (siempre visible si hay marcaciones) */}
+        {marcaciones.length > 0 && (
           <>
             <span style={{ width: '1px', height: '20px', background: 'var(--border-primary)', margin: '0 4px' }} />
             <button
-              onClick={() => setExcedeFilter(!excedeFilter)}
-              title="Filtrar conductores que superaron el limite de km semanal (turno: 1.800 / a cargo: 3.600)"
+              onClick={() => {
+                const next = !excedeFilter
+                setExcedeFilter(next)
+                // Al activar el filtro, sincronizar el rango de fecha a "Esta semana"
+                if (next && onActivarSemanaActual) onActivarSemanaActual()
+              }}
+              disabled={excedeCount === 0}
+              title={excedeCount > 0
+                ? "Filtrar conductores que superaron el limite de km semanal (turno: 1.800 / a cargo: 3.600). Cambia el rango de fecha a Esta semana."
+                : "Sin conductores excedidos esta semana (lunes 00:00 a domingo 23:59 ART)"}
               style={{
                 padding: '6px 12px',
                 borderRadius: '999px',
                 fontSize: '12px',
                 fontWeight: 600,
-                border: `1px solid ${excedeFilter ? '#dc2626' : '#dc2626'}`,
-                background: excedeFilter ? '#dc2626' : 'rgba(220, 38, 38, 0.08)',
-                color: excedeFilter ? '#fff' : '#dc2626',
-                cursor: 'pointer',
+                border: `1px solid ${excedeCount > 0 ? '#dc2626' : 'var(--border-primary)'}`,
+                background: excedeFilter ? '#dc2626' : (excedeCount > 0 ? 'rgba(220, 38, 38, 0.08)' : 'transparent'),
+                color: excedeFilter ? '#fff' : (excedeCount > 0 ? '#dc2626' : 'var(--text-tertiary)'),
+                cursor: excedeCount === 0 ? 'default' : 'pointer',
                 whiteSpace: 'nowrap',
                 display: 'inline-flex',
                 alignItems: 'center',
                 gap: '6px',
+                opacity: excedeCount === 0 ? 0.6 : 1,
               }}
             >
               <AlertTriangle size={13} />
@@ -702,6 +815,87 @@ export function MarcacionesTable({
         pageSizeOptions={[25, 50, 100]}
         getRowStyle={(m) => m.excedeLimite ? { background: 'rgba(220, 38, 38, 0.06)', boxShadow: 'inset 3px 0 0 #dc2626' } : undefined}
       />
+
+      {/* Panel lateral con detalle de marcaciones del conductor (modo exceso) */}
+      {detalleConductor && (
+        <>
+          <div
+            onClick={() => setDetalleConductor(null)}
+            style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.4)', zIndex: 999 }}
+          />
+          <div style={{
+            position: 'fixed', top: 0, right: 0, bottom: 0,
+            width: '560px', maxWidth: '95vw',
+            background: 'var(--bg-primary, #fff)',
+            zIndex: 1000,
+            boxShadow: '-4px 0 20px rgba(0,0,0,0.15)',
+            display: 'flex', flexDirection: 'column', overflow: 'hidden',
+          }}>
+            <div style={{
+              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+              padding: '16px 20px',
+              borderBottom: '1px solid var(--border-primary, #e5e7eb)',
+              background: 'var(--bg-secondary, #f9fafb)',
+            }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                <span style={{ fontSize: '14px', fontWeight: 700, color: 'var(--text-primary)', display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+                  <AlertTriangle size={14} color="#dc2626" />
+                  {detalleConductor.conductor}
+                </span>
+                <span style={{ fontSize: '12px', color: '#dc2626', fontWeight: 600 }}>
+                  {(detalleConductor.kmSemanaConductor || 0).toLocaleString('es-AR')} / {(detalleConductor.limiteSemanal || 0).toLocaleString('es-AR')} km · {detalleConductor.vehiculoModalidad === 'a_cargo' ? 'a cargo' : 'turno'}
+                </span>
+                <span style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>
+                  Duración acumulada: {formatDuracion(detalleConductor.duracionSemanaMinutos || 0)} · {detalleConductor.marcacionesDetalle?.length || 0} marcaciones
+                </span>
+              </div>
+              <button
+                onClick={() => setDetalleConductor(null)}
+                style={{
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  width: '32px', height: '32px',
+                  border: '1px solid var(--border-primary, #e5e7eb)',
+                  borderRadius: '8px', background: 'var(--bg-primary, #fff)',
+                  color: 'var(--text-secondary)', cursor: 'pointer',
+                }}
+                title="Cerrar"
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            <div style={{ flex: 1, overflowY: 'auto', padding: '12px 20px' }}>
+              {(detalleConductor.marcacionesDetalle || []).map((d, idx) => (
+                <div key={idx} style={{
+                  display: 'grid',
+                  gridTemplateColumns: '70px 1fr 1fr 80px 80px',
+                  gap: '8px',
+                  padding: '10px 0',
+                  borderBottom: '1px solid var(--border-primary, #e5e7eb)',
+                  alignItems: 'center',
+                  fontSize: '12px',
+                }}>
+                  <span style={{
+                    fontSize: '9px', fontWeight: 600, color: '#fff',
+                    background: d.gpsOrigen === 'GEOTAB' ? '#3b82f6' : '#10b981',
+                    padding: '2px 6px', borderRadius: '3px', textAlign: 'center',
+                  }}>{d.gpsOrigen}</span>
+                  <div>
+                    <div style={{ fontWeight: 600 }}>{formatFecha(d.fecha)}</div>
+                    <div style={{ fontSize: '10px', color: 'var(--text-tertiary)', fontFamily: 'monospace' }}>{d.patente}</div>
+                  </div>
+                  <div>
+                    <div style={{ color: '#16a34a', fontFamily: 'monospace' }}>{d.entrada}</div>
+                    <div style={{ color: '#dc2626', fontFamily: 'monospace' }}>{d.salida}</div>
+                  </div>
+                  <span style={{ color: 'var(--text-secondary)', textAlign: 'right' }}>{formatDuracion(d.duracionMinutos)}</span>
+                  <span style={{ fontWeight: 700, textAlign: 'right' }}>{d.kmTotal.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} km</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </>
+      )}
     </div>
   );
 }

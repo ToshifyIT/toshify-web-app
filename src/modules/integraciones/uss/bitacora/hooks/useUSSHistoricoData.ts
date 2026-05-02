@@ -54,6 +54,12 @@ export interface Marcacion {
   kmSemanaConductor?: number;
   limiteSemanal?: number;
   excedeLimite?: boolean;
+  // Resumen semanal: cuando se filtra por exceso, esta marcacion se transforma en 1 fila
+  // resumen con entrada/salida/duracion/km agregados de toda la semana del conductor.
+  duracionSemanaMinutos?: number;
+  entradaSemana?: { fecha: string; hora: string; periodoInicio: string | null }; // primer trip de la semana
+  salidaSemana?: { fecha: string; hora: string; periodoFin: string | null }; // ultimo trip de la semana
+  marcacionesDetalle?: Array<{ fecha: string; entrada: string; salida: string; kmTotal: number; duracionMinutos: number | null; patente: string; estado: string; gpsOrigen: 'USS' | 'GEOTAB' }>;
 }
 
 export interface USSHistoricoDateRange {
@@ -177,10 +183,12 @@ export function useUSSHistoricoData(sedeId?: string | null) {
         }
       }
 
-      // 2) Calcular semana ISO actual (lunes 00:00 -> domingo 23:59 ART)
-      const hoy = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Argentina/Buenos_Aires' }));
-      const dow = hoy.getDay() === 0 ? 7 : hoy.getDay(); // domingo=7
-      const lunes = new Date(hoy); lunes.setDate(hoy.getDate() - (dow - 1)); lunes.setHours(0, 0, 0, 0);
+      // 2) Calcular semana ISO de referencia (lunes 00:00 -> domingo 23:59 ART)
+      // Usar el endDate del filtro visible (asi si se filtra "Semana 17" o "Mes",
+      // el calculo del exceso se hace sobre la semana del ultimo dia visible).
+      const refDate = new Date((dateRange.endDate || new Date().toISOString().slice(0, 10)) + 'T12:00:00-03:00');
+      const dow = refDate.getDay() === 0 ? 7 : refDate.getDay(); // domingo=7
+      const lunes = new Date(refDate); lunes.setDate(refDate.getDate() - (dow - 1)); lunes.setHours(0, 0, 0, 0);
       const domingo = new Date(lunes); domingo.setDate(lunes.getDate() + 6); domingo.setHours(23, 59, 59, 999);
       const fmtAr = (d: Date) => d.toLocaleDateString('en-CA', { timeZone: 'America/Argentina/Buenos_Aires' });
 
@@ -277,17 +285,20 @@ export function useUSSHistoricoData(sedeId?: string | null) {
         break;
       }
       case 'week': {
-        const d = new Date();
-        const day = d.getDay();
-        // Lunes de esta semana
-        const diff = d.getDate() - day + (day === 0 ? -6 : 1);
-        d.setDate(diff);
-        const thisMondayStr = toArgentinaDateString(d);
-        // Si el lunes de esta semana es hoy (es lunes), retroceder 7 días para incluir semana anterior
-        if (thisMondayStr === today) {
-          d.setDate(d.getDate() - 7);
-        }
-        setDateRange({ startDate: toArgentinaDateString(d), endDate: today, label: 'Esta semana' });
+        // Calcular lunes y domingo de la semana actual en zona Argentina
+        const ahoraArt = new Date(new Date().toLocaleString('en-US', { timeZone: TIMEZONE_ARGENTINA }));
+        const dow = ahoraArt.getDay() === 0 ? 7 : ahoraArt.getDay(); // domingo=7 (ISO)
+        const lunes = new Date(ahoraArt);
+        lunes.setDate(ahoraArt.getDate() - (dow - 1));
+        lunes.setHours(0, 0, 0, 0);
+        const domingo = new Date(lunes);
+        domingo.setDate(lunes.getDate() + 6);
+        domingo.setHours(23, 59, 59, 999);
+        setDateRange({
+          startDate: toArgentinaDateString(lunes),
+          endDate: toArgentinaDateString(domingo),
+          label: 'Esta semana',
+        });
         break;
       }
       case 'month': {

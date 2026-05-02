@@ -92,6 +92,7 @@ export function BitacoraModule() {
           onSearchChange={handleSearchChange}
           headerControls={headerControls}
           onUpdateChecklist={updateChecklist}
+          onActivarSemanaActual={() => setDateRangePreset('week')}
         />
       )}
 
