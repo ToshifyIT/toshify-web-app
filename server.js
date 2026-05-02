@@ -1523,7 +1523,8 @@ app.post('/api/intercom/create-contact', async (req, res) => {
         'Dirección': direccion || 'N/A',
         'Tiempo de antiguedad': tiempo_de_antiguedad || 'N/A',
         'DNI': dni || '',
-        'Primer nombre': primer_nombre || ''
+        'Primer nombre': primer_nombre || '',
+        'Cliente': true
       }
     }
 

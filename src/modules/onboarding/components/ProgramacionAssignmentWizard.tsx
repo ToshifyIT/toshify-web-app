@@ -3630,7 +3630,7 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
 
                 <div className="step4-form" style={{ maxWidth: '700px', margin: '0 auto' }}>
                   {/* Fecha y Hora (compartidos) */}
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '24px' }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '16px', marginBottom: '24px' }}>
                     <div>
                       <label>Fecha de Cita *</label>
                       <input
@@ -3645,6 +3645,16 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
                         value={formData.hora_cita}
                         onChange={(value) => setFormData({ ...formData, hora_cita: value })}
                       />
+                    </div>
+                    <div>
+                      <label>Propietario</label>
+                      <select
+                        value={formData.propietario}
+                        onChange={(e) => setFormData({ ...formData, propietario: e.target.value as Propietario })}
+                      >
+                        <option value="grupo_cg">GRUPO CG</option>
+                        <option value="44_dreams">44 DREAMS</option>
+                      </select>
                     </div>
                   </div>
 
@@ -3737,18 +3747,6 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
                             onChange={(e) => setFormData({ ...formData, distancia_cargo: e.target.value ? parseInt(e.target.value) : '' })}
                             placeholder="Tiempo estimado"
                           />
-                        </div>
-                      </div>
-                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginTop: '16px' }}>
-                        <div>
-                          <label>Propietario</label>
-                          <select
-                            value={formData.propietario}
-                            onChange={(e) => setFormData({ ...formData, propietario: e.target.value as Propietario })}
-                          >
-                            <option value="grupo_cg">GRUPO CG</option>
-                            <option value="44_dreams">44 DREAMS</option>
-                          </select>
                         </div>
                       </div>
                     </div>
@@ -3846,18 +3844,6 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
                           />
                         </div>
                         )}
-                      </div>
-                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginTop: '16px' }}>
-                        <div>
-                          <label>Propietario</label>
-                          <select
-                            value={formData.propietario}
-                            onChange={(e) => setFormData({ ...formData, propietario: e.target.value as Propietario })}
-                          >
-                            <option value="grupo_cg">GRUPO CG</option>
-                            <option value="44_dreams">44 DREAMS</option>
-                          </select>
-                        </div>
                       </div>
                     </div>
                   )}

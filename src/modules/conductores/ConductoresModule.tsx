@@ -3847,6 +3847,17 @@ function ModalDetalles({
             ×
           </button>
         </div>
+        <div style={{ padding: '8px 24px 0', display: 'flex', justifyContent: 'flex-end' }}>
+          <button
+            className={`btn-sm ${(selectedConductor as any).intercom_id ? 'btn-primary' : 'btn-secondary'}`}
+            disabled={!(selectedConductor as any).intercom_id}
+            onClick={() => { if ((selectedConductor as any).intercom_id) window.open(`https://app.intercom.com/a/apps/ogv74k5c/users/${(selectedConductor as any).intercom_id}`, '_blank') }}
+            title={(selectedConductor as any).intercom_id ? 'Abrir en Intercom' : 'Sin ID de Intercom'}
+            style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}
+          >
+            <MessageSquare size={14} /> Ver Perfil Intercom
+          </button>
+        </div>
         <div className="modal-body">
         <div className="section-title">Información Personal</div>
         <div className="details-grid">
