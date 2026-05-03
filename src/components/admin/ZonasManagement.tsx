@@ -52,7 +52,7 @@ interface ZonaTipo {
   created_at: string
 }
 
-interface ZonaPeligrosa {
+interface ZonaRestringida {
   id: string
   nombre: string
   descripcion: string | null
@@ -90,14 +90,14 @@ const initialFormData: FormData = {
 
 export function ZonasManagement() {
   const { profile } = useAuth()
-  const [zonas, setZonas] = useState<ZonaPeligrosa[]>([])
+  const [zonas, setZonas] = useState<ZonaRestringida[]>([])
   const [tipos, setTipos] = useState<ZonaTipo[]>([])
   const [loading, setLoading] = useState(true)
   const [showCreateModal, setShowCreateModal] = useState(false)
   const [showEditModal, setShowEditModal] = useState(false)
   const [showTiposModal, setShowTiposModal] = useState(false)
   const [showDeleteModal, setShowDeleteModal] = useState(false)
-  const [selectedZona, setSelectedZona] = useState<ZonaPeligrosa | null>(null)
+  const [selectedZona, setSelectedZona] = useState<ZonaRestringida | null>(null)
   const [creating, setCreating] = useState(false)
   const [formData, setFormData] = useState<FormData>(initialFormData)
 
@@ -253,7 +253,7 @@ export function ZonasManagement() {
 
       if (error) throw error
 
-      showSuccess('Zona Creada', 'La zona peligrosa se ha creado exitosamente')
+      showSuccess('Zona Creada', 'La zona restringida se ha creado exitosamente')
       setShowCreateModal(false)
       setFormData(initialFormData)
       await loadZonas()
@@ -337,7 +337,7 @@ export function ZonasManagement() {
     }
   }
 
-  const handleToggleActivo = async (zona: ZonaPeligrosa) => {
+  const handleToggleActivo = async (zona: ZonaRestringida) => {
     try {
       const { error } = await (supabase as any)
         .from('zonas_peligrosas')
@@ -360,7 +360,7 @@ export function ZonasManagement() {
   }
 
   // Open modals
-  const openEditModal = (zona: ZonaPeligrosa) => {
+  const openEditModal = (zona: ZonaRestringida) => {
     setSelectedZona(zona)
     setFormData({
       nombre: zona.nombre,
@@ -374,7 +374,7 @@ export function ZonasManagement() {
     setShowEditModal(true)
   }
 
-  const openDeleteModal = (zona: ZonaPeligrosa) => {
+  const openDeleteModal = (zona: ZonaRestringida) => {
     setSelectedZona(zona)
     setShowDeleteModal(true)
   }
@@ -385,12 +385,12 @@ export function ZonasManagement() {
   }
 
   // Get color for zona type
-  const getZonaColor = (zona: ZonaPeligrosa): string => {
+  const getZonaColor = (zona: ZonaRestringida): string => {
     return zona.zonas_tipos?.color || '#EF4444'
   }
 
   // Table columns
-  const columns: ColumnDef<ZonaPeligrosa>[] = useMemo(() => [
+  const columns: ColumnDef<ZonaRestringida>[] = useMemo(() => [
     {
       accessorKey: 'nombre',
       header: 'Nombre',
@@ -673,7 +673,7 @@ export function ZonasManagement() {
       {/* Header */}
       <div className="admin-header">
         <div className="admin-header-title">
-          <h1>Gestion de Zonas Peligrosas</h1>
+          <h1>Gestion de Zonas Restringidas</h1>
           <span className="admin-header-subtitle">Administra areas geograficas con restricciones o advertencias</span>
         </div>
       </div>
@@ -770,7 +770,7 @@ export function ZonasManagement() {
           columns={columns}
           searchPlaceholder="Buscar zonas..."
           emptyTitle="No hay zonas"
-          emptyDescription="No se encontraron zonas peligrosas registradas"
+          emptyDescription="No se encontraron zonas restringidas registradas"
 />
       </div>
 
@@ -778,7 +778,7 @@ export function ZonasManagement() {
       {showCreateModal && (
         <div className="rm-modal-overlay" onClick={() => !creating && setShowCreateModal(false)}>
           <div className="rm-modal-content zona-modal-large" onClick={(e) => e.stopPropagation()}>
-            <h2 className="rm-modal-title">Nueva Zona Peligrosa</h2>
+            <h2 className="rm-modal-title">Nueva Zona Restringida</h2>
             <p className="rm-modal-subtitle">Define un area geografica con restricciones</p>
 
             <div className="form-group">

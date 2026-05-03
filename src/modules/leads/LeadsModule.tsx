@@ -75,7 +75,7 @@ function geocodificarDireccion(direccion: string): Promise<{ lat: number; lng: n
 // ZONA PELIGROSA – Ray casting algorithm
 // =====================================================
 
-interface ZonaPeligrosa {
+interface ZonaRestringida {
   id: string
   nombre: string
   poligono: { lat: number; lng: number }[]
@@ -262,7 +262,7 @@ export function LeadsModule() {
   const canDelete = canDeleteInMenu('leads')
 
   // Zonas peligrosas
-  const [zonasPeligrosas, setZonasPeligrosas] = useState<ZonaPeligrosa[]>([])
+  const [zonasRestringidas, setZonasPeligrosas] = useState<ZonaRestringida[]>([])
 
   // State principal
   const [leads, setLeads] = useState<Lead[]>([])
@@ -548,19 +548,19 @@ export function LeadsModule() {
         .from('zonas_peligrosas')
         .select('id, nombre, poligono')
         .eq('activo', true)
-      if (data) setZonasPeligrosas(data as ZonaPeligrosa[])
+      if (data) setZonasPeligrosas(data as ZonaRestringida[])
     }
     loadZonas()
   }, [])
 
-  // ---------- MAPA: lead_id -> nombre de zona peligrosa ----------
+  // ---------- MAPA: lead_id -> nombre de zona restringida ----------
   const leadsEnZona = useMemo(() => {
     const map = new Map<string, string>()
-    if (zonasPeligrosas.length === 0) return map
+    if (zonasRestringidas.length === 0) return map
     for (const lead of leads) {
       if (lead.latitud == null || lead.longitud == null) continue
       const punto = { lat: lead.latitud, lng: lead.longitud }
-      for (const zona of zonasPeligrosas) {
+      for (const zona of zonasRestringidas) {
         if (zona.poligono && isPointInPolygon(punto, zona.poligono)) {
           map.set(lead.id, zona.nombre)
           break
@@ -568,7 +568,7 @@ export function LeadsModule() {
       }
     }
     return map
-  }, [leads, zonasPeligrosas])
+  }, [leads, zonasRestringidas])
 
   // ---------- STATS ----------
   const stats = useMemo(() => {
@@ -577,11 +577,11 @@ export function LeadsModule() {
     const aptos = leads.filter(l => l.estado_de_lead === 'Apto - Hireflix').length
     const noAptos = leads.filter(l => l.estado_de_lead === 'No Apto - Hireflix').length
     const conCoordenadas = leads.filter(l => l.latitud != null && l.longitud != null)
-    const enZonaPeligrosa = conCoordenadas.filter(l => leadsEnZona.has(l.id)).length
+    const enZonaRestringida = conCoordenadas.filter(l => leadsEnZona.has(l.id)).length
     const enZonaSegura = conCoordenadas.filter(l => !leadsEnZona.has(l.id)).length
     const intercom = leads.filter(l => (l.fuente_de_lead || '').toLowerCase() === 'intercom').length
     const damaro = leads.filter(l => (l.fuente_de_lead || '').toLowerCase() === 'damaro').length
-    return { total, inicio, aptos, noAptos, enZonaPeligrosa, enZonaSegura, intercom, damaro }
+    return { total, inicio, aptos, noAptos, enZonaRestringida, enZonaSegura, intercom, damaro }
   }, [leads, leadsEnZona])
 
   // ---------- UNIQUE VALUES PARA FILTROS ----------
@@ -611,7 +611,7 @@ export function LeadsModule() {
     else if (activeStatCard === 'aptos') result = result.filter(l => l.estado_de_lead === 'Apto - Hireflix')
     else if (activeStatCard === 'noAptos') result = result.filter(l => l.estado_de_lead === 'No Apto - Hireflix')
     else if (activeStatCard === 'zonaSegura') result = result.filter(l => l.latitud != null && l.longitud != null && !leadsEnZona.has(l.id))
-    else if (activeStatCard === 'zonaPeligrosa') result = result.filter(l => l.latitud != null && l.longitud != null && leadsEnZona.has(l.id))
+    else if (activeStatCard === 'zonaRestringida') result = result.filter(l => l.latitud != null && l.longitud != null && leadsEnZona.has(l.id))
     else if (activeStatCard === 'intercom') result = result.filter(l => (l.fuente_de_lead || '').toLowerCase() === 'intercom')
     else if (activeStatCard === 'damaro') result = result.filter(l => (l.fuente_de_lead || '').toLowerCase() === 'damaro')
 
@@ -1556,16 +1556,16 @@ export function LeadsModule() {
         const dni = row.original.dni || ''
         const phone = row.original.phone || ''
         const direccion = row.original.direccion || ''
-        const zonaPeligrosa = leadsEnZona.get(row.original.id)
-        const enZonaPeligrosa = !!zonaPeligrosa
+        const zonaRestringida = leadsEnZona.get(row.original.id)
+        const enZonaRestringida = !!zonaRestringida
         const tieneCoordenadas = row.original.latitud != null && row.original.longitud != null
 
         return (
           <div
-            title={enZonaPeligrosa ? `Zona Restringida: ${zonaPeligrosa}` : tieneCoordenadas ? 'Zona Aprobada' : undefined}
+            title={enZonaRestringida ? `Zona Restringida: ${zonaRestringida}` : tieneCoordenadas ? 'Zona Aprobada' : undefined}
             style={{
-              background: enZonaPeligrosa ? '#FFF1F2' : undefined,
-              borderLeft: enZonaPeligrosa ? '3px solid #FF0033' : undefined,
+              background: enZonaRestringida ? '#FFF1F2' : undefined,
+              borderLeft: enZonaRestringida ? '3px solid #FF0033' : undefined,
               padding: '6px 8px',
               borderRadius: '6px',
             }}
@@ -1579,14 +1579,14 @@ export function LeadsModule() {
                     handleOpenDetails(row.original)
                   }
                 }}
-                style={{ fontWeight: 600, color: enZonaPeligrosa ? '#BE123C' : 'var(--text-primary)', textDecoration: 'none', fontSize: '13px' }}
+                style={{ fontWeight: 600, color: enZonaRestringida ? '#BE123C' : 'var(--text-primary)', textDecoration: 'none', fontSize: '13px' }}
               >
                 {nombre}
               </a>
               <span style={{ fontSize: '11px', color: 'var(--text-tertiary)' }}>
                 {dni ? `DNI: ${dni}` : ''}{dni && phone ? ' · ' : ''}{phone ? phone : ''}
               </span>
-              {enZonaPeligrosa && (
+              {enZonaRestringida && (
                 <span
                   className="lead-zona-badge"
                   style={{
@@ -1604,10 +1604,10 @@ export function LeadsModule() {
                   }}
                   data-tooltip={direccion || undefined}
                 >
-                  ⚠ Zona Restringida: {zonaPeligrosa}
+                  ⚠ Zona Restringida: {zonaRestringida}
                 </span>
               )}
-              {tieneCoordenadas && !enZonaPeligrosa && (
+              {tieneCoordenadas && !enZonaRestringida && (
                 <span
                   className="lead-zona-badge"
                   style={{
@@ -1996,7 +1996,7 @@ export function LeadsModule() {
         aptos: 'Aptos',
         noAptos: 'No aptos',
         zonaSegura: 'Zona Aprobada',
-        zonaPeligrosa: 'Zona Restringida',
+        zonaRestringida: 'Zona Restringida',
       }
       filters.push({
         id: `stat-${activeStatCard}`,
@@ -2205,8 +2205,8 @@ export function LeadsModule() {
             <div className="modal-body">
               <LeadDetailView
                 lead={selectedLead}
-                zonasPeligrosas={zonasPeligrosas}
-                enZonaPeligrosa={leadsEnZona.get(selectedLead.id) || null}
+                zonasRestringidas={zonasRestringidas}
+                enZonaRestringida={leadsEnZona.get(selectedLead.id) || null}
               />
             </div>
           </div>
@@ -2436,11 +2436,11 @@ interface LeadDetailViewProps {
   lead: Lead
   onEdit?: () => void
   onConvert?: () => void
-  zonasPeligrosas?: ZonaPeligrosa[]
-  enZonaPeligrosa?: string | null
+  zonasRestringidas?: ZonaRestringida[]
+  enZonaRestringida?: string | null
 }
 
-function LeadDetailView({ lead, onEdit, onConvert, zonasPeligrosas = [], enZonaPeligrosa }: LeadDetailViewProps) {
+function LeadDetailView({ lead, onEdit, onConvert, zonasRestringidas = [], enZonaRestringida }: LeadDetailViewProps) {
   const mapRef = useRef<google.maps.Map | null>(null)
 
   const handleRecenter = () => {
@@ -2550,9 +2550,9 @@ function LeadDetailView({ lead, onEdit, onConvert, zonasPeligrosas = [], enZonaP
             <LeadDetailMap
               lat={lead.latitud}
               lng={lead.longitud}
-              zonasPeligrosas={zonasPeligrosas}
-              enZonaPeligrosa={!!enZonaPeligrosa}
-              nombreZona={enZonaPeligrosa || undefined}
+              zonasRestringidas={zonasRestringidas}
+              enZonaRestringida={!!enZonaRestringida}
+              nombreZona={enZonaRestringida || undefined}
               mapRef={mapRef}
             />
           )}
@@ -2642,19 +2642,19 @@ function LeadDetailView({ lead, onEdit, onConvert, zonasPeligrosas = [], enZonaP
 }
 
 // =====================================================
-// LEAD DETAIL MAP (mapa interactivo con zonas peligrosas)
+// LEAD DETAIL MAP (mapa interactivo con zonas restringidas)
 // =====================================================
 
 interface LeadDetailMapProps {
   lat: number
   lng: number
-  zonasPeligrosas: ZonaPeligrosa[]
-  enZonaPeligrosa: boolean
+  zonasRestringidas: ZonaRestringida[]
+  enZonaRestringida: boolean
   nombreZona?: string
   mapRef?: React.MutableRefObject<google.maps.Map | null>
 }
 
-function LeadDetailMap({ lat, lng, zonasPeligrosas, enZonaPeligrosa, nombreZona, mapRef }: LeadDetailMapProps) {
+function LeadDetailMap({ lat, lng, zonasRestringidas, enZonaRestringida, nombreZona, mapRef }: LeadDetailMapProps) {
   const { isLoaded } = useJsApiLoader({
     googleMapsApiKey: GOOGLE_MAPS_API_KEY,
     libraries: GMAP_LIBRARIES,
@@ -2670,12 +2670,12 @@ function LeadDetailMap({ lat, lng, zonasPeligrosas, enZonaPeligrosa, nombreZona,
 
   return (
     <div style={{ marginTop: '8px' }}>
-      {enZonaPeligrosa && nombreZona && (
+      {enZonaRestringida && nombreZona && (
         <div style={{ marginBottom: '6px', padding: '6px 10px', background: '#FFF1F2', borderRadius: '6px', border: '1px solid #FECDD3', fontSize: '12px', color: '#BE123C', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '6px' }}>
           <AlertTriangle size={14} /> Zona Restringida: {nombreZona}
         </div>
       )}
-      <div style={{ borderRadius: '8px', overflow: 'hidden', border: `2px solid ${enZonaPeligrosa ? '#FF0033' : '#22C55E'}` }}>
+      <div style={{ borderRadius: '8px', overflow: 'hidden', border: `2px solid ${enZonaRestringida ? '#FF0033' : '#22C55E'}` }}>
         <GoogleMap
           mapContainerStyle={detailMapStyle}
           center={{ lat, lng }}
@@ -2695,14 +2695,14 @@ function LeadDetailMap({ lat, lng, zonasPeligrosas, enZonaPeligrosa, nombreZona,
             icon={{
               path: 0, // google.maps.SymbolPath.CIRCLE
               scale: 10,
-              fillColor: enZonaPeligrosa ? '#FF0033' : '#22C55E',
+              fillColor: enZonaRestringida ? '#FF0033' : '#22C55E',
               fillOpacity: 1,
               strokeColor: '#FFFFFF',
               strokeWeight: 3,
             }}
-            title={enZonaPeligrosa ? 'Zona Restringida' : 'Ubicación del lead'}
+            title={enZonaRestringida ? 'Zona Restringida' : 'Ubicación del lead'}
           />
-          {zonasPeligrosas.map(zona => (
+          {zonasRestringidas.map(zona => (
             zona.poligono && (
               <Polygon
                 key={zona.id}
@@ -2720,7 +2720,7 @@ function LeadDetailMap({ lat, lng, zonasPeligrosas, enZonaPeligrosa, nombreZona,
         </GoogleMap>
       </div>
       <div style={{ marginTop: '6px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        {!enZonaPeligrosa ? (
+        {!enZonaRestringida ? (
           <span style={{ fontSize: '11px', color: '#16A34A', fontWeight: 500 }}>Zona Aprobada</span>
         ) : <span />}
         <a

@@ -123,7 +123,7 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
   const [showMapModal, setShowMapModal] = useState(false)
 
   // Zonas peligrosas activas (para alertar si conductor vive en una)
-  const [zonasPeligrosas, setZonasPeligrosas] = useState<Array<{
+  const [zonasRestringidas, setZonasPeligrosas] = useState<Array<{
     id: string
     nombre: string
     poligono: { lat: number; lng: number }[]
@@ -1651,13 +1651,13 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
     return inside
   }
 
-  // Mapa de conductor.id -> nombre de zona peligrosa (null si no está en ninguna)
+  // Mapa de conductor.id -> nombre de zona restringida (null si no está en ninguna)
   const conductoresEnZona = useMemo(() => {
     const map = new Map<string, string>()
-    if (zonasPeligrosas.length === 0) return map
+    if (zonasRestringidas.length === 0) return map
     for (const conductor of conductores) {
       if (!conductor.direccion_lat || !conductor.direccion_lng) continue
-      for (const zona of zonasPeligrosas) {
+      for (const zona of zonasRestringidas) {
         if (zona.poligono && zona.poligono.length >= 3 &&
           isPointInPolygon(conductor.direccion_lat, conductor.direccion_lng, zona.poligono)) {
           map.set(conductor.id, zona.nombre)
@@ -1666,7 +1666,7 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
       }
     }
     return map
-  }, [conductores, zonasPeligrosas])
+  }, [conductores, zonasRestringidas])
 
   // Filtrar conductores disponibles con useMemo
   const filteredConductores = useMemo(() => {
@@ -3324,7 +3324,7 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
                                     draggable
                                     onDragStart={(e) => handleConductorDragStart(e, par.diurno.id, par.nocturno.id, par.tiempoMinutos)}
                                     onDragEnd={handleConductorDragEnd}
-                                    title={zonaDiurno ? `⚠ Zona peligrosa: ${zonaDiurno}` : undefined}
+                                    title={zonaDiurno ? `⚠ Zona restringida: ${zonaDiurno}` : undefined}
                                     style={{ marginBottom: '6px', background: zonaDiurno ? '#FFF1F2' : '#FFFBEB', borderColor: zonaDiurno ? '#FF0033' : '#FCD34D' }}
                                   >
                                     <div className="conductor-avatar" style={{ background: zonaDiurno ? '#FF0033' : '#F59E0B' }}>
@@ -3338,7 +3338,7 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
                                       <p className="conductor-license">DNI: {par.diurno.numero_dni || '-'}</p>
                                       {zonaDiurno && (
                                         <span style={{ fontSize: '9px', padding: '2px 6px', borderRadius: '4px', fontWeight: '600', display: 'inline-block', background: '#FFE4E6', color: '#BE123C' }}>
-                                          ⚠ Zona peligrosa
+                                          ⚠ Zona restringida
                                         </span>
                                       )}
                                     </div>
@@ -3354,7 +3354,7 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
                                     draggable
                                     onDragStart={(e) => handleConductorDragStart(e, par.nocturno.id, par.diurno.id, par.tiempoMinutos)}
                                     onDragEnd={handleConductorDragEnd}
-                                    title={zonanocturno ? `⚠ Zona peligrosa: ${zonanocturno}` : undefined}
+                                    title={zonanocturno ? `⚠ Zona restringida: ${zonanocturno}` : undefined}
                                     style={{ background: zonanocturno ? '#FFF1F2' : '#EFF6FF', borderColor: zonanocturno ? '#FF0033' : '#93C5FD' }}
                                   >
                                     <div className="conductor-avatar" style={{ background: zonanocturno ? '#FF0033' : '#3B82F6' }}>
@@ -3368,7 +3368,7 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
                                       <p className="conductor-license">DNI: {par.nocturno.numero_dni || '-'}</p>
                                       {zonanocturno && (
                                         <span style={{ fontSize: '9px', padding: '2px 6px', borderRadius: '4px', fontWeight: '600', display: 'inline-block', background: '#FFE4E6', color: '#BE123C' }}>
-                                          ⚠ Zona peligrosa
+                                          ⚠ Zona restringida
                                         </span>
                                       )}
                                     </div>
@@ -3385,7 +3385,7 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
                       ) : (
                         filteredConductores.map((conductor) => {
                           const algunoOcupado = conductor.tieneAsignacionDiurna || conductor.tieneAsignacionNocturna
-                          const zonaPeligrosa = conductoresEnZona.get(conductor.id)
+                          const zonaRestringida = conductoresEnZona.get(conductor.id)
                           let infoMsg = ''
                           if (conductor.tieneAsignacionDiurna && !conductor.tieneAsignacionNocturna) {
                             infoMsg = 'Diurno ocupado'
@@ -3402,13 +3402,13 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
                               draggable
                               onDragStart={(e) => handleConductorDragStart(e, conductor.id)}
                               onDragEnd={handleConductorDragEnd}
-                              title={zonaPeligrosa ? `⚠ Zona peligrosa: ${zonaPeligrosa}` : undefined}
+                              title={zonaRestringida ? `⚠ Zona restringida: ${zonaRestringida}` : undefined}
                               style={{
-                                background: zonaPeligrosa ? '#FFF1F2' : algunoOcupado ? '#FFFBEB' : undefined,
-                                borderColor: zonaPeligrosa ? '#FF0033' : algunoOcupado ? '#FCD34D' : undefined
+                                background: zonaRestringida ? '#FFF1F2' : algunoOcupado ? '#FFFBEB' : undefined,
+                                borderColor: zonaRestringida ? '#FF0033' : algunoOcupado ? '#FCD34D' : undefined
                               }}
                             >
-                              <div className="conductor-avatar" style={zonaPeligrosa ? { background: '#FF0033' } : undefined}>
+                              <div className="conductor-avatar" style={zonaRestringida ? { background: '#FF0033' } : undefined}>
                                 {conductor.nombres.charAt(0)}{conductor.apellidos.charAt(0)}
                               </div>
                               <div className="conductor-info">
@@ -3428,7 +3428,7 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
                                     {formatPreferencia(conductor.preferencia_turno)}
                                   </span>
                                 </p>
-                                {zonaPeligrosa && (
+                                {zonaRestringida && (
                                   <span style={{
                                     fontSize: '9px',
                                     padding: '2px 6px',
@@ -3439,7 +3439,7 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
                                     background: '#FFE4E6',
                                     color: '#BE123C'
                                   }}>
-                                    ⚠ Zona peligrosa
+                                    ⚠ Zona restringida
                                   </span>
                                 )}
                                 {infoMsg && (
