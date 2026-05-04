@@ -3513,7 +3513,7 @@ function ModalEditar({
               value={formData.estado_id}
               onChange={(e) => {
                 setFormData({ ...formData, estado_id: e.target.value })
-                if (e.target.value) setEditErrors(prev => { const { estado_id: _removed, ...rest } = prev; void _removed; return rest })
+                if (e.target.value) setEditErrors((prev: Record<string, string>) => { const { estado_id: _removed, ...rest } = prev; void _removed; return rest })
               }}
               disabled={saving}
             >
