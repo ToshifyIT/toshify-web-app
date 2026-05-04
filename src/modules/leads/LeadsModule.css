@@ -706,8 +706,14 @@
   position: sticky;
   right: 0;
   z-index: 2;
-  background: var(--bg-primary, #fff);
+  background: var(--card-bg, #fff);
   box-shadow: -2px 0 4px rgba(0, 0, 0, 0.06);
+}
+
+.leads-module .dt-table tbody tr:hover > td.dt-sticky-col {
+  background:
+    linear-gradient(var(--table-row-hover), var(--table-row-hover)),
+    var(--card-bg, #fff);
 }
 
 .leads-module .dt-table thead .dt-sticky-col {
