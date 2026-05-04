@@ -73,11 +73,6 @@ export const ussHistoricoService = {
     endDate: string,
     options?: USSHistoricoQueryOptions
   ): Promise<{ data: USSHistoricoRegistro[]; count: number }> {
-    // Las fechas en estas tablas ya vienen en hora Argentina (sin offset)
-    const endDatePlusOne = new Date(endDate + 'T00:00:00');
-    endDatePlusOne.setDate(endDatePlusOne.getDate() + 1);
-    const endStr = endDatePlusOne.toISOString().slice(0, 10);
-
     // Resolver patentes de la sede una sola vez
     let sedePatentes: string[] | null = null;
     if (options?.sedeId) {
@@ -94,35 +89,76 @@ export const ussHistoricoService = {
       }
     }
 
-    // Consultar ambas tablas en paralelo
-    const [ussRes, geotabRes] = await Promise.all([
-      buildHistoricoQuery('uss_historico', startDate, endStr, sedePatentes, options),
-      buildHistoricoQuery('geotab_historico', startDate, endStr, sedePatentes, options),
-    ]);
+    // Llamada al RPC que hace UNION ALL + paginacion server-side de las 2 tablas
+    const limit = options?.limit ?? 100;
+    const offset = options?.offset ?? 0;
+    const search = options?.patente?.trim() || options?.conductor?.trim() || null;
 
-    if (ussRes.error) throw new Error(`Error obteniendo uss_historico: ${ussRes.error.message}`);
-    if (geotabRes.error) throw new Error(`Error obteniendo geotab_historico: ${geotabRes.error.message}`);
-
-    // Mergear y taggear origen
-    const ussRows: USSHistoricoRegistro[] = (ussRes.data || []).map((r: any) => ({ ...r, gps_origen: 'USS' as GpsOrigen }));
-    const geotabRows: USSHistoricoRegistro[] = (geotabRes.data || []).map((r: any) => ({ ...r, gps_origen: 'GEOTAB' as GpsOrigen }));
-
-    const combined = [...ussRows, ...geotabRows].sort((a, b) => {
-      const av = a.fecha_hora_inicio || '';
-      const bv = b.fecha_hora_inicio || '';
-      return bv.localeCompare(av);
+    const { data, error } = await (supabase.rpc as any)('get_historico_combinado', {
+      p_start_date: startDate,
+      p_end_date: endDate,
+      p_patentes: sedePatentes,
+      p_search: search,
+      p_limit: limit,
+      p_offset: offset,
     });
 
-    const totalCount = (ussRes.count || 0) + (geotabRes.count || 0);
-
-    // Paginación en memoria
-    let paginated = combined;
-    if (options?.offset !== undefined && options?.limit !== undefined) {
-      paginated = combined.slice(options.offset, options.offset + options.limit);
-    } else if (options?.limit) {
-      paginated = combined.slice(0, options.limit);
+    if (error) {
+      // Fallback al metodo viejo si el RPC no existe (compat)
+      console.warn('[ussHistoricoService] RPC fallo, usando fallback:', error.message);
+      return getRegistrosFallback(startDate, endDate, options, sedePatentes);
     }
 
-    return { data: paginated, count: totalCount };
+    const rows: USSHistoricoRegistro[] = (data || []).map((r: any) => ({
+      id: r.id,
+      patente: r.patente,
+      conductor: r.conductor,
+      ibutton: r.ibutton,
+      observaciones: r.observaciones,
+      fecha_hora_inicio: r.fecha_hora_inicio,
+      fecha_hora_final: r.fecha_hora_final,
+      kilometraje: r.kilometraje,
+      gps_origen: r.gps_origen as GpsOrigen,
+    }));
+
+    const totalCount = data && data.length > 0 ? Number(data[0].total_count) : 0;
+    return { data: rows, count: totalCount };
   },
 };
+
+// Fallback: metodo viejo (queries separadas) si el RPC no esta disponible
+async function getRegistrosFallback(
+  startDate: string,
+  endDate: string,
+  options: USSHistoricoQueryOptions | undefined,
+  sedePatentes: string[] | null,
+): Promise<{ data: USSHistoricoRegistro[]; count: number }> {
+  const endDatePlusOne = new Date(endDate + 'T00:00:00');
+  endDatePlusOne.setDate(endDatePlusOne.getDate() + 1);
+  const endStr = endDatePlusOne.toISOString().slice(0, 10);
+
+  const [ussRes, geotabRes] = await Promise.all([
+    buildHistoricoQuery('uss_historico', startDate, endStr, sedePatentes, options).range(0, 9999),
+    buildHistoricoQuery('geotab_historico', startDate, endStr, sedePatentes, options).range(0, 9999),
+  ]);
+
+  const ussRows: USSHistoricoRegistro[] = (ussRes.data || []).map((r: any) => ({ ...r, gps_origen: 'USS' as GpsOrigen }));
+  const geotabRows: USSHistoricoRegistro[] = (geotabRes.data || []).map((r: any) => ({ ...r, gps_origen: 'GEOTAB' as GpsOrigen }));
+
+  const combined = [...ussRows, ...geotabRows].sort((a, b) => {
+    const av = a.fecha_hora_inicio || '';
+    const bv = b.fecha_hora_inicio || '';
+    return bv.localeCompare(av);
+  });
+
+  const totalCount = (ussRes.count || 0) + (geotabRes.count || 0);
+
+  let paginated = combined;
+  if (options?.offset !== undefined && options?.limit !== undefined) {
+    paginated = combined.slice(options.offset, options.offset + options.limit);
+  } else if (options?.limit) {
+    paginated = combined.slice(0, options.limit);
+  }
+
+  return { data: paginated, count: totalCount };
+}
