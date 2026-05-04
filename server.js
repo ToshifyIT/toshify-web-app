@@ -744,6 +744,9 @@ function resolveTemplateKey(tipoDocumento, modalidad, sedeCode) {
 
   const isBariloche = sedeCode && sedeCode.toUpperCase() === 'BRC'
 
+  // Bariloche no tiene modalidad turno, no generar contrato
+  if (isBariloche && modalidad === 'turno') return null
+
   if (tipoDocumento === 'carta_oferta') {
     if (isBariloche) return 'cartaOfertaAutoCargoBariloche'
     if (modalidad === 'a_cargo') return 'cartaOfertaAutoCargo'
@@ -751,6 +754,7 @@ function resolveTemplateKey(tipoDocumento, modalidad, sedeCode) {
   }
 
   if (tipoDocumento === 'anexo') {
+    if (isBariloche) return null
     if (modalidad === 'a_cargo') return 'actualizacionAutoCargo'
     return 'actualizacionTurno'
   }

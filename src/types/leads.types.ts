@@ -130,6 +130,17 @@ export interface Lead {
   // Intercom
   id_conversation?: string | null
 
+  // Licencia detallada
+  numero_licencia?: string | null
+  categorias_licencia?: string[] | null
+  estado_licencia?: string | null
+  tipo_licencia?: string | null
+
+  // Hireflix
+  resultado_hireflix?: string | null
+  resumen_hireflix?: string | null
+  id_hireflix?: string | null
+
   // Sistema
   created_at: string
   updated_at?: string | null
@@ -165,6 +176,10 @@ export interface LeadFormData {
   clasificacion_domicilio?: string
   licencia?: string
   vencimiento_licencia?: string
+  numero_licencia?: string
+  categorias_licencia?: string[]
+  estado_licencia?: string
+  tipo_licencia?: string
   rnr?: string
   fecha_rnr?: string
   dni_archivo?: string

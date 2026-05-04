@@ -3,9 +3,9 @@ import { useState, useEffect, useMemo, useCallback, useRef, useLayoutEffect } fr
 import { createPortal } from 'react-dom'
 import {
   Eye, Edit2, Trash2, Users, UserPlus, Clock, RefreshCw, MessageCircle,
-  CheckCircle, AlertTriangle, X, Download, Upload, MapPin, ExternalLink, FolderOpen,
+  CheckCircle, AlertTriangle, X, Download, Upload, MapPin, ExternalLink, FolderOpen, Video,
 } from 'lucide-react'
-import { GoogleMap, useJsApiLoader, Marker, Polygon } from '@react-google-maps/api'
+import { GoogleMap, Marker, Polygon } from '@react-google-maps/api'
 import { ActionsMenu } from '../../components/ui/ActionsMenu'
 import { supabase } from '../../lib/supabase'
 import { usePermissions } from '../../contexts/PermissionsContext'
@@ -26,7 +26,7 @@ import { LeadWizard } from './components/LeadWizard'
 // =====================================================
 
 const GOOGLE_MAPS_API_KEY = import.meta.env.VITE_GOOGLE_MAPS_API_KEY || 'AIzaSyCCiqk9jWZghUq5rBtSyo6ZjLuMORblY-w'
-const GMAP_LIBRARIES: ('places')[] = ['places']
+// Google Maps se carga via loadGoogleMapsAPI()
 
 const detailMapStyle = {
   width: '100%',
@@ -96,6 +96,16 @@ function isPointInPolygon(point: { lat: number; lng: number }, polygon: { lat: n
 // =====================================================
 // HELPERS
 // =====================================================
+
+/** Normaliza el valor de turno a Diurno/Nocturno/Indiferente o '-' */
+function normalizarTurno(turno: string | null | undefined): string {
+  const t = (turno || '').toLowerCase().trim()
+  if (!t) return '-'
+  if (t.includes('diurno') || t === 'dia' || t === 'day') return 'Diurno'
+  if (t.includes('nocturno') || t.includes('noche') || t === 'night') return 'Nocturno'
+  if (t.includes('indiferente') || t.includes('any') || t.includes('ambos') || t.includes('cualquier')) return 'Indiferente'
+  return turno || '-'
+}
 
 /**
  * Normaliza un número de teléfono argentino al formato +549XXXXXXXXXX (13 dígitos total).
@@ -183,6 +193,10 @@ function leadToFormData(lead: Lead): LeadFormData {
     clasificacion_domicilio: lead.clasificacion_domicilio || '',
     licencia: lead.licencia || '',
     vencimiento_licencia: lead.vencimiento_licencia || '',
+    numero_licencia: lead.numero_licencia || '',
+    categorias_licencia: lead.categorias_licencia || [],
+    estado_licencia: lead.estado_licencia || '',
+    tipo_licencia: lead.tipo_licencia || '',
     rnr: lead.rnr || '',
     fecha_rnr: lead.fecha_rnr || '',
     dni_archivo: lead.dni_archivo || '',
@@ -218,6 +232,8 @@ function formDataToDbFields(fd: LeadFormData): Record<string, unknown> {
   const out: Record<string, unknown> = {}
   Object.entries(fd).forEach(([k, v]) => {
     if (v === '' || v === undefined) {
+      out[k] = null
+    } else if (Array.isArray(v) && v.length === 0) {
       out[k] = null
     } else {
       out[k] = v
@@ -295,11 +311,16 @@ export function LeadsModule() {
   const [estadoDropdownId, setEstadoDropdownId] = useState<string | null>(null)
   const [sinoDropdownKey, setSinoDropdownKey] = useState<string | null>(null) // "leadId::field"
 
+  // Catálogos licencia (mismos que conductores)
+  const [categoriasLicencia, setCategoriasLicencia] = useState<Array<{ id: string; codigo: string; descripcion: string }>>([])
+  const [estadosLicencia, setEstadosLicencia] = useState<Array<{ id: string; codigo: string; descripcion: string }>>([])
+  const [tiposLicencia, setTiposLicencia] = useState<Array<{ id: string; codigo: string; descripcion: string }>>([])
+
   // Estados visibles para cambio manual (Conductor se asigna solo automáticamente)
   const ESTADOS_LEAD = [
     'Inicio conversación', 'Apto - Hireflix', 'No Apto - Hireflix', 'Ayuda - Hireflix',
     'Documentos enviados', 'Auto del pueblo', 'No le interesa', 'No cumple edad',
-    'Convocatoria Induccion', 'Descartado',
+    'Convocatoria Inducción', 'Descartado',
   ] as const
 
   /** Calcula el estado correcto de un lead basándose en proceso y entrevista_ia.
@@ -313,6 +334,13 @@ export function LeadsModule() {
     if (entrevista === 'Apto') return 'Apto - Hireflix'
     // Si tiene dato en ayuda_entrevista, asignar "Ayuda - Hireflix"
     if (lead.ayuda_entrevista && lead.ayuda_entrevista.trim() !== '') return 'Ayuda - Hireflix'
+    // Normalizar estados con formato invertido (ej: "Hireflix - Apto" -> "Apto - Hireflix")
+    if (lead.estado_de_lead) {
+      const el = lead.estado_de_lead.toLowerCase()
+      if (el.includes('hireflix') && el.includes('no apto')) return 'No Apto - Hireflix'
+      if (el.includes('hireflix') && el.includes('apto')) return 'Apto - Hireflix'
+      if (el.includes('hireflix') && el.includes('ayuda')) return 'Ayuda - Hireflix'
+    }
     // Si ya tiene un estado asignado (no vacío y no "Inicio conversación"), respetarlo
     if (lead.estado_de_lead && lead.estado_de_lead !== 'Inicio conversación') return lead.estado_de_lead
     return 'Inicio conversación'
@@ -373,9 +401,17 @@ export function LeadsModule() {
       // aplicarFiltroSede respeta el modo "Todas las sedes" para usuarios admin.
       query = aplicarFiltroSede(query, 'sede_id')
 
-      const { data, error: err } = await query
-      if (err) throw err
-      const leadsData = (data || []) as Lead[]
+      const [leadsRes, catRes, estLicRes, tipLicRes] = await Promise.all([
+        query,
+        supabase.from('licencias_categorias').select('id, codigo, descripcion').order('descripcion'),
+        supabase.from('licencias_estados').select('id, codigo, descripcion').order('descripcion'),
+        supabase.from('licencias_tipos').select('id, codigo, descripcion').order('descripcion'),
+      ])
+      if (leadsRes.error) throw leadsRes.error
+      if (catRes.data) setCategoriasLicencia(catRes.data)
+      if (estLicRes.data) setEstadosLicencia(estLicRes.data)
+      if (tipLicRes.data) setTiposLicencia(tipLicRes.data)
+      const leadsData = (leadsRes.data || []) as Lead[]
 
       // Calcular estado correcto y detectar desactualizados
       const leadsConEstado: Lead[] = []
@@ -434,35 +470,39 @@ export function LeadsModule() {
 
   // ---------- GEOCODIFICAR LEADS SIN COORDENADAS ----------
   const geocodificarLeadsSinCoordenadas = useCallback(async (leadsList: Lead[]) => {
-    const sinCoords = leadsList.filter(
-      l => l.direccion && (l.latitud == null || l.longitud == null)
-    )
-    if (sinCoords.length === 0) return
-
     try {
-      await loadGoogleMapsAPI()
-    } catch {
-      return
-    }
+      const sinCoords = leadsList.filter(
+        l => l.direccion && (l.latitud == null || l.longitud == null)
+      )
+      if (sinCoords.length === 0) return
 
-    let actualizado = false
-    for (const lead of sinCoords) {
       try {
-        const coords = await geocodificarDireccion(lead.direccion || '')
-        if (coords) {
-          await supabase
-            .from('leads')
-            .update({ latitud: coords.lat, longitud: coords.lng })
-            .eq('id', lead.id)
-          actualizado = true
-        }
+        await loadGoogleMapsAPI()
       } catch {
-        // silently ignored
+        return
       }
-    }
 
-    if (actualizado) {
-      loadLeads()
+      let actualizado = false
+      for (const lead of sinCoords) {
+        try {
+          const coords = await geocodificarDireccion(lead.direccion || '')
+          if (coords) {
+            await supabase
+              .from('leads')
+              .update({ latitud: coords.lat, longitud: coords.lng })
+              .eq('id', lead.id)
+            actualizado = true
+          }
+        } catch {
+          // silently ignored
+        }
+      }
+
+      if (actualizado) {
+        loadLeads()
+      }
+    } catch (err) {
+      console.error('[Leads] Error en geocodificarLeadsSinCoordenadas:', err)
     }
   }, [loadLeads])
 
@@ -476,61 +516,93 @@ export function LeadsModule() {
 
   // ---------- SINCRONIZAR SEDE Y FUENTE DE LEADS ----------
   const sincronizarSedeLeads = useCallback(async () => {
-    if (sedes.length === 0) return
+    try {
+      if (sedes.length === 0) return
 
-    // Traer todos los leads no convertidos
-    const { data: allLeads } = await supabase
-      .from('leads')
-      .select('id, sede, sede_id, fuente_de_lead')
-      .or('proceso.is.null,proceso.neq.Convertido')
-      .limit(5000)
+      // Traer todos los leads no convertidos
+      const { data: allLeads } = await supabase
+        .from('leads')
+        .select('id, sede, sede_id, fuente_de_lead, turno, estado_de_lead')
+        .or('proceso.is.null,proceso.neq.Convertido')
+        .limit(5000)
 
-    if (!allLeads || allLeads.length === 0) return
+      if (!allLeads || allLeads.length === 0) return
 
-    const sedePrincipal = sedes.find(s => s.es_principal) || sedes[0]
-    const sedeMap = new Map(sedes.map(s => [s.id, s.nombre?.toLowerCase() || '']))
-    let actualizado = false
+      const sedePrincipal = sedes.find(s => s.es_principal) || sedes[0]
+      const sedeMap = new Map(sedes.map(s => [s.id, s.nombre?.toLowerCase() || '']))
+      let actualizado = false
 
-    for (const lead of allLeads) {
-      const updateData: Record<string, unknown> = {}
+      for (const lead of allLeads) {
+        const updateData: Record<string, unknown> = {}
 
-      // --- Sede: asignar o corregir ---
-      const textoSede = (lead.sede || '').trim().toLowerCase()
-      const sedeActualNombre = lead.sede_id ? sedeMap.get(lead.sede_id) : null
-      const necesitaUpdateSede = !lead.sede_id || (textoSede && sedeActualNombre && textoSede !== sedeActualNombre)
+        // --- Sede: asignar o corregir ---
+        const textoSede = (lead.sede || '').trim().toLowerCase()
+        const sedeActualNombre = lead.sede_id ? sedeMap.get(lead.sede_id) : null
+        const necesitaUpdateSede = !lead.sede_id || (textoSede && sedeActualNombre && textoSede !== sedeActualNombre)
 
-      if (necesitaUpdateSede) {
-        const sedeMatch = textoSede
-          ? sedes.find(s => s.nombre?.toLowerCase() === textoSede || s.codigo?.toLowerCase() === textoSede)
-          : null
-        const sedeAsignada = sedeMatch || sedePrincipal
-        if (lead.sede_id !== sedeAsignada.id) {
-          updateData.sede_id = sedeAsignada.id
-          updateData.sede = sedeAsignada.nombre
+        if (necesitaUpdateSede) {
+          const sedeMatch = textoSede
+            ? sedes.find(s => s.nombre?.toLowerCase() === textoSede || s.codigo?.toLowerCase() === textoSede)
+            : null
+          const sedeAsignada = sedeMatch || sedePrincipal
+          if (lead.sede_id !== sedeAsignada.id) {
+            updateData.sede_id = sedeAsignada.id
+            updateData.sede = sedeAsignada.nombre
+          }
+        }
+
+        // --- Fuente: asignar Intercom si está vacía ---
+        if (!lead.fuente_de_lead) {
+          updateData.fuente_de_lead = 'Intercom'
+        }
+
+        // --- Turno: normalizar valores sucios ---
+        if (lead.turno) {
+          const tl = lead.turno.toLowerCase()
+          let turnoNorm: string | null = null
+          if (tl.includes('diurno') || tl === 'dia' || tl === 'day') turnoNorm = 'Diurno'
+          else if (tl.includes('nocturno') || tl.includes('noche') || tl === 'night') turnoNorm = 'Nocturno'
+          else if (tl.includes('indiferente') || tl.includes('any') || tl.includes('ambos') || tl.includes('cualquier')) turnoNorm = 'Indiferente'
+          if (turnoNorm && turnoNorm !== lead.turno) {
+            updateData.turno = turnoNorm
+          }
+        }
+
+        // --- Estado: normalizar formatos invertidos (ej: "Hireflix - Apto" -> "Apto - Hireflix") ---
+        if (lead.estado_de_lead) {
+          const el = lead.estado_de_lead.toLowerCase()
+          let estadoNorm: string | null = null
+          if (el.includes('hireflix') && el.includes('no apto')) estadoNorm = 'No Apto - Hireflix'
+          else if (el.includes('hireflix') && el.includes('apto')) estadoNorm = 'Apto - Hireflix'
+          else if (el.includes('hireflix') && el.includes('ayuda')) estadoNorm = 'Ayuda - Hireflix'
+          if (estadoNorm && estadoNorm !== lead.estado_de_lead) {
+            updateData.estado_de_lead = estadoNorm
+          }
+          // Normalizar tilde: "Convocatoria Induccion" -> "Convocatoria Inducción"
+          if (el === 'convocatoria induccion' && lead.estado_de_lead !== 'Convocatoria Inducción') {
+            updateData.estado_de_lead = 'Convocatoria Inducción'
+          }
+        }
+
+        // Si no hay nada que actualizar, seguir
+        if (Object.keys(updateData).length === 0) continue
+
+        try {
+          await supabase
+            .from('leads')
+            .update(updateData)
+            .eq('id', lead.id)
+          actualizado = true
+        } catch {
+          // silently ignored
         }
       }
 
-      // --- Fuente: asignar Intercom si está vacía ---
-      if (!lead.fuente_de_lead) {
-        updateData.fuente_de_lead = 'Intercom'
+      if (actualizado) {
+        loadLeads()
       }
-
-      // Si no hay nada que actualizar, seguir
-      if (Object.keys(updateData).length === 0) continue
-
-      try {
-        await supabase
-          .from('leads')
-          .update(updateData)
-          .eq('id', lead.id)
-        actualizado = true
-      } catch {
-        // silently ignored
-      }
-    }
-
-    if (actualizado) {
-      loadLeads()
+    } catch (err) {
+      console.error('[Leads] Error en sincronizarSedeLeads:', err)
     }
   }, [sedes, loadLeads])
 
@@ -556,16 +628,20 @@ export function LeadsModule() {
   // ---------- MAPA: lead_id -> nombre de zona restringida ----------
   const leadsEnZona = useMemo(() => {
     const map = new Map<string, string>()
+    try {
     if (zonasRestringidas.length === 0) return map
     for (const lead of leads) {
       if (lead.latitud == null || lead.longitud == null) continue
       const punto = { lat: lead.latitud, lng: lead.longitud }
       for (const zona of zonasRestringidas) {
-        if (zona.poligono && isPointInPolygon(punto, zona.poligono)) {
+        if (zona.poligono && Array.isArray(zona.poligono) && isPointInPolygon(punto, zona.poligono)) {
           map.set(lead.id, zona.nombre)
           break
         }
       }
+    }
+    } catch (err) {
+      console.error('[Leads] Error en leadsEnZona:', err)
     }
     return map
   }, [leads, zonasRestringidas])
@@ -579,9 +655,10 @@ export function LeadsModule() {
     const conCoordenadas = leads.filter(l => l.latitud != null && l.longitud != null)
     const enZonaRestringida = conCoordenadas.filter(l => leadsEnZona.has(l.id)).length
     const enZonaSegura = conCoordenadas.filter(l => !leadsEnZona.has(l.id)).length
-    const intercom = leads.filter(l => (l.fuente_de_lead || '').toLowerCase() === 'intercom').length
+    const convocatoria = leads.filter(l => l.estado_de_lead === 'Convocatoria Inducción' || l.estado_de_lead === 'Convocatoria Induccion').length
+    const intercom = leads.filter(l => (l.fuente_de_lead || '').toLowerCase() !== 'damaro').length
     const damaro = leads.filter(l => (l.fuente_de_lead || '').toLowerCase() === 'damaro').length
-    return { total, inicio, aptos, noAptos, enZonaRestringida, enZonaSegura, intercom, damaro }
+    return { total, inicio, aptos, noAptos, convocatoria, enZonaRestringida, enZonaSegura, intercom, damaro }
   }, [leads, leadsEnZona])
 
   // ---------- UNIQUE VALUES PARA FILTROS ----------
@@ -590,7 +667,7 @@ export function LeadsModule() {
   , [leads])
 
   const uniqueTurnos = useMemo(() =>
-    [...new Set(leads.map(l => l.turno).filter(Boolean))].sort() as string[]
+    [...new Set(leads.map(l => normalizarTurno(l.turno)).filter(v => v !== '-'))].sort() as string[]
   , [leads])
 
   const uniqueDisponibilidades = useMemo(() =>
@@ -610,9 +687,10 @@ export function LeadsModule() {
     if (activeStatCard === 'inicio') result = result.filter(l => l.estado_de_lead === 'Inicio conversación')
     else if (activeStatCard === 'aptos') result = result.filter(l => l.estado_de_lead === 'Apto - Hireflix')
     else if (activeStatCard === 'noAptos') result = result.filter(l => l.estado_de_lead === 'No Apto - Hireflix')
+    else if (activeStatCard === 'convocatoria') result = result.filter(l => l.estado_de_lead === 'Convocatoria Inducción' || l.estado_de_lead === 'Convocatoria Induccion')
     else if (activeStatCard === 'zonaSegura') result = result.filter(l => l.latitud != null && l.longitud != null && !leadsEnZona.has(l.id))
     else if (activeStatCard === 'zonaRestringida') result = result.filter(l => l.latitud != null && l.longitud != null && leadsEnZona.has(l.id))
-    else if (activeStatCard === 'intercom') result = result.filter(l => (l.fuente_de_lead || '').toLowerCase() === 'intercom')
+    else if (activeStatCard === 'intercom') result = result.filter(l => (l.fuente_de_lead || '').toLowerCase() !== 'damaro')
     else if (activeStatCard === 'damaro') result = result.filter(l => (l.fuente_de_lead || '').toLowerCase() === 'damaro')
 
     // Column filters
@@ -626,7 +704,7 @@ export function LeadsModule() {
     }
     if (turnoFilter.length > 0) {
       const set = new Set(turnoFilter)
-      result = result.filter(l => set.has(l.turno || ''))
+      result = result.filter(l => set.has(normalizarTurno(l.turno)))
     }
     if (disponibilidadFilter.length > 0) {
       const set = new Set(disponibilidadFilter)
@@ -817,6 +895,18 @@ export function LeadsModule() {
       else if (turnoLead.includes('nocturno')) turnoMapped = 'NOCTURNO'
       else if (turnoLead.includes('cargo')) turnoMapped = 'A_CARGO'
 
+      // Resolver estado_licencia y tipo_licencia a IDs
+      let licenciaEstadoId: string | null = null
+      let licenciaTipoId: string | null = null
+      if (lead.estado_licencia && estadosLicencia.length > 0) {
+        const match = estadosLicencia.find(e => e.descripcion === lead.estado_licencia)
+        if (match) licenciaEstadoId = match.id
+      }
+      if (lead.tipo_licencia && tiposLicencia.length > 0) {
+        const match = tiposLicencia.find(t => t.descripcion === lead.tipo_licencia)
+        if (match) licenciaTipoId = match.id
+      }
+
       const conductorData: Record<string, unknown> = {
         nombres: nombres || lead.primer_nombre || '',
         apellidos: apellidos || lead.apellido || '',
@@ -828,7 +918,9 @@ export function LeadsModule() {
         zona: lead.zona || '',
         preferencia_turno: turnoMapped,
         licencia_vencimiento: lead.vencimiento_licencia || null,
-        numero_licencia: '',
+        numero_licencia: lead.numero_licencia || '',
+        licencia_estado_id: licenciaEstadoId,
+        licencia_tipo_id: licenciaTipoId,
         estado_id: estadoId,
         cbu: lead.cbu || '',
         monotributo: lead.monotributo?.toLowerCase().includes('tiene') || false,
@@ -848,13 +940,27 @@ export function LeadsModule() {
         }
       })
 
-      const { error: errCond } = await supabase
+      const { data: createdConductor, error: errCond } = await supabase
         .from('conductores')
         .insert(conductorData)
         .select('id')
         .single()
 
       if (errCond) throw errCond
+
+      // Insertar categorías de licencia en tabla intermedia
+      if (createdConductor?.id && lead.categorias_licencia?.length && categoriasLicencia.length > 0) {
+        const categoriasRelacion: Array<{ conductor_id: string; licencia_categoria_id: string }> = []
+        for (const desc of lead.categorias_licencia) {
+          const cat = categoriasLicencia.find(c => c.descripcion === desc)
+          if (cat) {
+            categoriasRelacion.push({ conductor_id: createdConductor.id, licencia_categoria_id: cat.id })
+          }
+        }
+        if (categoriasRelacion.length > 0) {
+          await (supabase as any).from('conductores_licencias_categorias').insert(categoriasRelacion)
+        }
+      }
 
       await supabase.from('leads').update({
         proceso: 'Convertido',
@@ -1552,7 +1658,7 @@ export function LeadsModule() {
         />
       ),
       cell: ({ row }) => {
-        const nombre = row.original.nombre_completo || '-'
+        const nombre = (row.original.nombre_completo || '-').toUpperCase()
         const dni = row.original.dni || ''
         const phone = row.original.phone || ''
         const direccion = row.original.direccion || ''
@@ -1656,7 +1762,7 @@ export function LeadsModule() {
         const isOpen = estadoDropdownId === lead.id
 
         const badgeClass = estado
-          ? `lead-estado-badge lead-estado-${estado.toLowerCase().replace(/\s/g, '-')}`
+          ? `lead-estado-badge lead-estado-${estado.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/\s/g, '-')}`
           : ''
 
         return (
@@ -1677,38 +1783,7 @@ export function LeadsModule() {
       enableSorting: true,
     },
     /* Columnas Proceso y Entrevista IA ocultas */
-    {
-      id: 'disponibilidad',
-      accessorFn: (row) => row.disponibilidad || '-',
-      header: () => (
-        <ExcelColumnFilter
-          label="Disponibilidad"
-          options={uniqueDisponibilidades}
-          selectedValues={disponibilidadFilter}
-          onSelectionChange={setDisponibilidadFilter}
-          filterId="lead_disponibilidad"
-          openFilterId={openFilterId}
-          onOpenChange={setOpenFilterId}
-        />
-      ),
-      cell: ({ row }) => {
-        const val = row.original.disponibilidad || '-'
-        return (
-          <span style={{
-            display: 'block',
-            maxWidth: '180px',
-            whiteSpace: 'normal',
-            wordBreak: 'break-word',
-            lineHeight: '1.3',
-            fontSize: '12px',
-          }}>
-            {val}
-          </span>
-        )
-      },
-      size: 190,
-      enableSorting: true,
-    },
+    /* Columna Disponibilidad oculta */
     {
       id: 'zona',
       accessorFn: (row) => row.zona || '-',
@@ -1729,7 +1804,7 @@ export function LeadsModule() {
     },
     {
       id: 'turno',
-      accessorFn: (row) => row.turno || '-',
+      accessorFn: (row) => normalizarTurno(row.turno),
       header: () => (
         <ExcelColumnFilter
           label="Turno"
@@ -1741,7 +1816,7 @@ export function LeadsModule() {
           onOpenChange={setOpenFilterId}
         />
       ),
-      cell: ({ row }) => row.original.turno || '-',
+      cell: ({ row }) => normalizarTurno(row.original.turno),
       size: 90,
       enableSorting: true,
     },
@@ -1749,32 +1824,19 @@ export function LeadsModule() {
       id: 'licencia',
       accessorFn: (row) => row.licencia || '-',
       header: 'Licencia',
-      cell: ({ row }) => {
-        const val = row.original.licencia || '-'
-        const isLong = val.length > 16
-        return (
-          <span
-            className="lead-licencia-cell"
-            onMouseEnter={isLong ? (e) => {
-              const rect = e.currentTarget.getBoundingClientRect()
-              const tip = document.createElement('div')
-              tip.className = 'lead-licencia-tooltip'
-              tip.textContent = val
-              tip.style.left = `${rect.left}px`
-              tip.style.top = `${rect.top - 8}px`
-              document.body.appendChild(tip)
-              e.currentTarget.dataset.tipActive = 'true'
-            } : undefined}
-            onMouseLeave={isLong ? () => {
-              const tip = document.querySelector('.lead-licencia-tooltip')
-              if (tip) tip.remove()
-            } : undefined}
-          >
-            {val}
-          </span>
-        )
-      },
-      size: 130,
+      cell: ({ row }) => (
+        <SiNoDropdownCell
+          leadId={row.original.id}
+          field="licencia"
+          value={row.original.licencia}
+          isOpen={sinoDropdownKey === `${row.original.id}::licencia`}
+          canEdit={canEdit}
+          onToggle={(k) => setSinoDropdownKey(sinoDropdownKey === k ? null : k)}
+          onChange={handleInlineUpdate}
+          onClose={() => setSinoDropdownKey(null)}
+        />
+      ),
+      size: 70,
       enableSorting: true,
     },
     {
@@ -1789,40 +1851,70 @@ export function LeadsModule() {
       enableSorting: true,
     },
     {
-      id: 'turno_col',
-      accessorFn: (row) => row.turno || '-',
-      header: 'Turno',
-      cell: ({ row }) => <span style={{ fontSize: '11px' }}>{row.original.turno || '-'}</span>,
-      size: 70,
+      id: 'email',
+      accessorFn: (row) => row.email || '-',
+      header: 'Email',
+      cell: ({ row }) => {
+        const v = row.original.email || '-'
+        return <span style={{ fontSize: '11px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', display: 'block', maxWidth: '160px' }} title={v}>{v}</span>
+      },
+      size: 170,
       enableSorting: true,
     },
     {
+      id: 'telefono',
+      accessorFn: (row) => row.phone || '-',
+      header: 'Teléfono',
+      cell: ({ row }) => {
+        const v = row.original.phone || '-'
+        return <span style={{ fontSize: '11px', whiteSpace: 'nowrap' }}>{v}</span>
+      },
+      size: 130,
+      enableSorting: true,
+    },
+    {
+      id: 'edad',
+      accessorFn: (row) => row.edad ?? '-',
+      header: 'Edad',
+      cell: ({ row }) => {
+        const v = row.original.edad
+        return <span style={{ fontSize: '11px' }}>{v != null ? v : '-'}</span>
+      },
+      size: 60,
+      enableSorting: true,
+    },
+    {
+      id: 'entrevistador',
+      accessorFn: (row) => row.entrevistador_asignado || '-',
+      header: 'Guia',
+      cell: ({ row }) => {
+        const v = row.original.entrevistador_asignado || '-'
+        return <span style={{ fontSize: '11px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', display: 'block', maxWidth: '100px' }} title={v}>{v}</span>
+      },
+      size: 110,
+      enableSorting: true,
+    },
+    {
+      id: 'fase_preguntas',
+      accessorFn: (row) => row.fase_de_preguntas || '-',
+      header: 'Fase',
+      cell: ({ row }) => {
+        const v = row.original.fase_de_preguntas || '-'
+        return <span style={{ fontSize: '11px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', display: 'block', maxWidth: '120px' }} title={v}>{v}</span>
+      },
+      size: 120,
+      enableSorting: true,
+    },
+    /* Columna Hireflix oculta */
+    {
       id: 'exp_manejo',
-      accessorFn: (row) => row.experiencia_manejo || '-',
+      accessorFn: (row) => row.experiencia_previa || '-',
       header: 'Exp. Manejo',
-      cell: ({ row }) => <span style={{ fontSize: '11px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', display: 'block', maxWidth: '80px' }} title={row.original.experiencia_manejo || ''}>{row.original.experiencia_manejo || '-'}</span>,
+      cell: ({ row }) => <span style={{ fontSize: '11px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', display: 'block', maxWidth: '80px' }} title={row.original.experiencia_previa || ''}>{row.original.experiencia_previa || '-'}</span>,
       size: 85,
       enableSorting: true,
     },
-    {
-      id: 'd1',
-      accessorFn: (row) => row.d1 || '-',
-      header: 'D1',
-      cell: ({ row }) => (
-        <SiNoDropdownCell
-          leadId={row.original.id}
-          field="d1"
-          value={row.original.d1}
-          isOpen={sinoDropdownKey === `${row.original.id}::d1`}
-          canEdit={canEdit}
-          onToggle={(k) => setSinoDropdownKey(sinoDropdownKey === k ? null : k)}
-          onChange={handleInlineUpdate}
-          onClose={() => setSinoDropdownKey(null)}
-        />
-      ),
-      size: 55,
-      enableSorting: true,
-    },
+    /* Columna D1 oculta */
     {
       id: 'rnr',
       accessorFn: (row) => row.rnr || '-',
@@ -1865,7 +1957,16 @@ export function LeadsModule() {
       id: 'cta_cabify',
       accessorFn: (row) => row.cuenta_cabify || '-',
       header: 'Cta. Cabify',
-      cell: ({ row }) => <span style={{ fontSize: '11px' }}>{row.original.cuenta_cabify || '-'}</span>,
+      cell: ({ row }) => (
+        <EditableTextCell
+          leadId={row.original.id}
+          field="cuenta_cabify"
+          value={row.original.cuenta_cabify}
+          canEdit={canEdit}
+          onChange={handleInlineUpdate}
+          maxWidth="80px"
+        />
+      ),
       size: 85,
       enableSorting: true,
     },
@@ -1907,14 +2008,7 @@ export function LeadsModule() {
       size: 55,
       enableSorting: true,
     },
-    {
-      id: 'guia',
-      accessorFn: (row) => row.guia_asignado || '-',
-      header: 'Guia',
-      cell: ({ row }) => <span style={{ fontSize: '11px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', display: 'block', maxWidth: '90px' }} title={row.original.guia_asignado || ''}>{row.original.guia_asignado || '-'}</span>,
-      size: 90,
-      enableSorting: true,
-    },
+    /* Columna Guia oculta */
     /* Columna Fecha Entrevista oculta */
     {
       id: 'acciones',
@@ -2014,7 +2108,7 @@ export function LeadsModule() {
 
       {/* Stats */}
       <div className="leads-stats">
-        <div className="leads-stats-grid" style={{ gridTemplateColumns: 'repeat(5, 1fr)' }}>
+        <div className="leads-stats-grid" style={{ gridTemplateColumns: 'repeat(6, 1fr)' }}>
           <div
             className={`stat-card stat-card-clickable ${activeStatCard === 'inicio' ? 'stat-card-active' : ''}`}
             onClick={() => handleStatClick('inicio')}
@@ -2053,6 +2147,16 @@ export function LeadsModule() {
             <div className="stat-content">
               <span className="stat-value">{stats.damaro}</span>
               <span className="stat-label">Damaro</span>
+            </div>
+          </div>
+          <div
+            className={`stat-card stat-card-clickable ${activeStatCard === 'convocatoria' ? 'stat-card-active' : ''}`}
+            onClick={() => handleStatClick('convocatoria')}
+          >
+            <UserPlus size={18} className="stat-icon" style={{ color: '#8b5cf6' }} />
+            <div className="stat-content">
+              <span className="stat-value">{stats.convocatoria}</span>
+              <span className="stat-label">Conv. Inducción</span>
             </div>
           </div>
           <div
@@ -2131,6 +2235,9 @@ export function LeadsModule() {
                 onCancel={() => setShowCreateModal(false)}
                 saving={saving}
                 errors={editErrors}
+                categoriasLicencia={categoriasLicencia}
+                estadosLicencia={estadosLicencia}
+                tiposLicencia={tiposLicencia}
               />
             </div>
           </div>
@@ -2155,6 +2262,9 @@ export function LeadsModule() {
                 onCancel={() => setShowEditModal(false)}
                 saving={saving}
                 errors={editErrors}
+                categoriasLicencia={categoriasLicencia}
+                estadosLicencia={estadosLicencia}
+                tiposLicencia={tiposLicencia}
               />
             </div>
           </div>
@@ -2213,6 +2323,94 @@ export function LeadsModule() {
         </div>
       )}
     </div>
+  )
+}
+
+// =====================================================
+// EDITABLE TEXT CELL (click-to-edit inline)
+// =====================================================
+
+interface EditableTextCellProps {
+  leadId: string
+  field: keyof Lead
+  value: string | null | undefined
+  canEdit: boolean
+  onChange: (leadId: string, field: keyof Lead, value: string) => void
+  maxWidth?: string
+}
+
+function EditableTextCell({ leadId, field, value, canEdit, onChange, maxWidth = '120px' }: EditableTextCellProps) {
+  const [editing, setEditing] = useState(false)
+  const [text, setText] = useState(value || '')
+  const inputRef = useRef<HTMLInputElement>(null)
+
+  useEffect(() => {
+    setText(value || '')
+  }, [value])
+
+  useEffect(() => {
+    if (editing && inputRef.current) {
+      inputRef.current.focus()
+      inputRef.current.select()
+    }
+  }, [editing])
+
+  const handleSave = () => {
+    setEditing(false)
+    const trimmed = text.trim()
+    if (trimmed !== (value || '')) {
+      onChange(leadId, field, trimmed)
+    }
+  }
+
+  if (editing && canEdit) {
+    return (
+      <input
+        ref={inputRef}
+        type="text"
+        value={text}
+        onChange={(e) => setText(e.target.value)}
+        onBlur={handleSave}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') handleSave()
+          if (e.key === 'Escape') { setText(value || ''); setEditing(false) }
+        }}
+        style={{
+          fontSize: '11px',
+          width: '100%',
+          padding: '2px 6px',
+          border: '1px solid var(--border-primary)',
+          borderRadius: '4px',
+          background: 'var(--bg-primary)',
+          color: 'var(--text-primary)',
+          outline: 'none',
+        }}
+      />
+    )
+  }
+
+  const display = value || '-'
+  return (
+    <span
+      onClick={() => canEdit && setEditing(true)}
+      style={{
+        fontSize: '11px',
+        cursor: canEdit ? 'pointer' : 'default',
+        display: 'block',
+        maxWidth,
+        whiteSpace: 'nowrap',
+        overflow: 'hidden',
+        textOverflow: 'ellipsis',
+        padding: '2px 4px',
+        borderRadius: '4px',
+        border: canEdit ? '1px solid transparent' : 'none',
+      }}
+      onMouseEnter={(e) => { if (canEdit) (e.currentTarget as HTMLElement).style.borderColor = 'var(--border-primary)' }}
+      onMouseLeave={(e) => { if (canEdit) (e.currentTarget as HTMLElement).style.borderColor = 'transparent' }}
+      title={display}
+    >
+      {display}
+    </span>
   )
 }
 
@@ -2417,7 +2615,7 @@ function EstadoDropdownCell({ leadId, estado, badgeClass, isOpen, canEdit, onTog
                 else onClose()
               }}
             >
-              <span className={`lead-estado-dot lead-estado-dot-${est.toLowerCase().replace(/\s/g, '-')}`} />
+              <span className={`lead-estado-dot lead-estado-dot-${est.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/\s/g, '-')}`} />
               {est}
             </button>
           ))}
@@ -2471,6 +2669,33 @@ function LeadDetailView({ lead, onEdit, onConvert, zonasRestringidas = [], enZon
           >
             <MessageCircle size={14} /> Ver Perfil Intercom
           </button>
+          {(() => {
+            const guiaMap: Record<string, string> = { marina: '687169f1bda19bb1e7faa1bc', manuel: '6877eeff3042007628cd1ad7' }
+            const entrevistador = (lead.entrevistador_asignado || '').trim().toLowerCase()
+            const idGuia = guiaMap[entrevistador] || null
+            const idHireflix = lead.id_hireflix?.trim() || null
+            const faltantes: string[] = []
+            if (!idGuia) faltantes.push('No tiene guia asignado')
+            if (!idHireflix) faltantes.push('No tiene videocuestionario')
+            const habilitado = !!idGuia && !!idHireflix
+            const url = habilitado ? `https://admin.hireflix.com/es/jobs/${idGuia}/interview/${idHireflix}` : ''
+            return (
+              <span style={{ position: 'relative', display: 'inline-block' }} className="hireflix-btn-wrapper">
+                <button
+                  className={`btn-sm ${habilitado ? 'btn-primary' : 'btn-secondary'}`}
+                  disabled={!habilitado}
+                  onClick={() => { if (habilitado) window.open(url, '_blank') }}
+                >
+                  <Video size={14} /> Ver Videocuestionario
+                </button>
+                {!habilitado && (
+                  <div className="hireflix-tooltip">
+                    {faltantes.map((f, i) => <div key={i}>{f}</div>)}
+                  </div>
+                )}
+              </span>
+            )
+          })()}
           {onConvert && (
             <button className="btn-primary btn-sm" onClick={onConvert}>
               <UserPlus size={14} /> Convertir a Conductor
@@ -2511,6 +2736,26 @@ function LeadDetailView({ lead, onEdit, onConvert, zonasRestringidas = [], enZon
           <div className="lead-detail-item">
             <span className="lead-detail-item-label">Estado Civil</span>
             <span className="lead-detail-item-value">{lead.estado_civil || '-'}</span>
+          </div>
+          <div className="lead-detail-item">
+            <span className="lead-detail-item-label">Antecedentes Penales</span>
+            <span className="lead-detail-item-value">{lead.antecedentes_penales === true ? 'Si' : lead.antecedentes_penales === false ? 'No' : '-'}</span>
+          </div>
+          <div className="lead-detail-item">
+            <span className="lead-detail-item-label">Experiencia Previa</span>
+            <span className="lead-detail-item-value">{lead.experiencia_previa || '-'}</span>
+          </div>
+          <div className="lead-detail-item">
+            <span className="lead-detail-item-label">Experiencia Manejo</span>
+            <span className="lead-detail-item-value">{lead.experiencia_manejo || '-'}</span>
+          </div>
+          <div className="lead-detail-item">
+            <span className="lead-detail-item-label">Disponibilidad</span>
+            <span className="lead-detail-item-value">{lead.disponibilidad || '-'}</span>
+          </div>
+          <div className="lead-detail-item">
+            <span className="lead-detail-item-label">BCRA</span>
+            <span className="lead-detail-item-value">{lead.bcra || '-'}</span>
           </div>
         </div>
 
@@ -2575,12 +2820,12 @@ function LeadDetailView({ lead, onEdit, onConvert, zonasRestringidas = [], enZon
             <span className="lead-detail-item-value">{lead.fuente_de_lead || '-'}</span>
           </div>
           <div className="lead-detail-item">
-            <span className="lead-detail-item-label">Agente</span>
-            <span className="lead-detail-item-value">{lead.agente_asignado || '-'}</span>
-          </div>
-          <div className="lead-detail-item">
             <span className="lead-detail-item-label">Guia</span>
             <span className="lead-detail-item-value">{lead.entrevistador_asignado || '-'}</span>
+          </div>
+          <div className="lead-detail-item">
+            <span className="lead-detail-item-label">Detalle Hireflix</span>
+            <span className="lead-detail-item-value" style={{ whiteSpace: 'pre-wrap', maxWidth: '300px', textAlign: 'right' }}>{lead.resumen_hireflix || '-'}</span>
           </div>
         </div>
 
@@ -2590,6 +2835,22 @@ function LeadDetailView({ lead, onEdit, onConvert, zonasRestringidas = [], enZon
           <div className="lead-detail-item">
             <span className="lead-detail-item-label">Licencia</span>
             <span className="lead-detail-item-value">{lead.licencia || '-'}</span>
+          </div>
+          <div className="lead-detail-item">
+            <span className="lead-detail-item-label">Nro. Licencia</span>
+            <span className="lead-detail-item-value">{lead.numero_licencia || '-'}</span>
+          </div>
+          <div className="lead-detail-item">
+            <span className="lead-detail-item-label">Categorías</span>
+            <span className="lead-detail-item-value">{lead.categorias_licencia?.length ? lead.categorias_licencia.join(', ') : '-'}</span>
+          </div>
+          <div className="lead-detail-item">
+            <span className="lead-detail-item-label">Estado Licencia</span>
+            <span className="lead-detail-item-value">{lead.estado_licencia || '-'}</span>
+          </div>
+          <div className="lead-detail-item">
+            <span className="lead-detail-item-label">Tipo Licencia</span>
+            <span className="lead-detail-item-value">{lead.tipo_licencia || '-'}</span>
           </div>
           <div className="lead-detail-item">
             <span className="lead-detail-item-label">Venc. Licencia</span>
@@ -2655,12 +2916,18 @@ interface LeadDetailMapProps {
 }
 
 function LeadDetailMap({ lat, lng, zonasRestringidas, enZonaRestringida, nombreZona, mapRef }: LeadDetailMapProps) {
-  const { isLoaded } = useJsApiLoader({
-    googleMapsApiKey: GOOGLE_MAPS_API_KEY,
-    libraries: GMAP_LIBRARIES,
-  })
+  const [mapsReady, setMapsReady] = useState(false)
 
-  if (!isLoaded) {
+  useEffect(() => {
+    if ((window as any).google?.maps) {
+      setMapsReady(true)
+      return
+    }
+    // Cargar el script si aún no está
+    loadGoogleMapsAPI().then(() => setMapsReady(true)).catch(() => {})
+  }, [])
+
+  if (!mapsReady) {
     return (
       <div style={{ marginTop: '8px', height: '220px', borderRadius: '8px', border: '1px solid #e5e7eb', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#f9fafb' }}>
         <span style={{ fontSize: '12px', color: 'var(--text-tertiary)' }}>Cargando mapa...</span>

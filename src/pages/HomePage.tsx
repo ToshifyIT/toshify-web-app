@@ -111,7 +111,7 @@ class LazyErrorBoundary extends Component<{ children: ReactNode }, LazyErrorBoun
     return { hasError: true, isChunkError: isChunkLoadError(error) }
   }
 
-  componentDidCatch(error: Error, _errorInfo: ErrorInfo) {
+  componentDidCatch(error: Error, errorInfo: ErrorInfo) {
     if (isChunkLoadError(error)) {
       // Tracking por chunk: cada módulo puede auto-recargar de forma independiente.
       // Usamos los últimos 30 chars del mensaje como clave única del chunk.
@@ -124,6 +124,9 @@ class LazyErrorBoundary extends Component<{ children: ReactNode }, LazyErrorBoun
         return
       }
     }
+    // Loguear errores no-chunk para diagnóstico
+    console.error('[ErrorBoundary] Error en módulo:', error.message, error.stack)
+    console.error('[ErrorBoundary] Component stack:', errorInfo.componentStack)
   }
 
   render() {

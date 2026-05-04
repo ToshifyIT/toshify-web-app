@@ -3579,97 +3579,88 @@ export function AsignacionesModule() {
                                 return result
                               })()
                           return lista
-                        })().map((ac) => (
-                          <div key={ac.id} className="asig-conductor-card">
-                            <p className="asig-conductor-card-name">
-                              {ac.conductores?.nombres || '-'} {ac.conductores?.apellidos || ''}
-                              {(ac.conductores as any)?.conductores_estados?.codigo?.toLowerCase().includes('baja') && (
-                                <span style={{ marginLeft: 8, padding: '2px 8px', fontSize: '11px', fontWeight: 600, color: '#fff', background: '#DC2626', borderRadius: '10px', verticalAlign: 'middle' }}>De baja</span>
-                              )}
-                            </p>
-                            <p className="asig-conductor-card-info">Licencia: {ac.conductores?.numero_licencia || '-'}</p>
-                            {ac.horario !== 'todo_dia' && (
-                              <p className="asig-conductor-card-info">Turno: <strong>{ac.horario}</strong></p>
-                            )}
-                            {ac.documento && (
-                              <p className="asig-conductor-card-info">
-                                Documento: <strong style={{ color: ac.documento === 'CARTA_OFERTA' ? '#059669' : ac.documento === 'ANEXO' ? '#2563EB' : '#6B7280' }}>
-                                  {ac.documento === 'CARTA_OFERTA' ? 'Carta Oferta' : ac.documento === 'ANEXO' ? 'Anexo' : ac.documento}
-                                </strong>
+                        })().map((ac) => {
+                          const driveUrl = viewDriveUrls[ac.conductor_id] || (ac.conductores as any)?.drive_folder_url
+                          const showDrive = ac.documento !== 'NA' && ac.documento !== 'N/A'
+                          return (
+                          <div key={ac.id} className="asig-conductor-card" style={{ display: 'flex', gap: '16px', alignItems: 'stretch' }}>
+                            {/* Datos del conductor */}
+                            <div style={{ flex: 1, minWidth: 0 }}>
+                              <p className="asig-conductor-card-name">
+                                {ac.conductores?.nombres || '-'} {ac.conductores?.apellidos || ''}
+                                {(ac.conductores as any)?.conductores_estados?.codigo?.toLowerCase().includes('baja') && (
+                                  <span style={{ marginLeft: 8, padding: '2px 8px', fontSize: '11px', fontWeight: 600, color: '#fff', background: '#DC2626', borderRadius: '10px', verticalAlign: 'middle' }}>De baja</span>
+                                )}
                               </p>
-                            )}
-                            {(() => {
-                              if (ac.documento === 'NA' || ac.documento === 'N/A') return null
-                              const driveUrl = viewDriveUrls[ac.conductor_id] || (ac.conductores as any)?.drive_folder_url
-                              if (!driveUrl) return (
-                                <div style={{ marginTop: '4px', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                                  <FolderOpen size={13} style={{ color: '#9CA3AF' }} />
-                                  <span style={{ fontSize: '12px', color: '#9CA3AF', fontWeight: 500 }}>Sin Carpeta</span>
-                                </div>
-                              )
-                              return (
-                                <div style={{ marginTop: '4px', display: 'flex', flexDirection: 'column', gap: '2px' }}>
-                                  <a href={driveUrl} target="_blank" rel="noopener noreferrer" style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', fontSize: '12px', color: '#2563EB', textDecoration: 'none', fontWeight: 500 }}>
-                                    <FolderOpen size={13} /> Ver documentos en Drive
-                                  </a>
-                                  <span
-                                    onClick={() => { navigator.clipboard.writeText(driveUrl); showSuccess('URL copiada') }}
-                                    style={{ fontSize: '10px', color: '#9CA3AF', cursor: 'pointer', wordBreak: 'break-all' }}
-                                    title="Click para copiar"
-                                  >{driveUrl}</span>
-                                </div>
-                              )
-                            })()}
-                            <p className="asig-conductor-status">
-                              {ac.confirmado ? (
-                                <>
-                                  <span className="asig-conductor-confirmed">
-                                    <CheckCircle size={14} /> Confirmado
-                                    {ac.fecha_confirmacion && (
-                                      <span style={{ marginLeft: '6px', fontWeight: 400, fontSize: '12px', opacity: 0.85 }}>
-                                        ({new Date(ac.fecha_confirmacion).toLocaleString('es-AR', {
-                                          day: '2-digit',
-                                          month: '2-digit',
-                                          year: 'numeric',
-                                          hour: '2-digit',
-                                          minute: '2-digit',
-                                          timeZone: 'America/Argentina/Buenos_Aires'
-                                        })})
-                                      </span>
-                                    )}
-                                  </span>
-                                  {canEdit && viewAsignacion.estado === 'programado' && (
-                                    <button
-                                      className="asig-btn-unconfirm"
-                                      onClick={() => handleUnconfirmFromViewModal(ac.id)}
-                                    >
-                                      Desconfirmar
-                                    </button>
-                                  )}
-                                </>
-                              ) : (
-                                <span style={{ color: '#F59E0B', fontWeight: 600 }}>Pendiente</span>
+                              <p className="asig-conductor-card-info">Licencia: {ac.conductores?.numero_licencia || '-'}</p>
+                              {ac.horario !== 'todo_dia' && (
+                                <p className="asig-conductor-card-info">Turno: <strong>{ac.horario}</strong></p>
                               )}
-                            </p>
-                            {(() => {
-                              if (ac.documento === 'NA' || ac.documento === 'N/A') return null
-                              const driveUrl = (ac.conductores as any)?.drive_folder_url
-                              if (!driveUrl) return null
-                              return (
-                                <div style={{ marginTop: '4px', display: 'flex', flexDirection: 'column', gap: '2px' }}>
-                                  <a href={driveUrl} target="_blank" rel="noopener noreferrer" style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', fontSize: '12px', color: '#2563EB', textDecoration: 'none', fontWeight: 500 }}>
-                                    <FolderOpen size={13} /> Ver documentos en Drive
-                                  </a>
-                                  <span
-                                    onClick={() => { navigator.clipboard.writeText(driveUrl); showSuccess('URL copiada') }}
-                                    style={{ fontSize: '10px', color: '#9CA3AF', cursor: 'pointer', wordBreak: 'break-all' }}
-                                    title="Click para copiar"
-                                  >{driveUrl}</span>
-                                </div>
-                              )
-                            })()}
+                              {ac.documento && (
+                                <p className="asig-conductor-card-info">
+                                  Documento: <strong style={{ color: ac.documento === 'CARTA_OFERTA' ? '#059669' : ac.documento === 'ANEXO' ? '#2563EB' : '#6B7280' }}>
+                                    {ac.documento === 'CARTA_OFERTA' ? 'Carta Oferta' : ac.documento === 'ANEXO' ? 'Anexo' : ac.documento}
+                                  </strong>
+                                </p>
+                              )}
+                              <p className="asig-conductor-status">
+                                {ac.confirmado ? (
+                                  <>
+                                    <span className="asig-conductor-confirmed">
+                                      <CheckCircle size={14} /> Confirmado
+                                      {ac.fecha_confirmacion && (
+                                        <span style={{ marginLeft: '6px', fontWeight: 400, fontSize: '12px', opacity: 0.85 }}>
+                                          ({new Date(ac.fecha_confirmacion).toLocaleString('es-AR', {
+                                            day: '2-digit',
+                                            month: '2-digit',
+                                            year: 'numeric',
+                                            hour: '2-digit',
+                                            minute: '2-digit',
+                                            timeZone: 'America/Argentina/Buenos_Aires'
+                                          })})
+                                        </span>
+                                      )}
+                                    </span>
+                                    {canEdit && viewAsignacion.estado === 'programado' && (
+                                      <button
+                                        className="asig-btn-unconfirm"
+                                        onClick={() => handleUnconfirmFromViewModal(ac.id)}
+                                      >
+                                        Desconfirmar
+                                      </button>
+                                    )}
+                                  </>
+                                ) : (
+                                  <span style={{ color: '#F59E0B', fontWeight: 600 }}>Pendiente</span>
+                                )}
+                              </p>
+                            </div>
+                            {/* Documentos en Drive */}
+                            {showDrive && (
+                              <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', minWidth: '130px', padding: '10px 14px', background: 'var(--bg-secondary)', borderRadius: '8px', border: '1px solid var(--border-primary)' }}>
+                                {driveUrl ? (
+                                  <>
+                                    <FolderOpen size={22} style={{ color: '#2563EB', marginBottom: '6px' }} />
+                                    <a href={driveUrl} target="_blank" rel="noopener noreferrer" style={{ fontSize: '12px', color: '#2563EB', textDecoration: 'none', fontWeight: 600, textAlign: 'center', lineHeight: '1.3' }}>
+                                      Ver documentos
+                                    </a>
+                                    <span
+                                      onClick={() => { navigator.clipboard.writeText(driveUrl); showSuccess('URL copiada') }}
+                                      style={{ fontSize: '10px', color: 'var(--text-tertiary)', cursor: 'pointer', marginTop: '4px', textAlign: 'center' }}
+                                      title="Click para copiar URL"
+                                    >Copiar enlace</span>
+                                  </>
+                                ) : (
+                                  <>
+                                    <FolderOpen size={22} style={{ color: '#9CA3AF', marginBottom: '6px' }} />
+                                    <span style={{ fontSize: '12px', color: '#9CA3AF', fontWeight: 500, textAlign: 'center' }}>Sin carpeta</span>
+                                  </>
+                                )}
+                              </div>
+                            )}
                           </div>
-                        ))}
+                          )
+                        })}
                       </div>
                     ) : (
                       <p style={{ color: '#9CA3AF', fontSize: '14px' }}>Sin conductores asignados</p>

@@ -1143,6 +1143,7 @@ export function ProgramacionModule() {
           fecha_programada: fechaProgramada,
           estado: 'programado',
           notas: notasBase,
+          zona: prog.zona || prog.zona_diurno || prog.zona_nocturno || null,
           created_by: user?.id || null,
           created_by_name: profile?.full_name || 'Sistema',
           sede_id: prog.sede_id || sedeActualId || sedeUsuario?.id,
@@ -1957,7 +1958,7 @@ export function ProgramacionModule() {
           confirmo: { label: 'Confirmó', color: '#10B981' },
           no_confirmo: { label: 'No confirmó', color: '#EF4444' },
           reprogramar: { label: 'Reprogramar', color: '#F59E0B' },
-          sin_confirmar: { label: 'Sin confirmar', color: '#6B7280' }
+          sin_confirmar: { label: 'Sin confirmar', color: '#9CA3AF' }
         }
 
         // Para TURNO: mostrar ambas confirmaciones
@@ -2081,9 +2082,9 @@ export function ProgramacionModule() {
             style={{
               padding: '6px 14px',
               borderRadius: '6px',
-              border: activeTab === 'pendientes' ? '2px solid #ef4444' : '1px solid #e5e7eb',
-              background: activeTab === 'pendientes' ? 'rgba(239, 68, 68, 0.05)' : 'white',
-              color: activeTab === 'pendientes' ? '#ef4444' : '#6b7280',
+              border: activeTab === 'pendientes' ? '2px solid #ef4444' : '1px solid var(--border-primary)',
+              background: activeTab === 'pendientes' ? 'rgba(239, 68, 68, 0.08)' : 'var(--modal-bg)',
+              color: activeTab === 'pendientes' ? '#ef4444' : 'var(--text-secondary)',
               fontWeight: activeTab === 'pendientes' ? 600 : 500,
               fontSize: '13px',
               cursor: 'pointer',
@@ -2095,7 +2096,7 @@ export function ProgramacionModule() {
           >
             <Calendar size={14} />
             Pendientes
-            <span style={{ padding: '1px 6px', borderRadius: '10px', background: activeTab === 'pendientes' ? '#ef4444' : '#e5e7eb', color: activeTab === 'pendientes' ? 'white' : '#6b7280', fontSize: '11px', fontWeight: 600 }}>
+            <span style={{ padding: '1px 6px', borderRadius: '10px', background: activeTab === 'pendientes' ? '#ef4444' : 'var(--bg-tertiary)', color: activeTab === 'pendientes' ? 'white' : 'var(--text-secondary)', fontSize: '11px', fontWeight: 600 }}>
               {programaciones.length}
             </span>
           </button>
@@ -2107,9 +2108,9 @@ export function ProgramacionModule() {
             style={{
               padding: '6px 14px',
               borderRadius: '6px',
-              border: activeTab === 'historico' ? '2px solid #10b981' : '1px solid #e5e7eb',
-              background: activeTab === 'historico' ? 'rgba(16, 185, 129, 0.05)' : 'white',
-              color: activeTab === 'historico' ? '#10b981' : '#6b7280',
+              border: activeTab === 'historico' ? '2px solid #10b981' : '1px solid var(--border-primary)',
+              background: activeTab === 'historico' ? 'rgba(16, 185, 129, 0.08)' : 'var(--modal-bg)',
+              color: activeTab === 'historico' ? '#10b981' : 'var(--text-secondary)',
               fontWeight: activeTab === 'historico' ? 600 : 500,
               fontSize: '13px',
               cursor: 'pointer',
@@ -2122,7 +2123,7 @@ export function ProgramacionModule() {
             <Send size={14} />
             Enviados
             {programacionesHistorico.length > 0 && (
-              <span style={{ padding: '1px 6px', borderRadius: '10px', background: activeTab === 'historico' ? '#10b981' : '#e5e7eb', color: activeTab === 'historico' ? 'white' : '#6b7280', fontSize: '11px', fontWeight: 600 }}>
+              <span style={{ padding: '1px 6px', borderRadius: '10px', background: activeTab === 'historico' ? '#10b981' : 'var(--bg-tertiary)', color: activeTab === 'historico' ? 'white' : 'var(--text-secondary)', fontSize: '11px', fontWeight: 600 }}>
                 {programacionesHistorico.length}
               </span>
             )}
@@ -2245,10 +2246,10 @@ export function ProgramacionModule() {
               </div>
 
               {/* Modalidad (solo lectura) */}
-              <div className="prog-modal-section" style={{ background: '#F9FAFB', padding: '12px', borderRadius: '8px', marginBottom: '16px' }}>
+              <div className="prog-modal-section" style={{ background: 'var(--bg-secondary)', padding: '12px', borderRadius: '8px', marginBottom: '16px' }}>
                 <div style={{ display: 'flex', gap: '24px', flexWrap: 'wrap', alignItems: 'center' }}>
                   <div>
-                    <label style={{ fontSize: '11px', color: '#6B7280' }}>Modalidad</label>
+                    <label style={{ fontSize: '11px', color: 'var(--text-tertiary)' }}>Modalidad</label>
                     <p style={{ fontWeight: '600', margin: 0 }}>{editingProgramacion.modalidad || '-'}</p>
                   </div>
                 </div>
@@ -2283,8 +2284,8 @@ export function ProgramacionModule() {
               {editingProgramacion.modalidad === 'turno' ? (
                 <>
                   {/* Conductor Diurno */}
-                  <div className="prog-modal-section" style={{ background: '#FEF9C3', padding: '12px', borderRadius: '8px' }}>
-                    <h3 style={{ color: '#92400E', margin: '0 0 12px 0', fontSize: '14px', display: 'flex', alignItems: 'center', gap: '6px' }}><Sun size={16} /> Conductor Diurno</h3>
+                  <div className="prog-modal-section" style={{ background: 'rgba(251, 191, 36, 0.1)', padding: '12px', borderRadius: '8px' }}>
+                    <h3 style={{ color: '#FBBF24', margin: '0 0 12px 0', fontSize: '14px', display: 'flex', alignItems: 'center', gap: '6px' }}><Sun size={16} /> Conductor Diurno</h3>
                     {/* Selector de conductor diurno */}
                     <div style={{ marginBottom: '12px' }}>
                       <label>Conductor *</label>
@@ -2315,7 +2316,7 @@ export function ProgramacionModule() {
                                     setShowConductorDiurnoDropdown(false)
                                   }}
                                 >
-                                  <strong>{c.nombre}</strong> {c.dni && <span style={{ color: '#6B7280' }}>- DNI: {c.dni}</span>}
+                                  <strong>{c.nombre}</strong> {c.dni && <span style={{ color: 'var(--text-tertiary)' }}>- DNI: {c.dni}</span>}
                                 </div>
                               ))
                             ) : (
@@ -2396,8 +2397,8 @@ export function ProgramacionModule() {
                   </div>
 
                   {/* Conductor Nocturno */}
-                  <div className="prog-modal-section" style={{ background: '#DBEAFE', padding: '12px', borderRadius: '8px', marginTop: '12px' }}>
-                    <h3 style={{ color: '#1E40AF', margin: '0 0 12px 0', fontSize: '14px', display: 'flex', alignItems: 'center', gap: '6px' }}><Moon size={16} /> Conductor Nocturno</h3>
+                  <div className="prog-modal-section" style={{ background: 'rgba(59, 130, 246, 0.1)', padding: '12px', borderRadius: '8px', marginTop: '12px' }}>
+                    <h3 style={{ color: '#60A5FA', margin: '0 0 12px 0', fontSize: '14px', display: 'flex', alignItems: 'center', gap: '6px' }}><Moon size={16} /> Conductor Nocturno</h3>
                     {/* Selector de conductor nocturno */}
                     <div style={{ marginBottom: '12px' }}>
                       <label>Conductor *</label>
@@ -2428,7 +2429,7 @@ export function ProgramacionModule() {
                                     setShowConductorNocturnoDropdown(false)
                                   }}
                                 >
-                                  <strong>{c.nombre}</strong> {c.dni && <span style={{ color: '#6B7280' }}>- DNI: {c.dni}</span>}
+                                  <strong>{c.nombre}</strong> {c.dni && <span style={{ color: 'var(--text-tertiary)' }}>- DNI: {c.dni}</span>}
                                 </div>
                               ))
                             ) : (
@@ -2510,7 +2511,7 @@ export function ProgramacionModule() {
                 </>
               ) : (
                 /* A Cargo - campos legacy */
-                <div className="prog-modal-section" style={{ background: '#F3F4F6', padding: '12px', borderRadius: '8px' }}>
+                <div className="prog-modal-section" style={{ background: 'var(--bg-secondary)', padding: '12px', borderRadius: '8px' }}>
                   <h3 style={{ margin: '0 0 12px 0', fontSize: '14px' }}><User size={16} /> Conductor</h3>
                   {/* Selector de conductor */}
                   <div style={{ marginBottom: '12px' }}>
@@ -2542,7 +2543,7 @@ export function ProgramacionModule() {
                                   setShowConductorDropdown(false)
                                 }}
                               >
-                                <strong>{c.nombre}</strong> {c.dni && <span style={{ color: '#6B7280' }}>- DNI: {c.dni}</span>}
+                                <strong>{c.nombre}</strong> {c.dni && <span style={{ color: 'var(--text-tertiary)' }}>- DNI: {c.dni}</span>}
                               </div>
                             ))
                           ) : (
@@ -2655,16 +2656,16 @@ export function ProgramacionModule() {
                 {(previewProgramacion as any).cambio_vehiculo && (previewProgramacion as any).vehiculo_cambio_patente ? (
                   <div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '10px 0' }}>
-                      <div style={{ flex: 1, padding: '10px 14px', background: '#FEF3C7', borderRadius: '8px', border: '1px solid #FDE68A' }}>
-                        <label style={{ fontSize: '10px', color: '#92400E', fontWeight: '600', display: 'block', marginBottom: '2px' }}>VEHÍCULO ANTERIOR</label>
-                        <p style={{ margin: 0, fontWeight: '700', fontSize: '14px' }}>{(previewProgramacion as any).vehiculo_cambio_patente || '-'}</p>
-                        <p style={{ margin: '2px 0 0', fontSize: '11px', color: '#6B7280' }}>{(previewProgramacion as any).vehiculo_cambio_modelo || ''}</p>
+                      <div style={{ flex: 1, padding: '10px 14px', background: 'rgba(251, 191, 36, 0.15)', borderRadius: '8px', border: '1px solid rgba(251, 191, 36, 0.3)' }}>
+                        <label style={{ fontSize: '10px', color: 'var(--text-secondary)', fontWeight: '600', display: 'block', marginBottom: '2px' }}>VEHÍCULO ANTERIOR</label>
+                        <p style={{ margin: 0, fontWeight: '700', fontSize: '14px', color: 'var(--text-primary)' }}>{(previewProgramacion as any).vehiculo_cambio_patente || '-'}</p>
+                        <p style={{ margin: '2px 0 0', fontSize: '11px', color: 'var(--text-tertiary)' }}>{(previewProgramacion as any).vehiculo_cambio_modelo || ''}</p>
                       </div>
-                      <ArrowLeftRight size={20} style={{ color: '#9CA3AF', flexShrink: 0 }} />
-                      <div style={{ flex: 1, padding: '10px 14px', background: '#D1FAE5', borderRadius: '8px', border: '1px solid #A7F3D0' }}>
-                        <label style={{ fontSize: '10px', color: '#065F46', fontWeight: '600', display: 'block', marginBottom: '2px' }}>VEHÍCULO NUEVO</label>
-                        <p style={{ margin: 0, fontWeight: '700', fontSize: '14px' }}>{previewProgramacion.vehiculo_entregar_patente || previewProgramacion.vehiculo_entregar_patente_sistema || '-'}</p>
-                        <p style={{ margin: '2px 0 0', fontSize: '11px', color: '#6B7280' }}>{previewProgramacion.vehiculo_entregar_modelo || previewProgramacion.vehiculo_entregar_modelo_sistema || ''}</p>
+                      <ArrowLeftRight size={20} style={{ color: 'var(--text-tertiary)', flexShrink: 0 }} />
+                      <div style={{ flex: 1, padding: '10px 14px', background: 'rgba(16, 185, 129, 0.15)', borderRadius: '8px', border: '1px solid rgba(16, 185, 129, 0.3)' }}>
+                        <label style={{ fontSize: '10px', color: 'var(--text-secondary)', fontWeight: '600', display: 'block', marginBottom: '2px' }}>VEHÍCULO NUEVO</label>
+                        <p style={{ margin: 0, fontWeight: '700', fontSize: '14px', color: 'var(--text-primary)' }}>{previewProgramacion.vehiculo_entregar_patente || previewProgramacion.vehiculo_entregar_patente_sistema || '-'}</p>
+                        <p style={{ margin: '2px 0 0', fontSize: '11px', color: 'var(--text-tertiary)' }}>{previewProgramacion.vehiculo_entregar_modelo || previewProgramacion.vehiculo_entregar_modelo_sistema || ''}</p>
                       </div>
                     </div>
                   </div>
@@ -2807,15 +2808,16 @@ export function ProgramacionModule() {
                 </div>
               )}
             </div>
-            <div className="prog-modal-footer">
+            <div className="modal-footer">
               <button className="btn-secondary" onClick={handleClosePreview}>
                 Cerrar
               </button>
               {!previewProgramacion.asignacion_id && canEdit && (
                 <>
-                  <button 
+                  <button
                     className="btn-secondary"
                     onClick={handlePreviewEdit}
+                    style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
                   >
                     <Pencil size={16} />
                     Editar
@@ -2825,6 +2827,7 @@ export function ProgramacionModule() {
                     onClick={handlePreviewEnviar}
                     disabled={!!previewProgramacion.asignacion_id}
                     title={previewProgramacion.asignacion_id ? 'Ya enviado' : 'Enviar a Entrega'}
+                    style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
                   >
                     <Send size={16} />
                     {previewProgramacion.asignacion_id ? 'Ya Enviado' : 'Enviar a Entrega'}
