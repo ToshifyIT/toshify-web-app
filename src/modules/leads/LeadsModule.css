@@ -200,7 +200,7 @@
   opacity: 0.85;
 }
 
-.lead-estado-inicio-conversación {
+.lead-estado-inicio-conversacion {
   background: var(--badge-yellow-bg, #fef3c7);
   color: var(--badge-yellow-text, #92400e);
 }
@@ -314,7 +314,7 @@
   flex-shrink: 0;
 }
 
-.lead-estado-dot-inicio-conversación { background: #f59e0b; }
+.lead-estado-dot-inicio-conversacion { background: #f59e0b; }
 .lead-estado-dot-apto---hireflix { background: #16a34a; }
 .lead-estado-dot-no-apto---hireflix { background: #dc2626; }
 .lead-estado-dot-ayuda---hireflix { background: #d97706; }
@@ -713,4 +713,37 @@
 .leads-module .dt-table thead .dt-sticky-col {
   background: var(--table-header-bg);
   z-index: 5;
+}
+
+/* Tooltip para boton Videocuestionario deshabilitado */
+.hireflix-btn-wrapper .hireflix-tooltip {
+  display: none;
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 50%;
+  transform: translateX(-50%);
+  background: #1f2937;
+  color: #f9fafb;
+  font-size: 12px;
+  line-height: 1.4;
+  padding: 8px 12px;
+  border-radius: 6px;
+  white-space: normal;
+  width: 220px;
+  text-align: center;
+  z-index: 999;
+  pointer-events: none;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+.hireflix-btn-wrapper .hireflix-tooltip::after {
+  content: '';
+  position: absolute;
+  bottom: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  border: 5px solid transparent;
+  border-bottom-color: #1f2937;
+}
+.hireflix-btn-wrapper:hover .hireflix-tooltip {
+  display: block;
 }

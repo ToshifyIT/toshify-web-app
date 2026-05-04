@@ -248,15 +248,16 @@ export function ConductoresModule() {
         conductoresAsignados++;
       }
 
-      // Licencias (solo conductores NO baja)
+      // Licencias (solo conductores activos o con asignación)
       const vencimiento = c.licencia_vencimiento;
-      if (estadoCodigo !== 'baja' && vencimiento) {
+      const tieneAsignacion = !!(c as any).vehiculo_asignado;
+      if ((estadoCodigo === 'activo' || tieneAsignacion) && vencimiento) {
         // Vencidas: fecha < hoy
         if (vencimiento < hoyStr) {
           licenciasVencidas++;
         }
         // Por vencer: entre hoy y N días
-        if (estadoCodigo === 'activo' && vencimiento >= hoyStr && vencimiento <= enXDiasStr) {
+        if (vencimiento >= hoyStr && vencimiento <= enXDiasStr) {
           licenciasPorVencer++;
         }
       }
@@ -464,6 +465,7 @@ export function ConductoresModule() {
             numero_dni,
             numero_cuit,
             preferencia_turno,
+            zona,
             licencia_vencimiento,
             telefono_contacto,
             fecha_contratacion,
@@ -484,8 +486,11 @@ export function ConductoresModule() {
             .from("asignaciones_conductores")
             .select(`
               conductor_id,
+              horario,
               asignaciones!inner (
                 estado,
+                horario_asignacion:horario,
+                zona,
                 vehiculos (id, patente, marca, modelo)
               )
             `)
@@ -516,7 +521,11 @@ export function ConductoresModule() {
       if (asignacionesRes.data) {
         for (const asig of asignacionesRes.data as any[]) {
           if (asig?.asignaciones?.vehiculos) {
-            asignacionesMap.set(asig.conductor_id, asig.asignaciones.vehiculos);
+            asignacionesMap.set(asig.conductor_id, {
+              ...asig.asignaciones.vehiculos,
+              turno_asignacion: asig.horario || asig.asignaciones?.horario_asignacion,
+              zona_asignacion: asig.asignaciones?.zona
+            });
           }
         }
       }
@@ -618,6 +627,7 @@ export function ConductoresModule() {
             numero_dni,
             numero_cuit,
             preferencia_turno,
+            zona,
             licencia_vencimiento,
             telefono_contacto,
             fecha_contratacion,
@@ -636,8 +646,11 @@ export function ConductoresModule() {
             .from("asignaciones_conductores")
             .select(`
               conductor_id,
+              horario,
               asignaciones!inner (
                 estado,
+                horario_asignacion:horario,
+                zona,
                 vehiculos (id, patente, marca, modelo)
               )
             `)
@@ -653,7 +666,11 @@ export function ConductoresModule() {
       if (asignacionesRes.data) {
         for (const asig of asignacionesRes.data as any[]) {
           if (asig?.asignaciones?.vehiculos) {
-            asignacionesMap.set(asig.conductor_id, asig.asignaciones.vehiculos);
+            asignacionesMap.set(asig.conductor_id, {
+              ...asig.asignaciones.vehiculos,
+              turno_asignacion: asig.horario || asig.asignaciones?.horario_asignacion,
+              zona_asignacion: asig.asignaciones?.zona
+            });
           }
         }
       }
@@ -859,18 +876,24 @@ export function ConductoresModule() {
 
     if (!selectedConductor) return;
 
-    // Validar CUIT obligatorio
+    // Validar campos obligatorios
     const newErrors: Record<string, string> = {};
     if (!formData.numero_cuit?.trim()) {
       newErrors.numero_cuit = 'Requerido para facturación';
     }
-    
+    if (!formData.estado_id) {
+      newErrors.estado_id = 'Debe seleccionar un estado';
+    }
+
     if (Object.keys(newErrors).length > 0) {
       setEditErrors(newErrors);
+      const mensajes: string[] = [];
+      if (newErrors.numero_cuit) mensajes.push('El CUIT es obligatorio para la facturación mensual');
+      if (newErrors.estado_id) mensajes.push('Debe seleccionar un estado para el conductor');
       Swal.fire({
         icon: "warning",
-        title: "CUIT requerido",
-        text: "El CUIT es obligatorio para la facturación mensual",
+        title: "Campos requeridos",
+        text: mensajes.join('. '),
         confirmButtonColor: "#ff0033",
       });
       return;
@@ -2317,7 +2340,18 @@ export function ConductoresModule() {
             )}
           </div>
         ),
-        cell: ({ getValue }) => {
+        cell: ({ row, getValue }) => {
+          // Si tiene asignación activa, mostrar el turno real de la asignación
+          const vehiculoAsignado = (row.original as any).vehiculo_asignado;
+          const turnoAsignacion = vehiculoAsignado?.turno_asignacion;
+          if (turnoAsignacion) {
+            const t = turnoAsignacion.toLowerCase();
+            if (t === 'diurno') return <span className="dt-badge dt-badge-yellow">Diurno</span>;
+            if (t === 'nocturno') return <span className="dt-badge dt-badge-blue">Nocturno</span>;
+            if (t === 'todo_dia') return <span className="dt-badge dt-badge-purple">A Cargo</span>;
+            return <span className="dt-badge dt-badge-green">{turnoAsignacion}</span>;
+          }
+          // Sin asignación: mostrar preferencia del conductor
           const turno = getValue() as string;
           if (!turno || turno === 'SIN_PREFERENCIA') {
             return <span className="dt-badge dt-badge-gray">Sin Pref.</span>;
@@ -2418,6 +2452,17 @@ export function ConductoresModule() {
           />
         ),
         cell: ({ getValue }) => (getValue() as string) || "-",
+        enableSorting: true,
+      },
+      {
+        accessorKey: "zona",
+        header: "Zona",
+        cell: ({ row, getValue }) => {
+          const vehiculoAsignado = (row.original as any).vehiculo_asignado;
+          const zonaAsignacion = vehiculoAsignado?.zona_asignacion;
+          if (zonaAsignacion) return zonaAsignacion;
+          return (getValue() as string) || "-";
+        },
         enableSorting: true,
       },
       {
@@ -3461,13 +3506,15 @@ function ModalEditar({
             />
           </div>
           <div className="form-group">
-            <label className="form-label">Estado</label>
+            <label className="form-label">Estado *</label>
             <select
               className="form-input"
+              style={editErrors.estado_id ? { borderColor: '#ff0033' } : undefined}
               value={formData.estado_id}
-              onChange={(e) =>
+              onChange={(e) => {
                 setFormData({ ...formData, estado_id: e.target.value })
-              }
+                if (e.target.value) setEditErrors(prev => { const { estado_id: _removed, ...rest } = prev; void _removed; return rest })
+              }}
               disabled={saving}
             >
               <option value="">Seleccionar...</option>
@@ -3679,7 +3726,7 @@ function ModalDetalles({
       onConductorUpdated?.();
       setEditingEmail(false);
       showSuccess('Email Actualizado', conductorEmail || 'Email eliminado');
-    } catch (err: any) {
+    } catch {
       Swal.fire({ icon: 'error', title: 'Error', text: 'No se pudo guardar el email', confirmButtonColor: '#FF0033' });
     } finally {
       setSavingEmail(false);
@@ -3792,6 +3839,7 @@ function ModalDetalles({
             )
           `)
           .eq('conductor_id', selectedConductor.id)
+          .not('asignaciones.estado', 'eq', 'cancelada')
           .order('created_at', { ascending: false });
 
         if (error) throw error;

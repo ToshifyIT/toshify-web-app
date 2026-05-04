@@ -3,7 +3,14 @@
 import { useState, useEffect } from 'react'
 import { Check, ChevronLeft, ChevronRight } from 'lucide-react'
 import { AddressAutocomplete } from '../../../components/ui/AddressAutocomplete'
+import { useSede } from '../../../contexts/SedeContext'
 import type { LeadFormData } from '../../../types/leads.types'
+
+interface CatalogoItem {
+  id: string
+  codigo: string
+  descripcion: string
+}
 
 interface LeadWizardProps {
   formData: LeadFormData
@@ -12,6 +19,9 @@ interface LeadWizardProps {
   onCancel: () => void
   saving?: boolean
   errors?: Record<string, string>
+  categoriasLicencia?: CatalogoItem[]
+  estadosLicencia?: CatalogoItem[]
+  tiposLicencia?: CatalogoItem[]
 }
 
 const STEPS = [
@@ -20,7 +30,6 @@ const STEPS = [
   { id: 3, label: 'Documentos' },
   { id: 4, label: 'Operativo' },
   { id: 5, label: 'Proceso' },
-  { id: 6, label: 'Emergencia' },
 ]
 
 // Calcula la edad a partir de una fecha de nacimiento (formato YYYY-MM-DD)
@@ -52,13 +61,29 @@ function inferZonaFromAddress(address: string): string {
   return ''
 }
 
-export function LeadWizard({ formData, setFormData, onSave, onCancel, saving = false, errors = {} }: LeadWizardProps) {
+export function LeadWizard({ formData, setFormData, onSave, onCancel, saving = false, errors = {}, categoriasLicencia = [], estadosLicencia = [], tiposLicencia = [] }: LeadWizardProps) {
   const [currentStep, setCurrentStep] = useState(1)
+  const { sedes } = useSede()
 
   // Al abrir el wizard, si hay teléfono pero no WhatsApp, copiar el teléfono
   useEffect(() => {
     if (formData.phone && !formData.whatsapp_number) {
       setFormData(prev => ({ ...prev, whatsapp_number: prev.phone }))
+    }
+    // Auto-mapear licencia texto a categorías si hay licencia pero no categorías
+    if (formData.licencia && (!formData.categorias_licencia || formData.categorias_licencia.length === 0) && categoriasLicencia.length > 0) {
+      const partes = formData.licencia.split(/[.,\s]+/).map(p => p.trim().toUpperCase()).filter(Boolean)
+      const matched: string[] = []
+      for (const parte of partes) {
+        const cat = categoriasLicencia.find(c => {
+          const descUpper = c.descripcion.toUpperCase()
+          return descUpper.includes(parte) || c.codigo?.toUpperCase() === parte
+        })
+        if (cat) matched.push(cat.descripcion)
+      }
+      if (matched.length > 0) {
+        setFormData(prev => ({ ...prev, categorias_licencia: matched }))
+      }
     }
     // Solo al montar
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -197,12 +222,15 @@ export function LeadWizard({ formData, setFormData, onSave, onCancel, saving = f
               </div>
               <div className="lead-wizard-field">
                 <label>Sede</label>
-                <input
-                  type="text"
+                <select
                   value={formData.sede || ''}
                   onChange={e => updateField('sede', e.target.value)}
-                  placeholder="Ej: CABA, GBA Sur"
-                />
+                >
+                  <option value="">Seleccionar</option>
+                  {sedes.map(s => (
+                    <option key={s.id} value={s.nombre || ''}>{s.nombre}</option>
+                  ))}
+                </select>
               </div>
             </div>
           </>
@@ -297,6 +325,70 @@ export function LeadWizard({ formData, setFormData, onSave, onCancel, saving = f
               </div>
             </div>
             {/* Clasificación Domicilio y Estado Dirección ocultos */}
+            <div className="lead-wizard-form-group">
+              <div className="lead-wizard-field">
+                <label>Nombre Contacto Emergencia</label>
+                <input
+                  type="text"
+                  value={formData.datos_de_emergencia || ''}
+                  onChange={e => updateField('datos_de_emergencia', e.target.value)}
+                />
+              </div>
+              <div className="lead-wizard-field">
+                <label>Teléfono Emergencia</label>
+                <input
+                  type="text"
+                  value={formData.telefono_emergencia || ''}
+                  onChange={e => updateField('telefono_emergencia', e.target.value)}
+                />
+              </div>
+            </div>
+            <div className="lead-wizard-form-group">
+              <div className="lead-wizard-field">
+                <label>Parentesco</label>
+                <select value={formData.parentesco_emergencia || ''} onChange={e => updateField('parentesco_emergencia', e.target.value)}>
+                  <option value="">Seleccionar</option>
+                  <option value="Padre/Madre">Padre/Madre</option>
+                  <option value="Hermano/a">Hermano/a</option>
+                  <option value="Cónyuge">Conyuge</option>
+                  <option value="Hijo/a">Hijo/a</option>
+                  <option value="Abuelo/a">Abuelo/a</option>
+                  <option value="Amigo/a">Amigo/a</option>
+                  <option value="Compadre">Compadre</option>
+                  <option value="Comadre">Comadre</option>
+                  <option value="Concubino/a">Concubino/a</option>
+                  <option value="Conviviente">Conviviente</option>
+                  <option value="Cuñado/a">Cuñado/a</option>
+                  <option value="Ex Esposo/a">Ex Esposo/a</option>
+                  <option value="Padrastro">Padrastro</option>
+                  <option value="Madrastra">Madrastra</option>
+                  <option value="Primo/a">Primo/a</option>
+                  <option value="Vecino/a">Vecino/a</option>
+                  <option value="Tío/a">Tio/a</option>
+                  <option value="Otro">Otro</option>
+                </select>
+              </div>
+              <div className="lead-wizard-field">
+                <label>Verificación de contacto de emergencia</label>
+                <select
+                  value={formData.verificacion_emergencia ? 'Si' : 'No'}
+                  onChange={e => updateField('verificacion_emergencia', e.target.value === 'Si')}
+                >
+                  <option value="No">No verificado</option>
+                  <option value="Si">Verificado</option>
+                </select>
+              </div>
+            </div>
+            <div className="lead-wizard-form-group full-width">
+              <div className="lead-wizard-field">
+                <label>Dirección Emergencia</label>
+                <input
+                  type="text"
+                  value={formData.direccion_emergencia || ''}
+                  onChange={e => updateField('direccion_emergencia', e.target.value)}
+                />
+              </div>
+            </div>
           </>
         )}
 
@@ -305,17 +397,12 @@ export function LeadWizard({ formData, setFormData, onSave, onCancel, saving = f
           <>
             <div className="lead-wizard-form-group">
               <div className="lead-wizard-field">
-                <label>Licencia - Clases</label>
+                <label>Nro. Licencia</label>
                 <input
                   type="text"
-                  value={formData.licencia || ''}
-                  onChange={e => {
-                    const val = e.target.value.toUpperCase()
-                    updateField('licencia', val)
-                    // Auto-detectar D1 según las clases de licencia
-                    updateField('d1', val.includes('D1') ? 'Si' : 'No')
-                  }}
-                  placeholder="Ej: A1.4.B2.D1"
+                  value={formData.numero_licencia || ''}
+                  onChange={e => updateField('numero_licencia', e.target.value)}
+                  placeholder="Número de licencia"
                 />
               </div>
               <div className="lead-wizard-field">
@@ -325,6 +412,65 @@ export function LeadWizard({ formData, setFormData, onSave, onCancel, saving = f
                   value={formData.vencimiento_licencia || ''}
                   onChange={e => updateField('vencimiento_licencia', e.target.value)}
                 />
+              </div>
+            </div>
+            <div className="lead-wizard-form-group">
+              <div className="lead-wizard-field" style={{ flex: 1 }}>
+                <label>Categorías</label>
+                <select
+                  multiple
+                  value={formData.categorias_licencia || []}
+                  onChange={e => {
+                    const selected = Array.from(e.target.selectedOptions, opt => opt.value)
+                    setFormData(prev => {
+                      // Extraer códigos cortos de las descripciones (ej: "Licencia categoría A1.4" -> "A1.4")
+                      const codigos = selected.map(desc => {
+                        const match = desc.match(/categoría\s+(.+)/i)
+                        return match ? match[1].trim() : desc
+                      })
+                      const licenciaText = codigos.join('.')
+                      return { ...prev, categorias_licencia: selected, licencia: licenciaText, d1: licenciaText.includes('D1') ? 'Si' : 'No' }
+                    })
+                  }}
+                  style={{ minHeight: '80px' }}
+                >
+                  {categoriasLicencia.map(cat => (
+                    <option key={cat.id} value={cat.descripcion}>{cat.descripcion}</option>
+                  ))}
+                </select>
+                <small style={{ color: 'var(--text-secondary)', fontSize: '11px' }}>Ctrl+Click para múltiples</small>
+                {formData.licencia && (!formData.categorias_licencia || formData.categorias_licencia.length === 0) && (
+                  <div style={{ marginTop: '6px', padding: '6px 10px', background: 'rgba(251, 191, 36, 0.1)', border: '1px solid rgba(251, 191, 36, 0.3)', borderRadius: '6px', fontSize: '12px', color: 'var(--text-secondary)' }}>
+                    Valor anterior: <strong style={{ color: 'var(--text-primary)' }}>{formData.licencia}</strong>
+                    <span style={{ display: 'block', fontSize: '11px', marginTop: '2px' }}>Selecciona las categorías correspondientes del listado</span>
+                  </div>
+                )}
+              </div>
+            </div>
+            <div className="lead-wizard-form-group">
+              <div className="lead-wizard-field">
+                <label>Estado Licencia</label>
+                <select
+                  value={formData.estado_licencia || ''}
+                  onChange={e => updateField('estado_licencia', e.target.value)}
+                >
+                  <option value="">Seleccionar...</option>
+                  {estadosLicencia.map(e => (
+                    <option key={e.id} value={e.descripcion}>{e.descripcion}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="lead-wizard-field">
+                <label>Tipo Licencia</label>
+                <select
+                  value={formData.tipo_licencia || ''}
+                  onChange={e => updateField('tipo_licencia', e.target.value)}
+                >
+                  <option value="">Seleccionar...</option>
+                  {tiposLicencia.map(t => (
+                    <option key={t.id} value={t.descripcion}>{t.descripcion}</option>
+                  ))}
+                </select>
               </div>
             </div>
             <div className="lead-wizard-form-group">
@@ -395,7 +541,7 @@ export function LeadWizard({ formData, setFormData, onSave, onCancel, saving = f
                   <option value="">Seleccionar</option>
                   <option value="Diurno">Diurno</option>
                   <option value="Nocturno">Nocturno</option>
-                  <option value="A cargo">A cargo</option>
+                  <option value="Indiferente">Indiferente</option>
                 </select>
               </div>
               <div className="lead-wizard-field">
@@ -498,7 +644,7 @@ export function LeadWizard({ formData, setFormData, onSave, onCancel, saving = f
                   <option value="Auto del pueblo">Auto del pueblo</option>
                   <option value="No le interesa">No le interesa</option>
                   <option value="No cumple edad">No cumple edad</option>
-                  <option value="Convocatoria Induccion">Convocatoria Induccion</option>
+                  <option value="Convocatoria Inducción">Convocatoria Inducción</option>
                   <option value="Descartado">Descartado</option>
                 </select>
               </div>
@@ -558,75 +704,7 @@ export function LeadWizard({ formData, setFormData, onSave, onCancel, saving = f
           </>
         )}
 
-        {/* Step 6: Emergencia */}
-        {currentStep === 6 && (
-          <>
-            <div className="lead-wizard-form-group">
-              <div className="lead-wizard-field">
-                <label>Nombre Contacto Emergencia</label>
-                <input
-                  type="text"
-                  value={formData.datos_de_emergencia || ''}
-                  onChange={e => updateField('datos_de_emergencia', e.target.value)}
-                />
-              </div>
-              <div className="lead-wizard-field">
-                <label>Teléfono Emergencia</label>
-                <input
-                  type="text"
-                  value={formData.telefono_emergencia || ''}
-                  onChange={e => updateField('telefono_emergencia', e.target.value)}
-                />
-              </div>
-            </div>
-            <div className="lead-wizard-form-group">
-              <div className="lead-wizard-field">
-                <label>Parentesco</label>
-                <select value={formData.parentesco_emergencia || ''} onChange={e => updateField('parentesco_emergencia', e.target.value)}>
-                  <option value="">Seleccionar</option>
-                  <option value="Padre/Madre">Padre/Madre</option>
-                  <option value="Hermano/a">Hermano/a</option>
-                  <option value="Cónyuge">Conyuge</option>
-                  <option value="Hijo/a">Hijo/a</option>
-                  <option value="Abuelo/a">Abuelo/a</option>
-                  <option value="Amigo/a">Amigo/a</option>
-                  <option value="Compadre">Compadre</option>
-                  <option value="Comadre">Comadre</option>
-                  <option value="Concubino/a">Concubino/a</option>
-                  <option value="Conviviente">Conviviente</option>
-                  <option value="Cuñado/a">Cuñado/a</option>
-                  <option value="Ex Esposo/a">Ex Esposo/a</option>
-                  <option value="Padrastro">Padrastro</option>
-                  <option value="Madrastra">Madrastra</option>
-                  <option value="Primo/a">Primo/a</option>
-                  <option value="Vecino/a">Vecino/a</option>
-                  <option value="Tío/a">Tio/a</option>
-                  <option value="Otro">Otro</option>
-                </select>
-              </div>
-              <div className="lead-wizard-field">
-                <label>Verificación de contacto de emergencia</label>
-                <select
-                  value={formData.verificacion_emergencia ? 'Si' : 'No'}
-                  onChange={e => updateField('verificacion_emergencia', e.target.value === 'Si')}
-                >
-                  <option value="No">No verificado</option>
-                  <option value="Si">Verificado</option>
-                </select>
-              </div>
-            </div>
-            <div className="lead-wizard-form-group full-width">
-              <div className="lead-wizard-field">
-                <label>Dirección Emergencia</label>
-                <input
-                  type="text"
-                  value={formData.direccion_emergencia || ''}
-                  onChange={e => updateField('direccion_emergencia', e.target.value)}
-                />
-              </div>
-            </div>
-          </>
-        )}
+        {/* Step 6: Emergencia eliminado - campos movidos a Contacto */}
       </div>
 
       {/* Footer */}

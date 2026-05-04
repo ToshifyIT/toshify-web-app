@@ -2050,6 +2050,13 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
           border-radius: 3px;
         }
 
+        [data-theme="dark"] .vehicle-grid::-webkit-scrollbar-track {
+          background: var(--bg-tertiary);
+        }
+        [data-theme="dark"] .vehicle-grid::-webkit-scrollbar-thumb {
+          background: var(--border-primary);
+        }
+
         .vehicle-card {
           border: 2px solid var(--border-primary);
           border-radius: 14px;
@@ -2611,6 +2618,54 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
         .step4-form textarea {
           resize: vertical;
         }
+
+        /* Dark mode: zonas de drop diurno/nocturno/cargo */
+        [data-theme="dark"] .conductores-column.turno-diurno {
+          border-color: rgba(252, 211, 77, 0.4);
+          background: linear-gradient(135deg, rgba(251, 191, 36, 0.1) 0%, rgba(251, 191, 36, 0.18) 100%);
+        }
+        [data-theme="dark"] .conductores-column.turno-nocturno {
+          border-color: rgba(147, 197, 253, 0.4);
+          background: linear-gradient(135deg, rgba(59, 130, 246, 0.1) 0%, rgba(59, 130, 246, 0.18) 100%);
+        }
+        [data-theme="dark"] .conductores-column.a-cargo {
+          border-color: rgba(110, 231, 183, 0.4);
+          background: linear-gradient(135deg, rgba(16, 185, 129, 0.1) 0%, rgba(16, 185, 129, 0.18) 100%);
+        }
+
+        /* Dark mode: turno badges */
+        [data-theme="dark"] .turno-badge.diurno {
+          background: rgba(251, 191, 36, 0.2);
+          color: #FBBF24;
+        }
+        [data-theme="dark"] .turno-badge.nocturno {
+          background: rgba(59, 130, 246, 0.2);
+          color: #60A5FA;
+        }
+        [data-theme="dark"] .turno-badge.cargo {
+          background: rgba(16, 185, 129, 0.2);
+          color: #34D399;
+        }
+
+        /* Dark mode: conductor form cards (paso 4) */
+        [data-theme="dark"] .conductor-form-card.diurno {
+          background: linear-gradient(135deg, rgba(251, 191, 36, 0.08) 0%, rgba(251, 191, 36, 0.15) 100%);
+          border-color: rgba(252, 211, 77, 0.35);
+        }
+        [data-theme="dark"] .conductor-form-card.nocturno {
+          background: linear-gradient(135deg, rgba(59, 130, 246, 0.08) 0%, rgba(59, 130, 246, 0.15) 100%);
+          border-color: rgba(147, 197, 253, 0.35);
+        }
+        [data-theme="dark"] .conductor-form-card.cargo {
+          background: linear-gradient(135deg, rgba(16, 185, 129, 0.08) 0%, rgba(16, 185, 129, 0.15) 100%);
+          border-color: rgba(110, 231, 183, 0.35);
+        }
+
+        /* Dark mode: drop zone dashed border */
+        [data-theme="dark"] .drop-zone {
+          border-color: rgba(255, 255, 255, 0.15) !important;
+          color: var(--text-tertiary);
+        }
       `}</style>
 
       <div className="wizard-overlay" onClick={onClose}>
@@ -2834,7 +2889,7 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
                     style={{
                       flex: 1,
                       padding: '12px 16px',
-                      border: '2px solid #E5E7EB',
+                      border: '2px solid var(--border-primary)',
                       borderRadius: '8px',
                       fontSize: 'clamp(12px, 1vw, 14px)',
                       fontFamily: 'inherit'
@@ -2845,11 +2900,11 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
                     onChange={(e) => setVehicleAvailabilityFilter(e.target.value)}
                     style={{
                       padding: '12px 16px',
-                      border: '2px solid #E5E7EB',
+                      border: '2px solid var(--border-primary)',
                       borderRadius: '8px',
                       fontSize: 'clamp(12px, 1vw, 14px)',
                       fontFamily: 'inherit',
-                      background: 'white',
+                      background: 'var(--modal-bg)',
                       cursor: 'pointer',
                       minWidth: '180px'
                     }}
@@ -2944,7 +2999,7 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
                     style={{
                       flex: 1,
                       padding: '12px 16px',
-                      border: '2px solid #E5E7EB',
+                      border: '2px solid var(--border-primary)',
                       borderRadius: '8px',
                       fontSize: 'clamp(12px, 1vw, 14px)',
                       fontFamily: 'inherit'
@@ -2955,11 +3010,11 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
                     onChange={(e) => setVehicleAvailabilityFilter(e.target.value)}
                     style={{
                       padding: '12px 16px',
-                      border: '2px solid #E5E7EB',
+                      border: '2px solid var(--border-primary)',
                       borderRadius: '8px',
                       fontSize: 'clamp(12px, 1vw, 14px)',
                       fontFamily: 'inherit',
-                      background: 'white',
+                      background: 'var(--modal-bg)',
                       cursor: 'pointer',
                       minWidth: '180px'
                     }}
@@ -2976,22 +3031,22 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
                   <div>
                     <div style={{
                       padding: '8px 12px',
-                      background: '#FEF3C7',
+                      background: 'rgba(251, 191, 36, 0.15)',
                       borderRadius: '8px 8px 0 0',
                       borderBottom: '2px solid #F59E0B',
                       textAlign: 'center'
                     }}>
-                      <h4 style={{ margin: 0, fontSize: '12px', color: '#92400E', fontWeight: '700' }}>Vehículo a cambiar</h4>
-                      <p style={{ margin: '1px 0 0', fontSize: '10px', color: '#A16207' }}>El vehículo que tiene actualmente</p>
+                      <h4 style={{ margin: 0, fontSize: '12px', color: 'var(--text-primary)', fontWeight: '700' }}>Vehículo a cambiar</h4>
+                      <p style={{ margin: '1px 0 0', fontSize: '10px', color: 'var(--text-secondary)' }}>El vehículo que tiene actualmente</p>
                     </div>
-                    <div style={{ maxHeight: '350px', overflowY: 'auto', border: '1px solid #E5E7EB', borderTop: 'none', borderRadius: '0 0 8px 8px' }}>
+                    <div style={{ maxHeight: '350px', overflowY: 'auto', border: '1px solid var(--border-primary)', borderTop: 'none', borderRadius: '0 0 8px 8px' }}>
                       {loadingVehicles ? (
                         <div style={{ padding: '20px', textAlign: 'center' }}>
                           <div style={{ width: '20px', height: '20px', border: '2px solid var(--border-primary)', borderTopColor: 'var(--color-primary)', borderRadius: '50%', animation: 'spin 1s linear infinite', margin: '0 auto 6px' }} />
                           <span style={{ fontSize: '11px' }}>Cargando...</span>
                         </div>
                       ) : vehiculosEnUso.length === 0 ? (
-                        <div style={{ padding: '20px', textAlign: 'center', fontSize: '11px', color: '#9CA3AF' }}>No hay vehículos en uso</div>
+                        <div style={{ padding: '20px', textAlign: 'center', fontSize: '11px', color: 'var(--text-tertiary)' }}>No hay vehículos en uso</div>
                       ) : (
                         vehiculosEnUso.map(vehicle => {
                           const { badgeText, badgeBg, badgeColor, detalleText } = getVehicleBadge(vehicle)
@@ -3015,8 +3070,8 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
                                 alignItems: 'center',
                                 justifyContent: 'space-between',
                                 gap: '8px',
-                                borderBottom: '1px solid #F3F4F6',
-                                background: isSelected ? '#FEF3C7' : 'white',
+                                borderBottom: '1px solid var(--border-primary)',
+                                background: isSelected ? 'rgba(251, 191, 36, 0.15)' : 'var(--modal-bg)',
                                 transition: 'background 0.15s'
                               }}
                             >
@@ -3029,10 +3084,10 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
                                     fontSize: '9px', fontWeight: '600', lineHeight: '16px'
                                   }}>{badgeText}</span>
                                   {detalleText && (
-                                    <span style={{ color: '#6B7280', fontSize: '9px', fontWeight: '500' }}>({detalleText})</span>
+                                    <span style={{ color: 'var(--text-tertiary)', fontSize: '9px', fontWeight: '500' }}>({detalleText})</span>
                                   )}
                                 </div>
-                                <div style={{ fontSize: '10px', color: '#6B7280', marginTop: '1px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                <div style={{ fontSize: '10px', color: 'var(--text-tertiary)', marginTop: '1px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                                   {vehicle.marca} {vehicle.modelo} - {vehicle.anio}
                                 </div>
                               </div>
@@ -3046,29 +3101,29 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
 
                   {/* Icono de flecha central */}
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', paddingTop: '60px' }}>
-                    <ArrowLeftRight size={24} style={{ color: '#9CA3AF' }} />
+                    <ArrowLeftRight size={24} style={{ color: 'var(--text-tertiary)' }} />
                   </div>
 
                   {/* Columna derecha: Vehículo nuevo (destino) - Disponibles + En Uso */}
                   <div>
                     <div style={{
                       padding: '8px 12px',
-                      background: '#D1FAE5',
+                      background: 'rgba(16, 185, 129, 0.15)',
                       borderRadius: '8px 8px 0 0',
                       borderBottom: '2px solid #10B981',
                       textAlign: 'center'
                     }}>
-                      <h4 style={{ margin: 0, fontSize: '12px', color: '#065F46', fontWeight: '700' }}>Vehículo nuevo</h4>
-                      <p style={{ margin: '1px 0 0', fontSize: '10px', color: '#047857' }}>El vehículo por el que se va a cambiar</p>
+                      <h4 style={{ margin: 0, fontSize: '12px', color: 'var(--text-primary)', fontWeight: '700' }}>Vehículo nuevo</h4>
+                      <p style={{ margin: '1px 0 0', fontSize: '10px', color: 'var(--text-secondary)' }}>El vehículo por el que se va a cambiar</p>
                     </div>
-                    <div style={{ maxHeight: '350px', overflowY: 'auto', border: '1px solid #E5E7EB', borderTop: 'none', borderRadius: '0 0 8px 8px' }}>
+                    <div style={{ maxHeight: '350px', overflowY: 'auto', border: '1px solid var(--border-primary)', borderTop: 'none', borderRadius: '0 0 8px 8px' }}>
                       {loadingVehicles ? (
                         <div style={{ padding: '20px', textAlign: 'center' }}>
                           <div style={{ width: '20px', height: '20px', border: '2px solid var(--border-primary)', borderTopColor: 'var(--color-primary)', borderRadius: '50%', animation: 'spin 1s linear infinite', margin: '0 auto 6px' }} />
                           <span style={{ fontSize: '11px' }}>Cargando...</span>
                         </div>
                       ) : vehiculosDestino.length === 0 ? (
-                        <div style={{ padding: '20px', textAlign: 'center', fontSize: '11px', color: '#9CA3AF' }}>No hay vehículos disponibles</div>
+                        <div style={{ padding: '20px', textAlign: 'center', fontSize: '11px', color: 'var(--text-tertiary)' }}>No hay vehículos disponibles</div>
                       ) : (
                         vehiculosDestino.map(vehicle => {
                           const { badgeText, badgeBg, badgeColor, detalleText } = getVehicleBadge(vehicle)
@@ -3091,8 +3146,8 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
                                 alignItems: 'center',
                                 justifyContent: 'space-between',
                                 gap: '8px',
-                                borderBottom: '1px solid #F3F4F6',
-                                background: isSelected ? '#D1FAE5' : 'white',
+                                borderBottom: '1px solid var(--border-primary)',
+                                background: isSelected ? 'rgba(16, 185, 129, 0.15)' : 'var(--modal-bg)',
                                 transition: 'background 0.15s'
                               }}
                             >
@@ -3105,10 +3160,10 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
                                     fontSize: '9px', fontWeight: '600', lineHeight: '16px'
                                   }}>{badgeText}</span>
                                   {detalleText && (
-                                    <span style={{ color: '#6B7280', fontSize: '9px', fontWeight: '500' }}>({detalleText})</span>
+                                    <span style={{ color: 'var(--text-tertiary)', fontSize: '9px', fontWeight: '500' }}>({detalleText})</span>
                                   )}
                                 </div>
-                                <div style={{ fontSize: '10px', color: '#6B7280', marginTop: '1px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                <div style={{ fontSize: '10px', color: 'var(--text-tertiary)', marginTop: '1px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                                   {vehicle.marca} {vehicle.modelo} - {vehicle.anio}
                                 </div>
                               </div>
@@ -3125,15 +3180,15 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
                 {(formData.vehiculo_id || formData.vehiculo_cambio_id) && (
                   <div style={{ maxWidth: '900px', margin: '16px auto 0', padding: '12px 16px', background: 'var(--bg-secondary)', borderRadius: '8px', border: '1px solid var(--border-primary)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '16px' }}>
                     <div style={{ textAlign: 'center' }}>
-                      <span style={{ fontSize: '10px', color: '#6B7280', display: 'block' }}>ORIGEN</span>
-                      <span style={{ fontSize: '13px', fontWeight: '600', color: formData.vehiculo_id ? '#92400E' : '#9CA3AF' }}>
+                      <span style={{ fontSize: '10px', color: 'var(--text-tertiary)', display: 'block' }}>ORIGEN</span>
+                      <span style={{ fontSize: '13px', fontWeight: '600', color: formData.vehiculo_id ? '#F59E0B' : 'var(--text-tertiary)' }}>
                         {formData.vehiculo_patente || 'Sin seleccionar'}
                       </span>
                     </div>
-                    <ArrowLeftRight size={18} style={{ color: '#9CA3AF', flexShrink: 0 }} />
+                    <ArrowLeftRight size={18} style={{ color: 'var(--text-tertiary)', flexShrink: 0 }} />
                     <div style={{ textAlign: 'center' }}>
-                      <span style={{ fontSize: '10px', color: '#6B7280', display: 'block' }}>DESTINO</span>
-                      <span style={{ fontSize: '13px', fontWeight: '600', color: formData.vehiculo_cambio_id ? '#065F46' : '#9CA3AF' }}>
+                      <span style={{ fontSize: '10px', color: 'var(--text-tertiary)', display: 'block' }}>DESTINO</span>
+                      <span style={{ fontSize: '13px', fontWeight: '600', color: formData.vehiculo_cambio_id ? '#10B981' : 'var(--text-tertiary)' }}>
                         {formData.vehiculo_cambio_patente || 'Sin seleccionar'}
                       </span>
                     </div>
@@ -3156,7 +3211,7 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
                 <div className={`conductores-layout ${!isTurnoMode ? 'cargo-mode' : ''}`}>
                   {/* Conductores Disponibles */}
                   <div className="conductores-column">
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px', paddingBottom: '8px', borderBottom: '2px solid rgba(0,0,0,0.1)' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px', paddingBottom: '8px', borderBottom: '2px solid var(--border-primary)' }}>
                       <h4 style={{ margin: 0, border: 'none', paddingBottom: 0 }}>Conductores Disponibles</h4>
                        {isTurnoMode && (
                         <div style={{ display: 'flex', gap: '4px' }}>
@@ -3172,9 +3227,9 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
                               padding: '4px 8px',
                               fontSize: '10px',
                               fontWeight: '600',
-                              background: mostrarParesCercanos ? '#10B981' : '#F3F4F6',
-                              color: mostrarParesCercanos ? 'white' : '#6B7280',
-                              border: mostrarParesCercanos ? 'none' : '1px solid #E5E7EB',
+                              background: mostrarParesCercanos ? '#10B981' : 'var(--bg-secondary)',
+                              color: mostrarParesCercanos ? 'white' : 'var(--text-secondary)',
+                              border: mostrarParesCercanos ? 'none' : '1px solid var(--border-primary)',
                               borderRadius: '6px',
                               cursor: loadingPares ? 'wait' : 'pointer',
                               transition: 'all 0.2s'
@@ -3198,9 +3253,9 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
                               padding: '4px 8px',
                               fontSize: '10px',
                               fontWeight: '600',
-                              background: '#F3F4F6',
-                              color: '#6B7280',
-                              border: '1px solid #E5E7EB',
+                              background: 'var(--bg-secondary)',
+                              color: 'var(--text-secondary)',
+                              border: '1px solid var(--border-primary)',
                               borderRadius: '6px',
                               cursor: 'pointer',
                               transition: 'all 0.2s'
@@ -3224,7 +3279,7 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
                           flex: 1,
                           minWidth: '60px',
                           padding: '7px 10px',
-                          border: '1px solid #E5E7EB',
+                          border: '1px solid var(--border-primary)',
                           borderRadius: '6px',
                           fontSize: '12px',
                           fontFamily: 'inherit'
@@ -3235,11 +3290,11 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
                         onChange={(e) => setConductorStatusFilter(e.target.value)}
                         style={{
                           padding: '7px 6px',
-                          border: '1px solid #E5E7EB',
+                          border: '1px solid var(--border-primary)',
                           borderRadius: '6px',
                           fontSize: '11px',
                           fontFamily: 'inherit',
-                          background: 'white',
+                          background: 'var(--modal-bg)',
                           cursor: 'pointer'
                         }}
                       >
@@ -3252,11 +3307,11 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
                         onChange={(e) => setConductorTurnoFilter(e.target.value)}
                         style={{
                           padding: '7px 6px',
-                          border: '1px solid #E5E7EB',
+                          border: '1px solid var(--border-primary)',
                           borderRadius: '6px',
                           fontSize: '11px',
                           fontFamily: 'inherit',
-                          background: 'white',
+                          background: 'var(--modal-bg)',
                           cursor: 'pointer'
                         }}
                       >
@@ -3293,8 +3348,8 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
                               key={idx}
                               style={{
                                 padding: '10px',
-                                background: '#F0FDF4',
-                                border: '1px solid #86EFAC',
+                                background: 'rgba(16, 185, 129, 0.08)',
+                                border: '1px solid rgba(16, 185, 129, 0.3)',
                                 borderRadius: '8px',
                                 marginBottom: '8px'
                               }}
@@ -3325,7 +3380,7 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
                                     onDragStart={(e) => handleConductorDragStart(e, par.diurno.id, par.nocturno.id, par.tiempoMinutos)}
                                     onDragEnd={handleConductorDragEnd}
                                     title={zonaDiurno ? `⚠ Zona restringida: ${zonaDiurno}` : undefined}
-                                    style={{ marginBottom: '6px', background: zonaDiurno ? '#FFF1F2' : '#FFFBEB', borderColor: zonaDiurno ? '#FF0033' : '#FCD34D' }}
+                                    style={{ marginBottom: '6px', background: zonaDiurno ? 'rgba(255, 0, 51, 0.08)' : 'rgba(251, 191, 36, 0.1)', borderColor: zonaDiurno ? '#FF0033' : '#FCD34D' }}
                                   >
                                     <div className="conductor-avatar" style={{ background: zonaDiurno ? '#FF0033' : '#F59E0B' }}>
                                       {par.diurno.nombres.charAt(0)}{par.diurno.apellidos.charAt(0)}
@@ -3337,7 +3392,7 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
                                       </p>
                                       <p className="conductor-license">DNI: {par.diurno.numero_dni || '-'}</p>
                                       {zonaDiurno && (
-                                        <span style={{ fontSize: '9px', padding: '2px 6px', borderRadius: '4px', fontWeight: '600', display: 'inline-block', background: '#FFE4E6', color: '#BE123C' }}>
+                                        <span style={{ fontSize: '9px', padding: '2px 6px', borderRadius: '4px', fontWeight: '600', display: 'inline-block', background: 'rgba(255, 0, 51, 0.12)', color: '#FF4D6A' }}>
                                           ⚠ Zona restringida
                                         </span>
                                       )}
@@ -3355,7 +3410,7 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
                                     onDragStart={(e) => handleConductorDragStart(e, par.nocturno.id, par.diurno.id, par.tiempoMinutos)}
                                     onDragEnd={handleConductorDragEnd}
                                     title={zonanocturno ? `⚠ Zona restringida: ${zonanocturno}` : undefined}
-                                    style={{ background: zonanocturno ? '#FFF1F2' : '#EFF6FF', borderColor: zonanocturno ? '#FF0033' : '#93C5FD' }}
+                                    style={{ background: zonanocturno ? 'rgba(255, 0, 51, 0.08)' : 'rgba(59, 130, 246, 0.1)', borderColor: zonanocturno ? '#FF0033' : '#93C5FD' }}
                                   >
                                     <div className="conductor-avatar" style={{ background: zonanocturno ? '#FF0033' : '#3B82F6' }}>
                                       {par.nocturno.nombres.charAt(0)}{par.nocturno.apellidos.charAt(0)}
@@ -3367,7 +3422,7 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
                                       </p>
                                       <p className="conductor-license">DNI: {par.nocturno.numero_dni || '-'}</p>
                                       {zonanocturno && (
-                                        <span style={{ fontSize: '9px', padding: '2px 6px', borderRadius: '4px', fontWeight: '600', display: 'inline-block', background: '#FFE4E6', color: '#BE123C' }}>
+                                        <span style={{ fontSize: '9px', padding: '2px 6px', borderRadius: '4px', fontWeight: '600', display: 'inline-block', background: 'rgba(255, 0, 51, 0.12)', color: '#FF4D6A' }}>
                                           ⚠ Zona restringida
                                         </span>
                                       )}
@@ -3404,7 +3459,7 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
                               onDragEnd={handleConductorDragEnd}
                               title={zonaRestringida ? `⚠ Zona restringida: ${zonaRestringida}` : undefined}
                               style={{
-                                background: zonaRestringida ? '#FFF1F2' : algunoOcupado ? '#FFFBEB' : undefined,
+                                background: zonaRestringida ? 'rgba(255, 0, 51, 0.08)' : algunoOcupado ? 'rgba(251, 191, 36, 0.1)' : undefined,
                                 borderColor: zonaRestringida ? '#FF0033' : algunoOcupado ? '#FCD34D' : undefined
                               }}
                             >
@@ -3436,8 +3491,8 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
                                     fontWeight: '600',
                                     marginTop: '2px',
                                     display: 'inline-block',
-                                    background: '#FFE4E6',
-                                    color: '#BE123C'
+                                    background: 'rgba(255, 0, 51, 0.12)',
+                                    color: '#FF4D6A'
                                   }}>
                                     ⚠ Zona restringida
                                   </span>
@@ -3450,8 +3505,8 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
                                     fontWeight: '600',
                                     marginTop: '2px',
                                     display: 'inline-block',
-                                    background: '#FEF3C7',
-                                    color: '#92400E'
+                                    background: 'rgba(251, 191, 36, 0.15)',
+                                    color: '#FBBF24'
                                   }}>
                                     {infoMsg}
                                   </span>

@@ -624,10 +624,39 @@ export function PermissionsProvider({ children }: { children: React.ReactNode })
   )
 }
 
+// Fallback seguro cuando el provider no está disponible (ej: gap durante token refresh)
+const permissionsFallback: PermissionsContextType = {
+  userPermissions: null,
+  loading: true,
+  canViewMenu: () => false,
+  canCreateInMenu: () => false,
+  canEditInMenu: () => false,
+  canDeleteInMenu: () => false,
+  canViewSubmenu: () => false,
+  canCreateInSubmenu: () => false,
+  canEditInSubmenu: () => false,
+  canDeleteInSubmenu: () => false,
+  canViewTab: () => false,
+  canCreateInTab: () => false,
+  canEditInTab: () => false,
+  canDeleteInTab: () => false,
+  getVisibleTabs: () => [],
+  canAccess: () => false,
+  isAdmin: () => false,
+  isAdministrativo: () => false,
+  getRoleName: () => '',
+  getVisibleMenus: () => [],
+  getVisibleSubmenus: () => [],
+  canCreate: () => false,
+  canUpdate: () => false,
+  canDelete: () => false,
+}
+
 export function usePermissions() {
   const context = useContext(PermissionsContext)
   if (context === undefined) {
-    throw new Error('usePermissions debe usarse dentro de PermissionsProvider')
+    console.warn('[usePermissions] Contexto no disponible, usando fallback con loading=true')
+    return permissionsFallback
   }
   return context
 }

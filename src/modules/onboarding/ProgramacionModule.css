@@ -542,7 +542,7 @@
 }
 
 .prog-modal {
-  background: var(--bg-primary);
+  background: var(--modal-bg);
   border-radius: 12px;
   width: 90%;
   max-width: 500px;
@@ -668,7 +668,7 @@
   justify-content: center;
   gap: 12px;
   padding: 20px;
-  background: var(--bg-primary);
+  background: var(--modal-bg);
 }
 
 /* =====================================================
@@ -869,9 +869,9 @@
 
 .prog-btn-secondary {
   padding: 8px 18px;
-  background: #F3F4F6;
-  color: #374151;
-  border: 1px solid #E5E7EB;
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+  border: 1px solid var(--border-primary);
   border-radius: 6px;
   font-size: 13px;
   font-weight: 500;
@@ -880,7 +880,7 @@
 }
 
 .prog-btn-secondary:hover:not(:disabled) {
-  background: #E5E7EB;
+  background: var(--bg-hover);
 }
 
 /* =====================================================
@@ -1373,4 +1373,17 @@
 .prog-inline-select-mini.confirmacion.reprogramar {
   background: var(--badge-yellow-bg, #FEF3C7);
   color: var(--badge-yellow-text, #D97706);
+}
+
+/* Dark mode: ajustes para modales de programacion */
+[data-theme="dark"] .prog-modal .form-select,
+[data-theme="dark"] .prog-modal input,
+[data-theme="dark"] .prog-modal textarea {
+  background: var(--input-bg);
+  border-color: var(--input-border);
+  color: var(--text-primary);
+}
+
+[data-theme="dark"] .prog-modal .prog-observaciones {
+  background: var(--bg-tertiary);
 }
