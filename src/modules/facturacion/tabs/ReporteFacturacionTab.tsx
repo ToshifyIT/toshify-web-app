@@ -3806,37 +3806,10 @@ export function ReporteFacturacionTab() {
 
     setCerrando(true)
     try {
-      // 1. Materializar facturación en kardex (control_saldos) + saldos_conductores
-      // Al cerrar es cuando el total_a_pagar deja de ser preview y se vuelve definitivo.
-      const { data: facturacionesCierre } = await (supabase
-        .from('facturacion_conductores') as any)
-        .select('conductor_id, total_a_pagar')
-        .eq('periodo_id', periodo.id)
-
-      for (const fact of (facturacionesCierre || []) as { conductor_id: string; total_a_pagar: number }[]) {
-        const totalAPagar = Math.abs(fact.total_a_pagar || 0)
-        const saldoResultante = -totalAPagar
-        try {
-          await insertControlSaldo({
-            conductorId: fact.conductor_id,
-            semana: periodo.semana,
-            anio: periodo.anio,
-            tipoMovimiento: 'regularizado',
-            montoMovimiento: totalAPagar,
-            saldoPendiente: saldoResultante,
-            referencia: `Facturación S${periodo.semana}/${periodo.anio}`,
-            userName: profile?.full_name || 'Sistema',
-          })
-          await (supabase as any)
-            .from('saldos_conductores')
-            .update({ saldo_actual: saldoResultante, updated_at: new Date().toISOString() })
-            .eq('conductor_id', fact.conductor_id)
-        } catch (errKardex) {
-          console.error('Error registrando kardex al cerrar:', fact.conductor_id, errKardex)
-        }
-      }
-
-      // 2. Cambiar estado del período a cerrado
+      // Cierre solo cambia estado a 'cerrado'. NO toca control_saldos ni
+      // saldos_conductores: los saldos se mueven únicamente cuando se carga el
+      // Pago Cabify (o pago manual). Materializar acá producía cargos
+      // 'regularizado' fantasma que sobreescribían el saldo antes de tener el pago.
       const { error } = await (supabase
         .from('periodos_facturacion') as any)
         .update({

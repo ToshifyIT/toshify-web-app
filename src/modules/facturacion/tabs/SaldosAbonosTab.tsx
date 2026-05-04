@@ -1822,7 +1822,6 @@ export function SaldosAbonosTab() {
       const { data: rows, error } = await (supabase.from('control_saldos') as any)
         .select('id, semana, anio, tipo_movimiento, monto_movimiento, referencia, saldo_adeudado, saldo_a_favor, saldo_pendiente, dias_mora, interes_mora, created_at, created_by_name')
         .eq('conductor_id', saldo.conductor_id)
-        .neq('tipo_movimiento', 'regularizado')
         .order('anio', { ascending: false })
         .order('semana', { ascending: false })
         .order('created_at', { ascending: false })
@@ -2588,6 +2587,23 @@ export function SaldosAbonosTab() {
                             importacion: 'Importación',
                           }
                           const montoMov = r.monto_movimiento || 0
+                          // Determina si la fila es CARGO (suma deuda) o ABONO (resta deuda).
+                          // Para tipos ambiguos (ajustes), inferir por delta vs saldo previo.
+                          const cargosTipos = new Set(['regularizado', 'cargo', 'eliminacion_pago'])
+                          const abonosTipos = new Set(['pago_cabify', 'pago', 'pago_manual', 'pago_cuota', 'abono'])
+                          let esCargo = cargosTipos.has(tipo)
+                          let esAbono = abonosTipos.has(tipo)
+                          if (!esCargo && !esAbono) {
+                            // i+1 es la fila previa cronológicamente (orden DESC en el modal)
+                            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                            const previa = (kardexModal.rows as any[])[i + 1]
+                            const pendPrev = previa ? (previa.saldo_pendiente || 0) : 0
+                            const delta = pend - pendPrev
+                            if (delta > 0) esAbono = true
+                            else if (delta < 0) esCargo = true
+                          }
+                          const montoColor = esCargo ? '#dc2626' : esAbono ? '#16a34a' : 'var(--text-tertiary)'
+                          const montoSigno = esCargo ? '-' : esAbono ? '+' : ''
                           const fecha = r.created_at ? new Date(r.created_at).toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: '2-digit' }) : '-'
                           return (
                             <tr key={i} style={{ borderBottom: '1px solid var(--border-primary)' }}>
@@ -2603,8 +2619,8 @@ export function SaldosAbonosTab() {
                               <td style={{ padding: '5px 8px', color: 'var(--text-secondary)', fontSize: '10px', maxWidth: '160px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={r.referencia || ''}>
                                 {r.referencia || '-'}
                               </td>
-                              <td style={{ padding: '5px 8px', textAlign: 'right', fontFamily: 'monospace', color: montoMov > 0 ? '#16a34a' : 'var(--text-tertiary)' }}>
-                                {montoMov > 0 ? formatCurrency(montoMov) : '-'}
+                              <td style={{ padding: '5px 8px', textAlign: 'right', fontFamily: 'monospace', color: montoColor }}>
+                                {montoMov > 0 ? `${montoSigno}${formatCurrency(montoMov)}` : '-'}
                               </td>
                               <td style={{
                                 padding: '5px 8px', textAlign: 'right', fontFamily: 'monospace', fontWeight: 700,

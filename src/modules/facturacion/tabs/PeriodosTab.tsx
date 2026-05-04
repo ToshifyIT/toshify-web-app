@@ -26,6 +26,7 @@ import { formatCurrency } from '../../../types/facturacion.types'
 import { format, startOfWeek, endOfWeek, subWeeks, getWeek, getYear, parseISO } from 'date-fns'
 import { es } from 'date-fns/locale'
 import { normalizeDni } from '../../../utils/normalizeDocuments'
+import { recalcGarantiasForPeriodo } from '../../../services/garantiasService'
 
 // Helper: tabla de cabify según sede (Bariloche usa tabla separada)
 const SEDE_BARILOCHE_ID = 'f37193f7-5805-4d87-820d-c4521824860e'
@@ -968,6 +969,10 @@ export function PeriodosTab() {
 
       if (error) throw error
 
+      // Sincroniza cuotas de garantía: cada período cerrado con
+      // subtotal_garantia > 0 cuenta como una cuota pagada. Idempotente.
+      await recalcGarantiasForPeriodo(semana.periodo_id)
+
       showSuccess('Período Cerrado')
       cargarSemanas()
     } catch (error: any) {
@@ -996,6 +1001,9 @@ export function PeriodosTab() {
         .eq('id', semana.periodo_id)
 
       if (error) throw error
+
+      // No tocar garantías al reabrir: el recalc es MAX-only (no decrementa)
+      // y el período se volverá a contar al recerrar.
 
       showSuccess('Período Reabierto')
       cargarSemanas()

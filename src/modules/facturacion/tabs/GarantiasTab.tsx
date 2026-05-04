@@ -25,7 +25,8 @@ import {
   ArrowUpCircle,
   RotateCcw,
   Download,
-  Upload
+  Upload,
+  RefreshCw
 } from 'lucide-react'
 import { type ColumnDef } from '@tanstack/react-table'
 import { format, startOfWeek, endOfWeek, parseISO } from 'date-fns'
@@ -34,6 +35,7 @@ import { VerLogsButton } from '../../../components/ui/VerLogsButton'
 import { LoadingOverlay } from '../../../components/ui/LoadingOverlay'
 import type { GarantiaConductor } from '../../../types/facturacion.types'
 import { formatCurrency, formatDate, FACTURACION_CONFIG } from '../../../types/facturacion.types'
+import { recalcGarantiasForSede } from '../../../services/garantiasService'
 
 interface ConductorBasico {
   id: string
@@ -909,6 +911,81 @@ export function GarantiasTab() {
     showSuccess('Exportado correctamente')
   }
 
+  // ====== SINCRONIZAR GARANTÍAS (recalc retroactivo) ======
+  // Recuenta cuotas a partir de facturacion_conductores con subtotal_garantia > 0
+  // en períodos cerrados. Idempotente. Usado para corregir desfasajes históricos
+  // (ej. sedes donde el equipo no usaba la vista previa RIT).
+  async function sincronizarGarantias() {
+    if (!sedeActualId) {
+      Swal.fire('Error', 'Seleccione una sede', 'error')
+      return
+    }
+    const confirm = await Swal.fire({
+      title: 'Sincronizar garantías',
+      html: `
+        <p>Se recalcularán las cuotas pagadas de todas las garantías de esta sede a partir de la facturación cerrada.</p>
+        <p style="color:var(--text-secondary); font-size:12px; margin-top:10px;">
+          Cada período cerrado con cobro de garantía cuenta como una cuota pagada.
+          Acción idempotente — no acumula al ejecutarse varias veces.
+        </p>
+      `,
+      icon: 'question',
+      showCancelButton: true,
+      confirmButtonText: 'Sí, sincronizar',
+      confirmButtonColor: '#ff0033',
+      cancelButtonText: 'Cancelar'
+    })
+    if (!confirm.isConfirmed) return
+
+    try {
+      setLoading(true)
+      const resultados = await recalcGarantiasForSede(sedeActualId)
+      const cambios = resultados.filter(r => r.cambio)
+
+      if (cambios.length === 0) {
+        Swal.fire('Sin cambios', 'Todas las garantías ya están sincronizadas', 'info')
+        return
+      }
+
+      const filas = cambios
+        .sort((a, b) => a.conductor_nombre.localeCompare(b.conductor_nombre))
+        .map(r => `
+          <tr>
+            <td style="padding:3px 6px;border-bottom:1px solid #E5E7EB;font-size:11px;">${r.conductor_nombre}</td>
+            <td style="padding:3px 6px;border-bottom:1px solid #E5E7EB;font-size:11px;text-align:center;">${r.cuotas_pagadas_anterior} → <strong>${r.cuotas_pagadas_nuevo}</strong></td>
+            <td style="padding:3px 6px;border-bottom:1px solid #E5E7EB;font-size:11px;text-align:right;">${formatCurrency(r.monto_pagado_anterior)} → <strong>${formatCurrency(r.monto_pagado_nuevo)}</strong></td>
+            <td style="padding:3px 6px;border-bottom:1px solid #E5E7EB;font-size:11px;text-align:center;">${r.estado_anterior} → <strong>${r.estado_nuevo}</strong></td>
+          </tr>
+        `).join('')
+
+      await cargarGarantias()
+      await Swal.fire({
+        title: `${cambios.length} garantía${cambios.length === 1 ? '' : 's'} actualizada${cambios.length === 1 ? '' : 's'}`,
+        html: `
+          <div style="max-height:340px;overflow-y:auto;">
+            <table style="width:100%;border-collapse:collapse;">
+              <thead>
+                <tr style="background:#F9FAFB;">
+                  <th style="padding:6px;font-size:11px;text-align:left;">Conductor</th>
+                  <th style="padding:6px;font-size:11px;text-align:center;">Cuotas</th>
+                  <th style="padding:6px;font-size:11px;text-align:right;">Monto pagado</th>
+                  <th style="padding:6px;font-size:11px;text-align:center;">Estado</th>
+                </tr>
+              </thead>
+              <tbody>${filas}</tbody>
+            </table>
+          </div>
+        `,
+        width: 720,
+        icon: 'success'
+      })
+    } catch (err: any) {
+      Swal.fire('Error', err.message || 'No se pudo sincronizar', 'error')
+    } finally {
+      setLoading(false)
+    }
+  }
+
   // ====== IMPORTAR GARANTÍAS DESDE EXCEL ======
   async function importarGarantias(file: File) {
     try {
@@ -1623,6 +1700,13 @@ export function GarantiasTab() {
                     title="Importar garantias desde Excel"
                   >
                     <Upload size={14} /> Importar
+                  </button>
+                  <button
+                    className="fact-btn fact-btn-secondary"
+                    onClick={sincronizarGarantias}
+                    title="Recalcula cuotas pagadas a partir de la facturación cerrada"
+                  >
+                    <RefreshCw size={14} /> Sincronizar
                   </button>
                 </div>
               )}
