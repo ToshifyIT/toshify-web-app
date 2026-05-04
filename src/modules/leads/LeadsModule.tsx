@@ -269,6 +269,15 @@ function getProcesoClass(proceso: string | undefined | null): string {
 // LEADS MODULE
 // =====================================================
 
+/** Clasifica causal_de_cierre en motivo legible (solo para "No le interesa") */
+function clasificarMotivoDesinteres(causal: string | null | undefined): string {
+  if (!causal) return 'Otro'
+  const t = causal.toLowerCase()
+  if (/price|precio|caro|costoso|plata|alcanza|expensive|cost|dinero|pagar|cobr|tarifa|alquiler/.test(t)) return 'Precio de alquiler'
+  if (/disagreement|condicion|turno|conviene|oferta|acuerdo|horario|regla|requisito|policy|condition|schedule/.test(t)) return 'Desacuerdo con oferta'
+  return 'Otro'
+}
+
 export function LeadsModule() {
   const { canCreateInMenu, canEditInMenu, canDeleteInMenu } = usePermissions()
   const { profile } = useAuth()
@@ -522,7 +531,7 @@ export function LeadsModule() {
       // Traer todos los leads no convertidos
       const { data: allLeads } = await supabase
         .from('leads')
-        .select('id, sede, sede_id, fuente_de_lead, turno, estado_de_lead')
+        .select('id, sede, sede_id, fuente_de_lead, turno, estado_de_lead, zona')
         .or('proceso.is.null,proceso.neq.Convertido')
         .limit(5000)
 
@@ -565,6 +574,15 @@ export function LeadsModule() {
           else if (tl.includes('indiferente') || tl.includes('any') || tl.includes('ambos') || tl.includes('cualquier')) turnoNorm = 'Indiferente'
           if (turnoNorm && turnoNorm !== lead.turno) {
             updateData.turno = turnoNorm
+          }
+        }
+
+        // --- Zona: normalizar variantes (quitar prefijo "Zona") ---
+        if (lead.zona) {
+          const zl = lead.zona.trim()
+          const zonaNorm = zl.replace(/^zona\s+/i, '')
+          if (zonaNorm !== lead.zona) {
+            updateData.zona = zonaNorm
           }
         }
 
@@ -2815,6 +2833,17 @@ function LeadDetailView({ lead, onEdit, onConvert, zonasRestringidas = [], enZon
             <span className="lead-detail-item-label">Estado de Lead</span>
             <span className="lead-detail-item-value">{lead.estado_de_lead || '-'}</span>
           </div>
+          {lead.estado_de_lead === 'No le interesa' && (
+          <div className="lead-detail-item">
+            <span className="lead-detail-item-label">Motivo Desinterés</span>
+            <span className="lead-detail-item-value">
+              {clasificarMotivoDesinteres(lead.causal_de_cierre)}
+              {lead.causal_de_cierre && lead.causal_de_cierre !== clasificarMotivoDesinteres(lead.causal_de_cierre) && (
+                <span style={{ display: 'block', fontSize: '11px', color: '#9ca3af', marginTop: '2px' }}>({lead.causal_de_cierre})</span>
+              )}
+            </span>
+          </div>
+          )}
           <div className="lead-detail-item">
             <span className="lead-detail-item-label">Fuente</span>
             <span className="lead-detail-item-value">{lead.fuente_de_lead || '-'}</span>
