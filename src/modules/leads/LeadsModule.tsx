@@ -771,23 +771,6 @@ export function LeadsModule() {
     setShowDeleteModal(true)
   }
 
-  function validateLeadForm(data: LeadFormData): Record<string, string> {
-    const e: Record<string, string> = {}
-    if (!data.nombre_completo?.trim()) e.nombre_completo = 'Requerido'
-    if (!data.dni?.trim()) e.dni = 'Requerido'
-    if (!data.cuit?.trim()) e.cuit = 'Requerido'
-    if (!data.fecha_de_nacimiento) e.fecha_de_nacimiento = 'Requerido'
-    if (!data.nacionalidad) e.nacionalidad = 'Requerido'
-    if (!data.estado_civil) e.estado_civil = 'Requerido'
-    if (!data.sede) e.sede = 'Requerido'
-    if (!data.phone?.trim()) e.phone = 'Requerido'
-    if (!data.email?.trim()) e.email = 'Requerido'
-    if (!data.direccion?.trim()) e.direccion = 'Requerido'
-    if (!data.numero_licencia?.trim()) e.numero_licencia = 'Requerido'
-    if (!data.categorias_licencia || data.categorias_licencia.length === 0) e.categorias_licencia = 'Seleccione al menos una'
-    if (!data.vencimiento_licencia) e.vencimiento_licencia = 'Requerido'
-    return e
-  }
 
   async function handleSaveCreate() {
     setSaving(true)
