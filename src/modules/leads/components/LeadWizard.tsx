@@ -47,20 +47,6 @@ function calcularEdad(fechaNac: string): number | undefined {
   return edad >= 0 ? edad : undefined
 }
 
-// Infiere zona geográfica a partir del texto de la dirección
-function inferZonaFromAddress(address: string): string {
-  const lower = address.toLowerCase()
-  const cabaKeywords = ['capital federal', 'caba', 'ciudad autónoma', 'ciudad autonoma', 'cdad. autónoma', 'cdad. autonoma', 'autónoma de buenos aires', 'autonoma de buenos aires', 'c.a.b.a']
-  if (cabaKeywords.some(k => lower.includes(k))) return 'CABA'
-  const norteKeywords = ['san isidro', 'vicente lópez', 'vicente lopez', 'tigre', 'san fernando', 'pilar', 'escobar', 'campana', 'zárate', 'zarate', 'zona norte']
-  if (norteKeywords.some(k => lower.includes(k))) return 'Norte'
-  const surKeywords = ['avellaneda', 'quilmes', 'lanús', 'lanus', 'lomas de zamora', 'almirante brown', 'berazategui', 'florencio varela', 'zona sur']
-  if (surKeywords.some(k => lower.includes(k))) return 'Sur'
-  const oesteKeywords = ['morón', 'moron', 'merlo', 'moreno', 'la matanza', 'ituzaingó', 'ituzaingo', 'hurlingham', 'tres de febrero', 'san martín', 'san martin', 'zona oeste', 'josé c. paz', 'jose c. paz', 'malvinas argentinas', 'san miguel']
-  if (oesteKeywords.some(k => lower.includes(k))) return 'Oeste'
-  return ''
-}
-
 export function LeadWizard({ formData, setFormData, onSave, onCancel, saving = false, errors = {}, categoriasLicencia = [], estadosLicencia = [], tiposLicencia = [] }: LeadWizardProps) {
   const [currentStep, setCurrentStep] = useState(1)
   const { sedes } = useSede()
@@ -147,31 +133,36 @@ export function LeadWizard({ formData, setFormData, onSave, onCancel, saving = f
                 {errors.nombre_completo && <span className="error-text">{errors.nombre_completo}</span>}
               </div>
               <div className="lead-wizard-field">
-                <label>DNI</label>
+                <label>DNI <span className="required">*</span></label>
                 <input
                   type="text"
+                  className={errors.dni ? 'field-error' : ''}
                   value={formData.dni || ''}
                   onChange={e => updateField('dni', e.target.value)}
                   placeholder="Ej: 35123456"
                   maxLength={10}
                 />
+                {errors.dni && <span className="error-text">{errors.dni}</span>}
               </div>
             </div>
             <div className="lead-wizard-form-group">
               <div className="lead-wizard-field">
-                <label>CUIT</label>
+                <label>CUIT <span className="required">*</span></label>
                 <input
                   type="text"
+                  className={errors.cuit ? 'field-error' : ''}
                   value={formData.cuit || ''}
                   onChange={e => updateField('cuit', e.target.value)}
                   placeholder="Ej: 20351234569"
                   maxLength={13}
                 />
+                {errors.cuit && <span className="error-text">{errors.cuit}</span>}
               </div>
               <div className="lead-wizard-field">
-                <label>Fecha de Nacimiento</label>
+                <label>Fecha de Nacimiento <span className="required">*</span></label>
                 <input
                   type="date"
+                  className={errors.fecha_de_nacimiento ? 'field-error' : ''}
                   value={formData.fecha_de_nacimiento || ''}
                   onChange={e => {
                     const fecha = e.target.value
@@ -180,6 +171,7 @@ export function LeadWizard({ formData, setFormData, onSave, onCancel, saving = f
                     if (edad !== undefined) updateField('edad', edad)
                   }}
                 />
+                {errors.fecha_de_nacimiento && <span className="error-text">{errors.fecha_de_nacimiento}</span>}
               </div>
             </div>
             <div className="lead-wizard-form-group">
@@ -194,8 +186,8 @@ export function LeadWizard({ formData, setFormData, onSave, onCancel, saving = f
                 />
               </div>
               <div className="lead-wizard-field">
-                <label>Nacionalidad</label>
-                <select value={formData.nacionalidad || ''} onChange={e => updateField('nacionalidad', e.target.value)}>
+                <label>Nacionalidad <span className="required">*</span></label>
+                <select className={errors.nacionalidad ? 'field-error' : ''} value={formData.nacionalidad || ''} onChange={e => updateField('nacionalidad', e.target.value)}>
                   <option value="">Seleccionar</option>
                   <option value="ARGENTINA">ARGENTINA</option>
                   <option value="BOLIVIANA">BOLIVIANA</option>
@@ -206,12 +198,13 @@ export function LeadWizard({ formData, setFormData, onSave, onCancel, saving = f
                   <option value="CHILENA">CHILENA</option>
                   <option value="COLOMBIANA">COLOMBIANA</option>
                 </select>
+                {errors.nacionalidad && <span className="error-text">{errors.nacionalidad}</span>}
               </div>
             </div>
             <div className="lead-wizard-form-group">
               <div className="lead-wizard-field">
-                <label>Estado Civil</label>
-                <select value={formData.estado_civil || ''} onChange={e => updateField('estado_civil', e.target.value)}>
+                <label>Estado Civil <span className="required">*</span></label>
+                <select className={errors.estado_civil ? 'field-error' : ''} value={formData.estado_civil || ''} onChange={e => updateField('estado_civil', e.target.value)}>
                   <option value="">Seleccionar</option>
                   <option value="CASADO">CASADO</option>
                   <option value="DIVORCIADO">DIVORCIADO</option>
@@ -219,10 +212,12 @@ export function LeadWizard({ formData, setFormData, onSave, onCancel, saving = f
                   <option value="SOLTERO">SOLTERO</option>
                   <option value="VIUDO">VIUDO</option>
                 </select>
+                {errors.estado_civil && <span className="error-text">{errors.estado_civil}</span>}
               </div>
               <div className="lead-wizard-field">
-                <label>Sede</label>
+                <label>Sede <span className="required">*</span></label>
                 <select
+                  className={errors.sede ? 'field-error' : ''}
                   value={formData.sede || ''}
                   onChange={e => updateField('sede', e.target.value)}
                 >
@@ -231,6 +226,7 @@ export function LeadWizard({ formData, setFormData, onSave, onCancel, saving = f
                     <option key={s.id} value={s.nombre || ''}>{s.nombre}</option>
                   ))}
                 </select>
+                {errors.sede && <span className="error-text">{errors.sede}</span>}
               </div>
             </div>
           </>
@@ -241,9 +237,10 @@ export function LeadWizard({ formData, setFormData, onSave, onCancel, saving = f
           <>
             <div className="lead-wizard-form-group">
               <div className="lead-wizard-field">
-                <label>Teléfono</label>
+                <label>Teléfono <span className="required">*</span></label>
                 <input
                   type="text"
+                  className={errors.phone ? 'field-error' : ''}
                   value={formData.phone || ''}
                   onChange={e => {
                     const val = e.target.value
@@ -255,6 +252,7 @@ export function LeadWizard({ formData, setFormData, onSave, onCancel, saving = f
                   }}
                   placeholder="Ej: 11-1234-5678"
                 />
+                {errors.phone && <span className="error-text">{errors.phone}</span>}
               </div>
               <div className="lead-wizard-field">
                 <label>WhatsApp</label>
@@ -268,13 +266,15 @@ export function LeadWizard({ formData, setFormData, onSave, onCancel, saving = f
             </div>
             <div className="lead-wizard-form-group">
               <div className="lead-wizard-field">
-                <label>Email</label>
+                <label>Email <span className="required">*</span></label>
                 <input
                   type="email"
+                  className={errors.email ? 'field-error' : ''}
                   value={formData.email || ''}
                   onChange={e => updateField('email', e.target.value)}
                   placeholder="correo@ejemplo.com"
                 />
+                {errors.email && <span className="error-text">{errors.email}</span>}
               </div>
               <div className="lead-wizard-field">
                 <label>Mail de Respaldo</label>
@@ -288,19 +288,18 @@ export function LeadWizard({ formData, setFormData, onSave, onCancel, saving = f
             </div>
             <div className="lead-wizard-form-group full-width">
               <div className="lead-wizard-field">
-                <label>Dirección</label>
+                <label>Dirección <span className="required">*</span></label>
                 <AddressAutocomplete
                   value={formData.direccion || ''}
-                  onChange={(address, lat, lng) => {
+                  onChange={(address, lat, lng, zona) => {
                     updateField('direccion', address)
                     if (lat !== undefined) updateField('latitud', lat)
                     if (lng !== undefined) updateField('longitud', lng)
-                    // Auto-detectar zona desde la dirección
-                    const zonaInferida = inferZonaFromAddress(address)
-                    if (zonaInferida) updateField('zona', zonaInferida)
+                    if (zona) updateField('zona', zona)
                   }}
                   placeholder="Buscar dirección..."
                 />
+                {errors.direccion && <span className="error-text">{errors.direccion}</span>}
               </div>
             </div>
             <div className="lead-wizard-form-group">
@@ -397,28 +396,33 @@ export function LeadWizard({ formData, setFormData, onSave, onCancel, saving = f
           <>
             <div className="lead-wizard-form-group">
               <div className="lead-wizard-field">
-                <label>Nro. Licencia</label>
+                <label>Nro. Licencia <span className="required">*</span></label>
                 <input
                   type="text"
+                  className={errors.numero_licencia ? 'field-error' : ''}
                   value={formData.numero_licencia || ''}
                   onChange={e => updateField('numero_licencia', e.target.value)}
                   placeholder="Número de licencia"
                 />
+                {errors.numero_licencia && <span className="error-text">{errors.numero_licencia}</span>}
               </div>
               <div className="lead-wizard-field">
-                <label>Vencimiento Licencia</label>
+                <label>Vencimiento Licencia <span className="required">*</span></label>
                 <input
                   type="date"
+                  className={errors.vencimiento_licencia ? 'field-error' : ''}
                   value={formData.vencimiento_licencia || ''}
                   onChange={e => updateField('vencimiento_licencia', e.target.value)}
                 />
+                {errors.vencimiento_licencia && <span className="error-text">{errors.vencimiento_licencia}</span>}
               </div>
             </div>
             <div className="lead-wizard-form-group">
               <div className="lead-wizard-field" style={{ flex: 1 }}>
-                <label>Categorías</label>
+                <label>Categorías <span className="required">*</span></label>
                 <select
                   multiple
+                  className={errors.categorias_licencia ? 'field-error' : ''}
                   value={formData.categorias_licencia || []}
                   onChange={e => {
                     const selected = Array.from(e.target.selectedOptions, opt => opt.value)
@@ -439,6 +443,7 @@ export function LeadWizard({ formData, setFormData, onSave, onCancel, saving = f
                   ))}
                 </select>
                 <small style={{ color: 'var(--text-secondary)', fontSize: '11px' }}>Ctrl+Click para múltiples</small>
+                {errors.categorias_licencia && <span className="error-text">{errors.categorias_licencia}</span>}
                 {formData.licencia && (!formData.categorias_licencia || formData.categorias_licencia.length === 0) && (
                   <div style={{ marginTop: '6px', padding: '6px 10px', background: 'rgba(251, 191, 36, 0.1)', border: '1px solid rgba(251, 191, 36, 0.3)', borderRadius: '6px', fontSize: '12px', color: 'var(--text-secondary)' }}>
                     Valor anterior: <strong style={{ color: 'var(--text-primary)' }}>{formData.licencia}</strong>
