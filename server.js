@@ -199,7 +199,6 @@ app.post('/api/create-drive-folder', async (req, res) => {
     }
 
     // 2) No existe en Drive: crear nueva
-    console.log(`[create-drive-folder] Creating ${tipo} folder: ${folderName}`)
     const response = await drive.files.create({
       requestBody: {
         name: folderName,
@@ -210,7 +209,6 @@ app.post('/api/create-drive-folder', async (req, res) => {
     })
 
     const folder = response.data
-    console.log('Folder created:', folder)
 
     // Persistir en BD
     if (supabaseEnabled && recordId) {
@@ -913,7 +911,8 @@ async function fetchSedeCode(sedeId) {
 }
 
 /**
- * Actualiza drive_folder_url del conductor en Supabase
+ * Actualiza drive_contract_folder_url del conductor en Supabase
+ * (carpeta de contratos, separada de la carpeta de documentación)
  */
 async function updateConductorDriveUrl(conductorId, folderUrl) {
   const supabaseUrl = process.env.VITE_SUPABASE_URL
@@ -929,7 +928,7 @@ async function updateConductorDriveUrl(conductorId, folderUrl) {
         'Content-Type': 'application/json',
         'Prefer': 'return=minimal'
       },
-      body: JSON.stringify({ drive_folder_url: folderUrl })
+      body: JSON.stringify({ drive_contract_folder_url: folderUrl })
     }
   )
 }
@@ -1093,9 +1092,7 @@ async function generateContractForConductor({
   addIfPresent('KM', vehiculo.kilometraje_actual ? String(vehiculo.kilometraje_actual) : null)
 
   // Variables de propietario
-  console.log(`[Contract] propietario recibido: '${propietario}' (tipo: ${typeof propietario})`)
   const ownerData = CONTRACT_CONFIG.propietarios[propietario] || CONTRACT_CONFIG.propietarios['grupo_cg']
-  console.log(`[Contract] ownerData resuelto: ${JSON.stringify(ownerData)}`)
   addIfPresent('OWNER', ownerData.owner)
   addIfPresent('CUIT_OWNER', ownerData.cuit_owner)
   addIfPresent('NAME_OWNER', ownerData.name_owner)

@@ -1,7 +1,7 @@
 // src/modules/conductores/ConductoresModule.tsx
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { useState, useEffect, useMemo } from "react";
-import { Eye, Edit2, Trash2, AlertTriangle, Users, UserCheck, UserX, Clock, Filter, FolderOpen, FolderPlus, Loader2, History, RefreshCw, ShieldX, MessageSquare } from "lucide-react";
+import { Eye, Edit2, Trash2, AlertTriangle, Users, UserCheck, UserX, Clock, Filter, FolderOpen, FolderPlus, Loader2, History, RefreshCw, ShieldX, MessageSquare, FileText } from "lucide-react";
 import { ActionsMenu } from "../../components/ui/ActionsMenu";
 import { VerLogsButton } from "../../components/ui/VerLogsButton";
 
@@ -4270,19 +4270,33 @@ function ModalDetalles({
         </div>
         {(() => {
           const folderUrl = (selectedConductor as any).drive_folder_url || (selectedConductor as any).url_documentacion;
+          const contractUrl = (selectedConductor as any).drive_contract_folder_url;
           return (
             <div className="modal-footer" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <button
-                className={folderUrl ? 'btn-success' : 'btn-secondary'}
-                onClick={() => {
-                  if (folderUrl) window.open(folderUrl, '_blank');
-                  else Swal.fire('Sin URL', 'Este conductor no tiene una URL de documentación configurada', 'info');
-                }}
-                style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
-              >
-                {folderUrl ? <FolderOpen size={16} /> : <FolderPlus size={16} />}
-                {folderUrl ? 'Ver documentos' : 'Sin carpeta'}
-              </button>
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <button
+                  className={folderUrl ? 'btn-success' : 'btn-secondary'}
+                  onClick={() => {
+                    if (folderUrl) window.open(folderUrl, '_blank');
+                    else Swal.fire('Sin URL', 'Este conductor no tiene una URL de documentación configurada', 'info');
+                  }}
+                  style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
+                >
+                  {folderUrl ? <FolderOpen size={16} /> : <FolderPlus size={16} />}
+                  {folderUrl ? 'Ver documentos' : 'Sin carpeta'}
+                </button>
+                <button
+                  className={contractUrl ? 'btn-info' : 'btn-secondary'}
+                  disabled={!contractUrl}
+                  onClick={() => {
+                    if (contractUrl) window.open(contractUrl, '_blank');
+                  }}
+                  style={{ display: 'flex', alignItems: 'center', gap: '6px', opacity: contractUrl ? 1 : 0.5 }}
+                >
+                  <FileText size={16} />
+                  Ver historial contratos
+                </button>
+              </div>
               <button
                 className="btn-secondary"
                 onClick={() => setShowDetailsModal(false)}
