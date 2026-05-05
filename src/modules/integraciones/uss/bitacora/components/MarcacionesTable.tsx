@@ -24,7 +24,6 @@ interface MarcacionesTableProps {
     lavado_realizado?: boolean;
     nafta_cargada?: boolean;
   }) => Promise<void>;
-  onActivarSemanaActual?: () => void;
 }
 
 function formatFecha(fecha: string): string {
@@ -109,7 +108,6 @@ export function MarcacionesTable({
   onSearchChange,
   headerControls,
   onUpdateChecklist,
-  onActivarSemanaActual,
 }: MarcacionesTableProps) {
   const { openFilterId, setOpenFilterId } = useExcelFilters();
 
@@ -768,15 +766,12 @@ export function MarcacionesTable({
             <span style={{ width: '1px', height: '20px', background: 'var(--border-primary)', margin: '0 4px' }} />
             <button
               onClick={() => {
-                const next = !excedeFilter
-                setExcedeFilter(next)
-                // Al activar el filtro, sincronizar el rango de fecha a "Esta semana"
-                if (next && onActivarSemanaActual) onActivarSemanaActual()
+                setExcedeFilter(!excedeFilter)
               }}
               disabled={excedeCount === 0}
               title={excedeCount > 0
-                ? "Filtrar conductores que superaron el limite de km semanal (turno: 1.800 / a cargo: 3.600). Cambia el rango de fecha a Esta semana."
-                : "Sin conductores excedidos esta semana (lunes 00:00 a domingo 23:59 ART)"}
+                ? "Filtrar conductores que superaron el limite de km semanal (turno: 1.800 / a cargo: 3.600) en la semana del rango de fecha visible."
+                : "Sin conductores excedidos en la semana visible (lunes 00:00 a domingo 23:59 ART)"}
               style={{
                 padding: '6px 12px',
                 borderRadius: '999px',
