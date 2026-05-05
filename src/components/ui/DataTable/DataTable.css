@@ -567,6 +567,19 @@
   text-align: left;
 }
 
+/* Padding lateral interno para que el contenido no pegue al borde de la
+   tabla. Aplicado a la primera y última celda de cada fila (header y body)
+   en lugar del wrapper, para no recrear el bug ITCODE-113 (transparencia
+   por padding del wrapper en columnas sticky). */
+.dt-table th:first-child,
+.dt-table td:first-child {
+  padding-left: 16px;
+}
+.dt-table th:last-child,
+.dt-table td:last-child {
+  padding-right: 16px;
+}
+
 .dt-table tbody tr {
   transition: background 0.15s;
   content-visibility: auto;
