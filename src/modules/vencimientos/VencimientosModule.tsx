@@ -798,24 +798,6 @@ export function VencimientosModule() {
             </button>
           </div>
         </div>
-        <div className="tabs-actions">
-          <button
-            type="button"
-            className="btn-secondary"
-            onClick={exportToExcel}
-          >
-            <FileText size={16} />
-            Exportar
-          </button>
-          <button
-            type="button"
-            className="btn-primary"
-            onClick={openCreateModal}
-          >
-            <Plus size={16} />
-            Nuevo Registro
-          </button>
-        </div>
       </div>
 
       {totalProximosAVencer > 0 && (
@@ -852,6 +834,24 @@ export function VencimientosModule() {
               onChange={e => setSearch(e.target.value)}
             />
           </div>
+        </div>
+        <div className="tabs-actions">
+          <button
+            type="button"
+            className="btn-secondary"
+            onClick={exportToExcel}
+          >
+            <FileText size={16} />
+            Exportar
+          </button>
+          <button
+            type="button"
+            className="btn-primary"
+            onClick={openCreateModal}
+          >
+            <Plus size={16} />
+            Nuevo Registro
+          </button>
         </div>
       </div>
 

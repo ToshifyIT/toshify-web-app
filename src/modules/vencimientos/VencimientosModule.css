@@ -98,6 +98,17 @@
   align-items: center;
   gap: 16px;
   margin-top: 8px;
+  width: 100%;
+}
+
+.vencimientos-search-row .vencimientos-search {
+  flex: 1;
+  min-width: 0;
+}
+
+.vencimientos-search-row .tabs-actions {
+  margin-left: auto;
+  flex-shrink: 0;
 }
 
 .vencimientos-tabs {
