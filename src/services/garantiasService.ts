@@ -17,18 +17,30 @@ export interface GarantiaSyncResult {
 const ESTADOS_INMUTABLES = new Set(['cancelada', 'suspendida'])
 
 /**
- * Recalcula cuotas_pagadas de las garantías a partir de la cantidad de
- * facturacion_conductores con subtotal_garantia > 0 en períodos CERRADOS.
+ * Recalcula garantías por PRORRATEO PROPORCIONAL del pago real.
  *
- * Regla MAX-only: nunca baja un valor existente, solo sube si la facturación
- * cerrada cuenta más cuotas que las registradas. Esto preserva datos
- * históricos importados manualmente (ej. via Excel) que no están reflejados
- * en facturacion_conductores.
+ * Regla de negocio:
+ *   - Garantía universal: monto_total / cuotas_totales / cuota_semanal por garantía.
+ *   - El estado es PORCENTUAL (monto_pagado / monto_total).
+ *   - El número de cuota es REFERENCIAL (derivado de monto_pagado / cuota_semanal).
+ *
+ * Cómo se calcula monto_pagado:
+ *   Por cada conductor sumamos lo realmente cobrado vía pagos_conductores y lo
+ *   prorrateamos según el peso de la garantía dentro del total facturado:
+ *
+ *     ratio_garantia = sum(subtotal_garantia) / sum(total_a_pagar)
+ *     monto_pagado_garantia = sum(pagos) * ratio_garantia
+ *
+ *   Esto refleja: "si pagaste el X% de tu deuda total, asumimos que pagaste el
+ *   X% de cada concepto, incluida la garantía".
+ *
+ * MAX-only: nunca decrementa el monto_pagado existente — preserva imports
+ * históricos por Excel que no estén reflejados en pagos_conductores.
  *
  * - Si conductor no tiene garantía en BD → skip.
  * - Si garantía en estado cancelada/suspendida → skip.
- * - Si conductor está de BAJA y tiene pagos parciales → estado en_devolucion.
- * - Else: completada / en_curso / pendiente según cuotas y monto.
+ * - Estados: completada (>=100%) / en_curso (>0) / pendiente (0). El estado
+ *   "en_devolucion" lo deriva la UI según estado_conductor=BAJA + monto parcial.
  */
 export async function recalcGarantiasForConductors(
   conductorIds: string[]
@@ -58,17 +70,37 @@ export async function recalcGarantiasForConductors(
 
   const periodoIdsCerrados = periodosCerrados.map((p: any) => p.id)
 
-  const { data: facturasGarantia } = await (supabase
-    .from('facturacion_conductores') as any)
-    .select('conductor_id, periodo_id, subtotal_garantia')
-    .in('conductor_id', conductorIds)
-    .in('periodo_id', periodoIdsCerrados)
-    .gt('subtotal_garantia', 0)
+  // Cargar facturación cerrada (para calcular ratio garantía/total) + pagos.
+  const [facturasRes, pagosRes] = await Promise.all([
+    (supabase
+      .from('facturacion_conductores') as any)
+      .select('conductor_id, subtotal_garantia, total_a_pagar')
+      .in('conductor_id', conductorIds)
+      .in('periodo_id', periodoIdsCerrados),
+    (supabase
+      .from('pagos_conductores') as any)
+      .select('conductor_id, monto, tipo_cobro')
+      .in('conductor_id', conductorIds)
+  ])
 
-  // Contar cuotas por conductor (1 factura cerrada con garantía = 1 cuota).
-  const cuotasPorConductor = new Map<string, number>()
-  for (const f of (facturasGarantia || []) as any[]) {
-    cuotasPorConductor.set(f.conductor_id, (cuotasPorConductor.get(f.conductor_id) || 0) + 1)
+  // Acumular por conductor: garantía facturada, total facturado, total pagado.
+  const garantiaFacturada = new Map<string, number>()
+  const totalFacturado = new Map<string, number>()
+  for (const f of (facturasRes.data || []) as any[]) {
+    const cid = f.conductor_id
+    const sg = Number(f.subtotal_garantia) || 0
+    const tp = Number(f.total_a_pagar) || 0
+    if (sg > 0) garantiaFacturada.set(cid, (garantiaFacturada.get(cid) || 0) + sg)
+    if (tp > 0) totalFacturado.set(cid, (totalFacturado.get(cid) || 0) + tp)
+  }
+
+  // Total pagado por conductor: solo cuenta pagos atribuibles a facturación
+  // (excluimos cobros fraccionados y penalidades, que son flujos paralelos).
+  const totalPagado = new Map<string, number>()
+  for (const p of (pagosRes.data || []) as any[]) {
+    if (p.tipo_cobro && p.tipo_cobro !== 'facturacion_semanal') continue
+    const cid = p.conductor_id
+    totalPagado.set(cid, (totalPagado.get(cid) || 0) + (Number(p.monto) || 0))
   }
 
   const estadoConductor = new Map<string, string>()
@@ -82,26 +114,34 @@ export async function recalcGarantiasForConductors(
   for (const g of garantias) {
     if (ESTADOS_INMUTABLES.has(g.estado)) continue
 
-    const cuotasContadas = cuotasPorConductor.get(g.conductor_id) || 0
-    const cuotasActuales = Number(g.cuotas_pagadas) || 0
-    // MAX-only: nunca decrementar (preserva imports históricos no reflejados
-    // en facturacion_conductores).
-    const cuotasNuevas = Math.min(
-      Math.max(cuotasActuales, cuotasContadas),
-      g.cuotas_totales || 0
-    )
+    const cid = g.conductor_id
+    const garFact = garantiaFacturada.get(cid) || 0
+    const totalFact = totalFacturado.get(cid) || 0
+    const totalPag = totalPagado.get(cid) || 0
     const cuotaSemanal = Number(g.monto_cuota_semanal) || 0
     const montoTotal = Number(g.monto_total) || 0
+    const montoPagadoActual = Number(g.monto_pagado) || 0
+
+    // Prorrateo: monto pagado de garantía = total pagado × ratio garantía/total
+    const ratio = totalFact > 0 ? garFact / totalFact : 0
+    const montoGarantiaCalculado = Math.round(totalPag * ratio * 100) / 100
+
+    // MAX-only: nunca bajar valor existente.
     const montoPagadoNuevo = Math.min(
-      Math.round(cuotasNuevas * cuotaSemanal * 100) / 100,
+      Math.max(montoPagadoActual, montoGarantiaCalculado),
       montoTotal
     )
 
-    const esBaja = estadoConductor.get(g.conductor_id) === 'BAJA'
+    // Cuotas referenciales: derivadas de monto_pagado / cuota_semanal.
+    const cuotasNuevas = cuotaSemanal > 0
+      ? Math.min(Math.round(montoPagadoNuevo / cuotaSemanal), g.cuotas_totales || 0)
+      : 0
+
+    // Nota: el constraint solo permite pendiente/en_curso/completada/cancelada/
+    // suspendida. El estado "en_devolucion" es virtual — lo deriva la UI según
+    // estado_conductor=BAJA + monto parcial.
     let estadoNuevo: string
-    if (esBaja && montoPagadoNuevo > 0 && montoPagadoNuevo < montoTotal) {
-      estadoNuevo = 'en_devolucion'
-    } else if (montoPagadoNuevo >= montoTotal && montoTotal > 0) {
+    if (montoPagadoNuevo >= montoTotal && montoTotal > 0) {
       estadoNuevo = 'completada'
     } else if (montoPagadoNuevo > 0) {
       estadoNuevo = 'en_curso'
@@ -111,15 +151,15 @@ export async function recalcGarantiasForConductors(
 
     const cambio =
       g.cuotas_pagadas !== cuotasNuevas ||
-      Math.abs(Number(g.monto_pagado) - montoPagadoNuevo) > 0.01 ||
+      Math.abs(montoPagadoActual - montoPagadoNuevo) > 0.01 ||
       g.estado !== estadoNuevo
 
     resultados.push({
-      conductor_id: g.conductor_id,
+      conductor_id: cid,
       conductor_nombre: g.conductor_nombre,
       cuotas_pagadas_anterior: g.cuotas_pagadas,
       cuotas_pagadas_nuevo: cuotasNuevas,
-      monto_pagado_anterior: Number(g.monto_pagado),
+      monto_pagado_anterior: montoPagadoActual,
       monto_pagado_nuevo: montoPagadoNuevo,
       estado_anterior: g.estado,
       estado_nuevo: estadoNuevo,
