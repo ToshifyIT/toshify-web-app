@@ -76,6 +76,8 @@ export function VehicleManagement() {
 
   // Catalog states
   const [vehiculosEstados, setVehiculosEstados] = useState<VehiculoEstado[]>([])
+  // Patentes que aparecen en uss_historico (ultimos 30 dias) - para badge GPS en columna km
+  const [ussPatentes, setUssPatentes] = useState<Set<string>>(() => new Set())
 
   // Column filter states - Multiselect tipo Excel
   const [patenteFilter, setPatenteFilter] = useState<string[]>([])
@@ -220,7 +222,8 @@ export function VehicleManagement() {
     setError('')
 
     try {
-      const [vehiculosRes, estadosRes, sedesRes] = await Promise.all([
+      const desde30d = new Date(Date.now() - 30 * 24 * 3600 * 1000).toISOString()
+      const [vehiculosRes, estadosRes, sedesRes, ussRes] = await Promise.all([
         aplicarFiltroSede(supabase
           .from('vehiculos')
           .select(`
@@ -231,12 +234,20 @@ export function VehicleManagement() {
           .is('deleted_at', null))
           .order('created_at', { ascending: false }),
         supabase.from('vehiculos_estados').select('id, codigo, descripcion').order('descripcion'),
-        supabase.from('sedes').select('id, nombre').order('nombre')
+        supabase.from('sedes').select('id, nombre').order('nombre'),
+        supabase.from('uss_historico').select('patente').gte('fecha_hora_inicio_gmt3', desde30d),
       ])
 
       if (vehiculosRes.error) throw vehiculosRes.error
       if (estadosRes.data) setVehiculosEstados(estadosRes.data)
       if (sedesRes.data) setSedes(sedesRes.data)
+      if (ussRes.data) {
+        const set = new Set<string>()
+        for (const r of ussRes.data as { patente: string }[]) {
+          set.add((r.patente || '').replace(/[\s\-.%]/g, '').toUpperCase())
+        }
+        setUssPatentes(set)
+      }
 
       if (!vehiculosRes.data || vehiculosRes.data.length === 0) {
         setVehiculos([])
@@ -1476,27 +1487,41 @@ export function VehicleManagement() {
           />
         ),
         cell: ({ row, getValue }) => {
-          const kmManual = (getValue() as number) || 0
-          const kmGeotab = (row.original as any).kilometraje_geotab as number | null
+          const km = (getValue() as number) || 0
           const updatedAt = (row.original as any).kilometraje_geotab_updated_at as string | null
+          const patenteNorm = ((row.original as any).patente || '').replace(/[\s\-.%]/g, '').toUpperCase()
+          const esGeotab = !!updatedAt
+          const esUss = !esGeotab && ussPatentes.has(patenteNorm)
+          const tooltip = esGeotab && updatedAt
+            ? `Actualizado automáticamente desde Geotab el ${new Date(updatedAt).toLocaleString('es-AR', { timeZone: 'America/Argentina/Buenos_Aires' })}`
+            : esUss
+            ? 'Vehículo con GPS USS (km manual; USS no transmite odómetro acumulado)'
+            : 'Carga manual'
           return (
-            <div style={{ display: 'flex', flexDirection: 'column', lineHeight: 1.3 }}>
-              <span style={{ fontSize: '13px', fontWeight: 500 }}>{kmManual.toLocaleString()} km</span>
-              {kmGeotab != null && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 2, lineHeight: 1.3 }} title={tooltip}>
+              <span style={{ fontSize: 13, fontWeight: 500 }}>{km.toLocaleString()} km</span>
+              {esGeotab && (
                 <span
-                  title={updatedAt ? `Actualizado: ${new Date(updatedAt).toLocaleString('es-AR', { timeZone: 'America/Argentina/Buenos_Aires' })}` : 'Geotab'}
                   style={{
-                    fontSize: '10px',
-                    color: '#3b82f6',
-                    fontWeight: 600,
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: '4px',
-                    marginTop: '2px',
+                    background: '#3b82f6', color: '#fff',
+                    padding: '1px 5px', borderRadius: 3,
+                    fontSize: 9, fontWeight: 700, letterSpacing: 0.5,
+                    width: 'fit-content',
                   }}
                 >
-                  <span style={{ background: '#3b82f6', color: '#fff', padding: '1px 5px', borderRadius: '3px', fontSize: '9px', letterSpacing: '0.5px' }}>GEOTAB</span>
-                  {kmGeotab.toLocaleString()} km
+                  GEOTAB
+                </span>
+              )}
+              {esUss && (
+                <span
+                  style={{
+                    background: '#16a34a', color: '#fff',
+                    padding: '1px 5px', borderRadius: 3,
+                    fontSize: 9, fontWeight: 700, letterSpacing: 0.5,
+                    width: 'fit-content',
+                  }}
+                >
+                  USS
                 </span>
               )}
             </div>
@@ -1643,7 +1668,7 @@ export function VehicleManagement() {
         enableSorting: false,
       },
     ],
-    [canUpdate, canDelete, patenteFilter, marcaFilter, modeloFilter, titularFilter, anioFilter, colorFilter, kmFilter, estadoFilter, openFilterId, patentesUnicas, marcasExistentes, modelosExistentes, titularesUnicos, aniosUnicos, coloresUnicos, estadosUnicos]
+    [canUpdate, canDelete, patenteFilter, marcaFilter, modeloFilter, titularFilter, anioFilter, colorFilter, kmFilter, estadoFilter, openFilterId, patentesUnicas, marcasExistentes, modelosExistentes, titularesUnicos, aniosUnicos, coloresUnicos, estadosUnicos, ussPatentes]
   )
 
   return (
