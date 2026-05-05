@@ -2,6 +2,7 @@
 import { useState, useCallback, useRef, useEffect } from 'react'
 import { GoogleMap, useJsApiLoader, Marker, Autocomplete } from '@react-google-maps/api'
 import { MapPin, X, Loader2 } from 'lucide-react'
+import { inferZona } from '../../utils/zonaUtils'
 
 // Fallback a key hardcodeada si no está en env (para producción)
 const GOOGLE_MAPS_API_KEY = import.meta.env.VITE_GOOGLE_MAPS_API_KEY || 'AIzaSyCCiqk9jWZghUq5rBtSyo6ZjLuMORblY-w'
@@ -25,7 +26,8 @@ const mapContainerStyle = {
 
 interface AddressAutocompleteProps {
   value: string
-  onChange: (address: string, lat?: number, lng?: number) => void
+  /** Se llama cada vez que cambia la dirección. El 4to parámetro es la zona detectada automáticamente. */
+  onChange: (address: string, lat?: number, lng?: number, zona?: string) => void
   disabled?: boolean
   placeholder?: string
   className?: string
@@ -41,9 +43,12 @@ export function AddressAutocomplete({
   const [mapCenter, setMapCenter] = useState(DEFAULT_CENTER)
   const [markerPosition, setMarkerPosition] = useState<{ lat: number; lng: number } | null>(null)
   const [showMap, setShowMap] = useState(false)
-  const [inputValue, setInputValue] = useState(value) // Estado local para el input
+  const [inputValue, setInputValue] = useState(value)
   const autocompleteRef = useRef<google.maps.places.Autocomplete | null>(null)
   const inputRef = useRef<HTMLInputElement | null>(null)
+  // Ref para guardar la última versión de onChange (evita problemas de closures stale en callbacks asíncronos)
+  const onChangeRef = useRef(onChange)
+  onChangeRef.current = onChange
 
   // Sincronizar inputValue con value cuando cambia externamente
   useEffect(() => {
@@ -60,7 +65,7 @@ export function AddressAutocomplete({
   // Si hay un valor inicial y el mapa está cargado, mostrar el mapa y geocodificar
   useEffect(() => {
     if (isLoaded && value && !markerPosition) {
-      setShowMap(true) // Mostrar mapa automáticamente si hay dirección
+      setShowMap(true)
       const geocoder = new google.maps.Geocoder()
       geocoder.geocode({ address: value }, (results, status) => {
         if (status === 'OK' && results && results[0]) {
@@ -77,6 +82,12 @@ export function AddressAutocomplete({
     autocompleteRef.current = autocomplete
   }, [])
 
+  /** Helper: notifica al padre con dirección, coords y zona detectada. Usa ref para evitar closures stale. */
+  const notifyChange = useCallback((address: string, lat?: number, lng?: number) => {
+    const zona = inferZona(address, lat, lng)
+    onChangeRef.current(address, lat, lng, zona || undefined)
+  }, [])
+
   const onPlaceChanged = useCallback(() => {
     if (autocompleteRef.current) {
       const place = autocompleteRef.current.getPlace()
@@ -89,39 +100,85 @@ export function AddressAutocomplete({
         setMarkerPosition({ lat, lng })
         setMapCenter({ lat, lng })
         setShowMap(true)
-        setInputValue(address) // Actualizar el input
-        onChange(address, lat, lng)
+        setInputValue(address)
+        notifyChange(address, lat, lng)
       } else if (place.name) {
         setInputValue(place.name)
-        onChange(place.name)
+        notifyChange(place.name)
       }
     }
-  }, [onChange])
+  }, [notifyChange])
 
   const onMapClick = useCallback((e: google.maps.MapMouseEvent) => {
     if (e.latLng && !disabled) {
       const lat = e.latLng.lat()
       const lng = e.latLng.lng()
 
-      // Geocodificación inversa para obtener la dirección
       const geocoder = new google.maps.Geocoder()
       geocoder.geocode({ location: { lat, lng } }, (results, status) => {
         if (status === 'OK' && results && results[0]) {
           const address = results[0].formatted_address
           setMarkerPosition({ lat, lng })
-          setInputValue(address) // Actualizar el input
-          onChange(address, lat, lng)
+          setInputValue(address)
+          notifyChange(address, lat, lng)
         }
       })
     }
-  }, [disabled, onChange])
+  }, [disabled, notifyChange])
+
+  const handleDragEnd = useCallback((e: google.maps.MapMouseEvent) => {
+    if (e.latLng) {
+      const lat = e.latLng.lat()
+      const lng = e.latLng.lng()
+
+      const geocoder = new google.maps.Geocoder()
+      geocoder.geocode({ location: { lat, lng } }, (results, status) => {
+        if (status === 'OK' && results && results[0]) {
+          const address = results[0].formatted_address
+          setMarkerPosition({ lat, lng })
+          setInputValue(address)
+          notifyChange(address, lat, lng)
+        }
+      })
+    }
+  }, [notifyChange])
+
+  /** Cuando el usuario escribe manualmente y sale del campo, geocodificamos para obtener coords y zona */
+  const handleBlur = useCallback(() => {
+    if (!inputValue) return
+
+    // Si ya tenemos marker con las coords de esta dirección, notificar con esas coords
+    if (markerPosition) {
+      notifyChange(inputValue, markerPosition.lat, markerPosition.lng)
+      return
+    }
+
+    // Geocodificar el texto escrito manualmente
+    const geocoder = new google.maps.Geocoder()
+    geocoder.geocode({ address: inputValue, region: 'AR' }, (results, status) => {
+      if (status === 'OK' && results && results[0]) {
+        const location = results[0].geometry.location
+        const lat = location.lat()
+        const lng = location.lng()
+        setMarkerPosition({ lat, lng })
+        setMapCenter({ lat, lng })
+        setShowMap(true)
+        const formattedAddress = results[0].formatted_address
+        setInputValue(formattedAddress)
+        notifyChange(formattedAddress, lat, lng)
+      } else {
+        // Sin coords, intentar solo por texto
+        notifyChange(inputValue)
+      }
+    })
+  }, [inputValue, markerPosition, notifyChange])
 
   const clearAddress = useCallback(() => {
     setInputValue('')
     setMarkerPosition(null)
     setShowMap(false)
-    onChange('', undefined, undefined)
-  }, [onChange])
+    onChangeRef.current('', undefined, undefined, '')
+  }, [])
 
   if (loadError) {
     return (
@@ -130,7 +187,7 @@ export function AddressAutocomplete({
           type="text"
           className={`form-input ${className}`}
           value={value}
-          onChange={(e) => onChange(e.target.value)}
+          onChange={(e) => onChangeRef.current(e.target.value)}
           disabled={disabled}
           placeholder={placeholder}
         />
@@ -141,7 +198,6 @@ export function AddressAutocomplete({
     )
   }
 
-  // Si no hay API key configurada, mostrar input simple
   if (!GOOGLE_MAPS_API_KEY) {
     return (
       <div className="address-autocomplete-no-api">
@@ -149,7 +205,7 @@ export function AddressAutocomplete({
           type="text"
           className={`form-input ${className}`}
           value={value}
-          onChange={(e) => onChange(e.target.value)}
+          onChange={(e) => onChangeRef.current(e.target.value)}
           disabled={disabled}
           placeholder={placeholder}
         />
@@ -205,6 +261,7 @@ export function AddressAutocomplete({
             className={`form-input ${className}`}
             value={inputValue}
             onChange={(e) => setInputValue(e.target.value)}
+            onBlur={handleBlur}
             disabled={disabled}
             placeholder={placeholder}
             onFocus={() => setShowMap(true)}
@@ -254,6 +311,7 @@ export function AddressAutocomplete({
             mapTypeControl: false,
             fullscreenControl: false,
             zoomControl: true,
+            clickableIcons: false,
             gestureHandling: disabled ? 'none' : 'cooperative'
           }}
         >
@@ -261,22 +319,7 @@ export function AddressAutocomplete({
             <Marker
               position={markerPosition}
               draggable={!disabled}
-              onDragEnd={(e) => {
-                if (e.latLng) {
-                  const lat = e.latLng.lat()
-                  const lng = e.latLng.lng()
-
-                  const geocoder = new google.maps.Geocoder()
-                  geocoder.geocode({ location: { lat, lng } }, (results, status) => {
-                    if (status === 'OK' && results && results[0]) {
-                      const address = results[0].formatted_address
-                      setMarkerPosition({ lat, lng })
-                      setInputValue(address) // Actualizar el input
-                      onChange(address, lat, lng)
-                    }
-                  })
-                }
-              }}
+              onDragEnd={handleDragEnd}
             />
           )}
         </GoogleMap>

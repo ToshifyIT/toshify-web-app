@@ -20,6 +20,7 @@ import { LoadingOverlay } from '../../components/ui/LoadingOverlay'
 import { ExcelColumnFilter } from '../../components/ui/DataTable/ExcelColumnFilter'
 import './LeadsModule.css'
 import { LeadWizard } from './components/LeadWizard'
+import { inferZona, inferZonaFromCoords } from '../../utils/zonaUtils'
 
 // =====================================================
 // GOOGLE MAPS GEOCODING
@@ -320,10 +321,12 @@ export function LeadsModule() {
   const [estadoDropdownId, setEstadoDropdownId] = useState<string | null>(null)
   const [sinoDropdownKey, setSinoDropdownKey] = useState<string | null>(null) // "leadId::field"
 
-  // Catálogos licencia (mismos que conductores)
+  // Catálogos (mismos que conductores)
   const [categoriasLicencia, setCategoriasLicencia] = useState<Array<{ id: string; codigo: string; descripcion: string }>>([])
   const [estadosLicencia, setEstadosLicencia] = useState<Array<{ id: string; codigo: string; descripcion: string }>>([])
   const [tiposLicencia, setTiposLicencia] = useState<Array<{ id: string; codigo: string; descripcion: string }>>([])
+  const [nacionalidades, setNacionalidades] = useState<Array<{ id: string; codigo: string; descripcion: string }>>([])
+  const [estadosCiviles, setEstadosCiviles] = useState<Array<{ id: string; codigo: string; descripcion: string }>>([])
 
   // Estados visibles para cambio manual (Conductor se asigna solo automáticamente)
   const ESTADOS_LEAD = [
@@ -410,16 +413,20 @@ export function LeadsModule() {
       // aplicarFiltroSede respeta el modo "Todas las sedes" para usuarios admin.
       query = aplicarFiltroSede(query, 'sede_id')
 
-      const [leadsRes, catRes, estLicRes, tipLicRes] = await Promise.all([
+      const [leadsRes, catRes, estLicRes, tipLicRes, nacRes, ecRes] = await Promise.all([
         query,
         supabase.from('licencias_categorias').select('id, codigo, descripcion').order('descripcion'),
         supabase.from('licencias_estados').select('id, codigo, descripcion').order('descripcion'),
         supabase.from('licencias_tipos').select('id, codigo, descripcion').order('descripcion'),
+        supabase.from('nacionalidades').select('id, codigo, descripcion').order('descripcion'),
+        supabase.from('estados_civiles').select('id, codigo, descripcion').order('descripcion'),
       ])
       if (leadsRes.error) throw leadsRes.error
       if (catRes.data) setCategoriasLicencia(catRes.data)
       if (estLicRes.data) setEstadosLicencia(estLicRes.data)
       if (tipLicRes.data) setTiposLicencia(tipLicRes.data)
+      if (nacRes.data) setNacionalidades(nacRes.data)
+      if (ecRes.data) setEstadosCiviles(ecRes.data)
       const leadsData = (leadsRes.data || []) as Lead[]
 
       // Calcular estado correcto y detectar desactualizados
@@ -764,9 +771,28 @@ export function LeadsModule() {
     setShowDeleteModal(true)
   }
 
+  function validateLeadForm(data: LeadFormData): Record<string, string> {
+    const e: Record<string, string> = {}
+    if (!data.nombre_completo?.trim()) e.nombre_completo = 'Requerido'
+    if (!data.dni?.trim()) e.dni = 'Requerido'
+    if (!data.cuit?.trim()) e.cuit = 'Requerido'
+    if (!data.fecha_de_nacimiento) e.fecha_de_nacimiento = 'Requerido'
+    if (!data.nacionalidad) e.nacionalidad = 'Requerido'
+    if (!data.estado_civil) e.estado_civil = 'Requerido'
+    if (!data.sede) e.sede = 'Requerido'
+    if (!data.phone?.trim()) e.phone = 'Requerido'
+    if (!data.email?.trim()) e.email = 'Requerido'
+    if (!data.direccion?.trim()) e.direccion = 'Requerido'
+    if (!data.numero_licencia?.trim()) e.numero_licencia = 'Requerido'
+    if (!data.categorias_licencia || data.categorias_licencia.length === 0) e.categorias_licencia = 'Seleccione al menos una'
+    if (!data.vencimiento_licencia) e.vencimiento_licencia = 'Requerido'
+    return e
+  }
+
   async function handleSaveCreate() {
-    if (!formData.nombre_completo?.trim()) {
-      setEditErrors({ nombre_completo: 'Nombre es requerido' })
+    const validationErrors = validateLeadForm(formData)
+    if (Object.keys(validationErrors).length > 0) {
+      setEditErrors(validationErrors)
       return
     }
     setSaving(true)
@@ -792,8 +818,9 @@ export function LeadsModule() {
 
   async function handleSaveEdit() {
     if (!selectedLead) return
-    if (!formData.nombre_completo?.trim()) {
-      setEditErrors({ nombre_completo: 'Nombre es requerido' })
+    const validationErrors = validateLeadForm(formData)
+    if (Object.keys(validationErrors).length > 0) {
+      setEditErrors(validationErrors)
       return
     }
     setSaving(true)
@@ -840,15 +867,43 @@ export function LeadsModule() {
   }
 
   // ---------- CONVERTIR A CONDUCTOR ----------
+
+  /** Match flexible: compara lowercase e intenta coincidencia parcial */
+  function matchCatalogo(
+    catalogo: Array<{ id: string; codigo: string; descripcion: string }>,
+    texto: string | null | undefined
+  ): string | null {
+    if (!texto || catalogo.length === 0) return null
+    const t = texto.trim().toLowerCase()
+    // Primero buscar coincidencia exacta (case-insensitive)
+    const exacto = catalogo.find(c => c.descripcion.toLowerCase() === t)
+    if (exacto) return exacto.id
+    // Luego buscar si el texto contiene la descripción o viceversa
+    const parcial = catalogo.find(c =>
+      t.includes(c.descripcion.toLowerCase()) || c.descripcion.toLowerCase().includes(t)
+    )
+    if (parcial) return parcial.id
+    // Último intento: comparar por código
+    const porCodigo = catalogo.find(c => c.codigo.toLowerCase() === t)
+    if (porCodigo) return porCodigo.id
+    return null
+  }
+
   async function handleConvertir(lead: Lead) {
-    // Validar campos obligatorios para conductores
+    // Validar todos los campos obligatorios para conductores
     const camposFaltantes: string[] = []
     if (!lead.nombre_completo?.trim()) camposFaltantes.push('Nombre completo')
     if (!lead.dni?.trim()) camposFaltantes.push('DNI')
+    if (!lead.cuit?.trim()) camposFaltantes.push('CUIT')
+    if (!lead.fecha_de_nacimiento) camposFaltantes.push('Fecha de nacimiento')
+    if (!lead.nacionalidad?.trim()) camposFaltantes.push('Nacionalidad')
+    if (!lead.estado_civil?.trim()) camposFaltantes.push('Estado civil')
+    if (!lead.sede_id && !lead.sede) camposFaltantes.push('Sede')
     if (!lead.phone?.trim()) camposFaltantes.push('Teléfono')
     if (!lead.email?.trim()) camposFaltantes.push('Email')
-    if (!lead.fecha_de_nacimiento) camposFaltantes.push('Fecha de nacimiento')
     if (!lead.direccion?.trim()) camposFaltantes.push('Dirección')
+    if (!lead.numero_licencia?.trim()) camposFaltantes.push('Nro. Licencia')
+    if (!lead.categorias_licencia || lead.categorias_licencia.length === 0) camposFaltantes.push('Categorías de licencia')
     if (!lead.vencimiento_licencia) camposFaltantes.push('Vencimiento de licencia')
 
     if (camposFaltantes.length > 0) {
@@ -913,17 +968,50 @@ export function LeadsModule() {
       else if (turnoLead.includes('nocturno')) turnoMapped = 'NOCTURNO'
       else if (turnoLead.includes('cargo')) turnoMapped = 'A_CARGO'
 
-      // Resolver estado_licencia y tipo_licencia a IDs
-      let licenciaEstadoId: string | null = null
-      let licenciaTipoId: string | null = null
-      if (lead.estado_licencia && estadosLicencia.length > 0) {
-        const match = estadosLicencia.find(e => e.descripcion === lead.estado_licencia)
-        if (match) licenciaEstadoId = match.id
+      // Resolver textos a IDs usando match flexible
+      const licenciaEstadoId = matchCatalogo(estadosLicencia, lead.estado_licencia)
+      const licenciaTipoId = matchCatalogo(tiposLicencia, lead.tipo_licencia)
+      const nacionalidadId = matchCatalogo(nacionalidades, lead.nacionalidad)
+      const estadoCivilId = matchCatalogo(estadosCiviles, lead.estado_civil)
+
+      // Recalcular zona desde coordenadas o geocodificando la dirección
+      let zonaCalculada = ''
+      let latFinal = lead.latitud ?? null
+      let lngFinal = lead.longitud ?? null
+
+      if (latFinal != null && lngFinal != null) {
+        // Tiene coordenadas: inferir zona directamente
+        zonaCalculada = inferZona(lead.direccion || '', latFinal, lngFinal)
+      } else if (lead.direccion?.trim()) {
+        // No tiene coordenadas: geocodificar la dirección para obtenerlas
+        try {
+          const geocoder = new google.maps.Geocoder()
+          const geoResult = await new Promise<{ lat: number; lng: number; address: string } | null>((resolve) => {
+            geocoder.geocode({ address: lead.direccion!, region: 'AR' }, (results, status) => {
+              if (status === 'OK' && results && results[0]) {
+                resolve({
+                  lat: results[0].geometry.location.lat(),
+                  lng: results[0].geometry.location.lng(),
+                  address: results[0].formatted_address
+                })
+              } else {
+                resolve(null)
+              }
+            })
+          })
+          if (geoResult) {
+            latFinal = geoResult.lat
+            lngFinal = geoResult.lng
+            zonaCalculada = inferZonaFromCoords(geoResult.lat, geoResult.lng)
+          }
+        } catch {
+          // Si falla la geocodificación, intentar por texto como último recurso
+          zonaCalculada = inferZona(lead.direccion || '')
+        }
       }
-      if (lead.tipo_licencia && tiposLicencia.length > 0) {
-        const match = tiposLicencia.find(t => t.descripcion === lead.tipo_licencia)
-        if (match) licenciaTipoId = match.id
-      }
+
+      // Si no se pudo calcular zona, usar la que tenía el lead
+      if (!zonaCalculada) zonaCalculada = lead.zona || ''
 
       const conductorData: Record<string, unknown> = {
         nombres: nombres || lead.primer_nombre || '',
@@ -933,18 +1021,20 @@ export function LeadsModule() {
         telefono_contacto: lead.phone || '',
         email: lead.email || '',
         direccion: lead.direccion || '',
-        zona: lead.zona || '',
+        zona: zonaCalculada,
         preferencia_turno: turnoMapped,
         licencia_vencimiento: lead.vencimiento_licencia || null,
         numero_licencia: lead.numero_licencia || '',
         licencia_estado_id: licenciaEstadoId,
         licencia_tipo_id: licenciaTipoId,
+        nacionalidad_id: nacionalidadId,
+        estado_civil_id: estadoCivilId,
         estado_id: estadoId,
         cbu: lead.cbu || '',
         monotributo: lead.monotributo?.toLowerCase().includes('tiene') || false,
         fecha_nacimiento: lead.fecha_de_nacimiento || null,
-        direccion_lat: lead.latitud ?? null,
-        direccion_lng: lead.longitud ?? null,
+        direccion_lat: latFinal,
+        direccion_lng: lngFinal,
         sede_id: lead.sede_id || sedeActual?.id || null,
       }
 
@@ -1688,8 +1778,8 @@ export function LeadsModule() {
           <div
             title={enZonaRestringida ? `Zona Restringida: ${zonaRestringida}` : tieneCoordenadas ? 'Zona Aprobada' : undefined}
             style={{
-              background: enZonaRestringida ? '#FFF1F2' : undefined,
-              borderLeft: enZonaRestringida ? '3px solid #FF0033' : undefined,
+              background: enZonaRestringida ? 'var(--badge-red-bg)' : undefined,
+              borderLeft: enZonaRestringida ? '3px solid var(--color-primary)' : undefined,
               padding: '6px 8px',
               borderRadius: '6px',
             }}
@@ -1703,7 +1793,7 @@ export function LeadsModule() {
                     handleOpenDetails(row.original)
                   }
                 }}
-                style={{ fontWeight: 600, color: enZonaRestringida ? '#BE123C' : 'var(--text-primary)', textDecoration: 'none', fontSize: '13px' }}
+                style={{ fontWeight: 600, color: enZonaRestringida ? 'var(--badge-red-text)' : 'var(--text-primary)', textDecoration: 'none', fontSize: '13px' }}
               >
                 {nombre}
               </a>
@@ -1720,8 +1810,8 @@ export function LeadsModule() {
                     fontWeight: 600,
                     marginTop: '2px',
                     display: 'inline-block',
-                    background: '#FFE4E6',
-                    color: '#BE123C',
+                    background: 'var(--badge-red-bg)',
+                    color: 'var(--badge-red-text)',
                     width: 'fit-content',
                     cursor: 'default',
                     position: 'relative',
@@ -1741,8 +1831,8 @@ export function LeadsModule() {
                     fontWeight: 600,
                     marginTop: '2px',
                     display: 'inline-block',
-                    background: '#DCFCE7',
-                    color: '#16A34A',
+                    background: 'var(--badge-green-bg)',
+                    color: 'var(--badge-green-text)',
                     width: 'fit-content',
                     cursor: 'default',
                     position: 'relative',
@@ -2967,11 +3057,11 @@ function LeadDetailMap({ lat, lng, zonasRestringidas, enZonaRestringida, nombreZ
   return (
     <div style={{ marginTop: '8px' }}>
       {enZonaRestringida && nombreZona && (
-        <div style={{ marginBottom: '6px', padding: '6px 10px', background: '#FFF1F2', borderRadius: '6px', border: '1px solid #FECDD3', fontSize: '12px', color: '#BE123C', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '6px' }}>
+        <div style={{ marginBottom: '6px', padding: '6px 10px', background: 'var(--badge-red-bg)', borderRadius: '6px', border: '1px solid var(--badge-red-text)', fontSize: '12px', color: 'var(--badge-red-text)', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '6px' }}>
           <AlertTriangle size={14} /> Zona Restringida: {nombreZona}
         </div>
       )}
-      <div style={{ borderRadius: '8px', overflow: 'hidden', border: `2px solid ${enZonaRestringida ? '#FF0033' : '#22C55E'}` }}>
+      <div style={{ borderRadius: '8px', overflow: 'hidden', border: `2px solid ${enZonaRestringida ? 'var(--color-primary)' : 'var(--badge-green-text)'}` }}>
         <GoogleMap
           mapContainerStyle={detailMapStyle}
           center={{ lat, lng }}

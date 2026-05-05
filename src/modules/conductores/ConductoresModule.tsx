@@ -3348,13 +3348,14 @@ function ModalEditar({
           <label className="form-label">Dirección</label>
           <AddressAutocomplete
             value={formData.direccion}
-            onChange={(address, lat, lng) =>
-              setFormData({
-                ...formData,
+            onChange={(address, lat, lng, zona) =>
+              setFormData((prev: any) => ({
+                ...prev,
                 direccion: address,
                 direccion_lat: lat ?? null,
-                direccion_lng: lng ?? null
-              })
+                direccion_lng: lng ?? null,
+                zona: zona || prev.zona
+              }))
             }
             disabled={saving}
             placeholder="Buscar dirección..."

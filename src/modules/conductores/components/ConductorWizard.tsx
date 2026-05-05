@@ -420,44 +420,13 @@ export function ConductorWizard({
               {errors.direccion && <span className="error-message">{errors.direccion}</span>}
               <AddressAutocomplete
                 value={formData.direccion}
-                onChange={(address, lat, lng) => {
-                  // Auto-detectar zona desde la dirección
-                  const addrLower = (address || '').toLowerCase()
-                  let zona = formData.zona
-                  if (!zona || zona === '') {
-                    // Código postal CABA: C + 4 dígitos (ej. C1010)
-                    const cabaCpRegex = /\bc\d{4}\b/
-                    const cabaKeywords = [
-                      'caba', 'c.a.b.a', 'c a b a',
-                      'ciudad autónoma', 'ciudad autonoma',
-                      'cdad. autónoma', 'cdad autónoma', 'cdad. autonoma', 'cdad autonoma',
-                      'buenos aires city', 'capital federal',
-                      // Barrios CABA
-                      'palermo', 'recoleta', 'microcentro', 'san nicolás', 'san nicolas',
-                      'balvanera', 'caballito', 'villa crespo', 'belgrano', 'almagro',
-                      'flores', 'boedo', 'barracas', 'la boca', 'san telmo', 'puerto madero',
-                      'retiro', 'monserrat', 'constitución', 'constitucion', 'núñez', 'nunez',
-                      'colegiales', 'chacarita', 'villa urquiza', 'villa del parque',
-                      'villa pueyrredón', 'villa pueyrredon', 'villa devoto', 'saavedra',
-                      'coghlan', 'parque chas', 'agronomía', 'agronomia', 'paternal',
-                      'villa ortúzar', 'villa ortuzar', 'villa general mitre', 'villa santa rita',
-                      'villa real', 'villa luro', 'liniers', 'mataderos', 'parque avellaneda',
-                      'parque chacabuco', 'parque patricios', 'nueva pompeya', 'villa soldati',
-                      'villa riachuelo', 'villa lugano',
-                    ]
-                    const isCaba = cabaCpRegex.test(addrLower) || cabaKeywords.some(k => addrLower.includes(k))
-                    if (addrLower.includes('zona norte') || addrLower.includes('san isidro') || addrLower.includes('vicente lópez') || addrLower.includes('san fernando') || addrLower.includes('tigre')) zona = 'Zona Norte'
-                    else if (addrLower.includes('zona sur') || addrLower.includes('lanús') || addrLower.includes('avellaneda') || addrLower.includes('quilmes') || addrLower.includes('berazategui') || addrLower.includes('lomas de zamora')) zona = 'Zona Sur'
-                    else if (addrLower.includes('zona oeste') || addrLower.includes('morón') || addrLower.includes('merlo') || addrLower.includes('moreno') || addrLower.includes('ituzaingó') || addrLower.includes('hurlingham') || addrLower.includes('tres de febrero')) zona = 'Zona Oeste'
-                    else if (isCaba) zona = 'CABA'
-                    else if (addrLower.includes('muñiz') || addrLower.includes('san miguel') || addrLower.includes('josé c. paz') || addrLower.includes('malvinas')) zona = 'Zona Norte'
-                  }
+                onChange={(address, lat, lng, zona) => {
                   setFormData({
                     ...formData,
                     direccion: address,
                     direccion_lat: lat ?? null,
                     direccion_lng: lng ?? null,
-                    zona: zona,
+                    zona: zona || formData.zona,
                   })
                 }}
                 disabled={saving}
