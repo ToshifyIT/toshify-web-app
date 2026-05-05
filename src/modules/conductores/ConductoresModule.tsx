@@ -2760,6 +2760,43 @@ export function ConductoresModule() {
           <>
             <VerLogsButton tablas={['conductores', 'asignaciones', 'asignaciones_conductores']} label="Conductores" />
             <button
+              className="btn-secondary"
+              onClick={async () => {
+                const confirm = await Swal.fire({
+                  title: 'Sincronizar contratos',
+                  text: 'Se buscarán las carpetas de contratos en Drive para los conductores activos con asignación y se actualizará el campo correspondiente.',
+                  icon: 'question',
+                  showCancelButton: true,
+                  confirmButtonText: 'Sincronizar',
+                  cancelButtonText: 'Cancelar',
+                  confirmButtonColor: 'var(--color-primary)',
+                })
+                if (!confirm.isConfirmed) return
+                Swal.fire({ title: 'Sincronizando...', text: 'Buscando carpetas en Drive...', allowOutsideClick: false, didOpen: () => Swal.showLoading() })
+                try {
+                  const res = await fetch('/api/backfill-contract-folders', { method: 'POST' })
+                  const data = await res.json()
+                  if (!res.ok) throw new Error(data.error || 'Error del servidor')
+                  const notFoundList = data.details?.notFound?.length > 0
+                    ? '\n\nSin carpeta:\n' + data.details.notFound.map((c: any) => `- ${c.nombre}`).join('\n')
+                    : ''
+                  Swal.fire({
+                    icon: 'success',
+                    title: 'Sincronización completada',
+                    html: `<b>${data.updated}</b> actualizados<br><b>${data.notFound}</b> sin carpeta<br><b>${data.errors || 0}</b> errores${notFoundList ? '<br><br><details><summary>Ver sin carpeta</summary><pre style="text-align:left;font-size:12px;max-height:200px;overflow:auto">' + data.details.notFound.map((c: any) => c.nombre).join('\n') + '</pre></details>' : ''}`,
+                  })
+                  loadConductores(true)
+                } catch (err: any) {
+                  Swal.fire('Error', err.message || 'No se pudo sincronizar', 'error')
+                }
+              }}
+              style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
+              title="Sincronizar carpetas de contratos desde Drive"
+            >
+              <RefreshCw size={15} />
+              Sync Contratos
+            </button>
+            <button
               className="btn-primary"
               onClick={() => {
                 resetForm();
