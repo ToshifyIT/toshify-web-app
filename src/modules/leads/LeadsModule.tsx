@@ -790,11 +790,6 @@ export function LeadsModule() {
   }
 
   async function handleSaveCreate() {
-    const validationErrors = validateLeadForm(formData)
-    if (Object.keys(validationErrors).length > 0) {
-      setEditErrors(validationErrors)
-      return
-    }
     setSaving(true)
     try {
       const fields = formDataToDbFields(formData)
@@ -818,11 +813,6 @@ export function LeadsModule() {
 
   async function handleSaveEdit() {
     if (!selectedLead) return
-    const validationErrors = validateLeadForm(formData)
-    if (Object.keys(validationErrors).length > 0) {
-      setEditErrors(validationErrors)
-      return
-    }
     setSaving(true)
     try {
       const fields = formDataToDbFields(formData)
