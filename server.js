@@ -306,8 +306,8 @@ app.post('/api/cabify-efectivo', async (req, res) => {
     })
 
     if (!authResponse.ok) {
-      const authError = await authResponse.text()
-      return res.status(401).json({ error: 'Error de autenticación con Cabify', detail: authError })
+      const authErrorDetail = await authResponse.text()
+      return res.status(401).json({ error: 'Error de autenticación con Cabify', detail: authErrorDetail })
     }
 
     const authData = await authResponse.json()
@@ -1490,6 +1490,158 @@ app.post('/api/complete-control', async (req, res) => {
     })
   } catch (error) {
     console.error('[Control] Error:', error.message)
+    res.status(500).json({ error: error.message })
+  }
+})
+
+// =====================================================
+// BACKFILL: Sincronizar carpetas de contratos en Drive
+// =====================================================
+
+/**
+ * Busca (sin crear) la carpeta del conductor en Drive.
+ * Retorna { folderId, folderUrl } o null si no existe.
+ */
+async function findConductorContractFolder(drive, conductorDni, conductorNombre, rootFolderId) {
+  const folderName = conductorNombre
+  const folderNameLegacy = `${conductorDni} - ${conductorNombre}`
+
+  // Formato nuevo (solo nombre)
+  const searchRes = await drive.files.list({
+    q: `name='${folderName.replace(/'/g, "\\'")}' and '${rootFolderId}' in parents and mimeType='application/vnd.google-apps.folder' and trashed=false`,
+    fields: 'files(id, name)',
+    supportsAllDrives: true,
+    includeItemsFromAllDrives: true
+  })
+
+  if (searchRes.data.files && searchRes.data.files.length > 0) {
+    const folder = searchRes.data.files[0]
+    return { folderId: folder.id, folderUrl: `https://drive.google.com/drive/folders/${folder.id}` }
+  }
+
+  // Formato legacy (DNI - nombre)
+  if (conductorDni) {
+    const searchLegacy = await drive.files.list({
+      q: `name='${folderNameLegacy.replace(/'/g, "\\'")}' and '${rootFolderId}' in parents and mimeType='application/vnd.google-apps.folder' and trashed=false`,
+      fields: 'files(id, name)',
+      supportsAllDrives: true,
+      includeItemsFromAllDrives: true
+    })
+
+    if (searchLegacy.data.files && searchLegacy.data.files.length > 0) {
+      const folder = searchLegacy.data.files[0]
+      return { folderId: folder.id, folderUrl: `https://drive.google.com/drive/folders/${folder.id}` }
+    }
+  }
+
+  return null
+}
+
+app.post('/api/backfill-contract-folders', async (req, res) => {
+  try {
+    const supabaseUrl = process.env.VITE_SUPABASE_URL
+    const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+
+    if (!supabaseUrl || !serviceKey) {
+      return res.status(500).json({ error: 'Supabase no configurado' })
+    }
+
+    // 1. Obtener el ID del estado "activo"
+    const estadosRes = await fetch(
+      `${supabaseUrl}/rest/v1/conductores_estados?codigo=eq.activo&select=id`,
+      { headers: { 'apikey': serviceKey, 'Authorization': `Bearer ${serviceKey}` } }
+    )
+    const estados = await estadosRes.json()
+    if (!estados || estados.length === 0) {
+      return res.status(404).json({ error: 'No se encontró estado "activo"' })
+    }
+    const activoId = estados[0].id
+
+    // 2. Obtener conductores activos sin drive_contract_folder_url
+    const conductoresRes = await fetch(
+      `${supabaseUrl}/rest/v1/conductores?estado_id=eq.${activoId}&drive_contract_folder_url=is.null&select=id,nombres,apellidos,numero_dni,sede_id`,
+      { headers: { 'apikey': serviceKey, 'Authorization': `Bearer ${serviceKey}` } }
+    )
+    const conductores = await conductoresRes.json()
+
+    if (!conductores || conductores.length === 0) {
+      return res.json({ success: true, message: 'Todos los conductores activos ya tienen su carpeta de contratos', updated: 0, notFound: 0, total: 0 })
+    }
+
+    // 3. Obtener conductores que tienen asignación activa
+    const conductorIds = conductores.map(c => c.id)
+    const asigRes = await fetch(
+      `${supabaseUrl}/rest/v1/asignaciones_conductores?conductor_id=in.(${conductorIds.join(',')})&select=conductor_id`,
+      { headers: { 'apikey': serviceKey, 'Authorization': `Bearer ${serviceKey}` } }
+    )
+    const asignaciones = await asigRes.json()
+    const conductoresConAsignacion = new Set((asignaciones || []).map(a => a.conductor_id))
+
+    // Filtrar solo los que tienen asignación
+    const conductoresFiltrados = conductores.filter(c => conductoresConAsignacion.has(c.id))
+
+    if (conductoresFiltrados.length === 0) {
+      return res.json({ success: true, message: 'No hay conductores activos con asignación que necesiten actualización', updated: 0, notFound: 0, total: 0 })
+    }
+
+    // 4. Buscar carpetas en Drive y actualizar
+    const drive = getDriveServiceFull()
+    const results = { updated: [], notFound: [], errors: [] }
+
+    for (const conductor of conductoresFiltrados) {
+      try {
+        const fullName = `${conductor.nombres || ''} ${conductor.apellidos || ''}`.trim().toUpperCase()
+        if (!fullName) {
+          results.errors.push({ id: conductor.id, reason: 'Sin nombre' })
+          continue
+        }
+
+        // Determinar carpeta raíz por sede
+        const sedeCode = await fetchSedeCode(conductor.sede_id)
+        const rootFolderId = sedeCode.toUpperCase() === 'BRC'
+          ? CONTRACT_CONFIG.folders.bariloche
+          : CONTRACT_CONFIG.folders.principal
+
+        const folder = await findConductorContractFolder(drive, conductor.numero_dni || '', fullName, rootFolderId)
+
+        if (folder) {
+          await fetch(
+            `${supabaseUrl}/rest/v1/conductores?id=eq.${conductor.id}`,
+            {
+              method: 'PATCH',
+              headers: {
+                'apikey': serviceKey,
+                'Authorization': `Bearer ${serviceKey}`,
+                'Content-Type': 'application/json',
+                'Prefer': 'return=minimal'
+              },
+              body: JSON.stringify({ drive_contract_folder_url: folder.folderUrl })
+            }
+          )
+          results.updated.push({ id: conductor.id, nombre: fullName, url: folder.folderUrl })
+        } else {
+          results.notFound.push({ id: conductor.id, nombre: fullName })
+        }
+
+        // Pequeña pausa para no saturar Drive API
+        await new Promise(r => setTimeout(r, 200))
+      } catch (err) {
+        results.errors.push({ id: conductor.id, nombre: `${conductor.nombres} ${conductor.apellidos}`, reason: err.message })
+      }
+    }
+
+    console.log(`[Backfill] Completado: ${results.updated.length} actualizados, ${results.notFound.length} sin carpeta, ${results.errors.length} errores`)
+
+    res.json({
+      success: true,
+      total: conductoresFiltrados.length,
+      updated: results.updated.length,
+      notFound: results.notFound.length,
+      errors: results.errors.length,
+      details: results
+    })
+  } catch (error) {
+    console.error('[Backfill] Error:', error.message)
     res.status(500).json({ error: error.message })
   }
 })
