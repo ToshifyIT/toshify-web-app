@@ -1,0 +1,55 @@
+/* Overrides especificos para Control Combustible - hereda base de VehicleManagement.css */
+
+.combustible-stats-grid {
+  grid-template-columns: repeat(5, 1fr);
+}
+
+@media (max-width: 1200px) {
+  .combustible-stats-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+@media (max-width: 768px) {
+  .combustible-stats-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+/* Empty state */
+.combustible-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  padding: 32px 24px;
+  gap: 8px;
+}
+
+.combustible-empty-icon {
+  color: var(--text-tertiary);
+}
+
+.combustible-empty h3 {
+  margin: 4px 0 0 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.combustible-empty p {
+  margin: 0;
+  max-width: 560px;
+  font-size: 12px;
+  line-height: 1.55;
+  color: var(--text-tertiary);
+}
+
+.combustible-empty code {
+  background: var(--bg-secondary);
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, monospace;
+  font-size: 11px;
+  color: var(--text-secondary);
+}

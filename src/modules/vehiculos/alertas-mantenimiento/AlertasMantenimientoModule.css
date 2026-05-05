@@ -1,0 +1,200 @@
+/* Overrides especificos para Alertas Mantenimiento - hereda base de VehicleManagement.css */
+
+.alertas-stats-grid {
+  grid-template-columns: repeat(4, 1fr);
+}
+
+@media (max-width: 1200px) {
+  .alertas-stats-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 768px) {
+  .alertas-stats-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+/* Variantes de color para stat-icon segun severidad */
+.veh-stats .stat-card .stat-icon.stat-icon-red {
+  color: #dc2626;
+}
+
+.veh-stats .stat-card .stat-icon.stat-icon-orange {
+  color: #ea580c;
+}
+
+.veh-stats .stat-card .stat-icon.stat-icon-green {
+  color: #16a34a;
+}
+
+/* =====================================================
+   DRAWER DETALLE
+   ===================================================== */
+.alerta-drawer-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.4);
+  z-index: 1000;
+  animation: fadeIn 0.15s ease;
+}
+
+.alerta-drawer {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 100%;
+  max-width: 480px;
+  background: var(--bg-primary);
+  border-left: 1px solid var(--border-primary);
+  box-shadow: -8px 0 24px rgba(0, 0, 0, 0.1);
+  z-index: 1001;
+  display: flex;
+  flex-direction: column;
+  animation: slideInRight 0.2s ease;
+}
+
+@keyframes fadeIn { from { opacity: 0 } to { opacity: 1 } }
+@keyframes slideInRight { from { transform: translateX(100%) } to { transform: translateX(0) } }
+
+.alerta-drawer-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--border-secondary);
+}
+
+.alerta-drawer-close {
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 6px;
+  color: var(--text-secondary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.alerta-drawer-close:hover {
+  background: var(--bg-secondary);
+}
+
+.alerta-drawer-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.alerta-drawer-section {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-secondary);
+  border-radius: 8px;
+  padding: 12px 14px;
+}
+
+.alerta-drawer-title {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-primary);
+  line-height: 1.35;
+}
+
+.alerta-drawer-info {
+  display: grid;
+  grid-template-columns: 130px 1fr;
+  gap: 6px 12px;
+  margin: 0;
+}
+
+.alerta-drawer-info dt {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-tertiary);
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  align-self: center;
+}
+
+.alerta-drawer-info dd {
+  margin: 0;
+  font-size: 13px;
+  color: var(--text-primary);
+}
+
+.alerta-drawer-block {
+  margin-bottom: 10px;
+}
+
+.alerta-drawer-block:last-child {
+  margin-bottom: 0;
+}
+
+.alerta-drawer-block h4 {
+  margin: 0 0 4px 0;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-tertiary);
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+
+.alerta-drawer-block p {
+  margin: 0;
+  font-size: 13px;
+  color: var(--text-primary);
+  line-height: 1.5;
+}
+
+.alerta-drawer-footer {
+  padding: 12px 20px;
+  border-top: 1px solid var(--border-secondary);
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+/* Empty state cuando no hay datos */
+.alertas-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  padding: 32px 24px;
+  gap: 8px;
+}
+
+.alertas-empty-icon {
+  color: var(--text-tertiary);
+}
+
+.alertas-empty h3 {
+  margin: 4px 0 0 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.alertas-empty p {
+  margin: 0;
+  max-width: 560px;
+  font-size: 12px;
+  line-height: 1.55;
+  color: var(--text-tertiary);
+}
+
+.alertas-empty code {
+  background: var(--bg-secondary);
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, monospace;
+  font-size: 11px;
+  color: var(--text-secondary);
+}

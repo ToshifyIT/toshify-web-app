@@ -6,7 +6,7 @@ import {
   Menu, AlertCircle, RefreshCw, PanelLeftClose, PanelLeft,
   Car, Users, AlertTriangle, FileWarning, BarChart3, Receipt,
   Truck, Link2, Settings, CreditCard, Activity, Package,
-  Calendar, CalendarCheck, MapPin, Gauge, FileText, Shield, UserCog, List, ClipboardList, History, Compass, GraduationCap, Building2, ChevronRight, Check, Globe, Target, UserPlus
+  Calendar, CalendarCheck, MapPin, Gauge, FileText, Shield, UserCog, List, ClipboardList, History, Compass, GraduationCap, Building2, ChevronRight, Check, Globe, Target, UserPlus, Wrench, Fuel
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
@@ -65,6 +65,8 @@ const menuIcons: Record<string, LucideIcon> = {
   'parametros-sistema': Settings,
   'gestion-vehiculos': Car,
   'registro-vencimientos': FileWarning,
+  'alertas-mantenimiento': Wrench,
+  'control-combustible': Fuel,
   'visitas': CalendarCheck,
   'integraciones-tokens': Link2,
   'leads': UserPlus,
@@ -236,6 +238,8 @@ const VehiculosPage = lazy(() => import('./vehiculos/VehiculosPage').then(m => (
 const SiniestrosPage = lazy(() => import('./siniestros/SiniestrosPage').then(m => ({ default: m.SiniestrosPage })))
 const VisitasPage = lazy(() => import('./visitas/VisitasPage').then(m => ({ default: m.VisitasPage })))
 const VencimientosPage = lazy(() => import('./vencimientos/VencimientosPage').then(m => ({ default: m.VencimientosPage })))
+const AlertasMantenimientoPage = lazy(() => import('./vehiculos/AlertasMantenimientoPage'))
+const ControlCombustiblePage = lazy(() => import('./vehiculos/ControlCombustiblePage'))
 const InformesPage = lazy(() => import('./informes/InformesPage').then(m => ({ default: m.InformesPage })))
 const AsignacionesActivasPage = lazy(() => import('./asignaciones/AsignacionesActivasPage').then(m => ({ default: m.AsignacionesActivasPage })))
 const ProductosPage = lazy(() => import('./productos/ProductosPage').then(m => ({ default: m.ProductosPage })))
@@ -1881,7 +1885,17 @@ export function HomePage() {
                   <LazyPage><VencimientosPage /></LazyPage>
                 </ProtectedRoute>
               } />
-              
+              <Route path="/vehiculos/alertas-mantenimiento" element={
+                <ProtectedRoute submenuName="alertas-mantenimiento" action="view">
+                  <LazyPage><AlertasMantenimientoPage /></LazyPage>
+                </ProtectedRoute>
+              } />
+              <Route path="/vehiculos/control-combustible" element={
+                <ProtectedRoute submenuName="control-combustible" action="view">
+                  <LazyPage><ControlCombustiblePage /></LazyPage>
+                </ProtectedRoute>
+              } />
+
               <Route path="/conductores" element={
                 <ProtectedRoute menuName="conductores" action="view">
                   <LazyPage>
