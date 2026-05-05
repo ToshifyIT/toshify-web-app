@@ -214,9 +214,9 @@ export async function deleteVisita(id: string): Promise<void> {
 /**
  * Auto-actualiza estados de visitas según la hora actual:
  * - pendiente + hora_inicio ya pasó → en_curso
- * La transición a "completada" es SOLO manual (Marcar Presente o cambio de estado
- * en el detalle). Si pasó la hora de fin y nadie marcó nada, queda en en_curso
- * hasta que un usuario decida (completada o no_asistió).
+ * - en_curso + hora_fin ya pasó:
+ *     - si tiene hora_arribo → completada (el visitante llegó)
+ *     - si NO tiene hora_arribo → no_asistio (nadie marcó arribo)
  * No toca canceladas/completadas/no_asistio (estados terminales).
  */
 export async function autoUpdateEstados(visitas: VisitaCompleta[]): Promise<VisitaCompleta[]> {
@@ -224,15 +224,28 @@ export async function autoUpdateEstados(visitas: VisitaCompleta[]): Promise<Visi
   const updates: { id: string; estado: VisitaEstado }[] = [];
 
   const result = visitas.map(v => {
-    // Solo auto-transicionar pendiente → en_curso
-    if (v.estado !== 'pendiente') return v;
-
-    const inicio = new Date(v.fecha_hora);
-
-    if (now >= inicio) {
-      updates.push({ id: v.id, estado: 'en_curso' as VisitaEstado });
-      return { ...v, estado: 'en_curso' as VisitaEstado };
+    // pendiente → en_curso al llegar la hora de inicio
+    if (v.estado === 'pendiente') {
+      const inicio = new Date(v.fecha_hora);
+      if (now >= inicio) {
+        updates.push({ id: v.id, estado: 'en_curso' as VisitaEstado });
+        return { ...v, estado: 'en_curso' as VisitaEstado };
+      }
+      return v;
     }
+
+    // en_curso → completada / no_asistio al pasar la hora de fin
+    if (v.estado === 'en_curso') {
+      const inicio = new Date(v.fecha_hora);
+      const fin = new Date(inicio.getTime() + (v.duracion_minutos || 30) * 60_000);
+      if (now >= fin) {
+        const nuevoEstado: VisitaEstado = v.hora_arribo ? 'completada' : 'no_asistio';
+        updates.push({ id: v.id, estado: nuevoEstado });
+        return { ...v, estado: nuevoEstado };
+      }
+      return v;
+    }
+
     return v;
   });
 

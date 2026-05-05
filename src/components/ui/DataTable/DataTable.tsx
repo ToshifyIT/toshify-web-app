@@ -716,6 +716,10 @@ export function DataTable<T>({
     // Excluir columnas que son SOLO hora (ej: hora_inicio, hora_cierre),
     // pero NO excluir fecha_hora que es un timestamp completo
     if (lowerColId.includes('hora') && !lowerColId.includes('fecha')) return false;
+    // Excluir columnas de texto que casualmente contienen palabras de fecha
+    // (ej: "citador", "citador_nombre" tiene "cita"; "destinatario" tiene "fin")
+    if (lowerColId.includes('citador') || lowerColId.includes('finaliz')) return false;
+    if (lowerColId.endsWith('_nombre') || lowerColId === 'nombre' || lowerColId === 'name') return false;
     const dateKeywords = ['fecha', 'date', 'created', 'updated', 'vencimiento', 'inicio', 'fin', 'cita', 'entrega'];
     return dateKeywords.some(keyword => lowerColId.includes(keyword));
   }, []);

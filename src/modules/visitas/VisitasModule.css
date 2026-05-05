@@ -506,10 +506,12 @@
 /* --- Time slots --- */
 .visitas-calendario-wrapper .rbc-time-slot {
   border-top: none;
+  min-height: 30px;
 }
 
 .visitas-calendario-wrapper .rbc-timeslot-group {
   border-bottom: 1px solid var(--border-secondary);
+  min-height: 60px;
 }
 
 .visitas-calendario-wrapper .rbc-time-content > * + * > * {
@@ -518,6 +520,14 @@
 
 .visitas-calendario-wrapper .rbc-day-slot .rbc-time-slot {
   border-top: none;
+  min-height: 30px;
+}
+
+/* Asegurar que el contenedor de tiempo se expanda para llenar todos los slots
+   y no quede area vacia visual entre el ultimo evento y el final del dia */
+.visitas-calendario-wrapper .rbc-time-content {
+  min-height: 0;
+  overflow-y: auto;
 }
 
 /* --- Today highlight --- */

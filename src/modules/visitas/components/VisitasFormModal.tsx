@@ -470,11 +470,19 @@ export function VisitasFormModal({
     const catKey = categoriaSeleccionada.nombre.trim().toLowerCase();
     if (CATEGORIAS_ANFITRION_MANUAL.includes(catKey)) return;
 
+    // Helper: el id resuelto debe pertenecer a un anfitrion ACTIVO
+    // (atendedores ya viene filtrado por activo=true desde fetchAtendedores)
+    const isActivo = (id: string | null | undefined): boolean =>
+      !!id && atendedores.some((a) => a.id === id);
+
     // 1. Prioridad: mapa desde BD (motivo_id → atendedor_id)
     if (motivoSeleccionado && motivoAtendedorMap && motivoAtendedorMap.has(motivoSeleccionado.id)) {
       const atendedorId = motivoAtendedorMap.get(motivoSeleccionado.id)!;
-      setFormData((prev) => ({ ...prev, atendedor_id: atendedorId }));
-      return;
+      if (isActivo(atendedorId)) {
+        setFormData((prev) => ({ ...prev, atendedor_id: atendedorId }));
+        return;
+      }
+      // Si el mapeo BD apunta a un anfitrion inactivo, caemos al fallback hardcodeado
     }
 
     // 2. Fallback: mapa hardcodeado por nombre
@@ -484,8 +492,11 @@ export function VisitasFormModal({
       motNombre,
       atendedores
     );
-    if (resolved) {
+    if (resolved && isActivo(resolved)) {
       setFormData((prev) => ({ ...prev, atendedor_id: resolved }));
+    } else {
+      // Ningun mapeo dio un anfitrion activo: dejar vacio para que el usuario elija
+      setFormData((prev) => ({ ...prev, atendedor_id: '' }));
     }
   }, [categoriaSeleccionada, motivoSeleccionado, atendedores, motivoAtendedorMap, mode]);
 
@@ -564,9 +575,19 @@ export function VisitasFormModal({
       if (!tieneAlMenosUno) {
         e.nombre_visitante = 'Ingrese al menos un visitante';
       }
+      const algunoSinDni = visitantes.some((v) => v.nombre.trim() && !/^\d{6,}$/.test((v.dni || '').trim()));
+      if (algunoSinDni) {
+        e.dni_visitante = 'DNI obligatorio (solo numeros, min 6 digitos) en cada visitante';
+      }
     } else {
       if (!formData.nombre_visitante.trim()) {
         e.nombre_visitante = 'Ingrese el nombre del visitante';
+      }
+      const dni = (formData.dni_visitante || '').trim();
+      if (!dni) {
+        e.dni_visitante = 'DNI obligatorio';
+      } else if (!/^\d{6,}$/.test(dni)) {
+        e.dni_visitante = 'DNI debe tener solo numeros (minimo 6 digitos)';
       }
     }
 
@@ -910,14 +931,16 @@ export function VisitasFormModal({
                 {errors.nombre_visitante && <span className="error-message">{errors.nombre_visitante}</span>}
               </div>
               <div className="form-group vf-visitante-dni">
-                <label className="vf-label-sm">DNI</label>
+                <label className="vf-label-sm">DNI <span className="required">*</span></label>
                 <input
                   type="text"
                   value={formData.dni_visitante}
-                  onChange={(e) => handleChange('dni_visitante', e.target.value)}
+                  onChange={(e) => handleChange('dni_visitante', e.target.value.replace(/\D/g, ''))}
                   placeholder="Documento"
                   inputMode="numeric"
+                  className={errors.dni_visitante ? 'input-error' : ''}
                 />
+                {errors.dni_visitante && <span className="error-message">{errors.dni_visitante}</span>}
               </div>
               {categoriaSeleccionada?.requiere_patente && (
                 <div className="form-group vf-visitante-patente">
