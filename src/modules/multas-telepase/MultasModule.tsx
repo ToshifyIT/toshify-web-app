@@ -172,7 +172,7 @@ export default function MultasModule() {
     setLoading(true)
     try {
       const [multasRes, vehiculosRes] = await Promise.all([
-        aplicarFiltroSede(supabase.from('multas_historico').select('*')).order('created_at', { ascending: false }).limit(5000),
+        aplicarFiltroSede(supabase.from('multas_historico').select('*').is('deleted_at', null)).order('created_at', { ascending: false }).limit(5000),
         aplicarFiltroSede(supabase.from('vehiculos').select('id, patente').is('deleted_at', null))
       ])
 
@@ -469,7 +469,9 @@ export default function MultasModule() {
     if (!result.isConfirmed) return
 
     try {
-      const { error } = await (supabase.from('multas_historico') as any).delete().eq('id', multa.id)
+      const { error } = await (supabase.from('multas_historico') as any)
+        .update({ deleted_at: new Date().toISOString(), deleted_reason: 'Eliminada manualmente desde UI', deleted_by: 'usuario' })
+        .eq('id', multa.id)
       if (error) throw error
 
       showSuccess('Eliminada')

@@ -101,7 +101,8 @@ export function MultasTab() {
       // Cargar multas
       const { data: multasData, error: multasError } = await aplicarFiltroSede((supabase
         .from('multas_historico') as any)
-        .select('*'))
+        .select('*')
+        .is('deleted_at', null))
         .order('fecha_infraccion', { ascending: false })
         .limit(5000)
 

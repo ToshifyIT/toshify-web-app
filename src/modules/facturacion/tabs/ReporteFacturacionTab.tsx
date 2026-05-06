@@ -3228,7 +3228,7 @@ export function ReporteFacturacionTab() {
         (supabase.from('cobros_fraccionados') as any).select('*').in('conductor_id', conductorIds).lte('semana', semanaNum).eq('anio', anioNum),
         // Multas: se consulta pero solo se usa si MULTAS_HABILITADAS = true
         MULTAS_HABILITADAS
-          ? (supabase.from('multas_historico') as any).select('patente, importe, fecha_infraccion').gte('fecha_infraccion', fechaInicio).lte('fecha_infraccion', fechaFin)
+          ? (supabase.from('multas_historico') as any).select('patente, importe, fecha_infraccion').is('deleted_at', null).gte('fecha_infraccion', fechaInicio).lte('fecha_infraccion', fechaFin)
           : Promise.resolve({ data: [] }),
         supabase.from('cabify_dni_mapeo').select('cabify_hash, dni_real'),
       ])
