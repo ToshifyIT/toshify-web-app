@@ -18,7 +18,7 @@ import { VISITA_ESTADOS } from '../../../types/visitas.types';
 
 // Transiciones válidas de estado
 const TRANSICIONES: Record<VisitaEstado, VisitaEstado[]> = {
-  pendiente: ['no_asistio', 'cancelada'],
+  pendiente: ['no_asistio', 'cancelada', 'completada'],
   en_curso: ['completada', 'cancelada'],
   completada: [],
   no_asistio: [],
@@ -62,11 +62,6 @@ export function VisitaDetalleModal({
   const transicionesDisponibles = TRANSICIONES[estadoActual];
   const isPast = estadoActual === 'completada' || estadoActual === 'cancelada' || estadoActual === 'no_asistio';
 
-  // Lógica para marcar presente: solo si está pendiente y la cita no terminó aún
-  // Ventana de tolerancia = fecha_hora + duracion_minutos (B. duración de la cita)
-  const finVentana = new Date(new Date(visita.fecha_hora).getTime() + visita.duracion_minutos * 60_000);
-  const ventanaCerrada = new Date() >= finVentana;
-  const puedeMarcarPresente = estadoActual === 'pendiente' && !ventanaCerrada && !!onMarcarPresente;
   const yaMarcadoPresente = !!visita.hora_arribo;
   const horaArriboFmt = visita.hora_arribo
     ? format(toArgDate(new Date(visita.hora_arribo)), 'HH:mm')
@@ -156,30 +151,6 @@ export function VisitaDetalleModal({
                 </div>
               </div>
             )}
-            {!yaMarcadoPresente && puedeMarcarPresente && (
-              <div style={{ padding: '8px 0' }}>
-                <button
-                  onClick={onMarcarPresente}
-                  style={{
-                    display: 'flex', alignItems: 'center', gap: '8px',
-                    width: '100%', justifyContent: 'center',
-                    background: '#10b981', color: '#fff', border: 'none',
-                    padding: '10px 16px', borderRadius: '8px',
-                    fontSize: '14px', fontWeight: 600, cursor: 'pointer',
-                  }}
-                >
-                  <Clock size={16} /> Marcar Presente
-                </button>
-              </div>
-            )}
-            {!yaMarcadoPresente && estadoActual === 'pendiente' && ventanaCerrada && (
-              <div className="visita-detalle-row" style={{ background: 'rgba(239, 68, 68, 0.08)', padding: '10px 12px', borderRadius: '8px', border: '1px solid rgba(239, 68, 68, 0.25)' }}>
-                <Clock size={16} style={{ color: '#ef4444' }} />
-                <div style={{ fontSize: '13px', color: '#ef4444' }}>
-                  La ventana de arribo terminó (cita + duración). Cambiá el estado a "No asistió" si corresponde.
-                </div>
-              </div>
-            )}
 
             <div className="visita-detalle-row">
               <Tag size={16} />
@@ -217,16 +188,23 @@ export function VisitaDetalleModal({
             {/* Transiciones de estado */}
             {canEdit && transicionesDisponibles.length > 0 && (
               <div className="visita-detalle-estados">
-                <label>Cambiar estado:</label>
+                <label>Actualizar estado:</label>
                 <div className="visita-estados-btns">
                   {transicionesDisponibles.map((est) => {
                     const info = VISITA_ESTADOS[est];
+                    const handleClick = () => {
+                      if (est === 'completada' && estadoActual === 'pendiente' && onMarcarPresente) {
+                        onMarcarPresente();
+                      } else {
+                        onChangeEstado(est);
+                      }
+                    };
                     return (
                       <button
                         key={est}
                         className="btn-estado"
                         style={{ backgroundColor: info.color }}
-                        onClick={() => onChangeEstado(est)}
+                        onClick={handleClick}
                       >
                         {info.label}
                       </button>

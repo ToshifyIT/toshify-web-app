@@ -239,7 +239,7 @@ export async function autoUpdateEstados(visitas: VisitaCompleta[]): Promise<Visi
       const inicio = new Date(v.fecha_hora);
       const fin = new Date(inicio.getTime() + (v.duracion_minutos || 30) * 60_000);
       if (now >= fin) {
-        const nuevoEstado: VisitaEstado = v.hora_arribo ? 'completada' : 'no_asistio';
+        const nuevoEstado: VisitaEstado = 'completada';
         updates.push({ id: v.id, estado: nuevoEstado });
         return { ...v, estado: nuevoEstado };
       }

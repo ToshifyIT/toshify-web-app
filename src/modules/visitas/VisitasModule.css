@@ -16,6 +16,7 @@
   flex-direction: column;
   flex: 1;
   min-height: 0;
+  gap: 16px;
 }
 
 /* =====================================================
@@ -504,21 +505,26 @@
   background: transparent;
 }
 
-/* --- Time slots: forzar que las 13 horas entren sin scroll interno.
-   rbc trae min-height: 40px hardcodeado en .rbc-timeslot-group, que con 13 horas
-   exige 520px minimo y dispara overflow scroll si el wrapper es mas chico.
-   Con min-height:0 + flex:1 (default de rbc) los slots se reparten el alto disponible. */
+/* --- Time slots: las horas se reparten el alto disponible sin dejar espacio sobrante.
+   rbc usa min-height: 40px por defecto en .rbc-timeslot-group; con min-height:0
+   los slots se comprimen al alto que el contenedor les dé (flex:1 del rbc-time-view). */
 .visitas-calendario-wrapper .rbc-timeslot-group {
   border-bottom: 1px solid var(--border-secondary);
-  min-height: 0;
+  min-height: 60px;
 }
 
 .visitas-calendario-wrapper .rbc-time-content > * + * > * {
   border-left: 1px solid var(--border-secondary);
 }
 
+/* rbc-time-content: NO usar flex:1/align-items:stretch porque rbc calcula
+   top/height de eventos en % basándose en la altura natural de los slots.
+   Estirar el contenedor rompe esa relación. En su lugar, dejamos que
+   rbc-time-content tenga su alto natural y el overflow del rbc-time-view
+   se encarga de recortar el espacio sobrante. */
 .visitas-calendario-wrapper .rbc-time-content {
-  overflow: hidden;
+  flex: 0 0 auto;
+  overflow: visible;
 }
 
 /* --- Today highlight --- */
@@ -636,7 +642,8 @@
 .visitas-calendario-wrapper .rbc-time-view {
   border: 1px solid var(--border-secondary);
   border-radius: 10px;
-  overflow: hidden;
+  overflow-y: auto;
+  overflow-x: hidden;
   flex: 1;
   min-height: 0;
 }
@@ -1234,12 +1241,6 @@
 .visitas-tab.active {
   background: var(--color-primary);
   color: white;
-}
-
-.visitas-tab-content {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
 }
 
 /* =====================================================
@@ -1861,4 +1862,341 @@
   color: #9CA3AF;
   margin-left: 8px;
   flex-shrink: 0;
+}
+
+/* =====================================================
+   DARK MODE OVERRIDES
+   ===================================================== */
+
+/* Chip "Todas" y filtros de categoría */
+[data-theme="dark"] .visitas-cat-chip.active {
+  background: var(--color-primary);
+  color: #fff;
+  border-color: var(--color-primary);
+}
+
+[data-theme="dark"] .visitas-cat-chip {
+  background: var(--bg-tertiary);
+  border-color: var(--border-primary);
+  color: var(--text-secondary);
+}
+
+[data-theme="dark"] .visitas-cat-chip:hover {
+  background: var(--bg-hover);
+  border-color: var(--color-gray-400);
+}
+
+/* Calendar grid borders and backgrounds */
+[data-theme="dark"] .visitas-calendario-wrapper .rbc-time-view {
+  border-color: var(--border-primary);
+}
+
+[data-theme="dark"] .visitas-calendario-wrapper .rbc-timeslot-group {
+  border-bottom-color: var(--border-primary);
+}
+
+[data-theme="dark"] .visitas-calendario-wrapper .rbc-time-content > * + * > * {
+  border-left-color: var(--border-primary);
+}
+
+[data-theme="dark"] .visitas-calendario-wrapper .rbc-time-content {
+  border-top-color: var(--border-primary);
+}
+
+[data-theme="dark"] .visitas-calendario-wrapper .rbc-day-slot .rbc-time-slot {
+  border-top-color: var(--border-secondary);
+}
+
+/* Today highlight */
+[data-theme="dark"] .visitas-calendario-wrapper .rbc-today {
+  background: rgba(255, 0, 51, 0.06);
+}
+
+/* Time header */
+[data-theme="dark"] .visitas-calendario-wrapper .rbc-time-header {
+  border-bottom-color: var(--border-primary);
+}
+
+[data-theme="dark"] .visitas-calendario-wrapper .rbc-time-header-content {
+  border-left-color: var(--border-primary);
+}
+
+/* All-day cell */
+[data-theme="dark"] .visitas-calendario-wrapper .rbc-allday-cell {
+  border-bottom-color: var(--border-primary);
+}
+
+/* Day background borders */
+[data-theme="dark"] .visitas-calendario-wrapper .rbc-day-bg + .rbc-day-bg {
+  border-left-color: var(--border-primary);
+}
+
+/* Off-range backgrounds (month view) */
+[data-theme="dark"] .visitas-calendario-wrapper .rbc-off-range-bg {
+  background: var(--bg-secondary);
+}
+
+/* Current time indicator */
+[data-theme="dark"] .visitas-calendario-wrapper .rbc-current-time-indicator {
+  background-color: var(--color-primary);
+}
+
+/* Events: ensure white text on colored backgrounds */
+[data-theme="dark"] .visitas-calendario-wrapper .rbc-event {
+  border-color: transparent;
+}
+
+/* Hover tooltip */
+[data-theme="dark"] .visita-hover-tooltip {
+  background: var(--card-bg);
+  border-color: var(--border-primary);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+}
+
+[data-theme="dark"] .visita-hover-tooltip-title {
+  color: var(--text-primary);
+}
+
+[data-theme="dark"] .visita-hover-tooltip-time,
+[data-theme="dark"] .visita-hover-tooltip-row {
+  color: var(--text-secondary);
+}
+
+/* Day modal */
+[data-theme="dark"] .visitas-day-modal {
+  background: var(--card-bg);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.6);
+}
+
+[data-theme="dark"] .visitas-day-modal-header {
+  border-bottom-color: var(--border-primary);
+  color: var(--text-primary);
+}
+
+[data-theme="dark"] .visitas-day-modal-event {
+  background: var(--bg-secondary);
+  border-color: var(--border-primary);
+}
+
+[data-theme="dark"] .visitas-day-modal-event:hover {
+  background: var(--bg-hover);
+}
+
+[data-theme="dark"] .visitas-day-modal-event-time {
+  color: var(--text-secondary);
+}
+
+[data-theme="dark"] .visitas-day-modal-event-title {
+  color: var(--text-primary);
+}
+
+/* Suggestion dropdown */
+[data-theme="dark"] .sugerencia-item:hover {
+  background: var(--bg-hover);
+}
+
+[data-theme="dark"] .sugerencia-nombre {
+  color: var(--text-primary);
+}
+
+/* Toolbar navigation buttons */
+[data-theme="dark"] .visitas-calendario-wrapper .rbc-toolbar button {
+  border-color: var(--border-primary);
+  color: var(--text-secondary);
+}
+
+[data-theme="dark"] .visitas-calendario-wrapper .rbc-toolbar button:hover {
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+}
+
+/* Month view */
+[data-theme="dark"] .visitas-calendario-wrapper .rbc-month-view {
+  border-color: var(--border-primary);
+}
+
+[data-theme="dark"] .visitas-calendario-wrapper .rbc-month-row + .rbc-month-row {
+  border-top-color: var(--border-primary);
+}
+
+/* Overlay popup */
+[data-theme="dark"] .visitas-calendario-wrapper .rbc-overlay {
+  background: var(--card-bg);
+  border-color: var(--border-primary);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+}
+
+[data-theme="dark"] .visitas-calendario-wrapper .rbc-overlay-header {
+  border-bottom-color: var(--border-primary);
+  color: var(--text-primary);
+}
+
+/* Slot selection highlight */
+[data-theme="dark"] .visitas-calendario-wrapper .rbc-slot-selection {
+  background-color: rgba(255, 0, 51, 0.2);
+}
+
+/* ---- Detail modal (VisitaDetalleModal) ---- */
+[data-theme="dark"] .visita-detalle-modal {
+  border: 1px solid var(--border-primary);
+}
+
+[data-theme="dark"] .visita-detalle-body {
+  color: var(--text-primary);
+}
+
+[data-theme="dark"] .visita-detalle-row {
+  color: var(--text-primary);
+}
+
+[data-theme="dark"] .visita-detalle-row svg {
+  color: var(--text-tertiary);
+}
+
+[data-theme="dark"] .visita-detalle-row strong {
+  color: var(--text-primary);
+}
+
+[data-theme="dark"] .visita-detalle-sub {
+  color: var(--text-secondary);
+}
+
+[data-theme="dark"] .visita-detalle-fecha {
+  color: var(--text-primary);
+}
+
+[data-theme="dark"] .visita-detalle-meta {
+  color: var(--text-tertiary);
+  border-top-color: var(--border-primary);
+}
+
+[data-theme="dark"] .visita-detalle-estados {
+  border-top-color: var(--border-primary);
+}
+
+[data-theme="dark"] .visita-detalle-estados label {
+  color: var(--text-secondary);
+}
+
+/* Estado buttons: softer look in dark mode */
+[data-theme="dark"] .btn-estado {
+  opacity: 0.9;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+}
+
+[data-theme="dark"] .btn-estado:hover {
+  opacity: 1;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+}
+
+/* Arribo block dark mode */
+[data-theme="dark"] .visita-detalle-row[style*="rgba(16, 185, 129"] {
+  background: rgba(16, 185, 129, 0.12) !important;
+  border-color: rgba(16, 185, 129, 0.3) !important;
+}
+
+/* Footer buttons: btn-danger for Eliminar */
+[data-theme="dark"] .visita-detalle-modal .btn-danger,
+[data-theme="dark"] .modal-footer .btn-danger {
+  background: transparent;
+  color: var(--color-danger);
+  border: 1px solid var(--color-danger);
+  padding: 8px 16px;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+[data-theme="dark"] .visita-detalle-modal .btn-danger:hover,
+[data-theme="dark"] .modal-footer .btn-danger:hover {
+  background: rgba(255, 0, 51, 0.1);
+}
+
+/* Badge colors: softer backgrounds in dark */
+[data-theme="dark"] .visita-estado-badge {
+  opacity: 0.9;
+}
+
+[data-theme="dark"] .visita-categoria-badge {
+  opacity: 0.9;
+}
+
+/* ---- Form modal (VisitasFormModal) ---- */
+[data-theme="dark"] .visitas-form-modal .vf-warning-box {
+  background: rgba(251, 191, 36, 0.1);
+  border-color: rgba(251, 191, 36, 0.3);
+  color: var(--color-warning);
+}
+
+[data-theme="dark"] .visitas-form-modal .vf-label-sm {
+  color: var(--text-secondary);
+}
+
+[data-theme="dark"] .visitas-form-modal .vf-cat-chips .vf-cat-chip {
+  background: var(--bg-tertiary);
+  border-color: var(--border-primary);
+  color: var(--text-secondary);
+}
+
+[data-theme="dark"] .visitas-form-modal .vf-cat-chips .vf-cat-chip.selected {
+  border-color: currentColor;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+[data-theme="dark"] .visitas-form-modal .vf-atendedor-badge {
+  background: var(--bg-tertiary);
+  border-color: var(--border-primary);
+  color: var(--text-secondary);
+}
+
+[data-theme="dark"] .visitante-sugerencias-dropdown {
+  background: var(--card-bg);
+  border: 1px solid var(--border-primary);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+}
+
+[data-theme="dark"] .sugerencia-grupo-header {
+  color: var(--text-tertiary);
+  border-bottom-color: var(--border-primary);
+}
+
+/* ---- Visitantes submodal ---- */
+[data-theme="dark"] .visita-visitantes-submodal {
+  background: var(--card-bg);
+  border: 1px solid var(--border-primary);
+}
+
+[data-theme="dark"] .visita-visitantes-table th {
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+}
+
+[data-theme="dark"] .visita-visitantes-table td {
+  border-color: var(--border-primary);
+  color: var(--text-secondary);
+}
+
+/* ---- Parametros modals ---- */
+[data-theme="dark"] .visitas-modal-content {
+  background: var(--card-bg);
+  border: 1px solid var(--border-primary);
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.5);
+}
+
+[data-theme="dark"] .visitas-modal-header {
+  background: var(--card-bg);
+}
+
+[data-theme="dark"] .visitas-modal-footer {
+  background: var(--card-bg);
+}
+
+/* Sugerencia dropdown */
+[data-theme="dark"] .sugerencia-item:hover {
+  background: var(--bg-hover);
+}
+
+[data-theme="dark"] .sugerencia-nombre {
+  color: var(--text-primary);
 }
