@@ -83,6 +83,7 @@ export interface Lead {
   estado_de_lead?: string | null
   fase_de_preguntas?: string | null
   causal_de_cierre?: string | null
+  motivo_desinteres?: string | null
 
   // Asignaciones
   agente_asignado?: string | null
