@@ -238,7 +238,7 @@ export function VisitaDetalleModal({
           </div>
 
           <div className="modal-footer">
-            {canDelete && !isPast && (
+            {canDelete && (
               <button className="btn-danger" onClick={onDelete}>Eliminar</button>
             )}
             {canEdit && !isPast && (

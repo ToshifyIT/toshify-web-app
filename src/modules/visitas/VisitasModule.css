@@ -385,6 +385,7 @@
   flex-direction: column;
   min-height: 0;
   position: relative;
+  overflow: hidden;
 }
 
 /* =====================================================
@@ -503,31 +504,21 @@
   background: transparent;
 }
 
-/* --- Time slots --- */
-.visitas-calendario-wrapper .rbc-time-slot {
-  border-top: none;
-  min-height: 30px;
-}
-
+/* --- Time slots: forzar que las 13 horas entren sin scroll interno.
+   rbc trae min-height: 40px hardcodeado en .rbc-timeslot-group, que con 13 horas
+   exige 520px minimo y dispara overflow scroll si el wrapper es mas chico.
+   Con min-height:0 + flex:1 (default de rbc) los slots se reparten el alto disponible. */
 .visitas-calendario-wrapper .rbc-timeslot-group {
   border-bottom: 1px solid var(--border-secondary);
-  min-height: 60px;
+  min-height: 0;
 }
 
 .visitas-calendario-wrapper .rbc-time-content > * + * > * {
   border-left: 1px solid var(--border-secondary);
 }
 
-.visitas-calendario-wrapper .rbc-day-slot .rbc-time-slot {
-  border-top: none;
-  min-height: 30px;
-}
-
-/* Asegurar que el contenedor de tiempo se expanda para llenar todos los slots
-   y no quede area vacia visual entre el ultimo evento y el final del dia */
 .visitas-calendario-wrapper .rbc-time-content {
-  min-height: 0;
-  overflow-y: auto;
+  overflow: hidden;
 }
 
 /* --- Today highlight --- */
@@ -648,10 +639,6 @@
   overflow: hidden;
   flex: 1;
   min-height: 0;
-}
-
-.visitas-calendario-wrapper .rbc-time-content {
-  overflow-y: auto;
 }
 
 .visitas-calendario-wrapper .rbc-time-header {

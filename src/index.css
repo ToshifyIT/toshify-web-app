@@ -273,6 +273,12 @@ body.device-touch .show-touch-only {
    Cubre cuando el navegador se redimensiona en desktop también.
    ============================================ */
 
+/* SweetAlert2 siempre por encima de cualquier modal de la app
+   (modal-overlay = 1000, visita-submodal-overlay = 1100). */
+.swal2-container {
+  z-index: 10000 !important;
+}
+
 /* Modales SweetAlert2 en pantallas chicas: ancho fluido */
 @media (max-width: 640px) {
   .swal2-popup {

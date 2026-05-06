@@ -345,6 +345,7 @@ export function VisitasCalendario({
         <span>Argentina (GMT-3)</span>
       </div>
       <Calendar<VisitaCalendarEvent, CalendarResource>
+        style={{ flex: 1, minHeight: 0 }}
         localizer={localizer}
         culture="es"
         messages={messages}
