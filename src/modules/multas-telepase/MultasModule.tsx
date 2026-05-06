@@ -855,58 +855,75 @@ export default function MultasModule() {
     },
     {
       id: 'acciones',
-      size: 115,
+      size: 180,
       header: 'Acciones',
-      cell: ({ row }) => (
-        <div className="dt-actions">
-          <button
-            className="dt-btn-action dt-btn-edit"
-            data-tooltip="Editar"
-            onClick={() => editarMulta(row.original)}
-          >
-            <Edit2 size={14} />
-          </button>
-          <button
-            className="dt-btn-action dt-btn-view"
-            data-tooltip="Ver detalle"
-            onClick={() => handleVerDetalle(row.original)}
-          >
-            <Eye size={14} />
-          </button>
-          {(() => {
-            const yaEnviada = multasEnviadas.has(row.original.id)
-            const sinConductor = !row.original.conductor_responsable || row.original.conductor_responsable.trim() === ''
-            const deshabilitado = yaEnviada || sinConductor
-            const tooltip = yaEnviada
-              ? 'Ya enviada a facturación'
-              : sinConductor
-                ? 'Sin conductor identificado — no se puede enviar'
-                : 'Enviar a facturación'
-            return (
-              <button
-                className="dt-btn-action"
-                data-tooltip={tooltip}
-                style={{
-                  color: deshabilitado ? '#9ca3af' : '#10b981',
-                  cursor: deshabilitado ? 'not-allowed' : 'pointer',
-                  opacity: deshabilitado ? 0.5 : 1,
-                }}
-                disabled={deshabilitado}
-                onClick={() => { if (!deshabilitado) handleCrearCobroDirecto(row.original) }}
-              >
-                <SendHorizonal size={14} />
-              </button>
-            )
-          })()}
-          <button
-            className="dt-btn-action dt-btn-delete"
-            data-tooltip="Eliminar"
-            onClick={() => eliminarMulta(row.original)}
-          >
-            <Trash2 size={14} />
-          </button>
-        </div>
-      )
+      cell: ({ row }) => {
+        const yaEnviada = multasEnviadas.has(row.original.id)
+        const sinConductor = !row.original.conductor_responsable || row.original.conductor_responsable.trim() === ''
+        const deshabilitarEnvio = yaEnviada || sinConductor
+        const tooltipEnvio = yaEnviada
+          ? 'Ya enviada a facturación'
+          : sinConductor
+            ? 'Sin conductor identificado — no se puede enviar'
+            : 'Enviar a facturación'
+
+        // Estilo común para botones icono+label (mismo patrón que Bitacora/Marcaciones)
+        const btnBase = (color: string, opacity = 1, disabled = false): React.CSSProperties => ({
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          gap: '1px',
+          background: 'none',
+          border: 'none',
+          cursor: disabled ? 'not-allowed' : 'pointer',
+          padding: '2px',
+          color,
+          opacity,
+        })
+        const labelStyle: React.CSSProperties = { fontSize: '9px', fontWeight: 600, lineHeight: 1 }
+
+        return (
+          <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+            <button
+              title="Ver detalle"
+              onClick={() => handleVerDetalle(row.original)}
+              style={btnBase('var(--text-secondary)')}
+            >
+              <Eye size={14} />
+              <span style={labelStyle}>Ver</span>
+            </button>
+            <button
+              title="Editar multa"
+              onClick={() => editarMulta(row.original)}
+              style={btnBase('#2563eb')}
+            >
+              <Edit2 size={14} />
+              <span style={labelStyle}>Editar</span>
+            </button>
+            <button
+              title={tooltipEnvio}
+              onClick={() => { if (!deshabilitarEnvio) handleCrearCobroDirecto(row.original) }}
+              disabled={deshabilitarEnvio}
+              style={btnBase(
+                deshabilitarEnvio ? 'var(--text-tertiary)' : '#16a34a',
+                deshabilitarEnvio ? 0.4 : 1,
+                deshabilitarEnvio,
+              )}
+            >
+              <SendHorizonal size={14} />
+              <span style={labelStyle}>Enviar</span>
+            </button>
+            <button
+              title="Eliminar multa"
+              onClick={() => eliminarMulta(row.original)}
+              style={btnBase('#dc2626')}
+            >
+              <Trash2 size={14} />
+              <span style={labelStyle}>Borrar</span>
+            </button>
+          </div>
+        )
+      }
     }
   ], [patentesUnicas, patenteFilter, conductoresUnicos, conductorFilter, lugaresUnicos, lugarFilter, infraccionesUnicas, infraccionFilter, detallesUnicos, detalleFilter, semanasUnicas, semanaFilter, ibuttonsUnicos, ibuttonFilter, fechaInfraccionDesde, fechaInfraccionHasta, openFilterId, obsFilter, importesUnicos, importeFilter, fechaCargaDesde, fechaCargaHasta, multasEnviadas])
 

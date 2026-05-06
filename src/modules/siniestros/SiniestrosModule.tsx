@@ -27,7 +27,6 @@ import {
   CheckCircle,
   History
 } from 'lucide-react'
-import { ActionsMenu } from '../../components/ui/ActionsMenu'
 import { DateRangeSelector } from '../../components/ui/DateRangeSelector'
 import * as XLSX from 'xlsx'
 import { type ColumnDef, type FilterFn } from '@tanstack/react-table'
@@ -566,48 +565,87 @@ export function SiniestrosModule() {
 
     {
       id: 'acciones',
+      size: 220,
       header: 'Acciones',
       cell: ({ row }) => {
         const isHabilitado = row.original.habilitado_circular;
         const hasVehiculo = !!row.original.vehiculo_id;
         const hasDrive = !!row.original.carpeta_drive_url;
 
+        const habilitarDisabled = isHabilitado || !hasVehiculo;
+        const habilitarTooltip = !hasVehiculo
+          ? 'Sin vehículo asignado'
+          : isHabilitado
+            ? 'Vehículo ya habilitado'
+            : 'Habilitar vehículo';
+
+        const btnBase = (color: string, opacity = 1, disabled = false): React.CSSProperties => ({
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          gap: '1px',
+          background: 'none',
+          border: 'none',
+          cursor: disabled ? 'not-allowed' : 'pointer',
+          padding: '2px',
+          color,
+          opacity,
+        });
+        const labelStyle: React.CSSProperties = { fontSize: '9px', fontWeight: 600, lineHeight: 1 };
+
         return (
-          <ActionsMenu
-            maxVisible={999}
-            actions={[
-              {
-                icon: <Eye size={15} />,
-                label: 'Ver detalle',
-                onClick: () => handleVerSiniestro(row.original)
-              },
-              {
-                icon: <Edit2 size={15} />,
-                label: 'Editar',
-                onClick: () => handleEditarSiniestro(row.original),
-                variant: 'info'
-              },
-              {
-                icon: <History size={15} />,
-                label: 'Seguimiento',
-                onClick: () => setSeguimientoSiniestro(row.original)
-              },
-              {
-                icon: <FolderOpen size={15} />,
-                label: hasDrive ? 'Ver en Drive' : 'Sin carpeta de Drive',
-                onClick: () => { if (hasDrive) window.open(row.original.carpeta_drive_url!, '_blank') },
-                disabled: !hasDrive,
-                variant: 'success'
-              },
-              {
-                icon: <CheckCircle size={15} />,
-                label: !hasVehiculo ? 'Sin vehículo asignado' : isHabilitado ? 'Vehículo ya habilitado' : 'Habilitar vehiculo',
-                onClick: () => handleHabilitarVehiculo(row.original),
-                disabled: isHabilitado || !hasVehiculo,
-                variant: 'warning'
-              }
-            ]}
-          />
+          <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+            <button
+              title="Ver detalle"
+              onClick={() => handleVerSiniestro(row.original)}
+              style={btnBase('var(--text-secondary)')}
+            >
+              <Eye size={14} />
+              <span style={labelStyle}>Ver</span>
+            </button>
+            <button
+              title="Editar siniestro"
+              onClick={() => handleEditarSiniestro(row.original)}
+              style={btnBase('#2563eb')}
+            >
+              <Edit2 size={14} />
+              <span style={labelStyle}>Editar</span>
+            </button>
+            <button
+              title="Seguimiento del siniestro"
+              onClick={() => setSeguimientoSiniestro(row.original)}
+              style={btnBase('var(--text-secondary)')}
+            >
+              <History size={14} />
+              <span style={labelStyle}>Hist.</span>
+            </button>
+            <button
+              title={hasDrive ? 'Ver carpeta de Drive' : 'Sin carpeta de Drive'}
+              onClick={() => { if (hasDrive) window.open(row.original.carpeta_drive_url!, '_blank') }}
+              disabled={!hasDrive}
+              style={btnBase(
+                hasDrive ? '#16a34a' : 'var(--text-tertiary)',
+                hasDrive ? 1 : 0.4,
+                !hasDrive,
+              )}
+            >
+              <FolderOpen size={14} />
+              <span style={labelStyle}>Drive</span>
+            </button>
+            <button
+              title={habilitarTooltip}
+              onClick={() => handleHabilitarVehiculo(row.original)}
+              disabled={habilitarDisabled}
+              style={btnBase(
+                habilitarDisabled ? 'var(--text-tertiary)' : '#d97706',
+                habilitarDisabled ? 0.4 : 1,
+                habilitarDisabled,
+              )}
+            >
+              <CheckCircle size={14} />
+              <span style={labelStyle}>Habil.</span>
+            </button>
+          </div>
         );
       }
     }
