@@ -467,6 +467,7 @@ export function PeriodosTab() {
           .in('conductor_id', conductorIds)
           .lte('semana', semana.semana)
           .eq('anio', semana.anio)
+          .neq('estado', 'cancelada_por_baja')
       ])
 
       const penalidades = penalidadesRes.data || []
@@ -480,7 +481,8 @@ export function PeriodosTab() {
         (supabase
           .from('penalidades_cuotas') as any)
           .select('*, penalidad:penalidades(id, conductor_id, detalle, cantidad_cuotas, tipos_cobro_descuento(categoria, es_a_favor, nombre))')
-          .lte('semana', semana.semana),
+          .lte('semana', semana.semana)
+          .neq('estado', 'cancelada_por_baja'),
         // Pagos registrados para cruzar (ambos tipos)
         (supabase
           .from('pagos_conductores') as any)
@@ -490,6 +492,7 @@ export function PeriodosTab() {
         (supabase
           .from('penalidades_cuotas') as any)
           .select('penalidad_id')
+          .neq('estado', 'cancelada_por_baja')
       ])
 
       const pagosFraccionadosIds = new Set(

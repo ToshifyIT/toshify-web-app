@@ -2186,7 +2186,8 @@ export function ReporteFacturacionTab() {
           .select('id, penalidad_id, monto_cuota, numero_cuota, anio, semana, penalidades!inner(aplicado)')
           .eq('semana', semanaDelPeriodo)
           .eq('anio', anioDelPeriodo)
-          .eq('penalidades.aplicado', true),
+          .eq('penalidades.aplicado', true)
+          .neq('estado', 'cancelada_por_baja'),
         // Pagos registrados en pagos_conductores para cruzar
         (supabase
           .from('pagos_conductores') as any)
@@ -2196,6 +2197,7 @@ export function ReporteFacturacionTab() {
         (supabase
           .from('penalidades_cuotas') as any)
           .select('penalidad_id')
+          .neq('estado', 'cancelada_por_baja')
       ])
 
       const cuotasPagadasPreviewIds = new Set(
@@ -3225,7 +3227,7 @@ export function ReporteFacturacionTab() {
           return supabase.from(getCabifyTable(sedeDelPeriodo)).select('dni, peajes').gte('fecha_inicio', peajesInicio + 'T00:00:00').lte('fecha_inicio', peajesFin + 'T23:59:59')
         })(),
         (supabase.from('garantias_conductores') as any).select('*').in('conductor_id', conductorIds),
-        (supabase.from('cobros_fraccionados') as any).select('*').in('conductor_id', conductorIds).lte('semana', semanaNum).eq('anio', anioNum),
+        (supabase.from('cobros_fraccionados') as any).select('*').in('conductor_id', conductorIds).lte('semana', semanaNum).eq('anio', anioNum).neq('estado', 'cancelada_por_baja'),
         // Multas: se consulta pero solo se usa si MULTAS_HABILITADAS = true
         MULTAS_HABILITADAS
           ? (supabase.from('multas_historico') as any).select('patente, importe, fecha_infraccion').is('deleted_at', null).gte('fecha_infraccion', fechaInicio).lte('fecha_infraccion', fechaFin)
@@ -3240,7 +3242,8 @@ export function ReporteFacturacionTab() {
           .select('*, penalidad:penalidades!inner(id, conductor_id, detalle, cantidad_cuotas, aplicado, tipos_cobro_descuento(categoria, es_a_favor, nombre))')
           .eq('semana', semanaNum)
           .eq('anio', anioNum)
-          .eq('penalidad.aplicado', true),
+          .eq('penalidad.aplicado', true)
+          .neq('estado', 'cancelada_por_baja'),
         // Pagos registrados para cruzar (penalidad_cuota + cobro_fraccionado)
         (supabase
           .from('pagos_conductores') as any)
@@ -3250,6 +3253,7 @@ export function ReporteFacturacionTab() {
         (supabase
           .from('penalidades_cuotas') as any)
           .select('penalidad_id')
+          .neq('estado', 'cancelada_por_baja')
       ])
 
       const cuotasPagadasRecalcIds = new Set(

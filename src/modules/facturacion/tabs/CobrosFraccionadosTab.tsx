@@ -29,6 +29,7 @@ interface Cuota {
   anio: number
   aplicado: boolean
   fecha_aplicacion: string | null
+  estado?: 'pendiente' | 'aplicada' | 'pagada' | 'cancelada_por_baja'
   pagado?: boolean
   fecha_pago?: string | null
 }
@@ -50,6 +51,7 @@ interface CobroSaldoRow {
   descripcion: string | null
   aplicado: boolean
   fecha_aplicacion: string | null
+  estado?: 'pendiente' | 'aplicada' | 'pagada' | 'cancelada_por_baja'
   total_cuotas: number
   created_at: string
   conductor: ConductorRelation | null
@@ -106,6 +108,21 @@ interface CobrosFraccionadosTabProps {
   periodoActual?: number
 }
 
+type FiltroEstado = 'activos' | 'completados' | 'cancelados' | 'todos'
+
+// Estado computado de un grupo de cuotas (penalidad o cobro fraccionado)
+type EstadoGrupo = 'activo' | 'completado' | 'cancelado'
+
+function calcularEstadoGrupo(cuotas: Cuota[]): EstadoGrupo {
+  if (!cuotas || cuotas.length === 0) return 'activo'
+  const total = cuotas.length
+  const canceladas = cuotas.filter(c => c.estado === 'cancelada_por_baja').length
+  if (canceladas > 0 && canceladas === total) return 'cancelado'
+  const aplicadas = cuotas.filter(c => c.aplicado).length
+  if (aplicadas === total) return 'completado'
+  return 'activo'
+}
+
 export function CobrosFraccionadosTab({ periodoActual }: CobrosFraccionadosTabProps) {
   void periodoActual
   const { sedeActualId, aplicarFiltroSede } = useSede()
@@ -114,6 +131,9 @@ export function CobrosFraccionadosTab({ periodoActual }: CobrosFraccionadosTabPr
   const [loading, setLoading] = useState(true)
   const [expandidos, setExpandidos] = useState<Record<string, boolean>>({})
   const [allPagos, setAllPagos] = useState<PagoConductorRow[]>([])
+  const [filtroEstado, setFiltroEstado] = useState<FiltroEstado>('activos')
+  const [filtroTipo, setFiltroTipo] = useState<'todos' | 'saldo' | 'multa'>('todos')
+  const [busqueda, setBusqueda] = useState('')
 
   useEffect(() => {
     cargarCobrosFraccionados()
@@ -133,10 +153,10 @@ export function CobrosFraccionadosTab({ periodoActual }: CobrosFraccionadosTabPr
           id, monto, fraccionado, cantidad_cuotas, conductor_id, conductor_nombre,
           vehiculo_patente, fecha, observaciones, conductor:conductores(id, nombres, apellidos)
         `)).eq('fraccionado', true).order('fecha', { ascending: false }),
-        aplicarFiltroSede(supabase.from('penalidades_cuotas').select('*')).order('numero_cuota', { ascending: true }),
+        aplicarFiltroSede(supabase.from('penalidades_cuotas').select('id, penalidad_id, numero_cuota, monto_cuota, semana, anio, aplicado, fecha_aplicacion, estado')).order('numero_cuota', { ascending: true }),
         aplicarFiltroSede(supabase.from('cobros_fraccionados').select(`
           id, conductor_id, monto_total, monto_cuota, numero_cuota, semana, anio,
-          descripcion, aplicado, fecha_aplicacion, total_cuotas, created_at,
+          descripcion, aplicado, fecha_aplicacion, estado, total_cuotas, created_at,
           conductor:conductores(id, nombres, apellidos)
         `)).order('created_at', { ascending: false }),
         aplicarFiltroSede((supabase.from('pagos_conductores') as any).select('*'))
@@ -167,6 +187,7 @@ export function CobrosFraccionadosTab({ periodoActual }: CobrosFraccionadosTabPr
           .filter((c) => c.penalidad_id === pen.id)
           .map(c => ({
             ...c,
+            estado: c.estado,
             pagado: cuotasPagadasSet.has(c.id),
             fecha_pago: cuotasPagosMap.get(c.id)?.fecha_pago || null
           }))
@@ -227,6 +248,7 @@ export function CobrosFraccionadosTab({ periodoActual }: CobrosFraccionadosTabPr
             anio: c.anio,
             aplicado: c.aplicado,
             fecha_aplicacion: c.fecha_aplicacion,
+            estado: c.estado,
             pagado: cuotasPagadasSet.has(c.id),
             fecha_pago: cuotasPagosMap.get(c.id)?.fecha_pago || null
           })),
@@ -500,6 +522,51 @@ export function CobrosFraccionadosTab({ periodoActual }: CobrosFraccionadosTabPr
     })
   }
 
+  // Helpers para clasificar
+  const esTipoSaldo = (cobro: PenalidadFraccionada) => cobro.id.startsWith('saldo-')
+
+  // Filtrar cobros según búsqueda + tipo + estado (AND)
+  const busquedaNorm = busqueda.trim().toLowerCase()
+  const cobrosFiltrados = cobros.filter(cobro => {
+    // Estado
+    if (filtroEstado !== 'todos') {
+      const estado = calcularEstadoGrupo(cobro.cuotas)
+      if (filtroEstado === 'activos' && estado !== 'activo') return false
+      if (filtroEstado === 'completados' && estado !== 'completado') return false
+      if (filtroEstado === 'cancelados' && estado !== 'cancelado') return false
+    }
+    // Tipo
+    if (filtroTipo === 'saldo' && !esTipoSaldo(cobro)) return false
+    if (filtroTipo === 'multa' && esTipoSaldo(cobro)) return false
+    // Búsqueda (nombre, DNI placeholder en conductor_id, patente)
+    if (busquedaNorm) {
+      const nombre = (cobro.conductor?.nombre_completo || cobro.conductor_nombre || '').toLowerCase()
+      const patente = (cobro.vehiculo_patente || '').toLowerCase()
+      if (!nombre.includes(busquedaNorm) && !patente.includes(busquedaNorm)) return false
+    }
+    return true
+  })
+
+  // Conteo por estado para mostrar al lado del label en el dropdown
+  const conteos = {
+    activos: cobros.filter(c => calcularEstadoGrupo(c.cuotas) === 'activo').length,
+    completados: cobros.filter(c => calcularEstadoGrupo(c.cuotas) === 'completado').length,
+    cancelados: cobros.filter(c => calcularEstadoGrupo(c.cuotas) === 'cancelado').length,
+    todos: cobros.length,
+  }
+  const conteosTipo = {
+    todos: cobros.length,
+    saldo: cobros.filter(esTipoSaldo).length,
+    multa: cobros.filter(c => !esTipoSaldo(c)).length,
+  }
+
+  const limpiarFiltros = () => {
+    setBusqueda('')
+    setFiltroTipo('todos')
+    setFiltroEstado('activos')
+  }
+  const hayFiltrosActivos = !!busquedaNorm || filtroTipo !== 'todos' || filtroEstado !== 'activos'
+
   return (
     <div className="cobros-fraccionados-tab">
       <div className="tab-header">
@@ -507,22 +574,115 @@ export function CobrosFraccionadosTab({ periodoActual }: CobrosFraccionadosTabPr
         <p>Seguimiento de cuotas aplicadas y pendientes</p>
       </div>
 
+      {!loading && cobros.length > 0 && (
+        <div style={{
+          display: 'flex',
+          gap: '10px',
+          alignItems: 'center',
+          flexWrap: 'wrap',
+          marginBottom: '14px',
+        }}>
+          {/* Buscador (sigue patrón DataTable) */}
+          <div className="dt-search-wrapper" style={{ flex: '1 1 280px', minWidth: '220px' }}>
+            <svg
+              className="dt-search-icon"
+              width="20" height="20" viewBox="0 0 24 24"
+              fill="none" stroke="currentColor" strokeWidth="2"
+            >
+              <circle cx="11" cy="11" r="8" />
+              <path d="M21 21l-4.35-4.35" />
+            </svg>
+            <input
+              type="text"
+              className="dt-search-input"
+              value={busqueda}
+              onChange={(e) => setBusqueda(e.target.value)}
+              placeholder="Buscar conductor o patente..."
+            />
+          </div>
+
+          {/* Tipo */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <label style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-secondary, #6B7280)' }}>Tipo:</label>
+            <select
+              value={filtroTipo}
+              onChange={(e) => setFiltroTipo(e.target.value as 'todos' | 'saldo' | 'multa')}
+              style={{
+                padding: '7px 10px',
+                fontSize: '13px',
+                border: '1px solid var(--border-color, #d1d5db)',
+                borderRadius: '6px',
+                backgroundColor: 'var(--bg-primary, white)',
+                color: 'var(--text-primary, #111827)',
+                cursor: 'pointer',
+                minWidth: '160px',
+              }}
+            >
+              <option value="todos">Todos ({conteosTipo.todos})</option>
+              <option value="saldo">Saldos ({conteosTipo.saldo})</option>
+              <option value="multa">Multas ({conteosTipo.multa})</option>
+            </select>
+          </div>
+
+          {/* Estado */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <label style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-secondary, #6B7280)' }}>Estado:</label>
+            <select
+              value={filtroEstado}
+              onChange={(e) => setFiltroEstado(e.target.value as FiltroEstado)}
+              style={{
+                padding: '7px 10px',
+                fontSize: '13px',
+                border: '1px solid var(--border-color, #d1d5db)',
+                borderRadius: '6px',
+                backgroundColor: 'var(--bg-primary, white)',
+                color: 'var(--text-primary, #111827)',
+                cursor: 'pointer',
+                minWidth: '200px',
+              }}
+            >
+              <option value="activos">Activos ({conteos.activos})</option>
+              <option value="completados">Completados ({conteos.completados})</option>
+              <option value="cancelados">Cancelados por baja ({conteos.cancelados})</option>
+              <option value="todos">Todos ({conteos.todos})</option>
+            </select>
+          </div>
+
+          {/* Limpiar filtros */}
+          {hayFiltrosActivos && (
+            <button
+              type="button"
+              onClick={limpiarFiltros}
+              style={{
+                padding: '7px 12px', fontSize: '12px', fontWeight: 600,
+                border: '1px solid var(--border-color, #d1d5db)',
+                borderRadius: '6px', backgroundColor: 'transparent',
+                color: 'var(--text-secondary, #6B7280)', cursor: 'pointer',
+              }}
+              title="Limpiar todos los filtros"
+            >
+              Limpiar
+            </button>
+          )}
+        </div>
+      )}
+
       {loading ? (
         <div style={{ textAlign: 'center', padding: '40px' }}>
           <p>Cargando cobros fraccionados...</p>
         </div>
-      ) : cobros.length === 0 ? (
+      ) : cobrosFiltrados.length === 0 ? (
         <div style={{
           textAlign: 'center',
           padding: '40px',
           backgroundColor: 'var(--bg-tertiary, #f5f5f5)',
           borderRadius: '8px'
         }}>
-          <p>No hay cobros fraccionados</p>
+          <p>{cobros.length === 0 ? 'No hay cobros fraccionados' : 'No hay registros para el filtro seleccionado'}</p>
         </div>
       ) : (
         <div className="cobros-lista">
-          {cobros.map(cobro => {
+          {cobrosFiltrados.map(cobro => {
             const proxima = obtenerProximaCuota(cobro.cuotas)
             const progreso = calcularProgreso(cobro.cuotas)
             const cuotasAplicadas = (cobro.cuotas || []).filter(c => c.aplicado).length
@@ -576,19 +736,35 @@ export function CobrosFraccionadosTab({ periodoActual }: CobrosFraccionadosTabPr
                   </div>
 
                   <div className="proxima-cuota">
-                    {proxima ? (
-                      <div>
-                        <span className="label">Próxima Cuota:</span>
-                        <span className="valor">
-                          Semana {proxima.semana}/{proxima.anio || '?'} - ${proxima.monto_cuota.toLocaleString('en-US', { minimumFractionDigits: 2 })}
-                        </span>
-                      </div>
-                    ) : (
-                      <div>
-                        <span className="label">Estado:</span>
-                        <span className="valor completado">Completado</span>
-                      </div>
-                    )}
+                    {(() => {
+                      const estadoGrupo = calcularEstadoGrupo(cobro.cuotas)
+                      if (estadoGrupo === 'cancelado') {
+                        return (
+                          <div>
+                            <span className="label">Estado:</span>
+                            <span className="valor" style={{ color: '#6B7280', fontWeight: 600 }}>
+                              Cancelado por baja
+                            </span>
+                          </div>
+                        )
+                      }
+                      if (proxima) {
+                        return (
+                          <div>
+                            <span className="label">Próxima Cuota:</span>
+                            <span className="valor">
+                              Semana {proxima.semana}/{proxima.anio || '?'} - ${proxima.monto_cuota.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                            </span>
+                          </div>
+                        )
+                      }
+                      return (
+                        <div>
+                          <span className="label">Estado:</span>
+                          <span className="valor completado">Completado</span>
+                        </div>
+                      )
+                    })()}
                   </div>
 
                   <button
@@ -622,8 +798,10 @@ export function CobrosFraccionadosTab({ periodoActual }: CobrosFraccionadosTabPr
                         </tr>
                       </thead>
                       <tbody>
-                        {(cobro.cuotas || []).map(cuota => (
-                          <tr key={cuota.id} className={cuota.aplicado ? (cuota.pagado ? 'pagada' : 'aplicada') : 'pendiente'}>
+                        {(cobro.cuotas || []).map(cuota => {
+                          const cancelada = cuota.estado === 'cancelada_por_baja'
+                          return (
+                          <tr key={cuota.id} className={cancelada ? 'cancelada' : (cuota.aplicado ? (cuota.pagado ? 'pagada' : 'aplicada') : 'pendiente')}>
                             <td>#{cuota.numero_cuota}</td>
                             <td>Semana {cuota.semana} - {cuota.anio || '?'}</td>
                             <td>
@@ -633,16 +811,20 @@ export function CobrosFraccionadosTab({ periodoActual }: CobrosFraccionadosTabPr
                               <span style={{
                                 padding: '4px 8px',
                                 borderRadius: '4px',
-                                backgroundColor: cuota.aplicado
-                                  ? (cuota.pagado ? '#16a34a' : '#4CAF50')
-                                  : '#FFC107',
-                                color: cuota.aplicado ? 'white' : '#333',
+                                backgroundColor: cancelada
+                                  ? '#9CA3AF'
+                                  : cuota.aplicado
+                                    ? (cuota.pagado ? '#16a34a' : '#4CAF50')
+                                    : '#FFC107',
+                                color: cancelada || cuota.aplicado ? 'white' : '#333',
                                 fontSize: '12px',
                                 fontWeight: 'bold'
                               }}>
-                                {cuota.aplicado
-                                  ? (cuota.pagado ? 'Pagada' : 'Aplicada')
-                                  : 'Pendiente'
+                                {cancelada
+                                  ? 'Cancelado por baja'
+                                  : cuota.aplicado
+                                    ? (cuota.pagado ? 'Pagada' : 'Aplicada')
+                                    : 'Pendiente'
                                 }
                               </span>
                             </td>
@@ -655,7 +837,7 @@ export function CobrosFraccionadosTab({ periodoActual }: CobrosFraccionadosTabPr
                               }
                             </td>
                             <td style={{ textAlign: 'center' }}>
-                              {!cuota.aplicado && (
+                              {!cuota.aplicado && !cancelada && (
                                 <button
                                   onClick={(e) => {
                                     e.stopPropagation()
@@ -673,9 +855,15 @@ export function CobrosFraccionadosTab({ periodoActual }: CobrosFraccionadosTabPr
                                   Pagado
                                 </span>
                               )}
+                              {cancelada && (
+                                <span style={{ color: '#6B7280', fontSize: '11px', fontWeight: 600 }}>
+                                  —
+                                </span>
+                              )}
                             </td>
                           </tr>
-                        ))}
+                          )
+                        })}
                       </tbody>
                     </table>
                   </div>

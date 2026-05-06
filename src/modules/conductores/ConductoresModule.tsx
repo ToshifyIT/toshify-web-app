@@ -33,11 +33,150 @@ import { ConductorWizard } from "./components/ConductorWizard";
 import { createConductorDriveFolder } from "../../services/driveService";
 import { AddressAutocomplete } from "../../components/ui/AddressAutocomplete";
 import { registrarHistorialConductor, registrarHistorialVehiculo, registrarHistorialBaja } from "../../services/historialService";
+import { insertControlSaldo } from "../../services/controlSaldosService";
 import { getEstadoConductorDisplay, getEstadoConductorBadgeStyle } from "../../utils/conductorUtils";
 import { normalizeDni } from "../../utils/normalizeDocuments";
 
 // Umbral configurable: días para considerar una licencia "por vencer"
 const DIAS_LICENCIA_POR_VENCER = 10;
+
+// Calcula semana ISO 8601 a partir de un Date.
+function getISOWeekParts(date: Date): { semana: number; anio: number } {
+  const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
+  const dayNum = d.getUTCDay() || 7;
+  d.setUTCDate(d.getUTCDate() + 4 - dayNum);
+  const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
+  const weekNumber = Math.ceil(((+d - +yearStart) / 86400000 + 1) / 7);
+  return { semana: weekNumber, anio: d.getUTCFullYear() };
+}
+
+/**
+ * Cuenta cuotas fraccionadas pendientes para mostrar impacto antes de la baja.
+ */
+async function previewImpactoBaja(conductorId: string): Promise<{
+  cobrosCount: number;
+  cobrosMonto: number;
+  penalidadesCount: number;
+  penalidadesMonto: number;
+}> {
+  const { data: cobros } = await (supabase.from('cobros_fraccionados') as any)
+    .select('monto_cuota')
+    .eq('conductor_id', conductorId)
+    .eq('estado', 'pendiente');
+
+  const cobrosArr = (cobros || []) as Array<{ monto_cuota: number }>;
+  const cobrosCount = cobrosArr.length;
+  const cobrosMonto = cobrosArr.reduce((s, c) => s + (Number(c.monto_cuota) || 0), 0);
+
+  // penalidades_cuotas via JOIN: necesitamos primero los penalidad_id del conductor
+  const { data: penalidades } = await (supabase.from('penalidades') as any)
+    .select('id')
+    .eq('conductor_id', conductorId);
+  const penIds = ((penalidades || []) as Array<{ id: string }>).map((p) => p.id);
+
+  let penalidadesCount = 0;
+  let penalidadesMonto = 0;
+  if (penIds.length > 0) {
+    const { data: cuotas } = await (supabase.from('penalidades_cuotas') as any)
+      .select('monto_cuota')
+      .eq('estado', 'pendiente')
+      .in('penalidad_id', penIds);
+    const cuotasArr = (cuotas || []) as Array<{ monto_cuota: number }>;
+    penalidadesCount = cuotasArr.length;
+    penalidadesMonto = cuotasArr.reduce((s, c) => s + (Number(c.monto_cuota) || 0), 0);
+  }
+
+  return { cobrosCount, cobrosMonto, penalidadesCount, penalidadesMonto };
+}
+
+/**
+ * Cancela cuotas fraccionadas pendientes al dar de baja al conductor.
+ *
+ * Marca cuotas pendientes (cobros_fraccionados + penalidades_cuotas) como
+ * estado='cancelada_por_baja' y reingresa la suma TOTAL al saldo del conductor:
+ * sin distinción de tipo, todo lo pendiente queda como deuda en el saldo
+ * porque al darse de baja ya no habrá más facturación que las descuente.
+ */
+async function cancelarFraccionamientosPorBaja(
+  conductorId: string,
+  userName: string
+): Promise<void> {
+  const ahora = new Date();
+  const { semana, anio } = getISOWeekParts(ahora);
+
+  // 1) Cobros fraccionados pendientes (saldos)
+  const { data: cobrosPendientes } = await (supabase.from('cobros_fraccionados') as any)
+    .select('id, monto_cuota')
+    .eq('conductor_id', conductorId)
+    .eq('estado', 'pendiente');
+  const cobros = (cobrosPendientes || []) as Array<{ id: string; monto_cuota: number }>;
+  const cobrosTotal = cobros.reduce((s, c) => s + (Number(c.monto_cuota) || 0), 0);
+
+  if (cobros.length > 0) {
+    const { error: errCobros } = await (supabase.from('cobros_fraccionados') as any)
+      .update({ estado: 'cancelada_por_baja', updated_at: ahora.toISOString() })
+      .in('id', cobros.map((c) => c.id));
+    if (errCobros) throw errCobros;
+  }
+
+  // 2) Penalidades_cuotas pendientes (multas)
+  const { data: penalidades } = await (supabase.from('penalidades') as any)
+    .select('id')
+    .eq('conductor_id', conductorId);
+  const penIds = ((penalidades || []) as Array<{ id: string }>).map((p) => p.id);
+
+  let penTotal = 0;
+  let penCount = 0;
+  if (penIds.length > 0) {
+    const { data: cuotasPen } = await (supabase.from('penalidades_cuotas') as any)
+      .select('id, monto_cuota')
+      .eq('estado', 'pendiente')
+      .in('penalidad_id', penIds);
+    const cuotasArr = (cuotasPen || []) as Array<{ id: string; monto_cuota: number }>;
+    penCount = cuotasArr.length;
+    penTotal = cuotasArr.reduce((s, c) => s + (Number(c.monto_cuota) || 0), 0);
+
+    if (cuotasArr.length > 0) {
+      const { error: errPen } = await (supabase.from('penalidades_cuotas') as any)
+        .update({ estado: 'cancelada_por_baja' })
+        .in('id', cuotasArr.map((c) => c.id));
+      if (errPen) throw errPen;
+    }
+  }
+
+  // 3) Reingresar TODO al saldo del conductor (cobros + penalidades)
+  const totalAReingresar = cobrosTotal + penTotal;
+  const totalCount = cobros.length + penCount;
+
+  if (totalAReingresar > 0) {
+    const { data: saldoExistente } = await (supabase.from('saldos_conductores') as any)
+      .select('id, saldo_actual')
+      .eq('conductor_id', conductorId)
+      .maybeSingle();
+
+    if (saldoExistente) {
+      const nuevoSaldo = (Number(saldoExistente.saldo_actual) || 0) - totalAReingresar;
+      const { error: errSaldo } = await (supabase.from('saldos_conductores') as any)
+        .update({
+          saldo_actual: nuevoSaldo,
+          ultima_actualizacion: ahora.toISOString(),
+        })
+        .eq('id', saldoExistente.id);
+      if (errSaldo) throw errSaldo;
+
+      await insertControlSaldo({
+        conductorId,
+        semana,
+        anio,
+        tipoMovimiento: 'cancelacion_fraccionado_baja',
+        montoMovimiento: totalAReingresar,
+        saldoPendiente: nuevoSaldo,
+        referencia: `Cancelación por baja: ${totalCount} cuota(s) fraccionada(s) (saldos + multas) reingresadas al saldo`,
+        userName,
+      });
+    }
+  }
+}
 
 
 
@@ -80,6 +219,26 @@ export function ConductoresModule() {
   const [dniFilter, setDniFilter] = useState<string[]>([]);
   const [cbuFilter, setCbuFilter] = useState<string[]>([]);
   const [estadoFilter, setEstadoFilter] = useState<string[]>([]);
+
+  // Impacto al dar de baja: cuotas pendientes que se cancelan + sus detalles
+  type DetalleCuotaImpacto = {
+    tipo: 'cobro' | 'penalidad';
+    numero_cuota: number;
+    monto_cuota: number;
+    semana: number;
+    anio: number;
+    descripcion?: string | null;
+  };
+  type ImpactoBajaUI = {
+    cobrosCount: number;
+    cobrosMonto: number;
+    penalidadesCount: number;
+    penalidadesMonto: number;
+    detalles: DetalleCuotaImpacto[];
+  };
+  const [impactoBajaUI, setImpactoBajaUI] = useState<ImpactoBajaUI | null>(null);
+  const [loadingImpacto, setLoadingImpacto] = useState(false);
+  const [showImpactoModal, setShowImpactoModal] = useState(false);
   const [turnoFilter, setTurnoFilter] = useState<string[]>([]);
   const [categoriaFilter, setCategoriaFilter] = useState<string[]>([]);
   const [asignacionFilter, setAsignacionFilter] = useState<string[]>([]);
@@ -186,6 +345,95 @@ export function ConductoresModule() {
     document.addEventListener('click', handleClickOutside);
     return () => document.removeEventListener('click', handleClickOutside);
   }, [openColumnFilter]);
+
+  // Calcular impacto al elegir Baja: cuántas cuotas se cancelarán y sus montos.
+  // Solo corre cuando estamos editando un conductor existente que pasa de !BAJA a BAJA.
+  useEffect(() => {
+    let cancelado = false;
+
+    async function calcular() {
+      if (!showEditModal || !selectedConductor) {
+        setImpactoBajaUI(null);
+        return;
+      }
+      const estadoSeleccionado = estadosConductor.find((e: any) => e.id === formData.estado_id);
+      const esBajaSeleccionada = estadoSeleccionado?.codigo?.toUpperCase() === 'BAJA';
+      const yaEraBaja = (estadosConductor.find((e: any) => e.id === selectedConductor.estado_id)?.codigo?.toUpperCase() === 'BAJA');
+      if (!esBajaSeleccionada || yaEraBaja) {
+        setImpactoBajaUI(null);
+        return;
+      }
+      setLoadingImpacto(true);
+      try {
+        const detalles: DetalleCuotaImpacto[] = [];
+
+        const { data: cobros } = await (supabase.from('cobros_fraccionados') as any)
+          .select('numero_cuota, monto_cuota, semana, anio, descripcion')
+          .eq('conductor_id', selectedConductor.id)
+          .eq('estado', 'pendiente')
+          .order('numero_cuota', { ascending: true });
+        const cobrosArr = (cobros || []) as Array<{ numero_cuota: number; monto_cuota: number; semana: number; anio: number; descripcion: string | null }>;
+        for (const c of cobrosArr) {
+          detalles.push({
+            tipo: 'cobro',
+            numero_cuota: c.numero_cuota,
+            monto_cuota: Number(c.monto_cuota) || 0,
+            semana: c.semana,
+            anio: c.anio,
+            descripcion: c.descripcion,
+          });
+        }
+        const cobrosCount = cobrosArr.length;
+        const cobrosMonto = cobrosArr.reduce((s, c) => s + (Number(c.monto_cuota) || 0), 0);
+
+        const { data: penalidades } = await (supabase.from('penalidades') as any)
+          .select('id, detalle, observaciones')
+          .eq('conductor_id', selectedConductor.id);
+        const penArr = (penalidades || []) as Array<{ id: string; detalle: string | null; observaciones: string | null }>;
+        const penIds = penArr.map((p) => p.id);
+        const penInfoMap = new Map(penArr.map((p) => [p.id, p.detalle || p.observaciones || null] as const));
+
+        let penalidadesCount = 0;
+        let penalidadesMonto = 0;
+        if (penIds.length > 0) {
+          const { data: cuotasPen } = await (supabase.from('penalidades_cuotas') as any)
+            .select('penalidad_id, numero_cuota, monto_cuota, semana, anio')
+            .eq('estado', 'pendiente')
+            .in('penalidad_id', penIds);
+          const cuotasArr = (cuotasPen || []) as Array<{ penalidad_id: string; numero_cuota: number; monto_cuota: number; semana: number; anio: number }>;
+          penalidadesCount = cuotasArr.length;
+          penalidadesMonto = cuotasArr.reduce((s, c) => s + (Number(c.monto_cuota) || 0), 0);
+          for (const c of cuotasArr) {
+            detalles.push({
+              tipo: 'penalidad',
+              numero_cuota: c.numero_cuota,
+              monto_cuota: Number(c.monto_cuota) || 0,
+              semana: c.semana,
+              anio: c.anio,
+              descripcion: penInfoMap.get(c.penalidad_id) || null,
+            });
+          }
+        }
+
+        if (!cancelado) {
+          setImpactoBajaUI({
+            cobrosCount,
+            cobrosMonto,
+            penalidadesCount,
+            penalidadesMonto,
+            detalles,
+          });
+        }
+      } catch {
+        if (!cancelado) setImpactoBajaUI(null);
+      } finally {
+        if (!cancelado) setLoadingImpacto(false);
+      }
+    }
+
+    calcular();
+    return () => { cancelado = true; };
+  }, [formData.estado_id, showEditModal, selectedConductor, estadosConductor]);
 
   // Helper para obtener inicio y fin de la semana actual + semana anterior (para bajas)
   const getWeekRange = (includeLastWeek = false) => {
@@ -933,6 +1181,38 @@ export function ConductoresModule() {
         return;
       }
 
+      // Mostrar impacto si tiene fraccionamientos pendientes
+      const impacto = await previewImpactoBaja(selectedConductor.id);
+      if (impacto.cobrosCount > 0 || impacto.penalidadesCount > 0) {
+        const fmt = (n: number) =>
+          new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', minimumFractionDigits: 2 }).format(n);
+        const filas: string[] = [];
+        if (impacto.cobrosCount > 0) {
+          filas.push(`<li><strong>${impacto.cobrosCount}</strong> cuota(s) de saldo fraccionado por <strong>${fmt(impacto.cobrosMonto)}</strong> — se reingresarán al saldo pendiente del conductor.</li>`);
+        }
+        if (impacto.penalidadesCount > 0) {
+          filas.push(`<li><strong>${impacto.penalidadesCount}</strong> cuota(s) de multa/penalidad fraccionada por <strong>${fmt(impacto.penalidadesMonto)}</strong> — se cancelan (no afectan el saldo, ya se descontaban en cada facturación).</li>`);
+        }
+        const confirma = await Swal.fire({
+          icon: 'info',
+          title: 'Fraccionamientos pendientes',
+          html: `
+            <div style="text-align:left; font-size: 13px;">
+              <p style="margin-bottom:8px;">Al dar de baja al conductor:</p>
+              <ul style="padding-left:18px; margin:0;">${filas.join('')}</ul>
+              <p style="margin-top:10px;">Las cuotas quedarán marcadas como <strong>"Cancelado por baja"</strong> en el histórico.</p>
+            </div>
+          `,
+          showCancelButton: true,
+          confirmButtonText: 'Continuar con la baja',
+          cancelButtonText: 'Cancelar',
+          confirmButtonColor: '#ff0033',
+          cancelButtonColor: '#6B7280',
+          width: 540,
+        });
+        if (!confirma.isConfirmed) return;
+      }
+
       // Buscar asignaciones afectadas
       setSaving(true);
       const affected = await fetchAffectedAssignments(selectedConductor.id);
@@ -1343,6 +1623,14 @@ export function ConductoresModule() {
           motivoBaja: esBaja ? (formData.motivo_baja || null) : null,
           sedeId: formData.sede_id || null,
         });
+      }
+
+      // Cancelar fraccionamientos pendientes y reingresar saldo si el conductor pasa a BAJA
+      if (esBaja) {
+        await cancelarFraccionamientosPorBaja(
+          selectedConductor!.id,
+          profile?.full_name || 'Sistema'
+        );
       }
     }
 
@@ -2855,6 +3143,9 @@ export function ConductoresModule() {
           sedes={sedes}
           editErrors={editErrors}
           setEditErrors={setEditErrors}
+          impactoBajaUI={impactoBajaUI}
+          loadingImpacto={loadingImpacto}
+          onVerImpactoDetalle={() => setShowImpactoModal(true)}
         />
       )}
       {showDeleteModal && selectedConductor && (
@@ -2902,6 +3193,140 @@ export function ConductoresModule() {
           entityLabel={historialConductor.nombre}
           onClose={() => setHistorialConductor(null)}
         />
+      )}
+
+      {/* Modal Detalle de Impacto al dar de baja */}
+      {showImpactoModal && impactoBajaUI && (
+        <div
+          className="modal-overlay"
+          onClick={() => setShowImpactoModal(false)}
+          style={{
+            position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+            background: 'rgba(0,0,0,0.5)', zIndex: 10000,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            padding: '20px',
+          }}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              background: 'white',
+              borderRadius: '8px',
+              maxWidth: '640px',
+              width: '100%',
+              maxHeight: '85vh',
+              overflowY: 'auto',
+              padding: '20px',
+              boxShadow: '0 10px 25px rgba(0,0,0,0.2)',
+            }}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+              <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 700, color: '#111827' }}>
+                Fraccionamientos pendientes que se cancelarán
+              </h3>
+              <button
+                onClick={() => setShowImpactoModal(false)}
+                style={{ border: 'none', background: 'transparent', fontSize: '20px', cursor: 'pointer', color: '#6B7280' }}
+                type="button"
+              >
+                ×
+              </button>
+            </div>
+
+            <div style={{ fontSize: '13px', color: '#4B5563', marginBottom: '12px' }}>
+              Al confirmar la baja, las siguientes cuotas pendientes se marcarán como
+              <strong> "Cancelado por baja" </strong>
+              y quedarán en el histórico:
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '10px', marginBottom: '14px' }}>
+              <div style={{ padding: '10px', background: '#FEF3C7', border: '1px solid #F59E0B', borderRadius: '6px' }}>
+                <div style={{ fontSize: '11px', color: '#92400E', fontWeight: 600 }}>Saldos fraccionados</div>
+                <div style={{ fontSize: '14px', fontWeight: 700, color: '#78350F', marginTop: '2px' }}>
+                  {impactoBajaUI.cobrosCount} cuota(s)
+                </div>
+                <div style={{ fontSize: '12px', fontWeight: 700, color: '#78350F' }}>
+                  {new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', minimumFractionDigits: 2 }).format(impactoBajaUI.cobrosMonto)}
+                </div>
+              </div>
+              <div style={{ padding: '10px', background: '#E0E7FF', border: '1px solid #6366F1', borderRadius: '6px' }}>
+                <div style={{ fontSize: '11px', color: '#3730A3', fontWeight: 600 }}>Multas/Penalidades</div>
+                <div style={{ fontSize: '14px', fontWeight: 700, color: '#312E81', marginTop: '2px' }}>
+                  {impactoBajaUI.penalidadesCount} cuota(s)
+                </div>
+                <div style={{ fontSize: '12px', fontWeight: 700, color: '#312E81' }}>
+                  {new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', minimumFractionDigits: 2 }).format(impactoBajaUI.penalidadesMonto)}
+                </div>
+              </div>
+              <div style={{ padding: '10px', background: '#FEE2E2', border: '1px solid #DC2626', borderRadius: '6px' }}>
+                <div style={{ fontSize: '11px', color: '#7F1D1D', fontWeight: 600 }}>Total al saldo</div>
+                <div style={{ fontSize: '14px', fontWeight: 700, color: '#7F1D1D', marginTop: '2px' }}>
+                  {impactoBajaUI.cobrosCount + impactoBajaUI.penalidadesCount} cuota(s)
+                </div>
+                <div style={{ fontSize: '12px', fontWeight: 700, color: '#7F1D1D' }}>
+                  {new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', minimumFractionDigits: 2 }).format(impactoBajaUI.cobrosMonto + impactoBajaUI.penalidadesMonto)}
+                </div>
+                <div style={{ fontSize: '11px', color: '#7F1D1D', marginTop: '4px' }}>
+                  Suma a la deuda pendiente.
+                </div>
+              </div>
+            </div>
+
+            {impactoBajaUI.detalles.length > 0 ? (
+              <div style={{ border: '1px solid #E5E7EB', borderRadius: '6px', overflow: 'hidden' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px' }}>
+                  <thead>
+                    <tr style={{ background: '#F9FAFB' }}>
+                      <th style={{ padding: '6px 8px', textAlign: 'left', fontWeight: 600 }}>Tipo</th>
+                      <th style={{ padding: '6px 8px', textAlign: 'left', fontWeight: 600 }}>Cuota</th>
+                      <th style={{ padding: '6px 8px', textAlign: 'left', fontWeight: 600 }}>Semana</th>
+                      <th style={{ padding: '6px 8px', textAlign: 'right', fontWeight: 600 }}>Monto</th>
+                      <th style={{ padding: '6px 8px', textAlign: 'left', fontWeight: 600 }}>Concepto</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {impactoBajaUI.detalles.map((d, idx) => (
+                      <tr key={idx} style={{ borderTop: '1px solid #E5E7EB' }}>
+                        <td style={{ padding: '6px 8px' }}>
+                          <span style={{
+                            fontSize: '10px', fontWeight: 600, padding: '2px 6px', borderRadius: '4px',
+                            background: d.tipo === 'cobro' ? '#FEF3C7' : '#E0E7FF',
+                            color: d.tipo === 'cobro' ? '#92400E' : '#3730A3',
+                          }}>
+                            {d.tipo === 'cobro' ? 'SALDO' : 'MULTA'}
+                          </span>
+                        </td>
+                        <td style={{ padding: '6px 8px' }}>#{d.numero_cuota}</td>
+                        <td style={{ padding: '6px 8px' }}>S{d.semana}/{d.anio}</td>
+                        <td style={{ padding: '6px 8px', textAlign: 'right', fontWeight: 600 }}>
+                          {new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', minimumFractionDigits: 2 }).format(d.monto_cuota)}
+                        </td>
+                        <td style={{ padding: '6px 8px', color: '#6B7280' }}>{d.descripcion || '-'}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <p style={{ fontSize: '13px', color: '#6B7280', textAlign: 'center', padding: '20px' }}>
+                Sin cuotas pendientes.
+              </p>
+            )}
+
+            <div style={{ marginTop: '14px', display: 'flex', justifyContent: 'flex-end' }}>
+              <button
+                type="button"
+                onClick={() => setShowImpactoModal(false)}
+                style={{
+                  padding: '8px 16px', border: '1px solid #D1D5DB', borderRadius: '6px',
+                  background: 'white', cursor: 'pointer', fontSize: '13px', fontWeight: 600,
+                }}
+              >
+                Cerrar
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
@@ -2981,6 +3406,9 @@ function ModalEditar({
   sedes,
   editErrors,
   setEditErrors,
+  impactoBajaUI,
+  loadingImpacto,
+  onVerImpactoDetalle,
 }: any) {
   const [syncingEmail, setSyncingEmail] = useState(false);
 
@@ -3587,6 +4015,60 @@ function ModalEditar({
                   disabled={saving}
                   style={{ borderColor: '#ff0033' }}
                 />
+              </div>
+              <div className="form-group" style={{ display: 'flex', alignItems: 'flex-end' }}>
+                {loadingImpacto ? (
+                  <div style={{
+                    width: '100%',
+                    padding: '10px 12px',
+                    border: '1px dashed #d1d5db',
+                    borderRadius: '6px',
+                    fontSize: '12px',
+                    color: '#6b7280',
+                  }}>
+                    Calculando impacto...
+                  </div>
+                ) : impactoBajaUI && (impactoBajaUI.cobrosCount > 0 || impactoBajaUI.penalidadesCount > 0) ? (
+                  <button
+                    type="button"
+                    onClick={onVerImpactoDetalle}
+                    style={{
+                      width: '100%',
+                      padding: '10px 12px',
+                      background: '#FEF3C7',
+                      border: '1px solid #F59E0B',
+                      borderRadius: '6px',
+                      cursor: 'pointer',
+                      textAlign: 'left',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '8px',
+                    }}
+                    title="Ver detalle de cuotas afectadas"
+                  >
+                    <AlertTriangle size={18} color="#B45309" />
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontWeight: 600, fontSize: '12px', color: '#92400E' }}>
+                        Fraccionamientos pendientes
+                      </div>
+                      <div style={{ fontSize: '11px', color: '#78350F', marginTop: '2px' }}>
+                        {impactoBajaUI.cobrosCount + impactoBajaUI.penalidadesCount} cuota(s) — {new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', minimumFractionDigits: 2 }).format(impactoBajaUI.cobrosMonto + impactoBajaUI.penalidadesMonto)}. Click para ver detalle.
+                      </div>
+                    </div>
+                  </button>
+                ) : impactoBajaUI ? (
+                  <div style={{
+                    width: '100%',
+                    padding: '10px 12px',
+                    background: '#ECFDF5',
+                    border: '1px solid #10B981',
+                    borderRadius: '6px',
+                    fontSize: '12px',
+                    color: '#065F46',
+                  }}>
+                    Sin fraccionamientos pendientes.
+                  </div>
+                ) : null}
               </div>
             </div>
             <div className="form-row">
