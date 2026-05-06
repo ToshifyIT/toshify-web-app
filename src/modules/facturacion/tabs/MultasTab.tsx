@@ -46,6 +46,97 @@ interface Vehiculo {
   patente: string
 }
 
+/**
+ * Mapea las observaciones técnicas que escribe el bot de carga automática a
+ * mensajes claros para el usuario operativo.
+ *
+ * Las observaciones pueden venir concatenadas con " | " (varias razones
+ * encadenadas). Procesamos cada parte por separado y volvemos a unir.
+ *
+ * Si el texto no matchea ninguna regla conocida, se devuelve tal cual.
+ */
+function formatObservacion(texto: string | null | undefined): string {
+  if (!texto) return ''
+  const partes = texto.split('|').map(p => p.trim()).filter(Boolean)
+  const traducidas = partes.map(traducirObs)
+  // Deduplicar (a veces la misma razón aparece varias veces)
+  const seen = new Set<string>()
+  const unicas = traducidas.filter(t => {
+    if (seen.has(t)) return false
+    seen.add(t)
+    return true
+  })
+  return unicas.join(' • ')
+}
+
+function traducirObs(parte: string): string {
+  const t = parte.trim()
+  const tLow = t.toLowerCase()
+
+  // Casos exactos / con prefijo conocido
+  if (tLow.startsWith('sin trip activo')) {
+    return 'Vehículo no encontrado dentro de USS, revisar si aún es parte de la flota y completar manualmente qué conductor lo tenía asignado'
+  }
+  if (tLow.includes('vehiculo no encontrado dentro de uss') || tLow.includes('vehículo no encontrado dentro de uss')) {
+    return 'Vehículo no encontrado dentro de USS, revisar si aún es parte de la flota y completar manualmente qué conductor lo tenía asignado'
+  }
+  if (tLow.startsWith('sin coincidencia exacta')) {
+    // Legacy: candidato fuera del límite de 60 min — equivalente a "sin trip" para el usuario
+    return 'Vehículo no encontrado dentro de USS, revisar si aún es parte de la flota y completar manualmente qué conductor lo tenía asignado'
+  }
+  if (tLow.includes('vehiculo no encontrado en flota') || tLow.includes('vehículo no encontrado en flota')) {
+    return 'La patente no figura en la flota actual de Toshify. Revisar manualmente'
+  }
+  // Vehículo en estado X excluido — preservar el estado
+  const matchEstado = t.match(/Vehiculo en estado ([A-Z_]+),/i)
+  if (matchEstado) {
+    const estado = matchEstado[1].toUpperCase()
+    const labelEstado: Record<string, string> = {
+      ROBO: 'denunciado como robado',
+      DEVUELTO_PROVEEDOR: 'devuelto al proveedor',
+      JUBILADO: 'jubilado',
+      RETENIDO_COMISARIA: 'retenido en comisaría',
+      DESTRUCCION_TOTAL: 'dado de baja por destrucción total',
+    }
+    const desc = labelEstado[estado] || `en estado ${estado}`
+    return `El vehículo estaba ${desc} en esa fecha. La multa no aplica al conductor`
+  }
+  if (tLow.startsWith('turno encontrado sin conductor')) {
+    return 'Hay un turno coincidente con la infracción pero sin conductor asignado. Asignar manualmente'
+  }
+  // Conductor aproximado por turno cercano (diferencia: X min)
+  const matchAprox = t.match(/conductor aproximado.*diferencia:?\s*(\d+)\s*min/i)
+  if (matchAprox) {
+    const min = matchAprox[1]
+    return `Conductor identificado por turno cercano (diferencia de ${min} min). Verificar antes de cobrar`
+  }
+  if (tLow.startsWith('asignado desde geotab')) {
+    return 'Conductor identificado por GPS Geotab (vehículo fuera de USS)'
+  }
+  if (tLow.startsWith('asignado por turno habitual')) {
+    return 'Conductor identificado por su turno habitual (sin registro GPS exacto)'
+  }
+  if (tLow.includes('se debe resolver con un controlador')) {
+    return 'Esta multa requiere ser resuelta presencialmente con un controlador en la UACF'
+  }
+  if (tLow.startsWith('error al descargar foto')) {
+    return 'No se pudo descargar la foto de la infracción'
+  }
+  // Legacy
+  if (tLow.startsWith('consultar nombre del conductor con logística') || tLow.startsWith('consultar nombre del conductor con logistica')) {
+    return 'Consultar nombre del conductor con logística'
+  }
+  if (tLow.startsWith('no se encontro el ibutton') || tLow.startsWith('no se encontró el ibutton')) {
+    return 'No se encontró el iButton — tener en cuenta al verificar'
+  }
+  if (tLow.startsWith('no se encontro el rango de fecha') || tLow.startsWith('no se encontró el rango de fecha')) {
+    return 'No se encontró el rango de fechas. Revisar con logística para identificar conductor e iButton'
+  }
+
+  // No matchea: devolver tal cual
+  return t
+}
+
 export function MultasTab() {
   const { sedeActualId, aplicarFiltroSede } = useSede()
   const [multas, setMultas] = useState<Multa[]>([])
@@ -431,7 +522,7 @@ export function MultasTab() {
             <tr style="border-top: 1px solid #E5E7EB;">
               <td colspan="2" style="padding: 8px 0;">
                 <strong style="color: #6B7280;">Observaciones:</strong><br>
-                <span style="font-size: 13px;">${multa.observaciones || multa.detalle || ''}</span>
+                <span style="font-size: 13px;">${formatObservacion(multa.observaciones || multa.detalle || '')}</span>
               </td>
             </tr>
             ` : ''}

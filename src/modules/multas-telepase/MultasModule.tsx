@@ -6,7 +6,7 @@ import { LoadingOverlay } from '../../components/ui/LoadingOverlay'
 import { ExcelColumnFilter } from '../../components/ui/DataTable/ExcelColumnFilter'
 import { ExcelDateRangeFilter } from '../../components/ui/DataTable/ExcelDateRangeFilter'
 import { DataTable } from '../../components/ui/DataTable'
-import { Download, AlertTriangle, Eye, Edit2, Trash2, Plus, X, Car, Users, DollarSign, CheckCircle, AlertCircle, FileText, Receipt } from 'lucide-react'
+import { Download, AlertTriangle, Eye, Edit2, Trash2, Plus, X, Car, Users, DollarSign, CheckCircle, AlertCircle, FileText, Receipt, SendHorizonal } from 'lucide-react'
 import { CrearCobroMultaModal } from './components/CrearCobroMultaModal'
 import { type ColumnDef } from '@tanstack/react-table'
 import * as XLSX from 'xlsx'
@@ -99,6 +99,7 @@ export default function MultasModule() {
   const [loading, setLoading] = useState(true)
   const [multas, setMultas] = useState<Multa[]>([])
   const [vehiculos, setVehiculos] = useState<Vehiculo[]>([])
+  const [multasEnviadas, setMultasEnviadas] = useState<Set<number>>(new Set())
   const [selectedMulta, setSelectedMulta] = useState<Multa | null>(null)
   const [showModal, setShowModal] = useState(false)
   const [showEditModal, setShowEditModal] = useState(false)
@@ -171,14 +172,25 @@ export default function MultasModule() {
   async function cargarDatos() {
     setLoading(true)
     try {
-      const [multasRes, vehiculosRes] = await Promise.all([
+      const [multasRes, vehiculosRes, incidenciasRes] = await Promise.all([
         aplicarFiltroSede(supabase.from('multas_historico').select('*').is('deleted_at', null)).order('created_at', { ascending: false }).limit(5000),
-        aplicarFiltroSede(supabase.from('vehiculos').select('id, patente').is('deleted_at', null))
+        aplicarFiltroSede(supabase.from('vehiculos').select('id, patente').is('deleted_at', null)),
+        // IDs de multas que ya tienen incidencia (=ya fueron enviadas a facturación)
+        (supabase.from('incidencias' as any) as any)
+          .select('multa_id')
+          .not('multa_id', 'is', null)
       ])
 
       if (multasRes.error) throw multasRes.error
       setMultas((multasRes.data || []) as Multa[])
       setVehiculos((vehiculosRes.data || []) as Vehiculo[])
+
+      const enviadas = new Set<number>(
+        ((incidenciasRes.data || []) as Array<{ multa_id: number | null }>)
+          .map(r => r.multa_id)
+          .filter((v): v is number => v != null)
+      )
+      setMultasEnviadas(enviadas)
     } catch (_error) {
       Swal.fire('Error', 'No se pudieron cargar las multas', 'error')
     } finally {
@@ -484,6 +496,16 @@ export default function MultasModule() {
 
   // Crear cobro directo (sin modal). Si falta info auto-detectable cae al modal.
   async function handleCrearCobroDirecto(multa: Multa) {
+    if (multasEnviadas.has(multa.id)) {
+      Swal.fire({
+        icon: 'info',
+        title: 'Ya enviada',
+        text: 'Esta multa ya fue enviada a facturación.',
+        timer: 1800,
+        showConfirmButton: false,
+      })
+      return
+    }
     const result = await crearCobroDesdeMulta(multa, {
       userId: user?.id,
       userName: profile?.full_name || 'Sistema',
@@ -491,13 +513,14 @@ export default function MultasModule() {
       areaResponsable: 'ADMINISTRACION'
     })
     if (result.ok) {
-      Swal.fire({
-        icon: 'success',
-        title: 'Cobro generado',
-        text: 'La incidencia fue creada y enviada a "Por Aplicar".',
-        timer: 2200,
-        showConfirmButton: false
+      // Actualizar set de enviadas para deshabilitar el botón
+      setMultasEnviadas(prev => {
+        const next = new Set(prev)
+        next.add(multa.id)
+        return next
       })
+      // Toast estandar del sistema (utils/toast)
+      showSuccess('Enviado a facturación', 'La incidencia fue creada y enviada a "Por Aplicar".')
       return
     }
     if ('needsManualInput' in result) {
@@ -596,7 +619,7 @@ export default function MultasModule() {
       size: 95,
       header: () => (
         <ExcelDateRangeFilter
-          label="F. Carga"
+          label="Fec. Carga"
           startDate={fechaCargaDesde}
           endDate={fechaCargaHasta}
           onRangeChange={(start, end) => {
@@ -623,7 +646,7 @@ export default function MultasModule() {
       size: 45,
       header: () => (
         <ExcelColumnFilter
-          label="Sem."
+          label="Semana"
           options={semanasUnicas}
           selectedValues={semanaFilter}
           onSelectionChange={setSemanaFilter}
@@ -642,7 +665,7 @@ export default function MultasModule() {
       size: 95,
       header: () => (
         <ExcelDateRangeFilter
-          label="F. Infracción"
+          label="Fec. Infracción"
           startDate={fechaInfraccionDesde}
           endDate={fechaInfraccionHasta}
           onRangeChange={(start, end) => {
@@ -792,7 +815,7 @@ export default function MultasModule() {
       size: 50,
       header: () => (
         <ExcelColumnFilter
-          label="iBtn"
+          label="iButton"
           options={ibuttonsUnicos}
           selectedValues={ibuttonFilter}
           onSelectionChange={setIbuttonFilter}
@@ -808,7 +831,7 @@ export default function MultasModule() {
       size: 40,
       header: () => (
         <ExcelColumnFilter
-          label="Obs."
+          label="Obs"
           options={obsOptions}
           selectedValues={obsFilter}
           onSelectionChange={setObsFilter}
@@ -833,7 +856,7 @@ export default function MultasModule() {
     {
       id: 'acciones',
       size: 115,
-      header: 'Acc.',
+      header: 'Acciones',
       cell: ({ row }) => (
         <div className="dt-actions">
           <button
@@ -850,14 +873,31 @@ export default function MultasModule() {
           >
             <Eye size={14} />
           </button>
-          <button
-            className="dt-btn-action"
-            data-tooltip="Crear cobro"
-            style={{ color: '#10b981' }}
-            onClick={() => handleCrearCobroDirecto(row.original)}
-          >
-            <Receipt size={14} />
-          </button>
+          {(() => {
+            const yaEnviada = multasEnviadas.has(row.original.id)
+            const sinConductor = !row.original.conductor_responsable || row.original.conductor_responsable.trim() === ''
+            const deshabilitado = yaEnviada || sinConductor
+            const tooltip = yaEnviada
+              ? 'Ya enviada a facturación'
+              : sinConductor
+                ? 'Sin conductor identificado — no se puede enviar'
+                : 'Enviar a facturación'
+            return (
+              <button
+                className="dt-btn-action"
+                data-tooltip={tooltip}
+                style={{
+                  color: deshabilitado ? '#9ca3af' : '#10b981',
+                  cursor: deshabilitado ? 'not-allowed' : 'pointer',
+                  opacity: deshabilitado ? 0.5 : 1,
+                }}
+                disabled={deshabilitado}
+                onClick={() => { if (!deshabilitado) handleCrearCobroDirecto(row.original) }}
+              >
+                <SendHorizonal size={14} />
+              </button>
+            )
+          })()}
           <button
             className="dt-btn-action dt-btn-delete"
             data-tooltip="Eliminar"
@@ -868,7 +908,7 @@ export default function MultasModule() {
         </div>
       )
     }
-  ], [patentesUnicas, patenteFilter, conductoresUnicos, conductorFilter, lugaresUnicos, lugarFilter, infraccionesUnicas, infraccionFilter, detallesUnicos, detalleFilter, semanasUnicas, semanaFilter, ibuttonsUnicos, ibuttonFilter, fechaInfraccionDesde, fechaInfraccionHasta, openFilterId, obsFilter, importesUnicos, importeFilter, fechaCargaDesde, fechaCargaHasta])
+  ], [patentesUnicas, patenteFilter, conductoresUnicos, conductorFilter, lugaresUnicos, lugarFilter, infraccionesUnicas, infraccionFilter, detallesUnicos, detalleFilter, semanasUnicas, semanaFilter, ibuttonsUnicos, ibuttonFilter, fechaInfraccionDesde, fechaInfraccionHasta, openFilterId, obsFilter, importesUnicos, importeFilter, fechaCargaDesde, fechaCargaHasta, multasEnviadas])
 
   // Exportar a Excel
   function handleExportar() {
