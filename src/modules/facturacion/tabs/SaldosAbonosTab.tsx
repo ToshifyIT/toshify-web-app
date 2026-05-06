@@ -768,6 +768,14 @@ export function SaldosAbonosTab() {
         let semActual = formValues.semanaInicio
         let anioActual = formValues.anioInicio
 
+        // Obtener sede del conductor para que las cuotas queden correctamente asignadas
+        // (evita depender del default de la columna o del trigger)
+        const { data: conductorSede } = await (supabase.from('conductores') as any)
+          .select('sede_id')
+          .eq('id', formValues.conductorId)
+          .maybeSingle()
+        const sedeIdConductor = conductorSede?.sede_id || sedeActualId || null
+
         for (let i = 1; i <= formValues.cuotas; i++) {
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           await (supabase.from('cobros_fraccionados') as any).insert({
@@ -779,7 +787,8 @@ export function SaldosAbonosTab() {
             total_cuotas: formValues.cuotas,
             semana: semActual,
             anio: anioActual,
-            aplicado: false
+            aplicado: false,
+            sede_id: sedeIdConductor,
           })
 
           // Avanzar a siguiente semana
@@ -908,6 +917,13 @@ export function SaldosAbonosTab() {
 
       const montoCuota = Math.ceil(montoDeuda / formValues.cuotas)
 
+      // Obtener sede del conductor para que las cuotas queden correctamente asignadas
+      const { data: conductorSede } = await (supabase.from('conductores') as any)
+        .select('sede_id')
+        .eq('id', saldo.conductor_id)
+        .maybeSingle()
+      const sedeIdConductor = conductorSede?.sede_id || sedeActualId || null
+
       let semIter = formValues.semana
       let anioIter = formValues.anio
       for (let i = 1; i <= formValues.cuotas; i++) {
@@ -921,7 +937,8 @@ export function SaldosAbonosTab() {
           total_cuotas: formValues.cuotas,
           semana: semIter,
           anio: anioIter,
-          aplicado: false
+          aplicado: false,
+          sede_id: sedeIdConductor,
         })
         if (error) throw error
         semIter++
