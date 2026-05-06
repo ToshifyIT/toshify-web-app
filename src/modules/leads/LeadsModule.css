@@ -205,6 +205,11 @@
   color: var(--badge-yellow-text, #92400e);
 }
 
+.lead-estado-acepta-oferta {
+  background: var(--badge-teal-bg, #ccfbf1);
+  color: var(--badge-teal-text, #134e4a);
+}
+
 .lead-estado-apto---hireflix {
   background: var(--badge-green-bg, #dcfce7);
   color: var(--badge-green-text, #166534);
@@ -315,6 +320,7 @@
 }
 
 .lead-estado-dot-inicio-conversacion { background: #f59e0b; }
+.lead-estado-dot-acepta-oferta { background: #14b8a6; }
 .lead-estado-dot-apto---hireflix { background: #16a34a; }
 .lead-estado-dot-no-apto---hireflix { background: #dc2626; }
 .lead-estado-dot-ayuda---hireflix { background: #d97706; }
@@ -377,11 +383,14 @@
   align-items: flex-start;
   gap: 16px;
   position: sticky;
-  top: 0;
+  top: -20px;
   z-index: 10;
-  background: var(--bg-primary, #fff);
+  background: var(--modal-bg, #fff);
+  padding-top: 20px;
   padding-bottom: 12px;
-  margin-bottom: 4px;
+  margin: -20px -20px 4px -20px;
+  padding-left: 20px;
+  padding-right: 20px;
   border-bottom: 1px solid var(--border-color, #e5e7eb);
 }
 
@@ -759,4 +768,6 @@
 }
 .hireflix-btn-wrapper:hover .hireflix-tooltip {
   display: block;
-}
+}
+
+

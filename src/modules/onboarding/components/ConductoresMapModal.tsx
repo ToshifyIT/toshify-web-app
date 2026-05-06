@@ -38,6 +38,7 @@ export default function ConductoresMapModal({ conductores, onConfirmPair, onClos
     return () => clearTimeout(t)
   }, [isLoaded])
   const [searchMap, setSearchMap] = useState('')
+  const [filtroAsignacion, setFiltroAsignacion] = useState<'todos' | 'con' | 'sin'>('todos')
   const [selectedDiurno, setSelectedDiurno] = useState<Conductor | null>(null)
   const [selectedNocturno, setSelectedNocturno] = useState<Conductor | null>(null)
   const [routePath, setRoutePath] = useState<google.maps.LatLngLiteral[]>([])
@@ -94,15 +95,26 @@ export default function ConductoresMapModal({ conductores, onConfirmPair, onClos
   }, [conductoresConUbicacion])
 
   const filteredList = useMemo(() => {
-    if (!searchMap) return conductoresConUbicacion
-    const term = searchMap.toLowerCase()
-    return conductoresConUbicacion.filter(c =>
-      `${c.nombres} ${c.apellidos}`.toLowerCase().includes(term)
-      || `${c.apellidos} ${c.nombres}`.toLowerCase().includes(term)
-      || (c.numero_dni || '').includes(term)
-      || (c.zona || '').toLowerCase().includes(term)
-    )
-  }, [conductoresConUbicacion, searchMap])
+    let lista = conductoresConUbicacion
+
+    if (filtroAsignacion === 'con') {
+      lista = lista.filter(c => c.tieneAsignacionActiva || c.tieneAsignacionProgramada)
+    } else if (filtroAsignacion === 'sin') {
+      lista = lista.filter(c => !c.tieneAsignacionActiva && !c.tieneAsignacionProgramada)
+    }
+
+    if (searchMap) {
+      const term = searchMap.toLowerCase()
+      lista = lista.filter(c =>
+        `${c.nombres} ${c.apellidos}`.toLowerCase().includes(term)
+        || `${c.apellidos} ${c.nombres}`.toLowerCase().includes(term)
+        || (c.numero_dni || '').includes(term)
+        || (c.zona || '').toLowerCase().includes(term)
+      )
+    }
+
+    return lista
+  }, [conductoresConUbicacion, searchMap, filtroAsignacion])
 
   const handleListClick = (c: Conductor) => {
     setActiveMarker(c.id)
@@ -199,6 +211,20 @@ export default function ConductoresMapModal({ conductores, onConfirmPair, onClos
                   background: 'var(--bg-secondary)', color: 'var(--text-primary)',
                 }}
               />
+              <select
+                value={filtroAsignacion}
+                onChange={e => setFiltroAsignacion(e.target.value as 'todos' | 'con' | 'sin')}
+                style={{
+                  width: '100%', padding: '6px 8px', border: '1px solid var(--border-primary)',
+                  borderRadius: 8, fontSize: 11, outline: 'none', boxSizing: 'border-box',
+                  background: 'var(--bg-secondary)', color: 'var(--text-primary)', marginTop: 6,
+                  cursor: 'pointer',
+                }}
+              >
+                <option value="todos">Todos</option>
+                <option value="con">Con asignacion</option>
+                <option value="sin">Sin asignacion</option>
+              </select>
               <div style={{ fontSize: 10, color: 'var(--text-tertiary)', marginTop: 4 }}>
                 {filteredList.length} resultados
               </div>
@@ -327,7 +353,7 @@ export default function ConductoresMapModal({ conductores, onConfirmPair, onClos
                   zoomControlOptions: { position: google.maps.ControlPosition.RIGHT_TOP },
                 }}
               >
-                {conductoresConUbicacion.map(c => {
+                {filteredList.map(c => {
                   if (!c.direccion_lat || !c.direccion_lng) return null
                   const role = getSelectionRole(c.id)
                   const color = role === 'diurno' ? '#F59E0B' : role === 'nocturno' ? '#3B82F6' : getMarkerColor(c)

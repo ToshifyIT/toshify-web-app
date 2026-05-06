@@ -1548,7 +1548,7 @@ app.post('/api/backfill-contract-folders', async (req, res) => {
 
     // 1. Obtener el ID del estado "activo"
     const estadosRes = await fetch(
-      `${supabaseUrl}/rest/v1/conductores_estados?codigo=eq.activo&select=id`,
+      `${supabaseUrl}/rest/v1/conductores_estados?codigo=eq.ACTIVO&select=id`,
       { headers: { 'apikey': serviceKey, 'Authorization': `Bearer ${serviceKey}` } }
     )
     const estados = await estadosRes.json()

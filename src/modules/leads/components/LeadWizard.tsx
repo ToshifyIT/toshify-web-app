@@ -627,21 +627,11 @@ export function LeadWizard({ formData, setFormData, onSave, onCancel, saving = f
             {/* Campo Proceso oculto */}
             <div className="lead-wizard-form-group">
               <div className="lead-wizard-field">
-                <label>Entrevista IA</label>
-                <select value={formData.entrevista_ia || ''} onChange={e => updateField('entrevista_ia', e.target.value)}>
-                  <option value="">Seleccionar</option>
-                  <option value="Apto">Apto</option>
-                  <option value="No Apto">No Apto</option>
-                  <option value="Pendiente">Pendiente</option>
-                </select>
-              </div>
-            </div>
-            <div className="lead-wizard-form-group">
-              <div className="lead-wizard-field">
                 <label>Estado de Lead</label>
                 <select value={formData.estado_de_lead || ''} onChange={e => updateField('estado_de_lead', e.target.value)}>
                   <option value="">Seleccionar</option>
                   <option value="Inicio conversación">Inicio conversación</option>
+                  <option value="Acepta oferta">Acepta oferta</option>
                   <option value="Apto - Hireflix">Apto - Hireflix</option>
                   <option value="No Apto - Hireflix">No Apto - Hireflix</option>
                   <option value="Ayuda - Hireflix">Ayuda - Hireflix</option>
@@ -669,20 +659,21 @@ export function LeadWizard({ formData, setFormData, onSave, onCancel, saving = f
             </div>
             <div className="lead-wizard-form-group">
               <div className="lead-wizard-field">
-                <label>Agente Asignado</label>
-                <input
-                  type="text"
-                  value={formData.agente_asignado || ''}
-                  onChange={e => updateField('agente_asignado', e.target.value)}
-                />
-              </div>
-              <div className="lead-wizard-field">
                 <label>Guia</label>
                 <input
                   type="text"
                   value={formData.entrevistador_asignado || ''}
                   onChange={e => updateField('entrevistador_asignado', e.target.value)}
                 />
+              </div>
+              <div className="lead-wizard-field">
+                <label>Entrevista IA</label>
+                <select value={formData.entrevista_ia || ''} onChange={e => updateField('entrevista_ia', e.target.value)}>
+                  <option value="">Seleccionar</option>
+                  <option value="Apto">Apto</option>
+                  <option value="No Apto">No Apto</option>
+                  <option value="Pendiente">Pendiente</option>
+                </select>
               </div>
             </div>
             <div className="lead-wizard-form-group">
