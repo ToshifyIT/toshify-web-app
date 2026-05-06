@@ -575,19 +575,9 @@ export function VisitasFormModal({
       if (!tieneAlMenosUno) {
         e.nombre_visitante = 'Ingrese al menos un visitante';
       }
-      const algunoSinDni = visitantes.some((v) => v.nombre.trim() && !/^\d{6,}$/.test((v.dni || '').trim()));
-      if (algunoSinDni) {
-        e.dni_visitante = 'DNI obligatorio (solo numeros, min 6 digitos) en cada visitante';
-      }
     } else {
       if (!formData.nombre_visitante.trim()) {
         e.nombre_visitante = 'Ingrese el nombre del visitante';
-      }
-      const dni = (formData.dni_visitante || '').trim();
-      if (!dni) {
-        e.dni_visitante = 'DNI obligatorio';
-      } else if (!/^\d{6,}$/.test(dni)) {
-        e.dni_visitante = 'DNI debe tener solo numeros (minimo 6 digitos)';
       }
     }
 
@@ -931,16 +921,13 @@ export function VisitasFormModal({
                 {errors.nombre_visitante && <span className="error-message">{errors.nombre_visitante}</span>}
               </div>
               <div className="form-group vf-visitante-dni">
-                <label className="vf-label-sm">DNI <span className="required">*</span></label>
+                <label className="vf-label-sm">DNI</label>
                 <input
                   type="text"
                   value={formData.dni_visitante}
-                  onChange={(e) => handleChange('dni_visitante', e.target.value.replace(/\D/g, ''))}
+                  onChange={(e) => handleChange('dni_visitante', e.target.value)}
                   placeholder="Documento"
-                  inputMode="numeric"
-                  className={errors.dni_visitante ? 'input-error' : ''}
                 />
-                {errors.dni_visitante && <span className="error-message">{errors.dni_visitante}</span>}
               </div>
               {categoriaSeleccionada?.requiere_patente && (
                 <div className="form-group vf-visitante-patente">
