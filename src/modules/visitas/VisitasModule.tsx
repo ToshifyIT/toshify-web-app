@@ -284,27 +284,13 @@ export function VisitasModule() {
   async function handleMarcarPresente(visita?: VisitaCompleta) {
     const target = visita || selectedVisita;
     if (!target) return;
-    // Validar ventana de tolerancia = fecha_hora + duracion_minutos
-    const ahora = new Date();
-    const finVentana = new Date(
-      new Date(target.fecha_hora).getTime() + target.duracion_minutos * 60_000
-    );
-    if (ahora >= finVentana) {
-      Swal.fire('Ventana cerrada', 'La ventana de arribo ya terminó (cita + duración). Marcá la cita como "No asistió" si corresponde.', 'warning');
-      return;
-    }
-
-    // Detectar si llega con atraso
-    const fechaCita = new Date(target.fecha_hora);
-    const minutosAtraso = Math.max(0, Math.floor((ahora.getTime() - fechaCita.getTime()) / 60000));
-    const mensajeExtra = minutosAtraso > 0 ? ` (llegó ${minutosAtraso} min tarde)` : '';
 
     const result = await Swal.fire({
-      title: 'Confirmar arribo',
-      text: `¿Confirmás que ${target.nombre_visitante} llegó?${mensajeExtra}`,
+      title: 'Completar cita',
+      text: `¿Confirmás que la cita de ${target.nombre_visitante} fue completada?`,
       icon: 'question',
       showCancelButton: true,
-      confirmButtonText: 'Sí, llegó',
+      confirmButtonText: 'Sí, completada',
       cancelButtonText: 'Cancelar',
       confirmButtonColor: '#10b981',
     });
@@ -313,11 +299,11 @@ export function VisitasModule() {
     try {
       const nombreUsuario = profile?.full_name || 'Sistema';
       await marcarArriboVisita(target.id, nombreUsuario);
-      showSuccess('Arribo confirmado');
+      showSuccess('Cita completada');
       setShowDetalleModal(false);
       await cargarVisitas();
     } catch {
-      Swal.fire('Error', 'No se pudo confirmar el arribo', 'error');
+      Swal.fire('Error', 'No se pudo completar la cita', 'error');
     }
   }
 
@@ -476,7 +462,8 @@ export function VisitasModule() {
       },
     },
     {
-      accessorKey: 'estado',
+      id: 'estado',
+      accessorFn: (row) => VISITA_ESTADOS[row.estado as VisitaEstado]?.label ?? row.estado,
       header: 'Estado',
       cell: ({ getValue, row }) => {
         if (isMasked(row.original)) {
@@ -486,11 +473,12 @@ export function VisitasModule() {
             </span>
           );
         }
-        const estado = getValue() as VisitaEstado;
+        const label = getValue() as string;
+        const estado = row.original.estado as VisitaEstado;
         const info = VISITA_ESTADOS[estado];
         return (
           <span className="visita-estado-badge" style={{ backgroundColor: info?.color ?? '#6b7280' }}>
-            {info?.label ?? estado}
+            {label}
           </span>
         );
       },

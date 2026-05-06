@@ -153,7 +153,7 @@ export function VisitasCalendario({
     return `${v.nombre_visitante}\n${v.categoria_nombre}${v.motivo_nombre ? ' - ' + v.motivo_nombre : ''}\nAnfitrión: ${v.atendedor_nombre}\nEstado: ${estadoInfo.label}\nDuración: ${v.duracion_minutos} min`;
   }, []);
 
-  // Horario visible del calendario (8am - 20pm)
+  // Horario visible del calendario (7am - 23pm)
   const minTime = useMemo(() => {
     const d = new Date();
     d.setHours(7, 0, 0, 0);
@@ -162,7 +162,7 @@ export function VisitasCalendario({
 
   const maxTime = useMemo(() => {
     const d = new Date();
-    d.setHours(20, 0, 0, 0);
+    d.setHours(23, 0, 0, 0);
     return d;
   }, []);
 
@@ -300,46 +300,65 @@ export function VisitasCalendario({
   }, [hoveredEvent, anchorRect]);
   const tooltipTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const handleEventMouseEnter = useCallback((event: VisitaCalendarEvent, e: React.MouseEvent) => {
-    // deno-lint-ignore no-explicit-any
-    const v = event.visita as any;
-    if (v._synthetic || v._masked) return;
-    if (tooltipTimeout.current) clearTimeout(tooltipTimeout.current);
-    // Usar el elemento visual real del evento (.rbc-event) en lugar del wrapper,
-    // porque el wrapper con height: 100% puede abarcar toda la celda del día
-    const wrapper = e.currentTarget as HTMLElement;
-    const realEvent = wrapper.querySelector('.rbc-event') as HTMLElement | null;
-    const rect = (realEvent || wrapper).getBoundingClientRect();
-    setAnchorRect(rect);
-    // Posición inicial fuera de pantalla hasta que useLayoutEffect clampee con el tamaño real
-    setTooltipPos({ x: -9999, y: -9999 });
-    setHoveredEvent(event);
-  }, []);
+  // Ref al contenedor del calendario para event delegation del hover
+  const calendarWrapperRef = useRef<HTMLDivElement>(null);
 
-  const handleEventMouseLeave = useCallback(() => {
-    tooltipTimeout.current = setTimeout(() => {
-      setHoveredEvent(null);
-      setAnchorRect(null);
-    }, 150);
-  }, []);
+  // Event delegation: detectar hover sobre .rbc-event sin usar eventWrapper custom
+  useEffect(() => {
+    const wrapper = calendarWrapperRef.current;
+    if (!wrapper) return;
 
-  // Custom event wrapper que captura hover
-  const EventWrapperComponent = useMemo(() => {
-    return function EventWrapper({ event, children }: { event: VisitaCalendarEvent; children: React.ReactNode }) {
-      return (
-        <div
-          onMouseEnter={(e) => handleEventMouseEnter(event, e)}
-          onMouseLeave={handleEventMouseLeave}
-          style={{ height: '100%' }}
-        >
-          {children}
-        </div>
-      );
+    const handleMouseOver = (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
+      const eventEl = target.closest('.rbc-event') as HTMLElement | null;
+      if (!eventEl) return;
+
+      // Buscar el evento correspondiente por título
+      const titleEl = eventEl.querySelector('.rbc-event-content');
+      const title = titleEl?.textContent?.trim() || '';
+      if (!title) return;
+
+      // Buscar el evento en processedEvents
+      const found = processedEvents.find(ev => {
+        const evTitle = ev.title || ev.visita.nombre_visitante;
+        return evTitle === title || title.includes(evTitle.substring(0, 15));
+      });
+      if (!found) return;
+
+      // deno-lint-ignore no-explicit-any
+      const v = found.visita as any;
+      if (v._synthetic || v._masked) return;
+
+      if (tooltipTimeout.current) clearTimeout(tooltipTimeout.current);
+      const rect = eventEl.getBoundingClientRect();
+      setAnchorRect(rect);
+      setTooltipPos({ x: -9999, y: -9999 });
+      setHoveredEvent(found);
     };
-  }, [handleEventMouseEnter, handleEventMouseLeave]);
+
+    const handleMouseOut = (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
+      const relatedTarget = e.relatedTarget as HTMLElement | null;
+      const eventEl = target.closest('.rbc-event');
+      // Solo cerrar si salimos del .rbc-event y no entramos a otro .rbc-event ni al tooltip
+      if (eventEl && (!relatedTarget || (!relatedTarget.closest('.rbc-event') && !relatedTarget.closest('.visita-hover-tooltip')))) {
+        tooltipTimeout.current = setTimeout(() => {
+          setHoveredEvent(null);
+          setAnchorRect(null);
+        }, 150);
+      }
+    };
+
+    wrapper.addEventListener('mouseover', handleMouseOver);
+    wrapper.addEventListener('mouseout', handleMouseOut);
+    return () => {
+      wrapper.removeEventListener('mouseover', handleMouseOver);
+      wrapper.removeEventListener('mouseout', handleMouseOut);
+    };
+  }, [processedEvents]);
 
   return (
-    <div className="visitas-calendario-wrapper">
+    <div className="visitas-calendario-wrapper" ref={calendarWrapperRef}>
       <div className="visitas-timezone-badge">
         <Clock size={14} />
         <span>Argentina (GMT-3)</span>
@@ -363,10 +382,7 @@ export function VisitasCalendario({
         drilldownView={null}
         eventPropGetter={enhancedEventStyleGetter}
         tooltipAccessor={noTooltip}
-        components={{
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          eventWrapper: EventWrapperComponent as any,
-        }}
+        components={{}}
         step={60}
         timeslots={1}
         min={minTime}

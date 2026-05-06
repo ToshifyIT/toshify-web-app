@@ -567,27 +567,52 @@ export function VisitasFormModal({
 
   function validate(): boolean {
     const e: Partial<Record<keyof VisitaFormData, string>> = {};
-    if (!formData.categoria_id) e.categoria_id = 'Seleccione una categoría';
-    if (!formData.atendedor_id) e.atendedor_id = 'Seleccione un anfitrión';
+    const faltantes: string[] = [];
+
+    if (!formData.categoria_id) { e.categoria_id = 'Seleccione una categoría'; faltantes.push('Categoría'); }
+    if (!formData.atendedor_id) { e.atendedor_id = 'Seleccione un anfitrión'; faltantes.push('Anfitrión'); }
 
     if (esInduccion) {
       const tieneAlMenosUno = visitantes.some((v) => v.nombre.trim());
       if (!tieneAlMenosUno) {
         e.nombre_visitante = 'Ingrese al menos un visitante';
+        faltantes.push('Visitante (nombre)');
+      }
+      const sinDni = visitantes.filter((v) => v.nombre.trim() && !v.dni.trim());
+      if (sinDni.length > 0) {
+        e.dni_visitante = 'Todos los visitantes deben tener DNI';
+        faltantes.push('DNI de visitante(s)');
       }
     } else {
       if (!formData.nombre_visitante.trim()) {
         e.nombre_visitante = 'Ingrese el nombre del visitante';
+        faltantes.push('Nombre del visitante');
+      }
+      if (!formData.dni_visitante.trim()) {
+        e.dni_visitante = 'Ingrese el DNI del visitante';
+        faltantes.push('DNI del visitante');
       }
     }
 
-    if (!formData.fecha) e.fecha = 'Seleccione la fecha';
-    if (!formData.hora) e.hora = 'Seleccione la hora';
-    if (formData.duracion_minutos < 15) e.duracion_minutos = 'Mínimo 15 minutos';
+    if (!formData.fecha) { e.fecha = 'Seleccione la fecha'; faltantes.push('Fecha'); }
+    if (!formData.hora) { e.hora = 'Seleccione la hora'; faltantes.push('Hora'); }
+    if (formData.duracion_minutos < 15) { e.duracion_minutos = 'Mínimo 15 minutos'; faltantes.push('Duración'); }
     if (categoriaSeleccionada?.requiere_patente && !formData.patente.trim()) {
       e.patente = 'Esta categoría requiere patente';
+      faltantes.push('Patente');
     }
+
     setErrors(e);
+
+    if (faltantes.length > 0) {
+      Swal.fire({
+        icon: 'warning',
+        title: 'Campos requeridos',
+        html: `<ul style="text-align:left;margin:0;padding-left:20px;">${faltantes.map(f => `<li>${f}</li>`).join('')}</ul>`,
+        confirmButtonColor: '#ef4444',
+      });
+    }
+
     return Object.keys(e).length === 0;
   }
 
@@ -804,10 +829,14 @@ export function VisitasFormModal({
                       />
                       <input
                         type="text"
+                        inputMode="numeric"
                         value={v.dni}
-                        onChange={(e) => handleVisitanteChange(index, 'dni', e.target.value)}
-                        placeholder="DNI"
-                        className="visitante-dni"
+                        onChange={(e) => {
+                          const val = e.target.value.replace(/\D/g, '');
+                          handleVisitanteChange(index, 'dni', val);
+                        }}
+                        placeholder="DNI *"
+                        className={`visitante-dni ${v.nombre.trim() && !v.dni.trim() && Object.keys(errors).length > 0 ? 'input-error' : ''}`}
                       />
                     </div>
                     {visitantes.length > 1 && (
@@ -921,12 +950,14 @@ export function VisitasFormModal({
                 {errors.nombre_visitante && <span className="error-message">{errors.nombre_visitante}</span>}
               </div>
               <div className="form-group vf-visitante-dni">
-                <label className="vf-label-sm">DNI</label>
+                <label className="vf-label-sm">DNI <span className="required">*</span></label>
                 <input
                   type="text"
+                  inputMode="numeric"
                   value={formData.dni_visitante}
-                  onChange={(e) => handleChange('dni_visitante', e.target.value)}
+                  onChange={(e) => handleChange('dni_visitante', e.target.value.replace(/\D/g, ''))}
                   placeholder="Documento"
+                  className={errors.dni_visitante ? 'input-error' : ''}
                 />
               </div>
               {categoriaSeleccionada?.requiere_patente && (
