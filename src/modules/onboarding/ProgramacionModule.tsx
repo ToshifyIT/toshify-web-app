@@ -123,9 +123,15 @@ ${turnoEmoji}${turnoEmoji ? ' ' : ''}Turno: ${turnoLabel}
   return mensaje
 }
 
+// Sede Buenos Aires: el atendedor responsable de visitas de Asignaciones es Karen (fijo).
+const SEDE_BUENOS_AIRES_ID = '80587298-b799-4a98-87a9-2f74890da443'
+const KAREN_ATENDEDOR_ID = '503e3df5-5d5e-4c27-b90c-93128a670673'
+
 // Resuelve un atendedor activo desde la tabla visitas_atendedores.
 // Prioriza la sede del programa; si no hay activos en la sede, cae a cualquier activo.
+// Para la sede Buenos Aires se devuelve siempre Karen (decisión de negocio).
 async function resolverAtendedorActivo(sedeId: string | null): Promise<string | null> {
+  if (sedeId === SEDE_BUENOS_AIRES_ID) return KAREN_ATENDEDOR_ID
   if (sedeId) {
     const { data: enSede } = await (supabase.from('visitas_atendedores') as any)
       .select('id')
