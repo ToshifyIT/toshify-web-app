@@ -123,6 +123,26 @@ ${turnoEmoji}${turnoEmoji ? ' ' : ''}Turno: ${turnoLabel}
   return mensaje
 }
 
+// Resuelve un atendedor activo desde la tabla visitas_atendedores.
+// Prioriza la sede del programa; si no hay activos en la sede, cae a cualquier activo.
+async function resolverAtendedorActivo(sedeId: string | null): Promise<string | null> {
+  if (sedeId) {
+    const { data: enSede } = await (supabase.from('visitas_atendedores') as any)
+      .select('id')
+      .eq('sede_id', sedeId)
+      .eq('activo', true)
+      .order('created_at', { ascending: true })
+      .limit(1)
+    if (enSede && enSede.length > 0) return enSede[0].id
+  }
+  const { data: cualquiera } = await (supabase.from('visitas_atendedores') as any)
+    .select('id')
+    .eq('activo', true)
+    .order('created_at', { ascending: true })
+    .limit(1)
+  return cualquiera?.[0]?.id ?? null
+}
+
 export function ProgramacionModule() {
   const { canCreateInMenu, canEditInMenu, canDeleteInMenu, canViewTab } = usePermissions()
   const { user, profile } = useAuth()
@@ -798,7 +818,8 @@ export function ProgramacionModule() {
       // Crear visita automática con categoría "Asignaciones"
       try {
         const CATEGORIA_ASIGNACIONES_ID = '76514b14-b403-4587-993e-d64bad874594'
-        const ATENDEDOR_IVAN_ID = 'd0a03327-f364-48c8-9940-71d2f2793a9e'
+        const sedeVisita = prog.sede_id || sedeActualId || sedeUsuario?.id || null
+        const atendedorIdResuelto = await resolverAtendedorActivo(sedeVisita)
 
         // Resolver nombre real desde tabla conductores para evitar que quede el DNI
         let visitanteNombre = conductorNombre || ''
@@ -818,7 +839,7 @@ export function ProgramacionModule() {
 
         if (!visitanteNombre) visitanteNombre = 'Conductor por definir'
 
-        if (prog.fecha_cita) {
+        if (prog.fecha_cita && atendedorIdResuelto) {
           const soloFechaCita = prog.fecha_cita.split('T')[0]
           const horaCita = prog.hora_cita && prog.hora_cita.trim() !== ''
             ? prog.hora_cita.substring(0, 5)
@@ -828,7 +849,7 @@ export function ProgramacionModule() {
           await (supabase.from('visitas') as any).insert({
             categoria_id: CATEGORIA_ASIGNACIONES_ID,
             motivo_id: null,
-            atendedor_id: ATENDEDOR_IVAN_ID,
+            atendedor_id: atendedorIdResuelto,
             sede_id: prog.sede_id || sedeActualId || sedeUsuario?.id,
             nombre_visitante: visitanteNombre,
             dni_visitante: visitanteDni,
@@ -1234,9 +1255,10 @@ export function ProgramacionModule() {
         const tipoLabel = TIPO_ASIGNACION_LABELS[prog.tipo_asignacion || ''] || prog.tipo_asignacion || 'Asignación'
 
         const CATEGORIA_ASIGNACIONES_ID = '76514b14-b403-4587-993e-d64bad874594'
-        const ATENDEDOR_IVAN_ID = 'd0a03327-f364-48c8-9940-71d2f2793a9e'
+        const sedeVisita = prog.sede_id || sedeActualId || sedeUsuario?.id || null
+        const atendedorIdResuelto = await resolverAtendedorActivo(sedeVisita)
 
-        if (visitanteNombres.length > 0 && prog.fecha_cita) {
+        if (visitanteNombres.length > 0 && prog.fecha_cita && atendedorIdResuelto) {
           const soloFechaCita = prog.fecha_cita.split('T')[0]
           const horaCita = prog.hora_cita && prog.hora_cita.trim() !== ''
             ? prog.hora_cita.substring(0, 5)
@@ -1246,7 +1268,7 @@ export function ProgramacionModule() {
           await (supabase.from('visitas') as any).insert({
             categoria_id: CATEGORIA_ASIGNACIONES_ID,
             motivo_id: null,
-            atendedor_id: ATENDEDOR_IVAN_ID,
+            atendedor_id: atendedorIdResuelto,
             sede_id: prog.sede_id || sedeActualId || sedeUsuario?.id,
             nombre_visitante: visitanteNombres.join('; '),
             dni_visitante: visitanteDnis.join('; ') || null,
