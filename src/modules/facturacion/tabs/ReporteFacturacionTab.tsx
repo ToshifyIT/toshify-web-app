@@ -5207,6 +5207,91 @@ export function ReporteFacturacionTab() {
       // Leer como array de arrays (raw) para acceder por índice de columna
       const rows = XLSX.utils.sheet_to_json<any[]>(sheet, { header: 1, defval: '' })
 
+      // ─────────────────────────────────────────────────────────────────────
+      // VALIDACIÓN DE ESTRUCTURA DEL ARCHIVO (formato Cabify)
+      // Validación por contenido: la columna DNI (H) debe tener DNIs reales.
+      // Si no, el archivo no es del formato Cabify y se aborta.
+      // ─────────────────────────────────────────────────────────────────────
+      const COL_DNI_IDX = 7        // Col H
+      const COL_NOMBRE_IDX = 4     // Col E
+      const COL_IMPORTE_CONTRATO_IDX = 8  // Col I
+      const COL_DESCONTAR_IDX = 16 // Col Q
+
+      if (rows.length === 0) {
+        await Swal.fire({
+          icon: 'error',
+          title: 'Archivo vacío',
+          html: `<div style="text-align:left;font-size:13px;">La hoja <strong>${sheetName}</strong> no contiene filas. Verificá que el archivo sea el correcto.</div>`,
+          confirmButtonText: 'Entendido',
+        })
+        return
+      }
+
+      // Contar filas con DNI válido (entre fila 1 y N) y filas con datos en general
+      const dataRows = rows.slice(1)
+      let filasConDni = 0
+      let filasConContenido = 0
+      let filasConImporteValido = 0
+      for (const row of dataRows) {
+        const tieneAlgo = (row || []).some((c: any) => String(c || '').trim() !== '')
+        if (tieneAlgo) filasConContenido++
+        const dniRaw = String(row?.[COL_DNI_IDX] || '').trim()
+        const dniNorm = normalizeDni(dniRaw)
+        // DNI válido: solo dígitos, entre 7 y 12 caracteres (cubre AR/extranjeros)
+        const esDniValido = !!dniNorm && dniNorm !== '0' && /^\d{7,12}$/.test(dniNorm)
+        if (esDniValido) filasConDni++
+        const importe = parseFloat(row?.[COL_IMPORTE_CONTRATO_IDX])
+        const descontar = parseFloat(row?.[COL_DESCONTAR_IDX])
+        if (Number.isFinite(importe) || Number.isFinite(descontar)) filasConImporteValido++
+      }
+
+      const ratioDni = filasConContenido > 0 ? filasConDni / filasConContenido : 0
+      const ratioImporte = filasConContenido > 0 ? filasConImporteValido / filasConContenido : 0
+      const formatoOk = filasConDni >= 1 && ratioDni >= 0.5 && ratioImporte >= 0.5
+
+      if (!formatoOk) {
+        const headerLeido = (rows[0] || []).slice(0, 20).map((v: any, i: number) => `<li><strong>${String.fromCharCode(65 + i)}</strong>: ${String(v || '(vacío)')}</li>`).join('')
+        const ejemplo = (dataRows[0] || []).slice(0, 20).map((v: any, i: number) => `<li><strong>${String.fromCharCode(65 + i)}</strong>: ${String(v || '(vacío)')}</li>`).join('')
+        await Swal.fire({
+          icon: 'error',
+          title: 'El archivo no tiene el formato Cabify esperado',
+          html: `
+            <div style="text-align:left;font-size:13px;">
+              <p style="margin:0 0 8px 0;">No se procesará el archivo para evitar cargas erróneas.</p>
+              <p style="margin:0 0 8px 0;"><strong>Validación por contenido (DNI):</strong></p>
+              <ul style="margin:0 0 10px 18px;padding:0;">
+                <li>Hoja leída: <strong>${sheetName}</strong></li>
+                <li>Filas con datos: <strong>${filasConContenido}</strong></li>
+                <li>Filas con DNI válido en columna H: <strong>${filasConDni}</strong> (${(ratioDni * 100).toFixed(0)}%)</li>
+                <li>Filas con importes numéricos: <strong>${filasConImporteValido}</strong> (${(ratioImporte * 100).toFixed(0)}%)</li>
+              </ul>
+              <details style="margin-top:8px;">
+                <summary style="cursor:pointer;font-weight:600;">Ver header detectado</summary>
+                <ul style="margin:6px 0 0 18px;padding:0;font-size:12px;color:#6B7280;">${headerLeido || '<li>(vacío)</li>'}</ul>
+              </details>
+              ${ejemplo ? `
+              <details style="margin-top:6px;">
+                <summary style="cursor:pointer;font-weight:600;">Ver primera fila de datos</summary>
+                <ul style="margin:6px 0 0 18px;padding:0;font-size:12px;color:#6B7280;">${ejemplo}</ul>
+              </details>` : ''}
+              <p style="margin:12px 0 0 0;font-size:12px;color:#6B7280;">Esperado: archivo original Cabify con DNI en columna <strong>H</strong>, importes en <strong>I, P, Q, R</strong>.</p>
+            </div>
+          `,
+          confirmButtonText: 'Entendido',
+          width: 640,
+        })
+        return
+      }
+
+      // Observación inicial: resumen de lo detectado
+      const resumenInicial = {
+        sheetName,
+        filasTotal: filasConContenido,
+        filasConDni,
+        nombreEjemplo: String((dataRows[0] || [])[COL_NOMBRE_IDX] || '').trim(),
+      }
+      void resumenInicial
+
       // Parsear filas del Excel (saltear header - fila 0)
       // Col E (4) = Nombre, Col G (6) = Patente, Col H (7) = DNI
       // Col I (8) = Importe Contrato, Col P (15) = Disponible, Col Q (16) = Importe Descontado, Col R (17) = Saldo
