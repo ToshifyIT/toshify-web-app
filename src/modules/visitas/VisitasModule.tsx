@@ -58,8 +58,14 @@ export function VisitasModule() {
   const { sedeActualId, sedeUsuario } = useSede();
   const canCreate = isAdmin() || canCreateInMenu('visitas');
   const canEdit = isAdmin() || canEditInMenu('visitas');
-  const _canDelete = isAdmin() || canDeleteInMenu('visitas');
-  void _canDelete; // Reservado para uso futuro
+  // Whitelist explicita de emails autorizados a eliminar visitas (ademas de roles admin)
+  const EMAILS_PUEDEN_ELIMINAR = [
+    'admin@toshify.com.ar',
+    'archspec@toshify.com.ar',
+    'fullstack@toshify.com.ar',
+    'techspec@toshify.com.ar', // Maria Flores
+  ];
+  const canDelete = isAdmin() || canDeleteInMenu('visitas') || EMAILS_PUEDEN_ELIMINAR.includes((user?.email || '').toLowerCase());
 
   // === STATE: tabs ===
   const [mainTab, setMainTab] = useState<MainTab>('calendario');
@@ -648,6 +654,7 @@ export function VisitasModule() {
             <VisitaDetalleModal
               visita={selectedVisita}
               canEdit={canEdit}
+              canDelete={canDelete}
               onEdit={handleEditFromDetalle}
               onChangeEstado={handleChangeEstado}
               onMarcarPresente={handleMarcarPresente}

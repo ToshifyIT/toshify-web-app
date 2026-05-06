@@ -30,6 +30,7 @@ const MAX_VISITANTES_VISIBLE = 5;
 interface VisitaDetalleModalProps {
   visita: VisitaCompleta;
   canEdit: boolean;
+  canDelete?: boolean;
   onEdit: () => void;
   onChangeEstado: (estado: VisitaEstado) => void;
   onMarcarPresente?: () => void;
@@ -40,6 +41,7 @@ interface VisitaDetalleModalProps {
 export function VisitaDetalleModal({
   visita,
   canEdit,
+  canDelete = false,
   onEdit,
   onChangeEstado,
   onMarcarPresente,
@@ -236,11 +238,11 @@ export function VisitaDetalleModal({
           </div>
 
           <div className="modal-footer">
+            {canDelete && !isPast && (
+              <button className="btn-danger" onClick={onDelete}>Eliminar</button>
+            )}
             {canEdit && !isPast && (
-              <>
-                <button className="btn-danger" onClick={onDelete}>Eliminar</button>
-                <button className="btn-primary" onClick={onEdit}>Editar</button>
-              </>
+              <button className="btn-primary" onClick={onEdit}>Editar</button>
             )}
             <button className="btn-secondary" onClick={onClose}>Cerrar</button>
           </div>
