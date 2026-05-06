@@ -330,7 +330,7 @@ export function LeadsModule() {
 
   // Estados visibles para cambio manual (Conductor se asigna solo automáticamente)
   const ESTADOS_LEAD = [
-    'Inicio conversación', 'Apto - Hireflix', 'No Apto - Hireflix', 'Ayuda - Hireflix',
+    'Inicio conversación', 'Acepta oferta', 'Apto - Hireflix', 'No Apto - Hireflix', 'Ayuda - Hireflix',
     'Documentos enviados', 'Auto del pueblo', 'No le interesa', 'No cumple edad',
     'Convocatoria Inducción', 'Descartado',
   ] as const
@@ -475,6 +475,14 @@ export function LeadsModule() {
   }, [aplicarFiltroSede])
 
   useEffect(() => { loadLeads() }, [loadLeads])
+
+  // Bloquear scroll del body cuando el modal de detalle está abierto
+  useEffect(() => {
+    if (showDetailsModal) {
+      document.body.style.overflow = 'hidden'
+      return () => { document.body.style.overflow = '' }
+    }
+  }, [showDetailsModal])
 
   // Cerrar dropdown de estado al hacer click fuera
   useEffect(() => {
@@ -2901,6 +2909,9 @@ function LeadDetailView({ lead, onEdit, onConvert, zonasRestringidas = [], enZon
             <span className="lead-detail-item-label">Motivo Desinterés</span>
             <span className="lead-detail-item-value">
               {clasificarMotivoDesinteres(lead.causal_de_cierre)}
+              {lead.motivo_desinteres && (
+                <span> - {lead.motivo_desinteres}</span>
+              )}
               {lead.causal_de_cierre && lead.causal_de_cierre !== clasificarMotivoDesinteres(lead.causal_de_cierre) && (
                 <span style={{ display: 'block', fontSize: '11px', color: '#9ca3af', marginTop: '2px' }}>({lead.causal_de_cierre})</span>
               )}
@@ -2918,6 +2929,10 @@ function LeadDetailView({ lead, onEdit, onConvert, zonasRestringidas = [], enZon
           <div className="lead-detail-item">
             <span className="lead-detail-item-label">Detalle Hireflix</span>
             <span className="lead-detail-item-value" style={{ whiteSpace: 'pre-wrap', maxWidth: '300px', textAlign: 'right' }}>{lead.resumen_hireflix || '-'}</span>
+          </div>
+          <div className="lead-detail-item">
+            <span className="lead-detail-item-label">Observaciones</span>
+            <span className="lead-detail-item-value" style={{ whiteSpace: 'pre-wrap', maxWidth: '300px', textAlign: 'right' }}>{lead.observaciones || '-'}</span>
           </div>
         </div>
 
@@ -2966,14 +2981,6 @@ function LeadDetailView({ lead, onEdit, onConvert, zonasRestringidas = [], enZon
           </div>
         </div>
       </div>
-
-      {/* Observaciones */}
-      {lead.observaciones && (
-        <div className="lead-detail-description">
-          <div className="lead-detail-description-title">Observaciones</div>
-          <p style={{ whiteSpace: 'pre-line' }}>{lead.observaciones}</p>
-        </div>
-      )}
 
       {/* Emergencia */}
       {(lead.datos_de_emergencia || lead.telefono_emergencia || lead.contacto_de_emergencia || lead.direccion_emergencia || lead.verificacion_emergencia != null) && (

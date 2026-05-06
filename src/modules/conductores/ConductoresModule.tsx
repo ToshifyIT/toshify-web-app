@@ -487,15 +487,15 @@ export function ConductoresModule() {
             .select(`
               conductor_id,
               horario,
-              asignaciones!inner (
+              asignaciones (
                 estado,
+                sede_id,
                 horario_asignacion:horario,
                 zona,
                 vehiculos (id, patente, marca, modelo)
               )
             `)
-          if (sedeActualId) q.eq("asignaciones.sede_id", sedeActualId)
-          return q.in("asignaciones.estado", ["activo", "activa"])
+          return q
         })(),
         supabase.from("estados_civiles").select("id, codigo, descripcion").order("descripcion"),
         supabase.from("nacionalidades").select("id, codigo, descripcion").order("descripcion"),
@@ -516,15 +516,18 @@ export function ConductoresModule() {
       // Procesar conductores
       if (conductoresRes.error) throw conductoresRes.error;
 
-      // Crear mapa de asignaciones (optimizado con inner join)
+      // Crear mapa de asignaciones (filtrado en JS)
       const asignacionesMap = new Map();
       if (asignacionesRes.data) {
         for (const asig of asignacionesRes.data as any[]) {
-          if (asig?.asignaciones?.vehiculos) {
+          const a = asig?.asignaciones
+          if (!a || !['activo', 'activa'].includes(a.estado)) continue
+          if (sedeActualId && a.sede_id !== sedeActualId) continue
+          if (a.vehiculos) {
             asignacionesMap.set(asig.conductor_id, {
-              ...asig.asignaciones.vehiculos,
-              turno_asignacion: asig.horario || asig.asignaciones?.horario_asignacion,
-              zona_asignacion: asig.asignaciones?.zona
+              ...a.vehiculos,
+              turno_asignacion: asig.horario || a.horario_asignacion,
+              zona_asignacion: a.zona
             });
           }
         }
@@ -647,29 +650,32 @@ export function ConductoresModule() {
             .select(`
               conductor_id,
               horario,
-              asignaciones!inner (
+              asignaciones (
                 estado,
+                sede_id,
                 horario_asignacion:horario,
                 zona,
                 vehiculos (id, patente, marca, modelo)
               )
             `)
-          if (sedeActualId) q.eq("asignaciones.sede_id", sedeActualId)
-          return q.in("asignaciones.estado", ["activo", "activa"])
+          return q
         })()
       ]);
 
       if (conductoresRes.error) throw conductoresRes.error;
 
-      // Crear mapa de asignaciones
+      // Crear mapa de asignaciones (filtrado en JS)
       const asignacionesMap = new Map();
       if (asignacionesRes.data) {
         for (const asig of asignacionesRes.data as any[]) {
-          if (asig?.asignaciones?.vehiculos) {
+          const a = asig?.asignaciones
+          if (!a || !['activo', 'activa'].includes(a.estado)) continue
+          if (sedeActualId && a.sede_id !== sedeActualId) continue
+          if (a.vehiculos) {
             asignacionesMap.set(asig.conductor_id, {
-              ...asig.asignaciones.vehiculos,
-              turno_asignacion: asig.horario || asig.asignaciones?.horario_asignacion,
-              zona_asignacion: asig.asignaciones?.zona
+              ...a.vehiculos,
+              turno_asignacion: asig.horario || a.horario_asignacion,
+              zona_asignacion: a.zona
             });
           }
         }
