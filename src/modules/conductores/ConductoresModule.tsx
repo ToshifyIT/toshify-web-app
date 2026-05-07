@@ -4800,25 +4800,28 @@ function ModalDetalles({
             <div className="modal-footer" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <div style={{ display: 'flex', gap: '8px' }}>
                 <button
-                  className={folderUrl ? 'btn-success' : 'btn-secondary'}
+                  className={`btn-sm ${folderUrl ? 'btn-primary' : 'btn-secondary'}`}
+                  disabled={!folderUrl}
                   onClick={() => {
                     if (folderUrl) window.open(folderUrl, '_blank');
                     else Swal.fire('Sin URL', 'Este conductor no tiene una URL de documentación configurada', 'info');
                   }}
-                  style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
+                  style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}
+                  title={folderUrl ? 'Abrir carpeta de documentos' : 'Sin carpeta configurada'}
                 >
-                  {folderUrl ? <FolderOpen size={16} /> : <FolderPlus size={16} />}
+                  {folderUrl ? <FolderOpen size={14} /> : <FolderPlus size={14} />}
                   {folderUrl ? 'Ver documentos' : 'Sin carpeta'}
                 </button>
                 <button
-                  className={contractUrl ? 'btn-info' : 'btn-secondary'}
+                  className={`btn-sm ${contractUrl ? 'btn-primary' : 'btn-secondary'}`}
                   disabled={!contractUrl}
                   onClick={() => {
                     if (contractUrl) window.open(contractUrl, '_blank');
                   }}
-                  style={{ display: 'flex', alignItems: 'center', gap: '6px', opacity: contractUrl ? 1 : 0.5 }}
+                  style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}
+                  title={contractUrl ? 'Abrir historial de contratos' : 'Sin carpeta de contratos'}
                 >
-                  <FileText size={16} />
+                  <FileText size={14} />
                   Ver historial contratos
                 </button>
               </div>

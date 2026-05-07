@@ -21,6 +21,7 @@ import { ExcelColumnFilter } from '../../components/ui/DataTable/ExcelColumnFilt
 import './LeadsModule.css'
 import { LeadWizard } from './components/LeadWizard'
 import { inferZona, inferZonaFromCoords } from '../../utils/zonaUtils'
+import { createConductorDriveFolder } from '../../services/driveService'
 
 // =====================================================
 // GOOGLE MAPS GEOCODING
@@ -1017,6 +1018,7 @@ export function LeadsModule() {
         direccion_lat: latFinal,
         direccion_lng: lngFinal,
         sede_id: lead.sede_id || sedeActual?.id || null,
+        url_documentacion: lead.url_folder || null,
       }
 
       // Filtrar campos vacíos (salvo requeridos)
@@ -1036,6 +1038,28 @@ export function LeadsModule() {
         .single()
 
       if (errCond) throw errCond
+
+      // Buscar o crear carpeta en Drive para el conductor
+      let folderUrl = lead.url_folder?.trim() || null
+      if (createdConductor?.id) {
+        if (folderUrl) {
+          // Ya tiene carpeta: solo guardar en el conductor
+          await supabase.from('conductores').update({ url_documentacion: folderUrl }).eq('id', createdConductor.id)
+        } else {
+          // No tiene carpeta: buscar/crear en Drive
+          const nombreCompleto = (lead.nombre_completo || '').trim()
+          if (nombreCompleto) {
+            const driveResult = await createConductorDriveFolder(createdConductor.id, nombreCompleto, lead.dni)
+            if (driveResult.success && driveResult.folderUrl) {
+              folderUrl = driveResult.folderUrl
+              // Guardar en el lead también
+              await supabase.from('leads').update({ url_folder: folderUrl }).eq('id', lead.id)
+              // drive_folder_url ya lo persiste el endpoint, pero guardamos url_documentacion también
+              await supabase.from('conductores').update({ url_documentacion: folderUrl }).eq('id', createdConductor.id)
+            }
+          }
+        }
+      }
 
       // Insertar categorías de licencia en tabla intermedia
       if (createdConductor?.id && lead.categorias_licencia?.length && categoriasLicencia.length > 0) {
@@ -2197,7 +2221,7 @@ export function LeadsModule() {
 
       {/* Stats */}
       <div className="leads-stats">
-        <div className="leads-stats-grid" style={{ gridTemplateColumns: 'repeat(6, 1fr)' }}>
+        <div className="leads-stats-grid">
           <div
             className={`stat-card stat-card-clickable ${activeStatCard === 'inicio' ? 'stat-card-active' : ''}`}
             onClick={() => handleStatClick('inicio')}
@@ -2274,12 +2298,12 @@ export function LeadsModule() {
         emptyTitle="No hay leads"
         emptyDescription="No se encontraron leads con los filtros aplicados"
         headerAction={
-          <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+          <div className="leads-header-actions">
             <button className="btn-secondary btn-sm" onClick={loadLeads} title="Recargar">
               <RefreshCw size={14} />
             </button>
             <button className="btn-secondary btn-sm" onClick={handleExportExcel} title="Exportar Excel">
-              <Download size={14} /> Exportar
+              <Download size={14} /> <span className="leads-btn-label">Exportar</span>
             </button>
             {canCreate && (
               <>
@@ -2291,13 +2315,13 @@ export function LeadsModule() {
                   onChange={handleCargaMasiva}
                 />
                 <button className="btn-secondary btn-sm" onClick={() => fileInputRef.current?.click()} title="Carga Masiva">
-                  <Upload size={14} /> Carga Masiva
+                  <Upload size={14} /> <span className="leads-btn-label">Carga Masiva</span>
                 </button>
               </>
             )}
             {canCreate && (
               <button className="btn-primary btn-sm" onClick={handleOpenCreate}>
-                <UserPlus size={14} /> Nuevo Lead
+                <UserPlus size={14} /> <span className="leads-btn-label">Nuevo Lead</span>
               </button>
             )}
           </div>
