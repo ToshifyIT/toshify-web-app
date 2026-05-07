@@ -73,7 +73,7 @@
 
 .leads-stats-grid {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(6, 1fr);
   gap: 12px;
 }
 
@@ -134,15 +134,33 @@
   color: var(--color-primary);
 }
 
+/* =====================================================
+   HEADER ACTIONS (botones Exportar, Carga Masiva, etc.)
+   ===================================================== */
+
+.leads-header-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+/* =====================================================
+   RESPONSIVE BREAKPOINTS
+   ===================================================== */
+
+/* Laptop / pantalla mediana */
 @media (max-width: 1200px) {
   .leads-stats-grid {
     grid-template-columns: repeat(3, 1fr);
   }
 }
 
+/* Tablet */
 @media (max-width: 768px) {
   .leads-stats-grid {
-    grid-template-columns: repeat(2, 1fr);
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
   }
 
   .leads-stats-header {
@@ -152,23 +170,64 @@
   }
 
   .leads-header {
-    padding: 16px;
+    padding: 12px;
   }
 
   .leads-header-title h1 {
     font-size: 16px;
   }
-}
 
-@media (max-width: 480px) {
-  .leads-stats-grid {
-    grid-template-columns: repeat(2, 1fr);
+  .leads-stats {
+    padding: 12px;
+  }
+
+  /* Botones: ocultar texto, dejar solo icono */
+  .leads-btn-label {
+    display: none;
+  }
+
+  .leads-header-actions {
+    gap: 6px;
+  }
+
+  /* Modal de detalle: una columna */
+  .lead-detail-header {
+    flex-direction: column;
     gap: 8px;
   }
 
+  .lead-detail-header h3 {
+    font-size: 16px;
+  }
+
+  .lead-detail-cards {
+    grid-template-columns: 1fr;
+  }
+
+  /* Wizard */
+  .lead-wizard-content {
+    max-height: 60vh;
+  }
+
+  .lead-convert-preview {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Mobile */
+@media (max-width: 480px) {
+  .leads-module {
+    gap: 10px;
+  }
+
+  .leads-stats-grid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 6px;
+  }
+
   .leads-stats .stat-card {
-    padding: 10px;
-    gap: 8px;
+    padding: 8px;
+    gap: 6px;
   }
 
   .leads-stats .stat-value {
@@ -177,6 +236,104 @@
 
   .leads-stats .stat-label {
     font-size: 10px;
+  }
+
+  .leads-stats {
+    padding: 10px;
+  }
+
+  .leads-header {
+    padding: 10px;
+  }
+
+  .leads-header-title h1 {
+    font-size: 14px;
+  }
+
+  .leads-header-subtitle {
+    font-size: 11px;
+  }
+
+  /* Botones: solo iconos, mas compactos */
+  .leads-btn-label {
+    display: none;
+  }
+
+  .leads-header-actions {
+    gap: 4px;
+  }
+
+  /* Modal de detalle */
+  .lead-detail-item {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 2px;
+  }
+
+  .lead-detail-item-value {
+    text-align: left;
+    max-width: 100%;
+    word-break: break-word;
+  }
+
+  .lead-detail-card {
+    padding: 12px;
+  }
+
+  .lead-detail-card-title {
+    font-size: 10px;
+    margin-bottom: 8px;
+  }
+
+  /* Wizard */
+  .lead-wizard-footer {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .lead-wizard-footer button {
+    flex: 1;
+    min-width: 0;
+  }
+
+  /* Estado badges mas compactos */
+  .lead-estado-badge {
+    padding: 2px 8px;
+    font-size: 10px;
+  }
+
+  .lead-estado-dropdown {
+    min-width: 160px;
+  }
+
+  .lead-estado-dropdown-item {
+    padding: 10px 12px;
+    font-size: 13px;
+  }
+}
+
+/* Extra small */
+@media (max-width: 360px) {
+  .leads-stats-grid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 4px;
+  }
+
+  .leads-stats .stat-card {
+    padding: 6px;
+    gap: 4px;
+  }
+
+  .leads-stats .stat-value {
+    font-size: 13px;
+  }
+
+  .leads-stats .stat-label {
+    font-size: 9px;
+  }
+
+  .leads-stats .stat-card .stat-icon {
+    display: none;
   }
 }
 
@@ -476,11 +633,7 @@
   line-height: 1.5;
 }
 
-@media (max-width: 768px) {
-  .lead-detail-cards {
-    grid-template-columns: 1fr;
-  }
-}
+/* (detail cards responsive handled in main media queries above) */
 
 /* =====================================================
    WIZARD STYLES
@@ -639,10 +792,40 @@
 
   .lead-wizard-progress {
     flex-wrap: wrap;
+    gap: 4px;
+    padding: 12px 0;
   }
 
   .lead-wizard-step-label {
     display: none;
+  }
+
+  .lead-wizard-step-separator {
+    width: 16px;
+  }
+
+  .lead-wizard-step-number {
+    width: 32px;
+    height: 32px;
+    font-size: 13px;
+  }
+}
+
+@media (max-width: 480px) {
+  .lead-wizard-form-group {
+    gap: 10px;
+    margin-bottom: 10px;
+  }
+
+  .lead-wizard-field input,
+  .lead-wizard-field select,
+  .lead-wizard-field textarea {
+    padding: 10px 12px;
+    font-size: 14px;
+  }
+
+  .lead-wizard-field label {
+    font-size: 12px;
   }
 }
 

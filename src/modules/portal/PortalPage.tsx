@@ -111,10 +111,8 @@ function getConceptoLabel(item: PortalDetalle): string {
   // Si no tenemos label para este código, usar la descripción tal cual
   if (!baseLabel) return desc || item.concepto_codigo
 
-  // P003 = Cuota de Garantía: agregar fracción "X de Y" si aplica
+  // P003 = Cuota de Garantía: mostrar solo el label base
   if (item.concepto_codigo === 'P003') {
-    const cuotaMatch = desc ? /(\d+\s+de\s+\d+)/.exec(desc) : null
-    if (cuotaMatch) return `${baseLabel} ${cuotaMatch[1]}`
     return baseLabel
   }
 
