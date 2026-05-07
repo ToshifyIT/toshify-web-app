@@ -3,12 +3,12 @@ import { useState, useCallback, useRef, useEffect } from 'react'
 import { GoogleMap, useJsApiLoader, Marker, Autocomplete } from '@react-google-maps/api'
 import { MapPin, X, Loader2 } from 'lucide-react'
 import { inferZona } from '../../utils/zonaUtils'
-
-// Fallback a key hardcodeada si no está en env (para producción)
-const GOOGLE_MAPS_API_KEY = import.meta.env.VITE_GOOGLE_MAPS_API_KEY || 'AIzaSyCCiqk9jWZghUq5rBtSyo6ZjLuMORblY-w'
-
-// Librerías necesarias para Places API
-const libraries: ("places")[] = ['places']
+import {
+  GOOGLE_MAPS_API_KEY,
+  GOOGLE_MAPS_LIBRARIES,
+  GOOGLE_MAPS_LANGUAGE,
+  GOOGLE_MAPS_REGION,
+} from '../../lib/googleMaps'
 
 // Centro por defecto: Buenos Aires, Argentina
 const DEFAULT_CENTER = {
@@ -57,9 +57,9 @@ export function AddressAutocomplete({
 
   const { isLoaded, loadError } = useJsApiLoader({
     googleMapsApiKey: GOOGLE_MAPS_API_KEY,
-    libraries,
-    language: 'es',
-    region: 'AR'
+    libraries: GOOGLE_MAPS_LIBRARIES,
+    language: GOOGLE_MAPS_LANGUAGE,
+    region: GOOGLE_MAPS_REGION,
   })
 
   // Si hay un valor inicial y el mapa está cargado, mostrar el mapa y geocodificar

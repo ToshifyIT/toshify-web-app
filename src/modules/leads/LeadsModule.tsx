@@ -22,13 +22,14 @@ import './LeadsModule.css'
 import { LeadWizard } from './components/LeadWizard'
 import { inferZona, inferZonaFromCoords } from '../../utils/zonaUtils'
 import { createConductorDriveFolder } from '../../services/driveService'
+import { GOOGLE_MAPS_SCRIPT_URL } from '../../lib/googleMaps'
 
 // =====================================================
 // GOOGLE MAPS GEOCODING
 // =====================================================
 
-const GOOGLE_MAPS_API_KEY = import.meta.env.VITE_GOOGLE_MAPS_API_KEY || 'AIzaSyCCiqk9jWZghUq5rBtSyo6ZjLuMORblY-w'
-// Google Maps se carga via loadGoogleMapsAPI()
+// Google Maps se carga via loadGoogleMapsAPI() — usa la URL canónica de
+// src/lib/googleMaps.ts para no chocar con el useJsApiLoader de otros módulos.
 
 const detailMapStyle = {
   width: '100%',
@@ -48,7 +49,7 @@ function loadGoogleMapsAPI(): Promise<void> {
       return
     }
     const script = document.createElement('script')
-    script.src = `https://maps.googleapis.com/maps/api/js?key=${GOOGLE_MAPS_API_KEY}&libraries=places`
+    script.src = GOOGLE_MAPS_SCRIPT_URL
     script.async = true
     script.onload = () => resolve()
     script.onerror = () => reject(new Error('Error cargando Google Maps'))

@@ -12,13 +12,13 @@ import Swal from 'sweetalert2'
 import { showSuccess } from '../../utils/toast'
 import { ZonaTiposManager } from './ZonaTiposManager'
 import { useAuth } from '../../contexts/AuthContext'
+import {
+  GOOGLE_MAPS_API_KEY,
+  GOOGLE_MAPS_LIBRARIES,
+  GOOGLE_MAPS_LANGUAGE,
+  GOOGLE_MAPS_REGION,
+} from '../../lib/googleMaps'
 import './AdminStyles.css'
-
-// Google Maps API Key
-const GOOGLE_MAPS_API_KEY = import.meta.env.VITE_GOOGLE_MAPS_API_KEY || 'AIzaSyCCiqk9jWZghUq5rBtSyo6ZjLuMORblY-w'
-
-// Libraries for Google Maps
-const libraries: ("places" | "drawing")[] = ['places', 'drawing']
 
 // Default center: Buenos Aires, Argentina
 const DEFAULT_CENTER = {
@@ -113,9 +113,9 @@ export function ZonasManagement() {
   // Google Maps loader
   const { isLoaded } = useJsApiLoader({
     googleMapsApiKey: GOOGLE_MAPS_API_KEY,
-    libraries,
-    language: 'es',
-    region: 'AR'
+    libraries: GOOGLE_MAPS_LIBRARIES,
+    language: GOOGLE_MAPS_LANGUAGE,
+    region: GOOGLE_MAPS_REGION,
   })
 
   const loadZonas = useCallback(async () => {

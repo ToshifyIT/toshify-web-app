@@ -20,9 +20,7 @@ import type { TipoCandidato, TipoDocumento, TipoAsignacion, Propietario } from '
 import type { Vehicle } from '../../../types/vehiculo.types'
 import type { Conductor } from '../../../types/conductor.types'
 import { formatPreferencia, getPreferenciaBadge, PROGRAMACION_ESTADO_LABELS } from '../../../utils/conductorUtils'
-
-// Google Maps API Key
-const GOOGLE_MAPS_API_KEY = import.meta.env.VITE_GOOGLE_MAPS_API_KEY || 'AIzaSyCCiqk9jWZghUq5rBtSyo6ZjLuMORblY-w'
+import { GOOGLE_MAPS_API_KEY, GOOGLE_MAPS_SCRIPT_URL } from '../../../lib/googleMaps'
 
 interface ProgramacionData {
   sede_id: string
@@ -487,7 +485,7 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
       }
 
       const script = document.createElement('script')
-      script.src = `https://maps.googleapis.com/maps/api/js?key=${GOOGLE_MAPS_API_KEY}&libraries=places`
+      script.src = GOOGLE_MAPS_SCRIPT_URL
       script.async = true
       script.onload = () => resolve()
       script.onerror = () => reject(new Error('Error cargando Google Maps'))

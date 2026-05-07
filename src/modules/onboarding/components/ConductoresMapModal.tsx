@@ -5,8 +5,12 @@ import { GoogleMap, useJsApiLoader, MarkerF, InfoWindowF, PolylineF } from '@rea
 import { X, Sun, Moon, Check, Loader2, Map as MapIcon } from 'lucide-react'
 import type { Conductor } from '../../../types/conductor.types'
 import { formatPreferencia } from '../../../utils/conductorUtils'
+import {
+  GOOGLE_MAPS_LIBRARIES,
+  GOOGLE_MAPS_LANGUAGE,
+  GOOGLE_MAPS_REGION,
+} from '../../../lib/googleMaps'
 
-const LIBRARIES: ('places')[] = ['places']
 const MAP_CENTER = { lat: -34.6037, lng: -58.3816 }
 
 
@@ -27,7 +31,12 @@ const getMarkerColor = (c: Conductor): string => {
 
 
 export default function ConductoresMapModal({ conductores, onConfirmPair, onClose, apiKey }: Props) {
-  const { isLoaded, loadError } = useJsApiLoader({ googleMapsApiKey: apiKey, libraries: LIBRARIES })
+  const { isLoaded, loadError } = useJsApiLoader({
+    googleMapsApiKey: apiKey,
+    libraries: GOOGLE_MAPS_LIBRARIES,
+    language: GOOGLE_MAPS_LANGUAGE,
+    region: GOOGLE_MAPS_REGION,
+  })
   const [mapTimeout, setMapTimeout] = useState(false)
   const [activeMarker, setActiveMarker] = useState<string | null>(null)
 
