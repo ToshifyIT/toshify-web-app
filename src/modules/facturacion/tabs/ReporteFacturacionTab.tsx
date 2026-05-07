@@ -1234,35 +1234,101 @@ export function ReporteFacturacionTab() {
       const peajesFinSemAnt = format(subWeeks(parseISO(periodoFin), 1), 'yyyy-MM-dd')
 
       // Obtener datos de Cabify incluyendo cobro_app para barras de cobertura
+      // + mapeo de hash CABIFY_xxx → DNI real (Cabify a veces devuelve el DNI hasheado)
+      // + licencias de conductores para fallback de match cuando hash no está mapeado
       const cabifyTable = getCabifyTable((periodoData as any).sede_id || sedeActualId)
-      const [{ data: cabifyGanancias }, { data: cabifyPeajes }] = await Promise.all([
+      const [
+        { data: cabifyGanancias },
+        { data: cabifyPeajes },
+        { data: dniMapeoData },
+        { data: conductoresLicData },
+      ] = await Promise.all([
         supabase.from(cabifyTable)
-          .select('dni, cobro_app, cabify_driver_id, cabify_company_id, permiso_efectivo')
+          .select('dni, licencia, nombre, apellido, cobro_app, cabify_driver_id, cabify_company_id, permiso_efectivo')
           .gte('fecha_inicio', periodoInicio + 'T00:00:00')
           .lte('fecha_inicio', periodoFin + 'T23:59:59'),
         supabase.from(cabifyTable)
           .select('dni, peajes, fecha_inicio, cabify_driver_id, cabify_company_id')
           .gte('fecha_inicio', peajesInicioSemAnt + 'T00:00:00')
-          .lte('fecha_inicio', peajesFinSemAnt + 'T23:59:59')
+          .lte('fecha_inicio', peajesFinSemAnt + 'T23:59:59'),
+        supabase.from('cabify_dni_mapeo').select('cabify_hash, dni_real'),
+        conductorIdsLoad.length > 0
+          ? (supabase.from('conductores') as any)
+              .select('id, numero_dni, numero_licencia, nombres, apellidos')
+              .in('id', conductorIdsLoad)
+          : Promise.resolve({ data: [] as any[] }),
       ])
+
+      // Mapa de hash Cabify → DNI real (configurado manualmente en cabify_dni_mapeo)
+      const cabifyHashMapCarga = new Map<string, string>(
+        (dniMapeoData || []).map((m: any) => [m.cabify_hash, m.dni_real])
+      )
+
+      // Helper: resolver el DNI real a partir del valor que viene en cabify_historico.
+      // Si es hash CABIFY_xxx, intenta traducirlo vía cabify_dni_mapeo;
+      // si no hay traducción, devuelve null para que el caller intente fallback por licencia/nombre.
+      const resolverDniCabify = (raw: string | null | undefined): string | null => {
+        if (!raw) return null
+        const s = String(raw)
+        if (s.startsWith('CABIFY_')) {
+          const real = cabifyHashMapCarga.get(s)
+          return real || null
+        }
+        return s
+      }
+
+      // Mapas auxiliares: licencia y nombre normalizado del conductor (fallback de match)
+      // Licencia mínima 7 dígitos (DNI/licencia argentina) — evita falsos positivos con "B1 D1" → "11".
+      const licenciaToDniLocal = new Map<string, string>()
+      const nombreToDniLocal = new Map<string, string>()
+      ;(conductoresLicData || []).forEach((c: any) => {
+        const dni = String(c.numero_dni || '').trim()
+        if (!dni) return
+        const lic = String(c.numero_licencia || '').replace(/\D/g, '').trim()
+        if (lic.length >= 7 && !licenciaToDniLocal.has(lic)) {
+          licenciaToDniLocal.set(lic, normalizeDni(dni))
+        }
+        const nombreNorm = `${c.nombres || ''} ${c.apellidos || ''}`
+          .normalize('NFD').replace(/[̀-ͯ]/g, '')
+          .toUpperCase().replace(/\s+/g, ' ').trim()
+        if (nombreNorm && !nombreToDniLocal.has(nombreNorm)) nombreToDniLocal.set(nombreNorm, normalizeDni(dni))
+      })
 
       // Agrupar cobro_app por DNI (semana actual) - lo que Cabify cobra al conductor
       const cobroAppPorDni = new Map<string, number>()
       const dnisConRegistroCabify = new Set<string>()
       const cabifyEfectivoMapPeriodo = new Map<string, { permiso_efectivo: string | null; cabify_driver_id: string | null; cabify_company_id: string | null }>()
       ;(cabifyGanancias || []).forEach((c: any) => {
-        if (c.dni) {
-          const dniNorm = normalizeDni(c.dni)
-          dnisConRegistroCabify.add(dniNorm)
-          cobroAppPorDni.set(dniNorm, (cobroAppPorDni.get(dniNorm) || 0) + (parseFloat(c.cobro_app) || 0))
-          // Guardar permiso_efectivo y IDs Cabify (último registro gana)
-          if (c.cabify_driver_id) {
-            cabifyEfectivoMapPeriodo.set(dniNorm, {
-              permiso_efectivo: c.permiso_efectivo || null,
-              cabify_driver_id: c.cabify_driver_id || null,
-              cabify_company_id: c.cabify_company_id || null,
-            })
-          }
+        // 1) Resolver DNI real (si viene hasheado, traducir vía cabify_dni_mapeo)
+        let dniReal = resolverDniCabify(c.dni)
+
+        // 2) Fallback por licencia si DNI hash sin mapeo (mínimo 7 dígitos para evitar
+        //    falsos positivos con licencias categóricas tipo "B1 D1")
+        if (!dniReal && c.licencia) {
+          const licNorm = String(c.licencia).replace(/\D/g, '').trim()
+          if (licNorm.length >= 7) dniReal = licenciaToDniLocal.get(licNorm) || null
+        }
+
+        // 3) Fallback por nombre completo si tampoco hay licencia
+        if (!dniReal && c.nombre && c.apellido) {
+          const nombreNorm = `${c.nombre} ${c.apellido}`
+            .normalize('NFD').replace(/[̀-ͯ]/g, '')
+            .toUpperCase().replace(/\s+/g, ' ').trim()
+          if (nombreNorm) dniReal = nombreToDniLocal.get(nombreNorm) || null
+        }
+
+        if (!dniReal) return
+
+        const dniNorm = normalizeDni(dniReal)
+        dnisConRegistroCabify.add(dniNorm)
+        cobroAppPorDni.set(dniNorm, (cobroAppPorDni.get(dniNorm) || 0) + (parseFloat(c.cobro_app) || 0))
+        // Guardar permiso_efectivo y IDs Cabify (último registro gana)
+        if (c.cabify_driver_id) {
+          cabifyEfectivoMapPeriodo.set(dniNorm, {
+            permiso_efectivo: c.permiso_efectivo || null,
+            cabify_driver_id: c.cabify_driver_id || null,
+            cabify_company_id: c.cabify_company_id || null,
+          })
         }
       })
 
@@ -1270,8 +1336,9 @@ export function ReporteFacturacionTab() {
       const peajesPorDni = new Map<string, number>()
       const peajesDetalleMap = new Map<string, Array<{ fecha: string; monto: number }>>()
       ;(cabifyPeajes || []).forEach((c: any) => {
-        if (!c.dni) return
-        const dniNorm = normalizeDni(c.dni)
+        const dniReal = resolverDniCabify(c.dni)
+        if (!dniReal) return
+        const dniNorm = normalizeDni(dniReal)
         const monto = parseFloat(String(c.peajes)) || 0
         if (monto > 0) {
           peajesPorDni.set(dniNorm, (peajesPorDni.get(dniNorm) || 0) + monto)
