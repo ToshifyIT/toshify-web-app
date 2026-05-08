@@ -840,6 +840,7 @@ export function ConductoresModule() {
           conductores_estados (id, codigo, descripcion),
           licencias_estados (id, codigo, descripcion),
           licencias_tipos (id, codigo, descripcion),
+          sedes (id, nombre),
           conductores_licencias_categorias (
             licencias_categorias (id, codigo, descripcion)
           )
@@ -1130,24 +1131,53 @@ export function ConductoresModule() {
 
     if (!selectedConductor) return;
 
-    // Validar campos obligatorios
+    // Validar campos obligatorios — paridad con creación + campos usados en contratos
+    // Campos usados en contratos: nombres, apellidos, numero_dni, fecha_nacimiento,
+    // nacionalidad_id, estado_civil_id, telefono_contacto, email, direccion
     const newErrors: Record<string, string> = {};
-    if (!formData.numero_cuit?.trim()) {
-      newErrors.numero_cuit = 'Requerido para facturación';
+
+    if (!formData.nombres?.trim()) newErrors.nombres = 'Requerido';
+    if (!formData.apellidos?.trim()) newErrors.apellidos = 'Requerido';
+    if (!formData.numero_dni?.trim()) newErrors.numero_dni = 'Requerido (usado en contratos)';
+    if (!formData.numero_cuit?.trim()) newErrors.numero_cuit = 'Requerido para facturación';
+    if (!formData.fecha_nacimiento) newErrors.fecha_nacimiento = 'Requerido (usado en contratos)';
+    if (!formData.nacionalidad_id) newErrors.nacionalidad_id = 'Requerido (usado en contratos)';
+    if (!formData.estado_civil_id) newErrors.estado_civil_id = 'Requerido (usado en contratos)';
+    if (!formData.sede_id) newErrors.sede_id = 'Requerido';
+    if (!formData.numero_licencia?.trim()) newErrors.numero_licencia = 'Requerido';
+    if (!formData.licencia_categorias_ids || formData.licencia_categorias_ids.length === 0) {
+      newErrors.licencia_categorias_ids = 'Seleccione al menos una categoría';
     }
-    if (!formData.estado_id) {
-      newErrors.estado_id = 'Debe seleccionar un estado';
-    }
+    if (!formData.licencia_vencimiento) newErrors.licencia_vencimiento = 'Requerido';
+    if (!formData.telefono_contacto?.trim()) newErrors.telefono_contacto = 'Requerido';
+    if (!formData.email?.trim()) newErrors.email = 'Requerido (usado en contratos)';
+    if (!formData.direccion?.trim()) newErrors.direccion = 'Requerido (usado en contratos)';
+    if (!formData.estado_id) newErrors.estado_id = 'Debe seleccionar un estado';
 
     if (Object.keys(newErrors).length > 0) {
       setEditErrors(newErrors);
-      const mensajes: string[] = [];
-      if (newErrors.numero_cuit) mensajes.push('El CUIT es obligatorio para la facturación mensual');
-      if (newErrors.estado_id) mensajes.push('Debe seleccionar un estado para el conductor');
+      const labels: Record<string, string> = {
+        nombres: 'Nombres',
+        apellidos: 'Apellidos',
+        numero_dni: 'DNI',
+        numero_cuit: 'CUIT',
+        fecha_nacimiento: 'Fecha de nacimiento',
+        nacionalidad_id: 'Nacionalidad',
+        estado_civil_id: 'Estado civil',
+        sede_id: 'Sede',
+        numero_licencia: 'Número de licencia',
+        licencia_categorias_ids: 'Categorías de licencia',
+        licencia_vencimiento: 'Vencimiento de licencia',
+        telefono_contacto: 'Teléfono',
+        email: 'Email',
+        direccion: 'Dirección',
+        estado_id: 'Estado',
+      };
+      const faltantes = Object.keys(newErrors).map(k => labels[k] || k);
       Swal.fire({
         icon: "warning",
-        title: "Campos requeridos",
-        text: mensajes.join('. '),
+        title: "Campos obligatorios incompletos",
+        html: `<div style="text-align:left">Los siguientes campos son obligatorios:<br/><ul style="margin-top:8px">${faltantes.map(f => `<li>${f}</li>`).join('')}</ul></div>`,
         confirmButtonColor: "#ff0033",
       });
       return;
@@ -3520,16 +3550,18 @@ function ModalEditar({
 
         <div className="form-row-3">
           <div className="form-group">
-            <label className="form-label">DNI</label>
+            <label className="form-label">DNI *</label>
             <input
               type="text"
-              className="form-input"
+              className={`form-input ${editErrors.numero_dni ? 'input-error' : ''}`}
               value={formData.numero_dni}
-              onChange={(e) =>
-                setFormData({ ...formData, numero_dni: e.target.value })
-              }
+              onChange={(e) => {
+                setFormData({ ...formData, numero_dni: e.target.value });
+                if (editErrors.numero_dni) setEditErrors((prev: Record<string, string>) => { const { numero_dni: _r, ...rest } = prev; void _r; return rest });
+              }}
               disabled={saving}
             />
+            {editErrors.numero_dni && <span className="error-message">{editErrors.numero_dni}</span>}
           </div>
           <div className="form-group">
             <label className="form-label">CUIT *</label>
@@ -3547,28 +3579,31 @@ function ModalEditar({
             {editErrors.numero_cuit && <span className="error-message">{editErrors.numero_cuit}</span>}
           </div>
           <div className="form-group">
-            <label className="form-label">Fecha de Nacimiento</label>
+            <label className="form-label">Fecha de Nacimiento *</label>
             <input
               type="date"
-              className="form-input"
+              className={`form-input ${editErrors.fecha_nacimiento ? 'input-error' : ''}`}
               value={formData.fecha_nacimiento}
-              onChange={(e) =>
-                setFormData({ ...formData, fecha_nacimiento: e.target.value })
-              }
+              onChange={(e) => {
+                setFormData({ ...formData, fecha_nacimiento: e.target.value });
+                if (editErrors.fecha_nacimiento) setEditErrors((prev: Record<string, string>) => { const { fecha_nacimiento: _r, ...rest } = prev; void _r; return rest });
+              }}
               disabled={saving}
             />
+            {editErrors.fecha_nacimiento && <span className="error-message">{editErrors.fecha_nacimiento}</span>}
           </div>
         </div>
 
         <div className="form-row-3">
           <div className="form-group">
-            <label className="form-label">Nacionalidad</label>
+            <label className="form-label">Nacionalidad *</label>
             <select
-              className="form-input"
+              className={`form-input ${editErrors.nacionalidad_id ? 'input-error' : ''}`}
               value={formData.nacionalidad_id}
-              onChange={(e) =>
-                setFormData({ ...formData, nacionalidad_id: e.target.value })
-              }
+              onChange={(e) => {
+                setFormData({ ...formData, nacionalidad_id: e.target.value });
+                if (editErrors.nacionalidad_id) setEditErrors((prev: Record<string, string>) => { const { nacionalidad_id: _r, ...rest } = prev; void _r; return rest });
+              }}
               disabled={saving}
             >
               <option value="">Seleccionar...</option>
@@ -3578,15 +3613,17 @@ function ModalEditar({
                 </option>
               ))}
             </select>
+            {editErrors.nacionalidad_id && <span className="error-message">{editErrors.nacionalidad_id}</span>}
           </div>
           <div className="form-group">
-            <label className="form-label">Estado Civil</label>
+            <label className="form-label">Estado Civil *</label>
             <select
-              className="form-input"
+              className={`form-input ${editErrors.estado_civil_id ? 'input-error' : ''}`}
               value={formData.estado_civil_id}
-              onChange={(e) =>
-                setFormData({ ...formData, estado_civil_id: e.target.value })
-              }
+              onChange={(e) => {
+                setFormData({ ...formData, estado_civil_id: e.target.value });
+                if (editErrors.estado_civil_id) setEditErrors((prev: Record<string, string>) => { const { estado_civil_id: _r, ...rest } = prev; void _r; return rest });
+              }}
               disabled={saving}
             >
               <option value="">Seleccionar...</option>
@@ -3596,16 +3633,20 @@ function ModalEditar({
                 </option>
               ))}
             </select>
+            {editErrors.estado_civil_id && <span className="error-message">{editErrors.estado_civil_id}</span>}
           </div>
         </div>
 
         <div className="form-row">
           <div className="form-group">
-            <label className="form-label">Sede</label>
+            <label className="form-label">Sede *</label>
             <select
-              className="form-input"
+              className={`form-input ${editErrors.sede_id ? 'input-error' : ''}`}
               value={formData.sede_id}
-              onChange={(e) => setFormData({ ...formData, sede_id: e.target.value })}
+              onChange={(e) => {
+                setFormData({ ...formData, sede_id: e.target.value });
+                if (editErrors.sede_id) setEditErrors((prev: Record<string, string>) => { const { sede_id: _r, ...rest } = prev; void _r; return rest });
+              }}
               disabled={saving}
             >
               <option value="">Seleccionar...</option>
@@ -3613,6 +3654,7 @@ function ModalEditar({
                 <option key={s.id} value={s.id}>{s.nombre}</option>
               ))}
             </select>
+            {editErrors.sede_id && <span className="error-message">{editErrors.sede_id}</span>}
           </div>
         </div>
 
@@ -3777,28 +3819,31 @@ function ModalEditar({
 
         <div className="form-row">
           <div className="form-group">
-            <label className="form-label">Teléfono</label>
+            <label className="form-label">Teléfono *</label>
             <input
               type="tel"
-              className="form-input"
+              className={`form-input ${editErrors.telefono_contacto ? 'input-error' : ''}`}
               value={formData.telefono_contacto}
-              onChange={(e) =>
-                setFormData({ ...formData, telefono_contacto: e.target.value })
-              }
+              onChange={(e) => {
+                setFormData({ ...formData, telefono_contacto: e.target.value });
+                if (editErrors.telefono_contacto) setEditErrors((prev: Record<string, string>) => { const { telefono_contacto: _r, ...rest } = prev; void _r; return rest });
+              }}
               disabled={saving}
             />
+            {editErrors.telefono_contacto && <span className="error-message">{editErrors.telefono_contacto}</span>}
           </div>
           <div className="form-group">
-            <label className="form-label">Email</label>
+            <label className="form-label">Email *</label>
             <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
               <input
                 type="email"
-                className="form-input"
+                className={`form-input ${editErrors.email ? 'input-error' : ''}`}
                 style={{ flex: 1 }}
                 value={formData.email}
-                onChange={(e) =>
-                  setFormData({ ...formData, email: e.target.value })
-                }
+                onChange={(e) => {
+                  setFormData({ ...formData, email: e.target.value });
+                  if (editErrors.email) setEditErrors((prev: Record<string, string>) => { const { email: _r, ...rest } = prev; void _r; return rest });
+                }}
                 disabled={saving}
               />
               <button
@@ -3812,25 +3857,30 @@ function ModalEditar({
                 <RefreshCw size={14} className={syncingEmail ? 'spin-animation' : ''} />
               </button>
             </div>
+            {editErrors.email && <span className="error-message">{editErrors.email}</span>}
           </div>
         </div>
 
         <div className="form-group" style={{ width: '100%' }}>
-          <label className="form-label">Dirección</label>
-          <AddressAutocomplete
-            value={formData.direccion}
-            onChange={(address, lat, lng, zona) =>
-              setFormData((prev: any) => ({
-                ...prev,
-                direccion: address,
-                direccion_lat: lat ?? null,
-                direccion_lng: lng ?? null,
-                zona: zona || prev.zona
-              }))
-            }
-            disabled={saving}
-            placeholder="Buscar dirección..."
-          />
+          <label className="form-label">Dirección *</label>
+          <div className={editErrors.direccion ? 'input-error' : ''} style={editErrors.direccion ? { borderRadius: 8 } : undefined}>
+            <AddressAutocomplete
+              value={formData.direccion}
+              onChange={(address, lat, lng, zona) => {
+                setFormData((prev: any) => ({
+                  ...prev,
+                  direccion: address,
+                  direccion_lat: lat ?? null,
+                  direccion_lng: lng ?? null,
+                  zona: zona || prev.zona
+                }));
+                if (editErrors.direccion && address) setEditErrors((prev: Record<string, string>) => { const { direccion: _r, ...rest } = prev; void _r; return rest });
+              }}
+              disabled={saving}
+              placeholder="Buscar dirección..."
+            />
+          </div>
+          {editErrors.direccion && <span className="error-message">{editErrors.direccion}</span>}
         </div>
         <div className="form-group" style={{ width: '100%' }}>
           <label className="form-label">Zona</label>
@@ -4495,6 +4545,31 @@ function ModalDetalles({
               {selectedConductor.zona || "N/A"}
             </div>
           </div>
+          <div>
+            <label className="detail-label">SEDE</label>
+            <div className="detail-value">
+              {(selectedConductor as any).sedes?.nombre || "N/A"}
+            </div>
+          </div>
+          <div>
+            <label className="detail-label">CBU</label>
+            <div className="detail-value">
+              {(selectedConductor as any).cbu || "N/A"}
+            </div>
+          </div>
+          <div>
+            <label className="detail-label">PREFERENCIA DE TURNO</label>
+            <div className="detail-value">
+              {(() => {
+                const t = (selectedConductor as any).preferencia_turno;
+                if (t === 'DIURNO') return 'Diurno';
+                if (t === 'NOCTURNO') return 'Nocturno';
+                if (t === 'A_CARGO') return 'A Cargo';
+                if (t === 'SIN_PREFERENCIA' || !t) return 'Ambos';
+                return t;
+              })()}
+            </div>
+          </div>
         </div>
 
         <div className="section-title">Licencia de Conducir</div>
@@ -4682,9 +4757,9 @@ function ModalDetalles({
               </div>
               <div style={{ gridColumn: "1 / -1" }}>
                 <label className="detail-label">MOTIVO DE BAJA</label>
-                <div className="detail-value" style={{ 
-                  background: '#FEF2F2', 
-                  padding: '8px 12px', 
+                <div className="detail-value" style={{
+                  background: '#FEF2F2',
+                  padding: '8px 12px',
                   borderRadius: '6px',
                   color: '#991B1B',
                   fontSize: '13px'
@@ -4694,6 +4769,53 @@ function ModalDetalles({
               </div>
             </>
           )}
+        </div>
+
+        <div className="section-title">Información Adicional</div>
+        <div className="details-grid">
+          <div>
+            <label className="detail-label">ANTECEDENTES PENALES</label>
+            <div className="detail-value">
+              {(selectedConductor as any).antecedentes_penales ? "Sí" : "No"}
+            </div>
+          </div>
+          <div>
+            <label className="detail-label">COCHERA PROPIA</label>
+            <div className="detail-value">
+              {(selectedConductor as any).cochera_propia ? "Sí" : "No"}
+            </div>
+          </div>
+          <div>
+            <label className="detail-label">FECHA DE INCORPORACIÓN</label>
+            <div className="detail-value">
+              {(selectedConductor as any).fecha_contratacion
+                ? new Date((selectedConductor as any).fecha_contratacion + 'T12:00:00').toLocaleDateString("es-AR")
+                : "N/A"}
+            </div>
+          </div>
+          <div>
+            <label className="detail-label">FECHA REINCORPORACIÓN</label>
+            <div className="detail-value">
+              {(selectedConductor as any).fecha_reincorpoaracion
+                ? new Date((selectedConductor as any).fecha_reincorpoaracion + 'T12:00:00').toLocaleDateString("es-AR")
+                : "N/A"}
+            </div>
+          </div>
+          <div style={{ gridColumn: "1 / -1" }}>
+            <label className="detail-label">LINK DE DOCUMENTACIÓN</label>
+            <div className="detail-value">
+              {(selectedConductor as any).url_documentacion ? (
+                <a
+                  href={(selectedConductor as any).url_documentacion}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  style={{ color: '#3B82F6', textDecoration: 'underline', wordBreak: 'break-all' }}
+                >
+                  {(selectedConductor as any).url_documentacion}
+                </a>
+              ) : "N/A"}
+            </div>
+          </div>
         </div>
 
         {/* Historial de Vehículos Asignados */}
