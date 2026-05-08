@@ -3860,6 +3860,20 @@ export function ReporteFacturacionTab() {
       return
     }
 
+    // Paso 1: Recordatorio de recalcular
+    const preCheck = await Swal.fire({
+      title: 'Antes de cerrar',
+      html: '<p>¿Se aseguró de presionar el botón de <strong>Recalcular</strong> antes de cerrar?</p><p>¿Desea continuar cerrando el período?</p>',
+      icon: 'question',
+      showCancelButton: true,
+      confirmButtonColor: '#f59e0b',
+      confirmButtonText: 'Sí',
+      cancelButtonText: 'Cancelar'
+    })
+
+    if (!preCheck.isConfirmed) return
+
+    // Paso 2: Confirmación final
     const result = await Swal.fire({
       title: 'Cerrar Período',
       html: `
