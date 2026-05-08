@@ -245,6 +245,83 @@ app.post('/api/create-drive-folder', async (req, res) => {
   }
 })
 
+// API: Buscar o crear carpeta de documentación para lead (usa carpeta raíz específica de leads)
+app.post('/api/create-lead-drive-folder', async (req, res) => {
+  try {
+    const { leadId, leadNombre } = req.body
+
+    const parentFolderId = process.env.GOOGLE_DRIVE_LEADS_FOLDER_ID
+    if (!parentFolderId) {
+      return res.status(500).json({ error: 'Falta configurar GOOGLE_DRIVE_LEADS_FOLDER_ID en .env' })
+    }
+    if (!leadNombre) {
+      return res.status(400).json({ error: 'Falta parametro: leadNombre' })
+    }
+
+    const folderName = leadNombre.toUpperCase().trim().replace(/\s+/g, ' ')
+    const drive = getDriveService(true)
+    const escapedName = folderName.replace(/'/g, "\\'")
+
+    // Buscar carpeta existente
+    const searchRes = await drive.files.list({
+      q: `name='${escapedName}' and '${parentFolderId}' in parents and mimeType='application/vnd.google-apps.folder' and trashed=false`,
+      fields: 'files(id, webViewLink, name)',
+      pageSize: 1,
+      supportsAllDrives: true,
+      includeItemsFromAllDrives: true
+    })
+
+    const existing = searchRes.data.files && searchRes.data.files[0]
+    if (existing) {
+      console.log(`[create-lead-drive-folder] Carpeta encontrada '${folderName}': ${existing.id}`)
+      return res.json({
+        success: true,
+        folderId: existing.id,
+        folderUrl: existing.webViewLink || `https://drive.google.com/drive/folders/${existing.id}`,
+        folderName,
+        source: 'drive'
+      })
+    }
+
+    // Crear carpeta nueva
+    const createRes = await drive.files.create({
+      requestBody: {
+        name: folderName,
+        mimeType: 'application/vnd.google-apps.folder',
+        parents: [parentFolderId]
+      },
+      fields: 'id, webViewLink',
+      supportsAllDrives: true
+    })
+
+    const folder = createRes.data
+    console.log(`[create-lead-drive-folder] Carpeta creada '${folderName}': ${folder.id}`)
+
+    // Compartir con dominio toshify
+    try {
+      await drive.permissions.create({
+        fileId: folder.id,
+        requestBody: { role: 'writer', type: 'domain', domain: 'toshify.com.ar' },
+        supportsAllDrives: true,
+        sendNotificationEmail: false
+      })
+    } catch (permErr) {
+      console.warn(`[create-lead-drive-folder] No se pudo compartir carpeta: ${permErr.message}`)
+    }
+
+    res.json({
+      success: true,
+      folderId: folder.id,
+      folderUrl: folder.webViewLink || `https://drive.google.com/drive/folders/${folder.id}`,
+      folderName,
+      source: 'created'
+    })
+  } catch (error) {
+    console.error('[create-lead-drive-folder] Error:', error.message)
+    res.status(500).json({ error: error.message })
+  }
+})
+
 // Cabify auth proxy (for production - in dev Vite proxy handles this)
 app.post('/cabify-auth', async (req, res) => {
   try {

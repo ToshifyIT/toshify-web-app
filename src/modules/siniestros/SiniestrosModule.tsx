@@ -1,5 +1,4 @@
 // src/modules/siniestros/SiniestrosModule.tsx
-/* eslint-disable @typescript-eslint/no-explicit-any */
 import { useState, useEffect, useMemo } from 'react'
 import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../contexts/AuthContext'
@@ -206,7 +205,7 @@ export function SiniestrosModule() {
           setFormData(prev => ({ ...prev, estado_id: estadoRegistrado.id }))
         }
       }
-    } catch (_error) {
+    } catch {
       Swal.fire('Error', 'No se pudieron cargar los datos', 'error')
     } finally {
       setLoading(false)
@@ -741,7 +740,11 @@ export function SiniestrosModule() {
         })
         if (error) throw error
 
-        const ahora = new Date().toISOString()
+        // Usar fecha + hora del siniestro (no la fecha actual) para cerrar asignaciones
+        // Así facturación corta en el momento real del evento, no cuando se carga en el sistema
+        const fechaSiniestroStr = formDataClean.fecha_siniestro
+        const horaSiniestroStr = formDataClean.hora_siniestro || '00:00:00'
+        const fechaCierre = new Date(`${fechaSiniestroStr}T${horaSiniestroStr}`).toISOString()
 
         // Si se seleccionó un estado para el vehículo, actualizarlo
         if (estado_vehiculo && formDataClean.vehiculo_id) {
@@ -749,7 +752,7 @@ export function SiniestrosModule() {
           if (estadoSeleccionado) {
             await (supabase as any)
               .from('vehiculos')
-              .update({ 
+              .update({
                 estado_id: estadoSeleccionado.id,
                 updated_by: profile?.full_name || 'Sistema'
               })
@@ -794,19 +797,19 @@ export function SiniestrosModule() {
             if (asignacionesActivas && asignacionesActivas.length > 0) {
               const asignacionIds = asignacionesActivas.map((a: any) => a.id)
 
-              // Finalizar conductores
+              // Finalizar conductores (usa fecha del siniestro, no fecha actual)
               await (supabase as any)
                 .from('asignaciones_conductores')
-                .update({ estado: 'completado', fecha_fin: ahora })
+                .update({ estado: 'completado', fecha_fin: fechaCierre })
                 .in('asignacion_id', asignacionIds)
                 .in('estado', ['asignado', 'activo'])
 
-              // Finalizar asignaciones
+              // Finalizar asignaciones (usa fecha del siniestro, no fecha actual)
               await (supabase as any)
                 .from('asignaciones')
                 .update({
                   estado: 'finalizada',
-                  fecha_fin: ahora,
+                  fecha_fin: fechaCierre,
                   notas: `[AUTO-CERRADA] Siniestro - Vehículo cambió a estado: ${estado_vehiculo}`,
                   updated_by: profile?.full_name || 'Sistema'
                 })
@@ -844,7 +847,10 @@ export function SiniestrosModule() {
         }).eq('id', selectedSiniestro.id)
         if (error) throw error
 
-        const ahora = new Date().toISOString()
+        // Usar fecha + hora del siniestro (no la fecha actual) para cerrar asignaciones
+        const fechaSiniestroStrEdit = formDataClean.fecha_siniestro
+        const horaSiniestroStrEdit = formDataClean.hora_siniestro || '00:00:00'
+        const fechaCierreEdit = new Date(`${fechaSiniestroStrEdit}T${horaSiniestroStrEdit}`).toISOString()
 
         // Si se seleccionó un estado para el vehículo, actualizarlo
         if (estado_vehiculo && formDataClean.vehiculo_id) {
@@ -852,7 +858,7 @@ export function SiniestrosModule() {
           if (estadoSeleccionado) {
             await (supabase as any)
               .from('vehiculos')
-              .update({ 
+              .update({
                 estado_id: estadoSeleccionado.id,
                 updated_by: profile?.full_name || 'Sistema'
               })
@@ -878,7 +884,7 @@ export function SiniestrosModule() {
           const estadosFinalizanAsignacion = [
             'SINIESTRADO',
             'TALLER_CHAPA_PINTURA',
-            'CORPORATIVO', 
+            'CORPORATIVO',
             'PKG_OFF_BASE',
             'PKG_OFF_FRANCIA',
             'DESTRUCCION_TOTAL',
@@ -897,19 +903,19 @@ export function SiniestrosModule() {
             if (asignacionesActivas && asignacionesActivas.length > 0) {
               const asignacionIds = asignacionesActivas.map((a: any) => a.id)
 
-              // Finalizar conductores
+              // Finalizar conductores (usa fecha del siniestro, no fecha actual)
               await (supabase as any)
                 .from('asignaciones_conductores')
-                .update({ estado: 'completado', fecha_fin: ahora })
+                .update({ estado: 'completado', fecha_fin: fechaCierreEdit })
                 .in('asignacion_id', asignacionIds)
                 .in('estado', ['asignado', 'activo'])
 
-              // Finalizar asignaciones
+              // Finalizar asignaciones (usa fecha del siniestro, no fecha actual)
               await (supabase as any)
                 .from('asignaciones')
                 .update({
                   estado: 'finalizada',
-                  fecha_fin: ahora,
+                  fecha_fin: fechaCierreEdit,
                   notas: `[AUTO-CERRADA] Siniestro - Vehículo cambió a estado: ${estado_vehiculo}`,
                   updated_by: profile?.full_name || 'Sistema'
                 })
@@ -1006,7 +1012,7 @@ export function SiniestrosModule() {
       showSuccess('Vehículo habilitado', `${siniestro.vehiculo_patente} ahora puede circular`)
 
       cargarDatos()
-    } catch (_error) {
+    } catch {
       Swal.fire('Error', 'No se pudo habilitar el vehículo', 'error')
     }
   }

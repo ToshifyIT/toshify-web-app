@@ -60,6 +60,48 @@ export async function createConductorDriveFolder(
 }
 
 /**
+ * Busca o crea una carpeta en Google Drive para un lead (carpeta raíz de leads/documentación)
+ * @param leadId - UUID del lead
+ * @param leadNombre - Nombre completo del lead
+ * @returns Objeto con el ID y URL de la carpeta
+ */
+export async function createLeadDriveFolder(
+  leadId: string,
+  leadNombre: string
+): Promise<CreateFolderResponse> {
+  try {
+    const response = await fetch('/api/create-lead-drive-folder', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ leadId, leadNombre })
+    })
+
+    const data = await response.json()
+
+    if (!response.ok) {
+      return {
+        success: false,
+        error: data.error || 'Error al crear carpeta de lead en Drive'
+      }
+    }
+
+    return {
+      success: true,
+      folderId: data.folderId,
+      folderUrl: data.folderUrl,
+      folderName: data.folderName
+    }
+  } catch (error: any) {
+    return {
+      success: false,
+      error: error.message || 'Error desconocido al crear carpeta de lead'
+    }
+  }
+}
+
+/**
  * Abre la carpeta de Drive del conductor en una nueva pestaña
  * @param folderUrl - URL de la carpeta en Drive
  */

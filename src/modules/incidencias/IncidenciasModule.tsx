@@ -1,4 +1,4 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
+ 
 // src/modules/incidencias/IncidenciasModule.tsx
 import { useState, useEffect, useMemo } from 'react'
 import { useSearchParams } from 'react-router-dom'
@@ -187,9 +187,11 @@ export function IncidenciasModule() {
   const [penCodIncFilter, setPenCodIncFilter] = useState<string[]>([])
   const [penAplicadoFilter, setPenAplicadoFilter] = useState<string[]>([])
   const [penFraccFilter, setPenFraccFilter] = useState<string[]>([])
+  const [penSemFilter, setPenSemFilter] = useState<string[]>([])
+  const [penSemAplFilter, setPenSemAplFilter] = useState<string[]>([])
 
   // Helper: ¿Hay filtros activos en penalidades?
-  const hayFiltrosPenalidadesActivos = penPatenteFilter.length > 0 || penConductorFilter.length > 0 || penTipoFilter.length > 0 || penCodIncFilter.length > 0 || penAplicadoFilter.length > 0 || penFraccFilter.length > 0
+  const hayFiltrosPenalidadesActivos = penPatenteFilter.length > 0 || penConductorFilter.length > 0 || penTipoFilter.length > 0 || penCodIncFilter.length > 0 || penAplicadoFilter.length > 0 || penFraccFilter.length > 0 || penSemFilter.length > 0 || penSemAplFilter.length > 0
   
   // Limpiar todos los filtros de penalidades
   function limpiarFiltrosPenalidades() {
@@ -199,6 +201,8 @@ export function IncidenciasModule() {
     setPenCodIncFilter([])
     setPenAplicadoFilter([])
     setPenFraccFilter([])
+    setPenSemFilter([])
+    setPenSemAplFilter([])
   }
 
   // Selección masiva para envío a facturación
@@ -390,7 +394,7 @@ export function IncidenciasModule() {
         // Obtener campos adicionales de la tabla incidencias (tipo, monto)
         (supabase.from('incidencias' as any) as any).select('id, tipo, tipo_cobro_descuento_id, monto'),
         // Obtener campos frescos de la tabla penalidades (aplicado, rechazado, incidencia_id)
-        (supabase.from('penalidades' as any) as any).select('id, incidencia_id, aplicado, rechazado, fecha_rechazo, motivo_rechazo'),
+        (supabase.from('penalidades' as any) as any).select('id, incidencia_id, aplicado, rechazado, fecha_rechazo, motivo_rechazo, semana_aplicacion, anio_aplicacion'),
         // Obtener historial de rechazos
         (supabase.from('penalidades_rechazos' as any) as any).select('penalidad_id, motivo, rechazado_por, created_at').order('created_at', { ascending: false }),
         // Conceptos de facturación (para dropdown de incidencias, excluir alquileres y conceptos no aplicables)
@@ -448,14 +452,16 @@ export function IncidenciasModule() {
       setIncidencias(incidenciasConTipo)
       
       // Combinar datos de la vista con datos frescos de la tabla penalidades
-      const penalidadTableDataMap = new Map<string, { incidencia_id: string | null; aplicado: boolean; rechazado: boolean; fecha_rechazo: string | null; motivo_rechazo: string | null }>()
+      const penalidadTableDataMap = new Map<string, { incidencia_id: string | null; aplicado: boolean; rechazado: boolean; fecha_rechazo: string | null; motivo_rechazo: string | null; semana_aplicacion: number | null; anio_aplicacion: number | null }>()
       for (const p of (penalidadesTableRes.data || [])) {
-        penalidadTableDataMap.set(p.id, { 
+        penalidadTableDataMap.set(p.id, {
           incidencia_id: p.incidencia_id || null,
           aplicado: p.aplicado ?? false,
-          rechazado: p.rechazado ?? false, 
-          fecha_rechazo: p.fecha_rechazo, 
-          motivo_rechazo: p.motivo_rechazo 
+          rechazado: p.rechazado ?? false,
+          fecha_rechazo: p.fecha_rechazo,
+          motivo_rechazo: p.motivo_rechazo,
+          semana_aplicacion: p.semana_aplicacion ?? null,
+          anio_aplicacion: p.anio_aplicacion ?? null
         })
       }
       
@@ -479,7 +485,9 @@ export function IncidenciasModule() {
           aplicado: tableData?.aplicado ?? p.aplicado ?? false,
           rechazado: estaRechazado,
           fecha_rechazo: tableData?.fecha_rechazo || (estaRechazado ? rechazoHistorial?.fecha : null) || null,
-          motivo_rechazo: tableData?.motivo_rechazo || (estaRechazado ? rechazoHistorial?.motivo : null) || null
+          motivo_rechazo: tableData?.motivo_rechazo || (estaRechazado ? rechazoHistorial?.motivo : null) || null,
+          semana_aplicacion: tableData?.semana_aplicacion ?? p.semana_aplicacion ?? null,
+          anio_aplicacion: tableData?.anio_aplicacion ?? p.anio_aplicacion ?? null
         }
       })
       setPenalidades(penData)
@@ -553,6 +561,14 @@ export function IncidenciasModule() {
 
   const penConductoresUnicos = useMemo(() =>
     [...new Set(penalidades.map(p => p.conductor_display).filter(Boolean))].sort() as string[]
+  , [penalidades])
+
+  const penSemanasUnicas = useMemo(() =>
+    [...new Set(penalidades.map(p => p.semana).filter(v => v != null).map(String))].sort((a, b) => Number(a) - Number(b))
+  , [penalidades])
+
+  const penSemanasAplUnicas = useMemo(() =>
+    [...new Set(penalidades.map(p => (p as any).semana_aplicacion).filter(v => v != null).map(String))].sort((a, b) => Number(a) - Number(b))
   , [penalidades])
 
 
@@ -828,20 +844,37 @@ export function IncidenciasModule() {
     const hoy = new Date()
     const semActual = getWeekNumber(hoy.toISOString().split('T')[0])
     const anioActual = hoy.getFullYear()
-    let semDefault = semActual - 1
-    let anioDefault = anioActual
-    if (semDefault < 1) { semDefault = 52; anioDefault-- }
 
-    // Generar opciones de períodos
+    // Consultar periodos cerrados para filtrarlos del dropdown
+    const sedeId = sedeActualId || sedeUsuario?.id
+    let periodosCerradosSet = new Set<string>()
+    if (sedeId) {
+      const { data: cerrados } = await (supabase
+        .from('periodos_facturacion') as any)
+        .select('semana, anio')
+        .eq('sede_id', sedeId)
+        .eq('estado', 'cerrado')
+      if (cerrados) {
+        periodosCerradosSet = new Set(cerrados.map((c: any) => `${c.semana}-${c.anio}`))
+      }
+    }
+
+    // Generar opciones de períodos (solo abiertos)
     let sem = semActual - 4
     let anio = anioActual
     if (sem < 1) { sem = 52 + sem; anio-- }
-    const opcionesPeriodos: string[] = []
+    const opcionesPeriodos: Array<{semana: number, anio: number, label: string}> = []
     for (let i = 0; i < 25; i++) {
-      opcionesPeriodos.push(`Semana ${sem} - ${anio}`)
+      if (!periodosCerradosSet.has(`${sem}-${anio}`)) {
+        opcionesPeriodos.push({ semana: sem, anio: anio, label: `Semana ${sem} - ${anio}` })
+      }
       sem++
       if (sem > 52) { sem = 1; anio++ }
     }
+
+    // Determinar indice por defecto (semana actual o la primera disponible)
+    const defaultIdx = opcionesPeriodos.findIndex(p => p.semana === semActual && p.anio === anioActual)
+    const selectedDefault = defaultIdx >= 0 ? defaultIdx : 0
 
     const { value: semanaSeleccionada } = await Swal.fire({
       title: 'Aplicar en lote',
@@ -850,7 +883,7 @@ export function IncidenciasModule() {
         <p style="margin-bottom:12px;"><strong>Monto total:</strong> $${seleccionadas.reduce((s, p) => s + (p.monto || 0), 0).toLocaleString('es-AR')}</p>
         <label style="display:block; text-align:left; font-size:13px; font-weight:600; margin-bottom:4px;">Semana de aplicación:</label>
         <select id="swal-semana-masiva" class="swal2-select" style="width:100%; padding:8px; border:1px solid #d1d5db; border-radius:6px;">
-          ${opcionesPeriodos.map((op, i) => `<option value="${i}" ${i === 3 ? 'selected' : ''}>${op}</option>`).join('')}
+          ${opcionesPeriodos.map((op, i) => `<option value="${i}" ${i === selectedDefault ? 'selected' : ''}>${op.label}</option>`).join('')}
         </select>
       `,
       showCancelButton: true,
@@ -865,24 +898,10 @@ export function IncidenciasModule() {
 
     if (semanaSeleccionada === undefined) return
 
-    // Calcular semana/año desde el índice
-    let semFinal = semActual - 4 + semanaSeleccionada
-    let anioFinal = anioActual
-    if (semActual - 4 < 1) {
-      semFinal = 52 + (semActual - 4) + semanaSeleccionada
-      anioFinal = semFinal > 52 ? anioActual : anioActual - 1
-      if (semFinal > 52) semFinal -= 52
-    }
-    // Recalcular correctamente
-    sem = semActual - 4
-    anio = anioActual
-    if (sem < 1) { sem = 52 + sem; anio-- }
-    for (let i = 0; i < semanaSeleccionada; i++) {
-      sem++
-      if (sem > 52) { sem = 1; anio++ }
-    }
-    semFinal = sem
-    anioFinal = anio
+    // Obtener semana/año directamente del array filtrado
+    const periodoElegido = opcionesPeriodos[semanaSeleccionada]
+    const semFinal = periodoElegido.semana
+    const anioFinal = periodoElegido.anio
 
     setProcesandoMasivoPenalidades(true)
     let aplicados = 0
@@ -1181,9 +1200,15 @@ export function IncidenciasModule() {
         return penFraccFilter.includes(label)
       })
     }
+    if (penSemFilter.length > 0) {
+      filtered = filtered.filter(p => penSemFilter.includes(String(p.semana || '')))
+    }
+    if (penSemAplFilter.length > 0) {
+      filtered = filtered.filter(p => penSemAplFilter.includes(String((p as any).semana_aplicacion || '')))
+    }
 
     return filtered
-  }, [penalidades, activeTab, penPatenteFilter, penConductorFilter, penTipoFilter, penCodIncFilter, penAplicadoFilter, penFraccFilter, fraccionamientoMap, incidenciasSinEnviarVirtuales, tiposCobroDescuentoMap])
+  }, [penalidades, activeTab, penPatenteFilter, penConductorFilter, penTipoFilter, penCodIncFilter, penAplicadoFilter, penFraccFilter, penSemFilter, penSemAplFilter, fraccionamientoMap, incidenciasSinEnviarVirtuales, tiposCobroDescuentoMap])
 
   // Columnas para tabla de incidencias
   const incidenciasColumns = useMemo<ColumnDef<IncidenciaCompleta>[]>(() => [
@@ -1640,8 +1665,40 @@ export function IncidenciasModule() {
     },
     {
       accessorKey: 'semana',
-      header: 'Sem',
-      cell: ({ row }) => row.original.semana || '-'
+      header: () => (
+        <ExcelColumnFilter
+          label="Sem"
+          options={penSemanasUnicas}
+          selectedValues={penSemFilter}
+          onSelectionChange={setPenSemFilter}
+          filterId="pen_sem"
+          openFilterId={openFilterId}
+          onOpenChange={setOpenFilterId}
+        />
+      ),
+      cell: ({ row }) => row.original.semana || '-',
+      enableSorting: true,
+    },
+    {
+      id: 'sem_aplicacion',
+      header: () => (
+        <ExcelColumnFilter
+          label="Sem Apl."
+          options={penSemanasAplUnicas}
+          selectedValues={penSemAplFilter}
+          onSelectionChange={setPenSemAplFilter}
+          filterId="pen_sem_apl"
+          openFilterId={openFilterId}
+          onOpenChange={setOpenFilterId}
+        />
+      ),
+      accessorFn: (row) => row.semana_aplicacion || '',
+      cell: ({ row }) => {
+        const sem = row.original.semana_aplicacion
+        if (!sem) return <span style={{ color: '#9ca3af', fontSize: '11px' }}>-</span>
+        return <span style={{ fontSize: '12px', fontWeight: 600 }}>S{sem}</span>
+      },
+      enableSorting: true,
     },
     {
       accessorKey: 'patente_display',
@@ -1877,7 +1934,7 @@ export function IncidenciasModule() {
     })
 
     return cols
-  }, [penPatentesUnicas, penPatenteFilter, penConductoresUnicos, penConductorFilter, penTiposUnicos, penTipoFilter, penAplicadoFilter, penFraccFilter, openFilterId, canDelete, canEdit, fraccionamientoMap, activeTab, penalidadesSeleccionadas, penalidadesPorAplicar])
+  }, [penPatentesUnicas, penPatenteFilter, penConductoresUnicos, penConductorFilter, penTiposUnicos, penTipoFilter, penAplicadoFilter, penFraccFilter, penSemanasUnicas, penSemFilter, penSemanasAplUnicas, penSemAplFilter, openFilterId, canDelete, canEdit, fraccionamientoMap, activeTab, penalidadesSeleccionadas, penalidadesPorAplicar])
 
   function handleNuevaIncidencia() {
     const estadoPendiente = estados.find(e => e.codigo === 'PENDIENTE')
@@ -2507,10 +2564,25 @@ export function IncidenciasModule() {
     // Por defecto usar semana actual
     setSemanaInicio(semanaActual)
     setAnioInicio(anioActual)
-    
+
+    // Consultar periodos cerrados para filtrarlos del dropdown
+    const sedeId = sedeActualId || sedeUsuario?.id
+    let periodosCerradosSet = new Set<string>()
+    if (sedeId) {
+      const { data: cerrados } = await (supabase
+        .from('periodos_facturacion') as any)
+        .select('semana, anio')
+        .eq('sede_id', sedeId)
+        .eq('estado', 'cerrado')
+      if (cerrados) {
+        periodosCerradosSet = new Set(cerrados.map((c: any) => `${c.semana}-${c.anio}`))
+      }
+    }
+
     // Generar períodos disponibles (4 semanas anteriores + semana actual + próximas 20 semanas)
+    // Excluir los que ya están cerrados
     const periodos: Array<{semana: number, anio: number, label: string}> = []
-    
+
     // Agregar 4 semanas anteriores
     let sem = semanaActual - 4
     let anio = anioActual
@@ -2518,20 +2590,28 @@ export function IncidenciasModule() {
       sem = 52 + sem
       anio = anioActual - 1
     }
-    
+
     for (let i = 0; i < 25; i++) { // 4 anteriores + actual + 20 siguientes
-      periodos.push({
-        semana: sem,
-        anio: anio,
-        label: `Semana ${sem} - ${anio}`
-      })
+      if (!periodosCerradosSet.has(`${sem}-${anio}`)) {
+        periodos.push({
+          semana: sem,
+          anio: anio,
+          label: `Semana ${sem} - ${anio}`
+        })
+      }
       sem++
       if (sem > 52) {
         sem = 1
         anio++
       }
     }
-    
+
+    // Si la semana por defecto está cerrada, usar la primera disponible
+    if (periodosCerradosSet.has(`${semanaActual}-${anioActual}`) && periodos.length > 0) {
+      setSemanaInicio(periodos[0].semana)
+      setAnioInicio(periodos[0].anio)
+    }
+
     setPeriodosDisponibles(periodos)
     setShowAplicarModal(true)
   }
@@ -2673,38 +2753,55 @@ export function IncidenciasModule() {
   }
 
   // Abrir modal de reasignar semana
-  function handleReasignarSemana(penalidad: PenalidadCompleta) {
+  async function handleReasignarSemana(penalidad: PenalidadCompleta) {
     setPenalidadReasignar(penalidad)
-    
+
     // Setear la semana actual del cobro
     setNuevaSemana(penalidad.semana_aplicacion || 1)
     setNuevoAnio(penalidad.anio_aplicacion || new Date().getFullYear())
-    
+
+    // Consultar periodos cerrados para filtrarlos del dropdown
+    const sedeId = sedeActualId || sedeUsuario?.id
+    let periodosCerradosSet = new Set<string>()
+    if (sedeId) {
+      const { data: cerrados } = await (supabase
+        .from('periodos_facturacion') as any)
+        .select('semana, anio')
+        .eq('sede_id', sedeId)
+        .eq('estado', 'cerrado')
+      if (cerrados) {
+        periodosCerradosSet = new Set(cerrados.map((c: any) => `${c.semana}-${c.anio}`))
+      }
+    }
+
     // Generar períodos disponibles (8 semanas anteriores + 20 semanas futuras)
+    // Excluir los que ya están cerrados
     const semanaActual = getWeek(new Date())
     const anioActual = new Date().getFullYear()
     const periodos: Array<{semana: number, anio: number, label: string}> = []
-    
+
     let sem = semanaActual - 8
     let anio = anioActual
     if (sem < 1) {
       sem = 52 + sem
       anio = anioActual - 1
     }
-    
+
     for (let i = 0; i < 30; i++) { // 8 anteriores + actual + 21 siguientes
-      periodos.push({
-        semana: sem,
-        anio: anio,
-        label: `Semana ${sem} - ${anio}`
-      })
+      if (!periodosCerradosSet.has(`${sem}-${anio}`)) {
+        periodos.push({
+          semana: sem,
+          anio: anio,
+          label: `Semana ${sem} - ${anio}`
+        })
+      }
       sem++
       if (sem > 52) {
         sem = 1
         anio++
       }
     }
-    
+
     setPeriodosDisponibles(periodos)
     setShowReasignarModal(true)
   }
@@ -3543,6 +3640,32 @@ export function IncidenciasModule() {
                     </button>
                   </div>
                 ))}
+                {penSemFilter.map(val => (
+                  <div key={`sem-${val}`} className="dt-active-filter-chip">
+                    <span className="dt-chip-label">Sem:</span>
+                    <span className="dt-chip-value">{val}</span>
+                    <button
+                      className="dt-chip-remove"
+                      onClick={() => setPenSemFilter(prev => prev.filter(v => v !== val))}
+                      title="Quitar filtro"
+                    >
+                      <X size={12} />
+                    </button>
+                  </div>
+                ))}
+                {penSemAplFilter.map(val => (
+                  <div key={`semapl-${val}`} className="dt-active-filter-chip">
+                    <span className="dt-chip-label">Sem Apl.:</span>
+                    <span className="dt-chip-value">{val}</span>
+                    <button
+                      className="dt-chip-remove"
+                      onClick={() => setPenSemAplFilter(prev => prev.filter(v => v !== val))}
+                      title="Quitar filtro"
+                    >
+                      <X size={12} />
+                    </button>
+                  </div>
+                ))}
               </div>
               <button className="dt-clear-all-filters" onClick={limpiarFiltrosPenalidades}>
                 Limpiar todo
@@ -3630,6 +3753,32 @@ export function IncidenciasModule() {
                     <button
                       className="dt-chip-remove"
                       onClick={() => setPenTipoFilter(prev => prev.filter(v => v !== val))}
+                      title="Quitar filtro"
+                    >
+                      <X size={12} />
+                    </button>
+                  </div>
+                ))}
+                {penSemFilter.map(val => (
+                  <div key={`sem-${val}`} className="dt-active-filter-chip">
+                    <span className="dt-chip-label">Sem:</span>
+                    <span className="dt-chip-value">{val}</span>
+                    <button
+                      className="dt-chip-remove"
+                      onClick={() => setPenSemFilter(prev => prev.filter(v => v !== val))}
+                      title="Quitar filtro"
+                    >
+                      <X size={12} />
+                    </button>
+                  </div>
+                ))}
+                {penSemAplFilter.map(val => (
+                  <div key={`semapl-${val}`} className="dt-active-filter-chip">
+                    <span className="dt-chip-label">Sem Apl.:</span>
+                    <span className="dt-chip-value">{val}</span>
+                    <button
+                      className="dt-chip-remove"
+                      onClick={() => setPenSemAplFilter(prev => prev.filter(v => v !== val))}
                       title="Quitar filtro"
                     >
                       <X size={12} />
