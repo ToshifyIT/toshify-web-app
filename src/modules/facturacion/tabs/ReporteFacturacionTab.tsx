@@ -1,4 +1,4 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
+ 
 /* eslint-disable @typescript-eslint/no-unused-vars */
 import { useState, useEffect, useMemo, useRef } from 'react'
 import { supabase } from '../../../lib/supabase'
@@ -2850,8 +2850,8 @@ export function ReporteFacturacionTab() {
         const { data: penalidadesPendientesRecalc } = await (supabase
           .from('penalidades') as any)
           .select('conductor_id, conductores!inner(numero_dni, sede_id)')
-          .gte('fecha', fechaInicio)
-          .lte('fecha', fechaFin)
+          .eq('semana_aplicacion', semanaNum)
+          .eq('anio_aplicacion', anioNum)
           .eq('aplicado', true)
           .neq('rechazado', true)
 

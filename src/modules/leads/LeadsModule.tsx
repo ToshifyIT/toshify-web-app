@@ -21,7 +21,7 @@ import { ExcelColumnFilter } from '../../components/ui/DataTable/ExcelColumnFilt
 import './LeadsModule.css'
 import { LeadWizard } from './components/LeadWizard'
 import { inferZona, inferZonaFromCoords } from '../../utils/zonaUtils'
-import { createConductorDriveFolder } from '../../services/driveService'
+import { createLeadDriveFolder } from '../../services/driveService'
 import { GOOGLE_MAPS_SCRIPT_URL } from '../../lib/googleMaps'
 
 // =====================================================
@@ -1040,25 +1040,24 @@ export function LeadsModule() {
 
       if (errCond) throw errCond
 
-      // Buscar o crear carpeta en Drive para el conductor
+      // Buscar o crear carpeta en Drive (carpeta de leads/documentación)
       let folderUrl = lead.url_folder?.trim() || null
       if (createdConductor?.id) {
-        if (folderUrl) {
-          // Ya tiene carpeta: solo guardar en el conductor
-          await supabase.from('conductores').update({ url_documentacion: folderUrl }).eq('id', createdConductor.id)
-        } else {
-          // No tiene carpeta: buscar/crear en Drive
+        if (!folderUrl) {
+          // No tiene carpeta: buscar/crear en la carpeta raíz de leads
           const nombreCompleto = (lead.nombre_completo || '').trim()
           if (nombreCompleto) {
-            const driveResult = await createConductorDriveFolder(createdConductor.id, nombreCompleto, lead.dni)
+            const driveResult = await createLeadDriveFolder(lead.id, nombreCompleto)
             if (driveResult.success && driveResult.folderUrl) {
               folderUrl = driveResult.folderUrl
-              // Guardar en el lead también
+              // Guardar en el lead
               await supabase.from('leads').update({ url_folder: folderUrl }).eq('id', lead.id)
-              // drive_folder_url ya lo persiste el endpoint, pero guardamos url_documentacion también
-              await supabase.from('conductores').update({ url_documentacion: folderUrl }).eq('id', createdConductor.id)
             }
           }
+        }
+        // Guardar la URL en el conductor (venga del lead o recién creada)
+        if (folderUrl) {
+          await supabase.from('conductores').update({ url_documentacion: folderUrl }).eq('id', createdConductor.id)
         }
       }
 
