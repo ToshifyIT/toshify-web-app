@@ -30,3 +30,37 @@
   fill: var(--text-primary, #ffffff);
   font-weight: 600;
 }
+
+/* =====================================================
+   RESPONSIVE
+   ===================================================== */
+
+@media (max-width: 768px) {
+  .zones-assignments-chart {
+    padding: 16px;
+  }
+
+  .zones-assignments-title {
+    font-size: 12px;
+    margin-bottom: 12px;
+  }
+
+  .zones-assignments-body {
+    min-height: 220px;
+  }
+}
+
+@media (max-width: 480px) {
+  .zones-assignments-chart {
+    padding: 12px;
+    border-radius: 10px;
+  }
+
+  .zones-assignments-title {
+    font-size: 11px;
+  }
+
+  .zones-assignments-body {
+    min-height: 200px;
+  }
+}

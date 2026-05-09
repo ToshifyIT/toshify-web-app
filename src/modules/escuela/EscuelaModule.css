@@ -98,8 +98,66 @@
 }
 
 @media (max-width: 768px) {
+  .escuela-stats {
+    padding: 10px;
+  }
+
   .escuela-stats-grid {
     grid-template-columns: repeat(2, 1fr);
+    gap: 8px;
+  }
+
+  .escuela-stats .stat-card {
+    padding: 10px;
+    min-width: 0;
+  }
+
+  .escuela-stats .stat-label {
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+}
+
+@media (max-width: 480px) {
+  .escuela-stats {
+    padding: 8px;
+  }
+
+  .escuela-stats-grid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 6px;
+  }
+
+  .escuela-stats .stat-card {
+    padding: 8px;
+    gap: 6px;
+  }
+
+  .escuela-stats .stat-value {
+    font-size: 13px;
+  }
+
+  .escuela-stats .stat-label {
+    font-size: 10px;
+  }
+}
+
+/* iPhone SE: stats en 1 columna */
+@media (max-width: 380px) {
+  .escuela-stats-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .escuela-stats .stat-card {
+    padding: 10px 12px;
+  }
+
+  .escuela-stats .stat-value {
+    font-size: 16px;
+  }
+
+  .escuela-stats .stat-label {
+    font-size: 11px;
   }
 }
 

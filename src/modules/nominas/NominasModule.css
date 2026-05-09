@@ -253,6 +253,25 @@
   }
 }
 
+/* iPhone SE: stats en 1 columna */
+@media (max-width: 380px) {
+  .nom-stats-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .nom-stats .stat-card {
+    padding: 10px 12px;
+  }
+
+  .nom-stats .stat-value {
+    font-size: 16px;
+  }
+
+  .nom-stats .stat-label {
+    font-size: 11px;
+  }
+}
+
 /* =====================================================
    TABLE CELLS - Estilos específicos
    ===================================================== */

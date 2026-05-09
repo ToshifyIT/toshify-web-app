@@ -193,12 +193,31 @@
 }
 
 @media (max-width: 768px) {
+  .fact-stats {
+    padding: 10px;
+  }
+
   .fact-stats-grid {
     grid-template-columns: repeat(2, 1fr);
+    gap: 8px;
+  }
+
+  .fact-stats .stat-card {
+    padding: 10px;
+    min-width: 0;
+  }
+
+  .fact-stats .stat-label {
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 }
 
 @media (max-width: 480px) {
+  .fact-stats {
+    padding: 8px;
+  }
+
   .fact-stats-grid {
     grid-template-columns: repeat(2, 1fr);
     gap: 6px;
@@ -235,6 +254,25 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+  }
+}
+
+/* iPhone SE y dispositivos extra chicos: stats en 1 columna */
+@media (max-width: 380px) {
+  .fact-stats-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .fact-stats .stat-card {
+    padding: 10px 12px;
+  }
+
+  .fact-stats .stat-value {
+    font-size: 16px !important;
+  }
+
+  .fact-stats .stat-label {
+    font-size: 10px !important;
   }
 }
 

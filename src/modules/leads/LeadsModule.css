@@ -159,8 +159,18 @@
 /* Tablet */
 @media (max-width: 768px) {
   .leads-stats-grid {
-    grid-template-columns: repeat(3, 1fr);
+    grid-template-columns: repeat(2, 1fr);
     gap: 8px;
+  }
+
+  .leads-stats .stat-card {
+    padding: 10px;
+    min-width: 0;
+  }
+
+  .leads-stats .stat-label {
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 
   .leads-stats-header {
@@ -178,7 +188,7 @@
   }
 
   .leads-stats {
-    padding: 12px;
+    padding: 10px;
   }
 
   /* Botones: ocultar texto, dejar solo icono */
@@ -951,6 +961,25 @@
 }
 .hireflix-btn-wrapper:hover .hireflix-tooltip {
   display: block;
+}
+
+/* iPhone SE y dispositivos extra chicos: stats en 1 columna */
+@media (max-width: 380px) {
+  .leads-stats-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .leads-stats .stat-card {
+    padding: 10px 12px;
+  }
+
+  .leads-stats .stat-value {
+    font-size: 16px;
+  }
+
+  .leads-stats .stat-label {
+    font-size: 11px;
+  }
 }
 
 

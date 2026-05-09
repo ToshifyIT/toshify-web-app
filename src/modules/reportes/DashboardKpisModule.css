@@ -149,3 +149,52 @@
     min-width: 0; /* Previene desbordamiento en flex items */
   }
 }
+
+/* Mobile: padding reducido y stats más compactos */
+@media (max-width: 767px) {
+  .dkpis-stats {
+    padding: 10px;
+  }
+
+  .dkpis-stats-grid {
+    gap: 8px;
+  }
+
+  .dkpis-stats .stat-card {
+    padding: 8px 10px;
+  }
+
+  .dkpis-stats .stat-value {
+    font-size: 14px;
+  }
+
+  .dkpis-charts-container {
+    gap: 12px;
+  }
+
+  /* Charts: scroll horizontal si hace falta */
+  .dkpis-charts-container > * {
+    min-width: 0;
+    overflow-x: auto;
+  }
+}
+
+/* iPhone SE: stats en 1 columna */
+@media (max-width: 380px) {
+  .dkpis-stats-grid {
+    grid-template-columns: 1fr;
+    gap: 6px;
+  }
+
+  .dkpis-stats .stat-card {
+    padding: 10px 12px;
+  }
+
+  .dkpis-stats .stat-value {
+    font-size: 16px;
+  }
+
+  .dkpis-stats .stat-label {
+    font-size: 11px;
+  }
+}

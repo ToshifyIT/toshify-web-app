@@ -195,3 +195,52 @@
   from { transform: translateY(20px); opacity: 0; }
   to { transform: translateY(0); opacity: 1; }
 }
+
+/* =====================================================
+   RESPONSIVE
+   ===================================================== */
+
+@media (max-width: 768px) {
+  .cabify-historico-overlay {
+    padding: 0;
+  }
+
+  .cabify-historico-modal {
+    width: 100%;
+    max-width: 100%;
+    max-height: 100vh;
+    height: 100vh;
+    border-radius: 0;
+  }
+
+  .cabify-historico-header {
+    padding: 12px 14px;
+  }
+
+  .cabify-historico-title {
+    font-size: 15px;
+  }
+
+  .cabify-historico-subtitle {
+    font-size: 11px;
+  }
+
+  .cabify-historico-body {
+    padding: 12px 14px;
+  }
+}
+
+@media (max-width: 480px) {
+  .cabify-historico-header {
+    padding: 10px 12px;
+  }
+
+  .cabify-historico-body {
+    padding: 10px 12px;
+  }
+
+  .cabify-historico-title {
+    font-size: 14px;
+  }
+}
+

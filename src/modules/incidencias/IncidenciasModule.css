@@ -1323,6 +1323,30 @@
   }
 }
 
+/* iPhone SE y dispositivos extra chicos: stats en 1 columna */
+@media (max-width: 380px) {
+  .incidencias-stats {
+    padding: 8px;
+  }
+
+  .incidencias-stats .stats-grid {
+    grid-template-columns: 1fr;
+    gap: 6px;
+  }
+
+  .incidencias-stats .stat-card {
+    padding: 10px 12px;
+  }
+
+  .incidencias-stats .stat-value {
+    font-size: 16px !important;
+  }
+
+  .incidencias-stats .stat-label {
+    font-size: 10px !important;
+  }
+}
+
 /* =====================================================
    SEARCHABLE LOADING INDICATOR
    ===================================================== */

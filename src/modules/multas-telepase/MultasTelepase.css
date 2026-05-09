@@ -76,26 +76,68 @@
 }
 
 @media (max-width: 768px) {
-  .multas-stats-grid {
-    grid-template-columns: repeat(2, 1fr);
+  .multas-stats {
+    padding: 10px;
   }
+
+  .multas-stats-grid,
   .multas-stats-grid.five-cols {
     grid-template-columns: repeat(2, 1fr);
+    gap: 8px;
+  }
+
+  .multas-stats .stat-card {
+    padding: 10px;
+    min-width: 0;
+  }
+
+  .multas-stats .stat-label {
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 }
 
 @media (max-width: 480px) {
+  .multas-stats {
+    padding: 8px;
+  }
+
+  .multas-stats-grid,
+  .multas-stats-grid.five-cols {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 6px;
+  }
+
+  .multas-stats .stat-card {
+    padding: 8px;
+  }
+
+  .multas-stats .stat-value {
+    font-size: 14px;
+  }
+
+  .multas-stats .stat-label {
+    font-size: 10px;
+  }
+}
+
+/* iPhone SE: stats en 1 columna */
+@media (max-width: 380px) {
   .multas-stats-grid,
   .multas-stats-grid.five-cols {
     grid-template-columns: 1fr;
   }
-  
-  .multas-stats .stat-value {
-    font-size: 14px;
+
+  .multas-stats .stat-card {
+    padding: 10px 12px;
   }
-  
+
+  .multas-stats .stat-value {
+    font-size: 16px;
+  }
+
   .multas-stats .stat-label {
-    font-size: 10px;
+    font-size: 11px;
   }
 }
 

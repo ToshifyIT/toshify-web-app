@@ -98,3 +98,40 @@
 @keyframes spin {
   to { transform: rotate(360deg); }
 }
+
+/* =====================================================
+   RESPONSIVE
+   ===================================================== */
+
+@media (max-width: 768px) {
+  .permanencia-chart {
+    padding: 16px;
+    min-height: 240px;
+  }
+
+  .permanencia-chart__header {
+    margin-bottom: 16px;
+    gap: 10px;
+  }
+
+  .permanencia-chart__title {
+    font-size: 12px !important;
+  }
+
+  .permanencia-chart__picker {
+    min-width: 0;
+    width: 100%;
+  }
+}
+
+@media (max-width: 480px) {
+  .permanencia-chart {
+    padding: 12px;
+    min-height: 220px;
+    border-radius: 12px !important;
+  }
+
+  .permanencia-chart__title {
+    font-size: 11px !important;
+  }
+}

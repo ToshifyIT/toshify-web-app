@@ -109,3 +109,28 @@
   color: var(--text-tertiary);
   font-style: italic;
 }
+
+/* =====================================================
+   RESPONSIVE
+   ===================================================== */
+
+@media (max-width: 768px) {
+  .incidents-container {
+    margin-top: 1rem;
+  }
+
+  .incidents-card {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .incidents-table {
+    min-width: 500px;
+    font-size: 12px;
+  }
+
+  .incidents-title {
+    font-size: 0.7rem;
+  }
+}
+

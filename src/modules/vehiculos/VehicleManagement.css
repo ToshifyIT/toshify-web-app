@@ -127,8 +127,23 @@
 }
 
 @media (max-width: 768px) {
+  .veh-stats {
+    padding: 10px;
+  }
+
   .veh-stats-grid {
     grid-template-columns: repeat(2, 1fr);
+    gap: 8px;
+  }
+
+  .veh-stats .stat-card {
+    padding: 10px;
+    min-width: 0;
+  }
+
+  .veh-stats .stat-label {
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 
   .veh-header {
@@ -141,14 +156,18 @@
 }
 
 @media (max-width: 480px) {
+  .veh-stats {
+    padding: 8px;
+  }
+
   .veh-stats-grid {
     grid-template-columns: repeat(2, 1fr);
-    gap: 8px;
+    gap: 6px;
   }
 
   .veh-stats .stat-card {
-    padding: 10px;
-    gap: 8px;
+    padding: 8px;
+    gap: 6px;
   }
 
   .veh-stats .stat-value {
@@ -157,6 +176,26 @@
 
   .veh-stats .stat-label {
     font-size: 10px;
+  }
+}
+
+/* iPhone SE y dispositivos extra chicos: 1 columna */
+@media (max-width: 380px) {
+  .veh-stats-grid {
+    grid-template-columns: 1fr;
+    gap: 6px;
+  }
+
+  .veh-stats .stat-card {
+    padding: 10px 12px;
+  }
+
+  .veh-stats .stat-value {
+    font-size: 16px;
+  }
+
+  .veh-stats .stat-label {
+    font-size: 11px;
   }
 }
 

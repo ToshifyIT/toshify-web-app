@@ -113,12 +113,29 @@
 }
 
 @media (max-width: 768px) {
+  .prov-stats {
+    padding: 10px;
+  }
+
   .prov-stats-grid {
     grid-template-columns: repeat(2, 1fr);
+    gap: 8px;
+  }
+
+  .prov-stats .stat-card {
+    padding: 10px;
+    min-width: 0;
+  }
+
+  .prov-stats .stat-label {
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 
   .prov-header {
-    padding: 16px;
+    padding: 12px;
+    flex-wrap: wrap;
+    gap: 8px;
   }
 
   .prov-header-title h1 {
