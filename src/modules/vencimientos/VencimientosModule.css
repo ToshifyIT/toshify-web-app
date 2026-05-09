@@ -472,6 +472,20 @@
 }
 
 @media (max-width: 768px) {
+  .vencimientos-stats {
+    padding: 10px;
+  }
+
+  .vencimientos-stats .stats-grid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 8px;
+  }
+
+  .vencimientos-stats .stat-card {
+    padding: 10px;
+    min-width: 0;
+  }
+
   .vencimientos-header-row {
     flex-direction: column;
     align-items: stretch;
@@ -483,6 +497,8 @@
 
   .tabs-actions {
     justify-content: flex-end;
+    flex-wrap: wrap;
+    gap: 6px;
   }
 
   .form-row {
@@ -491,6 +507,49 @@
 
   .form-group.full-width {
     grid-column: span 1;
+  }
+}
+
+@media (max-width: 480px) {
+  .vencimientos-stats {
+    padding: 8px;
+  }
+
+  .vencimientos-stats .stats-grid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 6px;
+  }
+
+  .vencimientos-stats .stat-card {
+    padding: 8px;
+    gap: 6px;
+  }
+
+  .vencimientos-stats .stat-value {
+    font-size: 13px;
+  }
+
+  .vencimientos-stats .stat-label {
+    font-size: 10px;
+  }
+}
+
+/* iPhone SE: stats en 1 columna */
+@media (max-width: 380px) {
+  .vencimientos-stats .stats-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .vencimientos-stats .stat-card {
+    padding: 10px 12px;
+  }
+
+  .vencimientos-stats .stat-value {
+    font-size: 16px;
+  }
+
+  .vencimientos-stats .stat-label {
+    font-size: 11px;
   }
 }
 

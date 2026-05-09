@@ -200,3 +200,35 @@
 .btn-agregar-nota:hover {
   background-color: var(--color-primary-light);
 }
+
+/* =====================================================
+   RESPONSIVE
+   ===================================================== */
+
+@media (max-width: 768px) {
+  .driver-modal-overlay {
+    padding: 0;
+  }
+
+  .driver-modal-content {
+    max-width: 100%;
+    width: 100%;
+    height: 100vh;
+    max-height: 100vh;
+    border-radius: 0;
+    overflow-y: auto;
+  }
+
+  .driver-modal-header {
+    padding: 12px 14px;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+}
+
+@media (max-width: 480px) {
+  .driver-modal-header {
+    padding: 10px 12px;
+  }
+}
+

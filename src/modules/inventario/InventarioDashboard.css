@@ -318,6 +318,12 @@
 @media (max-width: 768px) {
   .inv-stats-grid {
     grid-template-columns: repeat(2, 1fr);
+    gap: 8px;
+  }
+
+  .inv-stats .stat-card {
+    padding: 10px;
+    min-width: 0;
   }
 
   .inv-category-cards {
@@ -326,6 +332,7 @@
 
   .inv-category-card {
     padding: 12px;
+    min-width: 0;
   }
 
   .inv-cat-count {
@@ -333,7 +340,9 @@
   }
 
   .inv-header {
-    padding: 16px;
+    padding: 12px;
+    flex-wrap: wrap;
+    gap: 8px;
   }
 
   .inv-header-title h1 {

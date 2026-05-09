@@ -2200,3 +2200,68 @@
 [data-theme="dark"] .sugerencia-nombre {
   color: var(--text-primary);
 }
+
+/* =====================================================
+   RESPONSIVE - CALENDARIO Y HEADER
+   ===================================================== */
+
+@media (max-width: 768px) {
+  .visitas-header {
+    padding: 12px;
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+
+  .visitas-header-actions {
+    width: 100%;
+    justify-content: flex-start;
+    flex-wrap: wrap;
+  }
+
+  .visitas-calendario-wrapper {
+    padding: 8px;
+  }
+
+  .visitas-calendario-wrapper .rbc-toolbar {
+    flex-wrap: wrap;
+    gap: 8px;
+    font-size: 12px;
+  }
+
+  .visitas-calendario-wrapper .rbc-toolbar .rbc-toolbar-label {
+    flex: 1 0 100%;
+    text-align: center;
+    font-size: 14px;
+    margin: 4px 0;
+  }
+
+  .visitas-calendario-wrapper .rbc-toolbar button {
+    padding: 6px 10px;
+    font-size: 12px;
+  }
+
+  .visitas-calendario-wrapper .rbc-header {
+    font-size: 11px;
+    padding: 4px 2px;
+  }
+
+  .visitas-calendario-wrapper .rbc-time-gutter .rbc-label {
+    font-size: 10px;
+  }
+}
+
+@media (max-width: 480px) {
+  .visitas-calendario-wrapper {
+    padding: 4px;
+  }
+
+  .visitas-calendario-wrapper .rbc-toolbar button {
+    padding: 5px 8px;
+    font-size: 11px;
+  }
+
+  .visitas-calendario-wrapper .rbc-header {
+    font-size: 10px;
+  }
+}
+

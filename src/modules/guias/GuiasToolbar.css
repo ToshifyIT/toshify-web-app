@@ -101,3 +101,58 @@
 .guias-btn svg {
   color: var(--text-tertiary);
 }
+
+/* =====================================================
+   RESPONSIVE
+   ===================================================== */
+
+@media (max-width: 768px) {
+  .guias-toolbar {
+    flex-wrap: wrap;
+    gap: 8px;
+    padding: 10px;
+  }
+
+  .guias-search-wrapper {
+    width: 100%;
+    flex-grow: 0;
+    flex-basis: 100%;
+  }
+
+  .guias-actions {
+    width: 100%;
+    flex-wrap: wrap;
+  }
+
+  .guias-actions .week-selector-container {
+    width: 100%;
+  }
+
+  .guias-btn {
+    flex: 1;
+    justify-content: center;
+    min-width: 0;
+  }
+}
+
+@media (max-width: 480px) {
+  .guias-toolbar {
+    padding: 8px;
+    gap: 6px;
+  }
+
+  .guias-search-wrapper {
+    height: 38px;
+    padding: 0 10px;
+  }
+
+  .guias-search-input {
+    font-size: 13px;
+  }
+
+  .guias-btn {
+    padding: 8px 10px;
+    font-size: 12px;
+  }
+}
+
