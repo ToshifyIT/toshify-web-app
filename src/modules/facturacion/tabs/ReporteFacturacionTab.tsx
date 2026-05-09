@@ -2457,9 +2457,11 @@ export function ReporteFacturacionTab() {
         const montoExcesos = diasTotales === 0 ? 0 : (exceso?.monto || 0)
         const kmExceso = exceso?.kmExceso || 0
 
-        // Peajes de Cabify (P005) - no aplica si tiene 0 días
-        // Si el vehículo tiene telepase habilitado, NO cobrar P005
-        const montoPeajes = (diasTotales === 0 || control.tiene_telepase) ? 0 : (peajesMap.get(dniConductor) || 0)
+        // Peajes de Cabify (P005)
+        // Si el vehículo tiene telepase habilitado, NO cobrar P005.
+        // Si Cabify reporta peajes para el conductor, se cobran sin importar los días del período
+        // (un conductor puede tener 0 turnos en la semana pero sí haber generado peajes en Cabify).
+        const montoPeajes = control.tiene_telepase ? 0 : (peajesMap.get(dniConductor) || 0)
 
         // Penalidades (P006 + P007 como cargos) - siempre aplica
         const montoPenalidades = penalidadesMap.get(conductorId) || 0
@@ -3527,9 +3529,11 @@ export function ReporteFacturacionTab() {
         const excesosConductor = excesosGrouped.get(conductor.conductor_id) || []
         const totalExcesos = conductor.total_dias === 0 ? 0 : excesosConductor.reduce((sum: number, e: any) => sum + (e.monto_total || 0), 0)
 
-        // Peajes (P005) - no aplica si tiene 0 días
-        // Si el vehículo tiene telepase habilitado, NO cobrar P005
-        const totalPeajes = (conductor.total_dias === 0 || tieneTelepaseVehiculo)
+        // Peajes (P005)
+        // Si el vehículo tiene telepase habilitado, NO cobrar P005.
+        // Si Cabify reporta peajes para el conductor, se cobran sin importar los días del período
+        // (un conductor puede tener 0 turnos en la semana pero sí haber generado peajes en Cabify).
+        const totalPeajes = tieneTelepaseVehiculo
           ? 0
           : (conductor.conductor_dni ? (peajesMap.get(normalizeDni(conductor.conductor_dni)) || 0) : 0)
 

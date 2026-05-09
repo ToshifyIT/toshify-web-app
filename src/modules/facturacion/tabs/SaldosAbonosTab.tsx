@@ -25,7 +25,9 @@ import {
   Download,
   Upload,
   Split,
-  X
+  X,
+  Search,
+  FileDown,
 } from 'lucide-react'
 import { type ColumnDef } from '@tanstack/react-table'
 import { DataTable } from '../../../components/ui/DataTable'
@@ -117,6 +119,11 @@ export function SaldosAbonosTab() {
     motivo: string
     saving: boolean
   }>({ open: false, row: null, nuevoMonto: '', nuevaSemana: '', motivo: '', saving: false })
+
+  // Filtros del kardex (Control de Saldos v2)
+  const [kardexSearch, setKardexSearch] = useState<string>('')
+  const [kardexSemanaFilter, setKardexSemanaFilter] = useState<string>('') // '' = todas, formato '2026-19'
+  const [kardexTipoFilter, setKardexTipoFilter] = useState<string>('') // '' = todos | 'cargo' | 'abono' | 'eliminacion'
 
   const handleKardexEditSave = async () => {
     if (!kardexEdit.row || !kardexEdit.motivo.trim()) return
@@ -1832,6 +1839,58 @@ export function SaldosAbonosTab() {
     }
   }
 
+  // Exportar kardex actual a PDF (vía ventana de impresión).
+  // No usa libs externas: arma HTML imprimible y dispara window.print().
+  function exportarKardexPDF(saldo: SaldoConductor, rows: any[]) {
+    const tipoLabel: Record<string, string> = {
+      regularizado: 'Facturación', pago_cabify: 'Pago Cabify', pago: 'Pago',
+      pago_manual: 'Pago Manual', pago_cuota: 'Pago Cuota', ajuste_manual: 'Ajuste',
+      eliminacion_pago: 'Elim. Pago', edicion_pago: 'Edic. Pago', cargo: 'Cargo',
+      abono: 'Abono', eliminacion_saldo: 'Elim. Saldo', importacion: 'Importación',
+    }
+    const w = window.open('', '_blank', 'width=900,height=700')
+    if (!w) return
+    const filas = rows.map((r) => {
+      const fecha = r.created_at ? new Date(r.created_at).toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric' }) : '-'
+      const monto = r.monto_movimiento ? formatCurrency(Math.abs(r.monto_movimiento)) : '-'
+      return `<tr>
+        <td>${fecha}</td>
+        <td>${r.anio} S${String(r.semana).padStart(2, '0')}</td>
+        <td>${tipoLabel[r.tipo_movimiento] || r.tipo_movimiento || '-'}</td>
+        <td>${(r.referencia || '-').replace(/</g, '&lt;')}</td>
+        <td style="text-align:right">${monto}</td>
+        <td style="text-align:right">${formatCurrency(r.saldo_pendiente || 0)}</td>
+        <td>${(r.created_by_name || 'Sistema').replace(/</g, '&lt;')}</td>
+      </tr>`
+    }).join('')
+    w.document.write(`<!doctype html><html><head><meta charset="utf-8" />
+      <title>Kardex - ${saldo.conductor_nombre || ''}</title>
+      <style>
+        body { font-family: -apple-system, Segoe UI, sans-serif; padding: 24px; color: #111827; }
+        h1 { font-size: 18px; margin: 0 0 4px; }
+        .meta { font-size: 11px; color: #6b7280; margin-bottom: 16px; }
+        .saldo { font-size: 18px; font-weight: 700; color: ${(saldo.saldo_actual || 0) < 0 ? '#dc2626' : '#16a34a'}; }
+        table { width: 100%; border-collapse: collapse; font-size: 11px; }
+        th, td { padding: 6px 8px; border-bottom: 1px solid #e5e7eb; text-align: left; }
+        th { background: #f9fafb; font-weight: 600; text-transform: uppercase; font-size: 10px; color: #6b7280; }
+        @media print { body { padding: 8px; } }
+      </style>
+      </head><body>
+      <h1>Control de Saldos</h1>
+      <div class="meta">
+        <strong>${saldo.conductor_nombre || ''}</strong> &middot; DNI ${saldo.conductor_dni || '-'} &middot; CUIT ${saldo.conductor_cuit || '-'}
+        <br/>Saldo actual: <span class="saldo">${formatCurrency(saldo.saldo_actual || 0)}</span>
+        <br/>Generado: ${new Date().toLocaleString('es-AR')}
+      </div>
+      <table>
+        <thead><tr><th>Fecha</th><th>Semana</th><th>Tipo</th><th>Referencia</th><th style="text-align:right">Monto</th><th style="text-align:right">Saldo</th><th>Usuario</th></tr></thead>
+        <tbody>${filas}</tbody>
+      </table>
+      <script>window.onload = () => { window.print(); };</script>
+      </body></html>`)
+    w.document.close()
+  }
+
   async function verHistorial(saldo: SaldoConductor) {
     setKardexModal({ open: true, saldo, rows: [], loading: true })
     try {
@@ -2528,24 +2587,32 @@ export function SaldosAbonosTab() {
                 </button>
               </div>
               <div className="fact-modal-body" style={{ padding: '16px' }}>
-                {/* Info conductor */}
+                {/* Info conductor (v2: hero más detallado) */}
                 <div style={{
                   marginBottom: '12px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start',
-                  paddingBottom: '10px', borderBottom: '1px solid var(--border-primary)',
+                  paddingBottom: '12px', borderBottom: '1px solid var(--border-primary)', gap: '16px',
                 }}>
-                  <div>
-                    <div style={{ fontSize: '14px', fontWeight: 700, color: 'var(--text-primary)' }}>{s.conductor_nombre}</div>
-                    <div style={{ fontSize: '11px', color: 'var(--text-secondary)', marginTop: '2px' }}>
+                  <div style={{ minWidth: 0 }}>
+                    <div style={{ fontSize: '15px', fontWeight: 700, color: 'var(--text-primary)' }}>{s.conductor_nombre}</div>
+                    <div style={{ fontSize: '11px', color: 'var(--text-secondary)', marginTop: '3px' }}>
                       DNI: {s.conductor_dni || '-'} &middot; CUIT: {s.conductor_cuit || '-'}
+                      {s.conductor_estado && (
+                        <> &middot; Estado: <span style={{
+                          fontWeight: 700,
+                          color: s.conductor_estado === 'BAJA' ? '#92400e'
+                              : s.conductor_estado === 'ACTIVO' ? '#16a34a'
+                              : 'var(--text-secondary)'
+                        }}>{s.conductor_estado}</span></>
+                      )}
                     </div>
                   </div>
-                  <div style={{ textAlign: 'right', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <div style={{ textAlign: 'right', display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '6px' }}>
                     <div>
-                      <div style={{ fontSize: '16px', fontWeight: 700, color: sColor, lineHeight: 1 }}>
+                      <div style={{ fontSize: '20px', fontWeight: 700, color: sColor, lineHeight: 1 }}>
                         {formatCurrency(s.saldo_actual)}
                       </div>
                       <span style={{
-                        display: 'inline-block', marginTop: '3px', padding: '1px 6px', borderRadius: '3px',
+                        display: 'inline-block', marginTop: '4px', padding: '2px 8px', borderRadius: '4px',
                         fontSize: '10px', fontWeight: 600,
                         background: s.saldo_actual >= 0 ? '#DCFCE7' : '#FEE2E2', color: sColor,
                       }}>
@@ -2556,124 +2623,348 @@ export function SaldosAbonosTab() {
                       <button
                         title="Editar saldo"
                         onClick={() => editarSaldo(s)}
-                        style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-tertiary)', padding: '4px' }}
+                        style={{
+                          background: 'none', border: '1px solid var(--border-primary)',
+                          cursor: 'pointer', color: 'var(--text-secondary)',
+                          padding: '4px 10px', borderRadius: '4px', fontSize: '11px',
+                          display: 'inline-flex', alignItems: 'center', gap: '4px',
+                        }}
                       >
-                        <Edit3 size={16} />
+                        <Edit3 size={12} /> Editar saldo
                       </button>
                     )}
                   </div>
                 </div>
 
-                {/* Tabla */}
+                {/* Barra de filtros (v2) */}
+                {!kardexModal.loading && kardexModal.rows.length > 0 && (() => {
+                  // Opciones únicas de semanas para el dropdown
+                  const semanasUnicas = Array.from(new Set(
+                    (kardexModal.rows as any[]).map(r => `${r.anio}-${r.semana}`)
+                  )).sort((a, b) => {
+                    const [aA, aS] = a.split('-').map(Number)
+                    const [bA, bS] = b.split('-').map(Number)
+                    if (aA !== bA) return bA - aA
+                    return bS - aS
+                  })
+                  return (
+                    <div style={{ display: 'flex', gap: '8px', marginBottom: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
+                      <div style={{ flex: 1, minWidth: '180px', position: 'relative' }}>
+                        <Search size={12} style={{ position: 'absolute', left: '8px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-tertiary)' }} />
+                        <input
+                          type="text"
+                          placeholder="Buscar referencia, usuario o monto..."
+                          value={kardexSearch}
+                          onChange={e => setKardexSearch(e.target.value)}
+                          style={{
+                            width: '100%', padding: '5px 8px 5px 26px', fontSize: '11px',
+                            border: '1px solid var(--border-primary)', borderRadius: '4px',
+                            background: 'var(--bg-secondary)', color: 'var(--text-primary)',
+                          }}
+                        />
+                      </div>
+                      <select
+                        value={kardexSemanaFilter}
+                        onChange={e => setKardexSemanaFilter(e.target.value)}
+                        style={{
+                          padding: '5px 8px', fontSize: '11px', border: '1px solid var(--border-primary)',
+                          borderRadius: '4px', background: 'var(--card-bg, #fff)', color: 'var(--text-secondary)',
+                        }}
+                      >
+                        <option value="">Todas las semanas</option>
+                        {semanasUnicas.map(sem => {
+                          const [a, s] = sem.split('-')
+                          return <option key={sem} value={sem}>{a} S{String(s).padStart(2, '0')}</option>
+                        })}
+                      </select>
+                      <select
+                        value={kardexTipoFilter}
+                        onChange={e => setKardexTipoFilter(e.target.value)}
+                        style={{
+                          padding: '5px 8px', fontSize: '11px', border: '1px solid var(--border-primary)',
+                          borderRadius: '4px', background: 'var(--card-bg, #fff)', color: 'var(--text-secondary)',
+                        }}
+                      >
+                        <option value="">Todos los tipos</option>
+                        <option value="cargo">Cargos</option>
+                        <option value="abono">Abonos</option>
+                        <option value="eliminacion">Eliminaciones</option>
+                      </select>
+                      <button
+                        onClick={() => exportarKardexPDF(s, kardexModal.rows)}
+                        title="Exportar a PDF"
+                        style={{
+                          background: 'var(--card-bg, #fff)', border: '1px solid var(--border-primary)',
+                          borderRadius: '4px', padding: '5px 10px', fontSize: '11px', cursor: 'pointer',
+                          color: 'var(--text-secondary)',
+                          display: 'inline-flex', alignItems: 'center', gap: '4px',
+                        }}
+                      >
+                        <FileDown size={12} /> PDF
+                      </button>
+                    </div>
+                  )
+                })()}
+
+                {/* Tabla v2: saldo recalculado en runtime, fila top destacada */}
                 {kardexModal.loading ? (
                   <div style={{ padding: '30px 0', textAlign: 'center', color: 'var(--text-secondary)', fontSize: '12px' }}>Cargando...</div>
                 ) : kardexModal.rows.length === 0 ? (
                   <div style={{ padding: '30px 0', textAlign: 'center', color: 'var(--text-secondary)', fontSize: '12px' }}>Sin registros</div>
-                ) : (
-                  <div style={{ maxHeight: '400px', overflowY: 'auto', border: '1px solid var(--border-primary)', borderRadius: '6px' }}>
-                    <table style={{ width: '100%', fontSize: '11px', borderCollapse: 'collapse' }}>
-                      <thead>
-                        <tr style={{ background: 'var(--bg-secondary)', position: 'sticky', top: 0, zIndex: 1 }}>
-                          {['Fecha', 'Semana', 'Tipo', 'Referencia', 'Monto', 'Saldo', 'Usuario', ...(isAdmin() ? [''] : [])].map((h, hi) => (
-                            <th key={hi} style={{
-                              padding: '6px 8px', fontWeight: 600, color: 'var(--text-secondary)',
-                              borderBottom: '1px solid var(--border-primary)',
-                              textAlign: hi >= 4 ? 'right' : 'left',
-                              ...(hi === 6 ? { textAlign: 'left' as const } : {}),
-                            }}>{h}</th>
-                          ))}
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
-                        {kardexModal.rows.map((r: any, i: number) => {
-                          const pend = r.saldo_pendiente || 0
-                          const tipo = r.tipo_movimiento || 'regularizado'
-                          const tipoLabel: Record<string, string> = {
-                            regularizado: 'Facturación',
-                            pago_cabify: 'Pago Cabify',
-                            pago: 'Pago',
-                            pago_manual: 'Pago Manual',
-                            pago_cuota: 'Pago Cuota',
-                            ajuste_manual: 'Ajuste',
-                            eliminacion_pago: 'Elim. Pago',
-                            edicion_pago: 'Edic. Pago',
-                            cargo: 'Cargo',
-                            abono: 'Abono',
-                            eliminacion_saldo: 'Elim. Saldo',
-                            importacion: 'Importación',
-                          }
-                          const montoMov = r.monto_movimiento || 0
-                          // Determina si la fila es CARGO (suma deuda) o ABONO (resta deuda).
-                          // Para tipos ambiguos (ajustes), inferir por delta vs saldo previo.
-                          const cargosTipos = new Set(['regularizado', 'cargo', 'eliminacion_pago'])
-                          const abonosTipos = new Set(['pago_cabify', 'pago', 'pago_manual', 'pago_cuota', 'abono'])
-                          let esCargo = cargosTipos.has(tipo)
-                          let esAbono = abonosTipos.has(tipo)
-                          if (!esCargo && !esAbono) {
-                            // i+1 es la fila previa cronológicamente (orden DESC en el modal)
-                            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                            const previa = (kardexModal.rows as any[])[i + 1]
-                            const pendPrev = previa ? (previa.saldo_pendiente || 0) : 0
-                            const delta = pend - pendPrev
-                            if (delta > 0) esAbono = true
-                            else if (delta < 0) esCargo = true
-                          }
-                          const montoColor = esCargo ? '#dc2626' : esAbono ? '#16a34a' : 'var(--text-tertiary)'
-                          const montoSigno = esCargo ? '-' : esAbono ? '+' : ''
-                          const fecha = r.created_at ? new Date(r.created_at).toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: '2-digit' }) : '-'
-                          return (
-                            <tr key={i} style={{ borderBottom: '1px solid var(--border-primary)' }}>
-                              <td style={{ padding: '5px 8px', color: 'var(--text-secondary)', fontSize: '10px', whiteSpace: 'nowrap' }}>
-                                {fecha}
-                              </td>
-                              <td style={{ padding: '5px 8px', fontWeight: 600, color: 'var(--text-primary)', whiteSpace: 'nowrap' }}>
-                                {r.anio} S{String(r.semana).padStart(2, '0')}
-                              </td>
-                              <td style={{ padding: '5px 8px', whiteSpace: 'nowrap', color: 'var(--text-secondary)', fontSize: '10px' }}>
-                                {tipoLabel[tipo] || tipo}
-                              </td>
-                              <td style={{ padding: '5px 8px', color: 'var(--text-secondary)', fontSize: '10px', maxWidth: '160px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={r.referencia || ''}>
-                                {r.referencia || '-'}
-                              </td>
-                              <td style={{ padding: '5px 8px', textAlign: 'right', fontFamily: 'monospace', color: montoColor }}>
-                                {montoMov > 0 ? `${montoSigno}${formatCurrency(montoMov)}` : '-'}
-                              </td>
-                              <td style={{
-                                padding: '5px 8px', textAlign: 'right', fontFamily: 'monospace', fontWeight: 700,
-                                color: pend < 0 ? '#dc2626' : pend > 0 ? '#16a34a' : 'var(--text-secondary)',
-                              }}>
-                                {formatCurrency(pend)}
-                              </td>
-                              <td style={{ padding: '5px 8px', color: 'var(--text-secondary)', fontSize: '10px', whiteSpace: 'nowrap' }}>
-                                {r.created_by_name || 'Sistema'}
-                              </td>
-                              {isAdmin() && <td style={{ padding: '5px 4px', textAlign: 'center' }}>
-                                <button
-                                  title="Editar movimiento"
-                                  onClick={() => setKardexEdit({
-                                    open: true,
-                                    row: r,
-                                    nuevoMonto: String(montoMov > 0 ? montoMov : (r.saldo_pendiente || 0)),
-                                    nuevaSemana: String(r.semana || ''),
-                                    motivo: '',
-                                    saving: false,
-                                  })}
-                                  style={{
-                                    background: 'none', border: 'none', cursor: 'pointer',
-                                    color: 'var(--text-tertiary)', padding: '2px',
-                                  }}
-                                >
-                                  <Edit3 size={13} />
-                                </button>
-                              </td>}
+                ) : (() => {
+                  // Helpers
+                  const tipoLabel: Record<string, string> = {
+                    regularizado: 'Facturación',
+                    pago_cabify: 'Pago Cabify',
+                    pago: 'Pago',
+                    pago_manual: 'Pago Manual',
+                    pago_cuota: 'Pago Cuota',
+                    ajuste_manual: 'Ajuste',
+                    eliminacion_pago: 'Elim. Pago',
+                    edicion_pago: 'Edic. Pago',
+                    cargo: 'Cargo',
+                    abono: 'Abono',
+                    eliminacion_saldo: 'Elim. Saldo',
+                    importacion: 'Importación',
+                  }
+                  const cargosTipos = new Set(['regularizado', 'cargo', 'eliminacion_pago'])
+                  const abonosTipos = new Set(['pago_cabify', 'pago', 'pago_manual', 'pago_cuota', 'abono'])
+                  const elimTipos = new Set(['eliminacion_pago', 'eliminacion_saldo'])
+
+                  // Clasificar fila como cargo / abono / eliminación
+                  // Para tipos ambiguos, inferir por delta del saldo_pendiente snapshot
+                  const clasificar = (r: any, idx: number, rows: any[]): 'cargo' | 'abono' | 'elim' | null => {
+                    const t = r.tipo_movimiento || 'regularizado'
+                    if (elimTipos.has(t)) return 'elim'
+                    if (cargosTipos.has(t)) return 'cargo'
+                    if (abonosTipos.has(t)) return 'abono'
+                    const prev = rows[idx + 1]
+                    const pendPrev = prev ? (prev.saldo_pendiente || 0) : 0
+                    const delta = (r.saldo_pendiente || 0) - pendPrev
+                    if (delta > 0) return 'abono'
+                    if (delta < 0) return 'cargo'
+                    return null
+                  }
+
+                  // 1) Filtrar
+                  const norm = (x: string) => (x || '').toString().toLowerCase()
+                  const rowsFiltradas = (kardexModal.rows as any[]).filter((r) => {
+                    if (kardexSemanaFilter) {
+                      const semKey = `${r.anio}-${r.semana}`
+                      if (semKey !== kardexSemanaFilter) return false
+                    }
+                    if (kardexTipoFilter) {
+                      const cls = clasificar(r, kardexModal.rows.indexOf(r), kardexModal.rows)
+                      if (kardexTipoFilter === 'cargo' && cls !== 'cargo') return false
+                      if (kardexTipoFilter === 'abono' && cls !== 'abono') return false
+                      if (kardexTipoFilter === 'eliminacion' && cls !== 'elim') return false
+                    }
+                    if (kardexSearch.trim()) {
+                      const q = norm(kardexSearch)
+                      const blob = `${norm(r.referencia)} ${norm(r.created_by_name)} ${norm(r.monto_movimiento)} ${norm(tipoLabel[r.tipo_movimiento] || r.tipo_movimiento)}`
+                      if (!blob.includes(q)) return false
+                    }
+                    return true
+                  })
+
+                  // 2) Recalcular saldos en runtime: arriba siempre = saldo_actual del conductor
+                  // Las filas vienen ordenadas DESC (más reciente arriba). Para cada fila i:
+                  //   saldo[i]      = saldo_actual - sum(deltaConSigno[0..i-1])
+                  //   saldoPrev[i]  = saldo[i] - deltaConSigno[i]
+                  // donde deltaConSigno = +monto si abono, -monto si cargo, -monto si elim_pago
+                  const deltaSigno = (r: any, idx: number, rows: any[]): number => {
+                    const monto = Math.abs(r.monto_movimiento || 0)
+                    const cls = clasificar(r, idx, rows)
+                    if (cls === 'abono') return +monto
+                    if (cls === 'cargo' || cls === 'elim') return -monto
+                    return 0
+                  }
+                  // Acumulamos sobre la lista FILTRADA, partiendo del saldo_actual.
+                  let saldoAcum = s.saldo_actual || 0
+                  const filasConSaldos = rowsFiltradas.map((r, i) => {
+                    const cls = clasificar(r, kardexModal.rows.indexOf(r), kardexModal.rows)
+                    const monto = Math.abs(r.monto_movimiento || 0)
+                    const delta = deltaSigno(r, kardexModal.rows.indexOf(r), kardexModal.rows)
+                    const saldo = saldoAcum
+                    const saldoPrev = saldoAcum - delta
+                    saldoAcum = saldoPrev
+                    return { r, i, cls, monto, delta, saldo, saldoPrev }
+                  })
+
+                  // 3) Totales del rango filtrado
+                  const totalCargos = filasConSaldos.reduce((acc, f) => acc + (f.cls === 'cargo' || f.cls === 'elim' ? f.monto : 0), 0)
+                  const totalAbonos = filasConSaldos.reduce((acc, f) => acc + (f.cls === 'abono' ? f.monto : 0), 0)
+                  const saldoNetoRango = totalAbonos - totalCargos
+                  const saldoFinal = filasConSaldos.length > 0 ? filasConSaldos[0].saldo : (s.saldo_actual || 0)
+
+                  return (
+                    <>
+                      <div style={{ maxHeight: '400px', overflowY: 'auto', border: '1px solid var(--border-primary)', borderRadius: '6px' }}>
+                        <table style={{ width: '100%', fontSize: '11px', borderCollapse: 'collapse' }}>
+                          <thead>
+                            <tr style={{ background: 'var(--bg-secondary)', position: 'sticky', top: 0, zIndex: 1 }}>
+                              {['Fecha', 'Semana', 'Tipo', 'Referencia', 'Monto', 'Saldo previo', 'Saldo', 'Usuario', ...(isAdmin() ? [''] : [])].map((h, hi) => (
+                                <th key={hi} style={{
+                                  padding: '6px 8px', fontWeight: 600, color: 'var(--text-secondary)',
+                                  borderBottom: '1px solid var(--border-primary)',
+                                  textAlign: hi >= 4 && hi <= 6 ? 'right' : 'left',
+                                  fontSize: '10px',
+                                }}>{h}</th>
+                              ))}
                             </tr>
-                          )
-                        })}
-                      </tbody>
-                    </table>
-                  </div>
-                )}
+                          </thead>
+                          <tbody>
+                            {filasConSaldos.map(({ r, i, cls, monto, saldo, saldoPrev }) => {
+                              const tipo = r.tipo_movimiento || 'regularizado'
+                              const labelBg = cls === 'cargo' ? '#fef2f2'
+                                            : cls === 'abono' ? '#f0fdf4'
+                                            : cls === 'elim' ? '#f3f4f6'
+                                            : 'var(--bg-secondary)'
+                              const labelFg = cls === 'cargo' ? '#dc2626'
+                                            : cls === 'abono' ? '#16a34a'
+                                            : cls === 'elim' ? 'var(--text-secondary)'
+                                            : 'var(--text-secondary)'
+                              const rowBg = i === 0 ? '#fef3c7'
+                                          : cls === 'cargo' ? 'rgba(254,242,242,0.4)'
+                                          : cls === 'abono' ? 'rgba(240,253,244,0.4)'
+                                          : cls === 'elim' ? 'rgba(249,250,251,0.6)'
+                                          : 'transparent'
+                              const montoColor = cls === 'cargo' || cls === 'elim' ? '#dc2626' : cls === 'abono' ? '#16a34a' : 'var(--text-tertiary)'
+                              const montoSigno = cls === 'cargo' || cls === 'elim' ? '-' : cls === 'abono' ? '+' : ''
+                              const fecha = r.created_at ? new Date(r.created_at).toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: '2-digit' }) : '-'
+                              return (
+                                <tr key={i} style={{
+                                  borderBottom: '1px solid var(--border-primary)',
+                                  background: rowBg,
+                                  borderLeft: i === 0 ? '3px solid #f59e0b' : '3px solid transparent',
+                                }}>
+                                  <td style={{ padding: '5px 8px', color: 'var(--text-secondary)', fontSize: '10px', whiteSpace: 'nowrap' }}>
+                                    {fecha}
+                                  </td>
+                                  <td style={{ padding: '5px 8px', fontWeight: 600, color: 'var(--text-primary)', whiteSpace: 'nowrap' }}>
+                                    {r.anio} S{String(r.semana).padStart(2, '0')}
+                                  </td>
+                                  <td style={{ padding: '5px 8px', whiteSpace: 'nowrap', fontSize: '10px' }}>
+                                    <span style={{
+                                      display: 'inline-block', padding: '1px 6px', borderRadius: '3px',
+                                      background: labelBg, color: labelFg, fontWeight: 600, fontSize: '10px',
+                                    }}>{tipoLabel[tipo] || tipo}</span>
+                                  </td>
+                                  <td style={{ padding: '5px 8px', color: 'var(--text-secondary)', fontSize: '10px', maxWidth: '180px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={r.referencia || ''}>
+                                    {r.referencia || '-'}
+                                    {i === 0 && (
+                                      <span style={{
+                                        marginLeft: '6px', padding: '1px 5px', background: '#f59e0b',
+                                        color: '#fff', borderRadius: '3px', fontSize: '9px', fontWeight: 700,
+                                        textTransform: 'uppercase', letterSpacing: '0.4px',
+                                      }}>actual</span>
+                                    )}
+                                  </td>
+                                  <td style={{ padding: '5px 8px', textAlign: 'right', fontFamily: 'monospace', color: montoColor, whiteSpace: 'nowrap' }}>
+                                    {monto > 0 ? `${montoSigno}${formatCurrency(monto)}` : '-'}
+                                  </td>
+                                  <td style={{ padding: '5px 8px', textAlign: 'right', fontFamily: 'monospace', color: 'var(--text-tertiary)', whiteSpace: 'nowrap' }}>
+                                    {formatCurrency(saldoPrev)}
+                                  </td>
+                                  <td style={{
+                                    padding: '5px 8px', textAlign: 'right', fontFamily: 'monospace', fontWeight: 700,
+                                    color: saldo < 0 ? '#dc2626' : saldo > 0 ? '#16a34a' : 'var(--text-secondary)',
+                                    whiteSpace: 'nowrap',
+                                  }}>
+                                    {formatCurrency(saldo)}
+                                  </td>
+                                  <td style={{ padding: '5px 8px', color: 'var(--text-secondary)', fontSize: '10px', whiteSpace: 'nowrap' }}>
+                                    {r.created_by_name || 'Sistema'}
+                                  </td>
+                                  {isAdmin() && <td style={{ padding: '5px 4px', textAlign: 'center' }}>
+                                    <button
+                                      title="Editar movimiento"
+                                      onClick={() => setKardexEdit({
+                                        open: true,
+                                        row: r,
+                                        nuevoMonto: String(monto > 0 ? monto : (r.saldo_pendiente || 0)),
+                                        nuevaSemana: String(r.semana || ''),
+                                        motivo: '',
+                                        saving: false,
+                                      })}
+                                      style={{
+                                        background: 'none', border: 'none', cursor: 'pointer',
+                                        color: 'var(--text-tertiary)', padding: '2px',
+                                      }}
+                                    >
+                                      <Edit3 size={13} />
+                                    </button>
+                                  </td>}
+                                </tr>
+                              )
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+
+                      {/* Footer con totales del rango filtrado */}
+                      <div style={{
+                        display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)',
+                        marginTop: '8px', background: 'var(--bg-secondary)',
+                        border: '1px solid var(--border-primary)', borderRadius: '6px',
+                        overflow: 'hidden',
+                      }}>
+                        <div style={{ padding: '8px 12px', borderRight: '1px solid var(--border-primary)', textAlign: 'right' }}>
+                          <div style={{ fontSize: '9px', textTransform: 'uppercase', color: 'var(--text-secondary)', fontWeight: 600, letterSpacing: '0.3px' }}>Total cargos</div>
+                          <div style={{ fontSize: '13px', fontWeight: 700, marginTop: '2px', color: '#dc2626', fontFamily: 'monospace' }}>
+                            -{formatCurrency(totalCargos)}
+                          </div>
+                        </div>
+                        <div style={{ padding: '8px 12px', borderRight: '1px solid var(--border-primary)', textAlign: 'right' }}>
+                          <div style={{ fontSize: '9px', textTransform: 'uppercase', color: 'var(--text-secondary)', fontWeight: 600, letterSpacing: '0.3px' }}>Total abonos</div>
+                          <div style={{ fontSize: '13px', fontWeight: 700, marginTop: '2px', color: '#16a34a', fontFamily: 'monospace' }}>
+                            +{formatCurrency(totalAbonos)}
+                          </div>
+                        </div>
+                        <div style={{ padding: '8px 12px', borderRight: '1px solid var(--border-primary)', textAlign: 'right' }}>
+                          <div style={{ fontSize: '9px', textTransform: 'uppercase', color: 'var(--text-secondary)', fontWeight: 600, letterSpacing: '0.3px' }}>Neto del rango</div>
+                          <div style={{
+                            fontSize: '13px', fontWeight: 700, marginTop: '2px', fontFamily: 'monospace',
+                            color: saldoNetoRango < 0 ? '#dc2626' : saldoNetoRango > 0 ? '#16a34a' : 'var(--text-secondary)',
+                          }}>
+                            {formatCurrency(saldoNetoRango)}
+                          </div>
+                        </div>
+                        <div style={{ padding: '8px 12px', textAlign: 'right' }}>
+                          <div style={{ fontSize: '9px', textTransform: 'uppercase', color: 'var(--text-secondary)', fontWeight: 600, letterSpacing: '0.3px' }}>Saldo final</div>
+                          <div style={{
+                            fontSize: '13px', fontWeight: 700, marginTop: '2px', fontFamily: 'monospace',
+                            color: saldoFinal < 0 ? '#dc2626' : saldoFinal > 0 ? '#16a34a' : 'var(--text-secondary)',
+                          }}>
+                            {formatCurrency(saldoFinal)}
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Línea de info abajo */}
+                      <div style={{
+                        marginTop: '8px', display: 'flex', justifyContent: 'space-between',
+                        fontSize: '10px', color: 'var(--text-tertiary)',
+                      }}>
+                        <span>
+                          Mostrando {filasConSaldos.length} de {kardexModal.rows.length} movimientos
+                          {(kardexSearch || kardexSemanaFilter || kardexTipoFilter) && (
+                            <button
+                              onClick={() => { setKardexSearch(''); setKardexSemanaFilter(''); setKardexTipoFilter('') }}
+                              style={{
+                                marginLeft: '8px', background: 'transparent', border: 'none',
+                                color: 'var(--text-secondary)', cursor: 'pointer', textDecoration: 'underline',
+                                fontSize: '10px', padding: 0,
+                              }}
+                            >
+                              Limpiar filtros
+                            </button>
+                          )}
+                        </span>
+                      </div>
+                    </>
+                  )
+                })()}
               </div>
 
               {/* Mini-modal edición de fila */}
