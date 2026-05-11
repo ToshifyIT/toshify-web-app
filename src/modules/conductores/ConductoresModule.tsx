@@ -1,7 +1,7 @@
 // src/modules/conductores/ConductoresModule.tsx
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { useState, useEffect, useMemo } from "react";
-import { Eye, Edit2, Trash2, AlertTriangle, Users, UserCheck, UserX, Clock, Filter, FolderOpen, FolderPlus, Loader2, History, RefreshCw, ShieldX, MessageSquare, FileText } from "lucide-react";
+import { useState, useEffect, useMemo, useRef } from "react";
+import { Eye, Edit2, Trash2, AlertTriangle, Users, UserCheck, UserX, Clock, Filter, FolderOpen, FolderPlus, Loader2, History, RefreshCw, ShieldX, MessageSquare, FileText, ChevronDown } from "lucide-react";
 import { ActionsMenu } from "../../components/ui/ActionsMenu";
 import { VerLogsButton } from "../../components/ui/VerLogsButton";
 
@@ -188,6 +188,20 @@ export function ConductoresModule() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [syncMenuOpen, setSyncMenuOpen] = useState(false);
+  const syncMenuRef = useRef<HTMLDivElement>(null);
+
+  // Cerrar el dropdown de Sincronizar al hacer click afuera
+  useEffect(() => {
+    if (!syncMenuOpen) return;
+    const handler = (e: MouseEvent) => {
+      if (syncMenuRef.current && !syncMenuRef.current.contains(e.target as Node)) {
+        setSyncMenuOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [syncMenuOpen]);
   const [showEditModal, setShowEditModal] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [showDetailsModal, setShowDetailsModal] = useState(false);
@@ -3083,43 +3097,146 @@ export function ConductoresModule() {
         headerAction={
           <>
             <VerLogsButton tablas={['conductores', 'asignaciones', 'asignaciones_conductores']} label="Conductores" />
-            <button
-              className="btn-secondary"
-              onClick={async () => {
-                const confirm = await Swal.fire({
-                  title: 'Sincronizar contratos',
-                  text: 'Se buscarán las carpetas de contratos en Drive para los conductores activos con asignación y se actualizará el campo correspondiente.',
-                  icon: 'question',
-                  showCancelButton: true,
-                  confirmButtonText: 'Sincronizar',
-                  cancelButtonText: 'Cancelar',
-                  confirmButtonColor: 'var(--color-primary)',
-                })
-                if (!confirm.isConfirmed) return
-                Swal.fire({ title: 'Sincronizando...', text: 'Buscando carpetas en Drive...', allowOutsideClick: false, didOpen: () => Swal.showLoading() })
-                try {
-                  const res = await fetch('/api/backfill-contract-folders', { method: 'POST' })
-                  const data = await res.json()
-                  if (!res.ok) throw new Error(data.error || 'Error del servidor')
-                  const notFoundList = data.details?.notFound?.length > 0
-                    ? '\n\nSin carpeta:\n' + data.details.notFound.map((c: any) => `- ${c.nombre}`).join('\n')
-                    : ''
-                  Swal.fire({
-                    icon: 'success',
-                    title: 'Sincronización completada',
-                    html: `<b>${data.updated}</b> actualizados<br><b>${data.notFound}</b> sin carpeta<br><b>${data.errors || 0}</b> errores${notFoundList ? '<br><br><details><summary>Ver sin carpeta</summary><pre style="text-align:left;font-size:12px;max-height:200px;overflow:auto">' + data.details.notFound.map((c: any) => c.nombre).join('\n') + '</pre></details>' : ''}`,
-                  })
-                  loadConductores(true)
-                } catch (err: any) {
-                  Swal.fire('Error', err.message || 'No se pudo sincronizar', 'error')
-                }
-              }}
-              style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
-              title="Sincronizar carpetas de contratos desde Drive"
-            >
-              <RefreshCw size={15} />
-              Sync Contratos
-            </button>
+            <div ref={syncMenuRef} style={{ position: 'relative', display: 'inline-block' }}>
+              <button
+                className="btn-secondary"
+                onClick={() => setSyncMenuOpen((v) => !v)}
+                style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
+                title="Acciones de sincronización"
+              >
+                <RefreshCw size={15} />
+                Sincronizar
+                <ChevronDown size={14} style={{ transform: syncMenuOpen ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.15s' }} />
+              </button>
+              {syncMenuOpen && (
+                <div
+                  style={{
+                    position: 'absolute',
+                    top: 'calc(100% + 4px)',
+                    right: 0,
+                    background: 'var(--card-bg, #fff)',
+                    border: '1px solid var(--border-primary, #e5e7eb)',
+                    borderRadius: '8px',
+                    boxShadow: '0 6px 24px rgba(0,0,0,0.12)',
+                    minWidth: '220px',
+                    zIndex: 100,
+                    overflow: 'hidden',
+                  }}
+                >
+                  <button
+                    onClick={async () => {
+                      setSyncMenuOpen(false)
+                      const confirm = await Swal.fire({
+                        title: 'Sincronizar contratos',
+                        text: 'Se buscarán las carpetas de contratos en Drive para los conductores activos con asignación y se actualizará el campo correspondiente.',
+                        icon: 'question',
+                        showCancelButton: true,
+                        confirmButtonText: 'Sincronizar',
+                        cancelButtonText: 'Cancelar',
+                        confirmButtonColor: 'var(--color-primary)',
+                      })
+                      if (!confirm.isConfirmed) return
+                      Swal.fire({ title: 'Sincronizando...', text: 'Buscando carpetas en Drive...', allowOutsideClick: false, didOpen: () => Swal.showLoading() })
+                      try {
+                        const res = await fetch('/api/backfill-contract-folders', { method: 'POST' })
+                        const data = await res.json()
+                        if (!res.ok) throw new Error(data.error || 'Error del servidor')
+                        const notFoundList = data.details?.notFound?.length > 0
+                          ? '\n\nSin carpeta:\n' + data.details.notFound.map((c: any) => `- ${c.nombre}`).join('\n')
+                          : ''
+                        Swal.fire({
+                          icon: 'success',
+                          title: 'Sincronización completada',
+                          html: `<b>${data.updated}</b> actualizados<br><b>${data.notFound}</b> sin carpeta<br><b>${data.errors || 0}</b> errores${notFoundList ? '<br><br><details><summary>Ver sin carpeta</summary><pre style="text-align:left;font-size:12px;max-height:200px;overflow:auto">' + data.details.notFound.map((c: any) => c.nombre).join('\n') + '</pre></details>' : ''}`,
+                        })
+                        loadConductores(true)
+                      } catch (err: any) {
+                        Swal.fire('Error', err.message || 'No se pudo sincronizar', 'error')
+                      }
+                    }}
+                    style={{
+                      width: '100%',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '8px',
+                      padding: '10px 14px',
+                      border: 'none',
+                      background: 'transparent',
+                      color: 'var(--text-primary)',
+                      cursor: 'pointer',
+                      fontSize: '13px',
+                      textAlign: 'left',
+                    }}
+                    onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.background = 'var(--bg-tertiary, #f3f4f6)' }}
+                    onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.background = 'transparent' }}
+                    title="Sincronizar carpetas de contratos desde Drive"
+                  >
+                    <RefreshCw size={14} />
+                    Sync Contratos
+                  </button>
+                  <button
+                    onClick={async () => {
+                      setSyncMenuOpen(false)
+                      if (!sedeActualId) {
+                        Swal.fire('Sede no seleccionada', 'Seleccioná una sede antes de sincronizar.', 'info')
+                        return
+                      }
+                      const confirm = await Swal.fire({
+                        title: 'Sincronizar documentación',
+                        text: 'Se buscarán carpetas de conductores en Drive y se vincularán al campo url_documentacion (sobreescribe valores existentes).',
+                        icon: 'question',
+                        showCancelButton: true,
+                        confirmButtonText: 'Sincronizar',
+                        cancelButtonText: 'Cancelar',
+                        confirmButtonColor: 'var(--color-primary)',
+                      })
+                      if (!confirm.isConfirmed) return
+                      Swal.fire({ title: 'Sincronizando...', text: 'Buscando carpetas en Drive...', allowOutsideClick: false, didOpen: () => Swal.showLoading() })
+                      try {
+                        const res = await fetch('/api/sync-conductores-documentacion', {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({ sedeId: sedeActualId }),
+                        })
+                        const data = await res.json()
+                        if (!res.ok) throw new Error(data.error || 'Error del servidor')
+                        const sinList = data.details?.sinCoincidencia?.length > 0
+                          ? '<br><br><details><summary>Ver sin coincidencia</summary><pre style="text-align:left;font-size:12px;max-height:200px;overflow:auto">' + data.details.sinCoincidencia.map((c: any) => c.nombre).join('\n') + '</pre></details>'
+                          : ''
+                        Swal.fire({
+                          icon: 'success',
+                          title: 'Sincronización completada',
+                          html: `<b>${data.actualizados}</b> actualizados<br><b>${data.sin_coincidencia}</b> sin coincidencia<br><b>${data.errores || 0}</b> errores${sinList}`,
+                        })
+                        loadConductores(true)
+                      } catch (err: any) {
+                        Swal.fire('Error', err.message || 'No se pudo sincronizar', 'error')
+                      }
+                    }}
+                    style={{
+                      width: '100%',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '8px',
+                      padding: '10px 14px',
+                      border: 'none',
+                      borderTop: '1px solid var(--border-primary, #e5e7eb)',
+                      background: 'transparent',
+                      color: 'var(--text-primary)',
+                      cursor: 'pointer',
+                      fontSize: '13px',
+                      textAlign: 'left',
+                    }}
+                    onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.background = 'var(--bg-tertiary, #f3f4f6)' }}
+                    onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.background = 'transparent' }}
+                    title="Buscar carpetas en Drive y vincularlas a conductores (sobreescribe)"
+                  >
+                    <RefreshCw size={14} />
+                    Sinc Documentación
+                  </button>
+                </div>
+              )}
+            </div>
             <button
               className="btn-primary"
               onClick={() => {
