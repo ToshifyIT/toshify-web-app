@@ -1730,6 +1730,136 @@ app.post('/api/backfill-contract-folders', async (req, res) => {
 })
 
 // =====================================================
+// SYNC CONDUCTORES DOCUMENTACION
+// Vincula carpetas existentes en Drive (GOOGLE_DRIVE_CONDUCTORES_FOLDER_ID)
+// al campo conductores.url_documentacion. Match por nombre exacto
+// (uppercase + trim + collapse spaces). Sobrescribe valores existentes.
+// =====================================================
+
+let syncDocumentacionEnCurso = false
+
+app.post('/api/sync-conductores-documentacion', async (req, res) => {
+  if (syncDocumentacionEnCurso) {
+    return res.status(409).json({ error: 'Ya hay una sincronización en curso. Esperá a que termine.' })
+  }
+  syncDocumentacionEnCurso = true
+  try {
+    const { sedeId } = req.body || {}
+    if (!sedeId) {
+      return res.status(400).json({ error: 'Falta sedeId en el body' })
+    }
+
+    const parentFolderId = process.env.GOOGLE_DRIVE_CONDUCTORES_FOLDER_ID
+    if (!parentFolderId) {
+      return res.status(500).json({ error: 'Falta GOOGLE_DRIVE_CONDUCTORES_FOLDER_ID en .env' })
+    }
+
+    const supabaseUrl = process.env.VITE_SUPABASE_URL
+    const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+    if (!supabaseUrl || !serviceKey) {
+      return res.status(500).json({ error: 'Supabase no configurado' })
+    }
+
+    // 1. Listar TODAS las carpetas del folder padre en Drive (paginado)
+    const drive = getDriveService(true)
+    const carpetas = new Map() // nombreNormalizado -> webViewLink
+    let pageToken = undefined
+    do {
+      const listRes = await drive.files.list({
+        q: `'${parentFolderId}' in parents and mimeType='application/vnd.google-apps.folder' and trashed=false`,
+        fields: 'nextPageToken, files(id, name, webViewLink)',
+        pageSize: 1000,
+        pageToken,
+        supportsAllDrives: true,
+        includeItemsFromAllDrives: true,
+      })
+      for (const f of listRes.data.files || []) {
+        const normalizado = (f.name || '').toUpperCase().trim().replace(/\s+/g, ' ')
+        if (normalizado) {
+          // Si hay carpetas con el mismo nombre normalizado, la última gana (raro)
+          carpetas.set(normalizado, f.webViewLink || `https://drive.google.com/drive/folders/${f.id}`)
+        }
+      }
+      pageToken = listRes.data.nextPageToken
+    } while (pageToken)
+
+    // 2. Obtener conductores de la sede actual
+    const condRes = await fetch(
+      `${supabaseUrl}/rest/v1/conductores?sede_id=eq.${encodeURIComponent(sedeId)}&select=id,nombres,apellidos`,
+      { headers: { apikey: serviceKey, Authorization: `Bearer ${serviceKey}` } }
+    )
+    if (!condRes.ok) {
+      const errText = await condRes.text()
+      return res.status(500).json({ error: `Error consultando conductores: ${errText}` })
+    }
+    const conductores = await condRes.json()
+
+    // 3. Para cada conductor, intentar match contra el map de carpetas
+    const actualizaciones = []
+    const sinCoincidencia = []
+    for (const c of conductores) {
+      const fullName = `${c.nombres || ''} ${c.apellidos || ''}`
+        .toUpperCase()
+        .trim()
+        .replace(/\s+/g, ' ')
+      if (!fullName) {
+        sinCoincidencia.push({ id: c.id, nombre: '(sin nombre)' })
+        continue
+      }
+      const url = carpetas.get(fullName)
+      if (url) {
+        actualizaciones.push({ id: c.id, nombre: fullName, url })
+      } else {
+        sinCoincidencia.push({ id: c.id, nombre: fullName })
+      }
+    }
+
+    // 4. Aplicar UPDATEs en chunks paralelos
+    const CHUNK = 20
+    let errores = 0
+    for (let i = 0; i < actualizaciones.length; i += CHUNK) {
+      const chunk = actualizaciones.slice(i, i + CHUNK)
+      await Promise.all(chunk.map(async (m) => {
+        try {
+          const r = await fetch(
+            `${supabaseUrl}/rest/v1/conductores?id=eq.${m.id}`,
+            {
+              method: 'PATCH',
+              headers: {
+                apikey: serviceKey,
+                Authorization: `Bearer ${serviceKey}`,
+                'Content-Type': 'application/json',
+                Prefer: 'return=minimal',
+              },
+              body: JSON.stringify({ url_documentacion: m.url }),
+            }
+          )
+          if (!r.ok) errores++
+        } catch {
+          errores++
+        }
+      }))
+    }
+
+    return res.json({
+      success: true,
+      total: conductores.length,
+      actualizados: actualizaciones.length - errores,
+      sin_coincidencia: sinCoincidencia.length,
+      errores,
+      details: {
+        sinCoincidencia: sinCoincidencia.slice(0, 200), // hasta 200 para no inflar la respuesta
+      },
+    })
+  } catch (error) {
+    console.error('[sync-conductores-documentacion] Error:', error.message)
+    return res.status(500).json({ error: error.message })
+  } finally {
+    syncDocumentacionEnCurso = false
+  }
+})
+
+// =====================================================
 // INTERCOM INTEGRATION
 // =====================================================
 
