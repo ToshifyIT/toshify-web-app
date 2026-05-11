@@ -36,6 +36,7 @@ import { LoadingOverlay } from '../../../components/ui/LoadingOverlay'
 import type { GarantiaConductor } from '../../../types/facturacion.types'
 import { formatCurrency, formatDate, FACTURACION_CONFIG } from '../../../types/facturacion.types'
 import { recalcGarantiasForSede } from '../../../services/garantiasService'
+import { formatNombreCompleto } from '../../../utils/conductorUtils'
 
 interface ConductorBasico {
   id: string
@@ -1336,7 +1337,7 @@ export function GarantiasTab() {
       ),
       cell: ({ row }) => (
         <div>
-          <div className="font-medium">{row.original.conductor_nombre}</div>
+          <div className="font-medium">{formatNombreCompleto(row.original.conductor_nombre)}</div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
             <span className="text-xs text-gray-500">{row.original.conductor_cuit || row.original.conductor_dni}</span>
             <span className={`fact-badge ${row.original.tipo_alquiler === 'CARGO' ? 'fact-badge-blue' : 'fact-badge-purple'}`} style={{ fontSize: '9px', padding: '1px 5px' }}>
@@ -1575,7 +1576,7 @@ export function GarantiasTab() {
           )}
         </div>
       ),
-      cell: ({ row }) => <span className="font-medium">{row.original.conductor_nombre}</span>
+      cell: ({ row }) => <span className="font-medium">{formatNombreCompleto(row.original.conductor_nombre)}</span>
     },
     {
       accessorKey: 'numero_cuota',
@@ -1813,7 +1814,7 @@ export function GarantiasTab() {
             data={garantiasFiltradas}
             columns={columnsGarantias}
             loading={loading}
-            searchPlaceholder="Buscar conductor..."
+            searchPlaceholder="Buscar por nombre, apellido, DNI o CUIT..."
             emptyIcon={<Shield size={48}
           />}
             emptyTitle="Sin garantías"

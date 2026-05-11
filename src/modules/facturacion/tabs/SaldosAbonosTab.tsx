@@ -36,6 +36,7 @@ import { VerLogsButton } from '../../../components/ui/VerLogsButton'
 import { LoadingOverlay } from '../../../components/ui/LoadingOverlay'
 import type { SaldoConductor } from '../../../types/facturacion.types'
 import { insertControlSaldo } from '../../../services/controlSaldosService'
+import { formatNombreCompleto } from '../../../utils/conductorUtils'
 
 interface ConductorBasico {
   id: string
@@ -2066,7 +2067,7 @@ export function SaldosAbonosTab() {
       ),
       cell: ({ row }) => (
         <div>
-          <div className="font-medium">{row.original.conductor_nombre}</div>
+          <div className="font-medium">{formatNombreCompleto(row.original.conductor_nombre)}</div>
           <div className="text-xs text-gray-500">{row.original.conductor_cuit || row.original.conductor_dni}</div>
         </div>
       )
@@ -2300,7 +2301,7 @@ export function SaldosAbonosTab() {
       accessorKey: 'conductor_nombre',
       header: 'Conductor',
       cell: ({ row }) => (
-        <div className="font-medium">{row.original.conductor_nombre || 'N/A'}</div>
+        <div className="font-medium">{formatNombreCompleto(row.original.conductor_nombre) || 'N/A'}</div>
       )
     },
     {

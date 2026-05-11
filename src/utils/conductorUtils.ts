@@ -3,6 +3,32 @@
  * Funciones puras sin dependencias externas.
  */
 
+/**
+ * Formatea el nombre del conductor para display en tablas.
+ *
+ * Acepta los formatos típicos de BD:
+ *  - "APELLIDO, NOMBRES"        → "NOMBRES APELLIDOS" (en mayúsculas)
+ *  - "NOMBRES APELLIDOS"        → mismo (en mayúsculas)
+ *  - null/undefined/vacío       → ""
+ *
+ * Es SOLO para presentación visual. NO toca la BD.
+ * Si el valor no tiene coma, lo devuelve tal cual (en mayúsculas).
+ */
+export function formatNombreCompleto(raw: string | null | undefined): string {
+  if (!raw) return '';
+  const txt = String(raw).trim();
+  if (!txt) return '';
+  if (txt.includes(',')) {
+    const partes = txt.split(',').map(p => p.trim()).filter(Boolean);
+    if (partes.length >= 2) {
+      const apellidos = partes[0];
+      const nombres = partes.slice(1).join(' ').trim();
+      return `${nombres} ${apellidos}`.toUpperCase();
+    }
+  }
+  return txt.toUpperCase();
+}
+
 interface EstadoParam {
   codigo?: string;
   descripcion?: string | null;

@@ -3,6 +3,7 @@
 import { useState, useEffect, useMemo, useRef } from 'react'
 import { supabase } from '../../../lib/supabase'
 import Swal from 'sweetalert2'
+import { formatNombreCompleto } from '../../../utils/conductorUtils'
 import { showSuccess } from '../../../utils/toast'
 import jsPDF from 'jspdf'
 import * as XLSX from 'xlsx'
@@ -8625,9 +8626,9 @@ export function ReporteFacturacionTab() {
                 row.original.conductor_nombre,
                 row.original.conductor_dni || ''
               )}
-              title={row.original.conductor_nombre}
+              title={formatNombreCompleto(row.original.conductor_nombre)}
             >
-              {row.original.conductor_nombre}
+              {formatNombreCompleto(row.original.conductor_nombre)}
             </strong>
             {row.original.dni_discrepancy && (
               <DiscrepancyBadge

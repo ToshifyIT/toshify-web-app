@@ -16,6 +16,7 @@ import { DataTable } from '../../../components/ui/DataTable'
 import type { TicketFavor } from '../../../types/facturacion.types'
 import { formatCurrency, formatDate, TIPOS_TICKET_FAVOR } from '../../../types/facturacion.types'
 import { useSede } from '../../../contexts/SedeContext'
+import { formatNombreCompleto } from '../../../utils/conductorUtils'
 
 export function TicketsFavorTab() {
   const { sedeActualId, aplicarFiltroSede } = useSede()
@@ -421,7 +422,7 @@ export function TicketsFavorTab() {
       ),
       cell: ({ row }) => (
         <div>
-          <div className="font-medium">{row.original.conductor_nombre}</div>
+          <div className="font-medium">{formatNombreCompleto(row.original.conductor_nombre)}</div>
           <div className="text-xs text-gray-500">{row.original.conductor_dni}</div>
         </div>
       )
