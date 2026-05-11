@@ -39,19 +39,47 @@ const detailMapStyle = {
 
 function loadGoogleMapsAPI(): Promise<void> {
   return new Promise((resolve, reject) => {
+    // Con loading=async, google.maps.Map NO está disponible inmediatamente
+    // después del onload del script — hay que importar las libs explícitamente
+    // vía google.maps.importLibrary(...). Esta función espera a que estén listas.
+    const ensureMapLib = async () => {
+      const g = (window as any).google
+      // Path síncrono: la clase Map ya está disponible (loader viejo, o lib ya importada)
+      if (g?.maps?.Map) {
+        resolve()
+        return
+      }
+      // Path async (URL con loading=async): importar las libs que usa el módulo
+      if (g?.maps?.importLibrary) {
+        try {
+          await Promise.all([
+            g.maps.importLibrary('maps'),
+            g.maps.importLibrary('places'),
+            g.maps.importLibrary('geocoding'),
+          ])
+          resolve()
+        } catch (err) {
+          reject(err instanceof Error ? err : new Error(String(err)))
+        }
+        return
+      }
+      // El script aún cargando — reintentar en 50ms
+      setTimeout(ensureMapLib, 50)
+    }
+
     if ((window as any).google?.maps) {
-      resolve()
+      ensureMapLib()
       return
     }
     const existingScript = document.querySelector('script[src*="maps.googleapis.com"]')
     if (existingScript) {
-      existingScript.addEventListener('load', () => resolve())
+      existingScript.addEventListener('load', () => ensureMapLib())
       return
     }
     const script = document.createElement('script')
     script.src = GOOGLE_MAPS_SCRIPT_URL
     script.async = true
-    script.onload = () => resolve()
+    script.onload = () => ensureMapLib()
     script.onerror = () => reject(new Error('Error cargando Google Maps'))
     document.head.appendChild(script)
   })
@@ -1274,6 +1302,18 @@ export function LeadsModule() {
     }
     // CUIT y DNI siempre como string
     if (dbCol === 'cuit' || dbCol === 'dni') return String(value).trim()
+    // Campo 'licencia' del lead: SIEMPRE solo 'Si', 'No' o null
+    // - 'NO' / 'NÓ' / 'FALSE' / '0' (cualquier capitalización) → 'No'
+    // - Cualquier otro valor con contenido (incluso códigos como 'A1.4', 'D1') → 'Si'
+    //   (la presencia de texto/categoría implica que tiene licencia)
+    if (dbCol === 'licencia') {
+      if (typeof value === 'boolean') return value ? 'Si' : 'No'
+      const s = String(value).trim()
+      if (!s) return null
+      const upper = s.toUpperCase()
+      if (upper === 'NO' || upper === 'NÓ' || upper === 'FALSE' || upper === '0') return 'No'
+      return 'Si'
+    }
     // Columnas boolean en la DB: convertir "Si"/"No"/"TRUE"/"FALSE" a true/false
     const boolCols = ['verificacion_emergencia', 'antecedentes_penales', 'acepta_oferta', 'cerrado_timeout_wpp']
     if (boolCols.includes(dbCol)) {
