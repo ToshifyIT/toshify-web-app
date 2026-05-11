@@ -153,8 +153,10 @@ app.post('/api/create-drive-folder', async (req, res) => {
     const supabaseEnabled = !!(supabaseUrl && serviceKey)
     const tabla = tipo === 'vehiculo' ? 'vehiculos' : 'conductores'
     const recordId = tipo === 'vehiculo' ? vehiculoId : conductorId
-    // conductores solo tiene drive_folder_url; vehiculos tiene url + id
+    // Conductores escribe en url_documentacion (campo unificado con leads convertidos)
+    // Vehículos sigue usando drive_folder_url + drive_folder_id
     const tieneFolderId = tipo === 'vehiculo'
+    const conductorFolderField = 'url_documentacion'
 
     // 1) Drive es la fuente de verdad: buscar carpeta con mismo nombre dentro del parent
     const drive = getDriveService(true)
@@ -163,7 +165,9 @@ app.post('/api/create-drive-folder', async (req, res) => {
     const searchRes = await drive.files.list({
       q: searchQ,
       fields: 'files(id, webViewLink, name)',
-      pageSize: 1
+      pageSize: 1,
+      supportsAllDrives: true,
+      includeItemsFromAllDrives: true
     })
     const existing = searchRes.data.files && searchRes.data.files[0]
     if (existing) {
@@ -182,7 +186,7 @@ app.post('/api/create-drive-folder', async (req, res) => {
             body: JSON.stringify(
               tieneFolderId
                 ? { drive_folder_id: existing.id, drive_folder_url: existing.webViewLink }
-                : { drive_folder_url: existing.webViewLink }
+                : { [conductorFolderField]: existing.webViewLink }
             )
           })
         } catch (dbErr) {
@@ -205,7 +209,8 @@ app.post('/api/create-drive-folder', async (req, res) => {
         mimeType: 'application/vnd.google-apps.folder',
         parents: [parentFolderId]
       },
-      fields: 'id, webViewLink'
+      fields: 'id, webViewLink',
+      supportsAllDrives: true
     })
 
     const folder = response.data
@@ -224,7 +229,7 @@ app.post('/api/create-drive-folder', async (req, res) => {
           body: JSON.stringify(
             tieneFolderId
               ? { drive_folder_id: folder.id, drive_folder_url: folder.webViewLink }
-              : { drive_folder_url: folder.webViewLink }
+              : { [conductorFolderField]: folder.webViewLink }
           )
         })
       } catch (dbErr) {

@@ -1082,7 +1082,7 @@ export function ConductoresModule() {
           if (result.success && result.folderUrl) {
             await (supabase as any)
               .from('conductores')
-              .update({ drive_folder_url: result.folderUrl })
+              .update({ url_documentacion: result.folderUrl })
               .eq('id', createdConductor.id);
           }
         }).catch(() => { /* silencioso */ });
@@ -4916,7 +4916,7 @@ function ModalDetalles({
         </div>
         </div>
         {(() => {
-          const folderUrl = (selectedConductor as any).drive_folder_url || (selectedConductor as any).url_documentacion;
+          const folderUrl = (selectedConductor as any).url_documentacion;
           const contractUrl = (selectedConductor as any).drive_contract_folder_url;
           return (
             <div className="modal-footer" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
