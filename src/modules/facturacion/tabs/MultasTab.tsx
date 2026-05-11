@@ -4,6 +4,7 @@ import { supabase } from '../../../lib/supabase'
 import { useSede } from '../../../contexts/SedeContext'
 import Swal from 'sweetalert2'
 import { showSuccess } from '../../../utils/toast'
+import { formatNombreCompleto } from '../../../utils/conductorUtils'
 import { normalizePatente } from '../../../utils/normalizeDocuments'
 import {
   AlertTriangle,
@@ -643,7 +644,7 @@ export function MultasTab() {
       ),
       cell: ({ row }) => (
         <span style={{ fontSize: '13px' }}>
-          {row.original.conductor_responsable || '-'}
+          {formatNombreCompleto(row.original.conductor_responsable) || '-'}
         </span>
       )
     },

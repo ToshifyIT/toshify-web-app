@@ -14,6 +14,7 @@ import { ChevronDown, ChevronUp, DollarSign, Eye } from 'lucide-react'
 import { supabase } from '../../../lib/supabase'
 import { useSede } from '../../../contexts/SedeContext'
 import { useAuth } from '../../../contexts/AuthContext'
+import { formatNombreCompleto } from '../../../utils/conductorUtils'
 import { insertControlSaldo } from '../../../services/controlSaldosService'
 import { showSuccess } from '../../../utils/toast'
 import { formatCurrency } from '../../../types/facturacion.types'
@@ -699,7 +700,7 @@ export function CobrosFraccionadosTab({ periodoActual }: CobrosFraccionadosTabPr
                   <div className="cobro-info">
                     <div className="cobro-titulo">
                       <span className="conductor">
-                        {cobro.conductor?.nombre_completo || cobro.conductor_nombre || 'Sin nombre'}
+                        {formatNombreCompleto(cobro.conductor?.nombre_completo || cobro.conductor_nombre) || 'Sin nombre'}
                       </span>
                       <span className="patente" style={{ marginLeft: '10px', color: 'var(--text-secondary, #666)' }}>
                         {cobro.vehiculo_patente || ''}

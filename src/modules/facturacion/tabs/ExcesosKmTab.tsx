@@ -19,6 +19,7 @@ import {
 import { type ColumnDef } from '@tanstack/react-table'
 import { DataTable } from '../../../components/ui/DataTable'
 import type { ExcesoKilometraje, PeriodoFacturacion } from '../../../types/facturacion.types'
+import { formatNombreCompleto } from '../../../utils/conductorUtils'
 import {
   formatCurrency,
   formatDate,
@@ -616,7 +617,7 @@ export function ExcesosKmTab() {
       ),
       cell: ({ row }) => (
         <div>
-          <div className="font-medium">{row.original.conductor_nombre}</div>
+          <div className="font-medium">{formatNombreCompleto(row.original.conductor_nombre)}</div>
         </div>
       )
     },

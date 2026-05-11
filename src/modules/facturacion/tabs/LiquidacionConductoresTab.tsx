@@ -27,6 +27,7 @@ import {
 } from '../../../types/facturacion.types'
 import { format, startOfWeek, endOfWeek } from 'date-fns'
 import * as XLSX from 'xlsx'
+import { formatNombreCompleto } from '../../../utils/conductorUtils'
 
 // Helper: tabla de cabify según sede (Bariloche usa tabla separada)
 const SEDE_BARILOCHE_ID = 'f37193f7-5805-4d87-820d-c4521824860e'
@@ -881,7 +882,7 @@ export function LiquidacionConductoresTab() {
       ),
       cell: ({ row }) => (
         <div>
-          <div className="font-medium">{row.original.conductor_nombre}</div>
+          <div className="font-medium">{formatNombreCompleto(row.original.conductor_nombre)}</div>
           <div style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>{row.original.conductor_dni}</div>
         </div>
       )
