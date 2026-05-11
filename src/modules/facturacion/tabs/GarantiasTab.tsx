@@ -789,32 +789,6 @@ export function GarantiasTab() {
     }
   }
 
-  async function verHistorial(garantia: GarantiaConductor) {
-    const porcentaje = Math.round((garantia.monto_pagado / garantia.monto_total) * 100)
-
-    Swal.fire({
-      title: `<span style="font-size: 16px; font-weight: 600;">Historial de Garantía</span>`,
-      html: `
-        <div style="text-align: left; font-size: 13px;">
-          <div style="background: #F3F4F6; padding: 10px 12px; border-radius: 6px;">
-            <div style="font-weight: 600; color: #111827;">${garantia.conductor_nombre}</div>
-            <div style="display: flex; gap: 12px; margin-top: 4px;">
-              <span style="color: #16a34a; font-size: 12px;">Pagado: <strong>${formatCurrency(garantia.monto_pagado)}</strong></span>
-              <span style="color: #ff0033; font-size: 12px;">Pendiente: <strong>${formatCurrency(garantia.monto_total - garantia.monto_pagado)}</strong></span>
-            </div>
-            <div style="background: #E5E7EB; height: 6px; border-radius: 3px; margin-top: 8px; overflow: hidden;">
-              <div style="background: #16a34a; height: 100%; width: ${porcentaje}%;"></div>
-            </div>
-            <div style="text-align: center; font-size: 11px; color: #6B7280; margin-top: 2px;">${porcentaje}%</div>
-          </div>
-        </div>
-      `,
-      width: 450,
-      confirmButtonText: 'Cerrar',
-      confirmButtonColor: '#6B7280'
-    })
-  }
-
   // ========== FUNCIONES PARA MOVIMIENTOS ==========
 
   async function editarMovimiento(pago: PagoGarantiaRow) {
