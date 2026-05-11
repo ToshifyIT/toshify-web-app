@@ -1166,7 +1166,8 @@ async function generateContractForConductor({
   addIfPresent('OBSERVATIONS', vehiculo.notas)
   addIfPresent('NAMETOSHIFY', CONTRACT_CONFIG.nameToshify)
   addIfPresent('ACTUALYEAR', String(new Date().getFullYear()))
-  addIfPresent('KM', vehiculo.kilometraje_actual ? String(vehiculo.kilometraje_actual) : null)
+  // {{KM}} se rellena en /api/complete-control al momento de la entrega real del vehículo,
+  // no al generar el contrato. Dejarlo como placeholder via nullGetter.
 
   // Variables de propietario
   const ownerData = CONTRACT_CONFIG.propietarios[propietario] || CONTRACT_CONFIG.propietarios['grupo_cg']
