@@ -1,4 +1,5 @@
-import { lazy, Suspense, useState } from 'react'
+import { lazy, Suspense } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import {
   FileText,
   // Calendar, // Oculto - Períodos movido al tab Reporte
@@ -46,8 +47,23 @@ const TABS = [
   // { id: 'conceptos' as TabType, label: 'Conceptos', icon: Settings } // Movido a menú Parámetros
 ]
 
+const VALID_TABS: TabType[] = ['reporte', 'periodos', 'garantias', 'saldos', 'tickets', 'excesos', 'bloqueos', 'conceptos', 'cobros_fraccionados']
+
 export function FacturacionModule() {
-  const [activeTab, setActiveTab] = useState<TabType>('reporte')
+  // Tab activo sincronizado con la URL (?tab=garantias) — sobrevive al F5.
+  const [searchParams, setSearchParams] = useSearchParams()
+  const tabFromUrl = searchParams.get('tab') as TabType | null
+  const activeTab: TabType = tabFromUrl && VALID_TABS.includes(tabFromUrl) ? tabFromUrl : 'reporte'
+
+  const setActiveTab = (tab: TabType) => {
+    setSearchParams(prev => {
+      const next = new URLSearchParams(prev)
+      if (tab === 'reporte') next.delete('tab')  // tab por defecto = sin query param
+      else next.set('tab', tab)
+      return next
+    }, { replace: true })
+  }
+
   const { canViewTab } = usePermissions()
 
   // Filtrar tabs según permisos
