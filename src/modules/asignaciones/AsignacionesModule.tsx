@@ -684,7 +684,7 @@ export function AsignacionesModule() {
             vehiculos (patente, marca, modelo),
             asignaciones_conductores (
               id, conductor_id, estado, horario, confirmado, fecha_confirmacion, documento,
-              conductores (nombres, apellidos, numero_licencia, estado_id, drive_folder_url, conductores_estados(codigo))
+              conductores (nombres, apellidos, numero_licencia, estado_id, drive_contract_folder_url, conductores_estados(codigo))
             )
           `))
           .or(`estado.in.(programado,activa),created_at.gte.${fechaLimiteStr}`)
@@ -786,7 +786,8 @@ export function AsignacionesModule() {
     loadAllData()
   }, [sedeActualId])
 
-  // Cargar drive_folder_url directo de conductores cuando se abre el modal de detalle
+  // Cargar drive_contract_folder_url (carpeta de contratos) directo de conductores
+  // cuando se abre el modal de detalle de la asignación
   useEffect(() => {
     if (!showViewModal || !viewAsignacion) {
       setViewDriveUrls({})
@@ -798,13 +799,13 @@ export function AsignacionesModule() {
     if (conductorIds.length === 0) return
     supabase
       .from('conductores')
-      .select('id, drive_folder_url')
+      .select('id, drive_contract_folder_url')
       .in('id', conductorIds)
       .then(({ data }) => {
         if (data) {
           const urls: Record<string, string> = {}
           for (const c of data) {
-            if (c.drive_folder_url) urls[c.id] = c.drive_folder_url
+            if (c.drive_contract_folder_url) urls[c.id] = c.drive_contract_folder_url
           }
           setViewDriveUrls(urls)
         }
@@ -3448,7 +3449,7 @@ export function AsignacionesModule() {
                         const docTipo = viewAsignacion.asignaciones_conductores?.[0]?.documento
                         if (docTipo === 'NA' || docTipo === 'N/A') return null
                         const cId = viewAsignacion.asignaciones_conductores?.[0]?.conductor_id
-                        const driveUrl = (cId && viewDriveUrls[cId]) || (viewAsignacion.asignaciones_conductores?.[0]?.conductores as any)?.drive_folder_url
+                        const driveUrl = (cId && viewDriveUrls[cId]) || (viewAsignacion.asignaciones_conductores?.[0]?.conductores as any)?.drive_contract_folder_url
                         if (!driveUrl) return (
                           <div style={{ marginTop: '4px', display: 'flex', alignItems: 'center', gap: '4px' }}>
                             <FolderOpen size={13} style={{ color: '#9CA3AF' }} />
@@ -3458,7 +3459,7 @@ export function AsignacionesModule() {
                         return (
                           <div style={{ marginTop: '4px', display: 'flex', flexDirection: 'column', gap: '2px' }}>
                             <a href={driveUrl} target="_blank" rel="noopener noreferrer" style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', fontSize: '12px', color: '#2563EB', textDecoration: 'none', fontWeight: 500 }}>
-                              <FolderOpen size={13} /> Ver documentos en Drive
+                              <FolderOpen size={13} /> Ver documentos del contrato
                             </a>
                             <span
                               onClick={() => { navigator.clipboard.writeText(driveUrl); showSuccess('URL copiada') }}
@@ -3580,7 +3581,7 @@ export function AsignacionesModule() {
                               })()
                           return lista
                         })().map((ac) => {
-                          const driveUrl = viewDriveUrls[ac.conductor_id] || (ac.conductores as any)?.drive_folder_url
+                          const driveUrl = viewDriveUrls[ac.conductor_id] || (ac.conductores as any)?.drive_contract_folder_url
                           const showDrive = ac.documento !== 'NA' && ac.documento !== 'N/A'
                           return (
                           <div key={ac.id} className="asig-conductor-card" style={{ display: 'flex', gap: '16px', alignItems: 'stretch' }}>
@@ -3642,7 +3643,7 @@ export function AsignacionesModule() {
                                   <>
                                     <FolderOpen size={22} style={{ color: '#2563EB', marginBottom: '6px', cursor: 'pointer' }} onClick={() => window.open(driveUrl, '_blank')} />
                                     <a href={driveUrl} target="_blank" rel="noopener noreferrer" style={{ fontSize: '12px', color: '#2563EB', textDecoration: 'none', fontWeight: 600, textAlign: 'center', lineHeight: '1.3' }}>
-                                      Ver documentos
+                                      Ver documentos del contrato
                                     </a>
                                     <span
                                       onClick={() => { navigator.clipboard.writeText(driveUrl); showSuccess('URL copiada') }}
