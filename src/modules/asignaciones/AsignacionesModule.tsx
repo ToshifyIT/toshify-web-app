@@ -3459,7 +3459,7 @@ export function AsignacionesModule() {
                         return (
                           <div style={{ marginTop: '4px', display: 'flex', flexDirection: 'column', gap: '2px' }}>
                             <a href={driveUrl} target="_blank" rel="noopener noreferrer" style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', fontSize: '12px', color: '#2563EB', textDecoration: 'none', fontWeight: 500 }}>
-                              <FolderOpen size={13} /> Ver documentos del contrato
+                              <FolderOpen size={13} /> Ver documentos Carta Oferta
                             </a>
                             <span
                               onClick={() => { navigator.clipboard.writeText(driveUrl); showSuccess('URL copiada') }}
@@ -3643,7 +3643,7 @@ export function AsignacionesModule() {
                                   <>
                                     <FolderOpen size={22} style={{ color: '#2563EB', marginBottom: '6px', cursor: 'pointer' }} onClick={() => window.open(driveUrl, '_blank')} />
                                     <a href={driveUrl} target="_blank" rel="noopener noreferrer" style={{ fontSize: '12px', color: '#2563EB', textDecoration: 'none', fontWeight: 600, textAlign: 'center', lineHeight: '1.3' }}>
-                                      Ver documentos del contrato
+                                      Ver documentos Carta Oferta
                                     </a>
                                     <span
                                       onClick={() => { navigator.clipboard.writeText(driveUrl); showSuccess('URL copiada') }}

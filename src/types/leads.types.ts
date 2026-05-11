@@ -81,6 +81,9 @@ export interface Lead {
   entrevista_ia?: string | null
   induccion?: string | null
   estado_de_lead?: string | null
+  // Marca el momento en que el operador cambió manualmente el estado.
+  // Si está seteado, el auto-cálculo de estado en loadLeads NO sobrescribe el valor.
+  estado_manual_at?: string | null
   fase_de_preguntas?: string | null
   causal_de_cierre?: string | null
   motivo_desinteres?: string | null
