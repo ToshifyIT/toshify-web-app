@@ -37,6 +37,8 @@ import type { GarantiaConductor } from '../../../types/facturacion.types'
 import { formatCurrency, formatDate, FACTURACION_CONFIG } from '../../../types/facturacion.types'
 import { recalcGarantiasForSede } from '../../../services/garantiasService'
 import { formatNombreCompleto } from '../../../utils/conductorUtils'
+import { getKardexGarantia, type ControlGarantiaRow } from '../../../services/controlGarantiasService'
+import { X as XIcon } from 'lucide-react'
 
 interface ConductorBasico {
   id: string
@@ -80,6 +82,23 @@ export function GarantiasTab() {
   // Estados para filtros Excel - Movimientos
   const [movConductorFilter, setMovConductorFilter] = useState<string[]>([])
   const [movConductorSearch, setMovConductorSearch] = useState('')
+
+  // Kardex de Garantía (modal P1)
+  const [kardexModal, setKardexModal] = useState<{
+    open: boolean
+    garantia: GarantiaConductor | null
+    rows: ControlGarantiaRow[]
+    loading: boolean
+    search: string
+    semanaFilter: string
+    tipoFilter: string
+  }>({ open: false, garantia: null, rows: [], loading: false, search: '', semanaFilter: '', tipoFilter: '' })
+
+  async function abrirKardex(garantia: GarantiaConductor) {
+    setKardexModal({ open: true, garantia, rows: [], loading: true, search: '', semanaFilter: '', tipoFilter: '' })
+    const rows = await getKardexGarantia(garantia.id)
+    setKardexModal(prev => ({ ...prev, rows, loading: false }))
+  }
 
   useEffect(() => {
     cargarGarantias()
@@ -1500,7 +1519,7 @@ export function GarantiasTab() {
         const pendienteDevolver = esDevolucion && row.original.monto_pagado > (row.original as any).monto_devuelto
         return (
           <div className="fact-table-actions">
-            <button className="fact-table-btn fact-table-btn-view" onClick={() => verHistorial(row.original)} data-tooltip="Ver historial">
+            <button className="fact-table-btn fact-table-btn-view" onClick={() => abrirKardex(row.original)} data-tooltip="Ver kardex de garantía">
               <Eye size={14} />
             </button>
             {!esBaja && row.original.estado !== 'completada' && !esDevolucion && (
@@ -1873,6 +1892,278 @@ export function GarantiasTab() {
           />
         </>
       )}
+
+      {/* ============ MODAL KARDEX DE GARANTÍA (Propuesta 1) ============ */}
+      {kardexModal.open && kardexModal.garantia && (() => {
+        const g = kardexModal.garantia
+        const facturado = Number(g.monto_pagado) || 0  // monto_pagado = facturado en P003 (post-fix)
+        const real = Number((g as any).monto_realmente_pagado) || 0
+        const total = Number(g.monto_total) || 1
+        // Deuda real = suma de delta_deuda del kardex (NO la diferencia facturado-pagado).
+        // delta_deuda solo se llena cuando un pago Cabify no cubrió la cuota completa.
+        // Si la cuota está facturada pero todavía no entró el pago Cabify, NO es deuda aún.
+        const deudaReal = Math.max(0, kardexModal.rows.reduce((s, r) => s + (Number(r.delta_deuda) || 0), 0))
+        const pctFact = Math.min(100, (facturado / total) * 100)
+        const pctReal = Math.min(100, (real / total) * 100)
+        const tieneDeuda = deudaReal > 1
+
+        // Filtrar filas
+        const rowsFiltradas = kardexModal.rows.filter(r => {
+          if (kardexModal.semanaFilter) {
+            const semKey = `${r.anio}-${r.semana}`
+            if (semKey !== kardexModal.semanaFilter) return false
+          }
+          if (kardexModal.tipoFilter && r.tipo_movimiento !== kardexModal.tipoFilter) return false
+          if (kardexModal.search.trim()) {
+            const q = kardexModal.search.toLowerCase()
+            const blob = `${r.referencia || ''} ${r.observaciones || ''} ${r.monto_facturado} ${r.monto_pagado_real} S${r.semana} ${r.anio}`.toLowerCase()
+            if (!blob.includes(q)) return false
+          }
+          return true
+        })
+
+        // Semanas únicas para dropdown
+        const semanasUnicas = Array.from(new Set(
+          kardexModal.rows.map(r => `${r.anio}-${r.semana}`)
+        )).sort((a, b) => {
+          const [aA, aS] = a.split('-').map(Number)
+          const [bA, bS] = b.split('-').map(Number)
+          if (aA !== bA) return bA - aA
+          return bS - aS
+        })
+
+        // Totales del rango filtrado
+        const totalFact = rowsFiltradas.reduce((s, r) => s + (Number(r.monto_facturado) || 0), 0)
+        const totalPag = rowsFiltradas.reduce((s, r) => s + (Number(r.monto_pagado_real) || 0), 0)
+
+        const tipoLabel: Record<string, string> = {
+          cuota_facturada: 'Cuota Facturada',
+          pago_aplicado: 'Pago Aplicado',
+          ajuste_manual: 'Ajuste Manual',
+          eliminacion: 'Eliminación',
+        }
+
+        return (
+          <div className="fact-modal-overlay" onClick={() => setKardexModal(prev => ({ ...prev, open: false }))}>
+            <div className="fact-modal-content" style={{ maxWidth: '1100px' }} onClick={e => e.stopPropagation()}>
+              <div className="fact-modal-header">
+                <h2>Kardex de Garantía</h2>
+                <button className="fact-modal-close" onClick={() => setKardexModal(prev => ({ ...prev, open: false }))}>
+                  <XIcon size={20} />
+                </button>
+              </div>
+
+              <div className="fact-modal-body" style={{ padding: '16px' }}>
+                {/* Hero con info conductor + alerta */}
+                <div style={{ marginBottom: '14px', paddingBottom: '12px', borderBottom: '1px solid var(--border-primary)' }}>
+                  <div style={{ fontSize: '16px', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                    <span>{formatNombreCompleto(g.conductor_nombre)}</span>
+                    {tieneDeuda && (
+                      <span style={{
+                        fontSize: '10px', fontWeight: 600,
+                        padding: '2px 8px', borderRadius: '4px',
+                        background: '#fffbeb', color: '#92400e', border: '1px solid #fde68a',
+                      }}>
+                        ⚠ Deuda real ${deudaReal.toLocaleString('es-AR', { maximumFractionDigits: 0 })}
+                      </span>
+                    )}
+                  </div>
+                  <div style={{ fontSize: '11px', color: 'var(--text-secondary)', marginTop: '4px' }}>
+                    DNI {g.conductor_dni || '-'} · CUIT {g.conductor_cuit || '-'} · {g.tipo_alquiler}
+                  </div>
+                </div>
+
+                {/* 2 KPIs con barras de progreso */}
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '14px' }}>
+                  <div style={{
+                    background: 'var(--bg-secondary)', border: '1px solid var(--border-primary)',
+                    borderRadius: '8px', padding: '12px 14px',
+                  }}>
+                    <div style={{ fontSize: '10px', textTransform: 'uppercase', color: 'var(--text-secondary)', letterSpacing: '0.4px', fontWeight: 600 }}>
+                      Facturado en P003
+                    </div>
+                    <div style={{ fontSize: '18px', fontWeight: 700, color: '#2563eb', marginTop: '4px', fontFamily: 'monospace' }}>
+                      {formatCurrency(facturado)} <span style={{ fontSize: '11px', color: 'var(--text-secondary)', fontFamily: 'system-ui' }}>/ {formatCurrency(total)}</span>
+                    </div>
+                    <div style={{ marginTop: '8px', height: '6px', background: 'var(--border-primary)', borderRadius: '3px', overflow: 'hidden' }}>
+                      <div style={{ height: '100%', background: '#2563eb', width: `${pctFact}%` }} />
+                    </div>
+                    <div style={{ fontSize: '10px', color: 'var(--text-tertiary)', marginTop: '6px' }}>
+                      {g.cuotas_pagadas || 0} cuotas facturadas · {pctFact.toFixed(0)}% cobrada en facturación
+                    </div>
+                  </div>
+                  <div style={{
+                    background: 'var(--bg-secondary)', border: '1px solid var(--border-primary)',
+                    borderRadius: '8px', padding: '12px 14px',
+                  }}>
+                    <div style={{ fontSize: '10px', textTransform: 'uppercase', color: 'var(--text-secondary)', letterSpacing: '0.4px', fontWeight: 600 }}>
+                      Pagado realmente
+                    </div>
+                    <div style={{ fontSize: '18px', fontWeight: 700, color: '#16a34a', marginTop: '4px', fontFamily: 'monospace' }}>
+                      {formatCurrency(real)} <span style={{ fontSize: '11px', color: 'var(--text-secondary)', fontFamily: 'system-ui' }}>/ {formatCurrency(total)}</span>
+                    </div>
+                    <div style={{ marginTop: '8px', height: '6px', background: 'var(--border-primary)', borderRadius: '3px', overflow: 'hidden' }}>
+                      <div style={{ height: '100%', background: 'linear-gradient(90deg, #16a34a, #22c55e)', width: `${pctReal}%` }} />
+                    </div>
+                    <div style={{ fontSize: '10px', color: 'var(--text-tertiary)', marginTop: '6px' }}>
+                      {pctReal.toFixed(0)}% real {tieneDeuda ? `· ${formatCurrency(deudaReal)} en saldo deudor` : '· sin deuda'}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Filtros */}
+                {!kardexModal.loading && kardexModal.rows.length > 0 && (
+                  <div style={{ display: 'flex', gap: '8px', marginBottom: '10px', flexWrap: 'wrap' }}>
+                    <input
+                      type="text"
+                      placeholder="🔍 Buscar por semana, referencia, monto..."
+                      value={kardexModal.search}
+                      onChange={e => setKardexModal(prev => ({ ...prev, search: e.target.value }))}
+                      style={{
+                        flex: 1, minWidth: '180px', padding: '6px 10px', fontSize: '11px',
+                        border: '1px solid var(--border-primary)', borderRadius: '4px',
+                        background: 'var(--bg-secondary)', color: 'var(--text-primary)',
+                      }}
+                    />
+                    <select
+                      value={kardexModal.semanaFilter}
+                      onChange={e => setKardexModal(prev => ({ ...prev, semanaFilter: e.target.value }))}
+                      style={{ padding: '5px 8px', fontSize: '11px', border: '1px solid var(--border-primary)', borderRadius: '4px', background: 'var(--card-bg, #fff)', color: 'var(--text-secondary)' }}
+                    >
+                      <option value="">Todas las semanas</option>
+                      {semanasUnicas.map(sem => {
+                        const [a, s] = sem.split('-')
+                        return <option key={sem} value={sem}>{a} S{String(s).padStart(2, '0')}</option>
+                      })}
+                    </select>
+                    <select
+                      value={kardexModal.tipoFilter}
+                      onChange={e => setKardexModal(prev => ({ ...prev, tipoFilter: e.target.value }))}
+                      style={{ padding: '5px 8px', fontSize: '11px', border: '1px solid var(--border-primary)', borderRadius: '4px', background: 'var(--card-bg, #fff)', color: 'var(--text-secondary)' }}
+                    >
+                      <option value="">Todos los tipos</option>
+                      <option value="cuota_facturada">Cuotas facturadas</option>
+                      <option value="pago_aplicado">Pagos aplicados</option>
+                      <option value="ajuste_manual">Ajustes manuales</option>
+                      <option value="eliminacion">Eliminaciones</option>
+                    </select>
+                  </div>
+                )}
+
+                {/* Tabla */}
+                {kardexModal.loading ? (
+                  <div style={{ padding: '30px 0', textAlign: 'center', color: 'var(--text-secondary)', fontSize: '12px' }}>Cargando...</div>
+                ) : kardexModal.rows.length === 0 ? (
+                  <div style={{ padding: '30px 0', textAlign: 'center', color: 'var(--text-secondary)', fontSize: '12px' }}>Sin movimientos en el kardex</div>
+                ) : (
+                  <>
+                    <div style={{ maxHeight: '400px', overflowY: 'auto', border: '1px solid var(--border-primary)', borderRadius: '6px' }}>
+                      <table style={{ width: '100%', fontSize: '11px', borderCollapse: 'collapse' }}>
+                        <thead>
+                          <tr style={{ background: 'var(--bg-secondary)', position: 'sticky', top: 0, zIndex: 1 }}>
+                            {['Fecha', 'Semana', 'Cuota ref.', 'Tipo', 'Referencia', 'Facturado', 'Pagado', 'A saldo', 'Acum. Pag.'].map((h, hi) => (
+                              <th key={hi} style={{
+                                padding: '6px 8px', fontWeight: 600, color: 'var(--text-secondary)',
+                                borderBottom: '1px solid var(--border-primary)',
+                                textAlign: hi >= 5 ? 'right' : (hi === 2 ? 'right' : 'left'),
+                                fontSize: '10px',
+                              }}>{h}</th>
+                            ))}
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {rowsFiltradas.map((r) => {
+                            const esCuota = r.tipo_movimiento === 'cuota_facturada'
+                            const esPago = r.tipo_movimiento === 'pago_aplicado'
+                            const rowBg = esCuota ? 'rgba(239, 246, 255, 0.4)'
+                                        : esPago ? 'rgba(240, 253, 244, 0.4)'
+                                        : 'transparent'
+                            const labelBg = esCuota ? '#eff6ff' : esPago ? '#f0fdf4' : '#f3f4f6'
+                            const labelFg = esCuota ? '#2563eb' : esPago ? '#16a34a' : 'var(--text-secondary)'
+                            const fecha = r.created_at ? new Date(r.created_at).toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: '2-digit' }) : '-'
+                            const monto_fact = Number(r.monto_facturado) || 0
+                            const monto_pag = Number(r.monto_pagado_real) || 0
+                            const delta = Number(r.delta_deuda) || 0
+                            const acumPag = Number(r.pagado_real_acumulado) || 0
+                            const cuotaRef = Number(r.cuotas_facturadas) || 0
+                            return (
+                              <tr key={r.id} style={{ borderBottom: '1px solid var(--border-primary)', background: rowBg }}>
+                                <td style={{ padding: '6px 8px', color: 'var(--text-secondary)', fontSize: '10px', whiteSpace: 'nowrap' }}>{fecha}</td>
+                                <td style={{ padding: '6px 8px', fontWeight: 600, color: 'var(--text-primary)', whiteSpace: 'nowrap' }}>
+                                  {r.anio} S{String(r.semana || '').padStart(2, '0')}
+                                </td>
+                                <td style={{ padding: '6px 8px', textAlign: 'right', whiteSpace: 'nowrap', color: esCuota ? 'var(--text-primary)' : 'var(--text-tertiary)' }}>
+                                  {esCuota ? <b>{cuotaRef}</b> : cuotaRef}<span style={{ fontSize: '9px', color: 'var(--text-tertiary)' }}>/20</span>
+                                </td>
+                                <td style={{ padding: '6px 8px', whiteSpace: 'nowrap' }}>
+                                  <span style={{ display: 'inline-block', padding: '1px 6px', borderRadius: '3px', background: labelBg, color: labelFg, fontWeight: 600, fontSize: '10px' }}>
+                                    {tipoLabel[r.tipo_movimiento] || r.tipo_movimiento}
+                                  </span>
+                                </td>
+                                <td style={{ padding: '6px 8px', color: 'var(--text-secondary)', fontSize: '10px', maxWidth: '260px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={r.referencia || ''}>
+                                  {r.referencia || '-'}
+                                </td>
+                                <td style={{ padding: '6px 8px', textAlign: 'right', fontFamily: 'monospace', color: monto_fact > 0 ? '#2563eb' : 'var(--text-tertiary)', fontWeight: monto_fact > 0 ? 600 : 400 }}>
+                                  {monto_fact > 0 ? `+${formatCurrency(monto_fact)}` : '—'}
+                                </td>
+                                <td style={{ padding: '6px 8px', textAlign: 'right', fontFamily: 'monospace', color: monto_pag > 0 ? '#16a34a' : 'var(--text-tertiary)', fontWeight: monto_pag > 0 ? 600 : 400 }}>
+                                  {monto_pag > 0 ? `+${formatCurrency(monto_pag)}` : '—'}
+                                </td>
+                                <td style={{ padding: '6px 8px', textAlign: 'right', fontFamily: 'monospace', fontWeight: 600, color: delta > 0 ? '#dc2626' : delta < 0 ? '#16a34a' : 'var(--text-tertiary)' }}>
+                                  {Math.abs(delta) > 0.01 ? `${delta > 0 ? '+' : '-'}${formatCurrency(Math.abs(delta))}` : '—'}
+                                </td>
+                                <td style={{ padding: '6px 8px', textAlign: 'right', fontFamily: 'monospace', color: 'var(--text-secondary)' }}>
+                                  {formatCurrency(acumPag)}
+                                </td>
+                              </tr>
+                            )
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+
+                    {/* Footer totales */}
+                    <div style={{
+                      display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)',
+                      marginTop: '8px', background: 'var(--bg-secondary)',
+                      border: '1px solid var(--border-primary)', borderRadius: '6px', overflow: 'hidden',
+                    }}>
+                      <div style={{ padding: '8px 12px', borderRight: '1px solid var(--border-primary)', textAlign: 'right' }}>
+                        <div style={{ fontSize: '9px', textTransform: 'uppercase', color: 'var(--text-secondary)', fontWeight: 600 }}>Total facturado</div>
+                        <div style={{ fontSize: '13px', fontWeight: 700, color: '#2563eb', fontFamily: 'monospace', marginTop: '2px' }}>{formatCurrency(totalFact)}</div>
+                      </div>
+                      <div style={{ padding: '8px 12px', borderRight: '1px solid var(--border-primary)', textAlign: 'right' }}>
+                        <div style={{ fontSize: '9px', textTransform: 'uppercase', color: 'var(--text-secondary)', fontWeight: 600 }}>Total pagado real</div>
+                        <div style={{ fontSize: '13px', fontWeight: 700, color: '#16a34a', fontFamily: 'monospace', marginTop: '2px' }}>{formatCurrency(totalPag)}</div>
+                      </div>
+                      <div style={{ padding: '8px 12px', borderRight: '1px solid var(--border-primary)', textAlign: 'right' }}>
+                        <div style={{ fontSize: '9px', textTransform: 'uppercase', color: 'var(--text-secondary)', fontWeight: 600 }}>Deuda real</div>
+                        <div style={{ fontSize: '13px', fontWeight: 700, color: tieneDeuda ? '#dc2626' : 'var(--text-secondary)', fontFamily: 'monospace', marginTop: '2px' }}>{formatCurrency(deudaReal)}</div>
+                      </div>
+                      <div style={{ padding: '8px 12px', textAlign: 'right' }}>
+                        <div style={{ fontSize: '9px', textTransform: 'uppercase', color: 'var(--text-secondary)', fontWeight: 600 }}>Cuotas / 20</div>
+                        <div style={{ fontSize: '13px', fontWeight: 700, fontFamily: 'monospace', marginTop: '2px' }}>{g.cuotas_pagadas || 0} / 20</div>
+                      </div>
+                    </div>
+
+                    <div style={{ marginTop: '8px', fontSize: '10px', color: 'var(--text-tertiary)' }}>
+                      Mostrando {rowsFiltradas.length} de {kardexModal.rows.length} movimientos
+                      {(kardexModal.search || kardexModal.semanaFilter || kardexModal.tipoFilter) && (
+                        <button
+                          onClick={() => setKardexModal(prev => ({ ...prev, search: '', semanaFilter: '', tipoFilter: '' }))}
+                          style={{ marginLeft: '8px', background: 'transparent', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer', textDecoration: 'underline', fontSize: '10px', padding: 0 }}
+                        >
+                          Limpiar filtros
+                        </button>
+                      )}
+                    </div>
+                  </>
+                )}
+              </div>
+            </div>
+          </div>
+        )
+      })()}
     </>
   )
 }
