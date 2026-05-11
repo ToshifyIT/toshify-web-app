@@ -130,6 +130,28 @@ const UPDATABLE_FIELDS = [
 const UPDATABLE_SET = new Set(UPDATABLE_FIELDS);
 
 // =====================================================
+// Helpers de normalización de campos
+// =====================================================
+
+/**
+ * Normaliza el valor del campo `licencia` del lead.
+ * Regla: solo se permite 'Si', 'No' o null.
+ * - null/empty/undefined → null
+ * - 'NO' / 'NÓ' / 'FALSE' / '0' (cualquier capitalización) → 'No'
+ * - Cualquier otro valor con contenido → 'Si'
+ *   (la presencia de texto/categoría implica que tiene licencia)
+ */
+function normalizarLicencia(value) {
+  if (value == null || value === '') return null;
+  if (typeof value === 'boolean') return value ? 'Si' : 'No';
+  const s = String(value).trim();
+  if (!s) return null;
+  const upper = s.toUpperCase();
+  if (upper === 'NO' || upper === 'NÓ' || upper === 'FALSE' || upper === '0') return 'No';
+  return 'Si';
+}
+
+// =====================================================
 // Create MCP Server with tools
 // =====================================================
 
@@ -256,6 +278,11 @@ function createMcpServer(apiKeyData) {
             }
           }
 
+          // Normalizar licencia para que solo entre 'Si' / 'No' / null
+          if ('licencia' in allowed) {
+            allowed.licencia = normalizarLicencia(allowed.licencia);
+          }
+
           if (Object.keys(allowed).length === 0) {
             return {
               content: [{
@@ -317,6 +344,11 @@ function createMcpServer(apiKeyData) {
             } else {
               rejected.push(key);
             }
+          }
+
+          // Normalizar licencia para que solo entre 'Si' / 'No' / null
+          if ('licencia' in updates) {
+            updates.licencia = normalizarLicencia(updates.licencia);
           }
 
           if (Object.keys(updates).length === 0) {

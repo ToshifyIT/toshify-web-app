@@ -1,6 +1,6 @@
 // src/modules/leads/components/LeadWizard.tsx
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { Check, ChevronLeft, ChevronRight } from 'lucide-react'
 import { AddressAutocomplete } from '../../../components/ui/AddressAutocomplete'
 import { useSede } from '../../../contexts/SedeContext'
@@ -50,6 +50,41 @@ function calcularEdad(fechaNac: string): number | undefined {
 export function LeadWizard({ formData, setFormData, onSave, onCancel, saving = false, errors = {}, categoriasLicencia = [], estadosLicencia = [], tiposLicencia = [] }: LeadWizardProps) {
   const [currentStep, setCurrentStep] = useState(1)
   const { sedes } = useSede()
+
+  // Mapping zona → nombre de sede esperada.
+  // Cuando el operador (o AddressAutocomplete) cambia la zona, auto-asignamos
+  // la sede correspondiente para evitar leads en sede equivocada.
+  const ZONA_TO_SEDE_NOMBRE: Record<string, string> = {
+    'bariloche': 'Bariloche',
+    'caba': 'Buenos Aires',
+    'norte': 'Buenos Aires',
+    'sur': 'Buenos Aires',
+    'oeste': 'Buenos Aires',
+    'gba': 'Buenos Aires',
+  }
+
+  // Auto-sincronización: cuando cambia formData.zona, ajustar sede/sede_id
+  // si corresponde a una sede distinta a la actual del lead.
+  // Solo dispara en cambios de zona después de montar (no en el primer render).
+  const zonaInicializadaRef = useRef(false)
+  useEffect(() => {
+    if (!zonaInicializadaRef.current) {
+      zonaInicializadaRef.current = true
+      return
+    }
+    if (!formData.zona) return
+    const zonaKey = formData.zona.toLowerCase().trim()
+    const nombreSedeDeseada = ZONA_TO_SEDE_NOMBRE[zonaKey]
+    if (!nombreSedeDeseada) return
+    const sedeMatch = sedes.find(s => s.nombre?.toLowerCase() === nombreSedeDeseada.toLowerCase())
+    if (!sedeMatch || formData.sede_id === sedeMatch.id) return
+    setFormData(prev => ({
+      ...prev,
+      sede: sedeMatch.nombre,
+      sede_id: sedeMatch.id,
+    }))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [formData.zona])
 
   // Al abrir el wizard, si hay teléfono pero no WhatsApp, copiar el teléfono
   useEffect(() => {
@@ -433,7 +468,15 @@ export function LeadWizard({ formData, setFormData, onSave, onCancel, saving = f
                         return match ? match[1].trim() : desc
                       })
                       const licenciaText = codigos.join('.')
-                      return { ...prev, categorias_licencia: selected, licencia: licenciaText, d1: licenciaText.includes('D1') ? 'Si' : 'No' }
+                      // d1 se mantiene auto-sincronizado con las categorías seleccionadas.
+                      // licencia: si hay al menos 1 categoría seleccionada → 'Si' (tener categoría
+                      // implica tener licencia). Si se vacían las categorías, mantener valor previo.
+                      return {
+                        ...prev,
+                        categorias_licencia: selected,
+                        licencia: selected.length > 0 ? 'Si' : prev.licencia,
+                        d1: licenciaText.includes('D1') ? 'Si' : 'No',
+                      }
                     })
                   }}
                   style={{ minHeight: '80px' }}
