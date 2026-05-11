@@ -387,12 +387,15 @@ export function LeadsModule() {
   async function handleChangeEstadoInline(leadId: string, nuevoEstado: string) {
     setEstadoDropdownId(null)
     try {
+      const now = new Date().toISOString()
+      // Marcar estado_manual_at para que loadLeads respete este cambio manual
+      // y no lo sobrescriba con el auto-cálculo de calcularEstadoLead.
       const { error } = await supabase
         .from('leads')
-        .update({ estado_de_lead: nuevoEstado, updated_at: new Date().toISOString() })
+        .update({ estado_de_lead: nuevoEstado, estado_manual_at: now, updated_at: now })
         .eq('id', leadId)
       if (error) throw error
-      setLeads(prev => prev.map(l => l.id === leadId ? { ...l, estado_de_lead: nuevoEstado, updated_at: new Date().toISOString() } : l))
+      setLeads(prev => prev.map(l => l.id === leadId ? { ...l, estado_de_lead: nuevoEstado, estado_manual_at: now, updated_at: now } : l))
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Error desconocido'
       Swal.fire('Error', `No se pudo cambiar el estado: ${msg}`, 'error')
@@ -431,11 +434,22 @@ export function LeadsModule() {
       if (ecRes.data) setEstadosCiviles(ecRes.data)
       const leadsData = (leadsRes.data || []) as Lead[]
 
-      // Calcular estado correcto y detectar desactualizados
+      // Calcular estado correcto y detectar desactualizados.
+      // Leads con estado_manual_at seteado conservan su estado (cambio del operador),
+      // excepto cuando proceso pasa a "convertido"/"conductor" (transición de proceso, gana).
       const leadsConEstado: Lead[] = []
       const actualizaciones: { id: string; estado: string }[] = []
 
       for (const lead of leadsData) {
+        const proceso = (lead.proceso || '').toLowerCase()
+        const esConductor = proceso === 'convertido' || proceso === 'conductor'
+
+        if (lead.estado_manual_at && !esConductor) {
+          // Cambio manual del operador — respetar siempre
+          leadsConEstado.push(lead)
+          continue
+        }
+
         const estadoCorrecto = calcularEstadoLead(lead)
         if (lead.estado_de_lead !== estadoCorrecto) {
           actualizaciones.push({ id: lead.id, estado: estadoCorrecto })
