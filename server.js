@@ -1773,7 +1773,7 @@ app.post('/api/sync-conductores-documentacion', async (req, res) => {
       pageCount++
       const listRes = await drive.files.list({
         q: `'${parentFolderId}' in parents and mimeType='application/vnd.google-apps.folder' and trashed=false`,
-        fields: 'nextPageToken, files(id, name, webViewLink)',
+        fields: 'nextPageToken, files(id, name, webViewLink, owners(emailAddress), createdTime)',
         pageSize: 1000,
         pageToken,
         corpora: 'allDrives',
@@ -1785,13 +1785,20 @@ app.post('/api/sync-conductores-documentacion', async (req, res) => {
       for (const f of filesPage) {
         const normalizado = (f.name || '').toUpperCase().trim().replace(/\s+/g, ' ')
         if (normalizado) {
-          allFolderNames.push(normalizado)
+          const ownerEmail = (f.owners && f.owners[0] && f.owners[0].emailAddress) || 'desconocido'
+          allFolderNames.push({ nombre: normalizado, owner: ownerEmail, creada: f.createdTime })
           // Si hay carpetas con el mismo nombre normalizado, la última gana (raro)
           carpetas.set(normalizado, f.webViewLink || `https://drive.google.com/drive/folders/${f.id}`)
         }
       }
       pageToken = listRes.data.nextPageToken
     } while (pageToken)
+
+    // Agrupar por owner para diagnóstico
+    const ownersStats = {}
+    for (const item of allFolderNames) {
+      ownersStats[item.owner] = (ownersStats[item.owner] || 0) + 1
+    }
     const phase1Ms = Date.now() - phase1Start
     console.log(`[sync-conductores-documentacion] Fase1 (Drive): ${totalFoldersDrive} carpetas en ${pageCount} páginas, ${carpetas.size} únicas normalizadas (${phase1Ms}ms)`)
 
@@ -1869,7 +1876,7 @@ app.post('/api/sync-conductores-documentacion', async (req, res) => {
 
     return res.json({
       success: true,
-      version: 'v3',
+      version: 'v4-owners',
       total: conductores.length,
       actualizados: actualizaciones.length - errores,
       sin_coincidencia: sinCoincidencia.length,
@@ -1887,6 +1894,7 @@ app.post('/api/sync-conductores-documentacion', async (req, res) => {
         totalFoldersUnique: carpetas.size,
         pageCount,
         sampleFolderNames: allFolderNames.slice(0, 10),
+        ownersStats, // { 'account-toshify@...': 18, 'humano@gmail.com': 200, ... }
       },
       details: {
         // Lista completa de carpetas encontradas en Drive (hasta 500 para no inflar)

@@ -3183,7 +3183,7 @@ export function ConductoresModule() {
                       }
                       const confirm = await Swal.fire({
                         title: 'Sincronizar documentación',
-                        text: 'Se buscarán carpetas de conductores en Drive y se vincularán al campo url_documentacion (sobreescribe valores existentes). V3',
+                        text: 'Se buscarán carpetas de conductores en Drive y se vincularán al campo url_documentacion (sobreescribe valores existentes). V4-owners (diagnóstico)',
                         icon: 'question',
                         showCancelButton: true,
                         confirmButtonText: 'Sincronizar',
@@ -3235,6 +3235,12 @@ export function ConductoresModule() {
     <li>Matching: <b>${fmtMs(fases.matching || 0)}</b></li>
     <li>Updates BD: <b>${fmtMs(fases.updates || 0)}</b></li>
   </ul>
+
+  ${dbg.ownersStats ? `
+  <h4 style="margin:12px 0 4px 0;font-size:13px;font-weight:700">👤 Carpetas por propietario (diagnóstico Drive API)</h4>
+  <pre style="font-size:11px;background:#eff6ff;padding:8px;border-radius:4px;max-height:160px;overflow:auto;margin:0 0 12px 0">${Object.entries(dbg.ownersStats as Record<string, number>).sort((a,b) => b[1] - a[1]).map(([email, count]) => `${count.toString().padStart(4)} carpetas — ${email}`).join('\n')}</pre>
+  <p style="font-size:11px;color:#6b7280;margin:0 0 12px 0">Si solo aparece el service account, significa que sólo ve las carpetas que él mismo creó. Las creadas por humanos no son visibles para el SA aunque estén en el mismo folder padre.</p>
+  ` : ''}
 
   <details style="margin-bottom:8px">
     <summary style="cursor:pointer;font-weight:600;color:#16a34a">✅ Carpetas encontradas en Drive (${det.foldersInDrive?.length || 0})</summary>
