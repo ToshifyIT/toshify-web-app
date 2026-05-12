@@ -40,6 +40,7 @@ const menuIcons: Record<string, LucideIcon> = {
   'productos': Package,
   'proveedores': Users,
   'ctrl-exceso-vel': Gauge,
+  'ctrl-exceso-km': Gauge,
   'bitacora-uss': History,
   'cabify': MapPin,
   'gestion-usuarios': UserCog,
@@ -250,6 +251,7 @@ const HistorialMovimientosPage = lazy(() => import('./inventario/HistorialMovimi
 const PedidosPage = lazy(() => import('./inventario/PedidosPage').then(m => ({ default: m.PedidosPage })))
 const USSPage = lazy(() => import('./integraciones/uss/USSPage').then(m => ({ default: m.USSPage })))
 const BitacoraPage = lazy(() => import('./integraciones/uss/BitacoraPage').then(m => ({ default: m.BitacoraPage })))
+const ControlExcesoKmPage = lazy(() => import('./integraciones/uss/ControlExcesoKmPage').then(m => ({ default: m.ControlExcesoKmPage })))
 const CabifyPage = lazy(() => import('./integraciones/cabify/CabifyPage').then(m => ({ default: m.CabifyPage })))
 const ReportesPage = lazy(() => import('./reportes/ReportesPage').then(m => ({ default: m.ReportesPage })))
 const DashboardKpisPage = lazy(() => import('./reportes/DashboardKpisPage').then(m => ({ default: m.DashboardKpisPage })))
@@ -2005,6 +2007,11 @@ export function HomePage() {
               <Route path="/integraciones/gps/bitacora" element={
                 <ProtectedRoute submenuName="bitacora-uss" action="view">
                   <LazyPage><BitacoraPage /></LazyPage>
+                </ProtectedRoute>
+              } />
+              <Route path="/integraciones/gps/exceso-km" element={
+                <ProtectedRoute submenuName="ctrl-exceso-km" action="view">
+                  <LazyPage><ControlExcesoKmPage /></LazyPage>
                 </ProtectedRoute>
               } />
               {/* Redirects para compatibilidad con URLs viejas */}
