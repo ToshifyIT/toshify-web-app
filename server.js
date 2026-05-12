@@ -1743,6 +1743,7 @@ app.post('/api/sync-conductores-documentacion', async (req, res) => {
     return res.status(409).json({ error: 'Ya hay una sincronización en curso. Esperá a que termine.' })
   }
   syncDocumentacionEnCurso = true
+  const startedAt = Date.now()
   try {
     const { sedeId } = req.body || {}
     if (!sedeId) {
@@ -1760,11 +1761,16 @@ app.post('/api/sync-conductores-documentacion', async (req, res) => {
       return res.status(500).json({ error: 'Supabase no configurado' })
     }
 
-    // 1. Listar TODAS las carpetas del folder padre en Drive (paginado)
+    // ===== FASE 1: Listar TODAS las carpetas del folder padre en Drive (paginado)
+    const phase1Start = Date.now()
     const drive = getDriveService(true)
     const carpetas = new Map() // nombreNormalizado -> webViewLink
+    const allFolderNames = [] // todos los nombres encontrados (para el resumen)
+    let totalFoldersDrive = 0
+    let pageCount = 0
     let pageToken = undefined
     do {
+      pageCount++
       const listRes = await drive.files.list({
         q: `'${parentFolderId}' in parents and mimeType='application/vnd.google-apps.folder' and trashed=false`,
         fields: 'nextPageToken, files(id, name, webViewLink)',
@@ -1774,17 +1780,23 @@ app.post('/api/sync-conductores-documentacion', async (req, res) => {
         supportsAllDrives: true,
         includeItemsFromAllDrives: true,
       })
-      for (const f of listRes.data.files || []) {
+      const filesPage = listRes.data.files || []
+      totalFoldersDrive += filesPage.length
+      for (const f of filesPage) {
         const normalizado = (f.name || '').toUpperCase().trim().replace(/\s+/g, ' ')
         if (normalizado) {
+          allFolderNames.push(normalizado)
           // Si hay carpetas con el mismo nombre normalizado, la última gana (raro)
           carpetas.set(normalizado, f.webViewLink || `https://drive.google.com/drive/folders/${f.id}`)
         }
       }
       pageToken = listRes.data.nextPageToken
     } while (pageToken)
+    const phase1Ms = Date.now() - phase1Start
+    console.log(`[sync-conductores-documentacion] Fase1 (Drive): ${totalFoldersDrive} carpetas en ${pageCount} páginas, ${carpetas.size} únicas normalizadas (${phase1Ms}ms)`)
 
-    // 2. Obtener conductores de la sede actual
+    // ===== FASE 2: Obtener conductores de la sede actual
+    const phase2Start = Date.now()
     const condRes = await fetch(
       `${supabaseUrl}/rest/v1/conductores?sede_id=eq.${encodeURIComponent(sedeId)}&select=id,nombres,apellidos`,
       { headers: { apikey: serviceKey, Authorization: `Bearer ${serviceKey}` } }
@@ -1794,8 +1806,11 @@ app.post('/api/sync-conductores-documentacion', async (req, res) => {
       return res.status(500).json({ error: `Error consultando conductores: ${errText}` })
     }
     const conductores = await condRes.json()
+    const phase2Ms = Date.now() - phase2Start
+    console.log(`[sync-conductores-documentacion] Fase2 (Conductores BD): ${conductores.length} conductores (${phase2Ms}ms)`)
 
-    // 3. Para cada conductor, intentar match contra el map de carpetas
+    // ===== FASE 3: Para cada conductor, intentar match contra el map de carpetas
+    const phase3Start = Date.now()
     const actualizaciones = []
     const sinCoincidencia = []
     for (const c of conductores) {
@@ -1814,10 +1829,13 @@ app.post('/api/sync-conductores-documentacion', async (req, res) => {
         sinCoincidencia.push({ id: c.id, nombre: fullName })
       }
     }
+    const phase3Ms = Date.now() - phase3Start
 
-    // 4. Aplicar UPDATEs en chunks paralelos
+    // ===== FASE 4: Aplicar UPDATEs en chunks paralelos
+    const phase4Start = Date.now()
     const CHUNK = 20
     let errores = 0
+    const erroresDetails = []
     for (let i = 0; i < actualizaciones.length; i += CHUNK) {
       const chunk = actualizaciones.slice(i, i + CHUNK)
       await Promise.all(chunk.map(async (m) => {
@@ -1835,21 +1853,50 @@ app.post('/api/sync-conductores-documentacion', async (req, res) => {
               body: JSON.stringify({ url_documentacion: m.url }),
             }
           )
-          if (!r.ok) errores++
-        } catch {
+          if (!r.ok) {
+            errores++
+            erroresDetails.push({ nombre: m.nombre, status: r.status })
+          }
+        } catch (err) {
           errores++
+          erroresDetails.push({ nombre: m.nombre, error: String(err?.message || err) })
         }
       }))
     }
+    const phase4Ms = Date.now() - phase4Start
+    const totalMs = Date.now() - startedAt
+    console.log(`[sync-conductores-documentacion] DONE: total ${totalMs}ms — Fase1:${phase1Ms}ms Fase2:${phase2Ms}ms Fase3:${phase3Ms}ms Fase4:${phase4Ms}ms`)
 
     return res.json({
       success: true,
+      version: 'v3',
       total: conductores.length,
       actualizados: actualizaciones.length - errores,
       sin_coincidencia: sinCoincidencia.length,
       errores,
+      duracion_ms: totalMs,
+      fases_ms: {
+        drive_list: phase1Ms,
+        conductores_query: phase2Ms,
+        matching: phase3Ms,
+        updates: phase4Ms,
+      },
+      debug: {
+        parentFolderId,
+        totalFoldersDriveRaw: totalFoldersDrive,
+        totalFoldersUnique: carpetas.size,
+        pageCount,
+        sampleFolderNames: allFolderNames.slice(0, 10),
+      },
       details: {
-        sinCoincidencia: sinCoincidencia.slice(0, 200), // hasta 200 para no inflar la respuesta
+        // Lista completa de carpetas encontradas en Drive (hasta 500 para no inflar)
+        foldersInDrive: allFolderNames.slice(0, 500),
+        // Lista de conductores actualizados (con nombre)
+        actualizadosLista: actualizaciones.slice(0, 500).map(a => a.nombre),
+        // Sin coincidencia
+        sinCoincidencia: sinCoincidencia.slice(0, 500),
+        // Errores con detalle
+        erroresDetalle: erroresDetails.slice(0, 100),
       },
     })
   } catch (error) {

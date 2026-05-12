@@ -3183,7 +3183,7 @@ export function ConductoresModule() {
                       }
                       const confirm = await Swal.fire({
                         title: 'Sincronizar documentación',
-                        text: 'Se buscarán carpetas de conductores en Drive y se vincularán al campo url_documentacion (sobreescribe valores existentes).',
+                        text: 'Se buscarán carpetas de conductores en Drive y se vincularán al campo url_documentacion (sobreescribe valores existentes). V3',
                         icon: 'question',
                         showCancelButton: true,
                         confirmButtonText: 'Sincronizar',
@@ -3200,14 +3200,85 @@ export function ConductoresModule() {
                         })
                         const data = await res.json()
                         if (!res.ok) throw new Error(data.error || 'Error del servidor')
-                        const sinList = data.details?.sinCoincidencia?.length > 0
-                          ? '<br><br><details><summary>Ver sin coincidencia</summary><pre style="text-align:left;font-size:12px;max-height:200px;overflow:auto">' + data.details.sinCoincidencia.map((c: any) => c.nombre).join('\n') + '</pre></details>'
-                          : ''
-                        Swal.fire({
+
+                        const verResumen = async () => {
+                          const fmtMs = (ms: number) => ms < 1000 ? `${ms}ms` : `${(ms/1000).toFixed(2)}s`
+                          const fases = data.fases_ms || {}
+                          const dbg = data.debug || {}
+                          const det = data.details || {}
+                          type FmtItem = string | { nombre?: string }
+                          const fmtList = (arr: FmtItem[] | undefined, max = 50): string => {
+                            if (!arr || arr.length === 0) return '<em style="color:#9ca3af">(vacío)</em>'
+                            const items = arr.slice(0, max)
+                            return items.map((x) => typeof x === 'string' ? x : (x?.nombre || JSON.stringify(x))).join('\n')
+                              + (arr.length > max ? `\n... (${arr.length - max} más)` : '')
+                          }
+                          const html = `
+<div style="text-align:left;font-size:13px">
+  <h3 style="margin:0 0 8px 0;font-size:15px;font-weight:700">📊 Resumen de la sincronización</h3>
+
+  <table style="width:100%;border-collapse:collapse;font-size:12px;margin-bottom:14px">
+    <tr><td style="padding:4px 8px;font-weight:600">Versión</td><td>${data.version || '(sin version)'}</td></tr>
+    <tr><td style="padding:4px 8px;font-weight:600">Duración total</td><td>${fmtMs(data.duracion_ms || 0)}</td></tr>
+    <tr><td style="padding:4px 8px;font-weight:600">Folder consultado</td><td style="font-family:monospace;font-size:11px">${dbg.parentFolderId || '?'}</td></tr>
+    <tr><td style="padding:4px 8px;font-weight:600">Carpetas en Drive</td><td>${dbg.totalFoldersDriveRaw || 0} <span style="color:#6b7280">(${dbg.totalFoldersUnique || 0} únicas, ${dbg.pageCount || 0} págs)</span></td></tr>
+    <tr><td style="padding:4px 8px;font-weight:600">Conductores BD</td><td>${data.total || 0}</td></tr>
+    <tr><td style="padding:4px 8px;font-weight:600;color:#16a34a">Actualizados</td><td style="color:#16a34a;font-weight:700">${data.actualizados || 0}</td></tr>
+    <tr><td style="padding:4px 8px;font-weight:600;color:#f59e0b">Sin coincidencia</td><td style="color:#f59e0b;font-weight:700">${data.sin_coincidencia || 0}</td></tr>
+    <tr><td style="padding:4px 8px;font-weight:600;color:#dc2626">Errores</td><td style="color:#dc2626;font-weight:700">${data.errores || 0}</td></tr>
+  </table>
+
+  <h4 style="margin:12px 0 4px 0;font-size:13px;font-weight:700">🕒 Tiempos por fase</h4>
+  <ul style="margin:0 0 12px 18px;font-size:12px">
+    <li>Listar Drive: <b>${fmtMs(fases.drive_list || 0)}</b></li>
+    <li>Query conductores: <b>${fmtMs(fases.conductores_query || 0)}</b></li>
+    <li>Matching: <b>${fmtMs(fases.matching || 0)}</b></li>
+    <li>Updates BD: <b>${fmtMs(fases.updates || 0)}</b></li>
+  </ul>
+
+  <details style="margin-bottom:8px">
+    <summary style="cursor:pointer;font-weight:600;color:#16a34a">✅ Carpetas encontradas en Drive (${det.foldersInDrive?.length || 0})</summary>
+    <pre style="font-size:11px;background:#f0fdf4;padding:8px;border-radius:4px;max-height:200px;overflow:auto;margin-top:4px">${fmtList(det.foldersInDrive, 200)}</pre>
+  </details>
+
+  <details style="margin-bottom:8px">
+    <summary style="cursor:pointer;font-weight:600;color:#16a34a">✅ Conductores actualizados (${det.actualizadosLista?.length || 0})</summary>
+    <pre style="font-size:11px;background:#f0fdf4;padding:8px;border-radius:4px;max-height:200px;overflow:auto;margin-top:4px">${fmtList(det.actualizadosLista, 200)}</pre>
+  </details>
+
+  <details style="margin-bottom:8px">
+    <summary style="cursor:pointer;font-weight:600;color:#f59e0b">⚠️ Sin coincidencia (${det.sinCoincidencia?.length || 0})</summary>
+    <pre style="font-size:11px;background:#fffbeb;padding:8px;border-radius:4px;max-height:200px;overflow:auto;margin-top:4px">${fmtList(det.sinCoincidencia, 200)}</pre>
+  </details>
+
+  ${(det.erroresDetalle?.length || 0) > 0 ? `
+  <details style="margin-bottom:8px">
+    <summary style="cursor:pointer;font-weight:600;color:#dc2626">❌ Errores (${det.erroresDetalle.length})</summary>
+    <pre style="font-size:11px;background:#fef2f2;padding:8px;border-radius:4px;max-height:200px;overflow:auto;margin-top:4px">${det.erroresDetalle.map((e: { nombre: string; status?: number; error?: string }) => `${e.nombre} - ${e.status || e.error || 'unknown'}`).join('\n')}</pre>
+  </details>` : ''}
+</div>
+                          `
+                          await Swal.fire({
+                            title: '',
+                            html,
+                            width: 720,
+                            confirmButtonText: 'Cerrar',
+                            confirmButtonColor: 'var(--color-primary)',
+                          })
+                        }
+
+                        const result = await Swal.fire({
                           icon: 'success',
                           title: 'Sincronización completada',
-                          html: `<b>${data.actualizados}</b> actualizados<br><b>${data.sin_coincidencia}</b> sin coincidencia<br><b>${data.errores || 0}</b> errores${sinList}`,
+                          html: `<b>${data.actualizados}</b> actualizados<br><b>${data.sin_coincidencia}</b> sin coincidencia<br><b>${data.errores || 0}</b> errores<br><br><span style="font-size:11px;color:#6b7280">Duración: ${data.duracion_ms ? (data.duracion_ms < 1000 ? data.duracion_ms + 'ms' : (data.duracion_ms/1000).toFixed(2) + 's') : '?'}</span>`,
+                          showCancelButton: true,
+                          confirmButtonText: '📊 Ver Resumen',
+                          cancelButtonText: 'Cerrar',
+                          confirmButtonColor: 'var(--color-primary)',
+                          cancelButtonColor: '#6b7280',
+                          reverseButtons: true,
                         })
+                        if (result.isConfirmed) await verResumen()
                         loadConductores(true)
                       } catch (err: any) {
                         Swal.fire('Error', err.message || 'No se pudo sincronizar', 'error')
