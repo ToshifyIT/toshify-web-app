@@ -1770,6 +1770,7 @@ app.post('/api/sync-conductores-documentacion', async (req, res) => {
         fields: 'nextPageToken, files(id, name, webViewLink)',
         pageSize: 1000,
         pageToken,
+        corpora: 'allDrives',
         supportsAllDrives: true,
         includeItemsFromAllDrives: true,
       })
