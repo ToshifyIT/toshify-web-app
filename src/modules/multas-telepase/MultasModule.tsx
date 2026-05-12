@@ -6,15 +6,16 @@ import { LoadingOverlay } from '../../components/ui/LoadingOverlay'
 import { ExcelColumnFilter } from '../../components/ui/DataTable/ExcelColumnFilter'
 import { ExcelDateRangeFilter } from '../../components/ui/DataTable/ExcelDateRangeFilter'
 import { DataTable } from '../../components/ui/DataTable'
-import { Download, AlertTriangle, Eye, Edit2, Trash2, Plus, X, Car, Users, DollarSign, CheckCircle, AlertCircle, FileText, Receipt, SendHorizonal } from 'lucide-react'
+import { Download, AlertTriangle, Eye, Edit2, Trash2, Plus, X, Car, Users, DollarSign, CheckCircle, AlertCircle, FileText, Receipt, SendHorizonal, Archive, RotateCcw } from 'lucide-react'
 import { CrearCobroMultaModal } from './components/CrearCobroMultaModal'
 import { type ColumnDef } from '@tanstack/react-table'
 import * as XLSX from 'xlsx'
 import Swal from 'sweetalert2'
-import { showSuccess } from '../../utils/toast'
+import { showSuccess, showError } from '../../utils/toast'
 import { useSede } from '../../contexts/SedeContext'
 import { useAuth } from '../../contexts/AuthContext'
 import { crearCobroDesdeMulta } from './services/crearCobroDesdeMulta'
+import { desestimarMulta as svcDesestimarMulta, reactivarMulta as svcReactivarMulta } from './services/desestimarMulta'
 import { format } from 'date-fns'
 import { es } from 'date-fns/locale'
 import './MultasTelepase.css'
@@ -35,6 +36,10 @@ interface Multa {
   ibutton: string
   sede_id?: string
   drive_url?: string | null
+  // Desestimación lógica (no es delete real)
+  desestimada_at?: string | null
+  desestimada_motivo?: string | null
+  desestimada_by?: string | null
 }
 
 interface Vehiculo {
@@ -107,6 +112,13 @@ export default function MultasModule() {
   const [multaParaCobro, setMultaParaCobro] = useState<Multa | null>(null)
   const [editingMulta, setEditingMulta] = useState<Multa | null>(null)
   const [onlyActiveConductors, setOnlyActiveConductors] = useState(false)
+  // Vista activas vs desestimadas (toggle del header)
+  const [vista, setVista] = useState<'activas' | 'desestimadas'>('activas')
+
+  // Permisos por rol — admin/fullstack pueden reactivar y borrar; el resto solo desestimar
+  const userRole = (profile?.roles?.name || '').toLowerCase()
+  const canReactivar = userRole === 'admin' || userRole === 'fullstack.senior'
+  const canBorrar = userRole === 'admin' || userRole === 'fullstack.senior'
 
   // Filtros
   const [openFilterId, setOpenFilterId] = useState<string | null>(null)
@@ -172,6 +184,8 @@ export default function MultasModule() {
   async function cargarDatos() {
     setLoading(true)
     try {
+      // Traemos activas (deleted_at IS NULL) — incluye tanto las desestimadas como las no desestimadas.
+      // Las borradas reales (deleted_at NOT NULL) se omiten — son las eliminadas con el botón rojo.
       const [multasRes, vehiculosRes, incidenciasRes] = await Promise.all([
         aplicarFiltroSede(supabase.from('multas_historico').select('*').is('deleted_at', null)).order('created_at', { ascending: false }).limit(5000),
         aplicarFiltroSede(supabase.from('vehiculos').select('id, patente').is('deleted_at', null)),
@@ -304,11 +318,14 @@ export default function MultasModule() {
     [...new Set(getFilteredData('importe').map(m => String(m.importe || '')))].filter(Boolean).sort()
   , [getFilteredData])
 
-  // Filtrar registros (Resultado final)
+  // Filtrar registros (Resultado final) — separa activas vs desestimadas según toggle
   const multasFiltradas = useMemo(() => {
     const data = getFilteredData()
+    const porVista = data.filter(m =>
+      vista === 'desestimadas' ? !!m.desestimada_at : !m.desestimada_at,
+    )
     // Ordenar por fecha de carga (created_at) descendente (más actual a más antiguo)
-    return data.sort((a, b) => {
+    return porVista.sort((a, b) => {
       const fechaA = a.created_at || ''
       const fechaB = b.created_at || ''
       if (fechaA === fechaB) return 0
@@ -316,7 +333,11 @@ export default function MultasModule() {
       if (!fechaB) return -1
       return fechaB.localeCompare(fechaA)
     })
-  }, [getFilteredData])
+  }, [getFilteredData, vista])
+
+  // Contadores globales (sin filtros) para el toggle del header
+  const totalActivas = useMemo(() => multas.filter(m => !m.desestimada_at).length, [multas])
+  const totalDesestimadas = useMemo(() => multas.filter(m => !!m.desestimada_at).length, [multas])
 
   // Estadisticas
   const totalImporte = useMemo(() =>
@@ -467,6 +488,70 @@ export default function MultasModule() {
   }
 
   // Eliminar multa
+  async function desestimarMulta(multa: Multa) {
+    const result = await Swal.fire({
+      title: '¿Desestimar esta multa?',
+      html: `
+        <div style="text-align: left; font-size: 13px; line-height: 1.6;">
+          <p style="color: #6b7280; margin: 0 0 10px;">
+            La multa quedará oculta del listado principal pero seguirá en la base de datos.
+            Podés reactivarla después si fue un error.
+          </p>
+          <div style="display: grid; grid-template-columns: 110px 1fr; gap: 4px 12px; font-size: 12px; padding: 10px; background: #f9fafb; border-radius: 6px; margin-bottom: 12px;">
+            <span style="color: #6b7280;">Patente</span><strong style="font-family: monospace;">${multa.patente || '-'}</strong>
+            <span style="color: #6b7280;">Fecha</span><span>${formatFecha(multa.fecha_infraccion)}</span>
+            <span style="color: #6b7280;">Infracción</span><span>${multa.infraccion || '-'}</span>
+            <span style="color: #6b7280;">Importe</span><strong style="color: #f59e0b;">${formatMoney(multa.importe)}</strong>
+          </div>
+        </div>
+      `,
+      input: 'textarea',
+      inputLabel: 'Motivo (opcional)',
+      inputPlaceholder: 'Ej: multa duplicada, conductor erróneo, ya pagada, etc.',
+      icon: undefined,
+      iconHtml: '<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" stroke-width="2"><rect width="20" height="5" x="2" y="3"/><path d="M4 8v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8"/><path d="M10 12h4"/></svg>',
+      showCancelButton: true,
+      confirmButtonColor: '#f59e0b',
+      confirmButtonText: 'Desestimar',
+      cancelButtonText: 'Cancelar',
+    })
+    if (!result.isConfirmed) return
+
+    const res = await svcDesestimarMulta(multa.id, {
+      userId: user?.id,
+      userName: profile?.full_name || user?.email || 'Sistema',
+      motivo: typeof result.value === 'string' ? result.value : undefined,
+    })
+    if (res.ok) {
+      showSuccess('Desestimada', 'Quedó oculta del listado principal')
+      setShowModal(false)
+      cargarDatos()
+    } else {
+      showError('No se pudo desestimar', res.error)
+    }
+  }
+
+  async function reactivarMulta(multa: Multa) {
+    const result = await Swal.fire({
+      title: '¿Reactivar esta multa?',
+      text: `Volverá a aparecer en el listado principal.`,
+      icon: 'question',
+      showCancelButton: true,
+      confirmButtonColor: '#7c3aed',
+      confirmButtonText: 'Reactivar',
+      cancelButtonText: 'Cancelar',
+    })
+    if (!result.isConfirmed) return
+
+    const res = await svcReactivarMulta(multa.id)
+    if (res.ok) {
+      showSuccess('Reactivada', 'La multa volvió al listado principal')
+      cargarDatos()
+    } else {
+      showError('No se pudo reactivar', res.error)
+    }
+  }
+
   async function eliminarMulta(multa: Multa) {
     const result = await Swal.fire({
       title: 'Eliminar multa?',
@@ -855,7 +940,7 @@ export default function MultasModule() {
     },
     {
       id: 'acciones',
-      size: 180,
+      size: 220,
       header: 'Acciones',
       cell: ({ row }) => {
         const yaEnviada = multasEnviadas.has(row.original.id)
@@ -866,6 +951,7 @@ export default function MultasModule() {
           : sinConductor
             ? 'Sin conductor identificado — no se puede enviar'
             : 'Enviar a facturación'
+        const estaDesestimada = !!row.original.desestimada_at
 
         // Estilo común para botones icono+label (mismo patrón que Bitacora/Marcaciones)
         const btnBase = (color: string, opacity = 1, disabled = false): React.CSSProperties => ({
@@ -892,31 +978,55 @@ export default function MultasModule() {
               <Eye size={14} />
               <span style={labelStyle}>Ver</span>
             </button>
+            {!estaDesestimada && (
+              <>
+                <button
+                  title="Editar multa"
+                  onClick={() => editarMulta(row.original)}
+                  style={btnBase('#2563eb')}
+                >
+                  <Edit2 size={14} />
+                  <span style={labelStyle}>Editar</span>
+                </button>
+                <button
+                  title={tooltipEnvio}
+                  onClick={() => { if (!deshabilitarEnvio) handleCrearCobroDirecto(row.original) }}
+                  disabled={deshabilitarEnvio}
+                  style={btnBase(
+                    deshabilitarEnvio ? 'var(--text-tertiary)' : '#16a34a',
+                    deshabilitarEnvio ? 0.4 : 1,
+                    deshabilitarEnvio,
+                  )}
+                >
+                  <SendHorizonal size={14} />
+                  <span style={labelStyle}>Enviar</span>
+                </button>
+                <button
+                  title="Desestimar (ocultar sin borrar de la base)"
+                  onClick={() => desestimarMulta(row.original)}
+                  style={btnBase('#f59e0b')}
+                >
+                  <Archive size={14} />
+                  <span style={labelStyle}>Desestimar</span>
+                </button>
+              </>
+            )}
+            {estaDesestimada && (
+              <button
+                title={canReactivar ? 'Reactivar multa' : 'Sin permiso para reactivar (solo admin/fullstack)'}
+                onClick={() => { if (canReactivar) reactivarMulta(row.original) }}
+                disabled={!canReactivar}
+                style={btnBase(canReactivar ? '#7c3aed' : 'var(--text-tertiary)', canReactivar ? 1 : 0.4, !canReactivar)}
+              >
+                <RotateCcw size={14} />
+                <span style={labelStyle}>Reactivar</span>
+              </button>
+            )}
             <button
-              title="Editar multa"
-              onClick={() => editarMulta(row.original)}
-              style={btnBase('#2563eb')}
-            >
-              <Edit2 size={14} />
-              <span style={labelStyle}>Editar</span>
-            </button>
-            <button
-              title={tooltipEnvio}
-              onClick={() => { if (!deshabilitarEnvio) handleCrearCobroDirecto(row.original) }}
-              disabled={deshabilitarEnvio}
-              style={btnBase(
-                deshabilitarEnvio ? 'var(--text-tertiary)' : '#16a34a',
-                deshabilitarEnvio ? 0.4 : 1,
-                deshabilitarEnvio,
-              )}
-            >
-              <SendHorizonal size={14} />
-              <span style={labelStyle}>Enviar</span>
-            </button>
-            <button
-              title="Eliminar multa"
-              onClick={() => eliminarMulta(row.original)}
-              style={btnBase('#dc2626')}
+              title={canBorrar ? 'Eliminar definitivo' : 'Sin permiso para borrar (solo admin/fullstack)'}
+              onClick={() => { if (canBorrar) eliminarMulta(row.original) }}
+              disabled={!canBorrar}
+              style={btnBase(canBorrar ? '#dc2626' : 'var(--text-tertiary)', canBorrar ? 1 : 0.4, !canBorrar)}
             >
               <Trash2 size={14} />
               <span style={labelStyle}>Borrar</span>
@@ -925,7 +1035,7 @@ export default function MultasModule() {
         )
       }
     }
-  ], [patentesUnicas, patenteFilter, conductoresUnicos, conductorFilter, lugaresUnicos, lugarFilter, infraccionesUnicas, infraccionFilter, detallesUnicos, detalleFilter, semanasUnicas, semanaFilter, ibuttonsUnicos, ibuttonFilter, fechaInfraccionDesde, fechaInfraccionHasta, openFilterId, obsFilter, importesUnicos, importeFilter, fechaCargaDesde, fechaCargaHasta, multasEnviadas])
+  ], [patentesUnicas, patenteFilter, conductoresUnicos, conductorFilter, lugaresUnicos, lugarFilter, infraccionesUnicas, infraccionFilter, detallesUnicos, detalleFilter, semanasUnicas, semanaFilter, ibuttonsUnicos, ibuttonFilter, fechaInfraccionDesde, fechaInfraccionHasta, openFilterId, obsFilter, importesUnicos, importeFilter, fechaCargaDesde, fechaCargaHasta, multasEnviadas, canReactivar, canBorrar])
 
   // Exportar a Excel
   function handleExportar() {
@@ -983,6 +1093,22 @@ export default function MultasModule() {
         </div>
       </div>
 
+      {/* Banner cuando se está mirando desestimadas */}
+      {vista === 'desestimadas' && (
+        <div style={{
+          background: 'rgba(245, 158, 11, 0.08)',
+          borderLeft: '3px solid #f59e0b',
+          padding: '10px 14px',
+          borderRadius: 4,
+          fontSize: 12,
+          color: 'var(--text-primary)',
+          marginBottom: 12,
+          lineHeight: 1.5,
+        }}>
+          <strong>Vista de multas desestimadas.</strong> Estas multas no aparecen en el listado principal ni en los KPIs, pero siguen en la base de datos. Podés reactivarlas si fue un error.
+        </div>
+      )}
+
       {/* DataTable */}
       <DataTable
         data={multasFiltradas}
@@ -991,16 +1117,81 @@ export default function MultasModule() {
         externalFilters={activeFilters}
         onClearAllFilters={clearAllFilters}
         headerAction={
-          <div style={{ display: 'flex', gap: '8px' }}>
+          <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+            {/* Toggle vista activas / desestimadas */}
+            <div style={{
+              display: 'inline-flex',
+              border: '1px solid var(--border-primary)',
+              borderRadius: 6,
+              overflow: 'hidden',
+            }}>
+              <button
+                onClick={() => setVista('activas')}
+                style={{
+                  border: 'none',
+                  background: vista === 'activas' ? 'var(--text-primary)' : 'var(--bg-primary)',
+                  color: vista === 'activas' ? '#fff' : 'var(--text-secondary)',
+                  padding: '6px 12px',
+                  fontSize: 12,
+                  fontWeight: 500,
+                  cursor: 'pointer',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 6,
+                  borderRight: '1px solid var(--border-primary)',
+                }}
+              >
+                Activas
+                <span style={{
+                  background: vista === 'activas' ? 'rgba(255,255,255,0.2)' : 'var(--bg-secondary)',
+                  color: vista === 'activas' ? '#fff' : 'var(--text-tertiary)',
+                  padding: '1px 6px',
+                  borderRadius: 10,
+                  fontSize: 10,
+                  fontWeight: 600,
+                }}>
+                  {totalActivas}
+                </span>
+              </button>
+              <button
+                onClick={() => setVista('desestimadas')}
+                style={{
+                  border: 'none',
+                  background: vista === 'desestimadas' ? 'var(--text-primary)' : 'var(--bg-primary)',
+                  color: vista === 'desestimadas' ? '#fff' : 'var(--text-secondary)',
+                  padding: '6px 12px',
+                  fontSize: 12,
+                  fontWeight: 500,
+                  cursor: 'pointer',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 6,
+                }}
+              >
+                Desestimadas
+                <span style={{
+                  background: vista === 'desestimadas' ? 'rgba(255,255,255,0.2)' : 'var(--bg-secondary)',
+                  color: vista === 'desestimadas' ? '#fff' : 'var(--text-tertiary)',
+                  padding: '1px 6px',
+                  borderRadius: 10,
+                  fontSize: 10,
+                  fontWeight: 600,
+                }}>
+                  {totalDesestimadas}
+                </span>
+              </button>
+            </div>
             <button className="btn-secondary" onClick={handleExportar}>
               <Download size={16}
             />
               Exportar
             </button>
-            <button className="btn-primary" onClick={crearMulta}>
-              <Plus size={16} />
-              Registrar Multa
-            </button>
+            {vista === 'activas' && (
+              <button className="btn-primary" onClick={crearMulta}>
+                <Plus size={16} />
+                Registrar Multa
+              </button>
+            )}
           </div>
         }
       />
