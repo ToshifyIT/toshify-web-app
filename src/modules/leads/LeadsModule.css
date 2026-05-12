@@ -397,6 +397,11 @@
   color: var(--badge-blue-text, #1e40af);
 }
 
+.lead-estado-documentos-pendientes {
+  background: #fef9c3;
+  color: #713f12;
+}
+
 .lead-estado-auto-del-pueblo {
   background: var(--badge-purple-bg, #f3e8ff);
   color: var(--badge-purple-text, #6b21a8);
@@ -492,6 +497,7 @@
 .lead-estado-dot-no-apto---hireflix { background: #dc2626; }
 .lead-estado-dot-ayuda---hireflix { background: #d97706; }
 .lead-estado-dot-documentos-enviados { background: #2563eb; }
+.lead-estado-dot-documentos-pendientes { background: #ca8a04; }
 .lead-estado-dot-auto-del-pueblo { background: #8b5cf6; }
 .lead-estado-dot-no-le-interesa { background: #6b7280; }
 .lead-estado-dot-no-cumple-edad { background: #ea580c; }
