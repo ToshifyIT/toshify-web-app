@@ -1933,6 +1933,12 @@ export function IncidenciasModule() {
       }
     })
 
+    // En las pestañas "Aplicadas" y "Rechazados" la columna "Aplicado" es redundante
+    // (todas las filas tienen el mismo valor), por eso se oculta.
+    if (activeTab === 'aplicadas' || activeTab === 'rechazados') {
+      return cols.filter(c => (c as { accessorKey?: string }).accessorKey !== 'aplicado')
+    }
+
     return cols
   }, [penPatentesUnicas, penPatenteFilter, penConductoresUnicos, penConductorFilter, penTiposUnicos, penTipoFilter, penAplicadoFilter, penFraccFilter, penSemanasUnicas, penSemFilter, penSemanasAplUnicas, penSemAplFilter, openFilterId, canDelete, canEdit, fraccionamientoMap, activeTab, penalidadesSeleccionadas, penalidadesPorAplicar])
 

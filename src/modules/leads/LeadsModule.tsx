@@ -309,10 +309,28 @@ function clasificarMotivoDesinteres(causal: string | null | undefined): string {
   return 'Otro'
 }
 
+// Caché en memoria a nivel módulo: sobrevive a desmontes/remontes del componente
+// (p.ej. cuando el usuario navega fuera de /leads y regresa). Se invalida al cambiar
+// de sede o al recargar la página. Permite mostrar datos instantáneamente y refrescar
+// en background sin mostrar el overlay "Cargando leads...".
+type CatalogoItem = { id: string; codigo: string; descripcion: string }
+type LeadsCache = {
+  sedeKey: string
+  leads: Lead[]
+  categoriasLicencia: CatalogoItem[]
+  estadosLicencia: CatalogoItem[]
+  tiposLicencia: CatalogoItem[]
+  nacionalidades: CatalogoItem[]
+  estadosCiviles: CatalogoItem[]
+}
+let leadsCache: LeadsCache | null = null
+
 export function LeadsModule() {
   const { canCreateInMenu, canEditInMenu, canDeleteInMenu } = usePermissions()
   const { profile } = useAuth()
-  const { sedes, sedeActual, aplicarFiltroSede } = useSede()
+  const { sedes, sedeActual, sedeActualId, verTodas, aplicarFiltroSede } = useSede()
+  const sedeKey = verTodas ? 'all' : (sedeActualId || 'none')
+  const cacheHit = leadsCache?.sedeKey === sedeKey ? leadsCache : null
   const canCreate = canCreateInMenu('leads')
   const canEdit = canEditInMenu('leads')
   const canDelete = canDeleteInMenu('leads')
@@ -320,9 +338,9 @@ export function LeadsModule() {
   // Zonas peligrosas
   const [zonasRestringidas, setZonasPeligrosas] = useState<ZonaRestringida[]>([])
 
-  // State principal
-  const [leads, setLeads] = useState<Lead[]>([])
-  const [loading, setLoading] = useState(true)
+  // State principal — hidratar desde caché module-level si está disponible para la sede actual
+  const [leads, setLeads] = useState<Lead[]>(() => cacheHit?.leads || [])
+  const [loading, setLoading] = useState(() => !cacheHit)
   const [error, setError] = useState('')
 
   // Modales
@@ -352,16 +370,16 @@ export function LeadsModule() {
   const [sinoDropdownKey, setSinoDropdownKey] = useState<string | null>(null) // "leadId::field"
 
   // Catálogos (mismos que conductores)
-  const [categoriasLicencia, setCategoriasLicencia] = useState<Array<{ id: string; codigo: string; descripcion: string }>>([])
-  const [estadosLicencia, setEstadosLicencia] = useState<Array<{ id: string; codigo: string; descripcion: string }>>([])
-  const [tiposLicencia, setTiposLicencia] = useState<Array<{ id: string; codigo: string; descripcion: string }>>([])
-  const [nacionalidades, setNacionalidades] = useState<Array<{ id: string; codigo: string; descripcion: string }>>([])
-  const [estadosCiviles, setEstadosCiviles] = useState<Array<{ id: string; codigo: string; descripcion: string }>>([])
+  const [categoriasLicencia, setCategoriasLicencia] = useState<Array<{ id: string; codigo: string; descripcion: string }>>(() => cacheHit?.categoriasLicencia || [])
+  const [estadosLicencia, setEstadosLicencia] = useState<Array<{ id: string; codigo: string; descripcion: string }>>(() => cacheHit?.estadosLicencia || [])
+  const [tiposLicencia, setTiposLicencia] = useState<Array<{ id: string; codigo: string; descripcion: string }>>(() => cacheHit?.tiposLicencia || [])
+  const [nacionalidades, setNacionalidades] = useState<Array<{ id: string; codigo: string; descripcion: string }>>(() => cacheHit?.nacionalidades || [])
+  const [estadosCiviles, setEstadosCiviles] = useState<Array<{ id: string; codigo: string; descripcion: string }>>(() => cacheHit?.estadosCiviles || [])
 
   // Estados visibles para cambio manual (Conductor se asigna solo automáticamente)
   const ESTADOS_LEAD = [
     'Inicio conversación', 'Acepta oferta', 'Apto - Hireflix', 'No Apto - Hireflix', 'Ayuda - Hireflix',
-    'Documentos enviados', 'Auto del pueblo', 'No le interesa', 'No cumple edad',
+    'Documentos enviados', 'Documentos pendientes', 'Auto del pueblo', 'No le interesa', 'No cumple edad',
     'Convocatoria Inducción', 'Descartado',
   ] as const
 
@@ -432,7 +450,9 @@ export function LeadsModule() {
 
   // ---------- DATA LOADING ----------
   const loadLeads = useCallback(async () => {
-    setLoading(true)
+    // Silent refresh si ya hay datos cacheados para esta sede; sino, mostrar overlay.
+    const silent = leadsCache?.sedeKey === sedeKey
+    if (!silent) setLoading(true)
     setError('')
     try {
       let query = supabase
@@ -455,11 +475,16 @@ export function LeadsModule() {
         supabase.from('estados_civiles').select('id, codigo, descripcion').order('descripcion'),
       ])
       if (leadsRes.error) throw leadsRes.error
-      if (catRes.data) setCategoriasLicencia(catRes.data)
-      if (estLicRes.data) setEstadosLicencia(estLicRes.data)
-      if (tipLicRes.data) setTiposLicencia(tipLicRes.data)
-      if (nacRes.data) setNacionalidades(nacRes.data)
-      if (ecRes.data) setEstadosCiviles(ecRes.data)
+      const catData = catRes.data || []
+      const estLicData = estLicRes.data || []
+      const tipLicData = tipLicRes.data || []
+      const nacData = nacRes.data || []
+      const ecData = ecRes.data || []
+      setCategoriasLicencia(catData)
+      setEstadosLicencia(estLicData)
+      setTiposLicencia(tipLicData)
+      setNacionalidades(nacData)
+      setEstadosCiviles(ecData)
       const leadsData = (leadsRes.data || []) as Lead[]
 
       // Calcular estado correcto y detectar desactualizados.
@@ -489,6 +514,17 @@ export function LeadsModule() {
 
       setLeads(leadsConEstado)
 
+      // Actualizar caché module-level para próximos remontes silenciosos del componente
+      leadsCache = {
+        sedeKey,
+        leads: leadsConEstado,
+        categoriasLicencia: catData,
+        estadosLicencia: estLicData,
+        tiposLicencia: tipLicData,
+        nacionalidades: nacData,
+        estadosCiviles: ecData,
+      }
+
       // Sincronizar en DB en lotes de 100 (en background, sin bloquear UI)
       if (actualizaciones.length > 0) {
         const batchSize = 100
@@ -514,9 +550,11 @@ export function LeadsModule() {
       const msg = err instanceof Error ? err.message : 'Error al cargar leads'
       setError(msg)
     } finally {
+      // setLoading(false) es idempotente — siempre limpio por si el silent fue interrumpido
+      // por un cambio de sede (donde sí mostramos overlay).
       setLoading(false)
     }
-  }, [aplicarFiltroSede])
+  }, [aplicarFiltroSede, sedeKey])
 
   useEffect(() => { loadLeads() }, [loadLeads])
 

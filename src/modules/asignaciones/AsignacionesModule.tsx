@@ -137,6 +137,10 @@ export function AsignacionesModule() {
     userRole === 'fullstack.senior' ||
     WHITELIST_EMAILS.has(userEmail)
 
+  // El botón "Nueva Asignación" se restringe a admin (independiente de las
+  // acciones "Regularizar" / "Eliminar" del menú de filas).
+  const isAdmin = userRole === 'admin'
+
   const [asignaciones, setAsignaciones] = useState<Asignacion[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -188,6 +192,7 @@ export function AsignacionesModule() {
   const [controlAsignacion, setControlAsignacion] = useState<ExpandedAsignacion | null>(null)
   const [controlSaving, setControlSaving] = useState(false)
   const [isControlBariloche, setIsControlBariloche] = useState(false)
+  const [controlVehiculoKmNotFound, setControlVehiculoKmNotFound] = useState(false)
   const [controlForm, setControlForm] = useState({
     km: '',
     ltnafta: '',
@@ -205,7 +210,31 @@ export function AsignacionesModule() {
 
   async function openControlModal(asig: ExpandedAsignacion) {
     setControlAsignacion(asig)
-    setControlForm({ km: '', ltnafta: '', observations: '', cristal_status: '', carter: '', tires: '', others_docs: '', other_accesory: '', make_chains: '', status_chains: '', tensioners_chains: '', others_kit: '' })
+    setControlVehiculoKmNotFound(false)
+
+    // Prefill del kilometraje desde la tabla vehiculos (kilometraje_actual)
+    let kmPrefill = ''
+    if (asig.vehiculo_id) {
+      try {
+        const { data: vehData, error: vehError } = await supabase
+          .from('vehiculos')
+          .select('kilometraje_actual')
+          .eq('id', asig.vehiculo_id)
+          .single()
+        const kmActual = (vehData as { kilometraje_actual: number | null } | null)?.kilometraje_actual
+        if (!vehError && typeof kmActual === 'number' && kmActual > 0) {
+          kmPrefill = String(kmActual)
+        } else {
+          setControlVehiculoKmNotFound(true)
+        }
+      } catch {
+        setControlVehiculoKmNotFound(true)
+      }
+    } else {
+      setControlVehiculoKmNotFound(true)
+    }
+
+    setControlForm({ km: kmPrefill, ltnafta: '', observations: '', cristal_status: '', carter: '', tires: '', others_docs: '', other_accesory: '', make_chains: '', status_chains: '', tensioners_chains: '', others_kit: '' })
     // Obtener un conductor para consultar si la plantilla es Bariloche
     const isAutoCargo = asig.horario === 'todo_dia'
     let conductorId = ''
@@ -534,7 +563,7 @@ export function AsignacionesModule() {
         aplicarFiltroSede(supabase
           .from('asignaciones')
           .select(`
-            id, codigo, vehiculo_id, horario, fecha_programada, fecha_inicio, fecha_fin, estado, control_completado, created_at, sede_id,
+            id, codigo, vehiculo_id, horario, fecha_programada, fecha_inicio, fecha_fin, estado, control_completado, created_at, sede_id, notas,
             vehiculos (patente, marca, modelo),
             asignaciones_conductores (
               id, conductor_id, estado, horario, confirmado, fecha_confirmacion, documento,
@@ -690,7 +719,7 @@ export function AsignacionesModule() {
         aplicarFiltroSede(supabase
           .from('asignaciones')
           .select(`
-            id, codigo, vehiculo_id, horario, fecha_programada, fecha_inicio, fecha_fin, estado, control_completado, created_at, sede_id,
+            id, codigo, vehiculo_id, horario, fecha_programada, fecha_inicio, fecha_fin, estado, control_completado, created_at, sede_id, notas,
             vehiculos (patente, marca, modelo),
             asignaciones_conductores (
               id, conductor_id, estado, horario, confirmado, fecha_confirmacion, documento,
@@ -2906,9 +2935,10 @@ export function AsignacionesModule() {
       id: 'cita_programada',
       header: 'Cita',
       accessorFn: (row) => {
+        // Devolver YYYY-MM-DD en zona local para que el filtro de fechas del DataTable
+        // (que parsea con new Date("YYYY-MM-DD") en UTC) no caiga 1 día atrás por el offset AR.
         if (!row.fecha_programada) return '-'
-        const fecha = new Date(row.fecha_programada)
-        return fecha.toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: '2-digit', timeZone: 'America/Argentina/Buenos_Aires' })
+        return getLocalDateStr(row.fecha_programada)
       },
       sortingFn: (rowA, rowB) => {
         const fechaA = rowA.original.fecha_programada ? new Date(rowA.original.fecha_programada).getTime() : 0
@@ -2933,10 +2963,10 @@ export function AsignacionesModule() {
       id: 'entrega_real',
       header: 'Entrega',
       accessorFn: (row) => {
+        // Devolver YYYY-MM-DD en zona local para evitar el bug de zona horaria del filtro.
         const fechaRef = row.fecha_inicio || row.fecha_programada
         if (!fechaRef) return '-'
-        const fecha = new Date(fechaRef)
-        return fecha.toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: '2-digit', timeZone: 'America/Argentina/Buenos_Aires' })
+        return getLocalDateStr(fechaRef)
       },
       cell: ({ row }) => {
         const fechaInicio = row.original.fecha_inicio
@@ -3009,8 +3039,19 @@ export function AsignacionesModule() {
       }
     },
     {
-      accessorKey: 'fecha_fin',
+      id: 'fecha_fin',
       header: 'Fin',
+      accessorFn: (row) => {
+        // Devolver YYYY-MM-DD en zona local; sino el filtro de fechas del DataTable
+        // compara un timestamp UTC contra un toDate ajustado en local time y rechaza filas válidas.
+        if (!row.fecha_fin) return ''
+        return getLocalDateStr(row.fecha_fin)
+      },
+      sortingFn: (rowA, rowB) => {
+        const a = rowA.original.fecha_fin ? new Date(rowA.original.fecha_fin).getTime() : 0
+        const b = rowB.original.fecha_fin ? new Date(rowB.original.fecha_fin).getTime() : 0
+        return a - b
+      },
       cell: ({ row }) => {
         if (!row.original.fecha_fin) return <span style={{ fontSize: '11px' }}>-</span>
         const d = new Date(row.original.fecha_fin)
@@ -3074,6 +3115,21 @@ export function AsignacionesModule() {
               onClick: esDevolucion
                 ? () => handleConfirmarDevolucion(row.original)
                 : () => {
+                    // Si la Carta Oferta sigue pendiente (acción "Completar Carta Oferta" visible),
+                    // no se puede confirmar todavía: hay que completarla primero.
+                    const cartaOfertaPendiente =
+                      row.original.control_completado !== true &&
+                      !(row.original.created_at && new Date(row.original.created_at) <= new Date('2026-04-27T23:59:59'))
+                    if (cartaOfertaPendiente) {
+                      Swal.fire({
+                        icon: 'warning',
+                        title: 'Completá la Carta Oferta primero',
+                        text: 'Antes de confirmar la asignación tenés que completar los datos de la Carta Oferta desde la opción "Completar Carta Oferta" del menú.',
+                        confirmButtonText: 'Entendido',
+                        confirmButtonColor: 'var(--color-primary)',
+                      })
+                      return
+                    }
                     setSelectedAsignacion(row.original)
                     setShowConfirmModal(true)
                   },
@@ -3109,12 +3165,16 @@ export function AsignacionesModule() {
             onClick: () => handleOpenRegularizar(row.original),
             hidden: !canCreateManualAssignment,
           },
-          // Completar Control (visible solo si no se ha completado y creada después del 27/04/2026)
+          // Completar Control (visible solo si no se ha completado y creada después del 27/04/2026,
+          // y la asignación no está cancelada)
           {
             icon: <ClipboardCheck size={15} />,
             label: 'Completar Carta Oferta',
             onClick: () => openControlModal(row.original),
-            hidden: row.original.control_completado === true || Boolean(row.original.created_at && new Date(row.original.created_at) <= new Date('2026-04-27T23:59:59')),
+            hidden:
+              row.original.control_completado === true ||
+              row.original.estado === 'cancelada' ||
+              Boolean(row.original.created_at && new Date(row.original.created_at) <= new Date('2026-04-27T23:59:59')),
             variant: 'info' as const,
           },
           // Eliminar (solo admin / administrativo / fullstack.senior, igual que Nueva Asignación)
@@ -3246,7 +3306,7 @@ export function AsignacionesModule() {
         pageSize={100}
         pageSizeOptions={[10, 20, 50, 100]}
         externalFilters={externalFilters}
-        headerAction={canCreateManualAssignment ? (
+        headerAction={isAdmin ? (
           <button
             className="btn-primary"
             onClick={() => setShowWizard(true)}
@@ -3470,7 +3530,7 @@ export function AsignacionesModule() {
                         return (
                           <div style={{ marginTop: '4px', display: 'flex', flexDirection: 'column', gap: '2px' }}>
                             <a href={driveUrl} target="_blank" rel="noopener noreferrer" style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', fontSize: '12px', color: '#2563EB', textDecoration: 'none', fontWeight: 500 }}>
-                              <FolderOpen size={13} /> Ver documentos Carta Oferta
+                              <FolderOpen size={13} /> Ver Carta Oferta
                             </a>
                             <span
                               onClick={() => { navigator.clipboard.writeText(driveUrl); showSuccess('URL copiada') }}
@@ -3654,7 +3714,7 @@ export function AsignacionesModule() {
                                   <>
                                     <FolderOpen size={22} style={{ color: '#2563EB', marginBottom: '6px', cursor: 'pointer' }} onClick={() => window.open(driveUrl, '_blank')} />
                                     <a href={driveUrl} target="_blank" rel="noopener noreferrer" style={{ fontSize: '12px', color: '#2563EB', textDecoration: 'none', fontWeight: 600, textAlign: 'center', lineHeight: '1.3' }}>
-                                      Ver documentos Carta Oferta
+                                      Ver Carta Oferta
                                     </a>
                                     <span
                                       onClick={() => { navigator.clipboard.writeText(driveUrl); showSuccess('URL copiada') }}
@@ -3694,6 +3754,35 @@ export function AsignacionesModule() {
                     </div>
                   </div>
 
+                  {viewAsignacion.estado === 'cancelada' && (() => {
+                    // El motivo puede venir de dos flujos:
+                    //  (1) Botón "Cancelar" del menú → guarda "[CANCELADA] Motivo: <texto>"
+                    //  (2) Modal "Editar Asignación" → guarda el texto libre que el usuario escribió en notas
+                    // Si no hay (1), tomamos todo el campo `notas` filtrando las trazas automáticas
+                    // tipo "[EDITADO 12/05/2026 por X] ..." que solo agregan ruido.
+                    const notasRaw = viewAsignacion.notas || ''
+                    const match = notasRaw.match(/\[CANCELADA\]\s*Motivo:\s*([\s\S]+?)$/m)
+                    let motivo: string | null = null
+                    if (match) {
+                      motivo = match[1].trim()
+                    } else {
+                      const libre = notasRaw
+                        .split('\n')
+                        .filter(l => !l.trim().match(/^\[EDITADO\b/))
+                        .join('\n')
+                        .trim()
+                      if (libre) motivo = libre
+                    }
+                    return (
+                      <div>
+                        <label className="asig-detail-label">Motivo de Cancelación</label>
+                        <p className="asig-notes-box" style={{ borderLeft: '4px solid #dc2626', background: '#fef2f2', color: '#991b1b' }}>
+                          {motivo || 'No se registró motivo'}
+                        </p>
+                      </div>
+                    )
+                  })()}
+
                   <div className="asig-detail-row four">
                     <div>
                       <label className="asig-detail-label">Fecha Creación</label>
@@ -3721,12 +3810,19 @@ export function AsignacionesModule() {
                     </div>
                   </div>
 
-                  {viewAsignacion.notas && (
-                    <div>
-                      <label className="asig-detail-label">Notas</label>
-                      <p className="asig-notes-box">{viewAsignacion.notas}</p>
-                    </div>
-                  )}
+                  {viewAsignacion.estado !== 'cancelada' && (() => {
+                    // Para estados no-cancelados, mostrar notas tal cual.
+                    // Si el estado es cancelada, todo el contenido ya se mostró arriba en
+                    // el bloque "Motivo de Cancelación" — evitamos duplicarlo aquí.
+                    const raw = (viewAsignacion.notas || '').trim()
+                    if (!raw) return null
+                    return (
+                      <div>
+                        <label className="asig-detail-label">Notas</label>
+                        <p className="asig-notes-box">{raw}</p>
+                      </div>
+                    )
+                  })()}
                 </div>
               </>
             )}
@@ -4137,6 +4233,11 @@ export function AsignacionesModule() {
                   <div>
                     <label style={labelStyle}>Kilometraje <span style={{ color: '#dc2626' }}>*</span></label>
                     <input type="text" placeholder="Ej: 45.000" value={controlForm.km} onChange={(e) => setControlForm(p => ({ ...p, km: e.target.value }))} disabled={controlSaving} style={inputStyle} />
+                    {controlVehiculoKmNotFound && (
+                      <div style={{ fontSize: '11px', color: '#f59e0b', marginTop: '4px' }}>
+                        No se encontró el km registrado del vehículo
+                      </div>
+                    )}
                   </div>
                   <div>
                     <label style={labelStyle}>Litros de Nafta <span style={{ color: '#dc2626' }}>*</span></label>
