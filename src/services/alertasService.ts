@@ -8,7 +8,7 @@ const SELECT = `
   fault_description, effect_on_component, recommendation, source_address,
   estado, dismiss_user, dismiss_at, conductor_id, conductor_name, sede_id,
   created_at, updated_at, synced_at,
-  vehiculo:vehiculos(marca, modelo, gnc)
+  vehiculo:vehiculos(marca, modelo, gnc, kilometraje_actual)
 `
 
 export async function fetchAlertas(sedeId?: string | null): Promise<AlertaMantenimiento[]> {

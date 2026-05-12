@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { AlertOctagon, AlertTriangle, CheckCircle, Wrench } from 'lucide-react'
+import { AlertOctagon, AlertTriangle, CheckCircle, Wrench, Gauge } from 'lucide-react'
 import { useSede } from '../../../contexts/SedeContext'
 import { useAuth } from '../../../contexts/AuthContext'
 import { useAlertasData } from './hooks/useAlertasData'
@@ -54,21 +54,32 @@ export function AlertasMantenimientoModule() {
               <span className="stat-label">Atendidas (semana)</span>
             </div>
           </div>
+          <div className="stat-card">
+            <Gauge size={18} className="stat-icon" />
+            <div className="stat-content">
+              <span className="stat-value">{stats.kmFlotaAcumulados.toLocaleString('es-AR')}</span>
+              <span className="stat-label">Km flota acumulados</span>
+            </div>
+          </div>
         </div>
       </div>
 
       {/* Tabla */}
       <div className="veh-stats">
-        <AlertasTable alertas={alertas} loading={loading} onRowClick={setSelected} />
+        <AlertasTable
+          alertas={alertas}
+          loading={loading}
+          onRowClick={setSelected}
+          onAtender={(a) => accionAtender(a.id, userName)}
+          onDescartar={(a) => accionDescartar(a.id, userName)}
+          onReactivar={(a) => accionReactivar(a.id)}
+        />
       </div>
 
-      {/* Drawer detalle */}
+      {/* Drawer detalle (solo lectura — acciones desde la tabla) */}
       <AlertaDetalleDrawer
         alerta={selected}
         onClose={() => setSelected(null)}
-        onAtender={async (id) => { await accionAtender(id, userName); setSelected(null) }}
-        onDescartar={async (id) => { await accionDescartar(id, userName); setSelected(null) }}
-        onReactivar={async (id) => { await accionReactivar(id); setSelected(null) }}
       />
     </div>
   )

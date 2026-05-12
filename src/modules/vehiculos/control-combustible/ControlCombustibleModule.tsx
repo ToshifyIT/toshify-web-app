@@ -1,8 +1,12 @@
-import { Fuel, DollarSign, Gauge, Hash, TrendingDown } from 'lucide-react'
+import { useState } from 'react'
+import { Fuel, Gauge, Clock, TrendingUp, Droplet } from 'lucide-react'
 import { useSede } from '../../../contexts/SedeContext'
 import { useCombustibleData } from './hooks/useCombustibleData'
 import { CombustibleTable } from './components/CombustibleTable'
+import { CombustibleDetalleDrawer } from './components/CombustibleDetalleDrawer'
+import type { FuelSummary } from './types/combustible.types'
 import '../VehicleManagement.css'
+import '../alertas-mantenimiento/AlertasMantenimientoModule.css'
 import './ControlCombustibleModule.css'
 
 function formatN(n: number): string {
@@ -11,7 +15,8 @@ function formatN(n: number): string {
 
 export function ControlCombustibleModule() {
   const { sedeActualId } = useSede()
-  const { cargas, stats, loading } = useCombustibleData(sedeActualId)
+  const { summary, stats, loading } = useCombustibleData(sedeActualId)
+  const [selected, setSelected] = useState<FuelSummary | null>(null)
 
   return (
     <div className="veh-module">
@@ -21,42 +26,36 @@ export function ControlCombustibleModule() {
           <div className="stat-card">
             <Fuel size={18} className="stat-icon" />
             <div className="stat-content">
-              <span className="stat-value">{stats.litros > 0 ? `${formatN(stats.litros)} L` : '—'}</span>
-              <span className="stat-label">Litros (semana)</span>
-            </div>
-          </div>
-          <div className="stat-card">
-            <DollarSign size={18} className="stat-icon" />
-            <div className="stat-content">
-              <span className="stat-value">{stats.gasto > 0 ? `$${formatN(stats.gasto)}` : '—'}</span>
-              <span className="stat-label">Gasto (semana)</span>
+              <span className="stat-value">{stats.combustibleTotal > 0 ? `${formatN(stats.combustibleTotal)} L` : '—'}</span>
+              <span className="stat-label">Combustible (30 días)</span>
             </div>
           </div>
           <div className="stat-card">
             <Gauge size={18} className="stat-icon" />
             <div className="stat-content">
-              <span className="stat-value">{stats.kmLPromedio > 0 ? stats.kmLPromedio.toFixed(1) : '—'}</span>
-              <span className="stat-label">Km/L promedio</span>
+              <span className="stat-value">{stats.distanciaTotal > 0 ? `${formatN(stats.distanciaTotal)} km` : '—'}</span>
+              <span className="stat-label">Distancia total</span>
             </div>
           </div>
           <div className="stat-card">
-            <Hash size={18} className="stat-icon" />
+            <TrendingUp size={18} className="stat-icon" />
             <div className="stat-content">
-              <span className="stat-value">{stats.cargas > 0 ? stats.cargas : '—'}</span>
-              <span className="stat-label">Cargas (semana)</span>
+              <span className="stat-value">{stats.rendimientoPromedio > 0 ? `${stats.rendimientoPromedio.toFixed(1)}` : '—'}</span>
+              <span className="stat-label">Rendimiento promedio km/L</span>
             </div>
           </div>
           <div className="stat-card">
-            <TrendingDown size={18} className="stat-icon" />
+            <Clock size={18} className="stat-icon" />
             <div className="stat-content">
-              <span className="stat-value" style={{ fontSize: 13 }}>
-                {stats.topConsumoNombre || '—'}
-              </span>
-              <span className="stat-label">
-                {stats.topConsumoVariacion != null
-                  ? `${stats.topConsumoVariacion > 0 ? '+' : ''}${stats.topConsumoVariacion}% vs flota`
-                  : 'Top consumo'}
-              </span>
+              <span className="stat-value">{stats.ralentiTotal > 0 ? `${formatN(stats.ralentiTotal)} L` : '—'}</span>
+              <span className="stat-label">Ralentí ({stats.ralentiPct.toFixed(0)}% del total)</span>
+            </div>
+          </div>
+          <div className="stat-card">
+            <Droplet size={18} className="stat-icon" />
+            <div className="stat-content">
+              <span className="stat-value">{stats.llenadosTotal}</span>
+              <span className="stat-label">Llenados detectados</span>
             </div>
           </div>
         </div>
@@ -64,8 +63,18 @@ export function ControlCombustibleModule() {
 
       {/* Tabla */}
       <div className="veh-stats">
-        <CombustibleTable cargas={cargas} loading={loading} />
+        <CombustibleTable
+          summary={summary}
+          loading={loading}
+          onRowClick={setSelected}
+        />
       </div>
+
+      {/* Drawer detalle */}
+      <CombustibleDetalleDrawer
+        vehiculo={selected}
+        onClose={() => setSelected(null)}
+      />
     </div>
   )
 }

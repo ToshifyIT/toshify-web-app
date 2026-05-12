@@ -3,8 +3,25 @@ import { supabase } from '../../../../lib/supabase'
 import { fetchAlertas, marcarAtendida, descartarAlerta, reactivarAlerta } from '../../../../services/alertasService'
 import type { AlertaMantenimiento, AlertasStats } from '../types/alertas.types'
 
+const SERVICE_INTERVAL = 10000
+
+/**
+ * Calcula prioridad del vehículo según km que faltan para el próximo service.
+ * Menor número = más urgente. Se usa para ordenar la tabla con Vencido/Próximo primero.
+ */
+function prioridadServicio(alerta: AlertaMantenimiento): number {
+  const km = alerta.vehiculo?.kilometraje_actual
+  if (km == null) return 999_999  // Sin datos al final
+  const proxService = Math.ceil(km / SERVICE_INTERVAL) * SERVICE_INTERVAL
+  const faltan = proxService - km
+  // Vencido = negativo → bien arriba
+  // Próximo = positivo pequeño → después
+  // Al día = positivo grande → al final
+  return faltan
+}
+
 export function useAlertasData(sedeId?: string | null) {
-  const [alertas, setAlertas] = useState<AlertaMantenimiento[]>([])
+  const [alertasRaw, setAlertasRaw] = useState<AlertaMantenimiento[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
@@ -13,13 +30,24 @@ export function useAlertasData(sedeId?: string | null) {
     setError(null)
     try {
       const data = await fetchAlertas(sedeId)
-      setAlertas(data)
+      setAlertasRaw(data)
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Error desconocido')
     } finally {
       setLoading(false)
     }
   }, [sedeId])
+
+  // Ordenar: Vencido > Próximo > Al día > Sin datos. Dentro de cada grupo, por fecha desc.
+  const alertas = useMemo(() => {
+    return [...alertasRaw].sort((a, b) => {
+      const pa = prioridadServicio(a)
+      const pb = prioridadServicio(b)
+      if (pa !== pb) return pa - pb
+      // Mismo bucket → más reciente arriba
+      return new Date(b.fecha_evento).getTime() - new Date(a.fecha_evento).getTime()
+    })
+  }, [alertasRaw])
 
   useEffect(() => { cargar() }, [cargar])
 
@@ -48,11 +76,22 @@ export function useAlertasData(sedeId?: string | null) {
       a.dismiss_at &&
       new Date(a.dismiss_at).getTime() >= haceUnaSemana
     ).length
+    // Km flota acumulados: suma de kilometraje_actual de los vehiculos únicos
+    const vehiculosUnicos = new Map<string, number>()
+    for (const a of alertas) {
+      const vid = a.vehiculo_id
+      const km = a.vehiculo?.kilometraje_actual
+      if (vid && km != null && !vehiculosUnicos.has(vid)) {
+        vehiculosUnicos.set(vid, km)
+      }
+    }
+    const kmFlotaAcumulados = Array.from(vehiculosUnicos.values()).reduce((sum, km) => sum + km, 0)
     return {
       vehiculosConAlerta: vehiculosConAlertaSet.size,
       criticas,
       medias,
       atendidasSemana,
+      kmFlotaAcumulados,
     }
   }, [alertas])
 

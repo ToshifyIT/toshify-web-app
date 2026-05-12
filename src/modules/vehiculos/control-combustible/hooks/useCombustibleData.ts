@@ -1,101 +1,69 @@
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import { supabase } from '../../../../lib/supabase'
-import { fetchCargas } from '../../../../services/combustibleService'
-import type { CargaCombustible, CombustibleStats } from '../types/combustible.types'
-
-function getInicioSemana(): Date {
-  const d = new Date()
-  const day = d.getDay()
-  const diff = d.getDate() - day + (day === 0 ? -6 : 1)
-  d.setDate(diff)
-  d.setHours(0, 0, 0, 0)
-  return d
-}
+import { fetchFuelSummary } from '../../../../services/combustibleService'
+import type { FuelSummary, CombustibleStats } from '../types/combustible.types'
 
 export function useCombustibleData(sedeId?: string | null) {
-  const [cargas, setCargas] = useState<CargaCombustible[]>([])
+  const [summary, setSummary] = useState<FuelSummary[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [desde] = useState<Date>(() => getInicioSemana())
-  const [hasta] = useState<Date>(() => new Date())
 
   const cargar = useCallback(async () => {
     setLoading(true)
     setError(null)
     try {
-      const data = await fetchCargas(sedeId, desde, hasta)
-      setCargas(data)
+      const data = await fetchFuelSummary(sedeId, 30)
+      setSummary(data)
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Error desconocido')
     } finally {
       setLoading(false)
     }
-  }, [sedeId, desde, hasta])
+  }, [sedeId])
 
   useEffect(() => { cargar() }, [cargar])
 
-  // Realtime
+  // Realtime: cuando el cron actualiza el summary, refrescamos.
   useEffect(() => {
     const channel = supabase
-      .channel('geotab_fuel_transactions_changes')
+      .channel('geotab_fuel_summary_changes')
       .on(
         'postgres_changes',
-        { event: '*', schema: 'public', table: 'geotab_fuel_transactions' },
+        { event: '*', schema: 'public', table: 'geotab_fuel_summary' },
         () => { cargar() }
       )
       .subscribe()
     return () => { channel.unsubscribe() }
   }, [cargar])
 
-  // Stats
   const stats: CombustibleStats = useMemo(() => {
-    const litros = cargas.reduce((s, c) => s + (Number(c.volumen_litros) || 0), 0)
-    const gasto = cargas.reduce((s, c) => s + (Number(c.costo) || 0), 0)
-    const conKmL = cargas.filter(c => c.km_por_litro != null && Number(c.km_por_litro) > 0)
-    const kmLPromedio = conKmL.length > 0
-      ? conKmL.reduce((s, c) => s + Number(c.km_por_litro), 0) / conKmL.length
+    const combustibleTotal = summary.reduce((s, v) => s + (Number(v.combustible_litros) || 0), 0)
+    const distanciaTotal = summary.reduce((s, v) => s + (Number(v.distancia_km) || 0), 0)
+    const ralentiTotal = summary.reduce((s, v) => s + (Number(v.ralenti_litros) || 0), 0)
+    const llenadosTotal = summary.reduce((s, v) => s + (Number(v.llenados_count) || 0), 0)
+    const conData = summary.filter(v => v.tiene_telemetria && Number(v.rendimiento_km_litro) > 0)
+    const rendimientoPromedio = conData.length > 0
+      ? conData.reduce((s, v) => s + Number(v.rendimiento_km_litro), 0) / conData.length
       : 0
-
-    // Top consumo: conductor con peor variacion vs promedio (kmL bajo = consume mas)
-    let topNombre: string | null = null
-    let topVar: number | null = null
-    const porConductor = new Map<string, { sum: number; n: number }>()
-    for (const c of conKmL) {
-      const k = c.conductor_name || c.conductor_id || ''
-      if (!k) continue
-      const prev = porConductor.get(k) || { sum: 0, n: 0 }
-      prev.sum += Number(c.km_por_litro); prev.n += 1
-      porConductor.set(k, prev)
-    }
-    if (kmLPromedio > 0 && porConductor.size > 0) {
-      let peor: { nombre: string; promCond: number } | null = null
-      for (const [nombre, s] of porConductor) {
-        const promCond = s.sum / s.n
-        if (!peor || promCond < peor.promCond) peor = { nombre, promCond }
-      }
-      if (peor) {
-        topNombre = peor.nombre
-        topVar = Math.round(((peor.promCond - kmLPromedio) / kmLPromedio) * 100)
-      }
-    }
+    const ralentiPct = combustibleTotal > 0 ? (ralentiTotal / combustibleTotal) * 100 : 0
 
     return {
-      litros: Math.round(litros * 10) / 10,
-      gasto: Math.round(gasto),
-      kmLPromedio: Math.round(kmLPromedio * 10) / 10,
-      cargas: cargas.length,
-      topConsumoNombre: topNombre,
-      topConsumoVariacion: topVar,
+      combustibleTotal: Math.round(combustibleTotal * 100) / 100,
+      distanciaTotal: Math.round(distanciaTotal),
+      rendimientoPromedio: Math.round(rendimientoPromedio * 100) / 100,
+      ralentiTotal: Math.round(ralentiTotal * 100) / 100,
+      ralentiPct: Math.round(ralentiPct * 10) / 10,
+      llenadosTotal,
+      vehiculosConData: conData.length,
+      vehiculosTotal: summary.length,
     }
-  }, [cargas])
+  }, [summary])
 
   return {
-    cargas,
+    summary,
     stats,
     loading,
     error,
-    desde,
-    hasta,
     refrescar: cargar,
   }
 }

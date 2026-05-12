@@ -123,9 +123,19 @@ export function AsignacionesModule() {
   const canEdit = canEditInMenu('asignaciones')
   const canDelete = canDeleteInMenu('asignaciones')
   
-  // Solo admin y fullstack.senior pueden crear/editar asignaciones manuales
+  // Permisos para crear nueva asignación y borrar:
+  //  - admin (Esau, Christiam, Karen, Gandhy, etc.)
+  //  - fullstack.senior (legacy)
+  //  - whitelist por email de personas puntuales (Maria Flores)
   const userRole = profile?.roles?.name || ''
-  const canCreateManualAssignment = userRole === 'admin' || userRole === 'fullstack.senior'
+  const userEmail = (profile?.email || '').toLowerCase()
+  const WHITELIST_EMAILS = new Set<string>([
+    'techspec@toshify.com.ar',   // Maria Flores
+  ])
+  const canCreateManualAssignment =
+    userRole === 'admin' ||
+    userRole === 'fullstack.senior' ||
+    WHITELIST_EMAILS.has(userEmail)
 
   const [asignaciones, setAsignaciones] = useState<Asignacion[]>([])
   const [loading, setLoading] = useState(true)
@@ -3107,13 +3117,14 @@ export function AsignacionesModule() {
             hidden: row.original.control_completado === true || Boolean(row.original.created_at && new Date(row.original.created_at) <= new Date('2026-04-27T23:59:59')),
             variant: 'info' as const,
           },
-          // Eliminar
+          // Eliminar (solo admin / administrativo / fullstack.senior, igual que Nueva Asignación)
           {
             icon: <Trash2 size={15} />,
             label: 'Eliminar',
             onClick: () => esDevolucion && row.original.devolucionId
               ? handleCancelDevolucion(row.original.devolucionId)
               : handleDelete(row.original.id),
+            hidden: !canCreateManualAssignment,
             disabled: !canDelete,
             variant: 'danger' as const,
           },

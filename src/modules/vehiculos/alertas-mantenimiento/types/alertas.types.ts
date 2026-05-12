@@ -38,14 +38,27 @@ export interface AlertaMantenimiento {
     marca?: string | null
     modelo?: string | null
     gnc?: boolean | null
+    kilometraje_actual?: number | null
   } | null
 }
+
+/**
+ * Estado consolidado del vehículo según km recorridos vs próximo service.
+ * Calculado en runtime, no se persiste.
+ */
+export type EstadoMantenimientoVehiculo =
+  | 'al_dia'         // < 80% del intervalo
+  | 'proximo'        // 80% - 100%
+  | 'vencido'        // > 100%
+  | 'manejo_riesgoso' // tiene faults críticos o muchos eventos
+  | 'sin_datos'      // sin odómetro
 
 export interface AlertasStats {
   vehiculosConAlerta: number
   criticas: number
   medias: number
   atendidasSemana: number
+  kmFlotaAcumulados: number  // suma de kilometraje_actual de la flota
 }
 
 export interface AlertasFiltros {

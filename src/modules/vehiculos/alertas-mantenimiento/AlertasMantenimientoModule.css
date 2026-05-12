@@ -1,12 +1,12 @@
 /* Overrides especificos para Alertas Mantenimiento - hereda base de VehicleManagement.css */
 
 .alertas-stats-grid {
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(5, 1fr);
 }
 
 @media (max-width: 1200px) {
   .alertas-stats-grid {
-    grid-template-columns: repeat(2, 1fr);
+    grid-template-columns: repeat(3, 1fr);
   }
 }
 
@@ -54,6 +54,11 @@
   display: flex;
   flex-direction: column;
   animation: slideInRight 0.2s ease;
+}
+
+/* Variante ampliada para detalle con métricas (estilo Geotab) */
+.alerta-drawer.alerta-drawer-wide {
+  max-width: 640px;
 }
 
 @keyframes fadeIn { from { opacity: 0 } to { opacity: 1 } }
