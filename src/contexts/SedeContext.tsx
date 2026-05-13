@@ -74,11 +74,16 @@ export function SedeProvider({ children }: { children: ReactNode }) {
   const [sedeUsuario, setSedeUsuario] = useState<Sede | null>(null)
   const [loading, setLoading] = useState(true)
 
-  // Admins y superadmins pueden ver todas las sedes
+  // Admins y superadmins ven todas por rol.
+  // Cualquier otro usuario también puede verlas si tiene ver_todas_sedes = true en su perfil
+  // (configurable desde Gestión de Usuarios → Configurar Sede).
   const roleName = (profile?.roles?.name || '').toLowerCase()
-  const puedeVerTodasSedes = roleName === 'admin' || roleName === 'superadmin' || roleName === 'administrador'
-  // puede_cambiar_sede: true por defecto, false solo si está explícitamente en false
-  const puedeCambiarSede = (profile as any)?.puede_cambiar_sede !== false
+  const verTodasPorRol = roleName === 'admin' || roleName === 'superadmin' || roleName === 'administrador'
+  const verTodasPorPerfil = (profile as any)?.ver_todas_sedes === true
+  const puedeVerTodasSedes = verTodasPorRol || verTodasPorPerfil
+  // puede_cambiar_sede: true por defecto, false solo si está explícitamente en false.
+  // Si tiene ver_todas_sedes implica que también puede cambiar.
+  const puedeCambiarSede = verTodasPorPerfil || (profile as any)?.puede_cambiar_sede !== false
 
   // Cargar sedes
   useEffect(() => {

@@ -195,6 +195,7 @@ export function UserManagement() {
   const configurarSede = async (user: UserWithRole) => {
     const currentSedeId = (user as any).sede_id || ''
     const puedeCambiar = (user as any).puede_cambiar_sede !== false
+    const verTodas = (user as any).ver_todas_sedes === true
 
     const sedeOptions = sedes.map(s => `<option value="${s.id}" ${s.id === currentSedeId ? 'selected' : ''}>${s.nombre}</option>`).join('')
 
@@ -202,12 +203,27 @@ export function UserManagement() {
       title: 'Configurar Sede',
       html: `
         <div style="text-align:left; display:flex; flex-direction:column; gap:16px; margin-top:8px">
+          <div style="padding:12px;background:#fef3c7;border:1px solid #fcd34d;border-radius:8px;display:flex;align-items:flex-start;gap:10px">
+            <input type="checkbox" id="swal-ver-todas" ${verTodas ? 'checked' : ''} style="width:18px;height:18px;cursor:pointer;margin-top:2px" />
+            <div style="flex:1">
+              <label for="swal-ver-todas" style="font-size:13px;font-weight:600;color:#92400e;cursor:pointer;display:block">
+                Ver todas las sedes
+              </label>
+              <span style="font-size:11px;color:#78350f;line-height:1.4">
+                El usuario podrá ver y cambiar a cualquier sede existente (y a las que se creen en el futuro).
+                Útil para roles directivos.
+              </span>
+            </div>
+          </div>
           <div>
             <label style="font-size:13px;font-weight:600;color:#374151;display:block;margin-bottom:6px">Sede por defecto</label>
             <select id="swal-sede" style="width:100%;padding:8px 12px;border:1px solid #d1d5db;border-radius:8px;font-size:14px">
               <option value="">Sin sede asignada</option>
               ${sedeOptions}
             </select>
+            <span style="font-size:11px;color:#6b7280;line-height:1.4;margin-top:4px;display:block">
+              La sede que se selecciona al iniciar sesión.
+            </span>
           </div>
           <div style="display:flex;align-items:center;gap:12px">
             <label style="font-size:13px;font-weight:600;color:#374151;flex:1">Puede cambiar de sede</label>
@@ -221,6 +237,7 @@ export function UserManagement() {
       preConfirm: () => ({
         sedeId: (document.getElementById('swal-sede') as HTMLSelectElement).value,
         puedeCambiar: (document.getElementById('swal-puede') as HTMLInputElement).checked,
+        verTodas: (document.getElementById('swal-ver-todas') as HTMLInputElement).checked,
       }),
     })
 
@@ -229,10 +246,11 @@ export function UserManagement() {
     await supabase.from('user_profiles').update({
       sede_id: formValues.sedeId || null,
       puede_cambiar_sede: formValues.puedeCambiar,
-    }).eq('id', user.id)
+      ver_todas_sedes: formValues.verTodas,
+    } as any).eq('id', user.id)
 
     setUsers(prev => prev.map(u => u.id === user.id
-      ? { ...u, sede_id: formValues.sedeId || null, puede_cambiar_sede: formValues.puedeCambiar } as any
+      ? { ...u, sede_id: formValues.sedeId || null, puede_cambiar_sede: formValues.puedeCambiar, ver_todas_sedes: formValues.verTodas } as any
       : u
     ))
     showSuccess('Configuración de sede guardada')
