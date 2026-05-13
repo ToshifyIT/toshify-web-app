@@ -1653,7 +1653,7 @@ export function HomePage() {
               {sedes.length > 0 && (
                 <div style={{ position: 'relative' }}>
                   <button
-                    onClick={() => (sedes.length > 1 && puedeCambiarSede) ? setSedeDropdownOpen(!sedeDropdownOpen) : undefined}
+                    onClick={() => (puedeCambiarSede && (sedes.length > 1 || puedeVerTodasSedes)) ? setSedeDropdownOpen(!sedeDropdownOpen) : undefined}
                     style={{
                       display: 'flex',
                       alignItems: 'center',
@@ -1662,7 +1662,7 @@ export function HomePage() {
                       borderRadius: '8px',
                       border: '1px solid var(--border-primary)',
                       background: 'var(--bg-secondary)',
-                      cursor: (sedes.length > 1 && puedeCambiarSede) ? 'pointer' : 'default',
+                      cursor: (puedeCambiarSede && (sedes.length > 1 || puedeVerTodasSedes)) ? 'pointer' : 'default',
                       color: 'var(--text-primary)',
                       fontSize: '13px',
                       fontWeight: 600,
