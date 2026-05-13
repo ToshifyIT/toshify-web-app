@@ -1494,7 +1494,7 @@ app.post('/api/complete-control', async (req, res) => {
 
     console.log(`[Control] Placeholders reemplazados: ${replacements.length} variables`)
 
-    // 3. Exportar como PDF y subir a Drive
+    // 3. Exportar como PDF y subir a Drive (o reemplazar si ya existe — idempotente)
     const drive = getDriveServiceFull()
     let pdfUrl = null
     try {
@@ -1510,21 +1510,68 @@ app.post('/api/complete-control', async (req, res) => {
         fields: 'name, parents',
         supportsAllDrives: true
       })
+      const pdfName = `${fileInfo.data.name}.pdf`
+      const parentId = (fileInfo.data.parents || [])[0]
 
-      const pdfFile = await drive.files.create({
-        requestBody: {
-          name: `${fileInfo.data.name}.pdf`,
-          parents: fileInfo.data.parents || [],
-          mimeType: 'application/pdf'
-        },
-        media: {
-          mimeType: 'application/pdf',
-          body: Readable.from(pdfBuffer)
-        },
-        fields: 'id, webViewLink',
-        supportsAllDrives: true
-      })
-      pdfUrl = pdfFile.data.webViewLink
+      // Buscar si ya existe un PDF con el mismo nombre en la misma carpeta.
+      // Si existe, REEMPLAZAR su contenido (update) en vez de crear un duplicado.
+      let existingPdfId = null
+      if (parentId) {
+        const safeName = pdfName.replace(/'/g, "\\'")
+        const searchExisting = await drive.files.list({
+          q: `name='${safeName}' and '${parentId}' in parents and mimeType='application/pdf' and trashed=false`,
+          fields: 'files(id, webViewLink)',
+          supportsAllDrives: true,
+          includeItemsFromAllDrives: true,
+        })
+        if (searchExisting.data.files && searchExisting.data.files.length > 0) {
+          existingPdfId = searchExisting.data.files[0].id
+          // Si por algún error pasado hay duplicados, mover los extras a papelera (deja el primero)
+          for (let i = 1; i < searchExisting.data.files.length; i++) {
+            try {
+              await drive.files.update({
+                fileId: searchExisting.data.files[i].id,
+                requestBody: { trashed: true },
+                supportsAllDrives: true,
+              })
+              console.log(`[Control] Duplicado previo enviado a papelera: ${searchExisting.data.files[i].id}`)
+            } catch (cleanupErr) {
+              console.warn(`[Control] No se pudo limpiar duplicado: ${cleanupErr.message}`)
+            }
+          }
+        }
+      }
+
+      if (existingPdfId) {
+        // Reemplazar contenido del PDF existente (mismo fileId, sin duplicar)
+        const pdfFile = await drive.files.update({
+          fileId: existingPdfId,
+          media: {
+            mimeType: 'application/pdf',
+            body: Readable.from(pdfBuffer)
+          },
+          fields: 'id, webViewLink',
+          supportsAllDrives: true
+        })
+        pdfUrl = pdfFile.data.webViewLink
+        console.log(`[Control] PDF existente actualizado: ${existingPdfId}`)
+      } else {
+        // No existía: crear nuevo
+        const pdfFile = await drive.files.create({
+          requestBody: {
+            name: pdfName,
+            parents: fileInfo.data.parents || [],
+            mimeType: 'application/pdf'
+          },
+          media: {
+            mimeType: 'application/pdf',
+            body: Readable.from(pdfBuffer)
+          },
+          fields: 'id, webViewLink',
+          supportsAllDrives: true
+        })
+        pdfUrl = pdfFile.data.webViewLink
+      }
     } catch (pdfErr) {
       console.warn(`[Control] No se pudo generar PDF: ${pdfErr.message}`)
     }
