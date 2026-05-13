@@ -3096,7 +3096,11 @@ export function ConductoresModule() {
         }
         headerAction={
           <>
-            <VerLogsButton tablas={['conductores', 'asignaciones', 'asignaciones_conductores']} label="Conductores" />
+            {/* "Ver Logs" y "Sincronizar" solo visibles para admin */}
+            {isAdmin() && (
+              <VerLogsButton tablas={['conductores', 'asignaciones', 'asignaciones_conductores']} label="Conductores" />
+            )}
+            {isAdmin() && (
             <div ref={syncMenuRef} style={{ position: 'relative', display: 'inline-block' }}>
               <button
                 className="btn-secondary"
@@ -3314,6 +3318,7 @@ export function ConductoresModule() {
                 </div>
               )}
             </div>
+            )}
             <button
               className="btn-primary"
               onClick={() => {
