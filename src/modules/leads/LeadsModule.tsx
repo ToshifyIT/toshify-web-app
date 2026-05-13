@@ -636,22 +636,32 @@ export function LeadsModule() {
 
       const sedePrincipal = sedes.find(s => s.es_principal) || sedes[0]
       const sedeMap = new Map(sedes.map(s => [s.id, s.nombre?.toLowerCase() || '']))
+      // Resolución por sustring: cuando un lead llega sin sede o con un texto sucio
+      // ("Esty Bariloche", "BRC", etc.) intentamos inferirla por contenido en sede + zona.
+      const sedeBariloche = sedes.find(s =>
+        /bariloche|^brc$|patagonia/i.test(`${s.nombre || ''} ${s.codigo || ''}`)
+      )
+      const sedeBuenosAires = sedes.find(s =>
+        /buenos\s*aires|^bsas$|^bs\.?\s*as\.?$|^ba$/i.test(`${s.nombre || ''} ${s.codigo || ''}`)
+      ) || sedePrincipal
       let actualizado = false
 
       for (const lead of allLeads) {
         const updateData: Record<string, unknown> = {}
 
         // --- Sede: asignar o corregir ---
+        // Regla: si el lead no tiene sede_id (o tiene un texto inconsistente),
+        // inferimos la sede a partir de `sede` + `zona`. Si hay alguna referencia
+        // a Bariloche → Bariloche; en cualquier otro caso → Buenos Aires (default).
         const textoSede = (lead.sede || '').trim().toLowerCase()
         const sedeActualNombre = lead.sede_id ? sedeMap.get(lead.sede_id) : null
-        const necesitaUpdateSede = !lead.sede_id || (textoSede && sedeActualNombre && textoSede !== sedeActualNombre)
+        const necesitaUpdateSede = !lead.sede_id || (textoSede && sedeActualNombre && !sedeActualNombre.includes(textoSede) && !textoSede.includes(sedeActualNombre))
 
         if (necesitaUpdateSede) {
-          const sedeMatch = textoSede
-            ? sedes.find(s => s.nombre?.toLowerCase() === textoSede || s.codigo?.toLowerCase() === textoSede)
-            : null
-          const sedeAsignada = sedeMatch || sedePrincipal
-          if (lead.sede_id !== sedeAsignada.id) {
+          const haystack = `${lead.sede || ''} ${lead.zona || ''}`.toLowerCase()
+          const refiereBariloche = /bariloche|\bbrc\b|patagonia/.test(haystack)
+          const sedeAsignada = (refiereBariloche ? sedeBariloche : sedeBuenosAires) || sedePrincipal
+          if (sedeAsignada && lead.sede_id !== sedeAsignada.id) {
             updateData.sede_id = sedeAsignada.id
             updateData.sede = sedeAsignada.nombre
           }

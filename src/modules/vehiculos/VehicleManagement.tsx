@@ -1,7 +1,8 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 // src/modules/vehiculos/VehicleManagement.tsx
 import { useState, useEffect, useMemo, useRef } from 'react'
-import { AlertTriangle, Eye, Edit, Trash2, Info, Car, Wrench, Briefcase, PaintBucket, Warehouse, FolderOpen, FolderPlus, Undo2, History, Fuel, CreditCard } from 'lucide-react'
+import { AlertTriangle, Eye, Edit, Trash2, Info, Car, Wrench, Briefcase, PaintBucket, Warehouse, FolderOpen, FolderPlus, Undo2, History, Fuel, CreditCard, Download } from 'lucide-react'
+import * as XLSX from 'xlsx'
 import { ActionsMenu } from '../../components/ui/ActionsMenu'
 import { VerLogsButton } from '../../components/ui/VerLogsButton'
 
@@ -93,6 +94,8 @@ export function VehicleManagement() {
   const [statCardExcludeMode, setStatCardExcludeMode] = useState(false) // true = excluir los estados del filtro en vez de incluir
   const [gncFilter, setGncFilter] = useState<string | null>(null) // 'sinGnc' | 'conGnc'
   const [telepaseFilter, setTelepaseFilter] = useState<string | null>(null) // 'propio' | 'toshify'
+  // Búsqueda global del DataTable (controlada para poder reflejarla en el botón Exportar)
+  const [globalSearch, setGlobalSearch] = useState('')
 
   // Excel filter hook for portal-based dropdowns
   const { openFilterId, setOpenFilterId } = useExcelFilters()
@@ -131,7 +134,17 @@ export function VehicleManagement() {
     titular: '',
     notas: '',
     url_documentacion: '',
-    sede_id: ''
+    sede_id: '',
+    grupo_flota: '',
+    cantidad_llaves: '',
+    lugar_radicacion: '',
+    vencimiento_seguro: '',
+    vto_vtv_aplica: false,
+    vto_vtv_fecha: '',
+    vto_gnc_aplica: false,
+    vto_gnc_fecha: '',
+    vto_matafuego_aplica: false,
+    vto_matafuego_fecha: ''
   })
 
   // ✅ OPTIMIZADO: Carga unificada en paralelo (recarga al cambiar sede)
@@ -228,7 +241,9 @@ export function VehicleManagement() {
           .from('vehiculos')
           .select(`
             id, patente, marca, modelo, anio, color, kilometraje_actual, kilometraje_geotab, kilometraje_geotab_updated_at, estado_id, created_at,
-            drive_folder_id, drive_folder_url, url_documentacion, gnc, telepase, titular,
+            drive_folder_id, drive_folder_url, url_documentacion, gnc, telepase, titular, grupo_flota,
+            cantidad_llaves, lugar_radicacion, vencimiento_seguro,
+            vto_vtv_aplica, vto_vtv_fecha, vto_gnc_aplica, vto_gnc_fecha, vto_matafuego_aplica, vto_matafuego_fecha,
             vehiculos_estados (id, codigo, descripcion)
           `)
           .is('deleted_at', null))
@@ -373,11 +388,11 @@ export function VehicleManagement() {
       return
     }
 
-    if (!formData.patente || !formData.marca || !formData.modelo || !formData.sede_id || !formData.titular?.trim() || !formData.cobertura?.trim()) {
+    if (!formData.patente || !formData.marca || !formData.modelo || !formData.sede_id || !formData.titular?.trim() || !formData.cobertura?.trim() || !formData.lugar_radicacion?.trim()) {
       Swal.fire({
         icon: 'warning',
         title: 'Campos requeridos',
-        text: 'Complete todos los campos requeridos: Patente, Marca, Modelo, Sede, Titular y Cobertura',
+        text: 'Complete todos los campos requeridos: Patente, Marca, Modelo, Sede, Titular, Cobertura y Lugar de Radicación',
         confirmButtonColor: '#ff0033'
       })
       return
@@ -449,6 +464,16 @@ export function VehicleManagement() {
             telepase: formData.telepase || false,
             url_documentacion: formData.url_documentacion || null,
             sede_id: formData.sede_id,
+            grupo_flota: formData.grupo_flota || null,
+            cantidad_llaves: formData.cantidad_llaves ? Number(formData.cantidad_llaves) : null,
+            lugar_radicacion: formData.lugar_radicacion || null,
+            vencimiento_seguro: formData.vencimiento_seguro || null,
+            vto_vtv_aplica: formData.vto_vtv_aplica,
+            vto_vtv_fecha: formData.vto_vtv_aplica && formData.vto_vtv_fecha ? formData.vto_vtv_fecha : null,
+            vto_gnc_aplica: formData.vto_gnc_aplica,
+            vto_gnc_fecha: formData.vto_gnc_aplica && formData.vto_gnc_fecha ? formData.vto_gnc_fecha : null,
+            vto_matafuego_aplica: formData.vto_matafuego_aplica,
+            vto_matafuego_fecha: formData.vto_matafuego_aplica && formData.vto_matafuego_fecha ? formData.vto_matafuego_fecha : null,
             updated_at: new Date().toISOString(),
           })
           .eq('id', vehiculoEliminado.id)
@@ -496,6 +521,16 @@ export function VehicleManagement() {
           created_by: user?.id,
           created_by_name: profile?.full_name || 'Sistema',
           sede_id: formData.sede_id,
+          grupo_flota: formData.grupo_flota || null,
+          cantidad_llaves: formData.cantidad_llaves ? Number(formData.cantidad_llaves) : null,
+          lugar_radicacion: formData.lugar_radicacion || null,
+          vencimiento_seguro: formData.vencimiento_seguro || null,
+          vto_vtv_aplica: formData.vto_vtv_aplica,
+          vto_vtv_fecha: formData.vto_vtv_aplica && formData.vto_vtv_fecha ? formData.vto_vtv_fecha : null,
+          vto_gnc_aplica: formData.vto_gnc_aplica,
+          vto_gnc_fecha: formData.vto_gnc_aplica && formData.vto_gnc_fecha ? formData.vto_gnc_fecha : null,
+          vto_matafuego_aplica: formData.vto_matafuego_aplica,
+          vto_matafuego_fecha: formData.vto_matafuego_aplica && formData.vto_matafuego_fecha ? formData.vto_matafuego_fecha : null,
         }])
 
       if (insertError) throw insertError
@@ -580,6 +615,16 @@ export function VehicleManagement() {
         icon: 'warning',
         title: 'Cobertura obligatoria',
         text: 'El campo Cobertura del seguro es requerido',
+        confirmButtonColor: '#ff0033'
+      })
+      return
+    }
+
+    if (!formData.lugar_radicacion?.trim()) {
+      Swal.fire({
+        icon: 'warning',
+        title: 'Lugar de Radicación obligatorio',
+        text: 'El campo Lugar de Radicación es requerido',
         confirmButtonColor: '#ff0033'
       })
       return
@@ -710,6 +755,16 @@ export function VehicleManagement() {
           telepase: formData.telepase || false,
           url_documentacion: formData.url_documentacion || null,
           sede_id: formData.sede_id || null,
+          grupo_flota: formData.grupo_flota || null,
+          cantidad_llaves: formData.cantidad_llaves ? Number(formData.cantidad_llaves) : null,
+          lugar_radicacion: formData.lugar_radicacion || null,
+          vencimiento_seguro: formData.vencimiento_seguro || null,
+          vto_vtv_aplica: formData.vto_vtv_aplica,
+          vto_vtv_fecha: formData.vto_vtv_aplica && formData.vto_vtv_fecha ? formData.vto_vtv_fecha : null,
+          vto_gnc_aplica: formData.vto_gnc_aplica,
+          vto_gnc_fecha: formData.vto_gnc_aplica && formData.vto_gnc_fecha ? formData.vto_gnc_fecha : null,
+          vto_matafuego_aplica: formData.vto_matafuego_aplica,
+          vto_matafuego_fecha: formData.vto_matafuego_aplica && formData.vto_matafuego_fecha ? formData.vto_matafuego_fecha : null,
           updated_at: new Date().toISOString(),
           updated_by: profile?.full_name || 'Sistema'
         })
@@ -890,7 +945,17 @@ export function VehicleManagement() {
         titular: fullVehiculo.titular || '',
         notas: fullVehiculo.notas || '',
         url_documentacion: (fullVehiculo as any).url_documentacion || (fullVehiculo as any).documentos_urls || '',
-        sede_id: (fullVehiculo as any).sede_id || ''
+        sede_id: (fullVehiculo as any).sede_id || '',
+        grupo_flota: (fullVehiculo as any).grupo_flota || '',
+        cantidad_llaves: (fullVehiculo as any).cantidad_llaves != null ? String((fullVehiculo as any).cantidad_llaves) : '',
+        lugar_radicacion: (fullVehiculo as any).lugar_radicacion || '',
+        vencimiento_seguro: (fullVehiculo as any).vencimiento_seguro || '',
+        vto_vtv_aplica: !!(fullVehiculo as any).vto_vtv_aplica,
+        vto_vtv_fecha: (fullVehiculo as any).vto_vtv_fecha || '',
+        vto_gnc_aplica: !!(fullVehiculo as any).vto_gnc_aplica,
+        vto_gnc_fecha: (fullVehiculo as any).vto_gnc_fecha || '',
+        vto_matafuego_aplica: !!(fullVehiculo as any).vto_matafuego_aplica,
+        vto_matafuego_fecha: (fullVehiculo as any).vto_matafuego_fecha || ''
       })
       setShowEditModal(true)
     } catch {
@@ -930,7 +995,17 @@ export function VehicleManagement() {
       titular: '',
       notas: '',
       url_documentacion: '',
-      sede_id: ''
+      sede_id: '',
+      grupo_flota: '',
+      cantidad_llaves: '',
+      lugar_radicacion: '',
+      vencimiento_seguro: '',
+      vto_vtv_aplica: false,
+      vto_vtv_fecha: '',
+      vto_gnc_aplica: false,
+      vto_gnc_fecha: '',
+      vto_matafuego_aplica: false,
+      vto_matafuego_fecha: ''
     })
   }
 
@@ -1380,6 +1455,16 @@ export function VehicleManagement() {
         enableSorting: true,
       },
       {
+        accessorKey: 'grupo_flota',
+        header: 'Grupo de Flota',
+        cell: ({ row }) => {
+          const g = (row.original as any).grupo_flota
+          if (!g) return <span style={{ color: 'var(--text-tertiary)' }}>-</span>
+          return <span style={{ fontSize: '12px' }}>{g}</span>
+        },
+        enableSorting: true,
+      },
+      {
         accessorKey: 'titular',
         header: () => (
           <ExcelColumnFilter
@@ -1396,6 +1481,16 @@ export function VehicleManagement() {
           const titular = (row.original as any).titular
           if (!titular) return <span style={{ color: 'var(--text-tertiary)' }}>-</span>
           return <span style={{ fontSize: '12px' }}>{titular}</span>
+        },
+        enableSorting: true,
+      },
+      {
+        accessorKey: 'lugar_radicacion',
+        header: 'Lugar de Radicación',
+        cell: ({ row }) => {
+          const l = (row.original as any).lugar_radicacion
+          if (!l) return <span style={{ color: 'var(--text-tertiary)' }}>-</span>
+          return <span style={{ fontSize: '12px' }}>{l}</span>
         },
         enableSorting: true,
       },
@@ -1671,6 +1766,120 @@ export function VehicleManagement() {
     [canUpdate, canDelete, patenteFilter, marcaFilter, modeloFilter, titularFilter, anioFilter, colorFilter, kmFilter, estadoFilter, openFilterId, patentesUnicas, marcasExistentes, modelosExistentes, titularesUnicos, aniosUnicos, coloresUnicos, estadosUnicos, ussPatentes]
   )
 
+  // Exporta a Excel los vehículos actualmente visibles en la tabla, respetando:
+  // - filtros de stat cards (activeStatCard, gnc/telepase)
+  // - filtros de columna Excel (patente, marca, modelo, etc.)
+  // - búsqueda global del input (replica la misma lógica del DataTable: case-insensitive,
+  //   todas las palabras deben coincidir en algún campo del registro)
+  // Hace un SELECT completo on-demand para incluir todos los campos, no solo los visibles.
+  const handleExportarVehiculos = async () => {
+    // Aplicar la búsqueda global sobre los vehículos ya filtrados por columnas/stat cards.
+    const search = globalSearch.trim().toLowerCase()
+    const filtroBusqueda = (v: any): boolean => {
+      if (!search) return true
+      const words = search.split(/\s+/).filter(w => w.length > 0)
+      const haystack = [
+        v.patente, v.marca, v.modelo, v.color, v.titular,
+        (v as any).grupo_flota, (v as any).tipo_vehiculo, (v as any).lugar_radicacion,
+        v.anio != null ? String(v.anio) : '',
+        v.vehiculos_estados?.descripcion, v.vehiculos_estados?.codigo,
+      ].filter(Boolean).join(' ').toLowerCase()
+      return words.every(w => haystack.includes(w))
+    }
+    const vehiculosVisibles = filteredVehiculos.filter(filtroBusqueda)
+
+    if (vehiculosVisibles.length === 0) {
+      Swal.fire('Sin datos', 'No hay vehículos para exportar', 'info')
+      return
+    }
+    try {
+      const ids = vehiculosVisibles.map(v => v.id)
+      const { data, error: exportError } = await supabase
+        .from('vehiculos')
+        .select(`
+          *,
+          vehiculos_estados (codigo, descripcion),
+          sedes:sede_id (nombre, codigo)
+        `)
+        .in('id', ids)
+      if (exportError) throw exportError
+
+      const fmtFecha = (v: string | null | undefined) =>
+        v ? new Date(v).toLocaleDateString('es-AR') : ''
+      const fmtFechaHora = (v: string | null | undefined) =>
+        v ? new Date(v).toLocaleString('es-AR') : ''
+
+      // Mantener orden de los IDs filtrados para que el Excel respete la vista actual
+      const ordenIds = new Map(ids.map((id, i) => [id, i]))
+      const sorted = ([...(data || [])] as any[]).sort(
+        (a, b) => (ordenIds.get(a.id) ?? 0) - (ordenIds.get(b.id) ?? 0)
+      )
+
+      const dataExport = sorted.map((v: any) => ({
+        'Patente': v.patente || '',
+        'Marca': v.marca || '',
+        'Modelo': v.modelo || '',
+        'Año': v.anio || '',
+        'Color': v.color || '',
+        'Tipo Vehículo': v.tipo_vehiculo || '',
+        'Grupo de Flota': v.grupo_flota || '',
+        'Lugar de Radicación': v.lugar_radicacion || '',
+        'Cantidad de Llaves': v.cantidad_llaves != null ? v.cantidad_llaves : '',
+        'Titular': v.titular || '',
+        'Sede': v.sedes?.nombre || '',
+        'Estado': v.vehiculos_estados?.descripcion || v.vehiculos_estados?.codigo || '',
+        'Tipo Combustible': v.tipo_combustible || '',
+        'GNC': v.gnc ? 'Sí' : 'No',
+        'Telepase': v.telepase ? 'Sí' : 'No',
+        'Tipo GPS': v.tipo_gps || '',
+        'GPS USS (Wialon)': v.gps_uss ? 'Sí' : 'No',
+        'Número Motor': v.numero_motor || '',
+        'Número Chasis': v.numero_chasis || '',
+        'Provisoria': v.provisoria || '',
+        'Kilometraje Actual': v.kilometraje_actual || 0,
+        'Kilometraje Geotab': v.kilometraje_geotab || '',
+        'Geotab — Última Lectura': fmtFechaHora(v.kilometraje_geotab_updated_at),
+        'Fecha Adquisición': fmtFecha(v.fecha_adquisicion),
+        'Última Inspección': fmtFecha(v.fecha_ulti_inspeccion),
+        'Próxima Inspección': fmtFecha(v.fecha_prox_inspeccion),
+        'Cobertura': v.cobertura || '',
+        'N° Póliza': v.seguro_numero || '',
+        'Vigencia Seguro': fmtFecha(v.seguro_vigencia),
+        'Vencimiento Seguro': fmtFecha(v.vencimiento_seguro),
+        'Vto VTV': v.vto_vtv_aplica ? `Sí${v.vto_vtv_fecha ? ' — ' + fmtFecha(v.vto_vtv_fecha) : ''}` : 'No',
+        'Vto GNC': v.vto_gnc_aplica ? `Sí${v.vto_gnc_fecha ? ' — ' + fmtFecha(v.vto_gnc_fecha) : ''}` : 'No',
+        'Vto Matafuego': v.vto_matafuego_aplica ? `Sí${v.vto_matafuego_fecha ? ' — ' + fmtFecha(v.vto_matafuego_fecha) : ''}` : 'No',
+        'URL Documentación': v.url_documentacion || '',
+        'Drive Folder URL': v.drive_folder_url || '',
+        'Notas': v.notas || '',
+        'Creado por': v.created_by_name || '',
+        'Fecha Creación': fmtFechaHora(v.created_at),
+        'Actualizado por': v.updated_by || '',
+        'Última Actualización': fmtFechaHora(v.updated_at),
+      }))
+
+      const ws = XLSX.utils.json_to_sheet(dataExport)
+      const wb = XLSX.utils.book_new()
+      XLSX.utils.book_append_sheet(wb, ws, 'Vehículos')
+
+      // Anchos razonables para las columnas principales
+      ws['!cols'] = [
+        { wch: 10 }, { wch: 14 }, { wch: 22 }, { wch: 6 }, { wch: 12 },
+        { wch: 14 }, { wch: 18 }, { wch: 24 }, { wch: 16 }, { wch: 18 },
+        { wch: 14 }, { wch: 6 }, { wch: 10 }, { wch: 14 }, { wch: 14 },
+        { wch: 18 }, { wch: 22 }, { wch: 14 }, { wch: 14 }, { wch: 14 },
+        { wch: 20 }, { wch: 14 }, { wch: 14 }, { wch: 16 }, { wch: 18 },
+        { wch: 16 }, { wch: 14 }, { wch: 30 }, { wch: 30 }, { wch: 30 },
+        { wch: 22 }, { wch: 18 }, { wch: 22 }, { wch: 18 },
+      ]
+
+      const fecha = new Date().toISOString().split('T')[0]
+      XLSX.writeFile(wb, `Vehiculos_${fecha}.xlsx`)
+    } catch (err: any) {
+      Swal.fire('Error', err?.message || 'No se pudo exportar', 'error')
+    }
+  }
+
   return (
     <div className="veh-module">
       {/* Loading Overlay - bloquea toda la pantalla */}
@@ -1819,6 +2028,8 @@ export function VehicleManagement() {
         pageSize={100}
         pageSizeOptions={[50, 100, 200]}
         searchPlaceholder="Buscar por patente, marca, modelo..."
+        globalFilter={globalSearch}
+        onGlobalFilterChange={setGlobalSearch}
         emptyIcon={<Car size={64}
       />}
         emptyTitle="No hay vehiculos registrados"
@@ -1826,6 +2037,14 @@ export function VehicleManagement() {
         headerAction={
           <>
             <VerLogsButton tablas={['vehiculos', 'vehiculo_control']} label="Veh\u00edculos" />
+            <button
+              className="btn-secondary"
+              onClick={handleExportarVehiculos}
+              title="Exportar a Excel los veh\u00edculos visibles seg\u00fan los filtros aplicados"
+              style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}
+            >
+              <Download size={14} /> Exportar
+            </button>
             <button
               className="btn-primary"
               onClick={handleOpenCreateModal}
@@ -2217,6 +2436,32 @@ export function VehicleManagement() {
               </div>
             </div>
 
+            <div className="form-row">
+              <div className="form-group">
+                <label className="form-label">Vencimiento Seguro</label>
+                <input
+                  type="date"
+                  className="form-input"
+                  value={formData.vencimiento_seguro}
+                  onChange={(e) => setFormData({ ...formData, vencimiento_seguro: e.target.value })}
+                  disabled={saving}
+                />
+              </div>
+              <div className="form-group">
+                <label className="form-label">Lugar de Radicación <span style={{ color: '#ef4444' }}>*</span></label>
+                <input
+                  type="text"
+                  className="form-input"
+                  value={formData.lugar_radicacion}
+                  onChange={(e) => setFormData({ ...formData, lugar_radicacion: e.target.value })}
+                  disabled={saving}
+                  required
+                  placeholder="Ciudad / jurisdicción"
+                  style={!formData.lugar_radicacion?.trim() ? { borderColor: '#ef4444' } : {}}
+                />
+              </div>
+            </div>
+
             <div className="section-title">Información Adicional</div>
 
             <div className="form-group">
@@ -2231,6 +2476,121 @@ export function VehicleManagement() {
                 placeholder="Nombre del titular del vehículo"
                 style={!formData.titular?.trim() ? { borderColor: '#ef4444' } : {}}
               />
+            </div>
+
+            <div className="form-row">
+              <div className="form-group">
+                <label className="form-label">Grupo de Flota</label>
+                <input
+                  type="text"
+                  className="form-input"
+                  value={formData.grupo_flota}
+                  onChange={(e) => setFormData({ ...formData, grupo_flota: e.target.value })}
+                  disabled={saving}
+                  placeholder="Ej: Grupo A, Flota Norte, etc."
+                />
+              </div>
+              <div className="form-group">
+                <label className="form-label">Cantidad de llaves de encendido</label>
+                <select
+                  className="form-input"
+                  value={formData.cantidad_llaves}
+                  onChange={(e) => setFormData({ ...formData, cantidad_llaves: e.target.value })}
+                  disabled={saving}
+                >
+                  <option value="">Seleccionar...</option>
+                  <option value="1">1</option>
+                  <option value="2">2</option>
+                </select>
+              </div>
+            </div>
+
+            {/* Vencimientos opcionales (VTV / GNC / Matafuego) */}
+            <div className="form-row">
+              <div className="form-group">
+                <label className="form-label">Vencimiento VTV</label>
+                <select
+                  className="form-input"
+                  value={formData.vto_vtv_aplica ? 'si' : 'no'}
+                  onChange={(e) => setFormData({
+                    ...formData,
+                    vto_vtv_aplica: e.target.value === 'si',
+                    vto_vtv_fecha: e.target.value === 'si' ? formData.vto_vtv_fecha : ''
+                  })}
+                  disabled={saving}
+                >
+                  <option value="no">No</option>
+                  <option value="si">Sí</option>
+                </select>
+              </div>
+              <div className="form-group">
+                <label className="form-label">Fecha VTV</label>
+                <input
+                  type="date"
+                  className="form-input"
+                  value={formData.vto_vtv_fecha}
+                  onChange={(e) => setFormData({ ...formData, vto_vtv_fecha: e.target.value })}
+                  disabled={saving || !formData.vto_vtv_aplica}
+                />
+              </div>
+            </div>
+
+            <div className="form-row">
+              <div className="form-group">
+                <label className="form-label">Vencimiento GNC</label>
+                <select
+                  className="form-input"
+                  value={formData.vto_gnc_aplica ? 'si' : 'no'}
+                  onChange={(e) => setFormData({
+                    ...formData,
+                    vto_gnc_aplica: e.target.value === 'si',
+                    vto_gnc_fecha: e.target.value === 'si' ? formData.vto_gnc_fecha : ''
+                  })}
+                  disabled={saving}
+                >
+                  <option value="no">No</option>
+                  <option value="si">Sí</option>
+                </select>
+              </div>
+              <div className="form-group">
+                <label className="form-label">Fecha GNC</label>
+                <input
+                  type="date"
+                  className="form-input"
+                  value={formData.vto_gnc_fecha}
+                  onChange={(e) => setFormData({ ...formData, vto_gnc_fecha: e.target.value })}
+                  disabled={saving || !formData.vto_gnc_aplica}
+                />
+              </div>
+            </div>
+
+            <div className="form-row">
+              <div className="form-group">
+                <label className="form-label">Vencimiento Matafuego</label>
+                <select
+                  className="form-input"
+                  value={formData.vto_matafuego_aplica ? 'si' : 'no'}
+                  onChange={(e) => setFormData({
+                    ...formData,
+                    vto_matafuego_aplica: e.target.value === 'si',
+                    vto_matafuego_fecha: e.target.value === 'si' ? formData.vto_matafuego_fecha : ''
+                  })}
+                  disabled={saving}
+                >
+                  <option value="no">No</option>
+                  <option value="si">Sí</option>
+                </select>
+              </div>
+              <div className="form-group">
+                <label className="form-label">Fecha Matafuego</label>
+                <input
+                  type="date"
+                  className="form-input"
+                  value={formData.vto_matafuego_fecha}
+                  onChange={(e) => setFormData({ ...formData, vto_matafuego_fecha: e.target.value })}
+                  disabled={saving || !formData.vto_matafuego_aplica}
+                />
+              </div>
             </div>
 
             <div className="form-group">
@@ -2488,6 +2848,51 @@ export function VehicleManagement() {
               <div>
                 <label className="detail-label">TITULAR</label>
                 <div className="detail-value">{selectedVehiculo.titular || 'N/A'}</div>
+              </div>
+              <div>
+                <label className="detail-label">GRUPO DE FLOTA</label>
+                <div className="detail-value">{(selectedVehiculo as any).grupo_flota || 'N/A'}</div>
+              </div>
+              <div>
+                <label className="detail-label">LUGAR DE RADICACIÓN</label>
+                <div className="detail-value">{(selectedVehiculo as any).lugar_radicacion || 'N/A'}</div>
+              </div>
+              <div>
+                <label className="detail-label">CANTIDAD DE LLAVES</label>
+                <div className="detail-value">{(selectedVehiculo as any).cantidad_llaves != null ? (selectedVehiculo as any).cantidad_llaves : 'N/A'}</div>
+              </div>
+              <div>
+                <label className="detail-label">VENCIMIENTO SEGURO</label>
+                <div className="detail-value">{(selectedVehiculo as any).vencimiento_seguro ? new Date((selectedVehiculo as any).vencimiento_seguro).toLocaleDateString('es-AR') : 'N/A'}</div>
+              </div>
+            </div>
+
+            {/* Vencimientos opcionales */}
+            <div className="section-title">Vencimientos</div>
+            <div className="details-grid">
+              <div>
+                <label className="detail-label">VENCIMIENTO VTV</label>
+                <div className="detail-value">
+                  {(selectedVehiculo as any).vto_vtv_aplica
+                    ? `Sí${(selectedVehiculo as any).vto_vtv_fecha ? ` — ${new Date((selectedVehiculo as any).vto_vtv_fecha).toLocaleDateString('es-AR')}` : ''}`
+                    : 'No'}
+                </div>
+              </div>
+              <div>
+                <label className="detail-label">VENCIMIENTO GNC</label>
+                <div className="detail-value">
+                  {(selectedVehiculo as any).vto_gnc_aplica
+                    ? `Sí${(selectedVehiculo as any).vto_gnc_fecha ? ` — ${new Date((selectedVehiculo as any).vto_gnc_fecha).toLocaleDateString('es-AR')}` : ''}`
+                    : 'No'}
+                </div>
+              </div>
+              <div>
+                <label className="detail-label">VENCIMIENTO MATAFUEGO</label>
+                <div className="detail-value">
+                  {(selectedVehiculo as any).vto_matafuego_aplica
+                    ? `Sí${(selectedVehiculo as any).vto_matafuego_fecha ? ` — ${new Date((selectedVehiculo as any).vto_matafuego_fecha).toLocaleDateString('es-AR')}` : ''}`
+                    : 'No'}
+                </div>
               </div>
             </div>
 

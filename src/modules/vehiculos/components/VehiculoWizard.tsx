@@ -30,6 +30,16 @@ interface VehiculoFormData {
   notas: string
   url_documentacion: string
   sede_id: string
+  grupo_flota: string
+  cantidad_llaves: string // '1' | '2' | ''
+  lugar_radicacion: string
+  vencimiento_seguro: string
+  vto_vtv_aplica: boolean
+  vto_vtv_fecha: string
+  vto_gnc_aplica: boolean
+  vto_gnc_fecha: string
+  vto_matafuego_aplica: boolean
+  vto_matafuego_fecha: string
 }
 
 interface VehiculoWizardProps {
@@ -103,6 +113,13 @@ export function VehiculoWizard({
       }
       if (!formData.numero_chasis.trim()) {
         newErrors.numero_chasis = 'El número de chasis es requerido'
+      }
+    }
+
+    if (stepIndex === 4) {
+      // Paso 5: Seguro / Información Adicional - lugar de radicación es requerido
+      if (!formData.lugar_radicacion.trim()) {
+        newErrors.lugar_radicacion = 'El lugar de radicación es requerido'
       }
     }
 
@@ -539,6 +556,33 @@ export function VehiculoWizard({
               </div>
             </div>
 
+            <div className="form-row">
+              <div className="form-group">
+                <label className="form-label">Vencimiento Seguro</label>
+                <input
+                  type="date"
+                  className="form-input"
+                  value={formData.vencimiento_seguro}
+                  onChange={(e) => setFormData({ ...formData, vencimiento_seguro: e.target.value })}
+                  disabled={saving}
+                />
+              </div>
+
+              <div className="form-group">
+                <label className="form-label">Lugar de Radicación <span style={{ color: '#ef4444' }}>*</span></label>
+                <input
+                  type="text"
+                  className="form-input"
+                  value={formData.lugar_radicacion}
+                  onChange={(e) => setFormData({ ...formData, lugar_radicacion: e.target.value })}
+                  disabled={saving}
+                  required
+                  placeholder="Ciudad / jurisdicción"
+                  style={!formData.lugar_radicacion?.trim() ? { borderColor: '#ef4444' } : {}}
+                />
+              </div>
+            </div>
+
             <div className="form-group">
               <label className="form-label">Titular <span style={{ color: '#ef4444' }}>*</span></label>
               <input
@@ -551,6 +595,122 @@ export function VehiculoWizard({
                 placeholder="Nombre del titular del vehículo"
                 style={!formData.titular?.trim() ? { borderColor: '#ef4444' } : {}}
               />
+            </div>
+
+            <div className="form-row">
+              <div className="form-group">
+                <label className="form-label">Grupo de Flota</label>
+                <input
+                  type="text"
+                  className="form-input"
+                  value={formData.grupo_flota}
+                  onChange={(e) => setFormData({ ...formData, grupo_flota: e.target.value })}
+                  disabled={saving}
+                  placeholder="Ej: Grupo A, Flota Norte, etc."
+                />
+              </div>
+
+              <div className="form-group">
+                <label className="form-label">Cantidad de llaves de encendido</label>
+                <select
+                  className="form-input"
+                  value={formData.cantidad_llaves}
+                  onChange={(e) => setFormData({ ...formData, cantidad_llaves: e.target.value })}
+                  disabled={saving}
+                >
+                  <option value="">Seleccionar...</option>
+                  <option value="1">1</option>
+                  <option value="2">2</option>
+                </select>
+              </div>
+            </div>
+
+            {/* Vencimientos opcionales: VTV / GNC / Matafuego (Si/No + fecha si aplica) */}
+            <div className="form-row">
+              <div className="form-group">
+                <label className="form-label">Vencimiento VTV</label>
+                <select
+                  className="form-input"
+                  value={formData.vto_vtv_aplica ? 'si' : 'no'}
+                  onChange={(e) => setFormData({
+                    ...formData,
+                    vto_vtv_aplica: e.target.value === 'si',
+                    vto_vtv_fecha: e.target.value === 'si' ? formData.vto_vtv_fecha : ''
+                  })}
+                  disabled={saving}
+                >
+                  <option value="no">No</option>
+                  <option value="si">Sí</option>
+                </select>
+              </div>
+              <div className="form-group">
+                <label className="form-label">Fecha VTV</label>
+                <input
+                  type="date"
+                  className="form-input"
+                  value={formData.vto_vtv_fecha}
+                  onChange={(e) => setFormData({ ...formData, vto_vtv_fecha: e.target.value })}
+                  disabled={saving || !formData.vto_vtv_aplica}
+                />
+              </div>
+            </div>
+
+            <div className="form-row">
+              <div className="form-group">
+                <label className="form-label">Vencimiento GNC</label>
+                <select
+                  className="form-input"
+                  value={formData.vto_gnc_aplica ? 'si' : 'no'}
+                  onChange={(e) => setFormData({
+                    ...formData,
+                    vto_gnc_aplica: e.target.value === 'si',
+                    vto_gnc_fecha: e.target.value === 'si' ? formData.vto_gnc_fecha : ''
+                  })}
+                  disabled={saving}
+                >
+                  <option value="no">No</option>
+                  <option value="si">Sí</option>
+                </select>
+              </div>
+              <div className="form-group">
+                <label className="form-label">Fecha GNC</label>
+                <input
+                  type="date"
+                  className="form-input"
+                  value={formData.vto_gnc_fecha}
+                  onChange={(e) => setFormData({ ...formData, vto_gnc_fecha: e.target.value })}
+                  disabled={saving || !formData.vto_gnc_aplica}
+                />
+              </div>
+            </div>
+
+            <div className="form-row">
+              <div className="form-group">
+                <label className="form-label">Vencimiento Matafuego</label>
+                <select
+                  className="form-input"
+                  value={formData.vto_matafuego_aplica ? 'si' : 'no'}
+                  onChange={(e) => setFormData({
+                    ...formData,
+                    vto_matafuego_aplica: e.target.value === 'si',
+                    vto_matafuego_fecha: e.target.value === 'si' ? formData.vto_matafuego_fecha : ''
+                  })}
+                  disabled={saving}
+                >
+                  <option value="no">No</option>
+                  <option value="si">Sí</option>
+                </select>
+              </div>
+              <div className="form-group">
+                <label className="form-label">Fecha Matafuego</label>
+                <input
+                  type="date"
+                  className="form-input"
+                  value={formData.vto_matafuego_fecha}
+                  onChange={(e) => setFormData({ ...formData, vto_matafuego_fecha: e.target.value })}
+                  disabled={saving || !formData.vto_matafuego_aplica}
+                />
+              </div>
             </div>
 
             <div className="form-group">

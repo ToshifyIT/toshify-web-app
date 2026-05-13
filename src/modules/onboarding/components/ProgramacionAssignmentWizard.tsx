@@ -1123,7 +1123,8 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
         updates.tipo_candidato_cargo = tipo
         if (!isDevolucionOCambio) {
           const defaults = getDefaultsPorCandidato(tipo)
-          updates.tipo_asignacion_cargo = defaults.asignacion
+          // En modalidad A Cargo "asignacion_companero" no aplica → caer a "entrega_auto".
+          updates.tipo_asignacion_cargo = defaults.asignacion === 'asignacion_companero' ? 'entrega_auto' : defaults.asignacion
           updates.documento_cargo = defaults.documento
         }
         changed = true
@@ -3745,7 +3746,7 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
                           >
                             <option value="">Seleccionar...</option>
                             <option value="entrega_auto">Entrega de auto</option>
-                            <option value="asignacion_companero">Asignacion companero</option>
+                            {/* "Asignacion companero" no aplica en modalidad A Cargo (asignación permanente sin compañero) */}
                             {formData.cambio_vehiculo && <option value="cambio_auto">Cambio de auto</option>}
                             <option value="cambio_turno">Cambio de turno</option>
                             {formData.devolucion_vehiculo && <option value="devolucion_vehiculo">Devolucion vehiculo</option>}
