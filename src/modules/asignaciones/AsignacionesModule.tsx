@@ -273,14 +273,23 @@ export function AsignacionesModule() {
   async function handleSubmitControl() {
     if (!controlAsignacion) return
 
-    // Obtener los conductores de la asignación
-    const conductoresAsig = controlAsignacion.asignaciones_conductores?.map(ac => ({
+    // Obtener los conductores de la asignación (todos, para referencia)
+    const todosLosConductores = controlAsignacion.asignaciones_conductores?.map(ac => ({
       id: (ac as any).conductores?.id || ac.conductor_id,
       nombre: `${(ac as any).conductores?.nombres || ''} ${(ac as any).conductores?.apellidos || ''}`.trim(),
       horario: ac.horario,
+      documento: String((ac as any).documento || '').toUpperCase(),
     })).filter(c => c.id && c.nombre) || []
 
-    if (conductoresAsig.length === 0) return
+    // Solo procesar los que tienen contrato (CARTA_OFERTA o ANEXO).
+    // Omitir N/A: la asignación queda intacta, pero el backend no genera nada para ellos.
+    const conductoresAsig = todosLosConductores.filter(c => c.documento !== 'N/A' && c.documento !== 'NA' && c.documento !== '')
+    const conductoresOmitidos = todosLosConductores.filter(c => !conductoresAsig.some(p => p.id === c.id))
+
+    if (conductoresAsig.length === 0) {
+      Swal.fire('Sin conductores procesables', 'Todos los conductores de esta asignación tienen documento marcado como N/A. No hay nada que generar.', 'info')
+      return
+    }
 
     // Validar que todos los campos visibles estén completos
     const camposBase = [controlForm.km, controlForm.ltnafta, controlForm.observations]
@@ -294,12 +303,21 @@ export function AsignacionesModule() {
     }
 
     const cantConductores = conductoresAsig.length
+    const listaProcesados = conductoresAsig.map(c => `<li><b>${c.nombre}</b> (${c.documento})</li>`).join('')
+    const listaOmitidos = conductoresOmitidos.length > 0
+      ? `<div style="margin-top:10px;padding:8px;background:#fef3c7;border-left:3px solid #f59e0b;border-radius:4px;text-align:left;font-size:13px"><b>Se omitirán</b> (documento N/A):<ul style="margin:4px 0 0 18px;padding:0">${conductoresOmitidos.map(c => `<li>${c.nombre}</li>`).join('')}</ul></div>`
+      : ''
     const confirmacion = await Swal.fire({
       icon: 'warning',
-      title: 'Confirmar generacion',
-      text: cantConductores > 1
-        ? `Se generará el documento de control para los ${cantConductores} conductores asignados. Tenga en cuenta que despues de guardar estos datos ya no se podra revertir ni editar los documentos generados.`
-        : 'Tenga en cuenta que despues de guardar estos datos ya no se podra revertir ni editar el documento generado.',
+      title: 'Confirmar generación',
+      html: `
+        <div style="text-align:left;font-size:13px">
+          <p style="margin:0 0 6px 0">Se generará el documento de control para:</p>
+          <ul style="margin:0 0 0 18px;padding:0">${listaProcesados}</ul>
+          ${listaOmitidos}
+          <p style="margin-top:12px;color:#6b7280;font-size:12px">Después de guardar, los documentos generados no se podrán revertir ni editar.</p>
+        </div>
+      `,
       showCancelButton: true,
       confirmButtonText: cantConductores > 1 ? `Generar ${cantConductores} Documentos` : 'Generar Documento',
       cancelButtonText: 'Cancelar',
