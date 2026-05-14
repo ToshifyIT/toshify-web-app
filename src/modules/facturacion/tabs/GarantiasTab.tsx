@@ -76,6 +76,12 @@ export function GarantiasTab() {
   const [conductorSearch, setConductorSearch] = useState('')
   const [estadoFilter, setEstadoFilter] = useState<string[]>([])
   const [estadoCondFilter, setEstadoCondFilter] = useState<'todos' | 'activo' | 'baja'>('todos')
+  // Búsqueda global del DataTable controlada para reflejarla en "Exportar Registros"
+  const [garantiasGlobalSearch, setGarantiasGlobalSearch] = useState('')
+  // Ref con las filas EXACTAMENTE visibles en la tabla (después de TODOS los filtros internos
+  // del DataTable: Excel, fechas, números y búsqueda global). El DataTable la actualiza vía
+  // su prop `onFilteredDataChange`. La usamos en "Exportar Registros".
+  const garantiasVisiblesRef = useRef<any[]>([])
   const [asignadoFilter, setAsignadoFilter] = useState<'todos' | 'asignado' | 'no_asignado'>('todos')
   const [conductoresAsignados, setConductoresAsignados] = useState<Set<string>>(new Set())
 
@@ -905,6 +911,56 @@ export function GarantiasTab() {
     showSuccess('Exportado correctamente')
   }
 
+  // ====== EXPORTAR REGISTROS VISIBLES EN LA TABLA ======
+  // Toma EXACTAMENTE las filas que están visibles en la tabla en este momento.
+  // El DataTable nos avisa vía `onFilteredDataChange` y guardamos la lista en una ref.
+  // Esto cubre TODOS los filtros: módulo (pills, ExcelColumnFilter) + DataTable interno
+  // (filtros numéricos como "Días Baja", fechas, búsqueda global, etc).
+  function exportarRegistrosVisibles() {
+    const registros = (garantiasVisiblesRef.current || []) as typeof garantias
+
+    if (registros.length === 0) {
+      Swal.fire('Sin datos', 'No hay garantías visibles para exportar con los filtros actuales', 'info')
+      return
+    }
+
+    const data = registros.map((g) => ({
+      'DNI': g.conductor_dni || '',
+      'Conductor': g.conductor_nombre || '',
+      'Estado Conductor': ((g as any).estado_conductor || '').toString(),
+      'Estado Garantía': g.estado || '',
+      'Días Baja': (g as any).fecha_baja
+        ? Math.max(0, Math.floor((Date.now() - new Date((g as any).fecha_baja).getTime()) / 86_400_000))
+        : '',
+      'Monto Total': g.monto_total,
+      'Monto Pagado': g.monto_pagado,
+      'Monto Pendiente': (Number(g.monto_total) || 0) - (Number(g.monto_pagado) || 0),
+      'Cuotas Totales': g.cuotas_totales,
+      'Cuotas Pagadas': g.cuotas_pagadas,
+    }))
+
+    const ws = XLSX.utils.json_to_sheet(data)
+    ws['!cols'] = [
+      { wch: 14 }, // DNI
+      { wch: 35 }, // Conductor
+      { wch: 16 }, // Estado Conductor
+      { wch: 16 }, // Estado Garantía
+      { wch: 10 }, // Días Baja
+      { wch: 14 }, // Monto Total
+      { wch: 14 }, // Monto Pagado
+      { wch: 16 }, // Monto Pendiente
+      { wch: 14 }, // Cuotas Totales
+      { wch: 14 }, // Cuotas Pagadas
+    ]
+
+    const wb = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(wb, ws, 'Garantias')
+
+    const fecha = new Date().toISOString().slice(0, 10)
+    XLSX.writeFile(wb, `Garantias_Registros_${fecha}.xlsx`)
+    showSuccess(`Exportados ${registros.length} registros`)
+  }
+
   // ====== SINCRONIZAR GARANTÍAS (recalc retroactivo) ======
   // Recuenta cuotas a partir de facturacion_conductores con subtotal_garantia > 0
   // en períodos cerrados. Idempotente. Usado para corregir desfasajes históricos
@@ -1679,15 +1735,26 @@ export function GarantiasTab() {
           {/* Header (filtro removido - se usan los filtros de columna) */}
           <div className="fact-header">
             <div className="fact-header-left">
-              {(isAdmin() || isAdministrativo()) && (
-                <div style={{ display: 'flex', gap: '6px' }}>
+              {/* "Exportar Registros" y "Sincronizar" disponibles para cualquier usuario con acceso.
+                  "Exportar" (todo) e "Importar" son acciones administrativas → solo admin. */}
+              <div style={{ display: 'flex', gap: '6px' }}>
+                {isAdmin() && (
                   <button
                     className="fact-btn fact-btn-secondary"
                     onClick={exportarGarantias}
-                    title="Exportar garantias a Excel"
+                    title="Exportar TODAS las garantías a Excel (sin aplicar filtros)"
                   >
                     <Download size={14} /> Exportar
                   </button>
+                )}
+                <button
+                  className="fact-btn fact-btn-secondary"
+                  onClick={exportarRegistrosVisibles}
+                  title="Exportar a Excel solo las garantías visibles en la tabla, respetando todos los filtros aplicados"
+                >
+                  <Download size={14} /> Exportar Registros
+                </button>
+                {isAdmin() && (
                   <button
                     className="fact-btn fact-btn-primary"
                     onClick={() => fileInputRef.current?.click()}
@@ -1695,15 +1762,15 @@ export function GarantiasTab() {
                   >
                     <Upload size={14} /> Importar
                   </button>
-                  <button
-                    className="fact-btn fact-btn-secondary"
-                    onClick={sincronizarGarantias}
-                    title="Recalcula cuotas pagadas a partir de la facturación cerrada"
-                  >
-                    <RefreshCw size={14} /> Sincronizar
-                  </button>
-                </div>
-              )}
+                )}
+                <button
+                  className="fact-btn fact-btn-secondary"
+                  onClick={sincronizarGarantias}
+                  title="Recalcula cuotas pagadas a partir de la facturación cerrada"
+                >
+                  <RefreshCw size={14} /> Sincronizar
+                </button>
+              </div>
             </div>
             <div className="fact-header-right" style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
               <div style={{ display: 'flex', gap: '2px', background: 'var(--bg-secondary)', borderRadius: '6px', padding: '2px' }}>
@@ -1808,6 +1875,9 @@ export function GarantiasTab() {
             columns={columnsGarantias}
             loading={loading}
             searchPlaceholder="Buscar por nombre, apellido, DNI o CUIT..."
+            globalFilter={garantiasGlobalSearch}
+            onGlobalFilterChange={setGarantiasGlobalSearch}
+            onFilteredDataChange={(rows) => { garantiasVisiblesRef.current = rows as any[] }}
             emptyIcon={<Shield size={48}
           />}
             emptyTitle="Sin garantías"
