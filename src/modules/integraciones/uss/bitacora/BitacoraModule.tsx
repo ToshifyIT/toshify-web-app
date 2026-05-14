@@ -91,6 +91,8 @@ export function BitacoraModule() {
           searchTerm={searchTerm}
           onSearchChange={handleSearchChange}
           headerControls={headerControls}
+          semanaInicio={dateRange.startDate}
+          semanaFin={dateRange.endDate}
           onUpdateChecklist={updateChecklist}
         />
       )}

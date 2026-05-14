@@ -1260,128 +1260,120 @@ export default function MultasModule() {
           </table>
         )
 
+        // Layout unificado: SIEMPRE vista grande (PDF a la izq + detalles a la der).
+        // Cuando no hay PDF en Drive, el panel izquierdo muestra un placeholder.
+        const btnBase: React.CSSProperties = {
+          height: '40px',
+          padding: '0 14px',
+          display: 'inline-flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          gap: '6px',
+          fontSize: '13px',
+          fontWeight: 600,
+          borderRadius: '6px',
+          border: '1px solid transparent',
+          cursor: 'pointer',
+          lineHeight: 1,
+          whiteSpace: 'nowrap',
+          margin: 0
+        }
+        const btnPrimary: React.CSSProperties = { ...btnBase, background: '#ef4444', color: '#fff', borderColor: '#ef4444' }
+        const btnGreen: React.CSSProperties = { ...btnBase, background: '#10b981', color: '#fff', borderColor: '#10b981' }
+        const btnSecondary: React.CSSProperties = { ...btnBase, background: 'transparent', color: 'inherit', borderColor: 'rgba(148,163,184,0.4)' }
+        const btnDisabled: React.CSSProperties = { ...btnSecondary, opacity: 0.4, cursor: 'not-allowed' }
+
         return (
         <div className="multas-modal-overlay" onClick={() => setShowModal(false)}>
           <div
             className="multas-modal-container"
             onClick={e => e.stopPropagation()}
-            style={hasPdf
-              ? { maxWidth: '1300px', width: '90vw', height: '88vh', display: 'flex', flexDirection: 'column' }
-              : { maxWidth: '550px' }}
+            style={{ maxWidth: '1300px', width: '90vw', height: '88vh', display: 'flex', flexDirection: 'column' }}
           >
             <div className="multas-modal-header">
               <h2 className="multas-modal-title">
-                Detalle de Multa{hasPdf && selectedMulta.patente ? ` — ${selectedMulta.patente}` : ''}
+                Detalle de Multa{selectedMulta.patente ? ` — ${selectedMulta.patente}` : ''}
               </h2>
               <button className="multas-modal-close" onClick={() => setShowModal(false)}>
                 <X size={18} />
               </button>
             </div>
-            {hasPdf ? (
-              <div style={{ display: 'flex', flex: 1, minHeight: 0, overflow: 'hidden' }}>
-                <div style={{ flex: '1 1 65%', borderRight: '1px solid rgba(148,163,184,0.2)', minWidth: 0, padding: '16px', background: 'rgba(15,23,42,0.4)' }}>
+            <div style={{ display: 'flex', flex: 1, minHeight: 0, overflow: 'hidden' }}>
+              <div style={{ flex: '1 1 65%', borderRight: '1px solid rgba(148,163,184,0.2)', minWidth: 0, padding: '16px', background: 'rgba(15,23,42,0.4)' }}>
+                {hasPdf ? (
                   <iframe
                     src={`https://drive.google.com/file/d/${driveFileId}/preview`}
                     title="PDF de la multa"
                     style={{ width: '100%', height: '100%', border: 'none', display: 'block', borderRadius: '8px', background: '#fff' }}
                     allow="autoplay"
                   />
-                </div>
-                <div style={{ flex: '1 1 35%', minWidth: '340px', display: 'flex', flexDirection: 'column', minHeight: 0 }}>
-                  <div style={{ flex: 1, overflowY: 'auto', padding: '20px' }}>
-                    {detailsTable}
+                ) : (
+                  <div style={{
+                    width: '100%', height: '100%', borderRadius: '8px',
+                    background: 'rgba(255,255,255,0.04)', border: '1px dashed rgba(148,163,184,0.4)',
+                    display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+                    gap: '12px', color: 'rgba(148,163,184,0.9)', padding: '32px', textAlign: 'center',
+                  }}>
+                    <FileText size={48} style={{ opacity: 0.4 }} />
+                    <div style={{ fontSize: '15px', fontWeight: 600 }}>Sin PDF disponible</div>
+                    <div style={{ fontSize: '12px', maxWidth: '320px', lineHeight: 1.5, opacity: 0.7 }}>
+                      Esta multa no tiene un PDF asociado en Drive. Podés editarla para cargar uno o continuar con los datos disponibles.
+                    </div>
                   </div>
-                  {(() => {
-                    const btnBase: React.CSSProperties = {
-                      height: '40px',
-                      padding: '0 14px',
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      gap: '6px',
-                      fontSize: '13px',
-                      fontWeight: 600,
-                      borderRadius: '6px',
-                      border: '1px solid transparent',
-                      cursor: 'pointer',
-                      lineHeight: 1,
-                      whiteSpace: 'nowrap',
-                      margin: 0
-                    }
-                    const btnPrimary: React.CSSProperties = { ...btnBase, background: '#ef4444', color: '#fff', borderColor: '#ef4444' }
-                    const btnGreen: React.CSSProperties = { ...btnBase, background: '#10b981', color: '#fff', borderColor: '#10b981' }
-                    const btnSecondary: React.CSSProperties = { ...btnBase, background: 'transparent', color: 'inherit', borderColor: 'rgba(148,163,184,0.4)' }
-                    return (
-                      <div style={{
-                        padding: '16px 20px',
-                        borderTop: '1px solid rgba(148,163,184,0.2)',
-                        display: 'grid',
-                        gridTemplateColumns: '1fr 1fr',
-                        gap: '8px'
-                      }}>
-                        <button
-                          onClick={() => window.open(selectedMulta.drive_url!, '_blank', 'noopener,noreferrer')}
-                          style={btnGreen}
-                        >
-                          <FileText size={14} />
-                          Abrir en Drive
-                        </button>
-                        <button
-                          onClick={() => window.open(`https://drive.google.com/uc?export=download&id=${driveFileId}`, '_blank', 'noopener,noreferrer')}
-                          style={btnSecondary}
-                        >
-                          <Download size={14} />
-                          Descargar
-                        </button>
-                        <button
-                          onClick={() => { setShowModal(false); editarMulta(selectedMulta); }}
-                          style={btnPrimary}
-                        >
-                          <Edit2 size={14} />
-                          Editar
-                        </button>
-                        <button
-                          onClick={() => { setShowModal(false); handleCrearCobroDirecto(selectedMulta); }}
-                          style={btnGreen}
-                        >
-                          <Receipt size={14} />
-                          Crear Cobro
-                        </button>
-                        <button
-                          onClick={() => setShowModal(false)}
-                          style={{ ...btnSecondary, gridColumn: '1 / -1' }}
-                        >
-                          Cerrar
-                        </button>
-                      </div>
-                    )
-                  })()}
-                </div>
+                )}
               </div>
-            ) : (
-              <>
-                <div className="multas-modal-body">
+              <div style={{ flex: '1 1 35%', minWidth: '340px', display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+                <div style={{ flex: 1, overflowY: 'auto', padding: '20px' }}>
                   {detailsTable}
                 </div>
-                <div className="multas-modal-footer">
-                  <button className="multas-btn-primary" onClick={() => { setShowModal(false); editarMulta(selectedMulta); }}>
-                    <Edit2 size={14} style={{ marginRight: '6px' }} />
+                <div style={{
+                  padding: '16px 20px',
+                  borderTop: '1px solid rgba(148,163,184,0.2)',
+                  display: 'grid',
+                  gridTemplateColumns: '1fr 1fr',
+                  gap: '8px'
+                }}>
+                  <button
+                    onClick={() => hasPdf && window.open(selectedMulta.drive_url!, '_blank', 'noopener,noreferrer')}
+                    disabled={!hasPdf}
+                    style={hasPdf ? btnGreen : btnDisabled}
+                    title={hasPdf ? 'Abrir PDF en Drive' : 'Sin PDF disponible'}
+                  >
+                    <FileText size={14} />
+                    Abrir en Drive
+                  </button>
+                  <button
+                    onClick={() => hasPdf && window.open(`https://drive.google.com/uc?export=download&id=${driveFileId}`, '_blank', 'noopener,noreferrer')}
+                    disabled={!hasPdf}
+                    style={hasPdf ? btnSecondary : btnDisabled}
+                    title={hasPdf ? 'Descargar PDF' : 'Sin PDF disponible'}
+                  >
+                    <Download size={14} />
+                    Descargar
+                  </button>
+                  <button
+                    onClick={() => { setShowModal(false); editarMulta(selectedMulta); }}
+                    style={btnPrimary}
+                  >
+                    <Edit2 size={14} />
                     Editar
                   </button>
                   <button
-                    className="multas-btn-primary"
-                    style={{ background: '#10b981', borderColor: '#10b981' }}
                     onClick={() => { setShowModal(false); handleCrearCobroDirecto(selectedMulta); }}
+                    style={btnGreen}
                   >
-                    <Receipt size={14} style={{ marginRight: '6px' }} />
+                    <Receipt size={14} />
                     Crear Cobro
                   </button>
-                  <button className="multas-btn-secondary" onClick={() => setShowModal(false)}>
+                  <button
+                    onClick={() => setShowModal(false)}
+                    style={{ ...btnSecondary, gridColumn: '1 / -1' }}
+                  >
                     Cerrar
                   </button>
                 </div>
-              </>
-            )}
+              </div>
+            </div>
           </div>
         </div>
         )
