@@ -543,6 +543,13 @@ export interface DataTableProps<T> {
   globalFilter?: string;
   /** Callback al cambiar el filtro global (modo controlado) */
   onGlobalFilterChange?: (value: string) => void;
+  /**
+   * Callback opcional que se dispara cada vez que cambian las filas visibles tras
+   * aplicar TODOS los filtros internos (columna Excel, fechas, números, búsqueda global).
+   * Permite a un módulo padre conocer "lo que el usuario realmente ve en la tabla" —
+   * útil para acciones tipo "Exportar lo visible". No tiene efecto si no se pasa.
+   */
+  onFilteredDataChange?: (rows: T[]) => void;
   /** Habilita paginación del lado del servidor */
   manualPagination?: boolean;
   /** Total de registros en el servidor (requerido si manualPagination=true) */
@@ -580,6 +587,7 @@ export function DataTable<T>({
   globalFilterFn: customGlobalFilterFn,
   globalFilter: controlledGlobalFilter,
   onGlobalFilterChange: setControlledGlobalFilter,
+  onFilteredDataChange,
   manualPagination = false,
   rowCount,
   pageIndex: controlledPageIndex,
@@ -1262,6 +1270,18 @@ export function DataTable<T>({
       onTableReady(table);
     }
   }, [table, onTableReady]);
+
+  // Notificar al padre cuando cambian las filas visibles tras aplicar TODOS los filtros
+  // (columna Excel, fechas, números y búsqueda global). Solo se ejecuta si el padre
+  // pasa `onFilteredDataChange`; en caso contrario es no-op.
+  const visibleRows = table.getFilteredRowModel().rows;
+  useEffect(() => {
+    if (!onFilteredDataChange) return;
+    onFilteredDataChange(visibleRows.map(r => r.original));
+    // visibleRows es estable mientras no cambien filtros/datos; depender directamente
+    // de él es suficiente para que el callback solo dispare en cambios reales.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [visibleRows, onFilteredDataChange]);
 
   // Map de columnas con size REAL (definido por el usuario, no el default 150 de TanStack)
   const userColumnSizes = useMemo(() => {
