@@ -1408,43 +1408,49 @@ app.post('/api/complete-control', async (req, res) => {
       return res.status(400).json({ error: 'KM y LTNAFTA son obligatorios' })
     }
 
-    // 1. Buscar el documento generado para este conductor
-    // Si hay asignacion_id, buscar por programacion_id de esa asignacion para encontrar el documento correcto
+    // 1. Buscar el documento generado para este conductor en la programación correcta
     const supabaseUrl = process.env.VITE_SUPABASE_URL
     const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+    const authHeaders = { apikey: serviceKey, Authorization: `Bearer ${serviceKey}` }
 
-    let docQueryUrl = `${supabaseUrl}/rest/v1/documentos_generados?conductor_id=eq.${conductor_id}&google_doc_id=not.is.null&order=created_at.desc&limit=1`
-
-    if (asignacion_id) {
-      // Obtener programacion_id de la asignacion
-      const asigQuery = await fetch(
-        `${supabaseUrl}/rest/v1/asignaciones?id=eq.${asignacion_id}&select=programacion_id`,
-        {
-          headers: {
-            'apikey': serviceKey,
-            'Authorization': `Bearer ${serviceKey}`
-          }
-        }
-      )
-      const asigData = await asigQuery.json()
-      if (asigData && asigData.length > 0 && asigData[0].programacion_id) {
-        const progId = asigData[0].programacion_id
-        docQueryUrl = `${supabaseUrl}/rest/v1/documentos_generados?conductor_id=eq.${conductor_id}&programacion_id=eq.${progId}&google_doc_id=not.is.null&order=created_at.desc&limit=1`
-        console.log(`[Control] Buscando documento por programacion_id=${progId} y conductor_id=${conductor_id}`)
-      } else {
-        console.log(`[Control] No se encontro programacion_id para asignacion ${asignacion_id}, buscando por conductor_id solamente`)
-      }
+    if (!asignacion_id) {
+      return res.status(400).json({ error: 'Falta campo requerido: asignacion_id' })
     }
 
-    const docQuery = await fetch(docQueryUrl, {
-      headers: {
-        'apikey': serviceKey,
-        'Authorization': `Bearer ${serviceKey}`
-      }
-    })
+    // 1.a — Defensa en profundidad: si el `documento` de este conductor en la asignación es
+    // N/A, no aplica generar nada. Devolvemos OK con skipped:true para que el frontend
+    // pueda continuar con los otros conductores sin romper el flujo.
+    const acQuery = await fetch(
+      `${supabaseUrl}/rest/v1/asignaciones_conductores?asignacion_id=eq.${asignacion_id}&conductor_id=eq.${conductor_id}&select=documento`,
+      { headers: authHeaders }
+    )
+    const acData = await acQuery.json()
+    const documentoAC = String((Array.isArray(acData) && acData[0]?.documento) || '').toUpperCase().trim()
+    if (documentoAC === 'N/A' || documentoAC === 'NA' || documentoAC === '') {
+      console.log(`[Control] Conductor ${conductor_id} tiene documento "${documentoAC || '(vacío)'}" en la asignación — se omite (no aplica generar contrato).`)
+      return res.json({ success: true, skipped: true, reason: 'documento_na' })
+    }
+
+    // 1.b — Buscar la programación origen vía la FK inversa (programaciones_onboarding.asignacion_id).
+    // OJO: `asignaciones` NO tiene columna `programacion_id`. La relación es solo desde la programación.
+    const progQuery = await fetch(
+      `${supabaseUrl}/rest/v1/programaciones_onboarding?asignacion_id=eq.${asignacion_id}&select=id&limit=1`,
+      { headers: authHeaders }
+    )
+    const progData = await progQuery.json()
+    const progId = (Array.isArray(progData) && progData[0]?.id) || null
+    if (!progId) {
+      return res.status(404).json({ error: 'La asignación no tiene programación origen registrada. No se puede determinar el contrato correspondiente.' })
+    }
+
+    // 1.c — Buscar el documento de ESTE conductor en ESTA programación (sin fallback peligroso).
+    const docQueryUrl = `${supabaseUrl}/rest/v1/documentos_generados?conductor_id=eq.${conductor_id}&programacion_id=eq.${progId}&google_doc_id=not.is.null&limit=1`
+    console.log(`[Control] Buscando documento programacion_id=${progId} conductor_id=${conductor_id}`)
+
+    const docQuery = await fetch(docQueryUrl, { headers: authHeaders })
     const docs = await docQuery.json()
     if (!docs || docs.length === 0) {
-      return res.status(404).json({ error: 'No se encontró documento generado para este conductor. Primero debe generarse el contrato desde Programaciones.' })
+      return res.status(404).json({ error: 'No se encontró documento generado para este conductor en la programación. Primero debe generarse el contrato desde Programaciones.' })
     }
 
     const docRecord = docs[0]
