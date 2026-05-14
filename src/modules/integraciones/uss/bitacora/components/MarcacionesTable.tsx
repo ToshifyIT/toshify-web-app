@@ -12,6 +12,7 @@ import { Search, ClipboardList, Download, ChevronDown, Fuel, Droplets, Sun, Moon
 import type { Marcacion } from '../hooks/useUSSHistoricoData';
 import { normalizePatente } from '../../../../../utils/normalizeDocuments';
 import * as XLSX from 'xlsx';
+import { PatenteDetalleDrawer } from './PatenteDetalleDrawer';
 
 interface MarcacionesTableProps {
   marcaciones: Marcacion[];
@@ -19,6 +20,9 @@ interface MarcacionesTableProps {
   searchTerm: string;
   onSearchChange: (term: string) => void;
   headerControls?: React.ReactNode;
+  /** Rango semanal visible — usado para el drawer de detalle de patente */
+  semanaInicio?: string;
+  semanaFin?: string;
   onUpdateChecklist: (id: string, updates: {
     gnc_cargado?: boolean;
     lavado_realizado?: boolean;
@@ -107,6 +111,8 @@ export function MarcacionesTable({
   searchTerm,
   onSearchChange,
   headerControls,
+  semanaInicio,
+  semanaFin,
   onUpdateChecklist,
 }: MarcacionesTableProps) {
   const { openFilterId, setOpenFilterId } = useExcelFilters();
@@ -119,6 +125,8 @@ export function MarcacionesTable({
   const [turnoFilter, setTurnoFilter] = useState<string[]>([]);
   // Quick filter por proveedor GPS
   const [gpsFilter, setGpsFilter] = useState<'USS' | 'GEOTAB' | null>(null);
+  // Marcación seleccionada para ver detalle de trips USS por patente
+  const [detalleMarcacion, setDetalleMarcacion] = useState<Marcacion | null>(null);
 
   // Conteos por proveedor GPS (sobre el universo cargado, no afectado por otros filtros)
   const gpsCounts = useMemo(() => {
@@ -239,9 +247,28 @@ export function MarcacionesTable({
       accessorFn: (row) => row.patenteNormalizada || row.patente.replace(/\s/g, ''),
       header: 'Patente',
       cell: ({ row }) => (
-        <span style={{ fontFamily: 'monospace', fontSize: '11px', color: 'var(--color-primary)', fontWeight: 600, background: 'var(--bg-secondary)', padding: '2px 6px', borderRadius: '3px', whiteSpace: 'nowrap' }}>
+        <button
+          type="button"
+          onClick={() => setDetalleMarcacion(row.original)}
+          title="Ver detalle de trips de esta patente en la semana"
+          style={{
+            fontFamily: 'monospace', fontSize: '11px', color: 'var(--color-primary)',
+            fontWeight: 600, background: 'var(--bg-secondary)', padding: '2px 6px',
+            borderRadius: '3px', whiteSpace: 'nowrap',
+            border: '1px dashed transparent', cursor: 'pointer',
+            transition: 'all 0.15s',
+          }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.borderColor = 'var(--color-primary)'
+            e.currentTarget.style.background = 'rgba(220, 38, 38, 0.08)'
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.borderColor = 'transparent'
+            e.currentTarget.style.background = 'var(--bg-secondary)'
+          }}
+        >
           {row.original.patenteNormalizada || row.original.patente.replace(/\s/g, '')}
-        </span>
+        </button>
       ),
       enableSorting: true,
     },
@@ -650,6 +677,14 @@ export function MarcacionesTable({
         emptyDescription="No hay marcaciones para mostrar en este rango de fechas"
         pageSize={50}
         pageSizeOptions={[25, 50, 100]}
+      />
+
+      {/* Drawer detalle de trips por patente */}
+      <PatenteDetalleDrawer
+        marcacion={detalleMarcacion}
+        semanaInicio={semanaInicio || ''}
+        semanaFin={semanaFin || ''}
+        onClose={() => setDetalleMarcacion(null)}
       />
     </div>
   );

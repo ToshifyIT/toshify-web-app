@@ -186,25 +186,30 @@ export function useUSSHistoricoData(sedeId?: string | null) {
         }
       }
 
-      // 2) Calcular semana ISO de referencia (lunes 00:00 -> domingo 23:59 ART)
-      // Usar el endDate del filtro visible (asi si se filtra "Semana 17" o "Mes",
-      // el calculo del exceso se hace sobre la semana del ultimo dia visible).
+      // 2) Calcular semana de referencia (lunes 00:00 ART -> lunes siguiente 00:00 ART).
+      // La ventana se aplica sobre PERIODO_INICIO del turno, NO sobre fecha_turno.
+      // Asi un nocturno entrado domingo 23:00 cuenta en la semana del domingo
+      // (donde fue su ENTRADA), no en la siguiente semana.
+      // Usar el endDate del filtro visible para anclarse a la semana del ultimo dia visible.
       const refDate = new Date((dateRange.endDate || new Date().toISOString().slice(0, 10)) + 'T12:00:00-03:00');
       const dow = refDate.getDay() === 0 ? 7 : refDate.getDay(); // domingo=7
       const lunes = new Date(refDate); lunes.setDate(refDate.getDate() - (dow - 1)); lunes.setHours(0, 0, 0, 0);
-      const domingo = new Date(lunes); domingo.setDate(lunes.getDate() + 6); domingo.setHours(23, 59, 59, 999);
-      const fmtAr = (d: Date) => d.toLocaleDateString('en-CA', { timeZone: 'America/Argentina/Buenos_Aires' });
+      // Inicio de la semana en ART como ISO timestamp: lunes 00:00:00-03:00
+      const fmtIsoArt = (d: Date) => d.toLocaleDateString('en-CA', { timeZone: 'America/Argentina/Buenos_Aires' });
+      const lunesIso = fmtIsoArt(lunes) + 'T00:00:00-03:00';
+      // Fin exclusivo: lunes siguiente 00:00 ART
+      const lunesSig = new Date(lunes); lunesSig.setDate(lunes.getDate() + 7);
+      const lunesSigIso = fmtIsoArt(lunesSig) + 'T00:00:00-03:00';
 
       // 3) Traer SUMA de km semanales por conductor desde wialon_bitacora + geotab_bitacora
-      const semanaInicio = fmtAr(lunes);
-      const semanaFin = fmtAr(domingo);
+      // Filtrar por periodo_inicio (entrada real del turno), no por fecha_turno.
       const sumKmPorConductor = new Map<string, { km: number; modalidad: string }>(); // key = conductor_id || conductor_wialon
       const fetchSemanaTabla = async (tabla: 'wialon_bitacora' | 'geotab_bitacora') => {
         const { data } = await supabase
           .from(tabla)
-          .select('conductor_id, conductor_wialon, kilometraje, vehiculo_modalidad')
-          .gte('fecha_turno', semanaInicio)
-          .lte('fecha_turno', semanaFin)
+          .select('conductor_id, conductor_wialon, kilometraje, vehiculo_modalidad, periodo_inicio')
+          .gte('periodo_inicio', lunesIso)
+          .lt('periodo_inicio', lunesSigIso)
           .neq('estado', 'Sin Actividad');
         for (const r of (data || []) as any[]) {
           const key = r.conductor_id || r.conductor_wialon || '';
