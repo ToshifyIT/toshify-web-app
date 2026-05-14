@@ -284,7 +284,6 @@ export function AsignacionesModule() {
     // Solo procesar los que tienen contrato (CARTA_OFERTA o ANEXO).
     // Omitir N/A: la asignación queda intacta, pero el backend no genera nada para ellos.
     const conductoresAsig = todosLosConductores.filter(c => c.documento !== 'N/A' && c.documento !== 'NA' && c.documento !== '')
-    const conductoresOmitidos = todosLosConductores.filter(c => !conductoresAsig.some(p => p.id === c.id))
 
     if (conductoresAsig.length === 0) {
       Swal.fire('Sin conductores procesables', 'Todos los conductores de esta asignación tienen documento marcado como N/A. No hay nada que generar.', 'info')
@@ -303,19 +302,32 @@ export function AsignacionesModule() {
     }
 
     const cantConductores = conductoresAsig.length
-    const listaProcesados = conductoresAsig.map(c => `<li><b>${c.nombre}</b> (${c.documento})</li>`).join('')
-    const listaOmitidos = conductoresOmitidos.length > 0
-      ? `<div style="margin-top:10px;padding:8px;background:#fef3c7;border-left:3px solid #f59e0b;border-radius:4px;text-align:left;font-size:13px"><b>Se omitirán</b> (documento N/A):<ul style="margin:4px 0 0 18px;padding:0">${conductoresOmitidos.map(c => `<li>${c.nombre}</li>`).join('')}</ul></div>`
-      : ''
+    // Traduce el tipo de documento (BD) a etiqueta legible en español
+    const docLegible = (doc: string): string => {
+      if (doc === 'CARTA_OFERTA') return 'carta oferta'
+      if (doc === 'ANEXO') return 'anexo'
+      return doc.toLowerCase()
+    }
+
+    let cuerpoConductores = ''
+    if (cantConductores === 1) {
+      const c = conductoresAsig[0]
+      cuerpoConductores = `<p style="margin:0">Se generará <b>la ${docLegible(c.documento)}</b> solo para el conductor: <b>${c.nombre}</b></p>`
+    } else {
+      cuerpoConductores = `
+        <p style="margin:0 0 6px 0">Se generarán los siguientes documentos:</p>
+        <ul style="margin:0 0 0 18px;padding:0">
+          ${conductoresAsig.map(c => `<li><b>${c.nombre}</b> → ${docLegible(c.documento)}</li>`).join('')}
+        </ul>`
+    }
+
     const confirmacion = await Swal.fire({
       icon: 'warning',
       title: 'Confirmar generación',
       html: `
         <div style="text-align:left;font-size:13px">
-          <p style="margin:0 0 6px 0">Se generará el documento de control para:</p>
-          <ul style="margin:0 0 0 18px;padding:0">${listaProcesados}</ul>
-          ${listaOmitidos}
-          <p style="margin-top:12px;color:#6b7280;font-size:12px">Después de guardar, los documentos generados no se podrán revertir ni editar.</p>
+          ${cuerpoConductores}
+          <p style="margin-top:14px;color:#6b7280;font-size:12px">Después de generar el PDF, en caso se requiera alguna corrección o ajuste, se debe cancelar la entrega y generar una nueva programación.</p>
         </div>
       `,
       showCancelButton: true,
