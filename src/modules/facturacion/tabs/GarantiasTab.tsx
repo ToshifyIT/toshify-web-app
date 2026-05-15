@@ -1735,8 +1735,8 @@ export function GarantiasTab() {
           {/* Header (filtro removido - se usan los filtros de columna) */}
           <div className="fact-header">
             <div className="fact-header-left">
-              {/* "Exportar Registros" y "Sincronizar" disponibles para cualquier usuario con acceso.
-                  "Exportar" (todo) e "Importar" son acciones administrativas → solo admin. */}
+              {/* "Exportar Registros" disponible para cualquier usuario con acceso.
+                  "Exportar" (todo), "Importar" y "Sincronizar" son acciones administrativas → solo admin. */}
               <div style={{ display: 'flex', gap: '6px' }}>
                 {isAdmin() && (
                   <button
@@ -1763,13 +1763,15 @@ export function GarantiasTab() {
                     <Upload size={14} /> Importar
                   </button>
                 )}
-                <button
-                  className="fact-btn fact-btn-secondary"
-                  onClick={sincronizarGarantias}
-                  title="Recalcula cuotas pagadas a partir de la facturación cerrada"
-                >
-                  <RefreshCw size={14} /> Sincronizar
-                </button>
+                {isAdmin() && (
+                  <button
+                    className="fact-btn fact-btn-secondary"
+                    onClick={sincronizarGarantias}
+                    title="Recalcula cuotas pagadas a partir de la facturación cerrada"
+                  >
+                    <RefreshCw size={14} /> Sincronizar
+                  </button>
+                )}
               </div>
             </div>
             <div className="fact-header-right" style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
