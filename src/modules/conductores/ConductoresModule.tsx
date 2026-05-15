@@ -736,7 +736,7 @@ export function ConductoresModule() {
             estado_id,
             created_at,
             updated_at,
-            drive_folder_url,
+            url_documentacion,
             conductores_estados (id, codigo, descripcion),
             conductores_licencias_categorias (
               licencias_categorias (id, codigo, descripcion)
@@ -899,7 +899,7 @@ export function ConductoresModule() {
             fecha_contratacion,
             estado_id,
             created_at,
-            drive_folder_url,
+            url_documentacion,
             intercom_id,
             conductores_estados (id, codigo, descripcion),
             conductores_licencias_categorias (
@@ -2953,7 +2953,9 @@ export function ConductoresModule() {
         id: "acciones",
         header: 'Acciones',
         cell: ({ row }) => {
-          const driveUrl = (row.original as any).drive_folder_url;
+          // Usar `url_documentacion` (campo canónico) en lugar de `drive_folder_url` (legacy),
+          // para que coincida con el botón "Ver documentos" del modal de detalle.
+          const driveUrl = (row.original as any).url_documentacion;
           
           return (
             <ActionsMenu
