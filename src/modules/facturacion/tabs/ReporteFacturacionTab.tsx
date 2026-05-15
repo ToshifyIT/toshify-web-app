@@ -5313,6 +5313,89 @@ export function ReporteFacturacionTab() {
         return
       }
 
+      // ─────────────────────────────────────────────────────────────────────
+      // VALIDACIÓN ESTRICTA DEL HEADER (estructura del archivo Cabify)
+      // El archivo debe tener exactamente estas 19 columnas (A–S) en este orden.
+      // Comparación tolerante: ignora mayúsculas/minúsculas, acentos y espacios extras.
+      // Se permiten columnas adicionales después de la S (no se rechazan).
+      // ─────────────────────────────────────────────────────────────────────
+      const HEADER_ESPERADO: string[] = [
+        'Año',                                      // A
+        'Semana Fact.',                             // B
+        'Fecha Inicial',                            // C
+        'Fecha Final',                              // D
+        'Conductor',                                // E
+        'Email',                                    // F
+        'Patente',                                  // G
+        'DNI',                                      // H
+        'Importe Contrato',                         // I
+        'EXCEDENTES',                               // J
+        '#DO',                                      // K
+        'Horas de conexion',                        // L
+        'Importe Generado',                         // M
+        'Importe Generado (con bonos)',             // N
+        'Generado efectivo',                        // O
+        'Disponible para descontar',                // P
+        'Importe Descontado / Total a Pagar',       // Q
+        'Saldo Adeudado',                           // R
+        'Fecha de pago',                            // S
+      ]
+      const normalizarHeader = (s: any): string =>
+        String(s ?? '')
+          .normalize('NFD').replace(/\p{Diacritic}/gu, '')
+          .toLowerCase()
+          .replace(/\s+/g, ' ')
+          .trim()
+      const headerActual = (rows[0] || []).slice(0, HEADER_ESPERADO.length)
+      const erroresHeader: Array<{ letra: string; esperado: string; recibido: string }> = []
+      for (let i = 0; i < HEADER_ESPERADO.length; i++) {
+        const recibido = normalizarHeader(headerActual[i])
+        const esperado = normalizarHeader(HEADER_ESPERADO[i])
+        if (recibido !== esperado) {
+          const letra = String.fromCharCode(65 + i)
+          erroresHeader.push({
+            letra,
+            esperado: HEADER_ESPERADO[i],
+            recibido: headerActual[i] ? String(headerActual[i]) : '(vacío o faltante)',
+          })
+        }
+      }
+
+      if (erroresHeader.length > 0) {
+        const filasError = erroresHeader.map(e =>
+          `<tr><td style="padding:4px 8px;font-weight:600;color:#dc2626;">${e.letra}</td><td style="padding:4px 8px;">${e.esperado}</td><td style="padding:4px 8px;color:#6b7280;">${e.recibido}</td></tr>`,
+        ).join('')
+        await Swal.fire({
+          icon: 'error',
+          title: 'Estructura del archivo incorrecta',
+          html: `
+            <div style="text-align:left;font-size:13px;">
+              <p style="margin:0 0 10px 0;">
+                El archivo no tiene las columnas esperadas en el orden correcto.
+                <br/>Se detectaron <strong>${erroresHeader.length}</strong> columnas con problemas:
+              </p>
+              <table style="width:100%;border-collapse:collapse;font-size:12px;margin-top:8px;">
+                <thead>
+                  <tr style="background:#f3f4f6;">
+                    <th style="padding:6px 8px;text-align:left;">Col</th>
+                    <th style="padding:6px 8px;text-align:left;">Se esperaba</th>
+                    <th style="padding:6px 8px;text-align:left;">Se encontró</th>
+                  </tr>
+                </thead>
+                <tbody>${filasError}</tbody>
+              </table>
+              <p style="margin:14px 0 0 0;font-size:12px;color:#6b7280;">
+                Verificá que el archivo Cabify tenga las 19 columnas (A–S) en el orden esperado.
+                Hoja leída: <strong>${sheetName}</strong>.
+              </p>
+            </div>
+          `,
+          confirmButtonText: 'Entendido',
+          width: 720,
+        })
+        return
+      }
+
       // Contar filas con DNI válido (entre fila 1 y N) y filas con datos en general
       const dataRows = rows.slice(1)
       let filasConDni = 0

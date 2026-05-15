@@ -118,7 +118,10 @@ function calcularEstadoGrupo(cuotas: Cuota[]): EstadoGrupo {
   if (!cuotas || cuotas.length === 0) return 'activo'
   const total = cuotas.length
   const canceladas = cuotas.filter(c => c.estado === 'cancelada_por_baja').length
-  if (canceladas > 0 && canceladas === total) return 'cancelado'
+  // Si hay AL MENOS UNA cuota cancelada por baja, el fraccionamiento entero
+  // se considera cancelado (el resto ya no se puede cobrar: el conductor está de baja
+  // y el saldo se reingresó como deuda exigible).
+  if (canceladas > 0) return 'cancelado'
   const aplicadas = cuotas.filter(c => c.aplicado).length
   if (aplicadas === total) return 'completado'
   return 'activo'
