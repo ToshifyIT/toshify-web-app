@@ -115,10 +115,23 @@ export default function MultasModule() {
   // Vista activas vs desestimadas (toggle del header)
   const [vista, setVista] = useState<'activas' | 'desestimadas'>('activas')
 
-  // Permisos por rol — admin/fullstack pueden reactivar y borrar; el resto solo desestimar
+  // Permisos por rol + whitelist por email — solo god mode puede reactivar/borrar.
+  // El resto (incluido data entry) solo puede desestimar.
   const userRole = (profile?.roles?.name || '').toLowerCase()
-  const canReactivar = userRole === 'admin' || userRole === 'fullstack.senior'
-  const canBorrar = userRole === 'admin' || userRole === 'fullstack.senior'
+  const userEmail = (profile?.email || '').toLowerCase()
+  // Emails de god mode (acceso total a borrar/reactivar más allá del rol).
+  // Christiam y Esau ya son admin por rol, pero los incluimos por defensa en profundidad.
+  const GOD_MODE_EMAILS = new Set<string>([
+    'techspec@toshify.com.ar',    // Maria Flores
+    'archspec@toshify.com.ar',    // Christiam Mendoza
+    'fullstack@toshify.com.ar',   // Esau Pretell
+  ])
+  const isGodMode =
+    userRole === 'admin' ||
+    userRole === 'fullstack.senior' ||
+    GOD_MODE_EMAILS.has(userEmail)
+  const canReactivar = isGodMode
+  const canBorrar = isGodMode
 
   // Filtros
   const [openFilterId, setOpenFilterId] = useState<string | null>(null)
@@ -1011,26 +1024,26 @@ export default function MultasModule() {
                 </button>
               </>
             )}
-            {estaDesestimada && (
+            {estaDesestimada && canReactivar && (
               <button
-                title={canReactivar ? 'Reactivar multa' : 'Sin permiso para reactivar (solo admin/fullstack)'}
-                onClick={() => { if (canReactivar) reactivarMulta(row.original) }}
-                disabled={!canReactivar}
-                style={btnBase(canReactivar ? '#7c3aed' : 'var(--text-tertiary)', canReactivar ? 1 : 0.4, !canReactivar)}
+                title="Reactivar multa"
+                onClick={() => reactivarMulta(row.original)}
+                style={btnBase('#7c3aed')}
               >
                 <RotateCcw size={14} />
                 <span style={labelStyle}>Reactivar</span>
               </button>
             )}
-            <button
-              title={canBorrar ? 'Eliminar definitivo' : 'Sin permiso para borrar (solo admin/fullstack)'}
-              onClick={() => { if (canBorrar) eliminarMulta(row.original) }}
-              disabled={!canBorrar}
-              style={btnBase(canBorrar ? '#dc2626' : 'var(--text-tertiary)', canBorrar ? 1 : 0.4, !canBorrar)}
-            >
-              <Trash2 size={14} />
-              <span style={labelStyle}>Borrar</span>
-            </button>
+            {canBorrar && (
+              <button
+                title="Eliminar definitivo"
+                onClick={() => eliminarMulta(row.original)}
+                style={btnBase('#dc2626')}
+              >
+                <Trash2 size={14} />
+                <span style={labelStyle}>Borrar</span>
+              </button>
+            )}
           </div>
         )
       }
