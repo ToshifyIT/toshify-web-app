@@ -122,7 +122,20 @@ export function IncidenciasModule() {
   const canEdit = isAdmin || canEditInMenu('incidencias')
   const canDelete = isAdmin || canDeleteInMenu('incidencias')
 
-  const [activeTab, setActiveTab] = useState<TabType>('logistica')
+  // Tab persistido en localStorage para sobrevivir refresh
+  const TAB_STORAGE_KEY = 'incidencias.activeTab'
+  const VALID_TABS: TabType[] = ['logistica', 'cobro', 'penalidades', 'por_aplicar', 'aplicadas', 'rechazados']
+  const [activeTab, setActiveTabInner] = useState<TabType>(() => {
+    try {
+      const saved = localStorage.getItem(TAB_STORAGE_KEY)
+      if (saved && (VALID_TABS as string[]).includes(saved)) return saved as TabType
+    } catch { /* ignore */ }
+    return 'logistica'
+  })
+  const setActiveTab = (t: TabType) => {
+    try { localStorage.setItem(TAB_STORAGE_KEY, t) } catch { /* ignore */ }
+    setActiveTabInner(t)
+  }
   const [loading, setLoading] = useState(true)
 
   // Data

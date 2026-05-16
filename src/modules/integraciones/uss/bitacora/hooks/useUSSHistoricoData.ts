@@ -129,8 +129,19 @@ export function useUSSHistoricoData(sedeId?: string | null) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Vista activa (marcaciones por defecto)
-  const [vista, setVista] = useState<'historico' | 'marcaciones'>('marcaciones');
+  // Vista activa (marcaciones por defecto). Persistida en localStorage para sobrevivir refresh.
+  const VISTA_STORAGE_KEY = 'bitacora.vista';
+  const [vista, setVistaInner] = useState<'historico' | 'marcaciones'>(() => {
+    try {
+      const saved = localStorage.getItem(VISTA_STORAGE_KEY);
+      if (saved === 'historico' || saved === 'marcaciones') return saved;
+    } catch { /* SSR o localStorage bloqueado: usar default */ }
+    return 'marcaciones';
+  });
+  const setVista = useCallback((v: 'historico' | 'marcaciones') => {
+    try { localStorage.setItem(VISTA_STORAGE_KEY, v); } catch { /* ignore */ }
+    setVistaInner(v);
+  }, []);
 
   // Debounce para búsqueda
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
