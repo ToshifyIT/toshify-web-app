@@ -11,6 +11,7 @@ interface Trip {
   id: number
   patente: string
   conductor: string | null
+  conductor_raw: string | null
   ibutton: string | null
   fecha_hora_inicio_gmt3: string
   fecha_hora_fin_gmt3: string | null
@@ -103,16 +104,19 @@ export function PatenteDetalleDrawer({ marcacion, semanaInicio, semanaFin, onClo
     const hasta = `${semanaFin}T23:59:59`
 
     const fetchTabla = async (tabla: 'uss_historico' | 'geotab_historico', origen: 'USS' | 'GEOTAB'): Promise<Trip[]> => {
+      const cols = tabla === 'uss_historico'
+        ? 'id, patente, conductor, conductor_raw, ibutton, fecha_hora_inicio_gmt3, fecha_hora_fin_gmt3, kilometraje'
+        : 'id, patente, conductor, ibutton, fecha_hora_inicio_gmt3, fecha_hora_fin_gmt3, kilometraje'
       const { data, error: e } = await (supabase
         .from(tabla)
-        .select('id, patente, conductor, ibutton, fecha_hora_inicio_gmt3, fecha_hora_fin_gmt3, kilometraje')
+        .select(cols)
         .gte('fecha_hora_inicio_gmt3', desde)
         .lte('fecha_hora_inicio_gmt3', hasta)
         .order('fecha_hora_inicio_gmt3', { ascending: true }) as any)
       if (e) throw e
       return ((data || []) as any[])
         .filter(r => normalizarPatente(r.patente) === patenteNorm)
-        .map(r => ({ ...r, gps_origen: origen } as Trip))
+        .map(r => ({ ...r, conductor_raw: r.conductor_raw ?? null, gps_origen: origen } as Trip))
     }
 
     ;(async () => {
@@ -136,33 +140,119 @@ export function PatenteDetalleDrawer({ marcacion, semanaInicio, semanaFin, onClo
   }, [marcacion, semanaInicio, semanaFin])
 
   // Determinar qué trips están "dentro" del agrupamiento de la marcación seleccionada.
-  // Criterio: mismo conductor (o ambos null) Y dentro de la ventana periodo_inicio → periodo_fin.
+  // Replica la lógica del sync sync-wialon-bitacora.ts:
+  //   - Huérfanos (conductor=null) heredan del vecino más cercano de la misma patente.
+  //   - Multi-conductor (conductor_raw con coma): el km/tiempo va al vecino más cercano
+  //     que aparezca en la lista raw. Si solo uno de los conductores del raw aparece en
+  //     un vecino con 1 conductor, el "huérfano" (el que no aparece) es el receptor.
+  // Entonces un trip "in group" si: está dentro de la ventana Y el conductor efectivo
+  // (después de huérfano-inherit y multi-donate) coincide con el de la marcación.
   const { tripsConMarca, totalKm, totalDuracion, tripsEnAgrupamiento } = useMemo(() => {
     if (!marcacion) return { tripsConMarca: [], totalKm: 0, totalDuracion: '-', tripsEnAgrupamiento: 0 }
-    // periodoInicio/periodoFin de wialon_bitacora ya vienen con tz (+00), parsean OK directamente.
-    // fecha_hora_*_gmt3 de uss_historico vienen SIN tz pero están en ART → usar parseGmt3.
     const ini = marcacion.periodoInicio ? new Date(marcacion.periodoInicio).getTime() : null
     const fin = marcacion.periodoFin ? new Date(marcacion.periodoFin).getTime() : null
     const conductorRef = (marcacion.conductor || '').trim().toUpperCase()
-    let kmSum = 0
-    let count = 0
-    const enriched = trips.map(t => {
+    const TOL = 60 * 1000
+
+    // Parser de conductor_raw "203-LUCIANO, 212-MIGUEL" -> ["LUCIANO", "MIGUEL"]
+    const parseRaw = (raw: string | null): string[] => {
+      if (!raw) return []
+      return raw.split(',').map(s => {
+        const d = s.indexOf('-')
+        return (d >= 0 ? s.slice(d + 1) : s).trim().toUpperCase()
+      }).filter(n => n.length > 0)
+    }
+
+    // Ordenar trips por inicio (ya vienen ordenados pero por seguridad) y precomputar timestamps
+    const tripsConTiempo = trips.map(t => {
       const tIniDate = parseGmt3(t.fecha_hora_inicio_gmt3)
       const tFinDate = parseGmt3(t.fecha_hora_fin_gmt3) || tIniDate
-      const tIni = tIniDate ? tIniDate.getTime() : 0
-      const tFin = tFinDate ? tFinDate.getTime() : tIni
-      // Tolerancia de 60s en ambos extremos para absorber desalineaciones de segundos
-      // entre periodo de la marcación (UTC) y trips (ART → UTC al parsear).
-      const TOL = 60 * 1000
-      const dentroVentana = ini != null && fin != null && tIni >= (ini - TOL) && tFin <= (fin + TOL)
-      const mismoConductor = (t.conductor || '').trim().toUpperCase() === conductorRef
-      const inGroup = dentroVentana && mismoConductor
+      const tIniMs = tIniDate ? tIniDate.getTime() : 0
+      const tFinMs = tFinDate ? tFinDate.getTime() : tIniMs
+      return { ...t, tIniMs, tFinMs }
+    })
+
+    // Calcular conductor efectivo para cada trip
+    const conductorEfectivo: (string | null)[] = tripsConTiempo.map(t => {
+      const conductores = parseRaw(t.conductor_raw)
+      const titular = (t.conductor || '').trim().toUpperCase() || null
+
+      // CASO 1: huerfano (conductor=null) -> heredar del vecino mas cercano (misma patente)
+      // Como el drawer ya filtra a la misma patente, todos los vecinos sirven.
+      if (!titular && conductores.length === 0) {
+        let prev: typeof tripsConTiempo[number] | null = null
+        let next: typeof tripsConTiempo[number] | null = null
+        for (let j = tripsConTiempo.indexOf(t) - 1; j >= 0; j--) {
+          if ((tripsConTiempo[j].conductor || '').trim()) { prev = tripsConTiempo[j]; break }
+        }
+        for (let j = tripsConTiempo.indexOf(t) + 1; j < tripsConTiempo.length; j++) {
+          if ((tripsConTiempo[j].conductor || '').trim()) { next = tripsConTiempo[j]; break }
+        }
+        let chosen: typeof tripsConTiempo[number] | null = null
+        if (prev && next) {
+          const gPrev = t.tIniMs - prev.tFinMs
+          const gNext = next.tIniMs - t.tFinMs
+          chosen = gPrev <= gNext ? prev : next
+        } else chosen = prev || next
+        return (chosen?.conductor || '').trim().toUpperCase() || null
+      }
+
+      // CASO 2: multi-conductor (raw con 2+) -> ver si dona al vecino mas cercano
+      if (conductores.length >= 2) {
+        const bestGap = new Map<string, number>()
+        const idx = tripsConTiempo.indexOf(t)
+        // Hacia atras
+        for (let j = idx - 1; j >= 0; j--) {
+          const vr = parseRaw(tripsConTiempo[j].conductor_raw)
+          if (vr.length !== 1) continue
+          if (!conductores.includes(vr[0])) continue
+          const gap = t.tIniMs - tripsConTiempo[j].tFinMs
+          const prev = bestGap.get(vr[0])
+          if (prev === undefined || gap < prev) bestGap.set(vr[0], gap)
+          break
+        }
+        // Hacia adelante
+        for (let j = idx + 1; j < tripsConTiempo.length; j++) {
+          const vr = parseRaw(tripsConTiempo[j].conductor_raw)
+          if (vr.length !== 1) continue
+          if (!conductores.includes(vr[0])) continue
+          const gap = tripsConTiempo[j].tIniMs - t.tFinMs
+          const prev = bestGap.get(vr[0])
+          if (prev === undefined || gap < prev) bestGap.set(vr[0], gap)
+          break
+        }
+        let receptor: string | null = null
+        if (bestGap.size === conductores.length) {
+          let m = Infinity
+          for (const [n, g] of bestGap.entries()) if (g < m) { m = g; receptor = n }
+        } else if (bestGap.size > 0) {
+          const huerf = conductores.filter(c => !bestGap.has(c))
+          if (huerf.length === 1) receptor = huerf[0]
+        }
+        // Solo donamos si receptor !== titular actual (sino es no-op)
+        if (receptor && receptor !== titular) return receptor
+        return titular
+      }
+
+      // CASO 3: trip normal de 1 conductor
+      return titular
+    })
+
+    let kmSum = 0
+    let count = 0
+    const enriched = tripsConTiempo.map((t, i) => {
+      const dentroVentana = ini != null && fin != null && t.tIniMs >= (ini - TOL) && t.tFinMs <= (fin + TOL)
+      const condEf = conductorEfectivo[i]
+      const inGroup = dentroVentana && condEf === conductorRef
       if (inGroup) {
         kmSum += parseFloat(t.kilometraje || '0') || 0
         count++
       }
-      return { ...t, inGroup }
+      // Strip los campos auxiliares para que el resto del drawer reciba Trip
+      const { tIniMs: _a, tFinMs: _b, ...rest } = t
+      return { ...rest, inGroup, conductorEfectivo: condEf }
     })
+
     return {
       tripsConMarca: enriched,
       totalKm: Math.round(kmSum * 100) / 100,
@@ -353,13 +443,12 @@ export function PatenteDetalleDrawer({ marcacion, semanaInicio, semanaFin, onClo
 
 interface FragmentDiaProps {
   diaKey: string
-  tripsDelDia: Array<Trip & { inGroup: boolean }>
+  tripsDelDia: Array<Trip & { inGroup: boolean; conductorEfectivo: string | null }>
   conductorRef: string
   highlightStartRef: React.MutableRefObject<HTMLTableRowElement | null>
 }
 
 function FragmentDia({ diaKey, tripsDelDia, conductorRef, highlightStartRef }: FragmentDiaProps) {
-  // Determinar si este día tiene el primer trip "in group" — para asignar la ref de scroll
   let firstInGroupAssigned = false
   return (
     <>
@@ -378,7 +467,12 @@ function FragmentDia({ diaKey, tripsDelDia, conductorRef, highlightStartRef }: F
         const inGroup = t.inGroup
         const isFirstInGroupOverall = inGroup && !firstInGroupAssigned
         if (isFirstInGroupOverall) firstInGroupAssigned = true
-        const otroConductor = t.conductor && t.conductor.trim().toUpperCase() !== (conductorRef || '').trim().toUpperCase()
+        const condRefUpper = (conductorRef || '').trim().toUpperCase()
+        const tituloUpper = (t.conductor || '').trim().toUpperCase()
+        const condEfUpper = (t.conductorEfectivo || '').trim().toUpperCase()
+        const otroConductor = !!t.conductor && tituloUpper !== condRefUpper && condEfUpper !== condRefUpper
+        // Heredado: titular USS distinto al efectivo, y el efectivo coincide con la marcacion -> es donado/heredado
+        const heredadoParaMarcacion = inGroup && tituloUpper !== condRefUpper
         const bg = inGroup ? '#f0fdf4' : '#fff'
         const borderLeft = inGroup ? '3px solid #16a34a' : '3px solid transparent'
         return (
@@ -402,6 +496,11 @@ function FragmentDia({ diaKey, tripsDelDia, conductorRef, highlightStartRef }: F
                 <span style={{ fontWeight: 600, fontSize: 11, color: inGroup ? '#16a34a' : 'var(--text-primary)' }}>
                   {t.conductor || '(sin conductor)'}
                 </span>
+                {heredadoParaMarcacion && (
+                  <span style={{ fontSize: 9, color: '#16a34a', fontWeight: 600 }}>
+                    {!t.conductor ? `→ heredado a ${t.conductorEfectivo}` : `→ km contado a ${t.conductorEfectivo}`}
+                  </span>
+                )}
                 {otroConductor && !inGroup && (
                   <span style={{ fontSize: 9, color: 'var(--text-tertiary)' }}>otro conductor</span>
                 )}

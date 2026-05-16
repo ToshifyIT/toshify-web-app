@@ -16,6 +16,7 @@ export interface USSHistoricoRegistro {
   id: number;
   patente: string;
   conductor: string | null;
+  conductor_raw: string | null;
   ibutton: string | null;
   observaciones: string | null;
   fecha_hora_inicio: string | null;
@@ -39,9 +40,12 @@ function buildHistoricoQuery(
   sedePatentes: string[] | null,
   options?: USSHistoricoQueryOptions
 ) {
+  const cols = table === 'uss_historico'
+    ? 'id, patente, conductor, conductor_raw, ibutton, observaciones, fecha_hora_inicio, fecha_hora_final, kilometraje'
+    : 'id, patente, conductor, ibutton, observaciones, fecha_hora_inicio, fecha_hora_final, kilometraje';
   let query = supabase
     .from(table)
-    .select('id, patente, conductor, ibutton, observaciones, fecha_hora_inicio, fecha_hora_final, kilometraje', { count: 'exact' })
+    .select(cols, { count: 'exact' })
     .gte('fecha_hora_inicio', `${startDate}T00:00:00`)
     .lt('fecha_hora_inicio', `${endStr}T00:00:00`);
 
@@ -92,6 +96,8 @@ export const ussHistoricoService = {
     // Llamada al RPC que hace UNION ALL + paginacion server-side de las 2 tablas
     const limit = options?.limit ?? 100;
     const offset = options?.offset ?? 0;
+    // El RPC normaliza la patente (quita espacios/guiones, upper) en el WHERE,
+    // así que `AG834UG` matchea `AG 834 UG` y viceversa. Conductor/ibutton siguen literal.
     const search = options?.patente?.trim() || options?.conductor?.trim() || null;
 
     const { data, error } = await (supabase.rpc as any)('get_historico_combinado', {
@@ -113,6 +119,7 @@ export const ussHistoricoService = {
       id: r.id,
       patente: r.patente,
       conductor: r.conductor,
+      conductor_raw: r.conductor_raw ?? null,
       ibutton: r.ibutton,
       observaciones: r.observaciones,
       fecha_hora_inicio: r.fecha_hora_inicio,
@@ -142,8 +149,8 @@ async function getRegistrosFallback(
     buildHistoricoQuery('geotab_historico', startDate, endStr, sedePatentes, options).range(0, 9999),
   ]);
 
-  const ussRows: USSHistoricoRegistro[] = (ussRes.data || []).map((r: any) => ({ ...r, gps_origen: 'USS' as GpsOrigen }));
-  const geotabRows: USSHistoricoRegistro[] = (geotabRes.data || []).map((r: any) => ({ ...r, gps_origen: 'GEOTAB' as GpsOrigen }));
+  const ussRows: USSHistoricoRegistro[] = (ussRes.data || []).map((r: any) => ({ ...r, conductor_raw: r.conductor_raw ?? null, gps_origen: 'USS' as GpsOrigen }));
+  const geotabRows: USSHistoricoRegistro[] = (geotabRes.data || []).map((r: any) => ({ ...r, conductor_raw: null, gps_origen: 'GEOTAB' as GpsOrigen }));
 
   const combined = [...ussRows, ...geotabRows].sort((a, b) => {
     const av = a.fecha_hora_inicio || '';

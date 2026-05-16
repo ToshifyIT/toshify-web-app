@@ -52,6 +52,22 @@ function formatKm(km: string | null): string {
   return n.toLocaleString('es-AR', { maximumFractionDigits: 1 });
 }
 
+// Parsea conductor_raw de USS: "142-NATALIA IRENE RIVAS, 15-EMMANUEL SEBASTIAN RAMIREZ"
+// -> ["NATALIA IRENE RIVAS", "EMMANUEL SEBASTIAN RAMIREZ"]
+// Descarta entradas vacías o sin nombre (ej: "81-")
+function parseConductoresRaw(raw: string | null): string[] {
+  if (!raw) return [];
+  return raw
+    .split(',')
+    .map(s => s.trim())
+    .map(s => {
+      const dashIdx = s.indexOf('-');
+      const name = (dashIdx >= 0 ? s.slice(dashIdx + 1) : s).trim();
+      return name;
+    })
+    .filter(n => n.length > 0);
+}
+
 const PAGE_SIZE_OPTIONS = [25, 50, 100, 200];
 
 export function HistoricoTable({
@@ -200,11 +216,44 @@ export function HistoricoTable({
     {
       accessorKey: 'observaciones',
       header: 'Observaciones',
-      cell: ({ row }) => (
-        <span style={{ color: 'var(--text-tertiary)', fontSize: '12px', maxWidth: '200px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'inline-block' }}>
-          {row.original.observaciones || '-'}
-        </span>
-      ),
+      cell: ({ row }) => {
+        const r = row.original;
+        const conductores = parseConductoresRaw(r.conductor_raw);
+        const varios = conductores.length >= 2;
+        const obs = r.observaciones?.trim() || '';
+        return (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', maxWidth: '260px' }}>
+            {varios && (
+              <span
+                title={conductores.join(' · ')}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '4px',
+                  alignSelf: 'flex-start',
+                  fontSize: '11px',
+                  fontWeight: 600,
+                  color: '#92400e',
+                  background: '#fef3c7',
+                  border: '1px solid #fcd34d',
+                  padding: '2px 8px',
+                  borderRadius: '999px',
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                {conductores.length} conductores: {conductores.join(', ')}
+              </span>
+            )}
+            {obs ? (
+              <span style={{ color: 'var(--text-tertiary)', fontSize: '12px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {obs}
+              </span>
+            ) : !varios ? (
+              <span style={{ color: 'var(--text-tertiary)', fontSize: '12px' }}>-</span>
+            ) : null}
+          </div>
+        );
+      },
       enableSorting: false,
     },
   ], [conductorPatenteUnicos, conductorFilter, openFilterId]);
@@ -223,15 +272,22 @@ export function HistoricoTable({
   }, [showExportMenu]);
 
   function getExportData() {
-    return registrosFiltrados.map(r => ({
-      'Patente': r.patente,
-      'Conductor': r.conductor || '',
-      'iButton': r.ibutton || '',
-      'Inicio': formatTimestamp(r.fecha_hora_inicio),
-      'Fin': formatTimestamp(r.fecha_hora_final),
-      'Km': formatKm(r.kilometraje),
-      'Observaciones': r.observaciones || '',
-    }));
+    return registrosFiltrados.map(r => {
+      const conductores = parseConductoresRaw(r.conductor_raw);
+      const variosTxt = conductores.length >= 2
+        ? `${conductores.length} conductores: ${conductores.join(', ')}`
+        : '';
+      const obs = r.observaciones || '';
+      return {
+        'Patente': r.patente,
+        'Conductor': r.conductor || '',
+        'iButton': r.ibutton || '',
+        'Inicio': formatTimestamp(r.fecha_hora_inicio),
+        'Fin': formatTimestamp(r.fecha_hora_final),
+        'Km': formatKm(r.kilometraje),
+        'Observaciones': [variosTxt, obs].filter(Boolean).join(' — '),
+      };
+    });
   }
 
   function exportarExcel() {

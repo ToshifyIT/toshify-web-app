@@ -53,14 +53,6 @@ function formatSegundos(s: number | null): string {
   return rest === 0 ? `${m}min` : `${m}m ${rest}s`
 }
 
-const DIAS = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom']
-function diaSemana(fechaStr: string): string {
-  const [y, m, d] = fechaStr.split('-').map(Number)
-  const date = new Date(y, m - 1, d, 12, 0, 0)
-  const dow = date.getDay() === 0 ? 6 : date.getDay() - 1
-  return DIAS[dow]
-}
-
 export function ExcesoKmDetalleDrawer({ row, onClose, semanaInicio, semanaFin }: Props) {
   const [excesosVel, setExcesosVel] = useState<ExcesoVelocidad[]>([])
   const [loadingVel, setLoadingVel] = useState(false)
@@ -100,23 +92,17 @@ export function ExcesoKmDetalleDrawer({ row, onClose, semanaInicio, semanaFin }:
 
   if (!row) return null
 
-  // Desglose por DÍA con km acumulados y % del límite
-  const porDia = new Map<string, { km: number; patente: string | null; gpsOrigen: string }>()
-  for (const m of row.detalle) {
-    if (!porDia.has(m.fecha)) {
-      porDia.set(m.fecha, { km: 0, patente: m.patente, gpsOrigen: m.gpsOrigen })
-    }
-    const prev = porDia.get(m.fecha)!
-    prev.km += m.kmTotal || 0
-  }
-  // Ordenar por fecha
-  const dias = [...porDia.entries()].sort((a, b) => a[0].localeCompare(b[0]))
-
-  // Acumulado progresivo para mostrar cuándo cruzó el límite
+  // Listar cada marcacion con su entrada -> salida real (igual que Bitacora),
+  // ordenadas por periodo_inicio. Acumulado progresivo para resaltar cuando cruzo el limite.
+  const marcacionesOrdenadas = [...row.detalle].sort((a, b) => {
+    const av = a.periodoInicio || `${a.fecha}T${a.entrada}`
+    const bv = b.periodoInicio || `${b.fecha}T${b.entrada}`
+    return av.localeCompare(bv)
+  })
   let acumulado = 0
-  const diasConAcum = dias.map(([fecha, info]) => {
-    acumulado += info.km
-    return { fecha, ...info, acumulado, excedeAqui: acumulado > row.limite }
+  const marcacionesConAcum = marcacionesOrdenadas.map(m => {
+    acumulado += m.kmTotal || 0
+    return { m, acumulado, excedeAqui: acumulado > row.limite }
   })
 
   // Agrupar excesos de velocidad por ubicación
@@ -183,55 +169,72 @@ export function ExcesoKmDetalleDrawer({ row, onClose, semanaInicio, semanaFin }:
         {/* BODY */}
         <div style={{ flex: 1, overflowY: 'auto', padding: '16px 20px' }}>
 
-          {/* SECCIÓN: Desglose por día */}
+          {/* SECCIÓN: Marcaciones de la semana (entrada -> salida real, como Bitacora) */}
           <div style={{ marginBottom: 24 }}>
             <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 10, textTransform: 'uppercase', letterSpacing: '0.3px' }}>
-              Desglose por día ({diasConAcum.length} días)
+              Marcaciones de la semana ({marcacionesConAcum.length})
             </div>
-            {diasConAcum.map(d => {
-              const pctAcum = (d.acumulado / row.limite) * 100
+            {marcacionesConAcum.map(({ m, acumulado: acumActual, excedeAqui }, idx) => {
+              const pctAcum = (acumActual / row.limite) * 100
               const pctBar = Math.min(100, pctAcum)
               let barColor = '#16a34a'
               if (pctAcum >= 100) barColor = '#dc2626'
               else if (pctAcum >= 80) barColor = '#ea580c'
               else if (pctAcum >= 60) barColor = '#f59e0b'
+              // Fecha entrada y salida (si periodoInicio/periodoFin existen, los usamos; sino caemos al fecha+entrada)
+              const fechaIni = m.periodoInicio ? m.periodoInicio.slice(0, 10) : m.fecha
+              const fechaFin = m.periodoFin ? m.periodoFin.slice(0, 10) : m.fecha
+              const cruzaDia = fechaIni !== fechaFin
+              const dur = m.duracionMinutos
+              const durTxt = dur != null
+                ? (dur >= 60 ? `${Math.floor(dur / 60)}h ${dur % 60}min` : `${dur} min`)
+                : '-'
               return (
-                <div key={d.fecha} style={{
-                  display: 'grid',
-                  gridTemplateColumns: '50px 80px 1fr 80px',
-                  gap: 10,
+                <div key={`${m.id}-${idx}`} style={{
                   padding: '10px 0',
                   borderBottom: '1px solid var(--border-primary, #e5e7eb)',
-                  alignItems: 'center',
                   fontSize: 12,
+                  display: 'flex', flexDirection: 'column', gap: 6,
                 }}>
-                  <div style={{ display: 'flex', flexDirection: 'column', lineHeight: 1.2 }}>
-                    <span style={{ fontSize: 10, fontWeight: 600, color: 'var(--text-tertiary)', textTransform: 'uppercase' }}>{diaSemana(d.fecha)}</span>
-                    <span style={{ fontSize: 11, fontWeight: 600 }}>{formatFecha(d.fecha)}</span>
+                  {/* Linea 1: rango entrada -> salida + km del turno */}
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', lineHeight: 1.3, flex: 1, minWidth: 0 }}>
+                      <span style={{ fontFamily: 'monospace', fontSize: 12, fontWeight: 600 }}>
+                        <span style={{ color: '#16a34a' }}>{formatFecha(fechaIni)} {m.entrada}</span>
+                        <span style={{ color: 'var(--text-tertiary)', margin: '0 4px' }}>→</span>
+                        <span style={{ color: '#dc2626' }}>
+                          {cruzaDia ? `${formatFecha(fechaFin)} ` : ''}{m.salida}
+                        </span>
+                      </span>
+                      <span style={{ fontSize: 10, color: 'var(--text-tertiary)' }}>
+                        {m.patente?.replace(/\s/g, '')} · {durTxt}
+                      </span>
+                    </div>
+                    <span style={{ fontFamily: 'monospace', fontSize: 13, fontWeight: 700, color: 'var(--text-primary)', whiteSpace: 'nowrap' }}>
+                      {(m.kmTotal || 0).toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} km
+                    </span>
                   </div>
-                  <span style={{ fontFamily: 'monospace', fontSize: 11, fontWeight: 700, color: 'var(--text-primary)' }}>
-                    {d.km.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} km
-                  </span>
+                  {/* Linea 2: barra de acumulado vs limite */}
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
                       <span style={{ fontSize: 10, color: 'var(--text-tertiary)' }}>Acumulado</span>
                       <span style={{ fontFamily: 'monospace', fontSize: 11, fontWeight: 600, color: barColor }}>
-                        {d.acumulado.toLocaleString('es-AR', { maximumFractionDigits: 0 })} km · {pctAcum.toFixed(0)}%
+                        {acumActual.toLocaleString('es-AR', { maximumFractionDigits: 0 })} km · {pctAcum.toFixed(0)}%
                       </span>
                     </div>
                     <div style={{ width: '100%', height: 5, background: 'var(--bg-secondary)', borderRadius: 3, overflow: 'hidden' }}>
                       <div style={{ height: '100%', width: `${pctBar}%`, background: barColor, borderRadius: 3 }} />
                     </div>
+                    <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                      {excedeAqui ? (
+                        <span style={{ fontSize: 10, fontWeight: 600, color: '#dc2626' }}>EXCEDIDO</span>
+                      ) : (
+                        <span style={{ fontSize: 10, color: 'var(--text-tertiary)' }}>
+                          {(row.limite - acumActual).toLocaleString('es-AR', { maximumFractionDigits: 0 })} km libres
+                        </span>
+                      )}
+                    </div>
                   </div>
-                  {d.excedeAqui ? (
-                    <span style={{ fontSize: 10, fontWeight: 600, color: '#dc2626', textAlign: 'right' }}>
-                      EXCEDIDO
-                    </span>
-                  ) : (
-                    <span style={{ fontSize: 10, color: 'var(--text-tertiary)', textAlign: 'right' }}>
-                      {(row.limite - d.acumulado).toLocaleString('es-AR', { maximumFractionDigits: 0 })} km libres
-                    </span>
-                  )}
                 </div>
               )
             })}

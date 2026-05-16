@@ -8,7 +8,7 @@ import { Users, Gauge, DollarSign, ClipboardCheck, AlertCircle } from 'lucide-re
 import Swal from 'sweetalert2'
 import { useSede } from '../../../../contexts/SedeContext'
 import { useAuth } from '../../../../contexts/AuthContext'
-import { useUSSHistoricoData } from '../bitacora/hooks/useUSSHistoricoData'
+import { useExcesoKmData } from './hooks/useExcesoKmData'
 import { supabase } from '../../../../lib/supabase'
 import { BitacoraHeader } from '../bitacora/components'
 import { ExcesoKmTable, type ExcesoKmRow } from './components/ExcesoKmTable'
@@ -58,7 +58,7 @@ export function ControlExcesoKmModule() {
     searchTerm,
     handleSearchChange,
     refresh,
-  } = useUSSHistoricoData(sedeActualId)
+  } = useExcesoKmData(sedeActualId)
 
   // Default: arrancar mostrando la SEMANA ANTERIOR COMPLETA (lunes a domingo).
   // Si la semana en curso recién arranca (lunes/martes), no habría datos suficientes.
