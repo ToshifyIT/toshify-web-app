@@ -62,7 +62,6 @@ export interface ExcesoKmDateRange {
 export function useExcesoKmData(sedeId?: string | null) {
   const [dateRange, setDateRange] = useState<ExcesoKmDateRange>(() => {
     // Default: lunes a domingo de la semana actual (ART)
-    const today = getToday()
     const d = new Date()
     const day = d.getDay()
     const diff = d.getDate() - day + (day === 0 ? -6 : 1)
@@ -98,8 +97,6 @@ export function useExcesoKmData(sedeId?: string | null) {
     setError(null)
     try {
       // Ventana estricta: startDate 00:00 ART -> endDate 23:59:59 ART
-      const desde = `${dateRange.startDate}T00:00:00`
-      const hasta = `${dateRange.endDate}T23:59:59`
       const weekStartMs = new Date(`${dateRange.startDate}T00:00:00-03:00`).getTime()
       const weekEndMs = new Date(`${dateRange.endDate}T23:59:59-03:00`).getTime()
 
