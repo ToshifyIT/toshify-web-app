@@ -399,5 +399,30 @@
     flex-direction: column;
     align-items: flex-start;
   }
+
+  /* Chart containers: alturas reducidas para mobile */
+  .dashboard-chart-container {
+    height: 220px;
+  }
+  .dashboard-chart-container-tall {
+    height: 280px;
+  }
+
+  /* Asegurar que los charts ocupen el ancho disponible */
+  .dashboard-charts-row {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+
+  /* Cards de dashboard: padding reducido en mobile */
+  .dashboard-card {
+    padding: 16px;
+    overflow: hidden;
+  }
+
+  /* Forzar ResponsiveContainer a tomar el ancho real */
+  .recharts-responsive-container {
+    width: 100% !important;
+  }
 }
 

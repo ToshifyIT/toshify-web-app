@@ -846,6 +846,10 @@ export function PortalPage() {
     const subtotalCargos = cargos.reduce((sum, d) => sum + d.total, 0)
     const subtotalDescuentos = descuentos.reduce((sum, d) => sum + d.total, 0)
     const totalAPagar = subtotalCargos - subtotalDescuentos + saldoAnterior
+    // Saldo real = referencial - lo ya pagado (Cabify + ajustes + transferencias).
+    // Si > 0 = todavia debe. Si <= 0 = cubierto o a favor.
+    const totalPagadoSemana = detallePagos.reduce((s, p) => s + p.monto, 0)
+    const saldoPendiente = totalAPagar - totalPagadoSemana
 
     return (
       <div className="portal">
@@ -992,9 +996,9 @@ export function PortalPage() {
                       <div
                         className="portal-detail-section-title"
                         style={{ color: '#059669' }}
-                        title="Cobros directos de Cabify (app) y/o transferencias del conductor a las cuentas de Toshify."
+                        title="Aportes registrados: app Cabify y transferencias a Toshify."
                       >
-                        Pagos
+                        Aportes
                       </div>
                       <div className="portal-detail-items">
                         {detallePagos.map((p) => {
@@ -1015,7 +1019,7 @@ export function PortalPage() {
                           )
                         })}
                         <div className="portal-detail-item" style={{ borderTop: '1px solid var(--border-primary)', paddingTop: '6px', marginTop: '4px' }}>
-                          <span className="portal-detail-item-name" style={{ fontWeight: 600, fontSize: '12px' }}>Total pagado</span>
+                          <span className="portal-detail-item-name" style={{ fontWeight: 600, fontSize: '12px' }}>Total aportado</span>
                           <span className="portal-detail-item-amount" style={{ fontWeight: 600, color: '#059669' }}>-{formatCurrency(totalPagado)}</span>
                         </div>
                       </div>
@@ -1023,14 +1027,19 @@ export function PortalPage() {
                   )
                 })()}
 
-                {/* TOTAL */}
+                {/* TOTAL — color segun saldo pendiente real (referencial - pagos):
+                    rojo si todavia debe, verde si esta cubierto o a favor */}
                 <div className="portal-detail-total">
                   <div className="portal-detail-total-label">Monto Total Referencial</div>
-                  <div className={`portal-detail-total-amount ${totalAPagar > 0 ? 'debit' : 'credit'}`}>
+                  <div className={`portal-detail-total-amount ${saldoPendiente > 0.01 ? 'debit' : 'credit'}`}>
                     {formatCurrency(totalAPagar)}
                   </div>
                   <div className="portal-detail-total-note">
-                    {totalAPagar > 0 ? 'Monto referencial' : totalAPagar < 0 ? 'Saldo a favor' : 'Sin saldo'}
+                    {saldoPendiente > 0.01
+                      ? `Pendiente de pago: ${formatCurrency(saldoPendiente)}`
+                      : saldoPendiente < -0.01
+                        ? `Saldo a favor: ${formatCurrency(Math.abs(saldoPendiente))}`
+                        : 'Cubierto'}
                   </div>
                 </div>
               </div>
@@ -1092,7 +1101,7 @@ export function PortalPage() {
               <div className="portal-stat-card">
                 <div className="portal-stat-label">
                   Última semana
-                  <span className="portal-stat-tooltip" data-tooltip="Monto total referencial de la última semana">ⓘ</span>
+                  <span className="portal-stat-tooltip" data-tooltip="Monto referencial de la última semana registrada.">ⓘ</span>
                 </div>
                 <div className="portal-stat-value debit">{formatCurrency(stats.ultima)}</div>
                 {stats.variacion !== 0 && (
@@ -1104,25 +1113,31 @@ export function PortalPage() {
               <div className="portal-stat-card">
                 <div className="portal-stat-label">
                   Promedio semanal
-                  <span className="portal-stat-tooltip" data-tooltip="Promedio de los montos totales referenciales de las semanas que he tenido un vehículo">ⓘ</span>
+                  <span className="portal-stat-tooltip" data-tooltip="Promedio de los montos referenciales de tus últimas semanas.">ⓘ</span>
                 </div>
                 <div className="portal-stat-value">{formatCurrency(stats.promedio)}</div>
                 <div className="portal-stat-sub">{stats.totalSemanas} semanas</div>
               </div>
               <div className="portal-stat-card">
-                <div className="portal-stat-label">Ganancia Cabify</div>
+                <div className="portal-stat-label">
+                  Ganancia Cabify
+                  <span className="portal-stat-tooltip" data-tooltip="Tu ingreso registrado por la app Cabify en la última semana.">ⓘ</span>
+                </div>
                 <div className="portal-stat-value" style={{ color: '#059669' }}>{formatCurrency(stats.ultimaGanancia)}</div>
                 <div className="portal-stat-sub">última semana</div>
               </div>
               <div className="portal-stat-card">
-                <div className="portal-stat-label">Saldo actual</div>
+                <div className="portal-stat-label">
+                  Saldo actual
+                  <span className="portal-stat-tooltip" data-tooltip="Saldo referencial acumulado. En rojo si está pendiente, en verde si tienes a favor.">ⓘ</span>
+                </div>
                 {saldo ? (
                   <>
                     <div className={`portal-stat-value ${saldo.saldo_actual < 0 ? 'debit' : 'credit'}`}>
                       {saldo.saldo_actual < 0 ? '-' : ''}{formatCurrency(Math.abs(saldo.saldo_actual))}
                     </div>
                     <div className="portal-stat-sub">
-                      {saldo.saldo_actual > 0 ? 'A favor' : saldo.saldo_actual < 0 ? 'Deuda' : 'Sin saldo'}
+                      {saldo.saldo_actual > 0 ? 'A favor' : saldo.saldo_actual < 0 ? 'Pendiente' : 'Sin saldo'}
                     </div>
                   </>
                 ) : (
@@ -1149,11 +1164,11 @@ export function PortalPage() {
                     <div className="portal-chart-legend">
                       <span className="portal-legend-item">
                         <span className="portal-legend-dot" style={{ background: '#ff0033' }} /> Proforma
-                        <span className="portal-stat-tooltip" data-tooltip="Monto de compromiso semanal de suma de conceptos: alquiler, garant&#237;a y otros">&#9432;</span>
+                        <span className="portal-stat-tooltip" data-tooltip="Monto referencial de cada semana: alquiler, garantía y otros conceptos.">&#9432;</span>
                       </span>
                       <span className="portal-legend-item">
                         <span className="portal-legend-dot" style={{ background: '#059669' }} /> Ganancia Cabify
-                        <span className="portal-stat-tooltip" data-tooltip="Total semanal recaudado por el conductor a trav&#233;s de la aplicaci&#243;n Cabify (excluye efectivo)">&#9432;</span>
+                        <span className="portal-stat-tooltip" data-tooltip="Tu ingreso registrado por la app Cabify cada semana.">&#9432;</span>
                       </span>
                     </div>
                   </div>
@@ -1205,17 +1220,18 @@ export function PortalPage() {
                   </div>
                 </div>
 
-                {/* Chart: Proforma vs Pagos */}
+                {/* Chart: Proforma vs Aportes */}
                 <div className="portal-chart-card" style={{ marginTop: '12px' }}>
                   <div className="portal-chart-header">
-                    <div className="portal-chart-title">Proforma vs Pagos</div>
+                    <div className="portal-chart-title">Proforma vs Aportes</div>
                     <div className="portal-chart-legend">
                       <span className="portal-legend-item">
                         <span className="portal-legend-dot" style={{ background: '#ff0033' }} /> Proforma
+                        <span className="portal-stat-tooltip" data-tooltip="Monto referencial de cada semana: alquiler, garantía y otros conceptos.">&#9432;</span>
                       </span>
                       <span className="portal-legend-item">
-                        <span className="portal-legend-dot" style={{ background: '#2563eb' }} /> Pagos
-                        <span className="portal-stat-tooltip" data-tooltip="Total pagado cada semana (Cabify, efectivo, transferencia, cuotas)">&#9432;</span>
+                        <span className="portal-legend-dot" style={{ background: '#2563eb' }} /> Aportes
+                        <span className="portal-stat-tooltip" data-tooltip="Aportes registrados cada semana: app Cabify y transferencias a Toshify.">&#9432;</span>
                       </span>
                     </div>
                   </div>
@@ -1236,7 +1252,7 @@ export function PortalPage() {
                           tickFormatter={(v: number) => v >= 1000 ? `$${(v / 1000).toFixed(0)}K` : `$${v}`}
                         />
                         <Tooltip
-                          formatter={(value: string | number, name: string) => [formatCurrency(Number(value)), name === 'facturacion' ? 'Proforma' : 'Pagos']}
+                          formatter={(value: string | number, name: string) => [formatCurrency(Number(value)), name === 'facturacion' ? 'Proforma' : 'Aportes']}
                           contentStyle={{
                             background: 'var(--bg-tertiary)',
                             border: '1px solid var(--border-primary)',
@@ -1294,27 +1310,48 @@ export function PortalPage() {
                   {facturas.map((f) => {
                     const p = f.periodos_facturacion
                     const pagado = pagadoPorSemana[`${p.semana}-${p.anio}`] || 0
+                    // Calculo de cobertura: pagado vs total a pagar
+                    const referencial = f.total_a_pagar || 0
+                    const saldo = referencial - pagado
+                    const cobertura = referencial > 0 ? Math.min(100, (pagado / referencial) * 100) : (pagado > 0 ? 100 : 0)
+                    // Estado: cubierto (saldo <= 0.01), pendiente (saldo > 0.01), a favor (saldo < -0.01)
+                    let estado: 'cubierto' | 'pendiente' | 'favor' = 'cubierto'
+                    if (saldo > 0.01) estado = 'pendiente'
+                    else if (saldo < -0.01) estado = 'favor'
+                    const fillColor = estado === 'pendiente'
+                      ? 'linear-gradient(90deg, #f59e0b, #dc2626)'
+                      : estado === 'favor' ? '#10b981' : '#059669'
+                    const estadoColor = estado === 'pendiente' ? '#dc2626' : '#059669'
+                    const estadoTexto = estado === 'pendiente'
+                      ? `Pendiente ${formatCurrency(saldo)}`
+                      : estado === 'favor'
+                        ? `A favor ${formatCurrency(Math.abs(saldo))}`
+                        : '✓ Cubierto'
                     return (
                       <div key={f.id} className="portal-week-card" onClick={() => openDetail(f)}>
-                        <div className="portal-week-left">
-                          <div className="portal-week-title">Semana {p.semana} / {p.anio}</div>
-                          <div className="portal-week-dates">
-                            {format(parseISO(p.fecha_inicio), 'dd/MM/yyyy')} - {format(parseISO(p.fecha_fin), 'dd/MM/yyyy')}
-                          </div>
-                          <div className="portal-week-info">
-                            {f.vehiculo_patente || '-'} · {f.tipo_alquiler} · {f.turnos_cobrados}/{f.turnos_base} turnos
-                          </div>
-                          {pagado > 0 && (
-                            <div className="portal-week-info" style={{ color: '#059669', fontWeight: 500, marginTop: '2px' }}>
-                              Pagado: {formatCurrency(pagado)}
+                        <div className="portal-week-left" style={{ width: '100%' }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: '4px' }}>
+                            <div className="portal-week-title">Semana {p.semana} / {p.anio}</div>
+                            <div className="portal-week-total" style={{ fontSize: '15px', fontWeight: 800 }}>
+                              {formatCurrency(referencial)}
                             </div>
-                          )}
-                        </div>
-                        <div className="portal-week-right">
-                          <div className={`portal-week-total ${f.total_a_pagar > 0 ? 'debit' : 'credit'}`}>
-                            {formatCurrency(f.total_a_pagar)}
                           </div>
-                          <span className="portal-week-arrow">›</span>
+                          <div className="portal-week-dates" style={{ marginBottom: '8px' }}>
+                            {format(parseISO(p.fecha_inicio), 'dd/MM/yyyy')} - {format(parseISO(p.fecha_fin), 'dd/MM/yyyy')} · {f.vehiculo_patente || '-'} · {f.turnos_cobrados}/{f.turnos_base} turnos
+                          </div>
+                          <div style={{ marginTop: '6px' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '10px', marginBottom: '4px' }}>
+                              <span style={{ color: 'var(--text-tertiary)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.4px' }}>
+                                Cobertura {Math.round(cobertura)}%
+                              </span>
+                              <span style={{ color: estadoColor, fontWeight: 700, fontFamily: 'monospace' }}>
+                                {estadoTexto}
+                              </span>
+                            </div>
+                            <div style={{ height: '6px', background: '#f3f4f6', borderRadius: '3px', overflow: 'hidden' }}>
+                              <div style={{ height: '100%', width: `${cobertura}%`, background: fillColor, borderRadius: '3px' }} />
+                            </div>
+                          </div>
                         </div>
                       </div>
                     )

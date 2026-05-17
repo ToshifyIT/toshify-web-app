@@ -579,7 +579,7 @@ export function CobrosFraccionadosTab({ periodoActual }: CobrosFraccionadosTabPr
       </div>
 
       {!loading && cobros.length > 0 && (
-        <div style={{
+        <div className="cf-filters-row" style={{
           display: 'flex',
           gap: '10px',
           alignItems: 'center',
@@ -606,21 +606,12 @@ export function CobrosFraccionadosTab({ periodoActual }: CobrosFraccionadosTabPr
           </div>
 
           {/* Tipo */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-            <label style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-secondary, #6B7280)' }}>Tipo:</label>
+          <div className="cf-filter-group">
+            <label className="cf-filter-label">Tipo:</label>
             <select
+              className="cf-filter-select"
               value={filtroTipo}
               onChange={(e) => setFiltroTipo(e.target.value as 'todos' | 'saldo' | 'multa')}
-              style={{
-                padding: '7px 10px',
-                fontSize: '13px',
-                border: '1px solid var(--border-color, #d1d5db)',
-                borderRadius: '6px',
-                backgroundColor: 'var(--bg-primary, white)',
-                color: 'var(--text-primary, #111827)',
-                cursor: 'pointer',
-                minWidth: '160px',
-              }}
             >
               <option value="todos">Todos ({conteosTipo.todos})</option>
               <option value="saldo">Saldos ({conteosTipo.saldo})</option>
@@ -629,21 +620,12 @@ export function CobrosFraccionadosTab({ periodoActual }: CobrosFraccionadosTabPr
           </div>
 
           {/* Estado */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-            <label style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-secondary, #6B7280)' }}>Estado:</label>
+          <div className="cf-filter-group">
+            <label className="cf-filter-label">Estado:</label>
             <select
+              className="cf-filter-select"
               value={filtroEstado}
               onChange={(e) => setFiltroEstado(e.target.value as FiltroEstado)}
-              style={{
-                padding: '7px 10px',
-                fontSize: '13px',
-                border: '1px solid var(--border-color, #d1d5db)',
-                borderRadius: '6px',
-                backgroundColor: 'var(--bg-primary, white)',
-                color: 'var(--text-primary, #111827)',
-                cursor: 'pointer',
-                minWidth: '200px',
-              }}
             >
               <option value="activos">Activos ({conteos.activos})</option>
               <option value="completados">Completados ({conteos.completados})</option>

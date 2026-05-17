@@ -290,3 +290,62 @@
     padding: 8px;
   }
 }
+
+/* ===========================================
+   Filtros (Tipo, Estado) — desktop horizontal
+   En mobile (<640px) en una sola fila de 2 columnas iguales
+   =========================================== */
+.cf-filter-group {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.cf-filter-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-secondary, #6B7280);
+  white-space: nowrap;
+}
+
+.cf-filter-select {
+  padding: 7px 10px;
+  font-size: 13px;
+  border: 1px solid var(--border-color, #d1d5db);
+  border-radius: 6px;
+  background-color: var(--bg-primary, white);
+  color: var(--text-primary, #111827);
+  cursor: pointer;
+  min-width: 160px;
+}
+
+@media (max-width: 768px) {
+  .cf-filters-row {
+    gap: 8px !important;
+  }
+  /* Buscador full width arriba */
+  .cf-filters-row > .dt-search-wrapper {
+    flex: 1 1 100% !important;
+    min-width: 0 !important;
+  }
+  /* Tipo + Estado pasan a 50/50 en una sola fila debajo del buscador */
+  .cf-filter-group {
+    flex: 1 1 calc(50% - 4px);
+    flex-direction: column;
+    align-items: stretch;
+    gap: 4px;
+    min-width: 0;
+  }
+  .cf-filter-label {
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+    color: var(--text-tertiary, #9CA3AF);
+  }
+  .cf-filter-select {
+    min-width: 0;
+    width: 100%;
+    font-size: 16px; /* evita zoom iOS */
+    padding: 8px 10px;
+  }
+}

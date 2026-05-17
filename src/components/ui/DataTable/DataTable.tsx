@@ -1623,19 +1623,19 @@ export function DataTable<T>({
                         // Obtener valor raw para determinar si está vacío
                         const rawValue = cell.getValue();
                         
-                        // Determinar si el valor está vacío o es un placeholder
-                        const isEmptyValue = (val: unknown, rendered: React.ReactNode): boolean => {
-                          // Valores nulos/undefined
-                          if (val === null || val === undefined || val === '') return true;
-                          // Strings vacíos o solo guiones
-                          if (typeof val === 'string' && (val.trim() === '' || val.trim() === '-' || val === 'N/A')) return true;
-                          // Verificar el contenido renderizado
-                          if (typeof rendered === 'string' && (rendered.trim() === '-' || rendered.trim() === '' || rendered === 'N/A')) return true;
+                        // Detectar valor vacio — SOLO mirando el raw value, no el JSX renderizado
+                        // (para no romper cells con iconos/badges que tienen texto vacio por design)
+                        const isEmptyValue = (val: unknown): boolean => {
+                          if (val === null || val === undefined) return true;
+                          if (typeof val === 'string') {
+                            const t = val.trim();
+                            if (t === '' || t === '-' || t === '–' || t === '—' || t === 'N/A') return true;
+                          }
                           return false;
                         };
                         
                         // Ocultar campos vacíos en mobile para cards más limpias
-                        if (isEmptyValue(rawValue, renderedValue)) {
+                        if (isEmptyValue(rawValue)) {
                           return null;
                         }
                         

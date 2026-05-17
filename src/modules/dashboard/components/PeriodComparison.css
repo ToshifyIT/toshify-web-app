@@ -304,22 +304,55 @@
 
 @media (max-width: 768px) {
   .dashboard-comparison-controls {
-    padding: 16px;
+    padding: 12px;
   }
 
-  /* Removed granularity button styles that caused wrapping */
+  /* En mobile los periodos A y B van EN LA MISMA FILA con VS al medio */
   .dashboard-periods-row {
-    flex-direction: column;
-    gap: 12px;
+    flex-direction: row;
+    gap: 8px;
+    align-items: flex-end;
   }
 
   .dashboard-period-separator {
-    align-self: center;
-    margin-bottom: 0;
+    align-self: flex-end;
+    margin-bottom: 8px;
+    font-size: 10px;
+    color: var(--text-tertiary);
+    font-weight: 700;
   }
 
   .period-picker__select {
     width: 100% !important;
+    font-size: 16px !important; /* evita zoom iOS */
+    padding: 6px 8px !important;
+  }
+
+  /* Metric cards compactas en mobile */
+  .period-comparison-card {
+    padding: 12px;
+    min-height: 0;
+  }
+
+  .period-comparison-name {
+    font-size: 10px;
+    margin-bottom: 8px;
+  }
+
+  .period-comparison-values {
+    gap: 12px;
+    margin-bottom: 8px;
+    justify-content: space-around;
+    width: 100%;
+  }
+
+  .period-comparison-value-main {
+    font-size: 14px;
+  }
+
+  .period-comparison-badge {
+    font-size: 10px;
+    padding: 3px 6px;
   }
 }
 

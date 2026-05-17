@@ -1,0 +1,254 @@
+/* =========================================
+   SearchableSelect — sigue tokens del design system
+   ========================================= */
+
+.ss-root {
+  position: relative;
+  display: inline-block;
+  width: 100%;
+  font-family: 'Roboto', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+}
+
+/* ------- Trigger (caja principal, parece un input) ------- */
+.ss-trigger {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+  padding: 0 12px;
+  background: var(--bg-primary, #fff);
+  border: 1px solid var(--border-primary, #E5E7EB);
+  border-radius: 6px;
+  color: var(--text-primary, #1F2937);
+  font-size: 14px;
+  font-family: inherit;
+  cursor: pointer;
+  transition: border-color 0.15s, box-shadow 0.15s;
+  text-align: left;
+  line-height: 1;
+}
+
+.ss-size-sm .ss-trigger { height: 28px; font-size: 12px; padding: 0 10px; }
+.ss-size-md .ss-trigger { height: 36px; font-size: 14px; }
+.ss-size-lg .ss-trigger { height: 44px; font-size: 16px; padding: 0 14px; }
+
+.ss-trigger:hover:not(:disabled) {
+  border-color: var(--text-tertiary, #9CA3AF);
+}
+
+.ss-open .ss-trigger,
+.ss-trigger:focus-visible {
+  border-color: var(--color-primary, #ff0033);
+  box-shadow: 0 0 0 3px var(--color-primary-light, rgba(255, 0, 51, 0.1));
+  outline: none;
+}
+
+.ss-disabled .ss-trigger {
+  background: var(--bg-tertiary, #F3F4F6);
+  color: var(--text-tertiary, #9CA3AF);
+  cursor: not-allowed;
+}
+
+.ss-value {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ss-placeholder {
+  color: var(--text-tertiary, #9CA3AF);
+  font-weight: 400;
+}
+
+.ss-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+  color: var(--text-secondary, #6B7280);
+}
+
+.ss-clear {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.ss-clear:hover { background: var(--bg-tertiary, #F3F4F6); color: var(--color-danger, #DC2626); }
+
+.ss-chevron {
+  transition: transform 0.18s ease;
+}
+.ss-open .ss-chevron { transform: rotate(180deg); }
+
+/* ------- Dropdown ------- */
+.ss-dropdown {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  z-index: 1500;
+  background: var(--bg-primary, #fff);
+  border: 1px solid var(--border-primary, #E5E7EB);
+  border-radius: 8px;
+  box-shadow: var(--shadow-lg, 0 20px 25px -5px rgba(0, 0, 0, 0.1));
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  max-height: 320px;
+  animation: ss-fade-in 0.12s ease;
+}
+
+@keyframes ss-fade-in {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* ------- Buscador interno ------- */
+.ss-search-wrap {
+  position: relative;
+  padding: 8px;
+  border-bottom: 1px solid var(--border-secondary, #F3F4F6);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.ss-search-icon {
+  position: absolute;
+  left: 18px;
+  color: var(--text-tertiary, #9CA3AF);
+  pointer-events: none;
+}
+
+.ss-search-input {
+  width: 100%;
+  padding: 7px 28px 7px 32px;
+  border: 1px solid var(--border-primary, #E5E7EB);
+  border-radius: 6px;
+  background: var(--bg-secondary, #f8f5f6);
+  color: var(--text-primary, #1F2937);
+  font-size: 14px; /* 14px en desktop, en mobile sube a 16px via media query */
+  font-family: inherit;
+  outline: none;
+  transition: border-color 0.15s, background 0.15s;
+}
+
+.ss-search-input:focus {
+  border-color: var(--color-primary, #ff0033);
+  background: var(--bg-primary, #fff);
+}
+
+.ss-search-clear {
+  position: absolute;
+  right: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border: none;
+  background: transparent;
+  color: var(--text-tertiary, #9CA3AF);
+  cursor: pointer;
+  border-radius: 50%;
+  padding: 0;
+}
+.ss-search-clear:hover { background: var(--bg-tertiary, #F3F4F6); color: var(--text-primary, #1F2937); }
+
+/* ------- Lista de opciones ------- */
+.ss-list {
+  overflow-y: auto;
+  flex: 1;
+  padding: 4px;
+  /* Scrollbar mas finito */
+  scrollbar-width: thin;
+  scrollbar-color: var(--text-tertiary, #9CA3AF) transparent;
+}
+.ss-list::-webkit-scrollbar { width: 6px; }
+.ss-list::-webkit-scrollbar-track { background: transparent; }
+.ss-list::-webkit-scrollbar-thumb { background: var(--text-tertiary, #9CA3AF); border-radius: 3px; }
+
+.ss-option {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 14px;
+  color: var(--text-primary, #1F2937);
+  transition: background 0.1s;
+  user-select: none;
+}
+
+.ss-option:hover:not(.ss-opt-disabled),
+.ss-option.ss-focused:not(.ss-opt-disabled) {
+  background: var(--bg-tertiary, #F3F4F6);
+}
+
+.ss-option.ss-selected {
+  background: var(--color-primary-light, rgba(255, 0, 51, 0.1));
+  color: var(--color-primary, #ff0033);
+  font-weight: 600;
+}
+
+.ss-option.ss-selected.ss-focused {
+  background: var(--color-primary-light, rgba(255, 0, 51, 0.1));
+}
+
+.ss-option.ss-opt-disabled {
+  color: var(--text-tertiary, #9CA3AF);
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.ss-option-content {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+  flex: 1;
+}
+
+.ss-option-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ss-option-subtitle {
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--text-tertiary, #9CA3AF);
+}
+
+.ss-option-check {
+  color: var(--color-primary, #ff0033);
+  flex-shrink: 0;
+}
+
+.ss-empty {
+  padding: 20px 12px;
+  text-align: center;
+  color: var(--text-tertiary, #9CA3AF);
+  font-size: 13px;
+}
+
+/* ------- Mobile: bigger touch targets, 16px font para evitar zoom iOS ------- */
+@media (max-width: 768px) {
+  .ss-size-md .ss-trigger { height: 44px; font-size: 16px; padding: 0 14px; }
+  .ss-size-sm .ss-trigger { height: 36px; font-size: 14px; padding: 0 12px; }
+  .ss-search-input { font-size: 16px; padding: 9px 28px 9px 32px; }
+  .ss-option { padding: 12px 12px; font-size: 15px; }
+  .ss-dropdown { max-height: 60vh; }
+}
+
+/* ------- Tema oscuro: respeta vars del :root.dark ------- */
