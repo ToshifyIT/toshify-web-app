@@ -8501,14 +8501,53 @@ export function ReporteFacturacionTab() {
           const totalProyectado = src.reduce((s, f) => s + (f.proyectado_alquiler || 0), 0)
           const totalAlquilerActual = src.reduce((s, f) => s + (f.subtotal_alquiler || 0), 0)
           const porcentaje = totalProyectado > 0 ? Math.round(totalAlquilerActual / totalProyectado * 100) : 0
-          return `<div style="text-align:left;font-size:13px;">
-            <p>Alquiler semanal proyectado (precio_unitario × 7):</p>
-            <table style="width:100%;border-collapse:collapse;">
-              <tr><td>Conductores con alquiler</td><td style="text-align:right"><b>${conductoresConProyectado.length}</b></td></tr>
-              <tr><td>Proyectado semanal</td><td style="text-align:right"><b>${formatCurrency(totalProyectado)}</b></td></tr>
-              <tr><td>Alquiler actual</td><td style="text-align:right"><b>${formatCurrency(totalAlquilerActual)}</b></td></tr>
-              <tr style="border-top:2px solid #ccc;"><td><b>Cobertura</b></td><td style="text-align:right"><b>${porcentaje}%</b></td></tr>
-            </table>
+          // Separar activos (proyectados a 7 dias) vs baja (proyectados a dias reales).
+          // estado_billing === 'De baja' indica que el conductor ya no es ACTIVO en el sistema.
+          const activos = conductoresConProyectado.filter(f => f.estado_billing !== 'De baja')
+          const bajas = conductoresConProyectado.filter(f => f.estado_billing === 'De baja')
+          const proyectadoActivos = activos.reduce((s, f) => s + (f.proyectado_alquiler || 0), 0)
+          const proyectadoBajas = bajas.reduce((s, f) => s + (f.proyectado_alquiler || 0), 0)
+          const pctClamped = Math.min(100, Math.max(0, porcentaje))
+          const barColor = porcentaje >= 90 ? '#16a34a' : porcentaje >= 60 ? '#f59e0b' : '#dc2626'
+          // Iconos lucide inline (SVG)
+          const iconTarget = `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#dc2626" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg>`
+          const iconCheck = `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#15803d" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>`
+          const iconAlert = `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#92400e" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>`
+          const iconReceipt = `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#6b7280" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 2v20l2-1 2 1 2-1 2 1 2-1 2 1 2-1 2 1V2l-2 1-2-1-2 1-2-1-2 1-2-1-2 1Z"/><path d="M14 8H8"/><path d="M16 12H8"/><path d="M13 16H8"/></svg>`
+          const iconInfo = `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#1e40af" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;margin-top:1px;"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>`
+          return `<div style="text-align:left;font-size:13px;color:#111827;">
+            <div style="text-align:center;padding:18px 12px;background:linear-gradient(135deg,#fef2f2 0%,#fff 100%);border-radius:8px;margin-bottom:16px;">
+              <div style="display:flex;justify-content:center;margin-bottom:8px;">${iconTarget}</div>
+              <div style="font-size:26px;font-weight:800;color:#111827;letter-spacing:-0.5px;">${formatCurrency(totalProyectado)}</div>
+              <div style="font-size:11px;color:#6b7280;margin-top:4px;">Si todos cumplieran sus días asignados</div>
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px;">
+              <div style="padding:12px;border-radius:8px;text-align:center;background:#f0fdf4;border:1px solid #86efac;">
+                <div style="display:inline-flex;align-items:center;gap:5px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:#15803d;margin-bottom:6px;">${iconCheck}<span>Activos</span></div>
+                <div style="font-size:22px;font-weight:800;color:#111827;line-height:1;">${activos.length}<span style="font-size:12px;font-weight:600;color:#6b7280;margin-left:4px;">cond.</span></div>
+                <div style="font-size:13px;font-weight:700;margin:6px 0 4px;">${formatCurrency(proyectadoActivos)}</div>
+                <div style="font-size:10px;color:#6b7280;">7 días c/u</div>
+              </div>
+              <div style="padding:12px;border-radius:8px;text-align:center;background:#fef3c7;border:1px solid #fcd34d;">
+                <div style="display:inline-flex;align-items:center;gap:5px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:#92400e;margin-bottom:6px;">${iconAlert}<span>Baja en la semana</span></div>
+                <div style="font-size:22px;font-weight:800;color:#111827;line-height:1;">${bajas.length}<span style="font-size:12px;font-weight:600;color:#6b7280;margin-left:4px;">cond.</span></div>
+                <div style="font-size:13px;font-weight:700;margin:6px 0 4px;">${formatCurrency(proyectadoBajas)}</div>
+                <div style="font-size:10px;color:#6b7280;">Proyectado parcial</div>
+              </div>
+            </div>
+            <div style="background:#f3f4f6;padding:12px;border-radius:8px;">
+              <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;font-size:13px;">
+                <span style="display:inline-flex;align-items:center;gap:6px;color:#6b7280;">${iconReceipt}<span>Ya facturado</span></span>
+                <span style="font-weight:700;">${formatCurrency(totalAlquilerActual)}</span>
+              </div>
+              <div style="height:10px;background:#e5e7eb;border-radius:5px;overflow:hidden;margin:6px 0;">
+                <div style="height:100%;width:${pctClamped}%;background:${barColor};border-radius:5px;"></div>
+              </div>
+              <div style="text-align:right;font-size:11px;color:${barColor};font-weight:600;">${porcentaje}% de cobertura</div>
+            </div>
+            <div style="display:flex;gap:8px;align-items:flex-start;background:#eff6ff;border-left:3px solid #3b82f6;padding:10px 12px;border-radius:6px;margin-top:14px;font-size:11px;color:#1e40af;line-height:1.5;">
+              ${iconInfo}<span>Los conductores dados de baja durante la semana solo proyectan los días que efectivamente trabajaron antes de la baja. No se inflan a x7.</span>
+            </div>
           </div>`
         })()
       },
@@ -8653,7 +8692,7 @@ export function ReporteFacturacionTab() {
     }
     const info = descriptions[stat]
     if (!info) return
-    Swal.fire({ title: info.title, html: info.html, icon: 'info', width: 420, confirmButtonText: 'Cerrar' })
+    Swal.fire({ title: info.title, html: info.html, width: 420, confirmButtonText: 'Cerrar' })
   }
 
   // Helper para obtener excesos de un conductor
@@ -8700,7 +8739,7 @@ export function ReporteFacturacionTab() {
         </div>
       ),
       cell: ({ row }) => (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', overflow: 'hidden' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', overflow: 'hidden', paddingLeft: '8px' }}>
           <div style={{ display: 'flex', alignItems: 'center', minWidth: 0 }}>
             <strong
               style={{ fontSize: '11px', textTransform: 'uppercase', cursor: 'pointer', color: 'var(--color-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
@@ -10011,7 +10050,7 @@ export function ReporteFacturacionTab() {
           <div className="fact-modal-overlay" onClick={() => setCobroAppPopup(null)}>
             <div className="fact-modal-content" style={{ maxWidth: '420px' }} onClick={(e) => e.stopPropagation()}>
               <div className="fact-modal-header">
-                <h2 style={{ fontSize: '14px' }}>Cobro App Cabify</h2>
+                <h2 style={{ fontSize: '14px' }}>Ganancia Cabify</h2>
                 <button className="fact-modal-close" onClick={() => setCobroAppPopup(null)}>
                   <X size={20} />
                 </button>
@@ -10022,7 +10061,7 @@ export function ReporteFacturacionTab() {
                 </div>
                 <div style={{ display: 'flex', gap: '16px', marginBottom: '8px', fontSize: '13px' }}>
                   <span style={{ color: '#16a34a', fontWeight: 600 }}>
-                    Cobro App: {formatCurrency(cobroAppPopup.cobroApp)}
+                    Ganancia Cabify: {formatCurrency(cobroAppPopup.cobroApp)}
                   </span>
                   <span style={{ color: pendiente > 0 ? '#dc2626' : '#6b7280', fontWeight: 600 }}>
                     Pendiente: {formatCurrency(pendiente)}

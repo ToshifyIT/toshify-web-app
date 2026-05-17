@@ -521,6 +521,16 @@ export function ConceptosFacturacionTab() {
         : <span style={{ fontFamily: 'monospace' }}>{formatCurrency(row.original.precio_final || 0)}</span>
     },
     {
+      id: 'total_semana',
+      header: 'Total x Semana (.00)',
+      accessorFn: (row) => row.es_variable ? null : Math.round((row.precio_final || 0) * 7),
+      cell: ({ row }) => row.original.es_variable
+        ? <span style={{ color: '#6B7280', fontStyle: 'italic' }}>-</span>
+        : <span style={{ fontFamily: 'monospace', fontWeight: 600 }}>
+            {formatCurrency(Math.round((row.original.precio_final || 0) * 7))}
+          </span>
+    },
+    {
       accessorKey: 'modalidad',
       header: 'Modalidad',
       cell: ({ row }) => (

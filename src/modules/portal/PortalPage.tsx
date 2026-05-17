@@ -1110,7 +1110,7 @@ export function PortalPage() {
                 <div className="portal-stat-sub">{stats.totalSemanas} semanas</div>
               </div>
               <div className="portal-stat-card">
-                <div className="portal-stat-label">Cobro App Cabify</div>
+                <div className="portal-stat-label">Ganancia Cabify</div>
                 <div className="portal-stat-value" style={{ color: '#059669' }}>{formatCurrency(stats.ultimaGanancia)}</div>
                 <div className="portal-stat-sub">última semana</div>
               </div>
@@ -1145,14 +1145,14 @@ export function PortalPage() {
                 {/* Chart */}
                 <div className="portal-chart-card">
                   <div className="portal-chart-header">
-                    <div className="portal-chart-title">Proforma vs Cobro App Cabify</div>
+                    <div className="portal-chart-title">Proforma vs Ganancia Cabify</div>
                     <div className="portal-chart-legend">
                       <span className="portal-legend-item">
                         <span className="portal-legend-dot" style={{ background: '#ff0033' }} /> Proforma
                         <span className="portal-stat-tooltip" data-tooltip="Monto de compromiso semanal de suma de conceptos: alquiler, garant&#237;a y otros">&#9432;</span>
                       </span>
                       <span className="portal-legend-item">
-                        <span className="portal-legend-dot" style={{ background: '#059669' }} /> Cobro App Cabify
+                        <span className="portal-legend-dot" style={{ background: '#059669' }} /> Ganancia Cabify
                         <span className="portal-stat-tooltip" data-tooltip="Total semanal recaudado por el conductor a trav&#233;s de la aplicaci&#243;n Cabify (excluye efectivo)">&#9432;</span>
                       </span>
                     </div>
@@ -1174,7 +1174,7 @@ export function PortalPage() {
                           tickFormatter={(v: number) => v >= 1000 ? `$${(v / 1000).toFixed(0)}K` : `$${v}`}
                         />
                         <Tooltip
-                          formatter={(value: string | number, name: string) => [formatCurrency(Number(value)), name === 'facturacion' ? 'Proforma' : 'Cobro App Cabify']}
+                          formatter={(value: string | number, name: string) => [formatCurrency(Number(value)), name === 'facturacion' ? 'Proforma' : 'Ganancia Cabify']}
                           contentStyle={{
                             background: 'var(--bg-tertiary)',
                             border: '1px solid var(--border-primary)',
