@@ -284,7 +284,7 @@ const pageStyles = `
     --red-light: rgba(255, 0, 51, 0.06);
     --red-focus: rgba(255, 0, 51, 0.12);
 
-    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    font-family: 'Roboto', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
     background-color: var(--gray-50);
     min-height: 100vh;
     display: flex;

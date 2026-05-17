@@ -8618,10 +8618,10 @@ export function ReporteFacturacionTab() {
             <div style="padding:12px;border-radius:8px;background:#fff;border:1px solid #e5e7eb;">
               <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px;">
                 <span style="width:8px;height:8px;border-radius:50%;background:${p.color};display:inline-block;"></span>
-                <span style="font-size:10px;text-transform:uppercase;letter-spacing:0.5px;font-weight:700;color:#6b7280;">${p.nombre}</span>
+                <span style="font-size:11px;text-transform:uppercase;letter-spacing:0.5px;font-weight:700;color:#6b7280;">${p.nombre}</span>
               </div>
-              <div style="font-size:15px;font-weight:800;color:#111827;font-family:monospace;letter-spacing:-0.3px;">${formatCurrency(p.monto)}</div>
-              <div style="font-size:10px;color:#6b7280;margin-top:4px;">${pct(p.monto)}% del total</div>
+              <div style="font-size:16px;font-weight:800;color:#111827;font-family:monospace;letter-spacing:-0.3px;">${formatCurrency(p.monto)}</div>
+              <div style="font-size:11px;color:#6b7280;margin-top:4px;">${pct(p.monto)}% del total</div>
             </div>
           `).join('')
           return `<div style="text-align:left;font-size:13px;color:#111827;">
@@ -8630,7 +8630,7 @@ export function ReporteFacturacionTab() {
             </div>
             <div style="padding:14px;background:#fef2f2;border-radius:8px;text-align:center;border:1px solid #fecaca;">
               <div style="font-size:11px;color:#991b1b;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;">Total Cargos</div>
-              <div style="font-size:22px;font-weight:800;color:#111827;margin-top:4px;font-family:monospace;letter-spacing:-0.5px;">${formatCurrency(total)}</div>
+              <div style="font-size:24px;font-weight:800;color:#111827;margin-top:6px;font-family:monospace;letter-spacing:-0.5px;">${formatCurrency(total)}</div>
             </div>
           </div>`
         })()
@@ -8666,16 +8666,17 @@ export function ReporteFacturacionTab() {
           const itemsHtml = items.map(it => `
             <div style="display:flex;justify-content:space-between;align-items:center;padding:12px 14px;background:#f0fdf4;border-radius:8px;border-left:3px solid #16a34a;">
               <div>
-                <div style="font-size:12px;color:#374151;font-weight:600;">${it.nombre}</div>
-                <div style="font-size:10px;color:#9ca3af;margin-top:2px;">${it.codigo} · ${it.subtitulo}</div>
+                <div style="font-size:11px;color:#374151;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;">${it.nombre}</div>
+                <div style="font-size:11px;color:#9ca3af;margin-top:2px;">${it.codigo} · ${it.subtitulo}</div>
               </div>
-              <div style="font-size:14px;font-weight:800;color:#15803d;font-family:monospace;">${formatCurrency(it.monto)}</div>
+              <div style="font-size:16px;font-weight:800;color:#15803d;font-family:monospace;">${formatCurrency(it.monto)}</div>
             </div>
           `).join('')
           const iconInfo = `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#1e40af" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;margin-top:1px;"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>`
           return `<div style="text-align:left;font-size:13px;color:#111827;">
             <div style="text-align:center;padding:18px;background:linear-gradient(135deg,#f0fdf4 0%,#fff 100%);border-radius:8px;margin-bottom:14px;">
-              <div style="font-size:26px;font-weight:800;color:#15803d;letter-spacing:-0.5px;">${formatCurrency(descTotal)}</div>
+              <div style="font-size:11px;color:#15803d;text-transform:uppercase;letter-spacing:0.5px;font-weight:700;margin-bottom:6px;">Total Descuentos</div>
+              <div style="font-size:24px;font-weight:800;color:#15803d;letter-spacing:-0.5px;font-family:monospace;">${formatCurrency(descTotal)}</div>
               <div style="font-size:11px;color:#6b7280;margin-top:4px;">Descuentos aplicados esta semana</div>
             </div>
             <div style="display:flex;flex-direction:column;gap:8px;">
@@ -8697,12 +8698,12 @@ export function ReporteFacturacionTab() {
           return `<div style="text-align:left;font-size:13px;color:#111827;">
             <div style="display:flex;flex-direction:column;gap:8px;">
               <div style="padding:14px;background:#fef2f2;border-radius:8px;display:flex;justify-content:space-between;align-items:center;border-left:4px solid #dc2626;">
-                <span style="font-size:12px;color:#991b1b;font-weight:600;">Cargos brutos</span>
-                <span style="font-size:14px;font-weight:700;font-family:monospace;color:#991b1b;">+ ${formatCurrency(totalCargos)}</span>
+                <span style="font-size:11px;color:#991b1b;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;">Cargos brutos</span>
+                <span style="font-size:16px;font-weight:800;font-family:monospace;color:#991b1b;">+ ${formatCurrency(totalCargos)}</span>
               </div>
               <div style="padding:14px;background:#f0fdf4;border-radius:8px;display:flex;justify-content:space-between;align-items:center;border-left:4px solid #16a34a;">
-                <span style="font-size:12px;color:#15803d;font-weight:600;">Descuentos aplicados</span>
-                <span style="font-size:14px;font-weight:700;font-family:monospace;color:#15803d;">− ${formatCurrency(totalDesc)}</span>
+                <span style="font-size:11px;color:#15803d;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;">Descuentos aplicados</span>
+                <span style="font-size:16px;font-weight:800;font-family:monospace;color:#15803d;">− ${formatCurrency(totalDesc)}</span>
               </div>
               <div style="padding:18px;background:linear-gradient(135deg,#dbeafe 0%,#e0e7ff 100%);border-radius:8px;border:2px solid #3b82f6;text-align:center;margin-top:6px;">
                 <div style="font-size:11px;color:#1e3a8a;text-transform:uppercase;letter-spacing:0.5px;font-weight:700;margin-bottom:6px;">A cobrar (Neto)</div>
@@ -8728,25 +8729,25 @@ export function ReporteFacturacionTab() {
           // Colores del ranking (1=rojo intenso, 2=naranja, 3=ambar, 4-5=gris)
           const rankColors = ['#dc2626', '#ea580c', '#f59e0b', '#6b7280', '#6b7280']
           const top5Html = top5.map((f, idx) => `
-            <div style="display:flex;align-items:center;gap:10px;padding:8px 10px;background:#f9fafb;border-radius:6px;">
+            <div style="display:flex;align-items:center;gap:10px;padding:10px 12px;background:#f9fafb;border-radius:6px;">
               <div style="width:22px;height:22px;border-radius:50%;background:${rankColors[idx]};color:#fff;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0;">${idx + 1}</div>
-              <div style="flex:1;font-size:12px;color:#374151;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${f.conductor_nombre}</div>
-              <div style="font-size:13px;font-weight:700;color:#991b1b;font-family:monospace;">${formatCurrency(f.total_a_pagar)}</div>
+              <div style="flex:1;font-size:11px;color:#374151;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${f.conductor_nombre}</div>
+              <div style="font-size:16px;font-weight:800;color:#991b1b;font-family:monospace;">${formatCurrency(f.total_a_pagar)}</div>
             </div>
           `).join('')
           return `<div style="text-align:left;font-size:13px;color:#111827;">
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px;">
-              <div style="padding:12px;text-align:center;border-radius:8px;background:#fef2f2;border:1px solid #fecaca;">
-                <div style="font-size:24px;font-weight:800;color:#991b1b;line-height:1;">${deben.length}</div>
-                <div style="font-size:10px;color:#6b7280;text-transform:uppercase;letter-spacing:0.5px;margin-top:6px;font-weight:600;">Con deuda</div>
+              <div style="padding:12px;text-align:center;border-radius:8px;background:#f9fafb;border:1px solid #e5e7eb;">
+                <div style="font-size:11px;color:#6b7280;text-transform:uppercase;letter-spacing:0.5px;font-weight:700;margin-bottom:6px;">Con deuda</div>
+                <div style="font-size:24px;font-weight:800;color:#111827;line-height:1;font-family:monospace;">${deben.length}</div>
               </div>
-              <div style="padding:12px;text-align:center;border-radius:8px;background:#fef3c7;border:1px solid #fcd34d;">
-                <div style="font-size:24px;font-weight:800;color:#92400e;line-height:1;font-family:monospace;letter-spacing:-0.5px;">${fmtCompacto(totalAdeudado)}</div>
-                <div style="font-size:10px;color:#6b7280;text-transform:uppercase;letter-spacing:0.5px;margin-top:6px;font-weight:600;">Total adeudado</div>
+              <div style="padding:12px;text-align:center;border-radius:8px;background:#f9fafb;border:1px solid #e5e7eb;">
+                <div style="font-size:11px;color:#6b7280;text-transform:uppercase;letter-spacing:0.5px;font-weight:700;margin-bottom:6px;">Total adeudado</div>
+                <div style="font-size:24px;font-weight:800;color:#111827;line-height:1;font-family:monospace;letter-spacing:-0.5px;">${fmtCompacto(totalAdeudado)}</div>
               </div>
             </div>
             ${top5.length > 0 ? `
-              <div style="font-size:10px;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:0.5px;margin:6px 0;">Top 5 deudores</div>
+              <div style="font-size:11px;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:0.5px;margin:6px 0;">Top 5 deudores</div>
               <div style="display:flex;flex-direction:column;gap:6px;">
                 ${top5Html}
               </div>

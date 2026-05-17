@@ -1867,7 +1867,7 @@ export function SaldosAbonosTab() {
     w.document.write(`<!doctype html><html><head><meta charset="utf-8" />
       <title>Kardex - ${saldo.conductor_nombre || ''}</title>
       <style>
-        body { font-family: -apple-system, Segoe UI, sans-serif; padding: 24px; color: #111827; }
+        body { font-family: 'Roboto', -apple-system, 'Segoe UI', sans-serif; padding: 24px; color: #111827; }
         h1 { font-size: 18px; margin: 0 0 4px; }
         .meta { font-size: 11px; color: #6b7280; margin-bottom: 16px; }
         .saldo { font-size: 18px; font-weight: 700; color: ${(saldo.saldo_actual || 0) < 0 ? '#dc2626' : '#16a34a'}; }
