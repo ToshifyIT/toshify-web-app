@@ -60,32 +60,28 @@ export function ControlExcesoKmModule() {
     refresh,
   } = useExcesoKmData(sedeActualId)
 
-  // Default: arrancar mostrando la SEMANA ANTERIOR COMPLETA (lunes a domingo).
-  // Si la semana en curso recién arranca (lunes/martes), no habría datos suficientes.
-  // El usuario puede cambiar a "Esta semana" desde el selector.
+  // Default: arrancar mostrando la SEMANA ACTUAL (lunes a domingo) en zona ART.
   const yaForzo = useRef(false)
   useEffect(() => {
     if (yaForzo.current) return
     yaForzo.current = true
-    // Trabajamos con strings YYYY-MM-DD para evitar problemas de timezone
     const TZ = 'America/Argentina/Buenos_Aires'
     const todayStr = new Date().toLocaleDateString('en-CA', { timeZone: TZ })
     const [y, m, d] = todayStr.split('-').map(Number)
-    // Construir fecha "anclada" al mediodía local (evita DST/timezone shifts)
     const hoy = new Date(y, m - 1, d, 12, 0, 0)
-    const dow = hoy.getDay() === 0 ? 7 : hoy.getDay()
-    // Domingo de la semana anterior = hoy - dow días
-    const domingoAnterior = new Date(hoy); domingoAnterior.setDate(hoy.getDate() - dow)
-    // Lunes de la semana anterior = domingo - 6 días
-    const lunesAnterior = new Date(domingoAnterior); lunesAnterior.setDate(domingoAnterior.getDate() - 6)
+    const dow = hoy.getDay() === 0 ? 7 : hoy.getDay() // ISO: domingo = 7
+    // Lunes de la semana actual = hoy - (dow - 1) dias
+    const lunes = new Date(hoy); lunes.setDate(hoy.getDate() - (dow - 1))
+    // Domingo de la semana actual = lunes + 6
+    const domingo = new Date(lunes); domingo.setDate(lunes.getDate() + 6)
     const fmt = (date: Date) =>
       `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
-    // Calcular n° de semana ISO para el label
-    const ref = new Date(lunesAnterior)
+    // Numero de semana ISO para el label
+    const ref = new Date(lunes)
     ref.setDate(ref.getDate() + 4 - (ref.getDay() || 7))
     const yearStart = new Date(ref.getFullYear(), 0, 1)
     const semana = Math.ceil(((ref.getTime() - yearStart.getTime()) / 86400000 + 1) / 7)
-    setCustomDateRange(fmt(lunesAnterior), fmt(domingoAnterior), `Semana ${semana}`)
+    setCustomDateRange(fmt(lunes), fmt(domingo), `Semana ${semana}`)
   }, [setCustomDateRange])
 
   // Parámetros (alquileres) — para mostrar monto en KPIs antes de crear

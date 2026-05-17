@@ -96,17 +96,26 @@ function transformarMarcacion(reg: BitacoraRegistroTransformado): Marcacion {
 
 export function useUSSHistoricoData(sedeId?: string | null) {
   const [dateRange, setDateRange] = useState<USSHistoricoDateRange>(() => {
-    // Default: Semana actual (lunes a hoy)
-    const today = getToday();
-    const d = new Date();
-    const day = d.getDay();
-    const diff = d.getDate() - day + (day === 0 ? -6 : 1); // lunes
-    d.setDate(diff);
-    const monday = toArgentinaDateString(d);
+    // Default: Semana actual completa (lunes a domingo) en zona ART.
+    // Antes calculaba con getDay() en hora LOCAL del browser, lo cual descalibraba
+    // si el browser estaba en otra TZ o cerca de medianoche.
+    const todayStr = getToday(); // YYYY-MM-DD en ART
+    const [y, m, d] = todayStr.split('-').map(Number);
+    const hoy = new Date(y, m - 1, d, 12, 0, 0);
+    const dow = hoy.getDay() === 0 ? 7 : hoy.getDay(); // ISO: domingo = 7
+    const lunes = new Date(hoy); lunes.setDate(hoy.getDate() - (dow - 1));
+    const domingo = new Date(lunes); domingo.setDate(lunes.getDate() + 6);
+    const fmt = (date: Date) =>
+      `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+    // Numero de semana ISO para el label
+    const ref = new Date(lunes);
+    ref.setDate(ref.getDate() + 4 - (ref.getDay() || 7));
+    const yearStart = new Date(ref.getFullYear(), 0, 1);
+    const semana = Math.ceil(((ref.getTime() - yearStart.getTime()) / 86400000 + 1) / 7);
     return {
-      startDate: monday,
-      endDate: today,
-      label: 'Esta semana',
+      startDate: fmt(lunes),
+      endDate: fmt(domingo),
+      label: `Semana ${semana}`,
     };
   });
 
@@ -313,10 +322,15 @@ export function useUSSHistoricoData(sedeId?: string | null) {
         const domingo = new Date(lunes);
         domingo.setDate(lunes.getDate() + 6);
         domingo.setHours(23, 59, 59, 999);
+        // Numero de semana ISO
+        const ref = new Date(lunes);
+        ref.setDate(ref.getDate() + 4 - (ref.getDay() || 7));
+        const yearStart = new Date(ref.getFullYear(), 0, 1);
+        const nroSemana = Math.ceil(((ref.getTime() - yearStart.getTime()) / 86400000 + 1) / 7);
         setDateRange({
           startDate: toArgentinaDateString(lunes),
           endDate: toArgentinaDateString(domingo),
-          label: 'Esta semana',
+          label: `Semana ${nroSemana}`,
         });
         break;
       }
