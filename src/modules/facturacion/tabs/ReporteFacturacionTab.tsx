@@ -8518,7 +8518,7 @@ export function ReporteFacturacionTab() {
           return `<div style="text-align:left;font-size:13px;color:#111827;">
             <div style="text-align:center;padding:18px 12px;background:linear-gradient(135deg,#fef2f2 0%,#fff 100%);border-radius:8px;margin-bottom:16px;">
               <div style="display:flex;justify-content:center;margin-bottom:8px;">${iconTarget}</div>
-              <div style="font-size:26px;font-weight:800;color:#111827;letter-spacing:-0.5px;">${formatCurrency(totalProyectado)}</div>
+              <div style="font-size:clamp(20px, 6vw, 26px);font-weight:800;color:#111827;letter-spacing:-0.5px;">${formatCurrency(totalProyectado)}</div>
               <div style="font-size:11px;color:#6b7280;margin-top:4px;">Si todos cumplieran sus días asignados</div>
             </div>
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px;">
@@ -8630,7 +8630,7 @@ export function ReporteFacturacionTab() {
             </div>
             <div style="padding:14px;background:#fef2f2;border-radius:8px;text-align:center;border:1px solid #fecaca;">
               <div style="font-size:11px;color:#991b1b;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;">Total Cargos</div>
-              <div style="font-size:24px;font-weight:800;color:#111827;margin-top:6px;font-family:monospace;letter-spacing:-0.5px;">${formatCurrency(total)}</div>
+              <div style="font-size:clamp(18px, 5.5vw, 24px);font-weight:800;color:#111827;margin-top:6px;font-family:monospace;letter-spacing:-0.5px;">${formatCurrency(total)}</div>
             </div>
           </div>`
         })()
@@ -8676,7 +8676,7 @@ export function ReporteFacturacionTab() {
           return `<div style="text-align:left;font-size:13px;color:#111827;">
             <div style="text-align:center;padding:18px;background:linear-gradient(135deg,#f0fdf4 0%,#fff 100%);border-radius:8px;margin-bottom:14px;">
               <div style="font-size:11px;color:#15803d;text-transform:uppercase;letter-spacing:0.5px;font-weight:700;margin-bottom:6px;">Total Descuentos</div>
-              <div style="font-size:24px;font-weight:800;color:#15803d;letter-spacing:-0.5px;font-family:monospace;">${formatCurrency(descTotal)}</div>
+              <div style="font-size:clamp(18px, 5.5vw, 24px);font-weight:800;color:#15803d;letter-spacing:-0.5px;font-family:monospace;">${formatCurrency(descTotal)}</div>
               <div style="font-size:11px;color:#6b7280;margin-top:4px;">Descuentos aplicados esta semana</div>
             </div>
             <div style="display:flex;flex-direction:column;gap:8px;">
@@ -8707,7 +8707,7 @@ export function ReporteFacturacionTab() {
               </div>
               <div style="padding:18px;background:linear-gradient(135deg,#dbeafe 0%,#e0e7ff 100%);border-radius:8px;border:2px solid #3b82f6;text-align:center;margin-top:6px;">
                 <div style="font-size:11px;color:#1e3a8a;text-transform:uppercase;letter-spacing:0.5px;font-weight:700;margin-bottom:6px;">A cobrar (Neto)</div>
-                <div style="font-size:24px;font-weight:800;color:#1e3a8a;font-family:monospace;letter-spacing:-0.5px;">${formatCurrency(neto)}</div>
+                <div style="font-size:clamp(18px, 5.5vw, 24px);font-weight:800;color:#1e3a8a;font-family:monospace;letter-spacing:-0.5px;">${formatCurrency(neto)}</div>
               </div>
             </div>
           </div>`
@@ -8739,11 +8739,11 @@ export function ReporteFacturacionTab() {
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px;">
               <div style="padding:12px;text-align:center;border-radius:8px;background:#f9fafb;border:1px solid #e5e7eb;">
                 <div style="font-size:11px;color:#6b7280;text-transform:uppercase;letter-spacing:0.5px;font-weight:700;margin-bottom:6px;">Con deuda</div>
-                <div style="font-size:24px;font-weight:800;color:#111827;line-height:1;font-family:monospace;">${deben.length}</div>
+                <div style="font-size:clamp(18px, 5.5vw, 24px);font-weight:800;color:#111827;line-height:1;font-family:monospace;">${deben.length}</div>
               </div>
               <div style="padding:12px;text-align:center;border-radius:8px;background:#f9fafb;border:1px solid #e5e7eb;">
                 <div style="font-size:11px;color:#6b7280;text-transform:uppercase;letter-spacing:0.5px;font-weight:700;margin-bottom:6px;">Total adeudado</div>
-                <div style="font-size:24px;font-weight:800;color:#111827;line-height:1;font-family:monospace;letter-spacing:-0.5px;">${fmtCompacto(totalAdeudado)}</div>
+                <div style="font-size:clamp(18px, 5.5vw, 24px);font-weight:800;color:#111827;line-height:1;font-family:monospace;letter-spacing:-0.5px;">${fmtCompacto(totalAdeudado)}</div>
               </div>
             </div>
             ${top5.length > 0 ? `
@@ -8773,7 +8773,7 @@ export function ReporteFacturacionTab() {
     }
     const info = descriptions[stat]
     if (!info) return
-    Swal.fire({ title: info.title, html: info.html, width: 420, confirmButtonText: 'Cerrar' })
+    Swal.fire({ title: info.title, html: info.html, width: 'min(92vw, 440px)', confirmButtonText: 'Cerrar' })
   }
 
   // Helper para obtener excesos de un conductor

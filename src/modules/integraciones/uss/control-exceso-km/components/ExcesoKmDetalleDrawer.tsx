@@ -124,7 +124,7 @@ export function ExcesoKmDetalleDrawer({ row, onClose, semanaInicio, semanaFin }:
       />
       <div style={{
         position: 'fixed', top: 0, right: 0, bottom: 0,
-        width: 640, maxWidth: '95vw',
+        width: 'min(100vw, 640px)',
         background: 'var(--bg-primary, #fff)',
         zIndex: 1000,
         boxShadow: '-4px 0 20px rgba(0,0,0,0.15)',

@@ -278,6 +278,22 @@ body.device-touch .show-touch-only {
   z-index: 10000 !important;
 }
 
+/* SweetAlert2 GLOBAL: prevenir desborde en cualquier viewport.
+   Cualquier `width: 420` que venga del código se topa con este max-width.
+   En viewport >= 641px: respeta el width del código pero acotado a 92vw.
+   En viewport <= 640px: fuerza 92vw para legibilidad mobile. */
+.swal2-popup {
+  max-width: min(92vw, 760px) !important;
+}
+
+/* Inputs en SweetAlert: 16px en todos los viewports para prevenir zoom iOS */
+.swal2-input,
+.swal2-select,
+.swal2-textarea,
+.swal2-file {
+  font-size: 16px !important;
+}
+
 /* Modales SweetAlert2 en pantallas chicas: ancho fluido */
 @media (max-width: 640px) {
   .swal2-popup {
@@ -295,7 +311,6 @@ body.device-touch .show-touch-only {
   .swal2-input,
   .swal2-select,
   .swal2-textarea {
-    font-size: 14px !important;
     margin: 0.4rem 0 !important;
   }
   .swal2-actions {
@@ -307,6 +322,13 @@ body.device-touch .show-touch-only {
     padding: 0.6rem 1rem !important;
     font-size: 0.9rem !important;
     min-height: 44px;
+  }
+}
+
+/* SweetAlert2 en tablet: ancho razonable, max 90vw */
+@media (min-width: 641px) and (max-width: 1024px) {
+  .swal2-popup {
+    max-width: min(90vw, 720px) !important;
   }
 }
 

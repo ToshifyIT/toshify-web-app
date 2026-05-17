@@ -122,7 +122,8 @@
 
 .cond-stats-grid {
   display: grid;
-  grid-template-columns: repeat(5, 1fr);
+  /* auto-fit: 5 cards en desktop, 3 en tablet, 2 en mobile */
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
   gap: 12px;
 }
 

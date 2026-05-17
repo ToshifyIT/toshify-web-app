@@ -140,7 +140,9 @@
 
 .fact-stats-grid {
   display: grid;
-  grid-template-columns: repeat(6, 1fr);
+  /* auto-fit: cards de min 150px ocupan el ancho disponible.
+     Desktop: 6 cards x ~180px. Tablet: 3-4. Mobile: 2. */
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
   gap: 12px;
 }
 

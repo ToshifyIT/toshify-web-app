@@ -298,7 +298,7 @@ export function PatenteDetalleDrawer({ marcacion, semanaInicio, semanaFin, onClo
       />
       <div style={{
         position: 'fixed', top: 0, right: 0, bottom: 0,
-        width: 820, maxWidth: '96vw',
+        width: 'min(100vw, 820px)',
         background: 'var(--bg-primary, #fff)',
         zIndex: 1000,
         boxShadow: '-4px 0 24px rgba(0,0,0,0.25)',

@@ -185,6 +185,13 @@
   gap: 10px;
 }
 
+/* Tablet: 2 columnas (768-1024px) */
+@media (min-width: 641px) and (max-width: 1024px) {
+  .portal-stats-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
 .portal-stat-card {
   background: var(--card-bg);
   border: 1px solid var(--border-primary);
