@@ -10285,7 +10285,7 @@ export function ReporteFacturacionTab() {
                           const alerta = conductorData?.alerta_prorrateo_ingreso;
                           // Si no hay alerta de la facturación, calcular desde el historial de asignaciones
                           // Solo aplica si la asignación es nueva en esta semana (no re-aplicar descuentos de semanas anteriores)
-                          const alertaLocal = (() => {
+                          let alertaLocal = (() => {
                             if (alerta) return alerta;
                             // Si el conductor ya tenía asignación activa antes de esta semana, no aplicar descuento (cambio de vehículo)
                             const tieneAsignacionPreviaModal = diasModalData.historial.some(h => h.dias > 0 && !h.nuevaEnSemana);
@@ -10317,6 +10317,7 @@ export function ReporteFacturacionTab() {
                             }
                             return null;
                           })();
+                          if (alertaLocal && alertaLocal.descuento_turnos < 0.01) alertaLocal = null;
                           // Calcular precio diario por día según modalidad+GNC del vehículo de cada día
                           // Usa prorrateo por modalidad (Vista Previa) o subtotal/días como fallback
                           // Precio diario real según modalidad+GNC del vehículo de cada día
