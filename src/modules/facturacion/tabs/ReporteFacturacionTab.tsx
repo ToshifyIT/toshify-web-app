@@ -8600,12 +8600,38 @@ export function ReporteFacturacionTab() {
           if (mora > 0) rows.push(`<tr><td>Mora (P009)</td><td style="text-align:right"><b>${formatCurrency(mora)}</b></td></tr>`)
           if (repuestos > 0) rows.push(`<tr><td>Repuestos/Daños (P010)</td><td style="text-align:right"><b>${formatCurrency(repuestos)}</b></td></tr>`)
           if (saldos > 0) rows.push(`<tr><td>Saldos pendientes (+)</td><td style="text-align:right"><b>${formatCurrency(saldos)}</b></td></tr>`)
-          return `<div style="text-align:left;font-size:13px;">
-            <p>Suma de todos los cobros a conductores:</p>
-            <table style="width:100%;border-collapse:collapse;">
-              ${rows.join('\n              ')}
-              <tr style="border-top:2px solid #ccc;"><td><b>TOTAL CARGOS</b></td><td style="text-align:right"><b>${formatCurrency(total)}</b></td></tr>
-            </table>
+          // Nuevo modal: grid de pills agrupados por categoria
+          // Cada pill: dot color + nombre + monto grande + % del total
+          const pct = (v: number) => total > 0 ? Math.round((v / total) * 100) : 0
+          const pills: { nombre: string; monto: number; color: string }[] = []
+          const alquilerTotal = alqConGnc + alqSinGnc + (tieneDetalles ? 0 : alquiler)
+          if (alquilerTotal > 0) pills.push({ nombre: 'Alquiler', monto: alquilerTotal, color: '#3b82f6' })
+          if (garantia > 0) pills.push({ nombre: 'Garantía', monto: garantia, color: '#8b5cf6' })
+          if (saldos > 0) pills.push({ nombre: 'Saldos pend.', monto: saldos, color: '#6b7280' })
+          if (penalidades > 0) pills.push({ nombre: 'Penalidades', monto: penalidades, color: '#dc2626' })
+          if (excesosKm > 0) pills.push({ nombre: 'Exceso KM', monto: excesosKm, color: '#ef4444' })
+          if (repuestos > 0) pills.push({ nombre: 'Repuestos', monto: repuestos, color: '#6366f1' })
+          if (peajes > 0) pills.push({ nombre: 'Peajes', monto: peajes, color: '#f59e0b' })
+          if (multas > 0) pills.push({ nombre: 'Multas', monto: multas, color: '#dc2626' })
+          if (mora > 0) pills.push({ nombre: 'Mora', monto: mora, color: '#b91c1c' })
+          const pillsHtml = pills.map(p => `
+            <div style="padding:12px;border-radius:8px;background:#fff;border:1px solid #e5e7eb;">
+              <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px;">
+                <span style="width:8px;height:8px;border-radius:50%;background:${p.color};display:inline-block;"></span>
+                <span style="font-size:10px;text-transform:uppercase;letter-spacing:0.5px;font-weight:700;color:#6b7280;">${p.nombre}</span>
+              </div>
+              <div style="font-size:15px;font-weight:800;color:#111827;font-family:monospace;letter-spacing:-0.3px;">${formatCurrency(p.monto)}</div>
+              <div style="font-size:10px;color:#6b7280;margin-top:4px;">${pct(p.monto)}% del total</div>
+            </div>
+          `).join('')
+          return `<div style="text-align:left;font-size:13px;color:#111827;">
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px;">
+              ${pillsHtml}
+            </div>
+            <div style="padding:14px;background:#fef2f2;border-radius:8px;text-align:center;border:1px solid #fecaca;">
+              <div style="font-size:11px;color:#991b1b;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;">Total Cargos</div>
+              <div style="font-size:22px;font-weight:800;color:#111827;margin-top:4px;font-family:monospace;letter-spacing:-0.5px;">${formatCurrency(total)}</div>
+            </div>
           </div>`
         })()
       },
@@ -8631,15 +8657,33 @@ export function ReporteFacturacionTab() {
           const descTotal = src.reduce((s, f) => s + (f.subtotal_descuentos || 0), 0)
           const conocidos = tickets + pubCabify + pubTablet
           const otrosDesc = Math.max(0, descTotal - conocidos)
-          return `<div style="text-align:left;font-size:13px;">
-            <p>Suma de todos los descuentos a conductores esta semana:</p>
-            <table style="width:100%;border-collapse:collapse;">
-              ${tickets > 0 ? `<tr><td>P004 - Descuentos a favor</td><td style="text-align:right"><b>${formatCurrency(tickets)}</b></td></tr>` : ''}
-              ${pubCabify > 0 ? `<tr><td>P011 - Publicidad Cabify</td><td style="text-align:right"><b>${formatCurrency(pubCabify)}</b></td></tr>` : ''}
-              ${pubTablet > 0 ? `<tr><td>P012 - Publicidad Tablet</td><td style="text-align:right"><b>${formatCurrency(pubTablet)}</b></td></tr>` : ''}
-              ${otrosDesc > 0 ? `<tr><td>Otros descuentos</td><td style="text-align:right"><b>${formatCurrency(otrosDesc)}</b></td></tr>` : ''}
-              <tr style="border-top:2px solid #ccc;"><td><b>TOTAL DESCUENTOS</b></td><td style="text-align:right"><b>${formatCurrency(descTotal)}</b></td></tr>
-            </table>
+          // Nuevo modal: hero verde + items destacados + nota
+          const items: { codigo: string; nombre: string; subtitulo: string; monto: number }[] = []
+          if (tickets > 0) items.push({ codigo: 'P004', nombre: 'Descuentos a favor', subtitulo: 'Tickets, ajustes manuales', monto: tickets })
+          if (pubCabify > 0) items.push({ codigo: 'P011', nombre: 'Publicidad Cabify', subtitulo: 'Ingreso por publicidad', monto: pubCabify })
+          if (pubTablet > 0) items.push({ codigo: 'P012', nombre: 'Publicidad Tablet', subtitulo: 'Ingreso por publicidad', monto: pubTablet })
+          if (otrosDesc > 0) items.push({ codigo: '—', nombre: 'Otros descuentos', subtitulo: 'Sin clasificar', monto: otrosDesc })
+          const itemsHtml = items.map(it => `
+            <div style="display:flex;justify-content:space-between;align-items:center;padding:12px 14px;background:#f0fdf4;border-radius:8px;border-left:3px solid #16a34a;">
+              <div>
+                <div style="font-size:12px;color:#374151;font-weight:600;">${it.nombre}</div>
+                <div style="font-size:10px;color:#9ca3af;margin-top:2px;">${it.codigo} · ${it.subtitulo}</div>
+              </div>
+              <div style="font-size:14px;font-weight:800;color:#15803d;font-family:monospace;">${formatCurrency(it.monto)}</div>
+            </div>
+          `).join('')
+          const iconInfo = `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#1e40af" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;margin-top:1px;"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>`
+          return `<div style="text-align:left;font-size:13px;color:#111827;">
+            <div style="text-align:center;padding:18px;background:linear-gradient(135deg,#f0fdf4 0%,#fff 100%);border-radius:8px;margin-bottom:14px;">
+              <div style="font-size:26px;font-weight:800;color:#15803d;letter-spacing:-0.5px;">${formatCurrency(descTotal)}</div>
+              <div style="font-size:11px;color:#6b7280;margin-top:4px;">Descuentos aplicados esta semana</div>
+            </div>
+            <div style="display:flex;flex-direction:column;gap:8px;">
+              ${itemsHtml || '<div style="padding:20px;text-align:center;color:#9ca3af;font-size:12px;">Sin descuentos aplicados</div>'}
+            </div>
+            <div style="display:flex;gap:8px;align-items:flex-start;background:#eff6ff;border-left:3px solid #3b82f6;padding:10px 12px;border-radius:6px;margin-top:14px;font-size:11px;color:#1e40af;line-height:1.5;">
+              ${iconInfo}<span>Los descuentos reducen el total a cobrar al conductor.</span>
+            </div>
           </div>`
         })()
       },
@@ -8649,13 +8693,22 @@ export function ReporteFacturacionTab() {
           const totalCargos = src.reduce((s, f) => s + f.subtotal_cargos + Math.max(0, f.saldo_anterior || 0), 0)
           const totalDesc = src.reduce((s, f) => s + (f.subtotal_descuentos || 0), 0)
           const neto = src.reduce((s, f) => s + (f.total_a_pagar || 0), 0)
-          return `<div style="text-align:left;font-size:13px;">
-            <p>Resultado neto de la facturación:</p>
-            <table style="width:100%;border-collapse:collapse;">
-              <tr><td>Total Cargos</td><td style="text-align:right">${formatCurrency(totalCargos)}</td></tr>
-              <tr><td>Total Descuentos</td><td style="text-align:right">- ${formatCurrency(totalDesc)}</td></tr>
-              <tr style="border-top:2px solid #ccc;"><td><b>TOTAL NETO</b></td><td style="text-align:right"><b>${formatCurrency(neto)}</b></td></tr>
-            </table>
+          // Nuevo modal: stack con conexion visual (cargos rojo, descuentos verde, neto azul destacado)
+          return `<div style="text-align:left;font-size:13px;color:#111827;">
+            <div style="display:flex;flex-direction:column;gap:8px;">
+              <div style="padding:14px;background:#fef2f2;border-radius:8px;display:flex;justify-content:space-between;align-items:center;border-left:4px solid #dc2626;">
+                <span style="font-size:12px;color:#991b1b;font-weight:600;">Cargos brutos</span>
+                <span style="font-size:14px;font-weight:700;font-family:monospace;color:#991b1b;">+ ${formatCurrency(totalCargos)}</span>
+              </div>
+              <div style="padding:14px;background:#f0fdf4;border-radius:8px;display:flex;justify-content:space-between;align-items:center;border-left:4px solid #16a34a;">
+                <span style="font-size:12px;color:#15803d;font-weight:600;">Descuentos aplicados</span>
+                <span style="font-size:14px;font-weight:700;font-family:monospace;color:#15803d;">− ${formatCurrency(totalDesc)}</span>
+              </div>
+              <div style="padding:18px;background:linear-gradient(135deg,#dbeafe 0%,#e0e7ff 100%);border-radius:8px;border:2px solid #3b82f6;text-align:center;margin-top:6px;">
+                <div style="font-size:11px;color:#1e3a8a;text-transform:uppercase;letter-spacing:0.5px;font-weight:700;margin-bottom:6px;">A cobrar (Neto)</div>
+                <div style="font-size:24px;font-weight:800;color:#1e3a8a;font-family:monospace;letter-spacing:-0.5px;">${formatCurrency(neto)}</div>
+              </div>
+            </div>
           </div>`
         })()
       },
@@ -8665,12 +8718,39 @@ export function ReporteFacturacionTab() {
           const deben = src.filter(f => f.total_a_pagar > 0)
             .sort((a, b) => b.total_a_pagar - a.total_a_pagar)
           const top5 = deben.slice(0, 5)
-          return `<div style="text-align:left;font-size:13px;">
-            <p><b>${deben.length}</b> conductores con saldo a pagar (total_a_pagar &gt; 0)</p>
-            ${top5.length > 0 ? `<p style="margin-top:8px;font-size:11px;color:#888;">Top 5:</p>
-            <table style="width:100%;border-collapse:collapse;font-size:12px;">
-              ${top5.map(f => `<tr><td style="padding:2px 0;">${f.conductor_nombre}</td><td style="text-align:right;padding:2px 0;"><b>${formatCurrency(f.total_a_pagar)}</b></td></tr>`).join('')}
-            </table>` : ''}
+          const totalAdeudado = deben.reduce((s, f) => s + f.total_a_pagar, 0)
+          // Formato compacto para el card de total adeudado (ej "2.37M")
+          const fmtCompacto = (v: number) => {
+            if (v >= 1_000_000) return `$ ${(v / 1_000_000).toFixed(2)}M`
+            if (v >= 1000) return `$ ${(v / 1000).toFixed(0)}K`
+            return formatCurrency(v)
+          }
+          // Colores del ranking (1=rojo intenso, 2=naranja, 3=ambar, 4-5=gris)
+          const rankColors = ['#dc2626', '#ea580c', '#f59e0b', '#6b7280', '#6b7280']
+          const top5Html = top5.map((f, idx) => `
+            <div style="display:flex;align-items:center;gap:10px;padding:8px 10px;background:#f9fafb;border-radius:6px;">
+              <div style="width:22px;height:22px;border-radius:50%;background:${rankColors[idx]};color:#fff;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0;">${idx + 1}</div>
+              <div style="flex:1;font-size:12px;color:#374151;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${f.conductor_nombre}</div>
+              <div style="font-size:13px;font-weight:700;color:#991b1b;font-family:monospace;">${formatCurrency(f.total_a_pagar)}</div>
+            </div>
+          `).join('')
+          return `<div style="text-align:left;font-size:13px;color:#111827;">
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px;">
+              <div style="padding:12px;text-align:center;border-radius:8px;background:#fef2f2;border:1px solid #fecaca;">
+                <div style="font-size:24px;font-weight:800;color:#991b1b;line-height:1;">${deben.length}</div>
+                <div style="font-size:10px;color:#6b7280;text-transform:uppercase;letter-spacing:0.5px;margin-top:6px;font-weight:600;">Con deuda</div>
+              </div>
+              <div style="padding:12px;text-align:center;border-radius:8px;background:#fef3c7;border:1px solid #fcd34d;">
+                <div style="font-size:24px;font-weight:800;color:#92400e;line-height:1;font-family:monospace;letter-spacing:-0.5px;">${fmtCompacto(totalAdeudado)}</div>
+                <div style="font-size:10px;color:#6b7280;text-transform:uppercase;letter-spacing:0.5px;margin-top:6px;font-weight:600;">Total adeudado</div>
+              </div>
+            </div>
+            ${top5.length > 0 ? `
+              <div style="font-size:10px;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:0.5px;margin:6px 0;">Top 5 deudores</div>
+              <div style="display:flex;flex-direction:column;gap:6px;">
+                ${top5Html}
+              </div>
+            ` : '<div style="text-align:center;color:#9ca3af;font-size:12px;padding:20px;">Sin conductores con deuda</div>'}
           </div>`
         })()
       },
