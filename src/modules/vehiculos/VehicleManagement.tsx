@@ -1,4 +1,4 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
+ 
 // src/modules/vehiculos/VehicleManagement.tsx
 import { useState, useEffect, useMemo, useRef } from 'react'
 import { AlertTriangle, Eye, Edit, Trash2, Info, Car, Wrench, Briefcase, PaintBucket, Warehouse, FolderOpen, FolderPlus, Undo2, History, Fuel, CreditCard, Download } from 'lucide-react'
@@ -1423,6 +1423,36 @@ export function VehicleManagement() {
         enableSorting: true,
       },
       {
+        accessorKey: 'titular',
+        header: () => (
+          <ExcelColumnFilter
+            label="Titular"
+            options={titularesUnicos}
+            selectedValues={titularFilter}
+            onSelectionChange={setTitularFilter}
+            filterId="titular"
+            openFilterId={openFilterId}
+            onOpenChange={setOpenFilterId}
+          />
+        ),
+        cell: ({ row }) => {
+          const titular = (row.original as any).titular
+          if (!titular) return <span style={{ color: 'var(--text-tertiary)' }}>-</span>
+          return <span style={{ fontSize: '12px' }}>{titular}</span>
+        },
+        enableSorting: true,
+      },
+      {
+        accessorKey: 'grupo_flota',
+        header: 'Grupo de Flota',
+        cell: ({ row }) => {
+          const g = (row.original as any).grupo_flota
+          if (!g) return <span style={{ color: 'var(--text-tertiary)' }}>-</span>
+          return <span style={{ fontSize: '12px' }}>{g}</span>
+        },
+        enableSorting: true,
+      },
+      {
         accessorKey: 'marca',
         header: () => (
           <ExcelColumnFilter
@@ -1452,36 +1482,6 @@ export function VehicleManagement() {
           />
         ),
         cell: ({ getValue }) => (getValue() as string) || 'N/A',
-        enableSorting: true,
-      },
-      {
-        accessorKey: 'grupo_flota',
-        header: 'Grupo de Flota',
-        cell: ({ row }) => {
-          const g = (row.original as any).grupo_flota
-          if (!g) return <span style={{ color: 'var(--text-tertiary)' }}>-</span>
-          return <span style={{ fontSize: '12px' }}>{g}</span>
-        },
-        enableSorting: true,
-      },
-      {
-        accessorKey: 'titular',
-        header: () => (
-          <ExcelColumnFilter
-            label="Titular"
-            options={titularesUnicos}
-            selectedValues={titularFilter}
-            onSelectionChange={setTitularFilter}
-            filterId="titular"
-            openFilterId={openFilterId}
-            onOpenChange={setOpenFilterId}
-          />
-        ),
-        cell: ({ row }) => {
-          const titular = (row.original as any).titular
-          if (!titular) return <span style={{ color: 'var(--text-tertiary)' }}>-</span>
-          return <span style={{ fontSize: '12px' }}>{titular}</span>
-        },
         enableSorting: true,
       },
       {
@@ -2025,6 +2025,7 @@ export function VehicleManagement() {
         columns={columns}
         loading={loading}
         error={error}
+        stickyLeftColumns={3}
         pageSize={100}
         pageSizeOptions={[50, 100, 200]}
         searchPlaceholder="Buscar por patente, marca, modelo..."
@@ -2035,7 +2036,7 @@ export function VehicleManagement() {
         emptyTitle="No hay vehiculos registrados"
         emptyDescription={canCreate ? 'Crea el primero usando el boton "+ Crear Vehiculo".' : ''}
         headerAction={
-          <>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
             <VerLogsButton tablas={['vehiculos', 'vehiculo_control']} label="Veh\u00edculos" />
             <button
               className="btn-secondary"
@@ -2053,7 +2054,7 @@ export function VehicleManagement() {
             >
               + Crear Vehiculo
             </button>
-          </>
+          </div>
         }
         externalFilters={externalFilters}
         onClearAllFilters={handleClearAllFilters}

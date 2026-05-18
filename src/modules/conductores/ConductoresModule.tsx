@@ -1,5 +1,5 @@
 // src/modules/conductores/ConductoresModule.tsx
-/* eslint-disable @typescript-eslint/no-explicit-any */
+ 
 import { useState, useEffect, useMemo, useRef } from "react";
 import { Eye, Edit2, Trash2, AlertTriangle, Users, UserCheck, UserX, Clock, Filter, FolderOpen, FolderPlus, Loader2, History, RefreshCw, ShieldX, MessageSquare, FileText, ChevronDown } from "lucide-react";
 import { ActionsMenu } from "../../components/ui/ActionsMenu";
@@ -749,6 +749,7 @@ export function ConductoresModule() {
             .select(`
               conductor_id,
               horario,
+              estado,
               asignaciones (
                 estado,
                 sede_id,
@@ -784,6 +785,9 @@ export function ConductoresModule() {
         for (const asig of asignacionesRes.data as any[]) {
           const a = asig?.asignaciones
           if (!a || !['activo', 'activa'].includes(a.estado)) continue
+          // El row del conductor también tiene que estar activo. Si está `completado` o
+          // `cancelado` (caso: baja con compañero, reactivación posterior), no se muestra.
+          if (!['asignado', 'activo'].includes(asig.estado)) continue
           if (sedeActualId && a.sede_id !== sedeActualId) continue
           if (a.vehiculos) {
             asignacionesMap.set(asig.conductor_id, {
@@ -913,6 +917,7 @@ export function ConductoresModule() {
             .select(`
               conductor_id,
               horario,
+              estado,
               asignaciones (
                 estado,
                 sede_id,
@@ -933,6 +938,9 @@ export function ConductoresModule() {
         for (const asig of asignacionesRes.data as any[]) {
           const a = asig?.asignaciones
           if (!a || !['activo', 'activa'].includes(a.estado)) continue
+          // El row del conductor también tiene que estar activo. Si está `completado` o
+          // `cancelado` (caso: baja con compañero, reactivación posterior), no se muestra.
+          if (!['asignado', 'activo'].includes(asig.estado)) continue
           if (sedeActualId && a.sede_id !== sedeActualId) continue
           if (a.vehiculos) {
             asignacionesMap.set(asig.conductor_id, {
@@ -1386,6 +1394,7 @@ export function ConductoresModule() {
       .from('asignaciones')
       .update({
         estado: 'finalizada',
+        fecha_fin: ahora,
         notas: appendNota(asignacion.notas, motivoBaja),
         updated_at: ahora
       })
@@ -1526,6 +1535,7 @@ export function ConductoresModule() {
       .from('asignaciones')
       .update({
         estado: 'finalizada',
+        fecha_fin: ahora,
         notas: appendNota(asignacion.notas, motivoBaja),
         updated_at: ahora
       })
@@ -1676,6 +1686,22 @@ export function ConductoresModule() {
           profile?.full_name || 'Sistema'
         );
       }
+
+      // Al REACTIVAR (BAJA → ACTIVO): cerrar cualquier row que hubiera quedado vivo.
+      // El conductor debe volver SIN asignación; si tenía rows en `asignado/activo`
+      // (por bugs pasados o intervención manual), los pasamos a `cancelado` con fecha
+      // de cierre = ahora. Esto garantiza que la tabla del módulo no muestre asignación
+      // residual al reactivarlo.
+      if (esReactivacion) {
+        await (supabase as any)
+          .from('asignaciones_conductores')
+          .update({
+            estado: 'cancelado',
+            fecha_fin: new Date().toISOString()
+          })
+          .eq('conductor_id', selectedConductor!.id)
+          .in('estado', ['asignado', 'activo']);
+      }
     }
 
     // Actualizar categorías de licencia
@@ -1727,7 +1753,7 @@ export function ConductoresModule() {
         // --- Paso común: finalizar registro del conductor dado de baja ---
         const { error: errCompletarConductor } = await (supabase as any)
           .from('asignaciones_conductores')
-          .update({ estado: 'completado', fecha_fin: new Date(fechaBaja + 'T23:59:59').toISOString() })
+          .update({ estado: 'completado', fecha_fin: new Date(fechaBaja + 'T23:59:59-03:00').toISOString() })
           .eq('id', asignacionConductor.id);
         if (errCompletarConductor) throw new Error(`Error al completar conductor: ${errCompletarConductor.message}`);
 
@@ -1782,6 +1808,7 @@ export function ConductoresModule() {
             .from('asignaciones')
             .update({
               estado: 'finalizada',
+              fecha_fin: ahora,
               notas: appendNota(asignacion.notas, motivoBaja),
               updated_at: ahora
             })
@@ -1791,7 +1818,7 @@ export function ConductoresModule() {
           // Finalizar cualquier otro registro de conductor en esta asignación (residuales)
           await (supabase as any)
             .from('asignaciones_conductores')
-            .update({ estado: 'completado', fecha_fin: new Date(fechaBaja + 'T23:59:59').toISOString() })
+            .update({ estado: 'completado', fecha_fin: new Date(fechaBaja + 'T23:59:59-03:00').toISOString() })
             .eq('asignacion_id', asignacion.id)
             .neq('id', asignacionConductor.id)
             .in('estado', ['asignado', 'activo']);
