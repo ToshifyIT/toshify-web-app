@@ -624,9 +624,9 @@ export function ReporteFacturacionTab() {
       setHorasCorteTurno(prev => ({
         diurno: params.hora_corte_diurno ? parseInt(params.hora_corte_diurno) : prev.diurno,
         cargo: params.hora_corte_cargo ? parseInt(params.hora_corte_cargo) : prev.cargo,
-        descDiurnoAntes: params.descuento_diurno_antes ? parseFloat(params.descuento_diurno_antes) : prev.descDiurnoAntes,
-        descDiurnoDespues: params.descuento_diurno_despues ? parseFloat(params.descuento_diurno_despues) : prev.descDiurnoDespues,
-        descCargoDespues: params.descuento_cargo_despues ? parseFloat(params.descuento_cargo_despues) : prev.descCargoDespues,
+        descDiurnoAntes: params.descuento_diurno_antes != null ? parseFloat(params.descuento_diurno_antes) : prev.descDiurnoAntes,
+        descDiurnoDespues: params.descuento_diurno_despues != null ? parseFloat(params.descuento_diurno_despues) : prev.descDiurnoDespues,
+        descCargoDespues: params.descuento_cargo_despues != null ? parseFloat(params.descuento_cargo_despues) : prev.descCargoDespues,
       }))
     }
     cargarConceptos()
@@ -10307,13 +10307,13 @@ export function ReporteFacturacionTab() {
                               || diasModalData.dias.find(dd => dd.trabajado)?.fecha;
                             if (esDiurno) {
                               if (hh >= (horasCorteTurno?.diurno || 12)) {
-                                return { tipo: 'dia_completo', fecha_entrega: fechaRealEntrega, hora_entrega: primeraConHora.horaEntrega, descuento_turnos: horasCorteTurno?.descDiurnoDespues || 1 };
+                                return { tipo: 'dia_completo', fecha_entrega: fechaRealEntrega, hora_entrega: primeraConHora.horaEntrega, descuento_turnos: horasCorteTurno?.descDiurnoDespues ?? 1 };
                               } else {
-                                return { tipo: 'medio_turno', fecha_entrega: fechaRealEntrega, hora_entrega: primeraConHora.horaEntrega, descuento_turnos: horasCorteTurno?.descDiurnoAntes || 0.5 };
+                                return { tipo: 'medio_turno', fecha_entrega: fechaRealEntrega, hora_entrega: primeraConHora.horaEntrega, descuento_turnos: horasCorteTurno?.descDiurnoAntes ?? 0.5 };
                               }
                             }
                             if (esCargo && hh >= (horasCorteTurno?.cargo || 14)) {
-                              return { tipo: 'medio_turno', fecha_entrega: fechaRealEntrega, hora_entrega: primeraConHora.horaEntrega, descuento_turnos: horasCorteTurno?.descCargoDespues || 0.5 };
+                              return { tipo: 'medio_turno', fecha_entrega: fechaRealEntrega, hora_entrega: primeraConHora.horaEntrega, descuento_turnos: horasCorteTurno?.descCargoDespues ?? 0.5 };
                             }
                             return null;
                           })();
