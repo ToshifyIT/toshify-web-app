@@ -1,7 +1,7 @@
 // src/modules/onboarding/components/ProgramacionAssignmentWizard.tsx
 // Wizard visual para crear nuevas programaciones de entregas
 // Basado en AssignmentWizard con drag & drop dual conductor
-/* eslint-disable @typescript-eslint/no-explicit-any */
+ 
 /* eslint-disable react-hooks/exhaustive-deps */
 
 import { useState, useEffect, useMemo, useRef, lazy, Suspense } from 'react'
@@ -1456,7 +1456,12 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
           return true
         }
 
-        const matchesSearch = !searchLower || 
+        // Si es devolucion, no mostrar vehiculos disponibles (solo los que estan en uso)
+        if (formData.devolucion_vehiculo && v.disponibilidad === 'disponible') {
+          return false
+        }
+
+        const matchesSearch = !searchLower ||
           v.patente.toLowerCase().includes(searchLower) ||
           v.marca.toLowerCase().includes(searchLower) ||
           v.modelo.toLowerCase().includes(searchLower)
