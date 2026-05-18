@@ -954,7 +954,8 @@ export function ReporteFacturacionTab() {
           // Calcular descuento por hora de entrega directamente desde el historial
           // Solo aplica si la asignación es NUEVA en esta semana (misma lógica que tabla/recalcular)
           // Si el conductor ya tenía asignación activa antes de esta semana, no aplicar descuento (cambio de vehículo)
-          const tieneAsignacionPrevia = historialFiltrado.some(h => h.dias > 0 && !h.nuevaEnSemana)
+          const asignacionesConDias = historialFiltrado.filter(h => h.dias > 0)
+          const tieneAsignacionPrevia = asignacionesConDias.some(h => !h.nuevaEnSemana) || asignacionesConDias.length > 1
           if (tieneAsignacionPrevia) return 0
           const primeraConEntrega = historialFiltrado.find(h => h.horaEntrega && h.dias > 0 && h.nuevaEnSemana)
           if (!primeraConEntrega || !primeraConEntrega.horaEntrega) return 0
@@ -1763,7 +1764,7 @@ export function ReporteFacturacionTab() {
         fechaFin: Date;
         tieneGnc: boolean;
         vehiculoId: string;
-      }>>()
+      }>>() 
       conductorIds.forEach((id: string) => asignacionesPorConductorVP.set(id, []))
 
       // Rastrear la fecha_fin más tardía de asignaciones por conductor (para comparar con fecha_terminacion)
@@ -1774,7 +1775,8 @@ export function ReporteFacturacionTab() {
       conductorIds.forEach((id: string) => diasContadosVP.set(id, new Set()))
 
       // Alertas de prorrateo por ingreso: conductor diurno con entrega nueva en la semana
-      const alertasProrrateoVP = new Map<string, { tipo: 'medio_turno' | 'dia_completo'; hora: string; fecha: string; descuento: number }>()
+      //const alertasProrrateoVP = new Map<string, { tipo: 'medio_turno' | 'dia_completo'; hora: string; fecha: string; descuento: number }>()
+      const alertasProrrateoVP = new Map<string, { tipo: 'medio_turno' | 'dia_completo'; hora: string; fecha: string; descuento: number; modalidad: 'TURNO_DIURNO' | 'CARGO' }>()
 
       // Pre-scan: detectar conductores que ya tenían asignación activa ANTES de esta semana
       // Si un conductor ya estaba trabajando (cambio de vehículo), NO se le aplica descuento por hora de entrega
@@ -1911,14 +1913,14 @@ export function ReporteFacturacionTab() {
             if (modalidad === 'TURNO_DIURNO') {
               if (hora >= horasCorteTurno.diurno) {
                 // Entrega después del corte → descuento 1 turno
-                alertasProrrateoVP.set(ac.conductor_id, { tipo: 'dia_completo', hora: horaStr, fecha: fechaStr, descuento: horasCorteTurno.descDiurnoDespues })
+                alertasProrrateoVP.set(ac.conductor_id, { tipo: 'dia_completo', hora: horaStr, fecha: fechaStr, descuento: horasCorteTurno.descDiurnoDespues, modalidad: 'TURNO_DIURNO' })
               } else {
                 // Entrega antes del corte → descuento medio turno
-                alertasProrrateoVP.set(ac.conductor_id, { tipo: 'medio_turno', hora: horaStr, fecha: fechaStr, descuento: horasCorteTurno.descDiurnoAntes })
+                alertasProrrateoVP.set(ac.conductor_id, { tipo: 'medio_turno', hora: horaStr, fecha: fechaStr, descuento: horasCorteTurno.descDiurnoAntes, modalidad: 'TURNO_DIURNO' })
               }
             } else if (modalidad === 'CARGO') {
               if (hora >= horasCorteTurno.cargo) {
-                alertasProrrateoVP.set(ac.conductor_id, { tipo: 'medio_turno', hora: horaStr, fecha: fechaStr, descuento: horasCorteTurno.descCargoDespues })
+                alertasProrrateoVP.set(ac.conductor_id, { tipo: 'medio_turno', hora: horaStr, fecha: fechaStr, descuento: horasCorteTurno.descCargoDespues, modalidad: 'CARGO' })
               }
               // Si entrega antes del corte cargo → sin descuento
             }
@@ -2059,13 +2061,11 @@ export function ReporteFacturacionTab() {
 
         // Ajustar montos y días del prorrateo restando el descuento de la modalidad correspondiente
         if (alertaVP && descuentoVP > 0) {
-          if (alertaVP.tipo === 'dia_completo' && prorrateo.TURNO_DIURNO > 0) {
-            // TURNO_DIURNO: restar precio proporcional al descuento
+          if (alertaVP.modalidad === 'TURNO_DIURNO' && prorrateo.TURNO_DIURNO > 0) {
             const precioPorDia = prorrateo.monto_TURNO_DIURNO / prorrateo.TURNO_DIURNO
             prorrateo.monto_TURNO_DIURNO -= precioPorDia * descuentoVP
             prorrateo.TURNO_DIURNO = Math.max(0, prorrateo.TURNO_DIURNO - descuentoVP)
-          } else if (alertaVP.tipo === 'medio_turno' && prorrateo.CARGO > 0) {
-            // CARGO: restar precio proporcional al descuento
+          } else if (alertaVP.modalidad === 'CARGO' && prorrateo.CARGO > 0) {
             const precioPorDia = prorrateo.monto_CARGO / prorrateo.CARGO
             prorrateo.monto_CARGO -= precioPorDia * descuentoVP
             prorrateo.CARGO = Math.max(0, prorrateo.CARGO - descuentoVP)
@@ -10288,7 +10288,8 @@ export function ReporteFacturacionTab() {
                           let alertaLocal = (() => {
                             if (alerta) return alerta;
                             // Si el conductor ya tenía asignación activa antes de esta semana, no aplicar descuento (cambio de vehículo)
-                            const tieneAsignacionPreviaModal = diasModalData.historial.some(h => h.dias > 0 && !h.nuevaEnSemana);
+                            const asignacionesConDiasModal = diasModalData.historial.filter(h => h.dias > 0);
+                            const tieneAsignacionPreviaModal = asignacionesConDiasModal.some(h => !h.nuevaEnSemana) || asignacionesConDiasModal.length > 1;
                             if (tieneAsignacionPreviaModal) return null;
                             // Buscar primera asignación NUEVA EN LA SEMANA con hora de entrega
                             const primeraConHora = diasModalData.historial.find(h => h.horaEntrega && h.dias > 0 && h.nuevaEnSemana);
