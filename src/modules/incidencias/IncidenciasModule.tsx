@@ -55,6 +55,8 @@ import './IncidenciasModule.css'
 import { PenalidadForm } from '../../components/shared/PenalidadForm'
 import { DateRangeSelector } from '../../components/ui/DateRangeSelector'
 import type { DateRange } from '../../components/ui/DateRangeSelector'
+import { SearchableSelect } from '../../components/ui/SearchableSelect'
+import type { SearchableSelectOption } from '../../components/ui/SearchableSelect'
 
 type TabType = 'logistica' | 'cobro' | 'penalidades' | 'por_aplicar' | 'aplicadas' | 'rechazados'
 
@@ -4750,83 +4752,55 @@ function IncidenciaForm({ formData, setFormData, estados, vehiculos, conductores
         <div className="form-row" style={{ display: 'grid', gridTemplateColumns: esCobro ? '1fr 1fr' : '1fr 1fr 1fr', gap: '16px' }}>
           <div className="form-group">
             <label>Tipo de Incidencia <span className="required">*</span></label>
-            <select 
-              value={formData.tipo_cobro_descuento_id || ''} 
-              onChange={e => {
-                const val = e.target.value || undefined
+            <SearchableSelect
+              value={formData.tipo_cobro_descuento_id || ''}
+              onChange={(val) => {
+                const v = val || undefined
                 // Si seleccionó un concepto de facturación, precargar el monto (precio_final x 7 = semanal)
-                if (val?.startsWith('__CONCEPTO__')) {
-                  const codigo = val.replace('__CONCEPTO__', '')
+                if (v?.startsWith('__CONCEPTO__')) {
+                  const codigo = v.replace('__CONCEPTO__', '')
                   const concepto = conceptosNomina.find(c => c.codigo === codigo)
                   if (concepto) {
-                    setFormData(prev => ({ ...prev, tipo_cobro_descuento_id: val, monto: Math.round(Number(concepto.precio_final) * 7) }))
+                    setFormData(prev => ({ ...prev, tipo_cobro_descuento_id: v, monto: Math.round(Number(concepto.precio_final) * 7) }))
                     return
                   }
                 }
-                setFormData(prev => ({ ...prev, tipo_cobro_descuento_id: val }))
-              }} 
+                setFormData(prev => ({ ...prev, tipo_cobro_descuento_id: v }))
+              }}
+              options={(esCobro ? [
+                ...tiposP006.map<SearchableSelectOption>(t => ({ value: t.id, label: t.nombre, group: 'P006 - Exceso KM', searchText: 'P006 exceso km' })),
+                ...tiposP004.map<SearchableSelectOption>(t => ({ value: t.id, label: t.nombre, group: 'P004 - Tickets a Favor', searchText: 'P004 tickets favor' })),
+                ...tiposP007.map<SearchableSelectOption>(t => ({ value: t.id, label: t.nombre, group: 'P007 - Multas/Penalidades', searchText: 'P007 multas penalidades' })),
+                ...tiposSinCategoria.map<SearchableSelectOption>(t => ({ value: t.id, label: t.nombre, group: 'Sin categoría' })),
+                ...conceptosNomina.map<SearchableSelectOption>(c => ({
+                  value: `__CONCEPTO__${c.codigo}`,
+                  label: `${c.codigo} - ${c.descripcion.charAt(0).toUpperCase() + c.descripcion.slice(1).toLowerCase()}`,
+                  searchText: `${c.codigo} ${c.descripcion}`,
+                  group: 'Conceptos de facturación',
+                })),
+              ] : [
+                { value: '__ENTREGA_TARDIA', label: 'Entrega tardía del vehículo' },
+                { value: '__LLEGADA_TARDE_REVISION', label: 'Llegada tarde o inasistencia injustificada a revisión técnica' },
+                { value: '__ZONAS_RESTRINGIDAS', label: 'Ingreso a zonas restringidas' },
+                { value: '__FALTA_LAVADO', label: 'Falta de lavado' },
+                { value: '__FALTA_RESTITUCION_UNIDAD', label: 'Falta de restitución de la unidad' },
+                { value: '__PERDIDA_DANO_SEGURIDAD', label: 'Pérdida o daño de elementos de seguridad' },
+                { value: '__FALTA_RESTITUCION_GNC', label: 'Falta restitución de GNC' },
+                { value: '__FALTA_RESTITUCION_NAFTA', label: 'Falta restitución de Nafta' },
+                { value: '__MORA_CANON', label: 'Mora en canon' },
+                { value: '__MANIPULACION_GPS', label: 'Manipulación no autorizada de GPS' },
+                { value: '__ABANDONO_VEHICULO', label: 'Abandono del vehículo' },
+                { value: '__SIN_LUGAR_GUARDA', label: 'No disponer de lugar seguro para la guarda del vehículo' },
+                { value: '__IBUTTON', label: 'I button' },
+                { value: '__MULTA_TRANSITO', label: 'Multa de tránsito' },
+                { value: '__REPARACION_SINIESTRO', label: 'Reparación Siniestro' },
+                { value: '__FALTA_REPORTE', label: 'Falta de reporte (Intercom)' },
+                { value: '__OTRO', label: 'Otro' },
+              ]) as SearchableSelectOption[]}
+              placeholder="Seleccionar"
+              searchPlaceholder="Buscar tipo..."
               disabled={disabled}
-            >
-              <option value="">Seleccionar</option>
-              {esCobro ? (
-                // Tipos que generan COBRO - agrupados por categoría
-                <>
-                  {/* P006 - Exceso KM */}
-                  {tiposP006.length > 0 && (
-                    <optgroup label="P006 - Exceso KM">
-                      {tiposP006.map(tipo => (
-                        <option key={tipo.id} value={tipo.id}>{tipo.nombre}</option>
-                      ))}
-                    </optgroup>
-                  )}
-                  {/* P004 - Tickets a Favor */}
-                  {tiposP004.length > 0 && (
-                    <optgroup label="P004 - Tickets a Favor">
-                      {tiposP004.map(tipo => (
-                        <option key={tipo.id} value={tipo.id}>{tipo.nombre}</option>
-                      ))}
-                    </optgroup>
-                  )}
-                  {/* P007 - Multas/Penalidades */}
-                  {tiposP007.length > 0 && (
-                    <optgroup label="P007 - Multas/Penalidades">
-                      {tiposP007.map(tipo => (
-                        <option key={tipo.id} value={tipo.id}>{tipo.nombre}</option>
-                      ))}
-                    </optgroup>
-                  )}
-                  {/* Sin categoría */}
-                  {tiposSinCategoria.map(tipo => (
-                    <option key={tipo.id} value={tipo.id}>{tipo.nombre}</option>
-                  ))}
-                  {/* Conceptos adicionales de facturación */}
-                  {conceptosNomina.map(c => (
-                    <option key={`cn-${c.id}`} value={`__CONCEPTO__${c.codigo}`}>{c.codigo} - {c.descripcion.charAt(0).toUpperCase() + c.descripcion.slice(1).toLowerCase()}</option>
-                  ))}
-                </>
-              ) : (
-                // Tipos de LOGÍSTICA (no generan cobro)
-                <>
-                  <option value="__ENTREGA_TARDIA">Entrega tardía del vehículo</option>
-                  <option value="__LLEGADA_TARDE_REVISION">Llegada tarde o inasistencia injustificada a revisión técnica</option>
-                  <option value="__ZONAS_RESTRINGIDAS">Ingreso a zonas restringidas</option>
-                  <option value="__FALTA_LAVADO">Falta de lavado</option>
-                  <option value="__FALTA_RESTITUCION_UNIDAD">Falta de restitución de la unidad</option>
-                  <option value="__PERDIDA_DANO_SEGURIDAD">Pérdida o daño de elementos de seguridad</option>
-                  <option value="__FALTA_RESTITUCION_GNC">Falta restitución de GNC</option>
-                  <option value="__FALTA_RESTITUCION_NAFTA">Falta restitución de Nafta</option>
-                  <option value="__MORA_CANON">Mora en canon</option>
-                  <option value="__MANIPULACION_GPS">Manipulación no autorizada de GPS</option>
-                  <option value="__ABANDONO_VEHICULO">Abandono del vehículo</option>
-                  <option value="__SIN_LUGAR_GUARDA">No disponer de lugar seguro para la guarda del vehículo</option>
-                  <option value="__IBUTTON">I button</option>
-                  <option value="__MULTA_TRANSITO">Multa de tránsito</option>
-                  <option value="__REPARACION_SINIESTRO">Reparación Siniestro</option>
-                  <option value="__FALTA_REPORTE">Falta de reporte (Intercom)</option>
-                  <option value="__OTRO">Otro</option>
-                </>
-              )}
-            </select>
+            />
           </div>
           <div className="form-group">
             <label>Área <span className="required">*</span></label>

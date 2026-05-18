@@ -28,6 +28,9 @@ export interface SearchableSelectOption {
   subtitle?: string
   /** Deshabilitar opcion */
   disabled?: boolean
+  /** Agrupacion visual (equivalente a optgroup). Las opciones con el mismo
+   *  `group` aparecen bajo un header no clickeable con ese texto. */
+  group?: string
 }
 
 interface Props {
@@ -261,28 +264,47 @@ export function SearchableSelect({
             {filteredOptions.length === 0 ? (
               <div className="ss-empty">{noResultsText}</div>
             ) : (
-              filteredOptions.map((opt, idx) => {
-                const isSelected = opt.value === value
-                const isFocused = idx === focusedIdx
-                return (
-                  <div
-                    key={opt.value}
-                    data-idx={idx}
-                    className={`ss-option ${isSelected ? 'ss-selected' : ''} ${isFocused ? 'ss-focused' : ''} ${opt.disabled ? 'ss-opt-disabled' : ''}`}
-                    onClick={() => handleSelect(opt)}
-                    onMouseEnter={() => setFocusedIdx(idx)}
-                    role="option"
-                    aria-selected={isSelected}
-                    aria-disabled={opt.disabled}
-                  >
-                    <div className="ss-option-content">
-                      <span className="ss-option-label">{opt.label}</span>
-                      {opt.subtitle && <span className="ss-option-subtitle">{opt.subtitle}</span>}
+              (() => {
+                // Render con agrupacion: si hay opciones con `group`, insertamos
+                // un header no clickeable antes del primer item de ese grupo.
+                // Las opciones sin `group` aparecen al final (o al principio si todas son sin group).
+                const elements: React.ReactNode[] = []
+                let lastGroup: string | undefined = undefined
+                filteredOptions.forEach((opt, idx) => {
+                  const g = opt.group
+                  if (g && g !== lastGroup) {
+                    elements.push(
+                      <div key={`grp-${g}-${idx}`} className="ss-group-header" aria-hidden="true">
+                        {g}
+                      </div>
+                    )
+                    lastGroup = g
+                  } else if (!g) {
+                    lastGroup = undefined
+                  }
+                  const isSelected = opt.value === value
+                  const isFocused = idx === focusedIdx
+                  elements.push(
+                    <div
+                      key={opt.value}
+                      data-idx={idx}
+                      className={`ss-option ${isSelected ? 'ss-selected' : ''} ${isFocused ? 'ss-focused' : ''} ${opt.disabled ? 'ss-opt-disabled' : ''}`}
+                      onClick={() => handleSelect(opt)}
+                      onMouseEnter={() => setFocusedIdx(idx)}
+                      role="option"
+                      aria-selected={isSelected}
+                      aria-disabled={opt.disabled}
+                    >
+                      <div className="ss-option-content">
+                        <span className="ss-option-label">{opt.label}</span>
+                        {opt.subtitle && <span className="ss-option-subtitle">{opt.subtitle}</span>}
+                      </div>
+                      {isSelected && <Check size={14} className="ss-option-check" />}
                     </div>
-                    {isSelected && <Check size={14} className="ss-option-check" />}
-                  </div>
-                )
-              })
+                  )
+                })
+                return elements
+              })()
             )}
           </div>
         </div>
