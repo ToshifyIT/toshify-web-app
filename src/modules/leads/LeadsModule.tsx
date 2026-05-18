@@ -1110,6 +1110,7 @@ export function LeadsModule() {
         direccion_lng: lngFinal,
         sede_id: lead.sede_id || sedeActual?.id || null,
         url_documentacion: lead.url_folder || null,
+        intercom_id: lead.id_lead || null,
       }
 
       // Filtrar campos vacíos (salvo requeridos)

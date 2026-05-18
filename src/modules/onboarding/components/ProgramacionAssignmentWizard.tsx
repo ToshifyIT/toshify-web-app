@@ -1008,6 +1008,14 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
           updates.distancia_diurno = pairTiempo
           updates.distancia_nocturno = pairTiempo
         }
+        // Si ya está marcada devolución o cambio de vehículo, auto-setear tipo_asignacion y documento
+        if (prev.devolucion_vehiculo) {
+          updates.tipo_asignacion_diurno = 'devolucion_vehiculo'
+          updates.documento_diurno = 'na'
+        } else if (prev.cambio_vehiculo) {
+          updates.tipo_asignacion_diurno = 'cambio_auto'
+          updates.documento_diurno = 'anexo'
+        }
         return updates
       })
     }
@@ -1029,6 +1037,14 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
         if (pairTiempo && pairPartnerId && prev.conductor_diurno_id === pairPartnerId) {
           updates.distancia_diurno = pairTiempo
           updates.distancia_nocturno = pairTiempo
+        }
+        // Si ya está marcada devolución o cambio de vehículo, auto-setear tipo_asignacion y documento
+        if (prev.devolucion_vehiculo) {
+          updates.tipo_asignacion_nocturno = 'devolucion_vehiculo'
+          updates.documento_nocturno = 'na'
+        } else if (prev.cambio_vehiculo) {
+          updates.tipo_asignacion_nocturno = 'cambio_auto'
+          updates.documento_nocturno = 'anexo'
         }
         return updates
       })
