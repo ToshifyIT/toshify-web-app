@@ -279,27 +279,39 @@ export function useExcesoKmData(sedeId?: string | null) {
       const nombresUnicos = [...new Set(turnos.map(t => t.conductor))].filter(Boolean)
       const condIdByName = new Map<string, { id: string; dni: string | null }>()
       if (nombresUnicos.length > 0) {
+        // FIX 2026-05-19: la tabla conductores tiene `nombres` y `apellidos`, no `nombre_completo`
         const { data: conductoresData } = await supabase
           .from('conductores')
-          .select('id, nombre_completo, numero_dni')
-        for (const c of (conductoresData || []) as any[]) {
-          const nom = (c.nombre_completo || '').toUpperCase().trim()
-          if (nom && nombresUnicos.includes(nom)) {
-            condIdByName.set(nom, { id: c.id, dni: c.numero_dni })
+          .select('id, nombres, apellidos, numero_dni')
+        const conductoresNorm = ((conductoresData || []) as any[]).map(c => {
+          const full = `${c.nombres || ''} ${c.apellidos || ''}`.toUpperCase().trim().replace(/\s+/g, ' ')
+          const fullRev = `${c.apellidos || ''} ${c.nombres || ''}`.toUpperCase().trim().replace(/\s+/g, ' ')
+          return { id: c.id as string, dni: c.numero_dni as string | null, full, fullRev }
+        })
+        for (const c of conductoresNorm) {
+          if (c.full && nombresUnicos.includes(c.full)) {
+            condIdByName.set(c.full, { id: c.id, dni: c.dni })
+          } else if (c.fullRev && nombresUnicos.includes(c.fullRev)) {
+            condIdByName.set(c.fullRev, { id: c.id, dni: c.dni })
           }
         }
         // Buscar tambien por inclusion (USS suele truncar/diferir formato)
         for (const n of nombresUnicos) {
           if (condIdByName.has(n)) continue
-          const match = (conductoresData || []).find((c: any) =>
-            c.nombre_completo && n.includes((c.nombre_completo as string).toUpperCase()))
-          if (match) condIdByName.set(n, { id: match.id, dni: match.numero_dni })
+          const nUpper = (n as string).toUpperCase()
+          const match = conductoresNorm.find(c =>
+            (c.full && (nUpper.includes(c.full) || c.full.includes(nUpper))) ||
+            (c.fullRev && (nUpper.includes(c.fullRev) || c.fullRev.includes(nUpper))),
+          )
+          if (match) condIdByName.set(n, { id: match.id, dni: match.dni })
         }
       }
 
-      // Resolver modalidad/horario por patente via asignaciones_conductores
+      // Resolver modalidad/horario por patente + conductor via asignaciones + asignaciones_conductores
       const patentesUnicas = [...new Set(turnos.map(t => t.patenteNorm))]
       const vehInfoByPatente = new Map<string, { modalidad: string | null }>()
+      // Mapa horario por (patente_norm + conductor_id) para distinguir cuando hay 2 conductores en 1 vehiculo
+      const horarioByPatenteCond = new Map<string, string>()
       if (patentesUnicas.length > 0) {
         const { data: vehiculosData } = await supabase
           .from('vehiculos')
@@ -310,19 +322,34 @@ export function useExcesoKmData(sedeId?: string | null) {
         }
         const vehIds = [...vehiculoByPatente.values()]
         if (vehIds.length > 0) {
+          // FIX 2026-05-19: la modalidad ('turno' | 'a_cargo') vive en `asignaciones`
+          // (no en `asignaciones_conductores`). La tabla correcta tiene fecha_inicio/fecha_fin.
+          // Adicionalmente leemos `asignaciones_conductores.horario` (diurno/nocturno/todo_dia)
+          // para mostrar el turno por conductor en la columna TURNO.
           const { data: asigs } = await supabase
-            .from('asignaciones_conductores')
-            .select('vehiculo_id, modalidad, fecha_desde, fecha_hasta, estado')
+            .from('asignaciones')
+            .select('id, vehiculo_id, modalidad, fecha_inicio, fecha_fin, estado, asignaciones_conductores(conductor_id, horario, estado)')
             .in('vehiculo_id', vehIds)
-            .eq('estado', 'activo')
+            .in('estado', ['activa', 'activo'])
           // Quedarse con la asignacion vigente al endDate
           const endDateStr = dateRange.endDate
           for (const a of (asigs || []) as any[]) {
-            const desd = a.fecha_desde || ''
-            const hasta_ = a.fecha_hasta || '9999-12-31'
+            const desd = a.fecha_inicio || ''
+            const hasta_ = a.fecha_fin || '9999-12-31'
             if (desd <= endDateStr && endDateStr <= hasta_) {
               const patNorm = [...vehiculoByPatente.entries()].find(([, id]) => id === a.vehiculo_id)?.[0]
-              if (patNorm) vehInfoByPatente.set(patNorm, { modalidad: a.modalidad || 'turno' })
+              if (!patNorm) continue
+              vehInfoByPatente.set(patNorm, { modalidad: a.modalidad || 'turno' })
+              // Mapear horario por conductor (puede haber 2 conductores asignados al mismo vehiculo)
+              const acs = (a.asignaciones_conductores || []) as Array<{ conductor_id: string; horario: string | null; estado?: string }>
+              for (const ac of acs) {
+                if (!ac.conductor_id) continue
+                // Solo asignaciones del conductor que esten vigentes (no canceladas/finalizadas)
+                if (ac.estado && !['asignado', 'completado', 'activa', 'activo'].includes(ac.estado)) continue
+                if (ac.horario) {
+                  horarioByPatenteCond.set(`${patNorm}|${ac.conductor_id}`, ac.horario)
+                }
+              }
             }
           }
         }
@@ -338,6 +365,10 @@ export function useExcesoKmData(sedeId?: string | null) {
         const condInfo = condIdByName.get(t.conductor)
         const vehInfo = vehInfoByPatente.get(t.patenteNorm)
         const modalidad = vehInfo?.modalidad || 'turno'
+        // FIX 2026-05-19: cruzar horario (diurno/nocturno/todo_dia) desde asignaciones_conductores
+        const horarioCond = condInfo?.id
+          ? (horarioByPatenteCond.get(`${t.patenteNorm}|${condInfo.id}`) || 'todo_dia')
+          : 'todo_dia'
 
         // Calcular fecha_turno y entrada/salida en ART
         const fechaTurno = new Date(primero.inicioMs).toLocaleDateString('en-CA', { timeZone: TIMEZONE_ARGENTINA })
@@ -364,7 +395,7 @@ export function useExcesoKmData(sedeId?: string | null) {
           kmTotal,
           duracionMinutos: duracionMin,
           estado: 'Turno Finalizado',
-          horario: 'todo_dia',
+          horario: horarioCond,
           vehiculoModalidad: modalidad,
           gncCargado: false,
           lavadoRealizado: false,

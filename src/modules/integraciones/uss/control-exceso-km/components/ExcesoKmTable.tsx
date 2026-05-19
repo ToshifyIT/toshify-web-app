@@ -88,18 +88,18 @@ export function ExcesoKmTable({
     for (const [key, lista] of grupos) {
       const km = lista.reduce((s, m) => s + (m.kmTotal || 0), 0)
       const modalidad: 'turno' | 'a_cargo' = lista.some(m => m.vehiculoModalidad === 'a_cargo') ? 'a_cargo' : 'turno'
-      // Horario solo aplica cuando modalidad === 'turno'
+      // Horario solo aplica cuando modalidad === 'turno'.
+      // FIX 2026-05-19: ya viene cruzado por conductor desde useExcesoKmData
+      // (Map patenteNorm|conductor_id -> horario), asi que basta con tomar
+      // el primer valor diurno/nocturno del conductor en la lista.
       let horario: ExcesoKmRow['horario'] = null
       if (modalidad === 'turno') {
-        const horariosUsados = new Set(
-          lista
-            .filter(m => m.vehiculoModalidad === 'turno' || m.vehiculoModalidad == null)
-            .map(m => m.horario)
-            .filter(h => h === 'diurno' || h === 'nocturno'),
-        )
-        if (horariosUsados.size > 1) horario = 'mixto'
-        else if (horariosUsados.has('diurno')) horario = 'diurno'
-        else if (horariosUsados.has('nocturno')) horario = 'nocturno'
+        for (const m of lista) {
+          if (m.horario === 'diurno' || m.horario === 'nocturno') {
+            horario = m.horario
+            break
+          }
+        }
       }
       // Si la marcación tiene limiteSemanal lo usamos; sino usamos default según modalidad
       const limite = lista[0].limiteSemanal || (modalidad === 'a_cargo' ? 3600 : 1800)
