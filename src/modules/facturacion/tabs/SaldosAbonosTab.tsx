@@ -1897,7 +1897,7 @@ export function SaldosAbonosTab() {
     try {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { data: rows, error } = await (supabase.from('control_saldos') as any)
-        .select('id, semana, anio, tipo_movimiento, monto_movimiento, referencia, saldo_adeudado, saldo_a_favor, saldo_pendiente, dias_mora, interes_mora, created_at, created_by_name')
+        .select('id, semana, anio, tipo_movimiento, monto_movimiento, referencia, saldo_adeudado, saldo_a_favor, saldo_pendiente, saldo_previo, dias_mora, interes_mora, created_at, created_by_name')
         .eq('conductor_id', saldo.conductor_id)
         .order('anio', { ascending: false })
         .order('semana', { ascending: false })
@@ -2768,11 +2768,12 @@ export function SaldosAbonosTab() {
                     return true
                   })
 
-                  // 2) Recalcular saldos en runtime: arriba siempre = saldo_actual del conductor
-                  // Las filas vienen ordenadas DESC (más reciente arriba). Para cada fila i:
-                  //   saldo[i]      = saldo_actual - sum(deltaConSigno[0..i-1])
-                  //   saldoPrev[i]  = saldo[i] - deltaConSigno[i]
-                  // donde deltaConSigno = +monto si abono, -monto si cargo, -monto si elim_pago
+                  // 2) Usar saldo_pendiente guardado en cada fila (snapshot post-movimiento).
+                  // FIX 2026-05-19: antes recalculábamos restando hacia atrás desde saldo_actual,
+                  // pero eso ignora cargos que no están en control_saldos (ej. facturación)
+                  // y genera saldos previos absurdos (ej -$745k para MARIA BORDA S15).
+                  // Ahora: saldo[i] = row.saldo_pendiente (ya guardado correcto),
+                  //        saldoPrev[i] = saldo_pendiente de la fila siguiente (más vieja), o 0 si es la última.
                   const deltaSigno = (r: any, idx: number, rows: any[]): number => {
                     const monto = Math.abs(r.monto_movimiento || 0)
                     const cls = clasificar(r, idx, rows)
@@ -2780,15 +2781,22 @@ export function SaldosAbonosTab() {
                     if (cls === 'cargo' || cls === 'elim') return -monto
                     return 0
                   }
-                  // Acumulamos sobre la lista FILTRADA, partiendo del saldo_actual.
-                  let saldoAcum = s.saldo_actual || 0
                   const filasConSaldos = rowsFiltradas.map((r, i) => {
                     const cls = clasificar(r, kardexModal.rows.indexOf(r), kardexModal.rows)
                     const monto = Math.abs(r.monto_movimiento || 0)
                     const delta = deltaSigno(r, kardexModal.rows.indexOf(r), kardexModal.rows)
-                    const saldo = saldoAcum
-                    const saldoPrev = saldoAcum - delta
-                    saldoAcum = saldoPrev
+                    // saldo del movimiento = saldo_pendiente guardado (snapshot post-movimiento)
+                    const saldo = Number(r.saldo_pendiente) || 0
+                    // FIX 2026-05-19: usar columna saldo_previo guardada en BD
+                    // (refleja la deuda real al inicio de la semana, incluye facturacion).
+                    // Si no existe (filas viejas), fallback a saldo_pendiente de la fila más vieja.
+                    let saldoPrev: number
+                    if (r.saldo_previo !== null && r.saldo_previo !== undefined) {
+                      saldoPrev = Number(r.saldo_previo) || 0
+                    } else {
+                      const siguiente = rowsFiltradas[i + 1]
+                      saldoPrev = siguiente ? (Number(siguiente.saldo_pendiente) || 0) : 0
+                    }
                     return { r, i, cls, monto, delta, saldo, saldoPrev }
                   })
 

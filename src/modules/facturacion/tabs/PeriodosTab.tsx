@@ -574,7 +574,10 @@ export function PeriodosTab() {
 
         // Si tiene días en TURNO DIURNO (P001)
         if (conductor.dias_turno > 0) {
-          const montoTurno = Math.round((precioTurnoDiurno / 7) * conductor.dias_turno)
+          // FIX 2026-05-19: preservar 2 decimales para evitar desfase entre la suma de
+          // los items del modal y el total_a_pagar (ej: 5.5 dias * $62571.43 = $344142.865
+          // que con Math.round daba 344143 y rompía la igualdad con total_a_pagar=344142.87).
+          const montoTurno = Math.round(((precioTurnoDiurno / 7) * conductor.dias_turno) * 100) / 100
           alquilerTotal += montoTurno
           detallesAlquiler.push({
             codigo: 'P001',
@@ -586,7 +589,7 @@ export function PeriodosTab() {
 
         // Si tiene días en TURNO NOCTURNO (P013)
         if (conductor.dias_turno_nocturno > 0) {
-          const montoNocturno = Math.round((precioTurnoNocturno / 7) * conductor.dias_turno_nocturno)
+          const montoNocturno = Math.round(((precioTurnoNocturno / 7) * conductor.dias_turno_nocturno) * 100) / 100
           alquilerTotal += montoNocturno
           detallesAlquiler.push({
             codigo: 'P013',
@@ -598,7 +601,7 @@ export function PeriodosTab() {
 
         // Si tiene días en CARGO (P002)
         if (conductor.dias_cargo > 0) {
-          const montoCargo = Math.round((precioCargo / 7) * conductor.dias_cargo)
+          const montoCargo = Math.round(((precioCargo / 7) * conductor.dias_cargo) * 100) / 100
           alquilerTotal += montoCargo
           detallesAlquiler.push({
             codigo: 'P002',
@@ -675,7 +678,7 @@ export function PeriodosTab() {
         const saldoConductor = (saldos as any[]).find((s: any) => s.conductor_id === conductor.conductor_id)
         const saldoAnterior = -(saldoConductor?.saldo_actual || 0)
         const diasMora = saldoAnterior > 0 ? Math.min(saldoConductor?.dias_mora || 0, 7) : 0
-        const montoMora = saldoAnterior > 0 ? Math.round(saldoAnterior * 0.01 * diasMora) : 0
+        const montoMora = saldoAnterior > 0 ? Math.round(saldoAnterior * 0.01 * diasMora * 100) / 100 : 0
 
         // Totales
         const subtotalCargos = alquilerTotal + cuotaGarantiaProporcional + totalPenalidades + totalExcesos + totalPeajes + montoMora + totalCobros + totalCuotasPenalidades
@@ -864,7 +867,7 @@ export function PeriodosTab() {
             concepto_codigo: 'P009',
             concepto_descripcion: `Mora (${diasMora} días al 1%)`,
             cantidad: diasMora,
-            precio_unitario: Math.round(saldoAnterior * 0.01),
+            precio_unitario: Math.round(saldoAnterior * 0.01 * 100) / 100,
             subtotal: montoMora,
             total: montoMora,
             es_descuento: false

@@ -3481,7 +3481,8 @@ export function ReporteFacturacionTab() {
           if (linea.dias <= 0) continue
           const codigo = getCodigoAlquiler(linea.modalidad, linea.gnc)
           const precio = preciosActuales[codigo] || 0
-          const monto = Math.round(precio * linea.dias)
+          // FIX 2026-05-19: preservar 2 decimales (ej: 5.5 * 62571.43 = 344142.865 → 344142.87)
+          const monto = Math.round(precio * linea.dias * 100) / 100
           alquilerTotal += monto
           detallesAlquiler.push({
             codigo,
@@ -3725,7 +3726,7 @@ export function ReporteFacturacionTab() {
           todosDetalles.push({
             facturacion_id: facturacionId, concepto_codigo: 'P008',
             concepto_descripcion: `Multas de Tránsito (${cantidadMultas})`,
-            cantidad: cantidadMultas, precio_unitario: Math.round(montoMultas / cantidadMultas),
+            cantidad: cantidadMultas, precio_unitario: Math.round((montoMultas / cantidadMultas) * 100) / 100,
             subtotal: montoMultas, total: montoMultas, es_descuento: false,
             referencia_tipo: 'multa_transito'
           })
@@ -3736,7 +3737,7 @@ export function ReporteFacturacionTab() {
           todosDetalles.push({
             facturacion_id: facturacionId, concepto_codigo: 'P009',
             concepto_descripcion: `Mora (${diasMora} días al 1%)`,
-            cantidad: diasMora, precio_unitario: Math.round(saldoAnterior * 0.01),
+            cantidad: diasMora, precio_unitario: Math.round(saldoAnterior * 0.01 * 100) / 100,
             subtotal: montoMora, total: montoMora, es_descuento: false
           })
         }
@@ -10818,7 +10819,9 @@ export function ReporteFacturacionTab() {
                               </button>
                             </div>
                             <span style={{ fontSize: '12px', fontWeight: 600, fontFamily: 'monospace', color: 'var(--text-primary)', flexShrink: 0, marginLeft: '8px' }}>
-                              {formatCurrency(item.total)}
+                              {/* FIX 2026-05-19: usar cantidad * precio_unitario (con decimales) en vez de item.total
+                                  que viejo se guardo redondeado a entero y rompe la suma del subtotal */}
+                              {formatCurrency(Math.round(Number(item.cantidad || 0) * Number(item.precio_unitario || 0) * 100) / 100 || item.total)}
                             </span>
                           </div>
                         );
@@ -10836,7 +10839,11 @@ export function ReporteFacturacionTab() {
                           Subtotal Cargos
                         </span>
                         <span style={{ fontSize: '13px', fontWeight: 700, fontFamily: 'monospace', color: 'var(--text-primary)' }}>
-                          {formatCurrency(detalleCargos.reduce((sum, d) => sum + d.total, 0))}
+                          {/* Suma sobre cantidad*precio_unitario para preservar decimales en items historicos */}
+                          {formatCurrency(detalleCargos.reduce((sum, d) => {
+                            const calc = Math.round(Number(d.cantidad || 0) * Number(d.precio_unitario || 0) * 100) / 100
+                            return sum + (calc || Number(d.total || 0))
+                          }, 0))}
                         </span>
                       </div>
                     </div>
