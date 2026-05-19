@@ -1953,47 +1953,112 @@ export function GarantiasTab() {
         const pctReal = Math.min(100, (real / total) * 100)
         const tieneDeuda = deudaReal > 1
 
-        // Filtrar filas
-        const rowsFiltradas = kardexModal.rows.filter(r => {
-          if (kardexModal.semanaFilter) {
-            const semKey = `${r.anio}-${r.semana}`
-            if (semKey !== kardexModal.semanaFilter) return false
+        // CONSOLIDAR: 1 fila por semana (combinar cuota_facturada + pago_aplicado de la misma semana)
+        // Estado posible: cubierta (full), parcial, no-cubierta
+        type FilaConsolidada = {
+          key: string
+          anio: number
+          semana: number
+          fecha: string
+          cuota_ref: number
+          monto_cuota: number      // siempre $50k (la cuota P003 de esa semana)
+          aplicado: number          // cuánto del pago Cabify se aplicó realmente
+          estado: 'cubierta' | 'parcial' | 'no-cubierta' | 'otro'
+          tipo_movimiento: string
+          referencia: string
+          ids: string[]
+        }
+        const consolidadasMap = new Map<string, FilaConsolidada>()
+        for (const r of kardexModal.rows) {
+          const key = `${r.anio}-${r.semana}`
+          let f = consolidadasMap.get(key)
+          if (!f) {
+            f = {
+              key,
+              anio: r.anio,
+              semana: r.semana,
+              fecha: r.created_at || '',
+              cuota_ref: Number(r.cuotas_facturadas) || 0,
+              monto_cuota: 0,
+              aplicado: 0,
+              estado: 'no-cubierta',
+              tipo_movimiento: r.tipo_movimiento,
+              referencia: r.referencia || '',
+              ids: [],
+            }
+            consolidadasMap.set(key, f)
           }
-          if (kardexModal.tipoFilter && r.tipo_movimiento !== kardexModal.tipoFilter) return false
+          f.ids.push(r.id)
+          // Tomar la fecha más reciente de la semana
+          if (r.created_at && r.created_at > f.fecha) f.fecha = r.created_at
+          // Cuota facturada: marca el monto cobrado en P003 esa semana
+          if (r.tipo_movimiento === 'cuota_facturada') {
+            f.monto_cuota += Number(r.monto_facturado) || 0
+            if (Number(r.cuotas_facturadas) > f.cuota_ref) f.cuota_ref = Number(r.cuotas_facturadas)
+          }
+          // Pago aplicado: monto que efectivamente entró a la garantía
+          if (r.tipo_movimiento === 'pago_aplicado') {
+            f.aplicado += Number(r.monto_pagado_real) || 0
+            if (r.referencia) f.referencia = r.referencia
+          }
+          // Ajustes manuales / eliminaciones se mantienen visibles aparte
+          if (r.tipo_movimiento === 'ajuste_manual' || r.tipo_movimiento === 'eliminacion') {
+            f.estado = 'otro'
+          }
+        }
+        // Calcular estado de cada fila comparando contra el VALOR FIJO de la cuota ($50k típicamente).
+        // Si no hay fila cuota_facturada (caso de conductores sin backfill), usamos g.monto_cuota_semanal.
+        const montoCuotaFijo = Number((g as any).monto_cuota_semanal) || 50000
+        for (const f of consolidadasMap.values()) {
+          if (f.estado === 'otro') continue
+          // monto a comparar = lo que dice la fila cuota_facturada, o el monto semanal fijo si no hay
+          const objetivo = f.monto_cuota > 0 ? f.monto_cuota : montoCuotaFijo
+          f.monto_cuota = objetivo // dejarlo guardado para totales
+          if (f.aplicado >= objetivo - 0.01) f.estado = 'cubierta'
+          else if (f.aplicado > 0.01) f.estado = 'parcial'
+          else f.estado = 'no-cubierta'
+        }
+        const consolidadas = Array.from(consolidadasMap.values())
+          .sort((a, b) => (a.anio !== b.anio ? b.anio - a.anio : b.semana - a.semana))
+
+        // Filtrar filas consolidadas
+        const filtroEstado = (kardexModal.tipoFilter || '').toLowerCase()
+        const rowsFiltradas = consolidadas.filter(f => {
+          if (kardexModal.semanaFilter && f.key !== kardexModal.semanaFilter) return false
+          if (filtroEstado === 'cubierta' && f.estado !== 'cubierta') return false
+          if (filtroEstado === 'parcial' && f.estado !== 'parcial') return false
+          if (filtroEstado === 'no-cubierta' && f.estado !== 'no-cubierta') return false
           if (kardexModal.search.trim()) {
             const q = kardexModal.search.toLowerCase()
-            const blob = `${r.referencia || ''} ${r.observaciones || ''} ${r.monto_facturado} ${r.monto_pagado_real} S${r.semana} ${r.anio}`.toLowerCase()
+            const blob = `${f.referencia || ''} ${f.aplicado} ${f.monto_cuota} S${f.semana} ${f.anio}`.toLowerCase()
             if (!blob.includes(q)) return false
           }
           return true
         })
 
         // Semanas únicas para dropdown
-        const semanasUnicas = Array.from(new Set(
-          kardexModal.rows.map(r => `${r.anio}-${r.semana}`)
-        )).sort((a, b) => {
-          const [aA, aS] = a.split('-').map(Number)
-          const [bA, bS] = b.split('-').map(Number)
-          if (aA !== bA) return bA - aA
-          return bS - aS
-        })
+        const semanasUnicas = consolidadas.map(f => f.key)
 
-        // Totales del rango filtrado
-        const totalFact = rowsFiltradas.reduce((s, r) => s + (Number(r.monto_facturado) || 0), 0)
-        const totalPag = rowsFiltradas.reduce((s, r) => s + (Number(r.monto_pagado_real) || 0), 0)
-
-        const tipoLabel: Record<string, string> = {
-          cuota_facturada: 'Cuota Facturada',
-          pago_aplicado: 'Pago Aplicado',
-          ajuste_manual: 'Ajuste Manual',
-          eliminacion: 'Eliminación',
-        }
+        // Totales (sobre filas filtradas)
+        const totalCubiertas = rowsFiltradas.filter(f => f.estado === 'cubierta').length
+        const totalParciales = rowsFiltradas.filter(f => f.estado === 'parcial').length
+        const totalNoCubiertas = rowsFiltradas.filter(f => f.estado === 'no-cubierta').length
+        const totalAplicado = rowsFiltradas.reduce((s, f) => s + f.aplicado, 0)
+        // total sin cubrir = $ que falta de las no-cubiertas (cuota completa) + lo que falta de las parciales
+        const totalSinCubrirNoCub = rowsFiltradas.filter(f => f.estado === 'no-cubierta').reduce((s, f) => s + (f.monto_cuota || 0), 0)
+        const totalSinCubrirParcial = rowsFiltradas.filter(f => f.estado === 'parcial').reduce((s, f) => s + Math.max(0, (f.monto_cuota || 0) - f.aplicado), 0)
+        const totalSinCubrir = totalSinCubrirNoCub + totalSinCubrirParcial
+        const totalParcialesAplicado = rowsFiltradas.filter(f => f.estado === 'parcial').reduce((s, f) => s + f.aplicado, 0)
+        // eslint-disable-next-line @typescript-eslint/no-unused-vars
+        const _legacyTotalFact = rowsFiltradas.reduce((s, f) => s + f.monto_cuota, 0)
+        // eslint-disable-next-line @typescript-eslint/no-unused-vars
+        const _legacyTotalPag = totalAplicado
 
         return (
           <div className="fact-modal-overlay" onClick={() => setKardexModal(prev => ({ ...prev, open: false }))}>
             <div className="fact-modal-content" style={{ maxWidth: '1100px' }} onClick={e => e.stopPropagation()}>
               <div className="fact-modal-header">
-                <h2>Kardex de Garantía</h2>
+                <h2>Estado de Garantía</h2>
                 <button className="fact-modal-close" onClick={() => setKardexModal(prev => ({ ...prev, open: false }))}>
                   <XIcon size={20} />
                 </button>
@@ -2019,43 +2084,8 @@ export function GarantiasTab() {
                   </div>
                 </div>
 
-                {/* 2 KPIs con barras de progreso */}
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '14px' }}>
-                  <div style={{
-                    background: 'var(--bg-secondary)', border: '1px solid var(--border-primary)',
-                    borderRadius: '8px', padding: '12px 14px',
-                  }}>
-                    <div style={{ fontSize: '10px', textTransform: 'uppercase', color: 'var(--text-secondary)', letterSpacing: '0.4px', fontWeight: 600 }}>
-                      Facturado en P003
-                    </div>
-                    <div style={{ fontSize: '18px', fontWeight: 700, color: '#2563eb', marginTop: '4px', fontFamily: 'monospace' }}>
-                      {formatCurrency(facturado)} <span style={{ fontSize: '11px', color: 'var(--text-secondary)', fontFamily: 'system-ui' }}>/ {formatCurrency(total)}</span>
-                    </div>
-                    <div style={{ marginTop: '8px', height: '6px', background: 'var(--border-primary)', borderRadius: '3px', overflow: 'hidden' }}>
-                      <div style={{ height: '100%', background: '#2563eb', width: `${pctFact}%` }} />
-                    </div>
-                    <div style={{ fontSize: '10px', color: 'var(--text-tertiary)', marginTop: '6px' }}>
-                      {g.cuotas_pagadas || 0} cuotas facturadas · {pctFact.toFixed(0)}% cobrada en facturación
-                    </div>
-                  </div>
-                  <div style={{
-                    background: 'var(--bg-secondary)', border: '1px solid var(--border-primary)',
-                    borderRadius: '8px', padding: '12px 14px',
-                  }}>
-                    <div style={{ fontSize: '10px', textTransform: 'uppercase', color: 'var(--text-secondary)', letterSpacing: '0.4px', fontWeight: 600 }}>
-                      Pagado realmente
-                    </div>
-                    <div style={{ fontSize: '18px', fontWeight: 700, color: '#16a34a', marginTop: '4px', fontFamily: 'monospace' }}>
-                      {formatCurrency(real)} <span style={{ fontSize: '11px', color: 'var(--text-secondary)', fontFamily: 'system-ui' }}>/ {formatCurrency(total)}</span>
-                    </div>
-                    <div style={{ marginTop: '8px', height: '6px', background: 'var(--border-primary)', borderRadius: '3px', overflow: 'hidden' }}>
-                      <div style={{ height: '100%', background: 'linear-gradient(90deg, #16a34a, #22c55e)', width: `${pctReal}%` }} />
-                    </div>
-                    <div style={{ fontSize: '10px', color: 'var(--text-tertiary)', marginTop: '6px' }}>
-                      {pctReal.toFixed(0)}% real {tieneDeuda ? `· ${formatCurrency(deudaReal)} en saldo deudor` : '· sin deuda'}
-                    </div>
-                  </div>
-                </div>
+                {/* Variables legadas (silenciar warning de unused) */}
+                {(() => { void facturado; void total; void real; void pctFact; void pctReal; void tieneDeuda; void deudaReal; return null })()}
 
                 {/* Filtros */}
                 {!kardexModal.loading && kardexModal.rows.length > 0 && (
@@ -2087,11 +2117,10 @@ export function GarantiasTab() {
                       onChange={e => setKardexModal(prev => ({ ...prev, tipoFilter: e.target.value }))}
                       style={{ padding: '5px 8px', fontSize: '11px', border: '1px solid var(--border-primary)', borderRadius: '4px', background: 'var(--card-bg, #fff)', color: 'var(--text-secondary)' }}
                     >
-                      <option value="">Todos los tipos</option>
-                      <option value="cuota_facturada">Cuotas facturadas</option>
-                      <option value="pago_aplicado">Pagos aplicados</option>
-                      <option value="ajuste_manual">Ajustes manuales</option>
-                      <option value="eliminacion">Eliminaciones</option>
+                      <option value="">Todos los estados</option>
+                      <option value="cubierta">Cubiertas</option>
+                      <option value="parcial">Parciales</option>
+                      <option value="no-cubierta">No cubiertas</option>
                     </select>
                   </div>
                 )}
@@ -2107,59 +2136,58 @@ export function GarantiasTab() {
                       <table style={{ width: '100%', fontSize: '11px', borderCollapse: 'collapse' }}>
                         <thead>
                           <tr style={{ background: 'var(--bg-secondary)', position: 'sticky', top: 0, zIndex: 1 }}>
-                            {['Fecha', 'Semana', 'Cuota ref.', 'Tipo', 'Referencia', 'Facturado', 'Pagado', 'A saldo', 'Acum. Pag.'].map((h, hi) => (
+                            {[
+                              { h: 'Fecha', align: 'left' as const },
+                              { h: 'Semana', align: 'left' as const },
+                              { h: 'Cuota', align: 'center' as const },
+                              { h: 'Origen del pago', align: 'left' as const },
+                              { h: 'Pagado', align: 'right' as const },
+                              { h: 'Estado', align: 'center' as const },
+                            ].map((col, hi) => (
                               <th key={hi} style={{
-                                padding: '6px 8px', fontWeight: 600, color: 'var(--text-secondary)',
+                                padding: '8px 12px', fontWeight: 600, color: 'var(--text-secondary)',
                                 borderBottom: '1px solid var(--border-primary)',
-                                textAlign: hi >= 5 ? 'right' : (hi === 2 ? 'right' : 'left'),
-                                fontSize: '10px',
-                              }}>{h}</th>
+                                textAlign: col.align,
+                                fontSize: '10px', textTransform: 'uppercase', letterSpacing: '0.3px',
+                              }}>{col.h}</th>
                             ))}
                           </tr>
                         </thead>
                         <tbody>
-                          {rowsFiltradas.map((r) => {
-                            const esCuota = r.tipo_movimiento === 'cuota_facturada'
-                            const esPago = r.tipo_movimiento === 'pago_aplicado'
-                            const rowBg = esCuota ? 'rgba(239, 246, 255, 0.4)'
-                                        : esPago ? 'rgba(240, 253, 244, 0.4)'
-                                        : 'transparent'
-                            const labelBg = esCuota ? '#eff6ff' : esPago ? '#f0fdf4' : '#f3f4f6'
-                            const labelFg = esCuota ? '#2563eb' : esPago ? '#16a34a' : 'var(--text-secondary)'
-                            const fecha = r.created_at ? new Date(r.created_at).toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: '2-digit' }) : '-'
-                            const monto_fact = Number(r.monto_facturado) || 0
-                            const monto_pag = Number(r.monto_pagado_real) || 0
-                            const delta = Number(r.delta_deuda) || 0
-                            const acumPag = Number(r.pagado_real_acumulado) || 0
-                            const cuotaRef = Number(r.cuotas_facturadas) || 0
+                          {rowsFiltradas.map((f) => {
+                            const fecha = f.fecha ? new Date(f.fecha).toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: '2-digit' }) : '-'
+                            const estadoLabel = f.estado === 'cubierta' ? 'Cubierta'
+                                              : f.estado === 'parcial' ? 'Parcial'
+                                              : f.estado === 'no-cubierta' ? 'No cubierta'
+                                              : 'Otro'
+                            const estadoColor = f.estado === 'cubierta' ? '#16a34a'
+                                              : f.estado === 'parcial' ? '#d97706'
+                                              : f.estado === 'no-cubierta' ? '#dc2626'
+                                              : 'var(--text-secondary)'
+                            const montoColor = f.aplicado > 0 && f.estado === 'cubierta' ? '#16a34a'
+                                             : f.aplicado > 0 && f.estado === 'parcial' ? '#d97706'
+                                             : 'var(--text-tertiary)'
+                            const origenLabel = f.estado === 'cubierta' ? (f.referencia || `Pago Cabify S${f.semana}/${f.anio}`)
+                                              : f.estado === 'parcial' ? 'Pago Cabify parcial'
+                                              : f.estado === 'no-cubierta' ? 'Pago Cabify insuficiente'
+                                              : (f.referencia || '-')
                             return (
-                              <tr key={r.id} style={{ borderBottom: '1px solid var(--border-primary)', background: rowBg }}>
-                                <td style={{ padding: '6px 8px', color: 'var(--text-secondary)', fontSize: '10px', whiteSpace: 'nowrap' }}>{fecha}</td>
-                                <td style={{ padding: '6px 8px', fontWeight: 600, color: 'var(--text-primary)', whiteSpace: 'nowrap' }}>
-                                  {r.anio} S{String(r.semana || '').padStart(2, '0')}
+                              <tr key={f.key} style={{ borderBottom: '1px solid var(--border-primary)' }}>
+                                <td style={{ padding: '10px 12px', color: 'var(--text-secondary)', fontSize: '11px', whiteSpace: 'nowrap' }}>{fecha}</td>
+                                <td style={{ padding: '10px 12px', fontWeight: 600, color: 'var(--text-primary)', whiteSpace: 'nowrap' }}>
+                                  {f.anio} S{String(f.semana || '').padStart(2, '0')}
                                 </td>
-                                <td style={{ padding: '6px 8px', textAlign: 'right', whiteSpace: 'nowrap', color: esCuota ? 'var(--text-primary)' : 'var(--text-tertiary)' }}>
-                                  {esCuota ? <b>{cuotaRef}</b> : cuotaRef}<span style={{ fontSize: '9px', color: 'var(--text-tertiary)' }}>/20</span>
+                                <td style={{ padding: '10px 12px', textAlign: 'center', whiteSpace: 'nowrap', fontFamily: 'monospace', fontSize: '12px', fontWeight: 600, color: 'var(--text-primary)' }}>
+                                  {f.cuota_ref}<span style={{ color: 'var(--text-tertiary)', fontWeight: 400 }}>/20</span>
                                 </td>
-                                <td style={{ padding: '6px 8px', whiteSpace: 'nowrap' }}>
-                                  <span style={{ display: 'inline-block', padding: '1px 6px', borderRadius: '3px', background: labelBg, color: labelFg, fontWeight: 600, fontSize: '10px' }}>
-                                    {tipoLabel[r.tipo_movimiento] || r.tipo_movimiento}
-                                  </span>
+                                <td style={{ padding: '10px 12px', color: 'var(--text-secondary)', fontSize: '11px', maxWidth: '240px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={origenLabel}>
+                                  {origenLabel}
                                 </td>
-                                <td style={{ padding: '6px 8px', color: 'var(--text-secondary)', fontSize: '10px', maxWidth: '260px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={r.referencia || ''}>
-                                  {r.referencia || '-'}
+                                <td style={{ padding: '10px 12px', textAlign: 'right', fontFamily: 'monospace', color: montoColor, fontWeight: 700 }}>
+                                  {f.aplicado > 0 ? `+${formatCurrency(f.aplicado)}` : formatCurrency(0)}
                                 </td>
-                                <td style={{ padding: '6px 8px', textAlign: 'right', fontFamily: 'monospace', color: monto_fact > 0 ? '#2563eb' : 'var(--text-tertiary)', fontWeight: monto_fact > 0 ? 600 : 400 }}>
-                                  {monto_fact > 0 ? `+${formatCurrency(monto_fact)}` : '—'}
-                                </td>
-                                <td style={{ padding: '6px 8px', textAlign: 'right', fontFamily: 'monospace', color: monto_pag > 0 ? '#16a34a' : 'var(--text-tertiary)', fontWeight: monto_pag > 0 ? 600 : 400 }}>
-                                  {monto_pag > 0 ? `+${formatCurrency(monto_pag)}` : '—'}
-                                </td>
-                                <td style={{ padding: '6px 8px', textAlign: 'right', fontFamily: 'monospace', fontWeight: 600, color: delta > 0 ? '#dc2626' : delta < 0 ? '#16a34a' : 'var(--text-tertiary)' }}>
-                                  {Math.abs(delta) > 0.01 ? `${delta > 0 ? '+' : '-'}${formatCurrency(Math.abs(delta))}` : '—'}
-                                </td>
-                                <td style={{ padding: '6px 8px', textAlign: 'right', fontFamily: 'monospace', color: 'var(--text-secondary)' }}>
-                                  {formatCurrency(acumPag)}
+                                <td style={{ padding: '10px 12px', textAlign: 'center', color: estadoColor, fontSize: '11px', fontWeight: 500, whiteSpace: 'nowrap' }}>
+                                  {estadoLabel}
                                 </td>
                               </tr>
                             )
@@ -2168,27 +2196,43 @@ export function GarantiasTab() {
                       </table>
                     </div>
 
-                    {/* Footer totales */}
+                    {/* Footer 4 KPIs: Cubiertas / Parciales / No cubiertas / Restantes (a futuro) */}
                     <div style={{
                       display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)',
                       marginTop: '8px', background: 'var(--bg-secondary)',
                       border: '1px solid var(--border-primary)', borderRadius: '6px', overflow: 'hidden',
                     }}>
-                      <div style={{ padding: '8px 12px', borderRight: '1px solid var(--border-primary)', textAlign: 'right' }}>
-                        <div style={{ fontSize: '9px', textTransform: 'uppercase', color: 'var(--text-secondary)', fontWeight: 600 }}>Total facturado</div>
-                        <div style={{ fontSize: '13px', fontWeight: 700, color: '#2563eb', fontFamily: 'monospace', marginTop: '2px' }}>{formatCurrency(totalFact)}</div>
+                      <div style={{ padding: '12px 16px', borderRight: '1px solid var(--border-primary)', textAlign: 'center' }}>
+                        <div style={{ fontSize: '10px', textTransform: 'uppercase', color: 'var(--text-secondary)', fontWeight: 600, letterSpacing: '0.4px' }}>Cubiertas</div>
+                        <div style={{ fontSize: '16px', fontWeight: 700, color: '#16a34a', fontFamily: 'monospace', marginTop: '4px' }}>
+                          {totalCubiertas} <span style={{ fontSize: '11px', color: 'var(--text-tertiary)', fontWeight: 500 }}>/ 20</span>
+                        </div>
+                        <div style={{ fontSize: '11px', color: '#16a34a', marginTop: '2px', fontWeight: 500 }}>
+                          +{formatCurrency(totalAplicado - totalParcialesAplicado)}
+                        </div>
                       </div>
-                      <div style={{ padding: '8px 12px', borderRight: '1px solid var(--border-primary)', textAlign: 'right' }}>
-                        <div style={{ fontSize: '9px', textTransform: 'uppercase', color: 'var(--text-secondary)', fontWeight: 600 }}>Total pagado real</div>
-                        <div style={{ fontSize: '13px', fontWeight: 700, color: '#16a34a', fontFamily: 'monospace', marginTop: '2px' }}>{formatCurrency(totalPag)}</div>
+                      <div style={{ padding: '12px 16px', borderRight: '1px solid var(--border-primary)', textAlign: 'center' }}>
+                        <div style={{ fontSize: '10px', textTransform: 'uppercase', color: 'var(--text-secondary)', fontWeight: 600, letterSpacing: '0.4px' }}>Parciales</div>
+                        <div style={{ fontSize: '16px', fontWeight: 700, color: '#d97706', fontFamily: 'monospace', marginTop: '4px' }}>{totalParciales}</div>
+                        <div style={{ fontSize: '11px', color: '#d97706', marginTop: '2px', fontWeight: 500 }}>
+                          +{formatCurrency(totalParcialesAplicado)}
+                        </div>
                       </div>
-                      <div style={{ padding: '8px 12px', borderRight: '1px solid var(--border-primary)', textAlign: 'right' }}>
-                        <div style={{ fontSize: '9px', textTransform: 'uppercase', color: 'var(--text-secondary)', fontWeight: 600 }}>Deuda real</div>
-                        <div style={{ fontSize: '13px', fontWeight: 700, color: tieneDeuda ? '#dc2626' : 'var(--text-secondary)', fontFamily: 'monospace', marginTop: '2px' }}>{formatCurrency(deudaReal)}</div>
+                      <div style={{ padding: '12px 16px', borderRight: '1px solid var(--border-primary)', textAlign: 'center' }}>
+                        <div style={{ fontSize: '10px', textTransform: 'uppercase', color: 'var(--text-secondary)', fontWeight: 600, letterSpacing: '0.4px' }}>No cubiertas</div>
+                        <div style={{ fontSize: '16px', fontWeight: 700, color: '#dc2626', fontFamily: 'monospace', marginTop: '4px' }}>{totalNoCubiertas}</div>
+                        <div style={{ fontSize: '11px', color: '#dc2626', marginTop: '2px', fontWeight: 500 }}>
+                          {formatCurrency(totalSinCubrir)} sin cubrir
+                        </div>
                       </div>
-                      <div style={{ padding: '8px 12px', textAlign: 'right' }}>
-                        <div style={{ fontSize: '9px', textTransform: 'uppercase', color: 'var(--text-secondary)', fontWeight: 600 }}>Cuotas / 20</div>
-                        <div style={{ fontSize: '13px', fontWeight: 700, fontFamily: 'monospace', marginTop: '2px' }}>{g.cuotas_pagadas || 0} / 20</div>
+                      <div style={{ padding: '12px 16px', textAlign: 'center' }}>
+                        <div style={{ fontSize: '10px', textTransform: 'uppercase', color: 'var(--text-secondary)', fontWeight: 600, letterSpacing: '0.4px' }}>Restantes</div>
+                        <div style={{ fontSize: '16px', fontWeight: 700, color: 'var(--text-secondary)', fontFamily: 'monospace', marginTop: '4px' }}>
+                          {Math.max(0, 20 - totalCubiertas - totalParciales - totalNoCubiertas)} <span style={{ fontSize: '11px', color: 'var(--text-tertiary)', fontWeight: 500 }}>/ 20</span>
+                        </div>
+                        <div style={{ fontSize: '11px', color: 'var(--text-secondary)', marginTop: '2px', fontWeight: 500 }}>
+                          {formatCurrency(Math.max(0, 20 - totalCubiertas - totalParciales - totalNoCubiertas) * 50000)} a futuro
+                        </div>
                       </div>
                     </div>
 
