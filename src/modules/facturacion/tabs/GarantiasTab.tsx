@@ -1971,23 +1971,21 @@ export function GarantiasTab() {
         const consolidadasMap = new Map<string, FilaConsolidada>()
         for (const r of kardexModal.rows) {
           const key = `${r.anio}-${r.semana}`
-          let f = consolidadasMap.get(key)
-          if (!f) {
-            f = {
-              key,
-              anio: r.anio,
-              semana: r.semana,
-              fecha: r.created_at || '',
-              cuota_ref: Number(r.cuotas_facturadas) || 0,
-              monto_cuota: 0,
-              aplicado: 0,
-              estado: 'no-cubierta',
-              tipo_movimiento: r.tipo_movimiento,
-              referencia: r.referencia || '',
-              ids: [],
-            }
-            consolidadasMap.set(key, f)
+          const existente = consolidadasMap.get(key)
+          const f: FilaConsolidada = existente ?? {
+            key,
+            anio: Number(r.anio) || 0,
+            semana: Number(r.semana) || 0,
+            fecha: r.created_at || '',
+            cuota_ref: Number(r.cuotas_facturadas) || 0,
+            monto_cuota: 0,
+            aplicado: 0,
+            estado: 'no-cubierta',
+            tipo_movimiento: r.tipo_movimiento,
+            referencia: r.referencia || '',
+            ids: [],
           }
+          if (!existente) consolidadasMap.set(key, f)
           f.ids.push(r.id)
           // Tomar la fecha más reciente de la semana
           if (r.created_at && r.created_at > f.fecha) f.fecha = r.created_at
@@ -2049,10 +2047,6 @@ export function GarantiasTab() {
         const totalSinCubrirParcial = rowsFiltradas.filter(f => f.estado === 'parcial').reduce((s, f) => s + Math.max(0, (f.monto_cuota || 0) - f.aplicado), 0)
         const totalSinCubrir = totalSinCubrirNoCub + totalSinCubrirParcial
         const totalParcialesAplicado = rowsFiltradas.filter(f => f.estado === 'parcial').reduce((s, f) => s + f.aplicado, 0)
-        // eslint-disable-next-line @typescript-eslint/no-unused-vars
-        const _legacyTotalFact = rowsFiltradas.reduce((s, f) => s + f.monto_cuota, 0)
-        // eslint-disable-next-line @typescript-eslint/no-unused-vars
-        const _legacyTotalPag = totalAplicado
 
         return (
           <div className="fact-modal-overlay" onClick={() => setKardexModal(prev => ({ ...prev, open: false }))}>
