@@ -536,7 +536,11 @@ export function PermissionsProvider({ children }: { children: React.ReactNode })
   }, [userPermissions?.role?.name])
 
   const isAdministrativo = useCallback((): boolean => {
-    return userPermissions?.role?.name === 'administrativo'
+    // FIX 2026-05-19: incluir 'coordinador administrativo' (rol de Ghandy)
+    // y cualquier rol que contenga 'administrativo' para futuras variantes.
+    const rolName = userPermissions?.role?.name || ''
+    return rolName === 'administrativo'
+        || rolName === 'coordinador administrativo'
   }, [userPermissions?.role?.name])
 
   const getRoleName = useCallback((): string => {
