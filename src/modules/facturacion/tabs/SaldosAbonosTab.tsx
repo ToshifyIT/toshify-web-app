@@ -2190,10 +2190,11 @@ export function SaldosAbonosTab() {
       id: 'acciones',
       header: 'Acciones',
       cell: ({ row }) => {
-        const esActivo = row.original.conductor_estado?.toUpperCase() === 'ACTIVO'
+        // FIX 2026-05-19: permitir fraccionar tambien a conductores en BAJA con deuda
+        // (cobranza fuera del alquiler de los morosos que se dieron de baja)
         const tieneDeuda = row.original.saldo_actual < 0
         const yaFraccionado = conductoresConFraccionado.has(row.original.conductor_id)
-        const puedeFraccionar = esActivo && tieneDeuda && !yaFraccionado && (isAdmin() || isAdministrativo())
+        const puedeFraccionar = tieneDeuda && !yaFraccionado && (isAdmin() || isAdministrativo())
 
         return (
           <div className="fact-table-actions">
