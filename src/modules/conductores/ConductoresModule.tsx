@@ -3363,6 +3363,7 @@ export function ConductoresModule() {
         }
         externalFilters={externalFilters}
         onClearAllFilters={handleClearAllFilters}
+        stickyLeftColumns={1}
       />
 
       {/* Modales definidos en componente separado para reducir tamaño del archivo */}

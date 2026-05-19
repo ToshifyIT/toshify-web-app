@@ -3136,6 +3136,15 @@ export function AsignacionesModule() {
       enableSorting: false,
       cell: ({ row }) => {
         const esDevolucion = row.original.esDevolucion || row.original.motivo === 'devolucion_vehiculo'
+        // Verificar si todos los conductores tienen documento N/A (no hay nada que generar)
+        const todosDocNA = (() => {
+          const acs = row.original.asignaciones_conductores
+          if (!acs || acs.length === 0) return false
+          return acs.every(ac => {
+            const doc = String((ac as any).documento || '').toUpperCase()
+            return doc === 'N/A' || doc === 'NA'
+          })
+        })()
         const actions = [
           // Acciones de programación (solo si está programado)
           ...(row.original.estado === 'programado' ? [
@@ -3149,6 +3158,7 @@ export function AsignacionesModule() {
                     // no se puede confirmar todavía: hay que completarla primero.
                     const cartaOfertaPendiente =
                       row.original.control_completado !== true &&
+                      !todosDocNA &&
                       !(row.original.created_at && new Date(row.original.created_at) <= new Date('2026-04-27T23:59:59'))
                     if (cartaOfertaPendiente) {
                       Swal.fire({
@@ -3204,6 +3214,7 @@ export function AsignacionesModule() {
             hidden:
               row.original.control_completado === true ||
               row.original.estado === 'cancelada' ||
+              todosDocNA ||
               Boolean(row.original.created_at && new Date(row.original.created_at) <= new Date('2026-04-27T23:59:59')),
             variant: 'info' as const,
           },

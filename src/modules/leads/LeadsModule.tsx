@@ -1087,8 +1087,8 @@ export function LeadsModule() {
       if (!zonaCalculada) zonaCalculada = lead.zona || ''
 
       const conductorData: Record<string, unknown> = {
-        nombres: nombres || lead.primer_nombre || '',
-        apellidos: apellidos || lead.apellido || '',
+        nombres: (nombres || lead.primer_nombre || '').toUpperCase(),
+        apellidos: (apellidos || lead.apellido || '').toUpperCase(),
         numero_dni: lead.dni || '',
         numero_cuit: lead.cuit || '',
         telefono_contacto: lead.phone || '',
