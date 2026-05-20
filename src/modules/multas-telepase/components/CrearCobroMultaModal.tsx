@@ -16,6 +16,9 @@ interface MultaInput {
   patente: string
   fecha_infraccion: string | null
   importe: string
+  // FIX 2026-05-20: campos de descuento para que el usuario decida que monto cobrar
+  importe_descuento?: string | null
+  fecha_vencimiento_descuento?: string | null
   infraccion: string
   lugar: string
   detalle: string
