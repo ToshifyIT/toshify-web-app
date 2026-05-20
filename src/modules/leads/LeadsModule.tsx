@@ -1111,6 +1111,7 @@ export function LeadsModule() {
         sede_id: lead.sede_id || sedeActual?.id || null,
         url_documentacion: lead.url_folder || null,
         intercom_id: lead.id_lead || null,
+        id_conversation: lead.id_conversation || null,
       }
 
       // Filtrar campos vacíos (salvo requeridos)
