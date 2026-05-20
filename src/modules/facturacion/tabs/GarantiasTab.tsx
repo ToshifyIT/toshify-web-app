@@ -2047,11 +2047,11 @@ export function GarantiasTab() {
         const totalSinCubrirNoCub = rowsFiltradas.filter(f => f.estado === 'no-cubierta').reduce((s, f) => s + (f.monto_cuota || 0), 0)
         const totalSinCubrirParcial = rowsFiltradas.filter(f => f.estado === 'parcial').reduce((s, f) => s + Math.max(0, (f.monto_cuota || 0) - f.aplicado), 0)
         const totalSinCubrir = totalSinCubrirNoCub + totalSinCubrirParcial
-        const totalParcialesAplicado = rowsFiltradas.filter(f => f.estado === 'parcial').reduce((s, f) => s + f.aplicado, 0)
+        // FIX 2026-05-20: totalParcialesAplicado removido (no se usa con footer simplificado)
 
         return (
           <div className="fact-modal-overlay" onClick={() => setKardexModal(prev => ({ ...prev, open: false }))}>
-            <div className="fact-modal-content" style={{ maxWidth: '1100px' }} onClick={e => e.stopPropagation()}>
+            <div className="fact-modal-content" style={{ maxWidth: '780px' }} onClick={e => e.stopPropagation()}>
               <div className="fact-modal-header">
                 <h2>Estado de Garantía</h2>
                 <button className="fact-modal-close" onClick={() => setKardexModal(prev => ({ ...prev, open: false }))}>
@@ -2132,12 +2132,12 @@ export function GarantiasTab() {
                         <thead>
                           <tr style={{ background: 'var(--bg-secondary)', position: 'sticky', top: 0, zIndex: 1 }}>
                             {[
+                              // FIX 2026-05-20: columnas finales — eliminada "Estado" (redundante: si esta en lista = cumplida)
                               { h: 'Fecha', align: 'left' as const },
                               { h: 'Semana', align: 'left' as const },
                               { h: 'Cuota', align: 'center' as const },
-                              { h: 'Origen del pago', align: 'left' as const },
-                              { h: 'Pagado', align: 'right' as const },
-                              { h: 'Estado', align: 'center' as const },
+                              { h: 'Concepto', align: 'left' as const },
+                              { h: 'Monto', align: 'right' as const },
                             ].map((col, hi) => (
                               <th key={hi} style={{
                                 padding: '8px 12px', fontWeight: 600, color: 'var(--text-secondary)',
@@ -2151,21 +2151,9 @@ export function GarantiasTab() {
                         <tbody>
                           {rowsFiltradas.map((f) => {
                             const fecha = f.fecha ? new Date(f.fecha).toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: '2-digit' }) : '-'
-                            const estadoLabel = f.estado === 'cubierta' ? 'Cubierta'
-                                              : f.estado === 'parcial' ? 'Parcial'
-                                              : f.estado === 'no-cubierta' ? 'No cubierta'
-                                              : 'Otro'
-                            const estadoColor = f.estado === 'cubierta' ? '#16a34a'
-                                              : f.estado === 'parcial' ? '#d97706'
-                                              : f.estado === 'no-cubierta' ? '#dc2626'
-                                              : 'var(--text-secondary)'
-                            const montoColor = f.aplicado > 0 && f.estado === 'cubierta' ? '#16a34a'
-                                             : f.aplicado > 0 && f.estado === 'parcial' ? '#d97706'
-                                             : 'var(--text-tertiary)'
-                            const origenLabel = f.estado === 'cubierta' ? (f.referencia || `Pago Cabify S${f.semana}/${f.anio}`)
-                                              : f.estado === 'parcial' ? 'Pago Cabify parcial'
-                                              : f.estado === 'no-cubierta' ? 'Pago Cabify insuficiente'
-                                              : (f.referencia || '-')
+                            // FIX 2026-05-20: monto neutro y concepto sin mencionar Cabify
+                            const montoColor = 'var(--text-primary)'
+                            const origenLabel = `Cuota Garantía S${f.semana}/${f.anio}`
                             return (
                               <tr key={f.key} style={{ borderBottom: '1px solid var(--border-primary)' }}>
                                 <td style={{ padding: '10px 12px', color: 'var(--text-secondary)', fontSize: '11px', whiteSpace: 'nowrap' }}>{fecha}</td>
@@ -2179,10 +2167,8 @@ export function GarantiasTab() {
                                   {origenLabel}
                                 </td>
                                 <td style={{ padding: '10px 12px', textAlign: 'right', fontFamily: 'monospace', color: montoColor, fontWeight: 700 }}>
-                                  {f.aplicado > 0 ? `+${formatCurrency(f.aplicado)}` : formatCurrency(0)}
-                                </td>
-                                <td style={{ padding: '10px 12px', textAlign: 'center', color: estadoColor, fontSize: '11px', fontWeight: 500, whiteSpace: 'nowrap' }}>
-                                  {estadoLabel}
+                                  {/* FIX 2026-05-20: monto sin signo "+", neutro */}
+                                  {formatCurrency(Math.round(f.aplicado || 0))}
                                 </td>
                               </tr>
                             )
@@ -2197,38 +2183,34 @@ export function GarantiasTab() {
                       marginTop: '8px', background: 'var(--bg-secondary)',
                       border: '1px solid var(--border-primary)', borderRadius: '6px', overflow: 'hidden',
                     }}>
-                      <div style={{ padding: '12px 16px', borderRight: '1px solid var(--border-primary)', textAlign: 'center' }}>
-                        <div style={{ fontSize: '10px', textTransform: 'uppercase', color: 'var(--text-secondary)', fontWeight: 600, letterSpacing: '0.4px' }}>Cubiertas</div>
-                        <div style={{ fontSize: '16px', fontWeight: 700, color: '#16a34a', fontFamily: 'monospace', marginTop: '4px' }}>
-                          {totalCubiertas} <span style={{ fontSize: '11px', color: 'var(--text-tertiary)', fontWeight: 500 }}>/ 20</span>
-                        </div>
-                        <div style={{ fontSize: '11px', color: '#16a34a', marginTop: '2px', fontWeight: 500 }}>
-                          +{formatCurrency(totalAplicado - totalParcialesAplicado)}
-                        </div>
-                      </div>
-                      <div style={{ padding: '12px 16px', borderRight: '1px solid var(--border-primary)', textAlign: 'center' }}>
-                        <div style={{ fontSize: '10px', textTransform: 'uppercase', color: 'var(--text-secondary)', fontWeight: 600, letterSpacing: '0.4px' }}>Parciales</div>
-                        <div style={{ fontSize: '16px', fontWeight: 700, color: '#d97706', fontFamily: 'monospace', marginTop: '4px' }}>{totalParciales}</div>
-                        <div style={{ fontSize: '11px', color: '#d97706', marginTop: '2px', fontWeight: 500 }}>
-                          +{formatCurrency(totalParcialesAplicado)}
-                        </div>
-                      </div>
-                      <div style={{ padding: '12px 16px', borderRight: '1px solid var(--border-primary)', textAlign: 'center' }}>
-                        <div style={{ fontSize: '10px', textTransform: 'uppercase', color: 'var(--text-secondary)', fontWeight: 600, letterSpacing: '0.4px' }}>No cubiertas</div>
-                        <div style={{ fontSize: '16px', fontWeight: 700, color: '#dc2626', fontFamily: 'monospace', marginTop: '4px' }}>{totalNoCubiertas}</div>
-                        <div style={{ fontSize: '11px', color: '#dc2626', marginTop: '2px', fontWeight: 500 }}>
-                          {formatCurrency(totalSinCubrir)} sin cubrir
-                        </div>
-                      </div>
-                      <div style={{ padding: '12px 16px', textAlign: 'center' }}>
-                        <div style={{ fontSize: '10px', textTransform: 'uppercase', color: 'var(--text-secondary)', fontWeight: 600, letterSpacing: '0.4px' }}>Restantes</div>
-                        <div style={{ fontSize: '16px', fontWeight: 700, color: 'var(--text-secondary)', fontFamily: 'monospace', marginTop: '4px' }}>
-                          {Math.max(0, 20 - totalCubiertas - totalParciales - totalNoCubiertas)} <span style={{ fontSize: '11px', color: 'var(--text-tertiary)', fontWeight: 500 }}>/ 20</span>
-                        </div>
-                        <div style={{ fontSize: '11px', color: 'var(--text-secondary)', marginTop: '2px', fontWeight: 500 }}>
-                          {formatCurrency(Math.max(0, 20 - totalCubiertas - totalParciales - totalNoCubiertas) * 50000)} a futuro
-                        </div>
-                      </div>
+                      {/* FIX 2026-05-20: footer simplificado — solo Facturadas vs Restantes */}
+                      {(() => {
+                        const totalFacturadas = totalCubiertas + totalParciales + totalNoCubiertas
+                        const totalFacturadoMonto = totalAplicado + totalSinCubrir
+                        const restantes = Math.max(0, 20 - totalFacturadas)
+                        return (
+                          <>
+                            <div style={{ padding: '12px 16px', borderRight: '1px solid var(--border-primary)', textAlign: 'center' }}>
+                              <div style={{ fontSize: '10px', textTransform: 'uppercase', color: 'var(--text-secondary)', fontWeight: 600, letterSpacing: '0.4px' }}>Facturadas</div>
+                              <div style={{ fontSize: '16px', fontWeight: 700, color: '#16a34a', fontFamily: 'monospace', marginTop: '4px' }}>
+                                {totalFacturadas} <span style={{ fontSize: '11px', color: 'var(--text-tertiary)', fontWeight: 500 }}>/ 20</span>
+                              </div>
+                              <div style={{ fontSize: '11px', color: '#16a34a', marginTop: '2px', fontWeight: 500 }}>
+                                {formatCurrency(Math.round(totalFacturadoMonto))}
+                              </div>
+                            </div>
+                            <div style={{ padding: '12px 16px', textAlign: 'center', gridColumn: 'span 3' }}>
+                              <div style={{ fontSize: '10px', textTransform: 'uppercase', color: 'var(--text-secondary)', fontWeight: 600, letterSpacing: '0.4px' }}>Restantes</div>
+                              <div style={{ fontSize: '16px', fontWeight: 700, color: 'var(--text-secondary)', fontFamily: 'monospace', marginTop: '4px' }}>
+                                {restantes} <span style={{ fontSize: '11px', color: 'var(--text-tertiary)', fontWeight: 500 }}>/ 20</span>
+                              </div>
+                              <div style={{ fontSize: '11px', color: 'var(--text-secondary)', marginTop: '2px', fontWeight: 500 }}>
+                                {formatCurrency(restantes * 50000)} a futuro
+                              </div>
+                            </div>
+                          </>
+                        )
+                      })()}
                     </div>
 
                     <div style={{ marginTop: '8px', fontSize: '10px', color: 'var(--text-tertiary)' }}>

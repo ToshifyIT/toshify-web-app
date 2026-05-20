@@ -109,7 +109,19 @@ export function SaldosAbonosTab() {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     rows: any[]
     loading: boolean
-  }>({ open: false, saldo: null, rows: [], loading: false })
+    // FIX 2026-05-20: facturacion por anio-semana para columna "Facturado" + detalle
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    facMap?: Map<string, any>
+  }>({ open: false, saldo: null, rows: [], loading: false, facMap: new Map() })
+
+  // FIX 2026-05-20: mini-modal con desglose de facturacion al click en "Facturado"
+  const [factDetailModal, setFactDetailModal] = useState<{
+    open: boolean
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    fact: any | null
+    anio: number | null
+    semana: number | null
+  }>({ open: false, fact: null, anio: null, semana: null })
 
   // Estado para edición de fila del kardex
   const [kardexEdit, setKardexEdit] = useState<{
@@ -1903,7 +1915,19 @@ export function SaldosAbonosTab() {
         .order('semana', { ascending: false })
         .order('created_at', { ascending: false })
       if (error) throw error
-      setKardexModal({ open: true, saldo, rows: rows || [], loading: false })
+      // FIX 2026-05-20: traer facturacion_conductores para mostrar columna "Facturado" + detalle
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data: facts } = await (supabase.from('facturacion_conductores') as any)
+        .select('id, periodo_id, subtotal_alquiler, subtotal_garantia, subtotal_cargos, subtotal_descuentos, subtotal_neto, saldo_anterior, total_a_pagar, periodo:periodos_facturacion(anio, semana)')
+        .eq('conductor_id', saldo.conductor_id)
+      // Indexar por anio-semana
+      const facMap = new Map<string, any>()
+      ;(facts || []).forEach((f: any) => {
+        const a = f.periodo?.anio
+        const s = f.periodo?.semana
+        if (a && s) facMap.set(`${a}-${s}`, f)
+      })
+      setKardexModal({ open: true, saldo, rows: rows || [], loading: false, facMap } as any)
     } catch {
       Swal.fire('Error', 'No se pudo cargar el control de saldos', 'error')
       setKardexModal(prev => ({ ...prev, open: false, loading: false }))
@@ -2783,12 +2807,14 @@ export function SaldosAbonosTab() {
                     if (cls === 'cargo' || cls === 'elim') return -monto
                     return 0
                   }
+                  // FIX 2026-05-20: helper para limpiar centavos residuales (<$1) -> $0
+                  const cleanResiduo = (v: number) => Math.abs(v) < 1 ? 0 : v
                   const filasConSaldos = rowsFiltradas.map((r, i) => {
                     const cls = clasificar(r, kardexModal.rows.indexOf(r), kardexModal.rows)
                     const monto = Math.abs(r.monto_movimiento || 0)
                     const delta = deltaSigno(r, kardexModal.rows.indexOf(r), kardexModal.rows)
                     // saldo del movimiento = saldo_pendiente guardado (snapshot post-movimiento)
-                    const saldo = Number(r.saldo_pendiente) || 0
+                    const saldo = cleanResiduo(Number(r.saldo_pendiente) || 0)
                     // FIX 2026-05-19: usar columna saldo_previo guardada en BD
                     // (refleja la deuda real al inicio de la semana, incluye facturacion).
                     // Si no existe (filas viejas), fallback a saldo_pendiente de la fila más vieja.
@@ -2799,6 +2825,7 @@ export function SaldosAbonosTab() {
                       const siguiente = rowsFiltradas[i + 1]
                       saldoPrev = siguiente ? (Number(siguiente.saldo_pendiente) || 0) : 0
                     }
+                    saldoPrev = cleanResiduo(saldoPrev)
                     return { r, i, cls, monto, delta, saldo, saldoPrev }
                   })
 
@@ -2814,7 +2841,8 @@ export function SaldosAbonosTab() {
                         <table style={{ width: '100%', fontSize: '11px', borderCollapse: 'collapse' }}>
                           <thead>
                             <tr style={{ background: 'var(--bg-secondary)', position: 'sticky', top: 0, zIndex: 1 }}>
-                              {['Fecha', 'Semana', 'Tipo', 'Referencia', 'Monto', 'Saldo previo', 'Saldo', 'Usuario', ...(isAdmin() ? [''] : [])].map((h, hi) => (
+                              {/* FIX 2026-05-20: oculta columna "Saldo previo" (info redundante con Facturado) */}
+                              {['Fecha', 'Semana', 'Tipo', 'Referencia', 'Monto', 'Facturado', 'Saldo', 'Usuario', ...(isAdmin() ? [''] : [])].map((h, hi) => (
                                 <th key={hi} style={{
                                   padding: '6px 8px', fontWeight: 600, color: 'var(--text-secondary)',
                                   borderBottom: '1px solid var(--border-primary)',
@@ -2825,7 +2853,7 @@ export function SaldosAbonosTab() {
                             </tr>
                           </thead>
                           <tbody>
-                            {filasConSaldos.map(({ r, i, cls, monto, saldo, saldoPrev }) => {
+                            {filasConSaldos.map(({ r, i, cls, monto, saldo }) => {
                               const tipo = r.tipo_movimiento || 'regularizado'
                               const labelBg = cls === 'cargo' ? '#fef2f2'
                                             : cls === 'abono' ? '#f0fdf4'
@@ -2872,10 +2900,36 @@ export function SaldosAbonosTab() {
                                     )}
                                   </td>
                                   <td style={{ padding: '5px 8px', textAlign: 'right', fontFamily: 'monospace', color: montoColor, whiteSpace: 'nowrap' }}>
-                                    {monto > 0 ? `${montoSigno}${formatCurrency(monto)}` : '-'}
+                                    {/* FIX 2026-05-20: redondear a entero para evitar decimales tipo $0,03 */}
+                                    {monto > 0 ? `${montoSigno}${formatCurrency(Math.round(monto))}` : '-'}
                                   </td>
-                                  <td style={{ padding: '5px 8px', textAlign: 'right', fontFamily: 'monospace', color: 'var(--text-tertiary)', whiteSpace: 'nowrap' }}>
-                                    {formatCurrency(saldoPrev)}
+                                  {/* FIX 2026-05-20: columna "Saldo previo" oculta */}
+                                  <td style={{ padding: '5px 8px', textAlign: 'right', fontFamily: 'monospace', whiteSpace: 'nowrap' }}>
+                                    {/* FIX 2026-05-20: columna Facturado - click abre detalle + redondeo residuos */}
+                                    {(() => {
+                                      const fac = (kardexModal as any).facMap?.get(`${r.anio}-${r.semana}`)
+                                      if (!fac) return <span style={{ color: 'var(--text-tertiary)' }}>—</span>
+                                      // Redondear a entero para no mostrar decimales tipo $371.688,03
+                                      const total = Math.round(Number(fac.total_a_pagar) || 0)
+                                      return (
+                                        <button
+                                          type="button"
+                                          onClick={(e) => {
+                                            e.stopPropagation()
+                                            setFactDetailModal({ open: true, fact: fac, anio: r.anio, semana: r.semana })
+                                          }}
+                                          style={{
+                                            background: 'none', border: 'none', cursor: 'pointer',
+                                            fontFamily: 'monospace', color: '#2563eb',
+                                            textDecoration: 'underline', textDecorationStyle: 'dotted',
+                                            padding: 0, fontSize: '11px', fontWeight: 500,
+                                          }}
+                                          title="Ver detalle de facturación"
+                                        >
+                                          {formatCurrency(total)}
+                                        </button>
+                                      )
+                                    })()}
                                   </td>
                                   <td style={{
                                     padding: '5px 8px', textAlign: 'right', fontFamily: 'monospace', fontWeight: 700,
@@ -3063,6 +3117,61 @@ export function SaldosAbonosTab() {
                   </div>
                 </div>
               )}
+            </div>
+          </div>
+        )
+      })()}
+
+      {/* FIX 2026-05-20: mini-modal detalle facturacion */}
+      {factDetailModal.open && factDetailModal.fact && (() => {
+        const f = factDetailModal.fact
+        const row = (lbl: string, val: number, isTotal = false, isSubtle = false) => (
+          <div style={{
+            display: 'flex', justifyContent: 'space-between',
+            padding: '6px 0',
+            borderBottom: isTotal ? 'none' : '1px solid var(--border-primary)',
+            fontWeight: isTotal ? 700 : 500,
+            color: isSubtle ? 'var(--text-tertiary)' : 'var(--text-primary)',
+            fontSize: isTotal ? '14px' : '12px',
+          }}>
+            <span>{lbl}</span>
+            <span style={{ fontFamily: 'monospace' }}>{formatCurrency(val)}</span>
+          </div>
+        )
+        return (
+          <div
+            className="fact-modal-overlay"
+            style={{ zIndex: 9999 }}
+            onClick={() => setFactDetailModal({ open: false, fact: null, anio: null, semana: null })}
+          >
+            <div
+              className="fact-modal-content"
+              style={{ maxWidth: '420px' }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="fact-modal-header">
+                <h2 style={{ fontSize: '14px' }}>
+                  Detalle Facturación — S{factDetailModal.semana}/{factDetailModal.anio}
+                </h2>
+                <button
+                  className="fact-modal-close"
+                  onClick={() => setFactDetailModal({ open: false, fact: null, anio: null, semana: null })}
+                >
+                  <X size={18} />
+                </button>
+              </div>
+              <div className="fact-modal-body" style={{ padding: '16px' }}>
+                {/* FIX 2026-05-20: redondear a entero para que no se vean decimales tipo $0,03 */}
+                {row('Saldo previo', Math.round(Number(f.saldo_anterior) || 0), false, true)}
+                {row('Alquiler', Math.round(Number(f.subtotal_alquiler) || 0))}
+                {row('Garantía (P003)', Math.round(Number(f.subtotal_garantia) || 0))}
+                {row('Cargos', Math.round(Number(f.subtotal_cargos) - Number(f.subtotal_alquiler) - Number(f.subtotal_garantia)))}
+                {row('Descuentos', -Math.round(Number(f.subtotal_descuentos) || 0))}
+                <div style={{ borderTop: '2px solid var(--border-primary)', marginTop: '6px', paddingTop: '6px' }}>
+                  {row('Subtotal Neto', Math.round(Number(f.subtotal_neto) || 0), false, true)}
+                  {row('Total a Pagar', Math.round(Number(f.total_a_pagar) || 0), true)}
+                </div>
+              </div>
             </div>
           </div>
         )
