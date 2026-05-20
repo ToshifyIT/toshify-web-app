@@ -624,6 +624,8 @@ export default function MultasModule() {
       if (periodos && periodos[0]?.fecha_inicio) fechaCobro = periodos[0].fecha_inicio
     }
     const { descuentoAplicado, descuentoVencio } = resolverMontoMulta(multa, fechaCobro)
+    // FIX 2026-05-20: monto a enviar (puede sobreescribirse si el usuario elige otra opcion en el modal)
+    let montoOverride: number | undefined = undefined
     if (descuentoVencio) {
       const vencFmt = formatFecha(multa.fecha_vencimiento_descuento || null)
       const confirm = await Swal.fire({
@@ -647,21 +649,48 @@ export default function MultasModule() {
       })
       if (!confirm.isConfirmed) return
     } else if (descuentoAplicado) {
-      // Informar (sin bloquear) que se aplica descuento
-      Swal.fire({
-        icon: 'success',
-        title: 'Descuento vigente',
-        html: `Se enviará el <strong>importe con descuento</strong>: ${formatMoney(multa.importe_descuento)}`,
-        timer: 2000,
-        showConfirmButton: false,
+      // FIX 2026-05-20: modal chico (Swal) con selector de monto cuando hay descuento vigente
+      const totalNum = parseImporte(multa.importe)
+      const descNum = parseImporte(multa.importe_descuento)
+      const vencFmt = formatFecha(multa.fecha_vencimiento_descuento || null)
+      const result = await Swal.fire({
+        title: 'Seleccionar monto a cobrar',
+        html: `
+          <div style="text-align:left; font-size: 13px; line-height: 1.5;">
+            <p style="margin: 0 0 12px; color:#6b7280;">La multa tiene un descuento vigente hasta el <strong>${vencFmt}</strong>. Elegí qué importe vas a cobrar:</p>
+            <label style="display:flex; align-items:center; gap:8px; padding:8px 10px; border:1px solid #bbf7d0; background:#f0fdf4; border-radius:6px; margin-bottom:6px; cursor:pointer;">
+              <input type="radio" name="opcionMonto" value="descuento" checked>
+              <span style="color:#10b981; font-weight:500;">Importe con descuento: <strong>${formatMoney(multa.importe_descuento)}</strong></span>
+            </label>
+            <label style="display:flex; align-items:center; gap:8px; padding:8px 10px; border:1px solid #e5e7eb; border-radius:6px; cursor:pointer;">
+              <input type="radio" name="opcionMonto" value="total">
+              <span style="font-weight:500;">Importe total: <strong>${formatMoney(multa.importe)}</strong></span>
+            </label>
+          </div>
+        `,
+        showCancelButton: true,
+        confirmButtonText: 'Enviar',
+        cancelButtonText: 'Cancelar',
+        confirmButtonColor: '#16a34a',
+        focusConfirm: false,
+        preConfirm: () => {
+          const opcion = (document.querySelector('input[name="opcionMonto"]:checked') as HTMLInputElement)?.value
+          if (opcion === 'descuento') return { monto: descNum }
+          if (opcion === 'total') return { monto: totalNum }
+          Swal.showValidationMessage('Seleccioná una opción')
+          return false
+        },
       })
+      if (!result.isConfirmed || !result.value) return
+      montoOverride = (result.value as { monto: number }).monto
     }
 
     const result = await crearCobroDesdeMulta(multa, {
       userId: user?.id,
       userName: profile?.full_name || 'Sistema',
       sedeId: sedeActualId || sedeUsuario?.id,
-      areaResponsable: 'ADMINISTRACION'
+      areaResponsable: 'ADMINISTRACION',
+      montoOverride,
     })
     if (result.ok) {
       // Actualizar set de enviadas para deshabilitar el botón

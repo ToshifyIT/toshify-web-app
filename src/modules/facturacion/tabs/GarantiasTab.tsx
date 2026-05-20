@@ -1385,9 +1385,10 @@ export function GarantiasTab() {
         </div>
       ),
       cell: ({ row }) => (
-        <div>
+        // FIX 2026-05-20: padding interno para que el conductor no quede pegado al borde
+        <div style={{ padding: '4px 8px' }}>
           <div className="font-medium">{formatNombreCompleto(row.original.conductor_nombre)}</div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '2px' }}>
             <span className="text-xs text-gray-500">{row.original.conductor_cuit || row.original.conductor_dni}</span>
             <span className={`fact-badge ${row.original.tipo_alquiler === 'CARGO' ? 'fact-badge-blue' : 'fact-badge-purple'}`} style={{ fontSize: '9px', padding: '1px 5px' }}>
               {row.original.tipo_alquiler}
