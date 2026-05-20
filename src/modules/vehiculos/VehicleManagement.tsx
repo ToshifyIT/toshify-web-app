@@ -117,7 +117,7 @@ export function VehicleManagement() {
     tipo_vehiculo: '',
     tipo_combustible: '',
     tipo_gps: '',
-    gps_uss: false,
+    gps_uss: '',
     gnc: false,
     telepase: false,
     numero_motor: '',
@@ -928,7 +928,7 @@ export function VehicleManagement() {
         tipo_vehiculo: (fullVehiculo as any).tipo_vehiculo || '',
         tipo_combustible: (fullVehiculo as any).tipo_combustible || '',
         tipo_gps: (fullVehiculo as any).tipo_gps || '',
-        gps_uss: (fullVehiculo as any).gps_uss || false,
+        gps_uss: (fullVehiculo as any).gps_uss || '',
         gnc: (fullVehiculo as any).gnc || false,
         telepase: (fullVehiculo as any).telepase || false,
         numero_motor: fullVehiculo.numero_motor || '',
@@ -978,7 +978,7 @@ export function VehicleManagement() {
       tipo_vehiculo: '',
       tipo_combustible: '',
       tipo_gps: '',
-      gps_uss: false,
+      gps_uss: '',
       gnc: false,
       telepase: false,
       numero_motor: '',
@@ -1832,7 +1832,7 @@ export function VehicleManagement() {
         'GNC': v.gnc ? 'Sí' : 'No',
         'Telepase': v.telepase ? 'Sí' : 'No',
         'Tipo GPS': v.tipo_gps || '',
-        'GPS USS (Wialon)': v.gps_uss ? 'Sí' : 'No',
+        'GPS 2': v.gps_uss || 'Sin GPS 2',
         'Número Motor': v.numero_motor || '',
         'Número Chasis': v.numero_chasis || '',
         'Provisoria': v.provisoria || '',
@@ -2260,18 +2260,16 @@ export function VehicleManagement() {
 
               <div className="form-group">
                 <label className="form-label">GPS 2</label>
-                <label style={{ display: 'flex', alignItems: 'center', height: '42px', cursor: 'pointer', gap: '8px' }}>
-                  <input
-                    type="checkbox"
-                    checked={formData.gps_uss}
-                    onChange={(e) => setFormData({ ...formData, gps_uss: e.target.checked })}
-                    disabled={saving}
-                    style={{ width: '18px', height: '18px', cursor: 'pointer' }}
-                  />
-                  <span style={{ color: formData.gps_uss ? '#10B981' : 'var(--text-primary)' }}>
-                    USS (Wialon)
-                  </span>
-                </label>
+                <select
+                  className="form-select"
+                  value={formData.gps_uss}
+                  onChange={(e) => setFormData({ ...formData, gps_uss: e.target.value })}
+                  disabled={saving}
+                >
+                  <option value="">Sin GPS 2</option>
+                  <option value="USS">USS (WIALON)</option>
+                  <option value="GEOTAB">Geotab</option>
+                </select>
               </div>
             </div>
 
@@ -2699,9 +2697,9 @@ export function VehicleManagement() {
                 <div className="detail-value">{(selectedVehiculo as any).tipo_gps || 'Sin GPS'}</div>
               </div>
               <div>
-                <label className="detail-label">GPS 2 - USS (WIALON)</label>
+                <label className="detail-label">GPS 2</label>
                 <div className="detail-value" style={{ color: (selectedVehiculo as any).gps_uss ? '#10B981' : 'inherit' }}>
-                  {(selectedVehiculo as any).gps_uss ? 'Sí' : 'No'}
+                  {(selectedVehiculo as any).gps_uss || 'Sin GPS 2'}
                 </div>
               </div>
               <div>

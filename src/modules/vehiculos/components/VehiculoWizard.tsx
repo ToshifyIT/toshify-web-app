@@ -12,7 +12,7 @@ interface VehiculoFormData {
   tipo_vehiculo: string
   tipo_combustible: string
   tipo_gps: string
-  gps_uss: boolean
+  gps_uss: string
   gnc: boolean
   telepase: boolean
   numero_motor: string
@@ -350,18 +350,16 @@ export function VehiculoWizard({
 
               <div className="form-group">
                 <label className="form-label">GPS 2</label>
-                <label style={{ display: 'flex', alignItems: 'center', height: '42px', cursor: 'pointer', gap: '8px' }}>
-                  <input
-                    type="checkbox"
-                    checked={formData.gps_uss}
-                    onChange={(e) => setFormData({ ...formData, gps_uss: e.target.checked })}
-                    disabled={saving}
-                    style={{ width: '18px', height: '18px', cursor: 'pointer' }}
-                  />
-                  <span style={{ color: formData.gps_uss ? '#10B981' : 'var(--text-primary)' }}>
-                    USS (Wialon)
-                  </span>
-                </label>
+                <select
+                  className="form-select"
+                  value={formData.gps_uss}
+                  onChange={(e) => setFormData({ ...formData, gps_uss: e.target.value })}
+                  disabled={saving}
+                >
+                  <option value="">Sin GPS 2</option>
+                  <option value="USS">USS (WIALON)</option>
+                  <option value="GEOTAB">Geotab</option>
+                </select>
               </div>
             </div>
           </div>

@@ -1485,18 +1485,64 @@ app.post('/api/complete-control', async (req, res) => {
       )
     }
 
-    // Ejecutar replaceAllText para cada placeholder
-    const requests = replacements.map(r => ({
+    // Separar observations de los demás reemplazos: observations puede tener
+    // saltos de línea y texto largo, replaceAllText no genera párrafos reales
+    // en Google Docs, así que usamos insertText para ese campo.
+    const observationsReplacement = replacements.find(r => r.find === '{{OBSERVATIONS}}')
+    const otherReplacements = replacements.filter(r => r.find !== '{{OBSERVATIONS}}')
+
+    // Ejecutar replaceAllText para los campos simples (KM, LTNAFTA, Bariloche, etc.)
+    const requests = otherReplacements.map(r => ({
       replaceAllText: {
         containsText: { text: r.find, matchCase: false },
         replaceText: r.replace
       }
     }))
 
-    await docsService.documents.batchUpdate({
-      documentId: googleDocId,
-      requestBody: { requests }
-    })
+    if (requests.length > 0) {
+      await docsService.documents.batchUpdate({
+        documentId: googleDocId,
+        requestBody: { requests }
+      })
+    }
+
+    // Para observations: buscar la posición del placeholder, eliminarlo e insertar
+    // el texto con insertText para que los \n generen párrafos reales
+    if (observationsReplacement) {
+      const docContent = await docsService.documents.get({ documentId: googleDocId })
+      const body = docContent.data.body?.content || []
+      let obsStartIndex = -1
+      let obsEndIndex = -1
+
+      // Buscar la posición exacta de {{OBSERVATIONS}} en el documento
+      for (const element of body) {
+        if (element.paragraph?.elements) {
+          for (const el of element.paragraph.elements) {
+            const text = el.textRun?.content || ''
+            const idx = text.indexOf('{{OBSERVATIONS}}')
+            if (idx !== -1) {
+              obsStartIndex = el.startIndex + idx
+              obsEndIndex = obsStartIndex + '{{OBSERVATIONS}}'.length
+              break
+            }
+          }
+        }
+        if (obsStartIndex !== -1) break
+      }
+
+      if (obsStartIndex !== -1) {
+        // Primero eliminar el placeholder, luego insertar el texto real
+        await docsService.documents.batchUpdate({
+          documentId: googleDocId,
+          requestBody: {
+            requests: [
+              { deleteContentRange: { range: { startIndex: obsStartIndex, endIndex: obsEndIndex } } },
+              { insertText: { location: { index: obsStartIndex }, text: observationsReplacement.replace } }
+            ]
+          }
+        })
+      }
+    }
 
     console.log(`[Control] Placeholders reemplazados: ${replacements.length} variables`)
 
