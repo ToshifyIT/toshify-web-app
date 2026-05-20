@@ -241,6 +241,7 @@ const VisitasPage = lazy(() => import('./visitas/VisitasPage').then(m => ({ defa
 const VencimientosPage = lazy(() => import('./vencimientos/VencimientosPage').then(m => ({ default: m.VencimientosPage })))
 const AlertasMantenimientoPage = lazy(() => import('./vehiculos/AlertasMantenimientoPage'))
 const ControlCombustiblePage = lazy(() => import('./vehiculos/ControlCombustiblePage'))
+const TitularesPage = lazy(() => import('./vehiculos/TitularesPage'))
 const InformesPage = lazy(() => import('./informes/InformesPage').then(m => ({ default: m.InformesPage })))
 const AsignacionesActivasPage = lazy(() => import('./asignaciones/AsignacionesActivasPage').then(m => ({ default: m.AsignacionesActivasPage })))
 const ProductosPage = lazy(() => import('./productos/ProductosPage').then(m => ({ default: m.ProductosPage })))
@@ -1895,6 +1896,11 @@ export function HomePage() {
               <Route path="/vehiculos/control-combustible" element={
                 <ProtectedRoute submenuName="control-combustible" action="view">
                   <LazyPage><ControlCombustiblePage /></LazyPage>
+                </ProtectedRoute>
+              } />
+              <Route path="/vehiculos/titulares" element={
+                <ProtectedRoute submenuName="gestion-vehiculos" action="view">
+                  <LazyPage><TitularesPage /></LazyPage>
                 </ProtectedRoute>
               } />
 

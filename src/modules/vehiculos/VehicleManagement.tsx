@@ -44,6 +44,9 @@ export function VehicleManagement() {
   const [error, setError] = useState('')
   const [showCreateModal, setShowCreateModal] = useState(false)
   const [showEditModal, setShowEditModal] = useState(false)
+  const [showEditTitularDropdown, setShowEditTitularDropdown] = useState(false)
+  const editTitularInputRef = useRef<HTMLInputElement>(null)
+  const editTitularDropdownRef = useRef<HTMLDivElement>(null)
   const [showDeleteModal, setShowDeleteModal] = useState(false)
   const [showDetailsModal, setShowDetailsModal] = useState(false)
   const [saving, setSaving] = useState(false)
@@ -52,6 +55,7 @@ export function VehicleManagement() {
 
   const [historialVehiculo, setHistorialVehiculo] = useState<{ id: string; patente: string } | null>(null)
   const [sedes, setSedes] = useState<{ id: string; nombre: string }[]>([])
+  const [titularesOptions, setTitularesOptions] = useState<{ id: string; tipo: 'persona' | 'empresa'; nombre: string }[]>([])
 
   // Modal de finalización de asignación al cambiar estado del vehículo
   const [showFinalizarModal, setShowFinalizarModal] = useState(false)
@@ -132,6 +136,8 @@ export function VehicleManagement() {
     seguro_numero: '',
     seguro_vigencia: '',
     titular: '',
+    tipo_titular: '' as 'persona' | 'empresa' | '',
+    titular_id: '',
     notas: '',
     url_documentacion: '',
     sede_id: '',
@@ -151,6 +157,32 @@ export function VehicleManagement() {
   useEffect(() => {
     loadAllData()
   }, [sedeActualId])
+
+  // Cerrar dropdown titular edición al clic fuera
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (
+        editTitularDropdownRef.current && !editTitularDropdownRef.current.contains(e.target as Node) &&
+        editTitularInputRef.current && !editTitularInputRef.current.contains(e.target as Node)
+      ) {
+        setShowEditTitularDropdown(false)
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [])
+
+  // Filtrar titulares para edición
+  const editFilteredTitulares = useMemo(() => {
+    if (!formData.tipo_titular) return []
+    return titularesOptions
+      .filter(t => t.tipo === formData.tipo_titular)
+      .filter(t => {
+        const search = formData.titular.trim().toUpperCase()
+        if (!search) return true
+        return t.nombre.toUpperCase().includes(search)
+      })
+  }, [formData.tipo_titular, formData.titular, titularesOptions])
 
   // ✅ OPTIMIZADO: Calcular stats desde datos ya cargados (elimina 6+ queries)
   const calculatedStats = useMemo(() => {
@@ -236,7 +268,7 @@ export function VehicleManagement() {
 
     try {
       const desde30d = new Date(Date.now() - 30 * 24 * 3600 * 1000).toISOString()
-      const [vehiculosRes, estadosRes, sedesRes, ussRes] = await Promise.all([
+      const [vehiculosRes, estadosRes, sedesRes, ussRes, titularesRes] = await Promise.all([
         aplicarFiltroSede(supabase
           .from('vehiculos')
           .select(`
@@ -251,11 +283,21 @@ export function VehicleManagement() {
         supabase.from('vehiculos_estados').select('id, codigo, descripcion').order('descripcion'),
         supabase.from('sedes').select('id, nombre').order('nombre'),
         supabase.from('uss_historico').select('patente').gte('fecha_hora_inicio_gmt3', desde30d),
+        supabase.from('titulares').select('id, tipo, nombres, apellidos, razon_social').eq('estado', 'activo'),
       ])
 
       if (vehiculosRes.error) throw vehiculosRes.error
       if (estadosRes.data) setVehiculosEstados(estadosRes.data)
       if (sedesRes.data) setSedes(sedesRes.data)
+      if (titularesRes?.data) {
+        setTitularesOptions((titularesRes.data as any[]).map(t => ({
+          id: t.id,
+          tipo: t.tipo as 'persona' | 'empresa',
+          nombre: t.tipo === 'empresa'
+            ? (t.razon_social || '').toUpperCase()
+            : [t.apellidos, t.nombres].filter(Boolean).join(' ').toUpperCase(),
+        })))
+      }
       if (ussRes.data) {
         const set = new Set<string>()
         for (const r of ussRes.data as { patente: string }[]) {
@@ -388,11 +430,11 @@ export function VehicleManagement() {
       return
     }
 
-    if (!formData.patente || !formData.marca || !formData.modelo || !formData.sede_id || !formData.titular?.trim() || !formData.cobertura?.trim() || !formData.lugar_radicacion?.trim()) {
+    if (!formData.patente || !formData.marca || !formData.modelo || !formData.sede_id || !formData.tipo_titular || !formData.titular?.trim() || !formData.cobertura?.trim() || !formData.lugar_radicacion?.trim()) {
       Swal.fire({
         icon: 'warning',
         title: 'Campos requeridos',
-        text: 'Complete todos los campos requeridos: Patente, Marca, Modelo, Sede, Titular, Cobertura y Lugar de Radicación',
+        text: 'Complete todos los campos requeridos: Patente, Marca, Modelo, Sede, Tipo de Titular, Titular, Cobertura y Lugar de Radicación',
         confirmButtonColor: '#ff0033'
       })
       return
@@ -480,6 +522,49 @@ export function VehicleManagement() {
 
         if (restoreError) throw restoreError
 
+        // Crear relación titular para vehículo restaurado
+        if (formData.titular.trim() && formData.tipo_titular) {
+          let titularId = formData.titular_id
+          if (!titularId) {
+            const titularNombre = formData.titular.trim().toUpperCase()
+            const nuevoTitular: Record<string, any> = {
+              tipo: formData.tipo_titular,
+              dni_cuit: '',
+              estado: 'activo',
+              sede_id: formData.sede_id || null,
+              created_by: user?.id,
+              created_by_name: profile?.full_name || 'Sistema',
+            }
+            if (formData.tipo_titular === 'empresa') {
+              nuevoTitular.razon_social = titularNombre
+            } else {
+              const partes = titularNombre.split(/\s+/)
+              if (partes.length >= 2) {
+                nuevoTitular.apellidos = partes[partes.length - 1]
+                nuevoTitular.nombres = partes.slice(0, -1).join(' ')
+              } else {
+                nuevoTitular.nombres = titularNombre
+                nuevoTitular.apellidos = ''
+              }
+            }
+            const { data: titularCreado } = await supabase.from('titulares').insert([nuevoTitular]).select('id').single()
+            if (titularCreado) titularId = titularCreado.id
+          }
+          if (titularId) {
+            const hoy = new Date().toISOString().split('T')[0]
+            // Desactivar titulares anteriores de este vehículo
+            await supabase.from('vehiculos_titulares').update({ activo: false, fecha_hasta: hoy }).eq('vehiculo_id', vehiculoEliminado.id).eq('activo', true)
+            await supabase.from('vehiculos_titulares').insert([{
+              vehiculo_id: vehiculoEliminado.id,
+              titular_id: titularId,
+              fecha_desde: hoy,
+              activo: true,
+              created_by: user?.id,
+              created_by_name: profile?.full_name || 'Sistema',
+            }])
+          }
+        }
+
         showSuccess('Vehículo restaurado', 'El vehículo fue restaurado y sus datos actualizados.')
         setShowCreateModal(false)
         resetForm()
@@ -556,6 +641,64 @@ export function VehicleManagement() {
             created_by_name: profile?.full_name || 'Sistema',
           })
         }
+
+        // Crear relación titular
+        if (formData.titular.trim() && formData.tipo_titular) {
+          let titularId = formData.titular_id
+
+          // Si no se seleccionó un titular existente, crear uno nuevo
+          if (!titularId) {
+            const titularNombre = formData.titular.trim().toUpperCase()
+            const nuevoTitular: Record<string, any> = {
+              tipo: formData.tipo_titular,
+              dni_cuit: '',
+              estado: 'activo',
+              sede_id: formData.sede_id || null,
+              created_by: user?.id,
+              created_by_name: profile?.full_name || 'Sistema',
+            }
+
+            if (formData.tipo_titular === 'empresa') {
+              nuevoTitular.razon_social = titularNombre
+            } else {
+              // Partir nombre: última palabra = apellido, resto = nombres
+              const partes = titularNombre.split(/\s+/)
+              if (partes.length >= 2) {
+                nuevoTitular.apellidos = partes[partes.length - 1]
+                nuevoTitular.nombres = partes.slice(0, -1).join(' ')
+              } else {
+                nuevoTitular.nombres = titularNombre
+                nuevoTitular.apellidos = ''
+              }
+            }
+
+            const { data: titularCreado, error: titError } = await supabase
+              .from('titulares')
+              .insert([nuevoTitular])
+              .select('id')
+              .single()
+
+            if (titError) {
+              console.error('Error creando titular:', titError)
+            } else if (titularCreado) {
+              titularId = titularCreado.id
+            }
+          }
+
+          // Crear relación vehiculo-titular
+          if (titularId) {
+            const hoy = new Date().toISOString().split('T')[0]
+            await supabase.from('vehiculos_titulares').insert([{
+              vehiculo_id: vehiculoCreado.id,
+              titular_id: titularId,
+              fecha_desde: hoy,
+              activo: true,
+              created_by: user?.id,
+              created_by_name: profile?.full_name || 'Sistema',
+            }])
+          }
+        }
+
         registrarHistorialVehiculo({
           vehiculoId: vehiculoCreado.id,
           tipoEvento: 'cambio_estado',
@@ -600,31 +743,25 @@ export function VehicleManagement() {
 
     if (!selectedVehiculo) return
 
-    if (!formData.titular?.trim()) {
-      Swal.fire({
-        icon: 'warning',
-        title: 'Titular obligatorio',
-        text: 'El campo Titular es requerido',
-        confirmButtonColor: '#ff0033'
-      })
-      return
-    }
+    const camposFaltantes: string[] = []
+    if (!formData.patente?.trim()) camposFaltantes.push('Patente')
+    if (!formData.marca?.trim()) camposFaltantes.push('Marca')
+    if (!formData.modelo?.trim()) camposFaltantes.push('Modelo')
+    if (!formData.anio) camposFaltantes.push('Año')
+    if (!formData.color?.trim()) camposFaltantes.push('Color')
+    if (!formData.tipo_vehiculo?.trim()) camposFaltantes.push('Tipo')
+    if (!formData.numero_motor?.trim()) camposFaltantes.push('Número Motor')
+    if (!formData.numero_chasis?.trim()) camposFaltantes.push('Número Chasis')
+    if (!formData.cobertura?.trim()) camposFaltantes.push('Cobertura')
+    if (!formData.lugar_radicacion?.trim()) camposFaltantes.push('Lugar de Radicación')
+    if (!formData.tipo_titular) camposFaltantes.push('Tipo de Titular')
+    if (!formData.titular?.trim()) camposFaltantes.push('Titular')
 
-    if (!formData.cobertura?.trim()) {
+    if (camposFaltantes.length > 0) {
       Swal.fire({
         icon: 'warning',
-        title: 'Cobertura obligatoria',
-        text: 'El campo Cobertura del seguro es requerido',
-        confirmButtonColor: '#ff0033'
-      })
-      return
-    }
-
-    if (!formData.lugar_radicacion?.trim()) {
-      Swal.fire({
-        icon: 'warning',
-        title: 'Lugar de Radicación obligatorio',
-        text: 'El campo Lugar de Radicación es requerido',
+        title: 'Campos requeridos',
+        text: `Complete los siguientes campos obligatorios: ${camposFaltantes.join(', ')}`,
         confirmButtonColor: '#ff0033'
       })
       return
@@ -844,6 +981,58 @@ export function VehicleManagement() {
         }
       }
 
+      // Manejar cambio de titular
+      if (formData.titular.trim() && formData.tipo_titular) {
+        const { data: { user } } = await supabase.auth.getUser()
+        let titularId = formData.titular_id
+
+        // Si no se seleccionó un titular existente, crear uno nuevo
+        if (!titularId) {
+          const titularNombre = formData.titular.trim().toUpperCase()
+          const nuevoTitular: Record<string, any> = {
+            tipo: formData.tipo_titular,
+            dni_cuit: '',
+            estado: 'activo',
+            sede_id: formData.sede_id || null,
+            created_by: user?.id,
+            created_by_name: profile?.full_name || 'Sistema',
+          }
+          if (formData.tipo_titular === 'empresa') {
+            nuevoTitular.razon_social = titularNombre
+          } else {
+            const partes = titularNombre.split(/\s+/)
+            if (partes.length >= 2) {
+              nuevoTitular.apellidos = partes[partes.length - 1]
+              nuevoTitular.nombres = partes.slice(0, -1).join(' ')
+            } else {
+              nuevoTitular.nombres = titularNombre
+              nuevoTitular.apellidos = ''
+            }
+          }
+          const { data: titularCreado } = await supabase.from('titulares').insert([nuevoTitular]).select('id').single()
+          if (titularCreado) titularId = titularCreado.id
+        }
+
+        if (titularId) {
+          const hoy = new Date().toISOString().split('T')[0]
+          // Desactivar titular anterior
+          await supabase
+            .from('vehiculos_titulares')
+            .update({ activo: false, fecha_hasta: hoy })
+            .eq('vehiculo_id', selectedVehiculo.id)
+            .eq('activo', true)
+          // Crear nueva relación
+          await supabase.from('vehiculos_titulares').insert([{
+            vehiculo_id: selectedVehiculo.id,
+            titular_id: titularId,
+            fecha_desde: hoy,
+            activo: true,
+            created_by: user?.id,
+            created_by_name: profile?.full_name || 'Sistema',
+          }])
+        }
+      }
+
       showSuccess('Vehículo actualizado', debeFinalizarAsignaciones ? 'Asignaciones finalizadas' : undefined)
       setShowEditModal(false)
       setSelectedVehiculo(null)
@@ -943,6 +1132,8 @@ export function VehicleManagement() {
         seguro_numero: fullVehiculo.seguro_numero || '',
         seguro_vigencia: fullVehiculo.seguro_vigencia || '',
         titular: fullVehiculo.titular || '',
+        tipo_titular: '' as 'persona' | 'empresa' | '',
+        titular_id: '',
         notas: fullVehiculo.notas || '',
         url_documentacion: (fullVehiculo as any).url_documentacion || (fullVehiculo as any).documentos_urls || '',
         sede_id: (fullVehiculo as any).sede_id || '',
@@ -957,6 +1148,37 @@ export function VehicleManagement() {
         vto_matafuego_aplica: !!(fullVehiculo as any).vto_matafuego_aplica,
         vto_matafuego_fecha: (fullVehiculo as any).vto_matafuego_fecha || ''
       })
+      // Precargar titular activo del vehículo
+      const { data: vtData } = await supabase
+        .from('vehiculos_titulares')
+        .select('titular_id, titulares(id, tipo, nombres, apellidos, razon_social)')
+        .eq('vehiculo_id', vehiculo.id)
+        .eq('activo', true)
+        .maybeSingle()
+
+      if (vtData?.titulares) {
+        const tit = vtData.titulares as any
+        setFormData(prev => ({
+          ...prev,
+          tipo_titular: tit.tipo as 'persona' | 'empresa',
+          titular_id: tit.id,
+          titular: tit.tipo === 'empresa'
+            ? (tit.razon_social || '').toUpperCase()
+            : [tit.apellidos, tit.nombres].filter(Boolean).join(' ').toUpperCase(),
+        }))
+      } else if (fullVehiculo.titular) {
+        // Titular en texto pero sin relación, intentar matchear
+        const titularTexto = (fullVehiculo.titular || '').toUpperCase()
+        const match = titularesOptions.find(t => t.nombre === titularTexto)
+        if (match) {
+          setFormData(prev => ({
+            ...prev,
+            tipo_titular: match.tipo,
+            titular_id: match.id,
+          }))
+        }
+      }
+
       setShowEditModal(true)
     } catch {
       // silently ignored
@@ -993,6 +1215,8 @@ export function VehicleManagement() {
       seguro_numero: '',
       seguro_vigencia: '',
       titular: '',
+      tipo_titular: '' as 'persona' | 'empresa' | '',
+      titular_id: '',
       notas: '',
       url_documentacion: '',
       sede_id: '',
@@ -2083,6 +2307,7 @@ export function VehicleManagement() {
               marcasExistentes={marcasExistentes}
               modelosExistentes={modelosExistentes}
               sedes={sedes}
+              titulares={titularesOptions}
               onCancel={handleCancelCreateWizard}
               onSubmit={handleCreate}
               saving={saving}
@@ -2124,7 +2349,7 @@ export function VehicleManagement() {
 
             <div className="form-row">
               <div className="form-group">
-                <label className="form-label">Marca</label>
+                <label className="form-label">Marca <span style={{ color: '#ef4444' }}>*</span></label>
                 <input
                   type="text"
                   className="form-input"
@@ -2136,7 +2361,7 @@ export function VehicleManagement() {
               </div>
 
               <div className="form-group">
-                <label className="form-label">Modelo</label>
+                <label className="form-label">Modelo <span style={{ color: '#ef4444' }}>*</span></label>
                 <input
                   type="text"
                   className="form-input"
@@ -2150,7 +2375,7 @@ export function VehicleManagement() {
 
             <div className="form-row">
               <div className="form-group">
-                <label className="form-label">Año</label>
+                <label className="form-label">Año <span style={{ color: '#ef4444' }}>*</span></label>
                 <input
                   type="number"
                   className="form-input"
@@ -2163,7 +2388,7 @@ export function VehicleManagement() {
               </div>
 
               <div className="form-group">
-                <label className="form-label">Color</label>
+                <label className="form-label">Color <span style={{ color: '#ef4444' }}>*</span></label>
                 <input
                   type="text"
                   className="form-input"
@@ -2176,7 +2401,7 @@ export function VehicleManagement() {
 
             <div className="form-row">
               <div className="form-group">
-                <label className="form-label">Tipo</label>
+                <label className="form-label">Tipo <span style={{ color: '#ef4444' }}>*</span></label>
                 <select
                   className="form-input"
                   value={formData.tipo_vehiculo}
@@ -2277,7 +2502,7 @@ export function VehicleManagement() {
 
             <div className="form-row">
               <div className="form-group">
-                <label className="form-label">Número Motor</label>
+                <label className="form-label">Número Motor <span style={{ color: '#ef4444' }}>*</span></label>
                 <input
                   type="text"
                   className="form-input"
@@ -2288,7 +2513,7 @@ export function VehicleManagement() {
               </div>
 
               <div className="form-group">
-                <label className="form-label">Número Chasis</label>
+                <label className="form-label">Número Chasis <span style={{ color: '#ef4444' }}>*</span></label>
                 <input
                   type="text"
                   className="form-input"
@@ -2461,21 +2686,101 @@ export function VehicleManagement() {
               </div>
             </div>
 
-            <div className="section-title">Información Adicional</div>
+            <div className="section-title">Relación Titular</div>
 
-            <div className="form-group">
-              <label className="form-label">Titular <span style={{ color: '#ef4444' }}>*</span></label>
-              <input
-                type="text"
-                className="form-input"
-                value={formData.titular}
-                onChange={(e) => setFormData({ ...formData, titular: e.target.value })}
-                disabled={saving}
-                required
-                placeholder="Nombre del titular del vehículo"
-                style={!formData.titular?.trim() ? { borderColor: '#ef4444' } : {}}
-              />
+            <div style={{
+              border: '1px solid var(--border-primary)',
+              borderRadius: '8px',
+              padding: '16px',
+              background: 'var(--bg-secondary)',
+            }}>
+              <div className="form-group">
+                <label className="form-label">Tipo de Titular <span style={{ color: '#ef4444' }}>*</span></label>
+                <select
+                  className="form-input"
+                  value={formData.tipo_titular}
+                  onChange={(e) => {
+                    const tipo = e.target.value as 'persona' | 'empresa' | ''
+                    setFormData({ ...formData, tipo_titular: tipo, titular: '', titular_id: '' })
+                    setShowEditTitularDropdown(false)
+                  }}
+                  disabled={saving}
+                >
+                  <option value="">Seleccionar tipo...</option>
+                  <option value="persona">Persona</option>
+                  <option value="empresa">Empresa</option>
+                </select>
+              </div>
+
+              {formData.tipo_titular && (
+                <div className="form-group" style={{ position: 'relative' }}>
+                  <label className="form-label">
+                    {formData.tipo_titular === 'persona' ? 'Nombre del Titular' : 'Razón Social'} <span style={{ color: '#ef4444' }}>*</span>
+                  </label>
+                  <input
+                    ref={editTitularInputRef}
+                    type="text"
+                    className="form-input"
+                    value={formData.titular}
+                    onChange={(e) => {
+                      const val = e.target.value.toUpperCase()
+                      setFormData({ ...formData, titular: val, titular_id: '' })
+                      setShowEditTitularDropdown(true)
+                    }}
+                    onFocus={() => setShowEditTitularDropdown(true)}
+                    disabled={saving}
+                    placeholder={formData.tipo_titular === 'persona' ? 'Ej: GARCIA JUAN' : 'Ej: NAIREBIS S.R.L.'}
+                    autoComplete="off"
+                  />
+
+                  {/* Dropdown autocomplete */}
+                  {showEditTitularDropdown && formData.titular.trim() !== '' && editFilteredTitulares.length > 0 && (
+                    <div
+                      ref={editTitularDropdownRef}
+                      style={{
+                        position: 'absolute',
+                        top: '100%',
+                        left: 0,
+                        right: 0,
+                        maxHeight: '160px',
+                        overflowY: 'auto',
+                        background: 'var(--bg-primary)',
+                        border: '1px solid var(--border-primary)',
+                        borderRadius: '6px',
+                        boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
+                        zIndex: 50,
+                        marginTop: '2px',
+                      }}
+                    >
+                      {editFilteredTitulares.map(t => (
+                        <div
+                          key={t.id}
+                          onClick={() => {
+                            setFormData({ ...formData, titular: t.nombre, titular_id: t.id })
+                            setShowEditTitularDropdown(false)
+                          }}
+                          style={{
+                            padding: '8px 12px',
+                            cursor: 'pointer',
+                            fontSize: '13px',
+                            color: 'var(--text-primary)',
+                            borderBottom: '1px solid var(--border-primary)',
+                            transition: 'background 0.15s',
+                          }}
+                          onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--bg-secondary)')}
+                          onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
+                        >
+                          {t.nombre}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                </div>
+              )}
             </div>
+
+            <div className="section-title" style={{ marginTop: '16px' }}>Información Adicional</div>
 
             <div className="form-row">
               <div className="form-group">

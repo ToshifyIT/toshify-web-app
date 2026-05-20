@@ -1,5 +1,5 @@
 // src/modules/vehiculos/components/VehiculoWizard.tsx
-import { useState } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { Car, Settings, Wrench, Calendar, Shield, Check, ChevronLeft, ChevronRight, Save, Info } from 'lucide-react'
 import type { VehiculoEstado } from '../../../types/database.types'
 
@@ -27,6 +27,8 @@ interface VehiculoFormData {
   seguro_numero: string
   seguro_vigencia: string
   titular: string
+  tipo_titular: 'persona' | 'empresa' | ''
+  titular_id: string
   notas: string
   url_documentacion: string
   sede_id: string
@@ -42,6 +44,12 @@ interface VehiculoFormData {
   vto_matafuego_fecha: string
 }
 
+interface TitularOption {
+  id: string
+  tipo: 'persona' | 'empresa'
+  nombre: string // nombre completo ya formateado
+}
+
 interface VehiculoWizardProps {
   formData: VehiculoFormData
   setFormData: React.Dispatch<React.SetStateAction<VehiculoFormData>>
@@ -49,6 +57,7 @@ interface VehiculoWizardProps {
   marcasExistentes: string[]
   modelosExistentes: string[]
   sedes: { id: string; nombre: string }[]
+  titulares: TitularOption[]
   onCancel: () => void
   onSubmit: () => void
   saving: boolean
@@ -71,12 +80,41 @@ export function VehiculoWizard({
   marcasExistentes,
   modelosExistentes,
   sedes,
+  titulares,
   onCancel,
   onSubmit,
   saving
 }: VehiculoWizardProps) {
   const [currentStep, setCurrentStep] = useState(0)
   const [errors, setErrors] = useState<Record<string, string>>({})
+  const [showTitularDropdown, setShowTitularDropdown] = useState(false)
+  const titularInputRef = useRef<HTMLInputElement>(null)
+  const titularDropdownRef = useRef<HTMLDivElement>(null)
+
+  // Filtrar titulares según tipo seleccionado y texto escrito
+  const filteredTitulares = formData.tipo_titular
+    ? titulares
+        .filter(t => t.tipo === formData.tipo_titular)
+        .filter(t => {
+          const search = formData.titular.trim().toUpperCase()
+          if (!search) return true
+          return t.nombre.toUpperCase().includes(search)
+        })
+    : []
+
+  // Cerrar dropdown al hacer clic fuera
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (
+        titularDropdownRef.current && !titularDropdownRef.current.contains(e.target as Node) &&
+        titularInputRef.current && !titularInputRef.current.contains(e.target as Node)
+      ) {
+        setShowTitularDropdown(false)
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [])
 
   const validateStep = (stepIndex: number): boolean => {
     const newErrors: Record<string, string> = {}
@@ -117,9 +155,15 @@ export function VehiculoWizard({
     }
 
     if (stepIndex === 4) {
-      // Paso 5: Seguro / Información Adicional - lugar de radicación es requerido
+      // Paso 5: Seguro / Información Adicional - lugar de radicación y titular son requeridos
       if (!formData.lugar_radicacion.trim()) {
         newErrors.lugar_radicacion = 'El lugar de radicación es requerido'
+      }
+      if (!formData.tipo_titular) {
+        newErrors.tipo_titular = 'El tipo de titular es requerido'
+      }
+      if (!formData.titular.trim()) {
+        newErrors.titular = 'El titular es requerido'
       }
     }
 
@@ -581,18 +625,104 @@ export function VehiculoWizard({
               </div>
             </div>
 
-            <div className="form-group">
-              <label className="form-label">Titular <span style={{ color: '#ef4444' }}>*</span></label>
-              <input
-                type="text"
-                className="form-input"
-                value={formData.titular}
-                onChange={(e) => setFormData({ ...formData, titular: e.target.value })}
-                disabled={saving}
-                required
-                placeholder="Nombre del titular del vehículo"
-                style={!formData.titular?.trim() ? { borderColor: '#ef4444' } : {}}
-              />
+            {/* Sección Relación Titular */}
+            <div style={{
+              border: '1px solid var(--border-primary)',
+              borderRadius: '8px',
+              padding: '16px',
+              marginTop: '4px',
+              background: 'var(--bg-secondary)',
+            }}>
+              <h4 style={{ margin: '0 0 12px 0', fontSize: '14px', fontWeight: 600, color: 'var(--text-primary)' }}>
+                Relación Titular
+              </h4>
+
+              <div className="form-group">
+                <label className="form-label">Tipo de Titular <span style={{ color: '#ef4444' }}>*</span></label>
+                <select
+                  className={`form-input ${errors.tipo_titular ? 'input-error' : ''}`}
+                  value={formData.tipo_titular}
+                  onChange={(e) => {
+                    const tipo = e.target.value as 'persona' | 'empresa' | ''
+                    setFormData({ ...formData, tipo_titular: tipo, titular: '', titular_id: '' })
+                    setShowTitularDropdown(false)
+                  }}
+                  disabled={saving}
+                >
+                  <option value="">Seleccionar tipo...</option>
+                  <option value="persona">Persona</option>
+                  <option value="empresa">Empresa</option>
+                </select>
+                {errors.tipo_titular && <span className="error-message">{errors.tipo_titular}</span>}
+              </div>
+
+              {formData.tipo_titular && (
+                <div className="form-group" style={{ position: 'relative' }}>
+                  <label className="form-label">
+                    {formData.tipo_titular === 'persona' ? 'Nombre del Titular' : 'Razón Social'} <span style={{ color: '#ef4444' }}>*</span>
+                  </label>
+                  <input
+                    ref={titularInputRef}
+                    type="text"
+                    className={`form-input ${errors.titular ? 'input-error' : ''}`}
+                    value={formData.titular}
+                    onChange={(e) => {
+                      const val = e.target.value.toUpperCase()
+                      setFormData({ ...formData, titular: val, titular_id: '' })
+                      setShowTitularDropdown(true)
+                    }}
+                    onFocus={() => setShowTitularDropdown(true)}
+                    disabled={saving}
+                    placeholder={formData.tipo_titular === 'persona' ? 'Ej: GARCIA JUAN' : 'Ej: NAIREBIS S.R.L.'}
+                    autoComplete="off"
+                  />
+                  {errors.titular && <span className="error-message">{errors.titular}</span>}
+
+                  {/* Dropdown autocomplete */}
+                  {showTitularDropdown && formData.titular.trim() !== '' && filteredTitulares.length > 0 && (
+                    <div
+                      ref={titularDropdownRef}
+                      style={{
+                        position: 'absolute',
+                        top: '100%',
+                        left: 0,
+                        right: 0,
+                        maxHeight: '160px',
+                        overflowY: 'auto',
+                        background: 'var(--bg-primary)',
+                        border: '1px solid var(--border-primary)',
+                        borderRadius: '6px',
+                        boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
+                        zIndex: 50,
+                        marginTop: '2px',
+                      }}
+                    >
+                      {filteredTitulares.map(t => (
+                        <div
+                          key={t.id}
+                          onClick={() => {
+                            setFormData({ ...formData, titular: t.nombre, titular_id: t.id })
+                            setShowTitularDropdown(false)
+                          }}
+                          style={{
+                            padding: '8px 12px',
+                            cursor: 'pointer',
+                            fontSize: '13px',
+                            color: 'var(--text-primary)',
+                            borderBottom: '1px solid var(--border-primary)',
+                            transition: 'background 0.15s',
+                          }}
+                          onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--bg-secondary)')}
+                          onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
+                        >
+                          {t.nombre}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                </div>
+              )}
             </div>
 
             <div className="form-row">
