@@ -14,7 +14,7 @@ import Swal from 'sweetalert2'
 import { showSuccess, showError } from '../../utils/toast'
 import { useSede } from '../../contexts/SedeContext'
 import { useAuth } from '../../contexts/AuthContext'
-import { crearCobroDesdeMulta } from './services/crearCobroDesdeMulta'
+import { crearCobroDesdeMulta, resolverMontoMulta } from './services/crearCobroDesdeMulta'
 import { desestimarMulta as svcDesestimarMulta, reactivarMulta as svcReactivarMulta } from './services/desestimarMulta'
 import { format } from 'date-fns'
 import { es } from 'date-fns/locale'
@@ -606,6 +606,57 @@ export default function MultasModule() {
       })
       return
     }
+
+    // FIX 2026-05-19: si la multa tiene descuento y vencio respecto al periodo
+    // abierto, pedir confirmacion mostrando ambos importes antes de enviar.
+    const sedeIdParaConsulta = sedeActualId || sedeUsuario?.id
+    let fechaCobro: string = (() => {
+      const d = new Date()
+      return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+    })()
+    if (sedeIdParaConsulta) {
+      const { data: periodos } = await (supabase.from('periodos_facturacion' as any) as any)
+        .select('fecha_inicio')
+        .eq('sede_id', sedeIdParaConsulta)
+        .eq('estado', 'abierto')
+        .order('fecha_inicio', { ascending: false })
+        .limit(1)
+      if (periodos && periodos[0]?.fecha_inicio) fechaCobro = periodos[0].fecha_inicio
+    }
+    const { descuentoAplicado, descuentoVencio } = resolverMontoMulta(multa, fechaCobro)
+    if (descuentoVencio) {
+      const vencFmt = formatFecha(multa.fecha_vencimiento_descuento || null)
+      const confirm = await Swal.fire({
+        icon: 'warning',
+        title: 'Descuento vencido',
+        html: `
+          <div style="text-align:left; font-size: 13px; line-height: 1.5;">
+            <p style="margin: 0 0 10px;">La multa tiene un descuento que venció el <strong>${vencFmt}</strong>.</p>
+            <p style="margin: 0 0 10px;">Se enviará el <strong>importe total</strong> a facturación:</p>
+            <ul style="margin: 0 0 10px 20px; padding: 0;">
+              <li>Importe descuento (vencido): <strong style="color:#10b981;">${formatMoney(multa.importe_descuento)}</strong></li>
+              <li>Importe total a cobrar: <strong style="color:#ef4444;">${formatMoney(multa.importe)}</strong></li>
+            </ul>
+            <p style="margin: 0;">¿Confirmás el envío?</p>
+          </div>
+        `,
+        showCancelButton: true,
+        confirmButtonText: 'Sí, enviar importe total',
+        cancelButtonText: 'Cancelar',
+        confirmButtonColor: '#ef4444',
+      })
+      if (!confirm.isConfirmed) return
+    } else if (descuentoAplicado) {
+      // Informar (sin bloquear) que se aplica descuento
+      Swal.fire({
+        icon: 'success',
+        title: 'Descuento vigente',
+        html: `Se enviará el <strong>importe con descuento</strong>: ${formatMoney(multa.importe_descuento)}`,
+        timer: 2000,
+        showConfirmButton: false,
+      })
+    }
+
     const result = await crearCobroDesdeMulta(multa, {
       userId: user?.id,
       userName: profile?.full_name || 'Sistema',

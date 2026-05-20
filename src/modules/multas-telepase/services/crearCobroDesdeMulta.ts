@@ -10,6 +10,11 @@ export interface MultaInput {
   patente: string
   fecha_infraccion: string | null
   importe: string
+  // FIX 2026-05-19: importe con descuento y su vencimiento.
+  // Si fecha_vencimiento_descuento >= fecha del cobro → usar importe_descuento.
+  // Si esta vencido → usar importe total (comportamiento previo).
+  importe_descuento?: string | null
+  fecha_vencimiento_descuento?: string | null
   infraccion: string
   lugar: string
   detalle: string
@@ -78,6 +83,25 @@ function parseImporteToNumber(s: string | number | null | undefined): number {
   return isNaN(n) ? 0 : n
 }
 
+// FIX 2026-05-19: decide si aplica el descuento o cobrar el total.
+// Devuelve { monto, descuentoAplicado, descuentoVencio }
+export function resolverMontoMulta(
+  multa: Pick<MultaInput, 'importe' | 'importe_descuento' | 'fecha_vencimiento_descuento'>,
+  fechaCobro: string, // YYYY-MM-DD
+): { monto: number; descuentoAplicado: boolean; descuentoVencio: boolean } {
+  const total = parseImporteToNumber(multa.importe)
+  const desc = parseImporteToNumber(multa.importe_descuento)
+  const vence = (multa.fecha_vencimiento_descuento || '').slice(0, 10)
+  const tieneDescuento = desc > 0 && !!vence
+  if (!tieneDescuento) {
+    return { monto: total, descuentoAplicado: false, descuentoVencio: false }
+  }
+  if (fechaCobro <= vence) {
+    return { monto: desc, descuentoAplicado: true, descuentoVencio: false }
+  }
+  return { monto: total, descuentoAplicado: false, descuentoVencio: true }
+}
+
 export async function crearCobroDesdeMulta(multa: MultaInput, ctx: CrearCobroContext): Promise<CrearCobroResult> {
   const sedeId = ctx.sedeId
   if (!sedeId) return { ok: false, error: 'No hay sede seleccionada' }
@@ -118,7 +142,7 @@ export async function crearCobroDesdeMulta(multa: MultaInput, ctx: CrearCobroCon
       needsManualInput: true,
       reason: `No se encontró el vehículo con patente ${multa.patente}`,
       prefilled: {
-        vehiculoId: null, conductorId: null, fecha, monto: parseImporteToNumber(multa.importe),
+        vehiculoId: null, conductorId: null, fecha, monto: resolverMontoMulta(multa, fecha).monto,
         tipoCobroDescuentoId: tipoMulta.id, estadoId: estadoPendiente.id, turno: null,
         descripcion: buildDescripcion(multa), sedeId
       }
@@ -139,7 +163,7 @@ export async function crearCobroDesdeMulta(multa: MultaInput, ctx: CrearCobroCon
         ? `No se encontró el conductor "${multa.conductor_responsable}" en la base. Cargá manualmente.`
         : 'La multa no tiene conductor cargado. Cargá manualmente.',
       prefilled: {
-        vehiculoId: vehiculo.id, conductorId: null, fecha, monto: parseImporteToNumber(multa.importe),
+        vehiculoId: vehiculo.id, conductorId: null, fecha, monto: resolverMontoMulta(multa, fecha).monto,
         tipoCobroDescuentoId: tipoMulta.id, estadoId: estadoPendiente.id, turno: null,
         descripcion: buildDescripcion(multa), sedeId
       }
@@ -161,8 +185,14 @@ export async function crearCobroDesdeMulta(multa: MultaInput, ctx: CrearCobroCon
     turno = 'A cargo'; break
   }
 
-  const monto = parseImporteToNumber(multa.importe)
-  const descripcion = buildDescripcion(multa)
+  // FIX 2026-05-19: resolver monto segun vigencia del descuento
+  const { monto, descuentoAplicado, descuentoVencio } = resolverMontoMulta(multa, fecha)
+  let descripcion = buildDescripcion(multa)
+  if (descuentoAplicado) {
+    descripcion += ` — Descuento aplicado (venc. ${multa.fecha_vencimiento_descuento})`
+  } else if (descuentoVencio) {
+    descripcion += ` — Descuento vencido el ${multa.fecha_vencimiento_descuento}, se cobra importe total`
+  }
 
   // 7. INSERT en incidencias
   const { data: incidenciaCreada, error: incError } = await (supabase.from('incidencias' as any) as any)
