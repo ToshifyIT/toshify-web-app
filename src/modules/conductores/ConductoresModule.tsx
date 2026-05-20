@@ -1,7 +1,7 @@
 // src/modules/conductores/ConductoresModule.tsx
  
 import { useState, useEffect, useMemo, useRef } from "react";
-import { Eye, Edit2, Trash2, AlertTriangle, Users, UserCheck, UserX, Clock, Filter, FolderOpen, FolderPlus, Loader2, History, RefreshCw, ShieldX, MessageSquare, FileText, ChevronDown } from "lucide-react";
+import { Eye, Edit2, Trash2, AlertTriangle, Users, UserCheck, UserX, Clock, Filter, FolderOpen, FolderPlus, Loader2, History, RefreshCw, ShieldX, MessageSquare, User, FileText, ChevronDown } from "lucide-react";
 import { ActionsMenu } from "../../components/ui/ActionsMenu";
 import { VerLogsButton } from "../../components/ui/VerLogsButton";
 
@@ -317,6 +317,8 @@ export function ConductoresModule() {
     preferencia_turno: "SIN_PREFERENCIA",
     url_documentacion: "",
     numero_ibutton: "",
+    id_conversation: "",
+    intercom_id: "",
     sede_id: "",
   });
 
@@ -905,6 +907,7 @@ export function ConductoresModule() {
             created_at,
             url_documentacion,
             intercom_id,
+            id_conversation,
             conductores_estados (id, codigo, descripcion),
             conductores_licencias_categorias (
               licencias_categorias (id, codigo, descripcion)
@@ -1067,6 +1070,8 @@ export function ConductoresModule() {
             preferencia_turno: formData.preferencia_turno || "SIN_PREFERENCIA",
             url_documentacion: formData.url_documentacion || null,
             numero_ibutton: formData.numero_ibutton || null,
+            id_conversation: formData.id_conversation || null,
+            intercom_id: formData.intercom_id || null,
             created_by: user?.id,
             created_by_name: profile?.full_name || "Sistema",
             sede_id: formData.sede_id || sedeActualId || sedeUsuario?.id,
@@ -1634,6 +1639,8 @@ export function ConductoresModule() {
         preferencia_turno: formData.preferencia_turno || "SIN_PREFERENCIA",
         url_documentacion: formData.url_documentacion || null,
         numero_ibutton: formData.numero_ibutton || null,
+        id_conversation: formData.id_conversation || null,
+        intercom_id: formData.intercom_id || null,
         sede_id: formData.sede_id || null,
         updated_at: new Date().toISOString(),
         updated_by: profile?.full_name || "Sistema",
@@ -2104,6 +2111,8 @@ export function ConductoresModule() {
       preferencia_turno: fc.preferencia_turno || "SIN_PREFERENCIA",
       url_documentacion: fc.url_documentacion || "",
       numero_ibutton: fc.numero_ibutton || "",
+      id_conversation: fc.id_conversation || "",
+      intercom_id: fc.intercom_id || "",
       sede_id: fc.sede_id || "",
     });
     setShowEditModal(true);
@@ -2342,6 +2351,8 @@ export function ConductoresModule() {
       preferencia_turno: "SIN_PREFERENCIA",
       url_documentacion: "",
       numero_ibutton: "",
+      id_conversation: "",
+      intercom_id: "",
       sede_id: "",
     });
   };
@@ -4413,6 +4424,35 @@ function ModalEditar({
           </div>
         </div>
 
+        <div className="form-row">
+          <div className="form-group">
+            <label className="form-label">Id Perfil Intercom</label>
+            <input
+              type="text"
+              className="form-input"
+              value={formData.intercom_id}
+              onChange={(e) =>
+                setFormData({ ...formData, intercom_id: e.target.value })
+              }
+              disabled={saving}
+              placeholder="Ej: 6839e3685ecb51f48e0f6b7f"
+            />
+          </div>
+          <div className="form-group">
+            <label className="form-label">ID Conversación Intercom</label>
+            <input
+              type="text"
+              className="form-input"
+              value={formData.id_conversation}
+              onChange={(e) =>
+                setFormData({ ...formData, id_conversation: e.target.value })
+              }
+              disabled={saving}
+              placeholder="Ej: 215474263498408"
+            />
+          </div>
+        </div>
+
         </div>
         <div className="modal-footer">
           <button
@@ -4700,7 +4740,7 @@ function ModalDetalles({
             ×
           </button>
         </div>
-        <div style={{ padding: '8px 24px 0', display: 'flex', justifyContent: 'flex-end' }}>
+        <div style={{ padding: '8px 24px 0', display: 'flex', justifyContent: 'flex-end', gap: '12px' }}>
           <button
             className={`btn-sm ${(selectedConductor as any).intercom_id ? 'btn-primary' : 'btn-secondary'}`}
             disabled={!(selectedConductor as any).intercom_id}
@@ -4708,7 +4748,16 @@ function ModalDetalles({
             title={(selectedConductor as any).intercom_id ? 'Abrir en Intercom' : 'Sin ID de Intercom'}
             style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}
           >
-            <MessageSquare size={14} /> Ver Perfil Intercom
+            <User size={14} /> Ver Perfil Intercom
+          </button>
+          <button
+            className={`btn-sm ${(selectedConductor as any).id_conversation ? 'btn-primary' : 'btn-secondary'}`}
+            disabled={!(selectedConductor as any).id_conversation}
+            onClick={() => { if ((selectedConductor as any).id_conversation) window.open(`https://app.intercom.com/a/inbox/ogv74k5c/inbox/conversation/${(selectedConductor as any).id_conversation}`, '_blank') }}
+            title={(selectedConductor as any).id_conversation ? 'Abrir conversación en Intercom' : 'Sin conversación'}
+            style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}
+          >
+            <MessageSquare size={14} /> Ver conversación
           </button>
         </div>
         <div className="modal-body">
