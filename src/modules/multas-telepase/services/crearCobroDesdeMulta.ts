@@ -189,16 +189,10 @@ export async function crearCobroDesdeMulta(multa: MultaInput, ctx: CrearCobroCon
 
   // FIX 2026-05-19: resolver monto segun vigencia del descuento
   // FIX 2026-05-20: si el usuario eligio un monto explicito en el modal, prevalece
+  // FIX 2026-05-20: NO agregar notas internas de descuento a la descripcion publica
   const resolved = resolverMontoMulta(multa, fecha)
   const monto = ctx.montoOverride != null && ctx.montoOverride > 0 ? ctx.montoOverride : resolved.monto
-  let descripcion = buildDescripcion(multa)
-  if (ctx.montoOverride != null && ctx.montoOverride > 0) {
-    descripcion += ` — Monto elegido por usuario: $${ctx.montoOverride.toLocaleString('es-AR')}`
-  } else if (resolved.descuentoAplicado) {
-    descripcion += ` — Descuento aplicado (venc. ${multa.fecha_vencimiento_descuento})`
-  } else if (resolved.descuentoVencio) {
-    descripcion += ` — Descuento vencido el ${multa.fecha_vencimiento_descuento}, se cobra importe total`
-  }
+  const descripcion = buildDescripcion(multa)
 
   // 7. INSERT en incidencias
   const { data: incidenciaCreada, error: incError } = await (supabase.from('incidencias' as any) as any)

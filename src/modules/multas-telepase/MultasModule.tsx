@@ -929,7 +929,7 @@ export default function MultasModule() {
     },
     {
       accessorKey: 'detalle',
-      size: 140,
+      size: 200,
       header: () => (
         <ExcelColumnFilter
           label="Detalle"
@@ -941,10 +941,11 @@ export default function MultasModule() {
           onOpenChange={setOpenFilterId}
         />
       ),
+      // FIX 2026-05-20: detalle ahora hace word-wrap (varias lineas) en vez de truncarse con ellipsis
       cell: ({ row }) => (
         <span
           title={row.original.detalle || '-'}
-          style={{ fontSize: '12px', maxWidth: '140px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'block' }}
+          style={{ fontSize: '12px', whiteSpace: 'normal', wordBreak: 'break-word', lineHeight: '1.3', display: 'block' }}
         >
           {row.original.detalle || '-'}
         </span>
@@ -1004,8 +1005,9 @@ export default function MultasModule() {
       }
     },
     {
+      // FIX 2026-05-20: conductor sin truncar + iButton debajo (columna iButton eliminada)
       accessorKey: 'conductor_responsable',
-      size: 110,
+      size: 200,
       header: () => (
         <ExcelColumnFilter
           label="Conductor"
@@ -1018,26 +1020,17 @@ export default function MultasModule() {
         />
       ),
       cell: ({ row }) => (
-        <span title={row.original.conductor_responsable || '-'} style={{ fontSize: '12px', maxWidth: '110px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'block' }}>
-          {row.original.conductor_responsable || '-'}
-        </span>
+        <div style={{ fontSize: '12px', lineHeight: '1.3' }}>
+          <div style={{ whiteSpace: 'normal', wordBreak: 'break-word', fontWeight: 500 }}>
+            {row.original.conductor_responsable || '-'}
+          </div>
+          {row.original.ibutton && (
+            <div style={{ fontSize: '11px', color: 'var(--text-tertiary)', marginTop: '2px' }}>
+              iButton: {row.original.ibutton}
+            </div>
+          )}
+        </div>
       )
-    },
-    {
-      accessorKey: 'ibutton',
-      size: 50,
-      header: () => (
-        <ExcelColumnFilter
-          label="iButton"
-          options={ibuttonsUnicos}
-          selectedValues={ibuttonFilter}
-          onSelectionChange={setIbuttonFilter}
-          filterId="ibutton"
-          openFilterId={openFilterId}
-          onOpenChange={setOpenFilterId}
-        />
-      ),
-      cell: ({ row }) => row.original.ibutton || '-'
     },
     {
       id: 'obs',
@@ -1339,7 +1332,18 @@ export default function MultasModule() {
               </tr>
               <tr>
                 <td className="multas-detail-label">Fecha Infraccion</td>
-                <td className="multas-detail-value">{formatFecha(selectedMulta.fecha_infraccion)}</td>
+                <td className="multas-detail-value">
+                  {/* FIX 2026-05-20: mostrar fecha + hora de la infraccion */}
+                  {(() => {
+                    const { date, time } = splitDateTime(selectedMulta.fecha_infraccion)
+                    return (
+                      <span>
+                        {date}
+                        {time && <span style={{ color: 'var(--text-tertiary)', marginLeft: '6px', fontSize: '12px' }}>{time}</span>}
+                      </span>
+                    )
+                  })()}
+                </td>
               </tr>
               <tr>
                 <td className="multas-detail-label">Importe</td>

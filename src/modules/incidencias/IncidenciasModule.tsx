@@ -1421,9 +1421,18 @@ export function IncidenciasModule() {
     }
     
     cols.push({
-      accessorKey: 'fecha',
+      // FIX 2026-05-20: mostrar created_at (fecha real de envio) en vez de fecha del periodo
+      accessorKey: 'created_at',
       header: 'Fecha',
-      cell: ({ row }) => formatDate(row.original.fecha)
+      cell: ({ row }) => {
+        const { date, time } = formatCreatedAt((row.original as any).created_at)
+        return (
+          <div style={{ fontSize: '12px', lineHeight: '1.2', whiteSpace: 'nowrap' }}>
+            <div>{date}</div>
+            {time && <div style={{ color: 'var(--text-tertiary)', fontSize: '11px' }}>{time}</div>}
+          </div>
+        )
+      }
     },
     {
       accessorKey: 'semana',
@@ -1674,9 +1683,18 @@ export function IncidenciasModule() {
     }
 
     cols.push({
-      accessorKey: 'fecha',
+      // FIX 2026-05-20: mostrar created_at (fecha real de envio) en vez de fecha del periodo
+      accessorKey: 'created_at',
       header: 'Fecha',
-      cell: ({ row }) => formatDate(row.original.fecha)
+      cell: ({ row }) => {
+        const { date, time } = formatCreatedAt((row.original as any).created_at)
+        return (
+          <div style={{ fontSize: '12px', lineHeight: '1.2', whiteSpace: 'nowrap' }}>
+            <div>{date}</div>
+            {time && <div style={{ color: 'var(--text-tertiary)', fontSize: '11px' }}>{time}</div>}
+          </div>
+        )
+      }
     },
     {
       accessorKey: 'semana',
@@ -2943,6 +2961,16 @@ export function IncidenciasModule() {
     // Parsear como fecha local para evitar problemas de timezone
     const [year, month, day] = dateStr.split('T')[0].split('-')
     return `${day}/${month}/${year}`
+  }
+
+  // FIX 2026-05-20: helper para mostrar created_at (fecha + hora real de envio)
+  function formatCreatedAt(dateStr: string | undefined | null): { date: string; time: string } {
+    if (!dateStr) return { date: '-', time: '' }
+    const d = new Date(dateStr)
+    if (isNaN(d.getTime())) return { date: '-', time: '' }
+    const date = d.toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric', timeZone: 'America/Argentina/Buenos_Aires' })
+    const time = d.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'America/Argentina/Buenos_Aires' })
+    return { date, time }
   }
 
   function handleExportarIncidencias() {
@@ -5115,7 +5143,8 @@ function IncidenciaDetailView({ incidencia, onEdit, tiposCobroDescuento }: Incid
     <div className="incidencia-detail">
       <div className="detail-header">
         <div>
-          <p className="detail-id" style={{ fontSize: '11px', color: 'var(--text-tertiary)', marginBottom: '4px' }}>ID: {incidencia.id.slice(0, 8)}...</p>
+          {/* FIX 2026-05-20: mostrar ID completo en el modal de detalle */}
+          <p className="detail-id" style={{ fontSize: '11px', color: 'var(--text-tertiary)', marginBottom: '4px', fontFamily: 'monospace', wordBreak: 'break-all' }}>ID: {incidencia.id}</p>
           <h3 className="detail-title" style={{ fontSize: '18px', fontWeight: 700, marginBottom: '8px' }}>{incidencia.patente_display || 'Sin patente'}</h3>
           <span className={`estado-badge estado-${incidencia.estado_color}`}>{incidencia.estado_nombre}</span>
         </div>
@@ -5300,7 +5329,8 @@ function PenalidadDetailView({ penalidad, onEdit, historialRechazos = [], loadin
     <div className="incidencia-detail">
       <div className="detail-header">
         <div>
-          <p className="detail-id">ID: {penalidad.id.slice(0, 8)}...</p>
+          {/* FIX 2026-05-20: mostrar ID completo en el modal de detalle */}
+          <p className="detail-id" style={{ fontFamily: 'monospace', wordBreak: 'break-all' }}>ID: {penalidad.id}</p>
           <h3 className="detail-title">{penalidad.conductor_display || 'Sin conductor'}</h3>
           <span className={`aplicado-badge ${esRechazado ? 'aplicado-rechazado' : penalidad.aplicado ? 'aplicado-si' : 'aplicado-no'}`}>
             {esRechazado ? 'Rechazado' : penalidad.aplicado ? 'Aplicado' : 'Pendiente'}
@@ -5400,7 +5430,8 @@ function PenalidadDetailView({ penalidad, onEdit, historialRechazos = [], loadin
           <div className="detail-card-title">Incidencia Enlazada</div>
           <div className="detail-item">
             <span className="detail-item-label">ID Incidencia</span>
-            <span className="detail-item-value" style={{ fontFamily: 'monospace', fontSize: '12px' }}>{penalidad.incidencia_id.slice(0, 8)}...</span>
+            {/* FIX 2026-05-20: mostrar ID completo */}
+            <span className="detail-item-value" style={{ fontFamily: 'monospace', fontSize: '12px', wordBreak: 'break-all' }}>{penalidad.incidencia_id}</span>
           </div>
           {penalidad.incidencia_descripcion && (
             <div className="detail-item">
