@@ -26,6 +26,8 @@ interface Multa {
   patente: string
   fecha_infraccion: string | null
   importe: string
+  importe_descuento?: string | null
+  fecha_vencimiento_descuento?: string | null
   lugar: string
   detalle: string
   fecha_anotacion: string | null
@@ -887,6 +889,43 @@ export default function MultasModule() {
           {row.original.importe}
         </span>
       )
+    },
+    {
+      // FIX 2026-05-19: nueva columna Importe con descuento
+      accessorKey: 'importe_descuento',
+      size: 90,
+      header: () => (
+        <span style={{ fontSize: '12px', fontWeight: 600 }}>Imp. Desc.</span>
+      ),
+      cell: ({ row }) => {
+        const v = row.original.importe_descuento
+        if (!v) return <span style={{ fontSize: '12px', color: '#9ca3af' }}>—</span>
+        return (
+          <span className="font-medium" style={{ fontSize: '12px', whiteSpace: 'nowrap', color: '#10b981' }}>
+            {v}
+          </span>
+        )
+      }
+    },
+    {
+      // FIX 2026-05-19: nueva columna Vencimiento del descuento
+      accessorKey: 'fecha_vencimiento_descuento',
+      size: 100,
+      header: () => (
+        <span style={{ fontSize: '12px', fontWeight: 600 }}>Venc. Desc.</span>
+      ),
+      cell: ({ row }) => {
+        const v = row.original.fecha_vencimiento_descuento
+        if (!v) return <span style={{ fontSize: '12px', color: '#9ca3af' }}>—</span>
+        // Indicar visualmente si ya vencio
+        const hoy = new Date().toISOString().slice(0, 10)
+        const vencido = v < hoy
+        return (
+          <span style={{ fontSize: '12px', whiteSpace: 'nowrap', color: vencido ? '#ef4444' : '#374151', fontWeight: vencido ? 600 : 400 }}>
+            {formatFecha(v)}
+          </span>
+        )
+      }
     },
     {
       accessorKey: 'conductor_responsable',
