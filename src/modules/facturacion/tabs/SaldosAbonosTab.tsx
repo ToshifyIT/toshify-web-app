@@ -2066,9 +2066,10 @@ export function SaldosAbonosTab() {
         </div>
       ),
       cell: ({ row }) => (
-        <div>
+        // FIX 2026-05-20: padding interno para que el conductor no quede pegado al borde
+        <div style={{ padding: '4px 8px' }}>
           <div className="font-medium">{formatNombreCompleto(row.original.conductor_nombre)}</div>
-          <div className="text-xs text-gray-500">{row.original.conductor_cuit || row.original.conductor_dni}</div>
+          <div className="text-xs text-gray-500" style={{ marginTop: '2px' }}>{row.original.conductor_cuit || row.original.conductor_dni}</div>
         </div>
       )
     },
