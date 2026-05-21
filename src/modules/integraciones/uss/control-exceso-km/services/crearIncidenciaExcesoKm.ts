@@ -65,21 +65,47 @@ export async function crearIncidenciaExcesoKm(
     return { ok: false, error: 'No hay exceso de km que cobrar' }
   }
 
-  // FIX 2026-05-20: UA real desde facturacion_conductores.subtotal_alquiler
-  // del conductor en la semana del exceso (no hardcoded ni de parametros_sistema).
+  // FIX 2026-05-20 v2: UA OFICIAL desde conceptos_nomina (precio_final * 7).
+  // Mapeo por modalidad + horario + GNC del vehiculo asignado al conductor.
   let valorAlquiler: number = 0
+  let codigoUA = 'P001'
   {
-    const { data: facts } = await (supabase
-      .from('facturacion_conductores')
-      .select('subtotal_alquiler, periodo:periodos_facturacion(anio,semana)')
-      .eq('conductor_id', input.conductorId) as any)
-    const fac = (facts || []).find((f: any) => f.periodo?.anio === input.anio && f.periodo?.semana === input.semana)
-    if (fac && Number(fac.subtotal_alquiler) > 0) {
-      valorAlquiler = Number(fac.subtotal_alquiler)
+    // 1. Conseguir GNC del vehiculo asignado actualmente al conductor + horario
+    let tieneGnc = true
+    let horario = 'diurno'
+    const { data: asigs } = await (supabase
+      .from('asignaciones')
+      .select('id, vehiculo_id, estado, asignaciones_conductores!inner(conductor_id, horario, estado), vehiculo:vehiculos(gnc)')
+      .eq('estado', 'activa')
+      .eq('asignaciones_conductores.conductor_id', input.conductorId) as any)
+    const asigActiva = (asigs || [])[0]
+    if (asigActiva) {
+      tieneGnc = !!asigActiva.vehiculo?.gnc
+      const ac = (asigActiva.asignaciones_conductores || [])[0]
+      horario = ac?.horario || 'diurno'
+    }
+
+    // 2. Mapear modalidad + horario + gnc -> codigo UA
+    if (input.modalidad === 'a_cargo') {
+      codigoUA = tieneGnc ? 'P002' : 'P016'
+    } else if (horario === 'nocturno') {
+      codigoUA = tieneGnc ? 'P013' : 'P015'
     } else {
-      // Fallback: si todavía no hay facturacion para la semana, usar default por modalidad
-      const modalidadEfectiva: 'turno' | 'a_cargo' = input.modalidad === 'a_cargo' ? 'a_cargo' : 'turno'
-      valorAlquiler = modalidadEfectiva === 'a_cargo' ? ALQUILER_A_CARGO_DEFAULT : ALQUILER_TURNO_DEFAULT
+      codigoUA = tieneGnc ? 'P001' : 'P014'
+    }
+
+    // 3. Leer precio_final desde conceptos_nomina
+    const { data: concepto } = await (supabase
+      .from('conceptos_nomina')
+      .select('precio_final')
+      .eq('codigo', codigoUA)
+      .eq('activo', true)
+      .maybeSingle() as any)
+    if (concepto && Number(concepto.precio_final) > 0) {
+      valorAlquiler = Number(concepto.precio_final) * 7
+    } else {
+      // Fallback hardcoded si no está el concepto
+      valorAlquiler = input.modalidad === 'a_cargo' ? ALQUILER_A_CARGO_DEFAULT : ALQUILER_TURNO_DEFAULT
     }
   }
   const porcentaje = porcentajePorKm(input.kmExcedidos)

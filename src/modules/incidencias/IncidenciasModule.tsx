@@ -4449,25 +4449,59 @@ function IncidenciaForm({ formData, setFormData, estados, vehiculos, conductores
   useEffect(() => {
     if (!esExcesoKm || !formData.km_exceso || formData.km_exceso <= 0) return
 
-    // Determinar valor de alquiler por modalidad del turno
-    const ALQUILER_CARGO = Number(import.meta.env.VITE_ALQUILER_A_CARGO) || 360000
-    const ALQUILER_TURNO = Number(import.meta.env.VITE_ALQUILER_TURNO) || 245000
-    const esCargo = formData.turno?.toLowerCase() === 'a cargo'
-    const valorAlquiler = esCargo ? ALQUILER_CARGO : ALQUILER_TURNO
+    // FIX 2026-05-20 v2: UA OFICIAL desde conceptos_nomina (precio_final * 7).
+    // Mapea modalidad + horario + GNC -> P001/P002/P013/P014/P015/P016
+    ;(async () => {
+      const ALQUILER_CARGO = Number(import.meta.env.VITE_ALQUILER_A_CARGO) || 360000
+      const ALQUILER_TURNO = Number(import.meta.env.VITE_ALQUILER_TURNO) || 245000
+      const esCargo = formData.turno?.toLowerCase() === 'a cargo'
+      const fallback = esCargo ? ALQUILER_CARGO : ALQUILER_TURNO
 
-    // Calcular según rangos: 1-50=15%, 51-100=20%, 101-150=25%, 151+=35%
-    const km = formData.km_exceso
-    let porcentaje = 15
-    if (km > 150) porcentaje = 35
-    else if (km > 100) porcentaje = 25
-    else if (km > 50) porcentaje = 20
+      let valorAlquiler = fallback
+      if (formData.conductor_id) {
+        // 1. Traer asignacion activa
+        const { data: asigs } = await (supabase
+          .from('asignaciones')
+          .select('id, modalidad, estado, asignaciones_conductores!inner(conductor_id, horario, estado), vehiculo:vehiculos(gnc)')
+          .eq('estado', 'activa')
+          .eq('asignaciones_conductores.conductor_id', formData.conductor_id) as any)
+        const asig = (asigs || [])[0]
+        if (asig) {
+          const ac = (asig.asignaciones_conductores || [])[0]
+          const tieneGnc = !!asig.vehiculo?.gnc
+          const horario = ac?.horario || 'diurno'
+          let codigoUA = 'P001'
+          if (asig.modalidad === 'a_cargo') codigoUA = tieneGnc ? 'P002' : 'P016'
+          else if (horario === 'nocturno') codigoUA = tieneGnc ? 'P013' : 'P015'
+          else codigoUA = tieneGnc ? 'P001' : 'P014'
+          // 2. Leer precio_final desde conceptos_nomina
+          const { data: concepto } = await (supabase
+            .from('conceptos_nomina')
+            .select('precio_final')
+            .eq('codigo', codigoUA)
+            .eq('activo', true)
+            .maybeSingle() as any)
+          if (concepto && Number(concepto.precio_final) > 0) {
+            valorAlquiler = Number(concepto.precio_final) * 7
+          }
+        }
+      }
 
-    const montoBase = valorAlquiler * (porcentaje / 100)
-    const iva = montoBase * 0.21
-    const total = Math.round(montoBase + iva)
+      // Calcular según rangos: 1-50=15%, 51-100=20%, 101-150=25%, 151+=35%
+      const km = formData.km_exceso || 0
+      let porcentaje = 15
+      if (km > 150) porcentaje = 35
+      else if (km > 100) porcentaje = 25
+      else if (km > 50) porcentaje = 20
 
-    setFormData(prev => ({ ...prev, monto: total }))
-  }, [esExcesoKm, formData.km_exceso, formData.turno])
+      const montoBase = valorAlquiler * (porcentaje / 100)
+      const iva = montoBase * 0.21
+      const total = Math.round(montoBase + iva)
+
+      setFormData(prev => ({ ...prev, monto: total }))
+    })()
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [esExcesoKm, formData.km_exceso, formData.turno, formData.conductor_id])
 
   // Buscar conductores asignados al vehículo seleccionado
   async function buscarConductoresAsignados(vehiculoId: string) {
@@ -4565,14 +4599,15 @@ function IncidenciaForm({ formData, setFormData, estados, vehiculos, conductores
   }
 
   // Buscar patentes asignadas al conductor (inverso de buscarConductoresAsignados)
+  // FIX 2026-05-20 v3: priorizar asignacion estado='activa'. Setear turno auto cuando se autoselecciona.
   async function buscarPatentesPorConductor(conductorId: string) {
     try {
       const { data, error } = await supabase
         .from('asignaciones_conductores')
         .select(`
-          fecha_inicio, fecha_fin,
+          fecha_inicio, fecha_fin, estado, horario,
           asignaciones!inner(
-            id, estado, fecha_inicio, fecha_fin,
+            id, estado, fecha_inicio, fecha_fin, modalidad, horario,
             vehiculos(id, patente)
           )
         `)
@@ -4580,8 +4615,18 @@ function IncidenciaForm({ formData, setFormData, estados, vehiculos, conductores
 
       if (error) throw error
 
-      // Extraer patentes únicas con sus períodos
-      const patenteMap = new Map<string, PatenteAsignada>()
+      // Helper: mapear modalidad+horario a label de turno
+      const mapearTurno = (modalidad: string | null, acHorario: string | null): string => {
+        if (modalidad === 'a_cargo') return 'A cargo'
+        if (acHorario === 'diurno') return 'Diurno'
+        if (acHorario === 'nocturno') return 'Nocturno'
+        return 'A cargo'
+      }
+
+      // 1. Filtrar solo asignaciones con estado='activa' en la tabla `asignaciones`
+      const activas: Array<PatenteAsignada & { turno: string }> = []
+      const patenteMapActivas = new Map<string, PatenteAsignada & { turno: string }>()
+      const patenteMapTodas = new Map<string, PatenteAsignada & { turno: string }>()
       for (const ac of (data || [])) {
         const asig = (ac as any).asignaciones
         if (!asig?.vehiculos?.patente) continue
@@ -4592,26 +4637,50 @@ function IncidenciaForm({ formData, setFormData, estados, vehiculos, conductores
         const patente = asig.vehiculos.patente
         const fechaDesde = ac.fecha_inicio || asig.fecha_inicio || ''
         const fechaHasta = ac.fecha_fin || asig.fecha_fin || ''
+        const turnoLabel = mapearTurno(asig.modalidad, ac.horario)
 
-        if (patenteMap.has(vehiculoId)) {
-          const existing = patenteMap.get(vehiculoId)!
+        // Map de TODAS (historico) para fallback
+        if (patenteMapTodas.has(vehiculoId)) {
+          const existing = patenteMapTodas.get(vehiculoId)!
           if (fechaDesde && (!existing.fechaDesde || fechaDesde < existing.fechaDesde)) existing.fechaDesde = fechaDesde
           if (fechaHasta && (!existing.fechaHasta || fechaHasta > existing.fechaHasta)) existing.fechaHasta = fechaHasta
         } else {
-          patenteMap.set(vehiculoId, { vehiculoId, patente, semanas: '', fechaDesde, fechaHasta })
+          patenteMapTodas.set(vehiculoId, { vehiculoId, patente, semanas: '', fechaDesde, fechaHasta, turno: turnoLabel })
+        }
+
+        // Map de ACTIVAS (solo asignaciones.estado='activa')
+        if (estado === 'activa' || estado === 'activo') {
+          if (!patenteMapActivas.has(vehiculoId)) {
+            patenteMapActivas.set(vehiculoId, { vehiculoId, patente, semanas: '', fechaDesde, fechaHasta, turno: turnoLabel })
+          }
         }
       }
 
-      const patentes = Array.from(patenteMap.values())
+      activas.push(...patenteMapActivas.values())
 
-      if (patentes.length === 1) {
-        // Una sola patente: auto-seleccionar
-        const p = patentes[0]
-        setFormData(prev => ({ ...prev, vehiculo_id: p.vehiculoId }))
+      // 2. Si hay UNA activa → auto-seleccionar patente + turno
+      if (activas.length === 1) {
+        const a = activas[0]
+        setFormData(prev => ({ ...prev, vehiculo_id: a.vehiculoId, turno: a.turno }))
         setVehiculoSearch('')
-      } else if (patentes.length > 1) {
-        // Múltiples patentes: mostrar modal
-        setPatentesAsignadas(patentes)
+        return
+      }
+
+      // 3. Si hay VARIAS activas simultaneas → modal con solo las activas
+      if (activas.length > 1) {
+        setPatentesAsignadas(activas.map(({ turno: _t, ...rest }) => rest))
+        setShowPatenteSelectModal(true)
+        return
+      }
+
+      // 4. Sin activas → fallback historico (comportamiento anterior)
+      const todas = Array.from(patenteMapTodas.values())
+      if (todas.length === 1) {
+        const t = todas[0]
+        setFormData(prev => ({ ...prev, vehiculo_id: t.vehiculoId, turno: t.turno }))
+        setVehiculoSearch('')
+      } else if (todas.length > 1) {
+        setPatentesAsignadas(todas.map(({ turno: _t, ...rest }) => rest))
         setShowPatenteSelectModal(true)
       }
     } catch {
