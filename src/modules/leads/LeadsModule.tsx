@@ -1112,6 +1112,10 @@ export function LeadsModule() {
         url_documentacion: lead.url_folder || null,
         intercom_id: lead.id_lead || null,
         id_conversation: lead.id_conversation || null,
+        contacto_emergencia: lead.contacto_de_emergencia || lead.datos_de_emergencia || null,
+        telefono_emergencia: lead.telefono_emergencia || null,
+        parentesco_emergencia: lead.parentesco_emergencia || null,
+        observaciones: lead.observaciones || null,
       }
 
       // Filtrar campos vacíos (salvo requeridos)

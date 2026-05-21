@@ -583,13 +583,8 @@ export function AsignacionesModule() {
       setLoading(true)
       setError(null)
 
-      // Calcular fecha límite (últimos 60 días para historial)
-      const fechaLimite = new Date()
-      fechaLimite.setDate(fechaLimite.getDate() - 60)
-      const fechaLimiteStr = fechaLimite.toISOString()
-
       const [asignacionesRes, vehiculosRes, conductoresRes, devolucionesRes] = await Promise.all([
-        // Asignaciones: activas/programadas + finalizadas recientes (máx 500)
+        // Asignaciones: TODAS (sin filtro de fecha)
         aplicarFiltroSede(supabase
           .from('asignaciones')
           .select(`
@@ -600,9 +595,8 @@ export function AsignacionesModule() {
               conductores (nombres, apellidos, numero_licencia, estado_id, conductores_estados(codigo))
             )
           `))
-          .or(`estado.in.(programado,activa),created_at.gte.${fechaLimiteStr}`)
           .order('fecha_programada', { ascending: false, nullsFirst: false })
-          .limit(500),
+          .limit(1000),
         // Vehículos con estado - solo activos (excluir soft-deleted)
         aplicarFiltroSede(supabase
           .from('vehiculos')
@@ -740,11 +734,6 @@ export function AsignacionesModule() {
       setLoading(true)
       setError(null)
 
-      // Calcular fecha límite (últimos 60 días)
-      const fechaLimite = new Date()
-      fechaLimite.setDate(fechaLimite.getDate() - 60)
-      const fechaLimiteStr = fechaLimite.toISOString()
-
       const [asigRes, devRes] = await Promise.all([
         aplicarFiltroSede(supabase
           .from('asignaciones')
@@ -756,9 +745,8 @@ export function AsignacionesModule() {
               conductores (nombres, apellidos, numero_licencia, estado_id, drive_contract_folder_url, conductores_estados(codigo))
             )
           `))
-          .or(`estado.in.(programado,activa),created_at.gte.${fechaLimiteStr}`)
           .order('created_at', { ascending: false })
-          .limit(500),
+          .limit(1000),
         aplicarFiltroSede((supabase as any)
           .from('devoluciones')
           .select('id, vehiculo_id, conductor_nombre, programado_por, fecha_programada, fecha_devolucion, estado, observaciones, created_at, programacion_id, sede_id, vehiculos:vehiculo_id(patente, marca, modelo), programaciones_onboarding:programacion_id(conductor_nombre, conductor_diurno_nombre, conductor_nocturno_nombre, documento_diurno, documento_nocturno, tipo_documento)'))
@@ -1570,256 +1558,18 @@ export function AsignacionesModule() {
       if (todosConfirmados) {
         const conductoresIds = (allConductores as any)?.map((c: any) => c.conductor_id) || []
 
-        // Si tiene companeros, lógica especial
-        if (tieneCompaneros) {
-          // Identificar conductores nuevos (los que NO son companero)
-          const conductoresNuevos = (allConductores as any)?.filter((c: any) => !companeroIds.has(c.conductor_id)) || []
+        // Lógica unificada: tanto con compañeros como sin ellos, se finaliza la asignación
+        // anterior del vehículo y se activa la nueva. El sistema de facturación ya recorre
+        // todas las asignaciones (activas + finalizadas) deduplicando por día.
+        {
+          // Si tiene tags de compañero, limpiarlos de las notas antes de activar
+          const notasFinales = tieneCompaneros
+            ? notas.replace(/\[COMPANERO:(diurno|nocturno):[a-f0-9-]+\]\n?/gi, '').trim()
+            : (confirmComentarios || selectedAsignacion.notas)
 
-          // IMPORTANTE: Finalizar participaciones anteriores de los conductores NUEVOS
-          // (igual que en la lógica normal, para que dejen vacante su turno anterior)
-          for (const conductorNuevo of conductoresNuevos) {
-            await (supabase as any)
-              .from('asignaciones_conductores')
-              .update({ estado: 'completado', fecha_fin: ahora })
-              .eq('conductor_id', conductorNuevo.conductor_id)
-              .in('estado', ['asignado', 'activo'])
-              .neq('asignacion_id', selectedAsignacion.id)
-          }
-
-          // Buscar la asignación activa del vehículo (donde están los companeros)
-          const { data: asignacionExistente } = await (supabase as any)
-            .from('asignaciones')
-            .select('id, fecha_inicio, notas')
-            .eq('vehiculo_id', selectedAsignacion.vehiculo_id)
-            .in('estado', ['activa', 'activo'])
-            .neq('id', selectedAsignacion.id)
-            .single()
-
-          if (asignacionExistente) {
-            // Obtener conductores actuales de la asignación existente
-            const { data: conductoresExistentes } = await (supabase as any)
-              .from('asignaciones_conductores')
-              .select('id, conductor_id, horario, estado, conductores(nombres, apellidos)')
-              .eq('asignacion_id', asignacionExistente.id)
-              .in('estado', ['asignado', 'activo'])
-
-            // Obtener patente del vehículo destino
-            const patenteDestino = selectedAsignacion.vehiculos?.patente || 'Sin patente'
-
-            // Obtener información de asignaciones actuales de los conductores nuevos
-            const conductoresNuevosIds = conductoresNuevos.map((cn: any) => cn.conductor_id)
-            const { data: asignacionesAnteriores } = await (supabase as any)
-              .from('asignaciones_conductores')
-              .select(`
-                id, conductor_id, horario, estado,
-                conductores(nombres, apellidos),
-                asignaciones(id, vehiculos(patente))
-              `)
-              .in('conductor_id', conductoresNuevosIds)
-              .in('estado', ['asignado', 'activo'])
-              .neq('asignacion_id', selectedAsignacion.id)
-
-            // Crear mapa de asignación anterior por conductor
-            const asignacionAnteriorMap = new Map<string, { patente: string; turno: string }>()
-            for (const asigAnt of (asignacionesAnteriores || [])) {
-              asignacionAnteriorMap.set(asigAnt.conductor_id, {
-                patente: asigAnt.asignaciones?.vehiculos?.patente || 'Sin patente',
-                turno: asigAnt.horario
-              })
-            }
-
-            // Verificar si hay conflictos de turno (otro conductor ya ocupa el turno)
-            const conflictos: Array<{
-              turno: string
-              conductorActual: { id: string; nombre: string; asignacionConductorId: string }
-              conductorNuevo: { id: string; nombre: string; horario: string; asignacionAnterior?: { patente: string; turno: string } }
-            }> = []
-
-            for (const conductorNuevo of conductoresNuevos) {
-              const conductorEnMismoTurno = (conductoresExistentes || []).find(
-                (ce: any) => ce.horario === conductorNuevo.horario && ce.conductor_id !== conductorNuevo.conductor_id
-              )
-              
-              // Obtener nombre del conductor nuevo
-              const { data: dataConductorNuevo } = await (supabase as any)
-                .from('conductores')
-                .select('nombres, apellidos')
-                .eq('id', conductorNuevo.conductor_id)
-                .single()
-              
-              const nombreConductorNuevo = dataConductorNuevo 
-                ? `${dataConductorNuevo.nombres} ${dataConductorNuevo.apellidos}`.trim()
-                : 'Conductor'
-
-              if (conductorEnMismoTurno) {
-                conflictos.push({
-                  turno: conductorNuevo.horario,
-                  conductorActual: {
-                    id: conductorEnMismoTurno.conductor_id,
-                    nombre: `${conductorEnMismoTurno.conductores?.nombres || ''} ${conductorEnMismoTurno.conductores?.apellidos || ''}`.trim(),
-                    asignacionConductorId: conductorEnMismoTurno.id
-                  },
-                  conductorNuevo: {
-                    id: conductorNuevo.conductor_id,
-                    nombre: nombreConductorNuevo,
-                    horario: conductorNuevo.horario,
-                    asignacionAnterior: asignacionAnteriorMap.get(conductorNuevo.conductor_id)
-                  }
-                })
-              }
-            }
-
-            // Si hay conflictos, preguntar al usuario con mensaje claro
-            if (conflictos.length > 0) {
-              // Construir mensaje HTML claro
-              let mensajeHtml = '<div style="text-align:left;font-size:14px;">'
-              
-              for (const conflicto of conflictos) {
-                const turnoLabel = conflicto.turno === 'diurno' ? 'DIURNO' : conflicto.turno === 'nocturno' ? 'NOCTURNO' : conflicto.turno.toUpperCase()
-                
-                mensajeHtml += `<div style="background:#FEF3C7;border-left:4px solid #F59E0B;padding:12px;margin-bottom:12px;border-radius:4px;">`
-                
-                // Info del conductor que entra
-                if (conflicto.conductorNuevo.asignacionAnterior) {
-                  mensajeHtml += `<p style="margin:0 0 8px 0;"><strong>${conflicto.conductorNuevo.nombre}</strong></p>`
-                  mensajeHtml += `<p style="margin:0 0 4px 0;color:#666;">Actualmente en: <strong>${conflicto.conductorNuevo.asignacionAnterior.patente}</strong> - Turno ${conflicto.conductorNuevo.asignacionAnterior.turno.toUpperCase()}</p>`
-                  mensajeHtml += `<p style="margin:0 0 8px 0;color:#059669;">➜ Pasará a: <strong>${patenteDestino}</strong> - Turno ${turnoLabel}</p>`
-                } else {
-                  mensajeHtml += `<p style="margin:0 0 8px 0;"><strong>${conflicto.conductorNuevo.nombre}</strong> entrará a <strong>${patenteDestino}</strong> - Turno ${turnoLabel}</p>`
-                }
-                
-                // Info del conflicto
-                mensajeHtml += `<p style="margin:0;color:#ff0033;"><strong>⚠️ Ese turno está ocupado por ${conflicto.conductorActual.nombre}</strong></p>`
-                mensajeHtml += `<p style="margin:4px 0 0 0;color:#666;font-size:13px;">Si confirmas, ${conflicto.conductorActual.nombre} quedará sin asignación.</p>`
-                
-                mensajeHtml += `</div>`
-              }
-              
-              mensajeHtml += '</div>'
-
-              const confirmResult = await Swal.fire({
-                title: '¿Confirmar cambio de asignación?',
-                html: mensajeHtml,
-                icon: 'warning',
-                showCancelButton: true,
-                confirmButtonText: 'Sí, confirmar cambio',
-                cancelButtonText: 'Cancelar',
-                confirmButtonColor: '#059669',
-                cancelButtonColor: '#6B7280',
-                width: '500px'
-              })
-
-              if (!confirmResult.isConfirmed) {
-                // Usuario canceló la operación
-                setIsSubmitting(false)
-                return
-              }
-
-              // Usuario confirmó: finalizar a los conductores actuales que serán reemplazados
-              const reemplazosTraza: string[] = []
-              for (const conflicto of conflictos) {
-                await (supabase as any)
-                  .from('asignaciones_conductores')
-                  .update({ estado: 'completado', fecha_fin: ahora })
-                  .eq('id', conflicto.conductorActual.asignacionConductorId)
-                reemplazosTraza.push(`${conflicto.conductorActual.nombre} reemplazado por ${conflicto.conductorNuevo.nombre} en turno ${conflicto.turno}`)
-
-                // Historial: conductor reemplazado completado
-                registrarHistorialConductor({
-                  conductorId: conflicto.conductorActual.id,
-                  tipoEvento: 'asignacion_completada',
-                  detalles: {
-                    patente: selectedAsignacion.vehiculos?.patente,
-                    codigo: selectedAsignacion.codigo,
-                    reemplazadoPor: conflicto.conductorNuevo.nombre,
-                    flujo: 'companero',
-                  },
-                  modulo: 'asignaciones',
-                  sedeId: sedeActualId,
-                })
-              }
-              // Agregar traza de reemplazos a la asignación existente
-              if (reemplazosTraza.length > 0) {
-                const { data: asigExData } = await (supabase as any)
-                  .from('asignaciones')
-                  .select('notas')
-                  .eq('id', asignacionExistente.id)
-                  .single()
-                const notasExistentes = asigExData?.notas || ''
-                const trazaReemplazo = `\n[REEMPLAZO ${new Date().toLocaleDateString('es-AR')}] ${reemplazosTraza.join('; ')}`
-                await (supabase as any)
-                  .from('asignaciones')
-                  .update({ notas: notasExistentes + trazaReemplazo, updated_by: profile?.full_name || 'Sistema' })
-                  .eq('id', asignacionExistente.id)
-              }
-            }
-
-            // Agregar los conductores NUEVOS a la asignación existente (sin cambiar fecha)
-            for (const conductorNuevo of conductoresNuevos) {
-              // Verificar si el conductor ya existe en esa asignación
-              const { data: yaExiste } = await (supabase as any)
-                .from('asignaciones_conductores')
-                .select('id')
-                .eq('asignacion_id', asignacionExistente.id)
-                .eq('conductor_id', conductorNuevo.conductor_id)
-                .single()
-
-              if (!yaExiste) {
-                await (supabase as any)
-                  .from('asignaciones_conductores')
-                  .insert({
-                    asignacion_id: asignacionExistente.id,
-                    conductor_id: conductorNuevo.conductor_id,
-                    horario: conductorNuevo.horario,
-                    estado: 'activo',
-                    confirmado: true,
-                    fecha_confirmacion: ahora,
-                    fecha_inicio: ahora
-                  })
-              } else {
-                await (supabase as any)
-                  .from('asignaciones_conductores')
-                  .update({ estado: 'activo', confirmado: true, fecha_confirmacion: ahora })
-                  .eq('id', yaExiste.id)
-              }
-            }
-          }
-
-          // Finalizar esta asignación nueva (no activarla)
-          // Limpiar las notas de los tags de companero
-          const notasLimpias = notas.replace(/\[COMPANERO:(diurno|nocturno):[a-f0-9-]+\]\n?/gi, '').trim()
-          await (supabase as any)
-            .from('asignaciones')
-            .update({
-              estado: 'finalizada',
-              fecha_fin: ahora,
-              notas: `${notasLimpias}\n[COMPANERO-FINALIZADA] Conductores agregados a asignación existente`,
-              updated_by: profile?.full_name || 'Sistema'
-            })
-            .eq('id', selectedAsignacion.id)
-
-          showSuccess('Confirmado', 'Los conductores nuevos fueron agregados a la asignación existente.')
-
-          // Historial: nuevos conductores asignados (companero flow)
-          for (const conductorNuevo of conductoresNuevos) {
-            registrarHistorialConductor({
-              conductorId: conductorNuevo.conductor_id,
-              tipoEvento: 'asignacion_activada',
-              estadoNuevo: 'activo',
-              detalles: { patente: selectedAsignacion.vehiculos?.patente, codigo: selectedAsignacion.codigo, flujo: 'companero' },
-              modulo: 'asignaciones',
-              sedeId: sedeActualId,
-            })
-          }
-
-        } else {
-          // Lógica normal (sin companeros)
-          // IMPORTANTE: Solo finalizar la participación del conductor en asignaciones anteriores,
-          // NO toda la asignación (para no afectar al compañero de turno)
-          
+          // 1. Finalizar participación de TODOS los conductores en otras asignaciones activas
           if (conductoresIds.length > 0) {
             for (const conductorId of conductoresIds) {
-              // 1. Finalizar participación del conductor en otras asignaciones activas
               await (supabase as any)
                 .from('asignaciones_conductores')
                 .update({ estado: 'completado', fecha_fin: ahora })
@@ -1851,7 +1601,6 @@ export function AsignacionesModule() {
               .in('estado', ['asignado', 'activo'])
             // Finalizar las asignaciones con traza de conductores
             for (const asigAnterior of asignacionesVehiculo as any[]) {
-              // Capturar TODOS los conductores para trazabilidad (no solo activos)
               const conductoresAnteriores = (asigAnterior.asignaciones_conductores || [])
                 .map((ac: any) => {
                   const nombre = ac.conductores ? `${ac.conductores.nombres || ''} ${ac.conductores.apellidos || ''}`.trim() : 'Desconocido'
@@ -1911,9 +1660,10 @@ export function AsignacionesModule() {
             }
           }
 
+          // 4. Activar la asignación nueva
           await (supabase as any)
             .from('asignaciones')
-            .update({ estado: 'activa', fecha_inicio: ahora, notas: confirmComentarios || selectedAsignacion.notas, updated_by: profile?.full_name || 'Sistema' })
+            .update({ estado: 'activa', fecha_inicio: ahora, notas: notasFinales, updated_by: profile?.full_name || 'Sistema' })
             .eq('id', selectedAsignacion.id)
 
           // Actualizar estado del vehículo a EN_USO
