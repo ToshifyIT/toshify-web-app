@@ -65,23 +65,49 @@ export async function crearIncidenciaExcesoKm(
     return { ok: false, error: 'No hay exceso de km que cobrar' }
   }
 
-  // 1) Parámetros: traer alquileres actuales (si están configurados)
-  let alquilerTurno = ALQUILER_TURNO_DEFAULT
-  let alquilerACargo = ALQUILER_A_CARGO_DEFAULT
+  // FIX 2026-05-20 v2: UA OFICIAL desde conceptos_nomina (precio_final * 7).
+  // Mapeo por modalidad + horario + GNC del vehiculo asignado al conductor.
+  let valorAlquiler: number = 0
+  let codigoUA = 'P001'
   {
-    const { data: params } = await supabase
-      .from('parametros_sistema')
-      .select('clave, valor')
-      .in('clave', ['alquiler_turno', 'alquiler_a_cargo'])
-    for (const p of (params || []) as any[]) {
-      const v = parseFloat(p.valor)
-      if (isNaN(v) || v <= 0) continue
-      if (p.clave === 'alquiler_turno') alquilerTurno = v
-      else if (p.clave === 'alquiler_a_cargo') alquilerACargo = v
+    // 1. Conseguir GNC del vehiculo asignado actualmente al conductor + horario
+    let tieneGnc = true
+    let horario = 'diurno'
+    const { data: asigs } = await (supabase
+      .from('asignaciones')
+      .select('id, vehiculo_id, estado, asignaciones_conductores!inner(conductor_id, horario, estado), vehiculo:vehiculos(gnc)')
+      .eq('estado', 'activa')
+      .eq('asignaciones_conductores.conductor_id', input.conductorId) as any)
+    const asigActiva = (asigs || [])[0]
+    if (asigActiva) {
+      tieneGnc = !!asigActiva.vehiculo?.gnc
+      const ac = (asigActiva.asignaciones_conductores || [])[0]
+      horario = ac?.horario || 'diurno'
+    }
+
+    // 2. Mapear modalidad + horario + gnc -> codigo UA
+    if (input.modalidad === 'a_cargo') {
+      codigoUA = tieneGnc ? 'P002' : 'P016'
+    } else if (horario === 'nocturno') {
+      codigoUA = tieneGnc ? 'P013' : 'P015'
+    } else {
+      codigoUA = tieneGnc ? 'P001' : 'P014'
+    }
+
+    // 3. Leer precio_final desde conceptos_nomina
+    const { data: concepto } = await (supabase
+      .from('conceptos_nomina')
+      .select('precio_final')
+      .eq('codigo', codigoUA)
+      .eq('activo', true)
+      .maybeSingle() as any)
+    if (concepto && Number(concepto.precio_final) > 0) {
+      valorAlquiler = Number(concepto.precio_final) * 7
+    } else {
+      // Fallback hardcoded si no está el concepto
+      valorAlquiler = input.modalidad === 'a_cargo' ? ALQUILER_A_CARGO_DEFAULT : ALQUILER_TURNO_DEFAULT
     }
   }
-  const modalidadEfectiva: 'turno' | 'a_cargo' = input.modalidad === 'a_cargo' ? 'a_cargo' : 'turno'
-  const valorAlquiler = modalidadEfectiva === 'a_cargo' ? alquilerACargo : alquilerTurno
   const porcentaje = porcentajePorKm(input.kmExcedidos)
   const montoBase = valorAlquiler * (porcentaje / 100)
   const monto = Math.round(montoBase * 1.21)
@@ -122,7 +148,7 @@ export async function crearIncidenciaExcesoKm(
   }
 
   // 5) Turno label
-  const turno = modalidadEfectiva === 'a_cargo' ? 'A cargo' : 'Turno'
+  const turno = input.modalidad === 'a_cargo' ? 'A cargo' : 'Turno'
 
   // 6) Descripción
   const descripcion = `Exceso de KM semanal (Sem ${input.semana}/${input.anio}) — ${input.kmRecorridos.toLocaleString('es-AR')} km recorridos, límite ${input.limite.toLocaleString('es-AR')} km, exceso ${input.kmExcedidos.toLocaleString('es-AR')} km (${porcentaje}%)`

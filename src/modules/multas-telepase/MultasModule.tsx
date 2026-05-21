@@ -333,14 +333,23 @@ export default function MultasModule() {
     [...new Set(getFilteredData('importe').map(m => String(m.importe || '')))].filter(Boolean).sort()
   , [getFilteredData])
 
+  // FIX 2026-05-20: helper para detectar multas con conductor con coma (2+ conductores).
+  // Las ocultamos automaticamente de la vista "Activas" y "Desestimadas" porque quedan
+  // pendientes de revision manual.
+  const tieneConductorConComa = (m: Multa): boolean => {
+    return !!m.conductor_responsable && m.conductor_responsable.includes(',')
+  }
+
   // Filtrar registros (Resultado final) — separa activas vs desestimadas según toggle
   const multasFiltradas = useMemo(() => {
     const data = getFilteredData()
     const porVista = data.filter(m =>
       vista === 'desestimadas' ? !!m.desestimada_at : !m.desestimada_at,
     )
+    // FIX 2026-05-20: ocultar multas con 2 conductores (con coma) pendientes de revision
+    const sinComa = porVista.filter(m => !tieneConductorConComa(m))
     // Ordenar por fecha de carga (created_at) descendente (más actual a más antiguo)
-    return porVista.sort((a, b) => {
+    return sinComa.sort((a, b) => {
       const fechaA = a.created_at || ''
       const fechaB = b.created_at || ''
       if (fechaA === fechaB) return 0
@@ -351,8 +360,9 @@ export default function MultasModule() {
   }, [getFilteredData, vista])
 
   // Contadores globales (sin filtros) para el toggle del header
-  const totalActivas = useMemo(() => multas.filter(m => !m.desestimada_at).length, [multas])
-  const totalDesestimadas = useMemo(() => multas.filter(m => !!m.desestimada_at).length, [multas])
+  // FIX 2026-05-20: contadores tambien excluyen las con coma (pendientes de revision)
+  const totalActivas = useMemo(() => multas.filter(m => !m.desestimada_at && !tieneConductorConComa(m)).length, [multas])
+  const totalDesestimadas = useMemo(() => multas.filter(m => !!m.desestimada_at && !tieneConductorConComa(m)).length, [multas])
 
   // Estadisticas
   const totalImporte = useMemo(() =>

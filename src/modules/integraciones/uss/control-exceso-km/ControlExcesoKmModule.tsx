@@ -136,6 +136,48 @@ export function ControlExcesoKmModule() {
 
   useEffect(() => { cargarConductoresConIncidencia() }, [cargarConductoresConIncidencia])
 
+  // FIX 2026-05-20 v2: UA OFICIAL desde conceptos_nomina (precio_final * 7).
+  // Mapea modalidad + horario + GNC -> P001/P002/P013/P014/P015/P016 por conductor activo.
+  const [alquilerPorConductor, setAlquilerPorConductor] = useState<Map<string, number>>(new Map())
+  useEffect(() => {
+    (async () => {
+      if (!marcaciones.length) { setAlquilerPorConductor(new Map()); return }
+      const conductorIds = [...new Set(marcaciones.map(m => m.conductorId).filter(Boolean))] as string[]
+      if (conductorIds.length === 0) { setAlquilerPorConductor(new Map()); return }
+      // 1. Traer asignacion activa de cada conductor (modalidad, horario, gnc)
+      const { data: asigs } = await (supabase
+        .from('asignaciones')
+        .select('id, modalidad, estado, asignaciones_conductores!inner(conductor_id, horario, estado), vehiculo:vehiculos(gnc)')
+        .eq('estado', 'activa')
+        .in('asignaciones_conductores.conductor_id', conductorIds) as any)
+      // 2. Traer precios de conceptos_nomina
+      const { data: conceptos } = await (supabase
+        .from('conceptos_nomina')
+        .select('codigo, precio_final')
+        .in('codigo', ['P001','P002','P013','P014','P015','P016'])
+        .eq('activo', true) as any)
+      const preciosMap = new Map<string, number>()
+      for (const c of (conceptos || []) as any[]) {
+        preciosMap.set(c.codigo, Number(c.precio_final) * 7)
+      }
+      // 3. Mapear conductor -> UA oficial
+      const map = new Map<string, number>()
+      for (const a of (asigs || []) as any[]) {
+        const ac = (a.asignaciones_conductores || [])[0]
+        if (!ac?.conductor_id) continue
+        const tieneGnc = !!a.vehiculo?.gnc
+        const horario = ac?.horario || 'diurno'
+        let codigoUA = 'P001'
+        if (a.modalidad === 'a_cargo') codigoUA = tieneGnc ? 'P002' : 'P016'
+        else if (horario === 'nocturno') codigoUA = tieneGnc ? 'P013' : 'P015'
+        else codigoUA = tieneGnc ? 'P001' : 'P014'
+        const ua = preciosMap.get(codigoUA) || 0
+        if (ua > 0) map.set(ac.conductor_id, ua)
+      }
+      setAlquilerPorConductor(map)
+    })()
+  }, [marcaciones])
+
   // Resumen agrupado por conductor (mismo cálculo que la tabla hace, pero para KPIs)
   const resumen = useMemo(() => {
     const filtered = marcaciones.filter(m => m.excedeLimite === true)
@@ -314,6 +356,7 @@ export function ControlExcesoKmModule() {
         conductoresConIncidencia={conductoresConIncidencia}
         alquilerTurno={alquilerTurno}
         alquilerACargo={alquilerACargo}
+        alquilerPorConductor={alquilerPorConductor}
         onCrear={handleCrear}
         onVerDetalle={setDetalle}
       />
