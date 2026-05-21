@@ -4410,6 +4410,8 @@ interface ConductorAsignado {
   nombre_completo: string
   horario: string // TURNO o CARGO (de asignacion)
   turno: string // diurno, nocturno, todo_dia (de asignaciones_conductores)
+  estado_codigo?: string // ACTIVO, BAJA, ASIGNADO
+  vehiculo_asignado_patente?: string // patente si tiene asignación activa con otro vehículo
 }
 
 interface PatenteAsignada {
@@ -4521,12 +4523,14 @@ function IncidenciaForm({ formData, setFormData, estados, vehiculos, conductores
         .select(`
           id,
           horario,
+          vehiculos (patente),
           asignaciones_conductores (
             horario,
             conductores (
               id,
               nombres,
-              apellidos
+              apellidos,
+              estado_id
             )
           )
         `)
@@ -4535,17 +4539,23 @@ function IncidenciaForm({ formData, setFormData, estados, vehiculos, conductores
 
       if (error) throw error
 
+      // Cargar estados de conductores para resolver códigos
+      const { data: estadosCondData } = await supabase.from('conductores_estados').select('id, codigo')
+      const estadosMap = new Map<string, string>()
+      for (const e of (estadosCondData || [])) estadosMap.set((e as any).id, (e as any).codigo?.toUpperCase())
+
       // Extraer conductores de asignaciones_conductores
       const conductoresData: ConductorAsignado[] = []
       for (const asig of (data || [])) {
         const asigConductores = (asig as any).asignaciones_conductores || []
         const esAsignacionTurno = (asig as any).horario === 'turno'
-        
+        const patenteActual = (asig as any).vehiculos?.patente || ''
+
         for (const ac of asigConductores) {
           if (ac.conductores) {
             // Mapear turno según el tipo de asignación y horario del conductor
             let turnoDisplay = 'A cargo'
-            
+
             if (esAsignacionTurno) {
               // Si la asignación es por TURNO, usar el horario del conductor
               if (ac.horario === 'diurno') turnoDisplay = 'Diurno'
@@ -4554,11 +4564,15 @@ function IncidenciaForm({ formData, setFormData, estados, vehiculos, conductores
             }
             // Si es A_CARGO, siempre mostrar "A cargo"
 
+            const estadoCodigo = ac.conductores.estado_id ? estadosMap.get(ac.conductores.estado_id) : undefined
+
             conductoresData.push({
               id: ac.conductores.id,
               nombre_completo: `${ac.conductores.nombres} ${ac.conductores.apellidos}`,
               horario: esAsignacionTurno ? 'Turno' : 'A Cargo',
-              turno: turnoDisplay
+              turno: turnoDisplay,
+              estado_codigo: estadoCodigo === 'ACTIVO' ? 'ASIGNADO' : estadoCodigo || 'DESCONOCIDO',
+              vehiculo_asignado_patente: patenteActual
             })
           }
         }
@@ -5125,8 +5139,20 @@ function IncidenciaForm({ formData, setFormData, estados, vehiculos, conductores
                   className="conductor-select-option"
                   onClick={() => handleSelectConductorFromModal(c)}
                 >
-                  <span className="conductor-select-name">{c.nombre_completo}</span>
-                  <span className={`conductor-select-turno ${c.turno.toLowerCase().replace(' ', '-')}`}>{c.turno}</span>
+                  <div className="conductor-select-info">
+                    <span className="conductor-select-name">{c.nombre_completo}</span>
+                    {c.vehiculo_asignado_patente && (
+                      <span className="conductor-select-patente">Vehiculo: {c.vehiculo_asignado_patente}</span>
+                    )}
+                  </div>
+                  <div className="conductor-select-badges">
+                    {c.estado_codigo && (
+                      <span className={`conductor-estado-badge conductor-estado-${c.estado_codigo.toLowerCase()}`}>
+                        {c.estado_codigo === 'ASIGNADO' ? 'Asignado' : c.estado_codigo === 'BAJA' ? 'Baja' : c.estado_codigo === 'ACTIVO' ? 'Activo' : c.estado_codigo}
+                      </span>
+                    )}
+                    <span className={`conductor-select-turno ${c.turno.toLowerCase().replace(' ', '-')}`}>{c.turno}</span>
+                  </div>
                 </button>
               ))}
             </div>

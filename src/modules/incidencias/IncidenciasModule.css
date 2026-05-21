@@ -1487,10 +1487,29 @@
   background: rgba(249, 115, 22, 0.05);
 }
 
+.conductor-select-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
 .conductor-select-name {
   font-size: 13px;
   font-weight: 500;
   color: var(--text-primary);
+}
+
+.conductor-select-patente {
+  font-size: 11px;
+  color: var(--text-secondary);
+  font-style: italic;
+}
+
+.conductor-select-badges {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
 }
 
 .conductor-select-horario {
