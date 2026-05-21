@@ -9339,6 +9339,86 @@ export function ReporteFacturacionTab() {
     return { semana, anio, inicio, fin }
   }, [semanaActual])
 
+  // Lista de semanas disponibles desde periodos_facturacion (BD)
+  const [semanasDisponibles, setSemanasDisponibles] = useState<{ value: string; semana: number; anio: number; inicioFmt: string; finFmt: string; inicio: Date; fin: Date }[]>([])
+  const [dropdownAbierto, setDropdownAbierto] = useState(false)
+  const [busquedaSemana, setBusquedaSemana] = useState('')
+  const dropdownRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    async function cargarSemanas() {
+      try {
+        let q = (supabase.from('periodos_facturacion') as any)
+          .select('anio, semana, fecha_inicio, fecha_fin, sede_id')
+          .order('anio', { ascending: false })
+          .order('semana', { ascending: false })
+        if (sedeActualId) q = q.eq('sede_id', sedeActualId)
+        const { data, error } = await q
+        if (error) {
+          console.error('[semanas dropdown] error:', error)
+          return
+        }
+        if (!Array.isArray(data)) return
+        const seen = new Set<string>()
+        const opciones: { value: string; semana: number; anio: number; inicioFmt: string; finFmt: string; inicio: Date; fin: Date }[] = []
+        for (const p of data) {
+          if (!p || p.anio == null || p.semana == null || !p.fecha_inicio || !p.fecha_fin) continue
+          const value = `${p.anio}-${p.semana}`
+          if (seen.has(value)) continue
+          seen.add(value)
+          try {
+            const inicio = parseISO(p.fecha_inicio)
+            const fin = parseISO(p.fecha_fin)
+            if (isNaN(inicio.getTime()) || isNaN(fin.getTime())) continue
+            opciones.push({
+              value,
+              semana: p.semana,
+              anio: p.anio,
+              inicioFmt: format(inicio, 'dd/MM', { locale: es }),
+              finFmt: format(fin, 'dd/MM', { locale: es }),
+              inicio,
+              fin
+            })
+          } catch (e) {
+            console.warn('[semanas dropdown] periodo inválido:', p, e)
+          }
+        }
+        setSemanasDisponibles(opciones)
+      } catch (e) {
+        console.error('[semanas dropdown] fallo carga:', e)
+      }
+    }
+    cargarSemanas()
+  }, [sedeActualId])
+
+  // Cerrar dropdown al click fuera
+  useEffect(() => {
+    function onClickOutside(e: MouseEvent) {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
+        setDropdownAbierto(false)
+        setBusquedaSemana('')
+      }
+    }
+    if (dropdownAbierto) document.addEventListener('mousedown', onClickOutside)
+    return () => document.removeEventListener('mousedown', onClickOutside)
+  }, [dropdownAbierto])
+
+  const semanasFiltradas = useMemo(() => {
+    if (!busquedaSemana.trim()) return semanasDisponibles
+    const q = busquedaSemana.toLowerCase()
+    return semanasDisponibles.filter(op =>
+      `semana ${op.semana} ${op.inicioFmt} ${op.finFmt} ${op.anio}`.toLowerCase().includes(q)
+    )
+  }, [semanasDisponibles, busquedaSemana])
+
+  function onSelectSemana(op: { inicio: Date; fin: Date }) {
+    setSemanaActual({ inicio: op.inicio, fin: op.fin })
+    setDropdownAbierto(false)
+    setBusquedaSemana('')
+  }
+
+  const valorSemanaActual = `${infoSemana.anio}-${infoSemana.semana}`
+
   // Mapa de alquiler proyectado por conductor_id para Preview Facturación
   const proyectadoAlquilerMap = useMemo(() => {
     const m = new Map<string, number>()
@@ -9607,9 +9687,90 @@ export function ReporteFacturacionTab() {
           <button className="fact-nav-btn" onClick={semanaAnterior} title="Semana anterior">
             <ChevronLeft size={18} />
           </button>
-          <div className="fact-semana-info">
-            <span className="fact-semana-titulo">Semana {infoSemana.semana}</span>
-            <span className="fact-semana-fecha">{infoSemana.inicio} - {infoSemana.fin} / {infoSemana.anio}</span>
+          <div ref={dropdownRef} style={{ position: 'relative' }}>
+            <div
+              className="fact-semana-info"
+              onClick={() => setDropdownAbierto(o => !o)}
+              style={{ cursor: 'pointer', userSelect: 'none' }}
+              title="Click para cambiar semana"
+            >
+              <span className="fact-semana-titulo">Semana {infoSemana.semana}</span>
+              <span className="fact-semana-fecha">{infoSemana.inicio} - {infoSemana.fin} / {infoSemana.anio}</span>
+            </div>
+            {dropdownAbierto && (
+              <div
+                style={{
+                  position: 'absolute',
+                  top: 'calc(100% + 6px)',
+                  left: '50%',
+                  transform: 'translateX(-50%)',
+                  background: 'var(--bg-primary)',
+                  border: '1px solid var(--border-primary)',
+                  borderRadius: '8px',
+                  boxShadow: '0 8px 24px rgba(0,0,0,0.15)',
+                  zIndex: 1000,
+                  width: '300px',
+                  maxHeight: '380px',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  overflow: 'hidden'
+                }}
+              >
+                <div style={{ padding: '8px', borderBottom: '1px solid var(--border-primary)' }}>
+                  <input
+                    type="text"
+                    autoFocus
+                    placeholder="Buscar semana o fecha..."
+                    value={busquedaSemana}
+                    onChange={(e) => setBusquedaSemana(e.target.value)}
+                    style={{
+                      width: '100%',
+                      padding: '6px 10px',
+                      border: '1px solid var(--border-primary)',
+                      borderRadius: '6px',
+                      background: 'var(--bg-secondary)',
+                      color: 'var(--text-primary)',
+                      fontSize: '13px',
+                      outline: 'none'
+                    }}
+                  />
+                </div>
+                <div style={{ overflowY: 'auto', flex: 1 }}>
+                  {semanasFiltradas.length === 0 ? (
+                    <div style={{ padding: '12px', fontSize: '13px', color: 'var(--text-tertiary)', textAlign: 'center' }}>
+                      Sin resultados
+                    </div>
+                  ) : (
+                    semanasFiltradas.map(op => {
+                      const seleccionada = op.value === valorSemanaActual
+                      return (
+                        <div
+                          key={op.value}
+                          onClick={() => onSelectSemana(op)}
+                          style={{
+                            padding: '8px 12px',
+                            cursor: 'pointer',
+                            display: 'flex',
+                            flexDirection: 'column',
+                            background: seleccionada ? 'var(--bg-tertiary)' : 'transparent',
+                            borderLeft: seleccionada ? '3px solid var(--color-info, #3b82f6)' : '3px solid transparent'
+                          }}
+                          onMouseEnter={(e) => { if (!seleccionada) e.currentTarget.style.background = 'var(--bg-secondary)' }}
+                          onMouseLeave={(e) => { if (!seleccionada) e.currentTarget.style.background = 'transparent' }}
+                        >
+                          <span style={{ fontSize: '14px', fontWeight: 600, color: 'var(--text-primary)' }}>
+                            Semana {op.semana}
+                          </span>
+                          <span style={{ fontSize: '12px', color: 'var(--text-tertiary)' }}>
+                            {op.inicioFmt} - {op.finFmt} / {op.anio}
+                          </span>
+                        </div>
+                      )
+                    })
+                  )}
+                </div>
+              </div>
+            )}
           </div>
           <button
             className="fact-nav-btn"
