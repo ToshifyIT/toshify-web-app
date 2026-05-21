@@ -2167,8 +2167,8 @@ export function GarantiasTab() {
                                   {origenLabel}
                                 </td>
                                 <td style={{ padding: '10px 12px', textAlign: 'right', fontFamily: 'monospace', color: montoColor, fontWeight: 700 }}>
-                                  {/* FIX 2026-05-20: monto sin signo "+", neutro */}
-                                  {formatCurrency(Math.round(f.aplicado || 0))}
+                                  {/* FIX 2026-05-21: mostrar monto facturado de la cuota (siempre $50k o lo que diga monto_cuota) */}
+                                  {formatCurrency(Math.round(f.monto_cuota || 0))}
                                 </td>
                               </tr>
                             )
