@@ -136,6 +136,29 @@ export function ControlExcesoKmModule() {
 
   useEffect(() => { cargarConductoresConIncidencia() }, [cargarConductoresConIncidencia])
 
+  // FIX 2026-05-20: cargar UA real (subtotal_alquiler) por conductor para la semana visible.
+  // Asi el preview del monto en la grilla refleja el alquiler real, no un hardcoded global.
+  const [alquilerPorConductor, setAlquilerPorConductor] = useState<Map<string, number>>(new Map())
+  useEffect(() => {
+    (async () => {
+      if (!marcaciones.length) { setAlquilerPorConductor(new Map()); return }
+      const { semana, anio } = getISOWeek(dateRange.endDate || dateRange.startDate)
+      const conductorIds = [...new Set(marcaciones.map(m => m.conductorId).filter(Boolean))] as string[]
+      if (conductorIds.length === 0) { setAlquilerPorConductor(new Map()); return }
+      const { data: facts } = await (supabase
+        .from('facturacion_conductores')
+        .select('conductor_id, subtotal_alquiler, periodo:periodos_facturacion(anio,semana)')
+        .in('conductor_id', conductorIds) as any)
+      const map = new Map<string, number>()
+      for (const f of (facts || []) as any[]) {
+        if (f.periodo?.anio === anio && f.periodo?.semana === semana && Number(f.subtotal_alquiler) > 0) {
+          map.set(f.conductor_id, Number(f.subtotal_alquiler))
+        }
+      }
+      setAlquilerPorConductor(map)
+    })()
+  }, [marcaciones, dateRange.endDate, dateRange.startDate])
+
   // Resumen agrupado por conductor (mismo cálculo que la tabla hace, pero para KPIs)
   const resumen = useMemo(() => {
     const filtered = marcaciones.filter(m => m.excedeLimite === true)
@@ -314,6 +337,7 @@ export function ControlExcesoKmModule() {
         conductoresConIncidencia={conductoresConIncidencia}
         alquilerTurno={alquilerTurno}
         alquilerACargo={alquilerACargo}
+        alquilerPorConductor={alquilerPorConductor}
         onCrear={handleCrear}
         onVerDetalle={setDetalle}
       />

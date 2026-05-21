@@ -55,6 +55,8 @@ interface Props {
   conductoresConIncidencia: Set<string>
   alquilerTurno?: number
   alquilerACargo?: number
+  // FIX 2026-05-20: UA real por conductor (subtotal_alquiler de facturacion_conductores de la semana)
+  alquilerPorConductor?: Map<string, number>
   onCrear: (row: ExcesoKmRow) => void
   onVerDetalle: (row: ExcesoKmRow) => void
 }
@@ -68,6 +70,7 @@ export function ExcesoKmTable({
   conductoresConIncidencia,
   alquilerTurno = ALQUILER_TURNO_DEFAULT,
   alquilerACargo = ALQUILER_A_CARGO_DEFAULT,
+  alquilerPorConductor,
   onCrear,
   onVerDetalle,
 }: Props) {
@@ -120,10 +123,13 @@ export function ExcesoKmTable({
       const gpsOrigen: 'USS' | 'GEOTAB' = kmGeotab > kmUSS ? 'GEOTAB' : 'USS'
       // porcentaje + monto
       const pct = porcentajePorKm(excedido)
-      const valor = modalidad === 'a_cargo' ? alquilerACargo : alquilerTurno
-      const monto = Math.round(valor * (pct / 100) * 1.21)
       // último registro: para tomar DNI/iButton del conductor
       const ultima = lista[lista.length - 1]
+      // FIX 2026-05-20: UA real desde alquilerPorConductor (subtotal_alquiler de facturacion).
+      // Si no hay (todavia no se facturo la semana), fallback al hardcoded por modalidad.
+      const valorReal = (ultima.conductorId && alquilerPorConductor?.get(ultima.conductorId))
+        || (modalidad === 'a_cargo' ? alquilerACargo : alquilerTurno)
+      const monto = Math.round(valorReal * (pct / 100) * 1.21)
       rows.push({
         key,
         conductorId: ultima.conductorId,
@@ -151,7 +157,7 @@ export function ExcesoKmTable({
       return pctB - pctA
     })
     return rows
-  }, [marcaciones, conductoresConIncidencia, alquilerTurno, alquilerACargo])
+  }, [marcaciones, conductoresConIncidencia, alquilerTurno, alquilerACargo, alquilerPorConductor])
 
   // Conteo por GPS
   const gpsCounts = useMemo(() => {
@@ -362,7 +368,9 @@ export function ExcesoKmTable({
         if (r.excedido <= 0) {
           return <span style={{ fontSize: 11, color: 'var(--text-tertiary)' }}>—</span>
         }
-        const valor = r.modalidad === 'a_cargo' ? alquilerACargo : alquilerTurno
+        // FIX 2026-05-20: mostrar UA real del conductor (no global hardcoded)
+        const valor = (r.conductorId && alquilerPorConductor?.get(r.conductorId))
+          || (r.modalidad === 'a_cargo' ? alquilerACargo : alquilerTurno)
         return (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
             <strong style={{ fontFamily: 'monospace', fontSize: 12 }}>${r.monto.toLocaleString('es-AR')}</strong>
@@ -470,7 +478,7 @@ export function ExcesoKmTable({
       },
       enableSorting: false,
     },
-  ], [onCrear, onVerDetalle, alquilerACargo, alquilerTurno])
+  ], [onCrear, onVerDetalle, alquilerACargo, alquilerTurno, alquilerPorConductor])
 
   // Exportar
   const [showExportMenu, setShowExportMenu] = useState(false)

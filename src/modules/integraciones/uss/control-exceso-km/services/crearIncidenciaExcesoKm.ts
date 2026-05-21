@@ -65,23 +65,23 @@ export async function crearIncidenciaExcesoKm(
     return { ok: false, error: 'No hay exceso de km que cobrar' }
   }
 
-  // 1) Parámetros: traer alquileres actuales (si están configurados)
-  let alquilerTurno = ALQUILER_TURNO_DEFAULT
-  let alquilerACargo = ALQUILER_A_CARGO_DEFAULT
+  // FIX 2026-05-20: UA real desde facturacion_conductores.subtotal_alquiler
+  // del conductor en la semana del exceso (no hardcoded ni de parametros_sistema).
+  let valorAlquiler: number = 0
   {
-    const { data: params } = await supabase
-      .from('parametros_sistema')
-      .select('clave, valor')
-      .in('clave', ['alquiler_turno', 'alquiler_a_cargo'])
-    for (const p of (params || []) as any[]) {
-      const v = parseFloat(p.valor)
-      if (isNaN(v) || v <= 0) continue
-      if (p.clave === 'alquiler_turno') alquilerTurno = v
-      else if (p.clave === 'alquiler_a_cargo') alquilerACargo = v
+    const { data: facts } = await (supabase
+      .from('facturacion_conductores')
+      .select('subtotal_alquiler, periodo:periodos_facturacion(anio,semana)')
+      .eq('conductor_id', input.conductorId) as any)
+    const fac = (facts || []).find((f: any) => f.periodo?.anio === input.anio && f.periodo?.semana === input.semana)
+    if (fac && Number(fac.subtotal_alquiler) > 0) {
+      valorAlquiler = Number(fac.subtotal_alquiler)
+    } else {
+      // Fallback: si todavía no hay facturacion para la semana, usar default por modalidad
+      const modalidadEfectiva: 'turno' | 'a_cargo' = input.modalidad === 'a_cargo' ? 'a_cargo' : 'turno'
+      valorAlquiler = modalidadEfectiva === 'a_cargo' ? ALQUILER_A_CARGO_DEFAULT : ALQUILER_TURNO_DEFAULT
     }
   }
-  const modalidadEfectiva: 'turno' | 'a_cargo' = input.modalidad === 'a_cargo' ? 'a_cargo' : 'turno'
-  const valorAlquiler = modalidadEfectiva === 'a_cargo' ? alquilerACargo : alquilerTurno
   const porcentaje = porcentajePorKm(input.kmExcedidos)
   const montoBase = valorAlquiler * (porcentaje / 100)
   const monto = Math.round(montoBase * 1.21)
@@ -122,7 +122,7 @@ export async function crearIncidenciaExcesoKm(
   }
 
   // 5) Turno label
-  const turno = modalidadEfectiva === 'a_cargo' ? 'A cargo' : 'Turno'
+  const turno = input.modalidad === 'a_cargo' ? 'A cargo' : 'Turno'
 
   // 6) Descripción
   const descripcion = `Exceso de KM semanal (Sem ${input.semana}/${input.anio}) — ${input.kmRecorridos.toLocaleString('es-AR')} km recorridos, límite ${input.limite.toLocaleString('es-AR')} km, exceso ${input.kmExcedidos.toLocaleString('es-AR')} km (${porcentaje}%)`
