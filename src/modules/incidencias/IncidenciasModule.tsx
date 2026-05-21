@@ -436,20 +436,28 @@ export function IncidenciasModule() {
         setPreciosAlquiler(precios)
       }
       setVehiculos(vehiculosRes.data || [])
-      // Cargar estados para identificar conductores de BAJA con etiqueta visual
+      // Cargar estados para identificar conductores de BAJA / ACTIVO con etiqueta visual
       const { data: estadosCondData } = await supabase.from('conductores_estados').select('id, codigo')
       const estadosCondMap = new Map<string, string>()
       for (const e of (estadosCondData || [])) estadosCondMap.set((e as any).id, (e as any).codigo)
+      // Detectar conductores con asignación activa
+      const { data: asignacionesActivasData } = await supabase
+        .from('asignaciones_conductores')
+        .select('conductor_id')
+        .in('estado', ['asignado', 'activo'])
+      const conductoresConAsignacion = new Set((asignacionesActivasData || []).map((a: any) => a.conductor_id))
       setConductores((conductoresRes.data || []).map((c: any) => {
-        const estadoCodigo = c.estado_id ? estadosCondMap.get(c.estado_id) : undefined
-        const isBaja = estadoCodigo?.toUpperCase() === 'BAJA'
+        const estadoCodigo = c.estado_id ? estadosCondMap.get(c.estado_id)?.toUpperCase() : undefined
+        let estadoFinal = estadoCodigo || 'DESCONOCIDO'
+        if (estadoFinal === 'ACTIVO' && conductoresConAsignacion.has(c.id)) {
+          estadoFinal = 'ASIGNADO'
+        }
         return {
           id: c.id,
           nombres: c.nombres,
           apellidos: c.apellidos,
-          nombre_completo: isBaja
-            ? `${c.nombres} ${c.apellidos} [BAJA]`
-            : `${c.nombres} ${c.apellidos}`
+          nombre_completo: `${c.nombres} ${c.apellidos}`,
+          estado_codigo: estadoFinal
         }
       }))
       
@@ -4797,7 +4805,12 @@ function IncidenciaForm({ formData, setFormData, estados, vehiculos, conductores
                         buscarPatentesPorConductor(c.id)
                       }
                     }}>
-                      {c.nombre_completo}
+                      <span>{c.nombre_completo}</span>
+                      {c.estado_codigo && (
+                        <span className={`conductor-estado-badge conductor-estado-${c.estado_codigo.toLowerCase()}`}>
+                          {c.estado_codigo === 'ASIGNADO' ? 'Asignado' : c.estado_codigo === 'BAJA' ? 'Baja' : c.estado_codigo === 'ACTIVO' ? 'Activo' : c.estado_codigo}
+                        </span>
+                      )}
                     </div>
                   ))}
                 </div>
