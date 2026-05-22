@@ -243,6 +243,8 @@ interface FacturacionConductor {
   tiene_gnc?: boolean
   // Telepase del vehículo asignado (si true, no se cobra P005)
   tiene_telepase?: boolean
+  // Grupo de flota del vehículo asignado (leído de tabla vehiculos)
+  grupo_flota?: string | null
   // Permiso de efectivo Cabify (leído de cabify_historico)
   permiso_efectivo?: 'Activado' | 'Desactivado' | null
   cabify_driver_id?: string | null
@@ -374,6 +376,9 @@ export function ReporteFacturacionTab() {
   // Filtros rápidos de alertas (toggle)
   const [filtroAlerta, setFiltroAlerta] = useState<'ingreso' | 'baja' | 'sin_gnc' | 'telepase' | 'pausa' | 'efectivo_on' | 'efectivo_off' | null>(null)
 
+  // Filtro por grupo de flota (null = todos)
+  const [filtroGrupoFlota, setFiltroGrupoFlota] = useState<string | null>(null)
+
   // Modal de desglose de días
   const [showDiasModal, setShowDiasModal] = useState(false)
 
@@ -430,6 +435,7 @@ export function ReporteFacturacionTab() {
       fechaInicio: string
       fechaFin: string | null
       modalidad: string
+      grupoFlota?: string | null
     }[]
   } | null>(null)
 
@@ -717,7 +723,7 @@ export function ReporteFacturacionTab() {
           .from('asignaciones_conductores') as any)
           .select(`
             id, conductor_id, horario, fecha_inicio, fecha_fin, estado,
-            asignaciones!inner(id, horario, estado, fecha_inicio, fecha_fin, vehiculo_id, vehiculos(patente, gnc, updated_at))
+            asignaciones!inner(id, horario, estado, fecha_inicio, fecha_fin, vehiculo_id, vehiculos(patente, gnc, grupo_flota, updated_at))
           `)
           .eq('conductor_id', realConductorId)
           .in('estado', ['asignado', 'activo', 'activa', 'finalizado', 'finalizada', 'completado', 'cancelado', 'cancelada']),
@@ -764,7 +770,7 @@ export function ReporteFacturacionTab() {
       // Construir un Set de fechas cubiertas con su horario
       const diasNombres = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado']
       const diasCubiertos = new Map<string, { horario: string; gnc: boolean }>() // fecha -> horario + gnc del vehículo
-      const historial: { fechaInicio: string; fechaFin: string; padreEstado: string; conductorEstado?: string; horario: string; dias: number; nota: string; horaEntrega?: string; nuevaEnSemana?: boolean; patente?: string; tieneGnc?: boolean }[] = []
+      const historial: { fechaInicio: string; fechaFin: string; padreEstado: string; conductorEstado?: string; horario: string; dias: number; nota: string; horaEntrega?: string; nuevaEnSemana?: boolean; patente?: string; tieneGnc?: boolean; grupoFlota?: string | null }[] = []
 
       for (const ac of (asignacionesCond || []) as any[]) {
         const asignacion = ac.asignaciones
@@ -870,7 +876,7 @@ export function ReporteFacturacionTab() {
         const rawTimestampEntrega = asignacion.fecha_inicio || ''
         const horaEntrega = rawTimestampEntrega ? toArgTime(rawTimestampEntrega) : undefined
 
-        historial.push({ fechaInicio: acInicioStr, fechaFin: acFinStr, padreEstado: estadoPadre, conductorEstado: ac.estado || '', horario, dias: diasContados, nota: diasContados > 0 ? `${format(efectivoInicio, 'dd/MM')} → ${format(efectivoFin, 'dd/MM')}` : 'Días ya cubiertos', horaEntrega, nuevaEnSemana: acInicio >= semanaInicio, patente: patenteAsig, tieneGnc: asignacion.vehiculos?.gnc === true })
+        historial.push({ fechaInicio: acInicioStr, fechaFin: acFinStr, padreEstado: estadoPadre, conductorEstado: ac.estado || '', horario, dias: diasContados, nota: diasContados > 0 ? `${format(efectivoInicio, 'dd/MM')} → ${format(efectivoFin, 'dd/MM')}` : 'Días ya cubiertos', horaEntrega, nuevaEnSemana: acInicio >= semanaInicio, patente: patenteAsig, tieneGnc: asignacion.vehiculos?.gnc === true, grupoFlota: asignacion.vehiculos?.grupo_flota || null })
       }
 
       // Generar los 7 días de la semana con su estado
@@ -994,7 +1000,7 @@ export function ReporteFacturacionTab() {
         .select(`
           id, conductor_id, horario, fecha_inicio, fecha_fin, estado,
           asignaciones!inner(id, horario, estado, fecha_inicio, fecha_fin, modalidad,
-            vehiculos(patente)
+            vehiculos(patente, grupo_flota)
           )
         `)
         .eq('conductor_id', realConductorId)
@@ -1009,6 +1015,7 @@ export function ReporteFacturacionTab() {
         fechaInicio: string
         fechaFin: string | null
         modalidad: string
+        grupoFlota?: string | null
       }[] = []
 
       for (const ac of (asignacionesCond || []) as any[]) {
@@ -1040,6 +1047,7 @@ export function ReporteFacturacionTab() {
           fechaInicio: toArgDate(acInicio),
           fechaFin: acFin ? toArgDate(acFin) : null,
           modalidad: padre.modalidad || padre.horario || '-',
+          grupoFlota: padre.vehiculos?.grupo_flota || null,
         })
       }
 
@@ -1522,11 +1530,11 @@ export function ReporteFacturacionTab() {
       if (patentesUnicasLoad.length > 0) {
         const { data: vehiculosFlagsLoad } = await supabase
           .from('vehiculos')
-          .select('patente, gnc, telepase')
+          .select('patente, gnc, telepase, grupo_flota')
           .in('patente', patentesUnicasLoad)
         if (vehiculosFlagsLoad) {
           const flagsMapLoad = new Map(
-            vehiculosFlagsLoad.map((v: any) => [v.patente, { gnc: v.gnc === true, telepase: v.telepase === true }]),
+            vehiculosFlagsLoad.map((v: any) => [v.patente, { gnc: v.gnc === true, telepase: v.telepase === true, grupo_flota: v.grupo_flota || null }]),
           )
           facturacionesTransformadas = facturacionesTransformadas.map((f: any) => {
             if (!f.vehiculo_patente || !flagsMapLoad.has(f.vehiculo_patente)) {
@@ -1537,6 +1545,7 @@ export function ReporteFacturacionTab() {
               ...f,
               tiene_gnc: flags.gnc,
               tiene_telepase: flags.telepase,
+              grupo_flota: flags.grupo_flota,
               monto_peajes: flags.telepase ? 0 : Number(f.monto_peajes || 0),
             }
           })
@@ -2594,11 +2603,11 @@ export function ReporteFacturacionTab() {
       if (patentesUnicas.length > 0) {
         const { data: vehiculosFlags } = await supabase
           .from('vehiculos')
-          .select('patente, gnc, telepase')
+          .select('patente, gnc, telepase, grupo_flota')
           .in('patente', patentesUnicas)
         if (vehiculosFlags) {
           const flagsMap = new Map(
-            vehiculosFlags.map((v: any) => [v.patente, { gnc: v.gnc === true, telepase: v.telepase === true }]),
+            vehiculosFlags.map((v: any) => [v.patente, { gnc: v.gnc === true, telepase: v.telepase === true, grupo_flota: v.grupo_flota || null }]),
           )
           facturacionesConGnc = facturacionesProyectadas.map((f) => {
             if (!f.vehiculo_patente || !flagsMap.has(f.vehiculo_patente)) return f
@@ -2611,6 +2620,7 @@ export function ReporteFacturacionTab() {
               ...f,
               tiene_gnc: flags.gnc,
               tiene_telepase: flags.telepase,
+              grupo_flota: flags.grupo_flota,
               monto_peajes: montoPeajesAjustado,
               subtotal_cargos: subtotalCargosAjustado,
               subtotal_neto: subtotalNetoAjustado,
@@ -8439,17 +8449,23 @@ export function ReporteFacturacionTab() {
   // Stats calculados - funciona para facturación generada y vista previa
   const stats = useMemo(() => {
     const applyChipFilter = (data: typeof facturaciones) => {
-      if (!filtroAlerta) return data
-      return data.filter(f => {
-        if (filtroAlerta === 'ingreso' && !f.alerta_prorrateo_ingreso) return false
-        if (filtroAlerta === 'baja' && f.estado_billing !== 'De baja') return false
-        if (filtroAlerta === 'pausa' && f.estado_billing !== 'Pausa') return false
-        if (filtroAlerta === 'sin_gnc' && !(f.tiene_gnc === false && f.vehiculo_patente)) return false
-        if (filtroAlerta === 'telepase' && !(f.tiene_telepase === true && f.vehiculo_patente)) return false
-        if (filtroAlerta === 'efectivo_on' && f.permiso_efectivo !== 'Activado') return false
-        if (filtroAlerta === 'efectivo_off' && f.permiso_efectivo !== 'Desactivado') return false
-        return true
-      })
+      let result = data
+      if (filtroAlerta) {
+        result = result.filter(f => {
+          if (filtroAlerta === 'ingreso' && !f.alerta_prorrateo_ingreso) return false
+          if (filtroAlerta === 'baja' && f.estado_billing !== 'De baja') return false
+          if (filtroAlerta === 'pausa' && f.estado_billing !== 'Pausa') return false
+          if (filtroAlerta === 'sin_gnc' && !(f.tiene_gnc === false && f.vehiculo_patente)) return false
+          if (filtroAlerta === 'telepase' && !(f.tiene_telepase === true && f.vehiculo_patente)) return false
+          if (filtroAlerta === 'efectivo_on' && f.permiso_efectivo !== 'Activado') return false
+          if (filtroAlerta === 'efectivo_off' && f.permiso_efectivo !== 'Desactivado') return false
+          return true
+        })
+      }
+      if (filtroGrupoFlota) {
+        result = result.filter(f => (f.grupo_flota || '') === filtroGrupoFlota)
+      }
+      return result
     }
 
     // Si estamos en modo vista previa, calcular desde vistaPreviaData
@@ -8482,7 +8498,7 @@ export function ReporteFacturacionTab() {
       conductores_deben: src.filter(f => f.total_a_pagar > 0).length,
       conductores_favor: src.filter(f => f.total_a_pagar <= 0).length
     }
-  }, [periodo, facturaciones, modoVistaPrevia, vistaPreviaData, filtroAlerta])
+  }, [periodo, facturaciones, modoVistaPrevia, vistaPreviaData, filtroAlerta, filtroGrupoFlota])
 
   // Info modal para stat cards
   function showStatInfo(stat: string) {
@@ -8867,6 +8883,9 @@ export function ReporteFacturacionTab() {
             )}
             {row.original.tiene_telepase === true && row.original.vehiculo_patente && (
               <span style={{ fontSize: '8px', padding: '1px 4px', lineHeight: '12px', borderRadius: '3px', fontWeight: 600, background: '#f3f4f6', color: '#6b7280' }}>Telepase</span>
+            )}
+            {row.original.grupo_flota && (
+              <span style={{ fontSize: '8px', padding: '1px 4px', lineHeight: '12px', borderRadius: '3px', fontWeight: 600, background: '#dbeafe', color: '#1e40af' }}>{row.original.grupo_flota}</span>
             )}
           </div>
         </div>
@@ -9963,6 +9982,14 @@ export function ReporteFacturacionTab() {
             const montoTelepase = telepaseList.reduce((sum, f) => sum + Number(f.monto_peajes || 0), 0)
             const countEfectivoOn = vistaPreviaData.filter(f => f.permiso_efectivo === 'Activado').length
             const countEfectivoOff = vistaPreviaData.filter(f => f.permiso_efectivo === 'Desactivado').length
+            // Conteo por grupo de flota
+            const gruposFlotaMap = new Map<string, number>()
+            vistaPreviaData.forEach(f => {
+              const g = f.grupo_flota || ''
+              if (!g) return
+              gruposFlotaMap.set(g, (gruposFlotaMap.get(g) || 0) + 1)
+            })
+            const gruposFlotaList = Array.from(gruposFlotaMap.entries()).sort((a, b) => a[0].localeCompare(b[0]))
             const btnStyle = (active: boolean, bg: string, color: string) => ({
               display: 'inline-flex', alignItems: 'center', gap: '5px',
               padding: '4px 10px', borderRadius: '14px', fontSize: '11px', fontWeight: 600 as const,
@@ -10016,9 +10043,16 @@ export function ReporteFacturacionTab() {
                     <AlertCircle size={12} /> Pausa <span style={{ opacity: 0.7 }}>{countPausa}</span>
                   </button>
                 )}
-                {filtroAlerta && (
+                {gruposFlotaList.map(([grupo, count]) => (
+                  <button key={grupo}
+                    style={btnStyle(filtroGrupoFlota === grupo, 'rgba(59,130,246,0.12)', '#1e40af')}
+                    onClick={() => setFiltroGrupoFlota(filtroGrupoFlota === grupo ? null : grupo)}>
+                    {grupo} <span style={{ opacity: 0.7 }}>{count}</span>
+                  </button>
+                ))}
+                {(filtroAlerta || filtroGrupoFlota) && (
                   <button style={{ ...btnStyle(false, '', ''), fontSize: '10px', padding: '3px 8px' }}
-                    onClick={() => setFiltroAlerta(null)}>
+                    onClick={() => { setFiltroAlerta(null); setFiltroGrupoFlota(null) }}>
                     <X size={10} /> Limpiar
                   </button>
                 )}
@@ -10046,6 +10080,8 @@ export function ReporteFacturacionTab() {
               if (filtroAlerta === 'telepase' && !(f.tiene_telepase === true && f.vehiculo_patente)) return false
               if (filtroAlerta === 'efectivo_on' && f.permiso_efectivo !== 'Activado') return false
               if (filtroAlerta === 'efectivo_off' && f.permiso_efectivo !== 'Desactivado') return false
+              // Filtro por grupo de flota
+              if (filtroGrupoFlota && (f.grupo_flota || '') !== filtroGrupoFlota) return false
               return true
             })}
             columns={columns}
@@ -10177,6 +10213,14 @@ export function ReporteFacturacionTab() {
               const montoTelepase = telepaseList.reduce((sum, f) => sum + Number(f.monto_peajes || 0), 0)
               const countEfectivoOn = src.filter(f => f.permiso_efectivo === 'Activado').length
               const countEfectivoOff = src.filter(f => f.permiso_efectivo === 'Desactivado').length
+              // Conteo por grupo de flota
+              const gruposFlotaMap = new Map<string, number>()
+              src.forEach(f => {
+                const g = f.grupo_flota || ''
+                if (!g) return
+                gruposFlotaMap.set(g, (gruposFlotaMap.get(g) || 0) + 1)
+              })
+              const gruposFlotaList = Array.from(gruposFlotaMap.entries()).sort((a, b) => a[0].localeCompare(b[0]))
               const btnStyle = (active: boolean, bg: string, color: string) => ({
                 display: 'inline-flex', alignItems: 'center', gap: '5px',
                 padding: '4px 10px', borderRadius: '14px', fontSize: '11px', fontWeight: 600 as const,
@@ -10230,9 +10274,16 @@ export function ReporteFacturacionTab() {
                       <AlertCircle size={12} /> Pausa <span style={{ opacity: 0.7 }}>{countPausa}</span>
                     </button>
                   )}
-                  {filtroAlerta && (
+                  {gruposFlotaList.map(([grupo, count]) => (
+                    <button key={grupo}
+                      style={btnStyle(filtroGrupoFlota === grupo, 'rgba(59,130,246,0.12)', '#1e40af')}
+                      onClick={() => setFiltroGrupoFlota(filtroGrupoFlota === grupo ? null : grupo)}>
+                      {grupo} <span style={{ opacity: 0.7 }}>{count}</span>
+                    </button>
+                  ))}
+                  {(filtroAlerta || filtroGrupoFlota) && (
                     <button style={{ ...btnStyle(false, '', ''), fontSize: '10px', padding: '3px 8px' }}
-                      onClick={() => setFiltroAlerta(null)}>
+                      onClick={() => { setFiltroAlerta(null); setFiltroGrupoFlota(null) }}>
                       <X size={10} /> Limpiar
                     </button>
                   )}
@@ -10240,16 +10291,25 @@ export function ReporteFacturacionTab() {
               )
             })()}
             <DataTable
-              data={filtroAlerta ? facturacionesFiltradas.filter(f => {
-                if (filtroAlerta === 'ingreso') return !!f.alerta_prorrateo_ingreso
-                if (filtroAlerta === 'baja') return f.estado_billing === 'De baja'
-                if (filtroAlerta === 'pausa') return f.estado_billing === 'Pausa'
-                if (filtroAlerta === 'sin_gnc') return f.tiene_gnc === false && f.vehiculo_patente
-                if (filtroAlerta === 'telepase') return f.tiene_telepase === true && f.vehiculo_patente
-                if (filtroAlerta === 'efectivo_on') return f.permiso_efectivo === 'Activado'
-                if (filtroAlerta === 'efectivo_off') return f.permiso_efectivo === 'Desactivado'
-                return true
-              }) : facturacionesFiltradas}
+              data={(() => {
+                let result = facturacionesFiltradas
+                if (filtroAlerta) {
+                  result = result.filter(f => {
+                    if (filtroAlerta === 'ingreso') return !!f.alerta_prorrateo_ingreso
+                    if (filtroAlerta === 'baja') return f.estado_billing === 'De baja'
+                    if (filtroAlerta === 'pausa') return f.estado_billing === 'Pausa'
+                    if (filtroAlerta === 'sin_gnc') return f.tiene_gnc === false && !!f.vehiculo_patente
+                    if (filtroAlerta === 'telepase') return f.tiene_telepase === true && !!f.vehiculo_patente
+                    if (filtroAlerta === 'efectivo_on') return f.permiso_efectivo === 'Activado'
+                    if (filtroAlerta === 'efectivo_off') return f.permiso_efectivo === 'Desactivado'
+                    return true
+                  })
+                }
+                if (filtroGrupoFlota) {
+                  result = result.filter(f => (f.grupo_flota || '') === filtroGrupoFlota)
+                }
+                return result
+              })()}
               columns={columns}
               loading={loading}
               searchPlaceholder="Buscar por conductor, DNI, patente..."
@@ -10641,6 +10701,11 @@ export function ReporteFacturacionTab() {
                                       {h.tieneGnc ? 'GNC' : 'Sin GNC'}
                                     </span>
                                   )}
+                                  {h.grupoFlota && (
+                                    <span style={{ fontSize: '8px', padding: '1px 4px', borderRadius: '3px', fontWeight: 600, background: '#dbeafe', color: '#1e40af' }}>
+                                      {h.grupoFlota}
+                                    </span>
+                                  )}
                                   <span style={{ fontSize: '10px', color: estadoColor, fontWeight: 600 }}>
                                     {h.horario}
                                   </span>
@@ -10821,6 +10886,17 @@ export function ReporteFacturacionTab() {
                                 {a.horario}
                               </span>
 
+                              {/* Grupo de flota */}
+                              {a.grupoFlota && (
+                                <span style={{
+                                  padding: '1px 6px', borderRadius: '3px', fontSize: '9px', fontWeight: 600,
+                                  background: '#dbeafe', color: '#1e40af',
+                                  whiteSpace: 'nowrap',
+                                }}>
+                                  {a.grupoFlota}
+                                </span>
+                              )}
+
                               {/* Estado badge */}
                               <span style={{
                                 padding: '1px 6px', borderRadius: '3px', fontSize: '9px', fontWeight: 500,
@@ -10920,6 +10996,20 @@ export function ReporteFacturacionTab() {
                         {detalleFacturacion.turnos_cobrados}<span style={{ color: 'var(--text-secondary)', fontWeight: 400 }}>/{detalleFacturacion.turnos_base}</span>
                       </span>
                     </div>
+                    {detalleFacturacion.grupo_flota && (
+                      <>
+                        <div style={{ width: '1px', background: 'var(--border-primary)' }} />
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                          <span style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>Flota</span>
+                          <span style={{
+                            fontSize: '10px', fontWeight: 600, padding: '2px 8px', borderRadius: '4px',
+                            background: '#dbeafe', color: '#1e40af',
+                          }}>
+                            {detalleFacturacion.grupo_flota}
+                          </span>
+                        </div>
+                      </>
+                    )}
                   </div>
 
                   {/* Sección: Cargos */}

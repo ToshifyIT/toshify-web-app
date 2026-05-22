@@ -46,6 +46,7 @@ interface PortalFacturacion {
   total_a_pagar: number
   estado: string
   periodos_facturacion: PortalPeriodo
+  grupo_flota?: string | null
 }
 
 interface PortalDetalle {
@@ -336,6 +337,26 @@ export function PortalPage() {
               factura.vehiculo_patente = validAsignaciones[0].asignaciones.vehiculos.patente
             }
           }
+        }
+      }
+
+      // Cruzar patentes con tabla vehiculos para traer grupo_flota
+      const patentesParaGrupo = [...new Set(facturasData.map(f => f.vehiculo_patente).filter(Boolean))] as string[]
+      if (patentesParaGrupo.length > 0) {
+        const { data: vehData } = await supabase
+          .from('vehiculos')
+          .select('patente, grupo_flota')
+          .in('patente', patentesParaGrupo)
+        if (vehData) {
+          const grupoMap = new Map<string, string | null>()
+          vehData.forEach((v: { patente: string; grupo_flota: string | null }) => {
+            grupoMap.set(v.patente, v.grupo_flota || null)
+          })
+          facturasData.forEach(f => {
+            if (f.vehiculo_patente && grupoMap.has(f.vehiculo_patente)) {
+              f.grupo_flota = grupoMap.get(f.vehiculo_patente) || null
+            }
+          })
         }
       }
 
@@ -913,6 +934,14 @@ export function PortalPage() {
                   <span className="portal-detail-info-label">Turnos</span>
                   <span className="portal-detail-info-value">{selectedFactura.turnos_cobrados}/{selectedFactura.turnos_base}</span>
                 </div>
+                {selectedFactura.grupo_flota && (
+                  <div className="portal-detail-info-item">
+                    <span className="portal-detail-info-label">Flota</span>
+                    <span className="portal-detail-info-value" style={{ background: '#dbeafe', color: '#1e40af', padding: '2px 8px', borderRadius: '4px', fontSize: '11px', fontWeight: 600 }}>
+                      {selectedFactura.grupo_flota}
+                    </span>
+                  </div>
+                )}
               </div>
 
               <div className="portal-detail-body">

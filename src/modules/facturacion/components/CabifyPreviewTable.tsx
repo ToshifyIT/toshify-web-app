@@ -3,7 +3,7 @@
  * Formato específico con columnas editables y sincronización con BD
  */
 
-import { useState, useMemo, useCallback } from 'react'
+import { useState, useMemo, useCallback, useEffect, useRef } from 'react'
 import {
   ArrowLeft,
   FileSpreadsheet,
@@ -105,21 +105,83 @@ export function CabifyPreviewTable({
   const [hasChanges, setHasChanges] = useState(false)
   const [syncing, setSyncing] = useState(false)
 
+  // Mapeo patente -> grupo_flota (cargado desde vehiculos)
+  const [grupoFlotaMap, setGrupoFlotaMap] = useState<Map<string, string | null>>(new Map())
+  // Filtro de grupo de flota (default: GRUPO CG SAS)
+  const [filtroGrupoFlota, setFiltroGrupoFlota] = useState<string | null>('GRUPO CG SAS')
+  const [grupoDropdownOpen, setGrupoDropdownOpen] = useState(false)
+  const [grupoBusqueda, setGrupoBusqueda] = useState('')
+  const grupoDropdownRef = useRef<HTMLDivElement>(null)
+
+  // Cargar patente -> grupo_flota
+  useEffect(() => {
+    async function cargarGrupos() {
+      const patentes = [...new Set(initialData.map(r => r.patente).filter(Boolean))]
+      if (patentes.length === 0) return
+      const { data: vehData } = await supabase
+        .from('vehiculos')
+        .select('patente, grupo_flota')
+        .in('patente', patentes)
+      if (vehData) {
+        const m = new Map<string, string | null>()
+        ;(vehData as Array<{ patente: string; grupo_flota: string | null }>).forEach(v => {
+          m.set(v.patente, v.grupo_flota || null)
+        })
+        setGrupoFlotaMap(m)
+      }
+    }
+    cargarGrupos()
+  }, [initialData])
+
+  // Cerrar dropdown al click fuera
+  useEffect(() => {
+    function onClickOutside(e: MouseEvent) {
+      if (grupoDropdownRef.current && !grupoDropdownRef.current.contains(e.target as Node)) {
+        setGrupoDropdownOpen(false)
+        setGrupoBusqueda('')
+      }
+    }
+    if (grupoDropdownOpen) document.addEventListener('mousedown', onClickOutside)
+    return () => document.removeEventListener('mousedown', onClickOutside)
+  }, [grupoDropdownOpen])
+
+  // Lista de grupos disponibles (basados en patentes presentes)
+  const gruposDisponibles = useMemo(() => {
+    const set = new Set<string>()
+    initialData.forEach(r => {
+      const g = grupoFlotaMap.get(r.patente)
+      if (g) set.add(g)
+    })
+    return Array.from(set).sort()
+  }, [initialData, grupoFlotaMap])
+
+  const gruposFiltrados = useMemo(() => {
+    if (!grupoBusqueda.trim()) return gruposDisponibles
+    const q = grupoBusqueda.toLowerCase()
+    return gruposDisponibles.filter(g => g.toLowerCase().includes(q))
+  }, [gruposDisponibles, grupoBusqueda])
+
   // Campos editables
   const editableFields = ['importeContrato', 'excedentes', 'patente']
   const textFields = ['patente']
 
   // Filtrar datos
   const filteredData = useMemo(() => {
-    if (!searchTerm) return data
-    const search = searchTerm.toLowerCase()
-    return data.filter(row => 
-      row.conductor.toLowerCase().includes(search) ||
-      row.dni.includes(search) ||
-      row.patente.toLowerCase().includes(search) ||
-      row.email.toLowerCase().includes(search)
-    )
-  }, [data, searchTerm])
+    let result = data
+    if (filtroGrupoFlota) {
+      result = result.filter(row => grupoFlotaMap.get(row.patente) === filtroGrupoFlota)
+    }
+    if (searchTerm) {
+      const search = searchTerm.toLowerCase()
+      result = result.filter(row =>
+        row.conductor.toLowerCase().includes(search) ||
+        row.dni.includes(search) ||
+        row.patente.toLowerCase().includes(search) ||
+        row.email.toLowerCase().includes(search)
+      )
+    }
+    return result
+  }, [data, searchTerm, filtroGrupoFlota, grupoFlotaMap])
 
   // Map O(1) para lookup de índice real en data (evita .findIndex() O(n) por cada fila en render)
   const dataIndexMap = useMemo(() => {
@@ -654,10 +716,91 @@ export function CabifyPreviewTable({
           </div>
           {/* Stats inline */}
           <div className="fact-preview-stats-inline">
-            <span className="fact-stat-inline"><strong>{data.length}</strong> conductores</span>
+            <span className="fact-stat-inline"><strong>{filteredData.length}</strong> conductores</span>
             <span className="fact-stat-inline"><strong>{formatCurrency(totales.importeContrato)}</strong> contratos</span>
             <span className="fact-stat-inline"><strong>{formatCurrency(totales.excedentes)}</strong> excedentes</span>
             <span className="fact-stat-inline total"><strong>{formatCurrency(totales.total)}</strong> total</span>
+
+            {/* Filtro Grupo de Flota - chip inline igual a los demás stats */}
+            <div ref={grupoDropdownRef} style={{ position: 'relative', display: 'inline-flex' }}>
+              <button
+                onClick={() => setGrupoDropdownOpen(o => !o)}
+                className="fact-stat-inline"
+                style={{
+                  display: 'inline-flex', alignItems: 'center', gap: '6px',
+                  cursor: 'pointer', border: filtroGrupoFlota ? '1px solid #2563eb' : '1px solid var(--border-primary)',
+                  background: filtroGrupoFlota ? 'rgba(37,99,235,0.08)' : 'transparent',
+                  color: filtroGrupoFlota ? '#1e40af' : 'inherit',
+                }}
+                title="Filtrar por grupo de flota"
+              >
+                <strong>{filtroGrupoFlota || 'Todos'}</strong>
+                <span style={{ opacity: 0.6, fontSize: '9px' }}>▾</span>
+              </button>
+              {grupoDropdownOpen && (
+                <div style={{
+                  position: 'absolute', top: 'calc(100% + 6px)', right: 0,
+                  background: 'var(--bg-primary)', border: '1px solid var(--border-primary)',
+                  borderRadius: '8px', boxShadow: '0 8px 24px rgba(0,0,0,0.15)',
+                  zIndex: 1000, width: '240px', maxHeight: '300px',
+                  display: 'flex', flexDirection: 'column', overflow: 'hidden'
+                }}>
+                  <div style={{ padding: '8px', borderBottom: '1px solid var(--border-primary)' }}>
+                    <input
+                      type="text" autoFocus placeholder="Buscar grupo..."
+                      value={grupoBusqueda}
+                      onChange={(e) => setGrupoBusqueda(e.target.value)}
+                      style={{
+                        width: '100%', padding: '5px 8px',
+                        border: '1px solid var(--border-primary)', borderRadius: '4px',
+                        background: 'var(--bg-secondary)', color: 'var(--text-primary)',
+                        fontSize: '12px', outline: 'none'
+                      }}
+                    />
+                  </div>
+                  <div style={{ overflowY: 'auto', flex: 1 }}>
+                    <div
+                      onClick={() => { setFiltroGrupoFlota(null); setGrupoDropdownOpen(false); setGrupoBusqueda('') }}
+                      style={{
+                        padding: '7px 12px', cursor: 'pointer', fontSize: '12px',
+                        background: !filtroGrupoFlota ? 'var(--bg-tertiary)' : 'transparent',
+                        borderLeft: !filtroGrupoFlota ? '3px solid #2563eb' : '3px solid transparent',
+                        color: 'var(--text-primary)', fontWeight: 600
+                      }}
+                      onMouseEnter={(e) => { if (filtroGrupoFlota) e.currentTarget.style.background = 'var(--bg-secondary)' }}
+                      onMouseLeave={(e) => { if (filtroGrupoFlota) e.currentTarget.style.background = 'transparent' }}
+                    >
+                      Todos los grupos
+                    </div>
+                    {gruposFiltrados.length === 0 ? (
+                      <div style={{ padding: '12px', fontSize: '12px', color: 'var(--text-tertiary)', textAlign: 'center' }}>
+                        Sin resultados
+                      </div>
+                    ) : (
+                      gruposFiltrados.map(g => {
+                        const seleccionado = g === filtroGrupoFlota
+                        return (
+                          <div
+                            key={g}
+                            onClick={() => { setFiltroGrupoFlota(g); setGrupoDropdownOpen(false); setGrupoBusqueda('') }}
+                            style={{
+                              padding: '7px 12px', cursor: 'pointer', fontSize: '12px',
+                              background: seleccionado ? 'var(--bg-tertiary)' : 'transparent',
+                              borderLeft: seleccionado ? '3px solid #2563eb' : '3px solid transparent',
+                              color: 'var(--text-primary)'
+                            }}
+                            onMouseEnter={(e) => { if (!seleccionado) e.currentTarget.style.background = 'var(--bg-secondary)' }}
+                            onMouseLeave={(e) => { if (!seleccionado) e.currentTarget.style.background = 'transparent' }}
+                          >
+                            {g}
+                          </div>
+                        )
+                      })
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
         </div>
         <div className="fact-preview-header-right">
