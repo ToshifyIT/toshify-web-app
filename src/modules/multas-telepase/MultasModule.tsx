@@ -1031,8 +1031,8 @@ export default function MultasModule() {
       ),
       cell: ({ row }) => (
         <div style={{ fontSize: '12px', lineHeight: '1.3' }}>
-          <div style={{ whiteSpace: 'normal', wordBreak: 'break-word', fontWeight: 500 }}>
-            {row.original.conductor_responsable || '-'}
+          <div style={{ whiteSpace: 'normal', wordBreak: 'break-word', fontWeight: row.original.conductor_responsable ? 500 : 400, color: row.original.conductor_responsable ? 'inherit' : '#9ca3af' }}>
+            {row.original.conductor_responsable || '—'}
           </div>
           {row.original.ibutton && (
             <div style={{ fontSize: '11px', color: 'var(--text-tertiary)', marginTop: '2px' }}>
