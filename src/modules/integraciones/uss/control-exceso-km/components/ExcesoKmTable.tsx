@@ -381,6 +381,10 @@ export function ExcesoKmTable({
         )
       },
     },
+    // OCULTADA 2026-05-22: columna "Estado" suma KM por vehículo (no por conductor),
+    // por lo que marcaba "Por aplicar" en conductores que en realidad no excedieron.
+    // Se mantiene comentada por si más adelante se quiere recalcular por iButton/conductor.
+    /*
     {
       id: 'estado',
       accessorFn: (r) => {
@@ -424,6 +428,7 @@ export function ExcesoKmTable({
       },
       enableSorting: false,
     },
+    */
     {
       id: 'acciones',
       header: 'Acciones',
