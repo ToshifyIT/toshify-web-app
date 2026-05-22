@@ -838,15 +838,6 @@ export function CabifyPreviewTable({
               Agregar Conductor
             </button>
           )}
-          <button
-            className="fact-preview-btn primary"
-            onClick={onExport}
-            disabled={exporting}
-            style={{ backgroundColor: '#7C3AED' }}
-          >
-            {exporting ? <Loader2 size={14} className="spinning" /> : <FileSpreadsheet size={14} />}
-            {exporting ? 'Exportando...' : 'Exportar Excel'}
-          </button>
         </div>
       </div>
 
@@ -858,8 +849,8 @@ export function CabifyPreviewTable({
       )}
 
       {/* Filtros */}
-      <div className="fact-preview-filters">
-        <div className="fact-preview-search">
+      <div className="fact-preview-filters" style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+        <div className="fact-preview-search" style={{ flex: 1, minWidth: '240px' }}>
           <Search size={16} />
           <input
             type="text"
@@ -871,7 +862,16 @@ export function CabifyPreviewTable({
             <button onClick={() => setSearchTerm('')}><X size={14} /></button>
           )}
         </div>
-        <span className="fact-preview-count">
+        <button
+          className="fact-preview-btn primary"
+          onClick={onExport}
+          disabled={exporting}
+          style={{ backgroundColor: '#7C3AED', whiteSpace: 'nowrap' }}
+        >
+          {exporting ? <Loader2 size={14} className="spinning" /> : <FileSpreadsheet size={14} />}
+          {exporting ? 'Exportando...' : 'Exportar Excel'}
+        </button>
+        <span className="fact-preview-count" style={{ marginLeft: 'auto' }}>
           {filteredData.length} de {data.length} conductores
           {hasChanges && <span className="changes-indicator"> • Cambios sin guardar</span>}
         </span>

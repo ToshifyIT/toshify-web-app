@@ -1148,10 +1148,41 @@ export function ReporteFacturacionTab() {
       const conductorIdsLoad = (facturacionesData || []).map((f: any) => f.conductor_id).filter(Boolean)
       const { data: asignacionesLoad } = conductorIdsLoad.length > 0 ? await (supabase
         .from('asignaciones_conductores') as any)
-        .select('conductor_id, horario, fecha_inicio, fecha_fin, asignaciones!inner(estado, horario, fecha_inicio, fecha_fin)')
+        .select('conductor_id, horario, fecha_inicio, fecha_fin, asignaciones!inner(estado, horario, fecha_inicio, fecha_fin, vehiculos(patente, grupo_flota))')
         .in('conductor_id', conductorIdsLoad)
         .in('estado', ['asignado', 'activo', 'activa', 'finalizado', 'finalizada', 'completado', 'cancelado', 'cancelada'])
       : { data: [] }
+
+      // Calcular grupo_flota GANADOR por conductor en la semana (44 DREAMS gana siempre que aparezca)
+      // Regla: si en la semana usó al menos 1 día un vehículo de 44 DREAMS, ese es el grupo asociado.
+      // Si no, toma el primer grupo no-nulo que encuentre.
+      const GRUPO_44_DREAMS = '44 DREAMS S.R.L'
+      const fechaInicioPeriodoLoad = parseISO((periodoData as any).fecha_inicio)
+      const fechaFinPeriodoLoadGrupo = parseISO((periodoData as any).fecha_fin)
+      const grupoFlotaGanadorMap = new Map<string, string | null>()
+      for (const ac of (asignacionesLoad || []) as any[]) {
+        const condId = ac.conductor_id
+        if (!condId) continue
+        const asig = ac.asignaciones
+        if (!asig) continue
+        // Filtrar asignaciones que NO se solapen con la semana del período
+        const acInicio = ac.fecha_inicio ? parseISO(ac.fecha_inicio) : (asig.fecha_inicio ? parseISO(asig.fecha_inicio) : null)
+        const acFin = ac.fecha_fin ? parseISO(ac.fecha_fin) : (asig.fecha_fin ? parseISO(asig.fecha_fin) : new Date('2099-12-31'))
+        if (!acInicio) continue
+        if (acFin < fechaInicioPeriodoLoad || acInicio > fechaFinPeriodoLoadGrupo) continue
+        const grupo = asig.vehiculos?.grupo_flota || null
+        if (!grupo) continue
+        const actual = grupoFlotaGanadorMap.get(condId)
+        // Si ya está marcado con 44 DREAMS, no se sobrescribe
+        if (actual === GRUPO_44_DREAMS) continue
+        // Si este es 44 DREAMS, gana siempre
+        if (grupo === GRUPO_44_DREAMS) {
+          grupoFlotaGanadorMap.set(condId, GRUPO_44_DREAMS)
+        } else if (!actual) {
+          // Si no había nada, poner este
+          grupoFlotaGanadorMap.set(condId, grupo)
+        }
+      }
 
       const conductoresConAsignacionAlCierreLoad = new Set<string>()
       // Calcular horario (diurno/nocturno) por conductor para períodos guardados
@@ -1539,14 +1570,18 @@ export function ReporteFacturacionTab() {
           )
           facturacionesTransformadas = facturacionesTransformadas.map((f: any) => {
             if (!f.vehiculo_patente || !flagsMapLoad.has(f.vehiculo_patente)) {
-              return f
+              // Aun si no tiene patente actual, podemos tener grupo ganador por asignaciones de la semana
+              const grupoGanadorSinPat = grupoFlotaGanadorMap.get(f.conductor_id) || null
+              return grupoGanadorSinPat ? { ...f, grupo_flota: grupoGanadorSinPat } : f
             }
             const flags = flagsMapLoad.get(f.vehiculo_patente)!
+            // Prioridad: si el conductor tuvo 44 DREAMS en la semana, usar 44 DREAMS aunque la patente actual sea otra
+            const grupoFinal = grupoFlotaGanadorMap.get(f.conductor_id) || flags.grupo_flota
             return {
               ...f,
               tiene_gnc: flags.gnc,
               tiene_telepase: flags.telepase,
-              grupo_flota: flags.grupo_flota,
+              grupo_flota: grupoFinal,
               monto_peajes: flags.telepase ? 0 : Number(f.monto_peajes || 0),
             }
           })
@@ -1587,7 +1622,7 @@ export function ReporteFacturacionTab() {
         (supabase.from('asignaciones_conductores') as any)
           .select(`
             conductor_id, horario, fecha_inicio, fecha_fin, estado,
-            asignaciones!inner(horario, estado, fecha_fin, vehiculo_id, vehiculos(patente, gnc, telepase, updated_at)),
+            asignaciones!inner(horario, estado, fecha_fin, fecha_inicio, vehiculo_id, vehiculos(patente, gnc, telepase, grupo_flota, updated_at)),
             conductores!inner(numero_dni, sede_id)
           `)
           .in('estado', ['asignado', 'activo', 'activa', 'finalizado', 'finalizada', 'completado', 'cancelado', 'cancelada'])
@@ -1605,6 +1640,34 @@ export function ReporteFacturacionTab() {
           .eq('anio_aplicacion', anioDelPeriodo)
           .eq('aplicado', true),
       ])
+
+      // Calcular grupo_flota GANADOR por DNI para vista previa (44 DREAMS gana siempre)
+      const GRUPO_44_DREAMS_VP = '44 DREAMS S.R.L'
+      const grupoFlotaGanadorVPMap = new Map<string, string | null>()
+      {
+        const semInicioGrupo = parseISO(fechaInicio)
+        const semFinGrupo = parseISO(fechaFin)
+        for (const ac of (asignacionesSemanaVP || []) as any[]) {
+          const cond = ac.conductores
+          const asig = ac.asignaciones
+          if (!cond || !asig) continue
+          if (sedeParaVP && cond.sede_id !== sedeParaVP) continue
+          const acInicio = ac.fecha_inicio ? parseISO(ac.fecha_inicio) : (asig.fecha_inicio ? parseISO(asig.fecha_inicio) : null)
+          const acFin = ac.fecha_fin ? parseISO(ac.fecha_fin) : (asig.fecha_fin ? parseISO(asig.fecha_fin) : new Date('2099-12-31'))
+          if (!acInicio) continue
+          if (acFin < semInicioGrupo || acInicio > semFinGrupo) continue
+          const grupo = asig.vehiculos?.grupo_flota || null
+          if (!grupo) continue
+          const dni = cond.numero_dni
+          const actual = grupoFlotaGanadorVPMap.get(dni)
+          if (actual === GRUPO_44_DREAMS_VP) continue
+          if (grupo === GRUPO_44_DREAMS_VP) {
+            grupoFlotaGanadorVPMap.set(dni, GRUPO_44_DREAMS_VP)
+          } else if (!actual) {
+            grupoFlotaGanadorVPMap.set(dni, grupo)
+          }
+        }
+      }
 
       // Procesar 1a: asignaciones
       {
@@ -2611,17 +2674,23 @@ export function ReporteFacturacionTab() {
             vehiculosFlags.map((v: any) => [v.patente, { gnc: v.gnc === true, telepase: v.telepase === true, grupo_flota: v.grupo_flota || null }]),
           )
           facturacionesConGnc = facturacionesProyectadas.map((f) => {
-            if (!f.vehiculo_patente || !flagsMap.has(f.vehiculo_patente)) return f
+            if (!f.vehiculo_patente || !flagsMap.has(f.vehiculo_patente)) {
+              // Aun sin patente actual, podemos asignar el grupo ganador por DNI
+              const grupoGanadorSinPat = f.conductor_dni ? grupoFlotaGanadorVPMap.get(f.conductor_dni) : null
+              return grupoGanadorSinPat ? { ...f, grupo_flota: grupoGanadorSinPat } : f
+            }
             const flags = flagsMap.get(f.vehiculo_patente)!
             const montoPeajesAjustado = flags.telepase ? 0 : (f.monto_peajes || 0)
             const subtotalCargosAjustado = (f.subtotal_cargos || 0) - ((f.monto_peajes || 0) - montoPeajesAjustado)
             const subtotalNetoAjustado = subtotalCargosAjustado - (f.subtotal_descuentos || 0)
             const totalAPagarAjustado = subtotalNetoAjustado + (f.saldo_anterior || 0)
+            // Aplicar regla "44 DREAMS gana siempre" basado en map por DNI
+            const grupoFinal = (f.conductor_dni ? grupoFlotaGanadorVPMap.get(f.conductor_dni) : null) || flags.grupo_flota
             return {
               ...f,
               tiene_gnc: flags.gnc,
               tiene_telepase: flags.telepase,
-              grupo_flota: flags.grupo_flota,
+              grupo_flota: grupoFinal,
               monto_peajes: montoPeajesAjustado,
               subtotal_cargos: subtotalCargosAjustado,
               subtotal_neto: subtotalNetoAjustado,
