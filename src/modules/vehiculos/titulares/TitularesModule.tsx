@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useCallback } from 'react'
-import { Users, Building2, UserCheck, Plus, Eye, Edit, Trash2, Car } from 'lucide-react'
+import { Users, Building2, UserCheck, Plus, Eye, Edit, Trash2, Car, FileText } from 'lucide-react'
 import { supabase } from '../../../lib/supabase'
 import { useAuth } from '../../../contexts/AuthContext'
 import { useSede } from '../../../contexts/SedeContext'
@@ -795,7 +795,7 @@ export function TitularesModule() {
               <h3>Vehículos de {getNombre(selectedTitular)}</h3>
               <button className="modal-close" onClick={() => setShowVehiculosModal(false)}>&times;</button>
             </div>
-            <div className="modal-body">
+            <div className="modal-body" style={{ overflowX: 'auto' }}>
               {vehiculosTitular.length === 0 ? (
                 <p style={{ textAlign: 'center', color: 'var(--text-tertiary)', padding: '20px' }}>
                   No hay vehículos asociados a este titular.
@@ -809,6 +809,7 @@ export function TitularesModule() {
                       <th style={{ textAlign: 'left', padding: '8px', fontSize: '11px', color: 'var(--text-tertiary)', textTransform: 'uppercase' }}>Desde</th>
                       <th style={{ textAlign: 'left', padding: '8px', fontSize: '11px', color: 'var(--text-tertiary)', textTransform: 'uppercase' }}>Hasta</th>
                       <th style={{ textAlign: 'left', padding: '8px', fontSize: '11px', color: 'var(--text-tertiary)', textTransform: 'uppercase' }}>Estado</th>
+                      <th style={{ textAlign: 'center', padding: '8px', fontSize: '11px', color: 'var(--text-tertiary)', textTransform: 'uppercase' }}>Reg. Oferta Locacion</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -829,6 +830,30 @@ export function TitularesModule() {
                           }}>
                             {vt.activo ? 'Activo' : 'Inactivo'}
                           </span>
+                        </td>
+                        <td style={{ padding: '8px', textAlign: 'center' }}>
+                          <button
+                            type="button"
+                            title="Registro de oferta locacion"
+                            onClick={(e) => { e.stopPropagation() }}
+                            style={{
+                              background: 'none',
+                              border: '1px solid var(--border-primary)',
+                              borderRadius: '6px',
+                              padding: '4px 8px',
+                              cursor: 'pointer',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '4px',
+                              color: 'var(--text-secondary)',
+                              fontSize: '12px',
+                              transition: 'all 0.15s',
+                            }}
+                            onMouseEnter={(e) => { e.currentTarget.style.borderColor = 'var(--color-primary)'; e.currentTarget.style.color = 'var(--color-primary)' }}
+                            onMouseLeave={(e) => { e.currentTarget.style.borderColor = 'var(--border-primary)'; e.currentTarget.style.color = 'var(--text-secondary)' }}
+                          >
+                            <FileText size={14} />
+                          </button>
                         </td>
                       </tr>
                     ))}
