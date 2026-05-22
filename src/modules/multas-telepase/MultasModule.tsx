@@ -16,6 +16,7 @@ import { useSede } from '../../contexts/SedeContext'
 import { useAuth } from '../../contexts/AuthContext'
 import { crearCobroDesdeMulta, resolverMontoMulta } from './services/crearCobroDesdeMulta'
 import { desestimarMulta as svcDesestimarMulta, reactivarMulta as svcReactivarMulta } from './services/desestimarMulta'
+import { withAudit, logMultaAudit } from './services/auditMulta'
 import { format } from 'date-fns'
 import { es } from 'date-fns/locale'
 import './MultasTelepase.css'
@@ -42,6 +43,10 @@ interface Multa {
   desestimada_at?: string | null
   desestimada_motivo?: string | null
   desestimada_by?: string | null
+  // Auditoría
+  updated_at?: string | null
+  updated_by?: string | null
+  updated_by_name?: string | null
 }
 
 interface Vehiculo {
@@ -486,22 +491,35 @@ export default function MultasModule() {
     if (!editingMulta) return
 
     try {
+      const auditCtx = {
+        userId: user?.id,
+        userName: profile?.full_name || user?.email || 'Sistema',
+        userEmail: user?.email || undefined,
+      }
+      const payload = withAudit({
+        patente: editingMulta.patente,
+        fecha_infraccion: editingMulta.fecha_infraccion,
+        importe: editingMulta.importe,
+        infraccion: editingMulta.infraccion || null,
+        lugar: editingMulta.lugar || null,
+        conductor_responsable: editingMulta.conductor_responsable || null,
+        detalle: editingMulta.detalle || null,
+        observaciones: editingMulta.observaciones || null,
+        ibutton: editingMulta.ibutton || null,
+        sede_id: editingMulta.sede_id || null
+      }, auditCtx)
       const { error } = await (supabase.from('multas_historico') as any)
-        .update({
-          patente: editingMulta.patente,
-          fecha_infraccion: editingMulta.fecha_infraccion,
-          importe: editingMulta.importe,
-          infraccion: editingMulta.infraccion || null,
-          lugar: editingMulta.lugar || null,
-          conductor_responsable: editingMulta.conductor_responsable || null,
-          detalle: editingMulta.detalle || null,
-          observaciones: editingMulta.observaciones || null,
-          ibutton: editingMulta.ibutton || null,
-          sede_id: editingMulta.sede_id || null
-        })
+        .update(payload)
         .eq('id', editingMulta.id)
 
       if (error) throw error
+
+      await logMultaAudit({
+        multaId: editingMulta.id,
+        accion: 'update',
+        datosNuevos: payload,
+        ctx: auditCtx,
+      })
 
       showSuccess('Actualizada')
       setShowEditModal(false)
@@ -545,6 +563,7 @@ export default function MultasModule() {
     const res = await svcDesestimarMulta(multa.id, {
       userId: user?.id,
       userName: profile?.full_name || user?.email || 'Sistema',
+      userEmail: user?.email || undefined,
       motivo: typeof result.value === 'string' ? result.value : undefined,
     })
     if (res.ok) {
@@ -568,7 +587,11 @@ export default function MultasModule() {
     })
     if (!result.isConfirmed) return
 
-    const res = await svcReactivarMulta(multa.id)
+    const res = await svcReactivarMulta(multa.id, {
+      userId: user?.id,
+      userName: profile?.full_name || user?.email || 'Sistema',
+      userEmail: user?.email || undefined,
+    })
     if (res.ok) {
       showSuccess('Reactivada', 'La multa volvió al listado principal')
       cargarDatos()
@@ -591,10 +614,28 @@ export default function MultasModule() {
     if (!result.isConfirmed) return
 
     try {
+      const auditCtx = {
+        userId: user?.id,
+        userName: profile?.full_name || user?.email || 'Sistema',
+        userEmail: user?.email || undefined,
+      }
+      const payload = withAudit({
+        deleted_at: new Date().toISOString(),
+        deleted_reason: 'Eliminada manualmente desde UI',
+        deleted_by: auditCtx.userName,
+      }, auditCtx)
       const { error } = await (supabase.from('multas_historico') as any)
-        .update({ deleted_at: new Date().toISOString(), deleted_reason: 'Eliminada manualmente desde UI', deleted_by: 'usuario' })
+        .update(payload)
         .eq('id', multa.id)
       if (error) throw error
+
+      await logMultaAudit({
+        multaId: multa.id,
+        accion: 'eliminar',
+        datosNuevos: { deleted_reason: 'Eliminada manualmente desde UI' },
+        camposModificados: ['deleted_at', 'deleted_by', 'deleted_reason'],
+        ctx: auditCtx,
+      })
 
       showSuccess('Eliminada')
       setShowModal(false)
@@ -1064,6 +1105,27 @@ export default function MultasModule() {
               <AlertCircle className="w-4 h-4 text-amber-500" />
             ) : (
               <CheckCircle className="w-4 h-4 text-emerald-500" />
+            )}
+          </div>
+        )
+      }
+    },
+    {
+      id: 'modificado',
+      accessorKey: 'updated_at',
+      size: 140,
+      header: 'Modificado',
+      cell: ({ row }) => {
+        const u = row.original.updated_at
+        const by = row.original.updated_by_name
+        if (!u) return <span style={{ color: '#9ca3af' }}>—</span>
+        return (
+          <div style={{ fontSize: '11px', lineHeight: '1.3' }}>
+            <div style={{ color: 'var(--text-primary)' }} title={u}>{formatFecha(u)}</div>
+            {by && (
+              <div style={{ fontSize: '10px', color: 'var(--text-tertiary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '130px' }} title={by}>
+                {by}
+              </div>
             )}
           </div>
         )

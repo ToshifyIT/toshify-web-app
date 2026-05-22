@@ -78,7 +78,7 @@ interface CabifyPreviewTableProps {
   periodoId?: string
   proyectadoA?: string // Fecha hasta la cual se proyectan importes (solo Vista Previa)
   onClose: () => void
-  onExport: () => void
+  onExport: (filtered?: CabifyPreviewRow[]) => void
   exporting: boolean
   onSync?: (data: CabifyPreviewRow[]) => Promise<boolean>
 }
@@ -864,7 +864,7 @@ export function CabifyPreviewTable({
         </div>
         <button
           className="fact-preview-btn primary"
-          onClick={onExport}
+          onClick={() => onExport(filteredData)}
           disabled={exporting}
           style={{ backgroundColor: '#7C3AED', whiteSpace: 'nowrap' }}
         >

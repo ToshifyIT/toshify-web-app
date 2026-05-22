@@ -8386,17 +8386,18 @@ export function ReporteFacturacionTab() {
   }
 
   // Exportar Facturación Cabify desde el Preview
-  function exportarCabifyExcel() {
-    if (cabifyPreviewData.length === 0) return
+  function exportarCabifyExcel(filtered?: CabifyPreviewRow[]) {
+    const dataToExport = (filtered && filtered.length > 0) ? filtered : cabifyPreviewData
+    if (dataToExport.length === 0) return
 
     setExportingCabify(true)
     try {
-      const semana = cabifyPreviewData[0].semana
-      const anio = cabifyPreviewData[0].anio
-      
+      const semana = dataToExport[0].semana
+      const anio = dataToExport[0].anio
+
       // Fechas como número de Excel (días desde 1/1/1900)
-      const fechaInicioExcel = Math.floor((cabifyPreviewData[0].fechaInicial.getTime() - new Date(1899, 11, 30).getTime()) / 86400000)
-      const fechaFinExcel = Math.floor((cabifyPreviewData[0].fechaFinal.getTime() - new Date(1899, 11, 30).getTime()) / 86400000)
+      const fechaInicioExcel = Math.floor((dataToExport[0].fechaInicial.getTime() - new Date(1899, 11, 30).getTime()) / 86400000)
+      const fechaFinExcel = Math.floor((dataToExport[0].fechaFinal.getTime() - new Date(1899, 11, 30).getTime()) / 86400000)
 
       const wb = XLSX.utils.book_new()
 
@@ -8405,7 +8406,7 @@ export function ReporteFacturacionTab() {
         ['Año', 'Semana Fact.', 'Fecha Inicial', 'Fecha Final', 'Conductor', 'Email', 'Patente', 'DNI', 'Importe Contrato', 'EXCEDENTES', '#DO', 'Horas de conexion', 'Importe Generado', 'Importe Generado (con bonos)', 'Generado efectivo']
       ]
 
-      cabifyPreviewData.forEach(row => {
+      dataToExport.forEach(row => {
         cabifyData.push([
           row.anio,
           row.semana,
