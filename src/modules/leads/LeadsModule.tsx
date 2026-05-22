@@ -996,44 +996,93 @@ export function LeadsModule() {
     const nombre = lead.nombre_completo || 'Sin nombre'
     const dni = lead.dni || 'Sin DNI'
 
-    const result = await Swal.fire({
-      icon: 'question',
-      title: 'Convertir Lead a Conductor',
-      html: `
-        <p>Se creará un nuevo conductor con los datos de este lead:</p>
-        <div style="text-align:left; padding:12px; background:#f9fafb; border-radius:8px; margin-top:12px;">
-          <p style="margin:4px 0;"><strong>Nombre:</strong> ${nombre}</p>
-          <p style="margin:4px 0;"><strong>DNI:</strong> ${dni}</p>
-          <p style="margin:4px 0;"><strong>Teléfono:</strong> ${lead.phone || '-'}</p>
-          <p style="margin:4px 0;"><strong>Zona:</strong> ${lead.zona || '-'}</p>
-          <p style="margin:4px 0;"><strong>Turno:</strong> ${lead.turno || '-'}</p>
-        </div>
-        <p style="margin-top:12px; color:#92400e; font-size:13px;">El lead se marcará como "Convertido".</p>
-      `,
-      showCancelButton: true,
-      confirmButtonText: 'Convertir',
-      cancelButtonText: 'Cancelar',
-      confirmButtonColor: '#16a34a',
-    })
+    // Verificar si ya existe un conductor con el mismo DNI o CUIT
+    // Normalizamos quitando espacios y guiones para comparar correctamente
+    const normalizarDoc = (val: string) => val.replace(/[\s\-]/g, '')
+    let conductorExistente: Record<string, unknown> | null = null
 
-    if (!result.isConfirmed) return
+    const dniLimpio = lead.dni?.trim() ? normalizarDoc(lead.dni.trim()) : ''
+    const cuitLimpio = lead.cuit?.trim() ? normalizarDoc(lead.cuit.trim()) : ''
+
+    if (dniLimpio || cuitLimpio) {
+      // Traer candidatos que contengan los digitos del DNI o CUIT
+      let query = supabase.from('conductores').select('*')
+      if (dniLimpio && cuitLimpio) {
+        query = query.or(`numero_dni.ilike.%${dniLimpio}%,numero_cuit.ilike.%${dniLimpio}%,numero_dni.ilike.%${cuitLimpio}%,numero_cuit.ilike.%${cuitLimpio}%`)
+      } else if (dniLimpio) {
+        query = query.or(`numero_dni.ilike.%${dniLimpio}%,numero_cuit.ilike.%${dniLimpio}%`)
+      } else {
+        query = query.or(`numero_dni.ilike.%${cuitLimpio}%,numero_cuit.ilike.%${cuitLimpio}%`)
+      }
+      const { data: candidatos } = await query.limit(10)
+
+      if (candidatos && candidatos.length > 0) {
+        // Comparar normalizado para encontrar match exacto
+        // DNI match directo, o DNI contenido dentro del CUIT (CUIT = prefijo + DNI + digito verificador)
+        conductorExistente = candidatos.find((c: Record<string, unknown>) => {
+          const cDni = normalizarDoc(String(c.numero_dni || ''))
+          const cCuit = normalizarDoc(String(c.numero_cuit || ''))
+          if (dniLimpio && (cDni === dniLimpio || cCuit.includes(dniLimpio))) return true
+          if (cuitLimpio && (cCuit === cuitLimpio || cDni === cuitLimpio)) return true
+          return false
+        }) || null
+      }
+    }
+
+    const esFusion = !!conductorExistente
+
+    if (esFusion && conductorExistente) {
+      // Mensaje informativo no bloqueante: se muestra mientras la fusion se ejecuta
+      const ce = conductorExistente
+      Swal.fire({
+        icon: 'info',
+        title: 'El conductor ya existe',
+        html: `
+          <p>Se realizará la fusión de datos de este lead con el conductor existente.</p>
+          <div style="text-align:left; padding:12px; background:#f0f9ff; border:1px solid #bae6fd; border-radius:8px; margin-top:12px;">
+            <p style="margin:4px 0;"><strong>Nombre:</strong> ${ce.nombres || ''} ${ce.apellidos || ''}</p>
+            <p style="margin:4px 0;"><strong>DNI:</strong> ${ce.numero_dni || '-'}</p>
+            <p style="margin:4px 0;"><strong>CUIT:</strong> ${ce.numero_cuit || '-'}</p>
+            <p style="margin:4px 0;"><strong>Teléfono:</strong> ${ce.telefono_contacto || '-'}</p>
+            <p style="margin:4px 0;"><strong>Email:</strong> ${ce.email || '-'}</p>
+            <p style="margin:4px 0;"><strong>Dirección:</strong> ${ce.direccion || '-'}</p>
+          </div>
+          <p style="margin-top:12px; font-size:13px; color:#6B7280;">Solo se completarán los campos vacíos del conductor con los datos del lead.</p>
+        `,
+        showConfirmButton: false,
+        allowOutsideClick: false,
+        didOpen: () => { Swal.showLoading() },
+      })
+    } else {
+      // Flujo normal: confirmar creación
+      const result = await Swal.fire({
+        icon: 'question',
+        title: 'Convertir Lead a Conductor',
+        html: `
+          <p>Se creará un nuevo conductor con los datos de este lead:</p>
+          <div style="text-align:left; padding:12px; background:#f9fafb; border-radius:8px; margin-top:12px;">
+            <p style="margin:4px 0;"><strong>Nombre:</strong> ${nombre}</p>
+            <p style="margin:4px 0;"><strong>DNI:</strong> ${dni}</p>
+            <p style="margin:4px 0;"><strong>Teléfono:</strong> ${lead.phone || '-'}</p>
+            <p style="margin:4px 0;"><strong>Zona:</strong> ${lead.zona || '-'}</p>
+            <p style="margin:4px 0;"><strong>Turno:</strong> ${lead.turno || '-'}</p>
+          </div>
+          <p style="margin-top:12px; color:#92400e; font-size:13px;">El lead se marcará como "Convertido".</p>
+        `,
+        showCancelButton: true,
+        confirmButtonText: 'Convertir',
+        cancelButtonText: 'Cancelar',
+        confirmButtonColor: '#16a34a',
+      })
+
+      if (!result.isConfirmed) return
+    }
 
     setSaving(true)
     try {
       const parts = (lead.nombre_completo || '').trim().split(' ')
       const nombres = parts.slice(0, Math.ceil(parts.length / 2)).join(' ')
       const apellidos = parts.slice(Math.ceil(parts.length / 2)).join(' ')
-
-      const { data: estados } = await supabase
-        .from('conductores_estados')
-        .select('id')
-        .eq('codigo', 'ACTIVO')
-        .limit(1)
-      const estadoId = estados?.[0]?.id
-
-      if (!estadoId) {
-        throw new Error('No se encontró el estado ACTIVO para conductores. Verifique la tabla conductores_estados.')
-      }
 
       let turnoMapped = 'SIN_PREFERENCIA'
       const turnoLead = (lead.turno || '').toLowerCase()
@@ -1053,10 +1102,8 @@ export function LeadsModule() {
       let lngFinal = lead.longitud ?? null
 
       if (latFinal != null && lngFinal != null) {
-        // Tiene coordenadas: inferir zona directamente
         zonaCalculada = inferZona(lead.direccion || '', latFinal, lngFinal)
       } else if (lead.direccion?.trim()) {
-        // No tiene coordenadas: geocodificar la dirección para obtenerlas
         try {
           const geocoder = new google.maps.Geocoder()
           const geoResult = await new Promise<{ lat: number; lng: number; address: string } | null>((resolve) => {
@@ -1078,15 +1125,14 @@ export function LeadsModule() {
             zonaCalculada = inferZonaFromCoords(geoResult.lat, geoResult.lng)
           }
         } catch {
-          // Si falla la geocodificación, intentar por texto como último recurso
           zonaCalculada = inferZona(lead.direccion || '')
         }
       }
 
-      // Si no se pudo calcular zona, usar la que tenía el lead
       if (!zonaCalculada) zonaCalculada = lead.zona || ''
 
-      const conductorData: Record<string, unknown> = {
+      // Datos del lead mapeados a campos de conductor
+      const leadMappedData: Record<string, unknown> = {
         nombres: (nombres || lead.primer_nombre || '').toUpperCase(),
         apellidos: (apellidos || lead.apellido || '').toUpperCase(),
         numero_dni: lead.dni || '',
@@ -1102,7 +1148,6 @@ export function LeadsModule() {
         licencia_tipo_id: licenciaTipoId,
         nacionalidad_id: nacionalidadId,
         estado_civil_id: estadoCivilId,
-        estado_id: estadoId,
         cbu: lead.cbu || '',
         monotributo: lead.monotributo?.toLowerCase().includes('tiene') || false,
         fecha_nacimiento: lead.fecha_de_nacimiento || null,
@@ -1118,52 +1163,105 @@ export function LeadsModule() {
         observaciones: lead.observaciones || null,
       }
 
-      // Filtrar campos vacíos (salvo requeridos)
-      Object.keys(conductorData).forEach(key => {
-        const v = conductorData[key]
-        if (v === '' || v === null || v === undefined) {
-          if (!['numero_licencia', 'estado_id', 'nombres', 'apellidos', 'numero_dni'].includes(key)) {
-            delete conductorData[key]
+      let conductorId: string
+
+      if (esFusion && conductorExistente) {
+        // FUSION: solo actualizar campos vacios/nulos del conductor existente
+        conductorId = conductorExistente.id as string
+        const updateData: Record<string, unknown> = {}
+
+        // Campos que no se deben pisar en fusion (estado, motivo_baja, etc)
+        const camposExcluidos = ['estado_id', 'motivo_baja', 'fecha_terminacion', 'fecha_reincorpoaracion']
+
+        for (const [key, leadValue] of Object.entries(leadMappedData)) {
+          if (camposExcluidos.includes(key)) continue
+          const existingValue = conductorExistente[key]
+          // Solo llenar si el conductor tiene el campo vacio/nulo
+          const isEmpty = existingValue === null || existingValue === undefined || existingValue === '' || existingValue === 0
+          const leadHasValue = leadValue !== null && leadValue !== undefined && leadValue !== ''
+          if (isEmpty && leadHasValue) {
+            updateData[key] = leadValue
           }
         }
-      })
 
-      const { data: createdConductor, error: errCond } = await supabase
-        .from('conductores')
-        .insert(conductorData)
-        .select('id')
-        .single()
+        if (Object.keys(updateData).length > 0) {
+          const { error: errUpdate } = await supabase
+            .from('conductores')
+            .update(updateData)
+            .eq('id', conductorId)
+          if (errUpdate) throw errUpdate
+        }
+      } else {
+        // CREACION: flujo normal de insert
+        const { data: estados } = await supabase
+          .from('conductores_estados')
+          .select('id')
+          .eq('codigo', 'ACTIVO')
+          .limit(1)
+        const estadoId = estados?.[0]?.id
 
-      if (errCond) throw errCond
+        if (!estadoId) {
+          throw new Error('No se encontró el estado ACTIVO para conductores. Verifique la tabla conductores_estados.')
+        }
 
-      // Buscar o crear carpeta en Drive (carpeta de leads/documentación)
+        const conductorData: Record<string, unknown> = { ...leadMappedData, estado_id: estadoId }
+
+        // Filtrar campos vacíos (salvo requeridos)
+        Object.keys(conductorData).forEach(key => {
+          const v = conductorData[key]
+          if (v === '' || v === null || v === undefined) {
+            if (!['numero_licencia', 'estado_id', 'nombres', 'apellidos', 'numero_dni'].includes(key)) {
+              delete conductorData[key]
+            }
+          }
+        })
+
+        const { data: createdConductor, error: errCond } = await supabase
+          .from('conductores')
+          .insert(conductorData)
+          .select('id')
+          .single()
+
+        if (errCond) throw errCond
+        conductorId = createdConductor.id
+      }
+
+      // Buscar o crear carpeta en Drive
       let folderUrl = lead.url_folder?.trim() || null
-      if (createdConductor?.id) {
+      if (conductorId) {
         if (!folderUrl) {
-          // No tiene carpeta: buscar/crear en la carpeta raíz de leads
           const nombreCompleto = (lead.nombre_completo || '').trim()
           if (nombreCompleto) {
             const driveResult = await createLeadDriveFolder(lead.id, nombreCompleto)
             if (driveResult.success && driveResult.folderUrl) {
               folderUrl = driveResult.folderUrl
-              // Guardar en el lead
               await supabase.from('leads').update({ url_folder: folderUrl }).eq('id', lead.id)
             }
           }
         }
-        // Guardar la URL en el conductor (venga del lead o recién creada)
+        // Solo guardar URL si el conductor no tiene una
         if (folderUrl) {
-          await supabase.from('conductores').update({ url_documentacion: folderUrl }).eq('id', createdConductor.id)
+          const existingUrl = esFusion ? (conductorExistente?.url_documentacion || conductorExistente?.drive_folder_url) : null
+          if (!existingUrl) {
+            await supabase.from('conductores').update({ url_documentacion: folderUrl }).eq('id', conductorId)
+          }
         }
       }
 
-      // Insertar categorías de licencia en tabla intermedia
-      if (createdConductor?.id && lead.categorias_licencia?.length && categoriasLicencia.length > 0) {
+      // Insertar categorías de licencia (sin duplicar)
+      if (conductorId && lead.categorias_licencia?.length && categoriasLicencia.length > 0) {
+        // Obtener categorias que ya tiene el conductor
+        const { data: categoriasExistentes } = await (supabase as any)
+          .from('conductores_licencias_categorias')
+          .select('licencia_categoria_id')
+          .eq('conductor_id', conductorId)
+        const idsExistentes = new Set((categoriasExistentes || []).map((c: { licencia_categoria_id: string }) => c.licencia_categoria_id))
+
         const categoriasRelacion: Array<{ conductor_id: string; licencia_categoria_id: string }> = []
         for (const desc of lead.categorias_licencia) {
           const cat = categoriasLicencia.find(c => c.descripcion === desc)
-          if (cat) {
-            categoriasRelacion.push({ conductor_id: createdConductor.id, licencia_categoria_id: cat.id })
+          if (cat && !idsExistentes.has(cat.id)) {
+            categoriasRelacion.push({ conductor_id: conductorId, licencia_categoria_id: cat.id })
           }
         }
         if (categoriasRelacion.length > 0) {
@@ -1178,9 +1276,14 @@ export function LeadsModule() {
         usuario: profile?.full_name || 'Sistema',
       }).eq('id', lead.id)
 
-      showSuccess('Convertido', `El lead "${nombre}" fue convertido a conductor exitosamente.`)
+      if (esFusion) Swal.close()
+      const msgExito = esFusion
+        ? `El lead "${nombre}" fue fusionado con el conductor existente.`
+        : `El lead "${nombre}" fue convertido a conductor exitosamente.`
+      showSuccess(esFusion ? 'Fusionado' : 'Convertido', msgExito)
       loadLeads()
     } catch (err) {
+      if (esFusion) Swal.close()
       const msg = err instanceof Error ? err.message : 'No se pudo convertir el lead a conductor'
       Swal.fire('Error', msg, 'error')
     } finally {
