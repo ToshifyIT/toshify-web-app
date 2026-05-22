@@ -407,6 +407,7 @@ export function ReporteFacturacionTab() {
       nuevaEnSemana?: boolean
       patente?: string
       tieneGnc?: boolean
+      grupoFlota?: string | null
     }[]
     devolucion?: {
       fecha_programada: string | null
