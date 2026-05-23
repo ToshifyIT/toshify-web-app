@@ -27,6 +27,7 @@ import { format, startOfWeek, endOfWeek, subWeeks, getWeek, getYear, parseISO } 
 import { es } from 'date-fns/locale'
 import { normalizeDni } from '../../../utils/normalizeDocuments'
 import { recalcGarantiasForPeriodo } from '../../../services/garantiasService'
+import { syncKardexForPeriodo } from '../../../services/controlGarantiasService'
 
 // Helper: tabla de cabify según sede (Bariloche usa tabla separada)
 const SEDE_BARILOCHE_ID = 'f37193f7-5805-4d87-820d-c4521824860e'
@@ -978,6 +979,10 @@ export function PeriodosTab() {
       // Sincroniza cuotas de garantía: cada período cerrado con
       // subtotal_garantia > 0 cuenta como una cuota pagada. Idempotente.
       await recalcGarantiasForPeriodo(semana.periodo_id)
+
+      // Crea entradas en el kardex (control_garantias) para cada conductor
+      // con garantía facturada en este período. Idempotente.
+      await syncKardexForPeriodo(semana.periodo_id)
 
       showSuccess('Período Cerrado')
       cargarSemanas()

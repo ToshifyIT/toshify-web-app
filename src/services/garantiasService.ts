@@ -50,7 +50,7 @@ export async function recalcGarantiasForConductors(
   const [garantiasRes, periodosCerradosRes, conductoresRes] = await Promise.all([
     (supabase
       .from('garantias_conductores') as any)
-      .select('id, conductor_id, conductor_nombre, cuotas_pagadas, cuotas_totales, monto_pagado, monto_total, monto_cuota_semanal, estado, fecha_completada')
+      .select('id, conductor_id, conductor_nombre, cuotas_pagadas, cuotas_totales, monto_pagado, monto_realmente_pagado, monto_total, monto_cuota_semanal, estado, fecha_completada')
       .in('conductor_id', conductorIds),
     (supabase
       .from('periodos_facturacion') as any)
@@ -121,29 +121,38 @@ export async function recalcGarantiasForConductors(
     const cuotaSemanal = Number(g.monto_cuota_semanal) || 0
     const montoTotal = Number(g.monto_total) || 0
     const montoPagadoActual = Number(g.monto_pagado) || 0
+    const montoRealActual = Number(g.monto_realmente_pagado) || 0
 
-    // Prorrateo: monto pagado de garantía = total pagado × ratio garantía/total
+    // --- monto_pagado: prorrateo proporcional (visual facturación) ---
     const ratio = totalFact > 0 ? garFact / totalFact : 0
     const montoGarantiaCalculado = Math.round(totalPag * ratio * 100) / 100
-
     // MAX-only: nunca bajar valor existente.
     const montoPagadoNuevo = Math.min(
       Math.max(montoPagadoActual, montoGarantiaCalculado),
       montoTotal
     )
 
-    // Cuotas referenciales: derivadas de monto_pagado / cuota_semanal.
+    // --- monto_realmente_pagado: sum(subtotal_garantia) directo (tracking garantía) ---
+    // Refleja lo realmente facturado como garantía. Lo no cubierto en efectivo
+    // pasa a saldo pendiente, por lo que se considera pagado para la garantía.
+    // MAX-only: preserva valores de backfill/Excel histórico.
+    const montoRealNuevo = Math.min(
+      Math.max(montoRealActual, garFact),
+      montoTotal
+    )
+
+    // Cuotas referenciales: derivadas de monto_realmente_pagado / cuota_semanal.
     const cuotasNuevas = cuotaSemanal > 0
-      ? Math.min(Math.round(montoPagadoNuevo / cuotaSemanal), g.cuotas_totales || 0)
+      ? Math.min(Math.round(montoRealNuevo / cuotaSemanal), g.cuotas_totales || 0)
       : 0
 
     // Nota: el constraint solo permite pendiente/en_curso/completada/cancelada/
     // suspendida. El estado "en_devolucion" es virtual — lo deriva la UI según
     // estado_conductor=BAJA + monto parcial.
     let estadoNuevo: string
-    if (montoPagadoNuevo >= montoTotal && montoTotal > 0) {
+    if (montoRealNuevo >= montoTotal && montoTotal > 0) {
       estadoNuevo = 'completada'
-    } else if (montoPagadoNuevo > 0) {
+    } else if (montoRealNuevo > 0) {
       estadoNuevo = 'en_curso'
     } else {
       estadoNuevo = 'pendiente'
@@ -152,6 +161,7 @@ export async function recalcGarantiasForConductors(
     const cambio =
       g.cuotas_pagadas !== cuotasNuevas ||
       Math.abs(montoPagadoActual - montoPagadoNuevo) > 0.01 ||
+      Math.abs(montoRealActual - montoRealNuevo) > 0.01 ||
       g.estado !== estadoNuevo
 
     resultados.push({
@@ -176,6 +186,7 @@ export async function recalcGarantiasForConductors(
           .update({
             cuotas_pagadas: cuotasNuevas,
             monto_pagado: montoPagadoNuevo,
+            monto_realmente_pagado: montoRealNuevo,
             estado: estadoNuevo,
             fecha_completada: fechaCompletada
           })

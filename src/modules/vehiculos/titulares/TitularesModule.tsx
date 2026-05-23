@@ -257,6 +257,10 @@ export function TitularesModule() {
     if (!confirm.isConfirmed) return
 
     try {
+      // Eliminar relaciones vehiculos_titulares antes de borrar el titular
+      const { error: errRel } = await supabase.from('vehiculos_titulares').delete().eq('titular_id', titular.id)
+      if (errRel) throw errRel
+
       const { error: err } = await supabase.from('titulares').delete().eq('id', titular.id)
       if (err) throw err
       showSuccess('Titular eliminado')

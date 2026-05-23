@@ -136,6 +136,7 @@ export interface GarantiaConductor {
   cuotas_totales: number
   cuotas_pagadas: number
   monto_pagado: number
+  monto_realmente_pagado: number
   estado: 'pendiente' | 'en_curso' | 'completada' | 'cancelada' | 'suspendida' | 'en_devolucion'
   fecha_inicio: string | null
   fecha_completada: string | null

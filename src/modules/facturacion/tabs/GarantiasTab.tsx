@@ -16,7 +16,6 @@ import {
   Eye,
   // Plus,
   DollarSign,
-  Banknote,
   Filter,
   Edit3,
   UserPlus,
@@ -26,7 +25,6 @@ import {
   RotateCcw,
   Download,
   Upload,
-  RefreshCw
 } from 'lucide-react'
 import { type ColumnDef } from '@tanstack/react-table'
 import { format, startOfWeek, endOfWeek, parseISO } from 'date-fns'
@@ -37,7 +35,7 @@ import type { GarantiaConductor } from '../../../types/facturacion.types'
 import { formatCurrency, formatDate, FACTURACION_CONFIG } from '../../../types/facturacion.types'
 import { recalcGarantiasForSede } from '../../../services/garantiasService'
 import { formatNombreCompleto } from '../../../utils/conductorUtils'
-import { getKardexGarantia, type ControlGarantiaRow } from '../../../services/controlGarantiasService'
+import { getKardexGarantia, getFacturacionGarantiaConductor, type ControlGarantiaRow } from '../../../services/controlGarantiasService'
 import { X as XIcon } from 'lucide-react'
 
 interface ConductorBasico {
@@ -98,12 +96,16 @@ export function GarantiasTab() {
     search: string
     semanaFilter: string
     tipoFilter: string
-  }>({ open: false, garantia: null, rows: [], loading: false, search: '', semanaFilter: '', tipoFilter: '' })
+    semanasFacturacion: { semana: number; anio: number; subtotalGarantia: number }[]
+  }>({ open: false, garantia: null, rows: [], loading: false, search: '', semanaFilter: '', tipoFilter: '', semanasFacturacion: [] })
 
   async function abrirKardex(garantia: GarantiaConductor) {
-    setKardexModal({ open: true, garantia, rows: [], loading: true, search: '', semanaFilter: '', tipoFilter: '' })
-    const rows = await getKardexGarantia(garantia.id)
-    setKardexModal(prev => ({ ...prev, rows, loading: false }))
+    setKardexModal({ open: true, garantia, rows: [], loading: true, search: '', semanaFilter: '', tipoFilter: '', semanasFacturacion: [] })
+    const [rows, facturacion] = await Promise.all([
+      getKardexGarantia(garantia.id),
+      getFacturacionGarantiaConductor(garantia.conductor_dni || ''),
+    ])
+    setKardexModal(prev => ({ ...prev, rows, loading: false, semanasFacturacion: facturacion }))
   }
 
   useEffect(() => {
@@ -188,7 +190,7 @@ export function GarantiasTab() {
       // Marcar visualmente como en_devolucion si conductor es BAJA (solo in-memory, no se guarda en BD)
       const garantiasConEstado = (data || []).map((g: any) => {
         const estadoCond = estadoConductorMap.get(g.conductor_id) || 'ACTIVO'
-        const necesitaDevolucion = estadoCond === 'BAJA' && g.monto_pagado > 0 && g.estado !== 'cancelada'
+        const necesitaDevolucion = estadoCond === 'BAJA' && (g.monto_realmente_pagado || g.monto_pagado) > 0 && g.estado !== 'cancelada'
         return {
           ...g,
           conductor_dni: g.conductor_dni || dniConductorMap.get(g.conductor_id) || null,
@@ -455,6 +457,7 @@ export function GarantiasTab() {
         tipo_alquiler: formValues.tipo,
         monto_total: formValues.monto,
         monto_pagado: 0,
+        monto_realmente_pagado: 0,
         cuotas_totales: formValues.cuotas,
         cuotas_pagadas: 0,
         estado: 'pendiente',
@@ -482,7 +485,7 @@ export function GarantiasTab() {
           </div>
           <div style="margin-bottom: 12px;">
             <label style="display: block; font-size: 12px; color: #374151; margin-bottom: 4px;">Monto Pagado:</label>
-            <input id="swal-monto-pagado" type="number" min="0" class="swal2-input" style="font-size: 14px; margin: 0; width: 100%;" value="${Math.round(garantia.monto_pagado)}">
+            <input id="swal-monto-pagado" type="number" min="0" class="swal2-input" style="font-size: 14px; margin: 0; width: 100%;" value="${Math.round(garantia.monto_realmente_pagado || garantia.monto_pagado)}">
           </div>
           <div>
             <label style="display: block; font-size: 12px; color: #374151; margin-bottom: 4px;">Monto Total:</label>
@@ -527,7 +530,7 @@ export function GarantiasTab() {
 
       const { error } = await (supabase.from('garantias_conductores') as any)
         .update({
-          monto_pagado: formValues.montoPagado,
+          monto_realmente_pagado: formValues.montoPagado,
           monto_total: formValues.montoTotal,
           estado: nuevoEstado
         })
@@ -701,8 +704,9 @@ export function GarantiasTab() {
 
   async function registrarDevolucion(garantia: GarantiaConductor) {
     const devuelto = (garantia as any).monto_devuelto || 0
-    const pendienteDevolver = garantia.monto_pagado - devuelto
-    const porcentajeDevuelto = garantia.monto_pagado > 0 ? Math.round((devuelto / garantia.monto_pagado) * 100) : 0
+    const montoReal = garantia.monto_realmente_pagado || garantia.monto_pagado
+    const pendienteDevolver = montoReal - devuelto
+    const porcentajeDevuelto = montoReal > 0 ? Math.round((devuelto / montoReal) * 100) : 0
 
     const { value: formValues } = await Swal.fire({
       title: '<span style="font-size: 16px; font-weight: 600;">Registrar Devolución de Garantía</span>',
@@ -716,7 +720,7 @@ export function GarantiasTab() {
             <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
               <div>
                 <div style="font-size: 11px; color: #6B7280;">Total pagado</div>
-                <div style="font-weight: 600; color: #111827;">${formatCurrency(garantia.monto_pagado)}</div>
+                <div style="font-weight: 600; color: #111827;">${formatCurrency(montoReal)}</div>
               </div>
               <div>
                 <div style="font-size: 11px; color: #6B7280;">Ya devuelto</div>
@@ -887,7 +891,7 @@ export function GarantiasTab() {
       'DNI': g.conductor_dni || '',
       'Conductor': g.conductor_nombre || '',
       'Monto Total': g.monto_total,
-      'Monto Pagado': g.monto_pagado,
+      'Monto Pagado': g.monto_realmente_pagado || g.monto_pagado,
       'Cuotas Totales': g.cuotas_totales,
       'Cuotas Pagadas': g.cuotas_pagadas,
     }))
@@ -929,12 +933,15 @@ export function GarantiasTab() {
       'Conductor': g.conductor_nombre || '',
       'Estado Conductor': ((g as any).estado_conductor || '').toString(),
       'Estado Garantía': g.estado || '',
-      'Días Baja': (g as any).fecha_baja
-        ? Math.max(0, Math.floor((Date.now() - new Date((g as any).fecha_baja).getTime()) / 86_400_000))
-        : '',
+      'Días Baja': (() => {
+        if ((g as any).estado_conductor === 'ACTIVO' || !(g as any).fecha_baja) return ''
+        let dias = 0; const inicio = new Date((g as any).fecha_baja); const hoy = new Date(); const cur = new Date(inicio)
+        while (cur <= hoy) { const d = cur.getDay(); if (d !== 0 && d !== 6) dias++; cur.setDate(cur.getDate() + 1) }
+        return dias
+      })(),
       'Monto Total': g.monto_total,
-      'Monto Pagado': g.monto_pagado,
-      'Monto Pendiente': (Number(g.monto_total) || 0) - (Number(g.monto_pagado) || 0),
+      'Monto Pagado': g.monto_realmente_pagado || g.monto_pagado,
+      'Monto Pendiente': (Number(g.monto_total) || 0) - (Number(g.monto_realmente_pagado || g.monto_pagado) || 0),
       'Cuotas Totales': g.cuotas_totales,
       'Cuotas Pagadas': g.cuotas_pagadas,
     }))
@@ -1311,7 +1318,7 @@ export function GarantiasTab() {
         const { error } = await (supabase.from('garantias_conductores') as any)
           .update({
             monto_total: c.monto_total,
-            monto_pagado: c.monto_pagado,
+            monto_realmente_pagado: c.monto_pagado,
             cuotas_totales: c.cuotas_totales,
             cuotas_pagadas: c.cuotas_pagadas,
             monto_cuota_semanal: c.monto_cuota_semanal,
@@ -1414,16 +1421,29 @@ export function GarantiasTab() {
       id: 'dias_desde_baja',
       header: 'Días Baja',
       accessorFn: (row) => {
+        const estadoCond = (row as any).estado_conductor
+        if (estadoCond === 'ACTIVO') return 0
         const fechaBaja = (row as any).fecha_baja
         if (!fechaBaja) return 0
-        return Math.floor((new Date().getTime() - new Date(fechaBaja).getTime()) / (1000 * 60 * 60 * 24))
+        let dias = 0
+        const inicio = new Date(fechaBaja)
+        const hoy = new Date()
+        const cur = new Date(inicio)
+        while (cur <= hoy) { const d = cur.getDay(); if (d !== 0 && d !== 6) dias++; cur.setDate(cur.getDate() + 1) }
+        return dias
       },
       cell: ({ row }) => {
+        const estadoCond = (row.original as any).estado_conductor
+        if (estadoCond === 'ACTIVO') return <span style={{ color: 'var(--text-secondary)', fontSize: '11px' }}>N/A</span>
         const fechaBaja = (row.original as any).fecha_baja
         if (!fechaBaja) return <span style={{ color: 'var(--text-secondary)', fontSize: '11px' }}>N/A</span>
-        const dias = Math.floor((new Date().getTime() - new Date(fechaBaja).getTime()) / (1000 * 60 * 60 * 24))
+        let dias = 0
+        const inicio = new Date(fechaBaja)
+        const hoy = new Date()
+        const cur = new Date(inicio)
+        while (cur <= hoy) { const d = cur.getDay(); if (d !== 0 && d !== 6) dias++; cur.setDate(cur.getDate() + 1) }
         return (
-          <span style={{ fontSize: '11px', fontWeight: 600, color: dias > 30 ? '#ef4444' : dias > 14 ? '#d97706' : 'var(--text-primary)' }}>
+          <span style={{ fontSize: '11px', fontWeight: 600, color: dias >= 120 ? '#ef4444' : 'var(--text-primary)' }}>
             {dias} días
           </span>
         )
@@ -1435,17 +1455,17 @@ export function GarantiasTab() {
       cell: ({ row }) => <span className="fact-precio">{formatCurrency(row.original.monto_total)}</span>
     },
     {
-      accessorKey: 'monto_pagado',
+      accessorKey: 'monto_realmente_pagado',
       header: 'Pagado',
-      cell: ({ row }) => <span className="fact-precio" style={{ color: '#16a34a' }}>{formatCurrency(row.original.monto_pagado)}</span>
+      cell: ({ row }) => <span className="fact-precio" style={{ color: '#16a34a' }}>{formatCurrency(row.original.monto_realmente_pagado || row.original.monto_pagado)}</span>
     },
     {
       id: 'cuotas_pagadas',
       header: 'Cuotas (ref.)',
-      accessorFn: (row) => Math.floor((row.monto_pagado || 0) / 50000),
+      accessorFn: (row) => Math.floor((row.monto_realmente_pagado || row.monto_pagado || 0) / 50000),
       cell: ({ row }) => {
         const cuotasTotales = Math.ceil((row.original.monto_total || 0) / 50000)
-        const cuotasPagadas = Math.floor((row.original.monto_pagado || 0) / 50000)
+        const cuotasPagadas = Math.floor((row.original.monto_realmente_pagado || row.original.monto_pagado || 0) / 50000)
         return (
           <span className="dt-badge dt-badge-blue" style={{ fontSize: '11px' }} title={`${cuotasPagadas} de ${cuotasTotales} cuotas de $50.000 (referencial)`}>
             {cuotasPagadas}/{cuotasTotales}
@@ -1456,19 +1476,19 @@ export function GarantiasTab() {
     {
       id: 'pendiente',
       header: 'Pendiente',
-      accessorFn: (row) => Math.round((row.monto_total || 0) - (row.monto_pagado || 0)),
+      accessorFn: (row) => Math.round((row.monto_total || 0) - (row.monto_realmente_pagado || row.monto_pagado || 0)),
       cell: ({ row }) => {
-        const pendiente = row.original.monto_total - row.original.monto_pagado
+        const pendiente = row.original.monto_total - (row.original.monto_realmente_pagado || row.original.monto_pagado)
         return <span className={`fact-precio ${pendiente > 0 ? 'fact-precio-negative' : ''}`}>{formatCurrency(pendiente)}</span>
       }
     },
     {
       id: 'progreso',
       header: 'Progreso',
-      accessorFn: (row) => row.monto_total > 0 ? Math.round((row.monto_pagado / row.monto_total) * 100) : 0,
+      accessorFn: (row) => row.monto_total > 0 ? Math.round(((row.monto_realmente_pagado || row.monto_pagado) / row.monto_total) * 100) : 0,
       cell: ({ row }) => {
         const porcentaje = row.original.monto_total > 0
-          ? (row.original.monto_pagado / row.original.monto_total) * 100
+          ? ((row.original.monto_realmente_pagado || row.original.monto_pagado) / row.original.monto_total) * 100
           : 0
         return (
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -1528,7 +1548,7 @@ export function GarantiasTab() {
         const { class: badgeClass, label } = config[estado] || { class: 'fact-badge-gray', label: estado }
         if (estado === 'en_devolucion') {
           const devuelto = (row.original as any).monto_devuelto || 0
-          const porDev = row.original.monto_pagado - devuelto
+          const porDev = (row.original.monto_realmente_pagado || row.original.monto_pagado) - devuelto
           return (
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: '2px' }}>
               <span className={`fact-badge ${badgeClass}`}>{label}</span>
@@ -1545,19 +1565,14 @@ export function GarantiasTab() {
       id: 'acciones',
       header: 'Acciones',
       cell: ({ row }) => {
-        const esBaja = (row.original as any).estado_conductor === 'BAJA'
         const esDevolucion = row.original.estado === 'en_devolucion'
-        const pendienteDevolver = esDevolucion && row.original.monto_pagado > (row.original as any).monto_devuelto
+        const pendienteDevolver = esDevolucion && (row.original.monto_realmente_pagado || row.original.monto_pagado) > (row.original as any).monto_devuelto
         return (
           <div className="fact-table-actions">
             <button className="fact-table-btn fact-table-btn-view" onClick={() => abrirKardex(row.original)} data-tooltip="Ver kardex de garantía">
               <Eye size={14} />
             </button>
-            {!esBaja && row.original.estado !== 'completada' && !esDevolucion && (
-              <button className="fact-table-btn" onClick={() => registrarPago(row.original)} data-tooltip="Registrar pago" style={{ color: '#16a34a' }}>
-                <Banknote size={14} />
-              </button>
-            )}
+            {/* Pago manual oculto: la garantía se cobra via saldo pendiente */}
             {pendienteDevolver && (isAdmin() || isAdministrativo()) && (
               <button className="fact-table-btn" onClick={() => registrarDevolucion(row.original)} data-tooltip="Registrar devolución" style={{ color: '#2563eb' }}>
                 <RotateCcw size={14} />
@@ -1705,9 +1720,9 @@ export function GarantiasTab() {
     const completadas = garantias.filter(g => g.estado === 'completada').length
     const enCurso = garantias.filter(g => g.estado === 'en_curso').length
     const enDevolucion = garantias.filter(g => g.estado === 'en_devolucion').length
-    const totalRecaudado = garantias.reduce((sum, g) => sum + g.monto_pagado, 0)
-    const totalPorRecaudar = garantias.reduce((sum, g) => sum + (g.monto_total - g.monto_pagado), 0)
-    const totalADevolver = garantias.filter(g => g.estado === 'en_devolucion').reduce((sum, g) => sum + g.monto_pagado, 0)
+    const totalRecaudado = garantias.reduce((sum, g) => sum + (g.monto_realmente_pagado || g.monto_pagado), 0)
+    const totalPorRecaudar = garantias.reduce((sum, g) => sum + (g.monto_total - (g.monto_realmente_pagado || g.monto_pagado)), 0)
+    const totalADevolver = garantias.filter(g => g.estado === 'en_devolucion').reduce((sum, g) => sum + (g.monto_realmente_pagado || g.monto_pagado), 0)
     return { total, completadas, enCurso, enDevolucion, totalRecaudado, totalPorRecaudar, totalADevolver }
   }, [garantias])
 
@@ -1764,15 +1779,7 @@ export function GarantiasTab() {
                     <Upload size={14} /> Importar
                   </button>
                 )}
-                {isAdmin() && (
-                  <button
-                    className="fact-btn fact-btn-secondary"
-                    onClick={sincronizarGarantias}
-                    title="Recalcula cuotas pagadas a partir de la facturación cerrada"
-                  >
-                    <RefreshCw size={14} /> Sincronizar
-                  </button>
-                )}
+                {/* Sincronizar oculto: la garantía se recalcula automáticamente al cerrar período */}
               </div>
             </div>
             <div className="fact-header-right" style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
@@ -1943,13 +1950,24 @@ export function GarantiasTab() {
       {/* ============ MODAL KARDEX DE GARANTÍA (Propuesta 1) ============ */}
       {kardexModal.open && kardexModal.garantia && (() => {
         const g = kardexModal.garantia
-        const facturado = Number(g.monto_pagado) || 0  // monto_pagado = facturado en P003 (post-fix)
-        const real = Number((g as any).monto_realmente_pagado) || 0
+        const facturado = Number(g.monto_realmente_pagado || g.monto_pagado) || 0  // monto_realmente_pagado = lo facturado como garantia
+        const real = facturado
         const total = Number(g.monto_total) || 1
         // Deuda real = suma de delta_deuda del kardex (NO la diferencia facturado-pagado).
         // delta_deuda solo se llena cuando un pago Cabify no cubrió la cuota completa.
         // Si la cuota está facturada pero todavía no entró el pago Cabify, NO es deuda aún.
-        const deudaReal = Math.max(0, kardexModal.rows.reduce((s, r) => s + (Number(r.delta_deuda) || 0), 0))
+        // Calcular semana actual (ISO: lunes = inicio de semana)
+        const hoy = new Date()
+        const tmp = new Date(hoy.getFullYear(), hoy.getMonth(), hoy.getDate())
+        const dayOfWeek = tmp.getDay() || 7
+        tmp.setDate(tmp.getDate() + 4 - dayOfWeek)
+        const semanaActual = Math.ceil((((tmp.getTime() - new Date(tmp.getFullYear(), 0, 1).getTime()) / 86400000) + 1) / 7)
+        const anioActual = tmp.getFullYear()
+
+        // Excluir semana actual: aún no se facturó
+        const rowsSinSemanaActual = kardexModal.rows.filter(r => !(Number(r.anio) === anioActual && Number(r.semana) === semanaActual))
+
+        const deudaReal = Math.max(0, rowsSinSemanaActual.reduce((s, r) => s + (Number(r.delta_deuda) || 0), 0))
         const pctFact = Math.min(100, (facturado / total) * 100)
         const pctReal = Math.min(100, (real / total) * 100)
         const tieneDeuda = deudaReal > 1
@@ -1970,7 +1988,7 @@ export function GarantiasTab() {
           ids: string[]
         }
         const consolidadasMap = new Map<string, FilaConsolidada>()
-        for (const r of kardexModal.rows) {
+        for (const r of rowsSinSemanaActual) {
           const key = `${r.anio}-${r.semana}`
           const existente = consolidadasMap.get(key)
           const f: FilaConsolidada = existente ?? {
@@ -2005,20 +2023,56 @@ export function GarantiasTab() {
             f.estado = 'otro'
           }
         }
+        // Inyectar semanas de facturacion_conductores que no están en el kardex
+        // SOLO cuando el total real pagado ya superó el monto_total ($1M),
+        // es decir, son cuotas de excedente genuino. Las cuotas normales
+        // deben estar en el kardex (control_garantias) vía syncKardexForPeriodo.
+        const totalFacturadoKardex = Array.from(consolidadasMap.values())
+          .reduce((sum, f) => sum + (Number(f.monto_cuota) || 0), 0)
+        const montoTotalGarantia = Number(g.monto_total) || 1000000
+        const hayExcedenteReal = totalFacturadoKardex >= montoTotalGarantia
+
+        if (hayExcedenteReal) {
+          for (const sf of kardexModal.semanasFacturacion) {
+            if (sf.anio === anioActual && sf.semana === semanaActual) continue
+            const key = `${sf.anio}-${sf.semana}`
+            if (!consolidadasMap.has(key)) {
+              consolidadasMap.set(key, {
+                key,
+                anio: sf.anio,
+                semana: sf.semana,
+                fecha: '',
+                cuota_ref: 0,
+                monto_cuota: sf.subtotalGarantia,
+                aplicado: 0,
+                estado: 'no-cubierta',
+                tipo_movimiento: 'facturacion',
+                referencia: 'Cobro via facturación',
+                ids: [],
+              })
+            }
+          }
+        }
+
         // Calcular estado de cada fila comparando contra el VALOR FIJO de la cuota ($50k típicamente).
         // Si no hay fila cuota_facturada (caso de conductores sin backfill), usamos g.monto_cuota_semanal.
         const montoCuotaFijo = Number((g as any).monto_cuota_semanal) || 50000
         for (const f of consolidadasMap.values()) {
           if (f.estado === 'otro') continue
-          // monto a comparar = lo que dice la fila cuota_facturada, o el monto semanal fijo si no hay
           const objetivo = f.monto_cuota > 0 ? f.monto_cuota : montoCuotaFijo
-          f.monto_cuota = objetivo // dejarlo guardado para totales
+          f.monto_cuota = objetivo
           if (f.aplicado >= objetivo - 0.01) f.estado = 'cubierta'
           else if (f.aplicado > 0.01) f.estado = 'parcial'
           else f.estado = 'no-cubierta'
         }
         const consolidadas = Array.from(consolidadasMap.values())
           .sort((a, b) => (a.anio !== b.anio ? b.anio - a.anio : b.semana - a.semana))
+
+        // Total real pagado: viene de garantias_conductores.monto_pagado (Excel + post-backfill)
+        // NO se calcula sumando kardex porque el backfill puede tener menos registros que semanas reales
+        const totalRealPagado = facturado  // facturado = g.monto_pagado
+        const excedente = totalRealPagado - total
+        const tieneExcedente = excedente > 1
 
         // Filtrar filas consolidadas
         const filtroEstado = (kardexModal.tipoFilter || '').toLowerCase()
@@ -2038,16 +2092,7 @@ export function GarantiasTab() {
         // Semanas únicas para dropdown
         const semanasUnicas = consolidadas.map(f => f.key)
 
-        // Totales (sobre filas filtradas)
-        const totalCubiertas = rowsFiltradas.filter(f => f.estado === 'cubierta').length
-        const totalParciales = rowsFiltradas.filter(f => f.estado === 'parcial').length
-        const totalNoCubiertas = rowsFiltradas.filter(f => f.estado === 'no-cubierta').length
-        const totalAplicado = rowsFiltradas.reduce((s, f) => s + f.aplicado, 0)
-        // total sin cubrir = $ que falta de las no-cubiertas (cuota completa) + lo que falta de las parciales
-        const totalSinCubrirNoCub = rowsFiltradas.filter(f => f.estado === 'no-cubierta').reduce((s, f) => s + (f.monto_cuota || 0), 0)
-        const totalSinCubrirParcial = rowsFiltradas.filter(f => f.estado === 'parcial').reduce((s, f) => s + Math.max(0, (f.monto_cuota || 0) - f.aplicado), 0)
-        const totalSinCubrir = totalSinCubrirNoCub + totalSinCubrirParcial
-        // FIX 2026-05-20: totalParcialesAplicado removido (no se usa con footer simplificado)
+        // (Variables de totales por estado removidas: el footer usa totalRealPagado)
 
         return (
           <div className="fact-modal-overlay" onClick={() => setKardexModal(prev => ({ ...prev, open: false }))}>
@@ -2080,7 +2125,35 @@ export function GarantiasTab() {
                 </div>
 
                 {/* Variables legadas (silenciar warning de unused) */}
-                {(() => { void facturado; void total; void real; void pctFact; void pctReal; void tieneDeuda; void deudaReal; return null })()}
+                {(() => { void real; void pctFact; void pctReal; void registrarPago; void sincronizarGarantias; return null })()}
+
+                {/* Resumen: total garantía vs total real pagado */}
+                <div style={{
+                  display: 'flex', gap: '16px', marginBottom: '12px', padding: '10px 14px',
+                  background: 'var(--bg-secondary)', borderRadius: '6px',
+                  border: '1px solid var(--border-primary)', alignItems: 'center', flexWrap: 'wrap',
+                }}>
+                  <div style={{ flex: 1, minWidth: '120px' }}>
+                    <div style={{ fontSize: '10px', textTransform: 'uppercase', color: 'var(--text-secondary)', fontWeight: 600, letterSpacing: '0.3px' }}>Garantía objetivo</div>
+                    <div style={{ fontSize: '15px', fontWeight: 700, fontFamily: 'monospace', color: 'var(--text-primary)', marginTop: '2px' }}>
+                      {formatCurrency(Math.round(total))}
+                    </div>
+                  </div>
+                  <div style={{ flex: 1, minWidth: '120px' }}>
+                    <div style={{ fontSize: '10px', textTransform: 'uppercase', color: 'var(--text-secondary)', fontWeight: 600, letterSpacing: '0.3px' }}>Total real pagado</div>
+                    <div style={{ fontSize: '15px', fontWeight: 700, fontFamily: 'monospace', color: tieneExcedente ? '#16a34a' : 'var(--text-primary)', marginTop: '2px' }}>
+                      {formatCurrency(Math.round(totalRealPagado))}
+                    </div>
+                  </div>
+                  {tieneExcedente && (
+                    <div style={{ flex: 1, minWidth: '120px' }}>
+                      <div style={{ fontSize: '10px', textTransform: 'uppercase', color: 'var(--text-secondary)', fontWeight: 600, letterSpacing: '0.3px' }}>Excedente</div>
+                      <div style={{ fontSize: '15px', fontWeight: 700, fontFamily: 'monospace', color: '#16a34a', marginTop: '2px' }}>
+                        +{formatCurrency(Math.round(excedente))}
+                      </div>
+                    </div>
+                  )}
+                </div>
 
                 {/* Filtros */}
                 {!kardexModal.loading && kardexModal.rows.length > 0 && (
@@ -2138,6 +2211,7 @@ export function GarantiasTab() {
                               { h: 'Cuota', align: 'center' as const },
                               { h: 'Concepto', align: 'left' as const },
                               { h: 'Monto', align: 'right' as const },
+                              { h: 'Diferencia', align: 'right' as const },
                             ].map((col, hi) => (
                               <th key={hi} style={{
                                 padding: '8px 12px', fontWeight: 600, color: 'var(--text-secondary)',
@@ -2151,25 +2225,44 @@ export function GarantiasTab() {
                         <tbody>
                           {rowsFiltradas.map((f) => {
                             const fecha = f.fecha ? new Date(f.fecha).toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: '2-digit' }) : '-'
-                            // FIX 2026-05-20: monto neutro y concepto sin mencionar Cabify
-                            const montoColor = 'var(--text-primary)'
-                            const origenLabel = `Cuota Garantía S${f.semana}/${f.anio}`
+                            const esExtraFacturacion = f.tipo_movimiento === 'facturacion'
+                            const montoColor = esExtraFacturacion ? '#b45309' : 'var(--text-primary)'
+                            const origenLabel = esExtraFacturacion
+                              ? `Excedente facturado S${f.semana}/${f.anio}`
+                              : `Cuota Garantía S${f.semana}/${f.anio}`
                             return (
-                              <tr key={f.key} style={{ borderBottom: '1px solid var(--border-primary)' }}>
+                              <tr key={f.key} style={{
+                                borderBottom: '1px solid var(--border-primary)',
+                                background: esExtraFacturacion ? '#fffbeb' : undefined,
+                              }}>
                                 <td style={{ padding: '10px 12px', color: 'var(--text-secondary)', fontSize: '11px', whiteSpace: 'nowrap' }}>{fecha}</td>
                                 <td style={{ padding: '10px 12px', fontWeight: 600, color: 'var(--text-primary)', whiteSpace: 'nowrap' }}>
                                   {f.anio} S{String(f.semana || '').padStart(2, '0')}
+                                  {esExtraFacturacion && (
+                                    <span style={{ fontSize: '9px', marginLeft: '4px', padding: '1px 5px', borderRadius: '3px', background: '#fde68a', color: '#92400e', fontWeight: 600 }}>
+                                      EXTRA
+                                    </span>
+                                  )}
                                 </td>
-                                <td style={{ padding: '10px 12px', textAlign: 'center', whiteSpace: 'nowrap', fontFamily: 'monospace', fontSize: '12px', fontWeight: 600, color: 'var(--text-primary)' }}>
-                                  {f.cuota_ref}<span style={{ color: 'var(--text-tertiary)', fontWeight: 400 }}>/20</span>
+                                <td style={{ padding: '10px 12px', textAlign: 'center', whiteSpace: 'nowrap', fontFamily: 'monospace', fontSize: '12px', fontWeight: 600, color: esExtraFacturacion ? '#b45309' : 'var(--text-primary)' }}>
+                                  {esExtraFacturacion ? '-' : <>{f.cuota_ref}<span style={{ color: 'var(--text-tertiary)', fontWeight: 400 }}>/20</span></>}
                                 </td>
-                                <td style={{ padding: '10px 12px', color: 'var(--text-secondary)', fontSize: '11px', maxWidth: '240px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={origenLabel}>
+                                <td style={{ padding: '10px 12px', color: esExtraFacturacion ? '#b45309' : 'var(--text-secondary)', fontSize: '11px', maxWidth: '240px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={origenLabel}>
                                   {origenLabel}
                                 </td>
                                 <td style={{ padding: '10px 12px', textAlign: 'right', fontFamily: 'monospace', color: montoColor, fontWeight: 700 }}>
-                                  {/* FIX 2026-05-21: mostrar monto facturado de la cuota (siempre $50k o lo que diga monto_cuota) */}
                                   {formatCurrency(Math.round(f.monto_cuota || 0))}
                                 </td>
+                                {(() => {
+                                  const diff = Math.round((f.monto_cuota || 0) - montoCuotaFijo)
+                                  if (diff === 0) return <td style={{ padding: '10px 12px', textAlign: 'right', fontFamily: 'monospace', fontSize: '11px', color: 'var(--text-tertiary)' }}>-</td>
+                                  const esExcedenteDiff = diff > 0
+                                  return (
+                                    <td style={{ padding: '10px 12px', textAlign: 'right', fontFamily: 'monospace', fontSize: '11px', fontWeight: 600, color: esExcedenteDiff ? '#16a34a' : '#ef4444' }}>
+                                      {esExcedenteDiff ? '+' : ''}{formatCurrency(diff)}
+                                    </td>
+                                  )
+                                })()}
                               </tr>
                             )
                           })}
@@ -2183,29 +2276,29 @@ export function GarantiasTab() {
                       marginTop: '8px', background: 'var(--bg-secondary)',
                       border: '1px solid var(--border-primary)', borderRadius: '6px', overflow: 'hidden',
                     }}>
-                      {/* FIX 2026-05-20: footer simplificado — solo Facturadas vs Restantes */}
+                      {/* Footer: cuotas calculadas desde totalRealPagado / 50k (referencial) */}
                       {(() => {
-                        const totalFacturadas = totalCubiertas + totalParciales + totalNoCubiertas
-                        const totalFacturadoMonto = totalAplicado + totalSinCubrir
-                        const restantes = Math.max(0, 20 - totalFacturadas)
+                        const cuotasPagadasRef = Math.floor(totalRealPagado / montoCuotaFijo)
+                        const cuotasRestantes = Math.max(0, 20 - cuotasPagadasRef)
+                        const montoRestante = Math.max(0, total - totalRealPagado)
                         return (
                           <>
                             <div style={{ padding: '12px 16px', borderRight: '1px solid var(--border-primary)', textAlign: 'center' }}>
-                              <div style={{ fontSize: '10px', textTransform: 'uppercase', color: 'var(--text-secondary)', fontWeight: 600, letterSpacing: '0.4px' }}>Facturadas</div>
+                              <div style={{ fontSize: '10px', textTransform: 'uppercase', color: 'var(--text-secondary)', fontWeight: 600, letterSpacing: '0.4px' }}>Pagadas</div>
                               <div style={{ fontSize: '16px', fontWeight: 700, color: '#16a34a', fontFamily: 'monospace', marginTop: '4px' }}>
-                                {totalFacturadas} <span style={{ fontSize: '11px', color: 'var(--text-tertiary)', fontWeight: 500 }}>/ 20</span>
+                                {cuotasPagadasRef} <span style={{ fontSize: '11px', color: 'var(--text-tertiary)', fontWeight: 500 }}>/ 20</span>
                               </div>
                               <div style={{ fontSize: '11px', color: '#16a34a', marginTop: '2px', fontWeight: 500 }}>
-                                {formatCurrency(Math.round(totalFacturadoMonto))}
+                                {formatCurrency(Math.round(totalRealPagado))}
                               </div>
                             </div>
                             <div style={{ padding: '12px 16px', textAlign: 'center', gridColumn: 'span 3' }}>
                               <div style={{ fontSize: '10px', textTransform: 'uppercase', color: 'var(--text-secondary)', fontWeight: 600, letterSpacing: '0.4px' }}>Restantes</div>
                               <div style={{ fontSize: '16px', fontWeight: 700, color: 'var(--text-secondary)', fontFamily: 'monospace', marginTop: '4px' }}>
-                                {restantes} <span style={{ fontSize: '11px', color: 'var(--text-tertiary)', fontWeight: 500 }}>/ 20</span>
+                                {cuotasRestantes} <span style={{ fontSize: '11px', color: 'var(--text-tertiary)', fontWeight: 500 }}>/ 20</span>
                               </div>
                               <div style={{ fontSize: '11px', color: 'var(--text-secondary)', marginTop: '2px', fontWeight: 500 }}>
-                                {formatCurrency(restantes * 50000)} a futuro
+                                {montoRestante > 0 ? `${formatCurrency(Math.round(montoRestante))} a futuro` : 'Completada'}
                               </div>
                             </div>
                           </>
