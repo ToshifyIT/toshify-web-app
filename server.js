@@ -770,12 +770,14 @@ const CONTRACT_CONFIG = {
     actualizacionAutoCargo: '197gvFlYzb2csrjyzJ_r40OCv-1pEBjYO0uaOmYKLZXI',
     cartaOfertaPedidosYa: '1Zo6INIVFjdZWhuOF8F91iEjAWkIBg61lcxMCxcoRRQY',
     cartaOfertaAutoCargoBariloche: '1hAVB6eQ6LcCE_7YfB9llQLdGXN7EByHLvy0lG5YRQ5I',
+    actualizacionAutoCargoBariloche: '1b2XCDQ2CYZJbQBYWuBfU3wV_MVqnPt7c36RxKuTqhMU',
     // Plantillas de prueba (TB)
     cartaOfertaTurnoTB: '1rjSKaYDUqls9T-NQU22CvR6TDfhCeX_rSlPREXh8CRQ',
     actualizacionTurnoTB: '1xSfKu0QzyOUBiP3tSBoQkm79pFK1b9XVr0-JNlNdOoo',
     cartaOfertaAutoCargoTB: '1_amfmBuFNIS_JtiAVvVAmWJXWET2tPhqpxQdORqMEOM',
     actualizacionAutoCargoTB: '1IB7Dstd_9t8JDSjHIBsiaIsZfKbhknLQWNWzktU2iyY',
-    cartaOfertaAutoCargoBarilocheTB: '1_4DID8aqv3JvB7Xri1OV3EOHNfSi-0nDWC0rxTMDeVE'
+    cartaOfertaAutoCargoBarilocheTB: '1_4DID8aqv3JvB7Xri1OV3EOHNfSi-0nDWC0rxTMDeVE',
+    actualizacionAutoCargoBarilocheTB: '1b2XCDQ2CYZJbQBYWuBfU3wV_MVqnPt7c36RxKuTqhMU'
   },
   folders: {
     principal: '1qQCnLb5OB1RioLcZOK8s5nKqaIhA7Kt7',
@@ -834,7 +836,7 @@ function resolveTemplateKey(tipoDocumento, modalidad, sedeCode) {
   }
 
   if (tipoDocumento === 'anexo') {
-    if (isBariloche) return null
+    if (isBariloche) return 'actualizacionAutoCargoBariloche'
     if (modalidad === 'a_cargo') return 'actualizacionAutoCargo'
     return 'actualizacionTurno'
   }

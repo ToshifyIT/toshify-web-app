@@ -3,7 +3,7 @@ import { useState, useEffect, useMemo, useCallback, useRef, useLayoutEffect } fr
 import { createPortal } from 'react-dom'
 import {
   Eye, Edit2, Trash2, Users, UserPlus, Clock, RefreshCw, MessageCircle,
-  CheckCircle, AlertTriangle, X, Download, Upload, MapPin, ExternalLink, FolderOpen, Video,
+  CheckCircle, AlertTriangle, X, Download, Upload, MapPin, ExternalLink, FolderOpen, Video, Car,
 } from 'lucide-react'
 import { GoogleMap, Marker, Polygon } from '@react-google-maps/api'
 import { ActionsMenu } from '../../components/ui/ActionsMenu'
@@ -783,7 +783,9 @@ export function LeadsModule() {
     const convocatoria = leads.filter(l => l.estado_de_lead === 'Convocatoria Inducción' || l.estado_de_lead === 'Convocatoria Induccion').length
     const intercom = leads.filter(l => (l.fuente_de_lead || '').toLowerCase() !== 'damaro').length
     const damaro = leads.filter(l => (l.fuente_de_lead || '').toLowerCase() === 'damaro').length
-    return { total, inicio, aptos, noAptos, convocatoria, enZonaRestringida, enZonaSegura, intercom, damaro }
+    const autoPueblo = leads.filter(l => l.estado_de_lead === 'Auto del pueblo').length
+    const descartados = leads.filter(l => l.estado_de_lead === 'Descartado').length
+    return { total, inicio, aptos, noAptos, convocatoria, enZonaRestringida, enZonaSegura, intercom, damaro, autoPueblo, descartados }
   }, [leads, leadsEnZona])
 
   // ---------- UNIQUE VALUES PARA FILTROS ----------
@@ -817,6 +819,12 @@ export function LeadsModule() {
     else if (activeStatCard === 'zonaRestringida') result = result.filter(l => l.latitud != null && l.longitud != null && leadsEnZona.has(l.id))
     else if (activeStatCard === 'intercom') result = result.filter(l => (l.fuente_de_lead || '').toLowerCase() !== 'damaro')
     else if (activeStatCard === 'damaro') result = result.filter(l => (l.fuente_de_lead || '').toLowerCase() === 'damaro')
+    else if (activeStatCard === 'autoPueblo') result = result.filter(l => l.estado_de_lead === 'Auto del pueblo')
+    else if (activeStatCard === 'descartados') result = result.filter(l => l.estado_de_lead === 'Descartado')
+    else {
+      // Por defecto: excluir descartados de la tabla
+      result = result.filter(l => l.estado_de_lead !== 'Descartado')
+    }
 
     // Column filters
     if (nombreFilter.length > 0) {
@@ -2415,6 +2423,8 @@ export function LeadsModule() {
         noAptos: 'No aptos',
         zonaSegura: 'Zona Aprobada',
         zonaRestringida: 'Zona Restringida',
+        autoPueblo: 'Auto del pueblo',
+        descartados: 'Descartados',
       }
       filters.push({
         id: `stat-${activeStatCard}`,
@@ -2493,6 +2503,16 @@ export function LeadsModule() {
               <span className="stat-label">Zona Aprobada</span>
             </div>
           </div>
+          <div
+            className={`stat-card stat-card-clickable ${activeStatCard === 'autoPueblo' ? 'stat-card-active' : ''}`}
+            onClick={() => handleStatClick('autoPueblo')}
+          >
+            <Car size={18} className="stat-icon" style={{ color: '#d97706' }} />
+            <div className="stat-content">
+              <span className="stat-value">{stats.autoPueblo}</span>
+              <span className="stat-label">Auto del pueblo</span>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -2535,6 +2555,13 @@ export function LeadsModule() {
                 <UserPlus size={14} /> <span className="leads-btn-label">Nuevo Lead</span>
               </button>
             )}
+            <button
+              className={`btn-sm ${activeStatCard === 'descartados' ? 'btn-primary' : 'btn-secondary'}`}
+              onClick={() => handleStatClick('descartados')}
+              style={activeStatCard === 'descartados' ? { background: '#dc2626', borderColor: '#dc2626' } : { color: '#dc2626', borderColor: '#dc2626' }}
+            >
+              <Trash2 size={14} /> <span className="leads-btn-label">Descartados ({stats.descartados})</span>
+            </button>
           </div>
         }
         externalFilters={externalFilters}

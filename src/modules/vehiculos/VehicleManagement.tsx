@@ -34,9 +34,6 @@ import './VehicleManagement.css'
 
 
 
-
-
-
 export function VehicleManagement() {
   const { sedeActualId, aplicarFiltroSede } = useSede()
   const [vehiculos, setVehiculos] = useState<VehiculoWithRelations[]>([])
@@ -1589,6 +1586,13 @@ export function VehicleManagement() {
         const matches = statCardEstadoFilter.includes(estadoLabel) || statCardEstadoFilter.includes(estadoCodigo)
         // En modo exclusión (Total Flota): mostrar los que NO están en la lista
         return statCardExcludeMode ? !matches : matches
+      })
+    } else {
+      // Por defecto (sin stat card activa): excluir estados fuera de flota activa
+      const estadosExcluidosTabla = ['ROBO', 'DESTRUCCION_TOTAL', 'JUBILADO', 'DEVUELTO_PROVEEDOR']
+      result = result.filter(v => {
+        const estadoCodigo = v.vehiculos_estados?.codigo || ''
+        return !estadosExcluidosTabla.includes(estadoCodigo)
       })
     }
 
