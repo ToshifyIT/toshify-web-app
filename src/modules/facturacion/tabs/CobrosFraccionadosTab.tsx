@@ -255,7 +255,7 @@ export function CobrosFraccionadosTab({ periodoActual }: CobrosFraccionadosTabPr
             estado: c.estado,
             pagado: cuotasPagadasSet.has(c.id),
             fecha_pago: cuotasPagosMap.get(c.id)?.fecha_pago || null
-          })),
+          })).sort((a, b) => a.numero_cuota - b.numero_cuota),
           conductor: conductor ? {
             nombres: conductor.nombres,
             apellidos: conductor.apellidos,
