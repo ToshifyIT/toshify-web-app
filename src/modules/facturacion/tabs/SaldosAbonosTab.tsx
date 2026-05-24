@@ -88,7 +88,7 @@ export function SaldosAbonosTab() {
   // const [activeSubTab, setActiveSubTab] = useState<'saldos' | 'abonos'>('saldos')
   
   const [saldos, setSaldos] = useState<SaldoConductor[]>([])
-  // @ts-expect-error todosLosAbonos se carga pero la UI de movimientos fue removida
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [todosLosAbonos, setTodosLosAbonos] = useState<AbonoRow[]>([])
   const [loading, setLoading] = useState(true)
   const [filtroSaldo] = useState<'todos' | 'favor' | 'deuda' | 'mora' | 'fraccionado'>('todos')
@@ -976,10 +976,18 @@ export function SaldosAbonosTab() {
         .eq('id', saldo.id)
       if (errorUpdate) throw errorUpdate
 
+      // El ajuste_manual debe quedar en la semana ANTERIOR a la primera cuota.
+      // Si se registra en la misma semana o posterior, el recalcular de esa semana
+      // no lo ve (filtra semana <= semanaDelPeriodo con orden DESC) y muestra
+      // el saldo viejo como "deuda pendiente semana anterior", causando doble cobro.
+      let semAjuste = formValues.semana - 1
+      let anioAjuste = formValues.anio
+      if (semAjuste < 1) { semAjuste = 52; anioAjuste-- }
+
       await insertControlSaldo({
         conductorId: saldo.conductor_id,
-        semana: formValues.semana,
-        anio: formValues.anio,
+        semana: semAjuste,
+        anio: anioAjuste,
         tipoMovimiento: 'ajuste_manual',
         montoMovimiento: montoDeuda,
         saldoPendiente: 0,
@@ -2305,7 +2313,7 @@ export function SaldosAbonosTab() {
   }, [saldos, cobrosFraccionados])
 
   // Columnas para la tabla de Abonos (UI de movimientos removida)
-  // @ts-expect-error columnsAbonos preservado por si se reactiva la UI de movimientos
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const columnsAbonos = useMemo<ColumnDef<AbonoRow>[]>(() => [
     {
       accessorKey: 'fecha_abono',

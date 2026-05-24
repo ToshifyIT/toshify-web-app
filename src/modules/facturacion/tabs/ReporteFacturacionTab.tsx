@@ -2856,11 +2856,9 @@ export function ReporteFacturacionTab() {
       // Penalidades: NO se resetean — las aplica otra persona desde incidencias.
       // Recalcular solo toma las que ya están aplicado=true.
 
-      // Cobros fraccionados: por semana/anio (todas las cuotas hasta esta semana)
-      await (supabase.from('cobros_fraccionados') as any)
-        .update({ aplicado: false, fecha_aplicacion: null })
-        .lte('semana', semanaNum)
-        .eq('anio', anioNum)
+      // Cobros fraccionados: NO se resetean aquí. El flag aplicado solo cambia
+      // al CERRAR el periodo (PeriodosTab) o al PAGAR (CobrosFraccionadosTab).
+      // Recalcular es un preview, no debe alterar el estado de las cuotas.
 
       // 2. BORRAR toda la facturación existente del período
       const { data: factExistentes } = await supabase
@@ -3433,8 +3431,10 @@ export function ReporteFacturacionTab() {
       const saldos = saldosRes.data || []
       const excesosArr = excesosRes.data || []
       const garantias = garantiasRes.data || []
-      // Filtrar cobros fraccionados: excluir pagados (aplicado=true O en pagos_conductores)
-      const cobros = (cobrosRes.data || []).filter((c: any) => c.aplicado !== true && !cuotasPagadasRecalcIds.has(c.id))
+      // Cobros fraccionados: incluir todos los no pagados de esta semana.
+      // El flag aplicado ya no se usa como filtro aquí porque recalcular no lo modifica.
+      // Solo se excluyen los que ya tienen un pago registrado en pagos_conductores.
+      const cobros = (cobrosRes.data || []).filter((c: any) => !cuotasPagadasRecalcIds.has(c.id))
 
       // ─── O(1) lookup Maps — construidos una vez, usados en el loop por conductor ───
       // Antes: cada iteración hacía .find()/.filter() sobre el array completo → O(n²)
@@ -3875,13 +3875,9 @@ export function ReporteFacturacionTab() {
               .in('id', excesoIdsAplicar)
           )
         }
-        if (cobroIdsAplicar.length > 0) {
-          batchUpdates.push(
-            (supabase.from('cobros_fraccionados') as any)
-              .update({ aplicado: true, fecha_aplicacion: new Date().toISOString() })
-              .in('id', cobroIdsAplicar)
-          )
-        }
+        // cobros_fraccionados: NO se marcan como aplicados aquí.
+        // Solo se marcan al CERRAR el periodo (PeriodosTab) o al PAGAR (CobrosFraccionadosTab).
+        void cobroIdsAplicar
         if (batchUpdates.length > 0) {
           await Promise.all(batchUpdates)
         }
