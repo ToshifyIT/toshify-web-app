@@ -88,8 +88,7 @@ export function SaldosAbonosTab() {
   // const [activeSubTab, setActiveSubTab] = useState<'saldos' | 'abonos'>('saldos')
   
   const [saldos, setSaldos] = useState<SaldoConductor[]>([])
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const [todosLosAbonos, setTodosLosAbonos] = useState<AbonoRow[]>([])
+  const [_todosLosAbonos, setTodosLosAbonos] = useState<AbonoRow[]>([])
   const [loading, setLoading] = useState(true)
   const [filtroSaldo] = useState<'todos' | 'favor' | 'deuda' | 'mora' | 'fraccionado'>('todos')
   const [cobrosFraccionados, setCobrosFraccionados] = useState<{
@@ -2313,8 +2312,7 @@ export function SaldosAbonosTab() {
   }, [saldos, cobrosFraccionados])
 
   // Columnas para la tabla de Abonos (UI de movimientos removida)
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const columnsAbonos = useMemo<ColumnDef<AbonoRow>[]>(() => [
+  const _columnsAbonos = useMemo<ColumnDef<AbonoRow>[]>(() => [
     {
       accessorKey: 'fecha_abono',
       header: 'Fecha',
