@@ -88,6 +88,7 @@ export function SaldosAbonosTab() {
   // const [activeSubTab, setActiveSubTab] = useState<'saldos' | 'abonos'>('saldos')
   
   const [saldos, setSaldos] = useState<SaldoConductor[]>([])
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [_todosLosAbonos, setTodosLosAbonos] = useState<AbonoRow[]>([])
   const [loading, setLoading] = useState(true)
   const [filtroSaldo] = useState<'todos' | 'favor' | 'deuda' | 'mora' | 'fraccionado'>('todos')
@@ -1941,7 +1942,7 @@ export function SaldosAbonosTab() {
     }
   }
 
-  // Función para editar un movimiento (abono/cargo)
+  /* editarMovimiento - UI removida, preservada por si se reactiva
   async function editarMovimiento(movimiento: AbonoRow) {
     // Calcular semana actual
     const hoy = new Date()
@@ -2049,7 +2050,7 @@ export function SaldosAbonosTab() {
     } catch {
       Swal.fire('Error', 'No se pudo actualizar el movimiento', 'error')
     }
-  }
+  } editarMovimiento - fin */
 
   // IDs de conductores con cobros fraccionados pendientes
   const conductoresConFraccionado = useMemo(() => {
