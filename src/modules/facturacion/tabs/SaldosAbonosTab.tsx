@@ -19,8 +19,8 @@ import {
   // UserPlus,
   Trash2,
   // Receipt,
-  ArrowUpCircle,
-  ArrowDownCircle,
+  // ArrowUpCircle,
+  // ArrowDownCircle,
   Banknote,
   Download,
   Upload,
@@ -2311,104 +2311,17 @@ export function SaldosAbonosTab() {
     }
   }, [saldos, cobrosFraccionados])
 
-  // Columnas para la tabla de Abonos (UI de movimientos removida)
-  const _columnsAbonos = useMemo<ColumnDef<AbonoRow>[]>(() => [
-    {
-      accessorKey: 'fecha_abono',
-      header: 'Fecha',
-      cell: ({ row }) => (
-        <span className="text-gray-700 text-sm">{formatDate(row.original.fecha_abono)}</span>
-      )
-    },
-    {
-      id: 'semana',
-      header: 'Semana',
-      cell: ({ row }) => {
-        const { semana, anio } = row.original
-        if (!semana || !anio) return <span className="text-gray-400">-</span>
-        return <span className="text-gray-600 text-sm">S{semana}/{anio}</span>
-      }
-    },
-    {
-      accessorKey: 'conductor_nombre',
-      header: 'Conductor',
-      cell: ({ row }) => (
-        <div className="font-medium">{formatNombreCompleto(row.original.conductor_nombre) || 'N/A'}</div>
-      )
-    },
-    {
-      accessorKey: 'tipo',
-      header: 'Tipo',
-      cell: ({ row }) => {
-        const tipo = row.original.tipo
-        const esAbono = tipo === 'abono'
-        return (
-          <div className="flex items-center gap-1.5">
-            {esAbono ? (
-              <ArrowUpCircle size={14} className="text-green-600" />
-            ) : (
-              <ArrowDownCircle size={14} className="text-red-600" />
-            )}
-            <span 
-              className="fact-badge" 
-              style={{
-                backgroundColor: esAbono ? '#DCFCE7' : '#FEE2E2',
-                color: esAbono ? '#166534' : '#991B1B',
-                fontSize: '11px',
-                padding: '3px 8px'
-              }}
-            >
-              {esAbono ? 'Abono' : 'Cargo'}
-            </span>
-          </div>
-        )
-      }
-    },
-    {
-      accessorKey: 'monto',
-      header: 'Monto',
-      cell: ({ row }) => {
-        const esAbono = row.original.tipo === 'abono'
-        return (
-          <span 
-            className={`fact-precio ${esAbono ? '' : 'fact-precio-negative'}`} 
-            style={{ fontWeight: 600 }}
-          >
-            {esAbono ? '+' : '-'}{formatCurrency(row.original.monto)}
-          </span>
-        )
-      }
-    },
-    {
-      accessorKey: 'concepto',
-      header: 'Concepto',
-      cell: ({ row }) => (
-        <span className="text-gray-700 text-sm">{row.original.concepto}</span>
-      )
-    },
-    {
-      accessorKey: 'referencia',
-      header: 'Referencia',
-      cell: ({ row }) => (
-        <span className="text-gray-500 text-sm">{row.original.referencia || '-'}</span>
-      )
-    },
-    {
-      id: 'acciones',
-      header: 'Acciones',
-      cell: ({ row }) => (
-        <div className="fact-table-actions">
-          <button 
-            className="fact-table-btn fact-table-btn-edit" 
-            onClick={() => editarMovimiento(row.original)} 
-            data-tooltip="Editar movimiento"
-          >
-            <Edit3 size={14} />
-          </button>
-        </div>
-      )
-    }
-  ], [])
+  // Columnas para la tabla de Abonos (UI de movimientos removida, preservado por si se reactiva)
+  /* const columnsAbonos = useMemo<ColumnDef<AbonoRow>[]>(() => [
+    { accessorKey: 'fecha_abono', header: 'Fecha', cell: ({ row }) => (<span className="text-gray-700 text-sm">{formatDate(row.original.fecha_abono)}</span>) },
+    { id: 'semana', header: 'Semana', cell: ({ row }) => { const { semana, anio } = row.original; if (!semana || !anio) return <span className="text-gray-400">-</span>; return <span className="text-gray-600 text-sm">S{semana}/{anio}</span> } },
+    { accessorKey: 'conductor_nombre', header: 'Conductor', cell: ({ row }) => (<div className="font-medium">{formatNombreCompleto(row.original.conductor_nombre) || 'N/A'}</div>) },
+    { accessorKey: 'tipo', header: 'Tipo' },
+    { accessorKey: 'monto', header: 'Monto' },
+    { accessorKey: 'concepto', header: 'Concepto' },
+    { accessorKey: 'referencia', header: 'Referencia' },
+    { id: 'acciones', header: 'Acciones', cell: ({ row }) => (<button onClick={() => editarMovimiento(row.original)}><Edit3 size={14} /></button>) }
+  ], []) */
 
   // Stats para sub-tab Abonos (comentado - simplificado a solo total)
   /* const statsAbonos = useMemo(() => {
