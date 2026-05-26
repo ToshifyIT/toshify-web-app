@@ -10392,20 +10392,14 @@ export function ReporteFacturacionTab() {
                         cursor: 'pointer',
                         border: '2px solid #16a34a',
                         background: 'linear-gradient(135deg, rgba(34,197,94,0.10) 0%, var(--bg-primary) 60%)',
-                        position: 'relative',
                       }}
-                      title="Indicador disponible en semanas cerradas"
+                      title="Importe Generado — solo en semanas cerradas"
                     >
-                      <span style={{
-                        position: 'absolute', top: '-8px', right: '12px',
-                        background: '#16a34a', color: '#fff', fontSize: '9px',
-                        padding: '2px 8px', borderRadius: '4px', fontWeight: 700, letterSpacing: '0.3px',
-                      }}>CIERRE</span>
                       <DollarSign size={18} className="stat-icon" style={{ color: '#16a34a' }} />
                       <div className="stat-content">
                         <span className="stat-value">{formatCurrency(totalDebe)}</span>
                         <span className="stat-label">
-                          Importe Generado{' '}
+                          Imp. Gen.{' '}
                           {hayPagos ? (
                             <span style={{ color: pctColor, fontWeight: 700 }}>
                               · {pct}% cubierto
