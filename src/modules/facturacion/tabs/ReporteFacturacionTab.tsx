@@ -45,7 +45,7 @@ import { useAuth } from '../../../contexts/AuthContext'
 import { usePermissions } from '../../../contexts/PermissionsContext'
 import { useSede } from '../../../contexts/SedeContext'
 import { formatCurrency, formatDate, FACTURACION_CONFIG } from '../../../types/facturacion.types'
-import { normalizeDni, normalizePatente } from '../../../utils/normalizeDocuments'
+import { normalizeDni, normalizePatente, normalizeCuit } from '../../../utils/normalizeDocuments'
 import { insertControlSaldo } from '../../../services/controlSaldosService'
 import { format, startOfWeek, endOfWeek, addWeeks, subWeeks, getWeek, getYear, parseISO, startOfDay, differenceInCalendarDays } from 'date-fns'
 import { es } from 'date-fns/locale'
@@ -1395,15 +1395,22 @@ export function ReporteFacturacionTab() {
       })
 
       // Agregar cobro_app de Cabify a cada facturación (para barras de cobertura)
+      // Lookup acepta DNI o CUIT (a veces el operador carga CUIT en el campo DNI)
       facturacionesTransformadas = facturacionesTransformadas.map((f: any) => {
         const dniNorm = normalizeDni(f.conductor_dni)
-        const cobroApp = dniNorm ? (cobroAppPorDni.get(dniNorm) || 0) : 0
+        const cuitNorm = normalizeCuit(f.conductor_cuit)
+        // Probar DNI primero, fallback a CUIT
+        const cobroApp = (dniNorm && cobroAppPorDni.get(dniNorm))
+          || (cuitNorm && cobroAppPorDni.get(cuitNorm))
+          || 0
         const cuotaFija = f.subtotal_alquiler + f.subtotal_garantia
-        const efectivoInfo = dniNorm ? cabifyEfectivoMapPeriodo.get(dniNorm) : null
+        const efectivoInfo = (dniNorm && cabifyEfectivoMapPeriodo.get(dniNorm))
+          || (cuitNorm && cabifyEfectivoMapPeriodo.get(cuitNorm))
+          || null
         return {
           ...f,
           ganancia_cabify: cobroApp,
-          cabify_tiene_registros: dniNorm ? dnisConRegistroCabify.has(dniNorm) : false,
+          cabify_tiene_registros: (dniNorm && dnisConRegistroCabify.has(dniNorm)) || (cuitNorm && dnisConRegistroCabify.has(cuitNorm)) || false,
           cubre_cuota: cobroApp >= cuotaFija,
           permiso_efectivo: efectivoInfo?.permiso_efectivo || null,
           cabify_driver_id: efectivoInfo?.cabify_driver_id || null,
@@ -1487,11 +1494,16 @@ export function ReporteFacturacionTab() {
       facturacionesTransformadas = facturacionesTransformadas.map((f: any) => {
         const pago = pagosMap.get(f.id)
         const detalle = detallesMap.get(f.id)
-        // Fallback: si no hay P005 en facturacion_detalle, buscar en cabify_historico por DNI (normalizado)
+        // Fallback: si no hay P005 en facturacion_detalle, buscar en cabify_historico por DNI o CUIT (normalizado)
         const dniNormPeaje = normalizeDni(f.conductor_dni)
+        const cuitNormPeaje = normalizeCuit(f.conductor_cuit)
         const peajesDetalle = detalle?.monto_peajes || 0
-        const peajesCabify = dniNormPeaje ? (peajesPorDni.get(dniNormPeaje) || 0) : 0
-        const peajesDetalleList = peajesDetalleMap.get(dniNormPeaje) || []
+        const peajesCabify = (dniNormPeaje && peajesPorDni.get(dniNormPeaje))
+          || (cuitNormPeaje && peajesPorDni.get(cuitNormPeaje))
+          || 0
+        const peajesDetalleList = (dniNormPeaje && peajesDetalleMap.get(dniNormPeaje))
+          || (cuitNormPeaje && peajesDetalleMap.get(cuitNormPeaje))
+          || []
         return {
           ...f,
           monto_cobrado: pago?.monto || 0,
