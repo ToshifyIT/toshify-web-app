@@ -12,6 +12,7 @@ import { usePermanenciaStats } from '../../../hooks/usePermanenciaStats'
 import { useKilometrajeStats } from '../../../hooks/useKilometrajeStats'
 import { useVehiculosStats } from '../../../hooks/useVehiculosStats'
 import { useBajasConductoresStats } from '../../../hooks/useBajasConductoresStats'
+import { useIncobrabilidadStats } from '../../../hooks/useIncobrabilidadStats'
 import { useSede } from '../../../contexts/SedeContext'
 import { PeriodPicker } from './PeriodPicker'
 import './PeriodComparison.css'
@@ -26,6 +27,7 @@ interface MetricView {
   variationLabel: string
   variationSign: 'positive' | 'negative' | 'neutral'
   tooltipContent?: React.ReactNode
+  variationTooltip?: React.ReactNode
 }
 
 export function PeriodComparison() {
@@ -62,6 +64,7 @@ export function PeriodComparison() {
   const kilometrajeStats = useKilometrajeStats(granularity, periodA, periodB, sedeActual?.id)
   const vehiculosStats = useVehiculosStats(granularity, periodA, periodB, sedeActual?.id)
   const bajasConductoresStats = useBajasConductoresStats(granularity, periodA, periodB, sedeActual?.id)
+  const incobrabilidadStats = useIncobrabilidadStats(granularity, periodA, periodB, sedeActual?.id)
 
   const formatCurrency = (value: number) => {
     if (isMobile) {
@@ -319,6 +322,111 @@ export function PeriodComparison() {
       })
     }
 
+    // --- 10. % DE INCOBRABILIDAD ---
+    if (granularity === 'semana') {
+      const { dataA, dataB } = incobrabilidadStats
+      const showA = dataA.periodoExiste
+      const showB = dataB.periodoExiste
+
+      const renderValue = (data: typeof dataA, show: boolean) => {
+        if (!show) return <span style={{ color: '#9ca3af', fontSize: '12px' }}>Sin datos</span>
+        return (
+          <span>
+            <span style={{ fontSize: '18px', fontWeight: 700 }}>{data.porcentaje}%</span>
+            <span style={{ fontSize: '11px', color: '#6b7280', marginLeft: '4px' }}>
+              ({currencyFormatter.format(data.montoIncobrable)})
+            </span>
+          </span>
+        )
+      }
+
+      // Variación en puntos porcentuales (pp)
+      // Ej: 29% -> 14% = -15 pp (mejoró, verde con flecha abajo)
+      const valA = showA ? dataA.porcentaje : 0
+      const valB = showB ? dataB.porcentaje : 0
+      let variationLabel = '0 pp'
+      let variationSign: 'positive' | 'negative' | 'neutral' = 'neutral'
+
+      let variationTooltipNode: React.ReactNode = null
+
+      if (showA && showB) {
+        const diffPp = valB - valA
+        if (diffPp === 0) {
+          variationLabel = '0 pp'
+          variationSign = 'neutral'
+          variationTooltipNode = (
+            <div style={{ fontSize: '12px', lineHeight: 1.5, maxWidth: 260 }}>
+              <strong>Sin cambios</strong>
+              <p style={{ margin: '6px 0 0' }}>La incobrabilidad se mantuvo en {valA}% en ambos periodos ({periodA} y {periodB}).</p>
+            </div>
+          )
+        } else if (diffPp < 0) {
+          variationLabel = `${diffPp} pp`
+          variationSign = 'positive'
+          variationTooltipNode = (
+            <div style={{ fontSize: '12px', lineHeight: 1.5, maxWidth: 260 }}>
+              <strong style={{ color: '#16a34a' }}>Mejora de {Math.abs(diffPp)} puntos</strong>
+              <p style={{ margin: '6px 0 0' }}>
+                La incobrabilidad bajó de <strong>{valA}%</strong> ({periodA}) a <strong>{valB}%</strong> ({periodB}).
+              </p>
+              <p style={{ margin: '4px 0 0', color: '#6b7280' }}>
+                En {periodB} se cobró proporcionalmente más que en {periodA}. El monto no cobrado pasó de {currencyFormatter.format(dataA.montoIncobrable)} a {currencyFormatter.format(dataB.montoIncobrable)}.
+              </p>
+            </div>
+          )
+        } else {
+          variationLabel = `+${diffPp} pp`
+          variationSign = 'negative'
+          variationTooltipNode = (
+            <div style={{ fontSize: '12px', lineHeight: 1.5, maxWidth: 260 }}>
+              <strong style={{ color: '#dc2626' }}>Aumento de {diffPp} puntos</strong>
+              <p style={{ margin: '6px 0 0' }}>
+                La incobrabilidad subió de <strong>{valA}%</strong> ({periodA}) a <strong>{valB}%</strong> ({periodB}).
+              </p>
+              <p style={{ margin: '4px 0 0', color: '#6b7280' }}>
+                En {periodB} se cobró proporcionalmente menos que en {periodA}. El monto no cobrado pasó de {currencyFormatter.format(dataA.montoIncobrable)} a {currencyFormatter.format(dataB.montoIncobrable)}.
+              </p>
+            </div>
+          )
+        }
+      } else {
+        variationLabel = 'N/A'
+        variationSign = 'neutral'
+        variationTooltipNode = (
+          <div style={{ fontSize: '12px', lineHeight: 1.5, maxWidth: 260 }}>
+            <strong>Sin datos para comparar</strong>
+            <p style={{ margin: '6px 0 0' }}>Uno o ambos periodos no tienen semana cerrada con pagos Cabify cargados.</p>
+          </div>
+        )
+      }
+
+      metricList.push({
+        id: 'metric-incobrabilidad',
+        name: '% DE INCOBRABILIDAD',
+        valueA: renderValue(dataA, showA),
+        valueB: renderValue(dataB, showB),
+        variationLabel,
+        variationSign,
+        variationTooltip: variationTooltipNode,
+        tooltipContent: (
+          <div className="kpi-tooltip-content">
+            <strong>% de Incobrabilidad</strong>
+            <p>Porcentaje del importe generado (facturado) que no fue cobrado por Cabify en la semana cerrada. Se calcula como 100% menos el porcentaje cubierto.</p>
+            <div className="kpi-tooltip-divider" />
+            <div className="kpi-tooltip-section-title">Componentes del importe</div>
+            <ul>
+              <li>Alquiler de la semana</li>
+              <li>Garantia (cuota semanal)</li>
+              <li>Incidencias / Cargos extra</li>
+              <li>Saldo pendiente semana anterior</li>
+            </ul>
+            <div className="kpi-tooltip-divider" />
+            <p style={{ fontSize: '11px', color: '#6b7280' }}>Solo disponible para semanas con periodo cerrado y pagos Cabify cargados.</p>
+          </div>
+        ),
+      })
+    }
+
     return metricList
   }, [
     currencyFormatter,
@@ -333,7 +441,9 @@ export function PeriodComparison() {
     permanenciaStats,
     vehiculosStats,
     bajasConductoresStats,
-    kilometrajeStats
+    kilometrajeStats,
+    incobrabilidadStats,
+    granularity
   ])
 
   const handleGranularityChange = (value: Granularity) => {
@@ -504,10 +614,19 @@ export function PeriodComparison() {
                   </span>
                 </div>
               </div>
-              <span className={badgeClassName}>
-                <Icon className="period-comparison-badge-icon" />
-                {metric.variationLabel}
-              </span>
+              {metric.variationTooltip ? (
+                <AdaptiveTooltip content={metric.variationTooltip} width={280} variant="card">
+                  <span className={badgeClassName} style={{ cursor: 'help' }}>
+                    <Icon className="period-comparison-badge-icon" />
+                    {metric.variationLabel}
+                  </span>
+                </AdaptiveTooltip>
+              ) : (
+                <span className={badgeClassName}>
+                  <Icon className="period-comparison-badge-icon" />
+                  {metric.variationLabel}
+                </span>
+              )}
             </div>
           )
         })}

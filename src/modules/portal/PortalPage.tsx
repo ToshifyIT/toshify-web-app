@@ -450,7 +450,7 @@ export function PortalPage() {
       .eq('conductor_id', factura.conductor_id)
       .eq('semana', periodo.semana)
       .eq('anio', periodo.anio)
-      .in('tipo_movimiento', ['pago_cabify', 'pago_manual', 'pago', 'pago_cuota', 'ajuste_manual'])
+      .in('tipo_movimiento', ['pago_cabify', 'pago_manual', 'pago', 'pago_cuota'])
       .order('created_at', { ascending: true })
       .then(({ data }) => {
         if (!data) return
