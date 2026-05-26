@@ -354,6 +354,9 @@ export function ReporteFacturacionTab() {
   const [facturaciones, setFacturaciones] = useState<FacturacionConductor[]>([])
   const [periodo, setPeriodo] = useState<PeriodoFacturacion | null>(null)
   const [periodoAnteriorCerrado, setPeriodoAnteriorCerrado] = useState(true) // Si la semana anterior está cerrada
+  // Pagos Cabify cargados (Excel formato Cabify) — Map<conductor_id, monto_pagado>
+  // Solo se popula cuando el período está cerrado y hay registros en pagos_conductores
+  const [pagosCabifyMap, setPagosCabifyMap] = useState<Map<string, number>>(new Map())
   const [excesos, setExcesos] = useState<ExcesoKm[]>([])
   const [loading, setLoading] = useState(true)
   const [loadingDetalle, setLoadingDetalle] = useState(false)
@@ -1590,6 +1593,25 @@ export function ReporteFacturacionTab() {
 
       setFacturaciones(facturacionesTransformadas as FacturacionConductor[])
       setExcesos((excesosData || []) as ExcesoKm[])
+
+      // Si el período está cerrado, cargar los pagos Cabify del Excel (tabla pagos_conductores)
+      // para alimentar el nuevo indicador "Importe Generado"
+      const esPeriodoCerrado = ((periodoData as any).estado || '').toLowerCase() === 'cerrado'
+      if (esPeriodoCerrado) {
+        const { data: pagosData } = await (supabase.from('pagos_conductores') as any)
+          .select('conductor_id, monto')
+          .eq('anio', (periodoData as any).anio)
+          .eq('semana', (periodoData as any).semana)
+          .eq('tipo_cobro', 'facturacion_semanal')
+          .ilike('referencia', 'Pago Cabify%')
+        const mapa = new Map<string, number>()
+        for (const p of (pagosData || []) as Array<{ conductor_id: string; monto: number }>) {
+          mapa.set(p.conductor_id, (mapa.get(p.conductor_id) || 0) + Number(p.monto || 0))
+        }
+        setPagosCabifyMap(mapa)
+      } else {
+        setPagosCabifyMap(new Map())
+      }
 
     } catch {
       Swal.fire('Error', 'No se pudo cargar la facturación', 'error')
@@ -8573,64 +8595,72 @@ export function ReporteFacturacionTab() {
     const descriptions: Record<string, { title: string; html: string }> = {
       conductores: {
         title: 'Conductores',
-        html: `<div style="text-align:left;font-size:13px;">
-          <p>Total de conductores incluidos en la facturación del período.</p>
-          <p><b>${src.length}</b> conductores</p>
+        html: `<div style="text-align:left;font-size:13px;color:var(--text-primary);">
+          <p style="color:var(--text-secondary);">Total de conductores incluidos en la facturación del período.</p>
+          <p><b style="color:var(--text-primary);">${src.length}</b> conductores</p>
         </div>`
       },
       proyectado: {
         title: 'Total Proyectado',
         html: (() => {
-          const conductoresConProyectado = src.filter(f => (f.proyectado_alquiler || 0) > 0)
-          const totalProyectado = src.reduce((s, f) => s + (f.proyectado_alquiler || 0), 0)
-          const totalAlquilerActual = src.reduce((s, f) => s + (f.subtotal_alquiler || 0), 0)
-          const porcentaje = totalProyectado > 0 ? Math.round(totalAlquilerActual / totalProyectado * 100) : 0
-          // Separar activos (proyectados a 7 dias) vs baja (proyectados a dias reales).
-          // estado_billing === 'De baja' indica que el conductor ya no es ACTIVO en el sistema.
+          // Total Proyectado = alquiler proyectado + garantía facturada de la semana
+          // (la garantía es $50K fija por semana si el conductor no la completó)
+          const proyectadoConductor = (f: any) => (f.proyectado_alquiler || 0) + (f.subtotal_garantia || 0)
+          const conductoresConProyectado = src.filter(f => proyectadoConductor(f) > 0)
+          const totalProyectado = src.reduce((s, f) => s + proyectadoConductor(f), 0)
+          // Ya facturado se mide contra el cobro_app real de Cabify (ganancia_cabify)
+          const totalCobroApp = src.reduce((s, f) => s + ((f as any).ganancia_cabify || 0), 0)
+          const porcentaje = totalProyectado > 0 ? Math.round(totalCobroApp / totalProyectado * 100) : 0
+          // Separar activos vs bajas usando el proyectado combinado
           const activos = conductoresConProyectado.filter(f => f.estado_billing !== 'De baja')
           const bajas = conductoresConProyectado.filter(f => f.estado_billing === 'De baja')
-          const proyectadoActivos = activos.reduce((s, f) => s + (f.proyectado_alquiler || 0), 0)
-          const proyectadoBajas = bajas.reduce((s, f) => s + (f.proyectado_alquiler || 0), 0)
+          const proyectadoActivos = activos.reduce((s, f) => s + proyectadoConductor(f), 0)
+          const proyectadoBajas = bajas.reduce((s, f) => s + proyectadoConductor(f), 0)
+          // Barra: cap visual al 100% pero el % numérico puede pasar de 100
           const pctClamped = Math.min(100, Math.max(0, porcentaje))
-          const barColor = porcentaje >= 90 ? '#16a34a' : porcentaje >= 60 ? '#f59e0b' : '#dc2626'
+          // Color: verde firme hasta 100%, azul cuando supera (positivo)
+          const barColor = porcentaje > 100 ? '#2563eb' : porcentaje >= 90 ? '#16a34a' : porcentaje >= 60 ? '#f59e0b' : '#dc2626'
           // Iconos lucide inline (SVG)
           const iconTarget = `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#dc2626" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg>`
           const iconCheck = `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#15803d" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>`
           const iconAlert = `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#92400e" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>`
-          const iconReceipt = `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#6b7280" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 2v20l2-1 2 1 2-1 2 1 2-1 2 1 2-1 2 1V2l-2 1-2-1-2 1-2-1-2 1-2-1-2 1Z"/><path d="M14 8H8"/><path d="M16 12H8"/><path d="M13 16H8"/></svg>`
-          const iconInfo = `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#1e40af" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;margin-top:1px;"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>`
-          return `<div style="text-align:left;font-size:13px;color:#111827;">
-            <div style="text-align:center;padding:18px 12px;background:linear-gradient(135deg,#fef2f2 0%,#fff 100%);border-radius:8px;margin-bottom:16px;">
+          const iconReceipt = `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 2v20l2-1 2 1 2-1 2 1 2-1 2 1 2-1 2 1V2l-2 1-2-1-2 1-2-1-2 1-2-1-2 1Z"/><path d="M14 8H8"/><path d="M16 12H8"/><path d="M13 16H8"/></svg>`
+          const iconInfo = `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;margin-top:1px;"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>`
+          return `<div style="text-align:left;font-size:13px;color:var(--text-primary);">
+            <div style="text-align:center;padding:18px 12px;background:var(--bg-secondary);border:1px solid var(--border-primary);border-radius:8px;margin-bottom:16px;">
               <div style="display:flex;justify-content:center;margin-bottom:8px;">${iconTarget}</div>
-              <div style="font-size:clamp(20px, 6vw, 26px);font-weight:800;color:#111827;letter-spacing:-0.5px;">${formatCurrency(totalProyectado)}</div>
-              <div style="font-size:11px;color:#6b7280;margin-top:4px;">Si todos cumplieran sus días asignados</div>
+              <div style="font-size:clamp(20px, 6vw, 26px);font-weight:800;color:var(--text-primary);letter-spacing:-0.5px;">${formatCurrency(totalProyectado)}</div>
+              <div style="font-size:11px;color:var(--text-secondary);margin-top:4px;">Si todos cumplieran sus días asignados</div>
             </div>
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px;">
-              <div style="padding:12px;border-radius:8px;text-align:center;background:#f0fdf4;border:1px solid #86efac;">
-                <div style="display:inline-flex;align-items:center;gap:5px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:#15803d;margin-bottom:6px;">${iconCheck}<span>Activos</span></div>
-                <div style="font-size:22px;font-weight:800;color:#111827;line-height:1;">${activos.length}<span style="font-size:12px;font-weight:600;color:#6b7280;margin-left:4px;">cond.</span></div>
-                <div style="font-size:13px;font-weight:700;margin:6px 0 4px;">${formatCurrency(proyectadoActivos)}</div>
-                <div style="font-size:10px;color:#6b7280;">7 días c/u</div>
+              <div style="padding:12px;border-radius:8px;text-align:center;background:rgba(34,197,94,0.10);border:1px solid rgba(34,197,94,0.35);">
+                <div style="display:inline-flex;align-items:center;gap:5px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:#22c55e;margin-bottom:6px;">${iconCheck}<span>Activos</span></div>
+                <div style="font-size:22px;font-weight:800;color:var(--text-primary);line-height:1;">${activos.length}<span style="font-size:12px;font-weight:600;color:var(--text-secondary);margin-left:4px;">cond.</span></div>
+                <div style="font-size:13px;font-weight:700;margin:6px 0 4px;color:var(--text-primary);">${formatCurrency(proyectadoActivos)}</div>
+                <div style="font-size:10px;color:var(--text-secondary);">7 días c/u</div>
               </div>
-              <div style="padding:12px;border-radius:8px;text-align:center;background:#fef3c7;border:1px solid #fcd34d;">
-                <div style="display:inline-flex;align-items:center;gap:5px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:#92400e;margin-bottom:6px;">${iconAlert}<span>Baja en la semana</span></div>
-                <div style="font-size:22px;font-weight:800;color:#111827;line-height:1;">${bajas.length}<span style="font-size:12px;font-weight:600;color:#6b7280;margin-left:4px;">cond.</span></div>
-                <div style="font-size:13px;font-weight:700;margin:6px 0 4px;">${formatCurrency(proyectadoBajas)}</div>
-                <div style="font-size:10px;color:#6b7280;">Proyectado parcial</div>
+              <div style="padding:12px;border-radius:8px;text-align:center;background:rgba(245,158,11,0.10);border:1px solid rgba(245,158,11,0.35);">
+                <div style="display:inline-flex;align-items:center;gap:5px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:#f59e0b;margin-bottom:6px;">${iconAlert}<span>Baja en la semana</span></div>
+                <div style="font-size:22px;font-weight:800;color:var(--text-primary);line-height:1;">${bajas.length}<span style="font-size:12px;font-weight:600;color:var(--text-secondary);margin-left:4px;">cond.</span></div>
+                <div style="font-size:13px;font-weight:700;margin:6px 0 4px;color:var(--text-primary);">${formatCurrency(proyectadoBajas)}</div>
+                <div style="font-size:10px;color:var(--text-secondary);">Proyectado parcial</div>
               </div>
             </div>
-            <div style="background:#f3f4f6;padding:12px;border-radius:8px;">
+            <div style="background:var(--bg-secondary);border:1px solid var(--border-primary);padding:12px;border-radius:8px;">
               <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;font-size:13px;">
-                <span style="display:inline-flex;align-items:center;gap:6px;color:#6b7280;">${iconReceipt}<span>Ya facturado</span></span>
-                <span style="font-weight:700;">${formatCurrency(totalAlquilerActual)}</span>
+                <span style="display:inline-flex;align-items:center;gap:6px;color:var(--text-secondary);">${iconReceipt}<span>Cobro app Cabify</span></span>
+                <span style="font-weight:700;color:var(--text-primary);">${formatCurrency(totalCobroApp)}</span>
               </div>
-              <div style="height:10px;background:#e5e7eb;border-radius:5px;overflow:hidden;margin:6px 0;">
+              <div style="height:10px;background:var(--bg-tertiary);border-radius:5px;overflow:hidden;margin:6px 0;">
                 <div style="height:100%;width:${pctClamped}%;background:${barColor};border-radius:5px;"></div>
               </div>
-              <div style="text-align:right;font-size:11px;color:${barColor};font-weight:600;">${porcentaje}% de cobertura</div>
+              <div style="display:flex;justify-content:space-between;align-items:center;font-size:11px;font-weight:600;">
+                <span style="color:var(--text-secondary);">vs proyectado</span>
+                <span style="color:${barColor};">${porcentaje}% ${porcentaje > 100 ? '(sobrecubre)' : 'de cobertura'}</span>
+              </div>
             </div>
-            <div style="display:flex;gap:8px;align-items:flex-start;background:#eff6ff;border-left:3px solid #3b82f6;padding:10px 12px;border-radius:6px;margin-top:14px;font-size:11px;color:#1e40af;line-height:1.5;">
-              ${iconInfo}<span>Los conductores dados de baja durante la semana solo proyectan los días que efectivamente trabajaron antes de la baja. No se inflan a x7.</span>
+            <div style="display:flex;gap:8px;align-items:flex-start;background:rgba(59,130,246,0.10);border:1px solid rgba(59,130,246,0.35);border-left:3px solid #3b82f6;padding:10px 12px;border-radius:6px;margin-top:14px;font-size:11px;color:#3b82f6;line-height:1.5;">
+              ${iconInfo}<span>Total Proyectado = alquiler proyectado + garantía. El % compara lo que Cabify ya descontó (cobro app) vs ese objetivo. Puede superar 100% cuando Cabify cobra de más para cubrir deudas previas.</span>
             </div>
           </div>`
         })()
@@ -8699,22 +8729,22 @@ export function ReporteFacturacionTab() {
           if (multas > 0) pills.push({ nombre: 'Multas', monto: multas, color: '#dc2626' })
           if (mora > 0) pills.push({ nombre: 'Mora', monto: mora, color: '#b91c1c' })
           const pillsHtml = pills.map(p => `
-            <div style="padding:12px;border-radius:8px;background:#fff;border:1px solid #e5e7eb;">
+            <div style="padding:12px;border-radius:8px;background:var(--bg-secondary);border:1px solid var(--border-primary);">
               <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px;">
                 <span style="width:8px;height:8px;border-radius:50%;background:${p.color};display:inline-block;"></span>
-                <span style="font-size:11px;text-transform:uppercase;letter-spacing:0.5px;font-weight:700;color:#6b7280;">${p.nombre}</span>
+                <span style="font-size:11px;text-transform:uppercase;letter-spacing:0.5px;font-weight:700;color:var(--text-secondary);">${p.nombre}</span>
               </div>
-              <div style="font-size:16px;font-weight:800;color:#111827;font-family:monospace;letter-spacing:-0.3px;">${formatCurrency(p.monto)}</div>
-              <div style="font-size:11px;color:#6b7280;margin-top:4px;">${pct(p.monto)}% del total</div>
+              <div style="font-size:16px;font-weight:800;color:var(--text-primary);font-family:monospace;letter-spacing:-0.3px;">${formatCurrency(p.monto)}</div>
+              <div style="font-size:11px;color:var(--text-secondary);margin-top:4px;">${pct(p.monto)}% del total</div>
             </div>
           `).join('')
-          return `<div style="text-align:left;font-size:13px;color:#111827;">
+          return `<div style="text-align:left;font-size:13px;color:var(--text-primary);">
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px;">
               ${pillsHtml}
             </div>
-            <div style="padding:14px;background:#fef2f2;border-radius:8px;text-align:center;border:1px solid #fecaca;">
-              <div style="font-size:11px;color:#991b1b;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;">Total Cargos</div>
-              <div style="font-size:clamp(18px, 5.5vw, 24px);font-weight:800;color:#111827;margin-top:6px;font-family:monospace;letter-spacing:-0.5px;">${formatCurrency(total)}</div>
+            <div style="padding:14px;background:rgba(239,68,68,0.08);border:1px solid rgba(239,68,68,0.3);border-radius:8px;text-align:center;">
+              <div style="font-size:11px;color:#ef4444;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;">Total Cargos</div>
+              <div style="font-size:clamp(18px, 5.5vw, 24px);font-weight:800;color:var(--text-primary);margin-top:6px;font-family:monospace;letter-spacing:-0.5px;">${formatCurrency(total)}</div>
             </div>
           </div>`
         })()
@@ -8748,25 +8778,25 @@ export function ReporteFacturacionTab() {
           if (pubTablet > 0) items.push({ codigo: 'P012', nombre: 'Publicidad Tablet', subtitulo: 'Ingreso por publicidad', monto: pubTablet })
           if (otrosDesc > 0) items.push({ codigo: '—', nombre: 'Otros descuentos', subtitulo: 'Sin clasificar', monto: otrosDesc })
           const itemsHtml = items.map(it => `
-            <div style="display:flex;justify-content:space-between;align-items:center;padding:12px 14px;background:#f0fdf4;border-radius:8px;border-left:3px solid #16a34a;">
+            <div style="display:flex;justify-content:space-between;align-items:center;padding:12px 14px;background:rgba(34,197,94,0.08);border-radius:8px;border-left:3px solid #16a34a;">
               <div>
-                <div style="font-size:11px;color:#374151;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;">${it.nombre}</div>
-                <div style="font-size:11px;color:#9ca3af;margin-top:2px;">${it.codigo} · ${it.subtitulo}</div>
+                <div style="font-size:11px;color:var(--text-primary);font-weight:700;text-transform:uppercase;letter-spacing:0.5px;">${it.nombre}</div>
+                <div style="font-size:11px;color:var(--text-tertiary);margin-top:2px;">${it.codigo} · ${it.subtitulo}</div>
               </div>
-              <div style="font-size:16px;font-weight:800;color:#15803d;font-family:monospace;">${formatCurrency(it.monto)}</div>
+              <div style="font-size:16px;font-weight:800;color:#16a34a;font-family:monospace;">${formatCurrency(it.monto)}</div>
             </div>
           `).join('')
-          const iconInfo = `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#1e40af" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;margin-top:1px;"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>`
-          return `<div style="text-align:left;font-size:13px;color:#111827;">
-            <div style="text-align:center;padding:18px;background:linear-gradient(135deg,#f0fdf4 0%,#fff 100%);border-radius:8px;margin-bottom:14px;">
-              <div style="font-size:11px;color:#15803d;text-transform:uppercase;letter-spacing:0.5px;font-weight:700;margin-bottom:6px;">Total Descuentos</div>
-              <div style="font-size:clamp(18px, 5.5vw, 24px);font-weight:800;color:#15803d;letter-spacing:-0.5px;font-family:monospace;">${formatCurrency(descTotal)}</div>
-              <div style="font-size:11px;color:#6b7280;margin-top:4px;">Descuentos aplicados esta semana</div>
+          const iconInfo = `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;margin-top:1px;"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>`
+          return `<div style="text-align:left;font-size:13px;color:var(--text-primary);">
+            <div style="text-align:center;padding:18px;background:rgba(34,197,94,0.08);border:1px solid rgba(34,197,94,0.3);border-radius:8px;margin-bottom:14px;">
+              <div style="font-size:11px;color:#16a34a;text-transform:uppercase;letter-spacing:0.5px;font-weight:700;margin-bottom:6px;">Total Descuentos</div>
+              <div style="font-size:clamp(18px, 5.5vw, 24px);font-weight:800;color:#16a34a;letter-spacing:-0.5px;font-family:monospace;">${formatCurrency(descTotal)}</div>
+              <div style="font-size:11px;color:var(--text-secondary);margin-top:4px;">Descuentos aplicados esta semana</div>
             </div>
             <div style="display:flex;flex-direction:column;gap:8px;">
-              ${itemsHtml || '<div style="padding:20px;text-align:center;color:#9ca3af;font-size:12px;">Sin descuentos aplicados</div>'}
+              ${itemsHtml || '<div style="padding:20px;text-align:center;color:var(--text-tertiary);font-size:12px;">Sin descuentos aplicados</div>'}
             </div>
-            <div style="display:flex;gap:8px;align-items:flex-start;background:#eff6ff;border-left:3px solid #3b82f6;padding:10px 12px;border-radius:6px;margin-top:14px;font-size:11px;color:#1e40af;line-height:1.5;">
+            <div style="display:flex;gap:8px;align-items:flex-start;background:rgba(59,130,246,0.08);border:1px solid rgba(59,130,246,0.3);border-left:3px solid #3b82f6;padding:10px 12px;border-radius:6px;margin-top:14px;font-size:11px;color:#3b82f6;line-height:1.5;">
               ${iconInfo}<span>Los descuentos reducen el total a cobrar al conductor.</span>
             </div>
           </div>`
@@ -8779,19 +8809,19 @@ export function ReporteFacturacionTab() {
           const totalDesc = src.reduce((s, f) => s + (f.subtotal_descuentos || 0), 0)
           const neto = src.reduce((s, f) => s + (f.total_a_pagar || 0), 0)
           // Nuevo modal: stack con conexion visual (cargos rojo, descuentos verde, neto azul destacado)
-          return `<div style="text-align:left;font-size:13px;color:#111827;">
+          return `<div style="text-align:left;font-size:13px;color:var(--text-primary);">
             <div style="display:flex;flex-direction:column;gap:8px;">
-              <div style="padding:14px;background:#fef2f2;border-radius:8px;display:flex;justify-content:space-between;align-items:center;border-left:4px solid #dc2626;">
-                <span style="font-size:11px;color:#991b1b;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;">Cargos brutos</span>
-                <span style="font-size:16px;font-weight:800;font-family:monospace;color:#991b1b;">+ ${formatCurrency(totalCargos)}</span>
+              <div style="padding:14px;background:rgba(239,68,68,0.08);border:1px solid rgba(239,68,68,0.3);border-radius:8px;display:flex;justify-content:space-between;align-items:center;border-left:4px solid #ef4444;">
+                <span style="font-size:11px;color:#ef4444;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;">Cargos brutos</span>
+                <span style="font-size:16px;font-weight:800;font-family:monospace;color:#ef4444;">+ ${formatCurrency(totalCargos)}</span>
               </div>
-              <div style="padding:14px;background:#f0fdf4;border-radius:8px;display:flex;justify-content:space-between;align-items:center;border-left:4px solid #16a34a;">
-                <span style="font-size:11px;color:#15803d;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;">Descuentos aplicados</span>
-                <span style="font-size:16px;font-weight:800;font-family:monospace;color:#15803d;">− ${formatCurrency(totalDesc)}</span>
+              <div style="padding:14px;background:rgba(34,197,94,0.08);border:1px solid rgba(34,197,94,0.3);border-radius:8px;display:flex;justify-content:space-between;align-items:center;border-left:4px solid #16a34a;">
+                <span style="font-size:11px;color:#16a34a;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;">Descuentos aplicados</span>
+                <span style="font-size:16px;font-weight:800;font-family:monospace;color:#16a34a;">− ${formatCurrency(totalDesc)}</span>
               </div>
-              <div style="padding:18px;background:linear-gradient(135deg,#dbeafe 0%,#e0e7ff 100%);border-radius:8px;border:2px solid #3b82f6;text-align:center;margin-top:6px;">
-                <div style="font-size:11px;color:#1e3a8a;text-transform:uppercase;letter-spacing:0.5px;font-weight:700;margin-bottom:6px;">A cobrar (Neto)</div>
-                <div style="font-size:clamp(18px, 5.5vw, 24px);font-weight:800;color:#1e3a8a;font-family:monospace;letter-spacing:-0.5px;">${formatCurrency(neto)}</div>
+              <div style="padding:18px;background:rgba(59,130,246,0.10);border-radius:8px;border:2px solid #3b82f6;text-align:center;margin-top:6px;">
+                <div style="font-size:11px;color:#3b82f6;text-transform:uppercase;letter-spacing:0.5px;font-weight:700;margin-bottom:6px;">A cobrar (Neto)</div>
+                <div style="font-size:clamp(18px, 5.5vw, 24px);font-weight:800;color:#3b82f6;font-family:monospace;letter-spacing:-0.5px;">${formatCurrency(neto)}</div>
               </div>
             </div>
           </div>`
@@ -8813,29 +8843,29 @@ export function ReporteFacturacionTab() {
           // Colores del ranking (1=rojo intenso, 2=naranja, 3=ambar, 4-5=gris)
           const rankColors = ['#dc2626', '#ea580c', '#f59e0b', '#6b7280', '#6b7280']
           const top5Html = top5.map((f, idx) => `
-            <div style="display:flex;align-items:center;gap:10px;padding:10px 12px;background:#f9fafb;border-radius:6px;">
+            <div style="display:flex;align-items:center;gap:10px;padding:10px 12px;background:var(--bg-secondary);border:1px solid var(--border-primary);border-radius:6px;">
               <div style="width:22px;height:22px;border-radius:50%;background:${rankColors[idx]};color:#fff;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0;">${idx + 1}</div>
-              <div style="flex:1;font-size:11px;color:#374151;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${f.conductor_nombre}</div>
-              <div style="font-size:16px;font-weight:800;color:#991b1b;font-family:monospace;">${formatCurrency(f.total_a_pagar)}</div>
+              <div style="flex:1;font-size:11px;color:var(--text-primary);font-weight:700;text-transform:uppercase;letter-spacing:0.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${f.conductor_nombre}</div>
+              <div style="font-size:16px;font-weight:800;color:#ef4444;font-family:monospace;">${formatCurrency(f.total_a_pagar)}</div>
             </div>
           `).join('')
-          return `<div style="text-align:left;font-size:13px;color:#111827;">
+          return `<div style="text-align:left;font-size:13px;color:var(--text-primary);">
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px;">
-              <div style="padding:12px;text-align:center;border-radius:8px;background:#f9fafb;border:1px solid #e5e7eb;">
-                <div style="font-size:11px;color:#6b7280;text-transform:uppercase;letter-spacing:0.5px;font-weight:700;margin-bottom:6px;">Con deuda</div>
-                <div style="font-size:clamp(18px, 5.5vw, 24px);font-weight:800;color:#111827;line-height:1;font-family:monospace;">${deben.length}</div>
+              <div style="padding:12px;text-align:center;border-radius:8px;background:var(--bg-secondary);border:1px solid var(--border-primary);">
+                <div style="font-size:11px;color:var(--text-secondary);text-transform:uppercase;letter-spacing:0.5px;font-weight:700;margin-bottom:6px;">Con deuda</div>
+                <div style="font-size:clamp(18px, 5.5vw, 24px);font-weight:800;color:var(--text-primary);line-height:1;font-family:monospace;">${deben.length}</div>
               </div>
-              <div style="padding:12px;text-align:center;border-radius:8px;background:#f9fafb;border:1px solid #e5e7eb;">
-                <div style="font-size:11px;color:#6b7280;text-transform:uppercase;letter-spacing:0.5px;font-weight:700;margin-bottom:6px;">Total adeudado</div>
-                <div style="font-size:clamp(18px, 5.5vw, 24px);font-weight:800;color:#111827;line-height:1;font-family:monospace;letter-spacing:-0.5px;">${fmtCompacto(totalAdeudado)}</div>
+              <div style="padding:12px;text-align:center;border-radius:8px;background:var(--bg-secondary);border:1px solid var(--border-primary);">
+                <div style="font-size:11px;color:var(--text-secondary);text-transform:uppercase;letter-spacing:0.5px;font-weight:700;margin-bottom:6px;">Total adeudado</div>
+                <div style="font-size:clamp(18px, 5.5vw, 24px);font-weight:800;color:var(--text-primary);line-height:1;font-family:monospace;letter-spacing:-0.5px;">${fmtCompacto(totalAdeudado)}</div>
               </div>
             </div>
             ${top5.length > 0 ? `
-              <div style="font-size:11px;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:0.5px;margin:6px 0;">Top 5 deudores</div>
+              <div style="font-size:11px;font-weight:700;color:var(--text-secondary);text-transform:uppercase;letter-spacing:0.5px;margin:6px 0;">Top 5 deudores</div>
               <div style="display:flex;flex-direction:column;gap:6px;">
                 ${top5Html}
               </div>
-            ` : '<div style="text-align:center;color:#9ca3af;font-size:12px;padding:20px;">Sin conductores con deuda</div>'}
+            ` : '<div style="text-align:center;color:var(--text-tertiary);font-size:12px;padding:20px;">Sin conductores con deuda</div>'}
           </div>`
         })()
       },
@@ -8845,19 +8875,132 @@ export function ReporteFacturacionTab() {
           const favor = src.filter(f => f.total_a_pagar <= 0)
             .sort((a, b) => a.total_a_pagar - b.total_a_pagar)
           const top5 = favor.slice(0, 5)
-          return `<div style="text-align:left;font-size:13px;">
+          return `<div style="text-align:left;font-size:13px;color:var(--text-primary);">
             <p><b>${favor.length}</b> conductores con saldo a favor o $0 (total_a_pagar &le; 0)</p>
-            ${top5.length > 0 ? `<p style="margin-top:8px;font-size:11px;color:#888;">Top 5:</p>
+            ${top5.length > 0 ? `<p style="margin-top:8px;font-size:11px;color:var(--text-tertiary);">Top 5:</p>
             <table style="width:100%;border-collapse:collapse;font-size:12px;">
-              ${top5.map(f => `<tr><td style="padding:2px 0;">${f.conductor_nombre}</td><td style="text-align:right;padding:2px 0;color:#059669;"><b>${formatCurrency(f.total_a_pagar)}</b></td></tr>`).join('')}
+              ${top5.map(f => `<tr><td style="padding:2px 0;color:var(--text-primary);">${f.conductor_nombre}</td><td style="text-align:right;padding:2px 0;color:#16a34a;"><b>${formatCurrency(f.total_a_pagar)}</b></td></tr>`).join('')}
             </table>` : ''}
+          </div>`
+        })()
+      },
+      importe_generado: {
+        title: `Importe Generado — S${periodo?.semana || '?'}/${periodo?.anio || '?'}`,
+        html: (() => {
+          // Total que se debió cobrar = alquiler + garantía + cargos extra + saldo previo
+          const totalAlquiler = src.reduce((s, f) => s + (f.subtotal_alquiler || 0), 0)
+          const totalGarantia = src.reduce((s, f) => s + (f.subtotal_garantia || 0), 0)
+          // Cargos "extra" = subtotal_cargos menos alquiler menos garantía (incidencias, multas, etc.)
+          const totalCargosExtra = src.reduce((s, f) => {
+            const cargos = f.subtotal_cargos || 0
+            const alq = f.subtotal_alquiler || 0
+            const gar = f.subtotal_garantia || 0
+            return s + Math.max(0, cargos - alq - gar)
+          }, 0)
+          const totalSaldoPrevio = src.reduce((s, f) => s + Math.max(0, f.saldo_anterior || 0), 0)
+          const importeGenerado = totalAlquiler + totalGarantia + totalCargosExtra + totalSaldoPrevio
+
+          // Pagado por Cabify (Excel cargado en pagos_conductores)
+          const totalCobroCabify = src.reduce((s, f) => s + (pagosCabifyMap.get(f.conductor_id) || 0), 0)
+          const hayPagosCargados = pagosCabifyMap.size > 0
+
+          const porcentaje = importeGenerado > 0 ? Math.round((totalCobroCabify / importeGenerado) * 100) : 0
+          const pctClamped = Math.min(100, Math.max(0, porcentaje))
+          const dasharray = 2 * Math.PI * 55 // ≈ 345.575
+          const dashoffset = dasharray * (1 - pctClamped / 100)
+          const barColor = porcentaje > 100 ? '#2563eb' : porcentaje >= 90 ? '#16a34a' : porcentaje >= 60 ? '#f59e0b' : '#dc2626'
+
+          // Buckets por conductor
+          const buckets = { ok: 0, mid: 0, low: 0 }
+          for (const f of src) {
+            const debe = (f.subtotal_alquiler || 0) + (f.subtotal_garantia || 0) +
+                         Math.max(0, (f.subtotal_cargos || 0) - (f.subtotal_alquiler || 0) - (f.subtotal_garantia || 0)) +
+                         Math.max(0, f.saldo_anterior || 0)
+            if (debe <= 0) continue
+            const pago = pagosCabifyMap.get(f.conductor_id) || 0
+            const pct = (pago / debe) * 100
+            if (pct >= 100) buckets.ok++
+            else if (pct >= 50) buckets.mid++
+            else buckets.low++
+          }
+
+          const placeholderHtml = `
+            <div style="padding:32px 20px;text-align:center;background:var(--bg-secondary);border:2px dashed var(--border-primary);border-radius:10px;">
+              <div style="font-size:32px;opacity:0.4;margin-bottom:8px;">📋</div>
+              <div style="font-size:13px;color:var(--text-secondary);margin-bottom:8px;">
+                El indicador necesita el <strong>reporte Cabify</strong> de pagos cargado para esta semana cerrada.
+              </div>
+              <div style="font-size:11px;color:var(--text-tertiary);">
+                Subí el Excel en la sección de pagos para activar este cálculo.
+              </div>
+            </div>
+            <div style="margin-top:14px;padding:10px 12px;background:rgba(245,158,11,0.08);border-left:3px solid #f59e0b;border-radius:6px;font-size:11px;color:#92400e;line-height:1.5;">
+              <strong>Total que debería cobrarse</strong> ya calculado:<br>
+              Alquiler ${formatCurrency(totalAlquiler)} + Garantía ${formatCurrency(totalGarantia)} + Cargos ${formatCurrency(totalCargosExtra)} + Saldo previo ${formatCurrency(totalSaldoPrevio)}<br>
+              = <strong>${formatCurrency(importeGenerado)}</strong>
+            </div>
+          `
+
+          const fullHtml = `
+            <div style="display:flex;gap:20px;align-items:center;padding:16px;background:linear-gradient(135deg,rgba(34,197,94,0.08) 0%,var(--bg-secondary) 100%);border-radius:10px;border:1px solid rgba(34,197,94,0.25);">
+              <div style="width:130px;height:130px;flex-shrink:0;position:relative;">
+                <svg width="130" height="130" viewBox="0 0 130 130" style="transform:rotate(-90deg);">
+                  <circle cx="65" cy="65" r="55" fill="none" stroke="var(--bg-tertiary)" stroke-width="14"/>
+                  <circle cx="65" cy="65" r="55" fill="none" stroke="${barColor}" stroke-width="14"
+                    stroke-dasharray="${dasharray.toFixed(2)}" stroke-dashoffset="${dashoffset.toFixed(2)}" stroke-linecap="round"/>
+                </svg>
+                <div style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;">
+                  <div style="font-size:22px;font-weight:800;color:${barColor};line-height:1;">${porcentaje}%</div>
+                  <div style="font-size:9px;color:var(--text-secondary);text-transform:uppercase;letter-spacing:0.5px;margin-top:2px;">cubierto</div>
+                </div>
+              </div>
+              <div style="flex:1;">
+                <div style="font-size:10px;color:var(--text-secondary);text-transform:uppercase;letter-spacing:0.5px;">Total facturado</div>
+                <div style="font-size:22px;font-weight:800;color:var(--text-primary);">${formatCurrency(importeGenerado)}</div>
+                <div style="font-size:11px;color:${barColor};margin-top:6px;padding:4px 8px;background:rgba(${porcentaje > 100 ? '37,99,235' : porcentaje >= 90 ? '34,197,94' : porcentaje >= 60 ? '245,158,11' : '239,68,68'},0.12);border-radius:4px;display:inline-block;font-weight:600;">
+                  Cabify cobró ${formatCurrency(totalCobroCabify)}${porcentaje !== 100 ? ` · ${porcentaje > 100 ? 'sobre-cobertura ' : 'queda '}${formatCurrency(Math.abs(importeGenerado - totalCobroCabify))}` : ''}
+                </div>
+              </div>
+            </div>
+
+            <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:var(--text-secondary);margin:18px 0 8px;">Componentes del total</div>
+            <table style="width:100%;border-collapse:collapse;font-size:12px;">
+              <thead>
+                <tr>
+                  <th style="background:var(--bg-secondary);padding:8px 10px;text-align:left;font-size:10px;text-transform:uppercase;letter-spacing:0.5px;color:var(--text-secondary);border-bottom:1px solid var(--border-primary);">Concepto</th>
+                  <th style="background:var(--bg-secondary);padding:8px 10px;text-align:right;font-size:10px;text-transform:uppercase;letter-spacing:0.5px;color:var(--text-secondary);border-bottom:1px solid var(--border-primary);">Monto</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr><td style="padding:9px 10px;border-bottom:1px solid var(--border-primary);color:var(--text-primary);">Alquiler de la semana</td><td style="padding:9px 10px;border-bottom:1px solid var(--border-primary);text-align:right;font-weight:600;color:var(--text-primary);font-variant-numeric:tabular-nums;">${formatCurrency(totalAlquiler)}</td></tr>
+                <tr><td style="padding:9px 10px;border-bottom:1px solid var(--border-primary);color:var(--text-primary);">Garantía (cuota semanal)</td><td style="padding:9px 10px;border-bottom:1px solid var(--border-primary);text-align:right;font-weight:600;color:var(--text-primary);font-variant-numeric:tabular-nums;">${formatCurrency(totalGarantia)}</td></tr>
+                <tr><td style="padding:9px 10px;border-bottom:1px solid var(--border-primary);color:var(--text-primary);">Incidencias / Cargos extra</td><td style="padding:9px 10px;border-bottom:1px solid var(--border-primary);text-align:right;font-weight:600;color:var(--text-primary);font-variant-numeric:tabular-nums;">${formatCurrency(totalCargosExtra)}</td></tr>
+                <tr><td style="padding:9px 10px;border-bottom:1px solid var(--border-primary);color:var(--text-primary);">Saldo pendiente semana anterior</td><td style="padding:9px 10px;border-bottom:1px solid var(--border-primary);text-align:right;font-weight:600;color:var(--text-primary);font-variant-numeric:tabular-nums;">${formatCurrency(totalSaldoPrevio)}</td></tr>
+                <tr style="font-weight:800;background:var(--bg-secondary);"><td style="padding:10px;color:var(--text-primary);font-size:13px;">TOTAL FACTURADO</td><td style="padding:10px;text-align:right;color:var(--text-primary);font-size:13px;font-variant-numeric:tabular-nums;">${formatCurrency(importeGenerado)}</td></tr>
+              </tbody>
+            </table>
+
+            <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:var(--text-secondary);margin:18px 0 8px;">Cobertura por conductor</div>
+            <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;">
+              <div style="padding:10px 6px;border-radius:6px;text-align:center;background:rgba(34,197,94,0.10);color:#15803d;"><strong style="display:block;font-size:20px;line-height:1;margin-bottom:4px;">${buckets.ok}</strong><span style="font-size:10px;font-weight:700;">100%+ OK</span></div>
+              <div style="padding:10px 6px;border-radius:6px;text-align:center;background:rgba(245,158,11,0.10);color:#92400e;"><strong style="display:block;font-size:20px;line-height:1;margin-bottom:4px;">${buckets.mid}</strong><span style="font-size:10px;font-weight:700;">50-99% parcial</span></div>
+              <div style="padding:10px 6px;border-radius:6px;text-align:center;background:rgba(239,68,68,0.10);color:#991b1b;"><strong style="display:block;font-size:20px;line-height:1;margin-bottom:4px;">${buckets.low}</strong><span style="font-size:10px;font-weight:700;">&lt;50% deuda</span></div>
+            </div>
+
+            <div style="background:rgba(59,130,246,0.08);border-left:3px solid #3b82f6;padding:10px 12px;border-radius:6px;margin-top:16px;font-size:11px;color:#3b82f6;line-height:1.5;">
+              <strong>Importe Generado</strong> = lo que se debió cobrar al cierre (alquiler + garantía + cargos + saldo previo). Se compara contra los pagos cargados desde el Excel formato Cabify de esa semana.
+            </div>
+          `
+
+          return `<div style="text-align:left;font-size:13px;color:var(--text-primary);">
+            ${hayPagosCargados ? fullHtml : placeholderHtml}
           </div>`
         })()
       }
     }
     const info = descriptions[stat]
     if (!info) return
-    Swal.fire({ title: info.title, html: info.html, width: 'min(92vw, 440px)', confirmButtonText: 'Cerrar' })
+    Swal.fire({ title: info.title, html: info.html, width: 'min(92vw, 520px)', confirmButtonText: 'Cerrar' })
   }
 
   // Helper para obtener excesos de un conductor
@@ -10227,6 +10370,56 @@ export function ReporteFacturacionTab() {
                     <span className="stat-label">Deben</span>
                   </div>
                 </div>
+                {/* Importe Generado: solo visible en semanas cerradas */}
+                {periodo?.estado === 'cerrado' && (() => {
+                  // Calcular importe total que debió cobrarse
+                  const totalDebe = facturacionesFiltradas.reduce((s, f) => {
+                    const alq = f.subtotal_alquiler || 0
+                    const gar = f.subtotal_garantia || 0
+                    const cargos = f.subtotal_cargos || 0
+                    const cargosExtra = Math.max(0, cargos - alq - gar)
+                    const saldoPrev = Math.max(0, f.saldo_anterior || 0)
+                    return s + alq + gar + cargosExtra + saldoPrev
+                  }, 0)
+                  const totalCobrado = facturacionesFiltradas.reduce((s, f) => s + (pagosCabifyMap.get(f.conductor_id) || 0), 0)
+                  const pct = totalDebe > 0 ? Math.round((totalCobrado / totalDebe) * 100) : 0
+                  const hayPagos = pagosCabifyMap.size > 0
+                  const pctColor = pct > 100 ? '#2563eb' : pct >= 90 ? '#16a34a' : pct >= 60 ? '#f59e0b' : '#dc2626'
+                  return (
+                    <div className="fact-stat-card"
+                      onClick={() => showStatInfo('importe_generado')}
+                      style={{
+                        cursor: 'pointer',
+                        border: '2px solid #16a34a',
+                        background: 'linear-gradient(135deg, rgba(34,197,94,0.10) 0%, var(--bg-primary) 60%)',
+                        position: 'relative',
+                      }}
+                      title="Indicador disponible en semanas cerradas"
+                    >
+                      <span style={{
+                        position: 'absolute', top: '-8px', right: '12px',
+                        background: '#16a34a', color: '#fff', fontSize: '9px',
+                        padding: '2px 8px', borderRadius: '4px', fontWeight: 700, letterSpacing: '0.3px',
+                      }}>CIERRE</span>
+                      <DollarSign size={18} className="stat-icon" style={{ color: '#16a34a' }} />
+                      <div className="stat-content">
+                        <span className="stat-value">{formatCurrency(totalDebe)}</span>
+                        <span className="stat-label">
+                          Importe Generado{' '}
+                          {hayPagos ? (
+                            <span style={{ color: pctColor, fontWeight: 700 }}>
+                              · {pct}% cubierto
+                            </span>
+                          ) : (
+                            <span style={{ color: 'var(--text-tertiary)', fontStyle: 'italic' }}>
+                              · sin pagos cargados
+                            </span>
+                          )}
+                        </span>
+                      </div>
+                    </div>
+                  )
+                })()}
               </div>
             </div>
           )}
