@@ -140,6 +140,7 @@ export function VehicleManagement() {
     url_documentacion: '',
     sede_id: '',
     grupo_flota: '',
+    categoria: '',
     cantidad_llaves: '',
     lugar_radicacion: '',
     vencimiento_seguro: '',
@@ -271,7 +272,7 @@ export function VehicleManagement() {
           .from('vehiculos')
           .select(`
             id, patente, marca, modelo, anio, color, kilometraje_actual, kilometraje_geotab, kilometraje_geotab_updated_at, estado_id, created_at,
-            drive_folder_id, drive_folder_url, url_documentacion, gnc, telepase, titular, grupo_flota,
+            drive_folder_id, drive_folder_url, url_documentacion, gnc, telepase, titular, grupo_flota, categoria,
             cantidad_llaves, lugar_radicacion, vencimiento_seguro,
             vto_vtv_aplica, vto_vtv_fecha, vto_gnc_aplica, vto_gnc_fecha, vto_matafuego_aplica, vto_matafuego_fecha,
             vehiculos_estados (id, codigo, descripcion)
@@ -417,6 +418,51 @@ export function VehicleManagement() {
     }
   }
 
+  // Sincronizar vencimientos VTV/GNC/Matafuegos con el módulo de vencimientos
+  const sincronizarVencimientos = async (patente: string, titular: string, userName: string) => {
+    const tipos: { aplica: boolean; fecha: string; documento: string }[] = [
+      { aplica: formData.vto_vtv_aplica, fecha: formData.vto_vtv_fecha, documento: 'VTV' },
+      { aplica: formData.vto_gnc_aplica, fecha: formData.vto_gnc_fecha, documento: 'GNC' },
+      { aplica: formData.vto_matafuego_aplica, fecha: formData.vto_matafuego_fecha, documento: 'Matafuegos' },
+    ]
+
+    for (const tipo of tipos) {
+      if (!tipo.aplica || !tipo.fecha) continue
+
+      // Buscar si ya existe un registro para esta patente y documento
+      const { data: existente } = await (supabase.from('vencimientos') as any)
+        .select('id')
+        .eq('patente', patente)
+        .eq('documento', tipo.documento)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle()
+
+      if (existente) {
+        // Actualizar fecha de vencimiento
+        await (supabase.from('vencimientos') as any)
+          .update({
+            fecha_vencimiento: tipo.fecha,
+            titular: titular,
+            fecha_edicion: new Date().toISOString(),
+            usuario_edicion: userName,
+          })
+          .eq('id', existente.id)
+      } else {
+        // Crear nuevo registro
+        await (supabase.from('vencimientos') as any)
+          .insert({
+            patente: patente,
+            titular: titular,
+            documento: tipo.documento,
+            fecha_vencimiento: tipo.fecha,
+            solicitado: false,
+            usuario_creacion: userName,
+          })
+      }
+    }
+  }
+
   const handleCreate = async () => {
     if (!canCreate) {
       Swal.fire({
@@ -505,6 +551,7 @@ export function VehicleManagement() {
             url_documentacion: formData.url_documentacion || null,
             sede_id: formData.sede_id,
             grupo_flota: formData.grupo_flota || null,
+            categoria: formData.categoria || null,
             cantidad_llaves: formData.cantidad_llaves ? Number(formData.cantidad_llaves) : null,
             lugar_radicacion: formData.lugar_radicacion || null,
             vencimiento_seguro: formData.vencimiento_seguro || null,
@@ -563,6 +610,13 @@ export function VehicleManagement() {
           }
         }
 
+        // Sincronizar vencimientos VTV/GNC/Matafuegos
+        await sincronizarVencimientos(
+          formData.patente.toUpperCase(),
+          formData.titular || '',
+          profile?.full_name || 'Sistema'
+        )
+
         showSuccess('Vehículo restaurado', 'El vehículo fue restaurado y sus datos actualizados.')
         setShowCreateModal(false)
         resetForm()
@@ -605,6 +659,7 @@ export function VehicleManagement() {
           created_by_name: profile?.full_name || 'Sistema',
           sede_id: formData.sede_id,
           grupo_flota: formData.grupo_flota || null,
+          categoria: formData.categoria || null,
           cantidad_llaves: formData.cantidad_llaves ? Number(formData.cantidad_llaves) : null,
           lugar_radicacion: formData.lugar_radicacion || null,
           vencimiento_seguro: formData.vencimiento_seguro || null,
@@ -706,6 +761,13 @@ export function VehicleManagement() {
           sedeId: formData.sede_id,
         })
       }
+
+      // Sincronizar vencimientos VTV/GNC/Matafuegos
+      await sincronizarVencimientos(
+        formData.patente.toUpperCase(),
+        formData.titular || '',
+        profile?.full_name || 'Sistema'
+      )
 
       showSuccess('Vehículo creado')
       setShowCreateModal(false)
@@ -891,6 +953,7 @@ export function VehicleManagement() {
           url_documentacion: formData.url_documentacion || null,
           sede_id: formData.sede_id || null,
           grupo_flota: formData.grupo_flota || null,
+          categoria: formData.categoria || null,
           cantidad_llaves: formData.cantidad_llaves ? Number(formData.cantidad_llaves) : null,
           lugar_radicacion: formData.lugar_radicacion || null,
           vencimiento_seguro: formData.vencimiento_seguro || null,
@@ -1031,6 +1094,13 @@ export function VehicleManagement() {
         }
       }
 
+      // Sincronizar vencimientos VTV/GNC/Matafuegos
+      await sincronizarVencimientos(
+        formData.patente.toUpperCase(),
+        formData.titular || '',
+        profile?.full_name || 'Sistema'
+      )
+
       showSuccess('Vehículo actualizado', debeFinalizarAsignaciones ? 'Asignaciones finalizadas' : undefined)
       setShowEditModal(false)
       setSelectedVehiculo(null)
@@ -1136,6 +1206,7 @@ export function VehicleManagement() {
         url_documentacion: (fullVehiculo as any).url_documentacion || (fullVehiculo as any).documentos_urls || '',
         sede_id: (fullVehiculo as any).sede_id || '',
         grupo_flota: (fullVehiculo as any).grupo_flota || '',
+        categoria: (fullVehiculo as any).categoria || '',
         cantidad_llaves: (fullVehiculo as any).cantidad_llaves != null ? String((fullVehiculo as any).cantidad_llaves) : '',
         lugar_radicacion: (fullVehiculo as any).lugar_radicacion || '',
         vencimiento_seguro: (fullVehiculo as any).vencimiento_seguro || '',
@@ -1175,6 +1246,30 @@ export function VehicleManagement() {
             titular_id: match.id,
           }))
         }
+      }
+
+      // Precargar fechas de vencimientos desde el módulo de vencimientos (sincronización inversa)
+      const patenteUpper = fullVehiculo.patente.toUpperCase()
+      const { data: vencimientosVehiculo } = await (supabase.from('vencimientos') as any)
+        .select('documento, fecha_vencimiento')
+        .eq('patente', patenteUpper)
+        .in('documento', ['VTV', 'GNC', 'Matafuegos'])
+        .order('created_at', { ascending: false })
+
+      if (vencimientosVehiculo && vencimientosVehiculo.length > 0) {
+        const vencMap = new Map<string, string>()
+        for (const v of vencimientosVehiculo) {
+          if (!vencMap.has(v.documento)) vencMap.set(v.documento, v.fecha_vencimiento)
+        }
+        setFormData(prev => ({
+          ...prev,
+          vto_vtv_fecha: vencMap.get('VTV') || prev.vto_vtv_fecha,
+          vto_vtv_aplica: vencMap.has('VTV') ? true : prev.vto_vtv_aplica,
+          vto_gnc_fecha: vencMap.get('GNC') || prev.vto_gnc_fecha,
+          vto_gnc_aplica: vencMap.has('GNC') ? true : prev.vto_gnc_aplica,
+          vto_matafuego_fecha: vencMap.get('Matafuegos') || prev.vto_matafuego_fecha,
+          vto_matafuego_aplica: vencMap.has('Matafuegos') ? true : prev.vto_matafuego_aplica,
+        }))
       }
 
       setShowEditModal(true)
@@ -1219,6 +1314,7 @@ export function VehicleManagement() {
       url_documentacion: '',
       sede_id: '',
       grupo_flota: '',
+      categoria: '',
       cantidad_llaves: '',
       lugar_radicacion: '',
       vencimiento_seguro: '',
@@ -2043,7 +2139,7 @@ export function VehicleManagement() {
       if (exportError) throw exportError
 
       const fmtFecha = (v: string | null | undefined) =>
-        v ? new Date(v).toLocaleDateString('es-AR') : ''
+        v ? new Date(v.length === 10 ? v + 'T00:00:00' : v).toLocaleDateString('es-AR') : ''
       const fmtFechaHora = (v: string | null | undefined) =>
         v ? new Date(v).toLocaleString('es-AR') : ''
 
@@ -2061,6 +2157,7 @@ export function VehicleManagement() {
         'Color': v.color || '',
         'Tipo Vehículo': v.tipo_vehiculo || '',
         'Grupo de Flota': v.grupo_flota || '',
+        'Categoría': (v as any).categoria || '',
         'Lugar de Radicación': v.lugar_radicacion || '',
         'Cantidad de Llaves': v.cantidad_llaves != null ? v.cantidad_llaves : '',
         'Titular': v.titular || '',
@@ -2812,6 +2909,22 @@ export function VehicleManagement() {
                 />
               </div>
               <div className="form-group">
+                <label className="form-label">Categoría</label>
+                <select
+                  className="form-input"
+                  value={formData.categoria}
+                  onChange={(e) => setFormData({ ...formData, categoria: e.target.value })}
+                  disabled={saving}
+                >
+                  <option value="">Seleccionar...</option>
+                  <option value="Autos del pueblo">Autos del pueblo</option>
+                  <option value="Rentadora">Rentadora</option>
+                  <option value="Flota propia">Flota propia</option>
+                </select>
+              </div>
+            </div>
+            <div className="form-row">
+              <div className="form-group">
                 <label className="form-label">Cantidad de llaves de encendido</label>
                 <select
                   className="form-input"
@@ -3175,6 +3288,10 @@ export function VehicleManagement() {
                 <div className="detail-value">{(selectedVehiculo as any).grupo_flota || 'N/A'}</div>
               </div>
               <div>
+                <label className="detail-label">CATEGORÍA</label>
+                <div className="detail-value">{(selectedVehiculo as any).categoria || 'N/A'}</div>
+              </div>
+              <div>
                 <label className="detail-label">LUGAR DE RADICACIÓN</label>
                 <div className="detail-value">{(selectedVehiculo as any).lugar_radicacion || 'N/A'}</div>
               </div>
@@ -3195,7 +3312,7 @@ export function VehicleManagement() {
                 <label className="detail-label">VENCIMIENTO VTV</label>
                 <div className="detail-value">
                   {(selectedVehiculo as any).vto_vtv_aplica
-                    ? `Sí${(selectedVehiculo as any).vto_vtv_fecha ? ` — ${new Date((selectedVehiculo as any).vto_vtv_fecha).toLocaleDateString('es-AR')}` : ''}`
+                    ? `Sí${(selectedVehiculo as any).vto_vtv_fecha ? ` — ${new Date((selectedVehiculo as any).vto_vtv_fecha + 'T00:00:00').toLocaleDateString('es-AR')}` : ''}`
                     : 'No'}
                 </div>
               </div>
@@ -3203,7 +3320,7 @@ export function VehicleManagement() {
                 <label className="detail-label">VENCIMIENTO GNC</label>
                 <div className="detail-value">
                   {(selectedVehiculo as any).vto_gnc_aplica
-                    ? `Sí${(selectedVehiculo as any).vto_gnc_fecha ? ` — ${new Date((selectedVehiculo as any).vto_gnc_fecha).toLocaleDateString('es-AR')}` : ''}`
+                    ? `Sí${(selectedVehiculo as any).vto_gnc_fecha ? ` — ${new Date((selectedVehiculo as any).vto_gnc_fecha + 'T00:00:00').toLocaleDateString('es-AR')}` : ''}`
                     : 'No'}
                 </div>
               </div>
@@ -3211,7 +3328,7 @@ export function VehicleManagement() {
                 <label className="detail-label">VENCIMIENTO MATAFUEGO</label>
                 <div className="detail-value">
                   {(selectedVehiculo as any).vto_matafuego_aplica
-                    ? `Sí${(selectedVehiculo as any).vto_matafuego_fecha ? ` — ${new Date((selectedVehiculo as any).vto_matafuego_fecha).toLocaleDateString('es-AR')}` : ''}`
+                    ? `Sí${(selectedVehiculo as any).vto_matafuego_fecha ? ` — ${new Date((selectedVehiculo as any).vto_matafuego_fecha + 'T00:00:00').toLocaleDateString('es-AR')}` : ''}`
                     : 'No'}
                 </div>
               </div>

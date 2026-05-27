@@ -34,6 +34,7 @@ interface VehiculoFormData {
   url_documentacion: string
   sede_id: string
   grupo_flota: string
+  categoria: string
   cantidad_llaves: string // '1' | '2' | ''
   lugar_radicacion: string
   vencimiento_seguro: string
@@ -743,6 +744,22 @@ export function VehiculoWizard({
                 />
               </div>
 
+              <div className="form-group">
+                <label className="form-label">Categoría</label>
+                <select
+                  className="form-input"
+                  value={formData.categoria}
+                  onChange={(e) => setFormData({ ...formData, categoria: e.target.value })}
+                  disabled={saving}
+                >
+                  <option value="">Seleccionar...</option>
+                  <option value="Autos del pueblo">Autos del pueblo</option>
+                  <option value="Rentadora">Rentadora</option>
+                  <option value="Flota propia">Flota propia</option>
+                </select>
+              </div>
+            </div>
+            <div className="form-row">
               <div className="form-group">
                 <label className="form-label">Cantidad de llaves de encendido</label>
                 <select
