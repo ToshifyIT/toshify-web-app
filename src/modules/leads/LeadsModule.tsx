@@ -378,9 +378,9 @@ export function LeadsModule() {
 
   // Estados visibles para cambio manual (Conductor se asigna solo automáticamente)
   const ESTADOS_LEAD = [
-    'Inicio conversación', 'Acepta oferta', 'Apto - Hireflix', 'No Apto - Hireflix', 'Ayuda - Hireflix',
+    'Inicio conversación', 'Acepta oferta', 'Pendiente - Hireflix', 'Apto - Hireflix', 'No Apto - Hireflix', 'Ayuda - Hireflix',
     'Documentos enviados', 'Documentos pendientes', 'Auto del pueblo', 'No le interesa', 'No cumple edad',
-    'Convocatoria Inducción', 'Descartado',
+    'Convocatoria Inducción', 'Apto Inducción', 'Descartado',
   ] as const
 
   /** Calcula el estado correcto de un lead basándose en proceso y entrevista_ia.
@@ -394,6 +394,8 @@ export function LeadsModule() {
     if (entrevista === 'Apto') return 'Apto - Hireflix'
     // Si tiene dato en ayuda_entrevista, asignar "Ayuda - Hireflix"
     if (lead.ayuda_entrevista && lead.ayuda_entrevista.trim() !== '') return 'Ayuda - Hireflix'
+    // Si fase_de_preguntas es "Video Entrevista" y aún está en "Acepta oferta", pasa a pendiente
+    if (lead.fase_de_preguntas === 'Video Entrevista' && lead.estado_de_lead === 'Acepta oferta') return 'Pendiente - Hireflix'
     // Normalizar estados con formato invertido (ej: "Hireflix - Apto" -> "Apto - Hireflix")
     if (lead.estado_de_lead) {
       const el = lead.estado_de_lead.toLowerCase()
@@ -496,9 +498,10 @@ export function LeadsModule() {
       for (const lead of leadsData) {
         const proceso = (lead.proceso || '').toLowerCase()
         const esConductor = proceso === 'convertido' || proceso === 'conductor'
+        const esPendienteHireflix = lead.fase_de_preguntas === 'Video Entrevista' && lead.estado_de_lead === 'Acepta oferta'
 
-        if (lead.estado_manual_at && !esConductor) {
-          // Cambio manual del operador — respetar siempre
+        if (lead.estado_manual_at && !esConductor && !esPendienteHireflix) {
+          // Cambio manual del operador — respetar siempre (excepto conductor y pendiente hireflix)
           leadsConEstado.push(lead)
           continue
         }
@@ -1978,6 +1981,8 @@ export function LeadsModule() {
     {
       id: 'nombre',
       accessorFn: (row) => row.nombre_completo || '-',
+      size: 260,
+      maxSize: 300,
       header: () => (
         <ExcelColumnFilter
           label="Candidato"
@@ -2017,7 +2022,13 @@ export function LeadsModule() {
                     handleOpenDetails(row.original)
                   }
                 }}
-                style={{ fontWeight: 600, color: enZonaRestringida ? 'var(--badge-red-text)' : 'var(--text-primary)', textDecoration: 'none', fontSize: '13px' }}
+                title={nombre}
+                style={{
+                  fontWeight: 600, color: enZonaRestringida ? 'var(--badge-red-text)' : 'var(--text-primary)',
+                  textDecoration: 'none', fontSize: '13px',
+                  display: 'block', maxWidth: '240px',
+                  overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                }}
               >
                 {nombre}
               </a>
@@ -2070,7 +2081,6 @@ export function LeadsModule() {
           </div>
         )
       },
-      size: 260,
       meta: { expand: true },
       enableSorting: true,
     },
@@ -2226,17 +2236,7 @@ export function LeadsModule() {
       size: 110,
       enableSorting: true,
     },
-    {
-      id: 'fase_preguntas',
-      accessorFn: (row) => row.fase_de_preguntas || '-',
-      header: 'Fase',
-      cell: ({ row }) => {
-        const v = row.original.fase_de_preguntas || '-'
-        return <span style={{ fontSize: '11px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', display: 'block', maxWidth: '120px' }} title={v}>{v}</span>
-      },
-      size: 120,
-      enableSorting: true,
-    },
+    /* Columna Fase oculta */
     /* Columna Hireflix oculta */
     {
       id: 'exp_manejo',

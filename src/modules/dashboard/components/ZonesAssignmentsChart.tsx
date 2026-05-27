@@ -3,6 +3,7 @@ import { BarChart, Bar, XAxis, YAxis, ResponsiveContainer, Cell } from 'recharts
 import { startOfWeek, endOfWeek, isWithinInterval, parseISO, getWeek, setWeek } from 'date-fns'
 import { supabase } from '../../../lib/supabase'
 import { useSede } from '../../../contexts/SedeContext'
+import { getCache, setCache } from '../../../hooks/useSessionCache'
 import { PeriodPicker } from './PeriodPicker'
 import './ZonesAssignmentsChart.css'
 
@@ -32,6 +33,16 @@ export function ZonesAssignmentsChart() {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
+    const CACHE_NS = 'ZonesAssignmentsChart'
+    const paramsKey = JSON.stringify({ sedeActualId, selectedWeek })
+
+    const cached = getCache<{ name: string; value: number }[]>(CACHE_NS, paramsKey)
+    if (cached) {
+      setData(cached)
+      setLoading(false)
+      return
+    }
+
     function normalizeZona(raw: string): string {
       let zona = raw.trim()
       if (zona.toUpperCase() === 'CABA') return 'CABA'
@@ -165,7 +176,9 @@ export function ZonesAssignmentsChart() {
           .map(([name, value]) => ({ name, value }))
           .sort((a, b) => b.value - a.value)
 
-        setData(chartData.length > 0 ? chartData : [])
+        const finalData = chartData.length > 0 ? chartData : []
+        setData(finalData)
+        setCache(CACHE_NS, paramsKey, finalData)
 
       } catch (_error) {
         // silently ignored

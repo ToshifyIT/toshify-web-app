@@ -1,6 +1,9 @@
 import { useState, useEffect, useRef } from 'react'
 import { supabase } from '../lib/supabase'
 import { getPeriodRange, type Granularity } from '../utils/periodUtils'
+import { getCache, setCache } from './useSessionCache'
+
+const CACHE_NS = 'usePermanenciaStats'
 
 /** Formatea Date a 'YYYY-MM-DD' usando componentes locales, sin conversión UTC */
 function formatDateOnly(d: Date): string {
@@ -81,8 +84,15 @@ export function usePermanenciaStats(granularity: Granularity, periodA: string, p
     }
 
     async function fetchStats() {
+      const paramsKey = JSON.stringify({ granularity, periodA, periodB, sedeId })
+      const cached = getCache<{ avgDaysA: number; avgDaysB: number }>(CACHE_NS, paramsKey)
+      if (cached) {
+        setStats({ ...cached, loading: false })
+        return
+      }
+
       setStats(prev => ({ ...prev, loading: true }))
-      
+
       try {
         const rangeA = getPeriodRange(granularity, periodA)
         const rangeB = getPeriodRange(granularity, periodB)
@@ -93,7 +103,9 @@ export function usePermanenciaStats(granularity: Granularity, periodA: string, p
         ])
 
         if (isMounted) {
-          setStats({ avgDaysA: avgA, avgDaysB: avgB, loading: false })
+          const result = { avgDaysA: avgA, avgDaysB: avgB }
+          setCache(CACHE_NS, paramsKey, result)
+          setStats({ ...result, loading: false })
         }
       } catch {
         if (isMounted) {

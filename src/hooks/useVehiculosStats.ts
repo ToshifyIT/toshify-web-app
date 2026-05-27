@@ -1,6 +1,9 @@
 import { useState, useEffect, useRef } from 'react'
 import { supabase } from '../lib/supabase'
 import { getPeriodRange, type Granularity } from '../utils/periodUtils'
+import { getCache, setCache } from './useSessionCache'
+
+const CACHE_NS = 'useVehiculosStats'
 
 export function useVehiculosStats(granularity: Granularity, periodA: string, periodB: string, sedeId?: string) {
   const [stats, setStats] = useState({
@@ -22,8 +25,15 @@ export function useVehiculosStats(granularity: Granularity, periodA: string, per
     let isMounted = true
 
     async function fetchStats() {
+      const paramsKey = JSON.stringify({ granularity, periodA, periodB, sedeId })
+      const cached = getCache<{ totalA: number; totalB: number }>(CACHE_NS, paramsKey)
+      if (cached) {
+        setStats({ ...cached, loading: false })
+        return
+      }
+
       setStats(prev => ({ ...prev, loading: true }))
-      
+
       try {
         const rangeA = getPeriodRange(granularity, periodA)
         const rangeB = getPeriodRange(granularity, periodB)
@@ -53,11 +63,12 @@ export function useVehiculosStats(granularity: Granularity, periodA: string, per
         const [resA, resB] = await Promise.all([queryA, queryB])
 
         if (isMounted) {
-          setStats({ 
-            totalA: resA.count || 0, 
-            totalB: resB.count || 0, 
-            loading: false 
-          })
+          const result = {
+            totalA: resA.count || 0,
+            totalB: resB.count || 0,
+          }
+          setCache(CACHE_NS, paramsKey, result)
+          setStats({ ...result, loading: false })
         }
       } catch {
         if (isMounted) {

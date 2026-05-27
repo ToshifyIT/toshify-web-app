@@ -4,6 +4,7 @@ import { es } from 'date-fns/locale'
 import { supabase } from '../lib/supabase'
 import { useSede } from '../contexts/SedeContext'
 import { normalizeDni } from '../utils/normalizeDocuments'
+import { getCache, setCache } from './useSessionCache'
 
 export type Granularity = 'semana' | 'mes' | 'ano'
 
@@ -627,6 +628,16 @@ export function useCobroTeoricoData(granularity: Granularity, selectedPeriod: st
   useEffect(() => {
     if (!selectedPeriod) return
 
+    const CACHE_NS = 'useCobroTeoricoData'
+    const paramsKey = JSON.stringify({ granularity, sedeActualId, selectedPeriod })
+
+    const cached = getCache<ChartDataPoint[]>(CACHE_NS, paramsKey)
+    if (cached) {
+      setChartData(cached)
+      setLoading(false)
+      return
+    }
+
     let isMounted = true
 
     const doFetch = async () => {
@@ -636,6 +647,7 @@ export function useCobroTeoricoData(granularity: Granularity, selectedPeriod: st
         const data = await fetchCobroData(startDate, endDate, granularity, sedeActualId)
         if (isMounted) {
           setChartData(data)
+          setCache(CACHE_NS, paramsKey, data)
         }
       } catch {
         // silently ignored

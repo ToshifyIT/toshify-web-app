@@ -1,6 +1,9 @@
 import { useState, useEffect, useRef } from 'react'
 import { supabase } from '../lib/supabase'
 import { getPeriodRange, type Granularity } from '../utils/periodUtils'
+import { getCache, setCache } from './useSessionCache'
+
+const CACHE_NS = 'useBajasConductoresStats'
 
 /** Formatea Date a 'YYYY-MM-DD' usando componentes locales, sin conversión UTC */
 function formatDateOnly(d: Date): string {
@@ -35,6 +38,13 @@ export function useBajasConductoresStats(
     let isMounted = true
 
     async function fetchStats() {
+      const paramsKey = JSON.stringify({ granularity, periodA, periodB, sedeId })
+      const cached = getCache<{ totalA: number; totalB: number }>(CACHE_NS, paramsKey)
+      if (cached) {
+        setStats({ ...cached, loading: false })
+        return
+      }
+
       setStats(prev => ({ ...prev, loading: true }))
 
       try {
@@ -81,11 +91,12 @@ export function useBajasConductoresStats(
         const [resA, resB] = await Promise.all([queryA, queryB])
 
         if (isMounted) {
-          setStats({
+          const result = {
             totalA: resA.count || 0,
             totalB: resB.count || 0,
-            loading: false
-          })
+          }
+          setCache(CACHE_NS, paramsKey, result)
+          setStats({ ...result, loading: false })
         }
       } catch {
         if (isMounted) {

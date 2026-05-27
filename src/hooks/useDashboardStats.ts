@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { useSede } from '../contexts/SedeContext'
+import { getCache, setCache } from './useSessionCache'
 
 const ESTADOS_EXCLUIDOS = ['ROBO', 'DESTRUCCION_TOTAL', 'JUBILADO', 'DEVUELTO_PROVEEDOR']
 
@@ -76,6 +77,14 @@ export function useDashboardStats() {
   const [stats, setStats] = useState<DashboardStats | null>(null)
 
   useEffect(() => {
+    const cacheKey = `dashStats-${sedeActualId || 'all'}`
+    const cached = getCache<DashboardStats>(cacheKey, cacheKey)
+    if (cached) {
+      setStats(cached)
+      setLoading(false)
+      return
+    }
+
     const fetchData = async () => {
       setLoading(true)
       try {
@@ -353,7 +362,7 @@ export function useDashboardStats() {
           ? ((deudaSemanaPasada / totalDeudaActual) * 100).toFixed(1)
           : '0.0'
 
-        setStats({
+        const newStats: DashboardStats = {
           totalFlota: {
             value: String(totalFlota),
             subtitle: `${enUso} activos · ${tallerCount} taller · ${dispCount} disp.`,
@@ -427,7 +436,9 @@ export function useDashboardStats() {
             value: vueltasMundoVal.toLocaleString('es-AR', { minimumFractionDigits: 0, maximumFractionDigits: 0 }),
             subtitle: 'Histórico global'
           }
-        })
+        }
+        setStats(newStats)
+        setCache(cacheKey, cacheKey, newStats)
       } catch {
         setStats(null)
       } finally {

@@ -1,6 +1,9 @@
 import { useState, useEffect, useRef } from 'react'
 import { supabase } from '../lib/supabase'
 import { getPeriodRange, type Granularity } from '../utils/periodUtils'
+import { getCache, setCache } from './useSessionCache'
+
+const CACHE_NS = 'useMultasStats'
 
 export function useMultasStats(granularity: Granularity, periodA: string, periodB: string, sedeId?: string) {
   const [stats, setStats] = useState({
@@ -22,8 +25,15 @@ export function useMultasStats(granularity: Granularity, periodA: string, period
     let isMounted = true
 
     async function fetchStats() {
+      const paramsKey = JSON.stringify({ granularity, periodA, periodB, sedeId })
+      const cached = getCache<{ totalA: number; totalB: number }>(CACHE_NS, paramsKey)
+      if (cached) {
+        setStats({ ...cached, loading: false })
+        return
+      }
+
       setStats(prev => ({ ...prev, loading: true }))
-      
+
       try {
         const rangeA = getPeriodRange(granularity, periodA)
         const rangeB = getPeriodRange(granularity, periodB)
@@ -43,11 +53,12 @@ export function useMultasStats(granularity: Granularity, periodA: string, period
         ])
 
         if (isMounted) {
-          setStats({
+          const result = {
             totalA: Number(resA.data) || 0,
             totalB: Number(resB.data) || 0,
-            loading: false
-          })
+          }
+          setCache(CACHE_NS, paramsKey, result)
+          setStats({ ...result, loading: false })
         }
       } catch {
         if (isMounted) {
