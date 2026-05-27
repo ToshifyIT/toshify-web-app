@@ -1,14 +1,13 @@
 import { useState } from 'react'
 import {
   Bar,
-  Line,
   XAxis,
   YAxis,
   CartesianGrid,
   Tooltip,
   Legend,
   ResponsiveContainer,
-  ComposedChart
+  BarChart
 } from 'recharts'
 import { getWeek } from 'date-fns'
 import { format } from 'date-fns'
@@ -38,7 +37,7 @@ const CustomTooltip = ({ active, payload, label }: any) => {
   const cobrado = Number(data.cobrado || 0)
   const saldoPendiente = facturado - cobrado
   const pctCobrado = facturado > 0 ? ((cobrado / facturado) * 100).toFixed(1) : '0'
-  const saldoColor = saldoPendiente >= 0 ? '#ef4444' : '#16a34a'
+  const pctPendiente = facturado > 0 ? ((saldoPendiente / facturado) * 100).toFixed(1) : '0'
 
   return (
     <div className="fact-cob-tooltip">
@@ -51,14 +50,18 @@ const CustomTooltip = ({ active, payload, label }: any) => {
         <span style={{ color: '#2563eb', fontWeight: 600 }}>Cobrado:</span>
         <span style={{ fontWeight: 600 }}>{formatCurrencyFull(cobrado)}</span>
       </div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, fontSize: '0.8rem' }}>
+        <span style={{ color: '#ef4444', fontWeight: 600 }}>Pendiente:</span>
+        <span style={{ fontWeight: 600 }}>{formatCurrencyFull(saldoPendiente)}</span>
+      </div>
       <div style={{ marginTop: 6, paddingTop: 6, borderTop: '1px solid #e5e7eb', fontSize: '0.75rem', color: '#6b7280' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}>
-          <span>Saldo Pendiente:</span>
-          <span style={{ fontWeight: 600, color: saldoColor }}>{formatCurrencyFull(saldoPendiente)}</span>
-        </div>
-        <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, marginTop: 2 }}>
           <span>% Cobrado:</span>
           <span style={{ fontWeight: 600 }}>{pctCobrado}%</span>
+        </div>
+        <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, marginTop: 2 }}>
+          <span>% Pendiente:</span>
+          <span style={{ fontWeight: 600 }}>{pctPendiente}%</span>
         </div>
       </div>
     </div>
@@ -157,7 +160,7 @@ export function FacturadoVsCobrado() {
               </div>
             ) : (
               <ResponsiveContainer width="99%" height="100%">
-                <ComposedChart
+                <BarChart
                   data={chartData}
                   margin={{ top: 20, right: 30, left: 20, bottom: 10 }}
                 >
@@ -174,7 +177,7 @@ export function FacturadoVsCobrado() {
                     tickLine={false}
                     tick={{ fill: 'var(--text-tertiary, #6b7280)', fontSize: 12 }}
                     tickFormatter={formatCurrencyK}
-                    domain={['auto', 'auto']}
+                    domain={[0, 'auto']}
                     width={50}
                   />
                   <Tooltip content={<CustomTooltip />} cursor={{ fill: 'rgba(0,0,0,0.04)' }} />
@@ -198,23 +201,21 @@ export function FacturadoVsCobrado() {
                   <Bar
                     dataKey="cobrado"
                     name="Cobrado"
+                    stackId="cobranza"
                     fill="#2563eb"
+                    barSize={24}
+                    isAnimationActive={false}
+                  />
+                  <Bar
+                    dataKey="brecha"
+                    name="Saldo Pendiente"
+                    stackId="cobranza"
+                    fill="#ef4444"
                     radius={[4, 4, 0, 0]}
                     barSize={24}
                     isAnimationActive={false}
                   />
-                  <Line
-                    type="monotone"
-                    dataKey="brecha"
-                    name="Saldo Pendiente"
-                    stroke="#f59e0b"
-                    strokeWidth={2}
-                    strokeDasharray="6 4"
-                    dot={{ r: 3, fill: '#ffffff', stroke: '#f59e0b', strokeWidth: 2 }}
-                    activeDot={{ r: 5, fill: '#f59e0b', stroke: '#ffffff', strokeWidth: 2 }}
-                    isAnimationActive={false}
-                  />
-                </ComposedChart>
+                </BarChart>
               </ResponsiveContainer>
             )}
           </div>

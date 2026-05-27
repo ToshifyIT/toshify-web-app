@@ -179,7 +179,7 @@ export function VencimientosModule() {
   const [search, setSearch] = useState('')
   const [activeFilter, setActiveFilter] = useState<'all' | 'proximos' | 'vencidos' | 'alta' | 'media' | 'baja'>('all')
 
-  const [vehiculos, setVehiculos] = useState<Array<{ id: string; patente: string; marca: string; modelo: string; titular: string }>>([])
+  const [vehiculos, setVehiculos] = useState<Array<{ id: string; patente: string; marca: string; modelo: string; titular: string; sedeNombre?: string }>>([])
   const [patenteSedeMap, setPatenteSedeMap] = useState<Map<string, string>>(new Map())
   const [vehiculoSearch, setVehiculoSearch] = useState('')
   const [showVehiculoDropdown, setShowVehiculoDropdown] = useState(false)
@@ -297,12 +297,13 @@ export function VencimientosModule() {
   const filteredVehiculos = useMemo(() => {
     const term = vehiculoSearch.toLowerCase().trim()
     if (!term) return []
-    return vehiculos.filter(v =>
-      v.patente.toLowerCase().includes(term) ||
-      v.marca.toLowerCase().includes(term) ||
-      v.modelo.toLowerCase().includes(term)
-    ).slice(0, 10)
-  }, [vehiculos, vehiculoSearch])
+    return vehiculos.filter(v => {
+      if (sedeActual?.nombre && v.sedeNombre !== sedeActual.nombre) return false
+      return v.patente.toLowerCase().includes(term) ||
+        v.marca.toLowerCase().includes(term) ||
+        v.modelo.toLowerCase().includes(term)
+    }).slice(0, 10)
+  }, [vehiculos, vehiculoSearch, sedeActual])
 
   // Dataset filtrado por sede (base para KPIs y tabla)
   const sedeFilteredItems = useMemo(() => {
@@ -553,6 +554,23 @@ export function VencimientosModule() {
               : x
           )
         )
+        // Sincronizar con módulo de vehículos si es VTV/GNC/Matafuegos
+        const docNorm = (payload.documento || '').trim()
+        if (['VTV', 'GNC', 'Matafuegos'].includes(docNorm)) {
+          const campoMap: Record<string, string> = {
+            'VTV': 'vto_vtv_fecha',
+            'GNC': 'vto_gnc_fecha',
+            'Matafuegos': 'vto_matafuego_fecha',
+          }
+          const campo = campoMap[docNorm]
+          if (campo) {
+            await supabase
+              .from('vehiculos' as any)
+              .update({ [campo]: payload.fecha_vencimiento })
+              .eq('patente', payload.patente.toUpperCase())
+          }
+        }
+
         showSuccess('Registro actualizado correctamente')
       }
       setShowModal(false)
