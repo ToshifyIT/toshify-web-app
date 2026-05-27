@@ -1185,7 +1185,20 @@ async function generateContractForConductor({
   // Mantener NAMETOSHIFY por compatibilidad con plantillas existentes
   addIfPresent('NAMETOSHIFY', ownerData.name_owner)
 
-  doc.render(renderData)
+  try {
+    doc.render(renderData)
+  } catch (renderErr) {
+    // docxtemplater guarda el detalle de cada error en properties.errors
+    if (renderErr.properties && renderErr.properties.errors) {
+      const details = renderErr.properties.errors.map((e, i) => {
+        const props = e.properties || {}
+        return `  [${i + 1}] ${e.message} | tag: "${props.tag || props.xtag || '?'}" | offset: ${props.offset ?? '?'}`
+      }).join('\n')
+      console.error(`[Contract] Template render errors (${templateKey}):\n${details}`)
+      throw new Error(`Error en plantilla "${templateKey}": ${renderErr.properties.errors.length} error(es).\n${details}`)
+    }
+    throw renderErr
+  }
 
   const docxBuffer = doc.getZip().generate({ type: 'nodebuffer' })
 
@@ -1364,7 +1377,7 @@ app.post('/api/generate-contract', async (req, res) => {
     res.json({ success: true, documents: results })
   } catch (error) {
     console.error('[Contract] Error:', error.message)
-    res.status(500).json({ error: error.message })
+    res.status(500).json({ error: error.message, details: error.message })
   }
 })
 

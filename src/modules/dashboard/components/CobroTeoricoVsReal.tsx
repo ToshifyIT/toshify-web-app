@@ -14,6 +14,7 @@ import { es } from 'date-fns/locale'
 import { supabase } from '../../../lib/supabase'
 import { useSede } from '../../../contexts/SedeContext'
 import { normalizeDni } from '../../../utils/normalizeDocuments'
+import { getCache, setCache } from '../../../hooks/useSessionCache'
 import { PeriodPicker } from './PeriodPicker'
 import { CobroComparativo } from './CobroComparativo'
 import './CobroTeoricoVsReal.css'
@@ -395,6 +396,16 @@ export function CobroTeoricoVsReal() {
   // Cargar datos cuando cambia el periodo específico
   useEffect(() => {
     if (!selectedPeriod) return
+
+    const CACHE_NS = 'CobroTeoricoVsReal'
+    const paramsKey = JSON.stringify({ selectedPeriod, granularity, sedeActualId })
+
+    const cached = getCache<any[]>(CACHE_NS, paramsKey)
+    if (cached) {
+      setChartData(cached)
+      setLoading(false)
+      return
+    }
 
     const fetchData = async () => {
       setLoading(true)
@@ -1233,6 +1244,7 @@ export function CobroTeoricoVsReal() {
         }
 
         setChartData(finalData)
+        setCache(CACHE_NS, paramsKey, finalData)
 
       } catch {
         // silently ignored

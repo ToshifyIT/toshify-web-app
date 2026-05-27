@@ -1,6 +1,15 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
 import { useSede } from '../contexts/SedeContext'
+import { getCache, setCache } from './useSessionCache'
+
+const CACHE_NS = 'useVehicleStatusStats'
+
+interface VehicleStatusCacheData {
+  data: VehicleStatusStat[]
+  totalVehicles: number
+  excludedStats: VehicleStatusStat[]
+}
 
 export interface VehicleStatusStat {
   name: string
@@ -41,6 +50,16 @@ export function useVehicleStatusStats() {
 
   useEffect(() => {
     async function fetchStats() {
+      const paramsKey = JSON.stringify({ sedeActualId })
+      const cached = getCache<VehicleStatusCacheData>(CACHE_NS, paramsKey)
+      if (cached) {
+        setData(cached.data)
+        setTotalVehicles(cached.totalVehicles)
+        setExcludedStats(cached.excludedStats)
+        setLoading(false)
+        return
+      }
+
       try {
         setLoading(true)
         
@@ -128,6 +147,12 @@ export function useVehicleStatusStats() {
         footerData.sort((a, b) => b.value - a.value)
 
         setExcludedStats(footerData)
+
+        setCache<VehicleStatusCacheData>(CACHE_NS, paramsKey, {
+          data: chartData,
+          totalVehicles: includedVehicles.length,
+          excludedStats: footerData,
+        })
 
       } catch (err: any) {
         setError(err.message)

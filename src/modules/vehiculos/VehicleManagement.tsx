@@ -23,6 +23,7 @@ import { type ColumnDef } from '@tanstack/react-table'
 import { DataTable } from '../../components/ui/DataTable'
 import { LoadingOverlay } from '../../components/ui/LoadingOverlay'
 import { VehiculoWizard } from './components/VehiculoWizard'
+import { SearchableSelect } from '../../components/ui/SearchableSelect/SearchableSelect'
 import { formatDateTimeAR } from '../../utils/dateUtils'
 import { VEHICULO_ESTADO_LABELS } from '../../types/vehiculo.types'
 import './VehicleManagement.css'
@@ -1474,6 +1475,15 @@ export function VehicleManagement() {
     return Array.from(modelos).sort()
   }, [vehiculos])
 
+  const gruposFlotaExistentes = useMemo(() => {
+    const grupos = new Set<string>()
+    vehiculos.forEach(v => {
+      const g = (v as any).grupo_flota
+      if (g) grupos.add(g)
+    })
+    return Array.from(grupos).sort()
+  }, [vehiculos])
+
   // Valores únicos para filtros tipo Excel
   const patentesUnicas = useMemo(() => {
     const patentes = vehiculos.map(v => v.patente).filter(Boolean) as string[]
@@ -2310,6 +2320,7 @@ export function VehicleManagement() {
               vehiculosEstados={vehiculosEstados}
               marcasExistentes={marcasExistentes}
               modelosExistentes={modelosExistentes}
+              gruposFlotaExistentes={gruposFlotaExistentes}
               sedes={sedes}
               titulares={titularesOptions}
               onCancel={handleCancelCreateWizard}
@@ -2789,13 +2800,15 @@ export function VehicleManagement() {
             <div className="form-row">
               <div className="form-group">
                 <label className="form-label">Grupo de Flota</label>
-                <input
-                  type="text"
-                  className="form-input"
+                <SearchableSelect
                   value={formData.grupo_flota}
-                  onChange={(e) => setFormData({ ...formData, grupo_flota: e.target.value })}
+                  onChange={(val) => setFormData({ ...formData, grupo_flota: val })}
+                  options={gruposFlotaExistentes.map(g => ({ value: g, label: g }))}
+                  placeholder="Seleccionar grupo..."
+                  searchPlaceholder="Buscar grupo..."
                   disabled={saving}
-                  placeholder="Ej: Grupo A, Flota Norte, etc."
+                  clearable
+                  noResultsText="No hay grupos de flota"
                 />
               </div>
               <div className="form-group">

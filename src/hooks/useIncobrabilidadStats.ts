@@ -1,6 +1,9 @@
 import { useState, useEffect, useRef } from 'react'
 import { supabase } from '../lib/supabase'
 import { type Granularity } from '../utils/periodUtils'
+import { getCache, setCache } from './useSessionCache'
+
+const CACHE_NS = 'useIncobrabilidadStats'
 
 interface IncobrabilidadResult {
   importeGenerado: number
@@ -88,7 +91,10 @@ async function fetchForPeriod(
 
   const importeGenerado = totalAlquiler + totalGarantia + totalCargosExtra + totalSaldoPrevio
 
-  // 3. Pagos Cabify
+  // 3. Pagos Cabify -- solo para conductores que están en las facturaciones del periodo
+  // (replica la lógica exacta de ReporteFacturacionTab: pagosCabifyMap.get(f.conductor_id))
+  const conductorIds = new Set(facturaciones.map(f => f.conductor_id))
+
   const { data: pagosData } = await (supabase.from('pagos_conductores') as any)
     .select('conductor_id, monto')
     .eq('anio', anio)
@@ -98,7 +104,9 @@ async function fetchForPeriod(
 
   let cobradoCabify = 0
   for (const p of (pagosData || []) as Array<{ conductor_id: string; monto: number }>) {
-    cobradoCabify += Number(p.monto || 0)
+    if (conductorIds.has(p.conductor_id)) {
+      cobradoCabify += Number(p.monto || 0)
+    }
   }
 
   const montoIncobrable = Math.max(0, importeGenerado - cobradoCabify)
@@ -140,6 +148,13 @@ export function useIncobrabilidadStats(
     let isMounted = true
 
     async function fetchStats() {
+      const paramsKey = JSON.stringify({ granularity, periodA, periodB, sedeId })
+      const cached = getCache<{ dataA: IncobrabilidadResult; dataB: IncobrabilidadResult }>(CACHE_NS, paramsKey)
+      if (cached) {
+        setStats({ ...cached, loading: false })
+        return
+      }
+
       setStats(prev => ({ ...prev, loading: true }))
 
       // Solo aplica para granularidad "semana"
@@ -160,7 +175,9 @@ export function useIncobrabilidadStats(
         ])
 
         if (isMounted) {
-          setStats({ dataA, dataB, loading: false })
+          const result = { dataA, dataB }
+          setCache(CACHE_NS, paramsKey, result)
+          setStats({ ...result, loading: false })
         }
       } catch {
         if (isMounted) {

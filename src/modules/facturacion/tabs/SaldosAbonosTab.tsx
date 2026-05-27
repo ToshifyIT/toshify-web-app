@@ -2827,6 +2827,8 @@ export function SaldosAbonosTab() {
                                   <td style={{ padding: '5px 8px', textAlign: 'right', fontFamily: 'monospace', whiteSpace: 'nowrap' }}>
                                     {/* FIX 2026-05-20: columna Facturado - click abre detalle + redondeo residuos */}
                                     {(() => {
+                                      // Ajustes manuales no tienen facturación asociada
+                                      if (tipo === 'ajuste_manual') return <span style={{ color: 'var(--text-tertiary)' }}>—</span>
                                       const fac = (kardexModal as any).facMap?.get(`${r.anio}-${r.semana}`)
                                       if (!fac) return <span style={{ color: 'var(--text-tertiary)' }}>—</span>
                                       // Redondear a entero para no mostrar decimales tipo $371.688,03

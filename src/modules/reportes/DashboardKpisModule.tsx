@@ -5,6 +5,7 @@ import { AdaptiveTooltip } from '../../components/ui/AdaptiveTooltip'
 import { PeriodComparison } from '../dashboard/components/PeriodComparison'
 import { FleetDonut } from '../dashboard/components/FleetDonut'
 import { CobroTeoricoVsReal } from '../dashboard/components/CobroTeoricoVsReal'
+import { FacturadoVsCobrado } from '../dashboard/components/FacturadoVsCobrado'
 import { PermanenciaChart } from '../dashboard/components/PermanenciaChart'
 import { ZonesAssignmentsChart } from '../dashboard/components/ZonesAssignmentsChart'
 import './DashboardKpisModule.css'
@@ -160,6 +161,9 @@ export function DashboardKpisModule() {
         <div className="dkpis-charts-container">
           <FleetDonut />
           <CobroTeoricoVsReal />
+        </div>
+        <div className="dkpis-charts-container">
+          <FacturadoVsCobrado />
         </div>
         <div className="flex flex-col lg:flex-row gap-4">
           <div className="w-full lg:w-1/2">

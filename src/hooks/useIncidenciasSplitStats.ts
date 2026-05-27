@@ -7,6 +7,9 @@
 import { useState, useEffect, useRef } from 'react'
 import { supabase } from '../lib/supabase'
 import { getPeriodRange, type Granularity } from '../utils/periodUtils'
+import { getCache, setCache } from './useSessionCache'
+
+const CACHE_NS = 'useIncidenciasSplitStats'
 
 interface IncidenciasSplitResult {
   aFavorA: number
@@ -101,6 +104,13 @@ export function useIncidenciasSplitStats(
     let isMounted = true
 
     async function fetchStats() {
+      const paramsKey = JSON.stringify({ granularity, periodA, periodB, sedeId })
+      const cached = getCache<Omit<IncidenciasSplitResult, 'loading'>>(CACHE_NS, paramsKey)
+      if (cached) {
+        setStats({ ...cached, loading: false })
+        return
+      }
+
       setStats((prev) => ({ ...prev, loading: true }))
 
       try {
@@ -127,14 +137,15 @@ export function useIncidenciasSplitStats(
             ...resultB.tiposAFavor,
           ])
 
-          setStats({
+          const result = {
             aFavorA: resultA.aFavor,
             aFavorB: resultB.aFavor,
             enContraA: resultA.enContra,
             enContraB: resultB.enContra,
             tiposAFavor: Array.from(allTipos).sort(),
-            loading: false,
-          })
+          }
+          setCache(CACHE_NS, paramsKey, result)
+          setStats({ ...result, loading: false })
         }
       } catch {
         if (isMounted) {

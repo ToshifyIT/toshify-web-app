@@ -1,6 +1,9 @@
 import { useState, useEffect, useRef } from 'react'
 import { supabase } from '../lib/supabase'
 import { getPeriodRange, type Granularity } from '../utils/periodUtils'
+import { getCache, setCache } from './useSessionCache'
+
+const CACHE_NS = 'useTelepaseStats'
 
 const SEDE_BARILOCHE_ID = 'f37193f7-5805-4d87-820d-c4521824860e'
 
@@ -89,6 +92,13 @@ export function useTelepaseStats(granularity: Granularity, periodA: string, peri
     let isMounted = true
 
     async function fetchStats() {
+      const paramsKey = JSON.stringify({ granularity, periodA, periodB, sedeId })
+      const cached = getCache<{ totalA: number; totalB: number }>(CACHE_NS, paramsKey)
+      if (cached) {
+        setStats({ ...cached, loading: false })
+        return
+      }
+
       setStats(prev => ({ ...prev, loading: true }))
 
       try {
@@ -101,7 +111,9 @@ export function useTelepaseStats(granularity: Granularity, periodA: string, peri
         ])
 
         if (isMounted) {
-          setStats({ totalA, totalB, loading: false })
+          const result = { totalA, totalB }
+          setCache(CACHE_NS, paramsKey, result)
+          setStats({ ...result, loading: false })
         }
       } catch {
         if (isMounted) {

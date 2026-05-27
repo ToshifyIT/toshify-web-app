@@ -368,63 +368,73 @@
 }
 
 .lead-estado-inicio-conversacion {
-  background: var(--badge-yellow-bg, #fef3c7);
-  color: var(--badge-yellow-text, #92400e);
+  background: #DBEAFE;
+  color: #3B82F6;
 }
 
 .lead-estado-acepta-oferta {
-  background: var(--badge-teal-bg, #ccfbf1);
-  color: var(--badge-teal-text, #134e4a);
+  background: #FEF9C3;
+  color: #CA8A04;
+}
+
+.lead-estado-pendiente---hireflix {
+  background: #FEF3C7;
+  color: #F59E0B;
 }
 
 .lead-estado-apto---hireflix {
-  background: var(--badge-green-bg, #dcfce7);
-  color: var(--badge-green-text, #166534);
+  background: #DCFCE7;
+  color: #22C55E;
 }
 
 .lead-estado-no-apto---hireflix {
-  background: var(--badge-red-bg, #fee2e2);
-  color: var(--badge-red-text, #991b1b);
+  background: #FEE2E2;
+  color: #DC2626;
 }
 
 .lead-estado-ayuda---hireflix {
-  background: #fef3c7;
-  color: #92400e;
+  background: #FFEDD5;
+  color: #F97316;
 }
 
 .lead-estado-documentos-enviados {
-  background: var(--badge-blue-bg, #dbeafe);
-  color: var(--badge-blue-text, #1e40af);
+  background: #DBEAFE;
+  color: #2563EB;
 }
 
 .lead-estado-documentos-pendientes {
-  background: #fef9c3;
-  color: #713f12;
+  background: #FEF3C7;
+  color: #D97706;
 }
 
 .lead-estado-auto-del-pueblo {
-  background: var(--badge-purple-bg, #f3e8ff);
-  color: var(--badge-purple-text, #6b21a8);
+  background: #EDE9FE;
+  color: #8B5CF6;
 }
 
 .lead-estado-no-le-interesa {
-  background: var(--badge-gray-bg, #f3f4f6);
-  color: var(--badge-gray-text, #374151);
+  background: #F3F4F6;
+  color: #6B7280;
 }
 
 .lead-estado-no-cumple-edad {
-  background: #fff7ed;
-  color: #9a3412;
+  background: #FFEDD5;
+  color: #EA580C;
 }
 
 .lead-estado-convocatoria-induccion {
-  background: #e0f2fe;
-  color: #0c4a6e;
+  background: #CFFAFE;
+  color: #0891B2;
+}
+
+.lead-estado-apto-induccion {
+  background: #D1FAE5;
+  color: #059669;
 }
 
 .lead-estado-descartado {
-  background: #fecaca;
-  color: #7f1d1d;
+  background: #FEE2E2;
+  color: #991B1B;
 }
 
 .lead-estado-conductor {
@@ -491,18 +501,20 @@
   flex-shrink: 0;
 }
 
-.lead-estado-dot-inicio-conversacion { background: #f59e0b; }
-.lead-estado-dot-acepta-oferta { background: #14b8a6; }
-.lead-estado-dot-apto---hireflix { background: #16a34a; }
-.lead-estado-dot-no-apto---hireflix { background: #dc2626; }
-.lead-estado-dot-ayuda---hireflix { background: #d97706; }
-.lead-estado-dot-documentos-enviados { background: #2563eb; }
-.lead-estado-dot-documentos-pendientes { background: #ca8a04; }
-.lead-estado-dot-auto-del-pueblo { background: #8b5cf6; }
-.lead-estado-dot-no-le-interesa { background: #6b7280; }
-.lead-estado-dot-no-cumple-edad { background: #ea580c; }
-.lead-estado-dot-convocatoria-induccion { background: #0891b2; }
-.lead-estado-dot-descartado { background: #991b1b; }
+.lead-estado-dot-inicio-conversacion { background: #3B82F6; }
+.lead-estado-dot-acepta-oferta { background: #CA8A04; }
+.lead-estado-dot-pendiente---hireflix { background: #F59E0B; }
+.lead-estado-dot-apto---hireflix { background: #22C55E; }
+.lead-estado-dot-no-apto---hireflix { background: #DC2626; }
+.lead-estado-dot-ayuda---hireflix { background: #F97316; }
+.lead-estado-dot-documentos-enviados { background: #2563EB; }
+.lead-estado-dot-documentos-pendientes { background: #D97706; }
+.lead-estado-dot-auto-del-pueblo { background: #8B5CF6; }
+.lead-estado-dot-no-le-interesa { background: #6B7280; }
+.lead-estado-dot-no-cumple-edad { background: #EA580C; }
+.lead-estado-dot-convocatoria-induccion { background: #0891B2; }
+.lead-estado-dot-apto-induccion { background: #059669; }
+.lead-estado-dot-descartado { background: #991B1B; }
 .lead-estado-dot-conductor { background: #7c3aed; }
 
 /* =====================================================

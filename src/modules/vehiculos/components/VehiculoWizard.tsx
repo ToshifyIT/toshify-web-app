@@ -2,6 +2,7 @@
 import { useState, useRef, useEffect } from 'react'
 import { Car, Settings, Wrench, Calendar, Shield, Check, ChevronLeft, ChevronRight, Save, Info } from 'lucide-react'
 import type { VehiculoEstado } from '../../../types/database.types'
+import { SearchableSelect } from '../../../components/ui/SearchableSelect/SearchableSelect'
 
 interface VehiculoFormData {
   patente: string
@@ -56,6 +57,7 @@ interface VehiculoWizardProps {
   vehiculosEstados: VehiculoEstado[]
   marcasExistentes: string[]
   modelosExistentes: string[]
+  gruposFlotaExistentes: string[]
   sedes: { id: string; nombre: string }[]
   titulares: TitularOption[]
   onCancel: () => void
@@ -79,6 +81,7 @@ export function VehiculoWizard({
   vehiculosEstados,
   marcasExistentes,
   modelosExistentes,
+  gruposFlotaExistentes,
   sedes,
   titulares,
   onCancel,
@@ -728,13 +731,15 @@ export function VehiculoWizard({
             <div className="form-row">
               <div className="form-group">
                 <label className="form-label">Grupo de Flota</label>
-                <input
-                  type="text"
-                  className="form-input"
+                <SearchableSelect
                   value={formData.grupo_flota}
-                  onChange={(e) => setFormData({ ...formData, grupo_flota: e.target.value })}
+                  onChange={(val) => setFormData({ ...formData, grupo_flota: val })}
+                  options={gruposFlotaExistentes.map(g => ({ value: g, label: g }))}
+                  placeholder="Seleccionar grupo..."
+                  searchPlaceholder="Buscar grupo..."
                   disabled={saving}
-                  placeholder="Ej: Grupo A, Flota Norte, etc."
+                  clearable
+                  noResultsText="No hay grupos de flota"
                 />
               </div>
 

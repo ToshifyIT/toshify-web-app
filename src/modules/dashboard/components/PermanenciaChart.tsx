@@ -21,6 +21,7 @@ import {
 import { es } from 'date-fns/locale'
 import { supabase } from '../../../lib/supabase'
 import { useSede } from '../../../contexts/SedeContext'
+import { getCache, setCache } from '../../../hooks/useSessionCache'
 import { PeriodPicker } from './PeriodPicker'
 import './PermanenciaStyles.css'
 
@@ -51,6 +52,16 @@ export function PermanenciaChart() {
 
   useEffect(() => {
     let isMounted = true
+
+    const CACHE_NS = 'PermanenciaChart'
+    const paramsKey = JSON.stringify({ selectedMonth, sedeId: sedeActual?.id })
+
+    const cached = getCache<WeeklyData[]>(CACHE_NS, paramsKey)
+    if (cached) {
+      setData(cached)
+      setLoading(false)
+      return
+    }
 
     async function fetchData() {
       try {
@@ -146,6 +157,7 @@ export function PermanenciaChart() {
         if (isMounted) {
           setData(chartData)
           setLoading(false)
+          setCache(CACHE_NS, paramsKey, chartData)
         }
       } catch (_err) {
         if (isMounted) setLoading(false)
