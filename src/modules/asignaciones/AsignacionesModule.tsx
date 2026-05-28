@@ -1554,60 +1554,105 @@ export function AsignacionesModule() {
         .eq('asignacion_id', selectedAsignacion.id)
 
       const todosConfirmados = (allConductores as any)?.every((c: any) => c.confirmado === true)
+      const asignacionYaActiva = selectedAsignacion.estado === 'activa' || selectedAsignacion.estado === 'activo'
+      // FIX 2026-05-28: activar asignación con al menos un confirmado (no requiere todos)
+      const debeActivar = !asignacionYaActiva
 
-      if (todosConfirmados) {
-        const conductoresIds = (allConductores as any)?.map((c: any) => c.conductor_id) || []
+      // IDs de los conductores que se acaban de confirmar (no todos, solo los de esta acción)
+      const conductoresConfirmadosAhora = (allConductores as any)?.filter(
+        (c: any) => conductoresToConfirm.includes(c.id)
+      ).map((c: any) => c.conductor_id) || []
 
-        // Lógica unificada: tanto con compañeros como sin ellos, se finaliza la asignación
-        // anterior del vehículo y se activa la nueva. El sistema de facturación ya recorre
-        // todas las asignaciones (activas + finalizadas) deduplicando por día.
-        {
-          // Si tiene tags de compañero, limpiarlos de las notas antes de activar
-          const notasFinales = tieneCompaneros
-            ? notas.replace(/\[COMPANERO:(diurno|nocturno):[a-f0-9-]+\]\n?/gi, '').trim()
-            : (confirmComentarios || selectedAsignacion.notas)
+      // 1. Finalizar participación de los conductores CONFIRMADOS AHORA en otras asignaciones activas
+      if (conductoresConfirmadosAhora.length > 0) {
+        for (const conductorId of conductoresConfirmadosAhora) {
+          await (supabase as any)
+            .from('asignaciones_conductores')
+            .update({ estado: 'completado', fecha_fin: ahora })
+            .eq('conductor_id', conductorId)
+            .in('estado', ['asignado', 'activo'])
+            .neq('asignacion_id', selectedAsignacion.id)
+        }
+      }
 
-          // 1. Finalizar participación de TODOS los conductores en otras asignaciones activas
-          if (conductoresIds.length > 0) {
-            for (const conductorId of conductoresIds) {
-              await (supabase as any)
-                .from('asignaciones_conductores')
-                .update({ estado: 'completado', fecha_fin: ahora })
-                .eq('conductor_id', conductorId)
-                .in('estado', ['asignado', 'activo'])
-                .neq('asignacion_id', selectedAsignacion.id)
-            }
-          }
+      // Solo ejecutar lógica de activación si la asignación aún no está activa
+      let asignacionesVehiculo: any[] | null = null
+      if (debeActivar) {
+        // Si tiene tags de compañero, limpiarlos de las notas antes de activar
+        const notasFinales = tieneCompaneros
+          ? notas.replace(/\[COMPANERO:(diurno|nocturno):[a-f0-9-]+\]\n?/gi, '').trim()
+          : (confirmComentarios || selectedAsignacion.notas)
 
-          // 2. Cerrar asignaciones activas anteriores del mismo vehículo
-          const { data: asignacionesVehiculo } = await (supabase as any)
-            .from('asignaciones')
-            .select(`id, codigo, notas,
-              asignaciones_conductores(conductor_id, estado, horario,
-                conductores(nombres, apellidos)
-              )
-            `)
-            .eq('vehiculo_id', selectedAsignacion.vehiculo_id)
-            .in('estado', ['activa', 'activo'])
-            .neq('id', selectedAsignacion.id)
+        // 2. Cerrar asignaciones activas anteriores del mismo vehículo
+        const { data: asignacionesVehiculoData } = await (supabase as any)
+          .from('asignaciones')
+          .select(`id, codigo, notas,
+            asignaciones_conductores(conductor_id, estado, horario,
+              conductores(nombres, apellidos)
+            )
+          `)
+          .eq('vehiculo_id', selectedAsignacion.vehiculo_id)
+          .in('estado', ['activa', 'activo'])
+          .neq('id', selectedAsignacion.id)
 
-          if (asignacionesVehiculo && asignacionesVehiculo.length > 0) {
-            const idsACerrar = asignacionesVehiculo.map((a: any) => a.id)
-            // Finalizar conductores de esas asignaciones
+        asignacionesVehiculo = asignacionesVehiculoData
+
+        if (asignacionesVehiculo && asignacionesVehiculo.length > 0) {
+          const idsACerrar = asignacionesVehiculo.map((a: any) => a.id)
+          // Finalizar conductores de esas asignaciones
+          await (supabase as any)
+            .from('asignaciones_conductores')
+            .update({ estado: 'completado', fecha_fin: ahora })
+            .in('asignacion_id', idsACerrar)
+            .in('estado', ['asignado', 'activo'])
+          // Finalizar las asignaciones con traza de conductores
+          for (const asigAnterior of asignacionesVehiculo as any[]) {
+            const conductoresAnteriores = (asigAnterior.asignaciones_conductores || [])
+              .map((ac: any) => {
+                const nombre = ac.conductores ? `${ac.conductores.nombres || ''} ${ac.conductores.apellidos || ''}`.trim() : 'Desconocido'
+                return `${nombre} (${ac.horario || 'sin turno'})`
+              })
+            const notasAnterior = asigAnterior.notas || ''
+            const traza = `\n[AUTO-CERRADA ${new Date().toLocaleDateString('es-AR')}] Nuevo turno activado para el mismo vehículo.\nConductores al cierre: ${conductoresAnteriores.length > 0 ? conductoresAnteriores.join(', ') : 'ninguno'}`
             await (supabase as any)
-              .from('asignaciones_conductores')
-              .update({ estado: 'completado', fecha_fin: ahora })
-              .in('asignacion_id', idsACerrar)
-              .in('estado', ['asignado', 'activo'])
-            // Finalizar las asignaciones con traza de conductores
-            for (const asigAnterior of asignacionesVehiculo as any[]) {
-              const conductoresAnteriores = (asigAnterior.asignaciones_conductores || [])
+              .from('asignaciones')
+              .update({
+                estado: 'finalizada',
+                fecha_fin: ahora,
+                notas: notasAnterior + traza,
+                updated_by: profile?.full_name || 'Sistema'
+              })
+              .eq('id', asigAnterior.id)
+          }
+        }
+
+        // 3. Verificar si alguna otra asignación quedó sin conductores activos y finalizarla
+        const { data: asignacionesSinConductores } = await (supabase as any)
+          .from('asignaciones')
+          .select(`
+            id, notas,
+            asignaciones_conductores(conductor_id, estado, horario,
+              conductores(nombres, apellidos)
+            )
+          `)
+          .in('estado', ['activa', 'activo'])
+          .neq('id', selectedAsignacion.id)
+
+        if (asignacionesSinConductores) {
+          for (const asig of asignacionesSinConductores as any[]) {
+            const conductoresActivos = asig.asignaciones_conductores?.filter(
+              (ac: any) => ac.estado === 'asignado' || ac.estado === 'activo'
+            ) || []
+
+            if (conductoresActivos.length === 0) {
+              const conductoresCompletados = (asig.asignaciones_conductores || [])
+                .filter((ac: any) => ac.estado === 'completado' || ac.estado === 'finalizado')
                 .map((ac: any) => {
                   const nombre = ac.conductores ? `${ac.conductores.nombres || ''} ${ac.conductores.apellidos || ''}`.trim() : 'Desconocido'
                   return `${nombre} (${ac.horario || 'sin turno'})`
                 })
-              const notasAnterior = asigAnterior.notas || ''
-              const traza = `\n[AUTO-CERRADA ${new Date().toLocaleDateString('es-AR')}] Nuevo turno activado para el mismo vehículo.\nConductores al cierre: ${conductoresAnteriores.length > 0 ? conductoresAnteriores.join(', ') : 'ninguno'}`
+              const notasAnterior = asig.notas || ''
+              const traza = `\n[AUTO-CERRADA ${new Date().toLocaleDateString('es-AR')}] Sin conductores activos.\nUltimos conductores: ${conductoresCompletados.length > 0 ? conductoresCompletados.join(', ') : 'ninguno'}`
               await (supabase as any)
                 .from('asignaciones')
                 .update({
@@ -1616,165 +1661,18 @@ export function AsignacionesModule() {
                   notas: notasAnterior + traza,
                   updated_by: profile?.full_name || 'Sistema'
                 })
-                .eq('id', asigAnterior.id)
-            }
-          }
-
-          // 3. Verificar si alguna otra asignación quedó sin conductores activos y finalizarla
-          const { data: asignacionesSinConductores } = await (supabase as any)
-            .from('asignaciones')
-            .select(`
-              id, notas,
-              asignaciones_conductores(conductor_id, estado, horario,
-                conductores(nombres, apellidos)
-              )
-            `)
-            .in('estado', ['activa', 'activo'])
-            .neq('id', selectedAsignacion.id)
-
-          if (asignacionesSinConductores) {
-            for (const asig of asignacionesSinConductores as any[]) {
-              const conductoresActivos = asig.asignaciones_conductores?.filter(
-                (ac: any) => ac.estado === 'asignado' || ac.estado === 'activo'
-              ) || []
-
-              if (conductoresActivos.length === 0) {
-                const conductoresCompletados = (asig.asignaciones_conductores || [])
-                  .filter((ac: any) => ac.estado === 'completado' || ac.estado === 'finalizado')
-                  .map((ac: any) => {
-                    const nombre = ac.conductores ? `${ac.conductores.nombres || ''} ${ac.conductores.apellidos || ''}`.trim() : 'Desconocido'
-                    return `${nombre} (${ac.horario || 'sin turno'})`
-                  })
-                const notasAnterior = asig.notas || ''
-                const traza = `\n[AUTO-CERRADA ${new Date().toLocaleDateString('es-AR')}] Sin conductores activos.\nUltimos conductores: ${conductoresCompletados.length > 0 ? conductoresCompletados.join(', ') : 'ninguno'}`
-                await (supabase as any)
-                  .from('asignaciones')
-                  .update({
-                    estado: 'finalizada',
-                    fecha_fin: ahora,
-                    notas: notasAnterior + traza,
-                    updated_by: profile?.full_name || 'Sistema'
-                  })
-                  .eq('id', asig.id)
-              }
-            }
-          }
-
-          // 4. Activar la asignación nueva
-          await (supabase as any)
-            .from('asignaciones')
-            .update({ estado: 'activa', fecha_inicio: ahora, notas: notasFinales, updated_by: profile?.full_name || 'Sistema' })
-            .eq('id', selectedAsignacion.id)
-
-          // Actualizar estado del vehículo a EN_USO
-          const { data: estadoEnUso } = await supabase
-            .from('vehiculos_estados')
-            .select('id')
-            .eq('codigo', 'EN_USO')
-            .single()
-
-          if (estadoEnUso && selectedAsignacion.vehiculo_id) {
-            await (supabase
-              .from('vehiculos') as any)
-              .update({ estado_id: (estadoEnUso as any).id })
-              .eq('id', selectedAsignacion.vehiculo_id)
-          }
-
-          // Si es cambio de vehículo: verificar si el vehículo viejo tiene asignaciones activas antes de cambiar estado
-          if (selectedAsignacion?.motivoDetalle?.cambioVehiculo && selectedAsignacion?.motivoDetalle?.vehiculoCambioId) {
-            const vehiculoViejoId = selectedAsignacion.motivoDetalle!.vehiculoCambioId
-
-            // Consultar si el vehículo viejo todavía tiene asignaciones activas
-            const { count: asignacionesActivas } = await supabase
-              .from('asignaciones_conductores')
-              .select('id', { count: 'exact', head: true })
-              .eq('vehiculo_id', vehiculoViejoId)
-              .eq('estado', 'activo')
-
-            if ((asignacionesActivas || 0) === 0) {
-              // Sin asignaciones activas → ponerlo como disponible
-              const { data: estadoPkgOn } = await supabase
-                .from('vehiculos_estados')
-                .select('id')
-                .eq('codigo', 'PKG_ON_BASE')
-                .single()
-
-              if (estadoPkgOn) {
-                await (supabase
-                  .from('vehiculos') as any)
-                  .update({ estado_id: (estadoPkgOn as any).id })
-                  .eq('id', vehiculoViejoId)
-              }
-            }
-            // Si tiene asignaciones activas → se deja en EN_USO (no se modifica)
-          }
-
-          if (fechaProgramada) {
-            await supabase.from('vehiculos_turnos_ocupados').delete()
-              .eq('vehiculo_id', selectedAsignacion.vehiculo_id)
-              .eq('fecha', fechaProgramada)
-
-            const turnosData = (allConductores as any)?.map((ac: any) => ({
-              vehiculo_id: selectedAsignacion.vehiculo_id,
-              fecha: fechaProgramada,
-              horario: ac.horario,
-              asignacion_conductor_id: ac.id,
-              estado: 'activo'
-            })) || []
-
-            if (turnosData.length > 0) {
-              await supabase.from('vehiculos_turnos_ocupados').insert(turnosData)
-            }
-          }
-
-          showSuccess('Confirmado', 'Todos los conductores han confirmado. La asignación está ACTIVA.')
-
-          // Historial: asignación activada - vehículo EN_USO
-          if (selectedAsignacion.vehiculo_id) {
-            registrarHistorialVehiculo({
-              vehiculoId: selectedAsignacion.vehiculo_id,
-              tipoEvento: 'asignacion_activada',
-              estadoNuevo: 'EN_USO',
-              detalles: { patente: selectedAsignacion.vehiculos?.patente, codigo: selectedAsignacion.codigo },
-              modulo: 'asignaciones',
-              sedeId: sedeActualId,
-            })
-          }
-          // Historial: conductores activados
-          for (const conductorId of conductoresIds) {
-            registrarHistorialConductor({
-              conductorId,
-              tipoEvento: 'asignacion_activada',
-              estadoNuevo: 'activo',
-              detalles: { patente: selectedAsignacion.vehiculos?.patente, codigo: selectedAsignacion.codigo },
-              modulo: 'asignaciones',
-              sedeId: sedeActualId,
-            })
-          }
-          // Historial: conductores de asignaciones anteriores del vehículo finalizados
-          if (asignacionesVehiculo && asignacionesVehiculo.length > 0) {
-            for (const asigAnterior of asignacionesVehiculo as any[]) {
-              for (const ac of (asigAnterior.asignaciones_conductores || []) as any[]) {
-                if (ac.conductor_id && (ac.estado === 'asignado' || ac.estado === 'activo' || ac.estado === 'completado')) {
-                  registrarHistorialConductor({
-                    conductorId: ac.conductor_id,
-                    tipoEvento: 'asignacion_completada',
-                    detalles: {
-                      patente: selectedAsignacion.vehiculos?.patente,
-                      codigoAnterior: asigAnterior.codigo,
-                      codigoNuevo: selectedAsignacion.codigo,
-                      motivo: 'nueva_asignacion_activada',
-                    },
-                    modulo: 'asignaciones',
-                    sedeId: sedeActualId,
-                  })
-                }
-              }
+                .eq('id', asig.id)
             }
           }
         }
-      } else {
-        // Confirmación parcial: aún así poner vehículo en EN_USO
+
+        // 4. Activar la asignación nueva
+        await (supabase as any)
+          .from('asignaciones')
+          .update({ estado: 'activa', fecha_inicio: ahora, notas: notasFinales, updated_by: profile?.full_name || 'Sistema' })
+          .eq('id', selectedAsignacion.id)
+
+        // Actualizar estado del vehículo a EN_USO
         const { data: estadoEnUso } = await supabase
           .from('vehiculos_estados')
           .select('id')
@@ -1788,8 +1686,104 @@ export function AsignacionesModule() {
             .eq('id', selectedAsignacion.vehiculo_id)
         }
 
+        // Si es cambio de vehículo: verificar si el vehículo viejo tiene asignaciones activas antes de cambiar estado
+        if (selectedAsignacion?.motivoDetalle?.cambioVehiculo && selectedAsignacion?.motivoDetalle?.vehiculoCambioId) {
+          const vehiculoViejoId = selectedAsignacion.motivoDetalle!.vehiculoCambioId
+
+          // Consultar si el vehículo viejo todavía tiene asignaciones activas
+          const { count: asignacionesActivas } = await supabase
+            .from('asignaciones_conductores')
+            .select('id', { count: 'exact', head: true })
+            .eq('vehiculo_id', vehiculoViejoId)
+            .eq('estado', 'activo')
+
+          if ((asignacionesActivas || 0) === 0) {
+            // Sin asignaciones activas → ponerlo como disponible
+            const { data: estadoPkgOn } = await supabase
+              .from('vehiculos_estados')
+              .select('id')
+              .eq('codigo', 'PKG_ON_BASE')
+              .single()
+
+            if (estadoPkgOn) {
+              await (supabase
+                .from('vehiculos') as any)
+                .update({ estado_id: (estadoPkgOn as any).id })
+                .eq('id', vehiculoViejoId)
+              }
+          }
+          // Si tiene asignaciones activas → se deja en EN_USO (no se modifica)
+        }
+
+        if (fechaProgramada) {
+          await supabase.from('vehiculos_turnos_ocupados').delete()
+            .eq('vehiculo_id', selectedAsignacion.vehiculo_id)
+            .eq('fecha', fechaProgramada)
+
+          const turnosConfirmados = (allConductores as any)?.filter((ac: any) => ac.confirmado).map((ac: any) => ({
+            vehiculo_id: selectedAsignacion.vehiculo_id,
+            fecha: fechaProgramada,
+            horario: ac.horario,
+            asignacion_conductor_id: ac.id,
+            estado: 'activo'
+          })) || []
+
+          if (turnosConfirmados.length > 0) {
+            await supabase.from('vehiculos_turnos_ocupados').insert(turnosConfirmados)
+          }
+        }
+
+        // Historial: asignación activada - vehículo EN_USO
+        if (selectedAsignacion.vehiculo_id) {
+          registrarHistorialVehiculo({
+            vehiculoId: selectedAsignacion.vehiculo_id,
+            tipoEvento: 'asignacion_activada',
+            estadoNuevo: 'EN_USO',
+            detalles: { patente: selectedAsignacion.vehiculos?.patente, codigo: selectedAsignacion.codigo },
+            modulo: 'asignaciones',
+            sedeId: sedeActualId,
+          })
+        }
+        // Historial: conductores confirmados ahora activados
+        for (const conductorId of conductoresConfirmadosAhora) {
+          registrarHistorialConductor({
+            conductorId,
+            tipoEvento: 'asignacion_activada',
+            estadoNuevo: 'activo',
+            detalles: { patente: selectedAsignacion.vehiculos?.patente, codigo: selectedAsignacion.codigo },
+            modulo: 'asignaciones',
+            sedeId: sedeActualId,
+          })
+        }
+        // Historial: conductores de asignaciones anteriores del vehículo finalizados
+        if (asignacionesVehiculo && asignacionesVehiculo.length > 0) {
+          for (const asigAnterior of asignacionesVehiculo as any[]) {
+            for (const ac of (asigAnterior.asignaciones_conductores || []) as any[]) {
+              if (ac.conductor_id && (ac.estado === 'asignado' || ac.estado === 'activo' || ac.estado === 'completado')) {
+                registrarHistorialConductor({
+                  conductorId: ac.conductor_id,
+                  tipoEvento: 'asignacion_completada',
+                  detalles: {
+                    patente: selectedAsignacion.vehiculos?.patente,
+                    codigoAnterior: asigAnterior.codigo,
+                    codigoNuevo: selectedAsignacion.codigo,
+                    motivo: 'nueva_asignacion_activada',
+                  },
+                  modulo: 'asignaciones',
+                  sedeId: sedeActualId,
+                })
+              }
+            }
+          }
+        }
+      }
+
+      // Mensaje según estado
+      if (todosConfirmados) {
+        showSuccess('Confirmado', 'Todos los conductores han confirmado. La asignación está ACTIVA.')
+      } else {
         const pendientes = (allConductores as any)?.filter((c: any) => !c.confirmado).length || 0
-        Swal.fire('Confirmación Parcial', `${conductoresToConfirm.length} confirmado(s). Faltan ${pendientes}. Vehículo marcado EN USO.`, 'info')
+        showSuccess('Asignación Activada', `${conductoresToConfirm.length} confirmado(s). Faltan ${pendientes} por confirmar. La asignación está ACTIVA y la facturación del confirmado ya corre.`)
       }
 
       setShowConfirmModal(false)
@@ -2852,7 +2846,7 @@ export function AsignacionesModule() {
         const conductores = (row.original.asignaciones_conductores || []).filter((c: any) =>
           c.estado === 'asignado' || c.estado === 'activo' || c.estado === 'completado'
         )
-        // Para TURNO con 2 conductores: solo mostrar por conductor si tienen estados DIFERENTES
+        // Para TURNO con 2 conductores en estado programado: mostrar badges individuales si tienen estados diferentes
         if (conductores.length > 1 && row.original.horario === 'turno' && row.original.estado === 'programado') {
           const labels = conductores.map((c: any) => c.confirmado ? 'Confirmado' : 'Pendiente')
           const todosIguales = labels.every(l => l === labels[0])
@@ -2867,6 +2861,24 @@ export function AsignacionesModule() {
                 {sorted.map((c: any, idx: number) => (
                   <span key={idx} className={getStatusBadgeClass(c.confirmado ? 'activa' : 'programado')} style={{ fontSize: '10px', padding: '2px 6px' }}>
                     {c.confirmado ? 'Confirmado' : 'Pendiente'}
+                  </span>
+                ))}
+              </div>
+            )
+          }
+        }
+        // FIX 2026-05-28: para asignaciones activas con conductores pendientes, mostrar badge ACTIVA + PENDIENTE
+        if ((row.original.estado === 'activa' || row.original.estado === 'activo') && conductores.length > 1) {
+          const pendientes = conductores.filter((c: any) => !c.confirmado)
+          if (pendientes.length > 0) {
+            return (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                <span className={getStatusBadgeClass('activa')} style={{ fontSize: '10px', padding: '2px 6px' }}>
+                  {getStatusLabel(row.original.estado)}
+                </span>
+                {pendientes.map((_c: any, idx: number) => (
+                  <span key={idx} className={getStatusBadgeClass('programado')} style={{ fontSize: '10px', padding: '2px 6px' }}>
+                    Pendiente
                   </span>
                 ))}
               </div>
@@ -2895,12 +2907,17 @@ export function AsignacionesModule() {
             return doc === 'N/A' || doc === 'NA'
           })
         })()
+        // FIX 2026-05-28: detectar si hay conductores pendientes en asignación activa
+        const tienePendientesEnActiva = (row.original.estado === 'activa' || row.original.estado === 'activo') &&
+          (row.original.asignaciones_conductores || []).some((c: any) =>
+            (c.estado === 'asignado' || c.estado === 'activo') && !c.confirmado
+          )
         const actions = [
-          // Acciones de programación (solo si está programado)
-          ...(row.original.estado === 'programado' ? [
+          // Acciones de programación (solo si está programado O activa con pendientes)
+          ...(row.original.estado === 'programado' || tienePendientesEnActiva ? [
             {
               icon: <CheckCircle size={15} />,
-              label: esDevolucion ? 'Confirmar Devolución' : 'Confirmar',
+              label: esDevolucion ? 'Confirmar Devolución' : tienePendientesEnActiva ? 'Confirmar Pendiente' : 'Confirmar',
               onClick: esDevolucion
                 ? () => handleConfirmarDevolucion(row.original)
                 : () => {
@@ -2910,7 +2927,7 @@ export function AsignacionesModule() {
                       row.original.control_completado !== true &&
                       !todosDocNA &&
                       !(row.original.created_at && new Date(row.original.created_at) <= new Date('2026-04-27T23:59:59'))
-                    if (cartaOfertaPendiente) {
+                    if (cartaOfertaPendiente && !tienePendientesEnActiva) {
                       Swal.fire({
                         icon: 'warning',
                         title: 'Completá la Carta Oferta primero',
@@ -2926,7 +2943,8 @@ export function AsignacionesModule() {
               disabled: !canEdit,
               variant: 'success' as const,
             },
-            {
+            // Cancelar solo para asignaciones programadas (no para activas con pendientes)
+            ...(!tienePendientesEnActiva ? [{
               icon: <XCircle size={15} />,
               label: 'Cancelar',
               onClick: esDevolucion && row.original.devolucionId
@@ -2937,7 +2955,7 @@ export function AsignacionesModule() {
                   },
               disabled: !canEdit,
               variant: 'warning' as const,
-            },
+            }] : []),
           ] : []),
           // Ver detalles
           {

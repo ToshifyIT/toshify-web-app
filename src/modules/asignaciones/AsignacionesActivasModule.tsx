@@ -1003,9 +1003,13 @@ export function AsignacionesActivasModule() {
                               Licencia: {asigConductor.conductores?.numero_licencia}
                             </div>
                           </div>
-                          {asigConductor.confirmado && (
+                          {asigConductor.confirmado ? (
                             <span className="status-badge status-confirmed">
                               Confirmado
+                            </span>
+                          ) : (
+                            <span className="status-badge" style={{ background: '#FEF3C7', color: '#D97706', fontWeight: 600 }}>
+                              Pendiente
                             </span>
                           )}
                         </div>
