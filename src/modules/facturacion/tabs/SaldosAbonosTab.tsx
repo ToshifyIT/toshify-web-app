@@ -1863,6 +1863,8 @@ export function SaldosAbonosTab() {
   // Exportar kardex actual a PDF (vía ventana de impresión).
   // No usa libs externas: arma HTML imprimible y dispara window.print().
   function exportarKardexPDF(saldo: SaldoConductor, rows: any[]) {
+    // FIX 2026-05-27: usar saldo real del kardex para el PDF
+    const saldoRealPDF = rows.length > 0 ? (Number(rows[0].saldo_pendiente) || 0) : (saldo.saldo_actual || 0)
     const tipoLabel: Record<string, string> = {
       regularizado: 'Facturación', pago_cabify: 'Pago Cabify', pago: 'Pago',
       pago_manual: 'Pago Manual', pago_cuota: 'Pago Cuota', ajuste_manual: 'Ajuste',
@@ -1890,7 +1892,7 @@ export function SaldosAbonosTab() {
         body { font-family: 'Roboto', -apple-system, 'Segoe UI', sans-serif; padding: 24px; color: #111827; }
         h1 { font-size: 18px; margin: 0 0 4px; }
         .meta { font-size: 11px; color: #6b7280; margin-bottom: 16px; }
-        .saldo { font-size: 18px; font-weight: 700; color: ${(saldo.saldo_actual || 0) < 0 ? '#dc2626' : '#16a34a'}; }
+        .saldo { font-size: 18px; font-weight: 700; color: ${saldoRealPDF < 0 ? '#dc2626' : '#16a34a'}; }
         table { width: 100%; border-collapse: collapse; font-size: 11px; }
         th, td { padding: 6px 8px; border-bottom: 1px solid #e5e7eb; text-align: left; }
         th { background: #f9fafb; font-weight: 600; text-transform: uppercase; font-size: 10px; color: #6b7280; }
@@ -1900,7 +1902,7 @@ export function SaldosAbonosTab() {
       <h1>Control de Saldos</h1>
       <div class="meta">
         <strong>${saldo.conductor_nombre || ''}</strong> &middot; DNI ${saldo.conductor_dni || '-'} &middot; CUIT ${saldo.conductor_cuit || '-'}
-        <br/>Saldo actual: <span class="saldo">${formatCurrency(saldo.saldo_actual || 0)}</span>
+        <br/>Saldo actual: <span class="saldo">${formatCurrency(saldoRealPDF)}</span>
         <br/>Generado: ${new Date().toLocaleString('es-AR')}
       </div>
       <table>
@@ -2523,7 +2525,12 @@ export function SaldosAbonosTab() {
       {/* Modal Kardex - Control de Saldos */}
       {kardexModal.open && kardexModal.saldo && (() => {
         const s = kardexModal.saldo
-        const sColor = s.saldo_actual >= 0 ? '#16a34a' : '#dc2626'
+        // FIX 2026-05-27: usar saldo real del último registro del kardex (control_saldos)
+        // en lugar de saldos_conductores.saldo_actual que puede estar desactualizado
+        const saldoRealKardex = kardexModal.rows && kardexModal.rows.length > 0
+          ? (Number((kardexModal.rows as any[])[0].saldo_pendiente) || 0)
+          : s.saldo_actual
+        const sColor = saldoRealKardex >= 0 ? '#16a34a' : '#dc2626'
         return (
           <div className="fact-modal-overlay" onClick={() => setKardexModal(prev => ({ ...prev, open: false }))}>
               <div className="fact-modal-content" style={{ maxWidth: '900px' }} onClick={(e) => e.stopPropagation()}>
@@ -2556,14 +2563,14 @@ export function SaldosAbonosTab() {
                   <div style={{ textAlign: 'right', display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '6px' }}>
                     <div>
                       <div style={{ fontSize: '20px', fontWeight: 700, color: sColor, lineHeight: 1 }}>
-                        {formatCurrency(s.saldo_actual)}
+                        {formatCurrency(saldoRealKardex)}
                       </div>
                       <span style={{
                         display: 'inline-block', marginTop: '4px', padding: '2px 8px', borderRadius: '4px',
                         fontSize: '10px', fontWeight: 600,
-                        background: s.saldo_actual >= 0 ? '#DCFCE7' : '#FEE2E2', color: sColor,
+                        background: saldoRealKardex >= 0 ? '#DCFCE7' : '#FEE2E2', color: sColor,
                       }}>
-                        {s.saldo_actual >= 0 ? 'A Favor' : 'Deuda'}
+                        {saldoRealKardex >= 0 ? 'A Favor' : 'Deuda'}
                       </span>
                     </div>
                     {isAdmin() && (

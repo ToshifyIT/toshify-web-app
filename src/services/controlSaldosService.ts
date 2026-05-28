@@ -61,4 +61,18 @@ export async function insertControlSaldo(params: {
     console.error('Error insertando control_saldos:', error);
     throw new Error(`Error registrando movimiento en kardex: ${error.message || 'desconocido'}`)
   }
+
+  // FIX 2026-05-27: sincronizar saldos_conductores.saldo_actual con el kardex
+  // para que el campo resumen siempre refleje el último movimiento registrado.
+  // Los flujos de pago ya llaman a upsertSaldoConductor antes, pero el doble
+  // update al mismo valor es inocuo y garantiza consistencia en todos los flujos.
+  if (saldo) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    await (supabase.from('saldos_conductores') as any)
+      .update({
+        saldo_actual: saldoPendiente,
+        ultima_actualizacion: new Date().toISOString(),
+      })
+      .eq('conductor_id', conductorId);
+  }
 }
