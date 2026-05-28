@@ -1778,12 +1778,24 @@ export function AsignacionesModule() {
         }
       }
 
+      // FIX 2026-05-28: cancelar conductores no confirmados (su turno queda vacante)
+      if (!todosConfirmados && debeActivar) {
+        const noConfirmados = (allConductores as any)?.filter((c: any) => !c.confirmado) || []
+        if (noConfirmados.length > 0) {
+          const idsNoConfirmados = noConfirmados.map((c: any) => c.id)
+          await (supabase as any)
+            .from('asignaciones_conductores')
+            .update({ estado: 'cancelado', fecha_fin: ahora })
+            .in('id', idsNoConfirmados)
+        }
+      }
+
       // Mensaje según estado
       if (todosConfirmados) {
         showSuccess('Confirmado', 'Todos los conductores han confirmado. La asignación está ACTIVA.')
       } else {
-        const pendientes = (allConductores as any)?.filter((c: any) => !c.confirmado).length || 0
-        showSuccess('Asignación Activada', `${conductoresToConfirm.length} confirmado(s). Faltan ${pendientes} por confirmar. La asignación está ACTIVA y la facturación del confirmado ya corre.`)
+        const cancelados = (allConductores as any)?.filter((c: any) => !c.confirmado).length || 0
+        showSuccess('Asignación Activada', `Asignación ACTIVA. ${cancelados > 0 ? `${cancelados} turno(s) vacante(s).` : ''} La facturación del confirmado ya corre.`)
       }
 
       setShowConfirmModal(false)
@@ -2867,24 +2879,7 @@ export function AsignacionesModule() {
             )
           }
         }
-        // FIX 2026-05-28: para asignaciones activas con conductores pendientes, mostrar badge ACTIVA + PENDIENTE
-        if ((row.original.estado === 'activa' || row.original.estado === 'activo') && conductores.length > 1) {
-          const pendientes = conductores.filter((c: any) => !c.confirmado)
-          if (pendientes.length > 0) {
-            return (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-                <span className={getStatusBadgeClass('activa')} style={{ fontSize: '10px', padding: '2px 6px' }}>
-                  {getStatusLabel(row.original.estado)}
-                </span>
-                {pendientes.map((_c: any, idx: number) => (
-                  <span key={idx} className={getStatusBadgeClass('programado')} style={{ fontSize: '10px', padding: '2px 6px' }}>
-                    Pendiente
-                  </span>
-                ))}
-              </div>
-            )
-          }
-        }
+        // Vacante ya se muestra en la columna ASIGNADOS, no duplicar en ESTADO
         return (
           <span className={getStatusBadgeClass(row.original.estado)} style={{ fontSize: '10px', padding: '2px 6px' }}>
             {getStatusLabel(row.original.estado)}
