@@ -654,6 +654,7 @@ export function ProgramacionModule() {
         .from('programaciones_onboarding') as any)
         .update({
           eliminado: true,
+          estado: 'cancelado',
           motivo_eliminacion: result.value.trim(),
           eliminado_at: new Date().toISOString(),
           eliminado_by: user?.id || null
