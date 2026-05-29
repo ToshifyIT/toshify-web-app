@@ -268,7 +268,8 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
           filtrarPorSede(supabase
             .from('programaciones_onboarding')
             .select('vehiculo_entregar_id, id')
-            .in('estado', ['por_agendar', 'agendado', 'en_curso']))
+            .in('estado', ['por_agendar', 'agendado', 'en_curso'])
+            .or('eliminado.is.null,eliminado.eq.false'))
         ])
 
         if (vehiculosRes.error) throw vehiculosRes.error
