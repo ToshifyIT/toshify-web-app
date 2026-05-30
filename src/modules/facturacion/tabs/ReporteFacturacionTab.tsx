@@ -8930,7 +8930,6 @@ export function ReporteFacturacionTab() {
           const diferencia = importeGenerado - totalCobroCabify
           const aFavor = diferencia < 0
           const diffColor = aFavor ? '#16a34a' : (diferencia > 0 ? '#dc2626' : '#16a34a')
-          const diffLabel = aFavor ? 'a favor' : (diferencia > 0 ? 'queda por cobrar' : 'cubierto al 100%')
 
           // Buckets por conductor
           const buckets = { ok: 0, mid: 0, low: 0 }
