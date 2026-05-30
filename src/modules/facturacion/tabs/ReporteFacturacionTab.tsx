@@ -8920,7 +8920,17 @@ export function ReporteFacturacionTab() {
           const pctClamped = Math.min(100, Math.max(0, porcentaje))
           const dasharray = 2 * Math.PI * 55 // ≈ 345.575
           const dashoffset = dasharray * (1 - pctClamped / 100)
-          const barColor = porcentaje > 100 ? '#2563eb' : porcentaje >= 90 ? '#16a34a' : porcentaje >= 60 ? '#f59e0b' : '#dc2626'
+          // % incobrable = lo que falta para llegar al 100% cubierto (0 si sobre-cubre)
+          const incobrablePct = Math.max(0, 100 - pctClamped)
+          // Semaforo: arco cobrado SIEMPRE verde, anillo de fondo ROJO = lo que falta cobrar.
+          // Si sobre-cubre (>100%), el anillo de fondo queda verde suave (no falta nada).
+          const barColor = '#16a34a'
+          const ringBgColor = incobrablePct > 0 ? '#dc2626' : 'rgba(34,197,94,0.18)'
+          // Diferencia: + = falta cobrar (rojo) · - = Cabify cobro de mas, a favor (verde)
+          const diferencia = importeGenerado - totalCobroCabify
+          const aFavor = diferencia < 0
+          const diffColor = aFavor ? '#16a34a' : (diferencia > 0 ? '#dc2626' : '#16a34a')
+          const diffLabel = aFavor ? 'a favor' : (diferencia > 0 ? 'queda por cobrar' : 'cubierto al 100%')
 
           // Buckets por conductor
           const buckets = { ok: 0, mid: 0, low: 0 }
@@ -8954,23 +8964,31 @@ export function ReporteFacturacionTab() {
           `
 
           const fullHtml = `
-            <div style="display:flex;gap:20px;align-items:center;padding:16px;background:linear-gradient(135deg,rgba(34,197,94,0.08) 0%,var(--bg-secondary) 100%);border-radius:10px;border:1px solid rgba(34,197,94,0.25);">
+            <div style="display:flex;gap:24px;align-items:center;padding:18px;background:linear-gradient(135deg,rgba(${aFavor ? '34,197,94' : '34,197,94'},0.06) 0%,var(--bg-secondary) 100%);border-radius:10px;border:1px solid var(--border-primary);">
               <div style="width:130px;height:130px;flex-shrink:0;position:relative;">
                 <svg width="130" height="130" viewBox="0 0 130 130" style="transform:rotate(-90deg);">
-                  <circle cx="65" cy="65" r="55" fill="none" stroke="var(--bg-tertiary)" stroke-width="14"/>
+                  <circle cx="65" cy="65" r="55" fill="none" stroke="${ringBgColor}" stroke-width="14"/>
                   <circle cx="65" cy="65" r="55" fill="none" stroke="${barColor}" stroke-width="14"
-                    stroke-dasharray="${dasharray.toFixed(2)}" stroke-dashoffset="${dashoffset.toFixed(2)}" stroke-linecap="round"/>
+                    stroke-dasharray="${dasharray.toFixed(2)}" stroke-dashoffset="${dashoffset.toFixed(2)}" stroke-linecap="butt"/>
                 </svg>
                 <div style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;">
-                  <div style="font-size:22px;font-weight:800;color:${barColor};line-height:1;">${porcentaje}%</div>
-                  <div style="font-size:9px;color:var(--text-secondary);text-transform:uppercase;letter-spacing:0.5px;margin-top:2px;">cubierto</div>
+                  <div style="font-size:24px;font-weight:800;color:${barColor};line-height:1;">${porcentaje}%</div>
+                  <div style="font-size:9px;color:var(--text-secondary);text-transform:uppercase;letter-spacing:0.5px;margin-top:2px;">cobrado</div>
+                  <div style="font-size:10px;font-weight:700;color:${incobrablePct > 0 ? '#dc2626' : '#15803d'};margin-top:5px;">${incobrablePct > 0 ? incobrablePct + '% sin cobrar' : 'sin pendientes'}</div>
                 </div>
               </div>
-              <div style="flex:1;">
-                <div style="font-size:10px;color:var(--text-secondary);text-transform:uppercase;letter-spacing:0.5px;">Total facturado</div>
-                <div style="font-size:22px;font-weight:800;color:var(--text-primary);">${formatCurrency(importeGenerado)}</div>
-                <div style="font-size:11px;color:${barColor};margin-top:6px;padding:4px 8px;background:rgba(${porcentaje > 100 ? '37,99,235' : porcentaje >= 90 ? '34,197,94' : porcentaje >= 60 ? '245,158,11' : '239,68,68'},0.12);border-radius:4px;display:inline-block;font-weight:600;">
-                  Cabify cobró ${formatCurrency(totalCobroCabify)}${porcentaje !== 100 ? ` · ${porcentaje > 100 ? 'sobre-cobertura ' : 'queda '}${formatCurrency(Math.abs(importeGenerado - totalCobroCabify))}` : ''}
+              <div style="flex:1;display:flex;flex-direction:column;gap:8px;">
+                <div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px;padding-bottom:8px;border-bottom:1px solid var(--border-primary);">
+                  <span style="font-size:11px;color:var(--text-secondary);text-transform:uppercase;letter-spacing:0.5px;">Total facturado</span>
+                  <span style="font-size:18px;font-weight:800;color:var(--text-primary);font-variant-numeric:tabular-nums;white-space:nowrap;">${formatCurrency(importeGenerado)}</span>
+                </div>
+                <div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px;padding-bottom:8px;border-bottom:1px solid var(--border-primary);">
+                  <span style="font-size:11px;color:var(--text-secondary);text-transform:uppercase;letter-spacing:0.5px;">Cabify cobró</span>
+                  <span style="font-size:18px;font-weight:800;color:#15803d;font-variant-numeric:tabular-nums;white-space:nowrap;">${formatCurrency(totalCobroCabify)}</span>
+                </div>
+                <div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px;">
+                  <span style="font-size:11px;color:${diffColor};text-transform:uppercase;letter-spacing:0.5px;font-weight:700;">${aFavor ? 'A favor' : (diferencia > 0 ? 'Falta cobrar' : 'Cubierto 100%')}</span>
+                  <span style="font-size:18px;font-weight:800;color:${diffColor};font-variant-numeric:tabular-nums;white-space:nowrap;">${aFavor ? '+' : ''}${formatCurrency(Math.abs(diferencia))}</span>
                 </div>
               </div>
             </div>
