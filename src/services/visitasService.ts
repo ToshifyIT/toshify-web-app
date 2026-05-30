@@ -79,7 +79,7 @@ export async function fetchVisitas(
     `)
     .gte('fecha_hora', rangeStart)
     .lte('fecha_hora', rangeEnd)
-    .order('fecha_hora');
+    .order('fecha_hora', { ascending: false });
 
   if (sedeId) query = query.eq('sede_id', sedeId);
 

@@ -554,6 +554,32 @@
   padding-bottom: 4px;
 }
 
+/* =====================================================
+   Vista MES: que se vean TODAS las semanas (5-6 filas).
+   Aislado bajo --month para NO afectar la vista semana.
+   Va DESPUES de las reglas base de rbc-month-row para ganar por orden CSS.
+   ===================================================== */
+
+/* El month-view crece a la altura natural de sus filas (cada una min-height:110px)
+   en lugar de comprimirse con flex:1. Asi las 5-6 filas se ven completas.
+   El wrapper hace scroll si el mes no entra en la pantalla. */
+.visitas-calendario-wrapper--month {
+  overflow-y: auto;
+}
+.visitas-calendario-wrapper--month .rbc-month-view {
+  flex: 1 0 auto;
+  min-height: 0;
+  overflow: visible;
+}
+
+/* Pantallas chicas (<1024px): filas un poco mas bajas para que entre mas mes
+   antes de necesitar scroll, pero siguen legibles. */
+@media (max-width: 1023px) {
+  .visitas-calendario-wrapper--month .rbc-month-row {
+    min-height: 88px;
+  }
+}
+
 .visitas-calendario-wrapper .rbc-day-bg + .rbc-day-bg {
   border-left: 1px solid var(--border-secondary);
 }

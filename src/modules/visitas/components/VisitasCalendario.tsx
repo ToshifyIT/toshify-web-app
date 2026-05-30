@@ -358,7 +358,7 @@ export function VisitasCalendario({
   }, [processedEvents]);
 
   return (
-    <div className="visitas-calendario-wrapper" ref={calendarWrapperRef}>
+    <div className={`visitas-calendario-wrapper${currentView === 'month' ? ' visitas-calendario-wrapper--month' : ''}`} ref={calendarWrapperRef}>
       <div className="visitas-timezone-badge">
         <Clock size={14} />
         <span>Argentina (GMT-3)</span>
