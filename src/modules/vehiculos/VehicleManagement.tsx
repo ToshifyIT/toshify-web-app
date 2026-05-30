@@ -275,7 +275,8 @@ export function VehicleManagement() {
             drive_folder_id, drive_folder_url, url_documentacion, gnc, telepase, titular, grupo_flota, categoria,
             cantidad_llaves, lugar_radicacion, vencimiento_seguro,
             vto_vtv_aplica, vto_vtv_fecha, vto_gnc_aplica, vto_gnc_fecha, vto_matafuego_aplica, vto_matafuego_fecha,
-            vehiculos_estados (id, codigo, descripcion)
+            vehiculos_estados (id, codigo, descripcion),
+            vehiculos_titulares!left (id, activo, titular_id, titulares (id, tipo, nombres, apellidos, razon_social))
           `)
           .is('deleted_at', null))
           .order('created_at', { ascending: false }),
@@ -308,6 +309,20 @@ export function VehicleManagement() {
       if (!vehiculosRes.data || vehiculosRes.data.length === 0) {
         setVehiculos([])
       } else {
+        // Sobreescribir campo titular con nombre del titular activo desde vehiculos_titulares
+        for (const v of vehiculosRes.data as any[]) {
+          const vtList = v.vehiculos_titulares
+          if (Array.isArray(vtList)) {
+            const activo = vtList.find((vt: any) => vt.activo && vt.titulares)
+            if (activo?.titulares) {
+              const t = activo.titulares
+              v.titular = t.tipo === 'empresa'
+                ? (t.razon_social || '').toUpperCase()
+                : [t.apellidos, t.nombres].filter(Boolean).join(' ').toUpperCase()
+            }
+          }
+        }
+
         // Ordenar: DISPONIBLE primero
         const sortedData = [...vehiculosRes.data].sort((a, b) => {
           const estadoA = (a as any).vehiculos_estados?.codigo || ''
@@ -970,6 +985,22 @@ export function VehicleManagement() {
 
       if (updateError) throw updateError
 
+      // Sincronizar datos copiados en ofertas_locacion
+      await supabase
+        .from('ofertas_locacion')
+        .update({
+          patente: formData.patente.toUpperCase() || null,
+          marca: formData.marca || null,
+          modelo: formData.modelo || null,
+          anio: formData.anio || null,
+          color: formData.color || null,
+          numero_motor: formData.numero_motor || null,
+          numero_chasis: formData.numero_chasis || null,
+          kilometraje: formData.kilometraje_actual ?? null,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('vehiculo_id', selectedVehiculo.id)
+
       // Registrar historial GNC si cambió
       const gncAnterior = !!(selectedVehiculo as any).gnc
       const gncNuevo = formData.gnc || false
@@ -1138,7 +1169,40 @@ export function VehicleManagement() {
 
     setSaving(true)
     try {
-      // Soft delete: marcar como eliminado sin borrar datos ni romper FK
+      // Verificar si tiene ofertas de locacion asociadas
+      const { data: ofertas } = await supabase
+        .from('ofertas_locacion')
+        .select('id, patente, titular_nombre')
+        .eq('vehiculo_id', selectedVehiculo.id)
+
+      if (ofertas && ofertas.length > 0) {
+        const confirm = await Swal.fire({
+          title: 'Ofertas de locacion asociadas',
+          html: `<div style="text-align:left;font-size:13px;">
+            <p>Este vehiculo tiene <b>${ofertas.length}</b> oferta(s) de locacion:</p>
+            <ul style="padding-left:20px;">${ofertas.map(o => `<li>${o.patente} - ${o.titular_nombre || 'Sin titular'}</li>`).join('')}</ul>
+            <p style="margin-top:10px;color:#dc2626;font-weight:600;">Se eliminaran junto con el vehiculo.</p>
+          </div>`,
+          icon: 'warning',
+          showCancelButton: true,
+          confirmButtonText: 'Eliminar todo',
+          cancelButtonText: 'Cancelar',
+          confirmButtonColor: '#dc2626',
+        })
+        if (!confirm.isConfirmed) {
+          setSaving(false)
+          return
+        }
+
+        // Eliminar ofertas asociadas
+        const { error: errOfertas } = await supabase
+          .from('ofertas_locacion')
+          .delete()
+          .eq('vehiculo_id', selectedVehiculo.id)
+        if (errOfertas) throw errOfertas
+      }
+
+      // Soft delete: marcar como eliminado
       const { error: deleteError } = await supabase
         .from('vehiculos')
         .update({ deleted_at: new Date().toISOString() })
@@ -1150,11 +1214,12 @@ export function VehicleManagement() {
       setShowDeleteModal(false)
       setSelectedVehiculo(null)
       await loadVehiculos(true)
-    } catch (err: any) {
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Error desconocido'
       Swal.fire({
         icon: 'error',
         title: 'Error',
-        text: err.message,
+        text: msg,
         confirmButtonColor: '#ff0033'
       })
     } finally {
