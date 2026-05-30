@@ -84,6 +84,42 @@ body.device-mobile .main-content {
   width: 100%;
 }
 
+/* Sidebar oculto en pantallas chicas: solo hamburguesa */
+@media (max-width: 1024px) {
+  .sidebar {
+    position: fixed !important;
+    left: -300px !important;
+    top: 0 !important;
+    bottom: 0 !important;
+    width: 280px !important;
+    height: 100vh !important;
+    z-index: 1000;
+    transition: left 0.3s ease;
+    overflow-y: auto;
+  }
+
+  .sidebar.open {
+    left: 0 !important;
+  }
+
+  .sidebar-overlay.show {
+    display: block;
+  }
+
+  .main-content {
+    margin-left: 0 !important;
+    width: 100% !important;
+  }
+
+  .menu-toggle {
+    display: flex !important;
+  }
+
+  .sidebar-collapse-btn {
+    display: none !important;
+  }
+}
+
 /* Header móvil */
 body.device-mobile .top-header {
   padding: 8px 12px;
@@ -146,25 +182,21 @@ body.device-tablet .stat-card {
   padding: 10px 12px;
 }
 
-/* Sidebar en tablet - colapsada por defecto */
+/* Sidebar en tablet - mismo comportamiento que mobile (hamburguesa) */
 body.device-tablet .sidebar {
-  width: 60px;
-  overflow: hidden;
+  position: fixed;
+  left: -300px;
+  top: 0;
+  bottom: 0;
+  width: 280px;
+  height: 100vh;
+  z-index: 1000;
+  transition: left 0.3s ease;
+  overflow-y: auto;
 }
 
-body.device-tablet .sidebar:hover,
-body.device-tablet .sidebar.expanded {
-  width: 240px;
-}
-
-body.device-tablet .sidebar .menu-text {
-  opacity: 0;
-  transition: opacity 0.2s;
-}
-
-body.device-tablet .sidebar:hover .menu-text,
-body.device-tablet .sidebar.expanded .menu-text {
-  opacity: 1;
+body.device-tablet .sidebar.open {
+  left: 0;
 }
 
 /* Tablas en tablet */
@@ -284,6 +316,10 @@ body.device-touch .show-touch-only {
    En viewport <= 640px: fuerza 92vw para legibilidad mobile. */
 .swal2-popup {
   max-width: min(92vw, 760px) !important;
+}
+
+.swal-popup-fix {
+  padding-top: 2.5rem !important;
 }
 
 /* Inputs en SweetAlert: 16px en todos los viewports para prevenir zoom iOS */

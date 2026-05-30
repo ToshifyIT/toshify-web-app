@@ -1448,3 +1448,27 @@
 [data-theme="dark"] .prog-modal .prog-observaciones {
   background: var(--bg-tertiary);
 }
+
+/* Mobile: padding para que no se corte en los bordes */
+@media (max-width: 768px) {
+  .prog-module {
+    padding: 0 4px;
+  }
+}
+
+/* Mobile cards: elementos necesitan mas espacio */
+.dt-card-value .prog-inline-select-mini {
+  max-width: none;
+  min-width: 100px;
+  font-size: 11px;
+  padding: 4px 6px;
+}
+
+.dt-card-value .prog-conductores-compact {
+  max-width: none;
+}
+
+.dt-card-value .prog-conductor-turno,
+.dt-card-value .prog-turno-vacante {
+  white-space: nowrap;
+}

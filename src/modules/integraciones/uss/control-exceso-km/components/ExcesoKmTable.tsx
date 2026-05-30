@@ -553,48 +553,50 @@ export function ExcesoKmTable({
             className="dt-search-input"
           />
         </div>
-        {headerControls}
-        {hasActiveFilters && (
-          <button onClick={clearAllFilters} style={{
-            display: 'flex', alignItems: 'center', gap: 4,
-            padding: '6px 10px', fontSize: 13, fontWeight: 500,
-            border: '1px solid var(--color-danger)', borderRadius: 6,
-            background: 'var(--bg-primary)', color: 'var(--color-danger)',
-            cursor: 'pointer', whiteSpace: 'nowrap',
-          }}>
-            <X size={14} /> Quitar filtros
-          </button>
-        )}
-        <div ref={exportRef} style={{ position: 'relative' }}>
-          <button onClick={() => setShowExportMenu(!showExportMenu)} disabled={filtered.length === 0} style={{
-            display: 'flex', alignItems: 'center', gap: 4,
-            padding: '6px 10px', fontSize: 13, fontWeight: 500,
-            border: '1px solid var(--border-color)', borderRadius: 6,
-            background: 'var(--bg-primary)', color: 'var(--text-secondary)',
-            cursor: 'pointer', whiteSpace: 'nowrap',
-          }}>
-            <Download size={14} /> Exportar <ChevronDown size={12} />
-          </button>
-          {showExportMenu && (
-            <div style={{
-              position: 'absolute', top: '100%', right: 0, marginTop: 4,
-              background: 'var(--bg-primary)', border: '1px solid var(--border-color)',
-              borderRadius: 6, boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
-              zIndex: 50, minWidth: 140, overflow: 'hidden',
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+          {headerControls}
+          {hasActiveFilters && (
+            <button onClick={clearAllFilters} style={{
+              display: 'flex', alignItems: 'center', gap: 4,
+              padding: '6px 10px', fontSize: 13, fontWeight: 500,
+              border: '1px solid var(--color-danger)', borderRadius: 6,
+              background: 'var(--bg-primary)', color: 'var(--color-danger)',
+              cursor: 'pointer', whiteSpace: 'nowrap',
             }}>
-              {[{ fn: exportarExcel, label: 'Excel (.xlsx)' }, { fn: exportarCSV, label: 'CSV (.csv)' }].map(({ fn, label }) => (
-                <button key={label} onClick={fn} style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', padding: '8px 12px', fontSize: 13, border: 'none', background: 'none', cursor: 'pointer', color: 'var(--text-primary)' }}
-                  onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--bg-secondary)')}
-                  onMouseLeave={(e) => (e.currentTarget.style.background = 'none')}>
-                  {label}
-                </button>
-              ))}
-            </div>
+              <X size={14} /> Quitar filtros
+            </button>
           )}
+          <div ref={exportRef} style={{ position: 'relative' }}>
+            <button onClick={() => setShowExportMenu(!showExportMenu)} disabled={filtered.length === 0} style={{
+              display: 'flex', alignItems: 'center', gap: 4,
+              padding: '6px 10px', fontSize: 13, fontWeight: 500,
+              border: '1px solid var(--border-color)', borderRadius: 6,
+              background: 'var(--bg-primary)', color: 'var(--text-secondary)',
+              cursor: 'pointer', whiteSpace: 'nowrap',
+            }}>
+              <Download size={14} /> Exportar <ChevronDown size={12} />
+            </button>
+            {showExportMenu && (
+              <div style={{
+                position: 'absolute', top: '100%', right: 0, marginTop: 4,
+                background: 'var(--bg-primary)', border: '1px solid var(--border-color)',
+                borderRadius: 6, boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+                zIndex: 50, minWidth: 140, overflow: 'hidden',
+              }}>
+                {[{ fn: exportarExcel, label: 'Excel (.xlsx)' }, { fn: exportarCSV, label: 'CSV (.csv)' }].map(({ fn, label }) => (
+                  <button key={label} onClick={fn} style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', padding: '8px 12px', fontSize: 13, border: 'none', background: 'none', cursor: 'pointer', color: 'var(--text-primary)' }}
+                    onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--bg-secondary)')}
+                    onMouseLeave={(e) => (e.currentTarget.style.background = 'none')}>
+                    {label}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+          <span style={{ color: 'var(--text-secondary)', fontSize: 13, whiteSpace: 'nowrap' }}>
+            {filtered.length} registros
+          </span>
         </div>
-        <span style={{ color: 'var(--text-secondary)', fontSize: 13, whiteSpace: 'nowrap' }}>
-          {filtered.length} registros
-        </span>
       </div>
 
       {/* Quick filters GPS */}

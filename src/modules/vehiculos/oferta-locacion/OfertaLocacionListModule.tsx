@@ -27,6 +27,7 @@ export function OfertaLocacionListModule() {
 
   // Filtros
   const [socioFilter, setSocioFilter] = useState<string[]>([])
+  const [activeStatCard, setActiveStatCard] = useState<string | null>(null)
   const { openFilterId, setOpenFilterId } = useExcelFilters()
 
   const userName = (profile as unknown as { full_name?: string })?.full_name || user?.email || 'admin'
@@ -135,6 +136,7 @@ export function OfertaLocacionListModule() {
       icon: 'success',
       confirmButtonText: 'Cerrar',
       confirmButtonColor: '#2563eb',
+      customClass: { popup: 'swal-popup-fix' },
     })
 
     loadOfertas()
@@ -202,8 +204,11 @@ export function OfertaLocacionListModule() {
   const filteredOfertas = useMemo(() => {
     let result = ofertas
     if (socioFilter.length > 0) result = result.filter(o => o.socio && socioFilter.includes(o.socio))
+    if (activeStatCard === 'borradores') result = result.filter(o => o.estado === 'borrador')
+    else if (activeStatCard === 'completados') result = result.filter(o => o.estado === 'completado')
+    else if (activeStatCard === 'generados') result = result.filter(o => o.estado === 'documento_generado')
     return result
-  }, [ofertas, socioFilter])
+  }, [ofertas, socioFilter, activeStatCard])
 
   const columns: ColumnDef<OfertaLocacion>[] = useMemo(() => [
     {
@@ -354,11 +359,20 @@ export function OfertaLocacionListModule() {
     if (socioFilter.length > 0) {
       filters.push({ id: 'socio', label: `Socio: ${socioFilter.join(', ')}`, onClear: () => setSocioFilter([]) })
     }
+    if (activeStatCard) {
+      const labelMap: Record<string, string> = { borradores: 'Borradores', completados: 'Completados', generados: 'Doc. Generados' }
+      filters.push({ id: 'statCard', label: `Estado: ${labelMap[activeStatCard] || activeStatCard}`, onClear: () => setActiveStatCard(null) })
+    }
     return filters
-  }, [socioFilter])
+  }, [socioFilter, activeStatCard])
+
+  const handleStatCardClick = (card: string) => {
+    setActiveStatCard(prev => prev === card ? null : card)
+  }
 
   const handleClearAllFilters = () => {
     setSocioFilter([])
+    setActiveStatCard(null)
   }
 
   return (
@@ -366,28 +380,28 @@ export function OfertaLocacionListModule() {
       {/* Stats */}
       <div className="veh-stats">
         <div className="veh-stats-grid" style={{ gridTemplateColumns: 'repeat(4, 1fr)' }}>
-          <div className="stat-card">
+          <div className={`stat-card ${activeStatCard === null ? '' : 'stat-card-inactive'}`} onClick={() => setActiveStatCard(null)} style={{ cursor: 'pointer' }}>
             <FileText size={18} className="stat-icon" />
             <div className="stat-content">
               <span className="stat-value">{stats.total}</span>
               <span className="stat-label">Total Ofertas</span>
             </div>
           </div>
-          <div className="stat-card">
+          <div className={`stat-card ${activeStatCard === 'borradores' ? 'stat-card-active' : activeStatCard ? 'stat-card-inactive' : ''}`} onClick={() => handleStatCardClick('borradores')} style={{ cursor: 'pointer' }}>
             <Edit size={18} className="stat-icon" />
             <div className="stat-content">
               <span className="stat-value">{stats.borradores}</span>
               <span className="stat-label">Borradores</span>
             </div>
           </div>
-          <div className="stat-card">
+          <div className={`stat-card ${activeStatCard === 'completados' ? 'stat-card-active' : activeStatCard ? 'stat-card-inactive' : ''}`} onClick={() => handleStatCardClick('completados')} style={{ cursor: 'pointer' }}>
             <Eye size={18} className="stat-icon" />
             <div className="stat-content">
               <span className="stat-value">{stats.completados}</span>
               <span className="stat-label">Completados</span>
             </div>
           </div>
-          <div className="stat-card">
+          <div className={`stat-card ${activeStatCard === 'generados' ? 'stat-card-active' : activeStatCard ? 'stat-card-inactive' : ''}`} onClick={() => handleStatCardClick('generados')} style={{ cursor: 'pointer' }}>
             <FileText size={18} className="stat-icon" />
             <div className="stat-content">
               <span className="stat-value">{stats.generados}</span>
