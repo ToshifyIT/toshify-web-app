@@ -889,16 +889,107 @@ export function VencimientosModule() {
         />
       </div>
 
-      {showModal && (
+      {showModal && modalMode === 'view' && selectedItem && (
+        <div className="modal-overlay" onClick={() => setShowModal(false)}>
+          <div className="modal-content" onClick={e => e.stopPropagation()} style={{ maxWidth: '600px' }}>
+            <div className="modal-header" style={{ justifyContent: 'center', position: 'relative' }}>
+              <h2>Detalle del Registro</h2>
+              <button type="button" className="modal-close" onClick={() => setShowModal(false)} style={{ position: 'absolute', right: '16px', top: '50%', transform: 'translateY(-50%)' }}>×</button>
+            </div>
+            <div className="modal-body" style={{ padding: '20px' }}>
+              <div className="venc-detail-grid">
+                <div className="venc-detail-row">
+                  <div>
+                    <span className="venc-detail-label">Patente</span>
+                    <p className="venc-detail-value" style={{ fontWeight: 700, fontFamily: 'monospace' }}>{selectedItem.patente || '-'}</p>
+                  </div>
+                  <div>
+                    <span className="venc-detail-label">Titular</span>
+                    <p className="venc-detail-value">{selectedItem.titular || '-'}</p>
+                  </div>
+                </div>
+
+                <div className="venc-detail-row">
+                  <div>
+                    <span className="venc-detail-label">Documento</span>
+                    <p className="venc-detail-value" style={{ fontWeight: 600 }}>{selectedItem.documento || '-'}</p>
+                  </div>
+                  <div>
+                    <span className="venc-detail-label">Solicitado</span>
+                    <span className={`solicitado-badge ${selectedItem.solicitado ? 'solicitado-si' : 'solicitado-no'}`}>
+                      {selectedItem.solicitado ? 'SI' : 'NO'}
+                    </span>
+                  </div>
+                </div>
+
+                <div className="venc-detail-row">
+                  <div>
+                    <span className="venc-detail-label">Prioridad</span>
+                    <span className={`prioridad-badge prioridad-${selectedItem.prioridad?.toLowerCase() || 'na'}`}>
+                      {selectedItem.prioridad || 'N/A'}
+                    </span>
+                  </div>
+                </div>
+
+                <div style={{ borderTop: '1px solid var(--border-primary)', margin: '4px 0' }} />
+
+                <div className="venc-detail-row" style={{ gridTemplateColumns: 'repeat(3, 1fr)' }}>
+                  <div>
+                    <span className="venc-detail-label">Fecha de Entrega</span>
+                    <p className="venc-detail-value">{formatDate(selectedItem.fecha_entrega)}</p>
+                  </div>
+                  <div>
+                    <span className="venc-detail-label">Fecha de Vencimiento</span>
+                    <p className="venc-detail-value" style={{ fontWeight: 600 }}>{formatDate(selectedItem.fecha_vencimiento)}</p>
+                  </div>
+                  <div>
+                    <span className="venc-detail-label">Iniciar Gestion</span>
+                    <p className="venc-detail-value">{formatDate(selectedItem.fecha_iniciar_gestion)}</p>
+                  </div>
+                </div>
+
+                {selectedItem.observacion && (
+                  <>
+                    <div style={{ borderTop: '1px solid var(--border-primary)', margin: '4px 0' }} />
+                    <div>
+                      <span className="venc-detail-label">Observaciones</span>
+                      <p className="venc-detail-value" style={{ whiteSpace: 'pre-wrap', background: 'var(--bg-secondary)', padding: '10px', borderRadius: '6px', borderLeft: '3px solid var(--color-primary)' }}>
+                        {selectedItem.observacion}
+                      </p>
+                    </div>
+                  </>
+                )}
+
+                <div style={{ borderTop: '1px solid var(--border-primary)', margin: '4px 0' }} />
+
+                <div className="venc-detail-row">
+                  <div>
+                    <span className="venc-detail-label">Creado</span>
+                    <p className="venc-detail-value" style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>{formatDateTime(selectedItem.created_at)}</p>
+                    {selectedItem.usuario_creacion && (
+                      <span style={{ fontSize: '11px', color: 'var(--text-tertiary)', fontStyle: 'italic' }}>por {selectedItem.usuario_creacion}</span>
+                    )}
+                  </div>
+                  <div>
+                    <span className="venc-detail-label">Ultima Actualizacion</span>
+                    <p className="venc-detail-value" style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>{selectedItem.fecha_edicion ? formatDateTime(selectedItem.fecha_edicion) : '---'}</p>
+                    {selectedItem.usuario_edicion && (
+                      <span style={{ fontSize: '11px', color: 'var(--text-tertiary)', fontStyle: 'italic' }}>por {selectedItem.usuario_edicion}</span>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showModal && modalMode !== 'view' && (
         <div className="modal-overlay" onClick={() => !saving && setShowModal(false)}>
           <div className="modal-content" onClick={e => e.stopPropagation()}>
             <div className="modal-header">
               <h2>
-                {modalMode === 'create'
-                  ? 'Nuevo Registro'
-                  : modalMode === 'edit'
-                  ? 'Editar Registro'
-                  : 'Detalle del Registro'}
+                {modalMode === 'create' ? 'Nuevo Registro' : 'Editar Registro'}
               </h2>
               <button
                 type="button"
@@ -929,7 +1020,7 @@ export function VencimientosModule() {
                         }}
                         onBlur={() => setTimeout(() => setShowVehiculoDropdown(false), 200)}
                         placeholder="Buscar por patente..."
-                        disabled={modalMode === 'view' || saving}
+                        disabled={saving}
                       />
                       {showVehiculoDropdown && vehiculoSearch && (
                         <div className="search-results">
@@ -977,7 +1068,7 @@ export function VencimientosModule() {
                     <select
                       value={formData.documento || ''}
                       onChange={e => setFormData(prev => ({ ...prev, documento: e.target.value || undefined }))}
-                      disabled={modalMode === 'view' || saving}
+                      disabled={saving}
                     >
                       <option value="">Seleccionar</option>
                       <option value="Patente provisoria">Patente provisoria</option>
@@ -996,7 +1087,7 @@ export function VencimientosModule() {
                         type="checkbox"
                         checked={formData.solicitado}
                         onChange={e => setFormData(prev => ({ ...prev, solicitado: e.target.checked }))}
-                        disabled={modalMode === 'view' || saving}
+                        disabled={saving}
                       />
                       <span className="slider round">
                         <span className="on-text">Si</span>
@@ -1012,7 +1103,7 @@ export function VencimientosModule() {
                       type="date"
                       value={formData.fecha_entrega || ''}
                       onChange={e => setFormData(prev => ({ ...prev, fecha_entrega: e.target.value }))}
-                      disabled={modalMode === 'view' || saving}
+                      disabled={saving}
                     />
                   </div>
                   <div className="form-group">
@@ -1027,14 +1118,13 @@ export function VencimientosModule() {
                         const newVal = e.target.value
                         setFormData(prev => {
                           const next = { ...prev, fecha_vencimiento: newVal }
-                          // Si estamos editando, limpiar fecha_iniciar_gestion al cambiar fecha_vencimiento
                           if (modalMode === 'edit') {
                             next.fecha_iniciar_gestion = ''
                           }
                           return next
                         })
                       }}
-                      disabled={modalMode === 'view' || saving}
+                      disabled={saving}
                     />
                   </div>
                 </div>
@@ -1045,7 +1135,7 @@ export function VencimientosModule() {
                       type="date"
                       value={formData.fecha_iniciar_gestion || ''}
                       onChange={e => setFormData(prev => ({ ...prev, fecha_iniciar_gestion: e.target.value }))}
-                      disabled={modalMode === 'view' || saving}
+                      disabled={saving}
                     />
                   </div>
                 </div>
@@ -1055,47 +1145,30 @@ export function VencimientosModule() {
                     <textarea
                       value={formData.observacion || ''}
                       onChange={e => setFormData(prev => ({ ...prev, observacion: e.target.value }))}
-                      disabled={modalMode === 'view' || saving}
+                      disabled={saving}
                     />
                   </div>
                 </div>
               </div>
-              {modalMode === 'view' && selectedItem && (
-                <div className="venc-registro-section">
-                  <span className="venc-registro-title">REGISTRO</span>
-                  <div className="venc-registro-row">
-                    <div className="venc-registro-item">
-                      <span className="venc-registro-label">CREADO</span>
-                      <span className="venc-registro-value">{formatDateTime(selectedItem.created_at)}</span>
-                    </div>
-                    <div className="venc-registro-item">
-                      <span className="venc-registro-label">ÚLTIMA ACTUALIZACIÓN</span>
-                      <span className="venc-registro-value">{selectedItem.fecha_edicion ? formatDateTime(selectedItem.fecha_edicion) : '---'}</span>
-                    </div>
-                  </div>
-                </div>
-              )}
             </div>
-            {modalMode !== 'view' && (
-              <div className="modal-footer">
-                <button
-                  type="button"
-                  className="btn-secondary"
-                  onClick={() => !saving && setShowModal(false)}
-                  disabled={saving}
-                >
-                  Cancelar
-                </button>
-                <button
-                  type="button"
-                  className="btn-primary"
-                  onClick={handleSubmit}
-                  disabled={saving}
-                >
-                  {saving ? 'Guardando...' : 'Guardar'}
-                </button>
-              </div>
-            )}
+            <div className="modal-footer">
+              <button
+                type="button"
+                className="btn-secondary"
+                onClick={() => !saving && setShowModal(false)}
+                disabled={saving}
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                className="btn-primary"
+                onClick={handleSubmit}
+                disabled={saving}
+              >
+                {saving ? 'Guardando...' : 'Guardar'}
+              </button>
+            </div>
           </div>
         </div>
       )}

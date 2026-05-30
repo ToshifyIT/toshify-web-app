@@ -631,61 +631,63 @@ export function BitacoraTable({
           <input type="text" placeholder="Buscar por patente o conductor..." value={searchTerm}
             onChange={(e) => onSearchChange(e.target.value)} className="dt-search-input" />
         </div>
-        {headerControls}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+          {headerControls}
 
-        {/* Toggle vista agrupada */}
-        <button
-          onClick={() => setVistaAgrupada(!vistaAgrupada)}
-          title={vistaAgrupada ? 'Vista normal' : 'Agrupar por conductor'}
-          style={{
-            display: 'flex', alignItems: 'center', gap: '4px',
-            padding: '6px 10px', fontSize: '13px', fontWeight: 500,
-            border: '1px solid var(--border-color)', borderRadius: '6px',
-            background: vistaAgrupada ? 'var(--color-primary)' : 'var(--bg-primary)',
-            color: vistaAgrupada ? '#fff' : 'var(--text-secondary)',
-            cursor: 'pointer', whiteSpace: 'nowrap',
-          }}
-        >
-          <Users size={14} /> Turnos
-        </button>
-
-        {/* Exportar dropdown */}
-        <div ref={exportRef} style={{ position: 'relative' }}>
-          <button onClick={() => setShowExportMenu(!showExportMenu)} disabled={registrosFiltrados.length === 0}
+          {/* Toggle vista agrupada */}
+          <button
+            onClick={() => setVistaAgrupada(!vistaAgrupada)}
+            title={vistaAgrupada ? 'Vista normal' : 'Agrupar por conductor'}
             style={{
               display: 'flex', alignItems: 'center', gap: '4px',
               padding: '6px 10px', fontSize: '13px', fontWeight: 500,
               border: '1px solid var(--border-color)', borderRadius: '6px',
-              background: 'var(--bg-primary)', color: 'var(--text-secondary)',
+              background: vistaAgrupada ? 'var(--color-primary)' : 'var(--bg-primary)',
+              color: vistaAgrupada ? '#fff' : 'var(--text-secondary)',
               cursor: 'pointer', whiteSpace: 'nowrap',
-            }}>
-            <Download size={14} /> Exportar <ChevronDown size={12} />
+            }}
+          >
+            <Users size={14} /> Turnos
           </button>
-          {showExportMenu && (
-            <div style={{
-              position: 'absolute', top: '100%', right: 0, marginTop: '4px',
-              background: 'var(--bg-primary)', border: '1px solid var(--border-color)',
-              borderRadius: '6px', boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
-              zIndex: 50, minWidth: '140px', overflow: 'hidden',
-            }}>
-              {[
-                { fn: exportarExcel, label: 'Excel (.xlsx)' },
-                { fn: exportarCSV, label: 'CSV (.csv)' },
-                { fn: exportarPDF, label: 'PDF (imprimir)' },
-              ].map(({ fn, label }) => (
-                <button key={label} onClick={fn} style={{ display: 'flex', alignItems: 'center', gap: '8px', width: '100%', padding: '8px 12px', fontSize: '13px', border: 'none', background: 'none', cursor: 'pointer', color: 'var(--text-primary)' }}
-                  onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--bg-secondary)')}
-                  onMouseLeave={(e) => (e.currentTarget.style.background = 'none')}>
-                  {label}
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
 
-        <span style={{ color: 'var(--text-secondary)', fontSize: '13px', whiteSpace: 'nowrap' }}>
-          {totalCount.toLocaleString()} registros
-        </span>
+          {/* Exportar dropdown */}
+          <div ref={exportRef} style={{ position: 'relative' }}>
+            <button onClick={() => setShowExportMenu(!showExportMenu)} disabled={registrosFiltrados.length === 0}
+              style={{
+                display: 'flex', alignItems: 'center', gap: '4px',
+                padding: '6px 10px', fontSize: '13px', fontWeight: 500,
+                border: '1px solid var(--border-color)', borderRadius: '6px',
+                background: 'var(--bg-primary)', color: 'var(--text-secondary)',
+                cursor: 'pointer', whiteSpace: 'nowrap',
+              }}>
+              <Download size={14} /> Exportar <ChevronDown size={12} />
+            </button>
+            {showExportMenu && (
+              <div style={{
+                position: 'absolute', top: '100%', right: 0, marginTop: '4px',
+                background: 'var(--bg-primary)', border: '1px solid var(--border-color)',
+                borderRadius: '6px', boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+                zIndex: 50, minWidth: '140px', overflow: 'hidden',
+              }}>
+                {[
+                  { fn: exportarExcel, label: 'Excel (.xlsx)' },
+                  { fn: exportarCSV, label: 'CSV (.csv)' },
+                  { fn: exportarPDF, label: 'PDF (imprimir)' },
+                ].map(({ fn, label }) => (
+                  <button key={label} onClick={fn} style={{ display: 'flex', alignItems: 'center', gap: '8px', width: '100%', padding: '8px 12px', fontSize: '13px', border: 'none', background: 'none', cursor: 'pointer', color: 'var(--text-primary)' }}
+                    onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--bg-secondary)')}
+                    onMouseLeave={(e) => (e.currentTarget.style.background = 'none')}>
+                    {label}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <span style={{ color: 'var(--text-secondary)', fontSize: '13px', whiteSpace: 'nowrap' }}>
+            {totalCount.toLocaleString()} registros
+          </span>
+        </div>
       </div>
 
       {/* DataTable */}

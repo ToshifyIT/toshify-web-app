@@ -60,6 +60,36 @@ function DeviceTypeInitializer({ children }: { children: React.ReactNode }) {
   // El hook agrega automáticamente clases al body:
   // device-mobile, device-tablet, device-desktop, device-touch, device-ios, device-android
   useDeviceType();
+
+  // Global: cerrar modales con Escape
+  useEffect(() => {
+    const handleEscape = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return
+
+      // Si hay un SweetAlert2 abierto, dejar que Swal lo maneje
+      if (document.querySelector('.swal2-container')) return
+
+      // Buscar cualquier overlay visible (modal-overlay, wizard-overlay, prog-modal-overlay, etc.)
+      // y cerrar el ultimo (el que esta mas arriba en el DOM = mas al frente)
+      const overlays = document.querySelectorAll('[class*="-overlay"], .modal-overlay')
+      const realOverlays = Array.from(overlays).filter(el => {
+        const cls = el.className
+        return (
+          cls.includes('modal-overlay') ||
+          cls.includes('wizard-overlay') ||
+          cls.includes('drawer-overlay')
+        ) && !cls.includes('sidebar-overlay')
+      })
+      if (realOverlays.length > 0) {
+        const topOverlay = realOverlays[realOverlays.length - 1] as HTMLElement
+        topOverlay.click()
+      }
+    }
+
+    document.addEventListener('keydown', handleEscape)
+    return () => document.removeEventListener('keydown', handleEscape)
+  }, [])
+
   return <>{children}</>;
 }
 

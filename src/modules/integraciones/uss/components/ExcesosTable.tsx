@@ -224,7 +224,8 @@ export function ExcesosTable({
       cell: ({ row }) => formatDuration(row.original.duracion_segundos),
     },
     {
-      accessorKey: 'localizacion',
+      id: 'localizacion',
+      accessorFn: (row) => row.localizacion || (row.latitud != null && row.longitud != null ? 'Ver en mapa' : null),
       header: 'Ubicacion',
       cell: ({ row }) => {
         const tieneCoords = row.original.latitud != null && row.original.longitud != null
@@ -287,65 +288,67 @@ export function ExcesosTable({
           )}
         </div>
 
-        {/* Filtro de rango de velocidad (servidor) */}
-        <div style={{ position: 'relative' }}>
-          <button
-            onClick={() => setShowVelFilter(!showVelFilter)}
-            style={{
-              display: 'flex', alignItems: 'center', gap: '6px',
-              padding: '8px 14px', fontSize: '13px', fontWeight: 500,
-              background: velFilterActive ? 'var(--color-primary, #ef4444)' : 'var(--bg-secondary, #f3f4f6)',
-              color: velFilterActive ? 'white' : 'var(--text-secondary)',
-              border: velFilterActive ? 'none' : '1px solid var(--border-primary, #e5e7eb)',
-              borderRadius: '8px', cursor: 'pointer', whiteSpace: 'nowrap',
-            }}
-          >
-            <Gauge size={15} />
-            {velFilterActive ? `${velMin || '0'} - ${velMax || '∞'} km/h` : 'Rango velocidad'}
-          </button>
-          {showVelFilter && (
-            <div style={{
-              position: 'absolute', top: '100%', right: 0, zIndex: 50, marginTop: '6px',
-              background: 'var(--bg-primary, white)', border: '1px solid var(--border-primary, #e5e7eb)',
-              borderRadius: '10px', padding: '14px', boxShadow: '0 4px 16px rgba(0,0,0,0.12)', minWidth: '220px',
-            }}>
-              <div style={{ fontSize: '12px', fontWeight: 600, marginBottom: '10px', color: 'var(--text-primary)' }}>Filtrar por velocidad (km/h)</div>
-              <div style={{ display: 'flex', gap: '8px', marginBottom: '12px', alignItems: 'center' }}>
-                <input
-                  type="number"
-                  placeholder="Min"
-                  value={velMin}
-                  onChange={(e) => setVelMin(e.target.value)}
-                  style={{ flex: 1, padding: '8px 10px', fontSize: '13px', border: '1px solid var(--border-primary, #e5e7eb)', borderRadius: '6px', background: 'var(--bg-secondary, #f9fafb)', outline: 'none' }}
-                />
-                <span style={{ color: 'var(--text-tertiary)', fontSize: '14px', fontWeight: 600 }}>—</span>
-                <input
-                  type="number"
-                  placeholder="Max"
-                  value={velMax}
-                  onChange={(e) => setVelMax(e.target.value)}
-                  style={{ flex: 1, padding: '8px 10px', fontSize: '13px', border: '1px solid var(--border-primary, #e5e7eb)', borderRadius: '6px', background: 'var(--bg-secondary, #f9fafb)', outline: 'none' }}
-                />
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+          {/* Filtro de rango de velocidad (servidor) */}
+          <div style={{ position: 'relative' }}>
+            <button
+              onClick={() => setShowVelFilter(!showVelFilter)}
+              style={{
+                display: 'flex', alignItems: 'center', gap: '6px',
+                padding: '8px 14px', fontSize: '13px', fontWeight: 500,
+                background: velFilterActive ? 'var(--color-primary, #ef4444)' : 'var(--bg-secondary, #f3f4f6)',
+                color: velFilterActive ? 'white' : 'var(--text-secondary)',
+                border: velFilterActive ? 'none' : '1px solid var(--border-primary, #e5e7eb)',
+                borderRadius: '8px', cursor: 'pointer', whiteSpace: 'nowrap',
+              }}
+            >
+              <Gauge size={15} />
+              {velFilterActive ? `${velMin || '0'} - ${velMax || '∞'} km/h` : 'Rango velocidad'}
+            </button>
+            {showVelFilter && (
+              <div style={{
+                position: 'absolute', top: '100%', right: 0, zIndex: 50, marginTop: '6px',
+                background: 'var(--bg-primary, white)', border: '1px solid var(--border-primary, #e5e7eb)',
+                borderRadius: '10px', padding: '14px', boxShadow: '0 4px 16px rgba(0,0,0,0.12)', minWidth: '220px',
+              }}>
+                <div style={{ fontSize: '12px', fontWeight: 600, marginBottom: '10px', color: 'var(--text-primary)' }}>Filtrar por velocidad (km/h)</div>
+                <div style={{ display: 'flex', gap: '8px', marginBottom: '12px', alignItems: 'center' }}>
+                  <input
+                    type="number"
+                    placeholder="Min"
+                    value={velMin}
+                    onChange={(e) => setVelMin(e.target.value)}
+                    style={{ flex: 1, padding: '8px 10px', fontSize: '13px', border: '1px solid var(--border-primary, #e5e7eb)', borderRadius: '6px', background: 'var(--bg-secondary, #f9fafb)', outline: 'none' }}
+                  />
+                  <span style={{ color: 'var(--text-tertiary)', fontSize: '14px', fontWeight: 600 }}>—</span>
+                  <input
+                    type="number"
+                    placeholder="Max"
+                    value={velMax}
+                    onChange={(e) => setVelMax(e.target.value)}
+                    style={{ flex: 1, padding: '8px 10px', fontSize: '13px', border: '1px solid var(--border-primary, #e5e7eb)', borderRadius: '6px', background: 'var(--bg-secondary, #f9fafb)', outline: 'none' }}
+                  />
+                </div>
+                <div style={{ display: 'flex', gap: '8px' }}>
+                  <button
+                    onClick={applyVelocidadFilter}
+                    style={{ flex: 1, padding: '8px', fontSize: '12px', fontWeight: 600, background: 'var(--color-primary, #ef4444)', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer' }}
+                  >
+                    Aplicar
+                  </button>
+                  <button
+                    onClick={clearVelocidadFilter}
+                    style={{ flex: 1, padding: '8px', fontSize: '12px', fontWeight: 600, background: 'var(--bg-secondary, #f3f4f6)', color: 'var(--text-secondary)', border: '1px solid var(--border-primary, #e5e7eb)', borderRadius: '6px', cursor: 'pointer' }}
+                  >
+                    Limpiar
+                  </button>
+                </div>
               </div>
-              <div style={{ display: 'flex', gap: '8px' }}>
-                <button
-                  onClick={applyVelocidadFilter}
-                  style={{ flex: 1, padding: '8px', fontSize: '12px', fontWeight: 600, background: 'var(--color-primary, #ef4444)', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer' }}
-                >
-                  Aplicar
-                </button>
-                <button
-                  onClick={clearVelocidadFilter}
-                  style={{ flex: 1, padding: '8px', fontSize: '12px', fontWeight: 600, background: 'var(--bg-secondary, #f3f4f6)', color: 'var(--text-secondary)', border: '1px solid var(--border-primary, #e5e7eb)', borderRadius: '6px', cursor: 'pointer' }}
-                >
-                  Limpiar
-                </button>
-              </div>
-            </div>
-          )}
-        </div>
+            )}
+          </div>
 
-        {headerControls}
+          {headerControls}
+        </div>
       </div>
 
       {/* Quick filters por proveedor GPS */}

@@ -49,14 +49,13 @@ export function OfertaLocacionDetailModal({ oferta, onClose }: Props) {
   return (
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal-content" onClick={e => e.stopPropagation()} style={{ maxWidth: '700px', maxHeight: '85vh', display: 'flex', flexDirection: 'column' }}>
-        <div className="modal-header" style={{ flexShrink: 0 }}>
-          <div>
-            <h3 style={{ margin: 0 }}>Detalle Oferta de Locacion</h3>
-            <p style={{ margin: '4px 0 0', fontSize: '12px', color: 'var(--text-tertiary)' }}>
+        <div className="modal-header" style={{ flexShrink: 0, flexDirection: 'column', gap: '6px', position: 'relative' }}>
+          <h3 style={{ margin: 0, textAlign: 'center', width: '100%' }}>Detalle Oferta de Locacion</h3>
+          <button className="modal-close" onClick={onClose} style={{ position: 'absolute', top: '12px', right: '12px' }}><X size={18} /></button>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%' }}>
+            <span style={{ fontSize: '12px', color: 'var(--text-tertiary)' }}>
               {o.patente} - {o.titular_nombre}
-            </p>
-          </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            </span>
             {o.drive_folder_url && (
               <a
                 href={o.drive_folder_url}
@@ -66,21 +65,19 @@ export function OfertaLocacionDetailModal({ oferta, onClose }: Props) {
                   display: 'inline-flex',
                   alignItems: 'center',
                   gap: '4px',
-                  padding: '6px 12px',
+                  padding: '5px 14px',
                   fontSize: '12px',
                   fontWeight: 600,
                   color: '#fff',
-                  backgroundColor: '#2563eb',
+                  backgroundColor: '#dc2626',
                   borderRadius: '6px',
                   textDecoration: 'none',
-                  whiteSpace: 'nowrap',
                 }}
               >
                 <ExternalLink size={14} />
                 Ver documentos
               </a>
             )}
-            <button className="modal-close" onClick={onClose}><X size={18} /></button>
           </div>
         </div>
 

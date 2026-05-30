@@ -108,6 +108,10 @@
   background: var(--color-primary-light);
 }
 
+.veh-stats .stat-card.stat-card-inactive {
+  opacity: 0.45;
+}
+
 /* Stat Loading Spinner */
 .veh-stats .stat-spinner {
   animation: spin 1s linear infinite;
