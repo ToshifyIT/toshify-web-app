@@ -53,6 +53,7 @@ export function TitularesModule() {
   const [selectedTitular, setSelectedTitular] = useState<Titular | null>(null)
   const [formData, setFormData] = useState<TitularFormData>({ ...EMPTY_FORM })
   const [vehiculosTitular, setVehiculosTitular] = useState<VehiculoTitular[]>([])
+  const [creatingOferta, setCreatingOferta] = useState<string | null>(null)
 
   // Filtros
   const [tipoFilter, setTipoFilter] = useState<string[]>([])
@@ -229,13 +230,50 @@ export function TitularesModule() {
       const { error: err } = await supabase.from('titulares').update(updateData).eq('id', selectedTitular.id)
       if (err) throw err
 
+      // Sincronizar datos copiados en ofertas_locacion
+      const nombreTitular = formData.tipo === 'persona'
+        ? `${(formData.nombres || '').trim().toUpperCase()} ${(formData.apellidos || '').trim().toUpperCase()}`.trim()
+        : (formData.razon_social || '').trim().toUpperCase()
+
+      const conyugueVal = formData.tipo === 'persona'
+        ? ((formData.nombre_conyugue || formData.conyugue || '').trim().toUpperCase() || null)
+        : null
+
+      await supabase
+        .from('ofertas_locacion')
+        .update({
+          titular_nombre: nombreTitular || null,
+          titular_dni_cuit: formData.dni_cuit.trim() || null,
+          titular_domicilio: formData.domicilio.trim() || null,
+          titular_email: formData.email.trim() || null,
+          titular_cuit: formData.dni_cuit.trim() || null,
+          titular_conyugue: conyugueVal,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('titular_id', selectedTitular.id)
+
+      // Sincronizar campo texto en vehiculos via vehiculos_titulares
+      const { data: relaciones } = await supabase
+        .from('vehiculos_titulares')
+        .select('vehiculo_id')
+        .eq('titular_id', selectedTitular.id)
+        .eq('activo', true)
+      const vehIds = (relaciones || []).map(r => r.vehiculo_id)
+      if (vehIds.length > 0) {
+        await supabase
+          .from('vehiculos')
+          .update({ titular: nombreTitular || null })
+          .in('id', vehIds)
+      }
+
       showSuccess('Titular actualizado correctamente')
       setShowEditModal(false)
       setSelectedTitular(null)
       setFormData({ ...EMPTY_FORM })
       loadTitulares()
-    } catch (e: any) {
-      Swal.fire('Error', e.message, 'error')
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : 'Error desconocido'
+      Swal.fire('Error', msg, 'error')
     } finally {
       setSaving(false)
     }
@@ -245,28 +283,69 @@ export function TitularesModule() {
     const nombre = titular.tipo === 'persona'
       ? `${titular.nombres} ${titular.apellidos}`
       : titular.razon_social
+
+    // Verificar si tiene ofertas de locacion asociadas
+    const { data: ofertas } = await supabase
+      .from('ofertas_locacion')
+      .select('id, patente')
+      .eq('titular_id', titular.id)
+    const tieneOfertas = (ofertas || []).length > 0
+
+    let mensajeHtml = `Se eliminará el titular <b>${nombre}</b>. Esta acción no se puede deshacer.`
+    if (tieneOfertas) {
+      const listaOfertas = (ofertas || []).map(o => o.patente || 'Sin patente').join(', ')
+      mensajeHtml += `<br><br><span style="color:#dc2626;font-weight:600;">Este titular tiene ${ofertas!.length} oferta(s) de locacion asociada(s) (${listaOfertas}) que tambien seran eliminadas.</span>`
+    }
+
     const confirm = await Swal.fire({
       title: 'Eliminar titular',
-      html: `Se eliminará el titular <b>${nombre}</b>. Esta acción no se puede deshacer.`,
+      html: mensajeHtml,
       icon: 'warning',
       showCancelButton: true,
-      confirmButtonText: 'Eliminar',
+      confirmButtonText: tieneOfertas ? 'Eliminar todo' : 'Eliminar',
       cancelButtonText: 'Cancelar',
       confirmButtonColor: '#dc2626',
     })
     if (!confirm.isConfirmed) return
 
     try {
-      // Eliminar relaciones vehiculos_titulares antes de borrar el titular
+      // 1. Eliminar ofertas de locacion asociadas (antes de tocar vehiculos_titulares por FK)
+      if (tieneOfertas) {
+        const { error: errOfertas } = await supabase
+          .from('ofertas_locacion')
+          .delete()
+          .eq('titular_id', titular.id)
+        if (errOfertas) throw errOfertas
+      }
+
+      // 2. Obtener los vehiculo_ids asociados a este titular
+      const { data: relaciones } = await supabase
+        .from('vehiculos_titulares')
+        .select('vehiculo_id')
+        .eq('titular_id', titular.id)
+      const vehiculoIds = (relaciones || []).map(r => r.vehiculo_id)
+
+      // 3. Limpiar campo texto titular en los vehiculos asociados
+      if (vehiculoIds.length > 0) {
+        const { error: errVeh } = await supabase
+          .from('vehiculos')
+          .update({ titular: null })
+          .in('id', vehiculoIds)
+        if (errVeh) throw errVeh
+      }
+
+      // 4. Eliminar relaciones vehiculos_titulares
       const { error: errRel } = await supabase.from('vehiculos_titulares').delete().eq('titular_id', titular.id)
       if (errRel) throw errRel
 
+      // 5. Eliminar el titular
       const { error: err } = await supabase.from('titulares').delete().eq('id', titular.id)
       if (err) throw err
-      showSuccess('Titular eliminado')
+      showSuccess('Titular eliminado y desvinculado de sus vehiculos')
       loadTitulares()
-    } catch (e: any) {
-      Swal.fire('Error', e.message, 'error')
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : 'Error desconocido'
+      Swal.fire('Error', msg, 'error')
     }
   }
 
@@ -311,6 +390,94 @@ export function TitularesModule() {
       setVehiculosTitular([])
     }
     setShowVehiculosModal(true)
+  }
+
+  // ---------- Crear Oferta Locacion ----------
+  const handleCrearOfertaLocacion = async (vt: VehiculoTitular) => {
+    if (!selectedTitular) return
+    const titular = selectedTitular
+
+    // Validar datos mínimos del titular
+    const nombreTitular = titular.tipo === 'persona'
+      ? `${titular.nombres || ''} ${titular.apellidos || ''}`.trim()
+      : titular.razon_social || ''
+
+    const camposFaltantes: string[] = []
+    if (!nombreTitular) camposFaltantes.push('Nombre del titular')
+    if (!titular.dni_cuit) camposFaltantes.push('DNI/CUIT del titular')
+
+    // Validar datos mínimos del vehículo
+    if (!vt.vehiculos?.patente) camposFaltantes.push('Patente del vehiculo')
+    if (!vt.vehiculos?.marca) camposFaltantes.push('Marca del vehiculo')
+    if (!vt.vehiculos?.modelo) camposFaltantes.push('Modelo del vehiculo')
+
+    if (camposFaltantes.length > 0) {
+      Swal.fire('Datos incompletos', `Faltan los siguientes datos para crear la oferta:\n\n- ${camposFaltantes.join('\n- ')}`, 'warning')
+      return
+    }
+
+    setCreatingOferta(vt.id)
+    try {
+      // Verificar si ya existe
+      const { data: existente } = await supabase
+        .from('ofertas_locacion')
+        .select('id')
+        .eq('vehiculo_titular_id', vt.id)
+        .maybeSingle()
+
+      if (existente) {
+        Swal.fire('Ya existe', 'Ya existe un registro de oferta de locacion para este vehiculo y titular. Editalo desde el modulo de Oferta Locacion.', 'info')
+        return
+      }
+
+      // Traer datos completos del vehículo
+      const { data: vehiculo } = await supabase
+        .from('vehiculos')
+        .select('patente, marca, modelo, anio, color, numero_motor, numero_chasis, kilometraje_actual')
+        .eq('id', vt.vehiculo_id)
+        .maybeSingle()
+
+      const { error } = await supabase
+        .from('ofertas_locacion')
+        .insert({
+          vehiculo_titular_id: vt.id,
+          vehiculo_id: vt.vehiculo_id,
+          titular_id: vt.titular_id,
+          titular_nombre: nombreTitular,
+          titular_dni_cuit: titular.dni_cuit || null,
+          titular_domicilio: titular.domicilio || null,
+          titular_email: titular.email || null,
+          titular_cuit: titular.dni_cuit || null,
+          titular_conyugue: titular.tipo === 'persona' ? (titular.nombre_conyugue || titular.conyugue || null) : null,
+          patente: vehiculo?.patente || vt.vehiculos?.patente || null,
+          marca: vehiculo?.marca || vt.vehiculos?.marca || null,
+          modelo: vehiculo?.modelo || vt.vehiculos?.modelo || null,
+          anio: vehiculo?.anio || null,
+          color: vehiculo?.color || null,
+          numero_motor: vehiculo?.numero_motor || null,
+          numero_chasis: vehiculo?.numero_chasis || null,
+          kilometraje: vehiculo?.kilometraje_actual ?? null,
+          estado: 'borrador',
+          sede_id: sedeActualId || null,
+          created_by: userId,
+          created_by_name: userName,
+        })
+
+      if (error) {
+        if (error.code === '23505') {
+          Swal.fire('Ya existe', 'Ya existe un registro de oferta de locacion para este vehiculo y titular.', 'info')
+          return
+        }
+        throw error
+      }
+
+      showSuccess('Oferta de locacion creada. Completa los datos desde el modulo Oferta Locacion.')
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Error desconocido'
+      Swal.fire('Error', msg, 'error')
+    } finally {
+      setCreatingOferta(null)
+    }
   }
 
   // ---------- Helper de nombre ----------
@@ -839,7 +1006,8 @@ export function TitularesModule() {
                           <button
                             type="button"
                             title="Registro de oferta locacion"
-                            onClick={(e) => { e.stopPropagation() }}
+                            disabled={creatingOferta === vt.id}
+                            onClick={(e) => { e.stopPropagation(); handleCrearOfertaLocacion(vt) }}
                             style={{
                               background: 'none',
                               border: '1px solid var(--border-primary)',
@@ -871,6 +1039,7 @@ export function TitularesModule() {
           </div>
         </div>
       )}
+
     </div>
   )
 }

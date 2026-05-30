@@ -71,6 +71,7 @@ const menuIcons: Record<string, LucideIcon> = {
   'visitas': CalendarCheck,
   'integraciones-tokens': Link2,
   'leads': UserPlus,
+  'oferta-locacion': FileText,
 }
 
 // Función para obtener icono de un menú
@@ -242,6 +243,7 @@ const VencimientosPage = lazy(() => import('./vencimientos/VencimientosPage').th
 const AlertasMantenimientoPage = lazy(() => import('./vehiculos/AlertasMantenimientoPage'))
 const ControlCombustiblePage = lazy(() => import('./vehiculos/ControlCombustiblePage'))
 const TitularesPage = lazy(() => import('./vehiculos/TitularesPage'))
+const OfertaLocacionPage = lazy(() => import('./vehiculos/OfertaLocacionPage'))
 const InformesPage = lazy(() => import('./informes/InformesPage').then(m => ({ default: m.InformesPage })))
 const AsignacionesActivasPage = lazy(() => import('./asignaciones/AsignacionesActivasPage').then(m => ({ default: m.AsignacionesActivasPage })))
 const ProductosPage = lazy(() => import('./productos/ProductosPage').then(m => ({ default: m.ProductosPage })))
@@ -1901,6 +1903,11 @@ export function HomePage() {
               <Route path="/vehiculos/titulares" element={
                 <ProtectedRoute submenuName="gestion-vehiculos" action="view">
                   <LazyPage><TitularesPage /></LazyPage>
+                </ProtectedRoute>
+              } />
+              <Route path="/vehiculos/oferta-locacion" element={
+                <ProtectedRoute submenuName="oferta-locacion" action="view">
+                  <LazyPage><OfertaLocacionPage /></LazyPage>
                 </ProtectedRoute>
               } />
 

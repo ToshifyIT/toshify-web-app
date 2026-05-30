@@ -2157,6 +2157,406 @@ function simplifyIntercomError(text) {
   return text
 }
 
+// ======================== OFERTA DE LOCACIÓN ========================
+
+/**
+ * Convierte un número entero a su representación en palabras (español).
+ * Ej: 1500000 → "un millón quinientos mil"
+ */
+function numeroALetras(numero) {
+  if (numero === 0) return 'cero'
+  if (numero < 0) return 'menos ' + numeroALetras(-numero)
+
+  const unidades = ['', 'uno', 'dos', 'tres', 'cuatro', 'cinco', 'seis', 'siete', 'ocho', 'nueve']
+  const especiales = ['diez', 'once', 'doce', 'trece', 'catorce', 'quince']
+  const decenas = ['', 'diez', 'veinte', 'treinta', 'cuarenta', 'cincuenta',
+                   'sesenta', 'setenta', 'ochenta', 'noventa']
+  const centenas = ['', 'ciento', 'doscientos', 'trescientos', 'cuatrocientos',
+                    'quinientos', 'seiscientos', 'setecientos', 'ochocientos', 'novecientos']
+
+  function convertirGrupo(n) {
+    if (n === 0) return ''
+    if (n === 100) return 'cien'
+    let resultado = ''
+    if (n >= 100) {
+      resultado += centenas[Math.floor(n / 100)] + ' '
+      n = n % 100
+    }
+    if (n >= 1 && n <= 9) {
+      resultado += unidades[n]
+    } else if (n >= 10 && n <= 15) {
+      resultado += especiales[n - 10]
+    } else if (n >= 16 && n <= 19) {
+      resultado += 'dieci' + unidades[n - 10]
+    } else if (n === 20) {
+      resultado += 'veinte'
+    } else if (n >= 21 && n <= 29) {
+      resultado += 'veinti' + unidades[n - 20]
+    } else if (n >= 30) {
+      resultado += decenas[Math.floor(n / 10)]
+      if (n % 10 !== 0) {
+        resultado += ' y ' + unidades[n % 10]
+      }
+    }
+    return resultado.trim()
+  }
+
+  let resultado = ''
+  if (numero >= 1000000) {
+    const millones = Math.floor(numero / 1000000)
+    resultado += millones === 1 ? 'un millón ' : convertirGrupo(millones) + ' millones '
+    numero = numero % 1000000
+  }
+  if (numero >= 1000) {
+    const miles = Math.floor(numero / 1000)
+    resultado += miles === 1 ? 'mil ' : convertirGrupo(miles) + ' mil '
+    numero = numero % 1000
+  }
+  if (numero > 0) {
+    resultado += convertirGrupo(numero)
+  }
+  return resultado.trim()
+}
+
+/**
+ * Formatea número como pesos argentinos con punto de miles: 1500000 → "$1.500.000"
+ */
+function formatearMontoAR(num) {
+  return '$' + Math.round(num).toString().replace(/\B(?=(\d{3})+(?!\d))/g, '.')
+}
+
+/**
+ * Aplica las transformaciones de formato del MAPA_VARIABLES del script original.
+ * Recibe los datos de la oferta y retorna el mapa {VARIABLE: valor_formateado}.
+ */
+function buildOfertaReemplazos(o) {
+  const data = {}
+  const add = (key, val) => { if (val != null && val !== '') data[key] = val }
+
+  // --- Datos del titular ---
+  add('OWNER', (o.titular_nombre || '').toUpperCase())
+  add('DNI', (o.titular_dni_cuit || '').toUpperCase())
+  add('ADDRESS', o.titular_domicilio || '')
+  add('EMAIL', o.titular_email || '')
+  add('CUIT', (o.titular_cuit || '').toUpperCase())
+
+  // Cónyuge: formato especial
+  const conyugue = (o.titular_conyugue || '').trim()
+  if (conyugue.length > 0) {
+    add('SPOUSE', 'Se declara el cónyuge ' + conyugue.toUpperCase())
+  } else {
+    add('SPOUSE', 'No se declara cónyuge')
+  }
+
+  // --- Datos del contrato ---
+  add('RENTAL START DATE', (o.fecha_inicio_alquiler ? formatDate(o.fecha_inicio_alquiler) : '').toUpperCase())
+
+  const canon = o.canon_mensual != null ? Math.round(o.canon_mensual) : 0
+  add('AMMOUNT', formatearMontoAR(canon))
+  add('AMMOUNT IN WORDS', numeroALetras(canon).toUpperCase())
+
+  add('PLATE AMMOUNT', o.costo_patente != null ? formatearMontoAR(o.costo_patente) : '')
+
+  // --- Datos del vehículo ---
+  add('PLATE', (o.patente || '').toUpperCase())
+  add('MARKE', (o.marca || '').toUpperCase())
+  add('MODEL', (o.modelo || '').toUpperCase())
+  add('YEAR CAR', (o.anio || '').toUpperCase())
+  add('ENGINE NUMBER', (o.numero_motor || '').toUpperCase())
+  add('CHASSIS NUMBER', (o.numero_chasis || '').toUpperCase())
+  add('KM', o.kilometraje != null ? String(o.kilometraje) : '')
+
+  // Nafta: fracción
+  const nafta = (o.nivel_nafta || '').trim()
+  const fracciones = { '0.25': '1/4', '0.5': '1/2', '0.75': '3/4', '1': 'Full',
+                       '1/4': '1/4', '1/2': '1/2', '3/4': '3/4', 'full': 'Full', 'Full': 'Full' }
+  add('NAFTA', fracciones[nafta] || nafta.toUpperCase())
+
+  // VTV
+  add('DATE VTV', (o.vto_vtv ? formatDate(o.vto_vtv) : '').toUpperCase())
+
+  // --- Limpieza ---
+  const fmtLimpieza = (val) => {
+    const upper = (val || '').toUpperCase().trim()
+    return (upper === 'SI' || upper === 'SÍ' || upper === 'OK') ? 'OK' : 'observado'
+  }
+  add('INSIDE CLEAN', fmtLimpieza(o.limpieza_interior))
+  add('OUTSIDE CLEAN', fmtLimpieza(o.limpieza_exterior))
+
+  // --- Elementos de seguridad (booleanos → Sí/No) ---
+  const siNo = (val) => val ? 'Sí' : 'No'
+  add('CRIQUET', siNo(o.criquet))
+  add('BUTTERFLY', siNo(o.mariposa))
+  // llave_tuercas no tiene variable en la plantilla original, pero lo incluimos por si acaso
+  add('SPARE TIRE', siNo(o.rueda_auxilio))
+  add('BEACONS', siNo(o.balizas))
+  add('REFLECTIVE VEST', siNo(o.chaleco_reflectivo))
+  add('GLOVES', siNo(o.guantes))
+  add('KIT', siNo(o.botiquin))
+
+  // Matafuego: en el script original usa vto_matafuego como indicador
+  const matafuego = (o.vto_matafuego || '').trim()
+  if (matafuego && matafuego.toUpperCase() !== 'SIN GNC') {
+    add('FIREWORKS', 'Sí')
+  } else {
+    add('FIREWORKS', 'No')
+  }
+
+  // --- Gravámenes ---
+  const grav = (o.gravamenes || '').trim()
+  if (grav.toUpperCase() === 'LIBRE' || grav === '') {
+    add('TAXES', 'Libre de prendas y embargos')
+  } else {
+    add('TAXES', 'Posee Prenda a favor de: ' + grav)
+  }
+
+  // --- Relevamiento de daños ---
+  const fmtDanio = (val) => {
+    const cleaned = (val || '')
+      .replace(/\r\n/g, ' ')
+      .replace(/\n/g, ' ')
+      .replace(/\r/g, ' ')
+      .replace(/\s{2,}/g, ' ')
+      .trim()
+      .replace(/\.$/, '')
+    return cleaned || 'Sin detalles'
+  }
+  add('FRONT BUMPER', fmtDanio(o.detalle_parte_frontal))
+  add('REAR BUMPER', fmtDanio(o.detalle_parte_trasera))
+  add('RIGHT SIDE', fmtDanio(o.detalle_lateral_derecho))
+  add('LEFT SIDE', fmtDanio(o.detalle_lateral_izquierdo))
+  add('HOOD', fmtDanio(o.detalle_capot_techo))
+  add('INSIDE', fmtDanio(o.detalle_interior))
+  add('OTHERS', fmtDanio(o.detalle_otros))
+
+  return data
+}
+
+// Configuración de carpetas y plantillas para Oferta de Locación
+const OFERTA_LOCACION_CONFIG = {
+  // Plantilla única (por ahora) - Google Doc ID
+  templateDocId: '1eIOgzQxDVP_wLKXk54M6RgRIzSARmF0YYp0Eq7wIjFY',
+  // Carpetas padre por socio
+  folders: {
+    grupocg: '1f4PMF-9GpUIdQuNk8yCF3Wm3-3eYhw18',
+    '44dreams': '1epZywKt7Pmcj988L65-BW2rkDu7mvJay'
+  },
+  // Prefijo del nombre del documento por socio
+  prefijo: {
+    grupocg: 'Oferta de Locación',
+    '44dreams': 'Oferta de Locación 44 Dream'
+  }
+}
+
+/**
+ * Genera documento de Oferta de Locación para una oferta específica.
+ * Flujo: descarga plantilla → reemplaza variables con docxtemplater → crea carpeta → sube a Drive
+ */
+async function generateOfertaLocacionDoc(drive, oferta) {
+  const socio = oferta.socio
+  if (!socio || !OFERTA_LOCACION_CONFIG.folders[socio]) {
+    throw new Error(`Socio inválido o no seleccionado: "${socio}"`)
+  }
+
+  const parentFolderId = OFERTA_LOCACION_CONFIG.folders[socio]
+  const templateId = OFERTA_LOCACION_CONFIG.templateDocId
+  const prefijo = OFERTA_LOCACION_CONFIG.prefijo[socio]
+
+  const titular = (oferta.titular_nombre || '').toUpperCase().trim()
+  const patente = (oferta.patente || '').toUpperCase().trim()
+
+  if (!patente) throw new Error('La oferta no tiene patente')
+
+  console.log(`[OfertaLocacion] Generando para ${patente} - ${titular} (socio: ${socio})`)
+
+  // 1. Exportar plantilla como .docx desde Drive
+  const exportRes = await drive.files.export(
+    { fileId: templateId, mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' },
+    { responseType: 'arraybuffer' }
+  )
+  const templateBuffer = Buffer.from(exportRes.data)
+
+  // 2. Reemplazar variables con docxtemplater
+  const zip = new PizZip(templateBuffer)
+  const doc = new Docxtemplater(zip, {
+    delimiters: { start: '{{', end: '}}' },
+    paragraphLoop: true,
+    linebreaks: true,
+    nullGetter: (part) => `{{${part.value}}}`
+  })
+
+  const renderData = buildOfertaReemplazos(oferta)
+
+  // Manejar el bloque {{SPOUSE SIGN}}
+  // docxtemplater no puede insertar párrafos con formato como lo hacía Apps Script,
+  // así que usamos un approach más simple: si hay cónyuge, reemplazamos con texto plano
+  const conyugueNombre = (oferta.titular_conyugue || '').trim()
+  if (conyugueNombre.length > 0) {
+    renderData['SPOUSE SIGN'] = 'POR EL CÓNYUGE:\n\nFirma: ________________________\n\nAclaración: ' + conyugueNombre.toUpperCase() + '\n\nDNI: ________________________'
+  } else {
+    renderData['SPOUSE SIGN'] = ''
+  }
+
+  try {
+    doc.render(renderData)
+  } catch (renderErr) {
+    if (renderErr.properties && renderErr.properties.errors) {
+      const details = renderErr.properties.errors.map((e, i) => {
+        const props = e.properties || {}
+        return `  [${i + 1}] ${e.message} | tag: "${props.tag || props.xtag || '?'}" | offset: ${props.offset ?? '?'}`
+      }).join('\n')
+      console.error(`[OfertaLocacion] Template render errors:\n${details}`)
+      throw new Error(`Error en plantilla oferta locación: ${renderErr.properties.errors.length} error(es).\n${details}`)
+    }
+    throw renderErr
+  }
+
+  const docxBuffer = doc.getZip().generate({ type: 'nodebuffer' })
+
+  // 3. Buscar o crear subcarpeta con nombre de PATENTE dentro de la carpeta del socio
+  const escapedPatente = patente.replace(/'/g, "\\'")
+  const searchQ = `name='${escapedPatente}' and '${parentFolderId}' in parents and mimeType='application/vnd.google-apps.folder' and trashed=false`
+  const folderSearch = await drive.files.list({
+    q: searchQ,
+    fields: 'files(id, name)',
+    supportsAllDrives: true,
+    includeItemsFromAllDrives: true
+  })
+
+  let subFolderId
+  if (folderSearch.data.files && folderSearch.data.files.length > 0) {
+    subFolderId = folderSearch.data.files[0].id
+    console.log(`[OfertaLocacion] Carpeta existente: ${patente} (${subFolderId})`)
+  } else {
+    const newFolder = await drive.files.create({
+      requestBody: {
+        name: patente,
+        parents: [parentFolderId],
+        mimeType: 'application/vnd.google-apps.folder'
+      },
+      fields: 'id',
+      supportsAllDrives: true
+    })
+    subFolderId = newFolder.data.id
+    console.log(`[OfertaLocacion] Carpeta creada: ${patente} (${subFolderId})`)
+  }
+
+  // 4. Nombre del documento: "Oferta de Locación - TITULAR - PATENTE"
+  const nombreDoc = `${prefijo} - ${titular} - ${patente}`
+
+  // 5. Subir como Google Doc
+  const googleDoc = await drive.files.create({
+    requestBody: {
+      name: nombreDoc,
+      parents: [subFolderId],
+      mimeType: 'application/vnd.google-apps.document'
+    },
+    media: {
+      mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      body: Readable.from(docxBuffer)
+    },
+    fields: 'id, webViewLink',
+    supportsAllDrives: true
+  })
+
+  // 6. Exportar como PDF
+  const pdfExport = await drive.files.export(
+    { fileId: googleDoc.data.id, mimeType: 'application/pdf' },
+    { responseType: 'arraybuffer' }
+  )
+  const pdfBlob = Buffer.from(pdfExport.data)
+  await drive.files.create({
+    requestBody: {
+      name: nombreDoc + '.pdf',
+      parents: [subFolderId],
+      mimeType: 'application/pdf'
+    },
+    media: {
+      mimeType: 'application/pdf',
+      body: Readable.from(pdfBlob)
+    },
+    fields: 'id',
+    supportsAllDrives: true
+  })
+
+  const folderUrl = `https://drive.google.com/drive/folders/${subFolderId}`
+  console.log(`[OfertaLocacion] OK: ${nombreDoc} → doc: ${googleDoc.data.id}, folder: ${folderUrl}`)
+
+  return {
+    googleDocUrl: googleDoc.data.webViewLink,
+    googleDocId: googleDoc.data.id,
+    folderUrl,
+    folderId: subFolderId
+  }
+}
+
+// API: Generar documento de Oferta de Locación
+app.post('/api/generate-oferta-locacion', async (req, res) => {
+  try {
+    const { oferta_id } = req.body
+
+    if (!oferta_id) {
+      return res.status(400).json({ error: 'Falta oferta_id' })
+    }
+
+    const supabaseUrl = process.env.VITE_SUPABASE_URL
+    const supabaseKey = process.env.VITE_SUPABASE_ANON_KEY
+
+    // 1. Leer oferta de Supabase
+    const ofertaRes = await fetch(
+      `${supabaseUrl}/rest/v1/ofertas_locacion?id=eq.${oferta_id}&select=*`,
+      {
+        headers: {
+          'apikey': supabaseKey,
+          'Authorization': `Bearer ${supabaseKey}`
+        }
+      }
+    )
+    const ofertas = await ofertaRes.json()
+    if (!ofertas || ofertas.length === 0) {
+      return res.status(404).json({ error: 'Oferta no encontrada' })
+    }
+    const oferta = ofertas[0]
+
+    if (!oferta.socio) {
+      return res.status(400).json({ error: 'La oferta no tiene socio seleccionado. Edite la oferta y seleccione un socio.' })
+    }
+
+    // 2. Generar documento
+    const drive = getDriveServiceFull()
+    const result = await generateOfertaLocacionDoc(drive, oferta)
+
+    // 3. Actualizar estado y drive_folder_url en ofertas_locacion
+    await fetch(
+      `${supabaseUrl}/rest/v1/ofertas_locacion?id=eq.${oferta_id}`,
+      {
+        method: 'PATCH',
+        headers: {
+          'apikey': supabaseKey,
+          'Authorization': `Bearer ${supabaseKey}`,
+          'Content-Type': 'application/json',
+          'Prefer': 'return=minimal'
+        },
+        body: JSON.stringify({
+          estado: 'documento_generado',
+          drive_folder_url: result.folderUrl,
+          updated_at: new Date().toISOString()
+        })
+      }
+    )
+
+    res.json({
+      success: true,
+      googleDocUrl: result.googleDocUrl,
+      folderUrl: result.folderUrl,
+      message: `Documento generado: ${oferta.patente} - ${oferta.titular_nombre}`
+    })
+  } catch (error) {
+    console.error('[OfertaLocacion] Error:', error.message)
+    res.status(500).json({ error: error.message })
+  }
+})
+
 // Health check
 app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() })
