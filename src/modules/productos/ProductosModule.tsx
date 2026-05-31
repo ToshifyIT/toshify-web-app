@@ -4,7 +4,7 @@ import { supabase } from '../../lib/supabase'
 import { LoadingOverlay } from '../../components/ui/LoadingOverlay'
 import Swal from 'sweetalert2'
 import { showSuccess } from '../../utils/toast'
-import { Eye, Edit, Trash2, Package, Tag, Info, Calendar, Filter, Wrench, Box } from 'lucide-react'
+import { Eye, Edit, Trash2, Package, Tag, Info, Calendar, Filter, Wrench, Box, AlertTriangle, CheckCircle } from 'lucide-react'
 import { usePermissions } from '../../contexts/PermissionsContext'
 import { DataTable } from '../../components/ui/DataTable'
 import './ProductosModule.css'
@@ -42,6 +42,9 @@ interface Producto {
   observacion?: string
   stock_minimo?: number
   alerta_reposicion?: number
+  stock_disponible?: number
+  stock_en_uso?: number
+  stock_transito?: number
   created_at: string
   updated_at: string
   unidades_medida?: UnidadMedida
@@ -175,7 +178,10 @@ export function ProductosModule() {
       total: 'Total',
       herramientas: 'Herramientas',
       repuestos: 'Repuestos',
-      retornables: 'Retornables'
+      retornables: 'Retornables',
+      bajo_minimo: 'Bajo minimo',
+      sin_reglas: 'Sin reglas',
+      incompletos: 'Catalogo incompleto'
     }
 
     return [{
@@ -198,6 +204,19 @@ export function ProductosModule() {
           return productos.filter(p => p.tipo === 'REPUESTOS')
         case 'retornables':
           return productos.filter(p => p.es_retornable)
+        case 'bajo_minimo':
+          return productos.filter(p =>
+            Number(p.stock_minimo || 0) > 0 &&
+            Number(p.stock_disponible || 0) <= Number(p.stock_minimo || 0)
+          )
+        case 'sin_reglas':
+          return productos.filter(p =>
+            Number(p.stock_minimo || 0) === 0 && Number(p.alerta_reposicion || 0) === 0
+          )
+        case 'incompletos':
+          return productos.filter(p =>
+            !p.categoria_id || !p.unidad_medida_id || !p.estado_id || !p.tipo
+          )
         case 'total':
         default:
           return productos
@@ -251,8 +270,46 @@ export function ProductosModule() {
         .order('created_at', { ascending: false })
 
       if (error) throw error
-      setProductos(data || [])
-    } catch (err: any) {
+
+      const { data: stockData } = await supabase
+        .from('inventario')
+        .select('producto_id, cantidad, estado')
+        .gt('cantidad', 0)
+
+      const stockPorProducto: Record<string, {
+        disponible: number
+        enUso: number
+        transito: number
+      }> = {}
+
+      ;(stockData || []).forEach((item: any) => {
+        const productoId = item.producto_id
+        if (!productoId) return
+        if (!stockPorProducto[productoId]) {
+          stockPorProducto[productoId] = { disponible: 0, enUso: 0, transito: 0 }
+        }
+
+        if (item.estado === 'disponible') {
+          stockPorProducto[productoId].disponible += Number(item.cantidad)
+        } else if (item.estado === 'en_uso') {
+          stockPorProducto[productoId].enUso += Number(item.cantidad)
+        } else if (item.estado === 'en_transito') {
+          stockPorProducto[productoId].transito += Number(item.cantidad)
+        }
+      })
+
+      const productosConStock = (data || []).map((producto: Producto) => {
+        const stock = stockPorProducto[producto.id] || { disponible: 0, enUso: 0, transito: 0 }
+        return {
+          ...producto,
+          stock_disponible: stock.disponible,
+          stock_en_uso: stock.enUso,
+          stock_transito: stock.transito,
+        }
+      })
+
+      setProductos(productosConStock)
+    } catch {
       Swal.fire({
         icon: 'error',
         title: 'Error',
@@ -541,7 +598,7 @@ export function ProductosModule() {
       }, [])
 
       setStockPorProveedor(stockAgrupado)
-    } catch (_err) {
+    } catch {
       setStockPorProveedor([])
     } finally {
       setLoadingStock(false)
@@ -778,6 +835,42 @@ export function ProductosModule() {
         },
       },
       {
+        id: 'regla_operativa',
+        header: 'Regla Stock',
+        cell: ({ row }) => {
+          const producto = row.original
+          const minimo = Number(producto.stock_minimo || 0)
+          const alerta = Number(producto.alerta_reposicion || 0)
+          const disponible = Number(producto.stock_disponible || 0)
+          const bajoMinimo = minimo > 0 && disponible <= minimo
+          const sinRegla = minimo === 0 && alerta === 0
+
+          if (bajoMinimo) {
+            return (
+              <span className="prod-rule-badge warning">
+                <AlertTriangle size={13} />
+                {disponible}/{minimo}
+              </span>
+            )
+          }
+
+          if (sinRegla) {
+            return (
+              <span className="prod-rule-badge muted">
+                Sin regla
+              </span>
+            )
+          }
+
+          return (
+            <span className="prod-rule-badge ok">
+              <CheckCircle size={13} />
+              Min {minimo}
+            </span>
+          )
+        },
+      },
+      {
         id: 'acciones',
         header: 'Acciones',
         cell: ({ row }) => (
@@ -818,13 +911,22 @@ export function ProductosModule() {
 
   // Calcular estadísticas en una sola pasada O(n) en vez de O(3n)
   const statsData = useMemo(() => {
-    let herramientas = 0, repuestos = 0, retornables = 0
+    let herramientas = 0, repuestos = 0, retornables = 0, bajoMinimo = 0, sinReglas = 0, incompletos = 0
     for (const p of productos) {
       if (p.tipo === 'HERRAMIENTAS') herramientas++
       if (p.tipo === 'REPUESTOS') repuestos++
       if (p.es_retornable) retornables++
+      if (Number(p.stock_minimo || 0) > 0 && Number(p.stock_disponible || 0) <= Number(p.stock_minimo || 0)) {
+        bajoMinimo++
+      }
+      if (Number(p.stock_minimo || 0) === 0 && Number(p.alerta_reposicion || 0) === 0) {
+        sinReglas++
+      }
+      if (!p.categoria_id || !p.unidad_medida_id || !p.estado_id || !p.tipo) {
+        incompletos++
+      }
     }
-    return { total: productos.length, herramientas, repuestos, retornables }
+    return { total: productos.length, herramientas, repuestos, retornables, bajoMinimo, sinReglas, incompletos }
   }, [productos])
 
   return (
@@ -871,6 +973,36 @@ export function ProductosModule() {
             <div className="stat-content">
               <span className="stat-value">{statsData.retornables}</span>
               <span className="stat-label">Retornables</span>
+            </div>
+          </button>
+          <button
+            className={`stat-card${activeStatCard === 'bajo_minimo' ? ' active' : ''}`}
+            onClick={() => setActiveStatCard(activeStatCard === 'bajo_minimo' ? null : 'bajo_minimo')}
+          >
+            <AlertTriangle size={18} className="stat-icon" />
+            <div className="stat-content">
+              <span className="stat-value">{statsData.bajoMinimo}</span>
+              <span className="stat-label">Bajo minimo</span>
+            </div>
+          </button>
+          <button
+            className={`stat-card${activeStatCard === 'sin_reglas' ? ' active' : ''}`}
+            onClick={() => setActiveStatCard(activeStatCard === 'sin_reglas' ? null : 'sin_reglas')}
+          >
+            <Info size={18} className="stat-icon" />
+            <div className="stat-content">
+              <span className="stat-value">{statsData.sinReglas}</span>
+              <span className="stat-label">Sin reglas</span>
+            </div>
+          </button>
+          <button
+            className={`stat-card${activeStatCard === 'incompletos' ? ' active' : ''}`}
+            onClick={() => setActiveStatCard(activeStatCard === 'incompletos' ? null : 'incompletos')}
+          >
+            <Filter size={18} className="stat-icon" />
+            <div className="stat-content">
+              <span className="stat-value">{statsData.incompletos}</span>
+              <span className="stat-label">Incompletos</span>
             </div>
           </button>
         </div>
@@ -1314,6 +1446,29 @@ export function ProductosModule() {
                         <span className="prod-info-value">{selectedProducto.observacion}</span>
                       </div>
                     )}
+                  </div>
+
+                  <div className="prod-info-grid" style={{ marginTop: '16px' }}>
+                    <div className="prod-info-item">
+                      <span className="prod-info-label">Stock disponible</span>
+                      <span className="prod-info-value">{selectedProducto.stock_disponible || 0}</span>
+                    </div>
+                    <div className="prod-info-item">
+                      <span className="prod-info-label">Stock en uso</span>
+                      <span className="prod-info-value">{selectedProducto.stock_en_uso || 0}</span>
+                    </div>
+                    <div className="prod-info-item">
+                      <span className="prod-info-label">En transito</span>
+                      <span className="prod-info-value">{selectedProducto.stock_transito || 0}</span>
+                    </div>
+                    <div className="prod-info-item">
+                      <span className="prod-info-label">Stock minimo</span>
+                      <span className="prod-info-value">{selectedProducto.stock_minimo || 0}</span>
+                    </div>
+                    <div className="prod-info-item">
+                      <span className="prod-info-label">Alerta reposicion</span>
+                      <span className="prod-info-value">{selectedProducto.alerta_reposicion || 0}</span>
+                    </div>
                   </div>
 
                   {/* Stock por Proveedor */}

@@ -55,7 +55,7 @@
 
 .prov-stats-grid {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(6, 1fr);
   gap: 12px;
 }
 
@@ -103,6 +103,37 @@
   font-size: 11px;
   color: var(--text-tertiary);
   white-space: nowrap;
+}
+
+.prov-op-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 8px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.prov-op-badge.ok {
+  background: var(--badge-green-bg);
+  color: var(--badge-green-text);
+}
+
+.prov-op-badge.warning {
+  background: var(--badge-yellow-bg);
+  color: var(--badge-yellow-text);
+}
+
+.prov-op-badge.danger {
+  background: var(--badge-red-bg);
+  color: var(--badge-red-text);
+}
+
+.prov-op-badge.muted {
+  background: var(--badge-gray-bg);
+  color: var(--badge-gray-text);
 }
 
 /* Responsive Stats */

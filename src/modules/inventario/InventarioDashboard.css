@@ -219,6 +219,196 @@
   white-space: nowrap;
 }
 
+/* =====================================================
+   COCKPIT OPERATIVO
+   ===================================================== */
+
+.inv-cockpit {
+  display: grid;
+  grid-template-columns: minmax(0, 1.35fr) minmax(280px, 0.65fr);
+  gap: 12px;
+}
+
+.inv-actions-panel,
+.inv-risk-panel {
+  background: var(--bg-primary);
+  border: 1px solid var(--border-primary);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.inv-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--border-primary);
+}
+
+.inv-panel-header.compact {
+  align-items: flex-start;
+}
+
+.inv-panel-header h2 {
+  margin: 0;
+  color: var(--text-primary);
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.inv-panel-header span {
+  display: block;
+  margin-top: 2px;
+  color: var(--text-tertiary);
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.inv-panel-badge {
+  padding: 4px 8px;
+  background: var(--color-primary-light);
+  color: var(--color-primary) !important;
+  border-radius: 999px;
+  font-size: 11px !important;
+  font-weight: 700 !important;
+  white-space: nowrap;
+}
+
+.inv-action-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+}
+
+.inv-action-item {
+  display: grid;
+  grid-template-columns: 78px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 58px;
+  padding: 10px;
+  background: var(--bg-primary);
+  border: 1px solid var(--border-secondary);
+  border-radius: 6px;
+  cursor: pointer;
+  text-align: left;
+  transition: all 0.15s ease;
+}
+
+.inv-action-item:hover {
+  background: var(--bg-hover);
+  border-color: var(--border-primary);
+}
+
+.inv-action-status {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 22px;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.inv-action-item.critico .inv-action-status {
+  background: var(--color-danger-light);
+  color: var(--color-danger-dark);
+}
+
+.inv-action-item.atencion .inv-action-status {
+  background: var(--color-warning-light);
+  color: var(--color-warning-dark);
+}
+
+.inv-action-item.info .inv-action-status {
+  background: var(--color-info-light);
+  color: var(--color-info-dark);
+}
+
+.inv-action-copy {
+  min-width: 0;
+}
+
+.inv-action-copy strong {
+  display: block;
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.inv-action-copy small {
+  display: block;
+  margin-top: 2px;
+  color: var(--text-tertiary);
+  font-size: 11px;
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.inv-action-cta {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--color-primary);
+  font-size: 11px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.inv-action-empty {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 58px;
+  padding: 12px;
+  color: var(--text-secondary);
+  background: var(--bg-secondary);
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.inv-risk-list {
+  padding: 4px 12px 0;
+}
+
+.inv-risk-list div {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 9px 0;
+  border-bottom: 1px solid var(--border-secondary);
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.inv-risk-list strong {
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.inv-risk-note {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 12px;
+  padding: 10px;
+  background: var(--color-info-light);
+  color: var(--color-info-dark);
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 600;
+}
+
 /* Tabla Header */
 .inv-table-header {
   padding: 12px;
@@ -313,6 +503,10 @@
   .inv-category-cards {
     grid-template-columns: repeat(3, 1fr);
   }
+
+  .inv-cockpit {
+    grid-template-columns: 1fr;
+  }
 }
 
 @media (max-width: 768px) {
@@ -356,6 +550,15 @@
   .inv-filter-btn {
     width: 100%;
     justify-content: center;
+  }
+
+  .inv-action-item {
+    grid-template-columns: 1fr;
+    gap: 6px;
+  }
+
+  .inv-action-cta {
+    justify-content: flex-start;
   }
 }
 

@@ -1,7 +1,9 @@
 import { useEffect, useState, useMemo } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { supabase } from '../../lib/supabase'
 import { LoadingOverlay } from '../../components/ui/LoadingOverlay'
 import { ExcelColumnFilter, useExcelFilters } from '../../components/ui/DataTable/ExcelColumnFilter'
+import { useSede } from '../../contexts/SedeContext'
 import {
   Package,
   Truck,
@@ -11,7 +13,10 @@ import {
   CheckCircle,
   Activity,
   Settings,
-  Droplets
+  Droplets,
+  Clock,
+  ArrowRight,
+  MapPin
 } from 'lucide-react'
 import { type ColumnDef } from '@tanstack/react-table'
 import { DataTable } from '../../components/ui/DataTable'
@@ -37,8 +42,23 @@ interface StockProducto {
 
 type FilterEstadoStock = 'all' | 'disponible' | 'en_uso' | 'en_transito' | 'dañado' | 'perdido'
 
+interface PendientesOperativos {
+  entradasTransito: number
+  pedidosTransito: number
+  pedidosVencidos: number
+  movimientosPendientes: number
+}
+
 export function InventarioDashboardModule() {
+  const navigate = useNavigate()
+  const { sedeActual, verTodas, sedeActualId } = useSede()
   const [stockProductos, setStockProductos] = useState<StockProducto[]>([])
+  const [pendientes, setPendientes] = useState<PendientesOperativos>({
+    entradasTransito: 0,
+    pedidosTransito: 0,
+    pedidosVencidos: 0,
+    movimientosPendientes: 0
+  })
   const [loading, setLoading] = useState(true)
   const [filterEstadoStock, setFilterEstadoStock] = useState<FilterEstadoStock>('all')
 
@@ -51,7 +71,7 @@ export function InventarioDashboardModule() {
 
   useEffect(() => {
     loadStockData()
-  }, [])
+  }, [sedeActualId])
 
 
   const loadStockData = async () => {
@@ -90,6 +110,43 @@ export function InventarioDashboardModule() {
       })
 
       setStockProductos(dataConStock)
+
+      const [entradasRes, pedidosRes, movimientosRes] = await Promise.allSettled([
+        supabase.from('v_entradas_en_transito').select('id, created_at'),
+        supabase.from('v_pedidos_en_transito').select('pedido_id, fecha_estimada_llegada'),
+        supabase.from('v_movimientos_pendientes').select('id, created_at')
+      ])
+
+      const entradasData = entradasRes.status === 'fulfilled' && !entradasRes.value.error
+        ? entradasRes.value.data || []
+        : []
+      const pedidosData = pedidosRes.status === 'fulfilled' && !pedidosRes.value.error
+        ? pedidosRes.value.data || []
+        : []
+      const movimientosData = movimientosRes.status === 'fulfilled' && !movimientosRes.value.error
+        ? movimientosRes.value.data || []
+        : []
+      const pedidosUnicos = new Set((pedidosData as any[]).map(p => p.pedido_id).filter(Boolean))
+      const hoy = new Date()
+      hoy.setHours(0, 0, 0, 0)
+      const pedidosVencidos = new Set(
+        (pedidosData as any[])
+          .filter(p => {
+            if (!p.fecha_estimada_llegada) return false
+            const fecha = new Date(p.fecha_estimada_llegada)
+            fecha.setHours(0, 0, 0, 0)
+            return fecha < hoy
+          })
+          .map(p => p.pedido_id)
+          .filter(Boolean)
+      )
+
+      setPendientes({
+        entradasTransito: entradasData.length,
+        pedidosTransito: pedidosUnicos.size,
+        pedidosVencidos: pedidosVencidos.size,
+        movimientosPendientes: movimientosData.length
+      })
     } catch {
       // silently ignored
     } finally {
@@ -102,6 +159,83 @@ export function InventarioDashboardModule() {
 
   // Solo productos con stock para conteos y tabla
   const productosConStock = stockProductos.filter(tieneStock)
+  const productosBajoMinimo = useMemo(() =>
+    productosConStock.filter(p => (p.stock_minimo || 0) > 0 && p.disponible <= (p.stock_minimo || 0)),
+    [productosConStock]
+  )
+  const productosSinCierre = useMemo(() =>
+    productosConStock.filter(p => p.dañado > 0 || p.perdido > 0),
+    [productosConStock]
+  )
+  const accionesOperativas = useMemo(() => {
+    const acciones: Array<{
+      id: string
+      severidad: 'critico' | 'atencion' | 'info'
+      titulo: string
+      detalle: string
+      accion: string
+      destino: string
+    }> = []
+
+    if (productosBajoMinimo.length > 0) {
+      const productoCritico = productosBajoMinimo[0]
+      acciones.push({
+        id: 'bajo-minimo',
+        severidad: 'critico',
+        titulo: `${productosBajoMinimo.length} productos bajo minimo`,
+        detalle: `${productoCritico.codigo} - ${productoCritico.nombre}: disponible ${productoCritico.disponible}, minimo ${productoCritico.stock_minimo || 0}`,
+        accion: 'Crear pedido',
+        destino: '/logistica/inventario/movimientos'
+      })
+    }
+
+    if (pendientes.pedidosVencidos > 0) {
+      acciones.push({
+        id: 'pedidos-vencidos',
+        severidad: 'critico',
+        titulo: `${pendientes.pedidosVencidos} pedidos vencidos`,
+        detalle: 'Requieren seguimiento de recepcion o reclamo a proveedor',
+        accion: 'Ver pedidos',
+        destino: '/logistica/inventario/pedidos'
+      })
+    }
+
+    if (pendientes.entradasTransito + pendientes.pedidosTransito > 0) {
+      acciones.push({
+        id: 'recepciones',
+        severidad: 'atencion',
+        titulo: `${pendientes.entradasTransito + pendientes.pedidosTransito} recepciones pendientes`,
+        detalle: `${pendientes.entradasTransito} entradas simples y ${pendientes.pedidosTransito} pedidos en transito`,
+        accion: 'Recepcionar',
+        destino: '/logistica/inventario/pedidos'
+      })
+    }
+
+    if (pendientes.movimientosPendientes > 0) {
+      acciones.push({
+        id: 'aprobaciones',
+        severidad: 'info',
+        titulo: `${pendientes.movimientosPendientes} movimientos por aprobar`,
+        detalle: 'Salidas, asignaciones o devoluciones pendientes de decision',
+        accion: 'Revisar',
+        destino: '/logistica/inventario/pedidos'
+      })
+    }
+
+    if (productosSinCierre.length > 0) {
+      const productoSinCierre = productosSinCierre[0]
+      acciones.push({
+        id: 'sin-cierre',
+        severidad: 'atencion',
+        titulo: `${productosSinCierre.length} productos con dano/perdida`,
+        detalle: `${productoSinCierre.codigo} - ${productoSinCierre.nombre}: ${productoSinCierre.dañado + productoSinCierre.perdido} unidades sin cierre`,
+        accion: 'Ver stock',
+        destino: '/logistica/inventario/dashboard'
+      })
+    }
+
+    return acciones.slice(0, 5)
+  }, [pendientes, productosBajoMinimo, productosSinCierre])
 
   // Contar por categoría en una sola pasada O(n) en vez de O(4n)
   const conteosPorCategoria = useMemo(() => {
@@ -360,7 +494,7 @@ export function InventarioDashboardModule() {
         enableSorting: true,
       },
     ],
-    [uniqueCodigos, codigoFilter, uniqueNombres, nombreFilter, uniqueTipos, tipoFilter, openFilterId]
+    [uniqueCodigos, codigoFilter, uniqueNombres, nombreFilter, uniqueTipos, tipoFilter, openFilterId, setOpenFilterId]
   )
 
   return (
@@ -469,6 +603,65 @@ export function InventarioDashboardModule() {
               <span className="stat-label">Perdido</span>
             </div>
           </button>
+        </div>
+      </div>
+
+      <div className="inv-cockpit">
+        <div className="inv-actions-panel">
+          <div className="inv-panel-header">
+            <div>
+              <h2>Acciones de hoy</h2>
+              <span>Priorizado por stock, recepcion, aprobacion y cierre operativo</span>
+            </div>
+            <span className="inv-panel-badge">{accionesOperativas.length} pendientes</span>
+          </div>
+          <div className="inv-action-list">
+            {accionesOperativas.length === 0 ? (
+              <div className="inv-action-empty">
+                <CheckCircle size={18} />
+                No hay acciones criticas para la sede seleccionada.
+              </div>
+            ) : accionesOperativas.map(action => (
+              <button
+                key={action.id}
+                className={`inv-action-item ${action.severidad}`}
+                onClick={() => navigate(action.destino)}
+              >
+                <span className="inv-action-status">
+                  {action.severidad === 'critico' ? 'Critico' : action.severidad === 'atencion' ? 'Atencion' : 'Revisar'}
+                </span>
+                <span className="inv-action-copy">
+                  <strong>{action.titulo}</strong>
+                  <small>{action.detalle}</small>
+                </span>
+                <span className="inv-action-cta">
+                  {action.accion}
+                  <ArrowRight size={14} />
+                </span>
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="inv-risk-panel">
+          <div className="inv-panel-header compact">
+            <div>
+              <h2>Riesgos por sede</h2>
+              <span>{verTodas ? 'Todas las sedes' : (sedeActual?.nombre || 'Sede actual')}</span>
+            </div>
+            <MapPin size={16} />
+          </div>
+          <div className="inv-risk-list">
+            <div><span>Bajo minimo</span><strong>{productosBajoMinimo.length}</strong></div>
+            <div><span>Pedidos vencidos</span><strong>{pendientes.pedidosVencidos}</strong></div>
+            <div><span>Recepciones pendientes</span><strong>{pendientes.entradasTransito + pendientes.pedidosTransito}</strong></div>
+            <div><span>Movimientos por aprobar</span><strong>{pendientes.movimientosPendientes}</strong></div>
+            <div><span>Dano/perdida sin cierre</span><strong>{productosSinCierre.length}</strong></div>
+          </div>
+          <div className="inv-risk-note">
+            <Clock size={14} />
+            La accion primaria siempre lleva al flujo donde se resuelve el pendiente.
+          </div>
         </div>
       </div>
 

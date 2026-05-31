@@ -1,4 +1,5 @@
 import { useEffect, useState, useMemo } from 'react'
+import { useLocation } from 'react-router-dom'
 import { supabase } from '../../lib/supabase'
 import { LoadingOverlay } from '../../components/ui/LoadingOverlay'
 import { usePermissions } from '../../contexts/PermissionsContext'
@@ -107,6 +108,7 @@ interface ProductoLoteSalida {
 // COMPONENTE PRINCIPAL
 // =====================================================
 export function MovimientosModule() {
+  const location = useLocation()
   const { aplicarFiltroSede, sedeActualId } = useSede()
   const { canCreateInSubmenu } = usePermissions()
 
@@ -155,6 +157,7 @@ export function MovimientosModule() {
   // Form data - Devolución
   const [estadoRetorno, setEstadoRetorno] = useState<EstadoRetorno>('operativa')
   const [categoriaServicioDevolucion, setCategoriaServicioDevolucion] = useState<CategoriaServicio | ''>('')
+  const [prefillSearchApplied, setPrefillSearchApplied] = useState('')
 
   // =====================================================
   // EFECTOS
@@ -184,6 +187,55 @@ export function MovimientosModule() {
     // Reset al cambiar tipo de movimiento
     resetForm()
   }, [tipoMovimiento])
+
+  useEffect(() => {
+    if (!location.search) return
+
+    const params = new URLSearchParams(location.search)
+    const tipo = params.get('tipo')
+
+    if (
+      tipo &&
+      ['entrada', 'salida', 'asignacion', 'devolucion'].includes(tipo) &&
+      tipoMovimiento !== tipo
+    ) {
+      setTipoMovimiento(tipo as TipoMovimiento)
+    }
+  }, [location.search, tipoMovimiento])
+
+  useEffect(() => {
+    if (!location.search || prefillSearchApplied === location.search) return
+
+    const params = new URLSearchParams(location.search)
+    const tipo = params.get('tipo') as TipoMovimiento | null
+
+    if (tipo && ['entrada', 'salida', 'asignacion', 'devolucion'].includes(tipo) && tipoMovimiento !== tipo) {
+      return
+    }
+
+    const producto = params.get('producto')
+    const vehiculo = params.get('vehiculo')
+    const motivo = params.get('motivo')
+
+    if (vehiculo) {
+      setVehiculoId(vehiculo)
+    }
+
+    if (producto) {
+      setProductoId(producto)
+      const productoSeleccionado = productos.find(p => p.id === producto)
+      if (productoSeleccionado) {
+        setBusquedaProducto(`${productoSeleccionado.codigo} - ${productoSeleccionado.nombre}`)
+      }
+    }
+
+    if (motivo === 'danado') {
+      setMotivoSalida('dañado')
+      setObservaciones(prev => prev || 'Reporte iniciado desde asignaciones activas')
+    }
+
+    setPrefillSearchApplied(location.search)
+  }, [location.search, prefillSearchApplied, productos, tipoMovimiento])
 
   useEffect(() => {
     // Cerrar dropdown al hacer clic fuera

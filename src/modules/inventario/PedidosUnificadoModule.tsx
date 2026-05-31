@@ -5,6 +5,7 @@ import { useState, useEffect, useMemo, useRef } from 'react'
 import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../contexts/AuthContext'
 import { usePermissions } from '../../contexts/PermissionsContext'
+import { useSede } from '../../contexts/SedeContext'
 import { type ColumnDef } from '@tanstack/react-table'
 import { DataTable } from '../../components/ui/DataTable/DataTable'
 import Swal from 'sweetalert2'
@@ -28,7 +29,9 @@ import {
   Filter,
   RefreshCw,
   History,
-  XCircle
+  XCircle,
+  AlertTriangle,
+  MapPin
 } from 'lucide-react'
 
 // ============= TIPOS =============
@@ -115,12 +118,30 @@ interface MovimientoHistorico {
   usuario_aprobador_nombre: string | null
 }
 
-type TabActiva = 'entradas' | 'pedidos' | 'pendientes' | 'historico'
+type TabActiva = 'entradas' | 'pedidos' | 'pendientes' | 'historico' | 'excepciones'
 type FiltroTipo = 'todos' | 'entrada' | 'salida' | 'asignacion' | 'devolucion'
+
+const getPedidoSla = (pedido: PedidoAgrupado) => {
+  if (!pedido.fecha_estimada_llegada) {
+    return { label: 'Sin fecha', className: 'sla-warning' }
+  }
+
+  const hoy = new Date()
+  hoy.setHours(0, 0, 0, 0)
+  const fecha = new Date(pedido.fecha_estimada_llegada)
+  fecha.setHours(0, 0, 0, 0)
+  const diffDias = Math.ceil((fecha.getTime() - hoy.getTime()) / 86400000)
+
+  if (diffDias < 0) return { label: 'Vencido', className: 'sla-danger' }
+  if (diffDias === 0) return { label: 'Vence hoy', className: 'sla-warning' }
+  if (diffDias <= 2) return { label: `${diffDias} dias`, className: 'sla-info' }
+  return { label: 'En plazo', className: 'sla-ok' }
+}
 
 export function PedidosUnificadoModule() {
   const { user, profile } = useAuth()
   const { canEditInSubmenu, canViewTab } = usePermissions()
+  const { sedeActual, verTodas } = useSede()
 
   // Permisos específicos para el submenú de pedidos
   const canEdit = canEditInSubmenu('pedidos')
@@ -392,7 +413,7 @@ export function PedidosUnificadoModule() {
 
       if (error) throw error
       setMovimientos(data || [])
-    } catch (error) {
+    } catch {
       Swal.fire('Error', 'No se pudieron cargar los movimientos pendientes', 'error')
     } finally {
       setLoadingAprobaciones(false)
@@ -446,7 +467,7 @@ export function PedidosUnificadoModule() {
       }))
 
       setHistorico(historicoFormateado)
-    } catch (error) {
+    } catch {
       Swal.fire('Error', 'No se pudo cargar el histórico de aprobaciones', 'error')
     } finally {
       setLoadingHistorico(false)
@@ -755,6 +776,16 @@ export function PedidosUnificadoModule() {
       )
     )
   }, [pedidos, searchPedidos])
+
+  const pedidosConExcepcion = useMemo(() => pedidos.filter((pedido) => {
+    const sla = getPedidoSla(pedido)
+    const tieneParcial = pedido.items.some(item => item.cantidad_recibida > 0 && item.cantidad_pendiente > 0)
+    return sla.className === 'sla-danger' || sla.className === 'sla-warning' || tieneParcial
+  }), [pedidos])
+
+  const totalRecepcionesPendientes = entradasSimples.length + pedidos.length
+  const totalExcepciones = pedidosConExcepcion.length
+  const sedeOperativaLabel = verTodas ? 'Todas las sedes' : (sedeActual?.nombre || 'Sede actual')
 
   // Columnas para Entradas Simples
   const entradasColumns = useMemo<ColumnDef<EntradaTransito, any>[]>(() => [
@@ -1275,7 +1306,165 @@ export function PedidosUnificadoModule() {
           opacity: 0.5;
         }
 
+        .pedidos-operational-summary {
+          display: grid;
+          grid-template-columns: repeat(5, minmax(0, 1fr));
+          gap: 12px;
+          margin-bottom: 16px;
+        }
+
+        .pedidos-summary-card {
+          background: var(--card-bg);
+          border: 1px solid var(--border-primary);
+          border-radius: 8px;
+          padding: 12px;
+        }
+
+        .pedidos-summary-label {
+          color: var(--text-tertiary);
+          font-size: 11px;
+          font-weight: 700;
+          text-transform: uppercase;
+        }
+
+        .pedidos-summary-value {
+          color: var(--text-primary);
+          font-size: 18px;
+          font-weight: 700;
+          line-height: 1;
+          margin-top: 6px;
+        }
+
+        .pedidos-summary-note {
+          color: var(--text-secondary);
+          font-size: 11px;
+          margin-top: 5px;
+        }
+
+        .sla-badge {
+          display: inline-flex;
+          align-items: center;
+          padding: 4px 10px;
+          border-radius: 12px;
+          font-size: 12px;
+          font-weight: 700;
+          white-space: nowrap;
+        }
+
+        .sla-ok {
+          background: var(--badge-green-bg);
+          color: var(--badge-green-text);
+        }
+
+        .sla-info {
+          background: var(--badge-blue-bg);
+          color: var(--badge-blue-text);
+        }
+
+        .sla-warning {
+          background: var(--badge-yellow-bg);
+          color: var(--badge-yellow-text);
+        }
+
+        .sla-danger {
+          background: var(--badge-red-bg);
+          color: var(--badge-red-text);
+        }
+
+        .excepciones-grid {
+          display: grid;
+          gap: 12px;
+        }
+
+        .excepcion-card {
+          background: var(--card-bg);
+          border: 1px solid var(--border-primary);
+          border-left: 4px solid var(--color-warning);
+          border-radius: 8px;
+          padding: 14px;
+        }
+
+        .excepcion-card.critica {
+          border-left-color: var(--color-danger);
+        }
+
+        .excepcion-header {
+          display: flex;
+          justify-content: space-between;
+          gap: 12px;
+          align-items: flex-start;
+          margin-bottom: 10px;
+        }
+
+        .excepcion-title {
+          color: var(--text-primary);
+          font-size: 14px;
+          font-weight: 700;
+        }
+
+        .excepcion-meta {
+          color: var(--text-secondary);
+          font-size: 12px;
+          margin-top: 3px;
+        }
+
+        .excepcion-list {
+          display: grid;
+          gap: 8px;
+          margin-top: 10px;
+        }
+
+        .excepcion-row {
+          display: grid;
+          grid-template-columns: minmax(0, 1fr) auto;
+          gap: 10px;
+          align-items: center;
+          padding: 8px 10px;
+          background: var(--bg-secondary);
+          border-radius: 6px;
+          color: var(--text-secondary);
+          font-size: 12px;
+        }
+
+        .excepcion-footer {
+          display: flex;
+          justify-content: flex-end;
+          margin-top: 12px;
+        }
+
+        .excepcion-action {
+          display: inline-flex;
+          align-items: center;
+          gap: 6px;
+          padding: 8px 12px;
+          border: 1px solid var(--border-primary);
+          border-radius: 6px;
+          background: var(--card-bg);
+          color: var(--text-primary);
+          font-size: 12px;
+          font-weight: 700;
+          cursor: pointer;
+        }
+
+        .excepcion-action:hover {
+          background: var(--bg-secondary);
+        }
+
+        .item-exception-badge {
+          display: inline-flex;
+          padding: 2px 8px;
+          border-radius: 10px;
+          background: var(--badge-yellow-bg);
+          color: var(--badge-yellow-text);
+          font-size: 11px;
+          font-weight: 700;
+        }
+
         @media (max-width: 768px) {
+          .pedidos-operational-summary {
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+          }
+
           .pedidos-tabs {
             gap: 0;
           }
@@ -1312,10 +1501,42 @@ export function PedidosUnificadoModule() {
             flex-direction: column;
             align-items: stretch;
           }
+
+          .excepcion-header {
+            flex-direction: column;
+          }
         }
       `}</style>
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: '0' }}>
+        <div className="pedidos-operational-summary">
+          <div className="pedidos-summary-card">
+            <div className="pedidos-summary-label">Sede</div>
+            <div className="pedidos-summary-value" style={{ fontSize: '14px' }}>{sedeOperativaLabel}</div>
+            <div className="pedidos-summary-note"><MapPin size={12} style={{ verticalAlign: 'middle' }} /> contexto operativo</div>
+          </div>
+          <div className="pedidos-summary-card">
+            <div className="pedidos-summary-label">Recepciones</div>
+            <div className="pedidos-summary-value">{totalRecepcionesPendientes}</div>
+            <div className="pedidos-summary-note">entradas y pedidos en transito</div>
+          </div>
+          <div className="pedidos-summary-card">
+            <div className="pedidos-summary-label">Por aprobar</div>
+            <div className="pedidos-summary-value">{movimientos.length}</div>
+            <div className="pedidos-summary-note">movimientos pendientes</div>
+          </div>
+          <div className="pedidos-summary-card">
+            <div className="pedidos-summary-label">Excepciones</div>
+            <div className="pedidos-summary-value">{totalExcepciones}</div>
+            <div className="pedidos-summary-note">SLA o recepcion parcial</div>
+          </div>
+          <div className="pedidos-summary-card">
+            <div className="pedidos-summary-label">Historico</div>
+            <div className="pedidos-summary-value">{historico.length}</div>
+            <div className="pedidos-summary-note">procesados cargados</div>
+          </div>
+        </div>
+
         {/* Tabs principales - controlados por permisos de tab */}
         <div className="pedidos-tabs">
           {canViewTab('inventario-pedidos:entradas') && (
@@ -1361,6 +1582,18 @@ export function PedidosUnificadoModule() {
             >
               <History size={16} />
               Historico
+            </button>
+          )}
+          {canViewTab('inventario-pedidos:pedidos') && (
+            <button
+              className={`pedidos-tab ${activeTab === 'excepciones' ? 'active' : ''}`}
+              onClick={() => setActiveTab('excepciones')}
+            >
+              <AlertTriangle size={16} />
+              Excepciones
+              {totalExcepciones > 0 && (
+                <span className="pedidos-tab-badge">{totalExcepciones}</span>
+              )}
             </button>
           )}
         </div>
@@ -1424,182 +1657,280 @@ pageSize={100}
               </div>
             ) : (
               <div style={{ display: 'grid', gap: '16px' }}>
-                {pedidosFiltrados.map((pedido) => (
-                  <div
-                    key={pedido.pedido_id}
-                    style={{
-                      background: 'var(--card-bg)',
-                      borderRadius: '12px',
-                      border: '1px solid var(--border-primary)',
-                      overflow: 'hidden'
-                    }}
-                  >
+                {pedidosFiltrados.map((pedido) => {
+                  const sla = getPedidoSla(pedido)
+                  return (
                     <div
-                      onClick={() => togglePedido(pedido.pedido_id)}
+                      key={pedido.pedido_id}
                       style={{
-                        padding: '16px 20px',
-                        display: 'flex',
-                        justifyContent: 'space-between',
-                        alignItems: 'center',
-                        cursor: 'pointer',
-                        background: 'var(--table-header-bg)',
-                        borderBottom: expandedPedidos.has(pedido.pedido_id) ? '1px solid var(--border-primary)' : 'none'
+                        background: 'var(--card-bg)',
+                        borderRadius: '12px',
+                        border: '1px solid var(--border-primary)',
+                        overflow: 'hidden'
                       }}
                     >
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-                        <div style={{
-                          width: '40px',
-                          height: '40px',
-                          background: 'var(--color-primary)',
-                          borderRadius: '8px',
+                      <div
+                        onClick={() => togglePedido(pedido.pedido_id)}
+                        style={{
+                          padding: '16px 20px',
                           display: 'flex',
+                          justifyContent: 'space-between',
                           alignItems: 'center',
-                          justifyContent: 'center'
-                        }}>
-                          <Package size={20} color="white" />
-                        </div>
-                        <div>
-                          <div style={{ fontWeight: 700, fontSize: '15px', color: 'var(--text-primary)' }}>
-                            {pedido.numero_pedido}
+                          cursor: 'pointer',
+                          background: 'var(--table-header-bg)',
+                          borderBottom: expandedPedidos.has(pedido.pedido_id) ? '1px solid var(--border-primary)' : 'none'
+                        }}
+                      >
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+                          <div style={{
+                            width: '40px',
+                            height: '40px',
+                            background: 'var(--color-primary)',
+                            borderRadius: '8px',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center'
+                          }}>
+                            <Package size={20} color="white" />
                           </div>
-                          <div style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>
-                            {pedido.proveedor_nombre} • {pedido.items.length} items
-                          </div>
-                        </div>
-                      </div>
-
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-                        <div style={{ textAlign: 'right' }}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px', color: 'var(--text-secondary)' }}>
-                            <Calendar size={14} />
-                            {new Date(pedido.fecha_pedido).toLocaleDateString('es-CL')}
-                          </div>
-                          {pedido.fecha_estimada_llegada && (
-                            <div style={{ fontSize: '11px', color: 'var(--text-tertiary)', marginTop: '2px' }}>
-                              Est: {new Date(pedido.fecha_estimada_llegada).toLocaleDateString('es-CL')}
+                          <div>
+                            <div style={{ fontWeight: 700, fontSize: '15px', color: 'var(--text-primary)' }}>
+                              {pedido.numero_pedido}
                             </div>
-                          )}
+                            <div style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>
+                              {pedido.proveedor_nombre} • {pedido.items.length} items
+                            </div>
+                          </div>
                         </div>
-                        {getEstadoBadge(pedido.estado_pedido)}
-                        <div style={{ color: 'var(--text-secondary)' }}>
-                          {expandedPedidos.has(pedido.pedido_id) ? <ChevronUp size={20} /> : <ChevronDown size={20} />}
+
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+                          <div style={{ textAlign: 'right' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px', color: 'var(--text-secondary)' }}>
+                              <Calendar size={14} />
+                              {new Date(pedido.fecha_pedido).toLocaleDateString('es-CL')}
+                            </div>
+                            {pedido.fecha_estimada_llegada && (
+                              <div style={{ fontSize: '11px', color: 'var(--text-tertiary)', marginTop: '2px' }}>
+                                Est: {new Date(pedido.fecha_estimada_llegada).toLocaleDateString('es-CL')}
+                              </div>
+                            )}
+                          </div>
+                          <span className={`sla-badge ${sla.className}`}>{sla.label}</span>
+                          {getEstadoBadge(pedido.estado_pedido)}
+                          <div style={{ color: 'var(--text-secondary)' }}>
+                            {expandedPedidos.has(pedido.pedido_id) ? <ChevronUp size={20} /> : <ChevronDown size={20} />}
+                          </div>
                         </div>
                       </div>
-                    </div>
 
-                    {expandedPedidos.has(pedido.pedido_id) && (
-                      <div style={{ padding: '16px 20px' }}>
-                        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                          <thead>
-                            <tr style={{ borderBottom: '2px solid var(--border-primary)' }}>
-                              <th style={{ padding: '10px', textAlign: 'left', fontSize: '11px', fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase' }}>
-                                Producto
-                              </th>
-                              <th style={{ padding: '10px', textAlign: 'center', fontSize: '11px', fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase' }}>
-                                Pedido
-                              </th>
-                              <th style={{ padding: '10px', textAlign: 'center', fontSize: '11px', fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase' }}>
-                                Recibido
-                              </th>
-                              <th style={{ padding: '10px', textAlign: 'center', fontSize: '11px', fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase' }}>
-                                Pendiente
-                              </th>
-                              <th style={{ padding: '10px', textAlign: 'center', fontSize: '11px', fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase' }}>
-                                Accion
-                              </th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {pedido.items.map((item) => (
-                              <tr key={item.item_id} style={{ borderBottom: '1px solid var(--border-primary)' }}>
-                                <td style={{ padding: '12px 10px' }}>
-                                  <div style={{ fontWeight: 600, color: 'var(--color-primary)', fontSize: '14px' }}>
-                                    {item.producto_codigo}
-                                  </div>
-                                  <div style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>
-                                    {item.producto_nombre}
-                                  </div>
-                                </td>
-                                <td style={{ padding: '12px 10px', textAlign: 'center', fontSize: '14px', fontWeight: 600, color: 'var(--text-primary)' }}>
-                                  {item.cantidad_pedida}
-                                </td>
-                                <td style={{ padding: '12px 10px', textAlign: 'center', fontSize: '14px', color: 'var(--color-success)', fontWeight: 600 }}>
-                                  {item.cantidad_recibida}
-                                </td>
-                                <td style={{ padding: '12px 10px', textAlign: 'center', fontSize: '14px', color: 'var(--color-warning)', fontWeight: 600 }}>
-                                  {item.cantidad_pendiente}
-                                </td>
-                                <td style={{ padding: '12px 10px', textAlign: 'center' }}>
-                                  {item.cantidad_pendiente > 0 ? (
-                                    canApprove ? (
-                                      <button
-                                        onClick={() => confirmarRecepcion(item)}
-                                        disabled={processingItem === item.item_id}
-                                        style={{
+                      {expandedPedidos.has(pedido.pedido_id) && (
+                        <div style={{ padding: '16px 20px' }}>
+                          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                            <thead>
+                              <tr style={{ borderBottom: '2px solid var(--border-primary)' }}>
+                                <th style={{ padding: '10px', textAlign: 'left', fontSize: '11px', fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase' }}>
+                                  Producto
+                                </th>
+                                <th style={{ padding: '10px', textAlign: 'center', fontSize: '11px', fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase' }}>
+                                  Pedido
+                                </th>
+                                <th style={{ padding: '10px', textAlign: 'center', fontSize: '11px', fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase' }}>
+                                  Recibido
+                                </th>
+                                <th style={{ padding: '10px', textAlign: 'center', fontSize: '11px', fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase' }}>
+                                  Pendiente
+                                </th>
+                                <th style={{ padding: '10px', textAlign: 'center', fontSize: '11px', fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase' }}>
+                                  Accion
+                                </th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {pedido.items.map((item) => (
+                                <tr key={item.item_id} style={{ borderBottom: '1px solid var(--border-primary)' }}>
+                                  <td style={{ padding: '12px 10px' }}>
+                                    <div style={{ fontWeight: 600, color: 'var(--color-primary)', fontSize: '14px' }}>
+                                      {item.producto_codigo}
+                                    </div>
+                                    <div style={{ fontSize: '13px', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                                      {item.producto_nombre}
+                                      {item.cantidad_recibida > 0 && item.cantidad_pendiente > 0 && (
+                                        <span className="item-exception-badge">Parcial</span>
+                                      )}
+                                    </div>
+                                  </td>
+                                  <td style={{ padding: '12px 10px', textAlign: 'center', fontSize: '14px', fontWeight: 600, color: 'var(--text-primary)' }}>
+                                    {item.cantidad_pedida}
+                                  </td>
+                                  <td style={{ padding: '12px 10px', textAlign: 'center', fontSize: '14px', color: 'var(--color-success)', fontWeight: 600 }}>
+                                    {item.cantidad_recibida}
+                                  </td>
+                                  <td style={{ padding: '12px 10px', textAlign: 'center', fontSize: '14px', color: 'var(--color-warning)', fontWeight: 600 }}>
+                                    {item.cantidad_pendiente}
+                                  </td>
+                                  <td style={{ padding: '12px 10px', textAlign: 'center' }}>
+                                    {item.cantidad_pendiente > 0 ? (
+                                      canApprove ? (
+                                        <button
+                                          onClick={() => confirmarRecepcion(item)}
+                                          disabled={processingItem === item.item_id}
+                                          style={{
+                                            padding: '6px 12px',
+                                            background: 'var(--color-success)',
+                                            color: 'white',
+                                            border: 'none',
+                                            borderRadius: '6px',
+                                            cursor: processingItem === item.item_id ? 'not-allowed' : 'pointer',
+                                            fontSize: '12px',
+                                            fontWeight: 600,
+                                            display: 'inline-flex',
+                                            alignItems: 'center',
+                                            gap: '4px',
+                                            opacity: processingItem === item.item_id ? 0.6 : 1
+                                          }}
+                                        >
+                                          <CheckCircle size={14} />
+                                          Recibir
+                                        </button>
+                                      ) : (
+                                        <span style={{
                                           padding: '6px 12px',
-                                          background: 'var(--color-success)',
-                                          color: 'white',
-                                          border: 'none',
+                                          background: 'var(--badge-yellow-bg)',
+                                          color: 'var(--badge-yellow-text)',
                                           borderRadius: '6px',
-                                          cursor: processingItem === item.item_id ? 'not-allowed' : 'pointer',
                                           fontSize: '12px',
-                                          fontWeight: 600,
-                                          display: 'inline-flex',
-                                          alignItems: 'center',
-                                          gap: '4px',
-                                          opacity: processingItem === item.item_id ? 0.6 : 1
-                                        }}
-                                      >
-                                        <CheckCircle size={14} />
-                                        Recibir
-                                      </button>
+                                          fontWeight: 600
+                                        }}>
+                                          Pendiente
+                                        </span>
+                                      )
                                     ) : (
                                       <span style={{
                                         padding: '6px 12px',
-                                        background: 'var(--badge-yellow-bg)',
-                                        color: 'var(--badge-yellow-text)',
+                                        background: 'var(--badge-green-bg)',
+                                        color: 'var(--badge-green-text)',
                                         borderRadius: '6px',
                                         fontSize: '12px',
                                         fontWeight: 600
                                       }}>
-                                        Pendiente
+                                        Completo
                                       </span>
-                                    )
-                                  ) : (
-                                    <span style={{
-                                      padding: '6px 12px',
-                                      background: 'var(--badge-green-bg)',
-                                      color: 'var(--badge-green-text)',
-                                      borderRadius: '6px',
-                                      fontSize: '12px',
-                                      fontWeight: 600
-                                    }}>
-                                      Completo
-                                    </span>
-                                  )}
-                                </td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
+                                    )}
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
 
-                        {pedido.observaciones && (
-                          <div style={{
-                            marginTop: '12px',
-                            padding: '10px 12px',
-                            background: 'var(--bg-secondary)',
-                            borderRadius: '6px',
-                            fontSize: '13px',
-                            color: 'var(--text-secondary)',
-                            border: '1px solid var(--border-secondary)'
-                          }}>
-                            <strong>Obs:</strong> {pedido.observaciones}
+                          {pedido.observaciones && (
+                            <div style={{
+                              marginTop: '12px',
+                              padding: '10px 12px',
+                              background: 'var(--bg-secondary)',
+                              borderRadius: '6px',
+                              fontSize: '13px',
+                              color: 'var(--text-secondary)',
+                              border: '1px solid var(--border-secondary)'
+                            }}>
+                              <strong>Obs:</strong> {pedido.observaciones}
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+          </>
+        )}
+
+        {/* ==================== TAB: EXCEPCIONES ==================== */}
+        {activeTab === 'excepciones' && (
+          <>
+            {pedidosConExcepcion.length === 0 ? (
+              <div className="empty-state">
+                <CheckCircle size={48} />
+                <h3>Sin excepciones operativas</h3>
+                <p>No hay pedidos vencidos, sin fecha o con recepcion parcial pendiente.</p>
+              </div>
+            ) : (
+              <div className="excepciones-grid">
+                {pedidosConExcepcion.map((pedido) => {
+                  const sla = getPedidoSla(pedido)
+                  const itemsParciales = pedido.items.filter(item =>
+                    item.cantidad_recibida > 0 && item.cantidad_pendiente > 0
+                  )
+                  const itemsPendientes = pedido.items.filter(item => item.cantidad_pendiente > 0)
+
+                  return (
+                    <div
+                      key={pedido.pedido_id}
+                      className={`excepcion-card ${sla.className === 'sla-danger' ? 'critica' : ''}`}
+                    >
+                      <div className="excepcion-header">
+                        <div>
+                          <div className="excepcion-title">{pedido.numero_pedido}</div>
+                          <div className="excepcion-meta">
+                            {pedido.proveedor_nombre} • {itemsPendientes.length} items pendientes
+                          </div>
+                        </div>
+                        <span className={`sla-badge ${sla.className}`}>{sla.label}</span>
+                      </div>
+
+                      <div className="excepcion-list">
+                        {!pedido.fecha_estimada_llegada && (
+                          <div className="excepcion-row">
+                            <span>Fecha estimada pendiente</span>
+                            <strong>Completar seguimiento</strong>
+                          </div>
+                        )}
+                        {sla.className === 'sla-danger' && (
+                          <div className="excepcion-row">
+                            <span>Pedido vencido</span>
+                            <strong>Reclamar proveedor</strong>
+                          </div>
+                        )}
+                        {itemsParciales.length > 0 && (
+                          <div className="excepcion-row">
+                            <span>Recepcion parcial</span>
+                            <strong>{itemsParciales.length} items</strong>
+                          </div>
+                        )}
+                        {itemsPendientes.slice(0, 3).map((item) => (
+                          <div key={item.item_id} className="excepcion-row">
+                            <span>{item.producto_codigo} - {item.producto_nombre}</span>
+                            <strong>{item.cantidad_pendiente} pendientes</strong>
+                          </div>
+                        ))}
+                        {itemsPendientes.length > 3 && (
+                          <div className="excepcion-row">
+                            <span>Items adicionales con saldo</span>
+                            <strong>+{itemsPendientes.length - 3}</strong>
                           </div>
                         )}
                       </div>
-                    )}
-                  </div>
-                ))}
+
+                      <div className="excepcion-footer">
+                        <button
+                          type="button"
+                          className="excepcion-action"
+                          onClick={() => {
+                            setActiveTab('pedidos')
+                            setExpandedPedidos(prev => {
+                              const next = new Set(prev)
+                              next.add(pedido.pedido_id)
+                              return next
+                            })
+                          }}
+                        >
+                          <Eye size={14} />
+                          Ver pedido
+                        </button>
+                      </div>
+                    </div>
+                  )
+                })}
               </div>
             )}
           </>
