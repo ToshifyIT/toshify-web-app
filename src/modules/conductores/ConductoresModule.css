@@ -1043,3 +1043,23 @@
     linear-gradient(var(--table-row-hover), var(--table-row-hover)),
     var(--card-bg);
 }
+
+/* =====================================================
+   DETAIL MODAL FOOTER - Responsive
+   ===================================================== */
+
+.cond-detail-footer {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+@media (max-width: 1024px) {
+  .cond-detail-footer {
+    flex-direction: column !important;
+  }
+
+  .cond-detail-footer button {
+    width: 100%;
+  }
+}

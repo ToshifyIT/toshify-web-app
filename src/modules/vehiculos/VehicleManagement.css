@@ -204,6 +204,29 @@
 }
 
 /* =====================================================
+   DETAIL MODAL FOOTER
+   ===================================================== */
+
+.veh-detail-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+@media (max-width: 1024px) {
+  .veh-detail-footer {
+    flex-direction: column !important;
+    gap: 8px;
+  }
+
+  .veh-detail-footer > * {
+    width: 100%;
+    justify-content: center;
+    text-align: center;
+  }
+}
+
+/* =====================================================
    WIZARD
    ===================================================== */
 
@@ -477,12 +500,14 @@
   }
 
   .vehiculo-wizard .wizard-footer {
-    flex-direction: column;
-    gap: 12px;
+    flex-direction: row;
+    flex-wrap: wrap;
+    gap: 8px;
+    padding: 12px 16px;
   }
 
   .vehiculo-wizard .wizard-nav-buttons {
-    width: 100%;
+    flex: 1;
     justify-content: flex-end;
   }
 }
@@ -490,6 +515,52 @@
 /* Modal Wizard Size */
 .modal-content.modal-wizard {
   max-width: 700px;
+}
+
+/* =====================================================
+   OFERTA LOCACION MODAL - Grids responsive
+   ===================================================== */
+
+.ol-grid-2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px 16px;
+}
+
+.ol-grid-3 {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 4px 16px;
+}
+
+.ol-modal-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+@media (max-width: 600px) {
+  .ol-grid-2,
+  .ol-grid-3 {
+    grid-template-columns: 1fr !important;
+  }
+}
+
+@media (max-width: 1024px) {
+  .ol-modal-footer {
+    flex-direction: column !important;
+    gap: 10px;
+  }
+
+  .ol-modal-footer button {
+    width: 100%;
+  }
+}
+
+@media (min-width: 601px) and (max-width: 750px) {
+  .ol-grid-3 {
+    grid-template-columns: 1fr 1fr !important;
+  }
 }
 
 /* Tooltip para Telepase Propio */

@@ -992,11 +992,11 @@ export default function TelepaseHistoricoModule() {
               </div>
             </div>
             <div className="multas-modal-footer">
-              <button className="multas-btn-primary" onClick={handleGuardarEdicion}>
-                Guardar
-              </button>
               <button className="multas-btn-secondary" onClick={() => setShowEditModal(false)}>
                 Cancelar
+              </button>
+              <button className="multas-btn-primary" onClick={handleGuardarEdicion}>
+                Guardar
               </button>
             </div>
           </div>

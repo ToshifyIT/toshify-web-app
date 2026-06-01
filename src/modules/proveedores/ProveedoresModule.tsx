@@ -896,13 +896,6 @@ export function ProveedoresModule() {
 
             <div className="prov-modal-footer">
               <button
-                className="prov-btn-primary"
-                onClick={handleCreate}
-                disabled={!formData.razon_social || !formData.numero_documento}
-              >
-                Crear Proveedor
-              </button>
-              <button
                 className="prov-btn-secondary"
                 onClick={() => {
                   setShowCreateModal(false)
@@ -910,6 +903,13 @@ export function ProveedoresModule() {
                 }}
               >
                 Cancelar
+              </button>
+              <button
+                className="prov-btn-primary"
+                onClick={handleCreate}
+                disabled={!formData.razon_social || !formData.numero_documento}
+              >
+                Crear Proveedor
               </button>
             </div>
           </div>
@@ -1033,13 +1033,6 @@ export function ProveedoresModule() {
 
             <div className="prov-modal-footer">
               <button
-                className="prov-btn-success"
-                onClick={handleEdit}
-                disabled={!formData.razon_social || !formData.numero_documento}
-              >
-                Actualizar Proveedor
-              </button>
-              <button
                 className="prov-btn-secondary"
                 onClick={() => {
                   setShowEditModal(false)
@@ -1047,6 +1040,13 @@ export function ProveedoresModule() {
                 }}
               >
                 Cancelar
+              </button>
+              <button
+                className="prov-btn-success"
+                onClick={handleEdit}
+                disabled={!formData.razon_social || !formData.numero_documento}
+              >
+                Actualizar Proveedor
               </button>
             </div>
           </div>
