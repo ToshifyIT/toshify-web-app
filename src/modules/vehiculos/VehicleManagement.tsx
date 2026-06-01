@@ -2436,7 +2436,7 @@ export function VehicleManagement() {
         emptyTitle="No hay vehiculos registrados"
         emptyDescription={canCreate ? 'Crea el primero usando el boton "+ Crear Vehiculo".' : ''}
         headerAction={
-          <div className="veh-header-actions">
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
             <VerLogsButton tablas={['vehiculos', 'vehiculo_control']} label="Veh\u00edculos" />
             <button
               className="btn-secondary"
@@ -3433,18 +3433,36 @@ export function VehicleManagement() {
             {(() => {
               const folderUrl = (selectedVehiculo as any).drive_folder_url || (selectedVehiculo as any).url_documentacion
               return (
-                <div className="modal-footer" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <button
-                    className={folderUrl ? 'btn-success' : 'btn-secondary'}
-                    onClick={() => {
-                      if (folderUrl) window.open(folderUrl, '_blank')
-                      else Swal.fire('Sin URL', 'Este vehículo no tiene una URL de documentación configurada', 'info')
-                    }}
-                    style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
-                  >
-                    {folderUrl ? <FolderOpen size={16} /> : <FolderPlus size={16} />}
-                    {folderUrl ? 'Ver documentos' : 'Sin carpeta'}
-                  </button>
+                <div className="modal-footer veh-detail-footer">
+                  {folderUrl ? (
+                    <a
+                      href={folderUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      style={{
+                        display: 'inline-flex', alignItems: 'center', gap: '6px',
+                        padding: '8px 16px', borderRadius: '6px', fontSize: '13px', fontWeight: 600,
+                        color: '#fff', backgroundColor: '#dc2626', textDecoration: 'none',
+                        border: 'none', cursor: 'pointer',
+                      }}
+                    >
+                      <FolderOpen size={16} />
+                      Ver documentos
+                    </a>
+                  ) : (
+                    <button
+                      disabled
+                      style={{
+                        display: 'inline-flex', alignItems: 'center', gap: '6px',
+                        padding: '8px 16px', borderRadius: '6px', fontSize: '13px', fontWeight: 500,
+                        color: 'var(--text-tertiary)', backgroundColor: 'var(--bg-secondary)',
+                        border: '1px solid var(--border-primary)', cursor: 'not-allowed', opacity: 0.5,
+                      }}
+                    >
+                      <FolderPlus size={16} />
+                      Sin documentos
+                    </button>
+                  )}
                   <button
                     className="btn-secondary"
                     onClick={() => { setShowDetailsModal(false); setLastAuditLog(null) }}

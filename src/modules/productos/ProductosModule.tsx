@@ -1169,13 +1169,6 @@ export function ProductosModule() {
 
             <div className="prod-modal-footer">
               <button
-                className="prod-btn-primary"
-                onClick={handleCreate}
-                disabled={!formData.codigo || !formData.nombre || !formData.unidad_medida_id || !formData.categoria_id}
-              >
-                Crear Producto
-              </button>
-              <button
                 className="prod-btn-secondary"
                 onClick={() => {
                   setShowCreateModal(false)
@@ -1183,6 +1176,13 @@ export function ProductosModule() {
                 }}
               >
                 Cancelar
+              </button>
+              <button
+                className="prod-btn-primary"
+                onClick={handleCreate}
+                disabled={!formData.codigo || !formData.nombre || !formData.unidad_medida_id || !formData.categoria_id}
+              >
+                Crear Producto
               </button>
             </div>
           </div>
@@ -1336,13 +1336,6 @@ export function ProductosModule() {
 
             <div className="prod-modal-footer">
               <button
-                className="prod-btn-success"
-                onClick={handleEdit}
-                disabled={!formData.codigo || !formData.nombre || !formData.unidad_medida_id || !formData.estado_id || !formData.categoria_id}
-              >
-                Actualizar Producto
-              </button>
-              <button
                 className="prod-btn-secondary"
                 onClick={() => {
                   setShowEditModal(false)
@@ -1350,6 +1343,13 @@ export function ProductosModule() {
                 }}
               >
                 Cancelar
+              </button>
+              <button
+                className="prod-btn-success"
+                onClick={handleEdit}
+                disabled={!formData.codigo || !formData.nombre || !formData.unidad_medida_id || !formData.estado_id || !formData.categoria_id}
+              >
+                Actualizar Producto
               </button>
             </div>
           </div>

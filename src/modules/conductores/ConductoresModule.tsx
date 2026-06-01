@@ -5197,37 +5197,36 @@ function ModalDetalles({
           const folderUrl = (selectedConductor as any).url_documentacion;
           const contractUrl = (selectedConductor as any).drive_contract_folder_url;
           return (
-            <div className="modal-footer" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <div style={{ display: 'flex', gap: '8px' }}>
-                <button
-                  className={`btn-sm ${folderUrl ? 'btn-primary' : 'btn-secondary'}`}
-                  disabled={!folderUrl}
-                  onClick={() => {
-                    if (folderUrl) window.open(folderUrl, '_blank');
-                    else Swal.fire('Sin URL', 'Este conductor no tiene una URL de documentación configurada', 'info');
-                  }}
-                  style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}
-                  title={folderUrl ? 'Abrir carpeta de documentos' : 'Sin carpeta configurada'}
-                >
-                  {folderUrl ? <FolderOpen size={14} /> : <FolderPlus size={14} />}
-                  {folderUrl ? 'Ver documentos' : 'Sin carpeta'}
-                </button>
-                <button
-                  className={`btn-sm ${contractUrl ? 'btn-primary' : 'btn-secondary'}`}
-                  disabled={!contractUrl}
-                  onClick={() => {
-                    if (contractUrl) window.open(contractUrl, '_blank');
-                  }}
-                  style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}
-                  title={contractUrl ? 'Abrir historial de contratos' : 'Sin carpeta de contratos'}
-                >
-                  <FileText size={14} />
-                  Ver historial contratos
-                </button>
-              </div>
+            <div className="modal-footer cond-detail-footer">
+              <button
+                className={`btn-sm ${folderUrl ? 'btn-primary' : 'btn-secondary'}`}
+                disabled={!folderUrl}
+                onClick={() => {
+                  if (folderUrl) window.open(folderUrl, '_blank');
+                  else Swal.fire('Sin URL', 'Este conductor no tiene una URL de documentación configurada', 'info');
+                }}
+                style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}
+                title={folderUrl ? 'Abrir carpeta de documentos' : 'Sin carpeta configurada'}
+              >
+                {folderUrl ? <FolderOpen size={14} /> : <FolderPlus size={14} />}
+                {folderUrl ? 'Ver documentos' : 'Sin carpeta'}
+              </button>
+              <button
+                className={`btn-sm ${contractUrl ? 'btn-primary' : 'btn-secondary'}`}
+                disabled={!contractUrl}
+                onClick={() => {
+                  if (contractUrl) window.open(contractUrl, '_blank');
+                }}
+                style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}
+                title={contractUrl ? 'Abrir historial de contratos' : 'Sin carpeta de contratos'}
+              >
+                <FileText size={14} />
+                Ver historial contratos
+              </button>
               <button
                 className="btn-secondary"
                 onClick={() => setShowDetailsModal(false)}
+                style={{ justifyContent: 'center', marginLeft: 'auto' }}
               >
                 Cerrar
               </button>

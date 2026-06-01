@@ -308,17 +308,8 @@ export function OfertaLocacionModal({ vehiculoTitular, titular, sedeId, userId, 
     marginBottom: '16px',
   }
 
-  const gridTwo: React.CSSProperties = {
-    display: 'grid',
-    gridTemplateColumns: '1fr 1fr',
-    gap: '4px 16px',
-  }
-
-  const gridThree: React.CSSProperties = {
-    display: 'grid',
-    gridTemplateColumns: '1fr 1fr 1fr',
-    gap: '4px 16px',
-  }
+  // Grid classes defined in VehicleManagement.css (.ol-grid-2, .ol-grid-3)
+  // with responsive breakpoints for mobile
 
   const checkboxRow: React.CSSProperties = {
     display: 'flex',
@@ -395,6 +386,7 @@ export function OfertaLocacionModal({ vehiculoTitular, titular, sedeId, userId, 
                 borderBottom: activeTab === tab.key ? '2px solid var(--color-primary)' : '2px solid transparent',
                 cursor: 'pointer',
                 whiteSpace: 'nowrap',
+                flexShrink: 0,
                 transition: 'all 0.15s',
               }}
             >
@@ -404,11 +396,11 @@ export function OfertaLocacionModal({ vehiculoTitular, titular, sedeId, userId, 
         </div>
 
         {/* Body */}
-        <div className="modal-body" style={{ flex: 1, overflow: 'auto', padding: '20px 24px' }}>
+        <div className="modal-body" style={{ flex: 1, overflow: 'auto', padding: '16px' }}>
           {/* Tab: Titular */}
           {activeTab === 'titular' && (
             <div>
-              <div style={gridTwo}>
+              <div className="ol-grid-2">
                 <div style={fieldGroup}>
                   <label style={labelStyle}>Nombre / Razon Social</label>
                   <input style={inputStyle} value={formData.titular_nombre} onChange={e => updateField('titular_nombre', e.target.value)} />
@@ -418,7 +410,7 @@ export function OfertaLocacionModal({ vehiculoTitular, titular, sedeId, userId, 
                   <input style={inputStyle} value={formData.titular_dni_cuit} onChange={e => updateField('titular_dni_cuit', e.target.value)} />
                 </div>
               </div>
-              <div style={gridTwo}>
+              <div className="ol-grid-2">
                 <div style={fieldGroup}>
                   <label style={labelStyle}>CUIT</label>
                   <input style={inputStyle} value={formData.titular_cuit} onChange={e => updateField('titular_cuit', e.target.value)} />
@@ -442,7 +434,7 @@ export function OfertaLocacionModal({ vehiculoTitular, titular, sedeId, userId, 
           {/* Tab: Vehiculo */}
           {activeTab === 'vehiculo' && (
             <div>
-              <div style={gridThree}>
+              <div className="ol-grid-3">
                 <div style={fieldGroup}>
                   <label style={labelStyle}>Patente</label>
                   <input style={{ ...inputStyle, fontWeight: 600 }} value={formData.patente} onChange={e => updateField('patente', e.target.value)} />
@@ -456,7 +448,7 @@ export function OfertaLocacionModal({ vehiculoTitular, titular, sedeId, userId, 
                   <input style={inputStyle} value={formData.modelo} onChange={e => updateField('modelo', e.target.value)} />
                 </div>
               </div>
-              <div style={gridThree}>
+              <div className="ol-grid-3">
                 <div style={fieldGroup}>
                   <label style={labelStyle}>Anio</label>
                   <input style={inputStyle} value={formData.anio} onChange={e => updateField('anio', e.target.value)} />
@@ -470,7 +462,7 @@ export function OfertaLocacionModal({ vehiculoTitular, titular, sedeId, userId, 
                   <input style={inputStyle} type="number" value={formData.kilometraje ?? ''} onChange={e => updateField('kilometraje', e.target.value ? Number(e.target.value) : null)} />
                 </div>
               </div>
-              <div style={gridTwo}>
+              <div className="ol-grid-2">
                 <div style={fieldGroup}>
                   <label style={labelStyle}>Numero Motor</label>
                   <input style={inputStyle} value={formData.numero_motor} onChange={e => updateField('numero_motor', e.target.value)} />
@@ -486,7 +478,7 @@ export function OfertaLocacionModal({ vehiculoTitular, titular, sedeId, userId, 
           {/* Tab: Contrato */}
           {activeTab === 'contrato' && (
             <div>
-              <div style={gridTwo}>
+              <div className="ol-grid-2">
                 <div style={fieldGroup}>
                   <label style={labelStyle}>Fecha Ingreso</label>
                   <input style={inputStyle} type="date" value={formData.fecha_ingreso} onChange={e => updateField('fecha_ingreso', e.target.value)} />
@@ -496,7 +488,7 @@ export function OfertaLocacionModal({ vehiculoTitular, titular, sedeId, userId, 
                   <input style={inputStyle} type="date" value={formData.fecha_inicio_alquiler} onChange={e => updateField('fecha_inicio_alquiler', e.target.value)} />
                 </div>
               </div>
-              <div style={gridTwo}>
+              <div className="ol-grid-2">
                 <div style={fieldGroup}>
                   <label style={labelStyle}>Canon Mensual ($)</label>
                   <input style={inputStyle} type="number" step="0.01" value={formData.canon_mensual ?? ''} onChange={e => updateField('canon_mensual', e.target.value ? Number(e.target.value) : null)} />
@@ -517,7 +509,7 @@ export function OfertaLocacionModal({ vehiculoTitular, titular, sedeId, userId, 
           {activeTab === 'estado' && (
             <div>
               <div style={sectionTitle}>Estado del Vehiculo</div>
-              <div style={gridThree}>
+              <div className="ol-grid-3">
                 <div style={fieldGroup}>
                   <label style={labelStyle}>Nivel Nafta</label>
                   <select style={inputStyle} value={formData.nivel_nafta} onChange={e => updateField('nivel_nafta', e.target.value)}>
@@ -544,7 +536,7 @@ export function OfertaLocacionModal({ vehiculoTitular, titular, sedeId, userId, 
               </div>
 
               <div style={{ ...sectionTitle, marginTop: '24px' }}>Vencimientos</div>
-              <div style={gridTwo}>
+              <div className="ol-grid-2">
                 <div style={fieldGroup}>
                   <label style={labelStyle}>Vencimiento Seguro</label>
                   <input style={inputStyle} type="date" value={formData.vencimiento_seguro} onChange={e => updateField('vencimiento_seguro', e.target.value)} />
@@ -554,7 +546,7 @@ export function OfertaLocacionModal({ vehiculoTitular, titular, sedeId, userId, 
                   <input style={inputStyle} type="date" value={formData.vto_vtv} onChange={e => updateField('vto_vtv', e.target.value)} />
                 </div>
               </div>
-              <div style={gridTwo}>
+              <div className="ol-grid-2">
                 <div style={fieldGroup}>
                   <label style={labelStyle}>Vto. GNC</label>
                   <input style={inputStyle} type="date" value={formData.vto_gnc} onChange={e => updateField('vto_gnc', e.target.value)} />
@@ -566,7 +558,7 @@ export function OfertaLocacionModal({ vehiculoTitular, titular, sedeId, userId, 
               </div>
 
               <div style={{ ...sectionTitle, marginTop: '24px' }}>Elementos de Seguridad</div>
-              <div style={gridTwo}>
+              <div className="ol-grid-2">
                 {([
                   ['criquet', 'Criquet'],
                   ['mariposa', 'Mariposa (llave tuercas)'],
@@ -593,7 +585,7 @@ export function OfertaLocacionModal({ vehiculoTitular, titular, sedeId, userId, 
               </div>
 
               <div style={{ ...sectionTitle, marginTop: '24px' }}>Limpieza</div>
-              <div style={gridTwo}>
+              <div className="ol-grid-2">
                 <div style={fieldGroup}>
                   <label style={labelStyle}>Interior</label>
                   <select style={inputStyle} value={formData.limpieza_interior} onChange={e => updateField('limpieza_interior', e.target.value)}>
@@ -646,7 +638,7 @@ export function OfertaLocacionModal({ vehiculoTitular, titular, sedeId, userId, 
           {activeTab === 'costos' && (
             <div>
               <div style={sectionTitle}>Informes</div>
-              <div style={gridTwo}>
+              <div className="ol-grid-2">
                 <div style={fieldGroup}>
                   <label style={labelStyle}>Informe de Dominio</label>
                   <textarea style={{ ...inputStyle, minHeight: '60px', resize: 'vertical' }} value={formData.informe_dominio} onChange={e => updateField('informe_dominio', e.target.value)} />
@@ -662,7 +654,7 @@ export function OfertaLocacionModal({ vehiculoTitular, titular, sedeId, userId, 
               </div>
 
               <div style={{ ...sectionTitle, marginTop: '24px' }}>Costos</div>
-              <div style={gridTwo}>
+              <div className="ol-grid-2">
                 <div style={fieldGroup}>
                   <label style={labelStyle}>Costo Multas ($)</label>
                   <input style={inputStyle} type="number" step="0.01" value={formData.costo_multas ?? ''} onChange={e => updateField('costo_multas', e.target.value ? Number(e.target.value) : null)} />
@@ -672,7 +664,7 @@ export function OfertaLocacionModal({ vehiculoTitular, titular, sedeId, userId, 
                   <input style={inputStyle} type="number" step="0.01" value={formData.costo_patente ?? ''} onChange={e => updateField('costo_patente', e.target.value ? Number(e.target.value) : null)} />
                 </div>
               </div>
-              <div style={gridTwo}>
+              <div className="ol-grid-2">
                 <div style={fieldGroup}>
                   <label style={labelStyle}>Costo Mantenimiento / Reparacion ($)</label>
                   <input style={inputStyle} type="number" step="0.01" value={formData.costo_mantenimiento_reparacion ?? ''} onChange={e => updateField('costo_mantenimiento_reparacion', e.target.value ? Number(e.target.value) : null)} />
@@ -687,7 +679,7 @@ export function OfertaLocacionModal({ vehiculoTitular, titular, sedeId, userId, 
         </div>
 
         {/* Footer */}
-        <div className="modal-footer" style={{ flexShrink: 0, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <div className="modal-footer ol-modal-footer" style={{ flexShrink: 0 }}>
           <div style={{ fontSize: '11px', color: 'var(--text-tertiary)' }}>
             {existingRecord ? (
               <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>

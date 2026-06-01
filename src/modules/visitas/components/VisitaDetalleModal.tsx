@@ -216,13 +216,13 @@ export function VisitaDetalleModal({
           </div>
 
           <div className="modal-footer">
+            <button className="btn-secondary" onClick={onClose}>Cerrar</button>
             {canDelete && (
               <button className="btn-danger" onClick={onDelete}>Eliminar</button>
             )}
             {canEdit && !isPast && (
               <button className="btn-primary" onClick={onEdit}>Editar</button>
             )}
-            <button className="btn-secondary" onClick={onClose}>Cerrar</button>
           </div>
         </div>
       </div>

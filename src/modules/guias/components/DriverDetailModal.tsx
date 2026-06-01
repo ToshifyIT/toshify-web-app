@@ -641,8 +641,11 @@ export function DriverDetailModal({ driver, onClose, onDriverUpdate, accionesImp
 
         {/* Footer */}
         <div className="driver-modal-footer">
+          <button onClick={onClose} className="close-button">
+            Cerrar
+          </button>
           {!readOnly && (
-            <button 
+            <button
               onClick={handleSave}
               disabled={isSaving}
               className="save-button"
@@ -660,9 +663,6 @@ export function DriverDetailModal({ driver, onClose, onDriverUpdate, accionesImp
               )}
             </button>
           )}
-          <button onClick={onClose} className="close-button">
-            Cerrar
-          </button>
         </div>
       </div>
       
