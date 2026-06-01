@@ -1172,6 +1172,8 @@ export function LeadsModule() {
         telefono_emergencia: lead.telefono_emergencia || null,
         parentesco_emergencia: lead.parentesco_emergencia || null,
         observaciones: lead.observaciones || null,
+        cochera_propia: lead.cochera?.toLowerCase() === 'si' || lead.cochera?.toLowerCase() === 'sí' || false,
+        antecedentes_penales: lead.antecedentes_penales ?? false,
       }
 
       let conductorId: string
@@ -2910,17 +2912,38 @@ function EstadoDropdownCell({ leadId, estado, badgeClass, isOpen, canEdit, onTog
   const dropdownRef = useRef<HTMLDivElement>(null)
   const [pos, setPos] = useState({ top: 0, left: 0 })
 
+  const [maxH, setMaxH] = useState<number | undefined>(undefined)
+
   useLayoutEffect(() => {
     if (!isOpen || !badgeRef.current) return
     const rect = badgeRef.current.getBoundingClientRect()
-    const dropdownHeight = 340 // estimated max
-    const viewportHeight = window.innerHeight
-    let top = rect.bottom + 4
-    if (top + dropdownHeight > viewportHeight - 8) {
-      top = rect.top - dropdownHeight - 4
-      if (top < 8) top = 8
+    const vH = window.innerHeight
+    const margin = 8
+    const gap = 4
+    const spaceBelow = vH - rect.bottom - gap - margin
+    const spaceAbove = rect.top - gap - margin
+
+    // Measure real dropdown height after first render
+    const realH = dropdownRef.current?.scrollHeight || 340
+
+    if (realH <= spaceBelow) {
+      // Fits below
+      setPos({ top: rect.bottom + gap, left: rect.left })
+      setMaxH(undefined)
+    } else if (realH <= spaceAbove) {
+      // Fits above
+      setPos({ top: rect.top - realH - gap, left: rect.left })
+      setMaxH(undefined)
+    } else {
+      // Doesn't fit either way, use the larger space with scroll
+      if (spaceBelow >= spaceAbove) {
+        setPos({ top: rect.bottom + gap, left: rect.left })
+        setMaxH(spaceBelow)
+      } else {
+        setPos({ top: margin, left: rect.left })
+        setMaxH(spaceAbove)
+      }
     }
-    setPos({ top, left: rect.left })
   }, [isOpen])
 
   // Close on click outside
@@ -2953,7 +2976,7 @@ function EstadoDropdownCell({ leadId, estado, badgeClass, isOpen, canEdit, onTog
         <div
           ref={dropdownRef}
           className="lead-estado-dropdown"
-          style={{ position: 'fixed', top: pos.top, left: pos.left, zIndex: 99999 }}
+          style={{ position: 'fixed', top: pos.top, left: pos.left, zIndex: 99999, maxHeight: maxH, overflowY: maxH ? 'auto' : undefined }}
           onClick={(e) => e.stopPropagation()}
         >
           {estados.map(est => (
