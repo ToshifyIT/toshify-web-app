@@ -1,4 +1,5 @@
 import { useEffect, useState, useMemo } from 'react'
+import { useLocation } from 'react-router-dom'
 import { supabase } from '../../lib/supabase'
 import { LoadingOverlay } from '../../components/ui/LoadingOverlay'
 import { usePermissions } from '../../contexts/PermissionsContext'
@@ -107,6 +108,7 @@ interface ProductoLoteSalida {
 // COMPONENTE PRINCIPAL
 // =====================================================
 export function MovimientosModule() {
+  const location = useLocation()
   const { aplicarFiltroSede, sedeActualId } = useSede()
   const { canCreateInSubmenu } = usePermissions()
 
@@ -155,6 +157,7 @@ export function MovimientosModule() {
   // Form data - Devolución
   const [estadoRetorno, setEstadoRetorno] = useState<EstadoRetorno>('operativa')
   const [categoriaServicioDevolucion, setCategoriaServicioDevolucion] = useState<CategoriaServicio | ''>('')
+  const [prefillSearchApplied, setPrefillSearchApplied] = useState('')
 
   // =====================================================
   // EFECTOS
@@ -184,6 +187,55 @@ export function MovimientosModule() {
     // Reset al cambiar tipo de movimiento
     resetForm()
   }, [tipoMovimiento])
+
+  useEffect(() => {
+    if (!location.search) return
+
+    const params = new URLSearchParams(location.search)
+    const tipo = params.get('tipo')
+
+    if (
+      tipo &&
+      ['entrada', 'salida', 'asignacion', 'devolucion'].includes(tipo) &&
+      tipoMovimiento !== tipo
+    ) {
+      setTipoMovimiento(tipo as TipoMovimiento)
+    }
+  }, [location.search, tipoMovimiento])
+
+  useEffect(() => {
+    if (!location.search || prefillSearchApplied === location.search) return
+
+    const params = new URLSearchParams(location.search)
+    const tipo = params.get('tipo') as TipoMovimiento | null
+
+    if (tipo && ['entrada', 'salida', 'asignacion', 'devolucion'].includes(tipo) && tipoMovimiento !== tipo) {
+      return
+    }
+
+    const producto = params.get('producto')
+    const vehiculo = params.get('vehiculo')
+    const motivo = params.get('motivo')
+
+    if (vehiculo) {
+      setVehiculoId(vehiculo)
+    }
+
+    if (producto) {
+      setProductoId(producto)
+      const productoSeleccionado = productos.find(p => p.id === producto)
+      if (productoSeleccionado) {
+        setBusquedaProducto(`${productoSeleccionado.codigo} - ${productoSeleccionado.nombre}`)
+      }
+    }
+
+    if (motivo === 'danado') {
+      setMotivoSalida('dañado')
+      setObservaciones(prev => prev || 'Reporte iniciado desde asignaciones activas')
+    }
+
+    setPrefillSearchApplied(location.search)
+  }, [location.search, prefillSearchApplied, productos, tipoMovimiento])
 
   useEffect(() => {
     // Cerrar dropdown al hacer clic fuera
@@ -832,7 +884,58 @@ export function MovimientosModule() {
   const productoSeleccionado = productos.find(p => p.id === productoId)
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', maxWidth: '1200px', margin: '0 auto' }}>
+    <div
+      className="movimientos-module"
+      style={{ display: 'flex', flexDirection: 'column', gap: '16px', width: '100%', maxWidth: '1200px', margin: '0 auto' }}
+    >
+      <style>{`
+        .movimientos-module,
+        .movimientos-module * {
+          box-sizing: border-box;
+        }
+
+        @media (max-width: 640px) {
+          .mov-form-card {
+            padding: 16px !important;
+          }
+
+          .mov-toggle-row {
+            flex-direction: column !important;
+            align-items: stretch !important;
+            gap: 10px;
+          }
+
+          .mov-toggle-button {
+            width: 100%;
+            justify-content: center;
+            text-align: center;
+            white-space: nowrap;
+          }
+
+          .mov-motivo-grid {
+            grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+          }
+
+          .mov-type-filter {
+            flex-wrap: wrap;
+          }
+
+          .mov-form-actions {
+            flex-direction: column;
+          }
+
+          .mov-form-actions > button {
+            width: 100%;
+            justify-content: center;
+          }
+        }
+
+        @media (max-width: 380px) {
+          .mov-motivo-grid {
+            grid-template-columns: 1fr !important;
+          }
+        }
+      `}</style>
       <LoadingOverlay show={loading} message="Cargando movimientos..." size="lg" />
       {requiereAprobacion() && (
         <div style={{
@@ -885,20 +988,25 @@ export function MovimientosModule() {
       </div>
 
       {/* Formulario */}
-      <div style={{
+      <div
+        className="mov-form-card"
+        style={{
         background: 'var(--card-bg)',
         borderRadius: '12px',
         padding: '24px',
         boxShadow: 'var(--shadow-sm)',
         border: '1px solid var(--border-primary)'
-      }}>
+      }}
+      >
         <div style={{ display: 'grid', gap: '20px' }}>
 
           {/* ============= SECCIÓN ENTRADA ============= */}
           {tipoMovimiento === 'entrada' && (
             <>
               {/* Toggle Modo Lote */}
-              <div style={{
+              <div
+                className="mov-toggle-row"
+                style={{
                 background: 'var(--bg-secondary)',
                 border: '1px solid var(--border-primary)',
                 borderRadius: '8px',
@@ -906,7 +1014,8 @@ export function MovimientosModule() {
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'space-between'
-              }}>
+              }}
+              >
                 <div>
                   <div style={{ fontWeight: 600, fontSize: '14px', color: 'var(--text-primary)', marginBottom: '4px' }}>
                     {modoLote ? <><Package size={14} style={{ display: 'inline', verticalAlign: 'middle' }} /> Ingreso por Lote/Pedido</> : <><FileText size={14} style={{ display: 'inline', verticalAlign: 'middle' }} /> Ingreso Simple</>}
@@ -919,6 +1028,7 @@ export function MovimientosModule() {
                   </div>
                 </div>
                 <button
+                  className="mov-toggle-button"
                   onClick={handleToggleModoLote}
                   style={{
                     padding: '8px 16px',
@@ -982,7 +1092,7 @@ export function MovimientosModule() {
               </div>
 
               {/* Número de Pedido (siempre visible) */}
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '16px' }}>
                 <div>
                   <label style={{ display: 'block', marginBottom: '8px', fontSize: '14px', fontWeight: 600, color: 'var(--text-secondary)' }}>
                     N° Pedido/Referencia *
@@ -1030,7 +1140,9 @@ export function MovimientosModule() {
           {tipoMovimiento === 'salida' && (
             <>
               {/* Toggle Modo Lote Salida */}
-              <div style={{
+              <div
+                className="mov-toggle-row"
+                style={{
                 background: 'var(--bg-secondary)',
                 border: '1px solid var(--border-primary)',
                 borderRadius: '8px',
@@ -1038,7 +1150,8 @@ export function MovimientosModule() {
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'space-between'
-              }}>
+              }}
+              >
                 <div>
                   <div style={{ fontWeight: 600, fontSize: '14px', color: 'var(--text-primary)', marginBottom: '4px' }}>
                     {modoLoteSalida ? <><Package size={14} style={{ display: 'inline', verticalAlign: 'middle' }} /> Salida por Lote</> : <><FileText size={14} style={{ display: 'inline', verticalAlign: 'middle' }} /> Salida Simple</>}
@@ -1051,6 +1164,7 @@ export function MovimientosModule() {
                   </div>
                 </div>
                 <button
+                  className="mov-toggle-button"
                   onClick={handleToggleModoLoteSalida}
                   style={{
                     padding: '8px 16px',
@@ -1072,20 +1186,29 @@ export function MovimientosModule() {
                 <label style={{ display: 'block', marginBottom: '8px', fontSize: '14px', fontWeight: 600, color: 'var(--text-primary)' }}>
                   Motivo de Salida *
                 </label>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '8px' }}>
+                <div
+                  className="mov-motivo-grid"
+                  style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '8px' }}
+                >
                   {(['venta', 'consumo_servicio', 'dañado', 'perdido'] as MotivoSalida[]).map((motivo) => (
                     <button
                       key={motivo}
                       onClick={() => setMotivoSalida(motivo)}
                       style={{
-                        padding: '10px',
+                        minHeight: '44px',
+                        padding: '8px',
                         background: motivoSalida === motivo ? 'var(--color-primary)' : 'var(--card-bg)',
                         color: motivoSalida === motivo ? 'white' : 'var(--text-secondary)',
                         border: `1px solid ${motivoSalida === motivo ? 'var(--color-primary)' : 'var(--border-primary)'}`,
                         borderRadius: '6px',
                         cursor: 'pointer',
                         fontSize: '13px',
-                        fontWeight: 600
+                        fontWeight: 600,
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: '4px',
+                        textAlign: 'center'
                       }}
                     >
                       {motivo === 'dañado' && <AlertTriangle size={14} style={{ marginRight: '4px' }} />}
@@ -1167,7 +1290,7 @@ export function MovimientosModule() {
                   </h3>
 
                   {/* Agregar nuevo item */}
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr auto auto', gap: '8px', marginBottom: '12px' }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '8px', marginBottom: '12px' }}>
                     {/* Selector de producto */}
                     <div style={{ position: 'relative' }} data-producto-dropdown>
                       <input
@@ -1585,7 +1708,7 @@ export function MovimientosModule() {
               <label style={{ display: 'block', marginBottom: '8px', fontSize: '14px', fontWeight: 600, color: 'var(--text-secondary)' }}>
                 Tipo de Producto
               </label>
-              <div style={{ display: 'flex', gap: '8px' }}>
+              <div className="mov-type-filter" style={{ display: 'flex', gap: '8px' }}>
                 {['TODOS', 'REPUESTOS', 'HERRAMIENTAS'].map((tipo) => (
                   <button
                     key={tipo}
@@ -1729,7 +1852,7 @@ export function MovimientosModule() {
                 Productos del pedido ({productosLote.length})
               </h3>
 
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr auto auto', gap: '8px', marginBottom: '12px' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '8px', marginBottom: '12px' }}>
                 <div style={{ position: 'relative' }} data-producto-dropdown>
                   <input
                     type="text"
@@ -1966,7 +2089,7 @@ export function MovimientosModule() {
           </div>
 
           {/* Botones */}
-          <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end', marginTop: '12px' }}>
+          <div className="mov-form-actions" style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end', marginTop: '12px' }}>
             <button
               onClick={resetForm}
               style={{

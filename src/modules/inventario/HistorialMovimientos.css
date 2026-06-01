@@ -12,6 +12,35 @@
   gap: 16px;
 }
 
+.hist-operational-summary {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.hist-summary-card {
+  background: var(--card-bg);
+  border: 1px solid var(--border-primary);
+  border-radius: 8px;
+  padding: 12px 14px;
+}
+
+.hist-summary-card span {
+  display: block;
+  color: var(--text-tertiary);
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.hist-summary-card strong {
+  display: block;
+  color: var(--text-primary);
+  font-size: 22px;
+  line-height: 1;
+  margin-top: 8px;
+}
+
 /* =====================================================
    HEADER - Estilo Bitacora
    ===================================================== */
@@ -86,6 +115,44 @@
 .hist-type-select:focus {
   outline: none;
   border-color: var(--border-focus);
+}
+
+.hist-date-filter {
+  padding: 8px 12px;
+  border: 1px solid var(--input-border);
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  background: var(--input-bg);
+  color: var(--text-primary);
+}
+
+.hist-date-filter:focus {
+  outline: none;
+  border-color: var(--border-focus);
+}
+
+.hist-action-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 12px;
+  border: 1px solid var(--border-primary);
+  border-radius: 6px;
+  background: var(--card-bg);
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.hist-action-btn:hover:not(:disabled) {
+  background: var(--bg-secondary);
+}
+
+.hist-action-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
 }
 
 /* Celdas especiales */
@@ -233,6 +300,10 @@
 
 /* Responsive */
 @media (max-width: 768px) {
+  .hist-operational-summary {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
   .hist-filters {
     flex-direction: column;
   }
@@ -243,6 +314,12 @@
 
   .hist-type-select {
     width: 100%;
+  }
+
+  .hist-date-filter,
+  .hist-action-btn {
+    width: 100%;
+    justify-content: center;
   }
 }
 

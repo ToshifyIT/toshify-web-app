@@ -12,7 +12,9 @@ import {
   Calendar,
   ArrowUp,
   ArrowDown,
-  Filter
+  Filter,
+  Download,
+  RefreshCw
 } from 'lucide-react'
 import './HistorialMovimientos.css'
 
@@ -20,6 +22,7 @@ interface Movimiento {
   id: string
   tipo_movimiento: string
   cantidad: number
+  usuario_id: string | null
   estado_origen: string | null
   estado_destino: string | null
   observaciones: string | null
@@ -66,11 +69,16 @@ const getTipoIcon = (tipo: string) => {
   return icons[tipo] || <Package size={16} />
 }
 
+const escapeCsvValue = (value: string | number | null | undefined) =>
+  `"${String(value ?? '').replace(/"/g, '""')}"`
+
 export function HistorialMovimientosModule() {
   const [movimientos, setMovimientos] = useState<Movimiento[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [tipoFilter, setTipoFilter] = useState<string>('all')
+  const [fechaDesde, setFechaDesde] = useState('')
+  const [fechaHasta, setFechaHasta] = useState('')
 
   // Excel-style column filter states
   const [openColumnFilter, setOpenColumnFilter] = useState<string | null>(null)
@@ -119,21 +127,32 @@ export function HistorialMovimientosModule() {
           vehiculo_origen:vehiculo_origen_id (
             patente
           ),
-          usuarios:usuario_id (
-            nombre,
-            email
-          )
+          usuario_id
         `)
         .order('created_at', { ascending: false })
         .limit(100)
 
       if (fetchError) throw fetchError
 
+      const usuarioIds = [...new Set((data || []).map((item: any) => item.usuario_id).filter(Boolean))]
+      let perfilesMap = new Map<string, string>()
+
+      if (usuarioIds.length > 0) {
+        const { data: perfiles, error: perfilesError } = await supabase
+          .from('user_profiles')
+          .select('id, full_name')
+          .in('id', usuarioIds)
+
+        if (perfilesError) throw perfilesError
+        perfilesMap = new Map((perfiles || []).map((perfil: any) => [perfil.id, perfil.full_name]))
+      }
+
       // Transform data
       const transformed = (data || []).map((item: any) => ({
         id: item.id,
         tipo_movimiento: item.tipo_movimiento,
         cantidad: item.cantidad,
+        usuario_id: item.usuario_id,
         estado_origen: item.estado_origen,
         estado_destino: item.estado_destino,
         observaciones: item.observaciones,
@@ -144,7 +163,10 @@ export function HistorialMovimientosModule() {
         },
         vehiculo_destino: item.vehiculo_destino,
         vehiculo_origen: item.vehiculo_origen,
-        usuario: item.usuarios
+        usuario: item.usuario_id ? {
+          nombre: perfilesMap.get(item.usuario_id) || 'Usuario desconocido',
+          email: ''
+        } : null
       }))
 
       setMovimientos(transformed)
@@ -216,8 +238,67 @@ export function HistorialMovimientosModule() {
     if (usuarioFilter.length > 0) {
       data = data.filter(item => item.usuario?.nombre && usuarioFilter.includes(item.usuario.nombre))
     }
+    if (fechaDesde) {
+      const desde = new Date(`${fechaDesde}T00:00:00`)
+      data = data.filter(item => new Date(item.created_at) >= desde)
+    }
+    if (fechaHasta) {
+      const hasta = new Date(`${fechaHasta}T23:59:59`)
+      data = data.filter(item => new Date(item.created_at) <= hasta)
+    }
     return data
-  }, [movimientos, tipoFilter, tipoMovimientoFilter, productoFilter, vehiculoFilter, usuarioFilter])
+  }, [
+    movimientos,
+    tipoFilter,
+    tipoMovimientoFilter,
+    productoFilter,
+    vehiculoFilter,
+    usuarioFilter,
+    fechaDesde,
+    fechaHasta,
+  ])
+
+  const trazabilidadStats = useMemo(() => {
+    const tipos = new Set(filteredData.map(item => item.tipo_movimiento)).size
+    const usuarios = new Set(filteredData.map(item => item.usuario?.nombre).filter(Boolean)).size
+    const vehiculos = new Set(filteredData.map(item =>
+      item.vehiculo_destino?.patente || item.vehiculo_origen?.patente
+    ).filter(Boolean)).size
+    return { tipos, usuarios, vehiculos }
+  }, [filteredData])
+
+  const exportarCsv = () => {
+    const headers = [
+      'Fecha',
+      'Tipo',
+      'Codigo',
+      'Producto',
+      'Cantidad',
+      'Vehiculo',
+      'Usuario',
+      'Observaciones',
+    ]
+    const rows = filteredData.map(item => [
+      new Date(item.created_at).toLocaleString('es-CL'),
+      getTipoLabel(item.tipo_movimiento),
+      item.producto.codigo,
+      item.producto.nombre,
+      item.cantidad,
+      item.vehiculo_destino?.patente || item.vehiculo_origen?.patente || '',
+      item.usuario?.nombre || 'Sistema',
+      item.observaciones || '',
+    ])
+    const csv = [headers, ...rows]
+      .map(row => row.map(escapeCsvValue).join(','))
+      .join('\n')
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = `historial-movimientos-${new Date().toISOString().slice(0, 10)}.csv`
+    link.click()
+    URL.revokeObjectURL(url)
+  }
 
   // Definición de columnas para TanStack Table
   const columns = useMemo<ColumnDef<Movimiento, any>[]>(() => [
@@ -406,7 +487,9 @@ export function HistorialMovimientosModule() {
             </div>
             <div>
               <div className="hist-usuario-nombre">{usuario.nombre}</div>
-              <div className="hist-usuario-email">{usuario.email}</div>
+              {usuario.email ? (
+                <div className="hist-usuario-email">{usuario.email}</div>
+              ) : null}
             </div>
           </div>
         )
@@ -426,6 +509,25 @@ export function HistorialMovimientosModule() {
   return (
     <div className="hist-module">
       <LoadingOverlay show={loading} message="Cargando historial..." size="lg" />
+      <div className="hist-operational-summary">
+        <div className="hist-summary-card">
+          <span>Movimientos filtrados</span>
+          <strong>{filteredData.length}</strong>
+        </div>
+        <div className="hist-summary-card">
+          <span>Tipos involucrados</span>
+          <strong>{trazabilidadStats.tipos}</strong>
+        </div>
+        <div className="hist-summary-card">
+          <span>Vehiculos</span>
+          <strong>{trazabilidadStats.vehiculos}</strong>
+        </div>
+        <div className="hist-summary-card">
+          <span>Usuarios</span>
+          <strong>{trazabilidadStats.usuarios}</strong>
+        </div>
+      </div>
+
       {/* Filtro de tipo (adicional al buscador del DataTable) */}
       <div className="hist-filters">
         <select
@@ -441,6 +543,38 @@ export function HistorialMovimientosModule() {
           <option value="daño">Daño</option>
           <option value="perdida">Pérdida</option>
         </select>
+        <input
+          className="hist-date-filter"
+          type="date"
+          value={fechaDesde}
+          onChange={(e) => setFechaDesde(e.target.value)}
+          aria-label="Fecha desde"
+        />
+        <input
+          className="hist-date-filter"
+          type="date"
+          value={fechaHasta}
+          onChange={(e) => setFechaHasta(e.target.value)}
+          aria-label="Fecha hasta"
+        />
+        <button
+          type="button"
+          className="hist-action-btn"
+          onClick={loadMovimientos}
+          disabled={loading}
+        >
+          <RefreshCw size={14} />
+          Actualizar
+        </button>
+        <button
+          type="button"
+          className="hist-action-btn"
+          onClick={exportarCsv}
+          disabled={filteredData.length === 0}
+        >
+          <Download size={14} />
+          Exportar
+        </button>
       </div>
 
       {/* DataTable */}

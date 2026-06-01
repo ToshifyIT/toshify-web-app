@@ -105,6 +105,32 @@
   white-space: nowrap;
 }
 
+.prod-rule-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 8px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.prod-rule-badge.ok {
+  background: var(--badge-green-bg);
+  color: var(--badge-green-text);
+}
+
+.prod-rule-badge.warning {
+  background: var(--badge-yellow-bg);
+  color: var(--badge-yellow-text);
+}
+
+.prod-rule-badge.muted {
+  background: var(--badge-gray-bg);
+  color: var(--badge-gray-text);
+}
+
 /* Responsive Stats */
 @media (max-width: 1200px) {
   .prod-stats-grid {

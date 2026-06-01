@@ -1130,6 +1130,14 @@
     padding: 20px;
   }
 
+  /* Ajuste de control de accesibilidad de Google Maps para evitar recorte lateral */
+  .zona-general-map .gm-style button[aria-label="Combinaciones de teclas"],
+  .zona-general-map .gm-style button[title="Combinaciones de teclas"],
+  .zona-general-map .gm-style button[aria-label="Keyboard shortcuts"],
+  .zona-general-map .gm-style button[title="Keyboard shortcuts"] {
+    display: none !important;
+  }
+
   .zona-filters {
     flex-direction: column;
   }

@@ -4,7 +4,7 @@ import { supabase } from '../../lib/supabase'
 import { LoadingOverlay } from '../../components/ui/LoadingOverlay'
 import Swal from 'sweetalert2'
 import { showSuccess } from '../../utils/toast'
-import { Eye, Edit, Trash2, Building2, FileText, Phone, CreditCard, Calendar, Filter, CheckCircle, XCircle, RotateCcw } from 'lucide-react'
+import { Eye, Edit, Trash2, Building2, FileText, Phone, CreditCard, Calendar, Filter, CheckCircle, XCircle, RotateCcw, AlertTriangle, Package } from 'lucide-react'
 import { usePermissions } from '../../contexts/PermissionsContext'
 import { DataTable } from '../../components/ui/DataTable'
 import { formatDateTimeAR } from '../../utils/dateUtils'
@@ -32,6 +32,8 @@ interface Proveedor {
   activo: boolean
   observaciones?: string
   categoria?: CategoriaProveedor
+  stock_asociado?: number
+  productos_asociados?: number
   created_at: string
   updated_at: string
 }
@@ -154,6 +156,9 @@ export function ProveedoresModule() {
       case 'inactivos':
         setStatCardEstadoFilter(['false'])
         break
+      default:
+        setStatCardEstadoFilter([])
+        break
     }
   }
 
@@ -167,6 +172,18 @@ export function ProveedoresModule() {
         const estadoStr = p.activo ? 'true' : 'false'
         return statCardEstadoFilter.includes(estadoStr)
       })
+    }
+
+    if (activeStatCard === 'con_stock') {
+      return proveedores.filter(p => Number(p.stock_asociado || 0) > 0)
+    }
+
+    if (activeStatCard === 'sin_contacto') {
+      return proveedores.filter(p => !p.telefono && !p.email)
+    }
+
+    if (activeStatCard === 'sin_categoria') {
+      return proveedores.filter(p => !p.categoria)
     }
 
     // Sin stat card activo → aplicar filtros de columna
@@ -190,7 +207,7 @@ export function ProveedoresModule() {
     }
 
     return result
-  }, [proveedores, razonSocialFilter, categoriaFilter, estadoFilter, statCardEstadoFilter])
+  }, [proveedores, razonSocialFilter, categoriaFilter, estadoFilter, statCardEstadoFilter, activeStatCard])
 
   const loadProveedores = async () => {
     try {
@@ -204,8 +221,35 @@ export function ProveedoresModule() {
         .limit(1000)
 
       if (error) throw error
-      setProveedores(data || [])
-    } catch (err: any) {
+
+      const { data: inventarioData } = await supabase
+        .from('inventario')
+        .select('proveedor_id, producto_id, cantidad')
+        .gt('cantidad', 0)
+
+      const proveedorOperacion: Record<string, { stock: number; productos: Set<string> }> = {}
+      ;(inventarioData || []).forEach((item: any) => {
+        if (!item.proveedor_id) return
+        if (!proveedorOperacion[item.proveedor_id]) {
+          proveedorOperacion[item.proveedor_id] = { stock: 0, productos: new Set() }
+        }
+        proveedorOperacion[item.proveedor_id].stock += Number(item.cantidad)
+        if (item.producto_id) {
+          proveedorOperacion[item.proveedor_id].productos.add(item.producto_id)
+        }
+      })
+
+      const proveedoresConOperacion = (data || []).map((proveedor: Proveedor) => {
+        const operacion = proveedorOperacion[proveedor.id]
+        return {
+          ...proveedor,
+          stock_asociado: operacion?.stock || 0,
+          productos_asociados: operacion?.productos.size || 0,
+        }
+      })
+
+      setProveedores(proveedoresConOperacion)
+    } catch {
       Swal.fire({
         icon: 'error',
         title: 'Error',
@@ -643,6 +687,39 @@ export function ProveedoresModule() {
         },
       },
       {
+        id: 'operatividad',
+        header: 'Operatividad',
+        cell: ({ row }) => {
+          const proveedor = row.original
+          const sinContacto = !proveedor.telefono && !proveedor.email
+          const sinCategoria = !proveedor.categoria
+
+          if (!proveedor.activo) {
+            return <span className="prov-op-badge danger">Inactivo</span>
+          }
+
+          if (sinContacto || sinCategoria) {
+            return (
+              <span className="prov-op-badge warning">
+                <AlertTriangle size={13} />
+                Incompleto
+              </span>
+            )
+          }
+
+          if (Number(proveedor.stock_asociado || 0) > 0) {
+            return (
+              <span className="prov-op-badge ok">
+                <Package size={13} />
+                {proveedor.productos_asociados} productos
+              </span>
+            )
+          }
+
+          return <span className="prov-op-badge muted">Sin stock</span>
+        },
+      },
+      {
         id: 'acciones',
         header: 'Acciones',
         cell: ({ row }) => (
@@ -695,7 +772,10 @@ export function ProveedoresModule() {
     const total = proveedores.length
     const activos = proveedores.filter(p => p.activo).length
     const inactivos = proveedores.filter(p => !p.activo).length
-    return { total, activos, inactivos }
+    const conStock = proveedores.filter(p => Number(p.stock_asociado || 0) > 0).length
+    const sinContacto = proveedores.filter(p => !p.telefono && !p.email).length
+    const sinCategoria = proveedores.filter(p => !p.categoria).length
+    return { total, activos, inactivos, conStock, sinContacto, sinCategoria }
   }, [proveedores])
 
   return (
@@ -734,6 +814,36 @@ export function ProveedoresModule() {
               <span className="stat-label">Inactivos</span>
             </div>
           </button>
+          <button
+            className={`stat-card${activeStatCard === 'con_stock' ? ' active' : ''}`}
+            onClick={() => handleStatCardClick('con_stock')}
+          >
+            <Package size={18} className="stat-icon" />
+            <div className="stat-content">
+              <span className="stat-value">{statsData.conStock}</span>
+              <span className="stat-label">Con stock</span>
+            </div>
+          </button>
+          <button
+            className={`stat-card${activeStatCard === 'sin_contacto' ? ' active' : ''}`}
+            onClick={() => handleStatCardClick('sin_contacto')}
+          >
+            <Phone size={18} className="stat-icon" />
+            <div className="stat-content">
+              <span className="stat-value">{statsData.sinContacto}</span>
+              <span className="stat-label">Sin contacto</span>
+            </div>
+          </button>
+          <button
+            className={`stat-card${activeStatCard === 'sin_categoria' ? ' active' : ''}`}
+            onClick={() => handleStatCardClick('sin_categoria')}
+          >
+            <AlertTriangle size={18} className="stat-icon" />
+            <div className="stat-content">
+              <span className="stat-value">{statsData.sinCategoria}</span>
+              <span className="stat-label">Sin categoria</span>
+            </div>
+          </button>
         </div>
       </div>
 
@@ -759,7 +869,13 @@ export function ProveedoresModule() {
             ? [
                 {
                   id: 'stat-estado',
-                  label: activeStatCard === 'activos' ? 'Estado: Activos' : 'Estado: Inactivos',
+                  label: {
+                    activos: 'Estado: Activos',
+                    inactivos: 'Estado: Inactivos',
+                    con_stock: 'Con stock asociado',
+                    sin_contacto: 'Sin contacto',
+                    sin_categoria: 'Sin categoria',
+                  }[activeStatCard] || activeStatCard,
                   onClear: () => {
                     setActiveStatCard(null)
                     setStatCardEstadoFilter([])
@@ -1092,6 +1208,14 @@ export function ProveedoresModule() {
                       ) : (
                         <span className="prov-info-value empty">-</span>
                       )}
+                    </div>
+                    <div className="prov-info-item">
+                      <span className="prov-info-label">Productos asociados</span>
+                      <span className="prov-info-value">{selectedProveedor.productos_asociados || 0}</span>
+                    </div>
+                    <div className="prov-info-item">
+                      <span className="prov-info-label">Stock asociado</span>
+                      <span className="prov-info-value">{selectedProveedor.stock_asociado || 0}</span>
                     </div>
                   </div>
                 </div>

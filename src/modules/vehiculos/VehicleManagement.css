@@ -42,6 +42,13 @@
   margin-top: 2px;
 }
 
+.veh-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
 /* =====================================================
    STATS - Estilo Bitácora
    ===================================================== */
@@ -162,6 +169,24 @@
 @media (max-width: 480px) {
   .veh-stats {
     padding: 8px;
+  }
+
+  .veh-header-actions {
+    display: grid;
+    grid-template-columns: 1fr;
+    width: 100%;
+    gap: 8px;
+  }
+
+  .veh-header-actions > * {
+    width: 100%;
+  }
+
+  .veh-header-actions .btn-primary,
+  .veh-header-actions .btn-secondary {
+    width: 100%;
+    justify-content: center;
+    white-space: normal;
   }
 
   .veh-stats-grid {

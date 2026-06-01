@@ -2436,7 +2436,7 @@ export function VehicleManagement() {
         emptyTitle="No hay vehiculos registrados"
         emptyDescription={canCreate ? 'Crea el primero usando el boton "+ Crear Vehiculo".' : ''}
         headerAction={
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
             <VerLogsButton tablas={['vehiculos', 'vehiculo_control']} label="Veh\u00edculos" />
             <button
               className="btn-secondary"

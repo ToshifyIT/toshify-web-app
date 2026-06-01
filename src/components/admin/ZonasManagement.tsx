@@ -538,7 +538,8 @@ export function ZonasManagement() {
             streetViewControl: false,
             mapTypeControl: false,
             fullscreenControl: true,
-            zoomControl: true
+            zoomControl: true,
+            keyboardShortcuts: false,
           }}
         >
           {activeZones.map(zona => (

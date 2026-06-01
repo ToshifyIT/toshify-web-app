@@ -1,13 +1,17 @@
-import { useEffect, useState, useMemo } from 'react'
+import { useEffect, useState, useMemo, useCallback } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { supabase } from '../../lib/supabase'
+import { useSede } from '../../contexts/SedeContext'
 import { type ColumnDef } from '@tanstack/react-table'
 import { DataTable } from '../../components/ui/DataTable/DataTable'
 import { ExcelColumnFilter, useExcelFilters } from '../../components/ui/DataTable/ExcelColumnFilter'
-import { Truck, Package, Calendar, Wrench } from 'lucide-react'
+import { Truck, Package, Calendar, Wrench, RotateCcw, AlertTriangle, Clock, MapPin } from 'lucide-react'
 
 interface AsignacionActiva {
   id: string
+  producto_id: string
   vehiculo_id: string
+  sede_id: string | null
   vehiculo_patente: string
   vehiculo_marca: string
   vehiculo_modelo: string
@@ -15,9 +19,12 @@ interface AsignacionActiva {
   producto: string
   cantidad: number
   fecha_asignacion: string
+  dias_asignada: number
 }
 
 export function AsignacionesActivasModule() {
+  const navigate = useNavigate()
+  const { sedeActual, sedeActualId, verTodas } = useSede()
   const [asignaciones, setAsignaciones] = useState<AsignacionActiva[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -26,10 +33,6 @@ export function AsignacionesActivasModule() {
   const { openFilterId, setOpenFilterId } = useExcelFilters()
   const [patenteFilter, setPatenteFilter] = useState<string[]>([])
   const [productoFilter, setProductoFilter] = useState<string[]>([])
-
-  useEffect(() => {
-    loadAsignaciones()
-  }, [])
 
   // Listas únicas para filtros
   const patentesUnicas = useMemo(() =>
@@ -74,7 +77,7 @@ export function AsignacionesActivasModule() {
     setProductoFilter([])
   }
 
-  const loadAsignaciones = async () => {
+  const loadAsignaciones = useCallback(async () => {
     try {
       setLoading(true)
       setError(null)
@@ -84,9 +87,11 @@ export function AsignacionesActivasModule() {
           id,
           cantidad,
           created_at,
+          producto_id,
           asignado_a_vehiculo_id,
           vehiculos:asignado_a_vehiculo_id (
             id,
+            sede_id,
             patente,
             marca,
             modelo
@@ -103,37 +108,64 @@ export function AsignacionesActivasModule() {
 
       if (fetchError) throw fetchError
 
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const transformed = (data || []).map((item: any) => ({
-        id: item.id,
-        vehiculo_id: item.vehiculos?.id || '',
-        vehiculo_patente: item.vehiculos?.patente || '',
-        vehiculo_marca: item.vehiculos?.marca || '',
-        vehiculo_modelo: item.vehiculos?.modelo || '',
-        codigo: item.productos?.codigo || '',
-        producto: item.productos?.nombre || '',
-        cantidad: item.cantidad,
-        fecha_asignacion: item.created_at
-      }))
+      const transformed = (data || []).map((item: any) => {
+        const diasAsignada = Math.max(
+          0,
+          Math.floor((Date.now() - new Date(item.created_at).getTime()) / 86400000)
+        )
+
+        return {
+          id: item.id,
+          producto_id: item.producto_id || item.productos?.id || '',
+          vehiculo_id: item.vehiculos?.id || '',
+          sede_id: item.vehiculos?.sede_id || null,
+          vehiculo_patente: item.vehiculos?.patente || '',
+          vehiculo_marca: item.vehiculos?.marca || '',
+          vehiculo_modelo: item.vehiculos?.modelo || '',
+          codigo: item.productos?.codigo || '',
+          producto: item.productos?.nombre || '',
+          cantidad: item.cantidad,
+          fecha_asignacion: item.created_at,
+          dias_asignada: diasAsignada
+        }
+      }).filter((item: AsignacionActiva) => verTodas || !sedeActualId || item.sede_id === sedeActualId)
 
       setAsignaciones(transformed)
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } catch (err: any) {
       setError(err.message || 'Error al cargar asignaciones')
     } finally {
       setLoading(false)
     }
-  }
+  }, [sedeActualId, verTodas])
+
+  useEffect(() => {
+    loadAsignaciones()
+  }, [loadAsignaciones])
 
   // Stats
   const stats = useMemo(() => {
     const vehiculosUnicos = new Set(asignaciones.map(a => a.vehiculo_id)).size
     const totalHerramientas = asignaciones.reduce((sum, a) => sum + a.cantidad, 0)
-    return { vehiculosUnicos, totalHerramientas }
+    const asignacionesRetenidas = asignaciones.filter(a => a.dias_asignada >= 14).length
+    const asignacionesPorRevisar = asignaciones.filter(a => a.dias_asignada >= 7 && a.dias_asignada < 14).length
+    return { vehiculosUnicos, totalHerramientas, asignacionesRetenidas, asignacionesPorRevisar }
   }, [asignaciones])
 
+  const irAMovimientos = useCallback((asignacion: AsignacionActiva, tipo: 'devolucion' | 'dano') => {
+    const params = new URLSearchParams({
+      tipo: tipo === 'devolucion' ? 'devolucion' : 'salida',
+      producto: asignacion.producto_id,
+      vehiculo: asignacion.vehiculo_id,
+    })
+
+    if (tipo === 'dano') {
+      params.set('motivo', 'danado')
+    }
+
+    navigate(`/logistica/inventario/movimientos?${params.toString()}`)
+  }, [navigate])
+
   // Columnas
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const columns = useMemo<ColumnDef<AsignacionActiva, any>[]>(() => [
     {
       accessorKey: 'vehiculo_patente',
@@ -229,13 +261,133 @@ export function AsignacionesActivasModule() {
           {new Date(row.original.fecha_asignacion).toLocaleDateString('es-CL')}
         </div>
       )
+    },
+    {
+      accessorKey: 'dias_asignada',
+      header: 'Dias en uso',
+      cell: ({ row }) => {
+        const dias = row.original.dias_asignada
+        const color = dias >= 14
+          ? 'var(--badge-red-text)'
+          : dias >= 7
+            ? 'var(--badge-yellow-text)'
+            : 'var(--badge-green-text)'
+        const bg = dias >= 14
+          ? 'var(--badge-red-bg)'
+          : dias >= 7
+            ? 'var(--badge-yellow-bg)'
+            : 'var(--badge-green-bg)'
+
+        return (
+          <span style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: '4px',
+            padding: '4px 10px',
+            borderRadius: '12px',
+            background: bg,
+            color,
+            fontSize: '12px',
+            fontWeight: 700
+          }}>
+            <Clock size={13} />
+            {dias} dias
+          </span>
+        )
+      }
+    },
+    {
+      id: 'acciones',
+      header: 'Acciones',
+      cell: ({ row }) => (
+        <div style={{ display: 'flex', gap: '8px', justifyContent: 'center', flexWrap: 'wrap' }}>
+          <button
+            type="button"
+            onClick={() => irAMovimientos(row.original, 'devolucion')}
+            style={{
+              border: '1px solid var(--border-primary)',
+              borderRadius: '6px',
+              background: 'var(--card-bg)',
+              color: 'var(--text-primary)',
+              padding: '6px 10px',
+              fontSize: '12px',
+              fontWeight: 700,
+              cursor: 'pointer',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '5px'
+            }}
+          >
+            <RotateCcw size={14} />
+            Devolver
+          </button>
+          <button
+            type="button"
+            onClick={() => irAMovimientos(row.original, 'dano')}
+            style={{
+              border: '1px solid var(--border-primary)',
+              borderRadius: '6px',
+              background: 'var(--badge-red-bg)',
+              color: 'var(--badge-red-text)',
+              padding: '6px 10px',
+              fontSize: '12px',
+              fontWeight: 700,
+              cursor: 'pointer',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '5px'
+            }}
+          >
+            <AlertTriangle size={14} />
+            Reportar
+          </button>
+        </div>
+      )
     }
-  ], [patentesUnicas, patenteFilter, productosUnicos, productoFilter, openFilterId])
+  ], [
+    patentesUnicas,
+    patenteFilter,
+    productosUnicos,
+    productoFilter,
+    openFilterId,
+    setOpenFilterId,
+    irAMovimientos,
+  ])
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
       {/* Stats */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '16px' }}>
+        <div style={{
+          background: 'var(--card-bg)',
+          borderRadius: '10px',
+          padding: '16px 20px',
+          border: '1px solid var(--border-primary)',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '12px'
+        }}>
+          <div style={{
+            width: '44px',
+            height: '44px',
+            background: 'var(--badge-blue-bg)',
+            borderRadius: '10px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center'
+          }}>
+            <MapPin size={22} style={{ color: 'var(--badge-blue-text)' }} />
+          </div>
+          <div>
+            <p style={{ fontSize: '11px', color: 'var(--text-secondary)', fontWeight: 600, margin: 0 }}>
+              Sede operativa
+            </p>
+            <p style={{ fontSize: '16px', fontWeight: 700, color: 'var(--text-primary)', margin: 0 }}>
+              {verTodas ? 'Todas las sedes' : (sedeActual?.nombre || 'Sede actual')}
+            </p>
+          </div>
+        </div>
+
         <div style={{
           background: 'var(--card-bg)',
           borderRadius: '10px',
@@ -262,6 +414,66 @@ export function AsignacionesActivasModule() {
             </p>
             <p style={{ fontSize: '22px', fontWeight: 700, color: 'var(--text-primary)', margin: 0 }}>
               {stats.vehiculosUnicos}
+            </p>
+          </div>
+        </div>
+
+        <div style={{
+          background: 'var(--card-bg)',
+          borderRadius: '10px',
+          padding: '16px 20px',
+          border: '1px solid var(--border-primary)',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '12px'
+        }}>
+          <div style={{
+            width: '44px',
+            height: '44px',
+            background: 'var(--badge-yellow-bg)',
+            borderRadius: '10px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center'
+          }}>
+            <Clock size={22} style={{ color: 'var(--badge-yellow-text)' }} />
+          </div>
+          <div>
+            <p style={{ fontSize: '11px', color: 'var(--text-secondary)', fontWeight: 600, margin: 0 }}>
+              Por revisar
+            </p>
+            <p style={{ fontSize: '22px', fontWeight: 700, color: 'var(--text-primary)', margin: 0 }}>
+              {stats.asignacionesPorRevisar}
+            </p>
+          </div>
+        </div>
+
+        <div style={{
+          background: 'var(--card-bg)',
+          borderRadius: '10px',
+          padding: '16px 20px',
+          border: '1px solid var(--border-primary)',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '12px'
+        }}>
+          <div style={{
+            width: '44px',
+            height: '44px',
+            background: 'var(--badge-red-bg)',
+            borderRadius: '10px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center'
+          }}>
+            <AlertTriangle size={22} style={{ color: 'var(--badge-red-text)' }} />
+          </div>
+          <div>
+            <p style={{ fontSize: '11px', color: 'var(--text-secondary)', fontWeight: 600, margin: 0 }}>
+              Retenidas 14+ dias
+            </p>
+            <p style={{ fontSize: '22px', fontWeight: 700, color: 'var(--text-primary)', margin: 0 }}>
+              {stats.asignacionesRetenidas}
             </p>
           </div>
         </div>

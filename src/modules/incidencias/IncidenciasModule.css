@@ -1192,6 +1192,7 @@
   .incidencias-tabs-row {
     flex-direction: column;
     align-items: stretch;
+    gap: 10px;
   }
 
   .incidencias-header-actions .btn-primary {
@@ -1200,13 +1201,13 @@
   }
 
   .incidencias-tabs {
-    flex-wrap: nowrap;
-    overflow-x: auto;
-    -webkit-overflow-scrolling: touch;
-    scrollbar-width: none;
-    padding: 4px;
-    gap: 2px;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    overflow: visible;
+    padding: 0;
+    gap: 8px;
     width: 100%;
+    background: transparent;
   }
 
   .incidencias-tabs::-webkit-scrollbar {
@@ -1214,10 +1215,14 @@
   }
 
   .incidencias-tab {
-    flex-shrink: 0;
-    padding: 6px 10px;
+    padding: 10px;
     font-size: 12px;
     gap: 4px;
+    justify-content: center;
+    text-align: center;
+    white-space: normal;
+    line-height: 1.2;
+    min-height: 42px;
   }
 
   .tab-badge {
@@ -1225,12 +1230,19 @@
     font-size: 10px;
   }
 
-  .tabs-actions {
-    justify-content: center;
+  .incidencias-tabs-row .tabs-actions {
+    width: 100%;
+    justify-content: stretch;
+    flex-wrap: wrap;
   }
 
-  .tabs-actions .btn-secondary,
-  .tabs-actions .btn-primary {
+  .incidencias-tabs-row .tabs-actions > * {
+    flex: 1 1 140px;
+    min-width: 0;
+  }
+
+  .incidencias-tabs-row .tabs-actions .btn-secondary,
+  .incidencias-tabs-row .tabs-actions .btn-primary {
     flex: 1;
     justify-content: center;
   }
@@ -1343,17 +1355,16 @@
   }
 
   .incidencias-tab {
-    padding: 6px 10px;
     font-size: 11px;
   }
 
-  .tabs-actions {
+  .incidencias-tabs-row .tabs-actions {
     flex-wrap: wrap;
     gap: 6px;
   }
 
-  .tabs-actions .btn-secondary,
-  .tabs-actions .btn-primary {
+  .incidencias-tabs-row .tabs-actions .btn-secondary,
+  .incidencias-tabs-row .tabs-actions .btn-primary {
     font-size: 12px;
     padding: 6px 10px;
   }
@@ -1361,6 +1372,10 @@
 
 /* iPhone SE y dispositivos extra chicos: stats en 1 columna */
 @media (max-width: 380px) {
+  .incidencias-tabs {
+    grid-template-columns: 1fr;
+  }
+
   .incidencias-stats {
     padding: 8px;
   }

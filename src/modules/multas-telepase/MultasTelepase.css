@@ -11,6 +11,17 @@
   gap: 16px;
 }
 
+.multas-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.multas-vista-switch {
+  display: inline-flex;
+}
+
 /* =====================================================
    STATS - Estilo igual a Conductores
    ===================================================== */
@@ -100,6 +111,34 @@
 @media (max-width: 480px) {
   .multas-stats {
     padding: 8px;
+  }
+
+  .multas-header-actions {
+    display: grid;
+    grid-template-columns: 1fr;
+    width: 100%;
+    gap: 8px;
+  }
+
+  .multas-header-actions > * {
+    width: 100%;
+  }
+
+  .multas-vista-switch {
+    display: flex;
+  }
+
+  .multas-vista-switch > button {
+    flex: 1 1 0;
+    justify-content: center;
+    min-width: 0;
+  }
+
+  .multas-header-actions .btn-primary,
+  .multas-header-actions .btn-secondary {
+    width: 100%;
+    justify-content: center;
+    white-space: normal;
   }
 
   .multas-stats-grid,
