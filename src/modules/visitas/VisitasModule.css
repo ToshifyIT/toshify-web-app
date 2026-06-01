@@ -2249,21 +2249,34 @@
   }
 
   .visitas-calendario-wrapper .rbc-toolbar {
-    flex-wrap: wrap;
+    display: grid;
+    grid-template-columns: 1fr;
     gap: 8px;
     font-size: 12px;
   }
 
   .visitas-calendario-wrapper .rbc-toolbar .rbc-toolbar-label {
-    flex: 1 0 100%;
     text-align: center;
     font-size: 14px;
-    margin: 4px 0;
+    margin: 0;
   }
 
   .visitas-calendario-wrapper .rbc-toolbar button {
     padding: 6px 10px;
     font-size: 12px;
+  }
+
+  .visitas-calendario-wrapper .rbc-toolbar .rbc-btn-group {
+    width: 100%;
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 6px;
+  }
+
+  .visitas-calendario-wrapper .rbc-toolbar .rbc-btn-group button {
+    flex: 1 1 0;
+    min-width: 0;
   }
 
   .visitas-calendario-wrapper .rbc-header {
@@ -2290,4 +2303,3 @@
     font-size: 10px;
   }
 }
-

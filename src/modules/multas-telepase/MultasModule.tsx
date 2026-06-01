@@ -1310,9 +1310,9 @@ export default function MultasModule() {
         externalFilters={activeFilters}
         onClearAllFilters={clearAllFilters}
         headerAction={
-          <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+          <div className="multas-header-actions">
             {/* Toggle vista activas / desestimadas */}
-            <div style={{
+            <div className="multas-vista-switch" style={{
               display: 'inline-flex',
               border: '1px solid var(--border-primary)',
               borderRadius: 6,

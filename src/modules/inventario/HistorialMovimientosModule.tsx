@@ -22,6 +22,7 @@ interface Movimiento {
   id: string
   tipo_movimiento: string
   cantidad: number
+  usuario_id: string | null
   estado_origen: string | null
   estado_destino: string | null
   observaciones: string | null
@@ -126,21 +127,32 @@ export function HistorialMovimientosModule() {
           vehiculo_origen:vehiculo_origen_id (
             patente
           ),
-          usuarios:usuario_id (
-            nombre,
-            email
-          )
+          usuario_id
         `)
         .order('created_at', { ascending: false })
         .limit(100)
 
       if (fetchError) throw fetchError
 
+      const usuarioIds = [...new Set((data || []).map((item: any) => item.usuario_id).filter(Boolean))]
+      let perfilesMap = new Map<string, string>()
+
+      if (usuarioIds.length > 0) {
+        const { data: perfiles, error: perfilesError } = await supabase
+          .from('user_profiles')
+          .select('id, full_name')
+          .in('id', usuarioIds)
+
+        if (perfilesError) throw perfilesError
+        perfilesMap = new Map((perfiles || []).map((perfil: any) => [perfil.id, perfil.full_name]))
+      }
+
       // Transform data
       const transformed = (data || []).map((item: any) => ({
         id: item.id,
         tipo_movimiento: item.tipo_movimiento,
         cantidad: item.cantidad,
+        usuario_id: item.usuario_id,
         estado_origen: item.estado_origen,
         estado_destino: item.estado_destino,
         observaciones: item.observaciones,
@@ -151,7 +163,10 @@ export function HistorialMovimientosModule() {
         },
         vehiculo_destino: item.vehiculo_destino,
         vehiculo_origen: item.vehiculo_origen,
-        usuario: item.usuarios
+        usuario: item.usuario_id ? {
+          nombre: perfilesMap.get(item.usuario_id) || 'Usuario desconocido',
+          email: ''
+        } : null
       }))
 
       setMovimientos(transformed)
@@ -472,7 +487,9 @@ export function HistorialMovimientosModule() {
             </div>
             <div>
               <div className="hist-usuario-nombre">{usuario.nombre}</div>
-              <div className="hist-usuario-email">{usuario.email}</div>
+              {usuario.email ? (
+                <div className="hist-usuario-email">{usuario.email}</div>
+              ) : null}
             </div>
           </div>
         )
