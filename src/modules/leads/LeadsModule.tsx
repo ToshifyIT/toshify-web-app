@@ -281,8 +281,11 @@ const emptyFormData: LeadFormData = {
 function formatDate(dateStr: string | undefined | null): string {
   if (!dateStr) return '-'
   try {
-    const [year, month, day] = dateStr.split('T')[0].split('-')
-    return `${day}/${month}/${year}`
+    const d = new Date(dateStr)
+    if (isNaN(d.getTime())) return '-'
+    const day = d.toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric', timeZone: 'America/Argentina/Buenos_Aires' })
+    const time = d.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'America/Argentina/Buenos_Aires' })
+    return `${day} ${time}`
   } catch { return '-' }
 }
 

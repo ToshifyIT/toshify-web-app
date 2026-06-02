@@ -30,9 +30,10 @@ interface PeriodPickerProps {
   label?: string
   className?: string
   align?: 'left' | 'right'
+  allowedWeeks?: Set<string>
 }
 
-export function PeriodPicker({ granularity, value, onChange, label, className = '', align: _align = 'left' }: PeriodPickerProps) {
+export function PeriodPicker({ granularity, value, onChange, label, className = '', align: _align = 'left', allowedWeeks }: PeriodPickerProps) {
   const [isOpen, setIsOpen] = useState(false)
   const containerRef = useRef<HTMLDivElement>(null)
   
@@ -258,14 +259,21 @@ export function PeriodPicker({ granularity, value, onChange, label, className = 
             const selected = isSelected(day)
             const weekHovered = isWeekHovered(day)
             
-            // Check if disabled (future)
+            // Check if disabled (future or not in allowedWeeks)
             let isDisabled = false
             if (granularity === 'dia') {
                 isDisabled = isAfter(day, today)
             } else if (granularity === 'semana') {
                 const weekStart = startOfWeek(day, { weekStartsOn: 1 })
                 const currentWeekStart = startOfWeek(today, { weekStartsOn: 1 })
-                isDisabled = isAfter(weekStart, currentWeekStart)
+                if (isAfter(weekStart, currentWeekStart)) {
+                    isDisabled = true
+                } else if (allowedWeeks) {
+                    const wn = getWeek(day, { weekStartsOn: 1 })
+                    const yr = day.getFullYear()
+                    const key = `Sem ${wn.toString().padStart(2, '0')} ${yr}`
+                    isDisabled = !allowedWeeks.has(key)
+                }
             }
 
             let bgClass = 'hover:bg-gray-100'
