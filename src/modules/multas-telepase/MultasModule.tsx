@@ -54,6 +54,8 @@ interface Vehiculo {
   patente: string
 }
 
+type VistaMultas = 'activas' | 'enviadas' | 'desestimadas'
+
 function parseImporte(importe: string | number | null | undefined): number {
   if (importe == null || importe === '') return 0
   if (typeof importe === 'number') return importe
@@ -119,8 +121,8 @@ export default function MultasModule() {
   const [multaParaCobro, setMultaParaCobro] = useState<Multa | null>(null)
   const [editingMulta, setEditingMulta] = useState<Multa | null>(null)
   const [onlyActiveConductors, setOnlyActiveConductors] = useState(false)
-  // Vista activas vs desestimadas (toggle del header)
-  const [vista, setVista] = useState<'activas' | 'desestimadas'>('activas')
+  // Vista por estado operativo (toggle del header)
+  const [vista, setVista] = useState<VistaMultas>('activas')
 
   // Permisos por rol + whitelist por email — solo god mode puede reactivar/borrar.
   // El resto (incluido data entry) solo puede desestimar.
@@ -338,6 +340,10 @@ export default function MultasModule() {
     [...new Set(getFilteredData('importe').map(m => String(m.importe || '')))].filter(Boolean).sort()
   , [getFilteredData])
 
+  const fueEnviadaAFacturacion = useCallback((m: Multa): boolean => {
+    return multasEnviadas.has(m.id)
+  }, [multasEnviadas])
+
   // FIX 2026-05-20: helper para detectar multas con conductor con coma (2+ conductores).
   // Las ocultamos automaticamente de la vista "Activas" y "Desestimadas" porque quedan
   // pendientes de revision manual.
@@ -345,12 +351,15 @@ export default function MultasModule() {
     return !!m.conductor_responsable && m.conductor_responsable.includes(',')
   }
 
-  // Filtrar registros (Resultado final) — separa activas vs desestimadas según toggle
+  // Filtrar registros (Resultado final) — separa activas, enviadas y desestimadas según toggle
   const multasFiltradas = useMemo(() => {
     const data = getFilteredData()
-    const porVista = data.filter(m =>
-      vista === 'desestimadas' ? !!m.desestimada_at : !m.desestimada_at,
-    )
+    const porVista = data.filter(m => {
+      if (vista === 'desestimadas') return !!m.desestimada_at
+      if (m.desestimada_at) return false
+      if (vista === 'enviadas') return fueEnviadaAFacturacion(m)
+      return !fueEnviadaAFacturacion(m)
+    })
     // FIX 2026-05-20: ocultar multas con 2 conductores (con coma) pendientes de revision
     const sinComa = porVista.filter(m => !tieneConductorConComa(m))
     // Ordenar por fecha de carga (created_at) descendente (más actual a más antiguo)
@@ -362,12 +371,31 @@ export default function MultasModule() {
       if (!fechaB) return -1
       return fechaB.localeCompare(fechaA)
     })
-  }, [getFilteredData, vista])
+  }, [getFilteredData, vista, fueEnviadaAFacturacion])
 
   // Contadores globales (sin filtros) para el toggle del header
   // FIX 2026-05-20: contadores tambien excluyen las con coma (pendientes de revision)
-  const totalActivas = useMemo(() => multas.filter(m => !m.desestimada_at && !tieneConductorConComa(m)).length, [multas])
+  const totalActivas = useMemo(() =>
+    multas.filter(m =>
+      !m.desestimada_at &&
+      !fueEnviadaAFacturacion(m) &&
+      !tieneConductorConComa(m)
+    ).length
+  , [multas, fueEnviadaAFacturacion])
+  const totalEnviadas = useMemo(() =>
+    multas.filter(m =>
+      !m.desestimada_at &&
+      fueEnviadaAFacturacion(m) &&
+      !tieneConductorConComa(m)
+    ).length
+  , [multas, fueEnviadaAFacturacion])
   const totalDesestimadas = useMemo(() => multas.filter(m => !!m.desestimada_at && !tieneConductorConComa(m)).length, [multas])
+
+  const vistaOptions = useMemo<Array<{ id: VistaMultas; label: string; count: number }>>(() => [
+    { id: 'activas', label: 'Activas', count: totalActivas },
+    { id: 'enviadas', label: 'Enviadas a facturación', count: totalEnviadas },
+    { id: 'desestimadas', label: 'Desestimadas', count: totalDesestimadas },
+  ], [totalActivas, totalEnviadas, totalDesestimadas])
 
   // Estadisticas
   const totalImporte = useMemo(() =>
@@ -1311,68 +1339,49 @@ export default function MultasModule() {
         onClearAllFilters={clearAllFilters}
         headerAction={
           <div className="multas-header-actions">
-            {/* Toggle vista activas / desestimadas */}
+            {/* Toggle vista activas / enviadas / desestimadas */}
             <div className="multas-vista-switch" style={{
               display: 'inline-flex',
               border: '1px solid var(--border-primary)',
               borderRadius: 6,
               overflow: 'hidden',
             }}>
-              <button
-                onClick={() => setVista('activas')}
-                style={{
-                  border: 'none',
-                  background: vista === 'activas' ? 'var(--text-primary)' : 'var(--bg-primary)',
-                  color: vista === 'activas' ? '#fff' : 'var(--text-secondary)',
-                  padding: '6px 12px',
-                  fontSize: 12,
-                  fontWeight: 500,
-                  cursor: 'pointer',
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: 6,
-                  borderRight: '1px solid var(--border-primary)',
-                }}
-              >
-                Activas
-                <span style={{
-                  background: vista === 'activas' ? 'rgba(255,255,255,0.2)' : 'var(--bg-secondary)',
-                  color: vista === 'activas' ? '#fff' : 'var(--text-tertiary)',
-                  padding: '1px 6px',
-                  borderRadius: 10,
-                  fontSize: 10,
-                  fontWeight: 600,
-                }}>
-                  {totalActivas}
-                </span>
-              </button>
-              <button
-                onClick={() => setVista('desestimadas')}
-                style={{
-                  border: 'none',
-                  background: vista === 'desestimadas' ? 'var(--text-primary)' : 'var(--bg-primary)',
-                  color: vista === 'desestimadas' ? '#fff' : 'var(--text-secondary)',
-                  padding: '6px 12px',
-                  fontSize: 12,
-                  fontWeight: 500,
-                  cursor: 'pointer',
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: 6,
-                }}
-              >
-                Desestimadas
-                <span style={{
-                  background: vista === 'desestimadas' ? 'rgba(255,255,255,0.2)' : 'var(--bg-secondary)',
-                  color: vista === 'desestimadas' ? '#fff' : 'var(--text-tertiary)',
-                  padding: '1px 6px',
-                  borderRadius: 10,
-                  fontSize: 10,
-                  fontWeight: 600,
-                }}>
-                  {totalDesestimadas}
-                </span>
-              </button>
+              {vistaOptions.map((option, index) => {
+                const isActive = vista === option.id
+                return (
+                  <button
+                    key={option.id}
+                    onClick={() => setVista(option.id)}
+                    style={{
+                      border: 'none',
+                      background: isActive ? 'var(--text-primary)' : 'var(--bg-primary)',
+                      color: isActive ? '#fff' : 'var(--text-secondary)',
+                      padding: '6px 12px',
+                      fontSize: 12,
+                      fontWeight: 500,
+                      cursor: 'pointer',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: 6,
+                      borderRight: index < vistaOptions.length - 1 ? '1px solid var(--border-primary)' : 'none',
+                      lineHeight: 1.2,
+                    }}
+                  >
+                    {option.label}
+                    <span style={{
+                      background: isActive ? 'rgba(255,255,255,0.2)' : 'var(--bg-secondary)',
+                      color: isActive ? '#fff' : 'var(--text-tertiary)',
+                      padding: '1px 6px',
+                      borderRadius: 10,
+                      fontSize: 10,
+                      fontWeight: 600,
+                    }}>
+                      {option.count}
+                    </span>
+                  </button>
+                )
+              })}
             </div>
             <button className="btn-secondary" onClick={handleExportar}>
               <Download size={16}
