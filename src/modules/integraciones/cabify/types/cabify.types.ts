@@ -11,6 +11,11 @@
 export interface CabifyDriver {
   readonly id: string
   readonly companyName?: string
+  readonly sourceAccount?: 'buenos_aires_44dreams' | 'bariloche'
+  readonly sourceLabel?: string
+  readonly sourceTable?: 'cabify_historico' | 'cabify_historico_bariloche'
+  readonly sourceCompanyId?: string
+  readonly sourceCompanyIds?: readonly string[]
   readonly name?: string
   readonly surname?: string
   readonly email?: string
@@ -38,6 +43,7 @@ export interface CabifyDriver {
   readonly gananciaPorHora?: number | string
   readonly permisoEfectivo?: string
   readonly disabled?: boolean
+  readonly lastSyncedAt?: string | null
 }
 
 export interface WeekOption {

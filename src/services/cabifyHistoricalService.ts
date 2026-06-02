@@ -8,10 +8,85 @@
  */
 
 import { supabase } from '../lib/supabase'
-import { normalizeDni } from '../utils/normalizeDocuments'
+import {
+  normalizeDni,
+  normalizeLicencia,
+  normalizeNombre,
+  normalizePatente,
+} from '../utils/normalizeDocuments'
 
 // IDs de sedes
 const SEDE_BARILOCHE_ID = 'f37193f7-5805-4d87-820d-c4521824860e'
+const SEDE_BUENOS_AIRES_ID = '80587298-b799-4a98-87a9-2f74890da443'
+
+type CabifySourceAccount = 'buenos_aires_44dreams' | 'bariloche'
+
+interface HistoricalSourceConfig {
+  tableName: 'cabify_historico' | 'cabify_historico_bariloche'
+  sourceAccount: CabifySourceAccount
+  sourceLabel: string
+  includeInResults: boolean
+}
+
+interface HistoricalRecord {
+  cabify_driver_id: string
+  cabify_company_id: string | null
+  nombre: string | null
+  apellido: string | null
+  email: string | null
+  dni: string | null
+  telefono_numero: string | null
+  telefono_codigo: string | null
+  licencia: string | null
+  vehiculo_id: string | null
+  vehiculo_marca: string | null
+  vehiculo_modelo: string | null
+  vehiculo_patente: string | null
+  vehiculo_completo: string | null
+  score: number | string | null
+  viajes_aceptados: number | null
+  viajes_perdidos: number | null
+  viajes_ofrecidos: number | null
+  viajes_finalizados: number | null
+  viajes_rechazados: number | null
+  tasa_aceptacion: number | string | null
+  horas_conectadas: number | string | null
+  tasa_ocupacion: number | string | null
+  cobro_efectivo: number | string | null
+  cobro_app: number | string | null
+  ganancia_total: number | string | null
+  peajes: number | string | null
+  promociones: number | string | null
+  deducciones: number | string | null
+  permiso_efectivo: string | null
+  estado_conductor: string | null
+  fecha_inicio: string | null
+  fecha_guardado: string | null
+  sourceAccount: CabifySourceAccount
+  sourceLabel: string
+  sourceTable: HistoricalSourceConfig['tableName']
+}
+
+interface SedeIdentityIndex {
+  dnis: Set<string>
+  licencias: Set<string>
+  nombres: Set<string>
+  patentes: Set<string>
+}
+
+const SOURCE_BUENOS_AIRES: HistoricalSourceConfig = {
+  tableName: 'cabify_historico',
+  sourceAccount: 'buenos_aires_44dreams',
+  sourceLabel: 'Buenos Aires / 44Dreams',
+  includeInResults: true,
+}
+
+const SOURCE_BARILOCHE: HistoricalSourceConfig = {
+  tableName: 'cabify_historico_bariloche',
+  sourceAccount: 'bariloche',
+  sourceLabel: 'Bariloche',
+  includeInResults: true,
+}
 
 // =====================================================
 // TIPOS
@@ -21,6 +96,11 @@ export interface DriverHistoricalData {
   id: string
   companyId: string
   companyName: string
+  sourceAccount: CabifySourceAccount
+  sourceLabel: string
+  sourceTable: HistoricalSourceConfig['tableName']
+  sourceCompanyId: string
+  sourceCompanyIds: string[]
   name: string
   surname: string
   email: string
@@ -53,6 +133,7 @@ export interface DriverHistoricalData {
   permisoEfectivo: string
   disabled: boolean
   activatedAt: string | null
+  lastSyncedAt: string | null
 }
 
 interface CoverageAnalysis {
@@ -238,18 +319,116 @@ class CabifyHistoricalService {
    * Los datos se almacenan por día, esta función los agrega por conductor
    */
   /**
-   * Determinar qué tabla(s) consultar según la sede
+   * Determinar qué fuentes consultar según la sede.
+   * Buenos Aires usa el job multicuenta CG + 44Dreams sobre cabify_historico.
+   * Bariloche usa una cuenta separada sobre cabify_historico_bariloche.
    */
-  private getTableNames(sedeId?: string | null): string[] {
+  private getSourceConfigs(sedeId?: string | null): HistoricalSourceConfig[] {
     if (sedeId === SEDE_BARILOCHE_ID) {
-      return ['cabify_historico_bariloche']
+      return [SOURCE_BARILOCHE]
     }
     if (!sedeId) {
-      // Todas las sedes: consultar ambas tablas
-      return ['cabify_historico', 'cabify_historico_bariloche']
+      return [SOURCE_BUENOS_AIRES, SOURCE_BARILOCHE]
     }
-    // Buenos Aires u otra sede
-    return ['cabify_historico']
+    if (sedeId === SEDE_BUENOS_AIRES_ID) {
+      return [SOURCE_BUENOS_AIRES]
+    }
+    return [SOURCE_BUENOS_AIRES]
+  }
+
+  private getQuerySources(sedeId?: string | null): HistoricalSourceConfig[] {
+    const sourceConfigs = this.getSourceConfigs(sedeId)
+    const needsBarilocheExclusion = sourceConfigs.some(
+      source => source.sourceAccount === 'buenos_aires_44dreams'
+    )
+    const alreadyQueriesBariloche = sourceConfigs.some(
+      source => source.sourceAccount === 'bariloche'
+    )
+
+    if (!needsBarilocheExclusion || alreadyQueriesBariloche) {
+      return sourceConfigs
+    }
+
+    return [
+      ...sourceConfigs,
+      { ...SOURCE_BARILOCHE, includeInResults: false },
+    ]
+  }
+
+  /**
+   * Índice interno de la sede. La fuente Cabify no es suficiente porque puede
+   * traer conductores de otra cuenta; este cruce valida contra Toshify.
+   */
+  private async getSedeIdentityIndex(sedeId?: string | null): Promise<SedeIdentityIndex | null> {
+    if (!sedeId) return null
+
+    const [conductoresResult, vehiculosResult] = await Promise.all([
+      supabase
+        .from('conductores')
+        .select('numero_dni, numero_licencia, nombres, apellidos')
+        .eq('sede_id', sedeId)
+        .limit(5000),
+      supabase
+        .from('vehiculos')
+        .select('patente')
+        .eq('sede_id', sedeId)
+        .limit(5000),
+    ])
+
+    const index: SedeIdentityIndex = {
+      dnis: new Set(),
+      licencias: new Set(),
+      nombres: new Set(),
+      patentes: new Set(),
+    }
+
+    if (!conductoresResult.error && conductoresResult.data) {
+      for (const conductor of conductoresResult.data as any[]) {
+        const dni = this.normalizeRealDni(conductor.numero_dni)
+        if (dni) index.dnis.add(dni)
+
+        const licencia = normalizeLicencia(conductor.numero_licencia)
+        if (licencia) index.licencias.add(licencia)
+
+        const nombre = normalizeNombre(`${conductor.nombres || ''} ${conductor.apellidos || ''}`)
+        if (nombre) index.nombres.add(nombre)
+      }
+    }
+
+    if (!vehiculosResult.error && vehiculosResult.data) {
+      for (const vehiculo of vehiculosResult.data as any[]) {
+        const patente = normalizePatente(vehiculo.patente)
+        if (patente) index.patentes.add(patente)
+      }
+    }
+
+    return index
+  }
+
+  private normalizeRealDni(value: string | number | null | undefined): string {
+    const raw = String(value || '').trim()
+    if (!raw || raw.toUpperCase().startsWith('CABIFY_')) return ''
+
+    const dni = normalizeDni(raw)
+    return /^\d+$/.test(dni) ? dni : ''
+  }
+
+  private recordMatchesSede(record: HistoricalRecord, index: SedeIdentityIndex | null): boolean {
+    if (!index) return true
+
+    const dni = this.normalizeRealDni(record.dni)
+    if (dni) {
+      return index.dnis.has(dni)
+    }
+
+    const licencia = normalizeLicencia(record.licencia)
+    if (licencia && index.licencias.has(licencia)) return true
+
+    const nombre = normalizeNombre(`${record.nombre || ''} ${record.apellido || ''}`)
+    if (nombre && index.nombres.has(nombre)) return true
+
+    const patente = normalizePatente(record.vehiculo_patente)
+    return Boolean(patente && index.patentes.has(patente))
   }
 
   private async queryHistorical(
@@ -259,12 +438,13 @@ class CabifyHistoricalService {
   ): Promise<DriverHistoricalData[]> {
     const selectFields = 'cabify_driver_id, cabify_company_id, nombre, apellido, email, dni, telefono_numero, telefono_codigo, licencia, vehiculo_id, vehiculo_marca, vehiculo_modelo, vehiculo_patente, vehiculo_completo, score, viajes_aceptados, viajes_perdidos, viajes_ofrecidos, viajes_finalizados, viajes_rechazados, tasa_aceptacion, horas_conectadas, tasa_ocupacion, cobro_efectivo, cobro_app, ganancia_total, peajes, promociones, deducciones, permiso_efectivo, estado_conductor, fecha_inicio, fecha_guardado'
 
-    const tableNames = this.getTableNames(sedeId)
+    const sourceConfigs = this.getQuerySources(sedeId)
+    const sedeIdentityPromise = this.getSedeIdentityIndex(sedeId)
 
     // Consultar todas las tablas necesarias en paralelo
-    const queryPromises = tableNames.map(tableName =>
+    const queryPromises = sourceConfigs.map(source =>
       supabase
-        .from(tableName)
+        .from(source.tableName)
         .select(selectFields)
         .gte('fecha_inicio', startDate)
         .lte('fecha_inicio', endDate)
@@ -273,12 +453,46 @@ class CabifyHistoricalService {
     )
 
     const results = await Promise.all(queryPromises)
+    const sedeIdentityIndex = await sedeIdentityPromise
 
-    // Combinar datos de todas las tablas
-    const allData: any[] = []
-    for (const result of results) {
-      if (!result.error && result.data) {
-        allData.push(...result.data)
+    const dataBySource = results.map((result, index) => ({
+      source: sourceConfigs[index],
+      rows: !result.error && result.data ? (result.data as any[]) : [],
+    }))
+
+    const barilocheCompanyIds = new Set(
+      dataBySource
+        .filter(({ source }) => source.sourceAccount === 'bariloche')
+        .flatMap(({ rows }) => rows.map(row => row.cabify_company_id).filter(Boolean))
+    )
+
+    // Combinar datos de todas las fuentes visibles y excluir de BA las compañías
+    // que también llegan por la cuenta/tabla de Bariloche.
+    const allData: HistoricalRecord[] = []
+    for (const { source, rows } of dataBySource) {
+      if (!source.includeInResults) continue
+
+      for (const row of rows) {
+        if (
+          source.sourceAccount === 'buenos_aires_44dreams' &&
+          row.cabify_company_id &&
+          barilocheCompanyIds.has(row.cabify_company_id)
+        ) {
+          continue
+        }
+
+        const record: HistoricalRecord = {
+          ...row,
+          sourceAccount: source.sourceAccount,
+          sourceLabel: source.sourceLabel,
+          sourceTable: source.tableName,
+        }
+
+        if (!this.recordMatchesSede(record, sedeIdentityIndex)) {
+          continue
+        }
+
+        allData.push(record)
       }
     }
 
@@ -286,19 +500,17 @@ class CabifyHistoricalService {
       return []
     }
 
-    const data = allData
-
     // PASO 1: Eliminar duplicados - quedarse solo con el registro más reciente por (dni, fecha)
     // Esto soluciona el problema de múltiples sincronizaciones por día
-    const uniqueRecordsMap = new Map<string, any>()
+    const uniqueRecordsMap = new Map<string, HistoricalRecord>()
 
-    for (const record of data as any[]) {
+    for (const record of allData) {
       const dni = record.dni || record.cabify_driver_id
       if (!dni) continue
 
-      // Crear key única: dni + fecha del día
+      // Crear key única: fuente + dni + fecha del día
       const fechaDia = record.fecha_inicio ? record.fecha_inicio.split('T')[0] : ''
-      const uniqueKey = `${dni}_${fechaDia}`
+      const uniqueKey = `${record.sourceAccount}_${dni}_${fechaDia}`
 
       const existing = uniqueRecordsMap.get(uniqueKey)
 
@@ -338,14 +550,22 @@ class CabifyHistoricalService {
       if (!dniRaw) continue
       const dni = normalizeDni(dniRaw)
 
-      const existing = driverMap.get(dni)
+      const driverKey = `${record.sourceAccount}_${dni}`
+      const existing = driverMap.get(driverKey)
 
       if (!existing) {
         // Primer registro del conductor
-        driverMap.set(dni, {
+        driverMap.set(driverKey, {
           id: record.cabify_driver_id,
-          companyId: record.cabify_company_id,
-          companyName: record.cabify_company_id,
+          companyId: record.cabify_company_id || '',
+          companyName: record.sourceLabel,
+          sourceAccount: record.sourceAccount,
+          sourceLabel: record.sourceLabel,
+          sourceLabels: new Set([record.sourceLabel]),
+          sourceTable: record.sourceTable,
+          sourceCompanyId: record.cabify_company_id || '',
+          sourceCompanyIds: new Set(record.cabify_company_id ? [record.cabify_company_id] : []),
+          lastSyncedAt: record.fecha_guardado || null,
           name: record.nombre || '',
           surname: record.apellido || '',
           email: record.email || '',
@@ -381,6 +601,19 @@ class CabifyHistoricalService {
           disabled: record.estado_conductor === 'Deshabilitado',
         })
       } else {
+        if (record.sourceLabel) {
+          existing.sourceLabels.add(record.sourceLabel)
+        }
+        if (record.cabify_company_id) {
+          existing.sourceCompanyIds.add(record.cabify_company_id)
+        }
+        if (
+          record.fecha_guardado &&
+          (!existing.lastSyncedAt || new Date(record.fecha_guardado) > new Date(existing.lastSyncedAt))
+        ) {
+          existing.lastSyncedAt = record.fecha_guardado
+        }
+
         // Acumular datos de días adicionales
         existing.viajesAceptados += record.viajes_aceptados || 0
         existing.viajesPerdidos += record.viajes_perdidos || 0
@@ -422,6 +655,9 @@ class CabifyHistoricalService {
       const avgTasaAceptacion = d.tasaAceptacionCount > 0 ? d.tasaAceptacionSum / d.tasaAceptacionCount : 0
       const avgTasaOcupacion = d.tasaOcupacionCount > 0 ? d.tasaOcupacionSum / d.tasaOcupacionCount : 0
       const gananciaPorHora = d.horasConectadas > 0 ? d.gananciaTotal / d.horasConectadas : 0
+      const sourceLabels = Array.from(d.sourceLabels as Set<string>)
+      const sourceCompanyIds = Array.from(d.sourceCompanyIds as Set<string>)
+      const sourceLabel = sourceLabels.length > 0 ? sourceLabels.join(' / ') : d.sourceLabel
 
       // Formatear horas conectadas
       const hours = Math.floor(d.horasConectadas)
@@ -431,7 +667,12 @@ class CabifyHistoricalService {
       return {
         id: d.id,
         companyId: d.companyId,
-        companyName: d.companyName,
+        companyName: sourceLabel,
+        sourceAccount: d.sourceAccount,
+        sourceLabel,
+        sourceTable: d.sourceTable,
+        sourceCompanyId: d.sourceCompanyId,
+        sourceCompanyIds,
         name: d.name,
         surname: d.surname,
         email: d.email,
@@ -463,7 +704,8 @@ class CabifyHistoricalService {
         deducciones: Number(d.deducciones.toFixed(2)),
         permisoEfectivo: d.permisoEfectivo,
         disabled: d.disabled,
-        activatedAt: null
+        activatedAt: null,
+        lastSyncedAt: d.lastSyncedAt
       }
     })
 

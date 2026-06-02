@@ -5,8 +5,7 @@
  */
 
 import { ChevronDown, ChevronUp } from 'lucide-react'
-import type { CabifyRankingDriver } from '../../../../services/cabifyIntegrationService'
-import type { AccordionState } from '../types/cabify.types'
+import type { AccordionState, CabifyDriver } from '../types/cabify.types'
 import { formatCurrency } from '../utils/cabify.utils'
 import { UI_TEXT } from '../constants/cabify.constants'
 
@@ -15,8 +14,8 @@ import { UI_TEXT } from '../constants/cabify.constants'
 // =====================================================
 
 interface TopDriversSectionProps {
-  readonly topMejores: readonly CabifyRankingDriver[]
-  readonly topPeores: readonly CabifyRankingDriver[]
+  readonly topMejores: readonly CabifyDriver[]
+  readonly topPeores: readonly CabifyDriver[]
   readonly accordionState: AccordionState
   readonly onToggleAccordion: (key: 'mejores' | 'peores') => void
 }
@@ -62,7 +61,7 @@ export function TopDriversSection({
 interface TopCardProps {
   readonly type: 'mejores' | 'peores'
   readonly title: string
-  readonly drivers: readonly CabifyRankingDriver[]
+  readonly drivers: readonly CabifyDriver[]
   readonly isExpanded: boolean
   readonly onToggle: () => void
 }
@@ -96,7 +95,7 @@ function TopCard({
 // =====================================================
 
 interface DriverListProps {
-  readonly drivers: readonly CabifyRankingDriver[]
+  readonly drivers: readonly CabifyDriver[]
   readonly type: 'mejores' | 'peores'
 }
 
@@ -109,7 +108,7 @@ function DriverList({ drivers, type }: DriverListProps) {
     <div className="cabify-top-list">
       {drivers.map((driver, index) => (
         <DriverListItem
-          key={driver.dni}
+          key={driver.nationalIdNumber || driver.id || `${driver.name}-${driver.surname}-${index}`}
           driver={driver}
           rank={index + 1}
           type={type}
@@ -120,49 +119,36 @@ function DriverList({ drivers, type }: DriverListProps) {
 }
 
 interface DriverListItemProps {
-  readonly driver: CabifyRankingDriver
+  readonly driver: CabifyDriver
   readonly rank: number
   readonly type: 'mejores' | 'peores'
 }
 
 function DriverListItem({ driver, rank, type }: DriverListItemProps) {
+  const sourceLabel = getSourceLabel(driver)
+  const fullName = `${driver.name || ''} ${driver.surname || ''}`.trim() || '-'
+
   return (
     <div className="cabify-top-item">
       <div className="cabify-top-rank">#{rank}</div>
       <div className="cabify-top-info">
-        <div className="cabify-top-name">{driver.nombreCompleto}</div>
+        <div className="cabify-top-name">{fullName}</div>
         <div className="cabify-top-details">
-          {driver.viajesFinalizados} viajes
+          {driver.viajesFinalizados || 0} viajes
+          {sourceLabel && <span className="cabify-top-source"> · {sourceLabel}</span>}
         </div>
       </div>
       <div className="cabify-top-stats">
-        {driver.horario && <ModalidadBadge horario={driver.horario} />}
         <span className={`cabify-top-amount ${type}`}>
-          ${formatCurrency(driver.gananciaTotal)}
+          ${formatCurrency(Number(driver.gananciaTotal) || 0)}
         </span>
       </div>
     </div>
   )
 }
 
-interface ModalidadBadgeProps {
-  readonly horario: 'CARGO' | 'Diurno' | 'Nocturno'
-}
-
-function ModalidadBadge({ horario }: ModalidadBadgeProps) {
-  const getBadgeConfig = () => {
-    switch (horario) {
-      case 'CARGO':
-        return { className: 'cargo', label: 'A cargo' }
-      case 'Diurno':
-        return { className: 'turno diurno', label: 'Diurno' }
-      case 'Nocturno':
-        return { className: 'turno nocturno', label: 'Nocturno' }
-      default:
-        return { className: 'turno', label: horario }
-    }
-  }
-
-  const { className, label } = getBadgeConfig()
-  return <span className={`cabify-top-badge ${className}`}>{label}</span>
+function getSourceLabel(driver: CabifyDriver): string {
+  if (driver.sourceAccount === 'bariloche') return 'Bariloche'
+  if (driver.sourceAccount === 'buenos_aires_44dreams') return 'BA/44D'
+  return driver.sourceLabel || ''
 }

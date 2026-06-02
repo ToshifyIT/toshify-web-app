@@ -99,9 +99,9 @@ export function useCabifyData(): UseCabifyDataReturn {
     // Usar índice multi-clave (DNI + licencia + nombre) para que el match con Cabify
     // no falle si el DNI tiene formato distinto o no coincide.
     void driverData
-    const asignacionesIndex = await asignacionesService.getAllAsignacionesActivasIndex()
+    const asignacionesIndex = await asignacionesService.getAllAsignacionesActivasIndex(sedeActualId)
     setAsignaciones(asignacionesIndex)
-  }, [])
+  }, [sedeActualId])
 
   const executeDataLoad = useCallback(async (week: WeekOption, showLoading: boolean): Promise<void> => {
     // Solo mostrar loading y vaciar datos si no es actualización silenciosa
@@ -148,11 +148,11 @@ export function useCabifyData(): UseCabifyDataReturn {
     // Cargar asignaciones
     await loadAsignaciones(driverData)
 
-    // Determinar última fecha de sync desde los datos (fecha_guardado más reciente)
+    // Determinar última fecha de sync desde los datos agregados
     let ultimaSync: Date | null = null
-    for (const d of driverData as any[]) {
-      if (d.fecha_guardado) {
-        const fg = new Date(d.fecha_guardado)
+    for (const d of driverData) {
+      if (d.lastSyncedAt) {
+        const fg = new Date(d.lastSyncedAt)
         if (!ultimaSync || fg > ultimaSync) ultimaSync = fg
       }
     }

@@ -6,23 +6,6 @@ import { normalizeDni } from '../utils/normalizeDocuments'
 
 const SEDE_BARILOCHE_ID = 'f37193f7-5805-4d87-820d-c4521824860e'
 
-/**
- * Tipo para los resultados de las funciones RPC de rankings
- */
-interface RankingRow {
-  dni: string
-  nombre: string
-  apellido: string
-  vehiculo_patente: string
-  viajes_finalizados: number
-  ganancia_total: number
-  score: number
-  ganancia_por_hora: number
-  horas_conectadas: number
-  horario: string | null
-  fecha_guardado: string
-}
-
 const ALQUILER_A_CARGO = Number(import.meta.env.VITE_ALQUILER_A_CARGO) || 360000
 const ALQUILER_TURNO = Number(import.meta.env.VITE_ALQUILER_TURNO) || 245000
 
@@ -220,17 +203,18 @@ class CabifyIntegrationService {
       return this.getTopFromTable('cabify_historico_bariloche', startDate, endDate, 'desc')
     }
 
-    // Buenos Aires: usar RPC optimizado
-    const { data, error } = await supabase.rpc('get_cabify_top_mejores', {
-      p_fecha_inicio: startDate,
-      p_fecha_fin: endDate
-    }) as { data: RankingRow[] | null; error: Error | null }
-
-    if (error) {
-      return this.getTopMejoresFallback()
-    }
-
-    const bsAsResults = (data || []).map((row: RankingRow) => this.mapRankingDriver(row))
+    const barilocheCompanyIds = await this.getCompanyIdsFromTable(
+      'cabify_historico_bariloche',
+      startDate,
+      endDate
+    )
+    const bsAsResults = await this.getTopFromTable(
+      'cabify_historico',
+      startDate,
+      endDate,
+      'desc',
+      barilocheCompanyIds
+    )
 
     // Si es "todas las sedes", combinar con Bariloche
     if (!sedeId) {
@@ -256,17 +240,18 @@ class CabifyIntegrationService {
       return this.getTopFromTable('cabify_historico_bariloche', startDate, endDate, 'asc')
     }
 
-    // Buenos Aires: usar RPC optimizado
-    const { data, error } = await supabase.rpc('get_cabify_top_peores', {
-      p_fecha_inicio: startDate,
-      p_fecha_fin: endDate
-    }) as { data: RankingRow[] | null; error: Error | null }
-
-    if (error) {
-      return this.getTopPeoresFallback()
-    }
-
-    const bsAsResults = (data || []).map((row: RankingRow) => this.mapRankingDriver(row))
+    const barilocheCompanyIds = await this.getCompanyIdsFromTable(
+      'cabify_historico_bariloche',
+      startDate,
+      endDate
+    )
+    const bsAsResults = await this.getTopFromTable(
+      'cabify_historico',
+      startDate,
+      endDate,
+      'asc',
+      barilocheCompanyIds
+    )
 
     // Si es "todas las sedes", combinar con Bariloche
     if (!sedeId) {
@@ -281,17 +266,39 @@ class CabifyIntegrationService {
    * Consultar top drivers directamente de una tabla (para Bariloche)
    * Agrupa registros diarios por DNI para evitar duplicados
    */
+  private async getCompanyIdsFromTable(
+    tableName: string,
+    startDate: string,
+    endDate: string
+  ): Promise<Set<string>> {
+    const { data, error } = await supabase
+      .from(tableName)
+      .select('cabify_company_id')
+      .gte('fecha_inicio', startDate)
+      .lte('fecha_inicio', endDate)
+      .limit(5000)
+
+    if (error || !data) return new Set()
+
+    return new Set(
+      (data as any[])
+        .map(row => row.cabify_company_id)
+        .filter((companyId): companyId is string => Boolean(companyId))
+    )
+  }
+
   private async getTopFromTable(
     tableName: string,
     startDate: string,
     endDate: string,
-    order: 'asc' | 'desc'
+    order: 'asc' | 'desc',
+    excludeCompanyIds: Set<string> = new Set()
   ): Promise<CabifyRankingDriver[]> {
     // endDate viene como domingo 23:59:59 UTC del rango de la semana
     // Los registros tienen fecha_inicio como T00:00:00Z, así que usamos lte para incluir el domingo
     const { data, error } = await supabase
       .from(tableName)
-      .select('dni, nombre, apellido, vehiculo_patente, viajes_finalizados, ganancia_total, score, horas_conectadas, fecha_guardado')
+      .select('cabify_company_id, dni, nombre, apellido, vehiculo_patente, viajes_finalizados, ganancia_total, score, horas_conectadas, fecha_guardado')
       .gte('fecha_inicio', startDate)
       .lte('fecha_inicio', endDate)
       .gt('viajes_finalizados', 0)
@@ -301,6 +308,10 @@ class CabifyIntegrationService {
     // Agrupar por DNI (los registros diarios se suman)
     const grouped = new Map<string, { nombre: string; apellido: string; vehiculo_patente: string; viajes_finalizados: number; ganancia_total: number; score: number; horas_conectadas: number; fecha_guardado: string }>()
     for (const row of data as any[]) {
+      if (row.cabify_company_id && excludeCompanyIds.has(row.cabify_company_id)) {
+        continue
+      }
+
       const dniKey = row.dni || ''
       const existing = grouped.get(dniKey)
       if (existing) {
@@ -360,36 +371,6 @@ class CabifyIntegrationService {
       startDate: monday.toISOString(),
       endDate: now.toISOString()
     }
-  }
-
-  /**
-   * Fallback: obtener top mejores desde vista (sin filtro)
-   */
-  private async getTopMejoresFallback(): Promise<CabifyRankingDriver[]> {
-    const { data, error } = await supabase
-      .from('cabify_top_mejores')
-      .select('*')
-
-    if (error) {
-      return []
-    }
-
-    return (data || []).map(row => this.mapRankingDriver(row))
-  }
-
-  /**
-   * Fallback: obtener top peores desde vista (sin filtro)
-   */
-  private async getTopPeoresFallback(): Promise<CabifyRankingDriver[]> {
-    const { data, error } = await supabase
-      .from('cabify_top_peores')
-      .select('*')
-
-    if (error) {
-      return []
-    }
-
-    return (data || []).map(row => this.mapRankingDriver(row))
   }
 
   /**

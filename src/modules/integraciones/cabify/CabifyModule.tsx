@@ -19,8 +19,6 @@ import type { CabifyDriver, AccordionKey, WeekOption } from './types/cabify.type
 
 // Hooks
 import { useCabifyData, useCabifyStats } from './hooks'
-import { useCabifyRankings } from './hooks/useCabifyRankings'
-import { useSede } from '../../../contexts/SedeContext'
 
 // Componentes
 import { CabifyHeader, type DateRange, StatsAccordion, TopDriversSection } from './components'
@@ -28,11 +26,12 @@ import { CabifyHeader, type DateRange, StatsAccordion, TopDriversSection } from 
 // Utilidades y constantes
 import { getScoreLevel, getRateLevel, buildLoadingMessage, getDriverPatente } from './utils/cabify.utils'
 import { findAsignacionEnIndex } from '../../../services/asignacionesService'
+import type { AsignacionActiva } from '../../../services/asignacionesService'
 
 // Helper: busca la asignación de un driver de Cabify por DNI, licencia o nombre.
 function findAsignacionForCabifyDriver(
   driver: CabifyDriver,
-  index: Map<string, import('../../../services/asignacionesService').AsignacionActiva>,
+  index: Map<string, AsignacionActiva>,
 ) {
   const nombre = [driver.name, driver.surname].filter(Boolean).join(' ').trim()
   return findAsignacionEnIndex(index, {
@@ -47,6 +46,31 @@ function getDniDisplay(raw: string | undefined | null, fallback = '-'): string {
   if (!raw) return fallback
   if (raw.toUpperCase().startsWith('CABIFY_')) return fallback
   return raw
+}
+
+function getSourceBadgeLabel(driver: CabifyDriver, asignacion?: AsignacionActiva | null): string {
+  const grupoFlota = asignacion?.grupoFlota?.toUpperCase() || ''
+  if (grupoFlota.includes('44 DREAMS')) return '44D'
+  if (driver.sourceAccount === 'bariloche') return 'Bariloche'
+  if (driver.sourceAccount === 'buenos_aires_44dreams') return 'BA/44D'
+  return driver.sourceLabel || driver.companyName || 'Cabify'
+}
+
+function getSourceBadgeTitle(driver: CabifyDriver, asignacion?: AsignacionActiva | null): string {
+  const label = driver.sourceLabel || driver.companyName || 'Cabify'
+  const grupoFlota = asignacion?.grupoFlota ? ` - ${asignacion.grupoFlota}` : ''
+  const companyIds = driver.sourceCompanyIds?.length
+    ? ` - Company ID: ${driver.sourceCompanyIds.join(', ')}`
+    : ''
+  return `Origen: ${label}${grupoFlota}${companyIds}`
+}
+
+function hasActiveAssignmentWithVehicle(
+  driver: CabifyDriver,
+  asignaciones: Map<string, AsignacionActiva>,
+): boolean {
+  const asig = findAsignacionForCabifyDriver(driver, asignaciones)
+  return Boolean(asig?.estado === 'activa' && asig.patente)
 }
 import {
   INITIAL_ACCORDION_STATE,
@@ -81,8 +105,6 @@ function createInitialDateRange(selectedWeek: WeekOption | null): DateRange | nu
 // =====================================================
 
 export function CabifyModule() {
-  const { sedeActualId } = useSede()
-
   // Custom hooks para datos y estadísticas
   const {
     drivers,
@@ -96,28 +118,17 @@ export function CabifyModule() {
     refreshData,
   } = useCabifyData()
 
-  const { estadisticas } = useCabifyStats(drivers, asignaciones)
+  const activeAssignedDrivers = useMemo(
+    () => drivers.filter((driver) => hasActiveAssignmentWithVehicle(driver, asignaciones)),
+    [drivers, asignaciones]
+  )
+
+  const { estadisticas, topMejores, topPeores } = useCabifyStats(activeAssignedDrivers, asignaciones)
 
   // Rango de fechas basado en la semana seleccionada
   const effectiveDateRange = useMemo(() => {
     return createInitialDateRange(selectedWeek)
   }, [selectedWeek])
-
-  // Memorizar las props del hook de rankings para evitar re-renders innecesarios
-  const rankingProps = useMemo(
-    () => {
-      if (!effectiveDateRange) return undefined
-      return {
-        fechaInicio: effectiveDateRange.startDate,
-        fechaFin: effectiveDateRange.endDate,
-        sedeId: sedeActualId,
-      }
-    },
-    [effectiveDateRange, sedeActualId]
-  )
-
-  // Rankings desde histórico con filtro de período
-  const { topMejores, topPeores } = useCabifyRankings(rankingProps)
 
   // Estado local de UI
   const [accordionState, setAccordionState] = useState(INITIAL_ACCORDION_STATE)
@@ -139,7 +150,8 @@ export function CabifyModule() {
 
   // Estado de carga y datos
   const isLoading = queryState.loading
-  const hasDrivers = drivers.length > 0
+  const hasHistoricalDrivers = drivers.length > 0
+  const hasActiveDrivers = activeAssignedDrivers.length > 0
   const hasError = Boolean(queryState.error)
 
   // Label del período actual para mostrar en UI
@@ -155,20 +167,16 @@ export function CabifyModule() {
     return `${formatISODate(effectiveDateRange.startDate)} - ${formatISODate(effectiveDateRange.endDate)}`
   }, [effectiveDateRange])
 
-  // Separar conductores con y sin asignación activa
-  const { driversWithAssignment, driversWithoutAssignment } = useMemo(() => {
-    if (!drivers.length || !asignaciones) return { driversWithAssignment: [], driversWithoutAssignment: [] }
-    const withAssignment: CabifyDriver[] = []
+  // Separar históricos de la sede que no cuentan como activos Cabify.
+  const driversWithoutAssignment = useMemo(() => {
+    if (!drivers.length || !asignaciones) return []
     const withoutAssignment: CabifyDriver[] = []
     for (const driver of drivers) {
-      const asig = findAsignacionForCabifyDriver(driver, asignaciones)
-      if (asig) {
-        withAssignment.push(driver)
-      } else {
+      if (!hasActiveAssignmentWithVehicle(driver, asignaciones)) {
         withoutAssignment.push(driver)
       }
     }
-    return { driversWithAssignment: withAssignment, driversWithoutAssignment: withoutAssignment }
+    return withoutAssignment
   }, [drivers, asignaciones])
 
   // Estado para expandir/colapsar la sección de sin asignación
@@ -185,7 +193,7 @@ export function CabifyModule() {
       />
 
       <ProgressBanner
-        isVisible={isLoading && hasDrivers}
+        isVisible={isLoading && hasHistoricalDrivers}
         message={loadingMessage}
       />
 
@@ -196,21 +204,21 @@ export function CabifyModule() {
       />
 
       <DataSourceInfo
-        isVisible={!hasError && hasDrivers}
+        isVisible={!hasError && hasHistoricalDrivers}
         dataSource={dataSource}
-        driverCount={drivers.length}
+        driverCount={activeAssignedDrivers.length}
         periodLabel={periodLabel}
       />
 
-      {!isLoading && hasDrivers && (
+      {!isLoading && hasHistoricalDrivers && (
         <StatsAccordion estadisticas={estadisticas} />
       )}
 
       <div className="cabify-table-container">
         <DataTable
-          data={driversWithAssignment}
+          data={activeAssignedDrivers}
           columns={columns}
-          loading={isLoading && !hasDrivers}
+          loading={isLoading && !hasHistoricalDrivers}
           error={null}
           searchPlaceholder={UI_TEXT.SEARCH_PLACEHOLDER}
           emptyIcon={<Users size={48}
@@ -224,7 +232,7 @@ export function CabifyModule() {
       </div>
 
       {/* Top Drivers - debajo de la tabla */}
-      {(topMejores.length > 0 || topPeores.length > 0) && (
+      {hasActiveDrivers && (topMejores.length > 0 || topPeores.length > 0) && (
         <TopDriversSection
           topMejores={topMejores}
           topPeores={topPeores}
@@ -357,7 +365,12 @@ function DriversWithoutAssignmentSection({
                 <span className="driver-name">
                   {driver.name} {driver.surname}
                 </span>
-                <span className="driver-dni">{getDniDisplay(driver.nationalIdNumber, 'Sin DNI')}</span>
+                <span className="driver-dni">
+                  {getDniDisplay(driver.nationalIdNumber, 'Sin DNI')}
+                  <span className="cabify-unassigned-source">
+                    {getSourceBadgeLabel(driver)}
+                  </span>
+                </span>
               </div>
               <div className="driver-stats">
                 <span className="stat-viajes">{driver.viajesFinalizados || 0} viajes</span>
@@ -379,8 +392,6 @@ function DriversWithoutAssignmentSection({
 // =====================================================
 // HOOK PARA COLUMNAS DE TABLA
 // =====================================================
-
-import type { AsignacionActiva } from '../../../services/asignacionesService'
 
 function useTableColumns(
   asignaciones: Map<string, AsignacionActiva>,
@@ -506,6 +517,9 @@ function createConductorCompactColumn(
       const isActive = !driver.disabled
       const estadoClass = isActive ? 'dt-badge-solid-green' : 'dt-badge-solid-gray'
       const estadoLabel = isActive ? 'Activo' : 'Inactivo'
+      const sourceBadgeLabel = getSourceBadgeLabel(driver, asig)
+      const sourceBadgeTitle = getSourceBadgeTitle(driver, asig)
+      const sourceClass = driver.sourceAccount === 'bariloche' ? 'bariloche' : 'buenos-aires'
 
       const score = driver.score as number | undefined
       const scoreLevel = getScoreLevel(score)
@@ -522,6 +536,12 @@ function createConductorCompactColumn(
           </div>
           <div className="cabify-driver-compact-meta">
             <span className="cabify-driver-compact-dni">{dni}</span>
+            <span
+              className={`dt-badge cabify-source-badge ${sourceClass}`}
+              title={sourceBadgeTitle}
+            >
+              {sourceBadgeLabel}
+            </span>
             <span className={`dt-badge ${modalidadClass}`} style={{ fontSize: '10px', padding: '1px 5px' }}>
               {modalidadLabel}
             </span>
@@ -605,4 +625,3 @@ function createPermisoEfectivoColumn(): ColumnDef<CabifyDriver, unknown> {
     },
   }
 }
-

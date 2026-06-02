@@ -14,7 +14,9 @@ export interface AsignacionActiva {
   modalidad: string | null
   nombreConductor: string
   asignacionId: string
+  sedeId?: string | null
   patente: string | null
+  grupoFlota?: string | null
   turnoEspecifico: string | null // diurno, nocturno, etc.
 }
 
@@ -114,17 +116,19 @@ class AsignacionesService {
    *
    * Para buscar, usar las funciones helper `keyForDni`, `keyForLicencia`, `keyForNombre`.
    */
-  async getAllAsignacionesActivasIndex(): Promise<Map<string, AsignacionActiva>> {
+  async getAllAsignacionesActivasIndex(sedeId?: string | null): Promise<Map<string, AsignacionActiva>> {
     try {
-      const { data, error } = await supabase
+      let query = supabase
         .from('asignaciones')
         .select(`
           id,
+          sede_id,
           horario,
           estado,
           modalidad,
           vehiculos (
-            patente
+            patente,
+            grupo_flota
           ),
           asignaciones_conductores!inner (
             horario,
@@ -138,12 +142,19 @@ class AsignacionesService {
         `)
         .in('estado', ['activa', 'programado'])
 
+      if (sedeId) {
+        query = query.eq('sede_id', sedeId)
+      }
+
+      const { data, error } = await query
+
       if (error) return new Map()
 
       const index = new Map<string, AsignacionActiva>()
       if (data && data.length > 0) {
         for (const record of (data as any[])) {
           const patente = record.vehiculos?.patente || null
+          const grupoFlota = record.vehiculos?.grupo_flota || null
           if (!record.asignaciones_conductores) continue
           for (const ac of record.asignaciones_conductores) {
             const conductor = ac.conductores
@@ -156,7 +167,9 @@ class AsignacionesService {
               modalidad: record.modalidad,
               nombreConductor: `${conductor.nombres || ''} ${conductor.apellidos || ''}`.trim(),
               asignacionId: record.id,
+              sedeId: record.sede_id || null,
               patente,
+              grupoFlota,
               turnoEspecifico: ac.horario || null,
             }
 
