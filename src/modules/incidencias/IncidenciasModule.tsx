@@ -2423,11 +2423,15 @@ export function IncidenciasModule() {
     // Es cobro si: estamos en la pestaña cobro O si la incidencia que editamos ya era de tipo cobro
     const esCobro = activeTab === 'cobro' || (modalMode === 'edit' && selectedIncidencia?.tipo === 'cobro')
     if (esCobro) {
+      // Validar que el tipo seleccionado sea un UUID real, no un pseudo-ID (__CONCEPTO__, __ENTREGA_TARDIA, etc.)
+      if (incidenciaForm.tipo_cobro_descuento_id?.startsWith('__')) {
+        Swal.fire('Error', 'Por favor seleccione un tipo de incidencia valido (P004, P006, P007 o Sin categoria). Los conceptos de facturacion solo precargan el monto.', 'warning')
+        return
+      }
       if (!incidenciaForm.monto || incidenciaForm.monto <= 0) {
         Swal.fire('Error', 'Por favor ingrese el monto del cobro', 'warning')
         return
       }
-      // estado_vehiculo ya no es requerido (campo eliminado del formulario)
     }
 
     setSaving(true)
@@ -4880,12 +4884,13 @@ function IncidenciaForm({ formData, setFormData, estados, vehiculos, conductores
               value={formData.tipo_cobro_descuento_id || ''}
               onChange={(val) => {
                 const v = val || undefined
-                // Si seleccionó un concepto de facturación, precargar el monto (precio_final x 7 = semanal)
+                // Si seleccionó un concepto de facturación, precargar el monto y limpiar tipo
+                // para que el usuario seleccione un tipo de incidencia real (P004/P006/P007)
                 if (v?.startsWith('__CONCEPTO__')) {
                   const codigo = v.replace('__CONCEPTO__', '')
                   const concepto = conceptosNomina.find(c => c.codigo === codigo)
                   if (concepto) {
-                    setFormData(prev => ({ ...prev, tipo_cobro_descuento_id: v, monto: Math.round(Number(concepto.precio_final) * 7) }))
+                    setFormData(prev => ({ ...prev, tipo_cobro_descuento_id: undefined, monto: Math.round(Number(concepto.precio_final) * 7) }))
                     return
                   }
                 }

@@ -1358,9 +1358,24 @@ export function ConductoresModule() {
       othersByAsignacion.set(oc.asignacion_id, arr);
     }
 
+    // Verificar si los vehiculos tienen devoluciones pendientes
+    const vehiculoIds = [...new Set(rows.map((ac: any) => ac.asignaciones?.vehiculo_id).filter(Boolean))];
+    const devolucionesPendientesSet = new Set<string>();
+    if (vehiculoIds.length > 0) {
+      const { data: devData } = await (supabase as any)
+        .from('devoluciones')
+        .select('vehiculo_id')
+        .in('vehiculo_id', vehiculoIds)
+        .eq('estado', 'pendiente');
+      for (const d of (devData || [])) {
+        devolucionesPendientesSet.add(d.vehiculo_id);
+      }
+    }
+
     return rows.map((ac: any) => ({
       ...ac,
-      otherConductors: othersByAsignacion.get(ac.asignacion_id) || []
+      otherConductors: othersByAsignacion.get(ac.asignacion_id) || [],
+      tieneDevolucionPendiente: devolucionesPendientesSet.has(ac.asignaciones?.vehiculo_id),
     }));
   };
 
@@ -2036,10 +2051,15 @@ export function ConductoresModule() {
 
     setSaving(true);
     try {
-      // Limpiar referencias en devoluciones antes de eliminar
+      // Limpiar referencias en tablas hijas antes de eliminar
       await (supabase as any)
         .from('devoluciones')
         .update({ conductor_id: null, conductor_nombre: null })
+        .eq('conductor_id', selectedConductor.id);
+
+      await (supabase as any)
+        .from('conductores_historial_bajas')
+        .delete()
         .eq('conductor_id', selectedConductor.id);
 
       const { error: deleteError } = await supabase
@@ -5280,6 +5300,9 @@ function ModalConfirmBaja({
   const _requiereFinalizacion = cargoAssignments.length > 0 || turnoSolo.length > 0;
   void _requiereFinalizacion;
 
+  // Si alguna asignacion tiene devolucion pendiente, no mostrar boton de finalizar
+  const hayDevolucionPendiente = affectedAssignments.some((a) => a.tieneDevolucionPendiente);
+
   return (
     <div className="modal-overlay" onClick={() => !processing && onCancel()}>
       <div
@@ -5379,33 +5402,61 @@ function ModalConfirmBaja({
         </div>
 
         {/* Alerta de finalización */}
-        <div style={{
-          marginTop: '20px',
-          padding: '16px',
-          background: '#FFF8E1',
-          border: '1px solid #FFD54F',
-          borderRadius: '8px',
-        }}>
-          <p style={{
-            margin: 0,
-            fontWeight: 700,
-            fontSize: '14px',
-            color: '#F57F17',
-            marginBottom: '8px',
+        {hayDevolucionPendiente ? (
+          <div style={{
+            marginTop: '20px',
+            padding: '16px',
+            background: '#EFF6FF',
+            border: '1px solid #93C5FD',
+            borderRadius: '8px',
           }}>
-            ¿Finalizar la asignación del conductor ahora?
-          </p>
-          <p style={{
-            margin: 0,
-            fontSize: '13px',
-            color: '#5D4037',
-            lineHeight: '1.5',
+            <p style={{
+              margin: 0,
+              fontWeight: 700,
+              fontSize: '14px',
+              color: '#1D4ED8',
+              marginBottom: '8px',
+            }}>
+              Este vehículo tiene una devolución programada
+            </p>
+            <p style={{
+              margin: 0,
+              fontSize: '13px',
+              color: '#1E3A5F',
+              lineHeight: '1.5',
+            }}>
+              La asignación se mantendrá activa y será finalizada automáticamente cuando Onboarding/Logística confirme la devolución del vehículo.
+            </p>
+          </div>
+        ) : (
+          <div style={{
+            marginTop: '20px',
+            padding: '16px',
+            background: '#FFF8E1',
+            border: '1px solid #FFD54F',
+            borderRadius: '8px',
           }}>
-            Si el conductor debe devolver el vehículo y se le programará una devolución, selecciona <strong>Mantener asignación</strong>: Onboarding/Logística gestionará la finalización al crear la programación de devolución.
-            <br /><br />
-            Si el conductor ya entregó el vehículo, selecciona <strong>Finalizar asignación</strong>.
-          </p>
-        </div>
+            <p style={{
+              margin: 0,
+              fontWeight: 700,
+              fontSize: '14px',
+              color: '#F57F17',
+              marginBottom: '8px',
+            }}>
+              ¿Finalizar la asignación del conductor ahora?
+            </p>
+            <p style={{
+              margin: 0,
+              fontSize: '13px',
+              color: '#5D4037',
+              lineHeight: '1.5',
+            }}>
+              Si el conductor debe devolver el vehículo y se le programará una devolución, selecciona <strong>Mantener asignación</strong>: Onboarding/Logística gestionará la finalización al crear la programación de devolución.
+              <br /><br />
+              Si el conductor ya entregó el vehículo, selecciona <strong>Finalizar asignación</strong>.
+            </p>
+          </div>
+        )}
         </div>
         <div className="modal-footer" style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
           <button
@@ -5415,22 +5466,24 @@ function ModalConfirmBaja({
           >
             Cancelar
           </button>
-          <button
-            onClick={onFinalizarSi}
-            disabled={processing || asignacionesFinalizadas}
-            style={{
-              background: asignacionesFinalizadas ? '#86EFAC' : '#16A34A',
-              color: 'white',
-              border: asignacionesFinalizadas ? '2px solid #16A34A' : 'none',
-              padding: '10px 20px',
-              borderRadius: '6px',
-              fontWeight: '600',
-              cursor: (processing || asignacionesFinalizadas) ? 'not-allowed' : 'pointer',
-              opacity: (processing || asignacionesFinalizadas) ? 0.8 : 1,
-            }}
-          >
-            {asignacionesFinalizadas ? 'Baja y asignación finalizada' : 'Dar de baja y finalizar asignación'}
-          </button>
+          {!hayDevolucionPendiente && (
+            <button
+              onClick={onFinalizarSi}
+              disabled={processing || asignacionesFinalizadas}
+              style={{
+                background: asignacionesFinalizadas ? '#86EFAC' : '#16A34A',
+                color: 'white',
+                border: asignacionesFinalizadas ? '2px solid #16A34A' : 'none',
+                padding: '10px 20px',
+                borderRadius: '6px',
+                fontWeight: '600',
+                cursor: (processing || asignacionesFinalizadas) ? 'not-allowed' : 'pointer',
+                opacity: (processing || asignacionesFinalizadas) ? 0.8 : 1,
+              }}
+            >
+              {asignacionesFinalizadas ? 'Baja y asignación finalizada' : 'Dar de baja y finalizar asignación'}
+            </button>
+          )}
           <button
             onClick={onBajaSinFinalizar}
             disabled={processing}

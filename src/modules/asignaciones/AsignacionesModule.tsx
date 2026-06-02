@@ -592,7 +592,7 @@ export function AsignacionesModule() {
             vehiculos (patente, marca, modelo),
             asignaciones_conductores (
               id, conductor_id, estado, horario, confirmado, fecha_confirmacion, documento,
-              conductores (nombres, apellidos, numero_licencia, estado_id, conductores_estados(codigo))
+              conductores (nombres, apellidos, numero_licencia, estado_id, cochera_propia, contacto_emergencia, telefono_emergencia, parentesco_emergencia, conductores_estados(codigo))
             )
           `))
           .order('fecha_programada', { ascending: false, nullsFirst: false })
@@ -742,7 +742,7 @@ export function AsignacionesModule() {
             vehiculos (patente, marca, modelo),
             asignaciones_conductores (
               id, conductor_id, estado, horario, confirmado, fecha_confirmacion, documento,
-              conductores (nombres, apellidos, numero_licencia, estado_id, drive_contract_folder_url, conductores_estados(codigo))
+              conductores (nombres, apellidos, numero_licencia, estado_id, drive_contract_folder_url, cochera_propia, contacto_emergencia, telefono_emergencia, parentesco_emergencia, conductores_estados(codigo))
             )
           `))
           .order('created_at', { ascending: false })
@@ -3472,6 +3472,12 @@ export function AsignacionesModule() {
                               {ac.horario !== 'todo_dia' && (
                                 <p className="asig-conductor-card-info">Turno: <strong>{ac.horario}</strong></p>
                               )}
+                              <div style={{ display: 'flex', gap: '16px', marginTop: '2px', fontSize: '11px', color: 'var(--text-tertiary)' }}>
+                                <span>Cochera: <strong style={{ color: (ac.conductores as any)?.cochera_propia ? '#16a34a' : '#9ca3af' }}>{(ac.conductores as any)?.cochera_propia ? 'Si' : 'No'}</strong></span>
+                                {(ac.conductores as any)?.contacto_emergencia && (
+                                  <span>Emergencia: <strong style={{ color: 'var(--text-secondary)' }}>{(ac.conductores as any).contacto_emergencia}{(ac.conductores as any).parentesco_emergencia ? ` (${(ac.conductores as any).parentesco_emergencia})` : ''}{(ac.conductores as any).telefono_emergencia ? ` · ${(ac.conductores as any).telefono_emergencia}` : ''}</strong></span>
+                                )}
+                              </div>
                               {ac.documento && (
                                 <p className="asig-conductor-card-info">
                                   Documento: <strong style={{ color: ac.documento === 'CARTA_OFERTA' ? '#059669' : ac.documento === 'ANEXO' ? '#2563EB' : '#6B7280' }}>

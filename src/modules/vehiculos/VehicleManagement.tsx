@@ -1,7 +1,7 @@
  
 // src/modules/vehiculos/VehicleManagement.tsx
 import { useState, useEffect, useMemo, useRef } from 'react'
-import { AlertTriangle, Eye, Edit, Trash2, Info, Car, Wrench, Briefcase, PaintBucket, Warehouse, FolderOpen, FolderPlus, Undo2, History, Fuel, CreditCard, Download } from 'lucide-react'
+import { AlertTriangle, Eye, Edit, Trash2, Info, Car, Wrench, Briefcase, PaintBucket, Warehouse, FolderOpen, FolderPlus, Undo2, History, Fuel, CreditCard, Download, Tag } from 'lucide-react'
 import * as XLSX from 'xlsx'
 import { ActionsMenu } from '../../components/ui/ActionsMenu'
 import { VerLogsButton } from '../../components/ui/VerLogsButton'
@@ -96,6 +96,7 @@ export function VehicleManagement() {
   const [statCardExcludeMode, setStatCardExcludeMode] = useState(false) // true = excluir los estados del filtro en vez de incluir
   const [gncFilter, setGncFilter] = useState<string | null>(null) // 'sinGnc' | 'conGnc'
   const [telepaseFilter, setTelepaseFilter] = useState<string | null>(null) // 'propio' | 'toshify'
+  const [categoriaFilter, setCategoriaFilter] = useState<string | null>(null) // Filtro por categoria desde stat card
   // Búsqueda global del DataTable (controlada para poder reflejarla en el botón Exportar)
   const [globalSearch, setGlobalSearch] = useState('')
 
@@ -201,10 +202,12 @@ export function VehicleManagement() {
     let vehiculosConGnc = 0
     let vehiculosConTelepase = 0
     let vehiculosTelepaseToshify = 0
+    const categoriaCountMap = new Map<string, number>()
 
     // UNA SOLA PASADA sobre los vehículos
     for (const v of vehiculos) {
       const estadoCodigo = (v as any).vehiculos_estados?.codigo || ''
+      const cat = (v as any).categoria as string | null
 
       // Excluir del total
       if (!estadosExcluidos.includes(estadoCodigo)) {
@@ -227,6 +230,11 @@ export function VehicleManagement() {
         } else {
           vehiculosTelepaseToshify++
         }
+      }
+
+      // Contar por categoría (solo flota activa)
+      if (!estadosExcluidos.includes(estadoCodigo) && cat) {
+        categoriaCountMap.set(cat, (categoriaCountMap.get(cat) || 0) + 1)
       }
 
       // Contar por estado
@@ -257,6 +265,7 @@ export function VehicleManagement() {
       vehiculosConGnc,
       vehiculosConTelepase,
       vehiculosTelepaseToshify,
+      categoriaCountMap,
     }
   }, [vehiculos])
 
@@ -1437,12 +1446,14 @@ export function VehicleManagement() {
       setStatCardExcludeMode(false)
       setGncFilter(null)
       setTelepaseFilter(null)
+      setCategoriaFilter(null)
       return
     }
 
     setActiveStatCard(cardType)
     setGncFilter(null) // Limpiar filtro GNC al cambiar de card
     setTelepaseFilter(null) // Limpiar filtro Telepase al cambiar de card
+    setCategoriaFilter(null) // Limpiar filtro categoria al cambiar de card
 
     // Definir estados para cada categoría (usando labels formateados)
     const estadosEnCochera = ['PKG ON'] // Solo disponibles (listos para usar)
@@ -1508,6 +1519,14 @@ export function VehicleManagement() {
         setTelepaseFilter('toshify')
         break
       default:
+        // Verificar si es un filtro de categoría (prefijo 'cat_')
+        if (cardType.startsWith('cat_')) {
+          const catName = cardType.substring(4)
+          setStatCardEstadoFilter([])
+          setStatCardExcludeMode(false)
+          setCategoriaFilter(catName)
+          return
+        }
         setStatCardEstadoFilter([])
         setStatCardExcludeMode(false)
     }
@@ -1532,12 +1551,17 @@ export function VehicleManagement() {
         telepase: 'Telepase Propio',
         telepaseToshify: 'Telepase Toshify',
       }
+      // Si es categoria, mostrar el nombre real
+      const displayLabel = activeStatCard.startsWith('cat_')
+        ? activeStatCard.substring(4)
+        : labels[activeStatCard] || activeStatCard
       filters.push({
         id: 'statCard',
-        label: labels[activeStatCard] || activeStatCard,
+        label: displayLabel,
         onClear: () => {
           setActiveStatCard(null)
           setStatCardEstadoFilter([])
+          setCategoriaFilter(null)
         }
       })
     }
@@ -1781,6 +1805,11 @@ export function VehicleManagement() {
       result = result.filter(v => !(v as any).telepase)
     }
 
+    // Filtro de Categoria (desde stat card)
+    if (categoriaFilter) {
+      result = result.filter(v => (v as any).categoria === categoriaFilter)
+    }
+
     // Ordenar por estado: En Uso, PKG ON, PKG OFF, Chapa&Pintura, luego el resto
     const estadoOrden: Record<string, number> = {
       'EN_USO': 1,
@@ -1797,7 +1826,7 @@ export function VehicleManagement() {
     })
 
     return result
-  }, [vehiculos, patenteFilter, marcaFilter, modeloFilter, anioFilter, colorFilter, titularFilter, kmFilter, estadoFilter, statCardEstadoFilter, statCardExcludeMode, gncFilter, telepaseFilter])
+  }, [vehiculos, patenteFilter, marcaFilter, modeloFilter, anioFilter, colorFilter, titularFilter, kmFilter, estadoFilter, statCardEstadoFilter, statCardExcludeMode, gncFilter, telepaseFilter, categoriaFilter])
 
 
   // Definir columnas para TanStack Table
@@ -1820,6 +1849,16 @@ export function VehicleManagement() {
           <span className="patente-badge">{getValue() as string}</span>
         ),
         enableSorting: true,
+      },
+      {
+        accessorKey: 'categoria',
+        header: 'Categoría',
+        cell: ({ row }) => {
+          const cat = (row.original as any).categoria
+          if (!cat) return <span style={{ color: 'var(--text-tertiary)' }}>-</span>
+          return <span style={{ fontSize: '12px' }}>{cat}</span>
+        },
+        enableSorting: false,
       },
       {
         accessorKey: 'titular',
@@ -2409,6 +2448,24 @@ export function VehicleManagement() {
               <span className="stat-label">Telepase Toshify</span>
             </div>
           </div>
+          {/* Stat cards por Categoría */}
+          {Array.from(calculatedStats.categoriaCountMap.entries())
+            .sort((a, b) => b[1] - a[1])
+            .map(([catName, count]) => (
+              <div
+                key={`cat_${catName}`}
+                className={`stat-card stat-card-clickable ${activeStatCard === `cat_${catName}` ? 'stat-card-active' : ''}`}
+                onClick={() => handleStatCardClick(`cat_${catName}`)}
+                title={`Click para filtrar: ${catName}`}
+              >
+                <Tag size={18} className="stat-icon" />
+                <div className="stat-content">
+                  <span className="stat-value">{count}</span>
+                  <span className="stat-label">{catName}</span>
+                </div>
+              </div>
+            ))
+          }
         </div>
       </div>
 
