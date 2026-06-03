@@ -567,7 +567,6 @@ export function SaldosAbonosTab() {
                   // Verificar si tiene fraccionamiento pendiente
                   const radioFracc = document.getElementById('swal-fraccionado') as HTMLInputElement
                   const labelFracc = document.getElementById('label-fraccionado') as HTMLElement
-                  const radioComp = document.getElementById('swal-completo') as HTMLInputElement
                   
                   const { data: pendientes } = await supabase
                     .from('cobros_fraccionados')
@@ -576,19 +575,11 @@ export function SaldosAbonosTab() {
                     .eq('aplicado', false)
                     .limit(1)
                   
-                  if (pendientes && pendientes.length > 0) {
-                    radioFracc.disabled = true
-                    labelFracc.style.opacity = '0.5'
-                    labelFracc.style.cursor = 'not-allowed'
-                    labelFracc.title = 'Ya tiene un fraccionamiento pendiente'
-                    radioComp.checked = true
-                    radioComp.dispatchEvent(new Event('change'))
-                  } else {
-                    radioFracc.disabled = false
-                    labelFracc.style.opacity = '1'
-                    labelFracc.style.cursor = 'pointer'
-                    labelFracc.title = ''
-                  }
+                  void pendientes // Permitir multiples fraccionamientos
+                  radioFracc.disabled = false
+                  labelFracc.style.opacity = '1'
+                  labelFracc.style.cursor = 'pointer'
+                  labelFracc.title = ''
                 }
               })
             })
@@ -688,14 +679,11 @@ export function SaldosAbonosTab() {
             .eq('aplicado', false)
             .limit(1)
           
-          if (pendientes && pendientes.length > 0) {
-            Swal.showValidationMessage('Este conductor ya tiene un cobro fraccionado pendiente. Debe completarlo antes de crear otro.')
-            return false
-          }
+          void pendientes // Permitir multiples fraccionamientos
         }
 
-        return { 
-          conductorId, 
+        return {
+          conductorId,
           saldo: -Math.abs(parseFloat(saldo)), // Siempre negativo (deuda)
           fecha,
           concepto: concepto || 'Saldo inicial - Regularización',
@@ -784,7 +772,8 @@ export function SaldosAbonosTab() {
 
       // Si es fraccionado, crear los cobros fraccionados
       if (formValues.fraccionado && formValues.cuotas > 1) {
-        const montoCuota = Math.ceil(Math.abs(formValues.saldo) / formValues.cuotas)
+        const montoAbsoluto = Math.abs(formValues.saldo)
+        const montoCuota = Math.ceil(montoAbsoluto / formValues.cuotas)
         let semActual = formValues.semanaInicio
         let anioActual = formValues.anioInicio
 
@@ -797,12 +786,16 @@ export function SaldosAbonosTab() {
         const sedeIdConductor = conductorSede?.sede_id || sedeActualId || null
 
         for (let i = 1; i <= formValues.cuotas; i++) {
+          // Ultima cuota absorbe la diferencia por redondeo
+          const montoCuotaFinal = i === formValues.cuotas
+            ? montoAbsoluto - (montoCuota * (formValues.cuotas - 1))
+            : montoCuota
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           await (supabase.from('cobros_fraccionados') as any).insert({
             conductor_id: formValues.conductorId,
             descripcion: `${formValues.concepto} - Cuota ${i}/${formValues.cuotas}`,
-            monto_total: Math.abs(formValues.saldo),
-            monto_cuota: montoCuota,
+            monto_total: montoAbsoluto,
+            monto_cuota: montoCuotaFinal,
             numero_cuota: i,
             total_cuotas: formValues.cuotas,
             semana: semActual,
@@ -835,12 +828,62 @@ export function SaldosAbonosTab() {
       Swal.fire('Sin deuda', 'Solo se puede fraccionar un saldo en deuda.', 'info')
       return
     }
-    if (conductoresConFraccionado.has(saldo.conductor_id)) {
-      Swal.fire('No disponible', 'Este conductor ya tiene un cobro fraccionado pendiente. Debe completarlo antes de crear otro.', 'info')
-      return
-    }
-
     const montoDeuda = Math.abs(saldo.saldo_actual)
+
+    // Buscar detalle de fraccionamientos pendientes (para ambos modales)
+    const tieneFracPendienteCheck = conductoresConFraccionado.has(saldo.conductor_id)
+    let fracDetalleHtml = ''
+
+    if (tieneFracPendienteCheck) {
+      const { data: cobrosPend } = await (supabase.from('cobros_fraccionados') as any)
+        .select('semana, anio, monto_cuota')
+        .eq('conductor_id', saldo.conductor_id)
+        .eq('aplicado', false)
+        .order('anio', { ascending: false })
+        .order('semana', { ascending: false })
+        .limit(50)
+
+      const { data: penCuotasPend } = await (supabase.from('penalidades_cuotas') as any)
+        .select('semana, anio, monto_cuota, penalidad:penalidades!inner(conductor_id)')
+        .eq('penalidad.conductor_id', saldo.conductor_id)
+        .eq('aplicado', false)
+        .order('anio', { ascending: false })
+        .order('semana', { ascending: false })
+        .limit(50)
+
+      const fracSaldos = cobrosPend || []
+      const fracIncidencias = (penCuotasPend || []) as any[]
+      const totalFrac = fracSaldos.length + fracIncidencias.length
+
+      if (fracSaldos.length > 0) {
+        const ultimaSem = fracSaldos[0]
+        fracDetalleHtml += `<div style="margin-bottom:4px;"><strong>Saldos:</strong> ${fracSaldos.length} cuota(s) pendiente(s), ultima en Sem ${ultimaSem.semana}/${ultimaSem.anio}</div>`
+      }
+      if (fracIncidencias.length > 0) {
+        const ultimaSem = fracIncidencias[0]
+        fracDetalleHtml += `<div><strong>Incidencias:</strong> ${fracIncidencias.length} cuota(s) pendiente(s), ultima en Sem ${ultimaSem.semana}/${ultimaSem.anio}</div>`
+      }
+
+      const { isConfirmed } = await Swal.fire({
+        icon: 'warning',
+        title: 'Fraccionamiento pendiente',
+        html: `
+          <div style="text-align:left;font-size:13px;">
+            <p>Este conductor tiene <strong>${totalFrac}</strong> cuota(s) pendiente(s):</p>
+            <div style="background:#FEF2F2;border:1px solid #FECACA;padding:10px 12px;border-radius:6px;margin:10px 0;font-size:12px;color:#991B1B;">
+              ${fracDetalleHtml}
+            </div>
+            <p style="color:#6B7280;font-size:12px;">Si continua, se creara un nuevo fraccionamiento adicional.</p>
+          </div>
+        `,
+        showCancelButton: true,
+        confirmButtonText: 'Continuar',
+        cancelButtonText: 'Cancelar',
+        confirmButtonColor: '#6366F1',
+        width: 420,
+      })
+      if (!isConfirmed) return
+    }
 
     const hoy = new Date()
     const hoyStr = `${hoy.getFullYear()}-${String(hoy.getMonth() + 1).padStart(2, '0')}-${String(hoy.getDate()).padStart(2, '0')}`
@@ -868,6 +911,12 @@ export function SaldosAbonosTab() {
               Deuda a fraccionar: <strong>${formatCurrency(montoDeuda)}</strong>
             </div>
           </div>
+          ${fracDetalleHtml ? `
+          <div style="background:#FEF2F2;border:1px solid #FECACA;padding:8px 12px;border-radius:6px;margin-bottom:12px;font-size:12px;color:#991B1B;">
+            <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px;"><span style="font-size:14px;">&#9888;</span><strong>Fraccionamiento pendiente</strong></div>
+            ${fracDetalleHtml}
+          </div>
+          ` : ''}
           <div style="margin-bottom:10px;">
             <label style="display:block;font-size:12px;color:#374151;margin-bottom:4px;font-weight:500;">Cantidad de cuotas:</label>
             <input id="swal-frac-cuotas" type="number" class="swal2-input" style="font-size:14px;margin:0;width:100%;" min="2" max="52" value="4">
@@ -930,10 +979,7 @@ export function SaldosAbonosTab() {
         .eq('aplicado', false)
         .limit(1)
 
-      if (pendientes && pendientes.length > 0) {
-        Swal.fire('No disponible', 'Este conductor ya tiene un cobro fraccionado pendiente.', 'info')
-        return
-      }
+      void pendientes // Permitir multiples fraccionamientos
 
       const montoCuota = Math.ceil(montoDeuda / formValues.cuotas)
 
@@ -947,12 +993,16 @@ export function SaldosAbonosTab() {
       let semIter = formValues.semana
       let anioIter = formValues.anio
       for (let i = 1; i <= formValues.cuotas; i++) {
+        // Ultima cuota absorbe la diferencia por redondeo
+        const montoCuotaFinal = i === formValues.cuotas
+          ? montoDeuda - (montoCuota * (formValues.cuotas - 1))
+          : montoCuota
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const { error } = await (supabase.from('cobros_fraccionados') as any).insert({
           conductor_id: saldo.conductor_id,
           descripcion: `Fraccionamiento de saldo - Cuota ${i}/${formValues.cuotas}`,
           monto_total: montoDeuda,
-          monto_cuota: montoCuota,
+          monto_cuota: montoCuotaFinal,
           numero_cuota: i,
           total_cuotas: formValues.cuotas,
           semana: semIter,
@@ -1252,6 +1302,9 @@ export function SaldosAbonosTab() {
       // Registrar movimiento en kardex (control_saldos)
       const semPago = getWeekNumber(new Date().toISOString().split('T')[0])
       const anioPago = new Date().getFullYear()
+      const refKardex = formValues.referencia
+        ? `${formValues.concepto || 'Pago manual'} | ${formValues.referencia}`
+        : formValues.concepto || `Pago manual S${semPago}/${anioPago}`
       await insertControlSaldo({
         conductorId: saldo.conductor_id,
         semana: semPago,
@@ -1259,7 +1312,7 @@ export function SaldosAbonosTab() {
         tipoMovimiento: 'pago_manual',
         montoMovimiento: formValues.monto,
         saldoPendiente: nuevoSaldo,
-        referencia: formValues.concepto || `Pago manual S${semPago}/${anioPago}`,
+        referencia: refKardex,
         userName: profile?.full_name,
       })
 
@@ -1937,7 +1990,18 @@ export function SaldosAbonosTab() {
         const s = f.periodo?.semana
         if (a && s) facMap.set(`${a}-${s}`, f)
       })
-      setKardexModal({ open: true, saldo, rows: rows || [], loading: false, facMap } as any)
+      // Cargar abonos para columna Detalle (referencia del pago)
+      const { data: abonosData } = await (supabase.from('abonos_conductores') as any)
+        .select('referencia, concepto, fecha_abono, monto')
+        .eq('conductor_id', saldo.conductor_id)
+        .order('fecha_abono', { ascending: false })
+      const abonosMap = new Map<string, string>()
+      for (const ab of (abonosData || []) as any[]) {
+        if (ab.referencia && ab.concepto) {
+          abonosMap.set(`${ab.concepto}_${ab.monto}`, ab.referencia)
+        }
+      }
+      setKardexModal({ open: true, saldo, rows: rows || [], loading: false, facMap, abonosMap } as any)
     } catch {
       Swal.fire('Error', 'No se pudo cargar el control de saldos', 'error')
       setKardexModal(prev => ({ ...prev, open: false, loading: false }))
@@ -2228,8 +2292,7 @@ export function SaldosAbonosTab() {
         // FIX 2026-05-19: permitir fraccionar tambien a conductores en BAJA con deuda
         // (cobranza fuera del alquiler de los morosos que se dieron de baja)
         const tieneDeuda = row.original.saldo_actual < 0
-        const yaFraccionado = conductoresConFraccionado.has(row.original.conductor_id)
-        const puedeFraccionar = tieneDeuda && !yaFraccionado && (isAdmin() || isAdministrativo())
+        const puedeFraccionar = tieneDeuda && (isAdmin() || isAdministrativo())
 
         return (
           <div className="fact-table-actions">
@@ -2533,7 +2596,7 @@ export function SaldosAbonosTab() {
         const sColor = saldoRealKardex >= 0 ? '#16a34a' : '#dc2626'
         return (
           <div className="fact-modal-overlay" onClick={() => setKardexModal(prev => ({ ...prev, open: false }))}>
-              <div className="fact-modal-content" style={{ maxWidth: '900px' }} onClick={(e) => e.stopPropagation()}>
+              <div className="fact-modal-content" style={{ maxWidth: '1100px' }} onClick={(e) => e.stopPropagation()}>
               <div className="fact-modal-header">
                 <h2>Control de Saldos</h2>
                 <button className="fact-modal-close" onClick={() => setKardexModal(prev => ({ ...prev, open: false }))}>
@@ -2769,11 +2832,11 @@ export function SaldosAbonosTab() {
                           <thead>
                             <tr style={{ background: 'var(--bg-secondary)', position: 'sticky', top: 0, zIndex: 1 }}>
                               {/* FIX 2026-05-20: oculta columna "Saldo previo" (info redundante con Facturado) */}
-                              {['Fecha', 'Semana', 'Tipo', 'Referencia', 'Monto', 'Facturado', 'Saldo', 'Usuario', ...(isAdmin() ? [''] : [])].map((h, hi) => (
+                              {['Fecha', 'Semana', 'Tipo', 'Referencia', 'Detalle', 'Monto', 'Facturado', 'Saldo', 'Usuario', ...(isAdmin() ? [''] : [])].map((h, hi) => (
                                 <th key={hi} style={{
                                   padding: '6px 8px', fontWeight: 600, color: 'var(--text-secondary)',
                                   borderBottom: '1px solid var(--border-primary)',
-                                  textAlign: hi >= 4 && hi <= 6 ? 'right' : 'left',
+                                  textAlign: hi >= 5 && hi <= 7 ? 'right' : 'left',
                                   fontSize: '10px',
                                 }}>{h}</th>
                               ))}
@@ -2816,16 +2879,33 @@ export function SaldosAbonosTab() {
                                       background: labelBg, color: labelFg, fontWeight: 600, fontSize: '10px',
                                     }}>{tipoLabel[tipo] || tipo}</span>
                                   </td>
-                                  <td style={{ padding: '5px 8px', color: 'var(--text-secondary)', fontSize: '10px', maxWidth: '180px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={r.referencia || ''}>
-                                    {r.referencia || '-'}
-                                    {i === 0 && (
-                                      <span style={{
-                                        marginLeft: '6px', padding: '1px 5px', background: '#f59e0b',
-                                        color: '#fff', borderRadius: '3px', fontSize: '9px', fontWeight: 700,
-                                        textTransform: 'uppercase', letterSpacing: '0.4px',
-                                      }}>actual</span>
-                                    )}
-                                  </td>
+                                  {(() => {
+                                    const refParts = (r.referencia || '').split(' | ')
+                                    const refMain = refParts[0] || '-'
+                                    // Buscar detalle: primero en el pipe, luego en abonosMap
+                                    let refDetalle = refParts.length > 1 ? refParts.slice(1).join(' | ') : ''
+                                    if (!refDetalle && (kardexModal as any).abonosMap) {
+                                      const abonoKey = `${r.referencia}_${Math.abs(Number(r.monto_movimiento) || 0)}`
+                                      refDetalle = (kardexModal as any).abonosMap.get(abonoKey) || ''
+                                    }
+                                    return (
+                                      <>
+                                        <td style={{ padding: '5px 8px', color: 'var(--text-secondary)', fontSize: '10px', maxWidth: '180px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={refMain}>
+                                          {refMain}
+                                          {i === 0 && (
+                                            <span style={{
+                                              marginLeft: '6px', padding: '1px 5px', background: '#f59e0b',
+                                              color: '#fff', borderRadius: '3px', fontSize: '9px', fontWeight: 700,
+                                              textTransform: 'uppercase', letterSpacing: '0.4px',
+                                            }}>actual</span>
+                                          )}
+                                        </td>
+                                        <td style={{ padding: '5px 8px', color: 'var(--text-secondary)', fontSize: '10px', maxWidth: '150px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={refDetalle || ''}>
+                                          {refDetalle || '-'}
+                                        </td>
+                                      </>
+                                    )
+                                  })()}
                                   <td style={{ padding: '5px 8px', textAlign: 'right', fontFamily: 'monospace', color: montoColor, whiteSpace: 'nowrap' }}>
                                     {/* FIX 2026-05-20: redondear a entero para evitar decimales tipo $0,03 */}
                                     {monto > 0 ? `${montoSigno}${formatCurrency(Math.round(monto))}` : '-'}
@@ -2834,8 +2914,8 @@ export function SaldosAbonosTab() {
                                   <td style={{ padding: '5px 8px', textAlign: 'right', fontFamily: 'monospace', whiteSpace: 'nowrap' }}>
                                     {/* FIX 2026-05-20: columna Facturado - click abre detalle + redondeo residuos */}
                                     {(() => {
-                                      // Ajustes manuales no tienen facturación asociada
-                                      if (tipo === 'ajuste_manual') return <span style={{ color: 'var(--text-tertiary)' }}>—</span>
+                                      // Ajustes manuales y cancelaciones por baja no tienen facturación asociada
+                                      if (tipo === 'ajuste_manual' || tipo === 'cancelacion_fraccionado_baja') return <span style={{ color: 'var(--text-tertiary)' }}>—</span>
                                       const fac = (kardexModal as any).facMap?.get(`${r.anio}-${r.semana}`)
                                       if (!fac) return <span style={{ color: 'var(--text-tertiary)' }}>—</span>
                                       // Redondear a entero para no mostrar decimales tipo $371.688,03

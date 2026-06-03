@@ -20,6 +20,7 @@ import type {
   Propietario
 } from '../../../types/onboarding.types'
 import type { ConductorBasic } from '../../../types/conductor.types'
+import { useGruposFlota } from '../../../hooks/useGruposFlota'
 
 interface Vehiculo {
   id: string
@@ -40,6 +41,7 @@ export function ProgramacionWizard({ onClose, onSuccess, initialData, editingDat
   const isEditing = !!editingData
   const { user, profile } = useAuth()
   const { aplicarFiltroSede, sedeActualId, sedeUsuario } = useSede()
+  const { grupos: gruposFlota } = useGruposFlota()
   const [step, setStep] = useState(1)
   const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
@@ -609,8 +611,15 @@ export function ProgramacionWizard({ onClose, onSuccess, initialData, editingDat
                         value={formData.propietario || 'grupo_cg'}
                         onChange={e => setFormData(prev => ({ ...prev, propietario: e.target.value as Propietario }))}
                       >
-                        <option value="grupo_cg">GRUPO CG</option>
-                        <option value="44_dreams">44 DREAMS</option>
+                        {gruposFlota.map(g => (
+                          <option key={g.codigo} value={g.valor_propietario || g.codigo}>{g.nombre_comercial}</option>
+                        ))}
+                        {gruposFlota.length === 0 && (
+                          <>
+                            <option value="grupo_cg">GRUPO CG</option>
+                            <option value="44_dreams">44 DREAMS</option>
+                          </>
+                        )}
                       </select>
                     </div>
                   </div>

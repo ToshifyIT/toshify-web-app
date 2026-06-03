@@ -21,6 +21,7 @@ import type { Vehicle } from '../../../types/vehiculo.types'
 import type { Conductor } from '../../../types/conductor.types'
 import { formatPreferencia, getPreferenciaBadge, PROGRAMACION_ESTADO_LABELS } from '../../../utils/conductorUtils'
 import { GOOGLE_MAPS_API_KEY, GOOGLE_MAPS_SCRIPT_URL } from '../../../lib/googleMaps'
+import { useGruposFlota } from '../../../hooks/useGruposFlota'
 
 interface ProgramacionData {
   sede_id: string
@@ -92,6 +93,7 @@ interface Props {
 export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: Props) {
   const { user, profile } = useAuth()
   const { sedeActualId, aplicarFiltroSede, sedeUsuario, sedes } = useSede()
+  const { grupos: gruposFlota } = useGruposFlota()
   const isEditMode = !!editData
   const [step, setStep] = useState(0)
   const [vehicles, setVehicles] = useState<Vehicle[]>([])
@@ -3728,8 +3730,15 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
                         value={formData.propietario}
                         onChange={(e) => setFormData({ ...formData, propietario: e.target.value as Propietario })}
                       >
-                        <option value="grupo_cg">GRUPO CG</option>
-                        <option value="44_dreams">44 DREAMS</option>
+                        {gruposFlota.map(g => (
+                          <option key={g.codigo} value={g.valor_propietario || g.codigo}>{g.nombre_comercial}</option>
+                        ))}
+                        {gruposFlota.length === 0 && (
+                          <>
+                            <option value="grupo_cg">GRUPO CG</option>
+                            <option value="44_dreams">44 DREAMS</option>
+                          </>
+                        )}
                       </select>
                     </div>
                   </div>
