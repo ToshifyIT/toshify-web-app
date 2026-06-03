@@ -1,0 +1,108 @@
+/* =====================================================
+   GRUPOS DE FLOTA MODULE
+   ===================================================== */
+
+.gf-stats {
+  margin-bottom: 16px;
+}
+
+.gf-stats-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 12px;
+}
+
+/* Status badges */
+.gf-status-badge {
+  display: inline-block;
+  padding: 3px 10px;
+  border-radius: 12px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+
+.gf-status-active {
+  background: rgba(22, 163, 74, 0.12);
+  color: #16a34a;
+}
+
+.gf-status-inactive {
+  background: rgba(156, 163, 175, 0.15);
+  color: #6b7280;
+}
+
+/* Action buttons */
+.gf-action-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border: none;
+  background: transparent;
+  color: var(--text-tertiary);
+  cursor: pointer;
+  border-radius: 6px;
+  transition: all 0.15s;
+}
+
+.gf-action-btn:hover {
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+}
+
+.gf-action-delete:hover {
+  background: rgba(239, 68, 68, 0.1);
+  color: #ef4444;
+}
+
+/* Section titles in modal */
+.gf-section-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 12px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--border-primary);
+}
+
+/* Help text */
+.gf-help-text {
+  font-size: 10px;
+  color: var(--text-tertiary);
+  margin-top: 2px;
+  display: block;
+}
+
+/* Primary action button */
+.btn-primary-action {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 16px;
+  border: none;
+  border-radius: 8px;
+  background: var(--color-primary);
+  color: white;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s;
+  white-space: nowrap;
+}
+
+.btn-primary-action:hover {
+  background: var(--color-primary-hover);
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .gf-stats-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}

@@ -803,6 +803,28 @@ const CONTRACT_CONFIG = {
 }
 
 /**
+ * Busca datos de un grupo de flota desde la tabla grupos_flota.
+ * Usa valor_propietario para contratos y valor_socio para ofertas.
+ * Retorna null si no se encuentra (el caller debe usar fallback hardcodeado).
+ */
+async function getGrupoFlotaData(lookupField, lookupValue) {
+  const supabaseUrl = process.env.VITE_SUPABASE_URL
+  const serviceKey = process.env.SUPABASE_SERVICE_KEY
+  if (!supabaseUrl || !serviceKey || !lookupValue) return null
+  try {
+    const res = await fetch(
+      `${supabaseUrl}/rest/v1/grupos_flota?${lookupField}=eq.${encodeURIComponent(lookupValue)}&activo=eq.true&select=*&limit=1`,
+      { headers: { apikey: serviceKey, Authorization: `Bearer ${serviceKey}` } }
+    )
+    if (!res.ok) return null
+    const rows = await res.json()
+    return rows && rows.length > 0 ? rows[0] : null
+  } catch {
+    return null
+  }
+}
+
+/**
  * Resuelve el ID de la plantilla según la key y el flag useTestTemplates.
  * Si useTestTemplates es true, busca key + 'TB'. Si no existe, usa la original como fallback.
  */
@@ -1176,8 +1198,11 @@ async function generateContractForConductor({
   // {{KM}} se rellena en /api/complete-control al momento de la entrega real del vehículo,
   // no al generar el contrato. Dejarlo como placeholder via nullGetter.
 
-  // Variables de propietario
-  const ownerData = CONTRACT_CONFIG.propietarios[propietario] || CONTRACT_CONFIG.propietarios['grupo_cg']
+  // Variables de propietario (busca en grupos_flota, fallback a hardcode)
+  const grupoFlotaDB = await getGrupoFlotaData('valor_propietario', propietario)
+  const ownerData = grupoFlotaDB
+    ? { owner: grupoFlotaDB.razon_social, cuit_owner: grupoFlotaDB.cuit, name_owner: grupoFlotaDB.representante_nombre, dni_owner: grupoFlotaDB.representante_dni }
+    : (CONTRACT_CONFIG.propietarios[propietario] || CONTRACT_CONFIG.propietarios['grupo_cg'])
   addIfPresent('OWNER', ownerData.owner)
   addIfPresent('CUIT_OWNER', ownerData.cuit_owner)
   addIfPresent('NAME_OWNER', ownerData.name_owner)
@@ -2354,13 +2379,16 @@ const OFERTA_LOCACION_CONFIG = {
  */
 async function generateOfertaLocacionDoc(drive, oferta) {
   const socio = oferta.socio
-  if (!socio || !OFERTA_LOCACION_CONFIG.folders[socio]) {
-    throw new Error(`Socio inválido o no seleccionado: "${socio}"`)
+  // Buscar datos del grupo desde la tabla, fallback a hardcode
+  const grupoFlotaDB = await getGrupoFlotaData('valor_socio', socio)
+  const parentFolderId = grupoFlotaDB?.drive_folder_ofertas || OFERTA_LOCACION_CONFIG.folders[socio]
+  const prefijo = grupoFlotaDB?.prefijo_oferta || OFERTA_LOCACION_CONFIG.prefijo[socio]
+
+  if (!parentFolderId) {
+    throw new Error(`Socio invalido o sin carpeta Drive configurada: "${socio}"`)
   }
 
-  const parentFolderId = OFERTA_LOCACION_CONFIG.folders[socio]
   const templateId = OFERTA_LOCACION_CONFIG.templateDocId
-  const prefijo = OFERTA_LOCACION_CONFIG.prefijo[socio]
 
   const titular = (oferta.titular_nombre || '').toUpperCase().trim()
   const patente = (oferta.patente || '').toUpperCase().trim()

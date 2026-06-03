@@ -5,6 +5,7 @@ import Swal from 'sweetalert2'
 import { showSuccess } from '../../../../utils/toast'
 import type { Titular, VehiculoTitular } from '../types/titulares.types'
 import type { OfertaLocacion, OfertaLocacionFormData } from '../types/ofertaLocacion.types'
+import { useGruposFlota } from '../../../../hooks/useGruposFlota'
 
 interface Props {
   vehiculoTitular: VehiculoTitular
@@ -74,6 +75,7 @@ function getNombreTitular(t: Titular): string {
 }
 
 export function OfertaLocacionModal({ vehiculoTitular, titular, sedeId, userId, userName, onClose }: Props) {
+  const { grupos: gruposFlota } = useGruposFlota()
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [existingRecord, setExistingRecord] = useState<OfertaLocacion | null>(null)
@@ -497,8 +499,15 @@ export function OfertaLocacionModal({ vehiculoTitular, titular, sedeId, userId, 
                   <label style={labelStyle}>Socio</label>
                   <select style={inputStyle} value={formData.socio} onChange={e => updateField('socio', e.target.value)}>
                     <option value="">Seleccionar...</option>
-                    <option value="grupocg">Grupo CG</option>
-                    <option value="44dreams">44 Dreams</option>
+                    {gruposFlota.map(g => (
+                      <option key={g.codigo} value={g.valor_socio || g.codigo}>{g.nombre_comercial}</option>
+                    ))}
+                    {gruposFlota.length === 0 && (
+                      <>
+                        <option value="grupocg">Grupo CG</option>
+                        <option value="44dreams">44 Dreams</option>
+                      </>
+                    )}
                   </select>
                 </div>
               </div>

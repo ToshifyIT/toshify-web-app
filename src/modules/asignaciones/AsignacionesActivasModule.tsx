@@ -880,6 +880,7 @@ export function AsignacionesActivasModule() {
               <h2 style={{ margin: 0, fontSize: '20px', fontWeight: '700', color: 'var(--text-primary)' }}>
                 Detalles de la Asignación
               </h2>
+              <button className="modal-close" onClick={() => setShowDetailsModal(false)}><X size={18} /></button>
             </div>
 
             <div className="modal-body">

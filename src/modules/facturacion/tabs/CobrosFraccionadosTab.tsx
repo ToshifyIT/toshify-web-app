@@ -10,13 +10,13 @@
  */
 
 import { useState, useEffect } from 'react'
-import { ChevronDown, ChevronUp, DollarSign, Eye } from 'lucide-react'
+import { ChevronDown, ChevronUp, Eye } from 'lucide-react'
 import { supabase } from '../../../lib/supabase'
 import { useSede } from '../../../contexts/SedeContext'
-import { useAuth } from '../../../contexts/AuthContext'
+// import { useAuth } from '../../../contexts/AuthContext'
 import { formatNombreCompleto } from '../../../utils/conductorUtils'
-import { insertControlSaldo } from '../../../services/controlSaldosService'
-import { showSuccess } from '../../../utils/toast'
+// import { insertControlSaldo } from '../../../services/controlSaldosService'
+// import { showSuccess } from '../../../utils/toast'
 import { formatCurrency } from '../../../types/facturacion.types'
 import Swal from 'sweetalert2'
 import '../CobrosFraccionados.css'
@@ -130,7 +130,7 @@ function calcularEstadoGrupo(cuotas: Cuota[]): EstadoGrupo {
 export function CobrosFraccionadosTab({ periodoActual }: CobrosFraccionadosTabProps) {
   void periodoActual
   const { sedeActualId, aplicarFiltroSede } = useSede()
-  const { profile } = useAuth()
+  // useAuth removido - no se usa tras ocultar boton Pagar
   const [cobros, setCobros] = useState<PenalidadFraccionada[]>([])
   const [loading, setLoading] = useState(true)
   const [expandidos, setExpandidos] = useState<Record<string, boolean>>({})
@@ -292,178 +292,6 @@ export function CobrosFraccionadosTab({ periodoActual }: CobrosFraccionadosTabPr
   }
 
   // ==========================================
-  // REGISTRAR PAGO DE CUOTA
-  // ==========================================
-  const registrarPagoCuota = async (cobro: PenalidadFraccionada, cuota: Cuota) => {
-    const esPenalidad = !cobro.id.startsWith('saldo-')
-    const cuotaTabla = esPenalidad ? 'penalidades_cuotas' : 'cobros_fraccionados'
-    const tipoCobro = esPenalidad ? 'penalidad_cuota' : 'cobro_fraccionado'
-
-    const hoy = new Date()
-    const semanaActual = Math.ceil(
-      (hoy.getTime() - new Date(hoy.getFullYear(), 0, 1).getTime()) / (7 * 24 * 60 * 60 * 1000)
-    )
-    const anioActual = hoy.getFullYear()
-
-    let semanaOptionsHtml = ''
-    for (let s = 1; s <= 52; s++) {
-      const selected = s === semanaActual ? 'selected' : ''
-      semanaOptionsHtml += `<option value="${s}" ${selected}>${s}</option>`
-    }
-
-    const conductorNombre = cobro.conductor?.nombre_completo || cobro.conductor_nombre || 'Sin nombre'
-
-    const { value: formValues } = await Swal.fire({
-      title: '<span style="font-size: 16px; font-weight: 600;">Registrar Pago de Cuota</span>',
-      html: `
-        <div style="text-align: left; font-size: 13px;">
-          <div style="background: #F3F4F6; padding: 10px 12px; border-radius: 6px; margin-bottom: 12px;">
-            <div style="font-weight: 600; color: #111827;">${conductorNombre}</div>
-            <div style="display: flex; gap: 12px; margin-top: 4px;">
-              <span style="color: #6B7280; font-size: 12px;">Cuota: <strong style="color: #374151;">#${cuota.numero_cuota}</strong></span>
-              <span style="color: #6B7280; font-size: 12px;">Semana: <strong style="color: #374151;">${cuota.semana}/${cuota.anio || '?'}</strong></span>
-            </div>
-            <div style="color: #ff0033; font-size: 12px; margin-top: 4px;">
-              Monto cuota: <strong>${formatCurrency(cuota.monto_cuota)}</strong>
-            </div>
-          </div>
-          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px;">
-            <div>
-              <label style="display: block; font-size: 12px; color: #374151; margin-bottom: 4px;">Semana:</label>
-              <select id="swal-semana" class="swal2-select" style="width: 100%; font-size: 14px;">
-                ${semanaOptionsHtml}
-              </select>
-            </div>
-            <div>
-              <label style="display: block; font-size: 12px; color: #374151; margin-bottom: 4px;">Año:</label>
-              <select id="swal-anio" class="swal2-select" style="width: 100%; font-size: 14px;">
-                <option value="2025">2025</option>
-                <option value="${anioActual}" selected>${anioActual}</option>
-              </select>
-            </div>
-          </div>
-          <div style="margin-bottom: 12px;">
-            <label style="display: block; font-size: 12px; color: #374151; margin-bottom: 4px;">Monto a pagar:</label>
-            <input id="swal-monto" type="number" class="swal2-input" style="font-size: 14px; margin: 0; width: 100%;" value="${cuota.monto_cuota}">
-          </div>
-          <div>
-            <label style="display: block; font-size: 12px; color: #374151; margin-bottom: 4px;">Referencia (opcional):</label>
-            <input id="swal-ref" type="text" class="swal2-input" style="font-size: 14px; margin: 0; width: 100%;" placeholder="Ej: Pago en efectivo, Transferencia #123">
-          </div>
-        </div>
-      `,
-      focusConfirm: false,
-      showCancelButton: true,
-      confirmButtonText: 'Registrar Pago',
-      cancelButtonText: 'Cancelar',
-      confirmButtonColor: '#16a34a',
-      width: 380,
-      preConfirm: () => {
-        const semana = parseInt((document.getElementById('swal-semana') as HTMLSelectElement).value)
-        const anio = parseInt((document.getElementById('swal-anio') as HTMLSelectElement).value)
-        const monto = (document.getElementById('swal-monto') as HTMLInputElement).value
-        const referencia = (document.getElementById('swal-ref') as HTMLInputElement).value
-        if (!monto || parseFloat(monto) <= 0) {
-          Swal.showValidationMessage('Ingrese un monto válido')
-          return false
-        }
-        return { monto: parseFloat(monto), referencia, semana, anio }
-      }
-    })
-
-    if (!formValues) return
-
-    try {
-      // 1. Registrar pago en pagos_conductores
-      const { error: errorPago } = await (supabase.from('pagos_conductores') as any)
-        .insert({
-          conductor_id: cobro.conductor_id,
-          tipo_cobro: tipoCobro,
-          referencia_id: cuota.id,
-          referencia_tabla: cuotaTabla,
-          numero_cuota: cuota.numero_cuota,
-          monto: formValues.monto,
-          fecha_pago: new Date().toISOString(),
-          referencia: formValues.referencia || null,
-          semana: formValues.semana,
-          anio: formValues.anio,
-          conductor_nombre: conductorNombre,
-          created_by_name: profile?.full_name || 'Sistema'
-        })
-
-      if (errorPago) throw errorPago
-
-      // 2. Marcar cuota como aplicada en tabla origen
-      if (cuotaTabla === 'cobros_fraccionados') {
-        const { error: errorUpdate } = await (supabase.from('cobros_fraccionados') as any)
-          .update({
-            aplicado: true,
-            fecha_aplicacion: new Date().toISOString()
-          })
-          .eq('id', cuota.id)
-        if (errorUpdate) throw errorUpdate
-      } else {
-        const { error: errorUpdate } = await (supabase.from('penalidades_cuotas') as any)
-          .update({
-            aplicado: true,
-            fecha_aplicacion: new Date().toISOString()
-          })
-          .eq('id', cuota.id)
-        if (errorUpdate) throw errorUpdate
-      }
-
-      // 3. Actualizar saldo_actual en saldos_conductores
-      // Las cuotas de penalidades NO afectan el saldo — ya se descuentan en la facturación semanal
-      // Solo los cobros fraccionados (saldos) afectan el saldo
-      if (!esPenalidad) {
-        const { data: saldoExistente } = await (supabase.from('saldos_conductores') as any)
-          .select('id, saldo_actual')
-          .eq('conductor_id', cobro.conductor_id)
-          .single()
-
-        if (saldoExistente) {
-          const nuevoSaldo = saldoExistente.saldo_actual + formValues.monto
-          await (supabase.from('saldos_conductores') as any)
-            .update({
-              saldo_actual: nuevoSaldo,
-              ultima_actualizacion: new Date().toISOString()
-            })
-            .eq('id', saldoExistente.id)
-
-          // Registrar movimiento en kardex (control_saldos)
-          await insertControlSaldo({
-            conductorId: cobro.conductor_id || '',
-            semana: formValues.semana,
-            anio: formValues.anio,
-            tipoMovimiento: 'pago_cuota',
-            montoMovimiento: formValues.monto,
-            saldoPendiente: nuevoSaldo,
-            referencia: `Pago cuota #${cuota.numero_cuota} - Saldo fraccionado`,
-            userName: profile?.full_name,
-          })
-        }
-      }
-
-      // 4. Registrar en abonos_conductores como audit trail
-      await (supabase.from('abonos_conductores') as any).insert({
-        conductor_id: cobro.conductor_id,
-        tipo: 'abono',
-        monto: formValues.monto,
-        concepto: `Pago cuota #${cuota.numero_cuota} - ${esPenalidad ? 'Penalidad fraccionada' : 'Saldo fraccionado'}`,
-        referencia: formValues.referencia || null,
-        semana: formValues.semana,
-        anio: formValues.anio,
-        fecha_abono: new Date().toISOString()
-      })
-
-      showSuccess('Pago Registrado', `Cuota #${cuota.numero_cuota} - ${formatCurrency(formValues.monto)}`)
-      cargarCobrosFraccionados()
-    } catch (error: any) {
-      Swal.fire('Error', error.message || 'No se pudo registrar el pago', 'error')
-    }
-  }
-
-  // ==========================================
   // VER HISTORIAL DE PAGOS
   // ==========================================
   const verHistorialPagos = (cobro: PenalidadFraccionada) => {
@@ -615,7 +443,7 @@ export function CobrosFraccionadosTab({ periodoActual }: CobrosFraccionadosTabPr
             >
               <option value="todos">Todos ({conteosTipo.todos})</option>
               <option value="saldo">Saldos ({conteosTipo.saldo})</option>
-              <option value="multa">Multas ({conteosTipo.multa})</option>
+              <option value="multa">Incidencias ({conteosTipo.multa})</option>
             </select>
           </div>
 
@@ -689,6 +517,17 @@ export function CobrosFraccionadosTab({ periodoActual }: CobrosFraccionadosTabPr
                       </span>
                       <span className="patente" style={{ marginLeft: '10px', color: 'var(--text-secondary, #666)' }}>
                         {cobro.vehiculo_patente || ''}
+                      </span>
+                      <span style={{
+                        marginLeft: '8px',
+                        padding: '2px 8px',
+                        borderRadius: '4px',
+                        fontSize: '10px',
+                        fontWeight: 600,
+                        background: esTipoSaldo(cobro) ? 'rgba(99,102,241,0.1)' : 'rgba(234,88,12,0.1)',
+                        color: esTipoSaldo(cobro) ? '#6366F1' : '#EA580C',
+                      }}>
+                        {esTipoSaldo(cobro) ? 'Saldo' : 'Incidencia'}
                       </span>
                     </div>
                     <div className="cobro-detalles">
@@ -787,7 +626,7 @@ export function CobrosFraccionadosTab({ periodoActual }: CobrosFraccionadosTabPr
                         {(cobro.cuotas || []).map(cuota => {
                           const cancelada = cuota.estado === 'cancelada_por_baja'
                           return (
-                          <tr key={cuota.id} className={cancelada ? 'cancelada' : (cuota.aplicado ? (cuota.pagado ? 'pagada' : 'aplicada') : 'pendiente')}>
+                          <tr key={cuota.id} className={cancelada ? 'cancelada' : (cuota.aplicado || cuota.pagado ? 'aplicada' : 'pendiente')}>
                             <td>#{cuota.numero_cuota}</td>
                             <td>Semana {cuota.semana} - {cuota.anio || '?'}</td>
                             <td>
@@ -799,17 +638,17 @@ export function CobrosFraccionadosTab({ periodoActual }: CobrosFraccionadosTabPr
                                 borderRadius: '4px',
                                 backgroundColor: cancelada
                                   ? '#9CA3AF'
-                                  : cuota.aplicado
-                                    ? (cuota.pagado ? '#16a34a' : '#4CAF50')
+                                  : (cuota.aplicado || cuota.pagado)
+                                    ? '#4CAF50'
                                     : '#FFC107',
-                                color: cancelada || cuota.aplicado ? 'white' : '#333',
+                                color: cancelada || cuota.aplicado || cuota.pagado ? 'white' : '#333',
                                 fontSize: '12px',
                                 fontWeight: 'bold'
                               }}>
                                 {cancelada
                                   ? 'Cancelado por baja'
-                                  : cuota.aplicado
-                                    ? (cuota.pagado ? 'Pagada' : 'Aplicada')
+                                  : (cuota.aplicado || cuota.pagado)
+                                    ? 'Aplicada'
                                     : 'Pendiente'
                                 }
                               </span>
@@ -823,20 +662,8 @@ export function CobrosFraccionadosTab({ periodoActual }: CobrosFraccionadosTabPr
                               }
                             </td>
                             <td style={{ textAlign: 'center' }}>
-                              {!cuota.aplicado && !cancelada && (
-                                <button
-                                  onClick={(e) => {
-                                    e.stopPropagation()
-                                    registrarPagoCuota(cobro, cuota)
-                                  }}
-                                  className="btn-pagar-cuota"
-                                  title="Registrar pago de esta cuota"
-                                >
-                                  <DollarSign size={12} />
-                                  Pagar
-                                </button>
-                              )}
-                              {cuota.aplicado && cuota.pagado && (
+                              {/* Boton Pagar oculto: las cuotas se aplican automaticamente al cerrar periodo */}
+                              {(cuota.aplicado || cuota.pagado) && !cancelada && (
                                 <span style={{ color: '#16a34a', fontSize: '11px', fontWeight: 600 }}>
                                   Pagado
                                 </span>

@@ -2051,6 +2051,58 @@ export function ConductoresModule() {
 
     setSaving(true);
     try {
+      // Verificar bloqueos antes de eliminar
+      const bloqueos: string[] = [];
+
+      // 1. Asignaciones activas o programadas
+      const { data: asigActivas } = await (supabase as any)
+        .from('asignaciones_conductores')
+        .select('id, asignaciones(codigo, estado)')
+        .eq('conductor_id', selectedConductor.id)
+        .in('estado', ['asignado', 'activo']);
+      const asigBloqueantes = (asigActivas || []).filter(
+        (ac: any) => ac.asignaciones?.estado === 'activa' || ac.asignaciones?.estado === 'programado'
+      );
+      if (asigBloqueantes.length > 0) {
+        const codigos = asigBloqueantes.map((a: any) => a.asignaciones?.codigo).filter(Boolean).join(', ');
+        bloqueos.push(`Asignaciones activas/programadas: ${codigos}`);
+      }
+
+      // 2. Cobros fraccionados pendientes
+      const { data: cobrosPend } = await (supabase as any)
+        .from('cobros_fraccionados')
+        .select('id')
+        .eq('conductor_id', selectedConductor.id)
+        .eq('aplicado', false)
+        .limit(1);
+      if (cobrosPend && cobrosPend.length > 0) {
+        bloqueos.push('Cobros fraccionados pendientes de pago');
+      }
+
+      // 3. Garantia en curso
+      const { data: garantiasAct } = await (supabase as any)
+        .from('garantias_conductores')
+        .select('id, estado')
+        .eq('conductor_id', selectedConductor.id)
+        .in('estado', ['en_curso', 'pendiente']);
+      if (garantiasAct && garantiasAct.length > 0) {
+        bloqueos.push('Garantia en curso o pendiente');
+      }
+
+      if (bloqueos.length > 0) {
+        Swal.fire({
+          icon: 'warning',
+          title: 'No se puede eliminar',
+          html: `<div style="text-align:left;font-size:13px;">
+            <p>Este conductor tiene referencias activas que deben resolverse primero:</p>
+            <ul style="margin-top:8px;">${bloqueos.map(b => `<li style="margin-bottom:4px;">${b}</li>`).join('')}</ul>
+          </div>`,
+          confirmButtonColor: '#ff0033',
+        });
+        setSaving(false);
+        return;
+      }
+
       // Limpiar referencias en tablas hijas antes de eliminar
       await (supabase as any)
         .from('devoluciones')

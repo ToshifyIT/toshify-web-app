@@ -3,6 +3,7 @@ import { useState, useEffect, useMemo, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import { supabase } from '../../../lib/supabase'
 import { useSede } from '../../../contexts/SedeContext'
+import { useAuth } from '../../../contexts/AuthContext'
 import { usePermissions } from '../../../contexts/PermissionsContext'
 import Swal from 'sweetalert2'
 import { showSuccess } from '../../../utils/toast'
@@ -25,6 +26,7 @@ import {
   RotateCcw,
   Download,
   Upload,
+  History,
 } from 'lucide-react'
 import { type ColumnDef } from '@tanstack/react-table'
 import { format, startOfWeek, endOfWeek, parseISO } from 'date-fns'
@@ -59,6 +61,7 @@ interface PagoGarantiaRow {
 
 export function GarantiasTab() {
   const { sedeActualId, aplicarFiltroSede } = useSede()
+  const { user, profile } = useAuth()
   const { isAdmin, isAdministrativo } = usePermissions()
   // Sub-tab activo (Movimientos removido - no se usa)
   const [activeSubTab] = useState<'garantias' | 'movimientos'>('garantias')
@@ -476,8 +479,11 @@ export function GarantiasTab() {
   }
 
   async function editarGarantia(garantia: GarantiaConductor) {
+    const montoPagadoActual = Math.round(garantia.monto_realmente_pagado || garantia.monto_pagado)
+    const montoTotalActual = Math.round(garantia.monto_total)
+
     const { value: formValues } = await Swal.fire({
-      title: `<span style="font-size: 16px; font-weight: 600;">Editar Garantía</span>`,
+      title: `<span style="font-size: 16px; font-weight: 600;">Editar Garantia</span>`,
       html: `
         <div style="text-align: left; font-size: 13px;">
           <div style="background: #F3F4F6; padding: 10px 12px; border-radius: 6px; margin-bottom: 12px;">
@@ -485,11 +491,20 @@ export function GarantiasTab() {
           </div>
           <div style="margin-bottom: 12px;">
             <label style="display: block; font-size: 12px; color: #374151; margin-bottom: 4px;">Monto Pagado:</label>
-            <input id="swal-monto-pagado" type="number" min="0" class="swal2-input" style="font-size: 14px; margin: 0; width: 100%;" value="${Math.round(garantia.monto_realmente_pagado || garantia.monto_pagado)}">
+            <input id="swal-monto-pagado" type="number" class="swal2-input" style="font-size: 14px; margin: 0; width: 100%; background: #F3F4F6; color: #374151;" value="${montoPagadoActual}" readonly>
+          </div>
+          <div style="margin-bottom: 12px;">
+            <label style="display: block; font-size: 12px; color: #374151; margin-bottom: 4px;">Monto Total:</label>
+            <input id="swal-monto-total" type="number" class="swal2-input" style="font-size: 14px; margin: 0; width: 100%; background: #F3F4F6; color: #374151;" value="${montoTotalActual}" readonly>
+          </div>
+          <div style="margin-bottom: 12px;">
+            <label style="display: block; font-size: 12px; color: #374151; margin-bottom: 4px;">Ajuste:</label>
+            <input id="swal-ajuste" type="number" class="swal2-input" style="font-size: 14px; margin: 0; width: 100%;" value="0" placeholder="0">
+            <span style="display: block; font-size: 10px; color: #9ca3af; margin-top: 3px;">Si ingresas numero negativo se restara del Monto Pagado</span>
           </div>
           <div>
-            <label style="display: block; font-size: 12px; color: #374151; margin-bottom: 4px;">Monto Total:</label>
-            <input id="swal-monto-total" type="number" min="0" class="swal2-input" style="font-size: 14px; margin: 0; width: 100%;" value="${Math.round(garantia.monto_total)}">
+            <label style="display: block; font-size: 12px; color: #374151; margin-bottom: 4px;">Motivo de la edicion: <span style="color: #ef4444;">*</span></label>
+            <textarea id="swal-motivo" class="swal2-textarea" style="font-size: 13px; margin: 0; width: 100%; min-height: 60px; resize: vertical;" placeholder="Ej: Correccion por cobro excedente, ajuste por error de carga..."></textarea>
           </div>
         </div>
       `,
@@ -498,21 +513,31 @@ export function GarantiasTab() {
       confirmButtonText: 'Guardar',
       cancelButtonText: 'Cancelar',
       confirmButtonColor: '#ff0033',
-      width: 340,
+      width: 380,
+      didOpen: () => {
+        const ajusteInput = document.getElementById('swal-ajuste') as HTMLInputElement
+        const pagadoInput = document.getElementById('swal-monto-pagado') as HTMLInputElement
+        const base = montoPagadoActual
+        ajusteInput.addEventListener('input', () => {
+          const ajuste = parseFloat(ajusteInput.value) || 0
+          pagadoInput.value = String(Math.round(base + ajuste))
+        })
+      },
       preConfirm: () => {
         const montoPagado = Math.round(parseFloat((document.getElementById('swal-monto-pagado') as HTMLInputElement).value))
         const montoTotal = Math.round(parseFloat((document.getElementById('swal-monto-total') as HTMLInputElement).value))
+        const motivo = (document.getElementById('swal-motivo') as HTMLTextAreaElement).value.trim()
 
         if (isNaN(montoPagado) || montoPagado < 0) {
-          Swal.showValidationMessage('Monto pagado debe ser un número válido')
+          Swal.showValidationMessage('El ajuste genera un monto pagado negativo')
           return false
         }
-        if (isNaN(montoTotal) || montoTotal <= 0) {
-          Swal.showValidationMessage('Monto total debe ser mayor a 0')
+        if (!motivo) {
+          Swal.showValidationMessage('El motivo es obligatorio')
           return false
         }
 
-        return { montoPagado, montoTotal }
+        return { montoPagado, montoTotal, motivo }
       }
     })
 
@@ -528,6 +553,23 @@ export function GarantiasTab() {
         nuevoEstado = 'pendiente'
       }
 
+      // 1. Registrar historial de la edicion
+      await (supabase.from('garantias_ediciones_historial') as any)
+        .insert({
+          garantia_id: garantia.id,
+          conductor_id: garantia.conductor_id,
+          monto_pagado_anterior: montoPagadoActual,
+          monto_pagado_nuevo: formValues.montoPagado,
+          monto_total_anterior: montoTotalActual,
+          monto_total_nuevo: formValues.montoTotal,
+          estado_anterior: garantia.estado,
+          estado_nuevo: nuevoEstado,
+          motivo: formValues.motivo,
+          created_by: user?.id || null,
+          created_by_name: profile?.full_name || null,
+        })
+
+      // 2. Actualizar la garantia
       const { error } = await (supabase.from('garantias_conductores') as any)
         .update({
           monto_realmente_pagado: formValues.montoPagado,
@@ -796,6 +838,87 @@ export function GarantiasTab() {
       cargarGarantias()
     } catch (error: any) {
       Swal.fire('Error', error.message || 'No se pudo registrar la devolución', 'error')
+    }
+  }
+
+  async function verHistorialEdiciones(garantia: GarantiaConductor) {
+    try {
+      const { data, error } = await (supabase.from('garantias_ediciones_historial') as any)
+        .select('*')
+        .eq('garantia_id', garantia.id)
+        .order('created_at', { ascending: false })
+
+      if (error) throw error
+
+      if (!data || data.length === 0) {
+        Swal.fire({
+          title: '<span style="font-size: 16px; font-weight: 600;">Historial de Ediciones</span>',
+          html: `
+            <div style="text-align: left; font-size: 13px;">
+              <div style="background: #F3F4F6; padding: 10px 12px; border-radius: 6px; margin-bottom: 12px;">
+                <div style="font-weight: 600;">${garantia.conductor_nombre}</div>
+              </div>
+              <div style="text-align: center; color: #9ca3af; padding: 20px 0;">Sin ediciones registradas</div>
+            </div>
+          `,
+          confirmButtonText: 'Cerrar',
+          confirmButtonColor: '#6b7280',
+          width: 420,
+        })
+        return
+      }
+
+      const rows = data.map((h: any) => {
+        const fecha = new Date(h.created_at).toLocaleString('es-AR', {
+          day: '2-digit', month: '2-digit', year: 'numeric',
+          hour: '2-digit', minute: '2-digit',
+          timeZone: 'America/Argentina/Buenos_Aires'
+        })
+        const cambios: string[] = []
+        if (h.monto_pagado_anterior !== h.monto_pagado_nuevo) {
+          cambios.push(`<div style="margin-bottom:4px;"><strong style="color:#6B7280;">Monto Pagado</strong></div><div style="display:flex;justify-content:space-between;"><span>Monto Antes:</span><span>${formatCurrency(h.monto_pagado_anterior)}</span></div><div style="display:flex;justify-content:space-between;"><span>Monto Modificado:</span><span style="font-weight:600;">${formatCurrency(h.monto_pagado_nuevo)}</span></div>`)
+        }
+        if (h.monto_total_anterior !== h.monto_total_nuevo) {
+          cambios.push(`<div style="margin-bottom:4px;${h.monto_pagado_anterior !== h.monto_pagado_nuevo ? 'margin-top:8px;padding-top:8px;border-top:1px solid #E5E7EB;' : ''}"><strong style="color:#6B7280;">Campo Total</strong></div><div style="display:flex;justify-content:space-between;"><span>Monto Antes:</span><span>${formatCurrency(h.monto_total_anterior)}</span></div><div style="display:flex;justify-content:space-between;"><span>Monto Modificado:</span><span style="font-weight:600;">${formatCurrency(h.monto_total_nuevo)}</span></div>`)
+        }
+        if (h.estado_anterior !== h.estado_nuevo) {
+          cambios.push(`<div style="margin-top:8px;padding-top:8px;border-top:1px solid #E5E7EB;display:flex;justify-content:space-between;"><span style="color:#6B7280;">Estado:</span><span>${h.estado_anterior} → <strong>${h.estado_nuevo}</strong></span></div>`)
+        }
+        return `
+          <div style="border: 1px solid #E5E7EB; border-radius: 8px; padding: 10px 12px; margin-bottom: 8px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+              <span style="font-size: 11px; color: #6B7280;">${fecha}</span>
+              <span style="font-size: 11px; color: #374151; font-weight: 600;">${h.created_by_name || 'Sistema'}</span>
+            </div>
+            <div style="font-size: 12px; color: #374151; margin-bottom: 6px;">
+              ${cambios.join('')}
+            </div>
+            <div style="font-size: 12px; background: #FEF9C3; padding: 6px 8px; border-radius: 4px; color: #854D0E;">
+              <strong>Motivo:</strong> ${h.motivo}
+            </div>
+          </div>
+        `
+      }).join('')
+
+      Swal.fire({
+        title: '<span style="font-size: 16px; font-weight: 600;">Historial de Ediciones</span>',
+        html: `
+          <div style="text-align: left; font-size: 13px;">
+            <div style="background: #F3F4F6; padding: 10px 12px; border-radius: 6px; margin-bottom: 12px;">
+              <div style="font-weight: 600;">${garantia.conductor_nombre}</div>
+              <div style="font-size: 11px; color: #6B7280;">${data.length} edicion(es) registrada(s)</div>
+            </div>
+            <div style="max-height: 350px; overflow-y: auto;">
+              ${rows}
+            </div>
+          </div>
+        `,
+        confirmButtonText: 'Cerrar',
+        confirmButtonColor: '#6b7280',
+        width: 460,
+      })
+    } catch (err: any) {
+      Swal.fire('Error', err.message || 'No se pudo cargar el historial', 'error')
     }
   }
 
@@ -1581,6 +1704,11 @@ export function GarantiasTab() {
             {(isAdmin() || isAdministrativo()) && (
               <button className="fact-table-btn fact-table-btn-edit" onClick={() => editarGarantia(row.original)} data-tooltip="Editar">
                 <Edit3 size={14} />
+              </button>
+            )}
+            {(isAdmin() || isAdministrativo()) && (
+              <button className="fact-table-btn" onClick={() => verHistorialEdiciones(row.original)} data-tooltip="Historial de ediciones" style={{ color: '#8b5cf6' }}>
+                <History size={14} />
               </button>
             )}
             {isAdmin() && (

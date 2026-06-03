@@ -273,6 +273,7 @@ const ConceptosFacturacionPage = lazy(() => import('./parametros/ConceptosFactur
 const RangoSeguimientoPage = lazy(() => import('./parametros/RangoSeguimientoPage').then(m => ({ default: m.RangoSeguimientoPage })))
 const ParametrosUssPage = lazy(() => import('./parametros/ParametrosUssPage').then(m => ({ default: m.ParametrosUssPage })))
 const ParametrosAsignacionesPage = lazy(() => import('./parametros/ParametrosAsignacionesPage').then(m => ({ default: m.ParametrosAsignacionesPage })))
+const GruposFlotaPage = lazy(() => import('./parametros/GruposFlotaPage').then(m => ({ default: m.GruposFlotaPage })))
 const IntegracionesTokensPage = lazy(() => import('./administracion/IntegracionesTokensPage').then(m => ({ default: m.IntegracionesTokensPage })))
 const GuiasPage = lazy(() => import('./GuiasPage').then(m => ({ default: m.GuiasPage })))
 const EscuelaPage = lazy(() => import('./EscuelaPage').then(m => ({ default: m.EscuelaPage })))
@@ -2129,6 +2130,11 @@ export function HomePage() {
               <Route path="/parametros/configuracion-asignaciones" element={
                 <ProtectedRoute submenuName="parametros-sistema" action="view">
                   <LazyPage><ParametrosAsignacionesPage /></LazyPage>
+                </ProtectedRoute>
+              } />
+              <Route path="/parametros/grupos-flota" element={
+                <ProtectedRoute submenuName="parametros-sistema" action="view">
+                  <LazyPage><GruposFlotaPage /></LazyPage>
                 </ProtectedRoute>
               } />
 

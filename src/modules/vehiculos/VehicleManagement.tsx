@@ -1,7 +1,7 @@
  
 // src/modules/vehiculos/VehicleManagement.tsx
 import { useState, useEffect, useMemo, useRef } from 'react'
-import { AlertTriangle, Eye, Edit, Trash2, Info, Car, Wrench, Briefcase, PaintBucket, Warehouse, FolderOpen, FolderPlus, Undo2, History, Fuel, CreditCard, Download, Tag } from 'lucide-react'
+import { AlertTriangle, Eye, Edit, Trash2, Info, Car, Wrench, Briefcase, PaintBucket, Warehouse, FolderOpen, FolderPlus, Undo2, History, Fuel, CreditCard, Download, Tag, X } from 'lucide-react'
 import * as XLSX from 'xlsx'
 import { ActionsMenu } from '../../components/ui/ActionsMenu'
 import { VerLogsButton } from '../../components/ui/VerLogsButton'
@@ -26,6 +26,7 @@ import { VehiculoWizard } from './components/VehiculoWizard'
 import { SearchableSelect } from '../../components/ui/SearchableSelect/SearchableSelect'
 import { formatDateTimeAR } from '../../utils/dateUtils'
 import { VEHICULO_ESTADO_LABELS } from '../../types/vehiculo.types'
+import { useGruposFlota } from '../../hooks/useGruposFlota'
 import './VehicleManagement.css'
 
 
@@ -37,6 +38,7 @@ import './VehicleManagement.css'
 
 export function VehicleManagement() {
   const { sedeActualId, aplicarFiltroSede } = useSede()
+  const { grupos: gruposFlotaDB } = useGruposFlota()
   const [vehiculos, setVehiculos] = useState<VehiculoWithRelations[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -198,6 +200,9 @@ export function VehicleManagement() {
     let vehiculosChapaPintura = 0
     let vehiculosCorporativos = 0
     let vehiculosDevueltos = 0
+    let vehiculosRobo = 0
+    let vehiculosPkgOff = 0
+    let vehiculosDestruccion = 0
     let vehiculosSinGnc = 0
     let vehiculosConGnc = 0
     let vehiculosConTelepase = 0
@@ -250,6 +255,12 @@ export function VehicleManagement() {
         vehiculosCorporativos++
       } else if (estadoCodigo === 'DEVUELTO_PROVEEDOR') {
         vehiculosDevueltos++
+      } else if (estadoCodigo === 'ROBO') {
+        vehiculosRobo++
+      } else if (estadoCodigo === 'PKG_OFF_BASE' || estadoCodigo === 'PKG_OFF_FRANCIA') {
+        vehiculosPkgOff++
+      } else if (estadoCodigo === 'DESTRUCCION_TOTAL') {
+        vehiculosDestruccion++
       }
     }
 
@@ -265,6 +276,9 @@ export function VehicleManagement() {
       vehiculosConGnc,
       vehiculosConTelepase,
       vehiculosTelepaseToshify,
+      vehiculosRobo,
+      vehiculosPkgOff,
+      vehiculosDestruccion,
       categoriaCountMap,
     }
   }, [vehiculos])
@@ -1470,6 +1484,18 @@ export function VehicleManagement() {
         setStatCardEstadoFilter(['Robo', 'Destruccion', 'Jubilado', 'Dev. Proveedor'])
         setStatCardExcludeMode(true)
         break
+      case 'robo':
+        setStatCardEstadoFilter(['Robo'])
+        setStatCardExcludeMode(false)
+        break
+      case 'pkgOff':
+        setStatCardEstadoFilter(['PKG OFF', 'PKG OFF - Francia'])
+        setStatCardExcludeMode(false)
+        break
+      case 'destruccion':
+        setStatCardEstadoFilter(['Destruccion'])
+        setStatCardExcludeMode(false)
+        break
       case 'enCochera':
         setStatCardEstadoFilter(estadosEnCochera)
         setStatCardExcludeMode(false)
@@ -1546,6 +1572,9 @@ export function VehicleManagement() {
         chapaPintura: 'Chapa y Pintura',
         corporativos: 'Corporativos',
         devueltos: 'Dev. Proveedor',
+        robo: 'Robo',
+        pkgOff: 'PKG OFF',
+        destruccion: 'Destruccion Total',
         sinGnc: 'Sin GNC',
         conGnc: 'Con GNC',
         telepase: 'Telepase Propio',
@@ -1661,13 +1690,20 @@ export function VehicleManagement() {
   }, [vehiculos])
 
   const gruposFlotaExistentes = useMemo(() => {
+    // Leer de la tabla grupos_flota (valor_vehiculo es el texto que se guarda en vehiculos.grupo_flota)
+    if (gruposFlotaDB.length > 0) {
+      return gruposFlotaDB
+        .filter(g => g.valor_vehiculo)
+        .map(g => g.valor_vehiculo as string)
+    }
+    // Fallback: valores unicos de vehiculos cargados
     const grupos = new Set<string>()
     vehiculos.forEach(v => {
       const g = (v as any).grupo_flota
       if (g) grupos.add(g)
     })
     return Array.from(grupos).sort()
-  }, [vehiculos])
+  }, [vehiculos, gruposFlotaDB])
 
   // Valores únicos para filtros tipo Excel
   const patentesUnicas = useMemo(() => {
@@ -1784,7 +1820,7 @@ export function VehicleManagement() {
       })
     } else {
       // Por defecto (sin stat card activa): excluir estados fuera de flota activa
-      const estadosExcluidosTabla = ['ROBO', 'DESTRUCCION_TOTAL', 'JUBILADO', 'DEVUELTO_PROVEEDOR']
+      const estadosExcluidosTabla = ['JUBILADO', 'DEVUELTO_PROVEEDOR']
       result = result.filter(v => {
         const estadoCodigo = v.vehiculos_estados?.codigo || ''
         return !estadosExcluidosTabla.includes(estadoCodigo)
@@ -1888,7 +1924,7 @@ export function VehicleManagement() {
           if (!g) return <span style={{ color: 'var(--text-tertiary)' }}>-</span>
           return <span style={{ fontSize: '12px' }}>{g}</span>
         },
-        enableSorting: true,
+        enableSorting: false,
       },
       {
         accessorKey: 'marca',
@@ -2324,148 +2360,73 @@ export function VehicleManagement() {
       {/* Loading Overlay - bloquea toda la pantalla */}
       <LoadingOverlay show={loading} message="Cargando vehiculos..." size="lg" />
 
-      {/* Stats Cards - Clickeables para filtrar */}
+      {/* Stats Cards - Fila 1: Estados de vehiculo */}
       <div className="veh-stats">
         <div className="veh-stats-grid">
-          <div
-            className={`stat-card stat-card-clickable ${activeStatCard === 'total' ? 'stat-card-active' : ''}`}
-            onClick={() => handleStatCardClick('total')}
-            title="Click para ver todos"
-          >
+          <div className={`stat-card stat-card-clickable ${activeStatCard === 'total' ? 'stat-card-active' : ''}`} onClick={() => handleStatCardClick('total')} title="Click para ver todos">
             <Car size={18} className="stat-icon" />
-            <div className="stat-content">
-              <span className="stat-value">{calculatedStats.totalVehiculos}</span>
-              <span className="stat-label">Total</span>
-            </div>
+            <div className="stat-content"><span className="stat-value">{calculatedStats.totalVehiculos}</span><span className="stat-label">Total</span></div>
           </div>
-          <div
-            className={`stat-card stat-card-clickable ${activeStatCard === 'enCochera' ? 'stat-card-active' : ''}`}
-            onClick={() => handleStatCardClick('enCochera')}
-            title="Click para filtrar: PKG ON + PKG OFF"
-          >
+          <div className={`stat-card stat-card-clickable ${activeStatCard === 'enCochera' ? 'stat-card-active' : ''}`} onClick={() => handleStatCardClick('enCochera')} title="Click para filtrar: PKG ON">
             <Warehouse size={18} className="stat-icon" />
-            <div className="stat-content">
-              <span className="stat-value">{calculatedStats.vehiculosDisponibles}</span>
-              <span className="stat-label">Disponible</span>
-            </div>
+            <div className="stat-content"><span className="stat-value">{calculatedStats.vehiculosDisponibles}</span><span className="stat-label">Disponible</span></div>
           </div>
-          <div
-            className={`stat-card stat-card-clickable ${activeStatCard === 'enUso' ? 'stat-card-active' : ''}`}
-            onClick={() => handleStatCardClick('enUso')}
-            title="Click para filtrar: EN USO"
-          >
+          <div className={`stat-card stat-card-clickable ${activeStatCard === 'enUso' ? 'stat-card-active' : ''}`} onClick={() => handleStatCardClick('enUso')} title="Click para filtrar: EN USO">
             <Car size={18} className="stat-icon" />
-            <div className="stat-content">
-              <span className="stat-value">{calculatedStats.vehiculosEnUso}</span>
-              <span className="stat-label">En Uso</span>
-            </div>
+            <div className="stat-content"><span className="stat-value">{calculatedStats.vehiculosEnUso}</span><span className="stat-label">En Uso</span></div>
           </div>
-          <div
-            className={`stat-card stat-card-clickable ${activeStatCard === 'tallerMecanico' ? 'stat-card-active' : ''}`}
-            onClick={() => handleStatCardClick('tallerMecanico')}
-            title="Click para filtrar: Talleres mecánicos"
-          >
+          <div className={`stat-card stat-card-clickable ${activeStatCard === 'tallerMecanico' ? 'stat-card-active' : ''}`} onClick={() => handleStatCardClick('tallerMecanico')} title="Click para filtrar: Talleres mecanicos">
             <Wrench size={18} className="stat-icon" />
-            <div className="stat-content">
-              <span className="stat-value">{calculatedStats.vehiculosTallerMecanico}</span>
-              <span className="stat-label">Taller Mecánico</span>
-            </div>
+            <div className="stat-content"><span className="stat-value">{calculatedStats.vehiculosTallerMecanico}</span><span className="stat-label">Taller Mecanico</span></div>
           </div>
-          <div
-            className={`stat-card stat-card-clickable ${activeStatCard === 'chapaPintura' ? 'stat-card-active' : ''}`}
-            onClick={() => handleStatCardClick('chapaPintura')}
-            title="Click para filtrar: Chapa y Pintura"
-          >
+          <div className={`stat-card stat-card-clickable ${activeStatCard === 'chapaPintura' ? 'stat-card-active' : ''}`} onClick={() => handleStatCardClick('chapaPintura')} title="Click para filtrar: Chapa y Pintura">
             <PaintBucket size={18} className="stat-icon" />
-            <div className="stat-content">
-              <span className="stat-value">{calculatedStats.vehiculosChapaPintura}</span>
-              <span className="stat-label">Chapa y Pintura</span>
-            </div>
+            <div className="stat-content"><span className="stat-value">{calculatedStats.vehiculosChapaPintura}</span><span className="stat-label">Chapa y Pintura</span></div>
           </div>
-          <div
-            className={`stat-card stat-card-clickable ${activeStatCard === 'corporativos' ? 'stat-card-active' : ''}`}
-            onClick={() => handleStatCardClick('corporativos')}
-            title="Click para filtrar: Corporativos"
-          >
+          <div className={`stat-card stat-card-clickable ${activeStatCard === 'corporativos' ? 'stat-card-active' : ''}`} onClick={() => handleStatCardClick('corporativos')} title="Click para filtrar: Corporativos">
             <Briefcase size={18} className="stat-icon" />
-            <div className="stat-content">
-              <span className="stat-value">{calculatedStats.vehiculosCorporativos}</span>
-              <span className="stat-label">Corporativos</span>
-            </div>
+            <div className="stat-content"><span className="stat-value">{calculatedStats.vehiculosCorporativos}</span><span className="stat-label">Corporativos</span></div>
           </div>
-          <div
-            className={`stat-card stat-card-clickable ${activeStatCard === 'devueltos' ? 'stat-card-active' : ''}`}
-            onClick={() => handleStatCardClick('devueltos')}
-            title="Click para filtrar: Devueltos a Proveedor"
-          >
+          <div className={`stat-card stat-card-clickable ${activeStatCard === 'pkgOff' ? 'stat-card-active' : ''}`} onClick={() => handleStatCardClick('pkgOff')} title="Click para filtrar: PKG OFF">
+            <Warehouse size={18} className="stat-icon" style={{ color: '#9ca3af' }} />
+            <div className="stat-content"><span className="stat-value">{calculatedStats.vehiculosPkgOff}</span><span className="stat-label">PKG OFF</span></div>
+          </div>
+          <div className={`stat-card stat-card-clickable ${activeStatCard === 'robo' ? 'stat-card-active' : ''}`} onClick={() => handleStatCardClick('robo')} title="Click para filtrar: Vehiculos robados">
+            <AlertTriangle size={18} className="stat-icon" style={{ color: '#dc2626' }} />
+            <div className="stat-content"><span className="stat-value">{calculatedStats.vehiculosRobo}</span><span className="stat-label">Robo</span></div>
+          </div>
+          <div className={`stat-card stat-card-clickable ${activeStatCard === 'destruccion' ? 'stat-card-active' : ''}`} onClick={() => handleStatCardClick('destruccion')} title="Click para filtrar: Destruccion Total">
+            <AlertTriangle size={18} className="stat-icon" style={{ color: '#991b1b' }} />
+            <div className="stat-content"><span className="stat-value">{calculatedStats.vehiculosDestruccion}</span><span className="stat-label">Destruccion Total</span></div>
+          </div>
+          <div className={`stat-card stat-card-clickable ${activeStatCard === 'devueltos' ? 'stat-card-active' : ''}`} onClick={() => handleStatCardClick('devueltos')} title="Click para filtrar: Devueltos a Proveedor">
             <Undo2 size={18} className="stat-icon" />
-            <div className="stat-content">
-              <span className="stat-value">{calculatedStats.vehiculosDevueltos}</span>
-              <span className="stat-label">Dev. Proveedor</span>
-            </div>
+            <div className="stat-content"><span className="stat-value">{calculatedStats.vehiculosDevueltos}</span><span className="stat-label">Dev. Proveedor</span></div>
           </div>
-          <div
-            className={`stat-card stat-card-clickable ${activeStatCard === 'sinGnc' ? 'stat-card-active' : ''}`}
-            onClick={() => handleStatCardClick('sinGnc')}
-            title="Click para filtrar: Vehiculos sin GNC"
-          >
-            <Fuel size={18} className="stat-icon" />
-            <div className="stat-content">
-              <span className="stat-value">{calculatedStats.vehiculosSinGnc}</span>
-              <span className="stat-label">Sin GNC</span>
-            </div>
-          </div>
-          <div
-            className={`stat-card stat-card-clickable ${activeStatCard === 'conGnc' ? 'stat-card-active' : ''}`}
-            onClick={() => handleStatCardClick('conGnc')}
-            title="Click para filtrar: Vehiculos con GNC"
-          >
-            <Fuel size={18} className="stat-icon" />
-            <div className="stat-content">
-              <span className="stat-value">{calculatedStats.vehiculosConGnc}</span>
-              <span className="stat-label">Con GNC</span>
-            </div>
-          </div>
-          <div
-            className={`stat-card stat-card-clickable ${activeStatCard === 'telepase' ? 'stat-card-active' : ''}`}
-            onClick={() => handleStatCardClick('telepase')}
-            title="Click para filtrar: Vehiculos con Telepase propio"
-          >
-            <CreditCard size={18} className="stat-icon" />
-            <div className="stat-content">
-              <span className="stat-value">{calculatedStats.vehiculosConTelepase}</span>
-              <span className="stat-label">Telepase Propio</span>
-            </div>
-          </div>
-          <div
-            className={`stat-card stat-card-clickable ${activeStatCard === 'telepaseToshify' ? 'stat-card-active' : ''}`}
-            onClick={() => handleStatCardClick('telepaseToshify')}
-            title="Click para filtrar: Vehiculos con Telepase Toshify"
-          >
-            <CreditCard size={18} className="stat-icon" />
-            <div className="stat-content">
-              <span className="stat-value">{calculatedStats.vehiculosTelepaseToshify}</span>
-              <span className="stat-label">Telepase Toshify</span>
-            </div>
-          </div>
-          {/* Stat cards por Categoría */}
+        </div>
+        {/* Fila 2: Categorias, GNC, Telepase */}
+        <div className="veh-stats-grid" style={{ marginTop: '8px' }}>
           {Array.from(calculatedStats.categoriaCountMap.entries())
             .sort((a, b) => b[1] - a[1])
             .map(([catName, count]) => (
-              <div
-                key={`cat_${catName}`}
-                className={`stat-card stat-card-clickable ${activeStatCard === `cat_${catName}` ? 'stat-card-active' : ''}`}
-                onClick={() => handleStatCardClick(`cat_${catName}`)}
-                title={`Click para filtrar: ${catName}`}
-              >
+              <div key={`cat_${catName}`} className={`stat-card stat-card-clickable ${activeStatCard === `cat_${catName}` ? 'stat-card-active' : ''}`} onClick={() => handleStatCardClick(`cat_${catName}`)} title={`Click para filtrar: ${catName}`}>
                 <Tag size={18} className="stat-icon" />
-                <div className="stat-content">
-                  <span className="stat-value">{count}</span>
-                  <span className="stat-label">{catName}</span>
-                </div>
+                <div className="stat-content"><span className="stat-value">{count}</span><span className="stat-label">{catName}</span></div>
               </div>
             ))
           }
+          <div className={`stat-card stat-card-clickable ${activeStatCard === 'sinGnc' ? 'stat-card-active' : ''}`} onClick={() => handleStatCardClick('sinGnc')} title="Click para filtrar: Sin GNC">
+            <Fuel size={18} className="stat-icon" />
+            <div className="stat-content"><span className="stat-value">{calculatedStats.vehiculosSinGnc}</span><span className="stat-label">Sin GNC</span></div>
+          </div>
+          <div className={`stat-card stat-card-clickable ${activeStatCard === 'telepaseToshify' ? 'stat-card-active' : ''}`} onClick={() => handleStatCardClick('telepaseToshify')} title="Click para filtrar: Telepase Toshify">
+            <CreditCard size={18} className="stat-icon" />
+            <div className="stat-content"><span className="stat-value">{calculatedStats.vehiculosTelepaseToshify}</span><span className="stat-label">Telepase Toshify</span></div>
+          </div>
+          <div className={`stat-card stat-card-clickable ${activeStatCard === 'telepase' ? 'stat-card-active' : ''}`} onClick={() => handleStatCardClick('telepase')} title="Click para filtrar: Telepase Propio">
+            <CreditCard size={18} className="stat-icon" />
+            <div className="stat-content"><span className="stat-value">{calculatedStats.vehiculosConTelepase}</span><span className="stat-label">Telepase Propio</span></div>
+          </div>
         </div>
       </div>
 
@@ -2482,7 +2443,7 @@ export function VehicleManagement() {
         columns={columns}
         loading={loading}
         error={error}
-        stickyLeftColumns={3}
+        stickyLeftColumns={4}
         pageSize={100}
         pageSizeOptions={[50, 100, 200]}
         searchPlaceholder="Buscar por patente, marca, modelo..."
@@ -3607,6 +3568,7 @@ export function VehicleManagement() {
                 <AlertTriangle size={20} style={{ color: '#ef4444' }} />
                 Vehículo con asignación activa
               </h2>
+              <button className="modal-close" onClick={() => setShowFinalizarModal(false)}><X size={18} /></button>
             </div>
             <div className="modal-body" style={{ padding: '16px 24px' }}>
               <p style={{ fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '16px' }}>
