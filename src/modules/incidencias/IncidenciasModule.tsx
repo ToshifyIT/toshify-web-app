@@ -2423,9 +2423,9 @@ export function IncidenciasModule() {
     // Es cobro si: estamos en la pestaña cobro O si la incidencia que editamos ya era de tipo cobro
     const esCobro = activeTab === 'cobro' || (modalMode === 'edit' && selectedIncidencia?.tipo === 'cobro')
     if (esCobro) {
-      // Validar que el tipo seleccionado sea un UUID real, no un pseudo-ID (__CONCEPTO__, __ENTREGA_TARDIA, etc.)
+      // Validar que el tipo no sea un pseudo-ID de logistica
       if (incidenciaForm.tipo_cobro_descuento_id?.startsWith('__')) {
-        Swal.fire('Error', 'Por favor seleccione un tipo de incidencia valido (P004, P006, P007 o Sin categoria). Los conceptos de facturacion solo precargan el monto.', 'warning')
+        Swal.fire('Error', 'Tipo de incidencia no valido para cobro.', 'warning')
         return
       }
       if (!incidenciaForm.monto || incidenciaForm.monto <= 0) {
@@ -4426,7 +4426,7 @@ interface PatenteAsignada {
   fechaHasta: string
 }
 
-function IncidenciaForm({ formData, setFormData, estados, vehiculos, conductores, tiposCobroDescuento, conceptosNomina = [], preciosAlquiler = { P001: 0, P002: 0, P013: 0, P014: 0, P015: 0, P016: 0 }, disabled, esCobro = false, sedes }: IncidenciaFormProps) {
+function IncidenciaForm({ formData, setFormData, estados, vehiculos, conductores, tiposCobroDescuento, preciosAlquiler = { P001: 0, P002: 0, P013: 0, P014: 0, P015: 0, P016: 0 }, disabled, esCobro = false, sedes }: IncidenciaFormProps) {
   const [vehiculoSearch, setVehiculoSearch] = useState('')
   const [conductorSearch, setConductorSearch] = useState('')
   const [showVehiculoDropdown, setShowVehiculoDropdown] = useState(false)
@@ -4457,6 +4457,7 @@ function IncidenciaForm({ formData, setFormData, estados, vehiculos, conductores
 
   // Tipos categorizados memoizados
   const { tiposP006, tiposP004, tiposP007, tiposSinCategoria } = useCategorizedTipos(tiposCobroDescuento)
+  const tiposConcepto = tiposCobroDescuento.filter(t => t.categoria === 'CONCEPTO')
 
   // Auto-calcular monto cuando cambian KM excedidos en tipo "Exceso de kilometraje"
   const esExcesoKm = tiposCobroDescuento.find(t => t.id === formData.tipo_cobro_descuento_id)?.nombre?.toLowerCase().includes('exceso')
@@ -4884,29 +4885,14 @@ function IncidenciaForm({ formData, setFormData, estados, vehiculos, conductores
               value={formData.tipo_cobro_descuento_id || ''}
               onChange={(val) => {
                 const v = val || undefined
-                // Si seleccionó un concepto de facturación, precargar el monto y limpiar tipo
-                // para que el usuario seleccione un tipo de incidencia real (P004/P006/P007)
-                if (v?.startsWith('__CONCEPTO__')) {
-                  const codigo = v.replace('__CONCEPTO__', '')
-                  const concepto = conceptosNomina.find(c => c.codigo === codigo)
-                  if (concepto) {
-                    setFormData(prev => ({ ...prev, tipo_cobro_descuento_id: undefined, monto: Math.round(Number(concepto.precio_final) * 7) }))
-                    return
-                  }
-                }
                 setFormData(prev => ({ ...prev, tipo_cobro_descuento_id: v }))
               }}
               options={(esCobro ? [
                 ...tiposP006.map<SearchableSelectOption>(t => ({ value: t.id, label: t.nombre, group: 'P006 - Exceso KM', searchText: 'P006 exceso km' })),
                 ...tiposP004.map<SearchableSelectOption>(t => ({ value: t.id, label: t.nombre, group: 'P004 - Tickets a Favor', searchText: 'P004 tickets favor' })),
                 ...tiposP007.map<SearchableSelectOption>(t => ({ value: t.id, label: t.nombre, group: 'P007 - Multas/Penalidades', searchText: 'P007 multas penalidades' })),
-                ...tiposSinCategoria.map<SearchableSelectOption>(t => ({ value: t.id, label: t.nombre, group: 'Sin categoría' })),
-                ...conceptosNomina.map<SearchableSelectOption>(c => ({
-                  value: `__CONCEPTO__${c.codigo}`,
-                  label: `${c.codigo} - ${c.descripcion.charAt(0).toUpperCase() + c.descripcion.slice(1).toLowerCase()}`,
-                  searchText: `${c.codigo} ${c.descripcion}`,
-                  group: 'Conceptos de facturación',
-                })),
+                ...tiposSinCategoria.filter(t => t.codigo !== 'CONCEPTO_FACTURACION').map<SearchableSelectOption>(t => ({ value: t.id, label: t.nombre, group: 'Sin categoría' })),
+                ...tiposConcepto.map<SearchableSelectOption>(t => ({ value: t.id, label: t.nombre, group: 'Conceptos de facturación', searchText: `${t.codigo} ${t.nombre}` })),
               ] : [
                 { value: '__ENTREGA_TARDIA', label: 'Entrega tardía del vehículo' },
                 { value: '__LLEGADA_TARDE_REVISION', label: 'Llegada tarde o inasistencia injustificada a revisión técnica' },
