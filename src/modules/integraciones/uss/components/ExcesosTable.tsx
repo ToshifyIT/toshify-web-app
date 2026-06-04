@@ -68,9 +68,11 @@ function UbicacionCell({
   }, [dirGuardada, tieneCoords, lat, lng])
 
   const direccion = dirGuardada || dirGeo
-  const textoVisible = direccion
-    ? truncateLocation(direccion, 34)
-    : (coordsTexto ?? '-')
+  // Mostrar SIEMPRE la direccion. Mientras se resuelve (geocoding), no mostrar
+  // las coordenadas en numeros (el usuario no las quiere ver): dejar un guion
+  // sutil hasta que llegue la calle. Cuando resuelve, aparece directo la direccion.
+  const cargando = !direccion && tieneCoords
+  const textoVisible = direccion ? truncateLocation(direccion, 34) : '—'
   const clickable = tieneCoords || !!dirGuardada
 
   return (
@@ -93,7 +95,11 @@ function UbicacionCell({
       }}
     >
       <MapPin size={14} style={{ flexShrink: 0 }} />
-      <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+      <span style={{
+        overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+        color: cargando ? 'var(--text-tertiary)' : undefined,
+        opacity: cargando ? 0.5 : 1,
+      }}>
         {textoVisible}
       </span>
     </button>

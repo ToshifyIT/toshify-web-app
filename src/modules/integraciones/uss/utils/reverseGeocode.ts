@@ -92,11 +92,25 @@ function loadGoogleMaps(): Promise<void> {
 
 // --- Geocoder de Google (singleton) + cola serializada con throttle ---
 let geocoder: any = null
-let chain: Promise<unknown> = Promise.resolve()
-let lastCallAt = 0
-const MIN_GAP_MS = 220 // espaciar llamadas para no gatillar OVER_QUERY_LIMIT
-
 const sleep = (ms: number) => new Promise(r => setTimeout(r, ms))
+
+// --- Semaforo: limita la concurrencia de llamadas a Google ---
+// Paralelizamos hasta MAX_CONCURRENT a la vez para resolver rapido las ~50 filas
+// visibles, sin gatillar OVER_QUERY_LIMIT (Google tolera bien rafagas moderadas).
+const MAX_CONCURRENT = 8
+let activeCount = 0
+const waiters: Array<() => void> = []
+
+async function acquire(): Promise<void> {
+  if (activeCount < MAX_CONCURRENT) { activeCount++; return }
+  await new Promise<void>(resolve => waiters.push(resolve))
+  activeCount++
+}
+function release(): void {
+  activeCount--
+  const next = waiters.shift()
+  if (next) next()
+}
 
 // Resultado del geocode: {ok:true, addr} | {ok:false, retry:boolean}
 // retry=true cuando Google pide reintentar (rate-limit), para NO cachear el fallo.
@@ -107,11 +121,6 @@ async function geocodeOnce(lat: number, lng: number): Promise<GeoOutcome> {
   const g = (window as any).google
   if (!g?.maps?.Geocoder) return { ok: false, retry: true }
   if (!geocoder) geocoder = new g.maps.Geocoder()
-
-  // Throttle entre llamadas
-  const wait = Math.max(0, lastCallAt + MIN_GAP_MS - Date.now())
-  if (wait > 0) await sleep(wait)
-  lastCallAt = Date.now()
 
   try {
     const res: any = await geocoder.geocode({
@@ -132,11 +141,12 @@ async function geocodeOnce(lat: number, lng: number): Promise<GeoOutcome> {
 
 // Devuelve { addr, cacheable }. cacheable=false si fue un fallo transitorio (rate-limit),
 // para no envenenar el cache con vacios que nunca reintentan.
-function geocodeWithGoogle(lat: number, lng: number): Promise<{ addr: string | null; cacheable: boolean }> {
-  const run = async (): Promise<{ addr: string | null; cacheable: boolean }> => {
-    // Hasta 3 intentos con backoff ante rate-limit
-    let delay = 350
-    for (let intento = 0; intento < 3; intento++) {
+// Corre en paralelo (limitado por el semaforo) con reintentos/backoff ante rate-limit.
+async function geocodeWithGoogle(lat: number, lng: number): Promise<{ addr: string | null; cacheable: boolean }> {
+  await acquire()
+  try {
+    let delay = 400
+    for (let intento = 0; intento < 4; intento++) {
       const out = await geocodeOnce(lat, lng)
       if (out.ok) return { addr: out.addr, cacheable: true }
       if (!out.retry) return { addr: null, cacheable: true } // error definitivo: cachear vacio
@@ -144,10 +154,9 @@ function geocodeWithGoogle(lat: number, lng: number): Promise<{ addr: string | n
       delay *= 2
     }
     return { addr: null, cacheable: false } // se agotaron reintentos: NO cachear, reintentar luego
+  } finally {
+    release()
   }
-  const next = chain.then(run, run)
-  chain = next.catch(() => ({ addr: null, cacheable: false }))
-  return next
 }
 
 // Direccion compacta: "Calle 1234, Barrio" en vez del formatted_address completo
