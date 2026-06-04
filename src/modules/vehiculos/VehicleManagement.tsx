@@ -36,6 +36,77 @@ import './VehicleManagement.css'
 
 
 
+/**
+ * Busca un titular existente por nombre (ilike) antes de crear uno nuevo.
+ * Si encuentra uno, retorna su ID. Si no, crea uno nuevo y retorna el ID.
+ */
+async function buscarOCrearTitular(
+  titularNombre: string,
+  tipoTitular: 'persona' | 'empresa',
+  extras: { sede_id?: string | null; created_by?: string; created_by_name?: string }
+): Promise<string | null> {
+  const nombre = titularNombre.trim().toUpperCase()
+  if (!nombre) return null
+
+  // Buscar existente por nombre similar
+  const campo = tipoTitular === 'empresa' ? 'razon_social' : 'nombres'
+  const { data: existentes } = await supabase
+    .from('titulares')
+    .select('id, nombres, apellidos, razon_social')
+    .ilike(campo, `%${nombre}%`)
+    .eq('estado', 'activo')
+    .limit(5)
+
+  if (existentes && existentes.length > 0) {
+    // Buscar match exacto primero
+    const exacto = existentes.find((e: any) => {
+      const n = tipoTitular === 'empresa'
+        ? (e.razon_social || '').toUpperCase().replace(/[\s.]+/g, '')
+        : `${(e.nombres || '')} ${(e.apellidos || '')}`.toUpperCase().replace(/[\s.]+/g, '')
+      return n === nombre.replace(/[\s.]+/g, '')
+    })
+    if (exacto) return exacto.id
+
+    // Si hay similares pero no exactos, usar el primero
+    return existentes[0].id
+  }
+
+  // No existe, crear nuevo
+  const nuevoTitular: Record<string, any> = {
+    tipo: tipoTitular,
+    dni_cuit: '',
+    estado: 'activo',
+    sede_id: extras.sede_id || null,
+    created_by: extras.created_by,
+    created_by_name: extras.created_by_name,
+  }
+
+  if (tipoTitular === 'empresa') {
+    nuevoTitular.razon_social = nombre
+  } else {
+    const partes = nombre.split(/\s+/)
+    if (partes.length >= 2) {
+      nuevoTitular.apellidos = partes[partes.length - 1]
+      nuevoTitular.nombres = partes.slice(0, -1).join(' ')
+    } else {
+      nuevoTitular.nombres = nombre
+      nuevoTitular.apellidos = ''
+    }
+  }
+
+  const { data: creado, error } = await supabase
+    .from('titulares')
+    .insert([nuevoTitular])
+    .select('id')
+    .single()
+
+  if (error) {
+    console.error('Error creando titular:', error)
+    return null
+  }
+  return creado?.id || null
+}
+
 export function VehicleManagement() {
   const { sedeActualId, aplicarFiltroSede } = useSede()
   const { grupos: gruposFlotaDB } = useGruposFlota()
@@ -607,31 +678,13 @@ export function VehicleManagement() {
 
         // Crear relación titular para vehículo restaurado
         if (formData.titular.trim() && formData.tipo_titular) {
-          let titularId = formData.titular_id
+          let titularId: string | null = formData.titular_id
           if (!titularId) {
-            const titularNombre = formData.titular.trim().toUpperCase()
-            const nuevoTitular: Record<string, any> = {
-              tipo: formData.tipo_titular,
-              dni_cuit: '',
-              estado: 'activo',
-              sede_id: formData.sede_id || null,
-              created_by: user?.id,
-              created_by_name: profile?.full_name || 'Sistema',
-            }
-            if (formData.tipo_titular === 'empresa') {
-              nuevoTitular.razon_social = titularNombre
-            } else {
-              const partes = titularNombre.split(/\s+/)
-              if (partes.length >= 2) {
-                nuevoTitular.apellidos = partes[partes.length - 1]
-                nuevoTitular.nombres = partes.slice(0, -1).join(' ')
-              } else {
-                nuevoTitular.nombres = titularNombre
-                nuevoTitular.apellidos = ''
-              }
-            }
-            const { data: titularCreado } = await supabase.from('titulares').insert([nuevoTitular]).select('id').single()
-            if (titularCreado) titularId = titularCreado.id
+            titularId = await buscarOCrearTitular(
+              formData.titular,
+              formData.tipo_titular as 'persona' | 'empresa',
+              { sede_id: formData.sede_id, created_by: user?.id, created_by_name: profile?.full_name || 'Sistema' }
+            )
           }
           if (titularId) {
             const hoy = new Date().toISOString().split('T')[0]
@@ -735,45 +788,15 @@ export function VehicleManagement() {
 
         // Crear relación titular
         if (formData.titular.trim() && formData.tipo_titular) {
-          let titularId = formData.titular_id
+          let titularId: string | null = formData.titular_id
 
-          // Si no se seleccionó un titular existente, crear uno nuevo
+          // Si no se seleccionó un titular existente, buscar similar o crear nuevo
           if (!titularId) {
-            const titularNombre = formData.titular.trim().toUpperCase()
-            const nuevoTitular: Record<string, any> = {
-              tipo: formData.tipo_titular,
-              dni_cuit: '',
-              estado: 'activo',
-              sede_id: formData.sede_id || null,
-              created_by: user?.id,
-              created_by_name: profile?.full_name || 'Sistema',
-            }
-
-            if (formData.tipo_titular === 'empresa') {
-              nuevoTitular.razon_social = titularNombre
-            } else {
-              // Partir nombre: última palabra = apellido, resto = nombres
-              const partes = titularNombre.split(/\s+/)
-              if (partes.length >= 2) {
-                nuevoTitular.apellidos = partes[partes.length - 1]
-                nuevoTitular.nombres = partes.slice(0, -1).join(' ')
-              } else {
-                nuevoTitular.nombres = titularNombre
-                nuevoTitular.apellidos = ''
-              }
-            }
-
-            const { data: titularCreado, error: titError } = await supabase
-              .from('titulares')
-              .insert([nuevoTitular])
-              .select('id')
-              .single()
-
-            if (titError) {
-              console.error('Error creando titular:', titError)
-            } else if (titularCreado) {
-              titularId = titularCreado.id
-            }
+            titularId = await buscarOCrearTitular(
+              formData.titular,
+              formData.tipo_titular as 'persona' | 'empresa',
+              { sede_id: formData.sede_id, created_by: user?.id, created_by_name: profile?.full_name || 'Sistema' }
+            )
           }
 
           // Crear relación vehiculo-titular
@@ -1020,6 +1043,11 @@ export function VehicleManagement() {
           numero_motor: formData.numero_motor || null,
           numero_chasis: formData.numero_chasis || null,
           kilometraje: formData.kilometraje_actual ?? null,
+          cantidad_llaves: formData.cantidad_llaves ? Number(formData.cantidad_llaves) : null,
+          vencimiento_seguro: formData.vencimiento_seguro || null,
+          vto_vtv: formData.vto_vtv_aplica ? (formData.vto_vtv_fecha || null) : null,
+          vto_gnc: formData.vto_gnc_aplica ? (formData.vto_gnc_fecha || null) : null,
+          vto_matafuego: formData.vto_matafuego_aplica ? (formData.vto_matafuego_fecha || null) : null,
           updated_at: new Date().toISOString(),
         })
         .eq('vehiculo_id', selectedVehiculo.id)
@@ -1099,33 +1127,15 @@ export function VehicleManagement() {
       // Manejar cambio de titular
       if (formData.titular.trim() && formData.tipo_titular) {
         const { data: { user } } = await supabase.auth.getUser()
-        let titularId = formData.titular_id
+        let titularId: string | null = formData.titular_id
 
-        // Si no se seleccionó un titular existente, crear uno nuevo
+        // Si no se seleccionó un titular existente, buscar similar o crear nuevo
         if (!titularId) {
-          const titularNombre = formData.titular.trim().toUpperCase()
-          const nuevoTitular: Record<string, any> = {
-            tipo: formData.tipo_titular,
-            dni_cuit: '',
-            estado: 'activo',
-            sede_id: formData.sede_id || null,
-            created_by: user?.id,
-            created_by_name: profile?.full_name || 'Sistema',
-          }
-          if (formData.tipo_titular === 'empresa') {
-            nuevoTitular.razon_social = titularNombre
-          } else {
-            const partes = titularNombre.split(/\s+/)
-            if (partes.length >= 2) {
-              nuevoTitular.apellidos = partes[partes.length - 1]
-              nuevoTitular.nombres = partes.slice(0, -1).join(' ')
-            } else {
-              nuevoTitular.nombres = titularNombre
-              nuevoTitular.apellidos = ''
-            }
-          }
-          const { data: titularCreado } = await supabase.from('titulares').insert([nuevoTitular]).select('id').single()
-          if (titularCreado) titularId = titularCreado.id
+          titularId = await buscarOCrearTitular(
+            formData.titular,
+            formData.tipo_titular as 'persona' | 'empresa',
+            { sede_id: formData.sede_id, created_by: user?.id, created_by_name: profile?.full_name || 'Sistema' }
+          )
         }
 
         if (titularId) {

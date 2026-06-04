@@ -41,14 +41,14 @@ export interface OfertaLocacion {
   vto_matafuego: string | null
 
   // Elementos de seguridad
-  criquet: boolean
-  mariposa: boolean
-  llave_tuercas: boolean
-  rueda_auxilio: boolean
-  balizas: boolean
-  chaleco_reflectivo: boolean
-  guantes: boolean
-  botiquin: boolean
+  criquet: string | boolean
+  mariposa: string | boolean
+  llave_tuercas: string | boolean
+  rueda_auxilio: string | boolean
+  balizas: string | boolean
+  chaleco_reflectivo: string | boolean
+  guantes: string | boolean
+  botiquin: string | boolean
 
   // Limpieza
   limpieza_interior: string | null
@@ -124,14 +124,14 @@ export interface OfertaLocacionFormData {
   vto_matafuego: string
 
   // Elementos de seguridad
-  criquet: boolean
-  mariposa: boolean
-  llave_tuercas: boolean
-  rueda_auxilio: boolean
-  balizas: boolean
-  chaleco_reflectivo: boolean
-  guantes: boolean
-  botiquin: boolean
+  criquet: string | boolean
+  mariposa: string | boolean
+  llave_tuercas: string | boolean
+  rueda_auxilio: string | boolean
+  balizas: string | boolean
+  chaleco_reflectivo: string | boolean
+  guantes: string | boolean
+  botiquin: string | boolean
 
   // Limpieza
   limpieza_interior: string

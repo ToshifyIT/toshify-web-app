@@ -2309,7 +2309,13 @@ function buildOfertaReemplazos(o) {
   add('OUTSIDE CLEAN', fmtLimpieza(o.limpieza_exterior))
 
   // --- Elementos de seguridad (booleanos → Sí/No) ---
-  const siNo = (val) => val ? 'Sí' : 'No'
+  const siNo = (val) => {
+    if (val === 'Entregado') return 'Entregado'
+    if (val === 'Pendiente') return 'Pendiente'
+    if (val === true) return 'Entregado'
+    if (val === false) return 'Pendiente'
+    return val || 'Pendiente'
+  }
   add('CRIQUET', siNo(o.criquet))
   add('BUTTERFLY', siNo(o.mariposa))
   // llave_tuercas no tiene variable en la plantilla original, pero lo incluimos por si acaso
@@ -2414,6 +2420,18 @@ async function generateOfertaLocacionDoc(drive, oferta) {
   })
 
   const renderData = buildOfertaReemplazos(oferta)
+
+  // Datos del socio desde grupos_flota
+  if (grupoFlotaDB) {
+    renderData['SOCIO'] = (grupoFlotaDB.razon_social || grupoFlotaDB.nombre_comercial || '').toUpperCase()
+    renderData['REPRESENTANTE_LEGAL'] = (grupoFlotaDB.representante_nombre || '').toUpperCase()
+  } else {
+    // Fallback hardcodeado
+    const fallbackSocio = OFERTA_LOCACION_CONFIG.folders[socio] ? socio : ''
+    const propietarioData = CONTRACT_CONFIG.propietarios[socio === 'grupocg' ? 'grupo_cg' : socio === '44dreams' ? '44_dreams' : '']
+    renderData['SOCIO'] = propietarioData?.owner || fallbackSocio.toUpperCase()
+    renderData['REPRESENTANTE_LEGAL'] = propietarioData?.name_owner || ''
+  }
 
   // Manejar el bloque {{SPOUSE SIGN}}
   // docxtemplater no puede insertar párrafos con formato como lo hacía Apps Script,
