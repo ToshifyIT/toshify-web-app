@@ -5,12 +5,15 @@ import { LoadingOverlay } from '../../components/ui/LoadingOverlay'
 import { ExcelColumnFilter } from '../../components/ui/DataTable/ExcelColumnFilter'
 import ExcelDateRangeFilter from '../../components/ui/DataTable/ExcelDateRangeFilter'
 import { DataTable } from '../../components/ui/DataTable'
-import { Download, FileText, AlertCircle, CheckCircle, Eye, Edit2, X, Car, Users, DollarSign } from 'lucide-react'
+import { Download, FileText, AlertCircle, CheckCircle, Eye, Edit2, X, Car, Users, DollarSign, SendHorizonal, Archive, RotateCcw, Trash2 } from 'lucide-react'
 import Swal from 'sweetalert2'
-import { showSuccess } from '../../utils/toast'
+import { showSuccess, showError } from '../../utils/toast'
 import { useSede } from '../../contexts/SedeContext'
+import { useAuth } from '../../contexts/AuthContext'
+import { desestimarTelepase, reactivarTelepase, eliminarTelepase } from './services/desestimarTelepase'
 import { type ColumnDef } from '@tanstack/react-table'
 import * as XLSX from 'xlsx'
+import { CrearCobroTelepaseModal } from './components/CrearCobroTelepaseModal'
 import './MultasTelepase.css'
 
 interface TelepaseRegistro {
@@ -75,12 +78,29 @@ function getWeekNumber(dateStr: string): number {
 
 export default function TelepaseHistoricoModule() {
   const { aplicarFiltroSede, sedeActualId } = useSede()
+  const { user, profile } = useAuth()
+
+  // Permisos God Mode (mismo criterio que MultasModule)
+  const userRole = (profile?.roles?.name || '').toLowerCase()
+  const userEmail = (profile?.email || '').toLowerCase()
+  const GOD_MODE_EMAILS = new Set<string>([
+    'archspec@toshify.com.ar',
+    'fullstack@toshify.com.ar',
+  ])
+  const isGodMode = userRole === 'admin' || userRole === 'fullstack.senior' || GOD_MODE_EMAILS.has(userEmail)
+  const canReactivar = isGodMode
+  const canBorrar = isGodMode
   const [loading, setLoading] = useState(true)
   const [registros, setRegistros] = useState<TelepaseRegistro[]>([])
   const [selectedRegistro, setSelectedRegistro] = useState<TelepaseRegistro | null>(null)
   const [showModal, setShowModal] = useState(false)
   const [showEditModal, setShowEditModal] = useState(false)
   const [editingRegistro, setEditingRegistro] = useState<TelepaseRegistro | null>(null)
+  const [showCobroModal, setShowCobroModal] = useState(false)
+  const [cobroRegistro, setCobroRegistro] = useState<TelepaseRegistro | null>(null)
+  // Vista (tabs): activas / enviadas a facturacion / desestimadas
+  const [vista, setVista] = useState<'activas' | 'enviadas' | 'desestimadas'>('activas')
+  const [telepaseEnviados, setTelepaseEnviados] = useState<Set<string>>(new Set())
   
   // Filtros
   const [openFilterId, setOpenFilterId] = useState<string | null>(null)
@@ -145,23 +165,38 @@ export default function TelepaseHistoricoModule() {
   async function cargarDatos() {
     setLoading(true)
     try {
-      const { data, error } = await aplicarFiltroSede(supabase
-        .from('telepase_historico')
-        .select('*')
-        .gte('fecha', '2026-01-01'))
-        .order('fecha', { ascending: false })
-        .order('hora', { ascending: false })
-        .limit(5000)
+      const [tpRes, incRes] = await Promise.all([
+        // Trae activos + desestimados (no eliminados). El filtrado por tab se hace despues.
+        aplicarFiltroSede(supabase
+          .from('telepase_historico')
+          .select('*')
+          .is('deleted_at', null)
+          .gte('fecha', '2026-01-01'))
+          .order('fecha', { ascending: false })
+          .order('hora', { ascending: false })
+          .limit(5000),
+        // telepase_id de incidencias = peajes ya enviados a facturacion
+        (supabase.from('incidencias' as any) as any)
+          .select('telepase_id')
+          .not('telepase_id', 'is', null),
+      ])
 
-      if (error) throw error
-      
-      // Filtrar registros que contengan "Aproximado" en observaciones
-      const filteredData = ((data || []) as TelepaseRegistro[]).filter(r => {
+      if (tpRes.error) throw tpRes.error
+
+      // Filtrar solo el ruido de "Aproximado" (los desestimados se filtran por tab, no aca)
+      const filteredData = ((tpRes.data || []) as TelepaseRegistro[]).filter(r => {
         const obs = r.observaciones?.toLowerCase() || ''
         return !obs.includes('aproximado')
       })
-      
+
+      const enviados = new Set<string>(
+        ((incRes.data || []) as Array<{ telepase_id: string | null }>)
+          .map(r => r.telepase_id)
+          .filter((x): x is string => !!x)
+      )
+
       setRegistros(filteredData)
+      setTelepaseEnviados(enviados)
     } catch (_error) {
       // silently ignored
     } finally {
@@ -205,7 +240,15 @@ export default function TelepaseHistoricoModule() {
 
   // Filtrar registros
   const registrosFiltrados = useMemo(() => {
-    let filtered = registros
+    // 1) Filtro por TAB (vista): desestimadas / enviadas / activas
+    let filtered = registros.filter(r => {
+      const desestimada = !!(r as any).desestimada_at
+      if (vista === 'desestimadas') return desestimada
+      if (desestimada) return false  // ocultar desestimadas de activas/enviadas
+      const enviada = telepaseEnviados.has(r.id)
+      if (vista === 'enviadas') return enviada
+      return !enviada  // activas = no enviadas
+    })
 
     if (patenteFilter.length > 0) {
       filtered = filtered.filter(r => patenteFilter.includes(r.patente))
@@ -250,7 +293,23 @@ export default function TelepaseHistoricoModule() {
     }
 
     return filtered
-  }, [registros, patenteFilter, concesionarioFilter, conductorFilter, observacionesFilter, semanaFilter, fechaDesde, fechaHasta, tarifaFilter, ibuttonFilter])
+  }, [registros, vista, telepaseEnviados, patenteFilter, concesionarioFilter, conductorFilter, observacionesFilter, semanaFilter, fechaDesde, fechaHasta, tarifaFilter, ibuttonFilter])
+
+  // Contadores globales para los tabs (sin filtros de columna)
+  const totalActivas = useMemo(() =>
+    registros.filter(r => !(r as any).desestimada_at && !telepaseEnviados.has(r.id)).length
+  , [registros, telepaseEnviados])
+  const totalEnviadas = useMemo(() =>
+    registros.filter(r => !(r as any).desestimada_at && telepaseEnviados.has(r.id)).length
+  , [registros, telepaseEnviados])
+  const totalDesestimadas = useMemo(() =>
+    registros.filter(r => !!(r as any).desestimada_at).length
+  , [registros])
+  const vistaOptions = useMemo<Array<{ id: 'activas' | 'enviadas' | 'desestimadas'; label: string; count: number }>>(() => [
+    { id: 'activas', label: 'Activas', count: totalActivas },
+    { id: 'enviadas', label: 'Enviadas a facturación', count: totalEnviadas },
+    { id: 'desestimadas', label: 'Desestimadas', count: totalDesestimadas },
+  ], [totalActivas, totalEnviadas, totalDesestimadas])
 
   // Calcular totales
   const totalTarifa = useMemo(() => {
@@ -280,6 +339,100 @@ export default function TelepaseHistoricoModule() {
   function handleVerDetalle(registro: TelepaseRegistro) {
     setSelectedRegistro(registro)
     setShowModal(true)
+  }
+
+  // Enviar a cobro (abre modal de verificacion antes de crear la incidencia)
+  function handleEnviarACobro(registro: TelepaseRegistro) {
+    setCobroRegistro(registro)
+    setShowCobroModal(true)
+  }
+
+  const auditCtx = () => ({
+    userId: user?.id,
+    userName: profile?.full_name || user?.email || 'Sistema',
+    userEmail: user?.email || undefined,
+  })
+
+  // Desestimar: oculta del listado (con motivo opcional)
+  async function handleDesestimar(registro: TelepaseRegistro) {
+    const result = await Swal.fire({
+      title: '¿Desestimar este peaje?',
+      html: `
+        <div style="text-align: left; font-size: 13px; line-height: 1.6;">
+          <p style="color: #6b7280; margin: 0 0 10px;">
+            El registro quedará oculto del listado principal pero seguirá en la base de datos.
+            Podés reactivarlo después si fue un error.
+          </p>
+          <div style="display: grid; grid-template-columns: 110px 1fr; gap: 4px 12px; font-size: 12px; padding: 10px; background: #f9fafb; border-radius: 6px;">
+            <span style="color: #6b7280;">Patente</span><strong style="font-family: monospace;">${registro.patente || '-'}</strong>
+            <span style="color: #6b7280;">Fecha</span><span>${registro.fecha || '-'}${registro.hora ? ' ' + registro.hora : ''}</span>
+            <span style="color: #6b7280;">Estación</span><span>${registro.estacion || '-'}</span>
+            <span style="color: #6b7280;">Tarifa</span><strong style="color: #f59e0b;">${formatMoney(registro.tarifa)}</strong>
+          </div>
+        </div>
+      `,
+      input: 'textarea',
+      inputLabel: 'Motivo (opcional)',
+      inputPlaceholder: 'Ej: peaje duplicado, conductor erróneo, ya cobrado, etc.',
+      iconHtml: '<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" stroke-width="2"><rect width="20" height="5" x="2" y="3"/><path d="M4 8v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8"/><path d="M10 12h4"/></svg>',
+      showCancelButton: true,
+      confirmButtonColor: '#f59e0b',
+      confirmButtonText: 'Desestimar',
+      cancelButtonText: 'Cancelar',
+    })
+    if (!result.isConfirmed) return
+    const res = await desestimarTelepase(registro.id, {
+      ...auditCtx(),
+      motivo: typeof result.value === 'string' ? result.value : undefined,
+    })
+    if (res.ok) {
+      showSuccess('Desestimado', 'Quedó oculto del listado principal')
+      cargarDatos()
+    } else {
+      showError('No se pudo desestimar', res.error)
+    }
+  }
+
+  // Reactivar: vuelve al listado principal
+  async function handleReactivar(registro: TelepaseRegistro) {
+    const result = await Swal.fire({
+      title: '¿Reactivar este peaje?',
+      text: 'Volverá a aparecer en el listado principal.',
+      icon: 'question',
+      showCancelButton: true,
+      confirmButtonColor: '#7c3aed',
+      confirmButtonText: 'Reactivar',
+      cancelButtonText: 'Cancelar',
+    })
+    if (!result.isConfirmed) return
+    const res = await reactivarTelepase(registro.id, auditCtx())
+    if (res.ok) {
+      showSuccess('Reactivado', 'El registro volvió al listado principal')
+      cargarDatos()
+    } else {
+      showError('No se pudo reactivar', res.error)
+    }
+  }
+
+  // Eliminar (soft-delete con confirmación)
+  async function handleEliminar(registro: TelepaseRegistro) {
+    const result = await Swal.fire({
+      title: '¿Eliminar este peaje?',
+      text: `${registro.patente} - ${formatMoney(registro.tarifa)}`,
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonColor: '#ff0033',
+      confirmButtonText: 'Eliminar',
+      cancelButtonText: 'Cancelar',
+    })
+    if (!result.isConfirmed) return
+    const res = await eliminarTelepase(registro.id, auditCtx())
+    if (res.ok) {
+      showSuccess('Eliminado', 'El registro fue eliminado')
+      cargarDatos()
+    } else {
+      showError('No se pudo eliminar', res.error)
+    }
   }
 
   // Editar registro
@@ -537,27 +690,57 @@ export default function TelepaseHistoricoModule() {
     },
     {
       id: 'acciones',
+      size: 180,
       header: 'Acciones',
-      cell: ({ row }) => (
-        <div className="dt-actions">
-          <button 
-            className="dt-btn-action dt-btn-edit" 
-            data-tooltip="Editar"
-            onClick={() => handleEditar(row.original)}
-          >
-            <Edit2 size={14} />
-          </button>
-          <button 
-            className="dt-btn-action dt-btn-view" 
-            data-tooltip="Ver detalle"
-            onClick={() => handleVerDetalle(row.original)}
-          >
-            <Eye size={14} />
-          </button>
-        </div>
-      )
+      cell: ({ row }) => {
+        // Mismo look & feel que MultasModule: icono arriba + label de texto abajo
+        const btnBase = (color: string): React.CSSProperties => ({
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          gap: '1px',
+          background: 'none',
+          border: 'none',
+          cursor: 'pointer',
+          padding: '2px',
+          color,
+        })
+        const labelStyle: React.CSSProperties = { fontSize: '9px', fontWeight: 600, lineHeight: 1 }
+        return (
+          <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+            <button title="Ver detalle" onClick={() => handleVerDetalle(row.original)} style={btnBase('var(--text-secondary)')}>
+              <Eye size={14} />
+              <span style={labelStyle}>Ver</span>
+            </button>
+            <button title="Editar" onClick={() => handleEditar(row.original)} style={btnBase('#2563eb')}>
+              <Edit2 size={14} />
+              <span style={labelStyle}>Editar</span>
+            </button>
+            <button title="Enviar a cobro" onClick={() => handleEnviarACobro(row.original)} style={btnBase('#16a34a')}>
+              <SendHorizonal size={14} />
+              <span style={labelStyle}>Enviar</span>
+            </button>
+            <button title="Desestimar (ocultar sin borrar de la base)" onClick={() => handleDesestimar(row.original)} style={btnBase('#f59e0b')}>
+              <Archive size={14} />
+              <span style={labelStyle}>Desestimar</span>
+            </button>
+            {canReactivar && (row.original as any).desestimada_at && (
+              <button title="Reactivar" onClick={() => handleReactivar(row.original)} style={btnBase('#7c3aed')}>
+                <RotateCcw size={14} />
+                <span style={labelStyle}>Reactivar</span>
+              </button>
+            )}
+            {canBorrar && (
+              <button title="Eliminar definitivo" onClick={() => handleEliminar(row.original)} style={btnBase('#dc2626')}>
+                <Trash2 size={14} />
+                <span style={labelStyle}>Borrar</span>
+              </button>
+            )}
+          </div>
+        )
+      }
     }
-  ], [patentesUnicas, patenteFilter, concesionariosUnicos, concesionarioFilter, conductoresUnicos, conductorFilter, observacionesOpciones, observacionesFilter, openFilterId, semanasUnicas, semanaFilter, fechaDesde, fechaHasta, tarifasUnicas, tarifaFilter, ibuttonsUnicos, ibuttonFilter])
+  ], [patentesUnicas, patenteFilter, concesionariosUnicos, concesionarioFilter, conductoresUnicos, conductorFilter, observacionesOpciones, observacionesFilter, openFilterId, semanasUnicas, semanaFilter, fechaDesde, fechaHasta, tarifasUnicas, tarifaFilter, ibuttonsUnicos, ibuttonFilter, canReactivar, canBorrar])
 
   // Exportar a Excel
   function handleExportar() {
@@ -636,11 +819,56 @@ export default function TelepaseHistoricoModule() {
         externalFilters={activeFilters}
         onClearAllFilters={clearAllFilters}
         headerAction={
-          <button className="btn-secondary" onClick={handleExportar}>
-            <Download size={16}
-          />
-            Exportar
-          </button>
+          <div style={{ display: 'inline-flex', alignItems: 'center', gap: 12 }}>
+            {/* Tabs de vista: Activas / Enviadas a facturación / Desestimadas */}
+            <div style={{
+              display: 'inline-flex',
+              border: '1px solid var(--border-primary)',
+              borderRadius: 6,
+              overflow: 'hidden',
+            }}>
+              {vistaOptions.map((option, index) => {
+                const isActive = vista === option.id
+                return (
+                  <button
+                    key={option.id}
+                    onClick={() => setVista(option.id)}
+                    style={{
+                      border: 'none',
+                      background: isActive ? 'var(--text-primary)' : 'var(--bg-primary)',
+                      color: isActive ? '#fff' : 'var(--text-secondary)',
+                      padding: '6px 12px',
+                      fontSize: 12,
+                      fontWeight: 500,
+                      cursor: 'pointer',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: 6,
+                      borderRight: index < vistaOptions.length - 1 ? '1px solid var(--border-primary)' : 'none',
+                      lineHeight: 1.2,
+                    }}
+                  >
+                    {option.label}
+                    <span style={{
+                      background: isActive ? 'rgba(255,255,255,0.2)' : 'var(--bg-secondary)',
+                      color: isActive ? '#fff' : 'var(--text-tertiary)',
+                      padding: '1px 6px',
+                      borderRadius: 10,
+                      fontSize: 10,
+                      fontWeight: 600,
+                    }}>
+                      {option.count}
+                    </span>
+                  </button>
+                )
+              })}
+            </div>
+            <button className="btn-secondary" onClick={handleExportar}>
+              <Download size={16} />
+              Exportar
+            </button>
+          </div>
         }
       />
 
@@ -1002,6 +1230,14 @@ export default function TelepaseHistoricoModule() {
           </div>
         </div>
       )}
+
+      {/* Modal de cobro: verifica datos antes de crear la incidencia */}
+      <CrearCobroTelepaseModal
+        isOpen={showCobroModal}
+        registro={cobroRegistro}
+        onClose={() => { setShowCobroModal(false); setCobroRegistro(null) }}
+        onSaved={() => { setShowCobroModal(false); setCobroRegistro(null) }}
+      />
     </div>
   )
 }
