@@ -18,6 +18,7 @@ import {
   truncateLocation,
   getSeverityColor,
 } from '../utils/uss.utils'
+import { reverseGeocode, reverseGeocodeFromCache } from '../utils/reverseGeocode'
 
 // Formato hora Argentina HH:MM:SS
 function formatTimeART(dateString: string): string {
@@ -29,6 +30,74 @@ function formatTimeART(dateString: string): string {
     second: '2-digit',
     hour12: false,
   })
+}
+
+// Celda de Ubicacion: muestra la direccion. Si la fila ya trae `localizacion`
+// (datos viejos), la usa. Si solo tiene coordenadas (USS via GPS crudo),
+// geocodifica lat/lng -> direccion en el front (Google Maps Geocoder, con cache).
+// Mientras resuelve, muestra las coordenadas como fallback.
+function UbicacionCell({
+  exceso,
+  onVerMapa,
+}: {
+  readonly exceso: ExcesoVelocidad
+  readonly onVerMapa: (e: ExcesoVelocidad) => void
+}) {
+  const lat = exceso.latitud
+  const lng = exceso.longitud
+  const tieneCoords = lat != null && lng != null
+  const dirGuardada = exceso.localizacion || null
+
+  const coordsTexto = tieneCoords ? `${lat!.toFixed(5)}, ${lng!.toFixed(5)}` : null
+
+  // Direccion resuelta por geocoding (solo si no hay direccion guardada).
+  const [dirGeo, setDirGeo] = useState<string | null>(
+    () => (dirGuardada ? null : (tieneCoords ? reverseGeocodeFromCache(lat!, lng!) : null)),
+  )
+
+  useEffect(() => {
+    if (dirGuardada || !tieneCoords) return
+    // NO usar un flag `activo` con cleanup: la tabla re-renderiza cada ~300ms
+    // (polling del padre para stats), lo que desmonta/remonta esta celda y
+    // cancelaria el geocoding antes de que resuelva (~1-2s). Como el resultado
+    // se cachea globalmente, dejamos que el set ocurra siempre; si la celda ya
+    // se desmonto, React ignora el set sin romper nada.
+    reverseGeocode(lat!, lng!).then(addr => {
+      if (addr) setDirGeo(addr)
+    })
+  }, [dirGuardada, tieneCoords, lat, lng])
+
+  const direccion = dirGuardada || dirGeo
+  const textoVisible = direccion
+    ? truncateLocation(direccion, 34)
+    : (coordsTexto ?? '-')
+  const clickable = tieneCoords || !!dirGuardada
+
+  return (
+    <button
+      type="button"
+      onClick={() => clickable && onVerMapa(exceso)}
+      disabled={!clickable}
+      title={clickable ? `Ver en mapa: ${direccion || coordsTexto}` : 'Sin coordenadas'}
+      style={{
+        display: 'flex', alignItems: 'center', gap: '6px',
+        padding: '4px 8px', borderRadius: '6px',
+        background: 'transparent',
+        border: clickable ? '1px solid var(--border-primary, #e5e7eb)' : '1px solid transparent',
+        color: clickable ? 'var(--color-primary, #ef4444)' : 'var(--text-tertiary)',
+        cursor: clickable ? 'pointer' : 'default',
+        fontSize: '12px',
+        maxWidth: '100%',
+        textAlign: 'left',
+        opacity: clickable ? 1 : 0.6,
+      }}
+    >
+      <MapPin size={14} style={{ flexShrink: 0 }} />
+      <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+        {textoVisible}
+      </span>
+    </button>
+  )
 }
 
 interface ExcesosTableProps {
@@ -225,38 +294,11 @@ export function ExcesosTable({
     },
     {
       id: 'localizacion',
-      accessorFn: (row) => row.localizacion || (row.latitud != null && row.longitud != null ? 'Ver en mapa' : null),
+      accessorFn: (row) => row.localizacion || (row.latitud != null && row.longitud != null ? `${row.latitud.toFixed(5)}, ${row.longitud.toFixed(5)}` : null),
       header: 'Ubicacion',
-      cell: ({ row }) => {
-        const tieneCoords = row.original.latitud != null && row.original.longitud != null
-        const tieneTexto = !!row.original.localizacion
-        const clickable = tieneCoords || tieneTexto
-        return (
-          <button
-            type="button"
-            onClick={() => clickable && setMapaExceso(row.original)}
-            disabled={!clickable}
-            title={clickable ? `Ver en mapa: ${row.original.localizacion || 'sin direccion'}` : 'Sin coordenadas'}
-            style={{
-              display: 'flex', alignItems: 'center', gap: '6px',
-              padding: '4px 8px', borderRadius: '6px',
-              background: 'transparent',
-              border: clickable ? '1px solid var(--border-primary, #e5e7eb)' : '1px solid transparent',
-              color: clickable ? 'var(--color-primary, #ef4444)' : 'var(--text-tertiary)',
-              cursor: clickable ? 'pointer' : 'default',
-              fontSize: '12px',
-              maxWidth: '100%',
-              textAlign: 'left',
-              opacity: clickable ? 1 : 0.6,
-            }}
-          >
-            <MapPin size={14} />
-            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-              {tieneTexto ? truncateLocation(row.original.localizacion, 30) : (tieneCoords ? 'Ver en mapa' : '-')}
-            </span>
-          </button>
-        )
-      },
+      cell: ({ row }) => (
+        <UbicacionCell exceso={row.original} onVerMapa={setMapaExceso} />
+      ),
       enableSorting: false,
     },
   ], [])
