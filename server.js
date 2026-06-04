@@ -2309,7 +2309,13 @@ function buildOfertaReemplazos(o) {
   add('OUTSIDE CLEAN', fmtLimpieza(o.limpieza_exterior))
 
   // --- Elementos de seguridad (booleanos → Sí/No) ---
-  const siNo = (val) => val ? 'Sí' : 'No'
+  const siNo = (val) => {
+    if (val === 'Entregado') return 'Entregado'
+    if (val === 'Pendiente') return 'Pendiente'
+    if (val === true) return 'Entregado'
+    if (val === false) return 'Pendiente'
+    return val || 'Pendiente'
+  }
   add('CRIQUET', siNo(o.criquet))
   add('BUTTERFLY', siNo(o.mariposa))
   // llave_tuercas no tiene variable en la plantilla original, pero lo incluimos por si acaso
