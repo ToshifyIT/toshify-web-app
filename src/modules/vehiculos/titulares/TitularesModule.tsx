@@ -143,9 +143,64 @@ export function TitularesModule() {
 
     setSaving(true)
     try {
+      // Validar duplicados por DNI/CUIT
+      const dniCuitNorm = formData.dni_cuit.trim()
+      if (dniCuitNorm) {
+        const { data: existente } = await supabase
+          .from('titulares')
+          .select('id, nombres, apellidos, razon_social')
+          .eq('dni_cuit', dniCuitNorm)
+          .limit(1)
+        if (existente && existente.length > 0) {
+          const nombre = (existente[0] as any).razon_social || `${(existente[0] as any).nombres} ${(existente[0] as any).apellidos}`
+          const { isConfirmed } = await Swal.fire({
+            icon: 'warning',
+            title: 'Posible duplicado',
+            html: `Ya existe un titular con DNI/CUIT <strong>${dniCuitNorm}</strong>:<br/><strong>${nombre}</strong>.<br/><br/>Desea crear otro de todas formas?`,
+            showCancelButton: true,
+            confirmButtonText: 'Crear de todas formas',
+            cancelButtonText: 'Cancelar',
+            confirmButtonColor: '#f59e0b',
+          })
+          if (!isConfirmed) {
+            setSaving(false)
+            return
+          }
+        }
+      }
+
+      // Validar duplicados por nombre/razon social
+      const nombreNorm = formData.tipo === 'empresa'
+        ? formData.razon_social.trim().toUpperCase()
+        : `${formData.nombres.trim().toUpperCase()} ${formData.apellidos.trim().toUpperCase()}`
+      if (nombreNorm) {
+        const campo = formData.tipo === 'empresa' ? 'razon_social' : 'nombres'
+        const valor = formData.tipo === 'empresa' ? nombreNorm : formData.nombres.trim().toUpperCase()
+        const { data: existeNombre } = await supabase
+          .from('titulares')
+          .select('id')
+          .ilike(campo, valor)
+          .limit(1)
+        if (existeNombre && existeNombre.length > 0) {
+          const { isConfirmed } = await Swal.fire({
+            icon: 'warning',
+            title: 'Posible duplicado',
+            html: `Ya existe un titular con nombre similar a <strong>${nombreNorm}</strong>.<br/><br/>Desea crear otro de todas formas?`,
+            showCancelButton: true,
+            confirmButtonText: 'Crear de todas formas',
+            cancelButtonText: 'Cancelar',
+            confirmButtonColor: '#f59e0b',
+          })
+          if (!isConfirmed) {
+            setSaving(false)
+            return
+          }
+        }
+      }
+
       const insertData: Record<string, unknown> = {
         tipo: formData.tipo,
-        dni_cuit: formData.dni_cuit.trim(),
+        dni_cuit: dniCuitNorm,
         domicilio: formData.domicilio.trim() || null,
         email: formData.email.trim() || null,
         telefono: formData.telefono.trim() || null,
@@ -418,14 +473,15 @@ export function TitularesModule() {
 
     setCreatingOferta(vt.id)
     try {
-      // Verificar si ya existe
+      // Verificar si ya existe por vehiculo_id (evita duplicados si hay multiples relaciones)
       const { data: existente } = await supabase
         .from('ofertas_locacion')
         .select('id')
-        .eq('vehiculo_titular_id', vt.id)
-        .maybeSingle()
+        .eq('vehiculo_id', vt.vehiculo_id)
+        .eq('titular_id', vt.titular_id)
+        .limit(1)
 
-      if (existente) {
+      if (existente && existente.length > 0) {
         Swal.fire('Ya existe', 'Ya existe un registro de oferta de locacion para este vehiculo y titular. Editalo desde el modulo de Oferta Locacion.', 'info')
         return
       }

@@ -43,14 +43,14 @@ const EMPTY_FORM: OfertaLocacionFormData = {
   vto_vtv: '',
   vto_gnc: '',
   vto_matafuego: '',
-  criquet: false,
-  mariposa: false,
-  llave_tuercas: false,
-  rueda_auxilio: false,
-  balizas: false,
-  chaleco_reflectivo: false,
-  guantes: false,
-  botiquin: false,
+  criquet: '',
+  mariposa: '',
+  llave_tuercas: '',
+  rueda_auxilio: '',
+  balizas: '',
+  chaleco_reflectivo: '',
+  guantes: '',
+  botiquin: '',
   limpieza_interior: '',
   limpieza_exterior: '',
   detalle_parte_frontal: '',
@@ -126,14 +126,14 @@ export function OfertaLocacionModal({ vehiculoTitular, titular, sedeId, userId, 
           vto_vtv: rec.vto_vtv || '',
           vto_gnc: rec.vto_gnc || '',
           vto_matafuego: rec.vto_matafuego || '',
-          criquet: rec.criquet ?? false,
-          mariposa: rec.mariposa ?? false,
-          llave_tuercas: rec.llave_tuercas ?? false,
-          rueda_auxilio: rec.rueda_auxilio ?? false,
-          balizas: rec.balizas ?? false,
-          chaleco_reflectivo: rec.chaleco_reflectivo ?? false,
-          guantes: rec.guantes ?? false,
-          botiquin: rec.botiquin ?? false,
+          criquet: rec.criquet === true ? 'Entregado' : rec.criquet === false ? 'Pendiente' : (rec.criquet || ''),
+          mariposa: rec.mariposa === true ? 'Entregado' : rec.mariposa === false ? 'Pendiente' : (rec.mariposa || ''),
+          llave_tuercas: rec.llave_tuercas === true ? 'Entregado' : rec.llave_tuercas === false ? 'Pendiente' : (rec.llave_tuercas || ''),
+          rueda_auxilio: rec.rueda_auxilio === true ? 'Entregado' : rec.rueda_auxilio === false ? 'Pendiente' : (rec.rueda_auxilio || ''),
+          balizas: rec.balizas === true ? 'Entregado' : rec.balizas === false ? 'Pendiente' : (rec.balizas || ''),
+          chaleco_reflectivo: rec.chaleco_reflectivo === true ? 'Entregado' : rec.chaleco_reflectivo === false ? 'Pendiente' : (rec.chaleco_reflectivo || ''),
+          guantes: rec.guantes === true ? 'Entregado' : rec.guantes === false ? 'Pendiente' : (rec.guantes || ''),
+          botiquin: rec.botiquin === true ? 'Entregado' : rec.botiquin === false ? 'Pendiente' : (rec.botiquin || ''),
           limpieza_interior: rec.limpieza_interior || '',
           limpieza_exterior: rec.limpieza_exterior || '',
           detalle_parte_frontal: rec.detalle_parte_frontal || '',
@@ -155,7 +155,7 @@ export function OfertaLocacionModal({ vehiculoTitular, titular, sedeId, userId, 
         // 2. Traer datos completos del vehículo para pre-cargar
         const { data: vehiculo } = await supabase
           .from('vehiculos')
-          .select('patente, marca, modelo, anio, color, numero_motor, numero_chasis, kilometraje_actual')
+          .select('patente, marca, modelo, anio, color, numero_motor, numero_chasis, kilometraje_actual, cantidad_llaves, vencimiento_seguro, vto_vtv_aplica, vto_vtv_fecha, vto_gnc_aplica, vto_gnc_fecha, vto_matafuego_aplica, vto_matafuego_fecha, gnc')
           .eq('id', vt.vehiculo_id)
           .maybeSingle()
 
@@ -175,6 +175,11 @@ export function OfertaLocacionModal({ vehiculoTitular, titular, sedeId, userId, 
           numero_motor: vehiculo?.numero_motor || '',
           numero_chasis: vehiculo?.numero_chasis || '',
           kilometraje: vehiculo?.kilometraje_actual ?? null,
+          cantidad_llaves: vehiculo?.cantidad_llaves ?? null,
+          vencimiento_seguro: vehiculo?.vencimiento_seguro || '',
+          vto_vtv: vehiculo?.vto_vtv_fecha || '',
+          vto_gnc: vehiculo?.vto_gnc_aplica ? (vehiculo?.vto_gnc_fecha || '') : '',
+          vto_matafuego: vehiculo?.vto_matafuego_aplica ? (vehiculo?.vto_matafuego_fecha || '') : '',
         })
       }
     } catch (err) {
@@ -296,6 +301,12 @@ export function OfertaLocacionModal({ vehiculoTitular, titular, sedeId, userId, 
     background: 'var(--bg-primary)',
     color: 'var(--text-primary)',
   }
+  const readonlyStyle: React.CSSProperties = {
+    ...inputStyle,
+    background: 'var(--bg-secondary)',
+    color: 'var(--text-secondary)',
+    cursor: 'default',
+  }
 
   const labelStyle: React.CSSProperties = {
     display: 'block',
@@ -313,12 +324,7 @@ export function OfertaLocacionModal({ vehiculoTitular, titular, sedeId, userId, 
   // Grid classes defined in VehicleManagement.css (.ol-grid-2, .ol-grid-3)
   // with responsive breakpoints for mobile
 
-  const checkboxRow: React.CSSProperties = {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '8px',
-    padding: '7px 0',
-  }
+  // checkboxRow removido - elementos de seguridad ahora usan selects
 
   const sectionTitle: React.CSSProperties = {
     fontSize: '13px',
@@ -405,30 +411,30 @@ export function OfertaLocacionModal({ vehiculoTitular, titular, sedeId, userId, 
               <div className="ol-grid-2">
                 <div style={fieldGroup}>
                   <label style={labelStyle}>Nombre / Razon Social</label>
-                  <input style={inputStyle} value={formData.titular_nombre} onChange={e => updateField('titular_nombre', e.target.value)} />
+                  <input style={readonlyStyle} value={formData.titular_nombre} readOnly />
                 </div>
                 <div style={fieldGroup}>
                   <label style={labelStyle}>DNI</label>
-                  <input style={inputStyle} value={formData.titular_dni_cuit} onChange={e => updateField('titular_dni_cuit', e.target.value)} />
+                  <input style={readonlyStyle} value={formData.titular_dni_cuit} readOnly />
                 </div>
               </div>
               <div className="ol-grid-2">
                 <div style={fieldGroup}>
                   <label style={labelStyle}>CUIT</label>
-                  <input style={inputStyle} value={formData.titular_cuit} onChange={e => updateField('titular_cuit', e.target.value)} />
+                  <input style={readonlyStyle} value={formData.titular_cuit} readOnly />
                 </div>
                 <div style={fieldGroup}>
                   <label style={labelStyle}>Email</label>
-                  <input style={inputStyle} type="email" value={formData.titular_email} onChange={e => updateField('titular_email', e.target.value)} />
+                  <input style={readonlyStyle} value={formData.titular_email} readOnly />
                 </div>
               </div>
               <div style={fieldGroup}>
                 <label style={labelStyle}>Domicilio</label>
-                <input style={inputStyle} value={formData.titular_domicilio} onChange={e => updateField('titular_domicilio', e.target.value)} />
+                <input style={readonlyStyle} value={formData.titular_domicilio} readOnly />
               </div>
               <div style={fieldGroup}>
                 <label style={labelStyle}>Conyugue</label>
-                <input style={inputStyle} value={formData.titular_conyugue} onChange={e => updateField('titular_conyugue', e.target.value)} />
+                <input style={readonlyStyle} value={formData.titular_conyugue} readOnly />
               </div>
             </div>
           )}
@@ -439,39 +445,39 @@ export function OfertaLocacionModal({ vehiculoTitular, titular, sedeId, userId, 
               <div className="ol-grid-3">
                 <div style={fieldGroup}>
                   <label style={labelStyle}>Patente</label>
-                  <input style={{ ...inputStyle, fontWeight: 600 }} value={formData.patente} onChange={e => updateField('patente', e.target.value)} />
+                  <input style={{ ...readonlyStyle, fontWeight: 600 }} value={formData.patente} readOnly />
                 </div>
                 <div style={fieldGroup}>
                   <label style={labelStyle}>Marca</label>
-                  <input style={inputStyle} value={formData.marca} onChange={e => updateField('marca', e.target.value)} />
+                  <input style={readonlyStyle} value={formData.marca} readOnly />
                 </div>
                 <div style={fieldGroup}>
                   <label style={labelStyle}>Modelo</label>
-                  <input style={inputStyle} value={formData.modelo} onChange={e => updateField('modelo', e.target.value)} />
+                  <input style={readonlyStyle} value={formData.modelo} readOnly />
                 </div>
               </div>
               <div className="ol-grid-3">
                 <div style={fieldGroup}>
                   <label style={labelStyle}>Anio</label>
-                  <input style={inputStyle} value={formData.anio} onChange={e => updateField('anio', e.target.value)} />
+                  <input style={readonlyStyle} value={formData.anio} readOnly />
                 </div>
                 <div style={fieldGroup}>
                   <label style={labelStyle}>Color</label>
-                  <input style={inputStyle} value={formData.color} onChange={e => updateField('color', e.target.value)} />
+                  <input style={readonlyStyle} value={formData.color} readOnly />
                 </div>
                 <div style={fieldGroup}>
                   <label style={labelStyle}>Kilometraje</label>
-                  <input style={inputStyle} type="number" value={formData.kilometraje ?? ''} onChange={e => updateField('kilometraje', e.target.value ? Number(e.target.value) : null)} />
+                  <input style={readonlyStyle} value={formData.kilometraje ?? ''} readOnly />
                 </div>
               </div>
               <div className="ol-grid-2">
                 <div style={fieldGroup}>
                   <label style={labelStyle}>Numero Motor</label>
-                  <input style={inputStyle} value={formData.numero_motor} onChange={e => updateField('numero_motor', e.target.value)} />
+                  <input style={readonlyStyle} value={formData.numero_motor} readOnly />
                 </div>
                 <div style={fieldGroup}>
                   <label style={labelStyle}>Numero Chasis</label>
-                  <input style={inputStyle} value={formData.numero_chasis} onChange={e => updateField('numero_chasis', e.target.value)} />
+                  <input style={readonlyStyle} value={formData.numero_chasis} readOnly />
                 </div>
               </div>
             </div>
@@ -532,37 +538,46 @@ export function OfertaLocacionModal({ vehiculoTitular, titular, sedeId, userId, 
                 </div>
                 <div style={fieldGroup}>
                   <label style={labelStyle}>Titulo Automotor</label>
-                  <input style={inputStyle} value={formData.titulo_automotor} onChange={e => updateField('titulo_automotor', e.target.value)} />
+                  <select style={inputStyle} value={formData.titulo_automotor} onChange={e => updateField('titulo_automotor', e.target.value)}>
+                    <option value="">Seleccionar...</option>
+                    <option value="Entregado">Entregado</option>
+                    <option value="Pendiente">Pendiente</option>
+                  </select>
                 </div>
                 <div style={fieldGroup}>
                   <label style={labelStyle}>Tipo Cedula</label>
-                  <input style={inputStyle} value={formData.tipo_cedula} onChange={e => updateField('tipo_cedula', e.target.value)} />
+                  <select style={inputStyle} value={formData.tipo_cedula} onChange={e => updateField('tipo_cedula', e.target.value)}>
+                    <option value="">Seleccionar...</option>
+                    <option value="Original">Original</option>
+                    <option value="Constancia Vigente">Constancia Vigente</option>
+                    <option value="Constancia Vencida">Constancia Vencida</option>
+                  </select>
                 </div>
               </div>
               <div style={fieldGroup}>
                 <label style={labelStyle}>Cantidad de Llaves</label>
-                <input style={{ ...inputStyle, maxWidth: '120px' }} type="number" value={formData.cantidad_llaves ?? ''} onChange={e => updateField('cantidad_llaves', e.target.value ? Number(e.target.value) : null)} />
+                <input style={{ ...readonlyStyle, maxWidth: '120px' }} value={formData.cantidad_llaves ?? ''} readOnly />
               </div>
 
               <div style={{ ...sectionTitle, marginTop: '24px' }}>Vencimientos</div>
               <div className="ol-grid-2">
                 <div style={fieldGroup}>
                   <label style={labelStyle}>Vencimiento Seguro</label>
-                  <input style={inputStyle} type="date" value={formData.vencimiento_seguro} onChange={e => updateField('vencimiento_seguro', e.target.value)} />
+                  <input style={readonlyStyle} value={formData.vencimiento_seguro || 'No definido'} readOnly />
                 </div>
                 <div style={fieldGroup}>
                   <label style={labelStyle}>Vto. VTV</label>
-                  <input style={inputStyle} type="date" value={formData.vto_vtv} onChange={e => updateField('vto_vtv', e.target.value)} />
+                  <input style={readonlyStyle} value={formData.vto_vtv || 'No definido'} readOnly />
                 </div>
               </div>
               <div className="ol-grid-2">
                 <div style={fieldGroup}>
                   <label style={labelStyle}>Vto. GNC</label>
-                  <input style={inputStyle} type="date" value={formData.vto_gnc} onChange={e => updateField('vto_gnc', e.target.value)} />
+                  <input style={readonlyStyle} value={formData.vto_gnc || 'No definido'} readOnly />
                 </div>
                 <div style={fieldGroup}>
                   <label style={labelStyle}>Vto. Matafuego</label>
-                  <input style={inputStyle} type="date" value={formData.vto_matafuego} onChange={e => updateField('vto_matafuego', e.target.value)} />
+                  <input style={readonlyStyle} value={formData.vto_matafuego || 'No definido'} readOnly />
                 </div>
               </div>
 
@@ -570,25 +585,21 @@ export function OfertaLocacionModal({ vehiculoTitular, titular, sedeId, userId, 
               <div className="ol-grid-2">
                 {([
                   ['criquet', 'Criquet'],
-                  ['mariposa', 'Mariposa (llave tuercas)'],
-                  ['llave_tuercas', 'Llave de Tuercas'],
+                  ['mariposa', 'Mariposa'],
+                  ['llave_tuercas', 'Llave para Tuercas'],
                   ['rueda_auxilio', 'Rueda de Auxilio'],
                   ['balizas', 'Balizas'],
                   ['chaleco_reflectivo', 'Chaleco Reflectivo'],
                   ['guantes', 'Guantes'],
                   ['botiquin', 'Botiquin'],
                 ] as [keyof OfertaLocacionFormData, string][]).map(([field, label]) => (
-                  <div key={field} style={checkboxRow}>
-                    <input
-                      type="checkbox"
-                      id={`chk_${field}`}
-                      checked={formData[field] as boolean}
-                      onChange={e => updateField(field, e.target.checked)}
-                      style={{ width: '16px', height: '16px', cursor: 'pointer' }}
-                    />
-                    <label htmlFor={`chk_${field}`} style={{ fontSize: '13px', cursor: 'pointer', color: 'var(--text-primary)' }}>
-                      {label}
-                    </label>
+                  <div key={field} style={fieldGroup}>
+                    <label style={labelStyle}>{label}</label>
+                    <select style={inputStyle} value={formData[field] as string} onChange={e => updateField(field, e.target.value)}>
+                      <option value="">Seleccionar...</option>
+                      <option value="Entregado">Entregado</option>
+                      <option value="Pendiente">Pendiente</option>
+                    </select>
                   </div>
                 ))}
               </div>
@@ -650,11 +661,19 @@ export function OfertaLocacionModal({ vehiculoTitular, titular, sedeId, userId, 
               <div className="ol-grid-2">
                 <div style={fieldGroup}>
                   <label style={labelStyle}>Informe de Dominio</label>
-                  <textarea style={{ ...inputStyle, minHeight: '60px', resize: 'vertical' }} value={formData.informe_dominio} onChange={e => updateField('informe_dominio', e.target.value)} />
+                  <select style={inputStyle} value={formData.informe_dominio} onChange={e => updateField('informe_dominio', e.target.value)}>
+                    <option value="">Seleccionar...</option>
+                    <option value="Entregado">Entregado</option>
+                    <option value="Pendiente">Pendiente</option>
+                  </select>
                 </div>
                 <div style={fieldGroup}>
                   <label style={labelStyle}>Informe de Multas</label>
-                  <textarea style={{ ...inputStyle, minHeight: '60px', resize: 'vertical' }} value={formData.informe_multas} onChange={e => updateField('informe_multas', e.target.value)} />
+                  <select style={inputStyle} value={formData.informe_multas} onChange={e => updateField('informe_multas', e.target.value)}>
+                    <option value="">Seleccionar...</option>
+                    <option value="Entregado">Entregado</option>
+                    <option value="Pendiente">Pendiente</option>
+                  </select>
                 </div>
               </div>
               <div style={fieldGroup}>

@@ -2415,6 +2415,18 @@ async function generateOfertaLocacionDoc(drive, oferta) {
 
   const renderData = buildOfertaReemplazos(oferta)
 
+  // Datos del socio desde grupos_flota
+  if (grupoFlotaDB) {
+    renderData['SOCIO'] = (grupoFlotaDB.razon_social || grupoFlotaDB.nombre_comercial || '').toUpperCase()
+    renderData['REPRESENTANTE_LEGAL'] = (grupoFlotaDB.representante_nombre || '').toUpperCase()
+  } else {
+    // Fallback hardcodeado
+    const fallbackSocio = OFERTA_LOCACION_CONFIG.folders[socio] ? socio : ''
+    const propietarioData = CONTRACT_CONFIG.propietarios[socio === 'grupocg' ? 'grupo_cg' : socio === '44dreams' ? '44_dreams' : '']
+    renderData['SOCIO'] = propietarioData?.owner || fallbackSocio.toUpperCase()
+    renderData['REPRESENTANTE_LEGAL'] = propietarioData?.name_owner || ''
+  }
+
   // Manejar el bloque {{SPOUSE SIGN}}
   // docxtemplater no puede insertar párrafos con formato como lo hacía Apps Script,
   // así que usamos un approach más simple: si hay cónyuge, reemplazamos con texto plano
