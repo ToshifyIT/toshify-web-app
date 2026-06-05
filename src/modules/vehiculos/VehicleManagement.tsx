@@ -2429,6 +2429,10 @@ export function VehicleManagement() {
             <Fuel size={18} className="stat-icon" />
             <div className="stat-content"><span className="stat-value">{calculatedStats.vehiculosSinGnc}</span><span className="stat-label">Sin GNC</span></div>
           </div>
+          <div className={`stat-card stat-card-clickable ${activeStatCard === 'conGnc' ? 'stat-card-active' : ''}`} onClick={() => handleStatCardClick('conGnc')} title="Click para filtrar: Con GNC">
+            <Fuel size={18} className="stat-icon" style={{ color: '#16a34a' }} />
+            <div className="stat-content"><span className="stat-value">{calculatedStats.vehiculosConGnc}</span><span className="stat-label">Con GNC</span></div>
+          </div>
           <div className={`stat-card stat-card-clickable ${activeStatCard === 'telepaseToshify' ? 'stat-card-active' : ''}`} onClick={() => handleStatCardClick('telepaseToshify')} title="Click para filtrar: Telepase Toshify">
             <CreditCard size={18} className="stat-icon" />
             <div className="stat-content"><span className="stat-value">{calculatedStats.vehiculosTelepaseToshify}</span><span className="stat-label">Telepase Toshify</span></div>
