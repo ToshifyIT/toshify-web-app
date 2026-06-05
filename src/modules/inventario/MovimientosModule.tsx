@@ -424,7 +424,6 @@ export function MovimientosModule() {
     setCantidad(1)
     setVehiculoId('')
     setObservaciones('')
-    setBusquedaProducto('')
     setTipoProductoFiltro('TODOS')
     setStockPorProveedor([])
     setProductosLote([])
@@ -620,7 +619,7 @@ export function MovimientosModule() {
         if (error) throw error
       }
 
-      showSuccess('Lote enviado para aprobación', `${productosLoteSalida.length} salidas registradas. Pendientes de aprobación.`)
+      showSuccess('Lote enviado para aprobación', `${productosLoteSalida.length} salidas registradas para aprobación.`)
       resetForm()
       loadData()
     } catch (error: any) {
@@ -715,7 +714,6 @@ export function MovimientosModule() {
   const handleToggleModoLote = () => {
     setModoLote(!modoLote)
     setProductoId('')
-    setBusquedaProducto('')
     setProductosLote([])
     if (!modoLote) {
       setEstadoInicial('en_transito') // Lote siempre en tránsito
@@ -725,7 +723,6 @@ export function MovimientosModule() {
   const handleToggleModoLoteSalida = () => {
     setModoLoteSalida(!modoLoteSalida)
     setProductoId('')
-    setBusquedaProducto('')
     setProductosLoteSalida([])
     setVehiculoId('')
   }
@@ -1771,26 +1768,15 @@ export function MovimientosModule() {
               <label style={{ display: 'block', marginBottom: '8px', fontSize: '14px', fontWeight: 600, color: 'var(--text-primary)' }}>
                 Proveedor *
               </label>
-              <select
+              <SearchableSelect
                 value={proveedorId}
-                onChange={(e) => setProveedorId(e.target.value)}
-                style={{
-                  width: '100%',
-                  padding: '10px',
-                  border: '1px solid var(--border-primary)',
-                  borderRadius: '8px',
-                  fontSize: '14px',
-                  background: 'var(--input-bg)',
-                  color: 'var(--text-primary)'
-                }}
-              >
-                <option value="">Seleccionar proveedor...</option>
-                {stockPorProveedor.map((stock) => (
-                  <option key={stock.proveedor_id} value={stock.proveedor_id}>
-                    {stock.proveedor_nombre} - Stock: {stock.cantidad}
-                  </option>
-                ))}
-              </select>
+                onChange={setProveedorId}
+                options={stockProveedorOptions}
+                placeholder="Seleccionar proveedor..."
+                searchPlaceholder="Buscar proveedor..."
+                noResultsText="Sin proveedores con stock"
+                size="lg"
+              />
               {stockPorProveedor.length === 0 && productoId && (
                 <p style={{ fontSize: '12px', color: 'var(--color-danger)', marginTop: '4px', fontStyle: 'italic' }}>
                   No hay stock disponible de este producto

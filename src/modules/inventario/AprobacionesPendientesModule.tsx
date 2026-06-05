@@ -792,7 +792,7 @@ export function AprobacionesPendientesModule() {
             onClick={() => setTabActiva('pendientes')}
           >
             <Clock size={16} />
-            Pendientes
+            Aprobaciones
             {movimientos.length > 0 && (
               <span className="tab-badge">{movimientos.length}</span>
             )}
@@ -806,7 +806,7 @@ export function AprobacionesPendientesModule() {
           </button>
         </div>
 
-        {/* Controles - Solo para pestaña pendientes */}
+        {/* Controles - Solo para pestaña aprobaciones */}
         {tabActiva === 'pendientes' && (
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', alignItems: 'center' }}>
             <div className="filter-select">
@@ -839,7 +839,7 @@ export function AprobacionesPendientesModule() {
           </div>
         )}
 
-        {/* Tab: Pendientes */}
+        {/* Tab: Aprobaciones */}
         {tabActiva === 'pendientes' && (
           <>
             {loading ? (
@@ -849,10 +849,10 @@ export function AprobacionesPendientesModule() {
             ) : movimientosFiltrados.length === 0 ? (
               <div className="empty-state">
                 <Check size={48} />
-                <h3>No hay movimientos pendientes</h3>
+                <h3>No hay aprobaciones pendientes</h3>
                 <p>
                   {filtroTipo === 'todos'
-                    ? 'Todos los movimientos han sido procesados'
+                    ? 'Todos los movimientos internos han sido procesados'
                     : `No hay ${getTipoLabel(filtroTipo).toLowerCase()}s pendientes de aprobación`}
                 </p>
               </div>

@@ -14,9 +14,7 @@ import {
   Activity,
   Settings,
   Droplets,
-  Clock,
-  ArrowRight,
-  MapPin
+  ArrowRight
 } from 'lucide-react'
 import { type ColumnDef } from '@tanstack/react-table'
 import { DataTable } from '../../components/ui/DataTable'
@@ -51,7 +49,7 @@ interface PendientesOperativos {
 
 export function InventarioDashboardModule() {
   const navigate = useNavigate()
-  const { sedeActual, verTodas, sedeActualId } = useSede()
+  const { sedeActualId } = useSede()
   const [stockProductos, setStockProductos] = useState<StockProducto[]>([])
   const [pendientes, setPendientes] = useState<PendientesOperativos>({
     entradasTransito: 0,
@@ -193,8 +191,8 @@ export function InventarioDashboardModule() {
       acciones.push({
         id: 'pedidos-vencidos',
         severidad: 'critico',
-        titulo: `${pendientes.pedidosVencidos} pedidos vencidos`,
-        detalle: 'Requieren seguimiento de recepcion o reclamo a proveedor',
+        titulo: `${pendientes.pedidosVencidos} pedidos con fecha vencida`,
+        detalle: 'Pedidos a proveedor fuera de la fecha estimada; revisar recepcion o reclamo',
         accion: 'Ver pedidos',
         destino: '/logistica/inventario/pedidos'
       })
@@ -215,8 +213,8 @@ export function InventarioDashboardModule() {
       acciones.push({
         id: 'aprobaciones',
         severidad: 'info',
-        titulo: `${pendientes.movimientosPendientes} movimientos por aprobar`,
-        detalle: 'Salidas, asignaciones o devoluciones pendientes de decision',
+        titulo: `${pendientes.movimientosPendientes} aprobaciones internas`,
+        detalle: 'Salidas, asignaciones o devoluciones pendientes de aprobacion',
         accion: 'Revisar',
         destino: '/logistica/inventario/pedidos'
       })
@@ -610,8 +608,8 @@ export function InventarioDashboardModule() {
         <div className="inv-actions-panel">
           <div className="inv-panel-header">
             <div>
-              <h2>Acciones de hoy</h2>
-              <span>Priorizado por stock, recepcion, aprobacion y cierre operativo</span>
+              <h2>Pendientes operativos</h2>
+              <span>Stock, recepciones, aprobaciones y cierres que requieren atencion</span>
             </div>
             <span className="inv-panel-badge">{accionesOperativas.length} pendientes</span>
           </div>
@@ -619,7 +617,7 @@ export function InventarioDashboardModule() {
             {accionesOperativas.length === 0 ? (
               <div className="inv-action-empty">
                 <CheckCircle size={18} />
-                No hay acciones criticas para la sede seleccionada.
+                No hay pendientes operativos criticos.
               </div>
             ) : accionesOperativas.map(action => (
               <button
@@ -640,27 +638,6 @@ export function InventarioDashboardModule() {
                 </span>
               </button>
             ))}
-          </div>
-        </div>
-
-        <div className="inv-risk-panel">
-          <div className="inv-panel-header compact">
-            <div>
-              <h2>Riesgos por sede</h2>
-              <span>{verTodas ? 'Todas las sedes' : (sedeActual?.nombre || 'Sede actual')}</span>
-            </div>
-            <MapPin size={16} />
-          </div>
-          <div className="inv-risk-list">
-            <div><span>Bajo minimo</span><strong>{productosBajoMinimo.length}</strong></div>
-            <div><span>Pedidos vencidos</span><strong>{pendientes.pedidosVencidos}</strong></div>
-            <div><span>Recepciones pendientes</span><strong>{pendientes.entradasTransito + pendientes.pedidosTransito}</strong></div>
-            <div><span>Movimientos por aprobar</span><strong>{pendientes.movimientosPendientes}</strong></div>
-            <div><span>Dano/perdida sin cierre</span><strong>{productosSinCierre.length}</strong></div>
-          </div>
-          <div className="inv-risk-note">
-            <Clock size={14} />
-            La accion primaria siempre lleva al flujo donde se resuelve el pendiente.
           </div>
         </div>
       </div>

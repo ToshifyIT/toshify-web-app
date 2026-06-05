@@ -45,6 +45,26 @@ const DAYS_SHORT = ['LU', 'MA', 'MI', 'JU', 'VI', 'SA', 'DO'];
 const MONTH_NAMES_SHORT = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
                            'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
 
+const humanizeColumnId = (columnId: string) =>
+  columnId
+    .replace(/_/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .replace(/\b\w/g, (char) => char.toUpperCase());
+
+const extractHeaderText = (node: ReactNode): string => {
+  if (node === null || node === undefined || typeof node === 'boolean') return '';
+  if (typeof node === 'string' || typeof node === 'number') return String(node).trim();
+  if (Array.isArray(node)) {
+    return node.map(extractHeaderText).filter(Boolean).join(' ').trim();
+  }
+  if (React.isValidElement<{ children?: ReactNode; label?: string }>(node)) {
+    if (typeof node.props.label === 'string') return node.props.label.trim();
+    return extractHeaderText(node.props.children);
+  }
+  return '';
+};
+
 const toISODate = (y: number, m: number, d: number) =>
   `${y}-${String(m + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
 
@@ -1602,13 +1622,18 @@ export function DataTable<T>({
                       {contentCells.map((cell) => {
                         // Get header label
                         const header = cell.column.columnDef.header;
-                        let headerLabel = cell.column.id;
-                        if (typeof header === 'string') {
+                        const meta = cell.column.columnDef.meta as { mobileLabel?: string } | undefined;
+                        let headerLabel = humanizeColumnId(cell.column.id);
+                        if (meta?.mobileLabel) {
+                          headerLabel = meta.mobileLabel;
+                        } else if (typeof header === 'string') {
                           headerLabel = header;
                         } else if (typeof header === 'function') {
                           // eslint-disable-next-line @typescript-eslint/no-explicit-any
                           const rendered = header({ column: cell.column, header: cell.column.columnDef, table } as any);
                           if (typeof rendered === 'string') headerLabel = rendered;
+                          const extractedLabel = extractHeaderText(rendered);
+                          if (extractedLabel) headerLabel = extractedLabel;
                           // Para FilterHeader, extraer el label
                           if (rendered && typeof rendered === 'object' && 'props' in rendered) {
                             // eslint-disable-next-line @typescript-eslint/no-explicit-any

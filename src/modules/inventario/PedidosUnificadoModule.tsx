@@ -162,7 +162,7 @@ const getPedidoSla = (pedido: PedidoAgrupado) => {
   fecha.setHours(0, 0, 0, 0)
   const diffDias = Math.ceil((fecha.getTime() - hoy.getTime()) / 86400000)
 
-  if (diffDias < 0) return { label: 'Vencido', className: 'sla-danger' }
+  if (diffDias < 0) return { label: 'Fecha vencida', className: 'sla-danger' }
   if (diffDias === 0) return { label: 'Vence hoy', className: 'sla-warning' }
   if (diffDias <= 2) return { label: `${diffDias} dias`, className: 'sla-info' }
   return { label: 'En plazo', className: 'sla-ok' }
@@ -223,7 +223,6 @@ export function PedidosUnificadoModule() {
   const [proveedorPedidoId, setProveedorPedidoId] = useState('')
   const [fechaEstimadaPedido, setFechaEstimadaPedido] = useState('')
   const [observacionesPedido, setObservacionesPedido] = useState('')
-  const [enviarEmailProveedor, setEnviarEmailProveedor] = useState(true)
   const [pedidoDraftItems, setPedidoDraftItems] = useState<PedidoDraftItem[]>([
     { producto_id: '', cantidad: 1 }
   ])
@@ -378,7 +377,6 @@ export function PedidosUnificadoModule() {
     setProveedorPedidoId('')
     setFechaEstimadaPedido('')
     setObservacionesPedido('')
-    setEnviarEmailProveedor(true)
     setPedidoDraftItems([{ producto_id: '', cantidad: 1 }])
   }
 
@@ -461,8 +459,8 @@ export function PedidosUnificadoModule() {
     if (pedidoItemsValidos.length === 0) return 'Debes agregar al menos un producto con cantidad valida'
 
     const proveedor = getPedidoProveedorSeleccionado()
-    if (enviarEmailProveedor && !proveedor?.email?.trim()) {
-      return 'El proveedor no tiene email cargado. Puedes crear el pedido desactivando el envio por correo.'
+    if (!proveedor?.email?.trim()) {
+      return 'El proveedor no tiene email configurado. Carga el email en Proveedores antes de crear el pedido.'
     }
 
     const productoIds = pedidoItemsValidos.map(item => item.producto_id)
@@ -571,11 +569,11 @@ export function PedidosUnificadoModule() {
 
     const proveedor = getPedidoProveedorSeleccionado()
     const result = await Swal.fire({
-      title: enviarEmailProveedor ? 'Crear y enviar pedido' : 'Crear pedido',
+      title: 'Crear y enviar pedido',
       html: buildPedidoPreviewHtml(),
       icon: 'question',
       showCancelButton: true,
-      confirmButtonText: enviarEmailProveedor ? 'Crear y enviar' : 'Crear pedido',
+      confirmButtonText: 'Crear y enviar',
       cancelButtonText: 'Cancelar',
       confirmButtonColor: '#FF0033',
       width: 760
@@ -588,9 +586,7 @@ export function PedidosUnificadoModule() {
       const { data: authData } = await supabase.auth.getUser()
       const observacionesFinal = [
         observacionesPedido.trim(),
-        enviarEmailProveedor && proveedor?.email
-          ? `Pedido preparado para envio por correo a ${proveedor.email}`
-          : null
+        proveedor?.email ? `Pedido preparado para envio por correo a ${proveedor.email}` : null
       ].filter(Boolean).join('\n')
 
       const { error } = await (supabase.rpc as any)('crear_pedido_inventario', {
@@ -607,19 +603,15 @@ export function PedidosUnificadoModule() {
 
       if (error) throw error
 
-      if (enviarEmailProveedor) {
-        try {
-          await enviarCorreoPedidoProveedor()
-          showSuccess('Pedido enviado', `Pedido ${numeroPedidoDraft} creado y enviado a ${proveedor?.email}`)
-        } catch (emailError: any) {
-          await Swal.fire({
-            icon: 'warning',
-            title: 'Pedido creado, correo pendiente',
-            text: emailError.message || 'El pedido quedó creado pero no se pudo enviar el correo.'
-          })
-        }
-      } else {
-        showSuccess('Pedido creado', `Pedido ${numeroPedidoDraft} creado en transito`)
+      try {
+        await enviarCorreoPedidoProveedor()
+        showSuccess('Pedido enviado', `Pedido ${numeroPedidoDraft} creado y enviado a ${proveedor?.email}`)
+      } catch (emailError: any) {
+        await Swal.fire({
+          icon: 'warning',
+          title: 'Pedido creado, correo pendiente',
+          text: emailError.message || 'El pedido quedó creado pero no se pudo enviar el correo.'
+        })
       }
 
       resetPedidoProveedorForm()
@@ -1146,6 +1138,7 @@ export function PedidosUnificadoModule() {
   const totalExcepciones = pedidosConExcepcion.length
   const sedeOperativaLabel = verTodas ? 'Todas las sedes' : (sedeActual?.nombre || 'Sede actual')
   const proveedorPedidoSeleccionado = getPedidoProveedorSeleccionado()
+  const proveedorPedidoTieneEmail = Boolean(proveedorPedidoSeleccionado?.email?.trim())
 
   // Columnas para Entradas Simples
   const entradasColumns = useMemo<ColumnDef<EntradaTransito, any>[]>(() => [
@@ -1361,6 +1354,15 @@ export function PedidosUnificadoModule() {
           color: var(--text-secondary);
         }
 
+        .pedidos-tab-separator {
+          width: 1px;
+          min-width: 1px;
+          height: 24px;
+          align-self: center;
+          margin: 0 10px;
+          background: var(--border-primary);
+        }
+
         .pedido-compose {
           display: grid;
           grid-template-columns: minmax(0, 1.5fr) minmax(280px, 0.7fr);
@@ -1446,7 +1448,7 @@ export function PedidosUnificadoModule() {
           align-items: center;
           justify-content: center;
           border: 1px solid var(--border-primary);
-          border-radius: 8px;
+          border-radius: 6px;
           background: var(--card-bg);
           color: var(--text-secondary);
           cursor: pointer;
@@ -1457,40 +1459,56 @@ export function PedidosUnificadoModule() {
           background: var(--bg-secondary);
         }
 
-        .pedido-secondary-action {
+        .pedido-compose .btn-secondary,
+        .pedido-compose-actions .btn-secondary {
           display: inline-flex;
           align-items: center;
           justify-content: center;
-          gap: 8px;
-          border: 1px solid var(--border-primary);
-          border-radius: 8px;
-          background: var(--card-bg);
+          gap: 6px;
+          border: 1px solid #E5E7EB;
+          border-radius: 6px;
+          background: #F3F4F6;
           color: var(--text-primary);
-          padding: 10px 12px;
+          padding: 8px 18px;
           font-size: 13px;
-          font-weight: 700;
+          font-weight: 500;
           cursor: pointer;
+          transition: all 0.15s;
         }
 
-        .pedido-primary-action {
+        .pedido-compose .btn-secondary:hover:not(:disabled),
+        .pedido-compose-actions .btn-secondary:hover:not(:disabled) {
+          background: #E5E7EB;
+        }
+
+        .pedido-compose .btn-primary,
+        .pedido-compose-actions .btn-primary {
           display: inline-flex;
           align-items: center;
           justify-content: center;
-          gap: 8px;
+          gap: 6px;
           border: none;
-          border-radius: 8px;
+          border-radius: 6px;
           background: var(--color-primary);
           color: white;
-          padding: 11px 14px;
+          padding: 8px 18px;
           font-size: 13px;
-          font-weight: 700;
+          font-weight: 500;
           cursor: pointer;
+          transition: background 0.15s;
         }
 
-        .pedido-primary-action:disabled,
-        .pedido-secondary-action:disabled,
+        .pedido-compose .btn-primary:hover:not(:disabled),
+        .pedido-compose-actions .btn-primary:hover:not(:disabled) {
+          background: var(--color-primary-hover);
+        }
+
+        .pedido-compose .btn-primary:disabled,
+        .pedido-compose .btn-secondary:disabled,
+        .pedido-compose-actions .btn-primary:disabled,
+        .pedido-compose-actions .btn-secondary:disabled,
         .pedido-icon-button:disabled {
-          opacity: 0.55;
+          opacity: 0.6;
           cursor: not-allowed;
         }
 
@@ -2112,6 +2130,10 @@ export function PedidosUnificadoModule() {
             font-size: 11px;
           }
 
+          .pedidos-tab-separator {
+            display: none;
+          }
+
           .pedido-compose-grid,
           .pedido-item-row {
             grid-template-columns: 1fr;
@@ -2144,9 +2166,9 @@ export function PedidosUnificadoModule() {
             <div className="pedidos-summary-note">entradas y pedidos en transito</div>
           </div>
           <div className="pedidos-summary-card">
-            <div className="pedidos-summary-label">Por aprobar</div>
+            <div className="pedidos-summary-label">Aprobaciones</div>
             <div className="pedidos-summary-value">{movimientos.length}</div>
-            <div className="pedidos-summary-note">movimientos pendientes</div>
+            <div className="pedidos-summary-note">salidas, asignaciones y devoluciones</div>
           </div>
           <div className="pedidos-summary-card">
             <div className="pedidos-summary-label">Excepciones</div>
@@ -2189,23 +2211,26 @@ export function PedidosUnificadoModule() {
               onClick={() => setActiveTab('pedidos')}
             >
               <Package size={16} />
-              Pedidos por Lote
+              Pedidos a proveedor
               {pedidos.length > 0 && (
                 <span className="pedidos-tab-badge">{pedidos.length}</span>
               )}
             </button>
           )}
           {canViewTab('inventario-pedidos:pendientes') && (
-            <button
-              className={`pedidos-tab ${activeTab === 'pendientes' ? 'active' : ''}`}
-              onClick={() => setActiveTab('pendientes')}
-            >
-              <Clock size={16} />
-              Pendientes
-              {movimientos.length > 0 && (
-                <span className="pedidos-tab-badge">{movimientos.length}</span>
-              )}
-            </button>
+            <>
+              <span className="pedidos-tab-separator" aria-hidden="true" />
+              <button
+                className={`pedidos-tab ${activeTab === 'pendientes' ? 'active' : ''}`}
+                onClick={() => setActiveTab('pendientes')}
+              >
+                <Clock size={16} />
+                Aprobaciones
+                {movimientos.length > 0 && (
+                  <span className="pedidos-tab-badge">{movimientos.length}</span>
+                )}
+              </button>
+            </>
           )}
           {canViewTab('inventario-pedidos:historico') && (
             <button
@@ -2346,7 +2371,7 @@ export function PedidosUnificadoModule() {
 
                     <button
                       type="button"
-                      className="pedido-secondary-action"
+                      className="btn-secondary"
                       onClick={addPedidoDraftItem}
                       disabled={creatingPedido || loadingCatalogoPedido}
                     >
@@ -2365,28 +2390,23 @@ export function PedidosUnificadoModule() {
                     />
                   </div>
 
-                  <label style={{
+                  <div style={{
                     display: 'flex',
                     alignItems: 'center',
                     gap: '8px',
                     marginTop: '12px',
-                    color: 'var(--text-secondary)',
+                    color: proveedorPedidoTieneEmail ? 'var(--text-secondary)' : 'var(--badge-yellow-text)',
                     fontSize: '13px',
                     fontWeight: 600
                   }}>
-                    <input
-                      type="checkbox"
-                      checked={enviarEmailProveedor}
-                      onChange={(event) => setEnviarEmailProveedor(event.target.checked)}
-                      disabled={creatingPedido}
-                    />
-                    Enviar pedido por correo al proveedor
-                  </label>
+                    <Mail size={15} />
+                    El envio por correo es obligatorio para crear pedidos a proveedor.
+                  </div>
 
                   <div className="pedido-compose-actions">
                     <button
                       type="button"
-                      className="pedido-secondary-action"
+                      className="btn-secondary"
                       onClick={previewPedidoProveedor}
                       disabled={creatingPedido || loadingCatalogoPedido}
                     >
@@ -2395,7 +2415,7 @@ export function PedidosUnificadoModule() {
                     </button>
                     <button
                       type="button"
-                      className="pedido-secondary-action"
+                      className="btn-secondary"
                       onClick={resetPedidoProveedorForm}
                       disabled={creatingPedido}
                     >
@@ -2404,14 +2424,13 @@ export function PedidosUnificadoModule() {
                     </button>
                     <button
                       type="button"
-                      className="pedido-primary-action"
+                      className="btn-primary"
                       onClick={crearPedidoProveedor}
-                      disabled={creatingPedido || loadingCatalogoPedido}
+                      disabled={creatingPedido || loadingCatalogoPedido || !proveedorPedidoTieneEmail}
+                      title={!proveedorPedidoTieneEmail ? 'El proveedor debe tener email configurado' : 'Crear y enviar pedido'}
                     >
-                      {enviarEmailProveedor ? <Send size={15} /> : <CheckCircle size={15} />}
-                      {creatingPedido
-                        ? 'Procesando...'
-                        : enviarEmailProveedor ? 'Crear y enviar' : 'Crear pedido'}
+                      <Send size={15} />
+                      {creatingPedido ? 'Procesando...' : 'Crear y enviar'}
                     </button>
                   </div>
                 </>
@@ -2424,9 +2443,9 @@ export function PedidosUnificadoModule() {
                 Correo
               </h3>
               <div className="pedido-email-status">
-                <span className={`pedido-status-pill ${proveedorPedidoSeleccionado?.email ? '' : 'warning'}`}>
+                <span className={`pedido-status-pill ${proveedorPedidoTieneEmail ? '' : 'warning'}`}>
                   <Mail size={13} />
-                  {proveedorPedidoSeleccionado?.email ? 'Email disponible' : 'Sin email'}
+                  {proveedorPedidoTieneEmail ? 'Email disponible' : 'Sin email'}
                 </span>
 
                 <div className="pedido-email-preview">
@@ -2451,9 +2470,9 @@ export function PedidosUnificadoModule() {
                 <p style={{ margin: 0, lineHeight: 1.5 }}>
                   Al crear el pedido se registra en inventario como pedido en transito. Luego se intenta enviar el correo al proveedor desde el servidor.
                 </p>
-                {!proveedorPedidoSeleccionado?.email && (
+                {!proveedorPedidoTieneEmail && (
                   <p style={{ margin: 0, color: 'var(--badge-yellow-text)', lineHeight: 1.5 }}>
-                    Si el proveedor no tiene email, puedes desactivar el envio por correo y completar el contacto desde Proveedores.
+                    No se puede crear ni enviar un pedido si el proveedor no tiene email configurado.
                   </p>
                 )}
               </div>
@@ -2715,7 +2734,7 @@ pageSize={100}
               <div className="empty-state">
                 <CheckCircle size={48} />
                 <h3>Sin excepciones operativas</h3>
-                <p>No hay pedidos vencidos, sin fecha o con recepcion parcial pendiente.</p>
+                <p>No hay pedidos con fecha vencida, sin fecha o con recepcion parcial pendiente.</p>
               </div>
             ) : (
               <div className="excepciones-grid">
@@ -2799,7 +2818,7 @@ pageSize={100}
           </>
         )}
 
-        {/* ==================== TAB: PENDIENTES ==================== */}
+        {/* ==================== TAB: APROBACIONES INTERNAS ==================== */}
         {activeTab === 'pendientes' && (
           <>
             {!canApprove ? (
@@ -2837,10 +2856,10 @@ pageSize={100}
                 ) : movimientosFiltrados.length === 0 ? (
                   <div className="empty-state">
                     <Check size={48} />
-                    <h3>No hay movimientos pendientes</h3>
+                    <h3>No hay aprobaciones pendientes</h3>
                     <p>
                       {filtroTipo === 'todos'
-                        ? 'Todos los movimientos han sido procesados'
+                        ? 'Todos los movimientos internos han sido procesados'
                         : `No hay ${getTipoLabel(filtroTipo).toLowerCase()}s pendientes de aprobación`}
                     </p>
                   </div>

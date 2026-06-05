@@ -571,7 +571,7 @@ export function PedidosTransitoModule() {
           }}
         >
           <Package size={18} />
-          Pedidos por Lote
+          Pedidos a proveedor
           {pedidos.length > 0 && (
             <span style={{
               background: 'var(--badge-red-bg)',
@@ -603,7 +603,7 @@ pageSize={100}
         />
       )}
 
-      {/* Tab: Pedidos por Lote */}
+      {/* Tab: Pedidos a proveedor */}
       {activeTab === 'pedidos' && (
         <>
           {/* Buscador para pedidos */}
