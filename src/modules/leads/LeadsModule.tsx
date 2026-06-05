@@ -345,6 +345,7 @@ export function LeadsModule() {
   const [leads, setLeads] = useState<Lead[]>(() => cacheHit?.leads || [])
   const [loading, setLoading] = useState(() => !cacheHit)
   const [error, setError] = useState('')
+  const retryRef = useRef(false)
 
   // Modales
   const [showCreateModal, setShowCreateModal] = useState(false)
@@ -553,12 +554,19 @@ export function LeadsModule() {
       }
 
     } catch (err) {
+      // Reintento automatico una vez
+      if (!retryRef.current) {
+        retryRef.current = true
+        setTimeout(() => {
+          loadLeads().finally(() => { retryRef.current = false })
+        }, 2000)
+        return
+      }
+      retryRef.current = false
       const msg = err instanceof Error ? err.message : 'Error al cargar leads'
       setError(msg)
     } finally {
-      // setLoading(false) es idempotente — siempre limpio por si el silent fue interrumpido
-      // por un cambio de sede (donde sí mostramos overlay).
-      setLoading(false)
+      if (!retryRef.current) setLoading(false)
     }
   }, [aplicarFiltroSede, sedeKey])
 
@@ -2522,6 +2530,17 @@ export function LeadsModule() {
       </div>
 
       {/* DataTable */}
+      {error && (
+        <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '12px' }}>
+          <button
+            onClick={() => { setError(''); loadLeads() }}
+            style={{ padding: '8px 20px', borderRadius: '6px', border: '1px solid var(--border-primary)', background: 'var(--bg-primary)', color: 'var(--color-primary)', fontWeight: 600, fontSize: '13px', cursor: 'pointer' }}
+          >
+            Reintentar
+          </button>
+        </div>
+      )}
+
       <DataTable
         data={filteredLeads}
         columns={columns}
