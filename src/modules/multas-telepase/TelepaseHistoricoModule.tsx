@@ -14,6 +14,7 @@ import { desestimarTelepase, reactivarTelepase, eliminarTelepase } from './servi
 import { type ColumnDef } from '@tanstack/react-table'
 import * as XLSX from 'xlsx'
 import { CrearCobroTelepaseModal } from './components/CrearCobroTelepaseModal'
+import { crearCobroDesdeTelepase } from './services/crearCobroDesdeTelepase'
 import './MultasTelepase.css'
 
 interface TelepaseRegistro {
@@ -157,7 +158,7 @@ export default function TelepaseHistoricoModule() {
         setConductoresStatus(statusMap)
         setConductoresOptions([...new Set(options)].sort())
       }
-    } catch (_error) {
+    } catch {
       // silently ignored
     }
   }
@@ -197,7 +198,7 @@ export default function TelepaseHistoricoModule() {
 
       setRegistros(filteredData)
       setTelepaseEnviados(enviados)
-    } catch (_error) {
+    } catch {
       // silently ignored
     } finally {
       setLoading(false)
@@ -342,9 +343,56 @@ export default function TelepaseHistoricoModule() {
   }
 
   // Enviar a cobro (abre modal de verificacion antes de crear la incidencia)
-  function handleEnviarACobro(registro: TelepaseRegistro) {
-    setCobroRegistro(registro)
-    setShowCobroModal(true)
+  // Enviar a cobro: confirmacion simple + creacion directa (sin modal de edicion).
+  // Crea incidencia + penalidad con datos auto-resueltos (P005-Peaje, tarifa, conductor, turno, R2D2).
+  async function handleEnviarACobro(registro: TelepaseRegistro) {
+    if (!registro.conductor || !registro.conductor.trim()) {
+      Swal.fire('No se puede enviar', 'El peaje no tiene conductor asignado.', 'warning')
+      return
+    }
+    const confirm = await Swal.fire({
+      title: '¿Enviar a cobro este peaje?',
+      html: `
+        <div style="text-align:left; font-size:13px; line-height:1.7;">
+          <div><b>Patente:</b> ${registro.patente || '-'}</div>
+          <div><b>Conductor:</b> ${registro.conductor}</div>
+          <div><b>Estación:</b> ${registro.estacion || '-'} · ${registro.fecha || ''} ${registro.hora || ''}</div>
+          <div><b>Monto:</b> ${formatMoney(registro.tarifa)}</div>
+          <div><b>Tipo:</b> P005 - Peaje</div>
+          <div style="margin-top:8px; color:#6b7280;">Se creará la incidencia de cobro y quedará en "Por Aplicar".</div>
+        </div>`,
+      icon: 'question',
+      showCancelButton: true,
+      confirmButtonText: 'Sí, enviar a cobro',
+      cancelButtonText: 'Cancelar',
+      confirmButtonColor: '#16a34a',
+    })
+    if (!confirm.isConfirmed) return
+
+    const result = await crearCobroDesdeTelepase(
+      {
+        id: registro.id,
+        patente: registro.patente,
+        fecha: registro.fecha,
+        hora: registro.hora,
+        estacion: registro.estacion,
+        via: registro.via,
+        tarifa: registro.tarifa,
+        concesionario: registro.concesionario,
+        conductor: registro.conductor,
+        ibutton: registro.ibutton,
+      },
+      { userId: user?.id, sedeId: sedeActualId },
+    )
+
+    if (result.ok) {
+      Swal.fire({ icon: 'success', title: 'Incidencia creada', text: 'El cobro de peaje fue registrado correctamente', timer: 2000, showConfirmButton: false })
+      cargarDatos()
+    } else if ('needsManualInput' in result) {
+      Swal.fire('No se pudo enviar automáticamente', result.reason, 'warning')
+    } else {
+      Swal.fire('Error', result.error || 'No se pudo crear la incidencia', 'error')
+    }
   }
 
   const auditCtx = () => ({
@@ -716,10 +764,29 @@ export default function TelepaseHistoricoModule() {
               <Edit2 size={14} />
               <span style={labelStyle}>Editar</span>
             </button>
-            <button title="Enviar a cobro" onClick={() => handleEnviarACobro(row.original)} style={btnBase('#16a34a')}>
-              <SendHorizonal size={14} />
-              <span style={labelStyle}>Enviar</span>
-            </button>
+            {(() => {
+              const sinConductor = !row.original.conductor || !row.original.conductor.trim()
+              const yaEnviado = telepaseEnviados.has(row.original.id)
+              const deshabilitado = sinConductor || yaEnviado
+              const titulo = yaEnviado
+                ? 'Este peaje ya fue enviado a facturación'
+                : (sinConductor ? 'No se puede enviar a cobro: el peaje no tiene conductor asignado' : 'Enviar a cobro')
+              return (
+                <button
+                  title={titulo}
+                  onClick={() => !deshabilitado && handleEnviarACobro(row.original)}
+                  disabled={deshabilitado}
+                  style={{
+                    ...btnBase('#16a34a'),
+                    opacity: deshabilitado ? 0.4 : 1,
+                    cursor: deshabilitado ? 'not-allowed' : 'pointer',
+                  }}
+                >
+                  <SendHorizonal size={14} />
+                  <span style={labelStyle}>Enviar</span>
+                </button>
+              )
+            })()}
             <button title="Desestimar (ocultar sin borrar de la base)" onClick={() => handleDesestimar(row.original)} style={btnBase('#f59e0b')}>
               <Archive size={14} />
               <span style={labelStyle}>Desestimar</span>

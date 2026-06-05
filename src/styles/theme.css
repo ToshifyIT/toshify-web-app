@@ -240,11 +240,25 @@
 }
 
 /* Icono - más pequeño y elegante */
+/* margin lateral auto + justify-self center: mantiene el icono centrado dentro
+   del grid del popup (sin esto queda pegado a la izquierda y pisa el titulo). */
 .swal2-icon {
-  margin: 0 0 16px 0 !important;
+  margin: 8px auto 16px auto !important;
+  justify-self: center !important;
   border-width: 2px !important;
   width: 48px !important;
   height: 48px !important;
+}
+
+/* El icono de SUCCESS tiene un checkmark cuyas lineas estan posicionadas para el
+   tamano nativo (80px). Cambiar width/height lo descoloca y rompe el tilde.
+   Por eso lo dejamos en su tamano nativo y solo lo reducimos con transform:scale
+   (mantiene las proporciones del check intactas). */
+.swal2-icon.swal2-success {
+  width: 80px !important;
+  height: 80px !important;
+  transform: scale(0.6);
+  margin: 0 auto 8px auto !important;
 }
 
 .swal2-icon .swal2-icon-content {
@@ -287,11 +301,11 @@
   border-color: rgba(16, 185, 129, 0.3) !important;
 }
 
-/* Fix para el ícono de success - líneas del checkmark */
+/* Lineas del checkmark: solo el color. NO forzar display ni posicion:
+   SweetAlert ya las posiciona/anima; sobreescribir rompe el dibujo del tilde. */
 .swal2-icon.swal2-success .swal2-success-line-tip,
 .swal2-icon.swal2-success .swal2-success-line-long {
   background-color: var(--color-success) !important;
-  display: block !important;
 }
 
 /* Fix para el ícono de success - círculos de fondo deben coincidir con el fondo del popup */

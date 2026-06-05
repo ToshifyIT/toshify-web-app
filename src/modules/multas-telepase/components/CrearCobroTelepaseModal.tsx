@@ -280,7 +280,8 @@ export function CrearCobroTelepaseModal({ isOpen, registro, onClose, onSaved }: 
       const conductor = conductores.find(c => c.id === conductorId)
       const vehiculo = vehiculos.find(v => v.id === vehiculoId)
 
-      const { error } = await (supabase.from('incidencias' as any) as any).insert({
+      // 1) INSERT en incidencias (capturamos el id para la penalidad)
+      const { data: incidenciaCreada, error } = await (supabase.from('incidencias' as any) as any).insert({
         vehiculo_id: vehiculoId,
         conductor_id: conductorId,
         estado_id: estadoId,
@@ -300,7 +301,33 @@ export function CrearCobroTelepaseModal({ isOpen, registro, onClose, onSaved }: 
         created_by: user?.id,
         created_by_name: 'R2D2'
       })
-      if (error) throw error
+        .select('id')
+        .single()
+      if (error || !incidenciaCreada) throw (error || new Error('No se pudo crear la incidencia'))
+
+      // 2) INSERT en penalidades — esto hace que aparezca en "Por Aplicar"
+      //    (mismo flujo que el cobro de multas: incidencia + penalidad)
+      const { error: penError } = await (supabase.from('penalidades' as any) as any).insert({
+        incidencia_id: incidenciaCreada.id,
+        vehiculo_id: vehiculoId,
+        conductor_id: conductorId,
+        tipo_cobro_descuento_id: tipoCobroId,
+        semana: semanaCalc,
+        fecha,
+        turno: turno || null,
+        area_responsable: 'ADMINISTRACION',
+        detalle: 'Cobro por peaje',
+        monto: monto || null,
+        observaciones: descripcion || null,
+        aplicado: false,
+        rechazado: false,
+        conductor_nombre: conductor?.nombre_completo || null,
+        vehiculo_patente: vehiculo?.patente || registro.patente,
+        created_by: user?.id,
+        created_by_name: 'R2D2',
+        sede_id: sedeId || null
+      })
+      if (penError) throw penError
 
       Swal.fire({ icon: 'success', title: 'Incidencia creada', text: 'El cobro de peaje fue registrado correctamente', timer: 2000, showConfirmButton: false })
       onSaved?.()

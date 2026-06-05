@@ -406,8 +406,8 @@ export function IncidenciasModule() {
         aplicarFiltroSede(supabase.from('conductores').select('id, nombres, apellidos, estado_id')).order('apellidos'),
         aplicarFiltroSede((supabase.from('v_incidencias_completas' as any) as any).select('*')).order('fecha', { ascending: false }).limit(2000),
         aplicarFiltroSede((supabase.from('v_penalidades_completas' as any) as any).select('*')).order('fecha', { ascending: false }).limit(2000),
-        // Obtener campos adicionales de la tabla incidencias (tipo, monto)
-        (supabase.from('incidencias' as any) as any).select('id, tipo, tipo_cobro_descuento_id, monto'),
+        // Obtener campos adicionales de la tabla incidencias (tipo, monto, telepase_id)
+        (supabase.from('incidencias' as any) as any).select('id, tipo, tipo_cobro_descuento_id, monto, telepase_id'),
         // Obtener campos frescos de la tabla penalidades (aplicado, rechazado, incidencia_id)
         (supabase.from('penalidades' as any) as any).select('id, incidencia_id, aplicado, rechazado, fecha_rechazo, motivo_rechazo, semana_aplicacion, anio_aplicacion'),
         // Obtener historial de rechazos
@@ -462,14 +462,15 @@ export function IncidenciasModule() {
       }))
       
       // Combinar datos de la vista con campos de la tabla (tipo, monto)
-      const extraDataMap = new Map<string, { tipo: string; tipo_cobro_descuento_id: string | null; monto: number | null }>((incidenciasTipoRes.data || []).map((i: any) => [i.id, { tipo: i.tipo, tipo_cobro_descuento_id: i.tipo_cobro_descuento_id, monto: i.monto }]))
+      const extraDataMap = new Map<string, { tipo: string; tipo_cobro_descuento_id: string | null; monto: number | null; telepase_id: string | null }>((incidenciasTipoRes.data || []).map((i: any) => [i.id, { tipo: i.tipo, tipo_cobro_descuento_id: i.tipo_cobro_descuento_id, monto: i.monto, telepase_id: i.telepase_id || null }]))
       const incidenciasConTipo = (incidenciasRes.data || []).map((inc: any) => {
         const extraData = extraDataMap.get(inc.id)
         return {
           ...inc,
           tipo: extraData?.tipo || 'cobro',
           tipo_cobro_descuento_id: extraData?.tipo_cobro_descuento_id || inc.tipo_cobro_descuento_id,
-          monto: extraData?.monto || inc.monto // Traer monto de la tabla
+          monto: extraData?.monto || inc.monto, // Traer monto de la tabla
+          telepase_id: extraData?.telepase_id || null // Origen telepase (para etiquetar Cod/Tipo Inc)
         }
       })
       setIncidencias(incidenciasConTipo)
@@ -502,9 +503,12 @@ export function IncidenciasModule() {
         // Una penalidad está rechazada SOLO si tiene rechazado=true en la tabla
         // El historial de rechazos es solo para mostrar el historial, no determina el estado actual
         const estaRechazado = tableData?.rechazado ?? false
+        const incId = tableData?.incidencia_id ?? p.incidencia_id ?? null
         return {
           ...p,
-          incidencia_id: tableData?.incidencia_id ?? p.incidencia_id ?? null,
+          incidencia_id: incId,
+          // Origen telepase: derivado de la incidencia (para etiquetar Cod/Tipo Inc)
+          telepase_id: (incId ? extraDataMap.get(incId)?.telepase_id : null) || null,
           aplicado: tableData?.aplicado ?? p.aplicado ?? false,
           rechazado: estaRechazado,
           fecha_rechazo: tableData?.fecha_rechazo || (estaRechazado ? rechazoHistorial?.fecha : null) || null,
@@ -1490,6 +1494,10 @@ export function IncidenciasModule() {
       id: 'cod_incidencia_cobro',
       header: 'Cod Inc.',
       accessorFn: (row) => {
+        // Telepase: Cod Inc muestra el NOMBRE del tipo (ej. "P005 - Peaje")
+        if ((row as any).telepase_id && row.tipo_cobro_descuento_id) {
+          return tiposCobroDescuentoMap.get(row.tipo_cobro_descuento_id)?.nombre || '-'
+        }
         if (row.tipo_cobro_descuento_id) {
           const tipo = tiposCobroDescuentoMap.get(row.tipo_cobro_descuento_id)
           if (tipo?.categoria) return codIncLabels[tipo.categoria] || tipo.categoria
@@ -1502,6 +1510,11 @@ export function IncidenciasModule() {
         const tipoId = row.original.tipo_cobro_descuento_id
         if (!tipoId) return '-'
         const tipo = tiposCobroDescuentoMap.get(tipoId)
+        // Telepase: Cod Inc = nombre del tipo (ej. "P005 - Peaje")
+        if ((row.original as any).telepase_id) {
+          const nombre = tipo?.nombre || '-'
+          return <span style={{ fontWeight: 600, color: '#1a1a1a', fontSize: '12px', background: '#fef3c7', padding: '2px 8px', borderRadius: '4px' }}>{nombre}</span>
+        }
         if (!tipo?.categoria) return '-'
         const label = codIncLabels[tipo.categoria] || tipo.categoria
         const bg = tipo.categoria === 'P004' ? '#dcfce7' : '#fee2e2'
@@ -1522,6 +1535,10 @@ export function IncidenciasModule() {
         />
       ),
       cell: ({ row }) => {
+        // Telepase: Tipo Inc = "Telepase" (el origen), no el nombre del tipo de cobro
+        if ((row.original as any).telepase_id) {
+          return <span style={{ fontWeight: 500, color: '#1a1a1a', background: '#fef3c7', padding: '2px 8px', borderRadius: '4px' }}>Telepase</span>
+        }
         const tipoId = row.original.tipo_cobro_descuento_id
         if (!tipoId) return '-'
         const tipo = tiposCobroDescuentoMap.get(tipoId)
@@ -1785,6 +1802,10 @@ export function IncidenciasModule() {
         />
       ),
       accessorFn: (row) => {
+        // Telepase: Cod Inc muestra el NOMBRE del tipo (ej. "P005 - Peaje")
+        if ((row as any).telepase_id && row.tipo_cobro_descuento_id) {
+          return tiposCobroDescuentoMap.get(row.tipo_cobro_descuento_id)?.nombre || '-'
+        }
         if (row.tipo_cobro_descuento_id) {
           const tipo = tiposCobroDescuentoMap.get(row.tipo_cobro_descuento_id)
           if (tipo?.categoria) return codIncLabels[tipo.categoria] || tipo.categoria
@@ -1797,6 +1818,11 @@ export function IncidenciasModule() {
         const tipoId = row.original.tipo_cobro_descuento_id
         if (!tipoId) return '-'
         const tipo = tiposCobroDescuentoMap.get(tipoId)
+        // Telepase: Cod Inc = nombre del tipo (ej. "P005 - Peaje")
+        if ((row.original as any).telepase_id) {
+          const nombre = tipo?.nombre || '-'
+          return <span style={{ fontWeight: 600, color: '#1a1a1a', fontSize: '12px', background: '#fef3c7', padding: '2px 8px', borderRadius: '4px' }}>{nombre}</span>
+        }
         if (!tipo?.categoria) return '-'
         const label = codIncLabels[tipo.categoria] || tipo.categoria
         const bg = tipo.categoria === 'P004' ? '#dcfce7' : '#fee2e2'
@@ -1817,6 +1843,8 @@ export function IncidenciasModule() {
         />
       ),
       accessorFn: (row) => {
+        // Telepase: Tipo Inc = "Telepase"
+        if ((row as any).telepase_id) return 'Telepase'
         if (row.tipo_nombre) return row.tipo_nombre
         if (row.tipo_cobro_descuento_id) {
           const tipo = tiposCobroDescuentoMap.get(row.tipo_cobro_descuento_id)
@@ -1826,6 +1854,10 @@ export function IncidenciasModule() {
       },
       enableSorting: true,
       cell: ({ row }) => {
+        // Telepase: Tipo Inc = "Telepase" (el origen), no el nombre del tipo de cobro
+        if ((row.original as any).telepase_id) {
+          return <span style={{ fontWeight: 500, color: '#1a1a1a', background: '#fef3c7', padding: '2px 8px', borderRadius: '4px' }}>Telepase</span>
+        }
         const tipoId = row.original.tipo_cobro_descuento_id
         const tipo = tipoId ? tiposCobroDescuentoMap.get(tipoId) : null
         const nombre = row.original.tipo_nombre || tipo?.nombre || '-'
