@@ -1298,99 +1298,26 @@ export function MovimientosModule() {
                   {/* Agregar nuevo item */}
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '8px', marginBottom: '12px' }}>
                     {/* Selector de producto */}
-                    <div style={{ position: 'relative' }} data-producto-dropdown>
-                      <input
-                        type="text"
-                        placeholder="Buscar producto..."
-                        value={busquedaProducto}
-                        onChange={(e) => {
-                          setBusquedaProducto(e.target.value)
-                          setMostrarDropdownProductos(true)
-                        }}
-                        onFocus={() => setMostrarDropdownProductos(true)}
-                        style={{
-                          width: '100%',
-                          padding: '8px 12px',
-                          border: '1px solid var(--border-primary)',
-                          borderRadius: '6px',
-                          fontSize: '13px',
-                          background: 'var(--input-bg)',
-                          color: 'var(--text-primary)'
-                        }}
-                      />
-                      {mostrarDropdownProductos && productosFiltrados.length > 0 && (
-                        <div style={{
-                          position: 'absolute',
-                          top: '100%',
-                          left: 0,
-                          right: 0,
-                          maxHeight: '200px',
-                          overflowY: 'auto',
-                          background: 'var(--card-bg)',
-                          border: '1px solid var(--border-primary)',
-                          borderRadius: '6px',
-                          marginTop: '4px',
-                          boxShadow: 'var(--shadow-md)',
-                          zIndex: 1000
-                        }}>
-                           {productosFiltrados.map((p) => (
-                            <div
-                              key={p.id}
-                              onClick={() => handleSelectProductoDropdown(p)}
-                              style={{
-                                padding: '8px 12px',
-                                cursor: 'pointer',
-                                borderBottom: '1px solid var(--border-secondary)',
-                                fontSize: '13px',
-                                display: 'flex',
-                                justifyContent: 'space-between',
-                                alignItems: 'center',
-                                background: 'var(--card-bg)',
-                                color: 'var(--text-primary)'
-                              }}
-                              onMouseEnter={(e) => e.currentTarget.style.background = 'var(--bg-hover)'}
-                              onMouseLeave={(e) => e.currentTarget.style.background = 'var(--card-bg)'}
-                            >
-                              <div>
-                                <div style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{p.codigo} - {p.nombre}</div>
-                                <div style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>{p.tipo}</div>
-                              </div>
-                              <span style={{
-                                padding: '2px 8px',
-                                borderRadius: '10px',
-                                fontSize: '11px',
-                                fontWeight: 600,
-                                background: (p.stock_disponible || 0) > 0 ? 'var(--badge-green-bg)' : 'var(--badge-red-bg)',
-                                color: (p.stock_disponible || 0) > 0 ? 'var(--badge-green-text)' : 'var(--badge-red-text)'
-                              }}>
-                                {p.stock_disponible || 0}
-                              </span>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </div>
+                    <SearchableSelect
+                      value={productoId}
+                      onChange={setProductoId}
+                      options={productoOptions}
+                      placeholder="Buscar producto..."
+                      searchPlaceholder="Buscar producto..."
+                      noResultsText="Sin productos"
+                      size="md"
+                    />
 
                     {/* Selector de vehículo */}
-                    <select
+                    <SearchableSelect
                       value={vehiculoId}
-                      onChange={(e) => setVehiculoId(e.target.value)}
-                      style={{
-                        padding: '8px 12px',
-                        border: '1px solid var(--border-primary)',
-                        borderRadius: '6px',
-                        fontSize: '13px',
-                        background: 'var(--input-bg)',
-                        color: 'var(--text-primary)'
-                      }}
-                    >
-                      <option value="">Sin vehículo</option>
-                      {vehiculos.map((v) => (
-                        <option key={v.id} value={v.id}>
-                          {v.patente} - {v.marca} {v.modelo}
-                        </option>
-                      ))}
-                    </select>
+                      onChange={setVehiculoId}
+                      options={vehiculoOptions}
+                      placeholder="Sin vehículo"
+                      searchPlaceholder="Buscar patente..."
+                      noResultsText="Sin vehículos"
+                      size="md"
+                    />
 
                     {/* Cantidad */}
                     <input
@@ -1508,26 +1435,15 @@ export function MovimientosModule() {
                 <label style={{ display: 'block', marginBottom: '8px', fontSize: '14px', fontWeight: 600, color: 'var(--text-primary)' }}>
                   Vehículo/Patente *
                 </label>
-                <select
+                <SearchableSelect
                   value={vehiculoId}
-                  onChange={(e) => setVehiculoId(e.target.value)}
-                  style={{
-                    width: '100%',
-                    padding: '10px',
-                    border: '1px solid var(--border-primary)',
-                    borderRadius: '8px',
-                    fontSize: '14px',
-                    background: 'var(--input-bg)',
-                    color: 'var(--text-primary)'
-                  }}
-                >
-                  <option value="">Seleccionar vehículo...</option>
-                  {vehiculos.map((v) => (
-                    <option key={v.id} value={v.id}>
-                      {v.patente} - {v.marca} {v.modelo}
-                    </option>
-                  ))}
-                </select>
+                  onChange={setVehiculoId}
+                  options={vehiculoOptions}
+                  placeholder="Seleccionar vehículo..."
+                  searchPlaceholder="Buscar patente..."
+                  noResultsText="Sin vehículos"
+                  size="lg"
+                />
               </div>
 
               {/* Categoría de servicio (obligatorio) */}
@@ -1567,26 +1483,15 @@ export function MovimientosModule() {
                 <label style={{ display: 'block', marginBottom: '8px', fontSize: '14px', fontWeight: 600, color: 'var(--text-primary)' }}>
                   Vehículo que devuelve *
                 </label>
-                <select
+                <SearchableSelect
                   value={vehiculoId}
-                  onChange={(e) => setVehiculoId(e.target.value)}
-                  style={{
-                    width: '100%',
-                    padding: '10px',
-                    border: '1px solid var(--border-primary)',
-                    borderRadius: '8px',
-                    fontSize: '14px',
-                    background: 'var(--input-bg)',
-                    color: 'var(--text-primary)'
-                  }}
-                >
-                  <option value="">Seleccionar vehículo...</option>
-                  {vehiculosConInventario.map((v) => (
-                    <option key={v.id} value={v.id}>
-                      {v.patente} - {v.marca} {v.modelo}
-                    </option>
-                  ))}
-                </select>
+                  onChange={setVehiculoId}
+                  options={vehiculosConInventarioOptions}
+                  placeholder="Seleccionar vehículo..."
+                  searchPlaceholder="Buscar patente..."
+                  noResultsText="Sin vehículos con herramientas"
+                  size="lg"
+                />
                 {vehiculosConInventario.length === 0 && (
                   <p style={{ fontSize: '12px', color: 'var(--color-danger)', marginTop: '4px', fontStyle: 'italic' }}>
                     No hay vehículos con herramientas asignadas
@@ -1600,30 +1505,19 @@ export function MovimientosModule() {
                   <label style={{ display: 'block', marginBottom: '8px', fontSize: '14px', fontWeight: 600, color: 'var(--text-primary)' }}>
                     Herramienta a devolver *
                   </label>
-                  <select
+                  <SearchableSelect
                     value={productoId}
-                    onChange={(e) => {
-                      const selected = productosAsignadosVehiculo.find(p => p.producto_id === e.target.value)
-                      setProductoId(e.target.value)
+                    onChange={(value) => {
+                      const selected = productosAsignadosVehiculo.find(p => p.producto_id === value)
+                      setProductoId(value)
                       if (selected) setCantidad(selected.cantidad)
                     }}
-                    style={{
-                      width: '100%',
-                      padding: '10px',
-                      border: '1px solid var(--border-primary)',
-                      borderRadius: '8px',
-                      fontSize: '14px',
-                      background: 'var(--input-bg)',
-                      color: 'var(--text-primary)'
-                    }}
-                  >
-                    <option value="">Seleccionar herramienta...</option>
-                    {productosAsignadosVehiculo.map((pa) => (
-                      <option key={pa.inventario_id} value={pa.producto_id}>
-                        {pa.producto?.codigo} - {pa.producto?.nombre} (Cant: {pa.cantidad})
-                      </option>
-                    ))}
-                  </select>
+                    options={productosAsignadosVehiculoOptions}
+                    placeholder="Seleccionar herramienta..."
+                    searchPlaceholder="Buscar herramienta..."
+                    noResultsText="Sin herramientas"
+                    size="lg"
+                  />
                 </div>
               )}
 
