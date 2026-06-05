@@ -79,7 +79,7 @@ export function useDashboardStats() {
   const [stats, setStats] = useState<DashboardStats | null>(null)
 
   useEffect(() => {
-    const cacheKey = `dashStats-cobro-multas-p007-incidencias-v2-${sedeActualId || 'all'}`
+    const cacheKey = `dashStats-cobro-multas-p007-penalidades-${sedeActualId || 'all'}`
     const cached = getCache<DashboardStats>(cacheKey, cacheKey)
     if (cached) {
       setStats(cached)

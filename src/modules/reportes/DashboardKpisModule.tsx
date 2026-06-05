@@ -158,7 +158,7 @@ export function DashboardKpisModule() {
                 <span className="stat-value">{stats.cobroMultas.value}</span>
                 <span className="stat-label">
                   <span className="stat-label-text">COBRO DE MULTAS</span>
-                  <KpiInfoIcon text="Suma acumulada de incidencias de cobro P007 tipo Multa de tránsito enviadas a facturación." />
+                  <KpiInfoIcon text="Suma acumulada de penalidades P007 tipo Multa de tránsito enviadas a facturación." />
                 </span>
                 <span className="stat-subtitle">{stats.cobroMultas.subtitle}</span>
               </div>

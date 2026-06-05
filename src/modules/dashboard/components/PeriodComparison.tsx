@@ -421,7 +421,7 @@ export function PeriodComparison() {
         tooltipContent: (
           <div className="kpi-tooltip-content">
             <strong>Cobro de Multas</strong>
-            <p>Suma de incidencias de cobro P007 tipo Multa de tránsito enviadas a facturación durante el período seleccionado.</p>
+            <p>Suma de penalidades P007 tipo Multa de tránsito enviadas a facturación durante el período seleccionado.</p>
           </div>
         ),
       })

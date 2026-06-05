@@ -3,7 +3,7 @@ import { getPeriodRange, type Granularity } from '../utils/periodUtils'
 import { getCache, setCache } from './useSessionCache'
 import { fetchCobroMultasStats } from '../services/cobroMultasStatsService'
 
-const CACHE_NS = 'useCobroMultasP007IncidenciasStatsV2'
+const CACHE_NS = 'useCobroMultasP007PenalidadesStats'
 
 function formatDateOnly(date: Date) {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`

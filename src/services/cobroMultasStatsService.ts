@@ -34,6 +34,18 @@ function getYearFromDate(value: string | null | undefined) {
   return Number.isFinite(year) ? year : null
 }
 
+function getPeriodoAplicacion(row: {
+  semana: number | null
+  semana_aplicacion: number | null
+  anio_aplicacion: number | null
+  fecha: string | null
+}) {
+  return {
+    semana: row.semana_aplicacion ?? row.semana,
+    anio: row.anio_aplicacion ?? getYearFromDate(row.fecha),
+  }
+}
+
 function isP007MultaTransito(row: {
   tipos_cobro_descuento?: {
     categoria: string | null
@@ -63,19 +75,21 @@ export async function fetchCobroMultasStats({
   let totalRows: number | null = null
 
   while (true) {
-    let query = (supabase.from('incidencias' as any) as any)
+    let query = (supabase.from('penalidades' as any) as any)
       .select(`
         monto,
         semana,
+        semana_aplicacion,
+        anio_aplicacion,
         fecha,
         tipos_cobro_descuento!inner (
           categoria,
           nombre
         )
       `, { count: 'exact' })
-      .eq('tipo', 'cobro')
       .eq('tipos_cobro_descuento.categoria', 'P007')
       .gt('monto', 0)
+      .neq('rechazado', true)
       .order('created_at', { ascending: true })
       .range(from, from + PAGE_SIZE - 1)
 
@@ -98,6 +112,8 @@ export async function fetchCobroMultasStats({
     const rows = (data || []) as Array<{
       monto: number | string | null
       semana: number | null
+      semana_aplicacion: number | null
+      anio_aplicacion: number | null
       fecha: string | null
       tipos_cobro_descuento?: {
         categoria: string | null
@@ -112,7 +128,10 @@ export async function fetchCobroMultasStats({
       if (!isP007MultaTransito(row)) return false
 
       if (semana != null) {
-        if (row.semana !== semana) return false
+        const periodo = getPeriodoAplicacion(row)
+        if (periodo.semana !== semana) return false
+        if (anio != null && periodo.anio !== anio) return false
+        return true
       }
 
       if (anio != null) {
