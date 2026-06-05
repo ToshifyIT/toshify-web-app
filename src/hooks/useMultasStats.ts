@@ -1,9 +1,22 @@
 import { useState, useEffect, useRef } from 'react'
-import { supabase } from '../lib/supabase'
 import { getPeriodRange, type Granularity } from '../utils/periodUtils'
 import { getCache, setCache } from './useSessionCache'
+import { fetchCobroMultasStats } from '../services/cobroMultasStatsService'
 
-const CACHE_NS = 'useMultasStats'
+const CACHE_NS = 'useCobroMultasP007IncidenciasStatsV2'
+
+function formatDateOnly(date: Date) {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
+}
+
+function parseSemanaLabel(label: string): { semana: number; anio: number } | null {
+  const match = label.match(/Sem\s+(\d+)(?:\s+(\d{4}))?/)
+  if (!match) return null
+  return {
+    semana: parseInt(match[1], 10),
+    anio: match[2] ? parseInt(match[2], 10) : new Date().getFullYear(),
+  }
+}
 
 export function useMultasStats(granularity: Granularity, periodA: string, periodB: string, sedeId?: string) {
   const [stats, setStats] = useState({
@@ -38,24 +51,38 @@ export function useMultasStats(granularity: Granularity, periodA: string, period
         const rangeA = getPeriodRange(granularity, periodA)
         const rangeB = getPeriodRange(granularity, periodB)
 
-        // Use server-side RPC for SUM — no row transfer
+        const parsedSemanaA = granularity === 'semana' ? parseSemanaLabel(periodA) : null
+        const parsedSemanaB = granularity === 'semana' ? parseSemanaLabel(periodB) : null
+
         const [resA, resB] = await Promise.all([
-          supabase.rpc('sum_multas_range', {
-            p_start: rangeA.start.toISOString(),
-            p_end: rangeA.end.toISOString(),
-            p_sede_id: sedeId || null
-          }),
-          supabase.rpc('sum_multas_range', {
-            p_start: rangeB.start.toISOString(),
-            p_end: rangeB.end.toISOString(),
-            p_sede_id: sedeId || null
-          })
+          parsedSemanaA
+            ? fetchCobroMultasStats({
+                semana: parsedSemanaA.semana,
+                anio: parsedSemanaA.anio,
+                sedeId: sedeId || null
+              })
+            : fetchCobroMultasStats({
+                start: formatDateOnly(rangeA.start),
+                end: formatDateOnly(rangeA.end),
+                sedeId: sedeId || null
+              }),
+          parsedSemanaB
+            ? fetchCobroMultasStats({
+                semana: parsedSemanaB.semana,
+                anio: parsedSemanaB.anio,
+                sedeId: sedeId || null
+              })
+            : fetchCobroMultasStats({
+                start: formatDateOnly(rangeB.start),
+                end: formatDateOnly(rangeB.end),
+                sedeId: sedeId || null
+              })
         ])
 
         if (isMounted) {
           const result = {
-            totalA: Number(resA.data) || 0,
-            totalB: Number(resB.data) || 0,
+            totalA: resA.total,
+            totalB: resB.total,
           }
           setCache(CACHE_NS, paramsKey, result)
           setStats({ ...result, loading: false })

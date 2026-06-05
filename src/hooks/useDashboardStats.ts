@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { useSede } from '../contexts/SedeContext'
 import { getCache, setCache } from './useSessionCache'
+import { fetchCobroMultasStats } from '../services/cobroMultasStatsService'
 
 const ESTADOS_EXCLUIDOS = ['ROBO', 'DESTRUCCION_TOTAL', 'JUBILADO', 'DEVUELTO_PROVEEDOR']
 
@@ -28,6 +29,7 @@ interface DashboardStats {
   totalSaldo: DashboardCardValue
   totalSaldoPendiente: DashboardCardValue
   totalSaldoMora: DashboardCardValue
+  cobroMultas: DashboardCardValue
   vueltasMundo: DashboardCardValue
 }
 
@@ -77,7 +79,7 @@ export function useDashboardStats() {
   const [stats, setStats] = useState<DashboardStats | null>(null)
 
   useEffect(() => {
-    const cacheKey = `dashStats-${sedeActualId || 'all'}`
+    const cacheKey = `dashStats-cobro-multas-p007-incidencias-v2-${sedeActualId || 'all'}`
     const cached = getCache<DashboardStats>(cacheKey, cacheKey)
     if (cached) {
       setStats(cached)
@@ -88,7 +90,16 @@ export function useDashboardStats() {
     const fetchData = async () => {
       setLoading(true)
       try {
-        const [asignacionesRes, vehiculosRes, siniestrosRes, garantiasRes, saldosRes, conductoresRes, wialonRes] = await Promise.all([
+        const [
+          asignacionesRes,
+          vehiculosRes,
+          siniestrosRes,
+          garantiasRes,
+          saldosRes,
+          conductoresRes,
+          wialonRes,
+          cobroMultasRes,
+        ] = await Promise.all([
           aplicarFiltroSede(
             supabase
               .from('asignaciones')
@@ -135,6 +146,9 @@ export function useDashboardStats() {
           ),
           supabase.rpc('sum_kilometraje_total', {
             p_sede_id: sedeActualId || null
+          }),
+          fetchCobroMultasStats({
+            sedeId: sedeActualId || null,
           })
         ])
 
@@ -159,7 +173,6 @@ export function useDashboardStats() {
         const vehiculosConAsignacion = new Set(asignaciones.map(a => a.vehiculo_id))
         let totalFlota = 0
         let operativos = 0
-        let pkgOn = 0
         let enUso = 0
         let tallerCount = 0
         let dispCount = 0
@@ -172,7 +185,6 @@ export function useDashboardStats() {
           if (!ESTADOS_EXCLUIDOS.includes(estadoCodigo)) totalFlota++
           
           if (estadoCodigo === 'PKG_ON_BASE') {
-            pkgOn++
             if (!vehiculosConAsignacion.has(v.id)) pkgOnSinAsignacion.push(v)
             operativos++
           } else if (estadoCodigo === 'EN_USO') {
@@ -432,6 +444,10 @@ export function useDashboardStats() {
             value: formatCurrencyArs(totalMora),
             subtitle: `${saldos.filter(s => (s.monto_mora_acumulada || 0) > 0).length} conductores con mora`
           },
+          cobroMultas: {
+            value: formatCurrencyArs(cobroMultasRes.total),
+            subtitle: `${cobroMultasRes.count} multas enviadas a facturación`
+          },
           vueltasMundo: {
             value: vueltasMundoVal.toLocaleString('es-AR', { minimumFractionDigits: 0, maximumFractionDigits: 0 }),
             subtitle: 'Histórico global'
@@ -451,4 +467,3 @@ export function useDashboardStats() {
   const memoized = useMemo(() => ({ stats, loading }), [stats, loading])
   return memoized
 }
-

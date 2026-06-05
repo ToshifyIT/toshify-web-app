@@ -229,26 +229,7 @@ export function PeriodComparison() {
       })
     }
 
-    // --- 6. TOTAL MULTAS ---
-    {
-      const variation = calculateVariation(multasStats.totalA, multasStats.totalB)
-      metricList.push({
-        id: 'metric-total-multas',
-        name: 'TOTAL MULTAS',
-        valueA: currencyFormatter.format(multasStats.totalA),
-        valueB: currencyFormatter.format(multasStats.totalB),
-        variationLabel: variation.label,
-        variationSign: variation.sign,
-        tooltipContent: (
-          <div className="kpi-tooltip-content">
-            <strong>Total Multas</strong>
-            <p>Suma de los montos de todas las multas de tránsito registradas durante el período seleccionado.</p>
-          </div>
-        ),
-      })
-    }
-
-    // --- 7. TOTAL TELEPASE ---
+    // --- 6. TOTAL TELEPASE ---
     {
       const variation = calculateVariation(telepaseStats.totalA, telepaseStats.totalB)
       metricList.push({
@@ -267,7 +248,7 @@ export function PeriodComparison() {
       })
     }
 
-    // --- 8. INCIDENCIAS A FAVOR ---
+    // --- 7. INCIDENCIAS A FAVOR ---
     {
       const variation = calculateVariation(incidenciasSplit.aFavorA, incidenciasSplit.aFavorB)
       const tiposTexto = incidenciasSplit.tiposAFavor.length > 0
@@ -422,6 +403,25 @@ export function PeriodComparison() {
             </ul>
             <div className="kpi-tooltip-divider" />
             <p style={{ fontSize: '11px', color: '#6b7280' }}>Solo disponible para semanas con periodo cerrado y pagos Cabify cargados.</p>
+          </div>
+        ),
+      })
+    }
+
+    // --- COBRO DE MULTAS ---
+    {
+      const variation = calculateVariation(multasStats.totalA, multasStats.totalB)
+      metricList.push({
+        id: 'metric-cobro-multas',
+        name: 'COBRO DE MULTAS',
+        valueA: currencyFormatter.format(multasStats.totalA),
+        valueB: currencyFormatter.format(multasStats.totalB),
+        variationLabel: variation.label,
+        variationSign: variation.sign,
+        tooltipContent: (
+          <div className="kpi-tooltip-content">
+            <strong>Cobro de Multas</strong>
+            <p>Suma de incidencias de cobro P007 tipo Multa de tránsito enviadas a facturación durante el período seleccionado.</p>
           </div>
         ),
       })

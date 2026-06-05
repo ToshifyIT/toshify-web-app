@@ -152,6 +152,17 @@ export function DashboardKpisModule() {
                 <span className="stat-subtitle">{stats.totalSaldoMora.subtitle}</span>
               </div>
             </div>
+            {/* 12. COBRO DE MULTAS */}
+            <div className="stat-card">
+              <div className="stat-content">
+                <span className="stat-value">{stats.cobroMultas.value}</span>
+                <span className="stat-label">
+                  <span className="stat-label-text">COBRO DE MULTAS</span>
+                  <KpiInfoIcon text="Suma acumulada de incidencias de cobro P007 tipo Multa de tránsito enviadas a facturación." />
+                </span>
+                <span className="stat-subtitle">{stats.cobroMultas.subtitle}</span>
+              </div>
+            </div>
           </div>
         )}
       </div>
