@@ -31,7 +31,11 @@ import {
   History,
   XCircle,
   AlertTriangle,
-  MapPin
+  MapPin,
+  Mail,
+  Send,
+  Plus,
+  Trash2,
 } from 'lucide-react'
 
 // ============= TIPOS =============
@@ -118,7 +122,31 @@ interface MovimientoHistorico {
   usuario_aprobador_nombre: string | null
 }
 
-type TabActiva = 'entradas' | 'pedidos' | 'pendientes' | 'historico' | 'excepciones'
+interface ProveedorPedido {
+  id: string
+  razon_social: string
+  email: string | null
+  telefono: string | null
+  activo: boolean
+}
+
+interface ProductoPedido {
+  id: string
+  codigo: string
+  nombre: string
+  tipo: string
+  unidades_medida?: {
+    codigo?: string | null
+    descripcion?: string | null
+  } | null
+}
+
+interface PedidoDraftItem {
+  producto_id: string
+  cantidad: number
+}
+
+type TabActiva = 'nuevo' | 'entradas' | 'pedidos' | 'pendientes' | 'historico' | 'excepciones'
 type FiltroTipo = 'todos' | 'entrada' | 'salida' | 'asignacion' | 'devolucion'
 
 const getPedidoSla = (pedido: PedidoAgrupado) => {
@@ -138,13 +166,32 @@ const getPedidoSla = (pedido: PedidoAgrupado) => {
   return { label: 'En plazo', className: 'sla-ok' }
 }
 
+const generarNumeroPedido = () => {
+  const now = new Date()
+  const pad = (value: number) => String(value).padStart(2, '0')
+  const fecha = `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}`
+  const hora = `${pad(now.getHours())}${pad(now.getMinutes())}`
+  return `PED-${fecha}-${hora}`
+}
+
+const escapeHtml = (value: string | number | null | undefined) =>
+  String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;')
+
+const todayInputValue = () => new Date().toISOString().slice(0, 10)
+
 export function PedidosUnificadoModule() {
   const { user, profile } = useAuth()
-  const { canEditInSubmenu, canViewTab } = usePermissions()
+  const { canCreateInSubmenu, canEditInSubmenu, canViewTab } = usePermissions()
   const { sedeActual, verTodas } = useSede()
 
   // Permisos específicos para el submenú de pedidos
-  const canEdit = canEditInSubmenu('pedidos')
+  const canEdit = canEditInSubmenu('inventario-pedidos') || canEditInSubmenu('pedidos')
+  const canCreatePedido = canCreateInSubmenu('inventario-pedidos') || canCreateInSubmenu('pedidos') || canEdit
 
   // Estado de tab activa
   const [activeTab, setActiveTab] = useState<TabActiva>('entradas')
@@ -165,6 +212,20 @@ export function PedidosUnificadoModule() {
   const [processing, setProcessing] = useState<string | null>(null)
   const [filtroTipo, setFiltroTipo] = useState<FiltroTipo>('todos')
 
+  // Estados para creación/envío de pedidos a proveedores
+  const [proveedoresPedido, setProveedoresPedido] = useState<ProveedorPedido[]>([])
+  const [productosPedido, setProductosPedido] = useState<ProductoPedido[]>([])
+  const [loadingCatalogoPedido, setLoadingCatalogoPedido] = useState(false)
+  const [creatingPedido, setCreatingPedido] = useState(false)
+  const [numeroPedidoDraft, setNumeroPedidoDraft] = useState(() => generarNumeroPedido())
+  const [proveedorPedidoId, setProveedorPedidoId] = useState('')
+  const [fechaEstimadaPedido, setFechaEstimadaPedido] = useState('')
+  const [observacionesPedido, setObservacionesPedido] = useState('')
+  const [enviarEmailProveedor, setEnviarEmailProveedor] = useState(true)
+  const [pedidoDraftItems, setPedidoDraftItems] = useState<PedidoDraftItem[]>([
+    { producto_id: '', cantidad: 1 }
+  ])
+
   // Excel-style column filter states for Entradas Simples
   const [openColumnFilter, setOpenColumnFilter] = useState<string | null>(null)
   const [productoFilter, setProductoFilter] = useState<string[]>([])
@@ -178,6 +239,7 @@ export function PedidosUnificadoModule() {
   // ============= EFECTOS =============
   useEffect(() => {
     loadPedidosData()
+    cargarCatalogoPedido()
     if (canApprove) {
       cargarMovimientosPendientes()
     } else {
@@ -211,6 +273,42 @@ export function PedidosUnificadoModule() {
       // silently ignored
     } finally {
       setLoadingPedidos(false)
+    }
+  }
+
+  const cargarCatalogoPedido = async () => {
+    setLoadingCatalogoPedido(true)
+    try {
+      const [proveedoresRes, productosRes] = await Promise.all([
+        supabase
+          .from('proveedores')
+          .select('id, razon_social, email, telefono, activo')
+          .eq('activo', true)
+          .order('razon_social'),
+        supabase
+          .from('productos')
+          .select(`
+            id,
+            codigo,
+            nombre,
+            tipo,
+            unidades_medida (
+              codigo,
+              descripcion
+            )
+          `)
+          .order('nombre')
+      ])
+
+      if (proveedoresRes.error) throw proveedoresRes.error
+      if (productosRes.error) throw productosRes.error
+
+      setProveedoresPedido((proveedoresRes.data || []) as ProveedorPedido[])
+      setProductosPedido((productosRes.data || []) as unknown as ProductoPedido[])
+    } catch {
+      Swal.fire('Error', 'No se pudo cargar el catalogo para crear pedidos', 'error')
+    } finally {
+      setLoadingCatalogoPedido(false)
     }
   }
 
@@ -271,6 +369,238 @@ export function PedidosUnificadoModule() {
       newExpanded.add(pedidoId)
     }
     setExpandedPedidos(newExpanded)
+  }
+
+  const resetPedidoProveedorForm = () => {
+    setNumeroPedidoDraft(generarNumeroPedido())
+    setProveedorPedidoId('')
+    setFechaEstimadaPedido('')
+    setObservacionesPedido('')
+    setEnviarEmailProveedor(true)
+    setPedidoDraftItems([{ producto_id: '', cantidad: 1 }])
+  }
+
+  const getProductoPedido = (productoId: string) =>
+    productosPedido.find(producto => producto.id === productoId)
+
+  const getUnidadProducto = (producto?: ProductoPedido) => {
+    if (!producto?.unidades_medida) return 'Unidad'
+    return producto.unidades_medida.descripcion || producto.unidades_medida.codigo || 'Unidad'
+  }
+
+  const getPedidoProveedorSeleccionado = () =>
+    proveedoresPedido.find(proveedor => proveedor.id === proveedorPedidoId) || null
+
+  const pedidoItemsValidos = useMemo(() => pedidoDraftItems
+    .map(item => ({
+      ...item,
+      producto: getProductoPedido(item.producto_id)
+    }))
+    .filter(item => item.producto && Number(item.cantidad) > 0),
+    [pedidoDraftItems, productosPedido]
+  )
+
+  const addPedidoDraftItem = () => {
+    setPedidoDraftItems(prev => [...prev, { producto_id: '', cantidad: 1 }])
+  }
+
+  const updatePedidoDraftItem = (
+    index: number,
+    field: keyof PedidoDraftItem,
+    value: string | number
+  ) => {
+    setPedidoDraftItems(prev => prev.map((item, itemIndex) => {
+      if (itemIndex !== index) return item
+      if (field === 'cantidad') {
+        return { ...item, cantidad: Math.max(1, Number(value) || 1) }
+      }
+      return { ...item, producto_id: String(value) }
+    }))
+  }
+
+  const removePedidoDraftItem = (index: number) => {
+    setPedidoDraftItems(prev => prev.length === 1
+      ? [{ producto_id: '', cantidad: 1 }]
+      : prev.filter((_, itemIndex) => itemIndex !== index)
+    )
+  }
+
+  const validatePedidoProveedor = () => {
+    if (!canCreatePedido) return 'No tienes permisos para crear pedidos'
+    if (!numeroPedidoDraft.trim()) return 'Debes indicar un numero de pedido'
+    if (!proveedorPedidoId) return 'Debes seleccionar un proveedor'
+    if (pedidoItemsValidos.length === 0) return 'Debes agregar al menos un producto con cantidad valida'
+
+    const proveedor = getPedidoProveedorSeleccionado()
+    if (enviarEmailProveedor && !proveedor?.email?.trim()) {
+      return 'El proveedor no tiene email cargado. Puedes crear el pedido desactivando el envio por correo.'
+    }
+
+    const productoIds = pedidoItemsValidos.map(item => item.producto_id)
+    if (new Set(productoIds).size !== productoIds.length) {
+      return 'Hay productos repetidos en el pedido. Unifica las cantidades antes de enviar.'
+    }
+
+    return null
+  }
+
+  const buildPedidoEmailPayload = () => {
+    const proveedor = getPedidoProveedorSeleccionado()
+    return {
+      to: proveedor?.email?.trim() || '',
+      proveedorNombre: proveedor?.razon_social || '',
+      numeroPedido: numeroPedidoDraft.trim(),
+      fechaPedido: new Date().toLocaleDateString('es-AR'),
+      fechaEstimada: fechaEstimadaPedido
+        ? new Date(`${fechaEstimadaPedido}T00:00:00`).toLocaleDateString('es-AR')
+        : '',
+      sede: verTodas ? 'Todas las sedes' : (sedeActual?.nombre || 'Sede operativa'),
+      solicitante: profile?.full_name || user?.email || 'Toshify',
+      observaciones: observacionesPedido.trim(),
+      replyTo: user?.email || undefined,
+      items: pedidoItemsValidos.map(item => ({
+        codigo: item.producto?.codigo || '',
+        nombre: item.producto?.nombre || '',
+        cantidad: item.cantidad,
+        unidad: getUnidadProducto(item.producto)
+      }))
+    }
+  }
+
+  const buildPedidoPreviewHtml = () => {
+    const payload = buildPedidoEmailPayload()
+    const rows = payload.items.map(item => `
+      <tr>
+        <td style="padding:8px;border-bottom:1px solid #e5e7eb;">
+          <strong>${escapeHtml(item.codigo)}</strong><br>
+          <span style="color:#6b7280;">${escapeHtml(item.nombre)}</span>
+        </td>
+        <td style="padding:8px;border-bottom:1px solid #e5e7eb;text-align:center;font-weight:700;">
+          ${escapeHtml(item.cantidad)}
+        </td>
+        <td style="padding:8px;border-bottom:1px solid #e5e7eb;">${escapeHtml(item.unidad)}</td>
+      </tr>
+    `).join('')
+
+    return `
+      <div style="text-align:left;font-size:13px;color:#111827;">
+        <p><strong>Proveedor:</strong> ${escapeHtml(payload.proveedorNombre)}</p>
+        <p><strong>Email:</strong> ${escapeHtml(payload.to || 'Sin email')}</p>
+        <p><strong>Pedido:</strong> ${escapeHtml(payload.numeroPedido)}</p>
+        <p><strong>Sede:</strong> ${escapeHtml(payload.sede)}</p>
+        <table style="width:100%;border-collapse:collapse;margin-top:12px;">
+          <thead>
+            <tr style="background:#f3f4f6;">
+              <th style="padding:8px;text-align:left;">Producto</th>
+              <th style="padding:8px;text-align:center;">Cantidad</th>
+              <th style="padding:8px;text-align:left;">Unidad</th>
+            </tr>
+          </thead>
+          <tbody>${rows}</tbody>
+        </table>
+        ${payload.observaciones ? `<p style="margin-top:12px;"><strong>Obs:</strong> ${escapeHtml(payload.observaciones)}</p>` : ''}
+      </div>
+    `
+  }
+
+  const previewPedidoProveedor = async () => {
+    const validationError = validatePedidoProveedor()
+    if (validationError) {
+      Swal.fire('Revisar pedido', validationError, 'warning')
+      return
+    }
+
+    await Swal.fire({
+      title: 'Vista previa del pedido',
+      html: buildPedidoPreviewHtml(),
+      width: 760,
+      confirmButtonText: 'Cerrar',
+      confirmButtonColor: '#FF0033'
+    })
+  }
+
+  const enviarCorreoPedidoProveedor = async () => {
+    const payload = buildPedidoEmailPayload()
+    const response = await fetch('/api/logistica/enviar-pedido-proveedor', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    })
+
+    const result = await response.json().catch(() => ({}))
+    if (!response.ok || !result.success) {
+      throw new Error(result.error || 'No se pudo enviar el correo')
+    }
+  }
+
+  const crearPedidoProveedor = async () => {
+    const validationError = validatePedidoProveedor()
+    if (validationError) {
+      Swal.fire('Revisar pedido', validationError, 'warning')
+      return
+    }
+
+    const proveedor = getPedidoProveedorSeleccionado()
+    const result = await Swal.fire({
+      title: enviarEmailProveedor ? 'Crear y enviar pedido' : 'Crear pedido',
+      html: buildPedidoPreviewHtml(),
+      icon: 'question',
+      showCancelButton: true,
+      confirmButtonText: enviarEmailProveedor ? 'Crear y enviar' : 'Crear pedido',
+      cancelButtonText: 'Cancelar',
+      confirmButtonColor: '#FF0033',
+      width: 760
+    })
+
+    if (!result.isConfirmed) return
+
+    setCreatingPedido(true)
+    try {
+      const { data: authData } = await supabase.auth.getUser()
+      const observacionesFinal = [
+        observacionesPedido.trim(),
+        enviarEmailProveedor && proveedor?.email
+          ? `Pedido preparado para envio por correo a ${proveedor.email}`
+          : null
+      ].filter(Boolean).join('\n')
+
+      const { error } = await (supabase.rpc as any)('crear_pedido_inventario', {
+        p_numero_pedido: numeroPedidoDraft.trim(),
+        p_proveedor_id: proveedorPedidoId,
+        p_fecha_estimada: fechaEstimadaPedido || null,
+        p_observaciones: observacionesFinal || null,
+        p_usuario_id: authData.user?.id,
+        p_items: JSON.stringify(pedidoItemsValidos.map(item => ({
+          producto_id: item.producto_id,
+          cantidad: item.cantidad
+        })))
+      })
+
+      if (error) throw error
+
+      if (enviarEmailProveedor) {
+        try {
+          await enviarCorreoPedidoProveedor()
+          showSuccess('Pedido enviado', `Pedido ${numeroPedidoDraft} creado y enviado a ${proveedor?.email}`)
+        } catch (emailError: any) {
+          await Swal.fire({
+            icon: 'warning',
+            title: 'Pedido creado, correo pendiente',
+            text: emailError.message || 'El pedido quedó creado pero no se pudo enviar el correo.'
+          })
+        }
+      } else {
+        showSuccess('Pedido creado', `Pedido ${numeroPedidoDraft} creado en transito`)
+      }
+
+      resetPedidoProveedorForm()
+      await loadPedidosData()
+      setActiveTab('pedidos')
+    } catch (error: any) {
+      Swal.fire('Error', error.message || 'No se pudo crear el pedido', 'error')
+    } finally {
+      setCreatingPedido(false)
+    }
   }
 
   const confirmarEntradaSimple = async (entrada: EntradaTransito) => {
@@ -786,6 +1116,7 @@ export function PedidosUnificadoModule() {
   const totalRecepcionesPendientes = entradasSimples.length + pedidos.length
   const totalExcepciones = pedidosConExcepcion.length
   const sedeOperativaLabel = verTodas ? 'Todas las sedes' : (sedeActual?.nombre || 'Sede actual')
+  const proveedorPedidoSeleccionado = getPedidoProveedorSeleccionado()
 
   // Columnas para Entradas Simples
   const entradasColumns = useMemo<ColumnDef<EntradaTransito, any>[]>(() => [
@@ -999,6 +1330,202 @@ export function PedidosUnificadoModule() {
         .pedidos-tab:not(.active) .pedidos-tab-badge {
           background: var(--bg-tertiary);
           color: var(--text-secondary);
+        }
+
+        .pedido-compose {
+          display: grid;
+          grid-template-columns: minmax(0, 1.5fr) minmax(280px, 0.7fr);
+          gap: 16px;
+          align-items: start;
+        }
+
+        .pedido-compose-card {
+          background: var(--card-bg);
+          border: 1px solid var(--border-primary);
+          border-radius: 8px;
+          padding: 16px;
+        }
+
+        .pedido-compose-title {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          margin: 0 0 14px 0;
+          color: var(--text-primary);
+          font-size: 15px;
+          font-weight: 700;
+        }
+
+        .pedido-compose-grid {
+          display: grid;
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+          gap: 12px;
+        }
+
+        .pedido-field {
+          display: flex;
+          flex-direction: column;
+          gap: 6px;
+        }
+
+        .pedido-field.full {
+          grid-column: 1 / -1;
+        }
+
+        .pedido-field label {
+          color: var(--text-secondary);
+          font-size: 11px;
+          font-weight: 700;
+          text-transform: uppercase;
+        }
+
+        .pedido-field input,
+        .pedido-field select,
+        .pedido-field textarea {
+          width: 100%;
+          border: 1px solid var(--border-primary);
+          border-radius: 8px;
+          background: var(--input-bg);
+          color: var(--text-primary);
+          font-size: 13px;
+          padding: 10px 12px;
+          box-sizing: border-box;
+        }
+
+        .pedido-field textarea {
+          min-height: 84px;
+          resize: vertical;
+        }
+
+        .pedido-items {
+          display: grid;
+          gap: 8px;
+          margin-top: 14px;
+        }
+
+        .pedido-item-row {
+          display: grid;
+          grid-template-columns: minmax(0, 1fr) 96px 36px;
+          gap: 8px;
+          align-items: center;
+        }
+
+        .pedido-icon-button {
+          width: 36px;
+          height: 36px;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          border: 1px solid var(--border-primary);
+          border-radius: 8px;
+          background: var(--card-bg);
+          color: var(--text-secondary);
+          cursor: pointer;
+        }
+
+        .pedido-icon-button:hover {
+          color: var(--color-primary);
+          background: var(--bg-secondary);
+        }
+
+        .pedido-secondary-action {
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          gap: 8px;
+          border: 1px solid var(--border-primary);
+          border-radius: 8px;
+          background: var(--card-bg);
+          color: var(--text-primary);
+          padding: 10px 12px;
+          font-size: 13px;
+          font-weight: 700;
+          cursor: pointer;
+        }
+
+        .pedido-primary-action {
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          gap: 8px;
+          border: none;
+          border-radius: 8px;
+          background: var(--color-primary);
+          color: white;
+          padding: 11px 14px;
+          font-size: 13px;
+          font-weight: 700;
+          cursor: pointer;
+        }
+
+        .pedido-primary-action:disabled,
+        .pedido-secondary-action:disabled,
+        .pedido-icon-button:disabled {
+          opacity: 0.55;
+          cursor: not-allowed;
+        }
+
+        .pedido-compose-actions {
+          display: flex;
+          justify-content: flex-end;
+          gap: 10px;
+          flex-wrap: wrap;
+          margin-top: 16px;
+          padding-top: 14px;
+          border-top: 1px solid var(--border-primary);
+        }
+
+        .pedido-email-status {
+          display: grid;
+          gap: 10px;
+          color: var(--text-secondary);
+          font-size: 13px;
+        }
+
+        .pedido-status-pill {
+          display: inline-flex;
+          align-items: center;
+          gap: 6px;
+          width: fit-content;
+          padding: 6px 10px;
+          border-radius: 999px;
+          font-size: 12px;
+          font-weight: 700;
+          background: var(--badge-green-bg);
+          color: var(--badge-green-text);
+        }
+
+        .pedido-status-pill.warning {
+          background: var(--badge-yellow-bg);
+          color: var(--badge-yellow-text);
+        }
+
+        .pedido-email-preview {
+          border: 1px solid var(--border-primary);
+          border-radius: 8px;
+          background: var(--bg-secondary);
+          padding: 12px;
+          display: grid;
+          gap: 8px;
+        }
+
+        .pedido-email-preview-row {
+          display: flex;
+          justify-content: space-between;
+          gap: 10px;
+        }
+
+        .pedido-email-preview-row span {
+          color: var(--text-tertiary);
+          font-size: 11px;
+          text-transform: uppercase;
+          font-weight: 700;
+        }
+
+        .pedido-email-preview-row strong {
+          color: var(--text-primary);
+          text-align: right;
+          font-size: 13px;
         }
 
         .controls-row {
@@ -1518,6 +2045,10 @@ export function PedidosUnificadoModule() {
           .excepcion-header {
             flex-direction: column;
           }
+
+          .pedido-compose {
+            grid-template-columns: 1fr;
+          }
         }
 
         @media (max-width: 640px) {
@@ -1550,6 +2081,23 @@ export function PedidosUnificadoModule() {
 
           .pedidos-tab-badge {
             font-size: 11px;
+          }
+
+          .pedido-compose-grid,
+          .pedido-item-row {
+            grid-template-columns: 1fr;
+          }
+
+          .pedido-compose-actions {
+            flex-direction: column;
+          }
+
+          .pedido-compose-actions > button {
+            width: 100%;
+          }
+
+          .pedido-icon-button {
+            width: 100%;
           }
         }
       `}</style>
@@ -1585,6 +2133,15 @@ export function PedidosUnificadoModule() {
 
         {/* Tabs principales - controlados por permisos de tab */}
         <div className="pedidos-tabs">
+          {canViewTab('inventario-pedidos:pedidos') && (
+            <button
+              className={`pedidos-tab ${activeTab === 'nuevo' ? 'active' : ''}`}
+              onClick={() => setActiveTab('nuevo')}
+            >
+              <Mail size={16} />
+              Nuevo Pedido
+            </button>
+          )}
           {canViewTab('inventario-pedidos:entradas') && (
             <button
               className={`pedidos-tab ${activeTab === 'entradas' ? 'active' : ''}`}
@@ -1643,6 +2200,242 @@ export function PedidosUnificadoModule() {
             </button>
           )}
         </div>
+
+        {/* ==================== TAB: NUEVO PEDIDO ==================== */}
+        {activeTab === 'nuevo' && (
+          <div className="pedido-compose">
+            <div className="pedido-compose-card">
+              <h3 className="pedido-compose-title">
+                <Package size={16} />
+                Pedido a proveedor
+              </h3>
+
+              {!canCreatePedido && (
+                <div className="no-permission" style={{ padding: '20px 0' }}>
+                  <Clock size={32} />
+                  <h3>Accion no disponible</h3>
+                  <p>No tienes permisos para crear pedidos de inventario.</p>
+                </div>
+              )}
+
+              {canCreatePedido && (
+                <>
+                  <div className="pedido-compose-grid">
+                    <div className="pedido-field">
+                      <label>Proveedor</label>
+                      <select
+                        value={proveedorPedidoId}
+                        onChange={(event) => setProveedorPedidoId(event.target.value)}
+                        disabled={loadingCatalogoPedido || creatingPedido}
+                      >
+                        <option value="">Seleccionar proveedor</option>
+                        {proveedoresPedido.map((proveedor) => (
+                          <option key={proveedor.id} value={proveedor.id}>
+                            {proveedor.razon_social}{proveedor.email ? '' : ' - sin email'}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div className="pedido-field">
+                      <label>Numero de pedido</label>
+                      <input
+                        value={numeroPedidoDraft}
+                        onChange={(event) => setNumeroPedidoDraft(event.target.value)}
+                        disabled={creatingPedido}
+                      />
+                    </div>
+
+                    <div className="pedido-field">
+                      <label>Fecha estimada</label>
+                      <input
+                        type="date"
+                        min={todayInputValue()}
+                        value={fechaEstimadaPedido}
+                        onChange={(event) => setFechaEstimadaPedido(event.target.value)}
+                        disabled={creatingPedido}
+                      />
+                    </div>
+
+                    <div className="pedido-field">
+                      <label>Sede</label>
+                      <input value={sedeOperativaLabel} disabled />
+                    </div>
+                  </div>
+
+                  <div className="pedido-items">
+                    <div className="pedido-compose-title" style={{ marginTop: '6px', marginBottom: '2px' }}>
+                      <Package size={16} />
+                      Items del pedido
+                    </div>
+
+                    {pedidoDraftItems.map((item, index) => {
+                      const productosSeleccionados = pedidoDraftItems
+                        .filter((_, itemIndex) => itemIndex !== index)
+                        .map(draft => draft.producto_id)
+                        .filter(Boolean)
+
+                      return (
+                        <div className="pedido-item-row" key={`${index}-${item.producto_id || 'nuevo'}`}>
+                          <div className="pedido-field">
+                            <select
+                              value={item.producto_id}
+                              onChange={(event) => updatePedidoDraftItem(index, 'producto_id', event.target.value)}
+                              disabled={loadingCatalogoPedido || creatingPedido}
+                            >
+                              <option value="">Seleccionar producto</option>
+                              {productosPedido.map((producto) => (
+                                <option
+                                  key={producto.id}
+                                  value={producto.id}
+                                  disabled={productosSeleccionados.includes(producto.id)}
+                                >
+                                  {producto.codigo} - {producto.nombre}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+
+                          <div className="pedido-field">
+                            <input
+                              type="number"
+                              min={1}
+                              step={1}
+                              value={item.cantidad}
+                              onChange={(event) => updatePedidoDraftItem(index, 'cantidad', event.target.value)}
+                              disabled={creatingPedido}
+                            />
+                          </div>
+
+                          <button
+                            type="button"
+                            className="pedido-icon-button"
+                            onClick={() => removePedidoDraftItem(index)}
+                            disabled={creatingPedido}
+                            title="Quitar item"
+                          >
+                            <Trash2 size={15} />
+                          </button>
+                        </div>
+                      )
+                    })}
+
+                    <button
+                      type="button"
+                      className="pedido-secondary-action"
+                      onClick={addPedidoDraftItem}
+                      disabled={creatingPedido || loadingCatalogoPedido}
+                    >
+                      <Plus size={15} />
+                      Agregar item
+                    </button>
+                  </div>
+
+                  <div className="pedido-field full" style={{ marginTop: '14px' }}>
+                    <label>Observaciones para proveedor</label>
+                    <textarea
+                      value={observacionesPedido}
+                      onChange={(event) => setObservacionesPedido(event.target.value)}
+                      placeholder="Ej: confirmar disponibilidad, alternativa de marca, prioridad de entrega..."
+                      disabled={creatingPedido}
+                    />
+                  </div>
+
+                  <label style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px',
+                    marginTop: '12px',
+                    color: 'var(--text-secondary)',
+                    fontSize: '13px',
+                    fontWeight: 600
+                  }}>
+                    <input
+                      type="checkbox"
+                      checked={enviarEmailProveedor}
+                      onChange={(event) => setEnviarEmailProveedor(event.target.checked)}
+                      disabled={creatingPedido}
+                    />
+                    Enviar pedido por correo al proveedor
+                  </label>
+
+                  <div className="pedido-compose-actions">
+                    <button
+                      type="button"
+                      className="pedido-secondary-action"
+                      onClick={previewPedidoProveedor}
+                      disabled={creatingPedido || loadingCatalogoPedido}
+                    >
+                      <Eye size={15} />
+                      Vista previa
+                    </button>
+                    <button
+                      type="button"
+                      className="pedido-secondary-action"
+                      onClick={resetPedidoProveedorForm}
+                      disabled={creatingPedido}
+                    >
+                      <RotateCcw size={15} />
+                      Limpiar
+                    </button>
+                    <button
+                      type="button"
+                      className="pedido-primary-action"
+                      onClick={crearPedidoProveedor}
+                      disabled={creatingPedido || loadingCatalogoPedido}
+                    >
+                      {enviarEmailProveedor ? <Send size={15} /> : <CheckCircle size={15} />}
+                      {creatingPedido
+                        ? 'Procesando...'
+                        : enviarEmailProveedor ? 'Crear y enviar' : 'Crear pedido'}
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
+
+            <aside className="pedido-compose-card">
+              <h3 className="pedido-compose-title">
+                <Mail size={16} />
+                Correo
+              </h3>
+              <div className="pedido-email-status">
+                <span className={`pedido-status-pill ${proveedorPedidoSeleccionado?.email ? '' : 'warning'}`}>
+                  <Mail size={13} />
+                  {proveedorPedidoSeleccionado?.email ? 'Email disponible' : 'Sin email'}
+                </span>
+
+                <div className="pedido-email-preview">
+                  <div className="pedido-email-preview-row">
+                    <span>Para</span>
+                    <strong>{proveedorPedidoSeleccionado?.email || 'Selecciona proveedor'}</strong>
+                  </div>
+                  <div className="pedido-email-preview-row">
+                    <span>Asunto</span>
+                    <strong>Pedido {numeroPedidoDraft || '-'}</strong>
+                  </div>
+                  <div className="pedido-email-preview-row">
+                    <span>Items</span>
+                    <strong>{pedidoItemsValidos.length}</strong>
+                  </div>
+                  <div className="pedido-email-preview-row">
+                    <span>Fecha estimada</span>
+                    <strong>{fechaEstimadaPedido || 'A confirmar'}</strong>
+                  </div>
+                </div>
+
+                <p style={{ margin: 0, lineHeight: 1.5 }}>
+                  Al crear el pedido se registra en inventario como pedido en transito. Luego se intenta enviar el correo al proveedor desde el servidor.
+                </p>
+                {!proveedorPedidoSeleccionado?.email && (
+                  <p style={{ margin: 0, color: 'var(--badge-yellow-text)', lineHeight: 1.5 }}>
+                    Si el proveedor no tiene email, puedes desactivar el envio por correo y completar el contacto desde Proveedores.
+                  </p>
+                )}
+              </div>
+            </aside>
+          </div>
+        )}
 
         {/* ==================== TAB: ENTRADAS SIMPLES ==================== */}
         {activeTab === 'entradas' && (
