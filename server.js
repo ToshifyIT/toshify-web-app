@@ -2603,6 +2603,160 @@ app.post('/api/generate-oferta-locacion', async (req, res) => {
   }
 })
 
+function escapeHtml(value = '') {
+  return String(value)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;')
+}
+
+function buildPedidoProveedorHtml(payload) {
+  const items = Array.isArray(payload.items) ? payload.items : []
+  const rows = items.map((item, index) => `
+    <tr>
+      <td style="padding:10px;border-bottom:1px solid #e5e7eb;color:#111827;">${index + 1}</td>
+      <td style="padding:10px;border-bottom:1px solid #e5e7eb;color:#111827;">
+        <strong>${escapeHtml(item.codigo || '-')}</strong><br>
+        <span style="color:#4b5563;">${escapeHtml(item.nombre || '-')}</span>
+      </td>
+      <td style="padding:10px;border-bottom:1px solid #e5e7eb;text-align:center;color:#111827;font-weight:700;">
+        ${escapeHtml(item.cantidad || '0')}
+      </td>
+      <td style="padding:10px;border-bottom:1px solid #e5e7eb;color:#4b5563;">
+        ${escapeHtml(item.unidad || 'Unidad')}
+      </td>
+    </tr>
+  `).join('')
+
+  const fechaEstimada = payload.fechaEstimada
+    ? escapeHtml(payload.fechaEstimada)
+    : 'A confirmar'
+
+  return `
+    <div style="font-family:Arial,sans-serif;background:#f8fafc;padding:24px;">
+      <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:760px;margin:0 auto;background:#ffffff;border:1px solid #e5e7eb;border-radius:10px;overflow:hidden;">
+        <tr>
+          <td style="padding:22px 26px;border-bottom:3px solid #ff0033;">
+            <div style="font-size:12px;color:#6b7280;text-transform:uppercase;font-weight:700;">Toshify Logistica</div>
+            <h1 style="margin:6px 0 0 0;font-size:22px;color:#111827;">Pedido ${escapeHtml(payload.numeroPedido)}</h1>
+          </td>
+        </tr>
+        <tr>
+          <td style="padding:20px 26px;">
+            <p style="margin:0 0 16px 0;color:#111827;">Hola ${escapeHtml(payload.proveedorNombre)},</p>
+            <p style="margin:0 0 18px 0;color:#374151;line-height:1.5;">
+              Solicitamos por favor cotizar/preparar los siguientes productos para la sede ${escapeHtml(payload.sede || 'operativa')}.
+            </p>
+            <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin-bottom:18px;background:#f9fafb;border:1px solid #e5e7eb;border-radius:8px;">
+              <tr>
+                <td style="padding:12px;color:#6b7280;font-size:12px;">Fecha pedido</td>
+                <td style="padding:12px;color:#111827;font-weight:700;">${escapeHtml(payload.fechaPedido || '')}</td>
+                <td style="padding:12px;color:#6b7280;font-size:12px;">Fecha estimada</td>
+                <td style="padding:12px;color:#111827;font-weight:700;">${fechaEstimada}</td>
+              </tr>
+              <tr>
+                <td style="padding:12px;color:#6b7280;font-size:12px;">Solicitante</td>
+                <td style="padding:12px;color:#111827;font-weight:700;" colspan="3">${escapeHtml(payload.solicitante || 'Toshify')}</td>
+              </tr>
+            </table>
+            <table width="100%" cellspacing="0" cellpadding="0" style="border-collapse:collapse;border:1px solid #e5e7eb;border-radius:8px;overflow:hidden;">
+              <thead>
+                <tr style="background:#f3f4f6;">
+                  <th style="padding:10px;text-align:left;color:#6b7280;font-size:11px;text-transform:uppercase;">#</th>
+                  <th style="padding:10px;text-align:left;color:#6b7280;font-size:11px;text-transform:uppercase;">Producto</th>
+                  <th style="padding:10px;text-align:center;color:#6b7280;font-size:11px;text-transform:uppercase;">Cantidad</th>
+                  <th style="padding:10px;text-align:left;color:#6b7280;font-size:11px;text-transform:uppercase;">Unidad</th>
+                </tr>
+              </thead>
+              <tbody>${rows}</tbody>
+            </table>
+            ${payload.observaciones ? `
+              <div style="margin-top:18px;padding:12px;background:#fff7ed;border:1px solid #fed7aa;border-radius:8px;color:#7c2d12;">
+                <strong>Observaciones:</strong> ${escapeHtml(payload.observaciones)}
+              </div>
+            ` : ''}
+            <p style="margin:20px 0 0 0;color:#374151;line-height:1.5;">
+              Quedamos atentos a confirmacion de disponibilidad, precio y fecha de entrega.
+            </p>
+          </td>
+        </tr>
+        <tr>
+          <td style="padding:14px 26px;background:#f9fafb;border-top:1px solid #e5e7eb;color:#9ca3af;font-size:11px;text-align:center;">
+            Pedido generado desde Toshify. Por favor responder a este correo para coordinar la entrega.
+          </td>
+        </tr>
+      </table>
+    </div>
+  `
+}
+
+app.post('/api/logistica/enviar-pedido-proveedor', async (req, res) => {
+  try {
+    const resendApiKey = process.env.RESEND_API_KEY || process.env.VITE_RESEND_API_KEY
+    const fromEmail = process.env.RESEND_FROM_EMAIL || 'Toshify <no-reply@toshify.com.ar>'
+    const {
+      to,
+      proveedorNombre,
+      numeroPedido,
+      fechaPedido,
+      fechaEstimada,
+      sede,
+      solicitante,
+      observaciones,
+      items,
+      replyTo
+    } = req.body || {}
+
+    if (!resendApiKey) {
+      return res.status(500).json({ error: 'Falta configurar RESEND_API_KEY en el servidor' })
+    }
+
+    if (!to || !proveedorNombre || !numeroPedido || !Array.isArray(items) || items.length === 0) {
+      return res.status(400).json({ error: 'Faltan datos obligatorios del pedido' })
+    }
+
+    const html = buildPedidoProveedorHtml({
+      proveedorNombre,
+      numeroPedido,
+      fechaPedido,
+      fechaEstimada,
+      sede,
+      solicitante,
+      observaciones,
+      items
+    })
+
+    const response = await fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${resendApiKey}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        from: fromEmail,
+        to: [to],
+        subject: `Pedido ${numeroPedido} - Toshify`,
+        html,
+        ...(replyTo ? { reply_to: replyTo } : {})
+      })
+    })
+
+    const result = await response.json().catch(() => ({}))
+    if (!response.ok) {
+      return res.status(response.status).json({
+        error: result?.message || result?.error || 'No se pudo enviar el correo'
+      })
+    }
+
+    res.json({ success: true, id: result?.id || null })
+  } catch (error) {
+    console.error('[LogisticaEmail] Error:', error.message)
+    res.status(500).json({ error: error.message || 'Error interno enviando correo' })
+  }
+})
+
 // Health check
 app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() })
