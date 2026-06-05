@@ -1,0 +1,64 @@
+{
+  "version": "5",
+  "redirects": {
+    "https://esm.sh/@supabase/supabase-js@2": "https://esm.sh/@supabase/supabase-js@2.101.0"
+  },
+  "remote": {
+    "https://esm.sh/@supabase/supabase-js@2.101.0": "a6c343bdb28042c7ae01e4e3f5ae0ced86b69edada6c739538fc7eab3bf09144"
+  },
+  "workspace": {
+    "packageJson": {
+      "dependencies": [
+        "npm:@eslint/js@^9.36.0",
+        "npm:@modelcontextprotocol/sdk@^1.27.1",
+        "npm:@react-google-maps/api@^2.20.8",
+        "npm:@supabase/supabase-js@^2.76.1",
+        "npm:@tailwindcss/postcss@^4.1.16",
+        "npm:@tanstack/react-table@^8.21.3",
+        "npm:@types/dompurify@^3.0.5",
+        "npm:@types/node@^24.9.1",
+        "npm:@types/react-big-calendar@^1.16.3",
+        "npm:@types/react-dom@^19.1.9",
+        "npm:@types/react@^19.1.16",
+        "npm:@vitejs/plugin-react@^5.0.4",
+        "npm:autoprefixer@^10.4.21",
+        "npm:axios@^1.13.2",
+        "npm:csv-parse@^6.1.0",
+        "npm:date-fns@^4.1.0",
+        "npm:docxtemplater@^3.68.5",
+        "npm:dompurify@^3.3.0",
+        "npm:dotenv@^17.2.3",
+        "npm:eslint-plugin-react-hooks@^5.2.0",
+        "npm:eslint-plugin-react-refresh@~0.4.22",
+        "npm:eslint@^9.36.0",
+        "npm:express-rate-limit@^8.3.1",
+        "npm:express@^4.21.2",
+        "npm:globals@^16.4.0",
+        "npm:googleapis@144",
+        "npm:html2canvas@^1.4.1",
+        "npm:husky@^9.1.7",
+        "npm:jspdf@4",
+        "npm:lint-staged@^16.2.7",
+        "npm:lucide-react@0.548",
+        "npm:pg@^8.16.3",
+        "npm:pizzip@^3.2.0",
+        "npm:postcss@^8.5.6",
+        "npm:react-big-calendar@^1.19.4",
+        "npm:react-dom@^19.1.1",
+        "npm:react-easy-crop@^5.5.6",
+        "npm:react-router-dom@^7.9.4",
+        "npm:react@^19.1.1",
+        "npm:recharts@^3.5.1",
+        "npm:swagger-ui-express@^5.0.1",
+        "npm:sweetalert2@^11.26.3",
+        "npm:tailwindcss@^4.1.16",
+        "npm:tsx@^4.21.0",
+        "npm:typescript-eslint@^8.45.0",
+        "npm:typescript@~5.9.3",
+        "npm:vite@^7.1.7",
+        "npm:xlsx@~0.18.5",
+        "npm:zod@^4.1.13"
+      ]
+    }
+  }
+}

@@ -1,0 +1,1326 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Propuesta de Mejora Funcional - Modulo de Logistica</title>
+  <style>
+    :root {
+      --ink: #172033;
+      --muted: #5d697c;
+      --line: #dfe4ec;
+      --soft: #f6f8fb;
+      --panel: #ffffff;
+      --brand: #e7333f;
+      --brand-soft: #fff0f1;
+      --blue: #2454a6;
+      --blue-soft: #eef4ff;
+      --green: #157f58;
+      --green-soft: #edf9f4;
+      --amber: #9a6200;
+      --amber-soft: #fff6e5;
+      --violet: #6842a8;
+      --violet-soft: #f4efff;
+      --danger: #a62929;
+      --danger-soft: #fff0f0;
+      --shadow: 0 10px 30px rgba(23, 32, 51, 0.08);
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      color: var(--ink);
+      background: #eef1f6;
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      line-height: 1.55;
+    }
+
+    main {
+      width: min(1180px, calc(100% - 32px));
+      margin: 32px auto;
+      background: var(--panel);
+      border: 1px solid var(--line);
+      box-shadow: var(--shadow);
+    }
+
+    header {
+      padding: 42px 48px 32px;
+      border-bottom: 1px solid var(--line);
+      background: linear-gradient(135deg, #ffffff 0%, #f8fafc 55%, #fff4f5 100%);
+    }
+
+    section {
+      padding: 32px 48px;
+      border-bottom: 1px solid var(--line);
+    }
+
+    h1,
+    h2,
+    h3,
+    h4 {
+      margin: 0;
+      letter-spacing: 0;
+      line-height: 1.2;
+    }
+
+    h1 {
+      max-width: 900px;
+      font-size: 36px;
+      font-weight: 800;
+    }
+
+    h2 {
+      margin-bottom: 18px;
+      font-size: 24px;
+      font-weight: 750;
+    }
+
+    h3 {
+      margin: 22px 0 10px;
+      font-size: 18px;
+      font-weight: 730;
+    }
+
+    h4 {
+      margin-bottom: 8px;
+      font-size: 15px;
+      font-weight: 750;
+    }
+
+    p {
+      margin: 0 0 12px;
+    }
+
+    ul,
+    ol {
+      margin: 10px 0 0;
+      padding-left: 20px;
+    }
+
+    li {
+      margin: 6px 0;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 14px;
+      font-size: 14px;
+    }
+
+    th,
+    td {
+      padding: 12px 14px;
+      border: 1px solid var(--line);
+      text-align: left;
+      vertical-align: top;
+    }
+
+    th {
+      color: #29364c;
+      background: #f7f9fc;
+      font-weight: 760;
+    }
+
+    code {
+      padding: 2px 5px;
+      border: 1px solid #dbe1ea;
+      border-radius: 5px;
+      background: #f8fafc;
+      color: #26364f;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+      font-size: 0.92em;
+    }
+
+    .eyebrow {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 14px;
+      color: var(--brand);
+      font-size: 13px;
+      font-weight: 800;
+      text-transform: uppercase;
+    }
+
+    .meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-top: 22px;
+    }
+
+    .pill {
+      display: inline-flex;
+      align-items: center;
+      min-height: 28px;
+      padding: 5px 10px;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      background: #ffffff;
+      color: var(--muted);
+      font-size: 13px;
+      font-weight: 650;
+    }
+
+    .lead {
+      max-width: 960px;
+      margin-top: 18px;
+      color: #3e4a5e;
+      font-size: 17px;
+    }
+
+    .toc {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 12px;
+      margin-top: 18px;
+    }
+
+    .toc a {
+      display: block;
+      min-height: 48px;
+      padding: 12px 14px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      color: #25344b;
+      background: #ffffff;
+      font-size: 14px;
+      font-weight: 700;
+      text-decoration: none;
+    }
+
+    .summary-grid,
+    .two-col,
+    .three-col,
+    .kpi-grid,
+    .roadmap {
+      display: grid;
+      gap: 14px;
+    }
+
+    .summary-grid {
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+    }
+
+    .two-col {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .three-col {
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+
+    .kpi-grid {
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+    }
+
+    .roadmap {
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+
+    .box {
+      padding: 16px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #ffffff;
+    }
+
+    .box.soft {
+      background: var(--soft);
+    }
+
+    .box.brand {
+      border-color: #ffd2d6;
+      background: var(--brand-soft);
+    }
+
+    .box.blue {
+      border-color: #cbdcf8;
+      background: var(--blue-soft);
+    }
+
+    .box.green {
+      border-color: #c7eadb;
+      background: var(--green-soft);
+    }
+
+    .box.amber {
+      border-color: #f4d795;
+      background: var(--amber-soft);
+    }
+
+    .box.violet {
+      border-color: #ddcffb;
+      background: var(--violet-soft);
+    }
+
+    .box.danger {
+      border-color: #f3c4c4;
+      background: var(--danger-soft);
+    }
+
+    .label {
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 800;
+      text-transform: uppercase;
+    }
+
+    .metric {
+      margin-top: 4px;
+      font-size: 24px;
+      font-weight: 820;
+    }
+
+    .small {
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .tag {
+      display: inline-flex;
+      align-items: center;
+      margin: 2px 4px 2px 0;
+      padding: 3px 8px;
+      border-radius: 999px;
+      font-size: 12px;
+      font-weight: 750;
+    }
+
+    .tag.p0 {
+      background: var(--danger-soft);
+      color: var(--danger);
+    }
+
+    .tag.p1 {
+      background: var(--amber-soft);
+      color: var(--amber);
+    }
+
+    .tag.p2 {
+      background: var(--blue-soft);
+      color: var(--blue);
+    }
+
+    .flow {
+      display: grid;
+      gap: 10px;
+      margin-top: 14px;
+    }
+
+    .step {
+      display: grid;
+      grid-template-columns: 34px 1fr;
+      gap: 12px;
+      align-items: start;
+      padding: 13px 14px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #ffffff;
+    }
+
+    .num {
+      display: inline-grid;
+      width: 28px;
+      height: 28px;
+      place-items: center;
+      border-radius: 999px;
+      background: #172033;
+      color: #ffffff;
+      font-size: 13px;
+      font-weight: 800;
+    }
+
+    .decision {
+      border-left: 4px solid var(--brand);
+    }
+
+    .quote {
+      padding: 18px 20px;
+      border-left: 5px solid var(--brand);
+      background: #fbfcfe;
+      color: #2d3a50;
+      font-size: 17px;
+      font-weight: 650;
+    }
+
+    .page-break {
+      break-before: page;
+    }
+
+    @media (max-width: 900px) {
+      main {
+        width: 100%;
+        margin: 0;
+        border: 0;
+      }
+
+      header,
+      section {
+        padding: 26px 20px;
+      }
+
+      h1 {
+        font-size: 30px;
+      }
+
+      .toc,
+      .summary-grid,
+      .two-col,
+      .three-col,
+      .kpi-grid,
+      .roadmap {
+        grid-template-columns: 1fr;
+      }
+
+      table {
+        display: block;
+        overflow-x: auto;
+        white-space: nowrap;
+      }
+    }
+
+    @media print {
+      body {
+        background: #ffffff;
+      }
+
+      main {
+        width: 100%;
+        margin: 0;
+        border: 0;
+        box-shadow: none;
+      }
+
+      section,
+      header {
+        padding: 24px 28px;
+      }
+
+      a {
+        color: inherit;
+        text-decoration: none;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <header>
+      <div class="eyebrow">Toshify Web App | Analisis funcional</div>
+      <h1>Propuesta de mejora funcional para el modulo de Logistica</h1>
+      <p class="lead">
+        Documento orientado a transformar el modulo actual de Logistica en una herramienta
+        operativa de control diario, tomando como base el estado AS-IS observado en el codigo:
+        dashboard de inventario, productos, proveedores, movimientos, pedidos, asignaciones
+        activas e historial.
+      </p>
+      <div class="meta">
+        <span class="pill">Fecha: 2026-05-31</span>
+        <span class="pill">Tipo: Propuesta TO-BE</span>
+        <span class="pill">Base: Analisis AS-IS del modulo actual</span>
+        <span class="pill">Enfoque: Happy path y escenarios no happy path</span>
+      </div>
+    </header>
+
+    <section id="indice">
+      <h2>Indice</h2>
+      <div class="toc">
+        <a href="#resumen">1. Resumen ejecutivo</a>
+        <a href="#principios">2. Principios de mejora</a>
+        <a href="#modelo">3. Modelo operativo propuesto</a>
+        <a href="#brechas">4. Brechas actuales y mejora esperada</a>
+        <a href="#supabase">5. Supabase y tablas</a>
+        <a href="#happy">6. Flujos happy path</a>
+        <a href="#no-happy">7. Escenarios no happy path</a>
+        <a href="#pages">8. Mejoras por page</a>
+        <a href="#reglas">9. Reglas funcionales objetivo</a>
+        <a href="#kpis">10. Indicadores de gestion</a>
+        <a href="#roadmap">11. Roadmap sugerido</a>
+        <a href="#criterios">12. Criterios de aceptacion</a>
+        <a href="#cierre">13. Recomendacion final</a>
+      </div>
+    </section>
+
+    <section id="resumen">
+      <h2>1. Resumen ejecutivo</h2>
+      <div class="quote">
+        El modulo de Logistica ya tiene los componentes principales para operar inventario,
+        pero debe evolucionar de un modulo de registro y consulta hacia un cockpit operativo
+        que indique que hacer, que esta atrasado, que esta en riesgo y que debe cerrarse.
+      </div>
+
+      <p>
+        Actualmente el sistema cubre catalogos, stock, movimientos, pedidos, recepciones,
+        aprobaciones, asignaciones e historial. La base funcional es buena: las entradas pasan
+        por transito, las salidas/asignaciones/devoluciones requieren aprobacion y existe
+        trazabilidad por movimientos.
+      </p>
+      <p>
+        La mejora recomendada no consiste en crear pantallas aisladas, sino en ordenar el
+        ciclo logistico completo: detectar necesidad, generar accion, aprobar, ejecutar,
+        recibir, asignar, devolver, resolver excepciones y medir el resultado.
+      </p>
+
+      <div class="summary-grid">
+        <div class="box brand">
+          <div class="label">Objetivo principal</div>
+          <div class="metric">Control diario</div>
+          <p class="small">El usuario debe saber que atender apenas ingresa al modulo.</p>
+        </div>
+        <div class="box blue">
+          <div class="label">Cambio funcional</div>
+          <div class="metric">De consulta a accion</div>
+          <p class="small">Cada alerta debe terminar en una solicitud, pedido, aprobacion o caso.</p>
+        </div>
+        <div class="box green">
+          <div class="label">Riesgo a reducir</div>
+          <div class="metric">Quiebre de stock</div>
+          <p class="small">Reposicion guiada por minimo, sede, proveedor y lead time.</p>
+        </div>
+        <div class="box amber">
+          <div class="label">Control requerido</div>
+          <div class="metric">Excepciones</div>
+          <p class="small">Recepciones parciales, rechazos, danos, perdidas y atrasos con cierre.</p>
+        </div>
+      </div>
+    </section>
+
+    <section id="principios">
+      <h2>2. Principios de mejora</h2>
+      <div class="two-col">
+        <div class="box">
+          <h3>2.1 Principios operativos</h3>
+          <ul>
+            <li>Priorizar trabajo pendiente antes que solo mostrar informacion.</li>
+            <li>Convertir alertas de stock en acciones de reposicion.</li>
+            <li>Separar claramente recepcion fisica, aprobacion administrativa y ajuste de stock.</li>
+            <li>Controlar stock por sede de forma consistente en inventario, movimientos, pedidos y dashboard.</li>
+            <li>Reducir carga manual mediante sugerencias, valores por defecto y validaciones.</li>
+            <li>Cerrar ciclos: pedido, recepcion, discrepancia, asignacion, devolucion, dano o perdida.</li>
+          </ul>
+        </div>
+        <div class="box">
+          <h3>2.2 Principios de experiencia</h3>
+          <ul>
+            <li>Que el operador vea la siguiente accion natural sin buscar en varias pantallas.</li>
+            <li>Que cada error sea recuperable: corregir, reenviar, rechazar, justificar o escalar.</li>
+            <li>Que las acciones sensibles pidan contexto suficiente, no informacion innecesaria.</li>
+            <li>Que el historial explique que paso, quien lo hizo, cuando y por que.</li>
+            <li>Que los permisos bloqueen acciones, pero no oculten el estado operativo relevante.</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <section id="modelo">
+      <h2>3. Modelo operativo propuesto</h2>
+      <p>
+        La propuesta es organizar el modulo alrededor de un ciclo logistico completo y medible.
+        El dashboard debe ser la entrada al trabajo; las pages especializadas deben resolver
+        cada parte del proceso.
+      </p>
+
+      <div class="flow">
+        <div class="step">
+          <span class="num">1</span>
+          <div>
+            <h4>Detectar necesidad</h4>
+            <p>El dashboard identifica bajo stock, pedidos atrasados, pendientes de aprobacion,
+              herramientas retenidas y estados danado/perdido sin cierre.</p>
+          </div>
+        </div>
+        <div class="step">
+          <span class="num">2</span>
+          <div>
+            <h4>Generar accion</h4>
+            <p>Desde la alerta se crea solicitud, pedido sugerido, aprobacion, recepcion,
+              devolucion o caso de resolucion.</p>
+          </div>
+        </div>
+        <div class="step">
+          <span class="num">3</span>
+          <div>
+            <h4>Validar y aprobar</h4>
+            <p>El responsable revisa datos clave, evidencia, stock disponible, sede, proveedor,
+              motivo y prioridad antes de aprobar o rechazar.</p>
+          </div>
+        </div>
+        <div class="step">
+          <span class="num">4</span>
+          <div>
+            <h4>Ejecutar movimiento</h4>
+            <p>El sistema actualiza estados de inventario: disponible, en uso, en transito,
+              danado o perdido, con trazabilidad completa.</p>
+          </div>
+        </div>
+        <div class="step">
+          <span class="num">5</span>
+          <div>
+            <h4>Cerrar excepciones</h4>
+            <p>Las diferencias, retrasos, rechazos, danos y perdidas no quedan como estados
+              sueltos; se tratan como casos con responsable y resultado.</p>
+          </div>
+        </div>
+        <div class="step">
+          <span class="num">6</span>
+          <div>
+            <h4>Medir gestion</h4>
+            <p>El modulo entrega indicadores de abastecimiento, recepcion, aprobacion,
+              custodia, proveedor y calidad de inventario.</p>
+          </div>
+        </div>
+      </div>
+
+      <h3>3.1 Roles funcionales objetivo</h3>
+      <table>
+        <thead>
+          <tr>
+            <th>Rol</th>
+            <th>Responsabilidad propuesta</th>
+            <th>Acciones principales</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Operador logistico</td>
+            <td>Registrar operaciones reales y adjuntar contexto operativo.</td>
+            <td>Crear entradas, salidas, asignaciones, devoluciones, recepciones y observaciones.</td>
+          </tr>
+          <tr>
+            <td>Encargado / supervisor</td>
+            <td>Aprobar, rechazar y resolver excepciones.</td>
+            <td>Revisar pendientes, validar stock, confirmar discrepancias, cerrar casos.</td>
+          </tr>
+          <tr>
+            <td>Administrador de catalogos</td>
+            <td>Mantener maestros confiables.</td>
+            <td>Gestionar productos, proveedores, unidades, categorias, minimos y equivalencias.</td>
+          </tr>
+          <tr>
+            <td>Usuario consultor</td>
+            <td>Dar seguimiento y auditar informacion.</td>
+            <td>Consultar dashboard, asignaciones, historial, pedidos y trazabilidad.</td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section id="brechas">
+      <h2>4. Brechas actuales y mejora esperada</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>Componente actual</th>
+            <th>Situacion observada</th>
+            <th>Mejora funcional propuesta</th>
+            <th>Impacto esperado</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Dashboard Inventario</td>
+            <td>Muestra stock y estados, pero no prioriza trabajo.</td>
+            <td>Convertirlo en bandeja operativa con alertas accionables y semaforos.</td>
+            <td>Menos busqueda manual y mayor velocidad de respuesta.</td>
+          </tr>
+          <tr>
+            <td>Productos</td>
+            <td>Catologo correcto, con minimo y alerta, pero sin reglas de reposicion completas.</td>
+            <td>Agregar stock minimo/maximo por sede, proveedor preferido, lead time y codigo de barras.</td>
+            <td>Reposicion mas precisa y menos errores de seleccion.</td>
+          </tr>
+          <tr>
+            <td>Proveedores</td>
+            <td>Maestro administrativo sin performance operativa.</td>
+            <td>Agregar productos asociados, tiempos de entrega, cumplimiento y estado documental.</td>
+            <td>Mejor decision de compra y seguimiento de entregas.</td>
+          </tr>
+          <tr>
+            <td>Movimientos</td>
+            <td>Registra entradas, salidas, asignaciones y devoluciones con validaciones importantes.</td>
+            <td>Guiar cada flujo con wizard, validacion por sede, evidencia y acciones de correccion.</td>
+            <td>Menos movimientos incompletos o rechazados.</td>
+          </tr>
+          <tr>
+            <td>Pedidos</td>
+            <td>Unifica entradas, pedidos, pendientes e historico.</td>
+            <td>Separar visualmente recepcion, aprobacion y excepciones; sumar SLA y discrepancias.</td>
+            <td>Mayor control de pendientes y recepciones parciales.</td>
+          </tr>
+          <tr>
+            <td>Asignaciones Activas</td>
+            <td>Consulta herramientas en uso, pero no permite gestion directa.</td>
+            <td>Agregar antiguedad, responsable, devolucion directa y alertas por retencion.</td>
+            <td>Mejor custodia y menor perdida de herramientas.</td>
+          </tr>
+          <tr>
+            <td>Historial</td>
+            <td>Consulta ultimos movimientos con filtros basicos.</td>
+            <td>Agregar timeline, rango de fechas, exportacion y trazabilidad por producto/vehiculo/proveedor.</td>
+            <td>Auditoria operativa completa.</td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section id="supabase" class="page-break">
+      <h2>5. Supabase y tablas</h2>
+      <p>
+        La implementacion de esta propuesta depende directamente del modelo de datos en
+        Supabase. El analisis tecnico local muestra que Logistica ya opera sobre tablas,
+        vistas y RPC existentes, pero la capa tipada esta abierta como <code>any</code>,
+        por lo que antes de implementar cambios productivos se debe hacer una introspeccion
+        controlada del esquema real y versionar las migraciones.
+      </p>
+
+      <div class="two-col">
+        <div class="box blue">
+          <h3>5.1 Hallazgo clave</h3>
+          <p>
+            El sistema ya tiene manejo de sedes mediante <code>SedeContext</code>,
+            <code>sedeActualId</code> y <code>aplicarFiltroSede</code>. Sin embargo,
+            en Logistica la sede se usa de forma parcial: se filtran vehiculos, pero el
+            dashboard, stock disponible, pedidos, asignaciones e historial no evidencian
+            una consistencia completa por sede.
+          </p>
+        </div>
+        <div class="box amber">
+          <h3>5.2 Criterio de diseno</h3>
+          <p>
+            La unidad operativa propuesta es <strong>sede</strong>. No se recomienda crear
+            otra unidad fisica en esta etapa salvo que el negocio lo pida despues. Toda mejora P0/P1
+            debe resolver stock, movimientos, recepciones y aprobaciones por sede.
+          </p>
+        </div>
+      </div>
+
+      <h3>5.3 Dependencias actuales observadas</h3>
+      <table>
+        <thead>
+          <tr>
+            <th>Objeto Supabase</th>
+            <th>Uso funcional actual</th>
+            <th>Campos o salida observada desde codigo</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>sedes</code></td>
+            <td>Contexto global de sede del usuario y filtros operativos.</td>
+            <td><code>id</code>, <code>nombre</code>, <code>es_principal</code>, <code>activa</code>.</td>
+          </tr>
+          <tr>
+            <td><code>productos</code></td>
+            <td>Catalogo maestro usado por dashboard, movimientos, pedidos y validaciones.</td>
+            <td><code>codigo</code>, <code>nombre</code>, <code>tipo</code>, <code>es_retornable</code>, <code>stock_minimo</code>, <code>alerta_reposicion</code>, <code>categoria_id</code>, <code>unidad_medida_id</code>, <code>estado_id</code>, <code>proveedor</code> textual.</td>
+          </tr>
+          <tr>
+            <td><code>proveedores</code></td>
+            <td>Maestro de terceros para entradas y pedidos.</td>
+            <td><code>razon_social</code>, <code>numero_documento</code>, <code>activo</code>, <code>categoria</code>, datos de contacto y pago.</td>
+          </tr>
+          <tr>
+            <td><code>inventario</code></td>
+            <td>Stock real/logico por producto, proveedor, estado y asignacion a vehiculo.</td>
+            <td><code>producto_id</code>, <code>proveedor_id</code>, <code>cantidad</code>, <code>estado</code>, <code>asignado_a_vehiculo_id</code>, <code>created_at</code>.</td>
+          </tr>
+          <tr>
+            <td><code>movimientos</code></td>
+            <td>Registro y aprobacion de entradas, salidas, asignaciones y devoluciones.</td>
+            <td><code>tipo_movimiento</code>, <code>cantidad</code>, <code>proveedor_id</code>, <code>vehiculo_destino_id</code>, <code>vehiculo_origen_id</code>, <code>usuario_id</code>, <code>estado_aprobacion</code>, <code>motivo_salida</code>, <code>estado_retorno</code>, <code>categoria_servicio</code>, <code>motivo_rechazo</code>, <code>usuario_aprobador_id</code>.</td>
+          </tr>
+          <tr>
+            <td><code>pedidos</code> / <code>pedido_items</code></td>
+            <td>Pedido por lote, recepcion parcial/total y bloqueo de eliminacion de productos con pedidos.</td>
+            <td><code>numero_pedido</code>, <code>fecha_pedido</code>, <code>fecha_estimada_llegada</code>, <code>estado_pedido</code>, cantidades pedidas, recibidas y pendientes.</td>
+          </tr>
+          <tr>
+            <td><code>vehiculos</code></td>
+            <td>Destino/origen de herramientas y filtro por sede en movimientos.</td>
+            <td><code>id</code>, <code>patente</code>, <code>marca</code>, <code>modelo</code>, <code>sede_id</code> usado en filtros de otros modulos.</td>
+          </tr>
+          <tr>
+            <td><code>v_stock_productos</code></td>
+            <td>Fuente principal del dashboard de inventario.</td>
+            <td><code>stock_total</code>, <code>disponible</code>, <code>en_uso</code>, <code>en_transito</code>, <code>danado</code>, <code>perdido</code>.</td>
+          </tr>
+          <tr>
+            <td><code>v_entradas_en_transito</code>, <code>v_pedidos_en_transito</code>, <code>v_movimientos_pendientes</code></td>
+            <td>Fuente de Pedidos Unificado para recepciones y aprobaciones.</td>
+            <td>Items pendientes, pedidos agrupados, movimientos por aprobar, usuario registrador y datos de producto/proveedor/vehiculo.</td>
+          </tr>
+          <tr>
+            <td>RPC de inventario</td>
+            <td>Operaciones criticas de stock y aprobacion.</td>
+            <td><code>procesar_movimiento_inventario</code>, <code>crear_pedido_inventario</code>, <code>confirmar_recepcion_entrada</code>, <code>procesar_recepcion_pedido</code>, <code>aprobar_rechazar_movimiento</code>.</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h3>5.4 Cambios de base de datos requeridos para P0/P1</h3>
+      <table>
+        <thead>
+          <tr>
+            <th>Necesidad funcional</th>
+            <th>Cambio Supabase recomendado</th>
+            <th>Notas de implementacion</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Stock consistente por sede</td>
+            <td>Confirmar o agregar <code>sede_id</code> en <code>inventario</code>, <code>movimientos</code> y pedidos.</td>
+            <td>Backfill sin borrar datos. Si no se puede inferir, marcar registros como "por clasificar".</td>
+          </tr>
+          <tr>
+            <td>Dashboard accionable por sede</td>
+            <td>Extender <code>v_stock_productos</code> o crear vista nueva con <code>sede_id</code>, bajo minimo, criticidad y acciones pendientes.</td>
+            <td>La UI debe filtrar con <code>sedeActualId</code>; admins pueden ver todas las sedes.</td>
+          </tr>
+          <tr>
+            <td>Validacion fuerte al aprobar</td>
+            <td>Actualizar <code>aprobar_rechazar_movimiento</code> para revalidar stock por sede dentro de la transaccion.</td>
+            <td>No alcanza validar en frontend; la regla debe estar en RPC.</td>
+          </tr>
+          <tr>
+            <td>Reposicion desde bajo stock</td>
+            <td>Crear <code>solicitudes_reposicion</code> y reglas por sede.</td>
+            <td>Debe guardar origen de alerta, producto, sede, cantidad sugerida, estado y usuario.</td>
+          </tr>
+          <tr>
+            <td>Producto-proveedor operativo</td>
+            <td>Crear tabla puente <code>producto_proveedor</code>.</td>
+            <td>Debe reemplazar gradualmente el proveedor textual del producto para decisiones de compra.</td>
+          </tr>
+          <tr>
+            <td>Stock minimo/maximo por sede</td>
+            <td>Crear <code>stock_reglas_sede</code>.</td>
+            <td>Debe soportar minimo, maximo, punto de reorden, criticidad y producto activo por sede.</td>
+          </tr>
+          <tr>
+            <td>Recepciones no conformes</td>
+            <td>Crear <code>recepcion_discrepancias</code>.</td>
+            <td>Debe vincular pedido/item o entrada simple, causa, cantidad, evidencia opcional, estado y responsable.</td>
+          </tr>
+          <tr>
+            <td>Danos/perdidas con cierre</td>
+            <td>Crear <code>inventario_casos</code>.</td>
+            <td>Debe manejar caso por dano, perdida o cuarentena con responsable, accion de cierre y resultado.</td>
+          </tr>
+          <tr>
+            <td>Tipos confiables en frontend</td>
+            <td>Regenerar <code>database.types.ts</code> luego de migraciones.</td>
+            <td>Evita seguir implementando Logistica con <code>createClient&lt;any&gt;</code>.</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h3>5.5 Seguridad, RLS y credenciales</h3>
+      <div class="three-col">
+        <div class="box danger">
+          <h4>Service role</h4>
+          <p>No debe usarse en frontend ni quedar versionado. Las operaciones administrativas deben quedar en RPC, Edge Function o backend seguro.</p>
+        </div>
+        <div class="box blue">
+          <h4>RLS por sede</h4>
+          <p>Las nuevas tablas deben tener politicas por rol y sede, respetando usuarios que pueden ver todas las sedes.</p>
+        </div>
+        <div class="box green">
+          <h4>Migraciones</h4>
+          <p>Todo cambio de tabla, vista o RPC debe versionarse y probarse en ambiente controlado antes de produccion.</p>
+        </div>
+      </div>
+    </section>
+
+    <section id="happy" class="page-break">
+      <h2>6. Flujos happy path propuestos</h2>
+      <p>
+        Los flujos happy path representan el comportamiento ideal cuando los datos son correctos,
+        hay stock o proveedor disponible, los permisos estan bien configurados y no existen
+        discrepancias.
+      </p>
+
+      <h3>6.1 Reposicion por bajo stock</h3>
+      <div class="flow">
+        <div class="step"><span class="num">1</span><div><h4>Alerta automatica</h4><p>El dashboard detecta producto bajo minimo por sede.</p></div></div>
+        <div class="step"><span class="num">2</span><div><h4>Pedido sugerido</h4><p>El sistema propone cantidad a reponer considerando stock disponible, en transito, minimo, maximo y consumo historico.</p></div></div>
+        <div class="step"><span class="num">3</span><div><h4>Proveedor recomendado</h4><p>Se muestra proveedor preferido, lead time y ultima performance.</p></div></div>
+        <div class="step"><span class="num">4</span><div><h4>Aprobacion</h4><p>Encargado valida y aprueba la solicitud de reposicion.</p></div></div>
+        <div class="step"><span class="num">5</span><div><h4>Pedido en transito</h4><p>El pedido queda visible con fecha estimada y estado operativo.</p></div></div>
+        <div class="step"><span class="num">6</span><div><h4>Recepcion y cierre</h4><p>Al recibir conforme, el stock pasa a disponible y la alerta se cierra.</p></div></div>
+      </div>
+
+      <h3>6.2 Entrada simple de inventario</h3>
+      <div class="flow">
+        <div class="step"><span class="num">1</span><div><h4>Registro</h4><p>Operador selecciona proveedor, producto, cantidad, sede y documento de referencia.</p></div></div>
+        <div class="step"><span class="num">2</span><div><h4>Transito</h4><p>El sistema crea la entrada en estado en transito.</p></div></div>
+        <div class="step"><span class="num">3</span><div><h4>Recepcion</h4><p>Usuario autorizado confirma recepcion total.</p></div></div>
+        <div class="step"><span class="num">4</span><div><h4>Disponibilidad</h4><p>El stock queda disponible para salidas o asignaciones.</p></div></div>
+      </div>
+
+      <h3>6.3 Salida por consumo de servicio</h3>
+      <div class="flow">
+        <div class="step"><span class="num">1</span><div><h4>Solicitud de salida</h4><p>Operador selecciona producto, cantidad, motivo, categoria de servicio y sede.</p></div></div>
+        <div class="step"><span class="num">2</span><div><h4>Validacion previa</h4><p>El sistema valida stock disponible real en la sede correspondiente.</p></div></div>
+        <div class="step"><span class="num">3</span><div><h4>Aprobacion</h4><p>Supervisor revisa contexto, aprueba y deja trazabilidad.</p></div></div>
+        <div class="step"><span class="num">4</span><div><h4>Descuento</h4><p>El stock se descuenta y el movimiento queda en historial con usuario, fecha y motivo.</p></div></div>
+      </div>
+
+      <h3>6.4 Asignacion de herramienta a vehiculo</h3>
+      <div class="flow">
+        <div class="step"><span class="num">1</span><div><h4>Seleccion de herramienta</h4><p>Solo se muestran productos retornables con stock disponible.</p></div></div>
+        <div class="step"><span class="num">2</span><div><h4>Asignacion</h4><p>Operador selecciona vehiculo, responsable, categoria de servicio y cantidad.</p></div></div>
+        <div class="step"><span class="num">3</span><div><h4>Aprobacion</h4><p>Encargado aprueba la asignacion.</p></div></div>
+        <div class="step"><span class="num">4</span><div><h4>Custodia activa</h4><p>La herramienta queda en uso y visible en Asignaciones Activas.</p></div></div>
+        <div class="step"><span class="num">5</span><div><h4>Devolucion</h4><p>Desde la asignacion activa se registra devolucion operativa y el stock vuelve a disponible.</p></div></div>
+      </div>
+
+      <h3>6.5 Pedido por lote</h3>
+      <div class="flow">
+        <div class="step"><span class="num">1</span><div><h4>Creacion de pedido</h4><p>Usuario registra numero de pedido, proveedor, fecha estimada e items.</p></div></div>
+        <div class="step"><span class="num">2</span><div><h4>Seguimiento</h4><p>El pedido aparece en la bandeja de transito con semaforo de vencimiento.</p></div></div>
+        <div class="step"><span class="num">3</span><div><h4>Recepcion parcial o total</h4><p>Al llegar mercaderia, se reciben cantidades por item.</p></div></div>
+        <div class="step"><span class="num">4</span><div><h4>Cierre automatico</h4><p>Cuando todos los items quedan recibidos, el pedido se cierra y el stock queda disponible.</p></div></div>
+      </div>
+    </section>
+
+    <section id="no-happy">
+      <h2>7. Escenarios no happy path</h2>
+      <p>
+        Estos escenarios son claves porque en operacion real el valor del sistema no esta solo
+        en registrar lo correcto, sino en conducir la excepcion sin perder control ni trazabilidad.
+      </p>
+
+      <table>
+        <thead>
+          <tr>
+            <th>Escenario</th>
+            <th>Riesgo operativo</th>
+            <th>Comportamiento funcional propuesto</th>
+            <th>Resultado esperado</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Producto bajo minimo sin proveedor asociado</td>
+            <td>La alerta existe, pero no se puede convertir rapidamente en pedido.</td>
+            <td>Permitir crear solicitud pendiente de completar proveedor y marcar maestro incompleto.</td>
+            <td>La necesidad no se pierde y catalogo queda observado.</td>
+          </tr>
+          <tr>
+            <td>Stock disponible global, pero no disponible en la sede del usuario</td>
+            <td>El operador cree que puede consumir stock que pertenece a otra sede.</td>
+            <td>Validar stock por sede y ofrecer transferencia interna o pedido local.</td>
+            <td>Menos quiebres y movimientos incorrectos.</td>
+          </tr>
+          <tr>
+            <td>Recepcion parcial</td>
+            <td>No queda claro si falta mercaderia, si hay backorder o si proveedor incumplio.</td>
+            <td>Solicitar motivo de diferencia: entrega parcial, faltante, danado, error de pedido o pendiente proveedor.</td>
+            <td>Pedido sigue abierto con saldo pendiente y causa documentada.</td>
+          </tr>
+          <tr>
+            <td>Recepcion con cantidad mayor a la pedida</td>
+            <td>Ingreso no autorizado o diferencia contra compra.</td>
+            <td>Bloquear recepcion excedente o mandarla a aprobacion especial con observacion obligatoria.</td>
+            <td>Control de sobre-recepcion y auditoria.</td>
+          </tr>
+          <tr>
+            <td>Producto recibido no coincide con pedido</td>
+            <td>Ingreso de item incorrecto al inventario.</td>
+            <td>Crear caso de discrepancia y mantener producto en cuarentena hasta decision.</td>
+            <td>No se contamina stock disponible.</td>
+          </tr>
+          <tr>
+            <td>Movimiento rechazado</td>
+            <td>El operador no sabe como corregir o reenviar.</td>
+            <td>Mostrar motivo de rechazo, permitir editar y reenviar si conserva trazabilidad.</td>
+            <td>Menos reproceso manual y cierre claro.</td>
+          </tr>
+          <tr>
+            <td>Stock cambia mientras un movimiento esta pendiente</td>
+            <td>Al aprobar, ya no existe stock suficiente.</td>
+            <td>Revalidar disponibilidad en el momento de aprobacion, no solo al crear solicitud.</td>
+            <td>Evita stock negativo o inconsistente.</td>
+          </tr>
+          <tr>
+            <td>Herramienta no devuelta a tiempo</td>
+            <td>Perdida de control de custodia.</td>
+            <td>Alertar por antiguedad, responsable y vehiculo; permitir escalamiento o recordatorio interno.</td>
+            <td>Mayor recuperacion de herramientas.</td>
+          </tr>
+          <tr>
+            <td>Herramienta devuelta danada</td>
+            <td>El dano queda como estado sin resolucion.</td>
+            <td>Crear caso de dano con evidencia, responsable, decision de reparacion, descarte o reposicion.</td>
+            <td>Estado danado tiene cierre operativo.</td>
+          </tr>
+          <tr>
+            <td>Herramienta perdida</td>
+            <td>Perdida queda registrada, pero no se gestiona consecuencia.</td>
+            <td>Crear caso de perdida con responsable, vehiculo, servicio asociado y accion: recuperacion, cobro o reposicion.</td>
+            <td>Menor perdida no explicada y mejor trazabilidad.</td>
+          </tr>
+          <tr>
+            <td>Proveedor inactivo con pedido pendiente</td>
+            <td>Bloqueo o confusion sobre pedidos ya emitidos.</td>
+            <td>Permitir continuar pedidos existentes, pero bloquear nuevos pedidos y mostrar alerta.</td>
+            <td>Continuidad operativa sin abrir nuevas obligaciones.</td>
+          </tr>
+          <tr>
+            <td>Producto inactivo con stock disponible</td>
+            <td>Stock residual puede quedar atrapado o usarse sin control.</td>
+            <td>Permitir salida controlada de stock existente, bloquear nuevas compras y mostrar etiqueta de discontinuado.</td>
+            <td>Inventario residual se agota ordenadamente.</td>
+          </tr>
+          <tr>
+            <td>Usuario sin permiso intenta aprobar</td>
+            <td>Accion bloqueada sin explicacion operativa.</td>
+            <td>Mostrar accion deshabilitada con razon funcional y responsable que puede aprobar.</td>
+            <td>Menos confusion y menos soporte operativo.</td>
+          </tr>
+          <tr>
+            <td>Error tecnico en RPC o base de datos</td>
+            <td>Movimiento parcialmente procesado o usuario sin certeza del resultado.</td>
+            <td>Operacion atomica, mensaje claro, reintento seguro y consulta de estado final del movimiento.</td>
+            <td>Evita duplicados y reduce incertidumbre.</td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section id="pages" class="page-break">
+      <h2>8. Mejoras funcionales por page</h2>
+
+      <h3>8.1 Dashboard Inventario</h3>
+      <div class="two-col">
+        <div class="box soft">
+          <h4>Mejoras recomendadas</h4>
+          <ul>
+            <li>Bandeja "Acciones de hoy": bajo stock, pedidos vencidos, recepciones pendientes, aprobaciones y herramientas retenidas.</li>
+            <li>Filtros por sede, tipo, categoria, criticidad y proveedor.</li>
+            <li>Acciones directas: crear pedido, ver pedido, aprobar pendiente, iniciar devolucion, abrir caso de dano/perdida.</li>
+            <li>Semaforos: critico, atencion, normal.</li>
+            <li>Indicador de cobertura estimada: dias de stock segun consumo historico.</li>
+          </ul>
+        </div>
+        <div class="box green">
+          <h4>Resultado esperado</h4>
+          <p>El dashboard deja de ser solo una fotografia del inventario y se convierte en el punto de entrada para gestionar la operacion diaria.</p>
+        </div>
+      </div>
+
+      <h3>8.2 Productos</h3>
+      <div class="two-col">
+        <div class="box soft">
+          <h4>Mejoras recomendadas</h4>
+          <ul>
+            <li>Definir stock minimo y maximo por sede.</li>
+            <li>Relacionar producto con uno o varios proveedores.</li>
+            <li>Registrar proveedor preferido, lead time, unidad de compra y equivalencias.</li>
+            <li>Agregar codigo de barras o codigo alterno para recepcion y salida rapida.</li>
+            <li>Estado funcional: activo, discontinuado, bloqueado para compra, bloqueado para salida.</li>
+          </ul>
+        </div>
+        <div class="box blue">
+          <h4>Resultado esperado</h4>
+          <p>El catalogo se vuelve una fuente de reglas operativas, no solo un maestro descriptivo.</p>
+        </div>
+      </div>
+
+      <h3>8.3 Proveedores</h3>
+      <div class="two-col">
+        <div class="box soft">
+          <h4>Mejoras recomendadas</h4>
+          <ul>
+            <li>Matriz producto-proveedor.</li>
+            <li>Lead time promedio y lead time comprometido.</li>
+            <li>Historial de cumplimiento: a tiempo, atrasado, parcial, con discrepancia.</li>
+            <li>Estado documental y condiciones comerciales relevantes.</li>
+            <li>Ficha operativa con pedidos abiertos, ultimas entregas y reclamos.</li>
+          </ul>
+        </div>
+        <div class="box amber">
+          <h4>Resultado esperado</h4>
+          <p>Compras y logistica pueden decidir con datos, no solo con datos administrativos del proveedor.</p>
+        </div>
+      </div>
+
+      <h3>8.4 Movimientos</h3>
+      <div class="two-col">
+        <div class="box soft">
+          <h4>Mejoras recomendadas</h4>
+          <ul>
+            <li>Wizard por tipo de movimiento con campos dinamicos.</li>
+            <li>Validacion de stock por sede en creacion y aprobacion.</li>
+            <li>Adjuntos o evidencia para salidas sensibles, danos, perdidas y devoluciones observadas.</li>
+            <li>Motivos normalizados y submotivos segun tipo de salida.</li>
+            <li>Boton de corregir y reenviar para movimientos rechazados.</li>
+            <li>Resumen previo antes de guardar: impacto de stock, estado destino y aprobador esperado.</li>
+          </ul>
+        </div>
+        <div class="box violet">
+          <h4>Resultado esperado</h4>
+          <p>El operador registra menos errores y el aprobador recibe solicitudes con contexto suficiente.</p>
+        </div>
+      </div>
+
+      <h3>8.5 Pedidos</h3>
+      <div class="two-col">
+        <div class="box soft">
+          <h4>Mejoras recomendadas</h4>
+          <ul>
+            <li>Separar visualmente recepciones, aprobaciones y excepciones dentro de la misma page.</li>
+            <li>Semaforo por fecha estimada: sin fecha, por vencer, vencido, recepcion parcial.</li>
+            <li>Recepcion por item con causa de diferencia obligatoria cuando no coincide.</li>
+            <li>Aprobacion masiva controlada para movimientos de bajo riesgo.</li>
+            <li>Historial de cambios por pedido: creado, editado, recibido, parcial, cerrado, reclamado.</li>
+          </ul>
+        </div>
+        <div class="box green">
+          <h4>Resultado esperado</h4>
+          <p>La page de Pedidos funciona como centro de seguimiento de transito y aprobaciones, con menos ambiguedad operativa.</p>
+        </div>
+      </div>
+
+      <h3>8.6 Asignaciones Activas</h3>
+      <div class="two-col">
+        <div class="box soft">
+          <h4>Mejoras recomendadas</h4>
+          <ul>
+            <li>Mostrar antiguedad de la asignacion y dias en uso.</li>
+            <li>Identificar responsable, vehiculo, sede y servicio asociado.</li>
+            <li>Accion directa de devolucion desde la fila.</li>
+            <li>Accion de reportar dano o perdida.</li>
+            <li>Alertas por herramientas retenidas fuera de SLA.</li>
+          </ul>
+        </div>
+        <div class="box amber">
+          <h4>Resultado esperado</h4>
+          <p>La pantalla deja de ser solo consulta y se convierte en control real de custodia.</p>
+        </div>
+      </div>
+
+      <h3>8.7 Historial de Movimientos</h3>
+      <div class="two-col">
+        <div class="box soft">
+          <h4>Mejoras recomendadas</h4>
+          <ul>
+            <li>Agregar rango de fechas obligatorio para busquedas amplias.</li>
+            <li>Exportacion filtrada para auditoria.</li>
+            <li>Timeline por producto, pedido, vehiculo, proveedor o usuario.</li>
+            <li>Mostrar relacion con aprobacion, rechazo, recepcion y caso de excepcion.</li>
+            <li>Incluir antes/despues de stock cuando sea posible.</li>
+          </ul>
+        </div>
+        <div class="box blue">
+          <h4>Resultado esperado</h4>
+          <p>El historial permite reconstruir decisiones y movimientos de punta a punta.</p>
+        </div>
+      </div>
+    </section>
+
+    <section id="reglas">
+      <h2>9. Reglas funcionales objetivo</h2>
+      <div class="three-col">
+        <div class="box">
+          <h3>9.1 Stock</h3>
+          <ul>
+            <li>No aprobar salidas/asignaciones sin revalidar stock.</li>
+            <li>No mezclar stock entre sedes sin transferencia registrada.</li>
+            <li>No liberar stock en cuarentena, danado o perdido sin resolucion.</li>
+            <li>Todo stock debe tener producto, sede, estado y trazabilidad de origen.</li>
+          </ul>
+        </div>
+        <div class="box">
+          <h3>9.2 Aprobaciones</h3>
+          <ul>
+            <li>Toda aprobacion debe registrar aprobador, fecha, resultado y comentario cuando aplique.</li>
+            <li>El rechazo debe tener motivo obligatorio y permitir correccion/reenvio.</li>
+            <li>La aprobacion masiva solo debe aplicar a movimientos de bajo riesgo y reglas claras.</li>
+            <li>Permisos deben separar crear, aprobar, recepcionar y administrar catalogos.</li>
+          </ul>
+        </div>
+        <div class="box">
+          <h3>9.3 Excepciones</h3>
+          <ul>
+            <li>Recepcion parcial requiere causa.</li>
+            <li>Dano o perdida requiere observacion, responsable y accion de cierre.</li>
+            <li>Pedido vencido requiere semaforo y seguimiento.</li>
+            <li>Movimiento con error tecnico no debe generar duplicados.</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <section id="kpis">
+      <h2>10. Indicadores de gestion propuestos</h2>
+      <div class="kpi-grid">
+        <div class="box brand">
+          <div class="label">Abastecimiento</div>
+          <div class="metric">% bajo minimo</div>
+          <p class="small">Productos bajo minimo por sede y criticidad.</p>
+        </div>
+        <div class="box blue">
+          <div class="label">Pedidos</div>
+          <div class="metric">OTD</div>
+          <p class="small">Entregas a tiempo por proveedor.</p>
+        </div>
+        <div class="box green">
+          <div class="label">Recepcion</div>
+          <div class="metric">% conformidad</div>
+          <p class="small">Recepciones sin diferencias sobre total recibido.</p>
+        </div>
+        <div class="box amber">
+          <div class="label">Aprobacion</div>
+          <div class="metric">Lead time</div>
+          <p class="small">Tiempo promedio desde solicitud hasta aprobacion.</p>
+        </div>
+        <div class="box violet">
+          <div class="label">Custodia</div>
+          <div class="metric">Dias en uso</div>
+          <p class="small">Antiguedad promedio de herramientas asignadas.</p>
+        </div>
+        <div class="box danger">
+          <div class="label">Perdidas</div>
+          <div class="metric">% sin cierre</div>
+          <p class="small">Danos/perdidas pendientes de resolucion.</p>
+        </div>
+        <div class="box blue">
+          <div class="label">Inventario</div>
+          <div class="metric">Rotacion</div>
+          <p class="small">Consumo por producto vs stock promedio.</p>
+        </div>
+        <div class="box green">
+          <div class="label">Calidad</div>
+          <div class="metric">Rechazos</div>
+          <p class="small">Movimientos rechazados por causa.</p>
+        </div>
+      </div>
+    </section>
+
+    <section id="roadmap" class="page-break">
+      <h2>11. Roadmap sugerido</h2>
+      <div class="roadmap">
+        <div class="box danger">
+          <span class="tag p0">P0</span>
+          <h3>0 a 2 semanas: Control base</h3>
+          <ul>
+            <li>Definir formalmente pages vigentes vs pages legado.</li>
+            <li>Aplicar consistencia funcional por sede en dashboard, stock y movimientos.</li>
+            <li>Agregar bandeja de acciones pendientes en dashboard.</li>
+            <li>Revalidar stock al aprobar movimientos.</li>
+            <li>Mostrar motivo y accion de correccion para rechazos.</li>
+            <li>Agregar rango de fechas y exportacion basica en historial.</li>
+          </ul>
+        </div>
+        <div class="box amber">
+          <span class="tag p1">P1</span>
+          <h3>3 a 6 semanas: Ciclos completos</h3>
+          <ul>
+            <li>Crear flujo de reposicion desde bajo stock.</li>
+            <li>Implementar matriz producto-proveedor y lead time.</li>
+            <li>Agregar SLA y semaforos a pedidos en transito.</li>
+            <li>Capturar causas de discrepancia en recepcion parcial.</li>
+            <li>Agregar acciones directas en Asignaciones Activas.</li>
+            <li>Crear casos de dano/perdida con cierre funcional.</li>
+          </ul>
+        </div>
+        <div class="box blue">
+          <span class="tag p2">P2</span>
+          <h3>7 a 12 semanas: Optimizacion</h3>
+          <ul>
+            <li>Implementar KPIs de proveedor, rotacion, cobertura y custodia.</li>
+            <li>Agregar escaneo por codigo de barras o QR.</li>
+            <li>Incluir sugerencia de compra por consumo historico.</li>
+            <li>Crear timeline completo por producto, pedido, vehiculo y proveedor.</li>
+            <li>Implementar aprobacion masiva con reglas de bajo riesgo.</li>
+            <li>Preparar integraciones contables o de compras si aplican.</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <section id="criterios">
+      <h2>12. Criterios de aceptacion funcional</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>Area</th>
+            <th>Criterio</th>
+            <th>Validacion esperada</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Dashboard</td>
+            <td>El usuario puede identificar acciones pendientes sin navegar por todas las pages.</td>
+            <td>Existe bandeja con bajo stock, pedidos vencidos, recepciones, aprobaciones y herramientas retenidas.</td>
+          </tr>
+          <tr>
+            <td>Reposicion</td>
+            <td>Una alerta de stock puede convertirse en solicitud o pedido.</td>
+            <td>El sistema precarga producto, sede, cantidad sugerida y proveedor recomendado si existe.</td>
+          </tr>
+          <tr>
+            <td>Stock</td>
+            <td>La disponibilidad se valida por sede.</td>
+            <td>No se aprueba un consumo si el stock de la sede no alcanza.</td>
+          </tr>
+          <tr>
+            <td>Recepcion</td>
+            <td>Las recepciones parciales registran causa.</td>
+            <td>El pedido queda abierto con saldo pendiente y motivo documentado.</td>
+          </tr>
+          <tr>
+            <td>Aprobacion</td>
+            <td>Los rechazos son recuperables.</td>
+            <td>El operador ve motivo, corrige y reenvia sin perder trazabilidad.</td>
+          </tr>
+          <tr>
+            <td>Custodia</td>
+            <td>Las herramientas activas se gestionan desde la misma pantalla.</td>
+            <td>Existe accion de devolucion, reporte de dano/perdida y alerta por antiguedad.</td>
+          </tr>
+          <tr>
+            <td>Auditoria</td>
+            <td>Se puede reconstruir la historia completa de un producto o movimiento.</td>
+            <td>Historial muestra origen, aprobacion, recepcion, estado final, usuario y timestamps.</td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section id="cierre">
+      <h2>13. Recomendacion final</h2>
+      <p>
+        La recomendacion es evolucionar el modulo en tres pasos: primero asegurar control y
+        consistencia operativa; luego cerrar ciclos funcionales de reposicion, recepcion,
+        custodia y excepciones; finalmente medir y optimizar con indicadores.
+      </p>
+      <p>
+        El modulo actual ya tiene una base madura. La mejora de mayor valor es conectar sus
+        piezas para que el usuario no solo registre movimientos, sino que gestione prioridades,
+        excepciones y resultados. En terminos funcionales, el objetivo debe ser que Logistica
+        funcione como una mesa de control: todo pendiente tiene responsable, fecha, estado,
+        accion siguiente y cierre.
+      </p>
+      <div class="two-col">
+        <div class="box green">
+          <h3>Decision recomendada</h3>
+          <p>Avanzar con P0 y P1 antes de agregar analitica avanzada. El mayor retorno esta en control operativo, consistencia de stock y cierre de excepciones.</p>
+        </div>
+        <div class="box brand">
+          <h3>Resultado buscado</h3>
+          <p>Reducir quiebres, atrasos, rechazos repetidos, herramientas retenidas, discrepancias no explicadas y movimientos sin trazabilidad suficiente.</p>
+        </div>
+      </div>
+    </section>
+  </main>
+</body>
+</html>

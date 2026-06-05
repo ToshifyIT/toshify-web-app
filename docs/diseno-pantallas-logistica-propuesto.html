@@ -1,0 +1,1929 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Diseno Propuesto - Pantallas Modulo de Logistica</title>
+  <style>
+    :root {
+      --color-primary: #ff0033;
+      --color-primary-hover: #e6002e;
+      --color-primary-light: rgba(255, 0, 51, 0.1);
+      --color-primary-shadow: rgba(255, 0, 51, 0.2);
+      --color-success: #10B981;
+      --color-success-light: #D1FAE5;
+      --color-success-dark: #065F46;
+      --color-warning: #F59E0B;
+      --color-warning-light: #FEF3C7;
+      --color-warning-dark: #92400E;
+      --color-danger: #DC2626;
+      --color-danger-light: #FEE2E2;
+      --color-danger-dark: #991B1B;
+      --color-info: #3B82F6;
+      --color-info-light: #DBEAFE;
+      --color-info-dark: #1E40AF;
+      --color-purple: #8B5CF6;
+      --color-purple-light: #F5F3FF;
+      --color-purple-dark: #6B21A8;
+      --color-gray-50: #F9FAFB;
+      --color-gray-100: #F3F4F6;
+      --color-gray-200: #E5E7EB;
+      --color-gray-300: #D1D5DB;
+      --color-gray-400: #9CA3AF;
+      --color-gray-500: #6B7280;
+      --color-gray-600: #4B5563;
+      --color-gray-700: #374151;
+      --color-gray-800: #1F2937;
+      --bg-primary: #FFFFFF;
+      --bg-secondary: #f8f5f6;
+      --bg-tertiary: #F3F4F6;
+      --bg-hover: #FAFAFA;
+      --text-primary: #1F2937;
+      --text-secondary: #6B7280;
+      --text-tertiary: #9CA3AF;
+      --text-inverse: #FFFFFF;
+      --border-primary: #E5E7EB;
+      --border-secondary: #F3F4F6;
+      --input-bg: #FFFFFF;
+      --input-border: #E5E7EB;
+      --input-focus-shadow: 0 0 0 3px rgba(255, 0, 51, 0.1);
+      --table-header-bg: #F9FAFB;
+      --table-row-hover: #FAFAFA;
+      --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.04);
+      --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html {
+      scroll-behavior: smooth;
+    }
+
+    body {
+      margin: 0;
+      min-width: 320px;
+      background: var(--bg-secondary);
+      color: var(--text-primary);
+      font-family: Roboto, -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif;
+      font-size: 14px;
+      line-height: 1.45;
+    }
+
+    button,
+    input,
+    select,
+    textarea,
+    table {
+      font: inherit;
+    }
+
+    a {
+      color: inherit;
+      text-decoration: none;
+    }
+
+    .prototype-shell {
+      display: flex;
+      min-height: 100vh;
+    }
+
+    .sidebar {
+      position: sticky;
+      top: 0;
+      width: 240px;
+      height: 100vh;
+      background: var(--bg-primary);
+      border-right: 1px solid var(--border-primary);
+      display: flex;
+      flex-direction: column;
+      flex-shrink: 0;
+    }
+
+    .sidebar-header {
+      padding: 18px 20px;
+      border-bottom: 1px solid var(--border-primary);
+    }
+
+    .brand {
+      color: var(--color-primary);
+      font-size: 22px;
+      font-weight: 800;
+      letter-spacing: 0;
+    }
+
+    .brand-subtitle {
+      margin-top: 2px;
+      color: var(--text-tertiary);
+      font-size: 11px;
+      font-weight: 600;
+    }
+
+    .sidebar-nav {
+      flex: 1;
+      padding: 12px;
+      overflow-y: auto;
+    }
+
+    .nav-section-label {
+      margin: 16px 8px 6px;
+      color: var(--text-tertiary);
+      font-size: 10px;
+      font-weight: 800;
+      text-transform: uppercase;
+    }
+
+    .nav-item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      min-height: 34px;
+      padding: 8px 10px;
+      border-radius: 6px;
+      color: var(--text-secondary);
+      font-size: 12px;
+      font-weight: 700;
+    }
+
+    .nav-item.active {
+      background: var(--color-primary-light);
+      color: var(--color-primary);
+    }
+
+    .nav-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--color-gray-300);
+      flex: 0 0 auto;
+    }
+
+    .nav-item.active .nav-dot {
+      background: var(--color-primary);
+    }
+
+    .sidebar-footer {
+      padding: 12px;
+      border-top: 1px solid var(--border-primary);
+    }
+
+    .user-card {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px;
+      border-radius: 8px;
+      background: var(--bg-secondary);
+    }
+
+    .avatar {
+      display: grid;
+      place-items: center;
+      width: 34px;
+      height: 34px;
+      border-radius: 50%;
+      background: var(--color-primary);
+      color: var(--text-inverse);
+      font-size: 12px;
+      font-weight: 800;
+    }
+
+    .workspace {
+      flex: 1;
+      min-width: 0;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .topbar {
+      position: sticky;
+      top: 0;
+      z-index: 20;
+      min-height: 64px;
+      background: var(--bg-primary);
+      border-bottom: 1px solid var(--border-primary);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      padding: 0 32px;
+    }
+
+    .topbar-title {
+      font-size: 16px;
+      font-weight: 800;
+      color: var(--text-primary);
+    }
+
+    .topbar-actions {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+    }
+
+    .sede-chip,
+    .top-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      min-height: 32px;
+      padding: 7px 12px;
+      border: 1px solid var(--border-primary);
+      border-radius: 8px;
+      background: var(--bg-primary);
+      color: var(--text-secondary);
+      font-size: 12px;
+      font-weight: 700;
+      white-space: nowrap;
+    }
+
+    .logout-btn {
+      min-height: 34px;
+      padding: 8px 16px;
+      border: 1px solid var(--color-primary);
+      border-radius: 8px;
+      background: var(--color-primary);
+      color: var(--text-inverse);
+      font-size: 12px;
+      font-weight: 800;
+    }
+
+    .content-area {
+      padding: 24px 32px 48px;
+    }
+
+    .doc-header {
+      background: var(--bg-primary);
+      border: 1px solid var(--border-primary);
+      border-radius: 8px;
+      padding: 20px;
+      margin-bottom: 16px;
+    }
+
+    .doc-title {
+      border-left: 4px solid var(--color-primary);
+      padding-left: 16px;
+    }
+
+    .doc-title h1 {
+      margin: 0;
+      font-size: 20px;
+      font-weight: 800;
+    }
+
+    .doc-title p {
+      margin: 4px 0 0;
+      color: var(--text-secondary);
+      font-size: 12px;
+    }
+
+    .screen-nav {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 16px;
+    }
+
+    .screen-nav a {
+      display: inline-flex;
+      align-items: center;
+      min-height: 32px;
+      padding: 7px 10px;
+      border: 1px solid var(--border-primary);
+      border-radius: 6px;
+      background: var(--bg-secondary);
+      color: var(--text-secondary);
+      font-size: 12px;
+      font-weight: 800;
+    }
+
+    .handoff-bar {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 12px;
+      margin-bottom: 16px;
+    }
+
+    .handoff-item {
+      min-height: 86px;
+      padding: 14px;
+      border: 1px solid var(--border-primary);
+      border-radius: 8px;
+      background: var(--bg-primary);
+    }
+
+    .handoff-label {
+      color: var(--text-tertiary);
+      font-size: 10px;
+      font-weight: 800;
+      text-transform: uppercase;
+    }
+
+    .handoff-value {
+      margin-top: 6px;
+      font-size: 14px;
+      font-weight: 800;
+    }
+
+    .screen {
+      margin-top: 18px;
+      background: var(--bg-primary);
+      border: 1px solid var(--border-primary);
+      border-radius: 8px;
+      overflow: hidden;
+    }
+
+    .screen-header {
+      display: flex;
+      justify-content: space-between;
+      gap: 16px;
+      padding: 20px;
+      border-bottom: 1px solid var(--border-primary);
+    }
+
+    .screen-title {
+      border-left: 4px solid var(--color-primary);
+      padding-left: 14px;
+    }
+
+    .screen-title h2 {
+      margin: 0;
+      font-size: 18px;
+      font-weight: 800;
+    }
+
+    .screen-title span {
+      display: block;
+      margin-top: 3px;
+      color: var(--text-tertiary);
+      font-size: 12px;
+      font-weight: 600;
+    }
+
+    .screen-actions {
+      display: flex;
+      gap: 8px;
+      align-items: flex-start;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+    }
+
+    .screen-body {
+      padding: 16px;
+      background: var(--bg-secondary);
+    }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      min-height: 34px;
+      padding: 8px 12px;
+      border: 1px solid var(--border-primary);
+      border-radius: 6px;
+      background: var(--bg-primary);
+      color: var(--text-secondary);
+      font-size: 12px;
+      font-weight: 800;
+      white-space: nowrap;
+    }
+
+    .btn.primary {
+      border-color: var(--color-primary);
+      background: var(--color-primary);
+      color: var(--text-inverse);
+    }
+
+    .btn.success {
+      border-color: var(--color-success);
+      background: var(--color-success);
+      color: var(--text-inverse);
+    }
+
+    .btn.warning {
+      border-color: var(--color-warning);
+      background: var(--color-warning-light);
+      color: var(--color-warning-dark);
+    }
+
+    .btn.danger {
+      border-color: var(--color-danger);
+      background: var(--color-danger-light);
+      color: var(--color-danger-dark);
+    }
+
+    .btn.ghost {
+      background: var(--bg-tertiary);
+    }
+
+    .filters-row,
+    .toolbar-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin-bottom: 12px;
+    }
+
+    .search {
+      flex: 1;
+      min-width: 220px;
+      min-height: 38px;
+      border: 1px solid var(--border-primary);
+      border-radius: 8px;
+      background: var(--bg-primary);
+      color: var(--text-tertiary);
+      padding: 10px 12px;
+      font-size: 13px;
+    }
+
+    .select,
+    .date-input {
+      min-height: 38px;
+      border: 1px solid var(--border-primary);
+      border-radius: 8px;
+      background: var(--bg-primary);
+      color: var(--text-secondary);
+      padding: 9px 12px;
+      font-size: 12px;
+      font-weight: 700;
+    }
+
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(6, minmax(0, 1fr));
+      gap: 12px;
+      margin-bottom: 16px;
+    }
+
+    .stat-card {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      min-height: 72px;
+      padding: 12px;
+      border: 1px solid transparent;
+      border-radius: 6px;
+      background: var(--bg-primary);
+    }
+
+    .stat-card.active {
+      border-color: var(--color-primary);
+      background: var(--color-primary-light);
+    }
+
+    .stat-icon {
+      display: grid;
+      place-items: center;
+      width: 32px;
+      height: 32px;
+      border-radius: 6px;
+      color: var(--color-primary);
+      background: var(--color-primary-light);
+      font-size: 12px;
+      font-weight: 800;
+      flex: 0 0 auto;
+    }
+
+    .stat-value {
+      font-size: 18px;
+      font-weight: 800;
+      line-height: 1;
+    }
+
+    .stat-label {
+      margin-top: 3px;
+      color: var(--text-tertiary);
+      font-size: 11px;
+      font-weight: 700;
+    }
+
+    .work-grid,
+    .split-grid,
+    .three-grid,
+    .two-grid {
+      display: grid;
+      gap: 12px;
+    }
+
+    .work-grid {
+      grid-template-columns: 1.25fr 0.75fr;
+    }
+
+    .split-grid {
+      grid-template-columns: minmax(0, 1fr) 320px;
+    }
+
+    .three-grid {
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+
+    .two-grid {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .panel {
+      border: 1px solid var(--border-primary);
+      border-radius: 8px;
+      background: var(--bg-primary);
+      overflow: hidden;
+    }
+
+    .panel-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 12px 14px;
+      border-bottom: 1px solid var(--border-primary);
+    }
+
+    .panel-title {
+      margin: 0;
+      font-size: 14px;
+      font-weight: 800;
+    }
+
+    .panel-subtitle {
+      color: var(--text-tertiary);
+      font-size: 11px;
+      font-weight: 600;
+    }
+
+    .panel-body {
+      padding: 12px;
+    }
+
+    .queue-list {
+      display: grid;
+      gap: 8px;
+    }
+
+    .queue-item {
+      display: grid;
+      grid-template-columns: 92px 1fr auto;
+      gap: 12px;
+      align-items: center;
+      min-height: 56px;
+      padding: 10px;
+      border: 1px solid var(--border-secondary);
+      border-radius: 6px;
+      background: var(--bg-primary);
+    }
+
+    .queue-title {
+      font-size: 13px;
+      font-weight: 800;
+    }
+
+    .queue-meta {
+      margin-top: 2px;
+      color: var(--text-tertiary);
+      font-size: 11px;
+      font-weight: 600;
+    }
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 22px;
+      padding: 4px 8px;
+      border-radius: 4px;
+      font-size: 11px;
+      font-weight: 800;
+      white-space: nowrap;
+    }
+
+    .badge.red {
+      background: var(--color-danger-light);
+      color: var(--color-danger-dark);
+    }
+
+    .badge.yellow {
+      background: var(--color-warning-light);
+      color: var(--color-warning-dark);
+    }
+
+    .badge.green {
+      background: var(--color-success-light);
+      color: var(--color-success-dark);
+    }
+
+    .badge.blue {
+      background: var(--color-info-light);
+      color: var(--color-info-dark);
+    }
+
+    .badge.gray {
+      background: var(--color-gray-100);
+      color: var(--color-gray-600);
+    }
+
+    .badge.purple {
+      background: var(--color-purple-light);
+      color: var(--color-purple-dark);
+    }
+
+    .table-wrap {
+      overflow: auto;
+      border: 1px solid var(--border-primary);
+      border-radius: 8px;
+      background: var(--bg-primary);
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      min-width: 820px;
+    }
+
+    th {
+      position: sticky;
+      top: 0;
+      background: var(--table-header-bg);
+      color: var(--text-tertiary);
+      font-size: 10px;
+      font-weight: 800;
+      letter-spacing: 0.04em;
+      text-align: left;
+      text-transform: uppercase;
+      padding: 9px 10px;
+      border-bottom: 1px solid var(--border-primary);
+    }
+
+    td {
+      padding: 10px;
+      border-bottom: 1px solid var(--border-secondary);
+      color: var(--text-secondary);
+      font-size: 12px;
+      vertical-align: middle;
+    }
+
+    tbody tr:hover {
+      background: var(--table-row-hover);
+    }
+
+    .code-cell {
+      color: var(--color-primary);
+      font-weight: 800;
+    }
+
+    .name-cell {
+      color: var(--text-primary);
+      font-weight: 800;
+    }
+
+    .muted {
+      color: var(--text-tertiary);
+      font-size: 11px;
+      font-weight: 600;
+    }
+
+    .qty {
+      color: var(--text-primary);
+      font-size: 13px;
+      font-weight: 800;
+    }
+
+    .progress {
+      height: 6px;
+      border-radius: 999px;
+      background: var(--bg-tertiary);
+      overflow: hidden;
+    }
+
+    .progress span {
+      display: block;
+      height: 100%;
+      border-radius: inherit;
+      background: var(--color-primary);
+    }
+
+    .progress.warning span {
+      background: var(--color-warning);
+    }
+
+    .progress.success span {
+      background: var(--color-success);
+    }
+
+    .tabs {
+      display: flex;
+      gap: 0;
+      border-bottom: 2px solid var(--border-primary);
+      margin-bottom: 14px;
+      overflow-x: auto;
+    }
+
+    .tab {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 9px 14px;
+      border: 0;
+      border-bottom: 2px solid transparent;
+      margin-bottom: -2px;
+      background: transparent;
+      color: var(--text-secondary);
+      font-size: 12px;
+      font-weight: 800;
+      white-space: nowrap;
+    }
+
+    .tab.active {
+      color: var(--color-primary);
+      border-bottom-color: var(--color-primary);
+    }
+
+    .tab-count {
+      min-width: 20px;
+      padding: 2px 7px;
+      border-radius: 999px;
+      background: var(--bg-tertiary);
+      color: var(--text-secondary);
+      font-size: 11px;
+    }
+
+    .tab.active .tab-count {
+      background: var(--color-primary);
+      color: var(--text-inverse);
+    }
+
+    .wizard {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 8px;
+      margin-bottom: 14px;
+    }
+
+    .wizard-step {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      min-height: 42px;
+      padding: 8px 10px;
+      border: 1px solid var(--border-primary);
+      border-radius: 6px;
+      background: var(--bg-primary);
+      color: var(--text-secondary);
+      font-size: 12px;
+      font-weight: 800;
+    }
+
+    .wizard-step.active {
+      border-color: var(--color-primary);
+      background: var(--color-primary-light);
+      color: var(--color-primary);
+    }
+
+    .step-number {
+      display: grid;
+      place-items: center;
+      width: 22px;
+      height: 22px;
+      border-radius: 50%;
+      background: var(--bg-tertiary);
+      color: var(--text-secondary);
+      font-size: 11px;
+    }
+
+    .wizard-step.active .step-number {
+      background: var(--color-primary);
+      color: var(--text-inverse);
+    }
+
+    .form-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 12px;
+    }
+
+    .form-field {
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+    }
+
+    .form-field.full {
+      grid-column: 1 / -1;
+    }
+
+    label {
+      color: var(--text-secondary);
+      font-size: 11px;
+      font-weight: 800;
+      text-transform: uppercase;
+    }
+
+    .input-like {
+      min-height: 38px;
+      padding: 9px 12px;
+      border: 1px solid var(--input-border);
+      border-radius: 6px;
+      background: var(--input-bg);
+      color: var(--text-primary);
+      font-size: 13px;
+      font-weight: 600;
+    }
+
+    .textarea-like {
+      min-height: 78px;
+      padding: 10px 12px;
+      border: 1px solid var(--input-border);
+      border-radius: 6px;
+      background: var(--input-bg);
+      color: var(--text-secondary);
+      font-size: 13px;
+    }
+
+    .impact-list {
+      display: grid;
+      gap: 8px;
+    }
+
+    .impact-row {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 9px 0;
+      border-bottom: 1px solid var(--border-secondary);
+      color: var(--text-secondary);
+      font-size: 12px;
+      font-weight: 700;
+    }
+
+    .impact-row strong {
+      color: var(--text-primary);
+    }
+
+    .alert-line {
+      padding: 10px 12px;
+      border-radius: 6px;
+      font-size: 12px;
+      font-weight: 700;
+    }
+
+    .alert-line.warning {
+      background: var(--color-warning-light);
+      color: var(--color-warning-dark);
+    }
+
+    .alert-line.danger {
+      background: var(--color-danger-light);
+      color: var(--color-danger-dark);
+    }
+
+    .alert-line.info {
+      background: var(--color-info-light);
+      color: var(--color-info-dark);
+    }
+
+    .order-card {
+      padding: 14px;
+      border: 1px solid var(--border-primary);
+      border-radius: 8px;
+      background: var(--bg-primary);
+      margin-bottom: 10px;
+    }
+
+    .order-head {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      align-items: flex-start;
+      margin-bottom: 10px;
+    }
+
+    .order-title {
+      font-size: 14px;
+      font-weight: 800;
+    }
+
+    .order-meta {
+      margin-top: 2px;
+      color: var(--text-tertiary);
+      font-size: 11px;
+      font-weight: 600;
+    }
+
+    .mini-list {
+      display: grid;
+      gap: 8px;
+    }
+
+    .mini-row {
+      display: grid;
+      grid-template-columns: 1fr auto auto;
+      gap: 10px;
+      align-items: center;
+      padding: 9px;
+      border-radius: 6px;
+      background: var(--bg-secondary);
+    }
+
+    .timeline {
+      display: grid;
+      gap: 10px;
+    }
+
+    .timeline-item {
+      display: grid;
+      grid-template-columns: 84px 1fr;
+      gap: 12px;
+      padding: 10px 0;
+      border-bottom: 1px solid var(--border-secondary);
+    }
+
+    .timeline-time {
+      color: var(--text-tertiary);
+      font-size: 11px;
+      font-weight: 800;
+    }
+
+    .timeline-title {
+      color: var(--text-primary);
+      font-size: 13px;
+      font-weight: 800;
+    }
+
+    .modal-mock {
+      max-width: 680px;
+      margin: 0 auto;
+      border: 1px solid var(--border-primary);
+      border-left: 4px solid var(--color-info);
+      border-radius: 8px;
+      background: var(--bg-primary);
+      box-shadow: var(--shadow-md);
+      overflow: hidden;
+    }
+
+    .modal-header {
+      padding: 16px 18px;
+      border-bottom: 1px solid var(--border-primary);
+      text-align: center;
+    }
+
+    .modal-header h3 {
+      margin: 0;
+      font-size: 17px;
+      font-weight: 800;
+    }
+
+    .modal-body {
+      padding: 16px;
+    }
+
+    .modal-footer {
+      display: flex;
+      justify-content: flex-end;
+      gap: 8px;
+      padding: 14px 16px;
+      border-top: 1px solid var(--border-primary);
+      background: var(--bg-secondary);
+    }
+
+    .component-map {
+      display: grid;
+      gap: 10px;
+    }
+
+    .component-row {
+      display: grid;
+      grid-template-columns: 210px 1fr 220px;
+      gap: 12px;
+      padding: 12px;
+      border: 1px solid var(--border-primary);
+      border-radius: 8px;
+      background: var(--bg-primary);
+    }
+
+    .component-name {
+      color: var(--color-primary);
+      font-weight: 900;
+    }
+
+    .print-note {
+      padding: 12px 14px;
+      border: 1px solid var(--border-primary);
+      border-left: 4px solid var(--color-primary);
+      border-radius: 8px;
+      background: var(--bg-primary);
+      color: var(--text-secondary);
+      font-size: 12px;
+      font-weight: 700;
+      margin-top: 16px;
+    }
+
+    @media (max-width: 1100px) {
+      .sidebar {
+        display: none;
+      }
+
+      .content-area,
+      .topbar {
+        padding-left: 16px;
+        padding-right: 16px;
+      }
+
+      .handoff-bar,
+      .stats-grid,
+      .three-grid,
+      .two-grid,
+      .work-grid,
+      .split-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .wizard {
+        grid-template-columns: 1fr 1fr;
+      }
+
+      .component-row {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    @media (max-width: 680px) {
+      .topbar {
+        align-items: flex-start;
+        flex-direction: column;
+        padding-top: 12px;
+        padding-bottom: 12px;
+      }
+
+      .screen-header,
+      .order-head {
+        flex-direction: column;
+      }
+
+      .stats-grid,
+      .wizard,
+      .form-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .queue-item,
+      .mini-row,
+      .timeline-item {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    @media print {
+      .sidebar,
+      .topbar,
+      .screen-nav {
+        display: none;
+      }
+
+      .prototype-shell {
+        display: block;
+      }
+
+      .content-area {
+        padding: 0;
+      }
+
+      .screen {
+        break-inside: avoid;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="prototype-shell">
+    <aside class="sidebar">
+      <div class="sidebar-header">
+        <div class="brand">toshify</div>
+        <div class="brand-subtitle">Diseno funcional propuesto</div>
+      </div>
+      <nav class="sidebar-nav">
+        <div class="nav-section-label">Logistica</div>
+        <a class="nav-item active" href="#dashboard"><span class="nav-dot"></span>Dashboard Inventario</a>
+        <a class="nav-item" href="#productos"><span class="nav-dot"></span>Productos</a>
+        <a class="nav-item" href="#proveedores"><span class="nav-dot"></span>Proveedores</a>
+        <a class="nav-item" href="#movimientos"><span class="nav-dot"></span>Movimientos</a>
+        <a class="nav-item" href="#pedidos"><span class="nav-dot"></span>Pedidos</a>
+        <a class="nav-item" href="#asignaciones"><span class="nav-dot"></span>Asignaciones Activas</a>
+        <a class="nav-item" href="#historial"><span class="nav-dot"></span>Historial</a>
+        <div class="nav-section-label">Handoff</div>
+        <a class="nav-item" href="#patrones"><span class="nav-dot"></span>Patrones transversales</a>
+        <a class="nav-item" href="#implementacion"><span class="nav-dot"></span>Mapa implementacion</a>
+      </nav>
+      <div class="sidebar-footer">
+        <div class="user-card">
+          <div class="avatar">M</div>
+          <div>
+            <div class="name-cell">Work</div>
+            <div class="muted">Supervisor</div>
+          </div>
+        </div>
+      </div>
+    </aside>
+
+    <main class="workspace">
+      <div class="topbar">
+        <div class="topbar-title">Modulo de Logistica</div>
+        <div class="topbar-actions">
+          <div class="sede-chip">Sede: Buenos Aires</div>
+          <div class="top-chip">Vista propuesta</div>
+          <button class="logout-btn">Cerrar Sesion</button>
+        </div>
+      </div>
+
+      <div class="content-area">
+        <section class="doc-header">
+          <div class="doc-title">
+            <h1>Pantallas propuestas para implementar el plan funcional</h1>
+            <p>Mockups estaticos alineados al design system actual: tablas compactas, stat cards, tabs, filtros Excel, modales SweetAlert-like y foco operativo por sede.</p>
+          </div>
+          <div class="screen-nav">
+            <a href="#dashboard">Dashboard</a>
+            <a href="#productos">Productos</a>
+            <a href="#proveedores">Proveedores</a>
+            <a href="#movimientos">Movimientos</a>
+            <a href="#pedidos">Pedidos</a>
+            <a href="#asignaciones">Asignaciones</a>
+            <a href="#historial">Historial</a>
+            <a href="#patrones">Patrones</a>
+            <a href="#implementacion">Implementacion</a>
+          </div>
+        </section>
+
+        <section class="handoff-bar">
+          <div class="handoff-item">
+            <div class="handoff-label">Principio visual</div>
+            <div class="handoff-value">Preservar Toshify actual</div>
+            <div class="muted">Sin landing, sin rediseno mayor, sin estilos ajenos.</div>
+          </div>
+          <div class="handoff-item">
+            <div class="handoff-label">Unidad operativa</div>
+            <div class="handoff-value">Sede</div>
+            <div class="muted">Dashboard, stock, pedidos y movimientos deben respetar sede.</div>
+          </div>
+          <div class="handoff-item">
+            <div class="handoff-label">Patron principal</div>
+            <div class="handoff-value">Cockpit operativo</div>
+            <div class="muted">La pantalla prioriza acciones, no solo conteos.</div>
+          </div>
+          <div class="handoff-item">
+            <div class="handoff-label">Alcance</div>
+            <div class="handoff-value">P0 + P1</div>
+            <div class="muted">Control base, reposicion, recepcion y custodia.</div>
+          </div>
+        </section>
+
+        <section id="dashboard" class="screen">
+          <div class="screen-header">
+            <div class="screen-title">
+              <h2>Dashboard Inventario - Cockpit operativo</h2>
+              <span>Primera pantalla de trabajo: acciones pendientes, riesgos y stock por sede.</span>
+            </div>
+            <div class="screen-actions">
+              <button class="btn ghost">Exportar</button>
+              <button class="btn primary">Crear pedido sugerido</button>
+            </div>
+          </div>
+          <div class="screen-body">
+            <div class="filters-row">
+              <div class="search">Buscar codigo o producto...</div>
+              <div class="select">Sede: Buenos Aires</div>
+              <div class="select">Criticidad: Todas</div>
+              <div class="select">Tipo: Todos</div>
+              <button class="btn">Columnas</button>
+            </div>
+
+            <div class="stats-grid">
+              <div class="stat-card active"><div class="stat-icon">P</div><div><div class="stat-value">62</div><div class="stat-label">Productos</div></div></div>
+              <div class="stat-card"><div class="stat-icon">D</div><div><div class="stat-value">679</div><div class="stat-label">Disponible</div></div></div>
+              <div class="stat-card"><div class="stat-icon">U</div><div><div class="stat-value">2</div><div class="stat-label">En uso</div></div></div>
+              <div class="stat-card"><div class="stat-icon">T</div><div><div class="stat-value">8</div><div class="stat-label">En transito</div></div></div>
+              <div class="stat-card"><div class="stat-icon">A</div><div><div class="stat-value">6</div><div class="stat-label">Bajo minimo</div></div></div>
+              <div class="stat-card"><div class="stat-icon">X</div><div><div class="stat-value">3</div><div class="stat-label">Sin cierre</div></div></div>
+            </div>
+
+            <div class="work-grid">
+              <div class="panel">
+                <div class="panel-header">
+                  <div>
+                    <h3 class="panel-title">Acciones de hoy</h3>
+                    <div class="panel-subtitle">Ordenado por criticidad y SLA operativo</div>
+                  </div>
+                  <span class="badge red">9 pendientes</span>
+                </div>
+                <div class="panel-body">
+                  <div class="queue-list">
+                    <div class="queue-item">
+                      <span class="badge red">Critico</span>
+                      <div><div class="queue-title">Aceite lubricante bajo minimo</div><div class="queue-meta">Disponible 2, minimo 8, sede Buenos Aires</div></div>
+                      <button class="btn primary">Crear pedido</button>
+                    </div>
+                    <div class="queue-item">
+                      <span class="badge yellow">Vence hoy</span>
+                      <div><div class="queue-title">Pedido PED-1048 pendiente de recepcion</div><div class="queue-meta">Proveedor Repuestos Norte, 3 items pendientes</div></div>
+                      <button class="btn">Ver pedido</button>
+                    </div>
+                    <div class="queue-item">
+                      <span class="badge blue">Aprobar</span>
+                      <div><div class="queue-title">Salida por consumo de servicio</div><div class="queue-meta">Bujias Fiat Cronos, cantidad 4, mecanica</div></div>
+                      <button class="btn success">Revisar</button>
+                    </div>
+                    <div class="queue-item">
+                      <span class="badge yellow">Custodia</span>
+                      <div><div class="queue-title">Herramienta retenida 18 dias</div><div class="queue-meta">Scanner OBD asignado a AB123CD</div></div>
+                      <button class="btn">Gestionar</button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div class="panel">
+                <div class="panel-header">
+                  <div>
+                    <h3 class="panel-title">Riesgos por sede</h3>
+                    <div class="panel-subtitle">Resumen para priorizar</div>
+                  </div>
+                </div>
+                <div class="panel-body">
+                  <div class="impact-list">
+                    <div class="impact-row"><span>Productos bajo minimo</span><strong>6</strong></div>
+                    <div class="impact-row"><span>Pedidos vencidos</span><strong>2</strong></div>
+                    <div class="impact-row"><span>Recepciones parciales</span><strong>1</strong></div>
+                    <div class="impact-row"><span>Herramientas retenidas</span><strong>4</strong></div>
+                    <div class="impact-row"><span>Danos/perdidas sin cierre</span><strong>3</strong></div>
+                  </div>
+                  <div class="alert-line warning" style="margin-top:12px;">La accion primaria del dashboard siempre debe llevar al flujo que resuelve el pendiente.</div>
+                </div>
+              </div>
+            </div>
+
+            <div class="table-wrap" style="margin-top:12px;">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Codigo</th>
+                    <th>Producto</th>
+                    <th>Sede</th>
+                    <th>Tipo</th>
+                    <th>Disponible</th>
+                    <th>Minimo</th>
+                    <th>Cobertura</th>
+                    <th>Estado accion</th>
+                    <th>Accion</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td class="code-cell">ACT-001</td>
+                    <td><div class="name-cell">Aceite lubricante de moto</div><div class="muted">Litro</div></td>
+                    <td>Buenos Aires</td>
+                    <td><span class="badge blue">Repuesto</span></td>
+                    <td class="qty">2</td>
+                    <td>8</td>
+                    <td><div class="progress warning"><span style="width:25%"></span></div></td>
+                    <td><span class="badge red">Bajo minimo</span></td>
+                    <td><button class="btn primary">Reponer</button></td>
+                  </tr>
+                  <tr>
+                    <td class="code-cell">REP-0048</td>
+                    <td><div class="name-cell">Bomba de agua</div><div class="muted">Unidad</div></td>
+                    <td>Buenos Aires</td>
+                    <td><span class="badge blue">Repuesto</span></td>
+                    <td class="qty">3</td>
+                    <td>2</td>
+                    <td><div class="progress success"><span style="width:78%"></span></div></td>
+                    <td><span class="badge green">Normal</span></td>
+                    <td><button class="btn">Ver</button></td>
+                  </tr>
+                  <tr>
+                    <td class="code-cell">HER-019</td>
+                    <td><div class="name-cell">Scanner OBD</div><div class="muted">Herramienta retornable</div></td>
+                    <td>Buenos Aires</td>
+                    <td><span class="badge yellow">Herramienta</span></td>
+                    <td class="qty">1</td>
+                    <td>1</td>
+                    <td><div class="progress"><span style="width:45%"></span></div></td>
+                    <td><span class="badge yellow">Retenida</span></td>
+                    <td><button class="btn">Custodia</button></td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        <section id="productos" class="screen">
+          <div class="screen-header">
+            <div class="screen-title">
+              <h2>Productos - Maestro operativo</h2>
+              <span>Agregar reglas de reposicion por sede y proveedor preferido sin romper el catalogo actual.</span>
+            </div>
+            <div class="screen-actions">
+              <button class="btn ghost">Importar reglas</button>
+              <button class="btn primary">Nuevo producto</button>
+            </div>
+          </div>
+          <div class="screen-body">
+            <div class="stats-grid">
+              <div class="stat-card"><div class="stat-icon">T</div><div><div class="stat-value">62</div><div class="stat-label">Total</div></div></div>
+              <div class="stat-card"><div class="stat-icon">R</div><div><div class="stat-value">49</div><div class="stat-label">Repuestos</div></div></div>
+              <div class="stat-card"><div class="stat-icon">H</div><div><div class="stat-value">10</div><div class="stat-label">Herramientas</div></div></div>
+              <div class="stat-card active"><div class="stat-icon">S</div><div><div class="stat-value">6</div><div class="stat-label">Sin reglas sede</div></div></div>
+              <div class="stat-card"><div class="stat-icon">P</div><div><div class="stat-value">8</div><div class="stat-label">Sin proveedor</div></div></div>
+              <div class="stat-card"><div class="stat-icon">B</div><div><div class="stat-value">31</div><div class="stat-label">Con codigo alterno</div></div></div>
+            </div>
+
+            <div class="split-grid">
+              <div>
+                <div class="filters-row">
+                  <div class="search">Buscar producto...</div>
+                  <div class="select">Sede: Buenos Aires</div>
+                  <div class="select">Estado regla: Todos</div>
+                  <button class="btn">Columnas</button>
+                </div>
+                <div class="table-wrap">
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>Codigo</th>
+                        <th>Producto</th>
+                        <th>Tipo</th>
+                        <th>Proveedor pref.</th>
+                        <th>Min / Max BA</th>
+                        <th>Lead time</th>
+                        <th>Estado</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr>
+                        <td class="code-cell">ACT-001</td>
+                        <td><div class="name-cell">Aceite lubricante de moto</div><div class="muted">Codigo barra: 779001</div></td>
+                        <td><span class="badge blue">Repuesto</span></td>
+                        <td>Lubricentro Sur</td>
+                        <td>8 / 24</td>
+                        <td>2 dias</td>
+                        <td><span class="badge green">Completo</span></td>
+                      </tr>
+                      <tr>
+                        <td class="code-cell">ALARP</td>
+                        <td><div class="name-cell">Acople rapido plateado</div><div class="muted">Unidad</div></td>
+                        <td><span class="badge yellow">Herramienta</span></td>
+                        <td>Sin asignar</td>
+                        <td>1 / 3</td>
+                        <td>Sin dato</td>
+                        <td><span class="badge yellow">Completar</span></td>
+                      </tr>
+                      <tr>
+                        <td class="code-cell">REP-0048</td>
+                        <td><div class="name-cell">Bomba de agua</div><div class="muted">Unidad</div></td>
+                        <td><span class="badge blue">Repuesto</span></td>
+                        <td>Repuestos Norte</td>
+                        <td>2 / 8</td>
+                        <td>5 dias</td>
+                        <td><span class="badge green">Completo</span></td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              <aside class="panel">
+                <div class="panel-header">
+                  <div>
+                    <h3 class="panel-title">Reglas por sede</h3>
+                    <div class="panel-subtitle">Panel lateral al seleccionar producto</div>
+                  </div>
+                </div>
+                <div class="panel-body">
+                  <div class="impact-list">
+                    <div class="impact-row"><span>Producto</span><strong>ACT-001</strong></div>
+                    <div class="impact-row"><span>Sede</span><strong>Buenos Aires</strong></div>
+                    <div class="impact-row"><span>Stock minimo</span><strong>8</strong></div>
+                    <div class="impact-row"><span>Stock maximo</span><strong>24</strong></div>
+                    <div class="impact-row"><span>Punto reorden</span><strong>10</strong></div>
+                    <div class="impact-row"><span>Proveedor preferido</span><strong>Lubricentro Sur</strong></div>
+                  </div>
+                  <button class="btn primary" style="width:100%; margin-top:12px;">Editar reglas</button>
+                </div>
+              </aside>
+            </div>
+          </div>
+        </section>
+
+        <section id="proveedores" class="screen">
+          <div class="screen-header">
+            <div class="screen-title">
+              <h2>Proveedores - Performance y matriz producto-proveedor</h2>
+              <span>Extiende el maestro actual con cumplimiento, lead time y productos asociados.</span>
+            </div>
+            <div class="screen-actions">
+              <button class="btn ghost">Ver inactivos</button>
+              <button class="btn primary">Nuevo proveedor</button>
+            </div>
+          </div>
+          <div class="screen-body">
+            <div class="stats-grid">
+              <div class="stat-card"><div class="stat-icon">A</div><div><div class="stat-value">28</div><div class="stat-label">Activos</div></div></div>
+              <div class="stat-card"><div class="stat-icon">I</div><div><div class="stat-value">3</div><div class="stat-label">Inactivos</div></div></div>
+              <div class="stat-card active"><div class="stat-icon">L</div><div><div class="stat-value">4.2</div><div class="stat-label">Lead time promedio</div></div></div>
+              <div class="stat-card"><div class="stat-icon">C</div><div><div class="stat-value">91%</div><div class="stat-label">Cumplimiento</div></div></div>
+              <div class="stat-card"><div class="stat-icon">D</div><div><div class="stat-value">2</div><div class="stat-label">Con discrepancias</div></div></div>
+              <div class="stat-card"><div class="stat-icon">P</div><div><div class="stat-value">18</div><div class="stat-label">Productos cubiertos</div></div></div>
+            </div>
+
+            <div class="split-grid">
+              <div class="panel">
+                <div class="panel-header">
+                  <div>
+                    <h3 class="panel-title">Ranking operativo</h3>
+                    <div class="panel-subtitle">Para decidir proveedor de reposicion</div>
+                  </div>
+                  <button class="btn">Filtrar</button>
+                </div>
+                <div class="table-wrap" style="border:0; border-radius:0;">
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>Proveedor</th>
+                        <th>Categoria</th>
+                        <th>Productos</th>
+                        <th>Lead time</th>
+                        <th>OTD</th>
+                        <th>Ultima entrega</th>
+                        <th>Estado</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr>
+                        <td><div class="name-cell">Repuestos Norte</div><div class="muted">CUIT 30-000</div></td>
+                        <td>Repuestos</td>
+                        <td>14</td>
+                        <td>5 dias</td>
+                        <td>94%</td>
+                        <td>Sin diferencias</td>
+                        <td><span class="badge green">Preferido</span></td>
+                      </tr>
+                      <tr>
+                        <td><div class="name-cell">Lubricentro Sur</div><div class="muted">CUIT 30-111</div></td>
+                        <td>Insumos</td>
+                        <td>6</td>
+                        <td>2 dias</td>
+                        <td>88%</td>
+                        <td>Parcial</td>
+                        <td><span class="badge yellow">Observar</span></td>
+                      </tr>
+                      <tr>
+                        <td><div class="name-cell">Herramientas Pro</div><div class="muted">CUIT 30-222</div></td>
+                        <td>Herramientas</td>
+                        <td>8</td>
+                        <td>7 dias</td>
+                        <td>96%</td>
+                        <td>Conforme</td>
+                        <td><span class="badge green">Activo</span></td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              <aside class="panel">
+                <div class="panel-header">
+                  <div>
+                    <h3 class="panel-title">Ficha operativa</h3>
+                    <div class="panel-subtitle">Proveedor seleccionado</div>
+                  </div>
+                </div>
+                <div class="panel-body">
+                  <div class="impact-list">
+                    <div class="impact-row"><span>Pedidos abiertos</span><strong>2</strong></div>
+                    <div class="impact-row"><span>Items pendientes</span><strong>7</strong></div>
+                    <div class="impact-row"><span>Discrepancias abiertas</span><strong>1</strong></div>
+                    <div class="impact-row"><span>Productos criticos</span><strong>3</strong></div>
+                  </div>
+                  <button class="btn primary" style="width:100%; margin-top:12px;">Ver matriz</button>
+                </div>
+              </aside>
+            </div>
+          </div>
+        </section>
+
+        <section id="movimientos" class="screen">
+          <div class="screen-header">
+            <div class="screen-title">
+              <h2>Movimientos - Wizard guiado con impacto de stock</h2>
+              <span>Mantiene los tipos actuales y agrega validacion por sede, resumen previo y excepciones recuperables.</span>
+            </div>
+            <div class="screen-actions">
+              <button class="btn ghost">Modo lote</button>
+              <button class="btn primary">Registrar movimiento</button>
+            </div>
+          </div>
+          <div class="screen-body">
+            <div class="wizard">
+              <div class="wizard-step active"><span class="step-number">1</span>Tipo</div>
+              <div class="wizard-step active"><span class="step-number">2</span>Producto y sede</div>
+              <div class="wizard-step"><span class="step-number">3</span>Contexto</div>
+              <div class="wizard-step"><span class="step-number">4</span>Resumen</div>
+            </div>
+
+            <div class="split-grid">
+              <div class="panel">
+                <div class="panel-header">
+                  <div>
+                    <h3 class="panel-title">Solicitud de salida</h3>
+                    <div class="panel-subtitle">Ejemplo de consumo de servicio</div>
+                  </div>
+                  <span class="badge blue">Pendiente aprobacion</span>
+                </div>
+                <div class="panel-body">
+                  <div class="form-grid">
+                    <div class="form-field">
+                      <label>Tipo movimiento</label>
+                      <div class="input-like">Salida</div>
+                    </div>
+                    <div class="form-field">
+                      <label>Sede</label>
+                      <div class="input-like">Buenos Aires</div>
+                    </div>
+                    <div class="form-field">
+                      <label>Producto</label>
+                      <div class="input-like">REP-0048 - Bomba de agua</div>
+                    </div>
+                    <div class="form-field">
+                      <label>Cantidad</label>
+                      <div class="input-like">2</div>
+                    </div>
+                    <div class="form-field">
+                      <label>Motivo</label>
+                      <div class="input-like">Consumo de servicio</div>
+                    </div>
+                    <div class="form-field">
+                      <label>Categoria servicio</label>
+                      <div class="input-like">Mecanica</div>
+                    </div>
+                    <div class="form-field">
+                      <label>Vehiculo</label>
+                      <div class="input-like">AB123CD - Toyota Etios</div>
+                    </div>
+                    <div class="form-field">
+                      <label>Proveedor stock</label>
+                      <div class="input-like">Repuestos Norte</div>
+                    </div>
+                    <div class="form-field full">
+                      <label>Observaciones</label>
+                      <div class="textarea-like">Cambio preventivo por mantenimiento programado.</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <aside class="panel">
+                <div class="panel-header">
+                  <div>
+                    <h3 class="panel-title">Resumen previo</h3>
+                    <div class="panel-subtitle">Visible antes de enviar</div>
+                  </div>
+                </div>
+                <div class="panel-body">
+                  <div class="impact-list">
+                    <div class="impact-row"><span>Disponible en sede</span><strong>3</strong></div>
+                    <div class="impact-row"><span>Cantidad solicitada</span><strong>-2</strong></div>
+                    <div class="impact-row"><span>Disponible post-aprobacion</span><strong>1</strong></div>
+                    <div class="impact-row"><span>Estado destino</span><strong>Consumido</strong></div>
+                    <div class="impact-row"><span>Aprobador esperado</span><strong>Supervisor</strong></div>
+                  </div>
+                  <div class="alert-line warning" style="margin-top:12px;">Al aprobar se revalida stock por sede en RPC.</div>
+                  <div class="modal-footer" style="margin:12px -12px -12px;">
+                    <button class="btn">Cancelar</button>
+                    <button class="btn primary">Enviar aprobacion</button>
+                  </div>
+                </div>
+              </aside>
+            </div>
+          </div>
+        </section>
+
+        <section id="pedidos" class="screen">
+          <div class="screen-header">
+            <div class="screen-title">
+              <h2>Pedidos - Recepcion, aprobacion y excepciones</h2>
+              <span>Conserva tabs actuales, suma SLA, semaforos y causa de discrepancia.</span>
+            </div>
+            <div class="screen-actions">
+              <button class="btn ghost">Actualizar</button>
+              <button class="btn primary">Nuevo pedido</button>
+            </div>
+          </div>
+          <div class="screen-body">
+            <div class="tabs">
+              <button class="tab active">Entradas <span class="tab-count">3</span></button>
+              <button class="tab">Pedidos <span class="tab-count">5</span></button>
+              <button class="tab">Pendientes <span class="tab-count">7</span></button>
+              <button class="tab">Historico <span class="tab-count">50</span></button>
+              <button class="tab">Excepciones <span class="tab-count">2</span></button>
+            </div>
+
+            <div class="filters-row">
+              <div class="search">Buscar pedido, proveedor o producto...</div>
+              <div class="select">SLA: Todos</div>
+              <div class="select">Sede: Buenos Aires</div>
+              <button class="btn">Filtros</button>
+            </div>
+
+            <div class="order-card">
+              <div class="order-head">
+                <div>
+                  <div class="order-title">PED-1048 - Repuestos Norte</div>
+                  <div class="order-meta">Fecha estimada: hoy | Sede Buenos Aires | 3 items pendientes</div>
+                </div>
+                <div>
+                  <span class="badge yellow">Vence hoy</span>
+                  <span class="badge blue">Recepcion parcial</span>
+                </div>
+              </div>
+              <div class="mini-list">
+                <div class="mini-row">
+                  <div><div class="name-cell">REP-0048 - Bomba de agua</div><div class="muted">Pedida 5, recibida 2, pendiente 3</div></div>
+                  <span class="badge yellow">Pendiente</span>
+                  <button class="btn success">Recibir</button>
+                </div>
+                <div class="mini-row">
+                  <div><div class="name-cell">6427 - Bujias Chevrolet Onix Joy</div><div class="muted">Pedida 12, recibida 12</div></div>
+                  <span class="badge green">Completo</span>
+                  <button class="btn">Ver</button>
+                </div>
+              </div>
+            </div>
+
+            <div class="order-card">
+              <div class="order-head">
+                <div>
+                  <div class="order-title">Movimiento pendiente - Salida por servicio</div>
+                  <div class="order-meta">Registrado por Juan Perez | Producto Bujias Fiat Cronos | Cantidad 4</div>
+                </div>
+                <span class="badge blue">Requiere aprobacion</span>
+              </div>
+              <div class="modal-footer" style="padding:0; border:0; background:transparent;">
+                <button class="btn">Ver detalle</button>
+                <button class="btn danger">Rechazar</button>
+                <button class="btn success">Aprobar</button>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section id="asignaciones" class="screen">
+          <div class="screen-header">
+            <div class="screen-title">
+              <h2>Asignaciones Activas - Custodia accionable</h2>
+              <span>De consulta a gestion: antiguedad, responsable, devolucion, dano y perdida.</span>
+            </div>
+            <div class="screen-actions">
+              <button class="btn ghost">Exportar</button>
+              <button class="btn primary">Nueva asignacion</button>
+            </div>
+          </div>
+          <div class="screen-body">
+            <div class="stats-grid">
+              <div class="stat-card"><div class="stat-icon">V</div><div><div class="stat-value">8</div><div class="stat-label">Vehiculos con herramientas</div></div></div>
+              <div class="stat-card"><div class="stat-icon">H</div><div><div class="stat-value">21</div><div class="stat-label">Herramientas en uso</div></div></div>
+              <div class="stat-card active"><div class="stat-icon">R</div><div><div class="stat-value">4</div><div class="stat-label">Retenidas</div></div></div>
+              <div class="stat-card"><div class="stat-icon">D</div><div><div class="stat-value">1</div><div class="stat-label">Dano reportado</div></div></div>
+              <div class="stat-card"><div class="stat-icon">P</div><div><div class="stat-value">0</div><div class="stat-label">Perdidas abiertas</div></div></div>
+              <div class="stat-card"><div class="stat-icon">S</div><div><div class="stat-value">12</div><div class="stat-label">Dias promedio</div></div></div>
+            </div>
+
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Vehiculo</th>
+                    <th>Herramienta</th>
+                    <th>Responsable</th>
+                    <th>Sede</th>
+                    <th>Dias uso</th>
+                    <th>Estado</th>
+                    <th>Acciones</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td><div class="name-cell">AB123CD</div><div class="muted">Toyota Etios</div></td>
+                    <td><div class="code-cell">HER-019</div><div class="muted">Scanner OBD</div></td>
+                    <td>Juan Perez</td>
+                    <td>Buenos Aires</td>
+                    <td class="qty">18</td>
+                    <td><span class="badge yellow">Fuera SLA</span></td>
+                    <td><button class="btn success">Devolver</button> <button class="btn danger">Reportar</button></td>
+                  </tr>
+                  <tr>
+                    <td><div class="name-cell">AC456EF</div><div class="muted">Renault Logan</div></td>
+                    <td><div class="code-cell">ALARP</div><div class="muted">Acople rapido</div></td>
+                    <td>Maria Gomez</td>
+                    <td>Buenos Aires</td>
+                    <td class="qty">3</td>
+                    <td><span class="badge green">Normal</span></td>
+                    <td><button class="btn success">Devolver</button> <button class="btn">Ver</button></td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        <section id="historial" class="screen">
+          <div class="screen-header">
+            <div class="screen-title">
+              <h2>Historial - Auditoria operativa</h2>
+              <span>Rango de fechas, exportacion y timeline por producto, vehiculo, pedido o usuario.</span>
+            </div>
+            <div class="screen-actions">
+              <button class="btn ghost">Exportar filtrado</button>
+              <button class="btn">Guardar vista</button>
+            </div>
+          </div>
+          <div class="screen-body">
+            <div class="filters-row">
+              <div class="date-input">Desde: 2026-05-01</div>
+              <div class="date-input">Hasta: 2026-05-31</div>
+              <div class="select">Tipo: Todos</div>
+              <div class="select">Sede: Buenos Aires</div>
+              <div class="search">Buscar producto, vehiculo, usuario...</div>
+            </div>
+
+            <div class="split-grid">
+              <div class="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Fecha</th>
+                      <th>Tipo</th>
+                      <th>Producto</th>
+                      <th>Cantidad</th>
+                      <th>Vehiculo</th>
+                      <th>Usuario</th>
+                      <th>Aprobacion</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr>
+                      <td>31/05/2026<br><span class="muted">10:42</span></td>
+                      <td><span class="badge red">Salida</span></td>
+                      <td><div class="code-cell">REP-0048</div><div class="muted">Bomba de agua</div></td>
+                      <td class="qty">2</td>
+                      <td>AB123CD</td>
+                      <td>Juan Perez</td>
+                      <td><span class="badge green">Aprobado</span></td>
+                    </tr>
+                    <tr>
+                      <td>30/05/2026<br><span class="muted">16:20</span></td>
+                      <td><span class="badge blue">Recepcion</span></td>
+                      <td><div class="code-cell">ACT-001</div><div class="muted">Aceite lubricante</div></td>
+                      <td class="qty">12</td>
+                      <td>N/A</td>
+                      <td>Maria Gomez</td>
+                      <td><span class="badge blue">Pedido PED-1047</span></td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+
+              <aside class="panel">
+                <div class="panel-header">
+                  <div>
+                    <h3 class="panel-title">Timeline seleccionado</h3>
+                    <div class="panel-subtitle">Producto REP-0048</div>
+                  </div>
+                </div>
+                <div class="panel-body">
+                  <div class="timeline">
+                    <div class="timeline-item">
+                      <div class="timeline-time">10:42</div>
+                      <div><div class="timeline-title">Salida aprobada</div><div class="muted">Stock BA 3 -> 1, aprobador Supervisor</div></div>
+                    </div>
+                    <div class="timeline-item">
+                      <div class="timeline-time">10:15</div>
+                      <div><div class="timeline-title">Solicitud registrada</div><div class="muted">Consumo servicio mecanica, vehiculo AB123CD</div></div>
+                    </div>
+                    <div class="timeline-item">
+                      <div class="timeline-time">Ayer</div>
+                      <div><div class="timeline-title">Recepcion parcial</div><div class="muted">Pedido PED-1048, pendiente 3 unidades</div></div>
+                    </div>
+                  </div>
+                </div>
+              </aside>
+            </div>
+          </div>
+        </section>
+
+        <section id="patrones" class="screen">
+          <div class="screen-header">
+            <div class="screen-title">
+              <h2>Patrones transversales - Excepciones y decisiones</h2>
+              <span>Modales y paneles que deben reutilizarse en recepcion, aprobacion, devolucion y casos.</span>
+            </div>
+          </div>
+          <div class="screen-body">
+            <div class="three-grid">
+              <div class="modal-mock">
+                <div class="modal-header"><h3>Recepcion con diferencia</h3></div>
+                <div class="modal-body">
+                  <div class="form-grid">
+                    <div class="form-field"><label>Cantidad pendiente</label><div class="input-like">10</div></div>
+                    <div class="form-field"><label>Cantidad recibida</label><div class="input-like">7</div></div>
+                    <div class="form-field full"><label>Causa diferencia</label><div class="input-like">Entrega parcial proveedor</div></div>
+                    <div class="form-field full"><label>Observacion</label><div class="textarea-like">Proveedor confirma saldo para proxima entrega.</div></div>
+                  </div>
+                </div>
+                <div class="modal-footer"><button class="btn">Cancelar</button><button class="btn success">Confirmar</button></div>
+              </div>
+
+              <div class="modal-mock">
+                <div class="modal-header"><h3>Rechazo recuperable</h3></div>
+                <div class="modal-body">
+                  <div class="alert-line danger">Motivo: Stock insuficiente en sede al momento de aprobar.</div>
+                  <div class="impact-list" style="margin-top:12px;">
+                    <div class="impact-row"><span>Accion sugerida</span><strong>Editar cantidad</strong></div>
+                    <div class="impact-row"><span>Alternativa</span><strong>Transferencia interna</strong></div>
+                  </div>
+                </div>
+                <div class="modal-footer"><button class="btn">Cerrar</button><button class="btn primary">Corregir y reenviar</button></div>
+              </div>
+
+              <div class="modal-mock">
+                <div class="modal-header"><h3>Caso dano/perdida</h3></div>
+                <div class="modal-body">
+                  <div class="form-grid">
+                    <div class="form-field"><label>Tipo caso</label><div class="input-like">Dano</div></div>
+                    <div class="form-field"><label>Responsable</label><div class="input-like">Juan Perez</div></div>
+                    <div class="form-field full"><label>Accion cierre</label><div class="input-like">Reparar y devolver a stock</div></div>
+                    <div class="form-field full"><label>Evidencia</label><div class="input-like">Adjunto opcional</div></div>
+                  </div>
+                </div>
+                <div class="modal-footer"><button class="btn">Cancelar</button><button class="btn primary">Abrir caso</button></div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section id="implementacion" class="screen">
+          <div class="screen-header">
+            <div class="screen-title">
+              <h2>Mapa de implementacion UI</h2>
+              <span>Componentes/patrones que deberian implementarse sobre las pages actuales.</span>
+            </div>
+          </div>
+          <div class="screen-body">
+            <div class="component-map">
+              <div class="component-row">
+                <div class="component-name">ActionQueuePanel</div>
+                <div>Panel de acciones de hoy en Dashboard: bajo stock, vencidos, pendientes, retenidos y casos sin cierre.</div>
+                <div><span class="badge red">P0</span> Dashboard</div>
+              </div>
+              <div class="component-row">
+                <div class="component-name">SedeAwareStockTable</div>
+                <div>Tabla de stock filtrada por sede con bajo minimo, cobertura y accion directa de reposicion.</div>
+                <div><span class="badge red">P0</span> Dashboard / Movimientos</div>
+              </div>
+              <div class="component-row">
+                <div class="component-name">MovementWizard</div>
+                <div>Wizard para entrada, salida, asignacion y devolucion con resumen de impacto y validaciones.</div>
+                <div><span class="badge red">P0</span> Movimientos</div>
+              </div>
+              <div class="component-row">
+                <div class="component-name">SlaTabs</div>
+                <div>Tabs de Pedidos con conteos, semaforos y separacion visual de recepcion, aprobacion y excepciones.</div>
+                <div><span class="badge yellow">P1</span> Pedidos</div>
+              </div>
+              <div class="component-row">
+                <div class="component-name">DiscrepancyModal</div>
+                <div>Modal obligatorio para recepcion parcial, excedente, item incorrecto o dano.</div>
+                <div><span class="badge yellow">P1</span> Pedidos</div>
+              </div>
+              <div class="component-row">
+                <div class="component-name">AssignmentActionTable</div>
+                <div>Tabla de asignaciones con dias en uso, responsable, devolucion, reporte de dano/perdida.</div>
+                <div><span class="badge yellow">P1</span> Asignaciones</div>
+              </div>
+              <div class="component-row">
+                <div class="component-name">AuditTimeline</div>
+                <div>Timeline lateral para reconstruir origen, aprobacion, recepcion y estado final.</div>
+                <div><span class="badge blue">P2</span> Historial</div>
+              </div>
+            </div>
+
+            <div class="print-note">
+              Nota de implementacion: estos mockups no proponen nuevas rutas principales. Se aplican sobre las pages actuales y solo agregan patrones reutilizables, datos por sede y estados accionables.
+            </div>
+          </div>
+        </section>
+      </div>
+    </main>
+  </div>
+</body>
+</html>

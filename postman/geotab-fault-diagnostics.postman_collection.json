@@ -1,0 +1,352 @@
+{
+  "info": {
+    "_postman_id": "3f66e392-2f79-4c87-9a89-4f8d28db1b61",
+    "name": "MyGeotab - Fault Diagnostics",
+    "description": "Coleccion para consultar Diagnostic, diagnosticType, FaultData, FailureMode y Controller en MyGeotab.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "01 - Authenticate",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"method\": \"Authenticate\",\n  \"params\": {\n    \"userName\": \"{{geotab_user}}\",\n    \"password\": \"{{geotab_password}}\",\n    \"database\": \"{{geotab_database}}\"\n  }\n}"
+        },
+        "url": {
+          "raw": "https://{{geotab_server}}/apiv1",
+          "protocol": "https",
+          "host": [
+            "{{geotab_server}}"
+          ],
+          "path": [
+            "apiv1"
+          ]
+        },
+        "description": "Autentica contra MyGeotab. Si devuelve path distinto a ThisServer, la coleccion actualiza geotab_server; vuelve a ejecutar este request una segunda vez."
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "const json = pm.response.json();",
+              "pm.test('Sin error de Geotab', function () {",
+              "  pm.expect(json.error).to.be.undefined;",
+              "});",
+              "",
+              "const result = json.result || {};",
+              "if (result.path && result.path !== 'ThisServer') {",
+              "  pm.collectionVariables.set('geotab_server', result.path);",
+              "  console.warn('Geotab redirigio a ' + result.path + '. Ejecuta Authenticate otra vez.');",
+              "}",
+              "",
+              "if (result.credentials) {",
+              "  pm.collectionVariables.set('geotab_session_id', result.credentials.sessionId);",
+              "  pm.collectionVariables.set('geotab_user', result.credentials.userName || pm.collectionVariables.get('geotab_user'));",
+              "  pm.collectionVariables.set('geotab_database', result.credentials.database || pm.collectionVariables.get('geotab_database'));",
+              "}"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ]
+    },
+    {
+      "name": "02 - Diagnostic - Listar diagnosticType disponibles",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"method\": \"Get\",\n  \"params\": {\n    \"typeName\": \"Diagnostic\",\n    \"credentials\": {\n      \"database\": \"{{geotab_database}}\",\n      \"sessionId\": \"{{geotab_session_id}}\",\n      \"userName\": \"{{geotab_user}}\"\n    },\n    \"resultsLimit\": {{diagnostic_results_limit}}\n  }\n}"
+        },
+        "url": {
+          "raw": "https://{{geotab_server}}/apiv1",
+          "protocol": "https",
+          "host": [
+            "{{geotab_server}}"
+          ],
+          "path": [
+            "apiv1"
+          ]
+        },
+        "description": "Trae Diagnostics y resume los diagnosticType existentes en la cuenta."
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "const json = pm.response.json();",
+              "const rows = json.result || [];",
+              "const counts = {};",
+              "for (const row of rows) {",
+              "  const key = row.diagnosticType || '(sin diagnosticType)';",
+              "  counts[key] = (counts[key] || 0) + 1;",
+              "}",
+              "const summary = Object.entries(counts).sort((a, b) => b[1] - a[1]).map(([type, count]) => ({ type, count }));",
+              "pm.collectionVariables.set('diagnostic_types_summary', JSON.stringify(summary));",
+              "console.table(summary);",
+              "pm.test('Diagnostics recibidos', function () {",
+              "  pm.expect(rows.length).to.be.greaterThan(0);",
+              "});"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ]
+    },
+    {
+      "name": "03 - Diagnostic - Filtrar por diagnostic_type",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"method\": \"Get\",\n  \"params\": {\n    \"typeName\": \"Diagnostic\",\n    \"search\": {\n      \"diagnosticType\": \"{{diagnostic_type}}\"\n    },\n    \"credentials\": {\n      \"database\": \"{{geotab_database}}\",\n      \"sessionId\": \"{{geotab_session_id}}\",\n      \"userName\": \"{{geotab_user}}\"\n    },\n    \"resultsLimit\": {{diagnostic_results_limit}}\n  }\n}"
+        },
+        "url": {
+          "raw": "https://{{geotab_server}}/apiv1",
+          "protocol": "https",
+          "host": [
+            "{{geotab_server}}"
+          ],
+          "path": [
+            "apiv1"
+          ]
+        },
+        "description": "Consulta Diagnostics por diagnosticType. Ejemplos: ObdFault, ObdWwhFault, SuspectParameter, GoFault."
+      }
+    },
+    {
+      "name": "04 - Diagnostic - Buscar por nombre",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"method\": \"Get\",\n  \"params\": {\n    \"typeName\": \"Diagnostic\",\n    \"search\": {\n      \"name\": \"{{diagnostic_name_like}}\"\n    },\n    \"credentials\": {\n      \"database\": \"{{geotab_database}}\",\n      \"sessionId\": \"{{geotab_session_id}}\",\n      \"userName\": \"{{geotab_user}}\"\n    },\n    \"resultsLimit\": 50\n  }\n}"
+        },
+        "url": {
+          "raw": "https://{{geotab_server}}/apiv1",
+          "protocol": "https",
+          "host": [
+            "{{geotab_server}}"
+          ],
+          "path": [
+            "apiv1"
+          ]
+        },
+        "description": "Busca diagnostics por nombre. Usa comodines con %, por ejemplo %sensor%."
+      }
+    },
+    {
+      "name": "05 - FaultData - Recientes por fecha",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"method\": \"Get\",\n  \"params\": {\n    \"typeName\": \"FaultData\",\n    \"search\": {\n      \"fromDate\": \"{{from_date}}\",\n      \"toDate\": \"{{to_date}}\"\n    },\n    \"credentials\": {\n      \"database\": \"{{geotab_database}}\",\n      \"sessionId\": \"{{geotab_session_id}}\",\n      \"userName\": \"{{geotab_user}}\"\n    },\n    \"resultsLimit\": {{fault_results_limit}}\n  }\n}"
+        },
+        "url": {
+          "raw": "https://{{geotab_server}}/apiv1",
+          "protocol": "https",
+          "host": [
+            "{{geotab_server}}"
+          ],
+          "path": [
+            "apiv1"
+          ]
+        },
+        "description": "Trae FaultData por rango de fecha. Los objetos FaultData traen IDs de Diagnostic, FailureMode y Controller."
+      }
+    },
+    {
+      "name": "06 - FaultData - Por diagnostic_id",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"method\": \"Get\",\n  \"params\": {\n    \"typeName\": \"FaultData\",\n    \"search\": {\n      \"diagnosticSearch\": {\n        \"id\": \"{{diagnostic_id}}\"\n      },\n      \"fromDate\": \"{{from_date}}\",\n      \"toDate\": \"{{to_date}}\"\n    },\n    \"credentials\": {\n      \"database\": \"{{geotab_database}}\",\n      \"sessionId\": \"{{geotab_session_id}}\",\n      \"userName\": \"{{geotab_user}}\"\n    },\n    \"resultsLimit\": {{fault_results_limit}}\n  }\n}"
+        },
+        "url": {
+          "raw": "https://{{geotab_server}}/apiv1",
+          "protocol": "https",
+          "host": [
+            "{{geotab_server}}"
+          ],
+          "path": [
+            "apiv1"
+          ]
+        },
+        "description": "Trae FaultData filtrado por Diagnostic.Id."
+      }
+    },
+    {
+      "name": "07 - FailureMode - Resolver failure_mode_id",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"method\": \"Get\",\n  \"params\": {\n    \"typeName\": \"FailureMode\",\n    \"search\": {\n      \"ids\": [\"{{failure_mode_id}}\"]\n    },\n    \"credentials\": {\n      \"database\": \"{{geotab_database}}\",\n      \"sessionId\": \"{{geotab_session_id}}\",\n      \"userName\": \"{{geotab_user}}\"\n    },\n    \"resultsLimit\": 10\n  }\n}"
+        },
+        "url": {
+          "raw": "https://{{geotab_server}}/apiv1",
+          "protocol": "https",
+          "host": [
+            "{{geotab_server}}"
+          ],
+          "path": [
+            "apiv1"
+          ]
+        },
+        "description": "Resuelve FailureMode para obtener code/name/source."
+      }
+    },
+    {
+      "name": "08 - Controller - Resolver controller_id",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"method\": \"Get\",\n  \"params\": {\n    \"typeName\": \"Controller\",\n    \"search\": {\n      \"ids\": [\"{{controller_id}}\"]\n    },\n    \"credentials\": {\n      \"database\": \"{{geotab_database}}\",\n      \"sessionId\": \"{{geotab_session_id}}\",\n      \"userName\": \"{{geotab_user}}\"\n    },\n    \"resultsLimit\": 10\n  }\n}"
+        },
+        "url": {
+          "raw": "https://{{geotab_server}}/apiv1",
+          "protocol": "https",
+          "host": [
+            "{{geotab_server}}"
+          ],
+          "path": [
+            "apiv1"
+          ]
+        },
+        "description": "Resuelve Controller para obtener name/source/codeId. Esto ayuda a categorizar: Powertrain, ABS, Suspension, etc."
+      }
+    }
+  ],
+  "variable": [
+    {
+      "key": "geotab_server",
+      "value": "my.geotab.com",
+      "type": "string"
+    },
+    {
+      "key": "geotab_user",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "geotab_password",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "geotab_database",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "geotab_session_id",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "diagnostic_type",
+      "value": "ObdWwhFault",
+      "type": "string"
+    },
+    {
+      "key": "diagnostic_name_like",
+      "value": "%sensor%",
+      "type": "string"
+    },
+    {
+      "key": "diagnostic_id",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "failure_mode_id",
+      "value": "b2736",
+      "type": "string"
+    },
+    {
+      "key": "controller_id",
+      "value": "ControllerObdWwhPowertrainId",
+      "type": "string"
+    },
+    {
+      "key": "from_date",
+      "value": "2026-06-01T00:00:00.000Z",
+      "type": "string"
+    },
+    {
+      "key": "to_date",
+      "value": "2026-06-03T00:00:00.000Z",
+      "type": "string"
+    },
+    {
+      "key": "diagnostic_results_limit",
+      "value": "5000",
+      "type": "string"
+    },
+    {
+      "key": "fault_results_limit",
+      "value": "100",
+      "type": "string"
+    },
+    {
+      "key": "diagnostic_types_summary",
+      "value": "",
+      "type": "string"
+    }
+  ]
+}
