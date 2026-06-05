@@ -8,6 +8,8 @@ import { usePermissions } from '../../contexts/PermissionsContext'
 import { useSede } from '../../contexts/SedeContext'
 import { type ColumnDef } from '@tanstack/react-table'
 import { DataTable } from '../../components/ui/DataTable/DataTable'
+import { SearchableSelect } from '../../components/ui/SearchableSelect'
+import type { SearchableSelectOption } from '../../components/ui/SearchableSelect'
 import Swal from 'sweetalert2'
 import { showSuccess } from '../../utils/toast'
 import {
@@ -390,6 +392,33 @@ export function PedidosUnificadoModule() {
 
   const getPedidoProveedorSeleccionado = () =>
     proveedoresPedido.find(proveedor => proveedor.id === proveedorPedidoId) || null
+
+  const proveedorPedidoOptions = useMemo<SearchableSelectOption[]>(() =>
+    proveedoresPedido.map(proveedor => ({
+      value: proveedor.id,
+      label: proveedor.razon_social,
+      subtitle: proveedor.email || 'Sin email cargado',
+      searchText: [
+        proveedor.razon_social,
+        proveedor.email,
+        proveedor.telefono
+      ].filter(Boolean).join(' ')
+    })),
+    [proveedoresPedido]
+  )
+
+  const productoPedidoBaseOptions = useMemo<SearchableSelectOption[]>(() =>
+    productosPedido.map(producto => {
+      const unidad = getUnidadProducto(producto)
+      return {
+        value: producto.id,
+        label: `${producto.codigo} - ${producto.nombre}`,
+        subtitle: `${producto.tipo} · ${unidad}`,
+        searchText: `${producto.codigo} ${producto.nombre} ${producto.tipo} ${unidad}`
+      }
+    }),
+    [productosPedido]
+  )
 
   const pedidoItemsValidos = useMemo(() => pedidoDraftItems
     .map(item => ({
@@ -2223,18 +2252,16 @@ export function PedidosUnificadoModule() {
                   <div className="pedido-compose-grid">
                     <div className="pedido-field">
                       <label>Proveedor</label>
-                      <select
+                      <SearchableSelect
                         value={proveedorPedidoId}
-                        onChange={(event) => setProveedorPedidoId(event.target.value)}
+                        onChange={setProveedorPedidoId}
+                        options={proveedorPedidoOptions}
+                        placeholder="Seleccionar proveedor"
+                        searchPlaceholder="Buscar proveedor..."
+                        noResultsText="Sin proveedores"
+                        size="lg"
                         disabled={loadingCatalogoPedido || creatingPedido}
-                      >
-                        <option value="">Seleccionar proveedor</option>
-                        {proveedoresPedido.map((proveedor) => (
-                          <option key={proveedor.id} value={proveedor.id}>
-                            {proveedor.razon_social}{proveedor.email ? '' : ' - sin email'}
-                          </option>
-                        ))}
-                      </select>
+                      />
                     </div>
 
                     <div className="pedido-field">
@@ -2278,22 +2305,19 @@ export function PedidosUnificadoModule() {
                       return (
                         <div className="pedido-item-row" key={`${index}-${item.producto_id || 'nuevo'}`}>
                           <div className="pedido-field">
-                            <select
+                            <SearchableSelect
                               value={item.producto_id}
-                              onChange={(event) => updatePedidoDraftItem(index, 'producto_id', event.target.value)}
+                              onChange={(value) => updatePedidoDraftItem(index, 'producto_id', value)}
+                              options={productoPedidoBaseOptions.map(option => ({
+                                ...option,
+                                disabled: productosSeleccionados.includes(option.value)
+                              }))}
+                              placeholder="Seleccionar producto"
+                              searchPlaceholder="Buscar producto..."
+                              noResultsText="Sin productos"
+                              size="lg"
                               disabled={loadingCatalogoPedido || creatingPedido}
-                            >
-                              <option value="">Seleccionar producto</option>
-                              {productosPedido.map((producto) => (
-                                <option
-                                  key={producto.id}
-                                  value={producto.id}
-                                  disabled={productosSeleccionados.includes(producto.id)}
-                                >
-                                  {producto.codigo} - {producto.nombre}
-                                </option>
-                              ))}
-                            </select>
+                            />
                           </div>
 
                           <div className="pedido-field">

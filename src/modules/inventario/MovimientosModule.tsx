@@ -2,6 +2,8 @@ import { useEffect, useState, useMemo } from 'react'
 import { useLocation } from 'react-router-dom'
 import { supabase } from '../../lib/supabase'
 import { LoadingOverlay } from '../../components/ui/LoadingOverlay'
+import { SearchableSelect } from '../../components/ui/SearchableSelect'
+import type { SearchableSelectOption } from '../../components/ui/SearchableSelect'
 import { usePermissions } from '../../contexts/PermissionsContext'
 import { useSede } from '../../contexts/SedeContext'
 import Swal from 'sweetalert2'
@@ -9,7 +11,6 @@ import { showSuccess } from '../../utils/toast'
 import {
   RotateCcw,
   Truck,
-  Search,
   PackagePlus,
   PackageMinus,
   Clock,
@@ -129,8 +130,6 @@ export function MovimientosModule() {
 
   // Filtros
   const [tipoProductoFiltro, setTipoProductoFiltro] = useState<'TODOS' | 'REPUESTOS' | 'HERRAMIENTAS'>('TODOS')
-  const [busquedaProducto, setBusquedaProducto] = useState('')
-  const [mostrarDropdownProductos, setMostrarDropdownProductos] = useState(false)
 
   // Modo de entrada/salida por lote
   const [modoLote, setModoLote] = useState(false)
@@ -223,10 +222,6 @@ export function MovimientosModule() {
 
     if (producto) {
       setProductoId(producto)
-      const productoSeleccionado = productos.find(p => p.id === producto)
-      if (productoSeleccionado) {
-        setBusquedaProducto(`${productoSeleccionado.codigo} - ${productoSeleccionado.nombre}`)
-      }
     }
 
     if (motivo === 'danado') {
@@ -236,21 +231,6 @@ export function MovimientosModule() {
 
     setPrefillSearchApplied(location.search)
   }, [location.search, prefillSearchApplied, productos, tipoMovimiento])
-
-  useEffect(() => {
-    // Cerrar dropdown al hacer clic fuera
-    const handleClickOutside = (event: MouseEvent) => {
-      const target = event.target as HTMLElement
-      if (!target.closest('[data-producto-dropdown]')) {
-        setMostrarDropdownProductos(false)
-      }
-    }
-
-    if (mostrarDropdownProductos) {
-      document.addEventListener('mousedown', handleClickOutside)
-      return () => document.removeEventListener('mousedown', handleClickOutside)
-    }
-  }, [mostrarDropdownProductos])
 
   useEffect(() => {
     if (tipoMovimiento === 'devolucion') {
@@ -766,7 +746,6 @@ export function MovimientosModule() {
       setProductosLote([...productosLote, { producto_id: productoId, cantidad, producto: prod }])
     }
     setProductoId('')
-    setBusquedaProducto('')
     setCantidad(1)
   }
 
@@ -795,21 +774,13 @@ export function MovimientosModule() {
     }
     setProductosLoteSalida([...productosLoteSalida, nuevoItem])
     setProductoId('')
-    setBusquedaProducto('')
     setVehiculoId('')
     setCantidad(1)
-  }
-
-  const handleSelectProductoDropdown = (p: Producto) => {
-    setProductoId(p.id)
-    setBusquedaProducto(`${p.codigo} - ${p.nombre}`)
-    setMostrarDropdownProductos(false)
   }
 
   const handleTipoProductoFiltroChange = (tipo: 'TODOS' | 'REPUESTOS' | 'HERRAMIENTAS') => {
     setTipoProductoFiltro(tipo)
     setProductoId('')
-    setBusquedaProducto('')
   }
 
   const getTipoLabel = (tipo: TipoMovimiento): string => {
@@ -844,7 +815,7 @@ export function MovimientosModule() {
 
   // Filtrar productos
   const productosFiltrados = useMemo(() => {
-    let filtered = productos
+    let filtered = [...productos]
 
     if (tipoProductoFiltro !== 'TODOS') {
       filtered = filtered.filter(p => p.tipo === tipoProductoFiltro)
@@ -859,16 +830,73 @@ export function MovimientosModule() {
       filtered = filtered.sort((a, b) => (b.stock_disponible || 0) - (a.stock_disponible || 0))
     }
 
-    if (busquedaProducto.trim()) {
-      const search = busquedaProducto.toLowerCase()
-      filtered = filtered.filter(p =>
-        p.codigo.toLowerCase().includes(search) ||
-        p.nombre.toLowerCase().includes(search)
-      )
-    }
-
     return filtered
-  }, [productos, tipoProductoFiltro, busquedaProducto, tipoMovimiento])
+  }, [productos, tipoProductoFiltro, tipoMovimiento])
+
+  const productoOptions = useMemo<SearchableSelectOption[]>(() =>
+    productosFiltrados.map(producto => {
+      const unidad = producto.unidades_medida?.descripcion || producto.unidades_medida?.codigo || 'Unidad'
+      const stockText = (tipoMovimiento === 'salida' || tipoMovimiento === 'asignacion')
+        ? ` · Stock: ${producto.stock_disponible || 0}`
+        : ''
+
+      return {
+        value: producto.id,
+        label: `${producto.codigo} - ${producto.nombre}`,
+        subtitle: `${producto.tipo} · ${unidad}${stockText}`,
+        searchText: `${producto.codigo} ${producto.nombre} ${producto.tipo} ${unidad}`
+      }
+    }),
+    [productosFiltrados, tipoMovimiento]
+  )
+
+  const proveedorOptions = useMemo<SearchableSelectOption[]>(() =>
+    proveedores.map(proveedor => ({
+      value: proveedor.id,
+      label: proveedor.razon_social,
+      subtitle: proveedor.numero_documento || 'Sin documento',
+      searchText: `${proveedor.razon_social} ${proveedor.numero_documento || ''}`
+    })),
+    [proveedores]
+  )
+
+  const vehiculoOptions = useMemo<SearchableSelectOption[]>(() =>
+    vehiculos.map(vehiculo => ({
+      value: vehiculo.id,
+      label: `${vehiculo.patente} - ${vehiculo.marca} ${vehiculo.modelo}`,
+      searchText: `${vehiculo.patente} ${vehiculo.marca} ${vehiculo.modelo}`
+    })),
+    [vehiculos]
+  )
+
+  const vehiculosConInventarioOptions = useMemo<SearchableSelectOption[]>(() =>
+    vehiculosConInventario.map(vehiculo => ({
+      value: vehiculo.id,
+      label: `${vehiculo.patente} - ${vehiculo.marca} ${vehiculo.modelo}`,
+      searchText: `${vehiculo.patente} ${vehiculo.marca} ${vehiculo.modelo}`
+    })),
+    [vehiculosConInventario]
+  )
+
+  const stockProveedorOptions = useMemo<SearchableSelectOption[]>(() =>
+    stockPorProveedor.map(stock => ({
+      value: stock.proveedor_id,
+      label: stock.proveedor_nombre,
+      subtitle: `Stock: ${stock.cantidad}`,
+      searchText: `${stock.proveedor_nombre} ${stock.cantidad}`
+    })),
+    [stockPorProveedor]
+  )
+
+  const productosAsignadosVehiculoOptions = useMemo<SearchableSelectOption[]>(() =>
+    productosAsignadosVehiculo.map(item => ({
+      value: item.producto_id,
+      label: `${item.producto?.codigo || ''} - ${item.producto?.nombre || 'Herramienta'}`,
+      subtitle: `Cantidad asignada: ${item.cantidad}`,
+      searchText: `${item.producto?.codigo || ''} ${item.producto?.nombre || ''} ${item.cantidad}`
+    })),
+    [productosAsignadosVehiculo]
+  )
 
   // =====================================================
   // RENDER
@@ -1050,26 +1078,15 @@ export function MovimientosModule() {
                 <label style={{ display: 'block', marginBottom: '8px', fontSize: '14px', fontWeight: 600, color: 'var(--text-primary)' }}>
                   Proveedor *
                 </label>
-                <select
+                <SearchableSelect
                   value={proveedorId}
-                  onChange={(e) => setProveedorId(e.target.value)}
-                  style={{
-                    width: '100%',
-                    padding: '10px',
-                    border: '1px solid var(--border-primary)',
-                    borderRadius: '8px',
-                    fontSize: '14px',
-                    background: 'var(--input-bg)',
-                    color: 'var(--text-primary)'
-                  }}
-                >
-                  <option value="">Seleccionar proveedor...</option>
-                  {proveedores.map((prov) => (
-                    <option key={prov.id} value={prov.id}>
-                      {prov.razon_social} - {prov.numero_documento}
-                    </option>
-                  ))}
-                </select>
+                  onChange={setProveedorId}
+                  options={proveedorOptions}
+                  placeholder="Seleccionar proveedor..."
+                  searchPlaceholder="Buscar proveedor..."
+                  noResultsText="Sin proveedores"
+                  size="lg"
+                />
               </div>
 
               {/* Aviso de que siempre va a tránsito */}
@@ -1254,26 +1271,15 @@ export function MovimientosModule() {
                   <label style={{ display: 'block', marginBottom: '8px', fontSize: '14px', fontWeight: 600, color: 'var(--text-primary)' }}>
                     Vehículo/Patente (opcional)
                   </label>
-                  <select
+                  <SearchableSelect
                     value={vehiculoId}
-                    onChange={(e) => setVehiculoId(e.target.value)}
-                    style={{
-                      width: '100%',
-                      padding: '10px',
-                      border: '1px solid var(--border-primary)',
-                      borderRadius: '8px',
-                      fontSize: '14px',
-                      background: 'var(--input-bg)',
-                      color: 'var(--text-primary)'
-                    }}
-                  >
-                    <option value="">Sin vehículo asociado</option>
-                    {vehiculos.map((v) => (
-                      <option key={v.id} value={v.id}>
-                        {v.patente} - {v.marca} {v.modelo}
-                      </option>
-                    ))}
-                  </select>
+                    onChange={setVehiculoId}
+                    options={vehiculoOptions}
+                    placeholder="Sin vehículo asociado"
+                    searchPlaceholder="Buscar patente..."
+                    noResultsText="Sin vehículos"
+                    size="lg"
+                  />
                 </div>
               )}
 
@@ -1733,98 +1739,19 @@ export function MovimientosModule() {
 
           {/* Buscador de Producto (modo simple, no devolución, no lote salida) */}
           {!modoLote && !modoLoteSalida && tipoMovimiento !== 'devolucion' && (
-            <div style={{ position: 'relative' }} data-producto-dropdown>
+            <div>
               <label style={{ display: 'block', marginBottom: '8px', fontSize: '14px', fontWeight: 600, color: 'var(--text-secondary)' }}>
                 {tipoMovimiento === 'asignacion' ? 'Herramienta *' : 'Producto *'}
               </label>
-              <div style={{ position: 'relative' }}>
-                <Search
-                  size={18}
-                  style={{
-                    position: 'absolute',
-                    left: '12px',
-                    top: '50%',
-                    transform: 'translateY(-50%)',
-                    color: 'var(--text-tertiary)',
-                    pointerEvents: 'none'
-                  }}
-                />
-                <input
-                  type="text"
-                  placeholder="Buscar por código o nombre..."
-                  value={busquedaProducto}
-                  onChange={(e) => {
-                    setBusquedaProducto(e.target.value)
-                    setMostrarDropdownProductos(true)
-                  }}
-                  onFocus={() => setMostrarDropdownProductos(true)}
-                  style={{
-                    width: '100%',
-                    padding: '10px 10px 10px 40px',
-                    border: '1px solid var(--border-primary)',
-                    borderRadius: '8px',
-                    fontSize: '14px',
-                    background: 'var(--input-bg)',
-                    color: 'var(--text-primary)'
-                  }}
-                />
-
-                {mostrarDropdownProductos && productosFiltrados.length > 0 && (
-                  <div style={{
-                    position: 'absolute',
-                    top: '100%',
-                    left: 0,
-                    right: 0,
-                    maxHeight: '300px',
-                    overflowY: 'auto',
-                    background: 'var(--card-bg)',
-                    border: '1px solid var(--border-primary)',
-                    borderRadius: '8px',
-                    marginTop: '4px',
-                    boxShadow: 'var(--shadow-md)',
-                    zIndex: 1000
-                  }}>
-                    {productosFiltrados.map((p) => (
-                      <div
-                        key={p.id}
-                        onClick={() => handleSelectProductoDropdown(p)}
-                        style={{
-                          padding: '12px 16px',
-                          cursor: 'pointer',
-                          borderBottom: '1px solid var(--border-secondary)',
-                          fontSize: '14px',
-                          display: 'flex',
-                          justifyContent: 'space-between',
-                          alignItems: 'center',
-                          background: 'var(--card-bg)',
-                          color: 'var(--text-primary)'
-                        }}
-                        onMouseEnter={(e) => e.currentTarget.style.background = 'var(--bg-hover)'}
-                        onMouseLeave={(e) => e.currentTarget.style.background = 'var(--card-bg)'}
-                      >
-                        <div>
-                          <div style={{ fontWeight: 600, color: 'var(--text-primary)' }}>
-                            {p.codigo} - {p.nombre}
-                          </div>
-                          <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '2px' }}>
-                            {p.tipo} • {p.unidades_medida?.descripcion || 'Unidad'}
-                          </div>
-                        </div>
-                        <div style={{
-                          padding: '4px 10px',
-                          borderRadius: '12px',
-                          fontSize: '12px',
-                          fontWeight: 600,
-                          background: (p.stock_disponible || 0) > 0 ? 'var(--badge-green-bg)' : 'var(--badge-red-bg)',
-                          color: (p.stock_disponible || 0) > 0 ? 'var(--badge-green-text)' : 'var(--badge-red-text)'
-                        }}>
-                          Stock: {p.stock_disponible || 0}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
+              <SearchableSelect
+                value={productoId}
+                onChange={setProductoId}
+                options={productoOptions}
+                placeholder="Buscar por código o nombre..."
+                searchPlaceholder="Buscar producto..."
+                noResultsText="Sin productos"
+                size="lg"
+              />
               {productoId && productoSeleccionado && (
                 <p style={{
                   fontSize: '12px',
@@ -1853,78 +1780,15 @@ export function MovimientosModule() {
               </h3>
 
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '8px', marginBottom: '12px' }}>
-                <div style={{ position: 'relative' }} data-producto-dropdown>
-                  <input
-                    type="text"
-                    placeholder="Buscar producto..."
-                    value={busquedaProducto}
-                    onChange={(e) => {
-                      setBusquedaProducto(e.target.value)
-                      setMostrarDropdownProductos(true)
-                    }}
-                    onFocus={() => setMostrarDropdownProductos(true)}
-                    style={{
-                      width: '100%',
-                      padding: '8px 12px',
-                      border: '1px solid var(--border-primary)',
-                      borderRadius: '6px',
-                      fontSize: '13px',
-                      background: 'var(--input-bg)',
-                      color: 'var(--text-primary)'
-                    }}
-                  />
-                  {mostrarDropdownProductos && productosFiltrados.length > 0 && (
-                    <div style={{
-                      position: 'absolute',
-                      top: '100%',
-                      left: 0,
-                      right: 0,
-                      maxHeight: '200px',
-                      overflowY: 'auto',
-                      background: 'var(--card-bg)',
-                      border: '1px solid var(--border-primary)',
-                      borderRadius: '6px',
-                      marginTop: '4px',
-                      boxShadow: 'var(--shadow-md)',
-                      zIndex: 1000
-                    }}>
-                       {productosFiltrados.map((p) => (
-                        <div
-                          key={p.id}
-                          onClick={() => handleSelectProductoDropdown(p)}
-                          style={{
-                            padding: '8px 12px',
-                            cursor: 'pointer',
-                            borderBottom: '1px solid var(--border-secondary)',
-                            fontSize: '13px',
-                            display: 'flex',
-                            justifyContent: 'space-between',
-                            alignItems: 'center',
-                            background: 'var(--card-bg)',
-                            color: 'var(--text-primary)'
-                          }}
-                          onMouseEnter={(e) => e.currentTarget.style.background = 'var(--bg-hover)'}
-                          onMouseLeave={(e) => e.currentTarget.style.background = 'var(--card-bg)'}
-                        >
-                          <div>
-                            <div style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{p.codigo} - {p.nombre}</div>
-                            <div style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>{p.tipo}</div>
-                          </div>
-                          <span style={{
-                            padding: '2px 8px',
-                            borderRadius: '10px',
-                            fontSize: '11px',
-                            fontWeight: 600,
-                            background: (p.stock_disponible || 0) > 0 ? 'var(--badge-green-bg)' : 'var(--badge-red-bg)',
-                            color: (p.stock_disponible || 0) > 0 ? 'var(--badge-green-text)' : 'var(--badge-red-text)'
-                          }}>
-                            {p.stock_disponible || 0}
-                          </span>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
+                <SearchableSelect
+                  value={productoId}
+                  onChange={setProductoId}
+                  options={productoOptions}
+                  placeholder="Buscar producto..."
+                  searchPlaceholder="Buscar producto..."
+                  noResultsText="Sin productos"
+                  size="md"
+                />
                 <input
                   type="number"
                   min="1"
