@@ -352,6 +352,7 @@ export function ControlExcesoKmModule() {
       onDateRangePreset={setDateRangePreset}
       onCustomDateRange={setCustomDateRange}
       isLoading={loading}
+      weekOnly
     />
   )
 

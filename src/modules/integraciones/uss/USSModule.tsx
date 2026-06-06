@@ -20,7 +20,7 @@ export function USSModule() {
     setDateRange,
     setVelocidadRange,
     isRealtime,
-  } = useUSSData({ sedeId: sedeActualId, defaultPeriod: 'yesterday' })
+  } = useUSSData({ sedeId: sedeActualId, defaultPeriod: 'week' })
 
   const [searchTerm, setSearchTerm] = useState('')
 

@@ -234,7 +234,7 @@ export function DateRangeSelector({
     const lastSunday = getSundayOfWeek(lastWeekDate.getFullYear(), lastWeekDate.getMonth(), lastWeekDate.getDate())
     const lastWeekNum = getWeekNumber(lastMonday.year, lastMonday.month, lastMonday.day)
 
-    return [
+    const weekShortcuts: DateRangeShortcut[] = [
       {
         id: 'this-week',
         label: `Esta semana (S${thisWeekNum})`,
@@ -255,6 +255,12 @@ export function DateRangeSelector({
           type: 'week' as const
         }
       },
+    ]
+
+    if (weekOnly) return weekShortcuts
+
+    return [
+      ...weekShortcuts,
       {
         id: 'this-year',
         label: `Este año (${currentYear})`,
@@ -266,7 +272,7 @@ export function DateRangeSelector({
         }
       }
     ]
-  }, [])
+  }, [weekOnly])
 
   // Label del botón
   const getButtonLabel = (): string => {

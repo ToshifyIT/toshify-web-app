@@ -130,11 +130,15 @@ export function getDateRangeForPeriod(period: 'today' | 'yesterday' | 'week' | '
       }
     }
     case 'week': {
-      const weekAgo = new Date(today)
-      weekAgo.setDate(weekAgo.getDate() - 7)
+      const day = today.getDay()
+      const daysToMonday = day === 0 ? 6 : day - 1
+      const monday = new Date(today)
+      monday.setDate(today.getDate() - daysToMonday)
+      const sunday = new Date(monday)
+      sunday.setDate(monday.getDate() + 6)
       return {
-        start: toLocalDateStr(weekAgo),
-        end: todayStr,
+        start: toLocalDateStr(monday),
+        end: toLocalDateStr(sunday),
       }
     }
     case 'month': {

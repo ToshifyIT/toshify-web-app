@@ -73,7 +73,7 @@ export function useUSSData(options: UseUSSDataOptions = {}): UseUSSDataReturn {
   const [dateRange, setDateRange] = useState<DateRange>({
     startDate: defaultRange.start,
     endDate: defaultRange.end,
-    label: defaultPeriod === 'week' ? 'Última semana' : defaultPeriod === 'yesterday' ? 'Ayer' : defaultPeriod === 'today' ? 'Hoy' : defaultPeriod === 'month' ? 'Últimos 30 días' : defaultPeriod,
+    label: defaultPeriod === 'week' ? 'Esta semana' : defaultPeriod === 'yesterday' ? 'Ayer' : defaultPeriod === 'today' ? 'Hoy' : defaultPeriod === 'month' ? 'Últimos 30 días' : defaultPeriod,
   })
   // Filtro de rango de velocidad (servidor)
   const [velocidadMin, setVelocidadMin] = useState<number | undefined>(undefined)
