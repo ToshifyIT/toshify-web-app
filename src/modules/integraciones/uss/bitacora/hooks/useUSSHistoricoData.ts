@@ -54,6 +54,13 @@ export interface Marcacion {
   kmSemanaConductor?: number;
   limiteSemanal?: number;
   excedeLimite?: boolean;
+  // Metadata semanal usada por Control de Exceso KM cuando el rango visible
+  // incluye varias semanas.
+  excesoKmSemana?: number;
+  excesoKmAnio?: number;
+  excesoKmSemanaInicio?: string;
+  excesoKmSemanaFin?: string;
+  excesoKmSemanaKey?: string;
   // Resumen semanal: cuando se filtra por exceso, esta marcacion se transforma en 1 fila
   // resumen con entrada/salida/duracion/km agregados de toda la semana del conductor.
   duracionSemanaMinutos?: number;

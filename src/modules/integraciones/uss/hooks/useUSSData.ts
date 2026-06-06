@@ -158,7 +158,9 @@ export function useUSSData(options: UseUSSDataOptions = {}): UseUSSDataReturn {
   }, [fetchStatsAndRankings, autoLoad])
 
   // Determinar si estamos en modo realtime (Hoy o Última semana)
-  const isRealtime = dateRange.label === 'Hoy' || dateRange.label === 'Última semana'
+  const isRealtime = dateRange.label === 'Hoy' ||
+    dateRange.label === 'Última semana' ||
+    dateRange.label.startsWith('Esta semana')
 
   // Ref para debouncing de realtime
   const realtimeDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)

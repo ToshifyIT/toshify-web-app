@@ -21,8 +21,46 @@ function getToday(): string {
   return toArgentinaDateString(new Date())
 }
 
+interface ExcesoKmWeekInfo {
+  semana: number
+  anio: number
+  inicio: string
+  fin: string
+  key: string
+}
+
+function toLocalDateString(date: Date): string {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
+}
+
+function getISOWeekInfo(dateStr: string): ExcesoKmWeekInfo {
+  const [year, month, day] = dateStr.split('-').map(Number)
+  const date = new Date(year, month - 1, day, 12, 0, 0)
+  const dow = date.getDay() === 0 ? 7 : date.getDay()
+
+  const monday = new Date(date)
+  monday.setDate(date.getDate() - (dow - 1))
+
+  const sunday = new Date(monday)
+  sunday.setDate(monday.getDate() + 6)
+
+  const target = new Date(date)
+  target.setDate(date.getDate() + 4 - (date.getDay() || 7))
+  const yearStart = new Date(target.getFullYear(), 0, 1)
+  const semana = Math.ceil(((target.getTime() - yearStart.getTime()) / 86400000 + 1) / 7)
+  const anio = target.getFullYear()
+
+  return {
+    semana,
+    anio,
+    inicio: toLocalDateString(monday),
+    fin: toLocalDateString(sunday),
+    key: `${anio}-${String(semana).padStart(2, '0')}`,
+  }
+}
+
 function normalizarPatente(p: string | null | undefined): string {
-  return (p || '').replace(/[\s\-]/g, '').toUpperCase()
+  return (p || '').replace(/[\s-]/g, '').toUpperCase()
 }
 
 function parseRawConductores(raw: string | null): string[] {
@@ -372,6 +410,7 @@ export function useExcesoKmData(sedeId?: string | null) {
 
         // Calcular fecha_turno y entrada/salida en ART
         const fechaTurno = new Date(primero.inicioMs).toLocaleDateString('en-CA', { timeZone: TIMEZONE_ARGENTINA })
+        const semanaInfo = getISOWeekInfo(fechaTurno)
         const fmtHora = (ms: number) => {
           const d = new Date(ms)
           const h = d.toLocaleTimeString('es-AR', { timeZone: TIMEZONE_ARGENTINA, hour: '2-digit', minute: '2-digit', hour12: false })
@@ -380,7 +419,7 @@ export function useExcesoKmData(sedeId?: string | null) {
         const duracionMin = Math.round(t.trips.reduce((s, x) => s + (x.finMs - x.inicioMs), 0) / 60000)
 
         const m: Marcacion = {
-          id: `excesoKM-${idx}`,
+          id: `excesoKM-${semanaInfo.key}-${idx}`,
           conductor: t.conductor,
           conductorId: condInfo?.id || null,
           conductorDni: condInfo?.dni || null,
@@ -401,6 +440,11 @@ export function useExcesoKmData(sedeId?: string | null) {
           lavadoRealizado: false,
           naftaCargada: false,
           gpsOrigen: 'USS',
+          excesoKmSemana: semanaInfo.semana,
+          excesoKmAnio: semanaInfo.anio,
+          excesoKmSemanaInicio: semanaInfo.inicio,
+          excesoKmSemanaFin: semanaInfo.fin,
+          excesoKmSemanaKey: semanaInfo.key,
         }
         return m
       })
@@ -408,15 +452,17 @@ export function useExcesoKmData(sedeId?: string | null) {
       // 8) Calcular suma semanal por conductor para aplicar excedeLimite
       const sumKmPorConductor = new Map<string, { km: number; modalidad: string }>()
       for (const m of marcs) {
-        const key = m.conductorId || m.conductor || ''
-        if (!key) continue
+        const conductorKey = m.conductorId || m.conductor || ''
+        if (!conductorKey) continue
+        const key = `${m.excesoKmSemanaKey || 'sin-semana'}|${conductorKey}`
         const prev = sumKmPorConductor.get(key) || { km: 0, modalidad: m.vehiculoModalidad || 'turno' }
         prev.km += m.kmTotal
         if (m.vehiculoModalidad === 'a_cargo') prev.modalidad = 'a_cargo'
         sumKmPorConductor.set(key, prev)
       }
       for (const m of marcs) {
-        const key = m.conductorId || m.conductor || ''
+        const conductorKey = m.conductorId || m.conductor || ''
+        const key = `${m.excesoKmSemanaKey || 'sin-semana'}|${conductorKey}`
         const acc = sumKmPorConductor.get(key)
         if (acc) {
           const limite = acc.modalidad === 'a_cargo' ? limiteACargo : limiteTurno

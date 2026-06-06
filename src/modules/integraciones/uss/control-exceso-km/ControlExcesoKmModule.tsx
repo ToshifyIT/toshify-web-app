@@ -43,6 +43,32 @@ function getISOWeek(dateStr: string): { semana: number; anio: number } {
   return { semana, anio: target.getFullYear() }
 }
 
+function getMarcacionWeekParts(m: {
+  fecha: string
+  excesoKmSemana?: number
+  excesoKmAnio?: number
+}): { semana: number; anio: number } {
+  if (m.excesoKmSemana && m.excesoKmAnio) {
+    return { semana: m.excesoKmSemana, anio: m.excesoKmAnio }
+  }
+  return getISOWeek(m.fecha)
+}
+
+function getConductorSemanaKey(
+  conductorId: string | null | undefined,
+  semana: number | null | undefined,
+  anio: number | null | undefined,
+): string | null {
+  if (!conductorId || !semana || !anio) return null
+  return `${conductorId}|${semana}|${anio}`
+}
+
+function getAnioFromDescripcion(descripcion: string | null | undefined, semana: number): number | null {
+  const match = (descripcion || '').match(/Sem\s+(\d{1,2})\/(\d{4})/i)
+  if (!match || Number(match[1]) !== semana) return null
+  return Number(match[2])
+}
+
 export function ControlExcesoKmModule() {
   const { sedeActualId } = useSede()
   const { user, profile } = useAuth()
@@ -102,18 +128,34 @@ export function ControlExcesoKmModule() {
     })()
   }, [])
 
-  // IDs de conductores que YA tienen incidencia EXCESO_KM en la semana visible
+  // Claves conductor|semana|anio que YA tienen incidencia EXCESO_KM en el rango visible
   const [conductoresConIncidencia, setConductoresConIncidencia] = useState<Set<string>>(new Set())
   const cargarConductoresConIncidencia = useCallback(async () => {
     if (!marcaciones.length) {
       setConductoresConIncidencia(new Set())
       return
     }
-    const { semana } = getISOWeek(dateRange.endDate || dateRange.startDate)
     const conductorIds = [...new Set(marcaciones.map(m => m.conductorId).filter(Boolean))] as string[]
     if (conductorIds.length === 0) {
       setConductoresConIncidencia(new Set())
       return
+    }
+    const periodosVisibles = new Map<string, { semana: number; anio: number }>()
+    for (const m of marcaciones) {
+      const { semana, anio } = getMarcacionWeekParts(m)
+      if (semana && anio) periodosVisibles.set(`${semana}|${anio}`, { semana, anio })
+    }
+    const periodos = [...periodosVisibles.values()]
+    if (periodos.length === 0) {
+      setConductoresConIncidencia(new Set())
+      return
+    }
+    const semanas = [...new Set(periodos.map(p => p.semana))]
+    const periodosPorSemana = new Map<number, Array<{ semana: number; anio: number }>>()
+    for (const periodo of periodos) {
+      const actuales = periodosPorSemana.get(periodo.semana) || []
+      actuales.push(periodo)
+      periodosPorSemana.set(periodo.semana, actuales)
     }
     // tipo EXCESO_KM
     const { data: tipos } = await (supabase.from('tipos_cobro_descuento' as any) as any)
@@ -127,12 +169,24 @@ export function ControlExcesoKmModule() {
     }
     const { data: incs } = await (supabase
       .from('incidencias' as any)
-      .select('conductor_id')
+      .select('conductor_id, semana, descripcion')
       .eq('tipo_cobro_descuento_id', tipoExceso.id)
-      .eq('semana', semana)
+      .in('semana', semanas)
       .in('conductor_id', conductorIds) as any)
-    setConductoresConIncidencia(new Set((incs || []).map((i: any) => i.conductor_id).filter(Boolean)))
-  }, [marcaciones, dateRange.endDate, dateRange.startDate])
+    const existentes = new Set<string>()
+    for (const inc of (incs || []) as any[]) {
+      const conductorId = inc.conductor_id as string | null
+      const semana = Number(inc.semana) || 0
+      if (!conductorId || !semana) continue
+      const anioDescripcion = getAnioFromDescripcion(inc.descripcion, semana)
+      for (const periodo of periodosPorSemana.get(semana) || []) {
+        if (anioDescripcion && periodo.anio !== anioDescripcion) continue
+        const key = getConductorSemanaKey(conductorId, periodo.semana, periodo.anio)
+        if (key) existentes.add(key)
+      }
+    }
+    setConductoresConIncidencia(existentes)
+  }, [marcaciones])
 
   useEffect(() => { cargarConductoresConIncidencia() }, [cargarConductoresConIncidencia])
 
@@ -183,8 +237,10 @@ export function ControlExcesoKmModule() {
     const filtered = marcaciones.filter(m => m.excedeLimite === true)
     const grupos = new Map<string, typeof filtered>()
     for (const m of filtered) {
-      const key = m.conductorId || m.conductor || ''
-      if (!key) continue
+      const conductorKey = m.conductorId || m.conductor || ''
+      if (!conductorKey) continue
+      const { semana, anio } = getMarcacionWeekParts(m)
+      const key = `${anio}-${String(semana).padStart(2, '0')}|${conductorKey}`
       if (!grupos.has(key)) grupos.set(key, [])
       grupos.get(key)!.push(m)
     }
@@ -204,7 +260,9 @@ export function ControlExcesoKmModule() {
       const excedido = Math.max(0, km - limite)
       const ultima = lista[lista.length - 1]
       const conductorId = ultima.conductorId
-      const ya = !!(conductorId && conductoresConIncidencia.has(conductorId))
+      const { semana, anio } = getMarcacionWeekParts(ultima)
+      const incidenciaKey = getConductorSemanaKey(conductorId, semana, anio)
+      const ya = !!(incidenciaKey && conductoresConIncidencia.has(incidenciaKey))
       filas.push({ conductorId, key, km, limite, excedido, modalidad, ya })
     }
     return filas
@@ -241,7 +299,7 @@ export function ControlExcesoKmModule() {
       showError('Sin exceso', 'No hay km excedidos que cobrar')
       return
     }
-    const { semana, anio } = getISOWeek(dateRange.endDate || dateRange.startDate)
+    const { semana, anio } = row
 
     const confirm = await Swal.fire({
       title: 'Crear incidencia de exceso de KM',
@@ -274,8 +332,8 @@ export function ControlExcesoKmModule() {
       limite: row.limite,
       semana,
       anio,
-      semanaInicio: dateRange.startDate,
-      semanaFin: dateRange.endDate,
+      semanaInicio: row.semanaInicio,
+      semanaFin: row.semanaFin,
       sedeId: sedeActualId || null,
     }, { userId: user?.id, userName })
 
@@ -286,7 +344,7 @@ export function ControlExcesoKmModule() {
     } else {
       showError('No se pudo crear', res.error)
     }
-  }, [dateRange.endDate, dateRange.startDate, sedeActualId, user?.id, userName, cargarConductoresConIncidencia, refresh])
+  }, [sedeActualId, user?.id, userName, cargarConductoresConIncidencia, refresh])
 
   const headerControls = (
     <BitacoraHeader
@@ -365,8 +423,8 @@ export function ControlExcesoKmModule() {
       <ExcesoKmDetalleDrawer
         row={detalle}
         onClose={() => setDetalle(null)}
-        semanaInicio={dateRange.startDate}
-        semanaFin={dateRange.endDate}
+        semanaInicio={detalle?.semanaInicio || dateRange.startDate}
+        semanaFin={detalle?.semanaFin || dateRange.endDate}
       />
     </div>
   )

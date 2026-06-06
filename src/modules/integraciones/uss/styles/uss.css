@@ -68,6 +68,11 @@
   margin-left: auto;
 }
 
+.uss-speed-controls .date-range-dropdown {
+  left: auto;
+  right: 0;
+}
+
 /* Indicador de tiempo real */
 .uss-realtime-indicator {
   display: flex;

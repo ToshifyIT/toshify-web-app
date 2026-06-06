@@ -22,9 +22,37 @@ function porcentajePorKm(km: number): number {
   return 15
 }
 
+function getMarcacionSemanaInfo(m: Marcacion): {
+  semana: number
+  anio: number
+  inicio: string
+  fin: string
+  key: string
+} {
+  const semana = m.excesoKmSemana || 0
+  const anio = m.excesoKmAnio || Number(m.fecha.slice(0, 4)) || new Date().getFullYear()
+  return {
+    semana,
+    anio,
+    inicio: m.excesoKmSemanaInicio || m.fecha,
+    fin: m.excesoKmSemanaFin || m.fecha,
+    key: m.excesoKmSemanaKey || `${anio}-${String(semana).padStart(2, '0')}`,
+  }
+}
+
+function getConductorSemanaKey(conductorId: string | null | undefined, semana: number, anio: number): string | null {
+  if (!conductorId || !semana || !anio) return null
+  return `${conductorId}|${semana}|${anio}`
+}
+
 export interface ExcesoKmRow {
   /** llave estable = conductorId || conductor (nombre) */
   key: string
+  semana: number
+  anio: number
+  semanaInicio: string
+  semanaFin: string
+  semanaKey: string
   conductorId: string | null
   conductorNombre: string
   conductorDni: string | null
@@ -82,14 +110,17 @@ export function ExcesoKmTable({
   const filas = useMemo<ExcesoKmRow[]>(() => {
     const grupos = new Map<string, Marcacion[]>()
     for (const m of marcaciones) {
-      const key = m.conductorId || m.conductor || ''
-      if (!key) continue
+      const conductorKey = m.conductorId || m.conductor || ''
+      if (!conductorKey) continue
+      const semanaInfo = getMarcacionSemanaInfo(m)
+      const key = `${semanaInfo.key}|${conductorKey}`
       if (!grupos.has(key)) grupos.set(key, [])
       grupos.get(key)!.push(m)
     }
     const rows: ExcesoKmRow[] = []
     for (const [key, lista] of grupos) {
       const km = lista.reduce((s, m) => s + (m.kmTotal || 0), 0)
+      const semanaInfo = getMarcacionSemanaInfo(lista[0])
       const modalidad: 'turno' | 'a_cargo' = lista.some(m => m.vehiculoModalidad === 'a_cargo') ? 'a_cargo' : 'turno'
       // Horario solo aplica cuando modalidad === 'turno'.
       // FIX 2026-05-19: ya viene cruzado por conductor desde useExcesoKmData
@@ -130,8 +161,14 @@ export function ExcesoKmTable({
       const valorReal = (ultima.conductorId && alquilerPorConductor?.get(ultima.conductorId))
         || (modalidad === 'a_cargo' ? alquilerACargo : alquilerTurno)
       const monto = Math.round(valorReal * (pct / 100) * 1.21)
+      const incidenciaKey = getConductorSemanaKey(ultima.conductorId, semanaInfo.semana, semanaInfo.anio)
       rows.push({
         key,
+        semana: semanaInfo.semana,
+        anio: semanaInfo.anio,
+        semanaInicio: semanaInfo.inicio,
+        semanaFin: semanaInfo.fin,
+        semanaKey: semanaInfo.key,
         conductorId: ultima.conductorId,
         conductorNombre: ultima.conductor,
         conductorDni: ultima.conductorDni ?? null,
@@ -146,7 +183,7 @@ export function ExcesoKmTable({
         horario,
         porcentaje: pct,
         monto,
-        yaTieneIncidencia: !!(ultima.conductorId && conductoresConIncidencia.has(ultima.conductorId)),
+        yaTieneIncidencia: !!(incidenciaKey && conductoresConIncidencia.has(incidenciaKey)),
         detalle: lista,
       })
     }
@@ -179,6 +216,7 @@ export function ExcesoKmTable({
       f = f.filter(r =>
         r.conductorNombre.toLowerCase().includes(term) ||
         (r.conductorDni && r.conductorDni.includes(term)) ||
+        `s${r.semana}/${r.anio}`.includes(term.replace(/\s+/g, '')) ||
         normalizePatente(r.patente).toLowerCase().includes(termPatente),
       )
     }
@@ -205,6 +243,20 @@ export function ExcesoKmTable({
         )
       },
       enableSorting: false,
+    },
+    {
+      id: 'semana',
+      accessorFn: (r) => `${r.anio}-${String(r.semana).padStart(2, '0')}`,
+      header: 'Semana',
+      size: 88,
+      cell: ({ row }) => (
+        <span
+          title={`${row.original.semanaInicio} a ${row.original.semanaFin}`}
+          style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}
+        >
+          S{row.original.semana}/{row.original.anio}
+        </span>
+      ),
     },
     {
       id: 'patente',
@@ -501,6 +553,7 @@ export function ExcesoKmTable({
   function getExportData() {
     return filtered.map(r => ({
       'GPS': r.gpsOrigen,
+      'Semana': `S${r.semana}/${r.anio}`,
       'Patente': r.patente,
       'Conductor': r.conductorNombre,
       'DNI': r.conductorDni || '',
@@ -518,7 +571,7 @@ export function ExcesoKmTable({
     const data = getExportData()
     if (data.length === 0) return
     const ws = XLSX.utils.json_to_sheet(data)
-    ws['!cols'] = [{ wch: 8 }, { wch: 10 }, { wch: 32 }, { wch: 12 }, { wch: 12 }, { wch: 10 }, { wch: 10 }, { wch: 10 }, { wch: 10 }, { wch: 10 }, { wch: 12 }, { wch: 12 }]
+    ws['!cols'] = [{ wch: 8 }, { wch: 12 }, { wch: 10 }, { wch: 32 }, { wch: 12 }, { wch: 12 }, { wch: 10 }, { wch: 10 }, { wch: 10 }, { wch: 10 }, { wch: 10 }, { wch: 12 }, { wch: 12 }]
     const wb = XLSX.utils.book_new()
     XLSX.utils.book_append_sheet(wb, ws, 'Exceso KM')
     XLSX.writeFile(wb, `Exceso_KM_${new Date().toISOString().slice(0, 10)}.xlsx`)
