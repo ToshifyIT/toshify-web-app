@@ -47,7 +47,7 @@ export function PenalidadForm({ formData, setFormData, tiposPenalidad, tiposCobr
   const selectedVehiculo = vehiculos.find(v => v.id === formData.vehiculo_id)
 
   // Tipos categorizados memoizados
-  const { tiposP006, tiposP004, tiposP007, tiposSinCategoria } = useCategorizedTipos(tiposCobroDescuento)
+  const { tiposP006, tiposP004, tiposP007, tiposConcepto, tiposSinCategoria } = useCategorizedTipos(tiposCobroDescuento)
 
   // Buscar conductores asignados al vehiculo seleccionado
   async function buscarConductoresAsignados(vehiculoId: string) {
@@ -340,6 +340,14 @@ export function PenalidadForm({ formData, setFormData, tiposPenalidad, tiposCobr
                   {tiposP007.length > 0 && (
                     <optgroup label="P007 - Multas/Penalidades">
                       {tiposP007.map(tipo => (
+                        <option key={tipo.id} value={tipo.id}>{tipo.nombre}</option>
+                      ))}
+                    </optgroup>
+                  )}
+                  {/* Conceptos (incluye P005 - Peaje / Telepase) */}
+                  {tiposConcepto.length > 0 && (
+                    <optgroup label="Conceptos">
+                      {tiposConcepto.map(tipo => (
                         <option key={tipo.id} value={tipo.id}>{tipo.nombre}</option>
                       ))}
                     </optgroup>

@@ -1362,7 +1362,11 @@ export function IncidenciasModule() {
       }
     },
     {
-      accessorKey: 'created_at',
+      id: 'fecha_creado',
+      // accessorFn + id propio: el colId es 'fecha_creado' (no 'created_at'), asi NO colisiona
+      // con la columna 'Fecha' (evita los 2 calendarios) y a la vez contiene 'fecha' para que
+      // el DataTable lo siga detectando como columna de FECHA (filtro calendario, no checklist).
+      accessorFn: (row) => row.created_at,
       header: 'Creado',
       cell: ({ row }) => {
         if (!row.original.created_at) return '-'
@@ -1607,7 +1611,11 @@ export function IncidenciasModule() {
       }
     },
     {
-      accessorKey: 'created_at',
+      id: 'fecha_creado',
+      // accessorFn + id propio: el colId es 'fecha_creado' (no 'created_at'), asi NO colisiona
+      // con la columna 'Fecha' (evita los 2 calendarios) y a la vez contiene 'fecha' para que
+      // el DataTable lo siga detectando como columna de FECHA (filtro calendario, no checklist).
+      accessorFn: (row) => row.created_at,
       header: 'Creado',
       cell: ({ row }) => {
         if (!row.original.created_at) return '-'
@@ -5253,9 +5261,13 @@ function IncidenciaDetailView({ incidencia, onEdit, tiposCobroDescuento }: Incid
   const tipoObj = incidencia.tipo_cobro_descuento_id
     ? tiposCobroDescuento.find(t => t.id === incidencia.tipo_cobro_descuento_id)
     : null
-  const tipoIncidenciaNombre = tipoObj?.nombre || '-'
+  const esTelepaseInc = !!(incidencia as any).telepase_id
   const codIncLabels: Record<string, string> = { 'P006': 'P006 - Exceso KM', 'P004': 'P004 - Tickets a Favor', 'P007': 'P007 - Multas/Penalidades' }
-  const codInc = tipoObj?.categoria ? (codIncLabels[tipoObj.categoria] || tipoObj.categoria) : '-'
+  // Telepase: Cod Inc = nombre del tipo (ej "P005 - Peaje"), Tipo Inc = "Telepase"
+  const tipoIncidenciaNombre = esTelepaseInc ? 'Telepase' : (tipoObj?.nombre || '-')
+  const codInc = esTelepaseInc
+    ? (tipoObj?.nombre || '-')
+    : (tipoObj?.categoria ? (codIncLabels[tipoObj.categoria] || tipoObj.categoria) : '-')
   const esCobro = incidencia.tipo === 'cobro'
   const esAFavor = tipoObj?.es_a_favor || false
 
@@ -5450,9 +5462,13 @@ function PenalidadDetailView({ penalidad, onEdit, historialRechazos = [], loadin
   
   const esRechazado = penalidad.rechazado
   const tipoObj = penalidad.tipo_cobro_descuento_id && tiposCobroDescuentoMap ? tiposCobroDescuentoMap.get(penalidad.tipo_cobro_descuento_id) : null
+  const esTelepasePen = !!(penalidad as any).telepase_id
   const codIncLabelsLocal: Record<string, string> = { 'P006': 'P006 - Exceso KM', 'P004': 'P004 - Tickets a Favor', 'P007': 'P007 - Multas/Penalidades' }
-  const codInc = tipoObj?.categoria ? (codIncLabelsLocal[tipoObj.categoria] || tipoObj.categoria) : '-'
-  const tipoNombreResuelto = penalidad.tipo_nombre || tipoObj?.nombre || '-'
+  // Telepase: Cod Inc = nombre del tipo (ej "P005 - Peaje"), Tipo Inc = "Telepase"
+  const codInc = esTelepasePen
+    ? (tipoObj?.nombre || '-')
+    : (tipoObj?.categoria ? (codIncLabelsLocal[tipoObj.categoria] || tipoObj.categoria) : '-')
+  const tipoNombreResuelto = esTelepasePen ? 'Telepase' : (penalidad.tipo_nombre || tipoObj?.nombre || '-')
   const colorBg = tipoObj?.categoria === 'P004' ? '#dcfce7' : tipoObj?.categoria ? '#fee2e2' : undefined
   const vehiculoDesc = [penalidad.vehiculo_marca, penalidad.vehiculo_modelo].filter(Boolean).join(' ') || '-'
 

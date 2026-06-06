@@ -72,7 +72,7 @@ function parseTarifaToNumber(s: string | number | null | undefined): number {
 
 function buildDescripcion(t: TelepaseCobroInput): string {
   const partes = [
-    `Peaje TelePASE`,
+    `Telepase`,
     t.estacion ? `Estación: ${t.estacion}` : null,
     t.via ? `Vía: ${t.via}` : null,
     t.concesionario ? `Concesionario: ${t.concesionario}` : null,
@@ -211,7 +211,7 @@ export async function crearCobroDesdeTelepase(
       fecha,
       turno,
       area_responsable: 'ADMINISTRACION',
-      detalle: 'Cobro por peaje',
+      detalle: 'Cobro por Telepase',
       monto: monto || null,
       observaciones: descripcion,
       aplicado: false,

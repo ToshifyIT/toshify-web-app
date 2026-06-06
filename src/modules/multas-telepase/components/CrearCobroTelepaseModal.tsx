@@ -104,7 +104,7 @@ function findConductorByName(
 
 function buildDescripcionTelepase(r: TelepaseInput): string {
   const partes = [
-    'Peaje TelePASE',
+    'Telepase',
     r.estacion ? `Estación: ${r.estacion}` : '',
     r.via ? `Vía: ${r.via}` : '',
     r.concesionario ? `Concesionario: ${r.concesionario}` : '',
@@ -316,7 +316,7 @@ export function CrearCobroTelepaseModal({ isOpen, registro, onClose, onSaved }: 
         fecha,
         turno: turno || null,
         area_responsable: 'ADMINISTRACION',
-        detalle: 'Cobro por peaje',
+        detalle: 'Cobro por Telepase',
         monto: monto || null,
         observaciones: descripcion || null,
         aplicado: false,

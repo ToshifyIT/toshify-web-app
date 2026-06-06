@@ -131,7 +131,7 @@ export function CrearCobroMultaModal({ isOpen, multa, onClose, onSaved }: Props)
   const [descripcion, setDescripcion] = useState<string>('')
   const [notas, setNotas] = useState<string>('')
 
-  const { tiposP006, tiposP004, tiposP007, tiposSinCategoria } = useCategorizedTipos(tiposCobro as any)
+  const { tiposP006, tiposP004, tiposP007, tiposConcepto, tiposSinCategoria } = useCategorizedTipos(tiposCobro as any)
 
   // Cargar catálogos
   useEffect(() => {
@@ -430,6 +430,11 @@ export function CrearCobroMultaModal({ isOpen, multa, onClose, onSaved }: Props)
                       {tiposP007.length > 0 && (
                         <optgroup label="P007 - Multas/Penalidades">
                           {tiposP007.map(t => <option key={t.id} value={t.id}>{t.nombre}</option>)}
+                        </optgroup>
+                      )}
+                      {tiposConcepto.length > 0 && (
+                        <optgroup label="Conceptos">
+                          {tiposConcepto.map(t => <option key={t.id} value={t.id}>{t.nombre}</option>)}
                         </optgroup>
                       )}
                       {tiposSinCategoria.map(t => <option key={t.id} value={t.id}>{t.nombre}</option>)}
