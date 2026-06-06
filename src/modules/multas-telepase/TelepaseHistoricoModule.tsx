@@ -278,10 +278,12 @@ export default function TelepaseHistoricoModule() {
     }
 
     if (fechaDesde || fechaHasta) {
+      // FECHA CARGA = created_at (cuando se cargo al sistema), no la fecha del peaje.
       filtered = filtered.filter(r => {
-        if (!r.fecha) return false
-        if (fechaDesde && r.fecha < fechaDesde) return false
-        if (fechaHasta && r.fecha > fechaHasta) return false
+        const fechaCarga = (r.created_at || '').slice(0, 10) // YYYY-MM-DD
+        if (!fechaCarga) return false
+        if (fechaDesde && fechaCarga < fechaDesde) return false
+        if (fechaHasta && fechaCarga > fechaHasta) return false
         return true
       })
     }
@@ -551,9 +553,13 @@ export default function TelepaseHistoricoModule() {
     }))
 
     if (fechaDesde || fechaHasta) {
+      const fmt = (f: string) => f.split('-').reverse().join('/')
+      const label = (fechaDesde && fechaHasta && fechaDesde === fechaHasta)
+        ? `Fecha: ${fmt(fechaDesde)}`
+        : `Fecha: ${fechaDesde ? fmt(fechaDesde) : 'Inicio'} - ${fechaHasta ? fmt(fechaHasta) : 'Fin'}`
       filters.push({
         id: 'fecha-rango',
-        label: `Fecha: ${fechaDesde ? fechaDesde.split('-').reverse().join('/') : 'Inicio'} - ${fechaHasta ? fechaHasta.split('-').reverse().join('/') : 'Fin'}`,
+        label,
         onClear: () => { setFechaDesde(null); setFechaHasta(null) }
       })
     }
@@ -588,8 +594,8 @@ export default function TelepaseHistoricoModule() {
   // Columnas
   const columns = useMemo<ColumnDef<TelepaseRegistro>[]>(() => [
     {
-      id: 'fecha_hora',
-      accessorFn: (row) => `${row.fecha || ''} ${row.hora || ''}`,
+      id: 'fecha_carga',
+      accessorFn: (row) => row.created_at || '',
       enableSorting: true,
       header: () => (
         <ExcelDateRangeFilter
@@ -597,8 +603,10 @@ export default function TelepaseHistoricoModule() {
           startDate={fechaDesde}
           endDate={fechaHasta}
           onRangeChange={(start, end) => {
+            // Si solo se eligio el inicio (sin fin), tratar como DIA UNICO en vez de
+            // dejar un rango abierto hacia el futuro (que dejaba "X - Fin" y mostraba 0).
             setFechaDesde(start)
-            setFechaHasta(end)
+            setFechaHasta(end ?? start)
           }}
           filterId="fecha"
           openFilterId={openFilterId}
@@ -606,9 +614,17 @@ export default function TelepaseHistoricoModule() {
         />
       ),
       cell: ({ row }) => {
-        const fecha = row.original.fecha || ''
-        const hora = row.original.hora || ''
-        return `${fecha} ${hora}`.trim() || '-'
+        // FECHA CARGA = created_at (cuando se cargo al sistema)
+        if (!row.original.created_at) return '-'
+        const d = new Date(row.original.created_at)
+        const fecha = d.toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric' })
+        const hora = d.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' })
+        return (
+          <div style={{ fontSize: '12px', lineHeight: '1.3' }}>
+            <div>{fecha}</div>
+            <div style={{ color: 'var(--text-tertiary)', fontSize: '11px' }}>{hora}</div>
+          </div>
+        )
       }
     },
     {
