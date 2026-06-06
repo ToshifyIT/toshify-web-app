@@ -289,6 +289,25 @@ function formatDate(dateStr: string | undefined | null): string {
   } catch { return '-' }
 }
 
+function formatDateParts(dateStr: string | undefined | null): { date: string; time: string } {
+  if (!dateStr) return { date: '-', time: '' }
+  try {
+    const d = new Date(dateStr)
+    if (isNaN(d.getTime())) return { date: '-', time: '' }
+    const date = d.toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric', timeZone: 'America/Argentina/Buenos_Aires' })
+    const time = d.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'America/Argentina/Buenos_Aires' })
+    return { date, time }
+  } catch {
+    return { date: '-', time: '' }
+  }
+}
+
+function getDateTime(dateStr: string | undefined | null): number {
+  if (!dateStr) return 0
+  const time = new Date(dateStr).getTime()
+  return isNaN(time) ? 0 : time
+}
+
 function getProcesoClass(proceso: string | undefined | null): string {
   if (!proceso) return 'lead-estado-pendiente'
   const p = proceso.toLowerCase()
@@ -465,7 +484,7 @@ export function LeadsModule() {
         .from('leads')
         .select('*')
         .or('proceso.is.null,proceso.neq.Convertido')
-        .order('updated_at', { ascending: false })
+        .order('created_at', { ascending: false })
         .limit(10000)
 
       // Filtro por sede usando la FK sede_id (UUID), igual que el resto del sistema.
@@ -866,7 +885,7 @@ export function LeadsModule() {
       result = result.filter(l => set.has(l.estado_de_lead || ''))
     }
 
-    return result
+    return result.sort((a, b) => getDateTime(b.created_at) - getDateTime(a.created_at))
   }, [leads, activeStatCard, nombreFilter, zonaFilter, turnoFilter, disponibilidadFilter, fuenteFilter, estadoFilter])
 
   // ---------- HANDLERS ----------
@@ -1982,13 +2001,23 @@ export function LeadsModule() {
   }
 
   // ---------- COLUMNS ----------
-  const columns = useMemo<ColumnDef<Lead>[]>(() => [
+  const columns = useMemo<ColumnDef<Lead>[]>(() => {
+    const leadColumns: ColumnDef<Lead>[] = [
     {
       id: 'fecha_creacion',
       accessorFn: (row) => row.created_at,
       header: 'Creación',
-      cell: ({ row }) => formatDate(row.original.created_at),
+      cell: ({ row }) => {
+        const { date, time } = formatDateParts(row.original.created_at)
+        return (
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', lineHeight: 1.25, textAlign: 'center' }}>
+            <span>{date}</span>
+            {time && <span>{time}</span>}
+          </div>
+        )
+      },
       size: 120,
+      meta: { cellAlign: 'center' },
       enableSorting: true,
     },
     {
@@ -2225,6 +2254,7 @@ export function LeadsModule() {
         return <span style={{ fontSize: '11px', whiteSpace: 'nowrap' }}>{v}</span>
       },
       size: 130,
+      meta: { cellAlign: 'center' },
       enableSorting: true,
     },
     {
@@ -2236,6 +2266,7 @@ export function LeadsModule() {
         return <span style={{ fontSize: '11px' }}>{v != null ? v : '-'}</span>
       },
       size: 60,
+      meta: { cellAlign: 'center' },
       enableSorting: true,
     },
     {
@@ -2394,8 +2425,18 @@ export function LeadsModule() {
         return <ActionsMenu actions={actions} />
       },
     },
+    ]
+
+    return leadColumns.map(column => ({
+      ...column,
+      meta: {
+        ...(column.meta as Record<string, unknown> | undefined),
+        headerAlign: 'center',
+      },
+    }))
+  }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  ], [uniqueNombres, nombreFilter, estadoFilter, uniqueDisponibilidades, disponibilidadFilter, uniqueZonas, zonaFilter, uniqueTurnos, turnoFilter, openFilterId, canEdit, canDelete, leadsEnZona, estadoDropdownId, sinoDropdownKey])
+  , [uniqueNombres, nombreFilter, estadoFilter, uniqueDisponibilidades, disponibilidadFilter, uniqueZonas, zonaFilter, uniqueTurnos, turnoFilter, openFilterId, canEdit, canDelete, leadsEnZona, estadoDropdownId, sinoDropdownKey])
 
   // ---------- EXTERNAL FILTERS (chips) ----------
   const hasActiveFilters = nombreFilter.length > 0 || estadoFilter.length > 0 ||

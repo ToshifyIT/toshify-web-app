@@ -39,6 +39,18 @@ import "../DateRangeSelector/DateRangeSelector.css";
 // Tipo para filtros de columna
 type ColumnFilters = Record<string, string[]>;
 type DateFilters = Record<string, { from?: string; to?: string }>;
+type ColumnAlignment = 'left' | 'center' | 'right';
+type DataTableColumnMeta = {
+  headerAlign?: ColumnAlignment;
+  cellAlign?: ColumnAlignment;
+};
+
+function getJustifyContent(align?: ColumnAlignment): CSSProperties['justifyContent'] | undefined {
+  if (align === 'center') return 'center';
+  if (align === 'right') return 'flex-end';
+  if (align === 'left') return 'flex-start';
+  return undefined;
+}
 
 // Calendar helper functions
 const DAYS_SHORT = ['LU', 'MA', 'MI', 'JU', 'VI', 'SA', 'DO'];
@@ -1708,16 +1720,28 @@ export function DataTable<T>({
                       const isLastStickyLeft = isStickyLeft && headerIndex === stickyLeftCount - 1;
                       const hasExplicitSize = columnsWithUserSize.has(header.id);
                       const isExpandColumn = !!(header.column.columnDef.meta as Record<string, unknown>)?.expand;
+                      const columnMeta = header.column.columnDef.meta as DataTableColumnMeta | undefined;
+                      const headerAlign = columnMeta?.headerAlign;
                       const shouldShrink = !hasExplicitSize && !isExpandColumn;
                       const shouldExpand = isExpandColumn;
                       const stickyLeftStyle: CSSProperties | undefined = isStickyLeft
                         ? { left: stickyDims[headerIndex].left }
                         : undefined;
+                      const headerStyle: CSSProperties | undefined = headerAlign
+                        ? {
+                            justifyContent: getJustifyContent(headerAlign),
+                            textAlign: headerAlign,
+                            width: '100%',
+                          }
+                        : undefined;
+                      const thStyle: CSSProperties | undefined = headerAlign
+                        ? { ...stickyLeftStyle, textAlign: headerAlign }
+                        : stickyLeftStyle;
                       return (
                         <th
                           key={header.id}
                           onClick={header.column.getCanSort() ? header.column.getToggleSortingHandler() : undefined}
-                          style={stickyLeftStyle}
+                          style={thStyle}
                           className={`
                             ${header.column.getCanSort() ? "dt-sortable" : ""}
                             ${isActionsColumn ? "dt-sticky-col" : ""}
@@ -1731,6 +1755,7 @@ export function DataTable<T>({
                             className={`dt-header-content ${
                               isActionsColumn ? "dt-header-center" : ""
                             }`}
+                            style={headerStyle}
                           >
                             {flexRender(
                               header.column.columnDef.header,
@@ -1771,15 +1796,20 @@ export function DataTable<T>({
                         const isLastStickyLeft = isStickyLeft && cellIndex === stickyLeftCount - 1;
                         const hasExplicitSize = columnsWithUserSize.has(cell.column.id);
                         const isExpandColumn = !!(cell.column.columnDef.meta as Record<string, unknown>)?.expand;
+                        const columnMeta = cell.column.columnDef.meta as DataTableColumnMeta | undefined;
+                        const cellAlign = columnMeta?.cellAlign;
                         const shouldShrink = !hasExplicitSize && !isExpandColumn;
                         const shouldExpand = isExpandColumn;
                         const stickyLeftStyle: CSSProperties | undefined = isStickyLeft
                           ? { left: stickyDims[cellIndex].left }
                           : undefined;
+                        const tdStyle: CSSProperties | undefined = cellAlign
+                          ? { ...stickyLeftStyle, textAlign: cellAlign }
+                          : stickyLeftStyle;
                         return (
                           <td
                             key={cell.id}
-                            style={stickyLeftStyle}
+                            style={tdStyle}
                             className={`${isActionsColumn ? "dt-sticky-col" : ""} ${isStickyLeft ? "dt-sticky-col-left" : ""} ${isLastStickyLeft ? "dt-sticky-col-left-last" : ""} ${shouldShrink ? "dt-col-shrink" : ""} ${shouldExpand ? "dt-col-expand" : ""}`}
                           >
                             {flexRender(
