@@ -956,73 +956,6 @@ export function PedidosUnificadoModule() {
     }
   }
 
-  const confirmarRecepcion = async (item: PedidoItem) => {
-    // Validar permisos
-    if (!canEdit) {
-      Swal.fire('Sin permisos', 'No tienes permisos para confirmar recepciones', 'error')
-      return
-    }
-
-    const cantidadPendiente = item.cantidad_pendiente
-
-    const { value: cantidad } = await Swal.fire({
-      title: 'Confirmar Recepcion',
-      html: `
-        <div style="text-align: left; margin-bottom: 16px;">
-          <p><strong>Producto:</strong> ${item.producto_codigo} - ${item.producto_nombre}</p>
-          <p><strong>Cantidad pendiente:</strong> ${cantidadPendiente} unidades</p>
-        </div>
-        <label style="display: block; margin-bottom: 8px; font-weight: 600;">
-          Cantidad recibida:
-        </label>
-      `,
-      input: 'text',
-      inputValue: String(cantidadPendiente),
-      inputAttributes: { autocomplete: 'off', inputmode: 'numeric', pattern: '[0-9]*' },
-      showCancelButton: true,
-      confirmButtonText: 'Confirmar Recepcion',
-      confirmButtonColor: '#059669',
-      cancelButtonText: 'Cancelar',
-      didOpen: () => {
-        const input = Swal.getInput()
-        if (input) {
-          input.addEventListener('input', (e) => {
-            const target = e.target as HTMLInputElement
-            target.value = target.value.replace(/[^0-9]/g, '').replace(/^0+/, '') || ''
-          })
-        }
-      },
-      inputValidator: (value) => {
-        const num = parseInt(value, 10)
-        if (!value || isNaN(num) || num <= 0) return 'Ingresa una cantidad valida'
-        if (num > cantidadPendiente) return `La cantidad no puede exceder ${cantidadPendiente}`
-        return null
-      }
-    })
-
-    if (!cantidad) return
-
-    try {
-      setProcessingItem(item.item_id)
-      const { data: { user } } = await supabase.auth.getUser()
-      const { data, error } = await (supabase.rpc as any)('procesar_recepcion_pedido', {
-        p_pedido_item_id: item.item_id,
-        p_cantidad_recibida: Number(cantidad),
-        p_usuario_id: user?.id
-      })
-
-      if (error) throw error
-      const result = data as { success: boolean; error?: string; mensaje?: string }
-      if (!result.success) throw new Error(result.error || 'Error procesando recepcion')
-
-      showSuccess('Recepción confirmada', `Se recibieron ${cantidad} unidades`)
-      loadPedidosData()
-    } catch (err: any) {
-      Swal.fire({ icon: 'error', title: 'Error', text: err.message || 'No se pudo procesar' })
-    } finally {
-      setProcessingItem(null)
-    }
-  }
 
   // ============= FUNCIONES APROBACIONES =============
   const cargarMovimientosPendientes = async () => {
@@ -3374,6 +3307,12 @@ pageSize={100}
                               return (it.estado_confirmacion !== 'rechazado') && objetivo > (it.cantidad_recibida || 0)
                             })
                             const puedeRecibir = canEdit && (confirmado || recibidoAlgo) && pendientePorRecibir
+                            // Items pendientes de recibir (para decidir simple vs lote)
+                            const itemsPendientes = pedido.items.filter(it => {
+                              const objetivo = it.cantidad_confirmada ?? it.cantidad_pedida
+                              return (it.estado_confirmacion !== 'rechazado') && objetivo > (it.cantidad_recibida || 0)
+                            })
+                            const esLote = itemsPendientes.length > 1
                             return (
                               <div className="pedido-detalle-actions">
                                 {puedeRecibir && (
@@ -3383,7 +3322,7 @@ pageSize={100}
                                     onClick={() => navigate(`/logistica/inventario/movimientos?tipo=entrada&pedido=${pedido.pedido_id}`)}
                                   >
                                     <ArrowDownCircle size={14} />
-                                    Recibir pedido
+                                    {esLote ? 'Generar entrada por lote' : 'Generar entrada'}
                                   </button>
                                 )}
                                 {canCreatePedido && pedido.estado_respuesta !== 'rechazado' && (
@@ -3483,53 +3422,22 @@ pageSize={100}
                                     {item.cantidad_recibida}
                                   </td>
                                   <td style={{ padding: '12px 10px', textAlign: 'center' }}>
-                                    {item.cantidad_pendiente > 0 ? (
-                                      canApprove ? (
-                                        <button
-                                          onClick={() => confirmarRecepcion(item)}
-                                          disabled={processingItem === item.item_id}
-                                          style={{
-                                            padding: '6px 12px',
-                                            background: 'var(--color-success)',
-                                            color: 'white',
-                                            border: 'none',
-                                            borderRadius: '6px',
-                                            cursor: processingItem === item.item_id ? 'not-allowed' : 'pointer',
-                                            fontSize: '12px',
-                                            fontWeight: 600,
-                                            display: 'inline-flex',
-                                            alignItems: 'center',
-                                            gap: '4px',
-                                            opacity: processingItem === item.item_id ? 0.6 : 1
-                                          }}
-                                        >
-                                          <CheckCircle size={14} />
-                                          Recibir
-                                        </button>
-                                      ) : (
-                                        <span style={{
-                                          padding: '6px 12px',
-                                          background: 'var(--badge-yellow-bg)',
-                                          color: 'var(--badge-yellow-text)',
-                                          borderRadius: '6px',
-                                          fontSize: '12px',
-                                          fontWeight: 600
-                                        }}>
-                                          Pendiente
-                                        </span>
-                                      )
-                                    ) : (
-                                      <span style={{
-                                        padding: '6px 12px',
-                                        background: 'var(--badge-green-bg)',
-                                        color: 'var(--badge-green-text)',
-                                        borderRadius: '6px',
-                                        fontSize: '12px',
-                                        fontWeight: 600
-                                      }}>
-                                        Completo
-                                      </span>
-                                    )}
+                                    {(() => {
+                                      const objetivo = item.cantidad_confirmada ?? item.cantidad_pedida
+                                      const rechazado = item.estado_confirmacion === 'rechazado'
+                                      const pendienteReal = Math.max(0, objetivo - (item.cantidad_recibida || 0))
+
+                                      if (rechazado) {
+                                        return <span style={{ padding: '6px 12px', background: 'var(--badge-red-bg, #fef2f2)', color: 'var(--badge-red-text, #dc2626)', borderRadius: '6px', fontSize: '12px', fontWeight: 600 }}>Rechazado</span>
+                                      }
+                                      if (pendienteReal <= 0) {
+                                        return <span style={{ padding: '6px 12px', background: 'var(--badge-green-bg)', color: 'var(--badge-green-text)', borderRadius: '6px', fontSize: '12px', fontWeight: 600 }}>Completo</span>
+                                      }
+                                      if ((item.cantidad_recibida || 0) > 0) {
+                                        return <span style={{ padding: '6px 12px', background: 'var(--badge-blue-bg, #eff6ff)', color: 'var(--badge-blue-text, #1d4ed8)', borderRadius: '6px', fontSize: '12px', fontWeight: 600 }}>Parcial</span>
+                                      }
+                                      return <span style={{ padding: '6px 12px', background: 'var(--badge-yellow-bg)', color: 'var(--badge-yellow-text)', borderRadius: '6px', fontSize: '12px', fontWeight: 600 }}>Pendiente</span>
+                                    })()}
                                   </td>
                                 </tr>
                               ))}
