@@ -38,6 +38,8 @@ import {
   Send,
   Plus,
   Trash2,
+  ClipboardList,
+  CheckCircle2,
 } from 'lucide-react'
 
 // ============= TIPOS =============
@@ -137,6 +139,9 @@ interface ProductoPedido {
   codigo: string
   nombre: string
   tipo: string
+  proveedor?: string | null
+  stock_disponible?: number
+  stock_minimo?: number
   unidades_medida?: {
     codigo?: string | null
     descripcion?: string | null
@@ -195,8 +200,8 @@ export function PedidosUnificadoModule() {
   const canEdit = canEditInSubmenu('inventario-pedidos') || canEditInSubmenu('pedidos')
   const canCreatePedido = canCreateInSubmenu('inventario-pedidos') || canCreateInSubmenu('pedidos') || canEdit
 
-  // Estado de tab activa
-  const [activeTab, setActiveTab] = useState<TabActiva>('entradas')
+  // Estado de tab activa — abre en "Nuevo Pedido" por defecto
+  const [activeTab, setActiveTab] = useState<TabActiva>('nuevo')
 
   // Estados para Pedidos en Tránsito
   const [pedidos, setPedidos] = useState<PedidoAgrupado[]>([])
@@ -280,7 +285,7 @@ export function PedidosUnificadoModule() {
   const cargarCatalogoPedido = async () => {
     setLoadingCatalogoPedido(true)
     try {
-      const [proveedoresRes, productosRes] = await Promise.all([
+      const [proveedoresRes, productosRes, stockRes] = await Promise.all([
         supabase
           .from('proveedores')
           .select('id, razon_social, email, telefono, activo')
@@ -293,19 +298,34 @@ export function PedidosUnificadoModule() {
             codigo,
             nombre,
             tipo,
+            proveedor,
+            stock_minimo,
             unidades_medida (
               codigo,
               descripcion
             )
           `)
-          .order('nombre')
+          .order('nombre'),
+        supabase
+          .from('v_stock_productos')
+          .select('id, disponible')
       ])
 
       if (proveedoresRes.error) throw proveedoresRes.error
       if (productosRes.error) throw productosRes.error
+      if (stockRes.error) throw stockRes.error
+
+      const stockMap = new Map<string, number>(
+        (stockRes.data || []).map((row: { id: string; disponible: number }) => [row.id, row.disponible || 0])
+      )
 
       setProveedoresPedido((proveedoresRes.data || []) as ProveedorPedido[])
-      setProductosPedido((productosRes.data || []) as unknown as ProductoPedido[])
+      setProductosPedido(
+        ((productosRes.data || []) as unknown as ProductoPedido[]).map(producto => ({
+          ...producto,
+          stock_disponible: stockMap.get(producto.id) ?? 0
+        }))
+      )
     } catch {
       Swal.fire('Error', 'No se pudo cargar el catalogo para crear pedidos', 'error')
     } finally {
@@ -426,6 +446,41 @@ export function PedidosUnificadoModule() {
     .filter(item => item.producto && Number(item.cantidad) > 0),
     [pedidoDraftItems, productosPedido]
   )
+
+  // Total de unidades del borrador (suma de cantidades válidas)
+  const pedidoTotalUnidades = useMemo(
+    () => pedidoItemsValidos.reduce((acc, item) => acc + Number(item.cantidad || 0), 0),
+    [pedidoItemsValidos]
+  )
+
+  // Productos del proveedor seleccionado que están bajo el stock mínimo y aún no fueron agregados
+  const sugerenciasBajoMinimo = useMemo(() => {
+    const proveedorSel = getPedidoProveedorSeleccionado()
+    if (!proveedorSel) return [] as ProductoPedido[]
+    const razon = proveedorSel.razon_social?.trim().toLowerCase()
+    const yaAgregados = new Set(pedidoDraftItems.map(item => item.producto_id).filter(Boolean))
+    return productosPedido.filter(producto => {
+      const min = Number(producto.stock_minimo || 0)
+      if (min <= 0) return false
+      if (Number(producto.stock_disponible || 0) > min) return false
+      if (yaAgregados.has(producto.id)) return false
+      // Sólo sugerir productos cuya marca/proveedor coincida con el proveedor seleccionado
+      return Boolean(razon) && (producto.proveedor || '').trim().toLowerCase() === razon
+    })
+  }, [productosPedido, pedidoDraftItems, proveedorPedidoId])
+
+  const agregarSugerenciasBajoMinimo = () => {
+    if (sugerenciasBajoMinimo.length === 0) return
+    setPedidoDraftItems(prev => {
+      const base = prev.filter(item => item.producto_id)
+      const nuevos = sugerenciasBajoMinimo.map(producto => ({
+        producto_id: producto.id,
+        cantidad: Math.max(1, Number(producto.stock_minimo || 1))
+      }))
+      const merged = [...base, ...nuevos]
+      return merged.length > 0 ? merged : [{ producto_id: '', cantidad: 1 }]
+    })
+  }
 
   const addPedidoDraftItem = () => {
     setPedidoDraftItems(prev => [...prev, { producto_id: '', cantidad: 1 }])
@@ -1434,11 +1489,296 @@ export function PedidosUnificadoModule() {
           margin-top: 14px;
         }
 
+        .pedido-items-head {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 12px;
+        }
+
+        .pedido-items-count {
+          font-size: 12px;
+          color: var(--text-secondary);
+        }
+
+        .pedido-items-table {
+          border: 1px solid var(--border-primary);
+          border-radius: 8px;
+        }
+
+        .pedido-items-table .pedido-item-row:first-child {
+          border-top-left-radius: 8px;
+          border-top-right-radius: 8px;
+        }
+
+        .pedido-items-table .pedido-item-row:last-child {
+          border-bottom-left-radius: 8px;
+          border-bottom-right-radius: 8px;
+        }
+
         .pedido-item-row {
           display: grid;
-          grid-template-columns: minmax(0, 1fr) 96px 36px;
-          gap: 8px;
+          grid-template-columns: minmax(0, 1fr) 110px 132px 36px;
+          gap: 10px;
           align-items: center;
+          padding: 8px 12px;
+          border-bottom: 1px solid var(--border-primary);
+        }
+
+        .pedido-item-row:last-child {
+          border-bottom: none;
+        }
+
+        .pedido-item-row--header {
+          background: var(--bg-secondary);
+          font-size: 10px;
+          font-weight: 700;
+          letter-spacing: 0.4px;
+          text-transform: uppercase;
+          color: var(--text-tertiary);
+        }
+
+        .pedido-item-stock-empty {
+          color: var(--text-tertiary);
+        }
+
+        .pedido-stock-pill {
+          display: inline-flex;
+          align-items: center;
+          gap: 4px;
+          padding: 2px 8px;
+          border-radius: 6px;
+          font-size: 11px;
+          font-weight: 600;
+          width: fit-content;
+          background: var(--badge-green-bg);
+          color: var(--badge-green-text);
+        }
+
+        .pedido-stock-pill.low {
+          background: var(--badge-yellow-bg);
+          color: var(--badge-yellow-text);
+        }
+
+        .pedido-qty {
+          display: inline-flex;
+          align-items: center;
+          border: 1px solid var(--border-primary);
+          border-radius: 7px;
+          overflow: hidden;
+          height: 36px;
+          width: fit-content;
+        }
+
+        .pedido-qty button {
+          width: 32px;
+          height: 100%;
+          border: none;
+          background: var(--bg-secondary);
+          color: var(--text-secondary);
+          font-size: 16px;
+          cursor: pointer;
+        }
+
+        .pedido-qty button:hover:not(:disabled) {
+          background: var(--border-primary);
+          color: var(--text-primary);
+        }
+
+        .pedido-qty button:disabled {
+          opacity: 0.6;
+          cursor: not-allowed;
+        }
+
+        .pedido-qty input {
+          width: 48px;
+          height: 100%;
+          text-align: center;
+          border: none;
+          background: var(--input-bg);
+          color: var(--text-primary);
+          font-size: 13px;
+          font-weight: 600;
+          padding: 0;
+        }
+
+        .pedido-add-item {
+          width: 100%;
+          height: 40px;
+          border: 1.5px dashed var(--border-primary);
+          border-radius: 8px;
+          background: none;
+          color: var(--text-secondary);
+          font-size: 13px;
+          font-weight: 500;
+          cursor: pointer;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          gap: 7px;
+          transition: all 0.15s;
+        }
+
+        .pedido-add-item:hover:not(:disabled) {
+          border-color: var(--color-primary);
+          color: var(--color-primary);
+          background: var(--bg-secondary);
+        }
+
+        .pedido-add-item:disabled {
+          opacity: 0.6;
+          cursor: not-allowed;
+        }
+
+        .pedido-suggest {
+          display: flex;
+          align-items: center;
+          gap: 10px;
+          padding: 11px 14px;
+          border-radius: 8px;
+          font-size: 12.5px;
+          background: var(--badge-yellow-bg);
+          color: var(--badge-yellow-text);
+        }
+
+        .pedido-suggest-btn {
+          margin-left: auto;
+          border: none;
+          border-radius: 6px;
+          padding: 6px 12px;
+          font-size: 12px;
+          font-weight: 600;
+          cursor: pointer;
+          white-space: nowrap;
+          background: var(--badge-yellow-text);
+          color: var(--card-bg);
+        }
+
+        .pedido-suggest-btn:disabled {
+          opacity: 0.6;
+          cursor: not-allowed;
+        }
+
+        .pedido-compose-side {
+          display: flex;
+          flex-direction: column;
+          gap: 14px;
+        }
+
+        .pedido-resumen-row {
+          display: flex;
+          justify-content: space-between;
+          gap: 10px;
+          padding: 9px 0;
+          border-bottom: 1px solid var(--bg-secondary);
+          font-size: 13px;
+        }
+
+        .pedido-resumen-row:last-child {
+          border-bottom: none;
+        }
+
+        .pedido-resumen-row span {
+          color: var(--text-secondary);
+        }
+
+        .pedido-resumen-row strong {
+          color: var(--text-primary);
+          text-align: right;
+        }
+
+        .pedido-resumen-totals {
+          background: var(--bg-secondary);
+          border-radius: 8px;
+          padding: 12px 14px;
+          margin-top: 10px;
+        }
+
+        .pedido-resumen-total-row {
+          display: flex;
+          justify-content: space-between;
+          font-size: 13px;
+          padding: 3px 0;
+          color: var(--text-secondary);
+        }
+
+        .pedido-resumen-total-row.big {
+          font-size: 16px;
+          font-weight: 700;
+          color: var(--text-primary);
+          padding-top: 8px;
+          margin-top: 5px;
+          border-top: 1px dashed var(--border-primary);
+        }
+
+        .pedido-resumen-total-row strong {
+          color: var(--text-primary);
+        }
+
+        .pedido-checklist {
+          display: flex;
+          flex-direction: column;
+          gap: 9px;
+        }
+
+        .pedido-check {
+          display: flex;
+          align-items: center;
+          gap: 9px;
+          font-size: 12.5px;
+        }
+
+        .pedido-check-mark {
+          width: 18px;
+          height: 18px;
+          border-radius: 50%;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          font-size: 11px;
+          font-weight: 700;
+          flex-shrink: 0;
+        }
+
+        .pedido-check.done {
+          color: var(--text-secondary);
+        }
+
+        .pedido-check.done .pedido-check-mark {
+          background: var(--badge-green-text);
+          color: var(--card-bg);
+        }
+
+        .pedido-check.todo {
+          color: var(--text-primary);
+          font-weight: 600;
+        }
+
+        .pedido-check.todo .pedido-check-mark {
+          background: var(--bg-secondary);
+          color: var(--text-tertiary);
+          border: 1.5px solid var(--border-primary);
+        }
+
+        .pedido-info-box {
+          margin: 0;
+          font-size: 11.5px;
+          line-height: 1.55;
+          background: var(--bg-secondary);
+          border: 1px solid var(--border-primary);
+          color: var(--text-secondary);
+          border-radius: 8px;
+          padding: 10px 12px;
+        }
+
+        .pedido-actions-summary {
+          margin-right: auto;
+          font-size: 13px;
+          color: var(--text-secondary);
+        }
+
+        .pedido-actions-summary strong {
+          color: var(--text-primary);
         }
 
         .pedido-icon-button {
@@ -2316,68 +2656,128 @@ export function PedidosUnificadoModule() {
                   </div>
 
                   <div className="pedido-items">
-                    <div className="pedido-compose-title" style={{ marginTop: '6px', marginBottom: '2px' }}>
-                      <Package size={16} />
-                      Items del pedido
+                    <div className="pedido-items-head">
+                      <div className="pedido-compose-title" style={{ margin: 0 }}>
+                        <Package size={16} />
+                        Items del pedido
+                      </div>
+                      <div className="pedido-items-count">
+                        {pedidoItemsValidos.length} productos · <strong>{pedidoTotalUnidades} unidades</strong>
+                      </div>
                     </div>
 
-                    {pedidoDraftItems.map((item, index) => {
-                      const productosSeleccionados = pedidoDraftItems
-                        .filter((_, itemIndex) => itemIndex !== index)
-                        .map(draft => draft.producto_id)
-                        .filter(Boolean)
+                    <div className="pedido-items-table">
+                      <div className="pedido-item-row pedido-item-row--header">
+                        <span>Producto</span>
+                        <span>Stock actual</span>
+                        <span>Cantidad</span>
+                        <span />
+                      </div>
 
-                      return (
-                        <div className="pedido-item-row" key={`${index}-${item.producto_id || 'nuevo'}`}>
-                          <div className="pedido-field">
-                            <SearchableSelect
-                              value={item.producto_id}
-                              onChange={(value) => updatePedidoDraftItem(index, 'producto_id', value)}
-                              options={productoPedidoBaseOptions.map(option => ({
-                                ...option,
-                                disabled: productosSeleccionados.includes(option.value)
-                              }))}
-                              placeholder="Seleccionar producto"
-                              searchPlaceholder="Buscar producto..."
-                              noResultsText="Sin productos"
-                              size="lg"
-                              disabled={loadingCatalogoPedido || creatingPedido}
-                            />
-                          </div>
+                      {pedidoDraftItems.map((item, index) => {
+                        const productosSeleccionados = pedidoDraftItems
+                          .filter((_, itemIndex) => itemIndex !== index)
+                          .map(draft => draft.producto_id)
+                          .filter(Boolean)
 
-                          <div className="pedido-field">
-                            <input
-                              type="number"
-                              min={1}
-                              step={1}
-                              value={item.cantidad}
-                              onChange={(event) => updatePedidoDraftItem(index, 'cantidad', event.target.value)}
+                        const producto = getProductoPedido(item.producto_id)
+                        const disponible = Number(producto?.stock_disponible || 0)
+                        const minimo = Number(producto?.stock_minimo || 0)
+                        const bajoMinimo = producto && minimo > 0 && disponible <= minimo
+
+                        return (
+                          <div className="pedido-item-row" key={`${index}-${item.producto_id || 'nuevo'}`}>
+                            <div className="pedido-field">
+                              <SearchableSelect
+                                value={item.producto_id}
+                                onChange={(value) => updatePedidoDraftItem(index, 'producto_id', value)}
+                                options={productoPedidoBaseOptions.map(option => ({
+                                  ...option,
+                                  disabled: productosSeleccionados.includes(option.value)
+                                }))}
+                                placeholder="Seleccionar producto"
+                                searchPlaceholder="Buscar producto..."
+                                noResultsText="Sin productos"
+                                size="lg"
+                                disabled={loadingCatalogoPedido || creatingPedido}
+                              />
+                            </div>
+
+                            <div className="pedido-item-stock">
+                              {producto ? (
+                                <span className={`pedido-stock-pill ${bajoMinimo ? 'low' : 'ok'}`}>
+                                  {bajoMinimo && <AlertTriangle size={11} />}
+                                  {bajoMinimo ? `${disponible} · bajo mín.` : `${disponible} disp.`}
+                                </span>
+                              ) : (
+                                <span className="pedido-item-stock-empty">—</span>
+                              )}
+                            </div>
+
+                            <div className="pedido-qty">
+                              <button
+                                type="button"
+                                onClick={() => updatePedidoDraftItem(index, 'cantidad', String(Math.max(1, Number(item.cantidad || 1) - 1)))}
+                                disabled={creatingPedido}
+                                aria-label="Disminuir cantidad"
+                              >−</button>
+                              <input
+                                type="number"
+                                min={1}
+                                step={1}
+                                value={item.cantidad}
+                                onChange={(event) => updatePedidoDraftItem(index, 'cantidad', event.target.value)}
+                                disabled={creatingPedido}
+                              />
+                              <button
+                                type="button"
+                                onClick={() => updatePedidoDraftItem(index, 'cantidad', String(Number(item.cantidad || 0) + 1))}
+                                disabled={creatingPedido}
+                                aria-label="Aumentar cantidad"
+                              >+</button>
+                            </div>
+
+                            <button
+                              type="button"
+                              className="pedido-icon-button"
+                              onClick={() => removePedidoDraftItem(index)}
                               disabled={creatingPedido}
-                            />
+                              title="Quitar item"
+                            >
+                              <Trash2 size={15} />
+                            </button>
                           </div>
-
-                          <button
-                            type="button"
-                            className="pedido-icon-button"
-                            onClick={() => removePedidoDraftItem(index)}
-                            disabled={creatingPedido}
-                            title="Quitar item"
-                          >
-                            <Trash2 size={15} />
-                          </button>
-                        </div>
-                      )
-                    })}
+                        )
+                      })}
+                    </div>
 
                     <button
                       type="button"
-                      className="btn-secondary"
+                      className="pedido-add-item"
                       onClick={addPedidoDraftItem}
                       disabled={creatingPedido || loadingCatalogoPedido}
                     >
                       <Plus size={15} />
                       Agregar item
                     </button>
+
+                    {sugerenciasBajoMinimo.length > 0 && (
+                      <div className="pedido-suggest">
+                        <AlertTriangle size={17} />
+                        <span>
+                          <strong>{sugerenciasBajoMinimo.length} producto{sugerenciasBajoMinimo.length > 1 ? 's' : ''} más</strong>
+                          {' '}de {proveedorPedidoSeleccionado?.razon_social} {sugerenciasBajoMinimo.length > 1 ? 'están' : 'está'} bajo el stock mínimo. ¿Agregarlo{sugerenciasBajoMinimo.length > 1 ? 's' : ''} al pedido?
+                        </span>
+                        <button
+                          type="button"
+                          className="pedido-suggest-btn"
+                          onClick={agregarSugerenciasBajoMinimo}
+                          disabled={creatingPedido}
+                        >
+                          + Agregar {sugerenciasBajoMinimo.length > 1 ? 'todos' : 'producto'}
+                        </button>
+                      </div>
+                    )}
                   </div>
 
                   <div className="pedido-field full" style={{ marginTop: '14px' }}>
@@ -2390,20 +2790,11 @@ export function PedidosUnificadoModule() {
                     />
                   </div>
 
-                  <div style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '8px',
-                    marginTop: '12px',
-                    color: proveedorPedidoTieneEmail ? 'var(--text-secondary)' : 'var(--badge-yellow-text)',
-                    fontSize: '13px',
-                    fontWeight: 600
-                  }}>
-                    <Mail size={15} />
-                    El envio por correo es obligatorio para crear pedidos a proveedor.
-                  </div>
-
                   <div className="pedido-compose-actions">
+                    <div className="pedido-actions-summary">
+                      <strong>{pedidoItemsValidos.length} items</strong> · <strong>{pedidoTotalUnidades} u.</strong>
+                      {proveedorPedidoSeleccionado ? ` · ${proveedorPedidoSeleccionado.razon_social}` : ''}
+                    </div>
                     <button
                       type="button"
                       className="btn-secondary"
@@ -2437,45 +2828,78 @@ export function PedidosUnificadoModule() {
               )}
             </div>
 
-            <aside className="pedido-compose-card">
-              <h3 className="pedido-compose-title">
-                <Mail size={16} />
-                Correo
-              </h3>
-              <div className="pedido-email-status">
-                <span className={`pedido-status-pill ${proveedorPedidoTieneEmail ? '' : 'warning'}`}>
-                  <Mail size={13} />
-                  {proveedorPedidoTieneEmail ? 'Email disponible' : 'Sin email'}
-                </span>
-
-                <div className="pedido-email-preview">
-                  <div className="pedido-email-preview-row">
-                    <span>Para</span>
-                    <strong>{proveedorPedidoSeleccionado?.email || 'Selecciona proveedor'}</strong>
+            <aside className="pedido-compose-side">
+              <div className="pedido-compose-card">
+                <h3 className="pedido-compose-title">
+                  <ClipboardList size={16} />
+                  Resumen del pedido
+                </h3>
+                <div className="pedido-email-preview" style={{ background: 'transparent', border: 'none', padding: 0, gap: 0 }}>
+                  <div className="pedido-resumen-row">
+                    <span>Proveedor</span>
+                    <strong>{proveedorPedidoSeleccionado?.razon_social || '—'}</strong>
                   </div>
-                  <div className="pedido-email-preview-row">
-                    <span>Asunto</span>
-                    <strong>Pedido {numeroPedidoDraft || '-'}</strong>
+                  <div className="pedido-resumen-row">
+                    <span>N° pedido</span>
+                    <strong>{numeroPedidoDraft || '—'}</strong>
                   </div>
-                  <div className="pedido-email-preview-row">
-                    <span>Items</span>
-                    <strong>{pedidoItemsValidos.length}</strong>
-                  </div>
-                  <div className="pedido-email-preview-row">
+                  <div className="pedido-resumen-row">
                     <span>Fecha estimada</span>
                     <strong>{fechaEstimadaPedido || 'A confirmar'}</strong>
                   </div>
+                  <div className="pedido-resumen-row">
+                    <span>Sede</span>
+                    <strong>{sedeOperativaLabel}</strong>
+                  </div>
                 </div>
-
-                <p style={{ margin: 0, lineHeight: 1.5 }}>
-                  Al crear el pedido se registra en inventario como pedido en transito. Luego se intenta enviar el correo al proveedor desde el servidor.
-                </p>
-                {!proveedorPedidoTieneEmail && (
-                  <p style={{ margin: 0, color: 'var(--badge-yellow-text)', lineHeight: 1.5 }}>
-                    No se puede crear ni enviar un pedido si el proveedor no tiene email configurado.
-                  </p>
-                )}
+                <div className="pedido-resumen-totals">
+                  <div className="pedido-resumen-total-row">
+                    <span>Productos distintos</span>
+                    <strong>{pedidoItemsValidos.length}</strong>
+                  </div>
+                  <div className="pedido-resumen-total-row big">
+                    <span>Total unidades</span>
+                    <strong>{pedidoTotalUnidades}</strong>
+                  </div>
+                </div>
               </div>
+
+              <div className="pedido-compose-card">
+                <h3 className="pedido-compose-title" style={{ fontSize: '14px' }}>
+                  <CheckCircle2 size={16} />
+                  Para poder enviar
+                </h3>
+                {(() => {
+                  const checks = [
+                    { ok: Boolean(proveedorPedidoId), label: 'Proveedor seleccionado' },
+                    { ok: proveedorPedidoTieneEmail, label: 'Proveedor con email configurado' },
+                    { ok: pedidoItemsValidos.length > 0, label: 'Al menos 1 item con cantidad > 0' },
+                    { ok: Boolean(numeroPedidoDraft.trim()), label: 'Número de pedido cargado' }
+                  ]
+                  const faltantes = checks.filter(c => !c.ok).length
+                  return (
+                    <>
+                      <div className="pedido-checklist">
+                        {checks.map((check, i) => (
+                          <div key={i} className={`pedido-check ${check.ok ? 'done' : 'todo'}`}>
+                            <span className="pedido-check-mark">{check.ok ? '✓' : '!'}</span>
+                            {check.label}
+                          </div>
+                        ))}
+                      </div>
+                      <span className={`pedido-status-pill ${faltantes === 0 ? '' : 'warning'}`} style={{ marginTop: '14px' }}>
+                        {faltantes === 0
+                          ? <><CheckCircle2 size={13} /> Listo para crear y enviar</>
+                          : <><AlertTriangle size={13} /> Falta{faltantes > 1 ? 'n' : ''} {faltantes} requisito{faltantes > 1 ? 's' : ''}</>}
+                      </span>
+                    </>
+                  )
+                })()}
+              </div>
+
+              <p className="pedido-info-box">
+                Al crear el pedido se registra en inventario como <strong>pedido en tránsito</strong>. El correo al proveedor se envía desde el servidor; el envío es obligatorio para pedidos a proveedor.
+              </p>
             </aside>
           </div>
         )}
