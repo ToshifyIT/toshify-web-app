@@ -2,6 +2,7 @@
 // Módulo unificado que combina Pedidos en Tránsito y Aprobaciones Pendientes
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { useState, useEffect, useMemo, useRef } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../contexts/AuthContext'
 import { usePermissions } from '../../contexts/PermissionsContext'
@@ -211,6 +212,7 @@ const escapeHtml = (value: string | number | null | undefined) =>
 const todayInputValue = () => new Date().toISOString().slice(0, 10)
 
 export function PedidosUnificadoModule() {
+  const navigate = useNavigate()
   const { user, profile } = useAuth()
   const { canCreateInSubmenu, canEditInSubmenu, canViewTab } = usePermissions()
   const { sedeActual, verTodas } = useSede()
@@ -3363,21 +3365,43 @@ pageSize={100}
                             ))}
                           </div>
 
-                          <div className="pedido-detalle-actions">
-                            {canCreatePedido && pedido.estado_respuesta !== 'rechazado' && (
-                              <button type="button" className="pedido-detalle-btn primary" onClick={() => abrirRespuestaPedido(pedido)}>
-                                <Mail size={14} />
-                                {pedido.estado_respuesta === 'enviado' || !pedido.estado_respuesta ? 'Registrar respuesta' : 'Editar respuesta'}
-                              </button>
-                            )}
-                            <button type="button" className="pedido-detalle-btn" onClick={() => toggleTimeline(pedido.pedido_id)}>
-                              <Clock size={14} />
-                              {timelinePedidoId === pedido.pedido_id ? 'Ocultar seguimiento' : 'Ver seguimiento'}
-                            </button>
-                            {pedido.fecha_comprometida && (
-                              <span className="pedido-detalle-nota">Fecha comprometida: <strong>{pedido.fecha_comprometida}</strong></span>
-                            )}
-                          </div>
+                          {(() => {
+                            const confirmado = pedido.estado_respuesta === 'confirmado' || pedido.estado_respuesta === 'confirmado_ajustes'
+                            const recibidoAlgo = pedido.items.some(it => (it.cantidad_recibida || 0) > 0)
+                            // Hay algo por recibir si lo confirmado supera lo ya recibido
+                            const pendientePorRecibir = pedido.items.some(it => {
+                              const objetivo = it.cantidad_confirmada ?? it.cantidad_pedida
+                              return (it.estado_confirmacion !== 'rechazado') && objetivo > (it.cantidad_recibida || 0)
+                            })
+                            const puedeRecibir = canEdit && (confirmado || recibidoAlgo) && pendientePorRecibir
+                            return (
+                              <div className="pedido-detalle-actions">
+                                {puedeRecibir && (
+                                  <button
+                                    type="button"
+                                    className="pedido-detalle-btn primary"
+                                    onClick={() => navigate(`/logistica/inventario/movimientos?tipo=entrada&pedido=${pedido.pedido_id}`)}
+                                  >
+                                    <ArrowDownCircle size={14} />
+                                    Recibir pedido
+                                  </button>
+                                )}
+                                {canCreatePedido && pedido.estado_respuesta !== 'rechazado' && (
+                                  <button type="button" className="pedido-detalle-btn" onClick={() => abrirRespuestaPedido(pedido)}>
+                                    <Mail size={14} />
+                                    {pedido.estado_respuesta === 'enviado' || !pedido.estado_respuesta ? 'Registrar respuesta' : 'Editar respuesta'}
+                                  </button>
+                                )}
+                                <button type="button" className="pedido-detalle-btn" onClick={() => toggleTimeline(pedido.pedido_id)}>
+                                  <Clock size={14} />
+                                  {timelinePedidoId === pedido.pedido_id ? 'Ocultar seguimiento' : 'Ver seguimiento'}
+                                </button>
+                                {pedido.fecha_comprometida && (
+                                  <span className="pedido-detalle-nota">Fecha comprometida: <strong>{pedido.fecha_comprometida}</strong></span>
+                                )}
+                              </div>
+                            )
+                          })()}
 
                           {timelinePedidoId === pedido.pedido_id && (
                             <div className="pedido-timeline">

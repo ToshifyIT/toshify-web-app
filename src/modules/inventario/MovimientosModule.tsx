@@ -1,5 +1,5 @@
 import { useEffect, useState, useMemo } from 'react'
-import { useLocation } from 'react-router-dom'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { supabase } from '../../lib/supabase'
 import { LoadingOverlay } from '../../components/ui/LoadingOverlay'
 import { SearchableSelect } from '../../components/ui/SearchableSelect'
@@ -18,6 +18,8 @@ import {
   CheckCircle,
   XCircle,
   Package,
+  ArrowDownCircle,
+  Check,
   FileText
 } from 'lucide-react'
 
@@ -110,6 +112,7 @@ interface ProductoLoteSalida {
 // =====================================================
 export function MovimientosModule() {
   const location = useLocation()
+  const navigate = useNavigate()
   const { aplicarFiltroSede, sedeActualId } = useSede()
   const { canCreateInSubmenu } = usePermissions()
 
@@ -147,6 +150,16 @@ export function MovimientosModule() {
   const [estadoInicial, setEstadoInicial] = useState<EstadoInicial>('en_transito')
   const [numeroPedido, setNumeroPedido] = useState('')
   const [fechaEstimadaLlegada, setFechaEstimadaLlegada] = useState('')
+
+  // Modo RECEPCIÓN DE PEDIDO: entrada vinculada a un pedido existente.
+  // Cuando está activo, el lote se procesa con procesar_recepcion_pedido (cierra el ciclo).
+  const [recepcionPedido, setRecepcionPedido] = useState<{
+    pedido_id: string
+    numero_pedido: string
+    proveedor_nombre: string
+    items: { item_id: string; producto_id: string; producto_codigo: string; producto_nombre: string; objetivo: number; recibido: number; pendiente: number }[]
+  } | null>(null)
+  const [recepcionCantidades, setRecepcionCantidades] = useState<Record<string, number>>({})
 
   // Form data - Salida
   const [motivoSalida, setMotivoSalida] = useState<MotivoSalida>('consumo_servicio')
@@ -231,6 +244,54 @@ export function MovimientosModule() {
 
     setPrefillSearchApplied(location.search)
   }, [location.search, prefillSearchApplied, productos, tipoMovimiento])
+
+  // Modo RECEPCIÓN DE PEDIDO: si la URL trae ?pedido=<id>, cargar el pedido y precargar el lote
+  useEffect(() => {
+    if (!location.search) return
+    const params = new URLSearchParams(location.search)
+    const pedidoId = params.get('pedido')
+    if (!pedidoId || (recepcionPedido && recepcionPedido.pedido_id === pedidoId)) return
+
+    const cargarPedido = async () => {
+      const { data, error } = await supabase
+        .from('v_pedidos_en_transito')
+        .select('*')
+        .eq('pedido_id', pedidoId)
+      if (error || !data || data.length === 0) return
+
+      const items = (data as any[]).map(row => {
+        const objetivo = row.cantidad_confirmada ?? row.cantidad_pedida
+        const recibido = row.cantidad_recibida || 0
+        return {
+          item_id: row.item_id,
+          producto_id: row.producto_id,
+          producto_codigo: row.producto_codigo,
+          producto_nombre: row.producto_nombre,
+          objetivo,
+          recibido,
+          pendiente: Math.max(0, objetivo - recibido),
+          estado_confirmacion: row.estado_confirmacion
+        }
+      }).filter(it => (it as any).estado_confirmacion !== 'rechazado' && it.pendiente > 0)
+
+      if (items.length === 0) return
+
+      const first = data[0] as any
+      setRecepcionPedido({
+        pedido_id: pedidoId,
+        numero_pedido: first.numero_pedido,
+        proveedor_nombre: first.proveedor_nombre,
+        items
+      })
+      // Precargar cantidades con lo pendiente (recibir todo lo confirmado por defecto)
+      const cant: Record<string, number> = {}
+      items.forEach(it => { cant[it.item_id] = it.pendiente })
+      setRecepcionCantidades(cant)
+      // Asegurar que estamos en tipo entrada
+      setTipoMovimiento('entrada')
+    }
+    cargarPedido()
+  }, [location.search, recepcionPedido])
 
   useEffect(() => {
     if (tipoMovimiento === 'devolucion') {
@@ -548,6 +609,71 @@ export function MovimientosModule() {
   // MANEJADORES DE MOVIMIENTO
   // =====================================================
 
+  /** Procesa la RECEPCIÓN de un pedido: cada item vía procesar_recepcion_pedido (cierra el ciclo) */
+  const handleRecepcionPedido = async () => {
+    if (!recepcionPedido) return
+
+    // Items con cantidad > 0 a recibir
+    const aRecibir = recepcionPedido.items
+      .map(it => ({ ...it, cantidad: Number(recepcionCantidades[it.item_id] || 0) }))
+      .filter(it => it.cantidad > 0)
+
+    if (aRecibir.length === 0) {
+      Swal.fire('Sin cantidades', 'Indicá cuánto recibiste de al menos un producto.', 'warning')
+      return
+    }
+    // Validar contra lo confirmado pendiente
+    for (const it of aRecibir) {
+      if (it.cantidad > it.pendiente) {
+        Swal.fire('Cantidad inválida', `${it.producto_codigo}: no podés recibir más de ${it.pendiente} (confirmado pendiente).`, 'warning')
+        return
+      }
+    }
+
+    const confirm = await Swal.fire({
+      title: 'Confirmar recepción',
+      html: `Vas a registrar la entrada de <strong>${aRecibir.length} producto(s)</strong> del pedido <strong>${recepcionPedido.numero_pedido}</strong>. Esto suma al stock y actualiza el pedido.`,
+      icon: 'question',
+      showCancelButton: true,
+      confirmButtonText: 'Confirmar recepción',
+      confirmButtonColor: '#059669',
+      cancelButtonText: 'Cancelar'
+    })
+    if (!confirm.isConfirmed) return
+
+    try {
+      const { data: { user } } = await supabase.auth.getUser()
+      let ok = 0
+      const errores: string[] = []
+      for (const it of aRecibir) {
+        const { data, error } = await (supabase.rpc as any)('procesar_recepcion_pedido', {
+          p_pedido_item_id: it.item_id,
+          p_cantidad_recibida: it.cantidad,
+          p_usuario_id: user?.id
+        })
+        if (error || (data && data.success === false)) {
+          errores.push(`${it.producto_codigo}: ${error?.message || data?.error || 'error'}`)
+        } else {
+          ok++
+        }
+      }
+
+      if (errores.length > 0) {
+        Swal.fire({
+          icon: ok > 0 ? 'warning' : 'error',
+          title: ok > 0 ? 'Recepción parcial' : 'No se pudo recibir',
+          html: `${ok} producto(s) recibidos.<br>Errores:<br>${errores.join('<br>')}`
+        })
+      } else {
+        showSuccess('Recepción registrada', `${ok} producto(s) ingresados al stock del pedido ${recepcionPedido.numero_pedido}`)
+      }
+      // Volver a Pedidos
+      navigate('/logistica/inventario/pedidos')
+    } catch (error: any) {
+      Swal.fire({ icon: 'error', title: 'Error', text: error.message || 'No se pudo procesar la recepción' })
+    }
+  }
+
   /** Procesa entrada en modo lote */
   const handleLoteEntrada = async () => {
     if (!validateLoteEntrada()) return
@@ -700,6 +826,7 @@ export function MovimientosModule() {
       return
     }
 
+    if (recepcionPedido) return handleRecepcionPedido()
     if (modoLote && tipoMovimiento === 'entrada') return handleLoteEntrada()
     if (modoLoteSalida && tipoMovimiento === 'salida') return handleLoteSalida()
     return handleMovimientoSimple()
@@ -979,7 +1106,8 @@ export function MovimientosModule() {
         </div>
       )}
 
-      {/* Selector de Tipo de Movimiento (sin Daño ni Pérdida) */}
+      {/* Selector de Tipo de Movimiento (oculto en modo recepción de pedido) */}
+      {!recepcionPedido && (
       <div style={{ marginBottom: '24px' }}>
         <label style={{ display: 'block', marginBottom: '12px', fontSize: '14px', fontWeight: 600, color: 'var(--text-primary)' }}>
           Tipo de Movimiento
@@ -1011,6 +1139,7 @@ export function MovimientosModule() {
           ))}
         </div>
       </div>
+      )}
 
       {/* Formulario */}
       <div
@@ -1025,8 +1154,79 @@ export function MovimientosModule() {
       >
         <div style={{ display: 'grid', gap: '20px' }}>
 
+          {/* ============= PANEL RECEPCIÓN DE PEDIDO ============= */}
+          {recepcionPedido && (
+            <div style={{ display: 'grid', gap: '14px' }}>
+              <div style={{
+                background: 'var(--badge-green-bg)', border: '1px solid var(--badge-green-text)',
+                borderRadius: '8px', padding: '12px 16px', display: 'flex', alignItems: 'center', gap: '10px'
+              }}>
+                <ArrowDownCircle size={18} color="var(--badge-green-text)" />
+                <div>
+                  <div style={{ fontWeight: 700, color: 'var(--badge-green-text)' }}>
+                    Recepción del pedido {recepcionPedido.numero_pedido}
+                  </div>
+                  <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
+                    {recepcionPedido.proveedor_nombre} · indicá cuánto llegó de cada producto. Se sumará al stock y se cerrará el pedido.
+                  </div>
+                </div>
+              </div>
+
+              <div style={{ border: '1px solid var(--border-primary)', borderRadius: '8px', overflow: 'hidden' }}>
+                <div style={{
+                  display: 'grid', gridTemplateColumns: '1fr 110px 110px 130px', gap: '10px',
+                  padding: '10px 14px', background: 'var(--bg-secondary)',
+                  fontSize: '10px', fontWeight: 700, color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: '.4px'
+                }}>
+                  <span>Producto</span>
+                  <span style={{ textAlign: 'center' }}>Confirmado pend.</span>
+                  <span style={{ textAlign: 'center' }}>Ya recibido</span>
+                  <span style={{ textAlign: 'center' }}>Recibir ahora</span>
+                </div>
+                {recepcionPedido.items.map(it => (
+                  <div key={it.item_id} style={{
+                    display: 'grid', gridTemplateColumns: '1fr 110px 110px 130px', gap: '10px',
+                    padding: '10px 14px', alignItems: 'center', borderTop: '1px solid var(--border-primary)'
+                  }}>
+                    <div>
+                      <div style={{ fontWeight: 600, fontSize: '14px' }}>{it.producto_nombre}</div>
+                      <div style={{ fontSize: '11px', color: 'var(--text-tertiary)', fontFamily: 'monospace' }}>{it.producto_codigo}</div>
+                    </div>
+                    <div style={{ textAlign: 'center', fontWeight: 700, fontFamily: 'monospace', color: 'var(--badge-yellow-text)' }}>{it.pendiente}</div>
+                    <div style={{ textAlign: 'center', fontFamily: 'monospace', color: 'var(--text-secondary)' }}>{it.recibido}</div>
+                    <div style={{ textAlign: 'center' }}>
+                      <input
+                        type="number" min={0} max={it.pendiente}
+                        value={recepcionCantidades[it.item_id] ?? 0}
+                        onChange={(e) => {
+                          const v = Math.max(0, Math.min(it.pendiente, Number(e.target.value)))
+                          setRecepcionCantidades(prev => ({ ...prev, [it.item_id]: v }))
+                        }}
+                        style={{
+                          width: '90px', height: '36px', textAlign: 'center', fontFamily: 'monospace', fontWeight: 600,
+                          border: '1px solid var(--border-primary)', borderRadius: '7px', background: 'var(--input-bg)', color: 'var(--text-primary)'
+                        }}
+                      />
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
+                <button type="button" onClick={() => navigate('/logistica/inventario/pedidos')}
+                  style={{ padding: '10px 18px', border: '1px solid var(--border-primary)', borderRadius: '8px', background: 'var(--bg-secondary)', color: 'var(--text-primary)', fontWeight: 600, cursor: 'pointer' }}>
+                  Cancelar
+                </button>
+                <button type="button" onClick={handleRecepcionPedido}
+                  style={{ padding: '10px 18px', border: 'none', borderRadius: '8px', background: 'var(--color-success)', color: '#fff', fontWeight: 600, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+                  <Check size={16} /> Confirmar recepción
+                </button>
+              </div>
+            </div>
+          )}
+
           {/* ============= SECCIÓN ENTRADA ============= */}
-          {tipoMovimiento === 'entrada' && (
+          {tipoMovimiento === 'entrada' && !recepcionPedido && (
             <>
               {/* Toggle Modo Lote */}
               <div
@@ -1600,7 +1800,7 @@ export function MovimientosModule() {
           {/* ============= CAMPOS COMUNES ============= */}
 
           {/* Filtro por Tipo de Producto (solo para entrada y salida sin modo lote) */}
-          {(tipoMovimiento === 'entrada' || (tipoMovimiento === 'salida' && !modoLoteSalida)) && (
+          {!recepcionPedido && (tipoMovimiento === 'entrada' || (tipoMovimiento === 'salida' && !modoLoteSalida)) && (
             <div>
               <label style={{ display: 'block', marginBottom: '8px', fontSize: '14px', fontWeight: 600, color: 'var(--text-secondary)' }}>
                 Tipo de Producto
@@ -1629,7 +1829,7 @@ export function MovimientosModule() {
           )}
 
           {/* Buscador de Producto (modo simple, no devolución, no lote salida) */}
-          {!modoLote && !modoLoteSalida && tipoMovimiento !== 'devolucion' && (
+          {!recepcionPedido && !modoLote && !modoLoteSalida && tipoMovimiento !== 'devolucion' && (
             <div>
               <label style={{ display: 'block', marginBottom: '8px', fontSize: '14px', fontWeight: 600, color: 'var(--text-secondary)' }}>
                 {tipoMovimiento === 'asignacion' ? 'Herramienta *' : 'Producto *'}
@@ -1786,7 +1986,7 @@ export function MovimientosModule() {
           )}
 
           {/* Cantidad (modo simple, no devolución, no lote salida) */}
-          {!modoLote && !modoLoteSalida && tipoMovimiento !== 'devolucion' && (
+          {!recepcionPedido && !modoLote && !modoLoteSalida && tipoMovimiento !== 'devolucion' && (
             <div>
               <label style={{ display: 'block', marginBottom: '8px', fontSize: '14px', fontWeight: 600, color: 'var(--text-primary)' }}>
                 Cantidad *
@@ -1810,6 +2010,7 @@ export function MovimientosModule() {
           )}
 
           {/* Observaciones */}
+          {!recepcionPedido && (
           <div>
             <label style={{ display: 'block', marginBottom: '8px', fontSize: '14px', fontWeight: 600, color: 'var(--text-primary)' }}>
               Observaciones {(tipoMovimiento === 'devolucion' && estadoRetorno !== 'operativa') ? '*' : ''}
@@ -1831,8 +2032,10 @@ export function MovimientosModule() {
               }}
             />
           </div>
+          )}
 
-          {/* Botones */}
+          {/* Botones (ocultos en modo recepción de pedido: el panel tiene los suyos) */}
+          {!recepcionPedido && (
           <div className="mov-form-actions" style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end', marginTop: '12px' }}>
             <button
               onClick={resetForm}
@@ -1869,6 +2072,7 @@ export function MovimientosModule() {
               {requiereAprobacion() ? 'Enviar para Aprobación' : `Registrar ${getTipoLabel(tipoMovimiento)}`}
             </button>
           </div>
+          )}
         </div>
       </div>
     </div>
