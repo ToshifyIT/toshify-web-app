@@ -61,6 +61,23 @@ interface PedidoItem {
   estado_item: string
   usuario_registro: string | null
   observaciones: string | null
+  // Seguimiento / respuesta del proveedor
+  estado_respuesta?: string | null
+  fecha_respuesta?: string | null
+  fecha_comprometida?: string | null
+  cantidad_confirmada?: number | null
+  estado_confirmacion?: string | null
+  fecha_estimada_item?: string | null
+}
+
+// Evento de la bitácora de un pedido
+interface PedidoSeguimientoEvento {
+  id: string
+  pedido_id: string
+  evento: string
+  descripcion: string | null
+  usuario_nombre?: string | null
+  created_at: string
 }
 
 interface PedidoAgrupado {
@@ -71,6 +88,8 @@ interface PedidoAgrupado {
   estado_pedido: string
   proveedor_nombre: string
   observaciones: string | null
+  estado_respuesta?: string | null
+  fecha_comprometida?: string | null
   items: PedidoItem[]
 }
 
@@ -210,6 +229,18 @@ export function PedidosUnificadoModule() {
   const [expandedPedidos, setExpandedPedidos] = useState<Set<string>>(new Set())
   const [searchPedidos, setSearchPedidos] = useState('')
   const [processingItem, setProcessingItem] = useState<string | null>(null)
+
+  // Registrar respuesta del proveedor (panel item-por-item)
+  const [respuestaPedido, setRespuestaPedido] = useState<PedidoAgrupado | null>(null)
+  const [respuestaItems, setRespuestaItems] = useState<Record<string, { estado: string; cantidad_confirmada: number; fecha?: string }>>({})
+  const [respuestaNota, setRespuestaNota] = useState('')
+  const [respuestaFechaComprometida, setRespuestaFechaComprometida] = useState('')
+  const [savingRespuesta, setSavingRespuesta] = useState(false)
+
+  // Timeline / bitácora del pedido
+  const [timelinePedidoId, setTimelinePedidoId] = useState<string | null>(null)
+  const [timelineEventos, setTimelineEventos] = useState<PedidoSeguimientoEvento[]>([])
+  const [loadingTimeline, setLoadingTimeline] = useState(false)
 
   // Estados para Aprobaciones
   const [movimientos, setMovimientos] = useState<MovimientoPendiente[]>([])
@@ -369,6 +400,8 @@ export function PedidosUnificadoModule() {
             estado_pedido: item.estado_pedido,
             proveedor_nombre: item.proveedor_nombre,
             observaciones: item.observaciones,
+            estado_respuesta: item.estado_respuesta,
+            fecha_comprometida: item.fecha_comprometida,
             items: []
           })
         }
@@ -390,6 +423,187 @@ export function PedidosUnificadoModule() {
       newExpanded.add(pedidoId)
     }
     setExpandedPedidos(newExpanded)
+  }
+
+  // ===== Pipeline de estados del pedido =====
+  // 5 pasos: Creado → Enviado → Respondido → En recepción → Recibido.
+  // No hay "Confirmado" como paso muerto: apenas el proveedor confirma/ajusta,
+  // el pedido queda "En recepción" (listo para recibir). Si rechaza todo, el
+  // último paso muestra "Rechazado" (fin del flujo, no hay nada que recibir).
+  const getPipelinePasos = (pedido: PedidoAgrupado) => {
+    const resp = pedido.estado_respuesta || 'sin_enviar'
+    const recibidoAlgo = pedido.items.some(it => (it.cantidad_recibida || 0) > 0)
+    const completo = pedido.estado_pedido === 'recibido_completo'
+    const rechazado = resp === 'rechazado'
+    const confirmado = resp === 'confirmado' || resp === 'confirmado_ajustes'
+
+    // índice del paso actual (0..4)
+    let idx: number
+    if (completo) idx = 4
+    else if (recibidoAlgo || confirmado) idx = 3  // confirmado o recibiendo → "En recepción"
+    else if (rechazado) idx = 2                    // rechazado → se queda en "Respondido" (fin)
+    else if (resp === 'enviado') idx = 2           // enviado → paso actual "Respondido" (a registrar)
+    else idx = 1                                   // sin enviar → recién "Enviado"
+
+    const ultimoLabel = rechazado ? 'Rechazado' : 'Recibido'
+    const ultimoSub = rechazado ? 'fin' : (completo ? 'completo' : '—')
+
+    const pasos = [
+      { label: 'Creado', sub: pedido.fecha_pedido ? new Date(pedido.fecha_pedido).toLocaleDateString('es-CL') : '' },
+      { label: 'Enviado', sub: 'correo' },
+      { label: 'Respondido', sub: resp === 'enviado' ? 'registrar' : (rechazado ? 'rechazó' : (confirmado || recibidoAlgo ? 'ok' : '—')) },
+      { label: 'En recepción', sub: completo ? 'ok' : (recibidoAlgo ? 'parcial' : (confirmado ? 'por recibir' : '—')) },
+      { label: ultimoLabel, sub: ultimoSub }
+    ]
+    return pasos.map((p, i) => ({
+      ...p,
+      // si rechazó, el último paso se pinta como "current" (fin) en rojo
+      estado: rechazado && i === 4 ? 'current' : (i < idx ? 'done' : i === idx ? 'current' : 'todo'),
+      num: i + 1,
+      isRechazo: rechazado && i === 4
+    }))
+  }
+
+  // ===== Registrar respuesta del proveedor =====
+  const abrirRespuestaPedido = (pedido: PedidoAgrupado) => {
+    const init: Record<string, { estado: string; cantidad_confirmada: number; fecha?: string }> = {}
+    for (const item of pedido.items) {
+      init[item.item_id] = {
+        estado: item.estado_confirmacion && item.estado_confirmacion !== 'pendiente' ? item.estado_confirmacion : 'confirmado',
+        cantidad_confirmada: item.cantidad_confirmada ?? item.cantidad_pedida,
+        fecha: item.fecha_estimada_item || ''
+      }
+    }
+    setRespuestaItems(init)
+    setRespuestaNota('')
+    setRespuestaFechaComprometida(pedido.fecha_comprometida || '')
+    setRespuestaPedido(pedido)
+  }
+
+  const setRespuestaItemCampo = (itemId: string, campo: 'estado' | 'cantidad_confirmada' | 'fecha', valor: string | number) => {
+    setRespuestaItems(prev => {
+      const actual = prev[itemId] || { estado: 'confirmado', cantidad_confirmada: 0 }
+      const next = { ...actual, [campo]: valor }
+      // Si rechaza, la cantidad confirmada va a 0
+      if (campo === 'estado' && valor === 'rechazado') next.cantidad_confirmada = 0
+      return { ...prev, [itemId]: next }
+    })
+  }
+
+  const guardarRespuestaProveedor = async () => {
+    if (!respuestaPedido) return
+    // Validación cliente: no confirmar más de lo pedido
+    for (const item of respuestaPedido.items) {
+      const r = respuestaItems[item.item_id]
+      if (r && r.estado !== 'rechazado' && Number(r.cantidad_confirmada) > item.cantidad_pedida) {
+        Swal.fire('Cantidad inválida', `No se puede confirmar más de lo pedido en ${item.producto_codigo} (máx ${item.cantidad_pedida})`, 'warning')
+        return
+      }
+    }
+    // La fecha comprometida es obligatoria si el proveedor va a entregar algo (confirma o ajusta)
+    const hayEntrega = respuestaPedido.items.some(item => {
+      const r = respuestaItems[item.item_id]
+      return r && r.estado !== 'rechazado' && Number(r.cantidad_confirmada) > 0
+    })
+    if (hayEntrega && !respuestaFechaComprometida) {
+      Swal.fire('Falta la fecha comprometida', 'Como el proveedor va a entregar productos, indicá la fecha comprometida de entrega.', 'warning')
+      return
+    }
+    setSavingRespuesta(true)
+    try {
+      const { data: authData } = await supabase.auth.getUser()
+      const itemsPayload = respuestaPedido.items.map(item => {
+        const r = respuestaItems[item.item_id] || { estado: 'confirmado', cantidad_confirmada: item.cantidad_pedida }
+        return {
+          item_id: item.item_id,
+          estado: r.estado,
+          cantidad_confirmada: r.estado === 'rechazado' ? 0 : Number(r.cantidad_confirmada),
+          fecha_estimada_item: r.fecha || null
+        }
+      })
+
+      const { data: rpcResult, error } = await (supabase.rpc as any)('registrar_respuesta_proveedor', {
+        p_pedido_id: respuestaPedido.pedido_id,
+        p_usuario_id: authData.user?.id,
+        p_items: itemsPayload,
+        p_nota: respuestaNota || null,
+        p_fecha_comprometida: respuestaFechaComprometida || null
+      })
+
+      if (error) throw error
+      if (rpcResult && rpcResult.success === false) throw new Error(rpcResult.error)
+
+      setRespuestaPedido(null)
+      showSuccess('Respuesta registrada', `Respuesta del proveedor guardada (${rpcResult?.estado_respuesta || 'ok'})`)
+      await loadPedidosData()
+      if (timelinePedidoId === respuestaPedido.pedido_id) cargarTimeline(respuestaPedido.pedido_id)
+    } catch (error: any) {
+      Swal.fire('Error', error.message || 'No se pudo registrar la respuesta', 'error')
+    } finally {
+      setSavingRespuesta(false)
+    }
+  }
+
+  // ===== Timeline / bitácora =====
+  const cargarTimeline = async (pedidoId: string) => {
+    setLoadingTimeline(true)
+    try {
+      const { data, error } = await supabase
+        .from('pedido_seguimiento')
+        .select('id, pedido_id, evento, descripcion, created_at, usuario_id')
+        .eq('pedido_id', pedidoId)
+        .order('created_at', { ascending: false })
+      if (error) throw error
+
+      const eventos = (data || []) as any[]
+      // Resolver nombres de usuario en una sola consulta (sin depender de FK embebida)
+      const userIds = [...new Set(eventos.map(e => e.usuario_id).filter(Boolean))]
+      const nombres = new Map<string, string>()
+      if (userIds.length > 0) {
+        const { data: users } = await supabase.from('user_profiles').select('id, full_name').in('id', userIds)
+        for (const u of (users || []) as any[]) nombres.set(u.id, u.full_name)
+      }
+
+      setTimelineEventos(eventos.map(e => ({
+        id: e.id, pedido_id: e.pedido_id, evento: e.evento, descripcion: e.descripcion,
+        created_at: e.created_at, usuario_nombre: e.usuario_id ? (nombres.get(e.usuario_id) || null) : null
+      })))
+    } catch {
+      setTimelineEventos([])
+    } finally {
+      setLoadingTimeline(false)
+    }
+  }
+
+  const toggleTimeline = (pedidoId: string) => {
+    if (timelinePedidoId === pedidoId) {
+      setTimelinePedidoId(null)
+    } else {
+      setTimelinePedidoId(pedidoId)
+      cargarTimeline(pedidoId)
+    }
+  }
+
+  // Badge ÚNICO de fase del pedido: combina respuesta del proveedor + recepción
+  // para evitar dos badges contradictorios (ej. "Confirmado" + "En Transito").
+  const labelFasePedido = (pedido: PedidoAgrupado): { texto: string; clase: string } => {
+    const resp = pedido.estado_respuesta || 'sin_enviar'
+    const recibidoAlgo = pedido.items.some(it => (it.cantidad_recibida || 0) > 0)
+    const completo = pedido.estado_pedido === 'recibido_completo'
+
+    // 1) Fase de recepción manda si ya empezó a recibirse
+    if (completo) return { texto: 'Recibido completo', clase: 'ok' }
+    if (recibidoAlgo) return { texto: 'Recibiendo (parcial)', clase: 'info' }
+
+    // 2) Si no se recibió nada, manda la fase de respuesta.
+    //    Confirmado = listo para recibir (no es un estado de espera muerto).
+    switch (resp) {
+      case 'confirmado': return { texto: 'Listo para recibir', clase: 'ok' }
+      case 'confirmado_ajustes': return { texto: 'Listo para recibir (c/ajustes)', clase: 'warn' }
+      case 'rechazado': return { texto: 'Rechazado por proveedor', clase: 'danger' }
+      case 'enviado': return { texto: 'Enviado · esperando respuesta', clase: 'info' }
+      default: return { texto: 'Sin enviar', clase: 'muted' }
+    }
   }
 
   const resetPedidoProveedorForm = () => {
@@ -1109,27 +1323,6 @@ export function PedidosUnificadoModule() {
     return labels[estado] || estado
   }
 
-  const getEstadoBadge = (estado: string) => {
-    const estilos: Record<string, { bg: string; color: string; label: string }> = {
-      en_transito: { bg: 'var(--badge-yellow-bg)', color: 'var(--badge-yellow-text)', label: 'En Transito' },
-      recibido_parcial: { bg: 'var(--badge-blue-bg)', color: 'var(--badge-blue-text)', label: 'Parcial' },
-      pendiente: { bg: 'var(--badge-gray-bg)', color: 'var(--badge-gray-text)', label: 'Pendiente' }
-    }
-    const estilo = estilos[estado] || estilos.pendiente
-    return (
-      <span style={{
-        padding: '4px 10px',
-        borderRadius: '12px',
-        fontSize: '12px',
-        fontWeight: 600,
-        background: estilo.bg,
-        color: estilo.color
-      }}>
-        {estilo.label}
-      </span>
-    )
-  }
-
   // ============= MEMOS =============
   // Unique value lists for Entradas Simples filters
   const uniqueProductos = useMemo(() =>
@@ -1779,6 +1972,129 @@ export function PedidosUnificadoModule() {
 
         .pedido-actions-summary strong {
           color: var(--text-primary);
+        }
+
+        /* ===== Seguimiento de pedido: badge estado_respuesta ===== */
+        .pedido-resp-badge {
+          display: inline-flex; align-items: center; gap: 5px;
+          font-size: 11px; font-weight: 700; padding: 4px 10px; border-radius: 7px; white-space: nowrap;
+        }
+        .pedido-resp-badge.ok { background: var(--badge-green-bg); color: var(--badge-green-text); }
+        .pedido-resp-badge.warn { background: var(--badge-yellow-bg); color: var(--badge-yellow-text); }
+        .pedido-resp-badge.danger { background: var(--badge-red-bg, #fef2f2); color: var(--badge-red-text, #dc2626); }
+        .pedido-resp-badge.info { background: var(--bg-secondary); color: var(--text-secondary); }
+        .pedido-resp-badge.muted { background: var(--bg-tertiary); color: var(--text-tertiary); }
+
+        /* ===== Barra de acciones en detalle del pedido ===== */
+        .pedido-detalle-actions {
+          display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 14px;
+        }
+        .pedido-detalle-btn {
+          display: inline-flex; align-items: center; gap: 6px;
+          border: 1px solid var(--border-primary); background: var(--card-bg); color: var(--text-secondary);
+          border-radius: 7px; padding: 7px 13px; font-size: 13px; font-weight: 600; cursor: pointer;
+        }
+        .pedido-detalle-btn:hover { background: var(--bg-secondary); color: var(--text-primary); }
+        .pedido-detalle-btn.primary { background: var(--color-primary); border-color: var(--color-primary); color: #fff; }
+        .pedido-detalle-btn.primary:hover { background: var(--color-primary-hover); }
+        .pedido-detalle-nota { font-size: 12px; color: var(--text-secondary); margin-left: auto; }
+        .pedido-detalle-nota strong { color: var(--text-primary); }
+
+        /* ===== Pipeline de estados del pedido ===== */
+        .pedido-pipeline {
+          display: flex; align-items: flex-start; gap: 0;
+          background: var(--bg-secondary); border: 1px solid var(--border-primary); border-radius: 10px;
+          padding: 16px 18px; margin-bottom: 16px; overflow-x: auto;
+        }
+        .pp-step-wrap { display: flex; align-items: flex-start; flex: 1; min-width: 0; }
+        .pp-step { display: flex; flex-direction: column; align-items: center; gap: 5px; text-align: center; min-width: 80px; }
+        .pp-dot {
+          width: 28px; height: 28px; border-radius: 50%; display: flex; align-items: center; justify-content: center;
+          font-size: 12px; font-weight: 700; border: 2px solid var(--border-primary); background: var(--card-bg); color: var(--text-tertiary);
+        }
+        .pp-step.done .pp-dot { background: var(--color-success); border-color: var(--color-success); color: #fff; }
+        .pp-step.current .pp-dot {
+          background: var(--color-primary); border-color: var(--color-primary); color: #fff;
+          box-shadow: 0 0 0 4px rgba(255,0,51,.12);
+        }
+        .pp-step.rechazo .pp-dot { background: var(--badge-red-text, #dc2626); border-color: var(--badge-red-text, #dc2626); color: #fff; box-shadow: 0 0 0 4px rgba(220,38,38,.12); }
+        .pp-step.rechazo .pp-label { color: var(--badge-red-text, #dc2626); }
+        .pp-label { font-size: 11px; font-weight: 600; color: var(--text-secondary); white-space: nowrap; }
+        .pp-step.current .pp-label { color: var(--color-primary); }
+        .pp-sub { font-size: 10px; color: var(--text-tertiary); white-space: nowrap; }
+        .pp-line { flex: 1; height: 2px; background: var(--border-primary); margin-top: 14px; min-width: 16px; }
+        .pp-line.done { background: var(--color-success); }
+
+        /* ===== Timeline / bitácora ===== */
+        .pedido-timeline {
+          background: var(--bg-secondary); border: 1px solid var(--border-primary); border-radius: 8px;
+          padding: 14px 16px; margin-bottom: 14px; display: flex; flex-direction: column; gap: 12px;
+        }
+        .pedido-tl-item { display: flex; gap: 10px; align-items: flex-start; }
+        .pedido-tl-dot { width: 12px; height: 12px; border-radius: 50%; margin-top: 3px; flex-shrink: 0; }
+        .pedido-tl-dot.green { background: var(--color-success); }
+        .pedido-tl-dot.amber { background: var(--badge-yellow-text); }
+        .pedido-tl-dot.blue { background: #1d4ed8; }
+        .pedido-tl-desc { font-size: 13px; color: var(--text-primary); line-height: 1.4; }
+        .pedido-tl-meta { font-size: 11px; color: var(--text-tertiary); margin-top: 2px; font-family: monospace; }
+
+        /* ===== Modal respuesta del proveedor ===== */
+        .pedido-resp-overlay {
+          position: fixed; inset: 0; background: rgba(0,0,0,0.45); z-index: 2000;
+          display: flex; align-items: center; justify-content: center; padding: 20px;
+        }
+        .pedido-resp-modal {
+          background: var(--card-bg); border-radius: 12px; width: 100%; max-width: 720px;
+          max-height: 90vh; overflow-y: auto; padding: 22px 24px; box-shadow: 0 10px 40px rgba(0,0,0,0.25);
+        }
+        .pedido-resp-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+        .pedido-resp-header h3 { margin: 0; font-size: 17px; font-weight: 700; }
+        .pedido-resp-header p { margin: 2px 0 0; font-size: 13px; color: var(--text-secondary); }
+        .pedido-resp-close { border: none; background: none; color: var(--text-tertiary); cursor: pointer; padding: 4px; }
+        .pedido-resp-close:hover { color: var(--text-primary); }
+        .pedido-resp-sub { font-size: 12.5px; color: var(--text-secondary); margin: 10px 0 16px; }
+        .pedido-resp-table { border: 1px solid var(--border-primary); border-radius: 8px; }
+        .pedido-resp-row {
+          display: grid; grid-template-columns: 1.5fr 60px 90px 1.4fr; gap: 10px; align-items: center;
+          padding: 11px 12px; border-bottom: 1px solid var(--border-primary);
+        }
+        .pedido-resp-row:last-child { border-bottom: none; }
+        .pedido-resp-row.header {
+          background: var(--bg-secondary); font-size: 10px; font-weight: 700; letter-spacing: .4px;
+          color: var(--text-tertiary); text-transform: uppercase;
+        }
+        .pedido-resp-row.rechazado { opacity: .6; }
+        .prp-prod .name { font-size: 13.5px; font-weight: 600; }
+        .prp-prod .code { font-size: 11px; color: var(--text-tertiary); font-family: monospace; }
+        .prp-ped { font-family: monospace; font-weight: 700; }
+        .prp-conf {
+          width: 70px; height: 34px; border: 1px solid var(--border-primary); border-radius: 7px;
+          text-align: center; font-family: monospace; font-weight: 600; font-size: 13px;
+          background: var(--input-bg); color: var(--text-primary);
+        }
+        .prp-seg { display: inline-flex; border: 1px solid var(--border-primary); border-radius: 7px; overflow: hidden; }
+        .prp-seg button {
+          border: none; background: var(--card-bg); padding: 6px 9px; font-size: 11px; font-weight: 600;
+          cursor: pointer; color: var(--text-secondary);
+        }
+        .prp-seg button.on.ok { background: var(--color-success); color: #fff; }
+        .prp-seg button.on.adj { background: var(--badge-yellow-text); color: #fff; }
+        .prp-seg button.on.no { background: var(--badge-red-text, #dc2626); color: #fff; }
+        .pedido-resp-grid { display: grid; grid-template-columns: 1fr 200px; gap: 14px; margin-top: 16px; }
+        .pedido-resp-footer {
+          display: flex; justify-content: flex-end; gap: 10px; margin-top: 20px;
+          padding-top: 16px; border-top: 1px solid var(--border-primary);
+        }
+        .pedido-resp-footer .btn-secondary, .pedido-resp-footer .btn-primary {
+          display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+          border-radius: 7px; padding: 9px 18px; font-size: 14px; font-weight: 600; cursor: pointer;
+        }
+        .pedido-resp-footer .btn-secondary { border: 1px solid var(--border-primary); background: var(--bg-secondary); color: var(--text-primary); }
+        .pedido-resp-footer .btn-primary { border: none; background: var(--color-primary); color: #fff; }
+        .pedido-resp-footer button:disabled { opacity: .6; cursor: not-allowed; }
+        @media (max-width: 640px) {
+          .pedido-resp-row { grid-template-columns: 1fr; gap: 6px; }
+          .pedido-resp-grid { grid-template-columns: 1fr; }
         }
 
         .pedido-icon-button {
@@ -3022,7 +3338,10 @@ pageSize={100}
                             )}
                           </div>
                           <span className={`sla-badge ${sla.className}`}>{sla.label}</span>
-                          {getEstadoBadge(pedido.estado_pedido)}
+                          {(() => {
+                            const lbl = labelFasePedido(pedido)
+                            return <span className={`pedido-resp-badge ${lbl.clase}`}>{lbl.texto}</span>
+                          })()}
                           <div style={{ color: 'var(--text-secondary)' }}>
                             {expandedPedidos.has(pedido.pedido_id) ? <ChevronUp size={20} /> : <ChevronDown size={20} />}
                           </div>
@@ -3031,6 +3350,57 @@ pageSize={100}
 
                       {expandedPedidos.has(pedido.pedido_id) && (
                         <div style={{ padding: '16px 20px' }}>
+                          <div className="pedido-pipeline">
+                            {getPipelinePasos(pedido).map((paso, i, arr) => (
+                              <div className="pp-step-wrap" key={paso.label}>
+                                <div className={`pp-step ${paso.estado} ${paso.isRechazo ? 'rechazo' : ''}`}>
+                                  <div className="pp-dot">{paso.isRechazo ? '✕' : paso.estado === 'done' ? '✓' : paso.num}</div>
+                                  <div className="pp-label">{paso.label}</div>
+                                  <div className="pp-sub">{paso.sub}</div>
+                                </div>
+                                {i < arr.length - 1 && <div className={`pp-line ${paso.estado === 'done' ? 'done' : ''}`} />}
+                              </div>
+                            ))}
+                          </div>
+
+                          <div className="pedido-detalle-actions">
+                            {canCreatePedido && pedido.estado_respuesta !== 'rechazado' && (
+                              <button type="button" className="pedido-detalle-btn primary" onClick={() => abrirRespuestaPedido(pedido)}>
+                                <Mail size={14} />
+                                {pedido.estado_respuesta === 'enviado' || !pedido.estado_respuesta ? 'Registrar respuesta' : 'Editar respuesta'}
+                              </button>
+                            )}
+                            <button type="button" className="pedido-detalle-btn" onClick={() => toggleTimeline(pedido.pedido_id)}>
+                              <Clock size={14} />
+                              {timelinePedidoId === pedido.pedido_id ? 'Ocultar seguimiento' : 'Ver seguimiento'}
+                            </button>
+                            {pedido.fecha_comprometida && (
+                              <span className="pedido-detalle-nota">Fecha comprometida: <strong>{pedido.fecha_comprometida}</strong></span>
+                            )}
+                          </div>
+
+                          {timelinePedidoId === pedido.pedido_id && (
+                            <div className="pedido-timeline">
+                              {loadingTimeline ? (
+                                <div style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>Cargando seguimiento…</div>
+                              ) : timelineEventos.length === 0 ? (
+                                <div style={{ fontSize: '13px', color: 'var(--text-tertiary)' }}>Sin eventos registrados.</div>
+                              ) : (
+                                timelineEventos.map(ev => (
+                                  <div key={ev.id} className="pedido-tl-item">
+                                    <span className={`pedido-tl-dot ${ev.evento === 'recepcion' ? 'green' : ev.evento === 'respuesta_proveedor' ? 'amber' : 'blue'}`} />
+                                    <div>
+                                      <div className="pedido-tl-desc">{ev.descripcion}</div>
+                                      <div className="pedido-tl-meta">
+                                        {new Date(ev.created_at).toLocaleString('es-CL')}{ev.usuario_nombre ? ` · ${ev.usuario_nombre}` : ''}
+                                      </div>
+                                    </div>
+                                  </div>
+                                ))
+                              )}
+                            </div>
+                          )}
+
                           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                             <thead>
                               <tr style={{ borderBottom: '2px solid var(--border-primary)' }}>
@@ -3041,10 +3411,13 @@ pageSize={100}
                                   Pedido
                                 </th>
                                 <th style={{ padding: '10px', textAlign: 'center', fontSize: '11px', fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase' }}>
-                                  Recibido
+                                  Confirmada
                                 </th>
                                 <th style={{ padding: '10px', textAlign: 'center', fontSize: '11px', fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase' }}>
                                   Pendiente
+                                </th>
+                                <th style={{ padding: '10px', textAlign: 'center', fontSize: '11px', fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase' }}>
+                                  Recibido
                                 </th>
                                 <th style={{ padding: '10px', textAlign: 'center', fontSize: '11px', fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase' }}>
                                   Accion
@@ -3068,11 +3441,22 @@ pageSize={100}
                                   <td style={{ padding: '12px 10px', textAlign: 'center', fontSize: '14px', fontWeight: 600, color: 'var(--text-primary)' }}>
                                     {item.cantidad_pedida}
                                   </td>
-                                  <td style={{ padding: '12px 10px', textAlign: 'center', fontSize: '14px', color: 'var(--color-success)', fontWeight: 600 }}>
-                                    {item.cantidad_recibida}
+                                  <td style={{ padding: '12px 10px', textAlign: 'center', fontSize: '14px', fontWeight: 600 }}>
+                                    {item.estado_confirmacion === 'rechazado' ? (
+                                      <span style={{ color: 'var(--badge-red-text, #dc2626)' }}>Rechazado</span>
+                                    ) : item.cantidad_confirmada != null ? (
+                                      <span style={{ color: item.cantidad_confirmada < item.cantidad_pedida ? 'var(--badge-yellow-text)' : 'var(--text-secondary)' }}>
+                                        {item.cantidad_confirmada}{item.estado_confirmacion === 'ajustado' ? ' (ajust.)' : ''}
+                                      </span>
+                                    ) : (
+                                      <span style={{ color: 'var(--text-tertiary)' }}>—</span>
+                                    )}
                                   </td>
                                   <td style={{ padding: '12px 10px', textAlign: 'center', fontSize: '14px', color: 'var(--color-warning)', fontWeight: 600 }}>
                                     {item.cantidad_pendiente}
+                                  </td>
+                                  <td style={{ padding: '12px 10px', textAlign: 'center', fontSize: '14px', color: 'var(--color-success)', fontWeight: 600 }}>
+                                    {item.cantidad_recibida}
                                   </td>
                                   <td style={{ padding: '12px 10px', textAlign: 'center' }}>
                                     {item.cantidad_pendiente > 0 ? (
@@ -3462,6 +3846,114 @@ pageSize={100}
           </>
         )}
       </div>
+
+      {/* ==================== MODAL: RESPUESTA DEL PROVEEDOR ==================== */}
+      {respuestaPedido && (
+        <div className="pedido-resp-overlay" onClick={() => !savingRespuesta && setRespuestaPedido(null)}>
+          <div className="pedido-resp-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="pedido-resp-header">
+              <div>
+                <h3>Registrar respuesta del proveedor</h3>
+                <p>{respuestaPedido.numero_pedido} · {respuestaPedido.proveedor_nombre}</p>
+              </div>
+              <button className="pedido-resp-close" onClick={() => !savingRespuesta && setRespuestaPedido(null)} aria-label="Cerrar">
+                <X size={18} />
+              </button>
+            </div>
+            <p className="pedido-resp-sub">Marcá, por producto, qué confirma el proveedor. Lo confirmado será la base para la recepción.</p>
+
+            <div className="pedido-resp-table">
+              <div className="pedido-resp-row header">
+                <span>Producto</span>
+                <span>Pedido</span>
+                <span>Confirma</span>
+                <span>Respuesta</span>
+              </div>
+              {respuestaPedido.items.map(item => {
+                const r = respuestaItems[item.item_id] || { estado: 'confirmado', cantidad_confirmada: item.cantidad_pedida }
+                return (
+                  <div className={`pedido-resp-row ${r.estado === 'rechazado' ? 'rechazado' : ''}`} key={item.item_id}>
+                    <div className="prp-prod">
+                      <div className="name">{item.producto_nombre}</div>
+                      <div className="code">{item.producto_codigo}</div>
+                    </div>
+                    <div className="prp-ped">{item.cantidad_pedida}</div>
+                    <div>
+                      <input
+                        type="number" min={0} max={item.cantidad_pedida}
+                        className="prp-conf"
+                        value={r.estado === 'rechazado' ? 0 : r.cantidad_confirmada}
+                        disabled={r.estado === 'rechazado' || savingRespuesta}
+                        onChange={(e) => {
+                          const v = Math.max(0, Math.min(item.cantidad_pedida, Number(e.target.value)))
+                          setRespuestaItemCampo(item.item_id, 'cantidad_confirmada', v)
+                          setRespuestaItemCampo(item.item_id, 'estado', v >= item.cantidad_pedida ? 'confirmado' : v === 0 ? 'rechazado' : 'ajustado')
+                        }}
+                      />
+                    </div>
+                    <div className="prp-seg">
+                      <button type="button" className={r.estado === 'confirmado' ? 'on ok' : ''} disabled={savingRespuesta}
+                        onClick={() => { setRespuestaItemCampo(item.item_id, 'estado', 'confirmado'); setRespuestaItemCampo(item.item_id, 'cantidad_confirmada', item.cantidad_pedida) }}>
+                        Confirma
+                      </button>
+                      <button type="button" className={r.estado === 'ajustado' ? 'on adj' : ''} disabled={savingRespuesta}
+                        onClick={() => setRespuestaItemCampo(item.item_id, 'estado', 'ajustado')}>
+                        Ajusta
+                      </button>
+                      <button type="button" className={r.estado === 'rechazado' ? 'on no' : ''} disabled={savingRespuesta}
+                        onClick={() => setRespuestaItemCampo(item.item_id, 'estado', 'rechazado')}>
+                        Rechaza
+                      </button>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+
+            <div className="pedido-resp-grid">
+              <div className="pedido-field">
+                <label>Nota (lo que respondió el proveedor)</label>
+                <textarea value={respuestaNota} onChange={(e) => setRespuestaNota(e.target.value)}
+                  placeholder="Ej: solo tengo 2 de 3; el resto llega la próxima semana..." disabled={savingRespuesta} />
+              </div>
+              {(() => {
+                const hayEntrega = respuestaPedido.items.some(item => {
+                  const r = respuestaItems[item.item_id]
+                  return r && r.estado !== 'rechazado' && Number(r.cantidad_confirmada) > 0
+                })
+                const faltaFecha = hayEntrega && !respuestaFechaComprometida
+                return (
+                  <div className="pedido-field">
+                    <label>
+                      Fecha comprometida {hayEntrega ? <span style={{ color: 'var(--color-primary)' }}>*</span> : <span style={{ color: 'var(--text-tertiary)', fontWeight: 400 }}>(opcional)</span>}
+                    </label>
+                    <input
+                      type="date"
+                      value={respuestaFechaComprometida}
+                      onChange={(e) => setRespuestaFechaComprometida(e.target.value)}
+                      disabled={savingRespuesta}
+                      style={faltaFecha ? { borderColor: 'var(--color-primary)' } : undefined}
+                    />
+                    {faltaFecha && (
+                      <span style={{ fontSize: '11px', color: 'var(--color-primary)', fontWeight: 600 }}>
+                        Requerida porque el proveedor entrega productos
+                      </span>
+                    )}
+                  </div>
+                )
+              })()}
+            </div>
+
+            <div className="pedido-resp-footer">
+              <button type="button" className="btn-secondary" onClick={() => setRespuestaPedido(null)} disabled={savingRespuesta}>Cancelar</button>
+              <button type="button" className="btn-primary" onClick={guardarRespuestaProveedor} disabled={savingRespuesta}>
+                <Check size={15} />
+                {savingRespuesta ? 'Guardando…' : 'Guardar respuesta'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   )
 }
