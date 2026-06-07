@@ -6,7 +6,6 @@ import { ExcelColumnFilter, useExcelFilters } from '../../components/ui/DataTabl
 import { useSede } from '../../contexts/SedeContext'
 import {
   Package,
-  Truck,
   AlertTriangle,
   XCircle,
   Wrench,
@@ -31,14 +30,13 @@ interface StockProducto {
   stock_total: number
   disponible: number
   en_uso: number
-  en_transito: number
   dañado: number
   perdido: number
   stock_minimo?: number
   alerta_reposicion?: number
 }
 
-type FilterEstadoStock = 'all' | 'disponible' | 'en_uso' | 'en_transito' | 'dañado' | 'perdido'
+type FilterEstadoStock = 'all' | 'disponible' | 'en_uso' | 'dañado' | 'perdido'
 
 interface PendientesOperativos {
   entradasTransito: number
@@ -152,8 +150,8 @@ export function InventarioDashboardModule() {
     }
   }
 
-  // Helper: verificar si producto tiene stock (disponible + en_uso + en_transito > 0)
-  const tieneStock = (p: StockProducto) => (p.disponible + p.en_uso + p.en_transito) > 0
+  // Helper: verificar si producto tiene stock (disponible + en_uso > 0)
+  const tieneStock = (p: StockProducto) => (p.disponible + p.en_uso) > 0
 
   // Solo productos con stock para conteos y tabla
   const productosConStock = stockProductos.filter(tieneStock)
@@ -177,56 +175,62 @@ export function InventarioDashboardModule() {
 
     if (productosBajoMinimo.length > 0) {
       const productoCritico = productosBajoMinimo[0]
+      const plural = productosBajoMinimo.length > 1
       acciones.push({
         id: 'bajo-minimo',
         severidad: 'critico',
-        titulo: `${productosBajoMinimo.length} productos bajo minimo`,
-        detalle: `${productoCritico.codigo} - ${productoCritico.nombre}: disponible ${productoCritico.disponible}, minimo ${productoCritico.stock_minimo || 0}`,
+        titulo: `${productosBajoMinimo.length} producto${plural ? 's' : ''} por reponer`,
+        detalle: `Stock por debajo del mínimo. Ej: ${productoCritico.codigo} ${productoCritico.nombre}: quedan ${productoCritico.disponible}, mínimo ${productoCritico.stock_minimo || 0}. Hacé un pedido al proveedor.`,
         accion: 'Crear pedido',
-        destino: '/logistica/inventario/movimientos'
+        destino: '/logistica/inventario/pedidos?tab=nuevo'
       })
     }
 
     if (pendientes.pedidosVencidos > 0) {
+      const plural = pendientes.pedidosVencidos > 1
       acciones.push({
         id: 'pedidos-vencidos',
         severidad: 'critico',
-        titulo: `${pendientes.pedidosVencidos} pedidos con fecha vencida`,
-        detalle: 'Pedidos a proveedor fuera de la fecha estimada; revisar recepcion o reclamo',
+        titulo: `${pendientes.pedidosVencidos} pedido${plural ? 's' : ''} atrasado${plural ? 's' : ''}`,
+        detalle: `Pedido${plural ? 's' : ''} a proveedor que ya pasó su fecha estimada de llegada. Revisá la recepción o reclamá al proveedor.`,
         accion: 'Ver pedidos',
-        destino: '/logistica/inventario/pedidos'
+        destino: '/logistica/inventario/pedidos?tab=pedidos'
       })
     }
 
     if (pendientes.entradasTransito + pendientes.pedidosTransito > 0) {
+      const total = pendientes.entradasTransito + pendientes.pedidosTransito
+      const plural = total > 1
       acciones.push({
         id: 'recepciones',
         severidad: 'atencion',
-        titulo: `${pendientes.entradasTransito + pendientes.pedidosTransito} recepciones pendientes`,
-        detalle: `${pendientes.entradasTransito} entradas simples y ${pendientes.pedidosTransito} pedidos en transito`,
+        titulo: `${total} pedido${plural ? 's' : ''} por recibir`,
+        detalle: `Mercadería que llegó o está por llegar y falta ingresar al stock. Generá la entrada para sumarla al inventario.`,
         accion: 'Recepcionar',
-        destino: '/logistica/inventario/pedidos'
+        destino: '/logistica/inventario/pedidos?tab=pedidos'
       })
     }
 
     if (pendientes.movimientosPendientes > 0) {
+      const plural = pendientes.movimientosPendientes > 1
       acciones.push({
         id: 'aprobaciones',
         severidad: 'info',
-        titulo: `${pendientes.movimientosPendientes} aprobaciones internas`,
-        detalle: 'Salidas, asignaciones o devoluciones pendientes de aprobacion',
+        titulo: `${pendientes.movimientosPendientes} movimiento${plural ? 's' : ''} por aprobar`,
+        detalle: `Salidas, asignaciones y devoluciones esperando aprobación de un encargado.`,
         accion: 'Revisar',
-        destino: '/logistica/inventario/pedidos'
+        destino: '/logistica/inventario/pedidos?tab=pendientes'
       })
     }
 
     if (productosSinCierre.length > 0) {
       const productoSinCierre = productosSinCierre[0]
+      const plural = productosSinCierre.length > 1
       acciones.push({
         id: 'sin-cierre',
         severidad: 'atencion',
-        titulo: `${productosSinCierre.length} productos con dano/perdida`,
-        detalle: `${productoSinCierre.codigo} - ${productoSinCierre.nombre}: ${productoSinCierre.dañado + productoSinCierre.perdido} unidades sin cierre`,
+        titulo: `${productosSinCierre.length} producto${plural ? 's' : ''} con daño o pérdida`,
+        detalle: `Unidades marcadas como dañadas o perdidas. Ej: ${productoSinCierre.codigo} ${productoSinCierre.nombre}: ${productoSinCierre.dañado + productoSinCierre.perdido} unidades. Revisá y dá de baja si corresponde.`,
         accion: 'Ver stock',
         destino: '/logistica/inventario/dashboard'
       })
@@ -272,7 +276,6 @@ export function InventarioDashboardModule() {
       const labels: Record<string, string> = {
         disponible: 'Disponible',
         en_uso: 'En Uso',
-        en_transito: 'En Tránsito',
         dañado: 'Dañado',
         perdido: 'Perdido'
       }
@@ -323,7 +326,6 @@ export function InventarioDashboardModule() {
         switch (filterEstadoStock) {
           case 'disponible': return p.disponible > 0
           case 'en_uso': return p.en_uso > 0
-          case 'en_transito': return p.en_transito > 0
           case 'dañado': return p.dañado > 0
           case 'perdido': return p.perdido > 0
           default: return true
@@ -352,17 +354,16 @@ export function InventarioDashboardModule() {
   }, [categoryFilteredData, codigoFilter, nombreFilter, tipoFilter, categoriaFilter, filterEstadoStock])
 
   // Calcular totales generales
-  // Stock Total = Disponible + En Uso + En Tránsito (NO incluye dañado ni perdido)
+  // Stock Total = Disponible + En Uso (NO incluye dañado ni perdido)
   const totales = filteredData.reduce(
     (acc, item) => ({
-      total: acc.total + item.disponible + item.en_uso + item.en_transito,
+      total: acc.total + item.disponible + item.en_uso,
       disponible: acc.disponible + item.disponible,
       en_uso: acc.en_uso + item.en_uso,
-      en_transito: acc.en_transito + item.en_transito,
       dañado: acc.dañado + item.dañado,
       perdido: acc.perdido + item.perdido
     }),
-    { total: 0, disponible: 0, en_uso: 0, en_transito: 0, dañado: 0, perdido: 0 }
+    { total: 0, disponible: 0, en_uso: 0, dañado: 0, perdido: 0 }
   )
 
   // Definir columnas para TanStack Table
@@ -468,14 +469,6 @@ export function InventarioDashboardModule() {
         enableSorting: true,
       },
       {
-        accessorKey: 'en_transito',
-        header: 'En Tránsito',
-        cell: ({ getValue }) => (
-          <span className="inv-en-transito">{getValue() as number}</span>
-        ),
-        enableSorting: true,
-      },
-      {
         accessorKey: 'dañado',
         header: 'Dañado',
         cell: ({ getValue }) => (
@@ -569,16 +562,6 @@ export function InventarioDashboardModule() {
             <div className="stat-content">
               <span className="stat-value">{totales.en_uso}</span>
               <span className="stat-label">En Uso</span>
-            </div>
-          </button>
-          <button
-            className={`stat-card${filterEstadoStock === 'en_transito' ? ' active' : ''}`}
-            onClick={() => setFilterEstadoStock(filterEstadoStock === 'en_transito' ? 'all' : 'en_transito')}
-          >
-            <Truck size={18} className="stat-icon" />
-            <div className="stat-content">
-              <span className="stat-value">{totales.en_transito}</span>
-              <span className="stat-label">En Tránsito</span>
             </div>
           </button>
           <button

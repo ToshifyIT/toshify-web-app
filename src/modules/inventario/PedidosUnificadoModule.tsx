@@ -2,7 +2,7 @@
 // Módulo unificado que combina Pedidos en Tránsito y Aprobaciones Pendientes
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { useState, useEffect, useMemo, useRef } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useLocation } from 'react-router-dom'
 import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../contexts/AuthContext'
 import { usePermissions } from '../../contexts/PermissionsContext'
@@ -213,6 +213,7 @@ const todayInputValue = () => new Date().toISOString().slice(0, 10)
 
 export function PedidosUnificadoModule() {
   const navigate = useNavigate()
+  const location = useLocation()
   const { user, profile } = useAuth()
   const { canCreateInSubmenu, canEditInSubmenu, canViewTab } = usePermissions()
   const { sedeActual, verTodas } = useSede()
@@ -276,6 +277,16 @@ export function PedidosUnificadoModule() {
   const canApprove = userRole === 'encargado' || userRole === 'admin' || userRole === 'supervisor'
 
   // ============= EFECTOS =============
+  // Abrir pestaña según ?tab= en la URL (ej. desde "Pendientes operativos" del Dashboard)
+  useEffect(() => {
+    const params = new URLSearchParams(location.search)
+    const tab = params.get('tab') as TabActiva | null
+    const validas: TabActiva[] = ['nuevo', 'entradas', 'pedidos', 'pendientes', 'historico', 'excepciones']
+    if (tab && validas.includes(tab)) {
+      setActiveTab(tab)
+    }
+  }, [location.search])
+
   useEffect(() => {
     loadPedidosData()
     cargarCatalogoPedido()
