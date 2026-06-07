@@ -2533,18 +2533,6 @@ export function PedidosUnificadoModule() {
               Nuevo Pedido
             </button>
           )}
-          {canViewTab('inventario-pedidos:entradas') && (
-            <button
-              className={`pedidos-tab ${activeTab === 'entradas' ? 'active' : ''}`}
-              onClick={() => setActiveTab('entradas')}
-            >
-              <ArrowDownCircle size={16} />
-              Entradas Simples
-              {entradasSimples.length > 0 && (
-                <span className="pedidos-tab-badge">{entradasSimples.length}</span>
-              )}
-            </button>
-          )}
           {canViewTab('inventario-pedidos:pedidos') && (
             <button
               className={`pedidos-tab ${activeTab === 'pedidos' ? 'active' : ''}`}
@@ -2554,6 +2542,18 @@ export function PedidosUnificadoModule() {
               Pedidos a proveedor
               {pedidos.length > 0 && (
                 <span className="pedidos-tab-badge">{pedidos.length}</span>
+              )}
+            </button>
+          )}
+          {canViewTab('inventario-pedidos:entradas') && (
+            <button
+              className={`pedidos-tab ${activeTab === 'entradas' ? 'active' : ''}`}
+              onClick={() => setActiveTab('entradas')}
+            >
+              <ArrowDownCircle size={16} />
+              Entradas Simples
+              {entradasSimples.length > 0 && (
+                <span className="pedidos-tab-badge">{entradasSimples.length}</span>
               )}
             </button>
           )}
