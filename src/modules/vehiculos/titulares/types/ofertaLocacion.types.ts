@@ -26,7 +26,7 @@ export interface OfertaLocacion {
   fecha_ingreso: string | null
   fecha_inicio_alquiler: string | null
   canon_mensual: number | null
-  socio: '44dreams' | 'grupocg' | null
+  socio: string | null
 
   // Estado del vehículo
   nivel_nafta: string | null
@@ -109,7 +109,7 @@ export interface OfertaLocacionFormData {
   fecha_ingreso: string
   fecha_inicio_alquiler: string
   canon_mensual: number | null
-  socio: '44dreams' | 'grupocg' | ''
+  socio: string
 
   // Estado del vehículo
   nivel_nafta: string

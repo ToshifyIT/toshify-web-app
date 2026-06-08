@@ -100,6 +100,32 @@
   background: var(--color-primary-hover);
 }
 
+/* Detail grid */
+.gf-detail-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+
+.gf-detail-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.gf-detail-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-tertiary);
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+
+.gf-detail-value {
+  font-size: 13px;
+  color: var(--text-primary);
+}
+
 /* Responsive */
 @media (max-width: 768px) {
   .gf-stats-grid {

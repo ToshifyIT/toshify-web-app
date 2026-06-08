@@ -1313,7 +1313,7 @@ export function ProgramacionModule() {
             .select('propietario')
             .eq('id', prog.id)
             .single()
-          propietarioValue = progDB?.propietario || 'grupo_cg'
+          propietarioValue = progDB?.propietario || ''
         }
 
         const contractParams = {

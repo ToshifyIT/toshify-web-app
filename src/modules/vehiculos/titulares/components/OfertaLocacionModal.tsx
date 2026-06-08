@@ -506,14 +506,8 @@ export function OfertaLocacionModal({ vehiculoTitular, titular, sedeId, userId, 
                   <select style={inputStyle} value={formData.socio} onChange={e => updateField('socio', e.target.value)}>
                     <option value="">Seleccionar...</option>
                     {gruposFlota.map(g => (
-                      <option key={g.codigo} value={g.valor_socio || g.codigo}>{g.nombre_comercial}</option>
+                      <option key={g.codigo} value={g.razon_social}>{g.razon_social}</option>
                     ))}
-                    {gruposFlota.length === 0 && (
-                      <>
-                        <option value="grupocg">Grupo CG</option>
-                        <option value="44dreams">44 Dreams</option>
-                      </>
-                    )}
                   </select>
                 </div>
               </div>

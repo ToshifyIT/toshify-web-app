@@ -99,7 +99,7 @@ export function OfertaLocacionListModule() {
       title: 'Generar documento',
       html: `<p>Se generara el documento de Oferta de Locacion para:</p>
         <p style="margin-top:8px;"><b>${oferta.patente}</b> - ${oferta.titular_nombre}</p>
-        <p style="margin-top:4px;">Socio: <b>${oferta.socio === 'grupocg' ? 'Grupo CG' : '44 Dreams'}</b></p>`,
+        <p style="margin-top:4px;">Socio: <b>${oferta.socio || '-'}</b></p>`,
       icon: 'question',
       showCancelButton: true,
       confirmButtonText: 'Generar',
@@ -255,9 +255,10 @@ export function OfertaLocacionListModule() {
       cell: ({ row }) => {
         const s = row.original.socio
         if (!s) return '-'
-        const label = s === 'grupocg' ? 'Grupo CG' : '44 Dreams'
-        const bg = s === 'grupocg' ? '#dbeafe' : '#fef3c7'
-        const color = s === 'grupocg' ? '#1d4ed8' : '#92400e'
+        const label = s
+        const es44Dreams = s.includes('44 DREAMS') || s === '44dreams'
+        const bg = es44Dreams ? '#fef3c7' : '#dbeafe'
+        const color = es44Dreams ? '#92400e' : '#1d4ed8'
         return (
           <span style={{ padding: '2px 8px', borderRadius: '12px', fontSize: '11px', fontWeight: 500, background: bg, color }}>
             {label}

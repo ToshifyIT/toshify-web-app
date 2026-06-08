@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react'
-import { Users, Building2, Plus, Edit, Trash2, X, CheckCircle, XCircle } from 'lucide-react'
+import { Users, Building2, Plus, Edit, Trash2, X, CheckCircle, XCircle, Eye } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { DataTable } from '../../components/ui/DataTable'
 import { type ColumnDef } from '@tanstack/react-table'
@@ -19,9 +19,6 @@ interface GrupoFlota {
   email: string | null
   telefono: string | null
   prioridad: number
-  valor_vehiculo: string | null
-  valor_propietario: string | null
-  valor_socio: string | null
   drive_folder_contratos: string | null
   drive_folder_ofertas: string | null
   prefijo_oferta: string | null
@@ -31,24 +28,17 @@ interface GrupoFlota {
   updated_at: string
 }
 
-const EMPTY_FORM: Omit<GrupoFlota, 'id' | 'created_at' | 'updated_at'> = {
-  codigo: '',
-  nombre_comercial: '',
+const EMPTY_FORM = {
   razon_social: '',
   cuit: '',
   representante_nombre: '',
   representante_dni: '',
   email: '',
   telefono: '',
-  prioridad: 99,
-  valor_vehiculo: '',
-  valor_propietario: '',
-  valor_socio: '',
   drive_folder_contratos: '',
   drive_folder_ofertas: '',
-  prefijo_oferta: '',
   activo: true,
-  sede_id: null,
+  sede_id: null as string | null,
 }
 
 export function GruposFlotaModule() {
@@ -61,6 +51,8 @@ export function GruposFlotaModule() {
   const [formData, setFormData] = useState(EMPTY_FORM)
   const [saving, setSaving] = useState(false)
   const [activeStatCard, setActiveStatCard] = useState<string | null>(null)
+  const [showDetail, setShowDetail] = useState(false)
+  const [detailGrupo, setDetailGrupo] = useState<GrupoFlota | null>(null)
 
   useEffect(() => {
     loadGrupos()
@@ -72,7 +64,6 @@ export function GruposFlotaModule() {
     try {
       const { data, error: fetchError } = await (supabase.from('grupos_flota') as any)
         .select('*')
-        .order('prioridad', { ascending: true })
         .order('nombre_comercial', { ascending: true })
       if (fetchError) throw fetchError
       setGrupos(data || [])
@@ -112,21 +103,14 @@ export function GruposFlotaModule() {
   function openEditModal(grupo: GrupoFlota) {
     setSelectedGrupo(grupo)
     setFormData({
-      codigo: grupo.codigo,
-      nombre_comercial: grupo.nombre_comercial,
       razon_social: grupo.razon_social,
       cuit: grupo.cuit,
       representante_nombre: grupo.representante_nombre,
       representante_dni: grupo.representante_dni,
       email: grupo.email || '',
       telefono: grupo.telefono || '',
-      prioridad: grupo.prioridad,
-      valor_vehiculo: grupo.valor_vehiculo || '',
-      valor_propietario: grupo.valor_propietario || '',
-      valor_socio: grupo.valor_socio || '',
       drive_folder_contratos: grupo.drive_folder_contratos || '',
       drive_folder_ofertas: grupo.drive_folder_ofertas || '',
-      prefijo_oferta: grupo.prefijo_oferta || '',
       activo: grupo.activo,
       sede_id: grupo.sede_id,
     })
@@ -136,14 +120,6 @@ export function GruposFlotaModule() {
 
   async function handleSave() {
     // Validaciones obligatorias
-    if (!formData.codigo.trim()) {
-      Swal.fire('Error', 'El codigo es obligatorio', 'warning')
-      return
-    }
-    if (!formData.nombre_comercial.trim()) {
-      Swal.fire('Error', 'El nombre comercial es obligatorio', 'warning')
-      return
-    }
     if (!formData.razon_social.trim()) {
       Swal.fire('Error', 'La razon social es obligatoria', 'warning')
       return
@@ -163,25 +139,25 @@ export function GruposFlotaModule() {
 
     setSaving(true)
     try {
-      const payload = {
-        codigo: formData.codigo.trim().toLowerCase().replace(/\s+/g, '_'),
-        nombre_comercial: formData.nombre_comercial.trim(),
-        razon_social: formData.razon_social.trim(),
+      const razonTrimmed = formData.razon_social.trim()
+      const codigoAuto = razonTrimmed.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '')
+      const payload: Record<string, unknown> = {
+        razon_social: razonTrimmed,
         cuit: formData.cuit.trim(),
         representante_nombre: formData.representante_nombre.trim(),
         representante_dni: formData.representante_dni.trim(),
         email: formData.email?.trim() || null,
         telefono: formData.telefono?.trim() || null,
-        prioridad: formData.prioridad || 99,
-        valor_vehiculo: formData.valor_vehiculo?.trim() || null,
-        valor_propietario: formData.valor_propietario?.trim() || null,
-        valor_socio: formData.valor_socio?.trim() || null,
         drive_folder_contratos: formData.drive_folder_contratos?.trim() || null,
         drive_folder_ofertas: formData.drive_folder_ofertas?.trim() || null,
-        prefijo_oferta: formData.prefijo_oferta?.trim() || null,
         activo: formData.activo,
         sede_id: formData.sede_id || null,
         updated_at: new Date().toISOString(),
+      }
+      // Auto-generar codigo y nombre_comercial solo al crear
+      if (modalMode === 'create') {
+        payload.codigo = codigoAuto
+        payload.nombre_comercial = razonTrimmed
       }
 
       if (modalMode === 'edit' && selectedGrupo) {
@@ -232,17 +208,9 @@ export function GruposFlotaModule() {
 
   const columns = useMemo<ColumnDef<GrupoFlota>[]>(() => [
     {
-      accessorKey: 'nombre_comercial',
-      header: 'Nombre',
-      cell: ({ row }) => (
-        <span style={{ fontWeight: 600, fontSize: '13px' }}>{row.original.nombre_comercial}</span>
-      ),
-      enableSorting: true,
-    },
-    {
       accessorKey: 'razon_social',
       header: 'Razon Social',
-      cell: ({ getValue }) => <span style={{ fontSize: '12px' }}>{getValue() as string}</span>,
+      cell: ({ getValue }) => <span style={{ fontWeight: 600, fontSize: '13px' }}>{getValue() as string}</span>,
       enableSorting: true,
     },
     {
@@ -264,12 +232,6 @@ export function GruposFlotaModule() {
       enableSorting: false,
     },
     {
-      accessorKey: 'prioridad',
-      header: 'Prioridad',
-      cell: ({ getValue }) => <span style={{ fontSize: '12px', fontWeight: 600 }}>{getValue() as number}</span>,
-      enableSorting: true,
-    },
-    {
       accessorKey: 'activo',
       header: 'Estado',
       cell: ({ row }) => (
@@ -284,6 +246,9 @@ export function GruposFlotaModule() {
       header: 'Acciones',
       cell: ({ row }) => (
         <div style={{ display: 'flex', gap: '8px' }}>
+          <button className="gf-action-btn" onClick={() => { setDetailGrupo(row.original); setShowDetail(true) }} title="Ver detalle">
+            <Eye size={15} />
+          </button>
           <button className="gf-action-btn" onClick={() => openEditModal(row.original)} title="Editar">
             <Edit size={15} />
           </button>
@@ -372,27 +337,6 @@ export function GruposFlotaModule() {
               </h3>
               <div className="form-row">
                 <div className="form-group">
-                  <label>Codigo <span className="required">*</span></label>
-                  <input
-                    type="text"
-                    value={formData.codigo}
-                    onChange={(e) => updateField('codigo', e.target.value)}
-                    placeholder="ej: grupo_cg"
-                    disabled={modalMode === 'edit'}
-                  />
-                </div>
-                <div className="form-group">
-                  <label>Nombre Comercial <span className="required">*</span></label>
-                  <input
-                    type="text"
-                    value={formData.nombre_comercial}
-                    onChange={(e) => updateField('nombre_comercial', e.target.value)}
-                    placeholder="ej: GRUPO CG"
-                  />
-                </div>
-              </div>
-              <div className="form-row">
-                <div className="form-group">
                   <label>Razon Social <span className="required">*</span></label>
                   <input
                     type="text"
@@ -457,18 +401,7 @@ export function GruposFlotaModule() {
                 <Building2 size={16} />
                 Configuracion
               </h3>
-              <div className="form-row" style={{ gridTemplateColumns: '1fr 1fr 1fr' }}>
-                <div className="form-group">
-                  <label>Prioridad</label>
-                  <input
-                    type="number"
-                    value={formData.prioridad}
-                    onChange={(e) => updateField('prioridad', parseInt(e.target.value) || 99)}
-                    min={1}
-                    max={99}
-                  />
-                  <span className="gf-help-text">Menor = mayor prioridad en facturacion</span>
-                </div>
+              <div className="form-row">
                 <div className="form-group">
                   <label>Estado</label>
                   <select
@@ -478,50 +411,6 @@ export function GruposFlotaModule() {
                     <option value="true">Activo</option>
                     <option value="false">Inactivo</option>
                   </select>
-                </div>
-                <div className="form-group">
-                  <label>Prefijo Oferta</label>
-                  <input
-                    type="text"
-                    value={formData.prefijo_oferta || ''}
-                    onChange={(e) => updateField('prefijo_oferta', e.target.value)}
-                    placeholder="Oferta de Locacion"
-                  />
-                </div>
-              </div>
-
-              {/* Valores legacy (mapeo) */}
-              <h3 className="gf-section-title" style={{ marginTop: '24px' }}>
-                Mapeo Legacy
-                <span className="gf-help-text" style={{ marginLeft: '8px', fontWeight: 400 }}>Valores usados en tablas existentes</span>
-              </h3>
-              <div className="form-row" style={{ gridTemplateColumns: '1fr 1fr 1fr' }}>
-                <div className="form-group">
-                  <label>Valor Vehiculo</label>
-                  <input
-                    type="text"
-                    value={formData.valor_vehiculo || ''}
-                    onChange={(e) => updateField('valor_vehiculo', e.target.value)}
-                    placeholder="ej: GRUPO CG SAS"
-                  />
-                </div>
-                <div className="form-group">
-                  <label>Valor Propietario</label>
-                  <input
-                    type="text"
-                    value={formData.valor_propietario || ''}
-                    onChange={(e) => updateField('valor_propietario', e.target.value)}
-                    placeholder="ej: grupo_cg"
-                  />
-                </div>
-                <div className="form-group">
-                  <label>Valor Socio</label>
-                  <input
-                    type="text"
-                    value={formData.valor_socio || ''}
-                    onChange={(e) => updateField('valor_socio', e.target.value)}
-                    placeholder="ej: grupocg"
-                  />
                 </div>
               </div>
 
@@ -554,6 +443,69 @@ export function GruposFlotaModule() {
               </button>
               <button className="btn-primary" onClick={handleSave} disabled={saving}>
                 {saving ? 'Guardando...' : (modalMode === 'create' ? 'Crear Grupo' : 'Guardar Cambios')}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Detalle */}
+      {showDetail && detailGrupo && (
+        <div className="modal-overlay" onClick={() => setShowDetail(false)}>
+          <div className="modal-content" style={{ maxWidth: '600px' }} onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h2>Detalle del Grupo</h2>
+              <button className="modal-close" onClick={() => setShowDetail(false)}><X size={18} /></button>
+            </div>
+            <div className="modal-body">
+              <div className="gf-detail-grid">
+                <div className="gf-detail-item">
+                  <span className="gf-detail-label">Razon Social</span>
+                  <span className="gf-detail-value">{detailGrupo.razon_social}</span>
+                </div>
+                <div className="gf-detail-item">
+                  <span className="gf-detail-label">CUIT</span>
+                  <span className="gf-detail-value" style={{ fontFamily: 'monospace' }}>{detailGrupo.cuit}</span>
+                </div>
+                <div className="gf-detail-item">
+                  <span className="gf-detail-label">Representante Legal</span>
+                  <span className="gf-detail-value">{detailGrupo.representante_nombre}</span>
+                </div>
+                <div className="gf-detail-item">
+                  <span className="gf-detail-label">DNI Representante</span>
+                  <span className="gf-detail-value" style={{ fontFamily: 'monospace' }}>{detailGrupo.representante_dni}</span>
+                </div>
+                <div className="gf-detail-item">
+                  <span className="gf-detail-label">Email</span>
+                  <span className="gf-detail-value">{detailGrupo.email || '-'}</span>
+                </div>
+                <div className="gf-detail-item">
+                  <span className="gf-detail-label">Telefono</span>
+                  <span className="gf-detail-value">{detailGrupo.telefono || '-'}</span>
+                </div>
+                <div className="gf-detail-item">
+                  <span className="gf-detail-label">Estado</span>
+                  <span className={`gf-status-badge ${detailGrupo.activo ? 'gf-status-active' : 'gf-status-inactive'}`}>
+                    {detailGrupo.activo ? 'Activo' : 'Inactivo'}
+                  </span>
+                </div>
+                <div className="gf-detail-item">
+                  <span className="gf-detail-label">Drive Contratos</span>
+                  <span className="gf-detail-value" style={{ fontSize: '11px', wordBreak: 'break-all' }}>{detailGrupo.drive_folder_contratos || '-'}</span>
+                </div>
+                <div className="gf-detail-item">
+                  <span className="gf-detail-label">Drive Ofertas</span>
+                  <span className="gf-detail-value" style={{ fontSize: '11px', wordBreak: 'break-all' }}>{detailGrupo.drive_folder_ofertas || '-'}</span>
+                </div>
+              </div>
+            </div>
+            <div className="modal-footer">
+              <button className="btn-secondary" onClick={() => setShowDetail(false)}>
+                Cerrar
+              </button>
+              <button className="btn-primary" onClick={() => { setShowDetail(false); openEditModal(detailGrupo) }}>
+                <Edit size={14} style={{ marginRight: '6px' }} />
+                Editar
               </button>
             </div>
           </div>

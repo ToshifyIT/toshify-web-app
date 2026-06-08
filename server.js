@@ -787,13 +787,13 @@ const CONTRACT_CONFIG = {
   nameToshify: 'MARCIAL JOSUE CARIDE GUZMAN',
   amounts: { diurno: '299.000', nocturno: '229.000' },
   propietarios: {
-    grupo_cg: {
+    'GRUPO CG S.A.S.': {
       owner: 'GRUPO CG S.A.S.',
       cuit_owner: '30-71834000-0',
       name_owner: 'MARCIAL JOSUE CARIDE GUZMAN',
       dni_owner: '36.802.416'
     },
-    '44_dreams': {
+    '44 DREAMS S.R.L.': {
       owner: '44 DREAMS S.R.L.',
       cuit_owner: '30-71934409-3',
       name_owner: 'RAUL GONZALO QUILODRAN LLAMAS',
@@ -803,8 +803,7 @@ const CONTRACT_CONFIG = {
 }
 
 /**
- * Busca datos de un grupo de flota desde la tabla grupos_flota.
- * Usa valor_propietario para contratos y valor_socio para ofertas.
+ * Busca datos de un grupo de flota desde la tabla grupos_flota por razon_social.
  * Retorna null si no se encuentra (el caller debe usar fallback hardcodeado).
  */
 async function getGrupoFlotaData(lookupField, lookupValue) {
@@ -1199,10 +1198,10 @@ async function generateContractForConductor({
   // no al generar el contrato. Dejarlo como placeholder via nullGetter.
 
   // Variables de propietario (busca en grupos_flota, fallback a hardcode)
-  const grupoFlotaDB = await getGrupoFlotaData('valor_propietario', propietario)
+  const grupoFlotaDB = await getGrupoFlotaData('razon_social', propietario)
   const ownerData = grupoFlotaDB
     ? { owner: grupoFlotaDB.razon_social, cuit_owner: grupoFlotaDB.cuit, name_owner: grupoFlotaDB.representante_nombre, dni_owner: grupoFlotaDB.representante_dni }
-    : (CONTRACT_CONFIG.propietarios[propietario] || CONTRACT_CONFIG.propietarios['grupo_cg'])
+    : (CONTRACT_CONFIG.propietarios[propietario] || CONTRACT_CONFIG.propietarios['GRUPO CG S.A.S.'])
   addIfPresent('OWNER', ownerData.owner)
   addIfPresent('CUIT_OWNER', ownerData.cuit_owner)
   addIfPresent('NAME_OWNER', ownerData.name_owner)
@@ -1297,7 +1296,7 @@ app.post('/api/generate-contract', async (req, res) => {
       modalidad,           // 'turno' | 'a_cargo'
       sede_id,
       programacion_id,     // UUID de la programación creada
-      propietario,         // 'grupo_cg' | '44_dreams'
+      propietario,         // razon_social del grupo de flota
       created_by,
       created_by_name
     } = req.body
@@ -2367,15 +2366,15 @@ function buildOfertaReemplazos(o) {
 const OFERTA_LOCACION_CONFIG = {
   // Plantilla única (por ahora) - Google Doc ID
   templateDocId: '1eIOgzQxDVP_wLKXk54M6RgRIzSARmF0YYp0Eq7wIjFY',
-  // Carpetas padre por socio
+  // Carpetas padre por socio (key = razon_social)
   folders: {
-    grupocg: '1f4PMF-9GpUIdQuNk8yCF3Wm3-3eYhw18',
-    '44dreams': '1epZywKt7Pmcj988L65-BW2rkDu7mvJay'
+    'GRUPO CG S.A.S.': '1f4PMF-9GpUIdQuNk8yCF3Wm3-3eYhw18',
+    '44 DREAMS S.R.L.': '1epZywKt7Pmcj988L65-BW2rkDu7mvJay'
   },
-  // Prefijo del nombre del documento por socio
+  // Prefijo del nombre del documento por socio (key = razon_social)
   prefijo: {
-    grupocg: 'Oferta de Locación',
-    '44dreams': 'Oferta de Locación 44 Dream'
+    'GRUPO CG S.A.S.': 'Oferta de Locación',
+    '44 DREAMS S.R.L.': 'Oferta de Locación 44 Dream'
   }
 }
 
@@ -2386,7 +2385,7 @@ const OFERTA_LOCACION_CONFIG = {
 async function generateOfertaLocacionDoc(drive, oferta) {
   const socio = oferta.socio
   // Buscar datos del grupo desde la tabla, fallback a hardcode
-  const grupoFlotaDB = await getGrupoFlotaData('valor_socio', socio)
+  const grupoFlotaDB = await getGrupoFlotaData('razon_social', socio)
   const parentFolderId = grupoFlotaDB?.drive_folder_ofertas || OFERTA_LOCACION_CONFIG.folders[socio]
   const prefijo = grupoFlotaDB?.prefijo_oferta || OFERTA_LOCACION_CONFIG.prefijo[socio]
 
@@ -2424,13 +2423,16 @@ async function generateOfertaLocacionDoc(drive, oferta) {
   // Datos del socio desde grupos_flota
   if (grupoFlotaDB) {
     renderData['SOCIO'] = (grupoFlotaDB.razon_social || grupoFlotaDB.nombre_comercial || '').toUpperCase()
-    renderData['REPRESENTANTE_LEGAL'] = (grupoFlotaDB.representante_nombre || '').toUpperCase()
+    renderData['FLEET_GROUP'] = (grupoFlotaDB.razon_social || grupoFlotaDB.nombre_comercial || '').toUpperCase()
+    renderData['CUIT_FLEET_GROUP'] = grupoFlotaDB.cuit || ''
+    renderData['FLEET_GROUP_LEGAL_REPRESENTATIVE'] = (grupoFlotaDB.representante_nombre || '').toUpperCase()
   } else {
-    // Fallback hardcodeado
-    const fallbackSocio = OFERTA_LOCACION_CONFIG.folders[socio] ? socio : ''
-    const propietarioData = CONTRACT_CONFIG.propietarios[socio === 'grupocg' ? 'grupo_cg' : socio === '44dreams' ? '44_dreams' : '']
-    renderData['SOCIO'] = propietarioData?.owner || fallbackSocio.toUpperCase()
-    renderData['REPRESENTANTE_LEGAL'] = propietarioData?.name_owner || ''
+    // Fallback hardcodeado (keys = razon_social)
+    const propietarioData = CONTRACT_CONFIG.propietarios[socio]
+    renderData['SOCIO'] = propietarioData?.owner || socio || ''
+    renderData['FLEET_GROUP'] = propietarioData?.owner || socio || ''
+    renderData['CUIT_FLEET_GROUP'] = propietarioData?.cuit_owner || ''
+    renderData['FLEET_GROUP_LEGAL_REPRESENTATIVE'] = propietarioData?.name_owner || ''
   }
 
   // Manejar el bloque {{SPOUSE SIGN}}

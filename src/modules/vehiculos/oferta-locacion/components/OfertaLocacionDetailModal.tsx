@@ -104,7 +104,7 @@ export function OfertaLocacionDetailModal({ oferta, onClose }: Props) {
             <div><div style={labelStyle}>Fecha Ingreso</div><div style={valueStyle}>{formatDate(o.fecha_ingreso)}</div></div>
             <div><div style={labelStyle}>Inicio Alquiler</div><div style={valueStyle}>{formatDate(o.fecha_inicio_alquiler)}</div></div>
             <div><div style={labelStyle}>Canon Mensual</div><div style={valueStyle}>{formatMoney(o.canon_mensual)}</div></div>
-            <div><div style={labelStyle}>Socio</div><div style={valueStyle}>{o.socio === 'grupocg' ? 'Grupo CG' : o.socio === '44dreams' ? '44 Dreams' : '-'}</div></div>
+            <div><div style={labelStyle}>Socio</div><div style={valueStyle}>{o.socio || '-'}</div></div>
           </div>
 
           <div style={sectionTitle}>Estado del Vehiculo</div>
