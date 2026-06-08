@@ -1159,7 +1159,7 @@ export function ReporteFacturacionTab() {
       // Calcular grupo_flota GANADOR por conductor en la semana (44 DREAMS gana siempre que aparezca)
       // Regla: si en la semana usó al menos 1 día un vehículo de 44 DREAMS, ese es el grupo asociado.
       // Si no, toma el primer grupo no-nulo que encuentre.
-      const GRUPO_44_DREAMS = '44 DREAMS S.R.L'
+      const es44Dreams = (g: string) => g.includes('44 DREAMS')
       const fechaInicioPeriodoLoad = parseISO((periodoData as any).fecha_inicio)
       const fechaFinPeriodoLoadGrupo = parseISO((periodoData as any).fecha_fin)
       const grupoFlotaGanadorMap = new Map<string, string | null>()
@@ -1177,10 +1177,10 @@ export function ReporteFacturacionTab() {
         if (!grupo) continue
         const actual = grupoFlotaGanadorMap.get(condId)
         // Si ya está marcado con 44 DREAMS, no se sobrescribe
-        if (actual === GRUPO_44_DREAMS) continue
+        if (actual && es44Dreams(actual)) continue
         // Si este es 44 DREAMS, gana siempre
-        if (grupo === GRUPO_44_DREAMS) {
-          grupoFlotaGanadorMap.set(condId, GRUPO_44_DREAMS)
+        if (es44Dreams(grupo)) {
+          grupoFlotaGanadorMap.set(condId, grupo)
         } else if (!actual) {
           // Si no había nada, poner este
           grupoFlotaGanadorMap.set(condId, grupo)
@@ -1676,7 +1676,7 @@ export function ReporteFacturacionTab() {
       ])
 
       // Calcular grupo_flota GANADOR por DNI para vista previa (44 DREAMS gana siempre)
-      const GRUPO_44_DREAMS_VP = '44 DREAMS S.R.L'
+      const es44DreamsVP = (g: string) => g.includes('44 DREAMS')
       const grupoFlotaGanadorVPMap = new Map<string, string | null>()
       {
         const semInicioGrupo = parseISO(fechaInicio)
@@ -1694,9 +1694,9 @@ export function ReporteFacturacionTab() {
           if (!grupo) continue
           const dni = cond.numero_dni
           const actual = grupoFlotaGanadorVPMap.get(dni)
-          if (actual === GRUPO_44_DREAMS_VP) continue
-          if (grupo === GRUPO_44_DREAMS_VP) {
-            grupoFlotaGanadorVPMap.set(dni, GRUPO_44_DREAMS_VP)
+          if (actual && es44DreamsVP(actual)) continue
+          if (es44DreamsVP(grupo)) {
+            grupoFlotaGanadorVPMap.set(dni, grupo)
           } else if (!actual) {
             grupoFlotaGanadorVPMap.set(dni, grupo)
           }

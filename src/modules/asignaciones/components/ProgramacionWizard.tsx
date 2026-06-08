@@ -16,8 +16,7 @@ import type {
   TurnoOnboarding,
   ModalidadOnboarding,
   ZonaOnboarding,
-  TipoDocumento,
-  Propietario
+  TipoDocumento
 } from '../../../types/onboarding.types'
 import type { ConductorBasic } from '../../../types/conductor.types'
 import { useGruposFlota } from '../../../hooks/useGruposFlota'
@@ -83,7 +82,7 @@ export function ProgramacionWizard({ onClose, onSuccess, initialData, editingDat
         citado_ypf: editingData.citado_ypf || false,
         estado_cabify: editingData.estado_cabify || 'pendiente',
         especialista_nombre: editingData.especialista_nombre || '',
-        propietario: (editingData.propietario as Propietario) || 'grupo_cg',
+        propietario: editingData.propietario || '',
         observaciones: editingData.observaciones || '',
         ...initialData
       }
@@ -112,7 +111,7 @@ export function ProgramacionWizard({ onClose, onSuccess, initialData, editingDat
       citado_ypf: false,
       estado_cabify: 'pendiente',
         especialista_nombre: '',
-      propietario: 'grupo_cg',
+      propietario: '',
       observaciones: '',
       ...initialData
     }
@@ -608,18 +607,13 @@ export function ProgramacionWizard({ onClose, onSuccess, initialData, editingDat
                     <div className="form-group">
                       <label>Propietario</label>
                       <select
-                        value={formData.propietario || 'grupo_cg'}
-                        onChange={e => setFormData(prev => ({ ...prev, propietario: e.target.value as Propietario }))}
+                        value={formData.propietario || ''}
+                        onChange={e => setFormData(prev => ({ ...prev, propietario: e.target.value }))}
                       >
+                        <option value="" disabled>Seleccionar...</option>
                         {gruposFlota.map(g => (
-                          <option key={g.codigo} value={g.valor_propietario || g.codigo}>{g.nombre_comercial}</option>
+                          <option key={g.codigo} value={g.razon_social}>{g.razon_social}</option>
                         ))}
-                        {gruposFlota.length === 0 && (
-                          <>
-                            <option value="grupo_cg">GRUPO CG</option>
-                            <option value="44_dreams">44 DREAMS</option>
-                          </>
-                        )}
                       </select>
                     </div>
                   </div>

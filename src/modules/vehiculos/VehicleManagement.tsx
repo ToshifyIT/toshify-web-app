@@ -1700,20 +1700,12 @@ export function VehicleManagement() {
   }, [vehiculos])
 
   const gruposFlotaExistentes = useMemo(() => {
-    // Leer de la tabla grupos_flota (valor_vehiculo es el texto que se guarda en vehiculos.grupo_flota)
-    if (gruposFlotaDB.length > 0) {
-      return gruposFlotaDB
-        .filter(g => g.valor_vehiculo)
-        .map(g => g.valor_vehiculo as string)
-    }
-    // Fallback: valores unicos de vehiculos cargados
-    const grupos = new Set<string>()
-    vehiculos.forEach(v => {
-      const g = (v as any).grupo_flota
-      if (g) grupos.add(g)
-    })
-    return Array.from(grupos).sort()
-  }, [vehiculos, gruposFlotaDB])
+    // Solo valores de la tabla grupos_flota (razon_social)
+    return gruposFlotaDB
+      .filter(g => g.razon_social)
+      .map(g => g.razon_social)
+      .sort()
+  }, [gruposFlotaDB])
 
   // Valores únicos para filtros tipo Excel
   const patentesUnicas = useMemo(() => {

@@ -34,8 +34,8 @@ export type EstadoCabify = 'pendiente' | 'listo_cabify' | 'asignar_auto' | 'crea
 // Tipo documento
 export type TipoDocumento = 'carta_oferta' | 'anexo' | 'na'
 
-// Propietario
-export type Propietario = 'grupo_cg' | '44_dreams'
+// Propietario (razon_social del grupo de flota)
+export type Propietario = string
 
 // Interfaz principal de Programación Onboarding
 export interface ProgramacionOnboarding {

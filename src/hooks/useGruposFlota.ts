@@ -6,9 +6,6 @@ export interface GrupoFlotaOption {
   codigo: string
   nombre_comercial: string
   razon_social: string
-  valor_vehiculo: string | null
-  valor_propietario: string | null
-  valor_socio: string | null
 }
 
 /**
@@ -22,7 +19,7 @@ export function useGruposFlota() {
   useEffect(() => {
     async function load() {
       const { data } = await (supabase.from('grupos_flota') as any)
-        .select('id, codigo, nombre_comercial, razon_social, valor_vehiculo, valor_propietario, valor_socio')
+        .select('id, codigo, nombre_comercial, razon_social')
         .eq('activo', true)
         .order('prioridad', { ascending: true })
       setGrupos(data || [])

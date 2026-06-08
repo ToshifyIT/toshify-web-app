@@ -107,8 +107,9 @@ export function CabifyPreviewTable({
 
   // Mapeo patente -> grupo_flota (cargado desde vehiculos)
   const [grupoFlotaMap, setGrupoFlotaMap] = useState<Map<string, string | null>>(new Map())
-  // Filtro de grupo de flota (default: GRUPO CG SAS)
-  const [filtroGrupoFlota, setFiltroGrupoFlota] = useState<string | null>('GRUPO CG SAS')
+  // Filtro de grupo de flota (default: primer grupo que contenga GRUPO CG, o null)
+  const [filtroGrupoFlota, setFiltroGrupoFlota] = useState<string | null>(null)
+  const [filtroGrupoFlotaIniciado, setFiltroGrupoFlotaIniciado] = useState(false)
   const [grupoDropdownOpen, setGrupoDropdownOpen] = useState(false)
   const [grupoBusqueda, setGrupoBusqueda] = useState('')
   const grupoDropdownRef = useRef<HTMLDivElement>(null)
@@ -154,6 +155,15 @@ export function CabifyPreviewTable({
     })
     return Array.from(set).sort()
   }, [initialData, grupoFlotaMap])
+
+  // Default: primer grupo que contenga "GRUPO CG" (cubre "GRUPO CG SAS" y "GRUPO CG S.A.S.")
+  useEffect(() => {
+    if (!filtroGrupoFlotaIniciado && gruposDisponibles.length > 0) {
+      const grupoCG = gruposDisponibles.find(g => g.includes('GRUPO CG'))
+      setFiltroGrupoFlota(grupoCG || gruposDisponibles[0])
+      setFiltroGrupoFlotaIniciado(true)
+    }
+  }, [gruposDisponibles, filtroGrupoFlotaIniciado])
 
   const gruposFiltrados = useMemo(() => {
     if (!grupoBusqueda.trim()) return gruposDisponibles
