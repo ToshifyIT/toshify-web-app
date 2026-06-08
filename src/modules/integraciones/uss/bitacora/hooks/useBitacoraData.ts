@@ -33,6 +33,18 @@ interface AsignacionActiva {
   conductores: ConductorTurno[]
 }
 
+// Tramo de asignacion de un conductor (para resolver el TURNO por conductor + fecha).
+// El turno NO se deriva de la patente USS sino de la asignacion vigente del conductor
+// en la fecha de la marcacion (asignaciones_conductores.horario).
+interface TramoConductor {
+  conductor_id: string
+  conductor_nombre: string // normalizado (lower) para match por nombre cuando falta conductor_id
+  turno: string | null     // diurno | nocturno | todo_dia
+  modalidad: string | null // turno | a_cargo
+  fecha_inicio: string     // YYYY-MM-DD
+  fecha_fin: string | null // YYYY-MM-DD o null (vigente)
+}
+
 // Helpers para fechas - Usando zona horaria Argentina
 const TIMEZONE_ARGENTINA = 'America/Argentina/Buenos_Aires'
 
@@ -67,6 +79,55 @@ function getStartOfMonth(): string {
   return toArgentinaDateString(date)
 }
 
+/**
+ * Resuelve la asignacion vigente DEL CONDUCTOR en la fecha de la marcacion.
+ * Tanto la MODALIDAD (turno/a_cargo) como el TURNO (diurno/nocturno) dependen
+ * SOLO del conductor — del tipo de asignacion que tuvo esa semana —, NO de la
+ * patente/vehiculo que reporto USS.
+ * - Cruza por conductor_id; si la marcacion no lo trae, cae a match por nombre.
+ * - Elige el tramo cuyo rango [fecha_inicio, fecha_fin] contiene fecha_turno.
+ * Devuelve el tramo vigente (o null si no hay asignacion del conductor esa fecha).
+ */
+function resolverTramoPorConductor(
+  tramosPorConductor: Map<string, TramoConductor[]>,
+  conductorId: string | null,
+  conductorNombre: string | null,
+  fechaTurno: string,
+): TramoConductor | null {
+  const fecha = (fechaTurno || '').slice(0, 10)
+  if (!fecha) return null
+
+  // 1) Candidatos por conductor_id
+  let candidatos: TramoConductor[] | undefined = conductorId ? tramosPorConductor.get(conductorId) : undefined
+
+  // 2) Fallback: si no hay conductor_id (marcacion USS sin link), match por nombre
+  if ((!candidatos || candidatos.length === 0) && conductorNombre) {
+    const nombre = conductorNombre.toLowerCase()
+    candidatos = []
+    for (const tramos of tramosPorConductor.values()) {
+      for (const t of tramos) {
+        if (t.conductor_nombre && (nombre.includes(t.conductor_nombre) || t.conductor_nombre.includes(nombre))) {
+          candidatos.push(t)
+        }
+      }
+    }
+  }
+  if (!candidatos || candidatos.length === 0) return null
+
+  // 3) Tramo vigente en la fecha (fecha_inicio <= fecha <= fecha_fin|null)
+  return candidatos.find(t =>
+    t.fecha_inicio <= fecha && (t.fecha_fin === null || t.fecha_fin >= fecha)
+  ) || null
+}
+
+/** Mapea el horario del conductor al indicador de TURNO mostrado.
+ *  'todo_dia' (a_cargo) => null: a cargo NO tiene turno diurno/nocturno => "-". */
+function turnoIndicadorDeTramo(turno: string | null): string | null {
+  if (turno === 'diurno') return 'Diurno'
+  if (turno === 'nocturno') return 'Nocturno'
+  return null
+}
+
 export function useBitacoraData() {
   // Estado de fechas - Default a "Hoy" para datos en tiempo real
   const [dateRange, setDateRange] = useState<BitacoraDateRange>({
@@ -80,6 +141,8 @@ export function useBitacoraData() {
   const [stats, setStats] = useState<BitacoraStats | null>(null)
   const [totalCount, setTotalCount] = useState(0)
   const [asignaciones, setAsignaciones] = useState<Map<string, AsignacionActiva>>(new Map())
+  // Tramos de asignacion por conductor_id, para resolver el TURNO por conductor + fecha.
+  const [tramosPorConductor, setTramosPorConductor] = useState<Map<string, TramoConductor[]>>(new Map())
 
   // Estado de paginación
   const [page, setPage] = useState(1)
@@ -153,8 +216,38 @@ export function useBitacoraData() {
         }
       }
       setAsignaciones(map)
+
+      // ===== TURNO por conductor + fecha =====
+      // El turno NO depende de la patente USS sino de la asignacion vigente del
+      // conductor en la fecha de la marcacion. Traemos TODOS los tramos (sin filtrar
+      // por estado='activa') desde asignaciones_conductores con sus fechas y el
+      // horario (turno) + la modalidad de la asignacion padre. Indexamos por conductor_id.
+      const { data: tramosData } = await (supabase
+        .from('asignaciones_conductores')
+        .select('conductor_id, horario, fecha_inicio, fecha_fin, conductores(nombres, apellidos), asignaciones(modalidad)')
+        .order('fecha_inicio', { ascending: false }) as any)
+
+      const tramosMap = new Map<string, TramoConductor[]>()
+      const toDateStr = (v: string | null) => (v ? String(v).slice(0, 10) : null)
+      for (const t of (tramosData || [])) {
+        if (!t.conductor_id) continue
+        const cond = t.conductores
+        const nombreCompleto = cond ? `${cond.nombres} ${cond.apellidos}` : ''
+        const tramo: TramoConductor = {
+          conductor_id: t.conductor_id,
+          conductor_nombre: nombreCompleto.toLowerCase(),
+          turno: t.horario ?? null,
+          modalidad: t.asignaciones?.modalidad ?? null,
+          fecha_inicio: toDateStr(t.fecha_inicio) || '0000-01-01',
+          fecha_fin: toDateStr(t.fecha_fin),
+        }
+        if (!tramosMap.has(t.conductor_id)) tramosMap.set(t.conductor_id, [])
+        tramosMap.get(t.conductor_id)!.push(tramo)
+      }
+      setTramosPorConductor(tramosMap)
     } catch {
       setAsignaciones(new Map())
+      setTramosPorConductor(new Map())
     }
   }, [])
 
@@ -183,51 +276,38 @@ export function useBitacoraData() {
         wialonBitacoraService.getStats(dateRange.startDate, dateRange.endDate),
       ])
 
-      // Enriquecer registros: usar valores de DB como primario, cruzar con asignaciones para completar
+      // Enriquecer registros.
+      // MODALIDAD (tipo_turno) y TURNO (turno_indicador) dependen SOLO del CONDUCTOR:
+      // se resuelven desde su asignacion vigente en la fecha de la marcacion
+      // (por conductor_id, o por nombre si la marcacion no trae conductor_id),
+      // NO desde la patente/vehiculo que reporto USS.
+      // - modalidad: tramo.modalidad (turno | a_cargo)
+      // - turno: diurno/nocturno; 'todo_dia' (a_cargo) => "-" (a cargo no tiene turno).
+      // Si el conductor NO tiene asignacion esa fecha, se cae a lo que trajo el DB (compat).
       const registrosEnriquecidos = bitacoraResult.data.map((r) => {
-        const asignacion = asignaciones.get(r.patente_normalizada)
+        const tramo = resolverTramoPorConductor(
+          tramosPorConductor,
+          r.conductor_id,
+          r.conductor_wialon,
+          r.fecha_turno,
+        )
 
-        // Buscar conductor en la asignación para obtener turno específico
-        let conductorMatch: ConductorTurno | undefined
-        if (asignacion) {
-          const conductorWialon = r.conductor_wialon?.toLowerCase() || ''
-          conductorMatch = asignacion.conductores.find(c =>
-            conductorWialon && conductorWialon.includes(c.conductor_nombre.toLowerCase())
-          )
-          if (!conductorMatch && asignacion.conductores.length > 0) {
-            conductorMatch = asignacion.conductores[0]
-          }
-        }
-
-        // Si ya tiene tipo_turno del DB, usarlo pero completar turno_indicador si falta
-        if (r.tipo_turno) {
-          // turno_indicador falta cuando DB tiene horario='todo_dia' - cruzar con asignación
-          if (!r.turno_indicador && asignacion && conductorMatch?.turno) {
-            const turno = conductorMatch.turno
-            return {
-              ...r,
-              turno_indicador: turno === 'diurno' ? 'Diurno' : turno === 'nocturno' ? 'Nocturno' : null,
-            }
-          }
-          return r
-        }
-
-        // Sin tipo_turno del DB: cruzar completamente con asignaciones (registros antiguos)
-        if (asignacion) {
-          let turnoIndicador: string | null = null
-          if (asignacion.modalidad === 'turno' && conductorMatch?.turno) {
-            if (conductorMatch.turno === 'diurno') turnoIndicador = 'Diurno'
-            else if (conductorMatch.turno === 'nocturno') turnoIndicador = 'Nocturno'
-          }
-
+        if (tramo) {
           return {
             ...r,
-            conductor_wialon: conductorMatch?.conductor_completo || r.conductor_wialon,
-            tipo_turno: asignacion.modalidad,
-            turno_indicador: turnoIndicador,
+            tipo_turno: tramo.modalidad ?? r.tipo_turno ?? null,
+            turno_indicador: turnoIndicadorDeTramo(tramo.turno),
           }
         }
-        return r
+
+        // Fallback (sin asignacion del conductor en esa fecha): conservar DB,
+        // completando modalidad por patente si falta (compat. registros antiguos).
+        const asignacionPorPatente = asignaciones.get(r.patente_normalizada)
+        return {
+          ...r,
+          tipo_turno: r.tipo_turno ?? asignacionPorPatente?.modalidad ?? null,
+          turno_indicador: r.turno_indicador ?? null,
+        }
       })
 
       setRegistros(registrosEnriquecidos)
@@ -251,7 +331,7 @@ export function useBitacoraData() {
         setQueryState((prev) => ({ ...prev, lastUpdate: new Date() }))
       }
     }
-  }, [dateRange, page, pageSize, filterPatente, filterConductor, filterEstado, asignaciones])
+  }, [dateRange, page, pageSize, filterPatente, filterConductor, filterEstado, asignaciones, tramosPorConductor])
 
   // Cargar datos con loading visible (para carga inicial y cambios de filtros)
   const loadData = useCallback(() => fetchData(true), [fetchData])
