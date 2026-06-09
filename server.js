@@ -2426,6 +2426,7 @@ async function generateOfertaLocacionDoc(drive, oferta) {
     renderData['FLEET_GROUP'] = (grupoFlotaDB.razon_social || grupoFlotaDB.nombre_comercial || '').toUpperCase()
     renderData['CUIT_FLEET_GROUP'] = grupoFlotaDB.cuit || ''
     renderData['FLEET_GROUP_LEGAL_REPRESENTATIVE'] = (grupoFlotaDB.representante_nombre || '').toUpperCase()
+    renderData['FLEET_GROUP_LEGAL_REPRESENTATIVE_DNI'] = grupoFlotaDB.representante_dni || ''
   } else {
     // Fallback hardcodeado (keys = razon_social)
     const propietarioData = CONTRACT_CONFIG.propietarios[socio]
@@ -2433,6 +2434,7 @@ async function generateOfertaLocacionDoc(drive, oferta) {
     renderData['FLEET_GROUP'] = propietarioData?.owner || socio || ''
     renderData['CUIT_FLEET_GROUP'] = propietarioData?.cuit_owner || ''
     renderData['FLEET_GROUP_LEGAL_REPRESENTATIVE'] = propietarioData?.name_owner || ''
+    renderData['FLEET_GROUP_LEGAL_REPRESENTATIVE_DNI'] = propietarioData?.dni_owner || ''
   }
 
   // Manejar el bloque {{SPOUSE SIGN}}
