@@ -34,50 +34,59 @@ export function OfertaLocacionListModule() {
   const userId = user?.id || ''
 
   // Campos requeridos para el documento Word (basado en MAPA_VARIABLES del template)
-  const getCamposFaltantes = (o: OfertaLocacion): string[] => {
-    const faltantes: string[] = []
-    // Titular
-    if (!o.titular_nombre) faltantes.push('Nombre titular')
-    if (!o.titular_dni_cuit) faltantes.push('DNI')
-    if (!o.titular_domicilio) faltantes.push('Domicilio')
-    if (!o.titular_email) faltantes.push('Email')
-    if (!o.titular_cuit) faltantes.push('CUIT')
-    // Contrato
-    if (!o.fecha_inicio_alquiler) faltantes.push('Fecha inicio alquiler')
-    if (o.canon_mensual == null) faltantes.push('Canon mensual')
-    if (!o.socio) faltantes.push('Socio')
-    // Vehiculo
-    if (!o.patente) faltantes.push('Patente')
-    if (!o.marca) faltantes.push('Marca')
-    if (!o.modelo) faltantes.push('Modelo')
-    if (!o.anio) faltantes.push('Anio')
-    if (!o.numero_motor) faltantes.push('Numero motor')
-    if (!o.numero_chasis) faltantes.push('Numero chasis')
-    if (o.kilometraje == null) faltantes.push('Kilometraje')
-    if (!o.nivel_nafta) faltantes.push('Nivel nafta')
-    if (!o.vto_vtv) faltantes.push('Vto. VTV')
-    // Seguridad (booleans siempre tienen valor, no faltan)
-    // Limpieza
-    if (!o.limpieza_interior) faltantes.push('Limpieza interior')
-    if (!o.limpieza_exterior) faltantes.push('Limpieza exterior')
-    // Costos
-    if (o.costo_patente == null) faltantes.push('Costo patente')
-    // Gravamenes
-    if (!o.gravamenes) faltantes.push('Gravamenes')
-    return faltantes
+  // Retorna faltantes agrupados por modulo de origen
+  const getCamposFaltantesAgrupados = (o: OfertaLocacion): Record<string, string[]> => {
+    const grupos: Record<string, string[]> = {}
+    const add = (grupo: string, campo: string) => {
+      if (!grupos[grupo]) grupos[grupo] = []
+      grupos[grupo].push(campo)
+    }
+    // Titular (se editan en modulo Titulares)
+    if (!o.titular_nombre) add('Titular', 'Nombre titular')
+    if (!o.titular_dni_cuit) add('Titular', 'DNI')
+    if (!o.titular_domicilio) add('Titular', 'Domicilio')
+    if (!o.titular_email) add('Titular', 'Email')
+    if (!o.titular_cuit) add('Titular', 'CUIT')
+    // Vehiculo (se editan en modulo Vehiculos)
+    if (!o.patente) add('Vehiculo', 'Patente')
+    if (!o.marca) add('Vehiculo', 'Marca')
+    if (!o.modelo) add('Vehiculo', 'Modelo')
+    if (!o.anio) add('Vehiculo', 'Anio')
+    if (!o.numero_motor) add('Vehiculo', 'Numero motor')
+    if (!o.numero_chasis) add('Vehiculo', 'Numero chasis')
+    if (o.kilometraje == null) add('Vehiculo', 'Kilometraje')
+    if (!o.vto_vtv) add('Vehiculo', 'Vto. VTV')
+    // Oferta Locacion (se editan en este modulo, pestaña Contrato)
+    if (!o.fecha_inicio_alquiler) add('Oferta Locacion', 'Fecha inicio alquiler')
+    if (o.canon_mensual == null) add('Oferta Locacion', 'Canon mensual')
+    if (!o.socio) add('Oferta Locacion', 'Socio')
+    if (!o.nivel_nafta) add('Oferta Locacion', 'Nivel nafta')
+    if (!o.limpieza_interior) add('Oferta Locacion', 'Limpieza interior')
+    if (!o.limpieza_exterior) add('Oferta Locacion', 'Limpieza exterior')
+    if (o.costo_patente == null) add('Oferta Locacion', 'Costo patente')
+    if (!o.gravamenes) add('Oferta Locacion', 'Gravamenes')
+    return grupos
   }
 
   const handleGenerarDocumento = async (oferta: OfertaLocacion) => {
-    const faltantes = getCamposFaltantes(oferta)
+    const grupos = getCamposFaltantesAgrupados(oferta)
+    const totalFaltantes = Object.values(grupos).reduce((sum, arr) => sum + arr.length, 0)
 
-    if (faltantes.length > 0) {
+    if (totalFaltantes > 0) {
+      const seccionesHtml = Object.entries(grupos).map(([modulo, campos]) =>
+        `<div style="margin-bottom:10px;">
+          <p style="margin:0 0 4px;font-weight:600;color:#1e40af;">Del modulo ${modulo} faltan:</p>
+          <ul style="margin:0;padding-left:20px;">
+            ${campos.map(f => `<li style="margin-bottom:2px;">${f}</li>`).join('')}
+          </ul>
+        </div>`
+      ).join('')
+
       Swal.fire({
         title: 'Campos sin completar',
         html: `<div style="text-align:left;font-size:13px;">
-          <p style="margin-bottom:10px;">Faltan <b>${faltantes.length}</b> campos por completar:</p>
-          <ul style="margin:0;padding-left:20px;max-height:200px;overflow-y:auto;">
-            ${faltantes.map(f => `<li style="margin-bottom:4px;">${f}</li>`).join('')}
-          </ul>
+          <p style="margin-bottom:10px;">Faltan <b>${totalFaltantes}</b> campos por completar:</p>
+          <div style="max-height:250px;overflow-y:auto;">${seccionesHtml}</div>
           <p style="margin-top:12px;">Complete todos los campos antes de generar el documento.</p>
         </div>`,
         icon: 'error',
@@ -263,8 +272,9 @@ export function OfertaLocacionListModule() {
       id: 'completitud',
       header: '%Camp. Completados',
       cell: ({ row }) => {
-        const faltantes = getCamposFaltantes(row.original)
-        const totalCampos = 22 // campos que valida getCamposFaltantes
+        const grupos = getCamposFaltantesAgrupados(row.original)
+        const faltantes = Object.values(grupos).flat()
+        const totalCampos = 21 // campos que valida getCamposFaltantesAgrupados
         const completos = totalCampos - faltantes.length
         const porcentaje = Math.round((completos / totalCampos) * 100)
 
@@ -277,9 +287,11 @@ export function OfertaLocacionListModule() {
           )
         }
 
+        const tooltipText = Object.entries(grupos).map(([mod, campos]) => `${mod}: ${campos.join(', ')}`).join(' | ')
+
         return (
           <span
-            title={`Faltan: ${faltantes.join(', ')}`}
+            title={tooltipText}
             style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', cursor: 'help' }}
           >
             <div style={{
