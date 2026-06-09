@@ -55,7 +55,7 @@ export function OfertaLocacionListModule() {
     if (!o.numero_chasis) faltantes.push('Numero chasis')
     if (o.kilometraje == null) faltantes.push('Kilometraje')
     if (!o.nivel_nafta) faltantes.push('Nivel nafta')
-    // vto_vtv es opcional: viene del vehiculo y puede no estar definido
+    if (!o.vto_vtv) faltantes.push('Vto. VTV')
     // Seguridad (booleans siempre tienen valor, no faltan)
     // Limpieza
     if (!o.limpieza_interior) faltantes.push('Limpieza interior')
