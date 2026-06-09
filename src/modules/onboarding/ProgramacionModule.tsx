@@ -593,6 +593,11 @@ export function ProgramacionModule() {
 
         // Usar tipo_asignacion general (columnas individuales no existen aún en BD)
         updateData.tipo_asignacion = quickEditData.tipo_asignacion_diurno || quickEditData.tipo_asignacion_nocturno || 'entrega_auto'
+
+        // Limpiar campos legacy de A CARGO para evitar datos stale
+        updateData.conductor_id = null
+        updateData.conductor_nombre = null
+        updateData.conductor_dni = null
       } else {
         // A Cargo - campos legacy
         updateData.conductor_id = quickEditData.conductor_id || null
@@ -602,6 +607,14 @@ export function ProgramacionModule() {
         updateData.tipo_documento = quickEditData.tipo_documento
         updateData.zona = quickEditData.zona
         updateData.distancia_minutos = quickEditData.distancia_minutos || null
+
+        // Limpiar campos de TURNO para evitar datos stale
+        updateData.conductor_diurno_id = null
+        updateData.conductor_diurno_nombre = null
+        updateData.conductor_diurno_dni = null
+        updateData.conductor_nocturno_id = null
+        updateData.conductor_nocturno_nombre = null
+        updateData.conductor_nocturno_dni = null
       }
 
       const { error } = await (supabase
@@ -610,6 +623,34 @@ export function ProgramacionModule() {
         .eq('id', editingProgramacion.id)
 
       if (error) throw error
+
+      // Sincronizar devolución vinculada (si existe) con los datos actualizados del conductor
+      try {
+        const conductorIdFinal = isTurno
+          ? (quickEditData.conductor_diurno_id || quickEditData.conductor_nocturno_id || null)
+          : (quickEditData.conductor_id || null)
+        const conductorNombreFinal = isTurno
+          ? (conductorDiurnoSeleccionado?.nombre || quickEditData.conductor_diurno_nombre || conductorNocturnoSeleccionado?.nombre || quickEditData.conductor_nocturno_nombre || null)
+          : (conductorSeleccionado?.nombre || quickEditData.conductor_nombre || null)
+
+        if (conductorIdFinal || conductorNombreFinal) {
+          const { data: devVinculada } = await (supabase.from('devoluciones') as any)
+            .select('id')
+            .eq('programacion_id', editingProgramacion.id)
+            .in('estado', ['pendiente', 'completado'])
+            .limit(1)
+          if (devVinculada && devVinculada.length > 0) {
+            await (supabase.from('devoluciones') as any)
+              .update({
+                conductor_id: conductorIdFinal,
+                conductor_nombre: conductorNombreFinal,
+              })
+              .eq('id', devVinculada[0].id)
+          }
+        }
+      } catch {
+        // No bloquear el guardado si falla la sincronización de devolución
+      }
 
       await loadProgramaciones()
       setShowQuickEdit(false)
@@ -715,6 +756,17 @@ export function ProgramacionModule() {
       return
     }
 
+    // Validar que no exista ya una devolución para esta programación
+    const { data: devExistente } = await (supabase.from('devoluciones') as any)
+      .select('id')
+      .eq('programacion_id', prog.id)
+      .in('estado', ['pendiente', 'completado'])
+      .limit(1)
+    if (devExistente && devExistente.length > 0) {
+      Swal.fire('Atención', 'Ya existe una devolución creada para esta programación', 'warning')
+      return
+    }
+
     // Construir fecha programada
     let fechaProgramada: string
     if (prog.fecha_cita) {
@@ -745,9 +797,16 @@ export function ProgramacionModule() {
     if (!result.isConfirmed) return
 
     try {
-      // Buscar conductor: 1) de prog, 2) de programaciones_onboarding, 3) de la asignación activa del vehículo
-      let conductorId = prog.conductor_id || prog.conductor_diurno_id || prog.conductor_nocturno_id || null
-      let conductorNombre = prog.conductor_nombre || prog.conductor_display || prog.conductor_diurno_nombre || prog.conductor_nocturno_nombre || null
+      // Buscar conductor respetando la modalidad de la programación
+      // TURNO: priorizar conductor_diurno, luego nocturno, luego legacy
+      // A CARGO: priorizar conductor_id (legacy), luego diurno como fallback
+      const esTurnoProg = prog.modalidad === 'turno'
+      let conductorId = esTurnoProg
+        ? (prog.conductor_diurno_id || prog.conductor_nocturno_id || prog.conductor_id || null)
+        : (prog.conductor_id || prog.conductor_diurno_id || prog.conductor_nocturno_id || null)
+      let conductorNombre = esTurnoProg
+        ? (prog.conductor_diurno_nombre || prog.conductor_nocturno_nombre || prog.conductor_nombre?.trim() || prog.conductor_display?.trim() || null)
+        : (prog.conductor_nombre?.trim() || prog.conductor_display?.trim() || prog.conductor_diurno_nombre || prog.conductor_nocturno_nombre || null)
 
       if (!conductorNombre) {
         // Fallback 2: buscar en la tabla programaciones_onboarding
@@ -1752,9 +1811,9 @@ export function ProgramacionModule() {
           </button>
           <button
             className="prog-btn prog-btn-send"
-            title={row.original.asignacion_id ? 'Ya enviado' : 'Enviar a Entrega'}
+            title={(row.original.asignacion_id || row.original.fecha_asignacion_creada) ? 'Ya enviado' : 'Enviar a Entrega'}
             onClick={() => handleEnviarAEntrega(row.original)}
-            disabled={!!row.original.asignacion_id}
+            disabled={!!(row.original.asignacion_id || row.original.fecha_asignacion_creada)}
           >
             <Send size={16} />
           </button>
@@ -2854,12 +2913,12 @@ export function ProgramacionModule() {
                   <button
                     className="btn-primary"
                     onClick={handlePreviewEnviar}
-                    disabled={!!previewProgramacion.asignacion_id}
-                    title={previewProgramacion.asignacion_id ? 'Ya enviado' : 'Enviar a Entrega'}
+                    disabled={!!(previewProgramacion.asignacion_id || previewProgramacion.fecha_asignacion_creada)}
+                    title={(previewProgramacion.asignacion_id || previewProgramacion.fecha_asignacion_creada) ? 'Ya enviado' : 'Enviar a Entrega'}
                     style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
                   >
                     <Send size={16} />
-                    {previewProgramacion.asignacion_id ? 'Ya Enviado' : 'Enviar a Entrega'}
+                    {(previewProgramacion.asignacion_id || previewProgramacion.fecha_asignacion_creada) ? 'Ya Enviado' : 'Enviar a Entrega'}
                   </button>
                 </>
               )}

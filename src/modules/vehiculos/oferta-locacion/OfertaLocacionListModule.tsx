@@ -55,7 +55,7 @@ export function OfertaLocacionListModule() {
     if (!o.numero_chasis) faltantes.push('Numero chasis')
     if (o.kilometraje == null) faltantes.push('Kilometraje')
     if (!o.nivel_nafta) faltantes.push('Nivel nafta')
-    if (!o.vto_vtv) faltantes.push('Vto. VTV')
+    // vto_vtv es opcional: viene del vehiculo y puede no estar definido
     // Seguridad (booleans siempre tienen valor, no faltan)
     // Limpieza
     if (!o.limpieza_interior) faltantes.push('Limpieza interior')
@@ -70,28 +70,21 @@ export function OfertaLocacionListModule() {
   const handleGenerarDocumento = async (oferta: OfertaLocacion) => {
     const faltantes = getCamposFaltantes(oferta)
 
-    if (!oferta.socio) {
-      Swal.fire('Socio requerido', 'Debe seleccionar un socio (Grupo CG o 44 Dreams) antes de generar el documento.', 'warning')
-      return
-    }
-
     if (faltantes.length > 0) {
-      const result = await Swal.fire({
+      Swal.fire({
         title: 'Campos sin completar',
         html: `<div style="text-align:left;font-size:13px;">
           <p style="margin-bottom:10px;">Faltan <b>${faltantes.length}</b> campos por completar:</p>
           <ul style="margin:0;padding-left:20px;max-height:200px;overflow-y:auto;">
             ${faltantes.map(f => `<li style="margin-bottom:4px;">${f}</li>`).join('')}
           </ul>
-          <p style="margin-top:12px;">Desea generar el documento de todas formas?</p>
+          <p style="margin-top:12px;">Complete todos los campos antes de generar el documento.</p>
         </div>`,
-        icon: 'warning',
-        showCancelButton: true,
-        confirmButtonText: 'Generar igual',
-        cancelButtonText: 'Cancelar',
+        icon: 'error',
+        confirmButtonText: 'Entendido',
         confirmButtonColor: '#2563eb',
       })
-      if (!result.isConfirmed) return
+      return
     }
 
     // Confirmacion final

@@ -1044,6 +1044,7 @@ export function VehicleManagement() {
           numero_chasis: formData.numero_chasis || null,
           kilometraje: formData.kilometraje_actual ?? null,
           cantidad_llaves: formData.cantidad_llaves ? Number(formData.cantidad_llaves) : null,
+          socio: formData.grupo_flota || null,
           vencimiento_seguro: formData.vencimiento_seguro || null,
           vto_vtv: formData.vto_vtv_aplica ? (formData.vto_vtv_fecha || null) : null,
           vto_gnc: formData.vto_gnc_aplica ? (formData.vto_gnc_fecha || null) : null,
