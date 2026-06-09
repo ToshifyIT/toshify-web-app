@@ -274,6 +274,7 @@ export function CrearCobroTelepaseModal({ isOpen, registro, onClose, onSaved }: 
     if (!estadoId) { Swal.fire('Error', 'Debe seleccionar un estado', 'error'); return }
     if (!tipoCobroId) { Swal.fire('Error', 'Debe seleccionar un tipo de incidencia', 'error'); return }
     if (!monto || monto <= 0) { Swal.fire('Error', 'El monto debe ser mayor a 0', 'error'); return }
+    if (!turno) { Swal.fire('Error', 'Debe seleccionar una modalidad (turno)', 'error'); return }
 
     setSaving(true)
     try {

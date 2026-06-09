@@ -467,7 +467,7 @@ export function OfertaLocacionModal({ vehiculoTitular, titular, sedeId, userId, 
                 </div>
                 <div style={fieldGroup}>
                   <label style={labelStyle}>Kilometraje</label>
-                  <input style={readonlyStyle} value={formData.kilometraje ?? ''} readOnly />
+                  <input style={inputStyle} type="number" value={formData.kilometraje ?? ''} onChange={e => updateField('kilometraje', e.target.value ? Number(e.target.value) : null)} />
                 </div>
               </div>
               <div className="ol-grid-2">

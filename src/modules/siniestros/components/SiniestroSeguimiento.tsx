@@ -221,11 +221,32 @@ export function SiniestroSeguimiento({ siniestro, onReload, readonly = false }: 
     setShowForm(false)
   }
 
-  function handleAbrirModalIncidencia() {
+  async function handleAbrirModalIncidencia() {
     // Buscar el tipo "Reparación Siniestro" para pre-seleccionarlo
-    const tipoReparacionSiniestro = tiposCobroDescuento.find(t => 
+    const tipoReparacionSiniestro = tiposCobroDescuento.find(t =>
       t.nombre?.toLowerCase().includes('reparaci') && t.nombre?.toLowerCase().includes('siniestro')
     )
+
+    // Auto-detectar turno del conductor desde su asignacion activa
+    let turnoDetectado: string | undefined
+    if (siniestro.conductor_id) {
+      try {
+        const { data: asigs } = await (supabase
+          .from('asignaciones')
+          .select('id, modalidad, asignaciones_conductores!inner(conductor_id, horario)')
+          .eq('estado', 'activa')
+          .eq('asignaciones_conductores.conductor_id', siniestro.conductor_id) as any)
+        const asig = (asigs || [])[0]
+        if (asig) {
+          if (asig.modalidad === 'a_cargo') {
+            turnoDetectado = 'A cargo'
+          } else {
+            const ac = (asig.asignaciones_conductores || [])[0]
+            turnoDetectado = ac?.horario === 'nocturno' ? 'Nocturno' : 'Diurno'
+          }
+        }
+      } catch (_e) { /* silently ignored */ }
+    }
 
     // Pre-cargar datos del siniestro en el formulario de incidencia
     setIncidenciaForm({
@@ -236,6 +257,7 @@ export function SiniestroSeguimiento({ siniestro, onReload, readonly = false }: 
       descripcion: formData.descripcion,
       notas: formData.notas,
       area: 'Siniestros',
+      turno: turnoDetectado,
       estado_id: incidenciaForm.estado_id, // Mantener el estado pre-seleccionado
       tipo_cobro_descuento_id: tipoReparacionSiniestro?.id || undefined
     })
@@ -313,6 +335,10 @@ export function SiniestroSeguimiento({ siniestro, onReload, readonly = false }: 
     }
     if (!incidenciaForm.tipo_cobro_descuento_id) {
       Swal.fire('Error', 'Debe seleccionar un tipo de incidencia', 'error')
+      return
+    }
+    if (!incidenciaForm.turno) {
+      Swal.fire('Error', 'Debe seleccionar una modalidad (turno)', 'error')
       return
     }
 
