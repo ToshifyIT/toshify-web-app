@@ -8167,6 +8167,10 @@ export function ReporteFacturacionTab() {
           diasProyectados = Math.min(actualDias + daysRemaining, 7)
           importeContrato = Math.round((actualAlquiler / actualDias) * diasProyectados)
         }
+        // Mostrar el alquiler redondo: el precio diario (semanal/7) se guarda redondeado
+        // a centavos, asi que precio_diario x 7 arrastra +/-0.01-0.03. Redondeamos a entero
+        // SOLO para visualizacion del reporte Cabify (no cambia lo guardado en la BD).
+        importeContrato = Math.round(importeContrato)
         
         // EXCEDENTES = recalcular desde campos individuales (no usar subtotal_cargos que puede estar mal)
         const tieneTelepasePreview = f.tiene_telepase === true
@@ -9232,7 +9236,9 @@ export function ReporteFacturacionTab() {
 
         return (
           <div style={{ cursor: 'pointer' }} onClick={handleClick}>
-            <div style={{ fontWeight: 600 }}>{formatCurrency(alquiler)}</div>
+            {/* Mostrar alquiler redondo: el precio diario (semanal/7) se guarda redondeado
+                a centavos, asi que x dias arrastra +/-0.01-0.03. Solo visual, no toca la BD. */}
+            <div style={{ fontWeight: 600 }}>{formatCurrency(Math.round(alquiler))}</div>
             <div style={{ width: '60px', height: '5px', backgroundColor: '#e5e7eb', borderRadius: '3px', overflow: 'hidden', marginTop: '2px' }}>
               <div style={{ width: `${porcentajeCubierto}%`, height: '100%', backgroundColor: cubreCuota ? '#10b981' : porcentajeCubierto >= 70 ? '#f59e0b' : '#ef4444', borderRadius: '3px' }} />
             </div>
@@ -11380,9 +11386,9 @@ export function ReporteFacturacionTab() {
                               </button>
                             </div>
                             <span style={{ fontSize: '12px', fontWeight: 600, fontFamily: 'monospace', color: 'var(--text-primary)', flexShrink: 0, marginLeft: '8px' }}>
-                              {/* FIX 2026-05-19: usar cantidad * precio_unitario (con decimales) en vez de item.total
-                                  que viejo se guardo redondeado a entero y rompe la suma del subtotal */}
-                              {formatCurrency(Math.round(Number(item.cantidad || 0) * Number(item.precio_unitario || 0) * 100) / 100 || item.total)}
+                              {/* Mostrar monto redondo (entero): el precio diario x cantidad arrastra
+                                  centavos (7 x 42714,29 = 299000,03). Solo visual, no toca la BD. */}
+                              {formatCurrency(Math.round(Number(item.cantidad || 0) * Number(item.precio_unitario || 0)) || Math.round(Number(item.total || 0)))}
                             </span>
                           </div>
                         );
@@ -11400,10 +11406,10 @@ export function ReporteFacturacionTab() {
                           Subtotal Cargos
                         </span>
                         <span style={{ fontSize: '13px', fontWeight: 700, fontFamily: 'monospace', color: 'var(--text-primary)' }}>
-                          {/* Suma sobre cantidad*precio_unitario para preservar decimales en items historicos */}
+                          {/* Suma de items redondeados al entero (coincide con lo que muestra cada item arriba) */}
                           {formatCurrency(detalleCargos.reduce((sum, d) => {
-                            const calc = Math.round(Number(d.cantidad || 0) * Number(d.precio_unitario || 0) * 100) / 100
-                            return sum + (calc || Number(d.total || 0))
+                            const calc = Math.round(Number(d.cantidad || 0) * Number(d.precio_unitario || 0)) || Math.round(Number(d.total || 0))
+                            return sum + calc
                           }, 0))}
                         </span>
                       </div>
@@ -11544,7 +11550,8 @@ export function ReporteFacturacionTab() {
                       margin: '6px 0',
                       color: totalRealDetalle > 0 ? '#ff0033' : '#059669',
                     }}>
-                      {formatCurrency(totalRealDetalle)}
+                      {/* Mostrar redondo (entero): el alquiler arrastra centavos del precio diario. Solo visual. */}
+                      {formatCurrency(Math.round(totalRealDetalle))}
                     </span>
                     <span style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>
                       {totalRealDetalle > 0 ? 'El conductor debe pagar' : 'Saldo a favor del conductor'}
