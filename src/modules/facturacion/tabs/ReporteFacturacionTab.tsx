@@ -2964,11 +2964,36 @@ export function ReporteFacturacionTab() {
       {
         const { data: penalidadesPendientesRecalc } = await (supabase
           .from('penalidades') as any)
-          .select('conductor_id, conductores!inner(numero_dni, sede_id)')
+          .select('conductor_id, conductores!inner(id, numero_dni, sede_id)')
           .eq('semana_aplicacion', semanaNum)
           .eq('anio_aplicacion', anioNum)
           .eq('aplicado', true)
           .neq('rechazado', true)
+
+        // Para conductores SIN asignacion en la semana (ej. de baja con multa pendiente),
+        // tomamos patente + grupo de flota + modalidad de su ULTIMA asignacion, para que
+        // la fila muestre de que auto/grupo venia (informativo; no afecta el cobro).
+        const condIdsPenalidad = [...new Set(
+          (penalidadesPendientesRecalc || [])
+            .map((p: any) => p.conductores?.id)
+            .filter(Boolean)
+        )] as string[]
+
+        const ultimaAsigPorConductor = new Map<string, { patente: string; modalidad: string }>()
+        if (condIdsPenalidad.length > 0) {
+          const { data: asigsPenalidad } = await (supabase
+            .from('asignaciones_conductores') as any)
+            .select('conductor_id, fecha_inicio, fecha_fin, asignaciones!inner(horario, vehiculos(patente))')
+            .in('conductor_id', condIdsPenalidad)
+            .order('fecha_inicio', { ascending: false })
+          // Primera por conductor = la mas reciente (ya viene ordenado desc)
+          for (const ac of (asigsPenalidad || []) as any[]) {
+            if (ultimaAsigPorConductor.has(ac.conductor_id)) continue
+            const patente = ac.asignaciones?.vehiculos?.patente || ''
+            const modalidad = (ac.asignaciones?.horario || '') === 'todo_dia' ? 'CARGO' : 'TURNO'
+            ultimaAsigPorConductor.set(ac.conductor_id, { patente, modalidad })
+          }
+        }
 
         for (const p of (penalidadesPendientesRecalc || []) as any[]) {
           const cond = p.conductores
@@ -2977,11 +3002,13 @@ export function ReporteFacturacionTab() {
           if (dnisAgregadosRecalc.has(cond.numero_dni)) continue
           dnisAgregadosRecalc.add(cond.numero_dni)
           dnisConPenalidadesRecalc.add(cond.numero_dni)
+            // Patente + modalidad de la ultima asignacion (grupo_flota se resuelve por patente)
+            const ultima = ultimaAsigPorConductor.get(cond.id)
             conductoresControl.push({
               numero_dni: cond.numero_dni,
               estado: 'Activo',
-              patente: '',
-              modalidad: 'TURNO',
+              patente: ultima?.patente || '',
+              modalidad: ultima?.modalidad || 'TURNO',
               valor_alquiler: null,
               tiene_gnc: true,
               tiene_telepase: false,
