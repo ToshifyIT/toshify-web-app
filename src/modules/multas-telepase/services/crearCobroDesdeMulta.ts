@@ -204,7 +204,7 @@ export async function crearCobroDesdeMulta(multa: MultaInput, ctx: CrearCobroCon
       semana,
       fecha,
       turno,
-      area: 'Multas',
+      area: 'Administración',
       descripcion,
       conductor_nombre: conductor.nombre_completo,
       vehiculo_patente: vehiculo.patente,
@@ -212,8 +212,9 @@ export async function crearCobroDesdeMulta(multa: MultaInput, ctx: CrearCobroCon
       tipo_cobro_descuento_id: tipoMulta.id,
       monto,
       multa_id: multa.id,
+      registrado_por: 'R2D2',
       created_by: ctx.userId || null,
-      created_by_name: ctx.userName || 'Sistema'
+      created_by_name: 'R2D2'
     })
     .select('id')
     .single()
@@ -238,7 +239,7 @@ export async function crearCobroDesdeMulta(multa: MultaInput, ctx: CrearCobroCon
       conductor_nombre: conductor.nombre_completo,
       vehiculo_patente: vehiculo.patente,
       created_by: ctx.userId || null,
-      created_by_name: ctx.userName || 'Sistema',
+      created_by_name: 'R2D2',
       sede_id: sedeId
     })
     .select('id')
