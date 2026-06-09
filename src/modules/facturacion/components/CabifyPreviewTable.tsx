@@ -202,15 +202,21 @@ export function CabifyPreviewTable({
 
   // Totales
   const totales = useMemo(() => {
-    return filteredData.reduce((acc, row) => ({
-      importeContrato: acc.importeContrato + row.importeContrato,
-      excedentes: acc.excedentes + row.excedentes,
-      total: acc.total + row.importeContrato + row.excedentes,
-      horasConexion: acc.horasConexion + row.horasConexion,
-      importeGenerado: acc.importeGenerado + row.importeGenerado,
-      importeGeneradoConBonos: acc.importeGeneradoConBonos + row.importeGeneradoConBonos,
-      generadoEfectivo: acc.generadoEfectivo + row.generadoEfectivo
-    }), { importeContrato: 0, excedentes: 0, total: 0, horasConexion: 0, importeGenerado: 0, importeGeneradoConBonos: 0, generadoEfectivo: 0 })
+    // Sumar montos redondeados al entero para que los totales coincidan AL PESO con
+    // las filas (que tambien se muestran redondas). Solo visual, no toca el dato.
+    return filteredData.reduce((acc, row) => {
+      const contrato = Math.round(row.importeContrato)
+      const exced = Math.round(row.excedentes)
+      return {
+        importeContrato: acc.importeContrato + contrato,
+        excedentes: acc.excedentes + exced,
+        total: acc.total + contrato + exced,
+        horasConexion: acc.horasConexion + row.horasConexion,
+        importeGenerado: acc.importeGenerado + row.importeGenerado,
+        importeGeneradoConBonos: acc.importeGeneradoConBonos + row.importeGeneradoConBonos,
+        generadoEfectivo: acc.generadoEfectivo + row.generadoEfectivo
+      }
+    }, { importeContrato: 0, excedentes: 0, total: 0, horasConexion: 0, importeGenerado: 0, importeGeneradoConBonos: 0, generadoEfectivo: 0 })
   }, [filteredData])
 
   // Iniciar edición
@@ -520,7 +526,9 @@ export function CabifyPreviewTable({
       )
     }
 
-    const displayValue = isHours ? value.toFixed(1) : formatCurrency(value)
+    // Mostrar montos redondos (entero): el alquiler arrastra centavos del precio diario
+    // (precio_diario x 7 = 299.000,03). Solo visual, no cambia el dato editado/guardado.
+    const displayValue = isHours ? value.toFixed(1) : formatCurrency(Math.round(value))
 
     return (
       <span
