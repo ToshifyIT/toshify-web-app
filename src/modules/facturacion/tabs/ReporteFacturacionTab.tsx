@@ -192,6 +192,7 @@ interface FacturacionConductor {
   cabify_tiene_registros?: boolean
   cubre_cuota?: boolean
   cuota_garantia_numero?: string // ej: "15/20"
+  garantia_estado?: string // estado real de la garantia: 'completada' | 'en_curso' | 'pendiente' | ... (para distinguir N/A de COMPLETADA)
   // Datos detallados para RIT export (P005, P006, P007)
   monto_peajes?: number       // P005 - Peajes de Cabify
   monto_excesos?: number      // P006 - Excesos de KM
@@ -2634,6 +2635,7 @@ export function ReporteFacturacionTab() {
           cabify_tiene_registros: cabifyRawDniMap.has(dniConductor),
           cubre_cuota: cubreCuota,
           cuota_garantia_numero: cuotaGarantiaNumero,
+          garantia_estado: garantia?.estado || null, // estado real para distinguir COMPLETADA de N/A
           // Datos detallados para RIT export
             monto_peajes: montoPeajes,       // P005
             peajes_detalle: peajesDetalleMap.get(dniConductor) || [],
@@ -9254,11 +9256,19 @@ export function ReporteFacturacionTab() {
       enableSorting: true,
       cell: ({ row }) => {
         const garantia = row.original.subtotal_garantia
-        const cuotaNum = row.original.cuota_garantia_numero || ''
-        const isCompletada = cuotaNum === 'NA' || garantia === 0
         const cobroApp = row.original.ganancia_cabify || 0
         const alquiler = row.original.subtotal_alquiler
-        
+        // Estado REAL de la garantia (de garantias_conductores): asi distinguimos
+        // "completada" (pago el 100%) de "no aplica / en devolucion" (de baja, sin completar).
+        const garEstado = row.original.garantia_estado || null
+        const garantiaCompletada = garEstado === 'completada'
+
+        // COMPLETADA: solo si la garantia esta realmente completada (gana siempre).
+        // N/A: la garantia NO esta completada y NO se le esta cobrando esta semana
+        //      (ej. conductor de baja / en devolucion que solo entra por una multa).
+        const noAplica = !garantiaCompletada && garantia === 0
+        const isCompletada = garantiaCompletada
+
         // Calcular restante de cobro app después de cubrir alquiler
         const restante = Math.max(0, cobroApp - alquiler)
         // Porcentaje de cobertura de garantía con el restante
@@ -9279,6 +9289,12 @@ export function ReporteFacturacionTab() {
                 COMPLETADA
               </span>
             </div>
+          )
+        }
+
+        if (noAplica) {
+          return (
+            <span style={{ fontSize: '11px', color: 'var(--text-tertiary)' }}>N/A</span>
           )
         }
 
