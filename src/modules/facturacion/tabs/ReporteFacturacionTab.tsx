@@ -2635,7 +2635,7 @@ export function ReporteFacturacionTab() {
           cabify_tiene_registros: cabifyRawDniMap.has(dniConductor),
           cubre_cuota: cubreCuota,
           cuota_garantia_numero: cuotaGarantiaNumero,
-          garantia_estado: garantia?.estado || null, // estado real para distinguir COMPLETADA de N/A
+          garantia_estado: garantia?.estado || undefined, // estado real para distinguir COMPLETADA de N/A
           // Datos detallados para RIT export
             monto_peajes: montoPeajes,       // P005
             peajes_detalle: peajesDetalleMap.get(dniConductor) || [],
