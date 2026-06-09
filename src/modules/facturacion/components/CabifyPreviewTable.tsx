@@ -107,6 +107,8 @@ export function CabifyPreviewTable({
 
   // Mapeo patente -> grupo_flota (cargado desde vehiculos)
   const [grupoFlotaMap, setGrupoFlotaMap] = useState<Map<string, string | null>>(new Map())
+  // Lista de grupos desde la tabla grupos_flota (razon_social) — fuente de verdad del filtro.
+  const [gruposCatalogo, setGruposCatalogo] = useState<string[]>([])
   // Filtro de grupo de flota (default: primer grupo que contenga GRUPO CG, o null)
   const [filtroGrupoFlota, setFiltroGrupoFlota] = useState<string | null>(null)
   const [filtroGrupoFlotaIniciado, setFiltroGrupoFlotaIniciado] = useState(false)
@@ -134,6 +136,25 @@ export function CabifyPreviewTable({
     cargarGrupos()
   }, [initialData])
 
+  // Cargar el CATALOGO de grupos desde la tabla grupos_flota (razon_social).
+  // Es la fuente de verdad del filtro: muestra TODOS los grupos reales, no solo
+  // los que aparecen en los datos de la semana.
+  useEffect(() => {
+    async function cargarCatalogoGrupos() {
+      const { data } = await supabase
+        .from('grupos_flota')
+        .select('razon_social')
+        .order('prioridad', { ascending: true })
+      if (data) {
+        const grupos = (data as Array<{ razon_social: string | null }>)
+          .map(g => g.razon_social)
+          .filter((g): g is string => !!g)
+        setGruposCatalogo([...new Set(grupos)])
+      }
+    }
+    cargarCatalogoGrupos()
+  }, [])
+
   // Cerrar dropdown al click fuera
   useEffect(() => {
     function onClickOutside(e: MouseEvent) {
@@ -146,15 +167,17 @@ export function CabifyPreviewTable({
     return () => document.removeEventListener('mousedown', onClickOutside)
   }, [grupoDropdownOpen])
 
-  // Lista de grupos disponibles (basados en patentes presentes)
+  // Lista de grupos del filtro: el catalogo de grupos_flota (todos los grupos reales).
+  // Fallback a los grupos presentes en los datos si el catalogo aun no cargo.
   const gruposDisponibles = useMemo(() => {
+    if (gruposCatalogo.length > 0) return gruposCatalogo
     const set = new Set<string>()
     initialData.forEach(r => {
       const g = grupoFlotaMap.get(r.patente)
       if (g) set.add(g)
     })
     return Array.from(set).sort()
-  }, [initialData, grupoFlotaMap])
+  }, [gruposCatalogo, initialData, grupoFlotaMap])
 
   // Default: primer grupo que contenga "GRUPO CG" (cubre "GRUPO CG SAS" y "GRUPO CG S.A.S.")
   useEffect(() => {
@@ -202,15 +225,21 @@ export function CabifyPreviewTable({
 
   // Totales
   const totales = useMemo(() => {
-    return filteredData.reduce((acc, row) => ({
-      importeContrato: acc.importeContrato + row.importeContrato,
-      excedentes: acc.excedentes + row.excedentes,
-      total: acc.total + row.importeContrato + row.excedentes,
-      horasConexion: acc.horasConexion + row.horasConexion,
-      importeGenerado: acc.importeGenerado + row.importeGenerado,
-      importeGeneradoConBonos: acc.importeGeneradoConBonos + row.importeGeneradoConBonos,
-      generadoEfectivo: acc.generadoEfectivo + row.generadoEfectivo
-    }), { importeContrato: 0, excedentes: 0, total: 0, horasConexion: 0, importeGenerado: 0, importeGeneradoConBonos: 0, generadoEfectivo: 0 })
+    // Sumar montos redondeados al entero para que los totales coincidan AL PESO con
+    // las filas (que tambien se muestran redondas). Solo visual, no toca el dato.
+    return filteredData.reduce((acc, row) => {
+      const contrato = Math.round(row.importeContrato)
+      const exced = Math.round(row.excedentes)
+      return {
+        importeContrato: acc.importeContrato + contrato,
+        excedentes: acc.excedentes + exced,
+        total: acc.total + contrato + exced,
+        horasConexion: acc.horasConexion + row.horasConexion,
+        importeGenerado: acc.importeGenerado + row.importeGenerado,
+        importeGeneradoConBonos: acc.importeGeneradoConBonos + row.importeGeneradoConBonos,
+        generadoEfectivo: acc.generadoEfectivo + row.generadoEfectivo
+      }
+    }, { importeContrato: 0, excedentes: 0, total: 0, horasConexion: 0, importeGenerado: 0, importeGeneradoConBonos: 0, generadoEfectivo: 0 })
   }, [filteredData])
 
   // Iniciar edición
@@ -520,7 +549,9 @@ export function CabifyPreviewTable({
       )
     }
 
-    const displayValue = isHours ? value.toFixed(1) : formatCurrency(value)
+    // Mostrar montos redondos (entero): el alquiler arrastra centavos del precio diario
+    // (precio_diario x 7 = 299.000,03). Solo visual, no cambia el dato editado/guardado.
+    const displayValue = isHours ? value.toFixed(1) : formatCurrency(Math.round(value))
 
     return (
       <span

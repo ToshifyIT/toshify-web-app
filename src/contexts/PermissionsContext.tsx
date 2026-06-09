@@ -363,6 +363,9 @@ export function PermissionsProvider({ children }: { children: React.ReactNode })
       if (!hasLoadedOnce.current) {
         setUserPermissions(null)
       }
+      // Red de seguridad: nunca dejar el spinner colgado aunque el finally
+      // externo cambie en el futuro. Idempotente (el llamador tambien lo hace).
+      setLoading(false)
     }
   }
 

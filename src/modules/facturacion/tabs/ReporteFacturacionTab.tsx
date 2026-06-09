@@ -192,6 +192,7 @@ interface FacturacionConductor {
   cabify_tiene_registros?: boolean
   cubre_cuota?: boolean
   cuota_garantia_numero?: string // ej: "15/20"
+  garantia_estado?: string // estado real de la garantia: 'completada' | 'en_curso' | 'pendiente' | ... (para distinguir N/A de COMPLETADA)
   // Datos detallados para RIT export (P005, P006, P007)
   monto_peajes?: number       // P005 - Peajes de Cabify
   monto_excesos?: number      // P006 - Excesos de KM
@@ -2634,6 +2635,7 @@ export function ReporteFacturacionTab() {
           cabify_tiene_registros: cabifyRawDniMap.has(dniConductor),
           cubre_cuota: cubreCuota,
           cuota_garantia_numero: cuotaGarantiaNumero,
+          garantia_estado: garantia?.estado || null, // estado real para distinguir COMPLETADA de N/A
           // Datos detallados para RIT export
             monto_peajes: montoPeajes,       // P005
             peajes_detalle: peajesDetalleMap.get(dniConductor) || [],
@@ -2964,11 +2966,36 @@ export function ReporteFacturacionTab() {
       {
         const { data: penalidadesPendientesRecalc } = await (supabase
           .from('penalidades') as any)
-          .select('conductor_id, conductores!inner(numero_dni, sede_id)')
+          .select('conductor_id, conductores!inner(id, numero_dni, sede_id)')
           .eq('semana_aplicacion', semanaNum)
           .eq('anio_aplicacion', anioNum)
           .eq('aplicado', true)
           .neq('rechazado', true)
+
+        // Para conductores SIN asignacion en la semana (ej. de baja con multa pendiente),
+        // tomamos patente + grupo de flota + modalidad de su ULTIMA asignacion, para que
+        // la fila muestre de que auto/grupo venia (informativo; no afecta el cobro).
+        const condIdsPenalidad = [...new Set(
+          (penalidadesPendientesRecalc || [])
+            .map((p: any) => p.conductores?.id)
+            .filter(Boolean)
+        )] as string[]
+
+        const ultimaAsigPorConductor = new Map<string, { patente: string; modalidad: string }>()
+        if (condIdsPenalidad.length > 0) {
+          const { data: asigsPenalidad } = await (supabase
+            .from('asignaciones_conductores') as any)
+            .select('conductor_id, fecha_inicio, fecha_fin, asignaciones!inner(horario, vehiculos(patente))')
+            .in('conductor_id', condIdsPenalidad)
+            .order('fecha_inicio', { ascending: false })
+          // Primera por conductor = la mas reciente (ya viene ordenado desc)
+          for (const ac of (asigsPenalidad || []) as any[]) {
+            if (ultimaAsigPorConductor.has(ac.conductor_id)) continue
+            const patente = ac.asignaciones?.vehiculos?.patente || ''
+            const modalidad = (ac.asignaciones?.horario || '') === 'todo_dia' ? 'CARGO' : 'TURNO'
+            ultimaAsigPorConductor.set(ac.conductor_id, { patente, modalidad })
+          }
+        }
 
         for (const p of (penalidadesPendientesRecalc || []) as any[]) {
           const cond = p.conductores
@@ -2977,11 +3004,13 @@ export function ReporteFacturacionTab() {
           if (dnisAgregadosRecalc.has(cond.numero_dni)) continue
           dnisAgregadosRecalc.add(cond.numero_dni)
           dnisConPenalidadesRecalc.add(cond.numero_dni)
+            // Patente + modalidad de la ultima asignacion (grupo_flota se resuelve por patente)
+            const ultima = ultimaAsigPorConductor.get(cond.id)
             conductoresControl.push({
               numero_dni: cond.numero_dni,
               estado: 'Activo',
-              patente: '',
-              modalidad: 'TURNO',
+              patente: ultima?.patente || '',
+              modalidad: ultima?.modalidad || 'TURNO',
               valor_alquiler: null,
               tiene_gnc: true,
               tiene_telepase: false,
@@ -8140,6 +8169,10 @@ export function ReporteFacturacionTab() {
           diasProyectados = Math.min(actualDias + daysRemaining, 7)
           importeContrato = Math.round((actualAlquiler / actualDias) * diasProyectados)
         }
+        // Mostrar el alquiler redondo: el precio diario (semanal/7) se guarda redondeado
+        // a centavos, asi que precio_diario x 7 arrastra +/-0.01-0.03. Redondeamos a entero
+        // SOLO para visualizacion del reporte Cabify (no cambia lo guardado en la BD).
+        importeContrato = Math.round(importeContrato)
         
         // EXCEDENTES = recalcular desde campos individuales (no usar subtotal_cargos que puede estar mal)
         const tieneTelepasePreview = f.tiene_telepase === true
@@ -9205,7 +9238,9 @@ export function ReporteFacturacionTab() {
 
         return (
           <div style={{ cursor: 'pointer' }} onClick={handleClick}>
-            <div style={{ fontWeight: 600 }}>{formatCurrency(alquiler)}</div>
+            {/* Mostrar alquiler redondo: el precio diario (semanal/7) se guarda redondeado
+                a centavos, asi que x dias arrastra +/-0.01-0.03. Solo visual, no toca la BD. */}
+            <div style={{ fontWeight: 600 }}>{formatCurrency(Math.round(alquiler))}</div>
             <div style={{ width: '60px', height: '5px', backgroundColor: '#e5e7eb', borderRadius: '3px', overflow: 'hidden', marginTop: '2px' }}>
               <div style={{ width: `${porcentajeCubierto}%`, height: '100%', backgroundColor: cubreCuota ? '#10b981' : porcentajeCubierto >= 70 ? '#f59e0b' : '#ef4444', borderRadius: '3px' }} />
             </div>
@@ -9221,11 +9256,19 @@ export function ReporteFacturacionTab() {
       enableSorting: true,
       cell: ({ row }) => {
         const garantia = row.original.subtotal_garantia
-        const cuotaNum = row.original.cuota_garantia_numero || ''
-        const isCompletada = cuotaNum === 'NA' || garantia === 0
         const cobroApp = row.original.ganancia_cabify || 0
         const alquiler = row.original.subtotal_alquiler
-        
+        // Estado REAL de la garantia (de garantias_conductores): asi distinguimos
+        // "completada" (pago el 100%) de "no aplica / en devolucion" (de baja, sin completar).
+        const garEstado = row.original.garantia_estado || null
+        const garantiaCompletada = garEstado === 'completada'
+
+        // COMPLETADA: solo si la garantia esta realmente completada (gana siempre).
+        // N/A: la garantia NO esta completada y NO se le esta cobrando esta semana
+        //      (ej. conductor de baja / en devolucion que solo entra por una multa).
+        const noAplica = !garantiaCompletada && garantia === 0
+        const isCompletada = garantiaCompletada
+
         // Calcular restante de cobro app después de cubrir alquiler
         const restante = Math.max(0, cobroApp - alquiler)
         // Porcentaje de cobertura de garantía con el restante
@@ -9246,6 +9289,12 @@ export function ReporteFacturacionTab() {
                 COMPLETADA
               </span>
             </div>
+          )
+        }
+
+        if (noAplica) {
+          return (
+            <span style={{ fontSize: '11px', color: 'var(--text-tertiary)' }}>N/A</span>
           )
         }
 
@@ -11353,9 +11402,9 @@ export function ReporteFacturacionTab() {
                               </button>
                             </div>
                             <span style={{ fontSize: '12px', fontWeight: 600, fontFamily: 'monospace', color: 'var(--text-primary)', flexShrink: 0, marginLeft: '8px' }}>
-                              {/* FIX 2026-05-19: usar cantidad * precio_unitario (con decimales) en vez de item.total
-                                  que viejo se guardo redondeado a entero y rompe la suma del subtotal */}
-                              {formatCurrency(Math.round(Number(item.cantidad || 0) * Number(item.precio_unitario || 0) * 100) / 100 || item.total)}
+                              {/* Mostrar monto redondo (entero): el precio diario x cantidad arrastra
+                                  centavos (7 x 42714,29 = 299000,03). Solo visual, no toca la BD. */}
+                              {formatCurrency(Math.round(Number(item.cantidad || 0) * Number(item.precio_unitario || 0)) || Math.round(Number(item.total || 0)))}
                             </span>
                           </div>
                         );
@@ -11373,10 +11422,10 @@ export function ReporteFacturacionTab() {
                           Subtotal Cargos
                         </span>
                         <span style={{ fontSize: '13px', fontWeight: 700, fontFamily: 'monospace', color: 'var(--text-primary)' }}>
-                          {/* Suma sobre cantidad*precio_unitario para preservar decimales en items historicos */}
+                          {/* Suma de items redondeados al entero (coincide con lo que muestra cada item arriba) */}
                           {formatCurrency(detalleCargos.reduce((sum, d) => {
-                            const calc = Math.round(Number(d.cantidad || 0) * Number(d.precio_unitario || 0) * 100) / 100
-                            return sum + (calc || Number(d.total || 0))
+                            const calc = Math.round(Number(d.cantidad || 0) * Number(d.precio_unitario || 0)) || Math.round(Number(d.total || 0))
+                            return sum + calc
                           }, 0))}
                         </span>
                       </div>
@@ -11517,7 +11566,8 @@ export function ReporteFacturacionTab() {
                       margin: '6px 0',
                       color: totalRealDetalle > 0 ? '#ff0033' : '#059669',
                     }}>
-                      {formatCurrency(totalRealDetalle)}
+                      {/* Mostrar redondo (entero): el alquiler arrastra centavos del precio diario. Solo visual. */}
+                      {formatCurrency(Math.round(totalRealDetalle))}
                     </span>
                     <span style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>
                       {totalRealDetalle > 0 ? 'El conductor debe pagar' : 'Saldo a favor del conductor'}
