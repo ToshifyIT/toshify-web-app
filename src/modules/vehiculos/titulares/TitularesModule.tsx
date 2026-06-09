@@ -489,7 +489,7 @@ export function TitularesModule() {
       // Traer datos completos del vehículo
       const { data: vehiculo } = await supabase
         .from('vehiculos')
-        .select('patente, marca, modelo, anio, color, numero_motor, numero_chasis, kilometraje_actual')
+        .select('patente, marca, modelo, anio, color, numero_motor, numero_chasis, kilometraje_actual, cantidad_llaves, grupo_flota')
         .eq('id', vt.vehiculo_id)
         .maybeSingle()
 
@@ -513,6 +513,8 @@ export function TitularesModule() {
           numero_motor: vehiculo?.numero_motor || null,
           numero_chasis: vehiculo?.numero_chasis || null,
           kilometraje: vehiculo?.kilometraje_actual ?? null,
+          cantidad_llaves: vehiculo?.cantidad_llaves ?? null,
+          socio: (vehiculo as any)?.grupo_flota || null,
           estado: 'borrador',
           sede_id: sedeActualId || null,
           created_by: userId,

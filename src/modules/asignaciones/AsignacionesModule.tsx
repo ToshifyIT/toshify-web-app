@@ -611,7 +611,7 @@ export function AsignacionesModule() {
         // Devoluciones pendientes y completadas
         aplicarFiltroSede((supabase as any)
           .from('devoluciones')
-          .select('id, vehiculo_id, conductor_nombre, programado_por, fecha_programada, fecha_devolucion, estado, observaciones, created_at, programacion_id, sede_id, vehiculos:vehiculo_id(patente, marca, modelo), programaciones_onboarding:programacion_id(conductor_nombre, conductor_diurno_nombre, conductor_nocturno_nombre, documento_diurno, documento_nocturno, tipo_documento)'))
+          .select('id, vehiculo_id, conductor_nombre, programado_por, fecha_programada, fecha_devolucion, estado, observaciones, created_at, programacion_id, sede_id, vehiculos:vehiculo_id(patente, marca, modelo), programaciones_onboarding:programacion_id(conductor_nombre, conductor_diurno_id, conductor_diurno_nombre, conductor_nocturno_id, conductor_nocturno_nombre, documento_diurno, documento_nocturno, tipo_documento, modalidad)'))
           .in('estado', ['pendiente', 'completado'])
           .order('fecha_programada', { ascending: true })
       ])
@@ -668,8 +668,11 @@ export function AsignacionesModule() {
       const devolucionesVirtuales: Asignacion[] = (devolucionesRes?.data || []).map((d: any) => {
         const asigVehiculo = asignacionesConMotivo.find((a: any) => a.vehiculo_id === d.vehiculo_id && a.estado === 'activa')
           || asignacionesConMotivo.filter((a: any) => a.vehiculo_id === d.vehiculo_id && a.estado === 'finalizada').sort((a: any, b: any) => (b.fecha_fin || b.created_at || '').localeCompare(a.fecha_fin || a.created_at || ''))[0]
-        const horarioReal = asigVehiculo?.horario || 'turno'
         const prog = d.programaciones_onboarding
+        // Usar modalidad de la programacion origen, no de una asignacion random del vehiculo
+        const horarioReal = prog?.modalidad
+          ? (prog.modalidad === 'turno' ? 'turno' : 'todo_dia')
+          : (asigVehiculo?.horario || 'turno')
         // Resolver conductor con .trim() y fallback a conductoresPorVehiculo (query directa)
         const conductorNombre = d.conductor_nombre?.trim()
           || prog?.conductor_nombre?.trim()
@@ -678,6 +681,15 @@ export function AsignacionesModule() {
           || conductoresPorVehiculo.get(d.vehiculo_id)
           || ''
         const doc = prog?.tipo_documento || prog?.documento_diurno || prog?.documento_nocturno
+        // Determinar turno del conductor: comparar conductor_id de la devolucion con diurno/nocturno de la programacion
+        let turnoConductor: string = horarioReal === 'todo_dia' ? 'todo_dia' : 'diurno'
+        if (prog?.modalidad === 'turno' && d.conductor_id) {
+          if (d.conductor_id === prog.conductor_nocturno_id) {
+            turnoConductor = 'nocturno'
+          } else {
+            turnoConductor = 'diurno'
+          }
+        }
         return {
           id: d.id,
           codigo: '',
@@ -694,7 +706,7 @@ export function AsignacionesModule() {
           created_by: null,
           motivo: 'devolucion_vehiculo',
           vehiculos: d.vehiculos || undefined,
-          asignaciones_conductores: doc ? [{ id: d.id, conductor_id: '', estado: 'asignado', horario: horarioReal === 'todo_dia' ? 'todo_dia' : 'diurno', documento: doc === 'carta_oferta' ? 'CARTA_OFERTA' : doc === 'anexo' ? 'ANEXO' : doc?.toUpperCase() }] : [],
+          asignaciones_conductores: [{ id: d.id, conductor_id: d.conductor_id || '', estado: 'asignado', horario: turnoConductor, documento: doc ? (doc === 'carta_oferta' ? 'CARTA_OFERTA' : doc === 'anexo' ? 'ANEXO' : doc?.toUpperCase()) : 'NA' }],
           esDevolucion: true,
           devolucionId: d.id,
           _conductorNombre: conductorNombre,
@@ -749,7 +761,7 @@ export function AsignacionesModule() {
           .limit(1000),
         aplicarFiltroSede((supabase as any)
           .from('devoluciones')
-          .select('id, vehiculo_id, conductor_nombre, programado_por, fecha_programada, fecha_devolucion, estado, observaciones, created_at, programacion_id, sede_id, vehiculos:vehiculo_id(patente, marca, modelo), programaciones_onboarding:programacion_id(conductor_nombre, conductor_diurno_nombre, conductor_nocturno_nombre, documento_diurno, documento_nocturno, tipo_documento)'))
+          .select('id, vehiculo_id, conductor_nombre, programado_por, fecha_programada, fecha_devolucion, estado, observaciones, created_at, programacion_id, sede_id, vehiculos:vehiculo_id(patente, marca, modelo), programaciones_onboarding:programacion_id(conductor_nombre, conductor_diurno_id, conductor_diurno_nombre, conductor_nocturno_id, conductor_nocturno_nombre, documento_diurno, documento_nocturno, tipo_documento, modalidad)'))
           .in('estado', ['pendiente', 'completado'])
           .order('fecha_programada', { ascending: true })
       ])
@@ -814,16 +826,23 @@ export function AsignacionesModule() {
           || conductoresPorVeh.get(d.vehiculo_id)
           || ''
         const doc = prog?.tipo_documento || prog?.documento_diurno || prog?.documento_nocturno
-        // Resolver horario real: primero activa, luego finalizada más reciente
+        // Resolver horario real: usar modalidad de programacion origen, fallback a asignacion del vehiculo
         const asigVeh = asignacionesConMotivo.find((a: any) => a.vehiculo_id === d.vehiculo_id && a.estado === 'activa')
           || asignacionesConMotivo.filter((a: any) => a.vehiculo_id === d.vehiculo_id && a.estado === 'finalizada').sort((a: any, b: any) => (b.fecha_fin || b.created_at || '').localeCompare(a.fecha_fin || a.created_at || ''))[0]
-        const horarioReal = asigVeh?.horario || 'turno'
+        const horarioReal = prog?.modalidad
+          ? (prog.modalidad === 'turno' ? 'turno' : 'todo_dia')
+          : (asigVeh?.horario || 'turno')
+        // Determinar turno del conductor
+        let turnoCond: string = horarioReal === 'todo_dia' ? 'todo_dia' : 'diurno'
+        if (prog?.modalidad === 'turno' && d.conductor_id) {
+          turnoCond = d.conductor_id === prog.conductor_nocturno_id ? 'nocturno' : 'diurno'
+        }
         return {
           id: d.id, codigo: '', vehiculo_id: d.vehiculo_id, conductor_id: '', fecha_programada: d.fecha_programada,
           fecha_inicio: d.fecha_devolucion || '', fecha_fin: d.fecha_devolucion || null, modalidad: '', horario: horarioReal, estado: d.estado === 'completado' ? 'finalizada' : 'programado',
           notas: d.observaciones, created_at: d.created_at, created_by: null, motivo: 'devolucion_vehiculo',
           vehiculos: d.vehiculos || undefined,
-          asignaciones_conductores: doc ? [{ id: d.id, conductor_id: '', estado: 'asignado', horario: horarioReal === 'todo_dia' ? 'todo_dia' : 'diurno', documento: doc === 'carta_oferta' ? 'CARTA_OFERTA' : doc === 'anexo' ? 'ANEXO' : doc?.toUpperCase() }] : [],
+          asignaciones_conductores: [{ id: d.id, conductor_id: d.conductor_id || '', estado: 'asignado', horario: turnoCond, documento: doc ? (doc === 'carta_oferta' ? 'CARTA_OFERTA' : doc === 'anexo' ? 'ANEXO' : doc?.toUpperCase()) : 'NA' }],
           esDevolucion: true, devolucionId: d.id, _conductorNombre: condNombre, _programadoPor: d.programado_por,
           motivoDetalle: { observaciones: d.observaciones, programadoPor: d.programado_por },
           sede_id: d.sede_id || '',
@@ -2669,9 +2688,20 @@ export function AsignacionesModule() {
       cell: ({ row }) => {
         const { conductoresTurno, conductorCargo, horario } = row.original
 
-        // Si es DEVOLUCIÓN, mostrar conductor
+        // Si es DEVOLUCIÓN, mostrar conductor con badge D/N si es TURNO
         if (row.original.esDevolucion) {
           const nombre = (row.original as any)._conductorNombre || conductorCargo?.nombre || 'Sin conductor'
+          const turnoCond = row.original.asignaciones_conductores?.[0]?.horario
+          if (horario === 'turno' && (turnoCond === 'diurno' || turnoCond === 'nocturno')) {
+            return (
+              <div className="asig-conductores-compact">
+                <span className={`asig-conductor-turno asig-turno-${turnoCond}`}>
+                  <span className={`asig-turno-label asig-label-${turnoCond}`}>{turnoCond === 'diurno' ? 'D' : 'N'}</span>
+                  {nombre}
+                </span>
+              </div>
+            )
+          }
           return <span className="asig-conductor-compacto">{nombre}</span>
         }
 
@@ -3312,7 +3342,7 @@ export function AsignacionesModule() {
                           <span style={{ marginLeft: 8, padding: '2px 8px', fontSize: '11px', fontWeight: 600, color: '#fff', background: '#DC2626', borderRadius: '10px', verticalAlign: 'middle' }}>De baja</span>
                         )}
                       </p>
-                      <p className="asig-conductor-card-info">Turno: <strong>{viewAsignacion.horario === 'todo_dia' ? 'A CARGO' : viewAsignacion.horario}</strong></p>
+                      <p className="asig-conductor-card-info">Turno: <strong>{viewAsignacion.horario === 'todo_dia' ? 'A CARGO' : (viewAsignacion.asignaciones_conductores?.[0]?.horario === 'nocturno' ? 'Nocturno' : viewAsignacion.asignaciones_conductores?.[0]?.horario === 'diurno' ? 'Diurno' : viewAsignacion.horario === 'todo_dia' ? 'A CARGO' : 'Diurno')}</strong></p>
                       {viewAsignacion.asignaciones_conductores?.[0]?.documento && (
                         <p className="asig-conductor-card-info">
                           Documento: <strong style={{ color: viewAsignacion.asignaciones_conductores[0].documento === 'CARTA_OFERTA' ? '#059669' : viewAsignacion.asignaciones_conductores[0].documento === 'ANEXO' ? '#2563EB' : '#6B7280' }}>
