@@ -71,7 +71,7 @@ _logoPreload.onload = () => {
   ctx.drawImage(_logoPreload, 0, 0)
   logoBase64 = c.toDataURL('image/png')
 }
-import { FacturacionPreviewTable, type FacturacionPreviewRow, type ConceptoPendiente, type ConceptoNomina } from '../components/FacturacionPreviewTable'
+import { FacturacionPreviewTable, type FacturacionPreviewRow, type ConceptoPendiente, type ConceptoNomina, type SemanaDisponible } from '../components/FacturacionPreviewTable'
 import { CabifyPreviewTable, type CabifyPreviewRow } from '../components/CabifyPreviewTable'
 
 // Helper: parsear importe de multas_historico (formato argentino "$119.776,50" o US "$59,888.25")
@@ -349,6 +349,8 @@ export function ReporteFacturacionTab() {
   
   // Ref para auto-recalcular después de crear un nuevo período
   const autoRecalcularRef = useRef(false)
+  // Ref para auto-disparar preview después de navegar a otra semana desde el selector del preview
+  const autoTriggerPreviewRef = useRef(false)
   const [generando, setGenerando] = useState(false)
 
   // Estados principales
@@ -2825,6 +2827,14 @@ export function ReporteFacturacionTab() {
       recalcularPeriodoAbierto(true)
     }
   }, [periodo])
+
+  // Auto-disparar preview de facturación al navegar de semana desde el selector del preview
+  useEffect(() => {
+    if (autoTriggerPreviewRef.current && !loading && periodo) {
+      autoTriggerPreviewRef.current = false
+      prepararSiFacturaPreview()
+    }
+  }, [loading, periodo])
 
   // Recalcular período abierto - REGENERACIÓN COMPLETA desde cero (misma lógica que PeriodosTab)
   async function recalcularPeriodoAbierto(skipConfirm = false) {
@@ -6525,7 +6535,8 @@ export function ReporteFacturacionTab() {
           errorMsg,
           facturacionId,
           detalleId,
-          tieneSaldosPendientes: conductoresConSaldosPendientes.has(fact.conductor_id)
+          tieneSaldosPendientes: conductoresConSaldosPendientes.has(fact.conductor_id),
+          grupoFlota: fact.grupo_flota || null
         }
       }
 
@@ -6637,8 +6648,9 @@ export function ReporteFacturacionTab() {
   }
 
   // Exportar a Excel Facturación (desde el preview)
-  async function exportarSiFacturaExcel() {
-    if (siFacturaPreviewData.length === 0) return
+  async function exportarSiFacturaExcel(filteredRows?: FacturacionPreviewRow[]) {
+    const dataToExport = filteredRows && filteredRows.length > 0 ? filteredRows : siFacturaPreviewData
+    if (dataToExport.length === 0) return
 
     setExportingSiFactura(true)
     try {
@@ -6679,7 +6691,7 @@ export function ReporteFacturacionTab() {
       ]
 
       // Convertir preview data a formato array para Excel
-      const filasExport = siFacturaPreviewData.map(row => [
+      const filasExport = dataToExport.map(row => [
         row.numero,
         row.fechaEmision,
         row.fechaVencimiento,
@@ -7091,7 +7103,8 @@ export function ReporteFacturacionTab() {
           conductorId: fact.conductor_id,
           tieneError,
           errorMsg,
-          tieneSaldosPendientes: conductoresConSaldosPendientes.has(fact.conductor_id)
+          tieneSaldosPendientes: conductoresConSaldosPendientes.has(fact.conductor_id),
+          grupoFlota: fact.grupo_flota || null
         }
       }
 
@@ -9724,6 +9737,17 @@ export function ReporteFacturacionTab() {
     setBusquedaSemana('')
   }
 
+  // Callback para cambiar semana desde dentro del Preview Facturación
+  function onChangeSemanaPreview(op: SemanaDisponible) {
+    // Cerrar el preview actual
+    setShowSiFacturaPreview(false)
+    setSiFacturaPreviewData([])
+    // Activar auto-trigger para que al terminar la carga, se abra el preview de la nueva semana
+    autoTriggerPreviewRef.current = true
+    // Navegar a la semana seleccionada (esto dispara cargarFacturacion vía useEffect)
+    setSemanaActual({ inicio: op.inicio, fin: op.fin })
+  }
+
   const valorSemanaActual = `${infoSemana.anio}-${infoSemana.semana}`
 
   // Mapa de alquiler proyectado por conductor_id para Preview Facturación
@@ -9770,6 +9794,9 @@ export function ReporteFacturacionTab() {
         exporting={exportingSiFactura}
         onSync={undefined}
         proyectadoAlquilerMap={proyectadoAlquilerMap}
+        semanasDisponibles={semanasDisponibles}
+        semanaActualValue={valorSemanaActual}
+        onChangeSemana={onChangeSemanaPreview}
       />
     )
   }
