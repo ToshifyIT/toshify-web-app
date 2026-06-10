@@ -71,7 +71,7 @@ _logoPreload.onload = () => {
   ctx.drawImage(_logoPreload, 0, 0)
   logoBase64 = c.toDataURL('image/png')
 }
-import { FacturacionPreviewTable, type FacturacionPreviewRow, type ConceptoPendiente, type ConceptoNomina, type SemanaDisponible } from '../components/FacturacionPreviewTable'
+import { FacturacionPreviewTable, type FacturacionPreviewRow, type ConceptoPendiente, type ConceptoNomina } from '../components/FacturacionPreviewTable'
 import { CabifyPreviewTable, type CabifyPreviewRow } from '../components/CabifyPreviewTable'
 
 // Helper: parsear importe de multas_historico (formato argentino "$119.776,50" o US "$59,888.25")
@@ -349,8 +349,6 @@ export function ReporteFacturacionTab() {
   
   // Ref para auto-recalcular después de crear un nuevo período
   const autoRecalcularRef = useRef(false)
-  // Ref para auto-disparar preview después de navegar a otra semana desde el selector del preview
-  const autoTriggerPreviewRef = useRef(false)
   const [generando, setGenerando] = useState(false)
 
   // Estados principales
@@ -384,6 +382,8 @@ export function ReporteFacturacionTab() {
 
   // Filtro por grupo de flota (null = todos)
   const [filtroGrupoFlota, setFiltroGrupoFlota] = useState<string | null>(null)
+  // Mapa de grupo ganador por DNI (vista previa) - ref para compartir entre funciones
+  const grupoFlotaGanadorVPRef = useRef<Map<string, string | null>>(new Map())
 
   // Modal de desglose de días
   const [showDiasModal, setShowDiasModal] = useState(false)
@@ -1159,35 +1159,41 @@ export function ReporteFacturacionTab() {
         .in('estado', ['asignado', 'activo', 'activa', 'finalizado', 'finalizada', 'completado', 'cancelado', 'cancelada'])
       : { data: [] }
 
-      // Calcular grupo_flota GANADOR por conductor en la semana (44 DREAMS gana siempre que aparezca)
-      // Regla: si en la semana usó al menos 1 día un vehículo de 44 DREAMS, ese es el grupo asociado.
-      // Si no, toma el primer grupo no-nulo que encuentre.
-      const es44Dreams = (g: string) => g.includes('44 DREAMS')
+      // Calcular grupo_flota GANADOR por conductor en la semana
+      // Regla: GRUPO CG es el grupo "base", cualquier otro tiene prioridad.
+      // 1. Juntar todos los grupos con sus fechas de asignación
+      // 2. Descartar GRUPO CG si hay otros grupos disponibles
+      // 3. Entre los restantes, tomar el más reciente por fecha de inicio de asignación
+      // 4. Si solo hay GRUPO CG, queda GRUPO CG
+      const esGrupoCG = (g: string) => g.includes('GRUPO CG')
       const fechaInicioPeriodoLoad = parseISO((periodoData as any).fecha_inicio)
       const fechaFinPeriodoLoadGrupo = parseISO((periodoData as any).fecha_fin)
-      const grupoFlotaGanadorMap = new Map<string, string | null>()
+      // Acumular todas las opciones de grupo por conductor con su fecha
+      const grupoFlotaCandidatos = new Map<string, Array<{ grupo: string; fechaInicio: Date }>>()
       for (const ac of (asignacionesLoad || []) as any[]) {
         const condId = ac.conductor_id
         if (!condId) continue
         const asig = ac.asignaciones
         if (!asig) continue
-        // Filtrar asignaciones que NO se solapen con la semana del período
         const acInicio = ac.fecha_inicio ? parseISO(ac.fecha_inicio) : (asig.fecha_inicio ? parseISO(asig.fecha_inicio) : null)
         const acFin = ac.fecha_fin ? parseISO(ac.fecha_fin) : (asig.fecha_fin ? parseISO(asig.fecha_fin) : new Date('2099-12-31'))
         if (!acInicio) continue
         if (acFin < fechaInicioPeriodoLoad || acInicio > fechaFinPeriodoLoadGrupo) continue
         const grupo = asig.vehiculos?.grupo_flota || null
         if (!grupo) continue
-        const actual = grupoFlotaGanadorMap.get(condId)
-        // Si ya está marcado con 44 DREAMS, no se sobrescribe
-        if (actual && es44Dreams(actual)) continue
-        // Si este es 44 DREAMS, gana siempre
-        if (es44Dreams(grupo)) {
-          grupoFlotaGanadorMap.set(condId, grupo)
-        } else if (!actual) {
-          // Si no había nada, poner este
-          grupoFlotaGanadorMap.set(condId, grupo)
-        }
+        if (!grupoFlotaCandidatos.has(condId)) grupoFlotaCandidatos.set(condId, [])
+        grupoFlotaCandidatos.get(condId)!.push({ grupo, fechaInicio: acInicio })
+      }
+      // Resolver ganador por conductor
+      const grupoFlotaGanadorMap = new Map<string, string | null>()
+      for (const [condId, candidatos] of grupoFlotaCandidatos) {
+        // Filtrar los que NO son GRUPO CG
+        const noGrupoCG = candidatos.filter(c => !esGrupoCG(c.grupo))
+        // Si hay opciones que no son GRUPO CG, tomar la más reciente de esas
+        // Si no, tomar la más reciente de GRUPO CG
+        const lista = noGrupoCG.length > 0 ? noGrupoCG : candidatos
+        lista.sort((a, b) => b.fechaInicio.getTime() - a.fechaInicio.getTime())
+        grupoFlotaGanadorMap.set(condId, lista[0].grupo)
       }
 
       const conductoresConAsignacionAlCierreLoad = new Set<string>()
@@ -1678,9 +1684,11 @@ export function ReporteFacturacionTab() {
           .eq('aplicado', true),
       ])
 
-      // Calcular grupo_flota GANADOR por DNI para vista previa (44 DREAMS gana siempre)
-      const es44DreamsVP = (g: string) => g.includes('44 DREAMS')
-      const grupoFlotaGanadorVPMap = new Map<string, string | null>()
+      // Calcular grupo_flota GANADOR por DNI para vista previa
+      // Regla: GRUPO CG es el grupo "base", cualquier otro tiene prioridad.
+      // Descartar GRUPO CG si hay otros grupos, y entre los restantes tomar el más reciente por fecha.
+      const esGrupoCGVP = (g: string) => g.includes('GRUPO CG')
+      const grupoFlotaCandidatosVP = new Map<string, Array<{ grupo: string; fechaInicio: Date }>>()
       {
         const semInicioGrupo = parseISO(fechaInicio)
         const semFinGrupo = parseISO(fechaFin)
@@ -1696,15 +1704,19 @@ export function ReporteFacturacionTab() {
           const grupo = asig.vehiculos?.grupo_flota || null
           if (!grupo) continue
           const dni = cond.numero_dni
-          const actual = grupoFlotaGanadorVPMap.get(dni)
-          if (actual && es44DreamsVP(actual)) continue
-          if (es44DreamsVP(grupo)) {
-            grupoFlotaGanadorVPMap.set(dni, grupo)
-          } else if (!actual) {
-            grupoFlotaGanadorVPMap.set(dni, grupo)
-          }
+          if (!grupoFlotaCandidatosVP.has(dni)) grupoFlotaCandidatosVP.set(dni, [])
+          grupoFlotaCandidatosVP.get(dni)!.push({ grupo, fechaInicio: acInicio })
         }
       }
+      const grupoFlotaGanadorVPMap = new Map<string, string | null>()
+      for (const [dni, candidatos] of grupoFlotaCandidatosVP) {
+        const noGrupoCG = candidatos.filter(c => !esGrupoCGVP(c.grupo))
+        const lista = noGrupoCG.length > 0 ? noGrupoCG : candidatos
+        lista.sort((a, b) => b.fechaInicio.getTime() - a.fechaInicio.getTime())
+        grupoFlotaGanadorVPMap.set(dni, lista[0].grupo)
+      }
+      // Guardar en ref para que prepararCabifyPreview pueda usarlo
+      grupoFlotaGanadorVPRef.current = grupoFlotaGanadorVPMap
 
       // Procesar 1a: asignaciones
       {
@@ -2827,14 +2839,6 @@ export function ReporteFacturacionTab() {
       recalcularPeriodoAbierto(true)
     }
   }, [periodo])
-
-  // Auto-disparar preview de facturación al navegar de semana desde el selector del preview
-  useEffect(() => {
-    if (autoTriggerPreviewRef.current && !loading && periodo) {
-      autoTriggerPreviewRef.current = false
-      prepararSiFacturaPreview()
-    }
-  }, [loading, periodo])
 
   // Recalcular período abierto - REGENERACIÓN COMPLETA desde cero (misma lógica que PeriodosTab)
   async function recalcularPeriodoAbierto(skipConfirm = false) {
@@ -8210,6 +8214,7 @@ export function ReporteFacturacionTab() {
           importeGenerado: cabifyInfo.ganancia,
           importeGeneradoConBonos: cabifyInfo.cobroApp,
           generadoEfectivo: cabifyInfo.efectivo,
+          flotaPrioritaria: grupoFlotaGanadorVPRef.current.get(f.conductor_dni) || null,
           detalle: {
             diasTrabajados: diasProyectados,
             prorrateoCargoDias: f.prorrateo_cargo_dias || 0,
@@ -8359,10 +8364,11 @@ export function ReporteFacturacionTab() {
             importeGenerado: Number(savedData.importe_generado) || 0,
             importeGeneradoConBonos: Number(savedData.importe_generado_bonos) || 0,
             generadoEfectivo: Number(savedData.generado_efectivo) || 0,
-            id: savedData.id
+            id: savedData.id,
+            flotaPrioritaria: f.grupo_flota || null
           }
         }
-        
+
         const actualAlquiler = f.subtotal_alquiler || 0
 
         // Proyectar alquiler a semana completa usando precio exacto del detalle
@@ -8400,6 +8406,7 @@ export function ReporteFacturacionTab() {
           importeGenerado: cabifyInfo.ganancia,
           importeGeneradoConBonos: cabifyInfo.cobroApp,
           generadoEfectivo: cabifyInfo.efectivo,
+          flotaPrioritaria: f.grupo_flota || null,
           detalle: {
             diasTrabajados: 7,
             prorrateoCargoDias: f.prorrateo_cargo_dias || 0,
@@ -9737,17 +9744,6 @@ export function ReporteFacturacionTab() {
     setBusquedaSemana('')
   }
 
-  // Callback para cambiar semana desde dentro del Preview Facturación
-  function onChangeSemanaPreview(op: SemanaDisponible) {
-    // Cerrar el preview actual
-    setShowSiFacturaPreview(false)
-    setSiFacturaPreviewData([])
-    // Activar auto-trigger para que al terminar la carga, se abra el preview de la nueva semana
-    autoTriggerPreviewRef.current = true
-    // Navegar a la semana seleccionada (esto dispara cargarFacturacion vía useEffect)
-    setSemanaActual({ inicio: op.inicio, fin: op.fin })
-  }
-
   const valorSemanaActual = `${infoSemana.anio}-${infoSemana.semana}`
 
   // Mapa de alquiler proyectado por conductor_id para Preview Facturación
@@ -9794,9 +9790,6 @@ export function ReporteFacturacionTab() {
         exporting={exportingSiFactura}
         onSync={undefined}
         proyectadoAlquilerMap={proyectadoAlquilerMap}
-        semanasDisponibles={semanasDisponibles}
-        semanaActualValue={valorSemanaActual}
-        onChangeSemana={onChangeSemanaPreview}
       />
     )
   }
