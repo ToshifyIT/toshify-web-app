@@ -101,6 +101,8 @@ export interface FacturacionPreviewRow {
   isDeleted?: boolean
   // Para tracking de modificaciones a filas existentes
   isModified?: boolean
+  // Grupo de flota del conductor
+  grupoFlota?: string | null
 }
 
 // Tipo para conceptos de la BD
@@ -111,6 +113,17 @@ export interface ConceptoNomina {
   tipo: string
   es_variable: boolean
   iva_porcentaje: number
+}
+
+// Tipo para las semanas disponibles en el selector
+export interface SemanaDisponible {
+  value: string
+  semana: number
+  anio: number
+  inicioFmt: string
+  finFmt: string
+  inicio: Date
+  fin: Date
 }
 
 interface FacturacionPreviewTableProps {
@@ -129,6 +142,10 @@ interface FacturacionPreviewTableProps {
   onSync?: (data: FacturacionPreviewRow[]) => Promise<boolean>
   // Mapa conductor_id → alquiler semanal proyectado (precio_unitario * 7)
   proyectadoAlquilerMap?: Map<string, number>
+  // Selector de semana
+  semanasDisponibles?: SemanaDisponible[]
+  semanaActualValue?: string
+  onChangeSemana?: (op: SemanaDisponible) => void
 }
 
 export function FacturacionPreviewTable({
@@ -145,7 +162,10 @@ export function FacturacionPreviewTable({
   onExport,
   exporting,
   onSync,
-  proyectadoAlquilerMap
+  proyectadoAlquilerMap,
+  semanasDisponibles = [],
+  semanaActualValue,
+  onChangeSemana
 }: FacturacionPreviewTableProps) {
   const { aplicarFiltroSede } = useSede()
   const [data, setData] = useState<FacturacionPreviewRow[]>(initialData)
@@ -153,6 +173,7 @@ export function FacturacionPreviewTable({
   const [searchTerm, setSearchTerm] = useState('')
   const [filtroProducto, setFiltroProducto] = useState<string>('todos')
   const [filtroTipoFactura, setFiltroTipoFactura] = useState<string>('todos')
+  const [filtroGrupoFlota, setFiltroGrupoFlota] = useState<string>('todos')
   const [editingCell, setEditingCell] = useState<{ rowIdx: number; field: string } | null>(null)
   const [editValue, setEditValue] = useState<string>('')
   const [hasChanges, setHasChanges] = useState(false)
@@ -172,6 +193,10 @@ export function FacturacionPreviewTable({
     return [...new Set(data.map(r => r.codigoProducto))].sort()
   }, [data])
 
+  const gruposFlotaUnicos = useMemo(() => {
+    return [...new Set(data.map(r => r.grupoFlota || '').filter(Boolean))].sort()
+  }, [data])
+
   // Filtrar datos
   const filteredData = useMemo(() => {
     return data.filter(row => {
@@ -189,9 +214,12 @@ export function FacturacionPreviewTable({
       if (filtroTipoFactura !== 'todos' && row.tipoFactura !== filtroTipoFactura) {
         return false
       }
+      if (filtroGrupoFlota !== 'todos' && (row.grupoFlota || '') !== filtroGrupoFlota) {
+        return false
+      }
       return true
     })
-  }, [data, searchTerm, filtroProducto, filtroTipoFactura])
+  }, [data, searchTerm, filtroProducto, filtroTipoFactura, filtroGrupoFlota])
 
   // Map O(1) para lookup de índice real en data (evita .findIndex() O(n) por fila en render)
   const dataIndexMap = useMemo(() => {
@@ -1055,6 +1083,30 @@ export function FacturacionPreviewTable({
             <option value="FACTURA_A">Fact. A</option>
             <option value="FACTURA_B">Fact. B</option>
           </select>
+          {gruposFlotaUnicos.length > 0 && (
+            <select value={filtroGrupoFlota} onChange={(e) => setFiltroGrupoFlota(e.target.value)}>
+              <option value="todos">Todos los grupos</option>
+              {gruposFlotaUnicos.map(g => (
+                <option key={g} value={g}>{g}</option>
+              ))}
+            </select>
+          )}
+          {semanasDisponibles.length > 0 && onChangeSemana && (
+            <select
+              value={semanaActualValue || ''}
+              onChange={(e) => {
+                const sel = semanasDisponibles.find(s => s.value === e.target.value)
+                if (sel) onChangeSemana(sel)
+              }}
+              style={{ fontWeight: 'bold' }}
+            >
+              {semanasDisponibles.map(s => (
+                <option key={s.value} value={s.value}>
+                  S{s.semana}/{s.anio} ({s.inicioFmt} - {s.finFmt})
+                </option>
+              ))}
+            </select>
+          )}
         </div>
         <span className="fact-preview-count">{filteredData.length} líneas</span>
       </div>
