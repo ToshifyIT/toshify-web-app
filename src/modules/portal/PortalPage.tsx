@@ -2,7 +2,7 @@
 // Portal público para conductores - Mi Espacio
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import { jsPDF } from 'jspdf'
-import { format, parseISO } from 'date-fns'
+import { format, parseISO, getISOWeek, startOfISOWeek, endOfISOWeek } from 'date-fns'
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts'
 import { supabase } from '../../lib/supabase'
 import { formatCurrency } from '../../types/facturacion.types'
@@ -20,6 +20,31 @@ interface PortalConductor {
   apellidos: string
   numero_dni: string | null
   numero_cuit: string | null
+}
+
+// Multa del conductor (seccion nueva)
+interface PortalMulta {
+  id: string
+  infraccion: string | null   // OJO: en BD esto es el N° de acta/expediente (ej "Q37295361")
+  patente: string | null
+  fecha_infraccion: string | null
+  importe: string | null
+  lugar: string | null         // jurisdiccion (ej "CABA")
+  lugar_detalle: string | null // "Lugar: <direccion> | Estado: <estado>"
+  detalle: string | null       // descripcion real de la infraccion
+  drive_url: string | null
+}
+
+// Km de una semana (seccion nueva). limite/excedido segun modalidad por contrato.
+interface PortalKmSemana {
+  semana: number
+  anio: number
+  fecha_inicio: string
+  fecha_fin: string
+  km: number
+  limite: number
+  excedido: number
+  modalidad: string // 'turno' | 'a_cargo'
 }
 
 interface PortalPeriodo {
@@ -141,6 +166,58 @@ function getConceptoLabel(item: PortalDetalle): string {
   return baseLabel
 }
 
+/** Convierte un link de Google Drive ("/file/d/<ID>/view" o "open?id=<ID>")
+ *  en su URL de descarga directa (uc?export=download&id=<ID>), que dispara
+ *  la descarga del navegador en vez de abrir el visor de Drive.
+ *  Si no se reconoce el patrón, devuelve la URL original. */
+function driveDownloadUrl(url: string | null): string {
+  if (!url) return ''
+  const m = url.match(/\/file\/d\/([^/]+)/) || url.match(/[?&]id=([^&]+)/)
+  const id = m ? m[1] : null
+  return id ? `https://drive.google.com/uc?export=download&id=${id}` : url
+}
+
+/** Versión /preview embebible (iframe) del link de Drive, para mostrar el
+ *  documento del acta dentro del modal (mismo patrón que MultasModule). */
+function drivePreviewUrl(url: string | null): string | null {
+  if (!url) return null
+  const m = url.match(/\/file\/d\/([^/]+)/) || url.match(/[?&]id=([^&]+)/)
+  return m ? `https://drive.google.com/file/d/${m[1]}/preview` : null
+}
+
+// =====================================================
+// ICONOS BOTTOM NAV (SVG line, heredan color via currentColor)
+// =====================================================
+const SVG = { width: 20, height: 20, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: 2, strokeLinecap: 'round' as const, strokeLinejoin: 'round' as const }
+
+// Resumen: gráfico de barras (resume facturación + gráficos)
+const ICON_RESUMEN = (
+  <svg {...SVG}><line x1="18" y1="20" x2="18" y2="10" /><line x1="12" y1="20" x2="12" y2="4" /><line x1="6" y1="20" x2="6" y2="14" /></svg>
+)
+// Historial: recibo / documento con líneas
+const ICON_HISTORIAL = (
+  <svg {...SVG}><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><polyline points="14 2 14 8 20 8" /><line x1="8" y1="13" x2="16" y2="13" /><line x1="8" y1="17" x2="13" y2="17" /></svg>
+)
+// Multas: triángulo de alerta con signo
+const ICON_MULTAS = (
+  <svg {...SVG}><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" /><line x1="12" y1="9" x2="12" y2="13" /><line x1="12" y1="17" x2="12.01" y2="17" /></svg>
+)
+// KM: velocímetro / gauge
+const ICON_KM = (
+  <svg {...SVG}><path d="M12 21a9 9 0 1 0-9-9" /><path d="M3 12a9 9 0 0 1 9-9" opacity="0" /><circle cx="12" cy="12" r="9" /><path d="M12 12l4-3" /><circle cx="12" cy="12" r="1.4" fill="currentColor" stroke="none" /></svg>
+)
+
+// Secciones del dashboard. Las tabs de desktop y la bottom-nav de mobile
+// comparten este set y el mismo estado activo (activeSection).
+type SectionKey = 'resumen' | 'historial' | 'multas' | 'km'
+
+const NAV_ITEMS: { key: SectionKey; label: string; short: string; ico: React.ReactNode }[] = [
+  { key: 'resumen', label: 'Resumen', short: 'Resumen', ico: ICON_RESUMEN },
+  { key: 'historial', label: 'Historial', short: 'Historial', ico: ICON_HISTORIAL },
+  { key: 'multas', label: 'Multas', short: 'Multas', ico: ICON_MULTAS },
+  { key: 'km', label: 'Km recorridos', short: 'KM', ico: ICON_KM },
+]
+
 // =====================================================
 // LOGO PRELOAD (para PDF)
 // =====================================================
@@ -179,6 +256,19 @@ export function PortalPage() {
   void fraccionamientos
   const [cabifyPorSemana, setCabifyPorSemana] = useState<Record<string, number>>({})
 
+  // Secciones nuevas: Multas y Km recorridos
+  const [multas, setMultas] = useState<PortalMulta[]>([])
+  const [kmSemanas, setKmSemanas] = useState<PortalKmSemana[]>([])
+
+  // Modales (detalle de semana + detalle de multa). Se renderizan como overlay
+  // sobre el dashboard (antes el detalle reemplazaba toda la vista con setView).
+  const [showDetalleModal, setShowDetalleModal] = useState(false)
+  const [selectedMulta, setSelectedMulta] = useState<PortalMulta | null>(null)
+
+  // Navegacion por secciones en TODAS las vistas: tabs arriba en desktop,
+  // bottom-nav en mobile. El CSS muestra solo la seccion activa.
+  const [activeSection, setActiveSection] = useState<SectionKey>('resumen')
+
   // UI state
   const [loginInput, setLoginInput] = useState('')
   const [loginLoading, setLoginLoading] = useState(false)
@@ -187,6 +277,20 @@ export function PortalPage() {
   const [loadingDetalle, setLoadingDetalle] = useState(false)
   const [detalleError, setDetalleError] = useState('')
   const [exportingPdf, setExportingPdf] = useState(false)
+
+  // Cerrar modales con tecla ESC. Guard interno: el hook se ejecuta siempre
+  // (cumple reglas de hooks), pero solo engancha el listener si hay modal abierto.
+  useEffect(() => {
+    if (!showDetalleModal && !selectedMulta) return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setShowDetalleModal(false)
+        setSelectedMulta(null)
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [showDetalleModal, selectedMulta])
 
   // =====================================================
   // LOGIN
@@ -382,6 +486,91 @@ export function PortalPage() {
     }
   }, [])
 
+  // ===== Carga de KM recorridos por semana (desde junio 2026) =====
+  // Suma kilometraje de uss_historico por semana ISO, resuelve modalidad/limite por contrato
+  // y calcula el excedido. El conductor en uss_historico es texto; matcheamos por nombre.
+  const loadKmRecorridos = useCallback(async (cond: PortalConductor) => {
+    try {
+      // Corte fijo: km recorridos se muestran desde junio 2026 (el 1/6 es lunes,
+      // arranque exacto de la semana ISO 23). Se listan todas las semanas desde ahi.
+      const DESDE = '2026-06-01'
+      const nombreCompleto = `${cond.nombres} ${cond.apellidos}`.trim()
+      const primerApe = cond.apellidos.split(' ')[0]
+
+      // 1) Viajes del conductor en la ventana (km + patente + fecha)
+      const { data: viajes } = await supabase
+        .from('uss_historico')
+        .select('kilometraje, patente, fecha_hora_inicio_gmt3, conductor')
+        .ilike('conductor', `%${primerApe}%`)
+        .gte('fecha_hora_inicio_gmt3', DESDE)
+        .limit(8000)
+
+      const normName = (s: string) => (s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toUpperCase().replace(/\s+/g, ' ').trim()
+      const target = normName(nombreCompleto)
+      const tokens = target.split(' ').filter(t => t.length >= 3)
+
+      // 2) Limites por modalidad (params configurables, mismos defaults que Control Exceso KM)
+      let limiteTurno = 1800
+      let limiteACargo = 3600
+      const { data: limiteParams } = await (supabase.from('parametros_sistema' as any) as any)
+        .select('clave, valor')
+        .in('clave', ['limite_km_semanal_turno', 'limite_km_semanal_a_cargo'])
+      for (const p of (limiteParams || []) as any[]) {
+        const v = Number(p.valor)
+        if (!isNaN(v)) {
+          if (p.clave === 'limite_km_semanal_turno') limiteTurno = v
+          if (p.clave === 'limite_km_semanal_a_cargo') limiteACargo = v
+        }
+      }
+
+      // 3) Modalidad del conductor (turno / a_cargo) via asignaciones vigentes
+      let modalidad: string = 'turno'
+      const { data: asigs } = await (supabase
+        .from('asignaciones_conductores')
+        .select('asignacion:asignaciones(modalidad, estado)')
+        .eq('conductor_id', cond.id) as any)
+      for (const a of (asigs || []) as any[]) {
+        const m = a.asignacion?.modalidad
+        const est = a.asignacion?.estado
+        if (m && ['activa', 'activo', 'programado'].includes(est || '')) { modalidad = m; break }
+        if (m) modalidad = m
+      }
+      const limite = modalidad === 'a_cargo' ? limiteACargo : limiteTurno
+
+      // 4) Agrupar km por semana ISO (filtrando los viajes que realmente son del conductor)
+      const porSemana = new Map<string, { km: number; semana: number; anio: number; ini: Date; fin: Date }>()
+      for (const v of (viajes || []) as any[]) {
+        const condNorm = normName(v.conductor || '')
+        const matchea = condNorm === target || (tokens.length > 0 && tokens.every(t => condNorm.includes(t)))
+        if (!matchea) continue
+        const km = Number(v.kilometraje) || 0
+        if (km <= 0) continue
+        const dt = new Date(v.fecha_hora_inicio_gmt3)
+        const semana = getISOWeek(dt)
+        const anio = dt.getFullYear()
+        const key = `${anio}-${semana}`
+        const cur = porSemana.get(key) || { km: 0, semana, anio, ini: startOfISOWeek(dt), fin: endOfISOWeek(dt) }
+        cur.km += km
+        porSemana.set(key, cur)
+      }
+
+      const lista: PortalKmSemana[] = [...porSemana.values()]
+        .map(s => ({
+          semana: s.semana, anio: s.anio,
+          fecha_inicio: format(s.ini, 'yyyy-MM-dd'),
+          fecha_fin: format(s.fin, 'yyyy-MM-dd'),
+          km: Math.round(s.km), limite,
+          excedido: Math.max(0, Math.round(s.km) - limite),
+          modalidad,
+        }))
+        .sort((a, b) => (b.anio - a.anio) || (b.semana - a.semana))
+
+      setKmSemanas(lista)
+    } catch {
+      setKmSemanas([])
+    }
+  }, [])
+
   useEffect(() => {
     if (conductor && view === 'dashboard') {
       loadFacturas(conductor.id)
@@ -428,8 +617,38 @@ export function PortalPage() {
           }
           setCabifyPorSemana(porDia)
         })
+
+      // ===== Seccion nueva: MULTAS del conductor =====
+      // Trae candidatas por primer apellido y filtra en cliente exigiendo que el
+      // conductor_responsable contenga nombre Y apellido. Excluye borradas/desestimadas.
+      supabase
+        .from('multas_historico')
+        .select('id, infraccion, patente, fecha_infraccion, importe, lugar, lugar_detalle, detalle, drive_url, conductor_responsable')
+        .ilike('conductor_responsable', `%${primerApellido}%`)
+        .is('deleted_at', null)
+        .is('desestimada_at', null)
+        .order('fecha_infraccion', { ascending: false })
+        .limit(200)
+        .then(({ data }) => {
+          const norm = (s: string) => (s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toUpperCase()
+          const n = norm(primerNombre), a = norm(primerApellido)
+          const filtradas = ((data || []) as Array<PortalMulta & { conductor_responsable?: string }>)
+            .filter(m => {
+              const cr = norm(m.conductor_responsable || '')
+              return cr.includes(n) && cr.includes(a)
+            })
+            .map((m): PortalMulta => ({
+              id: m.id, infraccion: m.infraccion, patente: m.patente,
+              fecha_infraccion: m.fecha_infraccion, importe: m.importe,
+              lugar: m.lugar, lugar_detalle: m.lugar_detalle, detalle: m.detalle, drive_url: m.drive_url,
+            }))
+          setMultas(filtradas)
+        })
+
+      // ===== Seccion nueva: KM RECORRIDOS por semana (desde junio 2026) =====
+      loadKmRecorridos(conductor)
     }
-  }, [conductor, view, loadFacturas])
+  }, [conductor, view, loadFacturas, loadKmRecorridos])
 
   // =====================================================
   // LOAD DETAIL
@@ -437,7 +656,7 @@ export function PortalPage() {
 
   async function openDetail(factura: PortalFacturacion) {
     setSelectedFactura(factura)
-    setView('detail')
+    setShowDetalleModal(true)
     setLoadingDetalle(true)
     setDetalleError('')
     setDetallePagos([])
@@ -763,6 +982,8 @@ export function PortalPage() {
     setSaldo(null)
     setFraccionamientos([])
     setCabifyPorSemana({})
+    setShowDetalleModal(false)
+    setSelectedMulta(null)
     setLoginInput('')
     setLoginError('')
     setView('login')
@@ -858,7 +1079,9 @@ export function PortalPage() {
   // RENDER: DETAIL
   // =====================================================
 
-  if (view === 'detail' && selectedFactura) {
+  // Modal de detalle de semana: se renderiza como overlay SOBRE el dashboard.
+  // Se construye solo cuando hay modal abierto + factura seleccionada.
+  const detalleModal = (showDetalleModal && selectedFactura) ? (() => {
     const periodo = selectedFactura.periodos_facturacion
     const cargos = detalleItems.filter(d => !d.es_descuento && d.total !== 0 && d.concepto_codigo !== 'SALDO')
     const descuentos = detalleItems.filter(d => d.es_descuento && d.total !== 0 && d.concepto_codigo !== 'SALDO')
@@ -873,31 +1096,18 @@ export function PortalPage() {
     const saldoPendiente = totalAPagar - totalPagadoSemana
 
     return (
-      <div className="portal">
-        <header className="portal-header">
-          <div className="portal-header-left">
-            <img src={logoToshifyUrl} alt="Toshify" className="portal-header-logo" />
-            <div>
-              <div className="portal-header-name">
-                {conductor?.nombres} {conductor?.apellidos}
-              </div>
-              <div className="portal-header-dni">DNI: {conductor?.numero_dni}</div>
-            </div>
-          </div>
-          <button className="portal-logout-btn" onClick={handleLogout}>
-            Salir
-          </button>
-        </header>
-
-        <div className="portal-detail">
-          <button className="portal-back-btn" onClick={() => setView('dashboard')}>
-            ← Volver
-          </button>
+      <div className="portal-modal-overlay" onClick={() => setShowDetalleModal(false)}>
+        <div className="portal-modal-card" onClick={e => e.stopPropagation()}>
+          <button
+            className="portal-modal-close"
+            onClick={() => setShowDetalleModal(false)}
+            aria-label="Cerrar"
+          >×</button>
 
           {loadingDetalle ? (
             <div className="portal-loading">Cargando detalle...</div>
           ) : (
-            <div className="portal-detail-card">
+            <div className="portal-detail-card" style={{ border: 'none', borderRadius: 0 }}>
               {/* Header */}
               <div className="portal-detail-header">
                 <div>
@@ -1086,13 +1296,119 @@ export function PortalPage() {
             </div>
           )}
           {/* Nota legal */}
-          <div className="portal-nota-legal">
+          <div className="portal-nota-legal" style={{ padding: '0 4px' }}>
             La información presentada es de carácter referencial y no constituye un comprobante fiscal válido.
           </div>
         </div>
       </div>
     )
-  }
+  })() : null
+
+  // Modal de detalle de multa (boton "Ver" de Mis multas).
+  // OJO con el modelo de datos real de multas_historico:
+  //   - infraccion    = N° de acta/expediente (ej "Q37295361")
+  //   - detalle       = descripcion real de la infraccion (ej "Exceso de velocidad...")
+  //   - lugar         = jurisdiccion (ej "CABA")
+  //   - lugar_detalle = "Lugar: <direccion> | Estado: <estado>"
+  const multaModal = selectedMulta ? (() => {
+    const m = selectedMulta
+    // Parsear lugar_detalle -> direccion + estado
+    let direccion = '', estado = ''
+    if (m.lugar_detalle) {
+      const dirMatch = m.lugar_detalle.match(/Lugar:\s*([^|]+)/i)
+      const estMatch = m.lugar_detalle.match(/Estado:\s*([^|]+)/i)
+      direccion = dirMatch ? dirMatch[1].trim() : ''
+      estado = estMatch ? estMatch[1].trim() : ''
+      if (!dirMatch && !estMatch) direccion = m.lugar_detalle.trim()
+    }
+    const lugarCompleto = [m.lugar, direccion].filter(Boolean).join(' — ')
+    const previewUrl = drivePreviewUrl(m.drive_url)
+    const fechaInfraccion = m.fecha_infraccion ? format(parseISO(m.fecha_infraccion), 'dd/MM/yyyy') : '-'
+    const horaInfraccion = m.fecha_infraccion ? format(parseISO(m.fecha_infraccion), 'HH:mm') : ''
+    return (
+    <div className="portal-modal-overlay" onClick={() => setSelectedMulta(null)}>
+      <div className="portal-multa-modal" onClick={e => e.stopPropagation()}>
+        {/* Header (diseño del sistema: título + cerrar, como MultasModule) */}
+        <div className="portal-multa-modal-header">
+          <h2 className="portal-multa-modal-title">Detalle de Multa{m.patente ? ` — ${m.patente}` : ''}</h2>
+          <button
+            className="portal-modal-close"
+            onClick={() => setSelectedMulta(null)}
+            aria-label="Cerrar"
+          >×</button>
+        </div>
+
+        {/* Cuerpo: acta embebida (izq) + tabla de detalle (der) */}
+        <div className="portal-multa-modal-body">
+          <div className="portal-multa-doc">
+            {previewUrl ? (
+              <iframe src={previewUrl} title="Acta de la multa" allow="autoplay" />
+            ) : (
+              <div className="portal-multa-doc-empty">
+                <div className="portal-multa-doc-empty-title">Sin PDF disponible</div>
+                <div className="portal-multa-doc-empty-sub">Esta multa no tiene un documento asociado en Drive.</div>
+              </div>
+            )}
+          </div>
+
+          <div className="portal-multa-datos">
+            <div className="portal-multa-datos-scroll">
+              <table className="portal-multa-table">
+                <tbody>
+                  <tr>
+                    <td className="portal-multa-label">Patente</td>
+                    <td className="portal-multa-value"><span className="patente-badge">{m.patente || '-'}</span></td>
+                  </tr>
+                  <tr>
+                    <td className="portal-multa-label">Fecha Infracción</td>
+                    <td className="portal-multa-value">
+                      {fechaInfraccion}
+                      {horaInfraccion && <span className="portal-multa-hora">{horaInfraccion}</span>}
+                    </td>
+                  </tr>
+                  <tr>
+                    <td className="portal-multa-label">Importe</td>
+                    <td className="portal-multa-value portal-multa-importe">{m.importe || '-'}</td>
+                  </tr>
+                  <tr>
+                    <td className="portal-multa-label">Acta</td>
+                    <td className="portal-multa-value">{m.infraccion || '-'}</td>
+                  </tr>
+                  <tr>
+                    <td className="portal-multa-label">Lugar</td>
+                    <td className="portal-multa-value">{lugarCompleto || m.lugar || '-'}</td>
+                  </tr>
+                  {estado && (
+                    <tr>
+                      <td className="portal-multa-label">Estado</td>
+                      <td className="portal-multa-value">{estado}</td>
+                    </tr>
+                  )}
+                  {m.detalle && (
+                    <tr>
+                      <td className="portal-multa-label">Infracción</td>
+                      <td className="portal-multa-value"><div className="portal-multa-obs">{m.detalle}</div></td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+            {m.drive_url && (
+              <div className="portal-multa-modal-footer">
+                <a
+                  className="portal-pdf-btn"
+                  href={driveDownloadUrl(m.drive_url)}
+                  download={`Multa_${m.infraccion || 'acta'}.pdf`}
+                  rel="noopener noreferrer"
+                >↓ Descargar</a>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+    )
+  })() : null
 
   // =====================================================
   // RENDER: DASHBOARD
@@ -1115,7 +1431,7 @@ export function PortalPage() {
         </button>
       </header>
 
-      <div className="portal-content">
+      <div className="portal-content" data-active={activeSection}>
         {loadingFacturas ? (
           <div className="portal-loading">Cargando facturación...</div>
         ) : facturas.length === 0 ? (
@@ -1124,7 +1440,27 @@ export function PortalPage() {
             <p>No hay facturación registrada todavía</p>
           </div>
         ) : stats && (
-          <>
+          <div className="portal-shell">
+            {/* ===== MENU LATERAL DESKTOP (mismo estado que la bottom-nav mobile) =====
+                En desktop, Resumen e Historial comparten sección (se ven juntos),
+                por eso Historial no aparece como ítem propio. */}
+            <nav className="portal-sidebar">
+              {NAV_ITEMS.filter(item => item.key !== 'historial').map(item => (
+                <button
+                  key={item.key}
+                  className={`portal-side-item${(activeSection === item.key || (item.key === 'resumen' && activeSection === 'historial')) ? ' active' : ''}`}
+                  onClick={() => setActiveSection(item.key)}
+                  type="button"
+                >
+                  <span className="portal-side-ico">{item.ico}</span>
+                  {item.label}
+                </button>
+              ))}
+            </nav>
+
+            <div className="portal-main">
+            {/* ===== SECCIÓN: RESUMEN (stats + mora + gráficos) ===== */}
+            <section className="portal-msec" data-msec="resumen">
             {/* Stats row */}
             <div className="portal-stats-grid">
               <div className="portal-stat-card">
@@ -1182,10 +1518,12 @@ export function PortalPage() {
                 <span className="portal-mora-amount">Acumulada: {formatCurrency(saldo.monto_mora_acumulada)}</span>
               </div>
             )}
+            </section>{/* /resumen (stats + mora) */}
 
-            {/* 2 columnas: Chart + Semanas */}
+            {/* 2 columnas en desktop: gráficos (Resumen) + Historial juntos en la
+                misma pestaña. En mobile cada uno es su propia sección. */}
             <div className="portal-layout">
-              <div className="portal-left">
+              <div className="portal-left portal-msec" data-msec="resumen">
                 {/* Chart */}
                 <div className="portal-chart-card">
                   <div className="portal-chart-header">
@@ -1250,7 +1588,7 @@ export function PortalPage() {
                 </div>
 
                 {/* Chart: Proforma vs Aportes */}
-                <div className="portal-chart-card" style={{ marginTop: '12px' }}>
+                <div className="portal-chart-card">
                   <div className="portal-chart-header">
                     <div className="portal-chart-title">Proforma vs Aportes</div>
                     <div className="portal-chart-legend">
@@ -1333,9 +1671,9 @@ export function PortalPage() {
                 */}
               </div>
 
-              <div className="portal-right">
+              <div className="portal-right portal-msec" data-msec="historial">
                 <div className="portal-weeks-header">Historial</div>
-                <div className="portal-weeks">
+                <div className="portal-weeks portal-weeks--grid">
                   {facturas.map((f) => {
                     const p = f.periodos_facturacion
                     const pagado = pagadoPorSemana[`${p.semana}-${p.anio}`] || 0
@@ -1387,14 +1725,123 @@ export function PortalPage() {
                   })}
                 </div>
               </div>
-            </div>
+            </div>{/* /portal-layout */}
+
+            {/* ===== SECCIÓN: MIS MULTAS ===== */}
+            <section className="portal-msec" data-msec="multas">
+                <div className="portal-weeks-header">Mis multas</div>
+                {multas.length > 0 ? (
+                  <div className="portal-weeks portal-weeks--grid">
+                    {multas.map(m => {
+                      const fecha = m.fecha_infraccion ? format(parseISO(m.fecha_infraccion), 'dd/MM/yyyy HH:mm') : 's/fecha'
+                      // lugar_detalle = "Lugar: <direccion> | Estado: <estado>" -> extraer direccion
+                      const dirMatch = m.lugar_detalle ? m.lugar_detalle.match(/Lugar:\s*([^|]+)/i) : null
+                      const direccion = dirMatch ? dirMatch[1].trim() : ''
+                      const ubic = [m.lugar, direccion].filter(Boolean).join(' — ')
+                      return (
+                        <div key={m.id} className="portal-week-card" style={{ cursor: 'default' }}>
+                          <div className="portal-week-left">
+                            {/* infraccion en BD = N° de acta; la descripcion real esta en detalle */}
+                            <div className="portal-week-title">{m.detalle || 'Multa de tránsito'}</div>
+                            <div className="portal-week-dates">{m.patente || '-'} · {fecha} · Acta {m.infraccion || '-'}</div>
+                            {ubic && <div className="portal-week-info">{ubic}</div>}
+                          </div>
+                          <div className="portal-week-right">
+                            <div className="portal-week-total debit">{m.importe || '-'}</div>
+                            <div style={{ display: 'flex', gap: '8px', marginTop: '4px' }}>
+                              <button className="portal-back-btn" style={{ margin: 0, padding: '6px 12px', fontSize: '12px', cursor: 'pointer' }} onClick={() => setSelectedMulta(m)}>Ver</button>
+                              {m.drive_url ? (
+                                <a className="portal-pdf-btn" style={{ padding: '6px 14px', fontSize: '12px' }} href={driveDownloadUrl(m.drive_url)} download={`Multa_${m.infraccion || 'acta'}.pdf`} rel="noopener noreferrer">Descargar</a>
+                              ) : (
+                                <span style={{ fontSize: '12px', color: 'var(--text-tertiary)', padding: '6px 12px', border: '1px solid var(--border-primary)', borderRadius: '6px' }}>Sin PDF</span>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                ) : (
+                  <div className="portal-empty-note">No tenés multas registradas.</div>
+                )}
+            </section>{/* /multas */}
+
+            {/* ===== SECCIÓN: KM RECORRIDOS (desde junio 2026) ===== */}
+            <section className="portal-msec" data-msec="km">
+                <div className="portal-weeks-header">Km recorridos (desde junio)</div>
+                {kmSemanas.length > 0 ? (
+                  <div className="portal-weeks portal-weeks--grid">
+                    {kmSemanas.map(k => {
+                      const pct = Math.min(100, Math.round((k.km / k.limite) * 100))
+                      const excedido = k.excedido > 0
+                      const disponibles = Math.max(0, k.limite - k.km)
+                      const modLabel = k.modalidad === 'a_cargo' ? 'A cargo' : 'Turno'
+                      return (
+                        <div key={`${k.anio}-${k.semana}`} className="portal-week-card" style={{ cursor: 'default', borderColor: excedido ? 'rgba(220,38,38,.25)' : undefined }}>
+                          <div className="portal-week-left" style={{ width: '100%' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: '4px' }}>
+                              <div className="portal-week-title">Semana {k.semana} / {k.anio}</div>
+                              <div className={`portal-week-total${excedido ? ' debit' : ''}`} style={{ fontSize: '15px' }}>
+                                {k.km.toLocaleString('es-AR')} <span style={{ color: 'var(--text-tertiary)', fontWeight: 500, fontSize: '12px' }}>/ {k.limite.toLocaleString('es-AR')} km</span>
+                              </div>
+                            </div>
+                            <div className="portal-week-dates" style={{ marginBottom: '8px' }}>
+                              {format(parseISO(k.fecha_inicio), 'dd/MM/yyyy')} - {format(parseISO(k.fecha_fin), 'dd/MM/yyyy')} · {modLabel}
+                            </div>
+                            <div style={{ marginTop: '6px' }}>
+                              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '10px', marginBottom: '4px' }}>
+                                <span style={{ color: 'var(--text-tertiary)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.4px' }}>{pct}% del límite</span>
+                                <span style={{ color: excedido ? 'var(--color-primary)' : '#059669', fontWeight: 700, fontFamily: 'monospace' }}>
+                                  {excedido ? 'Excedido' : `${disponibles.toLocaleString('es-AR')} km disponibles`}
+                                </span>
+                              </div>
+                              <div style={{ height: '6px', background: '#f3f4f6', borderRadius: '3px', overflow: 'hidden' }}>
+                                <div style={{ height: '100%', width: `${pct}%`, background: excedido ? 'var(--color-primary)' : '#9ca3af', borderRadius: '3px' }} />
+                              </div>
+                            </div>
+                            {excedido && (
+                              <div className="portal-mora-banner" style={{ marginTop: '10px' }}>
+                                <span className="portal-mora-label">Excedido +{k.excedido.toLocaleString('es-AR')} km</span>
+                                <span className="portal-mora-amount">sobre el límite de tu modalidad {modLabel} ({k.limite.toLocaleString('es-AR')} km/sem)</span>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                ) : (
+                  <div className="portal-empty-note">Sin viajes registrados desde junio.</div>
+                )}
+            </section>{/* /km */}
+
             {/* Nota legal */}
             <div className="portal-nota-legal">
               La información presentada es de carácter referencial y no constituye un comprobante fiscal válido.
             </div>
-          </>
+            </div>{/* /portal-main */}
+
+            {/* ===== BOTTOM NAV (solo mobile via CSS) ===== */}
+            <nav className="portal-bottom-nav">
+              {NAV_ITEMS.map(item => (
+                <button
+                  key={item.key}
+                  className={`portal-bn-item${activeSection === item.key ? ' active' : ''}`}
+                  onClick={() => { setActiveSection(item.key); window.scrollTo({ top: 0, behavior: 'smooth' }) }}
+                  type="button"
+                >
+                  <span className="portal-bn-ico">{item.ico}</span>
+                  {item.short}
+                </button>
+              ))}
+            </nav>
+          </div>
         )}
       </div>
+
+      {/* Modales (overlay sobre el dashboard) */}
+      {detalleModal}
+      {multaModal}
     </div>
   )
 }

@@ -169,27 +169,131 @@
 /* =====================================================
    DASHBOARD
    ===================================================== */
+/* Contenedor fluido: crece con la pantalla (y con el zoom alejado) en vez de
+   quedar fijo en 1200px con margenes blancos a los costados. */
 .portal-content {
-  max-width: 1200px;
+  max-width: min(1680px, 96%);
   margin: 0 auto;
-  padding: 20px 24px;
+  padding: 16px clamp(16px, 2vw, 36px) 28px;
   display: flex;
   flex-direction: column;
   gap: 16px;
 }
 
-/* Stats en fila horizontal - siempre arriba */
+/* =====================================================
+   MENU LATERAL (navegacion por secciones en desktop)
+   Mismo estado que la bottom-nav mobile (activeSection).
+   ===================================================== */
+/* El contenido de las secciones vive en .portal-main; en mobile se apila
+   con gap y el menu lateral se oculta (manda la bottom-nav). */
+.portal-main {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.portal-sidebar {
+  display: none;
+}
+
+@media (min-width: 901px) {
+  .portal-shell {
+    display: grid;
+    grid-template-columns: 210px minmax(0, 1fr);
+    gap: 20px;
+    align-items: start;
+  }
+
+  .portal-sidebar {
+    position: sticky;
+    top: 77px; /* header sticky (57px) + respiro */
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    background: var(--card-bg);
+    border: 1px solid var(--border-primary);
+    border-radius: 10px;
+    padding: 8px;
+  }
+
+  .portal-side-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+    padding: 10px 12px;
+    background: none;
+    border: none;
+    border-radius: 8px;
+    font-size: clamp(13px, 0.3vw + 11px, 15px);
+    font-weight: 600;
+    color: var(--text-secondary);
+    text-align: left;
+    cursor: pointer;
+    transition: background 0.15s, color 0.15s;
+  }
+
+  .portal-side-item:hover {
+    background: var(--bg-secondary);
+    color: var(--text-primary);
+  }
+
+  .portal-side-item.active {
+    background: rgba(255, 0, 51, 0.08);
+    color: var(--color-primary);
+  }
+
+  .portal-side-ico {
+    display: inline-flex;
+  }
+
+  .portal-side-ico svg {
+    width: 18px;
+    height: 18px;
+  }
+}
+
+/* Mostrar SOLO la seccion activa, en desktop (tabs) y mobile (bottom-nav).
+   El JS setea data-active en .portal-content. */
+.portal-content[data-active="resumen"]   .portal-msec:not([data-msec="resumen"]),
+.portal-content[data-active="historial"] .portal-msec:not([data-msec="historial"]),
+.portal-content[data-active="multas"]    .portal-msec:not([data-msec="multas"]),
+.portal-content[data-active="km"]        .portal-msec:not([data-msec="km"]) {
+  display: none;
+}
+
+/* El contenedor de 2 columnas (graficos + historial) se oculta entero cuando
+   la seccion activa es multas o km, para no dejar huecos. */
+.portal-content[data-active="multas"] .portal-layout,
+.portal-content[data-active="km"]     .portal-layout {
+  display: none;
+}
+
+/* Desktop: Resumen e Historial comparten pestaña — se muestran juntos */
+@media (min-width: 901px) {
+  .portal-content[data-active="resumen"]   .portal-msec[data-msec="historial"],
+  .portal-content[data-active="historial"] .portal-msec[data-msec="resumen"] {
+    display: block;
+  }
+}
+
+/* Stats: 4 KPIs en fila en desktop; 2x2 en anchos medios (nunca 3+1 con hueco) */
 .portal-stats-grid {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
-  gap: 10px;
+  gap: 12px;
 }
 
-/* Tablet: 2 columnas (768-1024px) */
-@media (min-width: 641px) and (max-width: 1024px) {
+@media (max-width: 1199px) {
   .portal-stats-grid {
-    grid-template-columns: repeat(2, 1fr);
+    grid-template-columns: 1fr 1fr;
   }
+}
+
+/* Separacion stats → banner de mora (conviven dentro de la seccion Resumen) */
+.portal-stats-grid + .portal-mora-banner {
+  margin-top: 16px;
 }
 
 .portal-stat-card {
@@ -209,7 +313,8 @@
 }
 
 .portal-stat-value {
-  font-size: 18px;
+  /* escala con el ancho de pantalla (18px base, hasta 22px en monitores anchos) */
+  font-size: clamp(17px, 0.5vw + 12px, 22px);
   font-weight: 700;
   color: var(--text-primary);
   font-family: 'SF Mono', 'Consolas', monospace;
@@ -243,7 +348,7 @@
   margin-top: 2px;
 }
 
-/* Layout 2 columnas: chart izq + semanas der (solo cuando hay chart) */
+/* Layout 2 columnas dentro de la pestaña Resumen: graficos (izq) + historial (der) */
 .portal-layout {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -252,13 +357,30 @@
 }
 
 .portal-left {
-  position: sticky;
-  top: 76px;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
 }
 
 .portal-right {
   min-width: 0;
 }
+
+/* Historial en la columna derecha: alto acotado al de los graficos, con
+   scroll interno para que las dos columnas queden parejas (sin huecos). */
+.portal-right .portal-weeks--grid {
+  max-height: clamp(560px, 72vh, 840px);
+  overflow-y: auto;
+  padding-right: 6px;
+}
+
+.portal-right .portal-weeks--grid::-webkit-scrollbar { width: 8px; }
+.portal-right .portal-weeks--grid::-webkit-scrollbar-thumb {
+  background: var(--border-primary);
+  border-radius: 999px;
+}
+.portal-right .portal-weeks--grid::-webkit-scrollbar-track { background: transparent; }
 
 /* Chart */
 .portal-chart-card {
@@ -279,7 +401,8 @@
 
 .portal-chart-container {
   width: 100%;
-  height: 280px;
+  /* crece con la altura de la pantalla (y al alejar el zoom) */
+  height: clamp(240px, 32vh, 380px);
 }
 
 /* Weeks header */
@@ -404,6 +527,16 @@
   display: flex;
   flex-direction: column;
   gap: 10px;
+}
+
+/* Listas seccionadas (historial / multas / km): grilla fluida de tarjetas.
+   1 columna en mobile, 2-3 segun ancho. Sin scrolls internos: cada seccion
+   usa el ancho completo de su pestaña y el scroll normal de la pagina. */
+.portal-weeks--grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(460px, 100%), 1fr));
+  gap: 12px;
+  align-items: start;
 }
 
 .portal-week-card {
@@ -755,23 +888,118 @@
 }
 
 /* =====================================================
+   BOTTOM NAV (navegacion por secciones en mobile)
+   ===================================================== */
+/* En DESKTOP: la barra esta oculta y todas las secciones se ven (sin filtro).
+   El comportamiento de mostrar-una-seccion vive dentro del @media mobile. */
+.portal-bottom-nav {
+  display: none;
+}
+
+/* =====================================================
    RESPONSIVE
    ===================================================== */
 @media (max-width: 900px) {
-  .portal-layout {
-    grid-template-columns: 1fr;
+  /* La seccion activa ocupa todo el ancho */
+  .portal-msec {
+    width: 100%;
   }
 
-  .portal-left {
-    position: static;
+  /* Dejar espacio inferior para que la bottom-nav fija no tape contenido */
+  .portal-content {
+    padding-bottom: 78px;
   }
 
+  /* La barra inferior fija */
+  .portal-bottom-nav {
+    display: flex;
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 60;
+    background: var(--card-bg);
+    border-top: 1px solid var(--border-primary);
+    padding: 8px 4px calc(8px + env(safe-area-inset-bottom, 0px));
+    box-shadow: 0 -2px 12px rgba(0, 0, 0, 0.06);
+  }
+
+  .portal-bn-item {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 3px;
+    background: none;
+    border: none;
+    cursor: pointer;
+    font-size: 10px;
+    font-weight: 600;
+    color: var(--text-tertiary);
+    padding: 2px;
+    transition: color 0.15s;
+  }
+
+  .portal-bn-item.active {
+    color: var(--color-primary);
+  }
+
+  .portal-bn-ico {
+    width: 40px;
+    height: 26px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 999px;
+    transition: background 0.15s;
+  }
+
+  .portal-bn-ico svg {
+    width: 20px;
+    height: 20px;
+    display: block;
+  }
+
+  /* Activo: pastilla suave rojo + icono rojo (icono hereda color via .active) */
+  .portal-bn-item.active .portal-bn-ico {
+    background: rgba(255, 0, 51, 0.10);
+  }
+
+  /* La nota legal sticky no debe taparse con la barra */
+  .portal-nota-legal {
+    margin-bottom: 8px;
+  }
+}
+
+@media (max-width: 900px) {
   .portal-stats-grid {
     grid-template-columns: 1fr 1fr;
   }
 
-  .portal-weeks-section {
-    max-width: none;
+  .portal-layout {
+    grid-template-columns: 1fr;
+  }
+
+  /* En mobile el historial usa el scroll normal de la pagina, sin limite */
+  .portal-right .portal-weeks--grid {
+    max-height: none;
+    overflow-y: visible;
+    padding-right: 0;
+  }
+}
+
+/* Pantallas grandes (o zoom alejado): mas densidad y graficos mas altos */
+@media (min-width: 1500px) {
+  .portal-shell {
+    grid-template-columns: 230px minmax(0, 1fr);
+  }
+
+  .portal-weeks--grid {
+    grid-template-columns: repeat(auto-fill, minmax(min(500px, 100%), 1fr));
+  }
+
+  .portal-chart-container {
+    height: clamp(300px, 36vh, 440px);
   }
 }
 
@@ -906,4 +1134,289 @@
   border-top: 1px solid var(--border-primary);
   background: var(--bg-primary);
   z-index: 10;
+}
+
+.portal-empty-note {
+  padding: 24px 16px;
+  text-align: center;
+  font-size: 13px;
+  color: var(--text-tertiary);
+  font-style: italic;
+  border: 1px dashed var(--border-primary);
+  border-radius: 10px;
+  margin-top: 4px;
+}
+
+/* ============ MODAL / OVERLAY (detalle semana + multa) ============ */
+.portal-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(3px);
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  z-index: 1000;
+  padding: 24px 16px;
+  overflow-y: auto;
+  animation: portal-modal-fade 0.15s ease;
+}
+
+.portal-modal-card {
+  position: relative;
+  background: var(--card-bg);
+  border: 1px solid var(--border-primary);
+  border-radius: 12px;
+  width: 100%;
+  max-width: 720px;
+  margin: auto;
+  padding: 20px 24px 24px;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.35);
+  animation: portal-modal-pop 0.15s ease;
+}
+
+.portal-modal-card--sm {
+  max-width: 480px;
+}
+
+/* ============ MODAL MULTA (diseño del sistema: visor izq + detalle der) ============ */
+.portal-multa-modal {
+  position: relative;
+  background: var(--card-bg);
+  border: 1px solid var(--border-primary);
+  border-radius: 12px;
+  width: 100%;
+  max-width: 1300px;
+  height: 88vh;
+  margin: auto;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.35);
+  animation: portal-modal-pop 0.15s ease;
+}
+
+.portal-multa-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--border-primary);
+}
+
+.portal-multa-modal-title {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+/* El botón X reutiliza .portal-modal-close pero anclado al header */
+.portal-multa-modal-header .portal-modal-close {
+  position: static;
+  flex-shrink: 0;
+}
+
+.portal-multa-modal-body {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+}
+
+.portal-multa-doc {
+  flex: 1 1 65%;
+  min-width: 0;
+  padding: 16px;
+  background: var(--bg-secondary);
+  border-right: 1px solid var(--border-primary);
+}
+
+.portal-multa-doc iframe {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border: none;
+  border-radius: 8px;
+  background: #fff;
+}
+
+.portal-multa-doc-empty {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border: 1px dashed var(--border-primary);
+  border-radius: 8px;
+  padding: 32px;
+  text-align: center;
+}
+
+.portal-multa-doc-empty-title {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.portal-multa-doc-empty-sub {
+  font-size: 12px;
+  color: var(--text-tertiary);
+  max-width: 320px;
+  line-height: 1.5;
+}
+
+.portal-multa-datos {
+  flex: 1 1 35%;
+  min-width: 320px;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.portal-multa-datos-scroll {
+  flex: 1;
+  overflow-y: auto;
+  padding: 18px 20px;
+}
+
+/* Tabla de detalle (mismo patron que multas-detail-table del sistema) */
+.portal-multa-table {
+  width: 100%;
+  font-size: 14px;
+  border-collapse: collapse;
+}
+
+.portal-multa-table tr {
+  border-bottom: 1px solid var(--border-primary);
+}
+
+.portal-multa-table tr:last-child {
+  border-bottom: none;
+}
+
+.portal-multa-label {
+  padding: 10px 12px 10px 0;
+  color: var(--text-secondary);
+  font-weight: 500;
+  white-space: nowrap;
+  width: 35%;
+  vertical-align: top;
+}
+
+.portal-multa-value {
+  padding: 10px 0;
+  color: var(--text-primary);
+}
+
+.portal-multa-hora {
+  margin-left: 6px;
+  font-size: 12px;
+  color: var(--text-tertiary);
+}
+
+.portal-multa-importe {
+  font-weight: 700;
+  font-size: 18px;
+  color: var(--color-primary);
+  font-family: 'SF Mono', 'Consolas', monospace;
+}
+
+.portal-multa-obs {
+  padding: 12px;
+  background: rgba(239, 68, 68, 0.1);
+  border: 1px solid rgba(239, 68, 68, 0.2);
+  border-radius: 6px;
+}
+
+.portal-multa-modal-footer {
+  display: flex;
+  justify-content: center;
+  gap: 12px;
+  padding: 14px 20px;
+  border-top: 1px solid var(--border-primary);
+}
+
+/* Mobile: visor arriba, datos abajo, todo scrollea dentro del modal */
+@media (max-width: 760px) {
+  .portal-multa-modal {
+    height: 92vh;
+  }
+
+  .portal-multa-modal-body {
+    flex-direction: column;
+    overflow-y: auto;
+  }
+
+  .portal-multa-doc {
+    flex: 0 0 auto;
+    height: 52vh;
+    border-right: none;
+    border-bottom: 1px solid var(--border-primary);
+  }
+
+  .portal-multa-datos {
+    flex: 0 0 auto;
+    min-width: 0;
+  }
+
+  .portal-multa-datos-scroll {
+    overflow-y: visible;
+  }
+}
+
+/* La nota legal dentro del modal no debe quedar sticky ni con su barra superior */
+.portal-modal-card .portal-nota-legal {
+  position: static;
+  margin-top: 16px;
+  border-top: none;
+  background: transparent;
+  z-index: auto;
+}
+
+/* Dentro del modal, el header debe dejar espacio a la derecha para no
+   solaparse con el boton X (que esta en top/right del card). */
+.portal-modal-card .portal-detail-header {
+  padding-right: 44px;
+}
+
+.portal-modal-close {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  width: 32px;
+  height: 32px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: 1px solid var(--border-primary);
+  border-radius: 8px;
+  color: var(--text-secondary);
+  font-size: 20px;
+  line-height: 1;
+  cursor: pointer;
+  transition: all 0.2s;
+  z-index: 1;
+}
+
+.portal-modal-close:hover {
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+}
+
+@keyframes portal-modal-fade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes portal-modal-pop {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@media (max-width: 640px) {
+  .portal-modal-overlay { padding: 12px; }
+  .portal-modal-card { padding: 16px 16px 20px; }
 }
