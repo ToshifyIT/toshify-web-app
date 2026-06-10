@@ -2263,6 +2263,7 @@ function buildOfertaReemplazos(o) {
   add('ADDRESS', o.titular_domicilio || '')
   add('EMAIL', o.titular_email || '')
   add('CUIT', (o.titular_cuit || '').toUpperCase())
+  add('DOCUMENT_TYPE', o.titular_tipo === 'empresa' ? 'CUIT' : 'DNI')
 
   // Cónyuge: formato especial
   const conyugue = (o.titular_conyugue || '').trim()
@@ -2437,14 +2438,16 @@ async function generateOfertaLocacionDoc(drive, oferta) {
     renderData['FLEET_GROUP_LEGAL_REPRESENTATIVE_DNI'] = propietarioData?.dni_owner || ''
   }
 
-  // Manejar el bloque {{SPOUSE SIGN}}
-  // docxtemplater no puede insertar párrafos con formato como lo hacía Apps Script,
-  // así que usamos un approach más simple: si hay cónyuge, reemplazamos con texto plano
+  // Manejar el bloque {{SPOUSE SIGN}} (cónyuge para persona, representante para empresa)
   const conyugueNombre = (oferta.titular_conyugue || '').trim()
   if (conyugueNombre.length > 0) {
-    renderData['SPOUSE SIGN'] = 'POR EL CÓNYUGE:\n\nFirma: ________________________\n\nAclaración: ' + conyugueNombre.toUpperCase() + '\n\nDNI: ________________________'
+    const esEmpresa = oferta.titular_tipo === 'empresa'
+    const tituloBloque = esEmpresa ? 'POR EL REPRESENTANTE ADMINISTRATIVO:' : 'POR EL CÓNYUGE:'
+    const dniConyugue = (oferta.titular_dni_conyugue || '').trim()
+    const dniLinea = dniConyugue ? 'DNI: ' + dniConyugue : 'DNI: ________________________'
+    renderData['SPOUSE SIGN'] = tituloBloque + '\n\nFirma: ________________________\n\nAclaración: ' + conyugueNombre.toUpperCase() + '\n\n' + dniLinea
   } else {
-    renderData['SPOUSE SIGN'] = ''
+    renderData['SPOUSE SIGN'] = '__REMOVE_SPOUSE__'
   }
 
   try {
@@ -2459,6 +2462,18 @@ async function generateOfertaLocacionDoc(drive, oferta) {
       throw new Error(`Error en plantilla oferta locación: ${renderErr.properties.errors.length} error(es).\n${details}`)
     }
     throw renderErr
+  }
+
+  // Si no hay cónyuge, eliminar el párrafo vacío que quedó del bloque SPOUSE SIGN
+  if (conyugueNombre.length === 0) {
+    const renderedZip = doc.getZip()
+    const docXml = renderedZip.file('word/document.xml')
+    if (docXml) {
+      let xml = docXml.asText()
+      // Buscar párrafos que contengan el marcador __REMOVE_SPOUSE__ y eliminarlos
+      xml = xml.replace(/<w:p\b[^>]*>(?:(?!<w:p\b)[\s\S])*?__REMOVE_SPOUSE__(?:(?!<w:p\b)[\s\S])*?<\/w:p>/g, '')
+      renderedZip.file('word/document.xml', xml)
+    }
   }
 
   const docxBuffer = doc.getZip().generate({ type: 'nodebuffer' })

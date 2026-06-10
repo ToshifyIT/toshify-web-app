@@ -61,8 +61,6 @@ export function OfertaLocacionListModule() {
     if (o.canon_mensual == null) add('Oferta Locacion', 'Canon mensual')
     if (!o.socio) add('Oferta Locacion', 'Socio')
     if (!o.nivel_nafta) add('Oferta Locacion', 'Nivel nafta')
-    if (!o.limpieza_interior) add('Oferta Locacion', 'Limpieza interior')
-    if (!o.limpieza_exterior) add('Oferta Locacion', 'Limpieza exterior')
     if (o.costo_patente == null) add('Oferta Locacion', 'Costo patente')
     if (!o.gravamenes) add('Oferta Locacion', 'Gravamenes')
     return grupos
@@ -274,7 +272,7 @@ export function OfertaLocacionListModule() {
       cell: ({ row }) => {
         const grupos = getCamposFaltantesAgrupados(row.original)
         const faltantes = Object.values(grupos).flat()
-        const totalCampos = 21 // campos que valida getCamposFaltantesAgrupados
+        const totalCampos = 19 // campos que valida getCamposFaltantesAgrupados
         const completos = totalCampos - faltantes.length
         const porcentaje = Math.round((completos / totalCampos) * 100)
 

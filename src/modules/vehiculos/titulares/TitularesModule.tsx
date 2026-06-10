@@ -292,7 +292,11 @@ export function TitularesModule() {
 
       const conyugueVal = formData.tipo === 'persona'
         ? ((formData.nombre_conyugue || formData.conyugue || '').trim().toUpperCase() || null)
-        : null
+        : ((formData.representante_administrativo || '').trim().toUpperCase() || null)
+
+      const dniConyugueVal = formData.tipo === 'persona'
+        ? (formData.dni_conyugue?.trim() || null)
+        : (formData.dni_representante?.trim() || null)
 
       await supabase
         .from('ofertas_locacion')
@@ -302,7 +306,9 @@ export function TitularesModule() {
           titular_domicilio: formData.domicilio.trim() || formData.domicilio_fiscal?.trim() || null,
           titular_email: formData.email.trim() || formData.email_representante?.trim() || null,
           titular_cuit: formData.dni_cuit.trim() || null,
+          titular_tipo: formData.tipo || 'persona',
           titular_conyugue: conyugueVal,
+          titular_dni_conyugue: dniConyugueVal,
           updated_at: new Date().toISOString(),
         })
         .eq('titular_id', selectedTitular.id)
@@ -504,7 +510,13 @@ export function TitularesModule() {
           titular_domicilio: titular.domicilio || titular.domicilio_fiscal || null,
           titular_email: titular.email || titular.email_representante || null,
           titular_cuit: titular.dni_cuit || null,
-          titular_conyugue: titular.tipo === 'persona' ? (titular.nombre_conyugue || titular.conyugue || null) : null,
+          titular_tipo: titular.tipo || 'persona',
+          titular_conyugue: titular.tipo === 'persona'
+            ? (titular.nombre_conyugue || titular.conyugue || null)
+            : (titular.representante_administrativo || null),
+          titular_dni_conyugue: titular.tipo === 'persona'
+            ? (titular.dni_conyugue || null)
+            : (titular.dni_representante || null),
           patente: vehiculo?.patente || vt.vehiculos?.patente || null,
           marca: vehiculo?.marca || vt.vehiculos?.marca || null,
           modelo: vehiculo?.modelo || vt.vehiculos?.modelo || null,
