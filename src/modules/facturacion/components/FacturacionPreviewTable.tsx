@@ -115,17 +115,6 @@ export interface ConceptoNomina {
   iva_porcentaje: number
 }
 
-// Tipo para las semanas disponibles en el selector
-export interface SemanaDisponible {
-  value: string
-  semana: number
-  anio: number
-  inicioFmt: string
-  finFmt: string
-  inicio: Date
-  fin: Date
-}
-
 interface FacturacionPreviewTableProps {
   data: FacturacionPreviewRow[]
   conceptos?: ConceptoNomina[]  // Conceptos de la BD
@@ -142,10 +131,6 @@ interface FacturacionPreviewTableProps {
   onSync?: (data: FacturacionPreviewRow[]) => Promise<boolean>
   // Mapa conductor_id → alquiler semanal proyectado (precio_unitario * 7)
   proyectadoAlquilerMap?: Map<string, number>
-  // Selector de semana
-  semanasDisponibles?: SemanaDisponible[]
-  semanaActualValue?: string
-  onChangeSemana?: (op: SemanaDisponible) => void
 }
 
 export function FacturacionPreviewTable({
@@ -162,10 +147,7 @@ export function FacturacionPreviewTable({
   onExport,
   exporting,
   onSync,
-  proyectadoAlquilerMap,
-  semanasDisponibles = [],
-  semanaActualValue,
-  onChangeSemana
+  proyectadoAlquilerMap
 }: FacturacionPreviewTableProps) {
   const { aplicarFiltroSede } = useSede()
   const [data, setData] = useState<FacturacionPreviewRow[]>(initialData)
@@ -1088,22 +1070,6 @@ export function FacturacionPreviewTable({
               <option value="todos">Todos los grupos</option>
               {gruposFlotaUnicos.map(g => (
                 <option key={g} value={g}>{g}</option>
-              ))}
-            </select>
-          )}
-          {semanasDisponibles.length > 0 && onChangeSemana && (
-            <select
-              value={semanaActualValue || ''}
-              onChange={(e) => {
-                const sel = semanasDisponibles.find(s => s.value === e.target.value)
-                if (sel) onChangeSemana(sel)
-              }}
-              style={{ fontWeight: 'bold' }}
-            >
-              {semanasDisponibles.map(s => (
-                <option key={s.value} value={s.value}>
-                  S{s.semana}/{s.anio} ({s.inicioFmt} - {s.finFmt})
-                </option>
               ))}
             </select>
           )}

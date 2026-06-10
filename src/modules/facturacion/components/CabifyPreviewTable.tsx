@@ -67,6 +67,8 @@ export interface CabifyPreviewRow {
   isModified?: boolean
   // Detalle del cálculo (opcional)
   detalle?: CabifyPreviewRowDetalle
+  // Grupo de flota prioritario (regla de ganador: descartar GRUPO CG si hay otros)
+  flotaPrioritaria?: string | null
 }
 
 interface CabifyPreviewTableProps {
@@ -202,7 +204,7 @@ export function CabifyPreviewTable({
   const filteredData = useMemo(() => {
     let result = data
     if (filtroGrupoFlota) {
-      result = result.filter(row => grupoFlotaMap.get(row.patente) === filtroGrupoFlota)
+      result = result.filter(row => (row.flotaPrioritaria || grupoFlotaMap.get(row.patente)) === filtroGrupoFlota)
     }
     if (searchTerm) {
       const search = searchTerm.toLowerCase()
