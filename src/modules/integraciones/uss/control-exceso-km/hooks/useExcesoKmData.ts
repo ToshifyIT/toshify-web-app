@@ -119,6 +119,10 @@ export function useExcesoKmData(sedeId?: string | null) {
 
   const [searchTerm, setSearchTerm] = useState('')
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  // Guard "última request gana": al cambiar el rango rápido (semana -> año, etc.)
+  // varios loadData se solapan; el año pagina ~22k filas y puede responder tarde.
+  // Cada llamada toma un id y solo aplica su resultado si sigue siendo la vigente.
+  const requestIdRef = useRef(0)
 
   const handleSearchChange = useCallback((value: string) => {
     setSearchTerm(value)
@@ -131,6 +135,8 @@ export function useExcesoKmData(sedeId?: string | null) {
   }, [])
 
   const loadData = useCallback(async () => {
+    const reqId = ++requestIdRef.current
+    const isStale = () => requestIdRef.current !== reqId
     setLoading(true)
     setError(null)
     try {
@@ -149,6 +155,7 @@ export function useExcesoKmData(sedeId?: string | null) {
         if (vehiculos && vehiculos.length > 0) {
           sedePatentes = vehiculos.map((v: { patente: string }) => normalizarPatente(v.patente))
         } else {
+          if (isStale()) return
           setMarcaciones([])
           setLoading(false)
           return
@@ -168,17 +175,28 @@ export function useExcesoKmData(sedeId?: string | null) {
         return d.toISOString().slice(0, 10) + 'T23:59:59'
       })()
 
-      const { data: rows, error: e } = await supabase
-        .from('uss_historico')
-        .select('id, patente, conductor, conductor_raw, ibutton, fecha_hora_inicio_gmt3, fecha_hora_fin_gmt3, kilometraje, sede_id')
-        .gte('fecha_hora_inicio_gmt3', desdeExt)
-        .lte('fecha_hora_inicio_gmt3', hastaExt)
-        .order('patente', { ascending: true })
-        .order('fecha_hora_inicio_gmt3', { ascending: true })
-      if (e) throw e
+      // Paginación: PostgREST limita a 1000 filas por request. Un rango de mes/año
+      // supera ese tope (un mes ~6k viajes), así que iteramos con .range() hasta
+      // agotar; de lo contrario el desglose semanal quedaría incompleto.
+      const PAGE = 1000
+      const rows: UssTripRaw[] = []
+      for (let offset = 0; ; offset += PAGE) {
+        const { data: page, error: e } = await supabase
+          .from('uss_historico')
+          .select('id, patente, conductor, conductor_raw, ibutton, fecha_hora_inicio_gmt3, fecha_hora_fin_gmt3, kilometraje, sede_id')
+          .gte('fecha_hora_inicio_gmt3', desdeExt)
+          .lte('fecha_hora_inicio_gmt3', hastaExt)
+          .order('patente', { ascending: true })
+          .order('fecha_hora_inicio_gmt3', { ascending: true })
+          .range(offset, offset + PAGE - 1)
+        if (e) throw e
+        const batch = (page || []) as UssTripRaw[]
+        rows.push(...batch)
+        if (batch.length < PAGE) break
+      }
 
       const tripsArr: TripEnriched[] = []
-      for (const r of (rows || []) as UssTripRaw[]) {
+      for (const r of rows) {
         const patenteNorm = normalizarPatente(r.patente)
         if (!patenteNorm) continue
         if (sedePatentes !== null && !sedePatentes.includes(patenteNorm)) continue
@@ -476,12 +494,17 @@ export function useExcesoKmData(sedeId?: string | null) {
         }
       }
 
+      // Descartar si una request más nueva ya tomó el relevo (evita que el año,
+      // que tarda más, pise los datos de una semana seleccionada después).
+      if (isStale()) return
       setMarcaciones(marcs)
     } catch (err) {
+      if (isStale()) return
       setError(err instanceof Error ? err.message : 'Error desconocido')
       setMarcaciones([])
     } finally {
-      setLoading(false)
+      // Solo la request vigente controla el spinner.
+      if (!isStale()) setLoading(false)
     }
   }, [dateRange, sedeId])
 
