@@ -363,50 +363,80 @@ export function useExcesoKmData(sedeId?: string | null) {
         }
       }
 
-      // Resolver modalidad/horario por patente + conductor via asignaciones + asignaciones_conductores
-      const patentesUnicas = [...new Set(turnos.map(t => t.patenteNorm))]
-      const vehInfoByPatente = new Map<string, { modalidad: string | null }>()
-      // Mapa horario por (patente_norm + conductor_id) para distinguir cuando hay 2 conductores en 1 vehiculo
-      const horarioByPatenteCond = new Map<string, string>()
-      if (patentesUnicas.length > 0) {
-        const { data: vehiculosData } = await supabase
-          .from('vehiculos')
-          .select('id, patente')
-        const vehiculoByPatente = new Map<string, string>()
-        for (const v of (vehiculosData || []) as any[]) {
-          vehiculoByPatente.set(normalizarPatente(v.patente), v.id)
+      // Resolver MODALIDAD (turno/a_cargo) y TURNO (diurno/nocturno) POR CONDUCTOR,
+      // sin cruzar patente. Regla acordada:
+      //  - Para cada (conductor, semana) se toma la asignación del conductor VIGENTE
+      //    en esa semana (lunes-domingo). Vigente = fecha_inicio <= domingo y
+      //    (fecha_fin null o fecha_fin >= lunes). Entre las vigentes gana LA ÚLTIMA
+      //    QUE EMPEZÓ (mayor fecha_inicio).
+      //  - Estados válidos: la asignacion_conductor no debe estar 'cancelado' y la
+      //    asignación padre debe estar 'activa'/'finalizada' (no cancelada/programada).
+      //  - modalidad <- asignaciones.modalidad ; horario <- asignaciones_conductores.horario
+      //    (a_cargo => 'todo_dia', turno => 'diurno'/'nocturno').
+      //  - Sin asignación válida vigente => modalidad null y horario null ('—').
+      // Como el rango puede abarcar varias semanas (mes/año), se resuelve por semana.
+      const condIdsUnicos = [...new Set(
+        turnos.map(t => condIdByName.get(t.conductor)?.id).filter(Boolean) as string[],
+      )]
+      // Semanas presentes -> sus límites lunes/domingo (en ms ART) por semanaKey
+      const semanasPresentes = new Map<string, { lunesMs: number; domingoMs: number }>()
+      for (const t of turnos) {
+        const fechaTurno = new Date(t.trips[0].inicioMs).toLocaleDateString('en-CA', { timeZone: TIMEZONE_ARGENTINA })
+        const wi = getISOWeekInfo(fechaTurno)
+        if (!semanasPresentes.has(wi.key)) {
+          semanasPresentes.set(wi.key, {
+            lunesMs: new Date(`${wi.inicio}T00:00:00-03:00`).getTime(),
+            domingoMs: new Date(`${wi.fin}T23:59:59-03:00`).getTime(),
+          })
         }
-        const vehIds = [...vehiculoByPatente.values()]
-        if (vehIds.length > 0) {
-          // FIX 2026-05-19: la modalidad ('turno' | 'a_cargo') vive en `asignaciones`
-          // (no en `asignaciones_conductores`). La tabla correcta tiene fecha_inicio/fecha_fin.
-          // Adicionalmente leemos `asignaciones_conductores.horario` (diurno/nocturno/todo_dia)
-          // para mostrar el turno por conductor en la columna TURNO.
-          const { data: asigs } = await supabase
-            .from('asignaciones')
-            .select('id, vehiculo_id, modalidad, fecha_inicio, fecha_fin, estado, asignaciones_conductores(conductor_id, horario, estado)')
-            .in('vehiculo_id', vehIds)
-            .in('estado', ['activa', 'activo'])
-          // Quedarse con la asignacion vigente al endDate
-          const endDateStr = dateRange.endDate
-          for (const a of (asigs || []) as any[]) {
-            const desd = a.fecha_inicio || ''
-            const hasta_ = a.fecha_fin || '9999-12-31'
-            if (desd <= endDateStr && endDateStr <= hasta_) {
-              const patNorm = [...vehiculoByPatente.entries()].find(([, id]) => id === a.vehiculo_id)?.[0]
-              if (!patNorm) continue
-              vehInfoByPatente.set(patNorm, { modalidad: a.modalidad || 'turno' })
-              // Mapear horario por conductor (puede haber 2 conductores asignados al mismo vehiculo)
-              const acs = (a.asignaciones_conductores || []) as Array<{ conductor_id: string; horario: string | null; estado?: string }>
-              for (const ac of acs) {
-                if (!ac.conductor_id) continue
-                // Solo asignaciones del conductor que esten vigentes (no canceladas/finalizadas)
-                if (ac.estado && !['asignado', 'completado', 'activa', 'activo'].includes(ac.estado)) continue
-                if (ac.horario) {
-                  horarioByPatenteCond.set(`${patNorm}|${ac.conductor_id}`, ac.horario)
-                }
-              }
-            }
+      }
+      // Mapa resultado: `${conductorId}|${semanaKey}` -> { modalidad, horario }
+      const asignByCondSemana = new Map<string, { modalidad: string | null; horario: string | null }>()
+      if (condIdsUnicos.length > 0) {
+        // Traer todas las asignaciones_conductores de esos conductores + su asignación padre.
+        const { data: acRows } = await supabase
+          .from('asignaciones_conductores')
+          .select('conductor_id, horario, estado, fecha_inicio, fecha_fin, asignaciones(modalidad, estado)')
+          .in('conductor_id', condIdsUnicos)
+        type AsigJoin = { modalidad: string | null; estado: string | null }
+        type AcRow = {
+          conductor_id: string
+          horario: string | null
+          estado: string | null
+          fecha_inicio: string | null
+          fecha_fin: string | null
+          // Supabase tipa la relación como array aunque la FK sea 1:1.
+          asignaciones: AsigJoin | AsigJoin[] | null
+        }
+        // La asignación padre puede venir como objeto o array de 1 elemento.
+        const asigDe = (r: AcRow): AsigJoin | null =>
+          Array.isArray(r.asignaciones) ? (r.asignaciones[0] ?? null) : (r.asignaciones ?? null)
+        // Estados válidos
+        const acEstadoOk = (e: string | null) => e == null || ['asignado', 'completado', 'activo', 'activa'].includes(e)
+        const asigEstadoOk = (e: string | null) => e == null || ['activa', 'activo', 'finalizada', 'finalizado'].includes(e)
+        // Pre-parsear a ms (null fecha_fin => vigente indefinida)
+        const acParsed = ((acRows || []) as unknown as AcRow[])
+          .filter(r => acEstadoOk(r.estado) && asigEstadoOk(asigDe(r)?.estado ?? null) && r.fecha_inicio)
+          .map(r => ({
+            conductor_id: r.conductor_id,
+            horario: r.horario,
+            modalidad: asigDe(r)?.modalidad ?? null,
+            iniMs: new Date(r.fecha_inicio as string).getTime(),
+            finMs: r.fecha_fin ? new Date(r.fecha_fin).getTime() : Number.POSITIVE_INFINITY,
+          }))
+        for (const condId of condIdsUnicos) {
+          const delCond = acParsed.filter(r => r.conductor_id === condId)
+          for (const [semanaKey, { lunesMs, domingoMs }] of semanasPresentes) {
+            // Vigentes en la semana: empezaron antes/durante el domingo y no terminaron antes del lunes
+            const vigentes = delCond.filter(r => r.iniMs <= domingoMs && r.finMs >= lunesMs)
+            if (vigentes.length === 0) continue
+            // Gana la última que empezó
+            vigentes.sort((a, b) => b.iniMs - a.iniMs)
+            const elegida = vigentes[0]
+            asignByCondSemana.set(`${condId}|${semanaKey}`, {
+              modalidad: elegida.modalidad,
+              horario: elegida.horario,
+            })
           }
         }
       }
@@ -419,16 +449,19 @@ export function useExcesoKmData(sedeId?: string | null) {
         const inicioStr = new Date(primero.inicioMs).toISOString()
         const finStr = new Date(ultimo.finMs).toISOString()
         const condInfo = condIdByName.get(t.conductor)
-        const vehInfo = vehInfoByPatente.get(t.patenteNorm)
-        const modalidad = vehInfo?.modalidad || 'turno'
-        // FIX 2026-05-19: cruzar horario (diurno/nocturno/todo_dia) desde asignaciones_conductores
-        const horarioCond = condInfo?.id
-          ? (horarioByPatenteCond.get(`${t.patenteNorm}|${condInfo.id}`) || 'todo_dia')
-          : 'todo_dia'
 
-        // Calcular fecha_turno y entrada/salida en ART
+        // Calcular fecha_turno y semana ANTES de resolver modalidad/horario,
+        // porque ahora la asignación se resuelve por (conductor, semana).
         const fechaTurno = new Date(primero.inicioMs).toLocaleDateString('en-CA', { timeZone: TIMEZONE_ARGENTINA })
         const semanaInfo = getISOWeekInfo(fechaTurno)
+
+        // Modalidad/turno POR CONDUCTOR (sin patente), según la asignación vigente
+        // en la semana del turno. Si no hay asignación válida => null ('—').
+        const asignInfo = condInfo?.id
+          ? asignByCondSemana.get(`${condInfo.id}|${semanaInfo.key}`)
+          : undefined
+        const modalidad: string | null = asignInfo?.modalidad ?? null
+        const horarioCond: string | null = asignInfo?.horario ?? null
         const fmtHora = (ms: number) => {
           const d = new Date(ms)
           const h = d.toLocaleTimeString('es-AR', { timeZone: TIMEZONE_ARGENTINA, hour: '2-digit', minute: '2-digit', hour12: false })
@@ -452,7 +485,9 @@ export function useExcesoKmData(sedeId?: string | null) {
           kmTotal,
           duracionMinutos: duracionMin,
           estado: 'Turno Finalizado',
-          horario: horarioCond,
+          // horario '' => sin asignación válida esa semana (la tabla mostrará '—').
+          horario: horarioCond ?? '',
+          // modalidad null => sin asignación válida esa semana.
           vehiculoModalidad: modalidad,
           gncCargado: false,
           lavadoRealizado: false,
