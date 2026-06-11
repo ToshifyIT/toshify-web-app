@@ -64,7 +64,8 @@ export interface ExcesoKmRow {
   kmRecorridos: number
   limite: number
   excedido: number
-  modalidad: 'turno' | 'a_cargo'
+  /** Modalidad del conductor esa semana. null = sin asignación válida vigente. */
+  modalidad: 'turno' | 'a_cargo' | null
   /** Si la modalidad es 'turno': diurno | nocturno. Si es 'a_cargo': null (no aplica). */
   horario: 'diurno' | 'nocturno' | 'mixto' | null
   porcentaje: number
@@ -121,11 +122,14 @@ export function ExcesoKmTable({
     for (const [key, lista] of grupos) {
       const km = lista.reduce((s, m) => s + (m.kmTotal || 0), 0)
       const semanaInfo = getMarcacionSemanaInfo(lista[0])
-      const modalidad: 'turno' | 'a_cargo' = lista.some(m => m.vehiculoModalidad === 'a_cargo') ? 'a_cargo' : 'turno'
-      // Horario solo aplica cuando modalidad === 'turno'.
-      // FIX 2026-05-19: ya viene cruzado por conductor desde useExcesoKmData
-      // (Map patenteNorm|conductor_id -> horario), asi que basta con tomar
-      // el primer valor diurno/nocturno del conductor en la lista.
+      // FIX 2026-06-11: modalidad/turno se resuelven POR CONDUCTOR (sin patente) en
+      // useExcesoKmData, vía la asignación vigente en la semana. Aquí solo agregamos:
+      //  - a_cargo si algún registro la tiene; turno si alguno la tiene; null si NINGUNO
+      //    tiene asignación válida esa semana (=> MODALIDAD vacía y TURNO '—').
+      let modalidad: 'turno' | 'a_cargo' | null = null
+      if (lista.some(m => m.vehiculoModalidad === 'a_cargo')) modalidad = 'a_cargo'
+      else if (lista.some(m => m.vehiculoModalidad === 'turno')) modalidad = 'turno'
+      // Horario (diurno/nocturno) solo aplica cuando modalidad === 'turno'.
       let horario: ExcesoKmRow['horario'] = null
       if (modalidad === 'turno') {
         for (const m of lista) {
@@ -135,7 +139,8 @@ export function ExcesoKmTable({
           }
         }
       }
-      // Si la marcación tiene limiteSemanal lo usamos; sino usamos default según modalidad
+      // Límite según la modalidad resuelta. Sin asignación (null) => límite de turno
+      // (1800, el más estricto) para no subestimar el exceso.
       const limite = lista[0].limiteSemanal || (modalidad === 'a_cargo' ? 3600 : 1800)
       const excedido = Math.max(0, km - limite)
       // patente principal: la que más km tiene en la semana
@@ -366,6 +371,10 @@ export function ExcesoKmTable({
       size: 90,
       cell: ({ row }) => {
         const mod = row.original.modalidad
+        // Sin asignación válida esa semana => sin badge.
+        if (!mod) {
+          return <span style={{ fontSize: 11, color: 'var(--text-tertiary)' }}>—</span>
+        }
         const color = mod === 'a_cargo' ? '#0891b2' : '#7c3aed'
         return (
           <span style={{ fontSize: 10, fontWeight: 600, padding: '2px 8px', borderRadius: 10, color: '#fff', background: color, textTransform: 'uppercase', letterSpacing: '0.3px' }}>
