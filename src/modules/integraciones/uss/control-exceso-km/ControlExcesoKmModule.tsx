@@ -353,6 +353,7 @@ export function ControlExcesoKmModule() {
       onCustomDateRange={setCustomDateRange}
       isLoading={loading}
       weekOnly
+      allowMonthYear
     />
   )
 

@@ -13,7 +13,7 @@ export interface DateRange {
   startDate: string // ISO string YYYY-MM-DD
   endDate: string   // ISO string YYYY-MM-DD
   label: string
-  type: 'day' | 'week' | 'custom' | 'all' | 'year'
+  type: 'day' | 'week' | 'custom' | 'all' | 'month' | 'year'
 }
 
 export interface DateRangeShortcut {
@@ -30,6 +30,10 @@ interface DateRangeSelectorProps {
   placeholder?: string
   extraShortcuts?: DateRangeShortcut[] // Atajos adicionales al inicio de la lista
   weekOnly?: boolean // Solo modo semana, sin día ni shortcuts Hoy/Ayer
+  // Modo "desglose semanal": permite además elegir Mes/Año. El rango resultante
+  // siempre cubre semanas COMPLETAS lunes-domingo (se extiende hacia atrás/adelante
+  // para no cortar la semana borde). Los datos se siguen mostrando por semana.
+  allowMonthYear?: boolean
 }
 
 // Días de la semana (Lunes a Domingo)
@@ -84,7 +88,25 @@ const getSundayOfWeek = (year: number, month: number, day: number): { year: numb
   return { year: sunday.getFullYear(), month: sunday.getMonth(), day: sunday.getDate() }
 }
 
-type SelectionMode = 'day' | 'week'
+type SelectionMode = 'day' | 'week' | 'month' | 'year'
+
+// Rango de semanas COMPLETAS (lunes-domingo) que cubren un mes.
+// Se extiende: del lunes de la semana que contiene el día 1, al domingo de la
+// semana que contiene el último día del mes. Así ninguna semana borde se corta.
+const getMonthWeekRange = (year: number, month: number): { start: { year: number; month: number; day: number }; end: { year: number; month: number; day: number } } => {
+  const lastDay = new Date(year, month + 1, 0).getDate()
+  const start = getMondayOfWeek(year, month, 1)
+  const end = getSundayOfWeek(year, month, lastDay)
+  return { start, end }
+}
+
+// Rango de semanas COMPLETAS (lunes-domingo) que cubren un año.
+// Del lunes de la semana del 1-ene al domingo de la semana del 31-dic.
+const getYearWeekRange = (year: number): { start: { year: number; month: number; day: number }; end: { year: number; month: number; day: number } } => {
+  const start = getMondayOfWeek(year, 0, 1)
+  const end = getSundayOfWeek(year, 11, 31)
+  return { start, end }
+}
 
 export function DateRangeSelector({
   selectedRange,
@@ -94,10 +116,18 @@ export function DateRangeSelector({
   placeholder = 'Seleccionar fecha',
   extraShortcuts = [],
   weekOnly = false,
+  allowMonthYear = false,
 }: DateRangeSelectorProps) {
   const [isOpen, setIsOpen] = useState(false)
   const [viewDate, setViewDate] = useState(new Date())
-  const [selectionMode, setSelectionMode] = useState<SelectionMode>('week')
+  // El modo inicial respeta el tipo del rango ya seleccionado (mes/año/semana),
+  // así las pestañas reflejan lo que el usuario tiene activo al abrir el dropdown.
+  const [selectionMode, setSelectionMode] = useState<SelectionMode>(() => {
+    if (allowMonthYear && (selectedRange?.type === 'month' || selectedRange?.type === 'year')) {
+      return selectedRange.type
+    }
+    return 'week'
+  })
   const dropdownRef = useRef<HTMLDivElement>(null)
 
   // Pre-calcular rango seleccionado
@@ -107,6 +137,44 @@ export function DateRangeSelector({
     const end = parseISODate(selectedRange.endDate)
     return { start, end }
   }, [selectedRange])
+
+  // Al abrir, posicionar el calendario en el mes/año del rango seleccionado.
+  // Para mes/año el mes lo da el label ("Mayo 2026" / "Año 2026"), no las fechas,
+  // porque el rango se extiende a semanas completas que pueden caer en otro mes.
+  useEffect(() => {
+    if (!isOpen || !selectedRange || selectedRange.type === 'all') return
+    // Sincronizar la pestaña activa con el tipo del rango ya seleccionado,
+    // así no queda "Mes" activo cuando en realidad hay una semana elegida.
+    if (allowMonthYear) {
+      if (selectedRange.type === 'month') setSelectionMode('month')
+      else if (selectedRange.type === 'year') setSelectionMode('year')
+      else setSelectionMode('week')
+    }
+    let year: number
+    let month: number
+    if (selectedRange.type === 'month') {
+      const mi = MONTH_NAMES.findIndex(n => selectedRange.label.startsWith(n))
+      const ym = selectedRange.label.match(/(\d{4})/)
+      if (mi < 0 || !ym) return
+      month = mi
+      year = Number(ym[1])
+    } else if (selectedRange.type === 'year') {
+      const ym = selectedRange.label.match(/(\d{4})/)
+      if (!ym) return
+      year = Number(ym[1])
+      // En modo año conservamos el mes que ya mostraba el calendario, así al
+      // volver a "Mes" no salta a enero. Solo ajustamos el año.
+      setViewDate(prev => prev.getFullYear() === year ? prev : new Date(year, prev.getMonth(), 1))
+      return
+    } else {
+      const p = parseISODate(selectedRange.startDate)
+      year = p.year
+      month = p.month
+    }
+    setViewDate(prev =>
+      prev.getFullYear() === year && prev.getMonth() === month ? prev : new Date(year, month, 1),
+    )
+  }, [isOpen, selectedRange])
 
   // Cerrar al hacer clic fuera
   useEffect(() => {
@@ -183,6 +251,89 @@ export function DateRangeSelector({
     return ts === selectedRangeParsed.end.timestamp
   }
 
+  // Construir el rango de un MES completo (semanas lunes-domingo). No cierra el dropdown:
+  // se reutiliza tanto al clicar un día como al cambiar de pestaña / navegar.
+  const emitMonthRange = (year: number, month: number, close = true) => {
+    const { start, end } = getMonthWeekRange(year, month)
+    onRangeChange({
+      startDate: toISODateString(start.year, start.month, start.day),
+      endDate: toISODateString(end.year, end.month, end.day),
+      label: `${MONTH_NAMES[month]} ${year}`,
+      type: 'month',
+    })
+    if (close) setIsOpen(false)
+  }
+
+  // Construir el rango de un AÑO completo (semanas lunes-domingo).
+  const emitYearRange = (year: number, close = true) => {
+    const { start, end } = getYearWeekRange(year)
+    onRangeChange({
+      startDate: toISODateString(start.year, start.month, start.day),
+      endDate: toISODateString(end.year, end.month, end.day),
+      label: `Año ${year}`,
+      type: 'year',
+    })
+    if (close) setIsOpen(false)
+  }
+
+  // Emitir el rango de una SEMANA completa (lunes-domingo) que contiene una fecha.
+  const emitWeekRange = (year: number, month: number, day: number, close = true) => {
+    const monday = getMondayOfWeek(year, month, day)
+    const sunday = getSundayOfWeek(year, month, day)
+    const weekNum = getWeekNumber(monday.year, monday.month, monday.day)
+    onRangeChange({
+      startDate: toISODateString(monday.year, monday.month, monday.day),
+      endDate: toISODateString(sunday.year, sunday.month, sunday.day),
+      label: `Semana ${weekNum}`,
+      type: 'week',
+    })
+    if (close) setIsOpen(false)
+  }
+
+  // Cambiar de pestaña. Cada modo emite un rango coherente de inmediato para que el
+  // resaltado y los datos se actualicen sin tener que clicar un día:
+  //  - Mes/Año: selecciona el mes/año que se está viendo en el calendario.
+  //  - Semana: selecciona una semana dentro del período visible (la semana de hoy si
+  //    cae en el mes/año visible; si no, la primera semana del mes visible). Así no
+  //    queda el mes completo seleccionado al pasar de Mes a Semana.
+  const handleModeChange = (mode: SelectionMode) => {
+    setSelectionMode(mode)
+    if (mode === 'month') {
+      emitMonthRange(viewDate.getFullYear(), viewDate.getMonth(), false)
+    } else if (mode === 'year') {
+      emitYearRange(viewDate.getFullYear(), false)
+    } else if (mode === 'week') {
+      const today = new Date()
+      const vy = viewDate.getFullYear()
+      const vm = viewDate.getMonth()
+      // Si hoy cae en el mes visible, usamos hoy; si no, el día 1 del mes visible.
+      if (today.getFullYear() === vy && today.getMonth() === vm) {
+        emitWeekRange(vy, vm, today.getDate(), false)
+      } else {
+        emitWeekRange(vy, vm, 1, false)
+      }
+    }
+  }
+
+  // Navegar con las flechas. En modo Año saltan de año en año; en el resto, mes a mes.
+  // En Mes/Año además re-seleccionan el rango para que el cambio se refleje al instante.
+  const handleNavigate = (delta: number) => {
+    const next = selectionMode === 'year'
+      ? new Date(viewDate.getFullYear() + delta, viewDate.getMonth(), 1)
+      : new Date(viewDate.getFullYear(), viewDate.getMonth() + delta, 1)
+    setViewDate(next)
+    if (selectionMode === 'month') emitMonthRange(next.getFullYear(), next.getMonth(), false)
+    else if (selectionMode === 'year') emitYearRange(next.getFullYear(), false)
+  }
+
+  // Cambiar el año desde el <select>. En modo Mes/Año re-selecciona el rango.
+  const handleYearSelect = (year: number) => {
+    const next = new Date(year, viewDate.getMonth(), 1)
+    setViewDate(next)
+    if (selectionMode === 'month') emitMonthRange(year, viewDate.getMonth(), false)
+    else if (selectionMode === 'year') emitYearRange(year, false)
+  }
+
   // Manejar clic en un día
   const handleDayClick = (dayInfo: typeof calendarDays[0], e: React.MouseEvent) => {
     e.preventDefault()
@@ -199,12 +350,18 @@ export function DateRangeSelector({
       }
       onRangeChange(range)
       setIsOpen(false)
+    } else if (selectionMode === 'month') {
+      // Modo mes: trae todas las semanas completas (lunes-domingo) del mes del día clicado.
+      emitMonthRange(dayInfo.year, dayInfo.month)
+    } else if (selectionMode === 'year') {
+      // Modo año: trae todas las semanas completas (lunes-domingo) del año del día clicado.
+      emitYearRange(dayInfo.year)
     } else {
       // Modo semana: seleccionar semana completa
       const monday = getMondayOfWeek(dayInfo.year, dayInfo.month, dayInfo.day)
       const sunday = getSundayOfWeek(dayInfo.year, dayInfo.month, dayInfo.day)
       const weekNum = getWeekNumber(monday.year, monday.month, monday.day)
-      
+
       const range: DateRange = {
         startDate: toISODateString(monday.year, monday.month, monday.day),
         endDate: toISODateString(sunday.year, sunday.month, sunday.day),
@@ -317,8 +474,8 @@ export function DateRangeSelector({
 
       {isOpen && (
         <div className="date-range-dropdown">
-          {/* Pestañas Día/Semana */}
-          {!weekOnly && (
+          {/* Pestañas Día/Semana (modo Bitácora) */}
+          {!weekOnly && !allowMonthYear && (
           <div className="date-range-tabs">
             <button
               type="button"
@@ -337,24 +494,51 @@ export function DateRangeSelector({
           </div>
           )}
 
+          {/* Pestañas Semana/Mes/Año (Exceso de KM: siempre desglose semanal) */}
+          {allowMonthYear && (
+          <div className="date-range-tabs">
+            <button
+              type="button"
+              className={`date-range-tab ${selectionMode === 'week' ? 'active' : ''}`}
+              onClick={() => handleModeChange('week')}
+            >
+              Semana
+            </button>
+            <button
+              type="button"
+              className={`date-range-tab ${selectionMode === 'month' ? 'active' : ''}`}
+              onClick={() => handleModeChange('month')}
+            >
+              Mes
+            </button>
+            <button
+              type="button"
+              className={`date-range-tab ${selectionMode === 'year' ? 'active' : ''}`}
+              onClick={() => handleModeChange('year')}
+            >
+              Año
+            </button>
+          </div>
+          )}
+
           {/* Header con navegación */}
           <div className="date-range-header">
-            <button type="button" onClick={() => setViewDate(new Date(viewDate.getFullYear(), viewDate.getMonth() - 1, 1))} className="date-range-nav">
+            <button type="button" onClick={() => handleNavigate(-1)} className="date-range-nav">
               <ChevronLeft size={16} />
             </button>
             <div className="date-range-month-year">
               <span className="date-range-month">{MONTH_NAMES[viewDate.getMonth()]}</span>
-              <select 
+              <select
                 className="date-range-year-select"
                 value={viewDate.getFullYear()}
-                onChange={(e) => setViewDate(new Date(parseInt(e.target.value), viewDate.getMonth(), 1))}
+                onChange={(e) => handleYearSelect(parseInt(e.target.value))}
               >
                 {Array.from({ length: 10 }, (_, i) => new Date().getFullYear() - 5 + i).map(year => (
                   <option key={year} value={year}>{year}</option>
                 ))}
               </select>
             </div>
-            <button type="button" onClick={() => setViewDate(new Date(viewDate.getFullYear(), viewDate.getMonth() + 1, 1))} className="date-range-nav">
+            <button type="button" onClick={() => handleNavigate(1)} className="date-range-nav">
               <ChevronRight size={16} />
             </button>
           </div>
@@ -376,9 +560,10 @@ export function DateRangeSelector({
                 selectedRange?.type === 'day' &&
                 selectedRange.startDate === toISODateString(dayInfo.year, dayInfo.month, dayInfo.day)
 
-              const isInRange = selectionMode === 'week' && isDayInSelectedRange(dayInfo.timestamp)
-              const isStart = selectionMode === 'week' && isRangeStart(dayInfo.timestamp)
-              const isEnd = selectionMode === 'week' && isRangeEnd(dayInfo.timestamp)
+              const isRangeMode = selectionMode === 'week' || selectionMode === 'month' || selectionMode === 'year'
+              const isInRange = isRangeMode && isDayInSelectedRange(dayInfo.timestamp)
+              const isStart = isRangeMode && isRangeStart(dayInfo.timestamp)
+              const isEnd = isRangeMode && isRangeEnd(dayInfo.timestamp)
 
               const classes = [
                 'date-range-day',

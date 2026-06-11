@@ -12,6 +12,9 @@ interface BitacoraHeaderProps {
   isLoading: boolean
   lastUpdate?: Date | null
   weekOnly?: boolean
+  // Permite además elegir Mes/Año en el calendario (Exceso de KM).
+  // Los datos se siguen mostrando por semana lunes-domingo.
+  allowMonthYear?: boolean
 }
 
 // Helpers de fecha en zona Argentina
@@ -27,17 +30,32 @@ export function BitacoraHeader({
   onCustomDateRange,
   isLoading,
   weekOnly = false,
+  allowMonthYear = false,
 }: BitacoraHeaderProps) {
 
   const isRealtime = dateRange.label === 'Hoy'
 
-  // Convertir BitacoraDateRange a DateRange del componente compartido
-  const selectedRange: DateRange = useMemo(() => ({
-    startDate: dateRange.startDate,
-    endDate: dateRange.endDate,
-    label: dateRange.label,
-    type: dateRange.startDate === dateRange.endDate ? 'day' : 'week',
-  }), [dateRange])
+  // Convertir BitacoraDateRange a DateRange del componente compartido.
+  // Inferimos el tipo (mes/año/semana/día) a partir del label para que el
+  // calendario resalte correctamente el rango cuando se elige Mes o Año.
+  const selectedRange: DateRange = useMemo(() => {
+    let type: DateRange['type']
+    if (dateRange.startDate === dateRange.endDate) {
+      type = 'day'
+    } else if (/^Año\s/i.test(dateRange.label)) {
+      type = 'year'
+    } else if (/^(Este mes|Mes pasado)$/i.test(dateRange.label) || /^(Enero|Febrero|Marzo|Abril|Mayo|Junio|Julio|Agosto|Septiembre|Octubre|Noviembre|Diciembre)\s+\d{4}$/i.test(dateRange.label)) {
+      type = 'month'
+    } else {
+      type = 'week'
+    }
+    return {
+      startDate: dateRange.startDate,
+      endDate: dateRange.endDate,
+      label: dateRange.label,
+      type,
+    }
+  }, [dateRange])
 
   // Atajos extra: Hoy y Ayer solo para Marcaciones, no para Histórico
   const extraShortcuts: DateRangeShortcut[] = useMemo(() => {
@@ -84,6 +102,7 @@ export function BitacoraHeader({
         placeholder="Seleccionar fecha"
         extraShortcuts={extraShortcuts}
         weekOnly={weekOnly}
+        allowMonthYear={allowMonthYear}
       />
 
       <div className="uss-status">
