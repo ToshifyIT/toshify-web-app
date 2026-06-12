@@ -14,6 +14,7 @@ interface RangoSeguimiento {
   color: string
   desde: number | null
   hasta: number | null
+  gnc: boolean
 }
 
 const COLOR_OPTIONS = [
@@ -62,6 +63,11 @@ export function RangoSeguimientoPage() {
       { value: 'CARGO', label: 'A Cargo' },
     ].map(t => `<option value="${t.value}">${t.label}</option>`).join('')
 
+    const gncOptions = [
+      { value: 'true', label: 'Con GNC' },
+      { value: 'false', label: 'Sin GNC' },
+    ].map(g => `<option value="${g.value}">${g.label}</option>`).join('')
+
     const { value: formValues } = await Swal.fire({
       title: 'Nuevo Rango de Seguimiento',
       html: `
@@ -76,11 +82,19 @@ export function RangoSeguimientoPage() {
               ${colorOptions}
             </select>
           </div>
-          <div>
-            <label style="font-size:13px;font-weight:600;color:var(--text-secondary);display:block;margin-bottom:4px;">Turno</label>
-            <select id="swal-turno" class="swal2-select" style="margin:0;width:100%;box-sizing:border-box;">
-              ${turnoOptions}
-            </select>
+          <div style="display:flex;gap:12px;">
+            <div style="flex:1;">
+              <label style="font-size:13px;font-weight:600;color:var(--text-secondary);display:block;margin-bottom:4px;">Turno</label>
+              <select id="swal-turno" class="swal2-select" style="margin:0;width:100%;box-sizing:border-box;">
+                ${turnoOptions}
+              </select>
+            </div>
+            <div style="flex:1;">
+              <label style="font-size:13px;font-weight:600;color:var(--text-secondary);display:block;margin-bottom:4px;">GNC</label>
+              <select id="swal-gnc" class="swal2-select" style="margin:0;width:100%;box-sizing:border-box;">
+                ${gncOptions}
+              </select>
+            </div>
           </div>
           <div style="display:flex;gap:12px;">
             <div style="flex:1;">
@@ -102,6 +116,7 @@ export function RangoSeguimientoPage() {
         const nombre = (document.getElementById('swal-nombre') as HTMLInputElement).value.trim().toUpperCase()
         const color = (document.getElementById('swal-color') as HTMLSelectElement).value
         const turno = (document.getElementById('swal-turno') as HTMLSelectElement).value
+        const gncVal = (document.getElementById('swal-gnc') as HTMLSelectElement).value
         const desde = (document.getElementById('swal-desde') as HTMLInputElement).value
         const hasta = (document.getElementById('swal-hasta') as HTMLInputElement).value
 
@@ -118,6 +133,7 @@ export function RangoSeguimientoPage() {
           rango_nombre: nombre,
           color,
           sub_rango_nombre: turno ? turno.toUpperCase() : null,
+          gnc: gncVal === 'true',
           desde: parseInt(desde),
           hasta: hasta ? parseInt(hasta) : null,
         }
@@ -150,6 +166,12 @@ export function RangoSeguimientoPage() {
       { value: 'CARGO', label: 'A Cargo' },
     ].map(t => `<option value="${t.value}" ${t.value === (rango.sub_rango_nombre || '') ? 'selected' : ''}>${t.label}</option>`).join('')
 
+    const gncCurrentVal = rango.gnc === true ? 'true' : 'false'
+    const gncOptionsEdit = [
+      { value: 'true', label: 'Con GNC' },
+      { value: 'false', label: 'Sin GNC' },
+    ].map(g => `<option value="${g.value}" ${g.value === gncCurrentVal ? 'selected' : ''}>${g.label}</option>`).join('')
+
     const { value: formValues } = await Swal.fire({
       title: 'Editar Rango de Seguimiento',
       html: `
@@ -164,11 +186,19 @@ export function RangoSeguimientoPage() {
               ${colorOptions}
             </select>
           </div>
-          <div>
-            <label style="font-size:13px;font-weight:600;color:var(--text-secondary);display:block;margin-bottom:4px;">Turno</label>
-            <select id="swal-turno" class="swal2-select" style="margin:0;width:100%;box-sizing:border-box;">
-              ${turnoOptions}
-            </select>
+          <div style="display:flex;gap:12px;">
+            <div style="flex:1;">
+              <label style="font-size:13px;font-weight:600;color:var(--text-secondary);display:block;margin-bottom:4px;">Turno</label>
+              <select id="swal-turno" class="swal2-select" style="margin:0;width:100%;box-sizing:border-box;">
+                ${turnoOptions}
+              </select>
+            </div>
+            <div style="flex:1;">
+              <label style="font-size:13px;font-weight:600;color:var(--text-secondary);display:block;margin-bottom:4px;">GNC</label>
+              <select id="swal-gnc" class="swal2-select" style="margin:0;width:100%;box-sizing:border-box;">
+                ${gncOptionsEdit}
+              </select>
+            </div>
           </div>
           <div style="display:flex;gap:12px;">
             <div style="flex:1;">
@@ -190,6 +220,7 @@ export function RangoSeguimientoPage() {
         const nombre = (document.getElementById('swal-nombre') as HTMLInputElement).value.trim().toUpperCase()
         const color = (document.getElementById('swal-color') as HTMLSelectElement).value
         const turno = (document.getElementById('swal-turno') as HTMLSelectElement).value
+        const gncVal = (document.getElementById('swal-gnc') as HTMLSelectElement).value
         const desde = (document.getElementById('swal-desde') as HTMLInputElement).value
         const hasta = (document.getElementById('swal-hasta') as HTMLInputElement).value
 
@@ -206,6 +237,7 @@ export function RangoSeguimientoPage() {
           rango_nombre: nombre,
           color,
           sub_rango_nombre: turno ? turno.toUpperCase() : null,
+          gnc: gncVal === 'true',
           desde: parseInt(desde),
           hasta: hasta ? parseInt(hasta) : null,
         }
@@ -272,10 +304,26 @@ export function RangoSeguimientoPage() {
     {
       accessorKey: 'sub_rango_nombre',
       header: 'TURNO',
-      size: 180,
+      size: 150,
       cell: ({ row }) => (
         <span>{row.original.sub_rango_nombre || '—'}</span>
       ),
+    },
+    {
+      accessorKey: 'gnc',
+      header: 'GNC',
+      size: 120,
+      cell: ({ row }) => {
+        const gnc = row.original.gnc
+        return (
+          <span
+            className={`dt-badge dt-badge-${gnc ? 'green' : 'yellow'}`}
+            style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}
+          >
+            {gnc ? 'Con GNC' : 'Sin GNC'}
+          </span>
+        )
+      },
     },
     {
       accessorKey: 'color',
