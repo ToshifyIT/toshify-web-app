@@ -69,7 +69,7 @@ interface ProgramacionData {
   distancia_nocturno: number | ''
   // Devolución de vehículo
   devolucion_vehiculo: boolean
-  ultimo_dia_cobro: 'dia_entrega' | 'fecha_baja' | ''
+  ultimo_dia_cobro: 'dia_entrega' | 'fecha_baja' | 'sin_cobro' | ''
   // Cambio de vehículo
   cambio_vehiculo: boolean
   // Propietario (razon_social del grupo de flota)
@@ -3799,11 +3799,12 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
                               <label>Último Día de Cobro *</label>
                               <select
                                 value={formData.ultimo_dia_cobro}
-                                onChange={(e) => setFormData({ ...formData, ultimo_dia_cobro: e.target.value as 'dia_entrega' | 'fecha_baja' | '' })}
+                                onChange={(e) => setFormData({ ...formData, ultimo_dia_cobro: e.target.value as 'dia_entrega' | 'fecha_baja' | 'sin_cobro' | '' })}
                               >
                                 <option value="">Seleccionar...</option>
                                 <option value="dia_entrega">Día de entrega de vehículo</option>
                                 <option value="fecha_baja">Fecha de Baja</option>
+                                <option value="sin_cobro">Sin cobro (0 días)</option>
                               </select>
                             </>
                           )}
@@ -3893,11 +3894,12 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
                               <label>Último Día de Cobro *</label>
                               <select
                                 value={formData.ultimo_dia_cobro}
-                                onChange={(e) => setFormData({ ...formData, ultimo_dia_cobro: e.target.value as 'dia_entrega' | 'fecha_baja' | '' })}
+                                onChange={(e) => setFormData({ ...formData, ultimo_dia_cobro: e.target.value as 'dia_entrega' | 'fecha_baja' | 'sin_cobro' | '' })}
                               >
                                 <option value="">Seleccionar...</option>
                                 <option value="dia_entrega">Día de entrega de vehículo</option>
                                 <option value="fecha_baja">Fecha de Baja</option>
+                                <option value="sin_cobro">Sin cobro (0 días)</option>
                               </select>
                             </>
                           )}
@@ -3992,11 +3994,12 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
                               <label>Último Día de Cobro *</label>
                               <select
                                 value={formData.ultimo_dia_cobro}
-                                onChange={(e) => setFormData({ ...formData, ultimo_dia_cobro: e.target.value as 'dia_entrega' | 'fecha_baja' | '' })}
+                                onChange={(e) => setFormData({ ...formData, ultimo_dia_cobro: e.target.value as 'dia_entrega' | 'fecha_baja' | 'sin_cobro' | '' })}
                               >
                                 <option value="">Seleccionar...</option>
                                 <option value="dia_entrega">Día de entrega de vehículo</option>
                                 <option value="fecha_baja">Fecha de Baja</option>
+                                <option value="sin_cobro">Sin cobro (0 días)</option>
                               </select>
                             </>
                           )}

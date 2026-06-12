@@ -760,9 +760,10 @@ export function ReporteFacturacionTab() {
 
       // Tope por fecha_terminacion del conductor
       const fechaTermDesglose = conductorDesglose?.fecha_terminacion ? parseISO(conductorDesglose.fecha_terminacion) : null
-      // Verificar si la devolución indica ultimo_dia_cobro='fecha_baja'
+      // Verificar si la devolución indica ultimo_dia_cobro='fecha_baja' o 'sin_cobro'
       const devProgDesglose = devolucionProgData && devolucionProgData.length > 0 ? devolucionProgData[0] : null
       const usarFechaBajaDesglose = devProgDesglose?.ultimo_dia_cobro === 'fecha_baja'
+      const sinCobroDesglose = devProgDesglose?.ultimo_dia_cobro === 'sin_cobro'
 
       // Mapa historial GNC para desglose
       const gncHistorialMapDesglose = new Map<string, GncHistorialEntry[]>()
@@ -864,6 +865,12 @@ export function ReporteFacturacionTab() {
         }
         let diasContados = 0
 
+        // Si la devolución tiene ultimo_dia_cobro='sin_cobro', no contar ningún día
+        if (sinCobroDesglose) {
+          historial.push({ fechaInicio: acInicioStr, fechaFin: acFinStr, padreEstado: estadoPadre, conductorEstado: ac.estado || '', horario, dias: 0, nota: 'Sin cobro (devolución)', patente: patenteAsig, tieneGnc: asignacion.vehiculos?.gnc === true, grupoFlota: asignacion.vehiculos?.grupo_flota || null })
+          continue
+        }
+
         const vehiculoGncActualDesglose = asignacion.vehiculos?.gnc === true
         const vehiculoIdDesglose = asignacion.vehiculo_id
         const modalidadGncDesglose: 'CARGO' | 'TURNO_DIURNO' | 'TURNO_NOCTURNO' =
@@ -910,7 +917,7 @@ export function ReporteFacturacionTab() {
       const historialFiltrado = historial.filter(h => {
         const estado = h.padreEstado.toLowerCase()
         if (estado.includes('program') || estado.includes('cancel')) return false
-        if (h.dias === 0 && h.nota !== 'Días ya cubiertos') return false
+        if (h.dias === 0 && h.nota !== 'Días ya cubiertos' && h.nota !== 'Sin cobro (devolución)') return false
         return true
       })
 
@@ -1863,19 +1870,36 @@ export function ReporteFacturacionTab() {
         if (c.fecha_terminacion) fechaTermMapVP.set(c.id, parseISO(c.fecha_terminacion))
       }
 
-      // Cargar devoluciones para determinar si usar fecha_baja como tope de días
+      // Cargar devoluciones con fecha_baja (requiere fecha_terminacion) y sin_cobro (independiente)
       const conductoresConFechaBajaVP = new Set<string>()
+      const conductoresSinCobroVP = new Set<string>()
       const conductoresConTerminacion = [...fechaTermMapVP.keys()]
+      // fecha_baja: solo aplica a conductores con fecha_terminacion
       if (conductoresConTerminacion.length > 0) {
-        const { data: devolucionesVP } = await (supabase as any)
+        const { data: devolucionesFechaBajaVP } = await (supabase as any)
           .from('programaciones_onboarding')
-          .select('conductor_id, conductor_diurno_id, conductor_nocturno_id, ultimo_dia_cobro')
+          .select('conductor_id, conductor_diurno_id, conductor_nocturno_id')
           .eq('devolucion_vehiculo', true)
           .eq('ultimo_dia_cobro', 'fecha_baja')
-        for (const d of (devolucionesVP || []) as any[]) {
-          if (d.conductor_id && conductoresConTerminacion.includes(d.conductor_id)) conductoresConFechaBajaVP.add(d.conductor_id)
-          if (d.conductor_diurno_id && conductoresConTerminacion.includes(d.conductor_diurno_id)) conductoresConFechaBajaVP.add(d.conductor_diurno_id)
-          if (d.conductor_nocturno_id && conductoresConTerminacion.includes(d.conductor_nocturno_id)) conductoresConFechaBajaVP.add(d.conductor_nocturno_id)
+        for (const d of (devolucionesFechaBajaVP || []) as any[]) {
+          const ids = [d.conductor_id, d.conductor_diurno_id, d.conductor_nocturno_id].filter(Boolean)
+          for (const id of ids) {
+            if (conductoresConTerminacion.includes(id)) conductoresConFechaBajaVP.add(id)
+          }
+        }
+      }
+      // sin_cobro: buscar para TODOS los conductores del periodo, no solo los que tienen fecha_terminacion
+      if (conductorIds.length > 0) {
+        const { data: devolucionesSinCobroVP } = await (supabase as any)
+          .from('programaciones_onboarding')
+          .select('conductor_id, conductor_diurno_id, conductor_nocturno_id')
+          .eq('devolucion_vehiculo', true)
+          .eq('ultimo_dia_cobro', 'sin_cobro')
+        for (const d of (devolucionesSinCobroVP || []) as any[]) {
+          const ids = [d.conductor_id, d.conductor_diurno_id, d.conductor_nocturno_id].filter(Boolean)
+          for (const id of ids) {
+            if (conductorIds.includes(id)) conductoresSinCobroVP.add(id)
+          }
         }
       }
       
@@ -1975,6 +1999,8 @@ export function ReporteFacturacionTab() {
           }
         }
 
+        const esSinCobroVP = conductoresSinCobroVP.has(ac.conductor_id)
+
         // Aplicar fecha_terminacion como tope si:
         // - La asignación NO tiene fecha_fin propia, O
         // - El conductor tiene devolución con ultimo_dia_cobro='fecha_baja' (siempre aplica)
@@ -1982,10 +2008,10 @@ export function ReporteFacturacionTab() {
         const fechaTermVP = fechaTermMapVP.get(ac.conductor_id)
         const usarFechaBajaVP = conductoresConFechaBajaVP.has(ac.conductor_id)
         if (fechaTermVP && (!tieneFinPropioVP || usarFechaBajaVP) && efectivoFin > fechaTermVP && acInicio <= fechaTermVP) efectivoFin = fechaTermVP
-        
+
         const prorrateo = prorrateoMap.get(ac.conductor_id)
         if (!prorrateo) return
-        
+
         // Determinar modalidad basándose en asignaciones.horario + asignaciones_conductores.horario
         let modalidad: 'CARGO' | 'TURNO_DIURNO' | 'TURNO_NOCTURNO' = 'CARGO'
         const horarioLowerVP = (horarioConductor || '').toLowerCase().trim()
@@ -2000,22 +2026,25 @@ export function ReporteFacturacionTab() {
         }
 
         // Contar días deduplicando por fecha (evita doble conteo con registros duplicados)
+        // Si es sin_cobro, no contar ningún día pero dejar pasar al conductor
         const fechasContadas = diasContadosVP.get(ac.conductor_id)!
         let diasReales = 0
-        const cursorVP = new Date(efectivoInicio)
-        while (cursorVP <= efectivoFin) {
-          const key = format(cursorVP, 'yyyy-MM-dd')
-          if (!fechasContadas.has(key)) {
-            fechasContadas.add(key)
-            diasReales++
-            if (modalidad === 'CARGO') prorrateo.CARGO++
-            else if (modalidad === 'TURNO_NOCTURNO') prorrateo.TURNO_NOCTURNO++
-            else prorrateo.TURNO_DIURNO++
+        if (!esSinCobroVP) {
+          const cursorVP = new Date(efectivoInicio)
+          while (cursorVP <= efectivoFin) {
+            const key = format(cursorVP, 'yyyy-MM-dd')
+            if (!fechasContadas.has(key)) {
+              fechasContadas.add(key)
+              diasReales++
+              if (modalidad === 'CARGO') prorrateo.CARGO++
+              else if (modalidad === 'TURNO_NOCTURNO') prorrateo.TURNO_NOCTURNO++
+              else prorrateo.TURNO_DIURNO++
+            }
+            cursorVP.setDate(cursorVP.getDate() + 1)
           }
-          cursorVP.setDate(cursorVP.getDate() + 1)
         }
-        
-        if (diasReales <= 0) return
+
+        if (diasReales <= 0 && !esSinCobroVP) return
 
         // Detectar prorrateo de ingreso por hora de entrega real
         // Solo aplica si la asignación es NUEVA en esta semana (acInicio >= inicio de semana)
@@ -2526,8 +2555,8 @@ export function ReporteFacturacionTab() {
         // prorrateo.CARGO/TURNO_DIURNO/TURNO_NOCTURNO ya tienen el descuento por hora de entrega aplicado
         const diasTotales = Math.min(7, Math.max(0, prorrateo.CARGO + prorrateo.TURNO_DIURNO + prorrateo.TURNO_NOCTURNO))
 
-        // Excluir conductores con 0 días, SALVO que tengan penalidades pendientes
-        if (diasTotales === 0 && !dnisConPenalidadesVP.has(control.numero_dni)) continue
+        // Excluir conductores con 0 días, SALVO que tengan penalidades pendientes o sean sin_cobro
+        if (diasTotales === 0 && !dnisConPenalidadesVP.has(control.numero_dni) && !conductoresSinCobroVP.has(conductorId)) continue
         
         // Calcular alquiler usando montos pre-calculados con precios (precio_final ya incluye IVA)
         const subtotalAlquiler = prorrateo.monto_CARGO + prorrateo.monto_TURNO_DIURNO + prorrateo.monto_TURNO_NOCTURNO
@@ -3084,6 +3113,8 @@ export function ReporteFacturacionTab() {
 
       // Rastrear la fecha_fin más tardía de asignaciones por conductor
       const maxAsigFinRecalc = new Map<string, string>()
+      // Rastrear primera fecha efectiva de asignación por conductor (para proyectado)
+      const primeraFechaRecalc = new Map<string, Date>()
 
       // Calcular días reales por conductor por modalidad+GNC
       // Cada combinación modalidad+GNC genera una línea de alquiler separada
@@ -3114,19 +3145,37 @@ export function ReporteFacturacionTab() {
         }
       }
 
-      // Cargar devoluciones para determinar si usar fecha_baja como tope de días
+      // Cargar devoluciones con fecha_baja (requiere fecha_terminacion) y sin_cobro (independiente)
       const conductoresConFechaBajaRecalc = new Set<string>()
+      const conductoresSinCobroRecalc = new Set<string>()
       const conductoresConTermRecalc = [...fechaTerminacionMap.keys()]
+      // fecha_baja: solo aplica a conductores con fecha_terminacion
       if (conductoresConTermRecalc.length > 0) {
-        const { data: devolucionesRecalc } = await (supabase as any)
+        const { data: devolucionesFechaBajaRecalc } = await (supabase as any)
           .from('programaciones_onboarding')
-          .select('conductor_id, conductor_diurno_id, conductor_nocturno_id, ultimo_dia_cobro')
+          .select('conductor_id, conductor_diurno_id, conductor_nocturno_id')
           .eq('devolucion_vehiculo', true)
           .eq('ultimo_dia_cobro', 'fecha_baja')
-        for (const d of (devolucionesRecalc || []) as any[]) {
-          if (d.conductor_id && conductoresConTermRecalc.includes(d.conductor_id)) conductoresConFechaBajaRecalc.add(d.conductor_id)
-          if (d.conductor_diurno_id && conductoresConTermRecalc.includes(d.conductor_diurno_id)) conductoresConFechaBajaRecalc.add(d.conductor_diurno_id)
-          if (d.conductor_nocturno_id && conductoresConTermRecalc.includes(d.conductor_nocturno_id)) conductoresConFechaBajaRecalc.add(d.conductor_nocturno_id)
+        for (const d of (devolucionesFechaBajaRecalc || []) as any[]) {
+          const ids = [d.conductor_id, d.conductor_diurno_id, d.conductor_nocturno_id].filter(Boolean)
+          for (const id of ids) {
+            if (conductoresConTermRecalc.includes(id)) conductoresConFechaBajaRecalc.add(id)
+          }
+        }
+      }
+      // sin_cobro: buscar para TODOS los conductores del periodo
+      const conductorIdsRecalc = [...conductoresMap.values()].map((c: any) => c.id)
+      if (conductorIdsRecalc.length > 0) {
+        const { data: devolucionesSinCobroRecalc } = await (supabase as any)
+          .from('programaciones_onboarding')
+          .select('conductor_id, conductor_diurno_id, conductor_nocturno_id')
+          .eq('devolucion_vehiculo', true)
+          .eq('ultimo_dia_cobro', 'sin_cobro')
+        for (const d of (devolucionesSinCobroRecalc || []) as any[]) {
+          const ids = [d.conductor_id, d.conductor_diurno_id, d.conductor_nocturno_id].filter(Boolean)
+          for (const id of ids) {
+            if (conductorIdsRecalc.includes(id)) conductoresSinCobroRecalc.add(id)
+          }
         }
       }
 
@@ -3190,6 +3239,12 @@ export function ReporteFacturacionTab() {
         const efectivoInicio = acInicio < fechaInicioSemanaRecalc ? fechaInicioSemanaRecalc : acInicio
         let efectivoFin = acFin > fechaFinSemanaRecalc ? fechaFinSemanaRecalc : acFin
 
+        // Rastrear primera fecha efectiva (para proyectado)
+        const existingPF = primeraFechaRecalc.get(ac.conductor_id)
+        if (!existingPF || efectivoInicio < existingPF) {
+          primeraFechaRecalc.set(ac.conductor_id, efectivoInicio)
+        }
+
         // Regla: si otra asignación del mismo conductor EMPIEZA el día en que esta TERMINA,
         // ese día cuenta para la nueva. Recortamos efectivoFin en 1 día.
         const fechasInicioSetR = fechasInicioAsigRecalc.get(ac.conductor_id)
@@ -3202,6 +3257,8 @@ export function ReporteFacturacionTab() {
             efectivoFin = nuevoFinR
           }
         }
+
+        const esSinCobroRecalc = conductoresSinCobroRecalc.has(ac.conductor_id)
 
         // Aplicar fecha_terminacion como tope si el conductor tiene devolución con ultimo_dia_cobro='fecha_baja'
         const fechaTermRecalc = fechaTerminacionMap.get(ac.conductor_id)
@@ -3223,24 +3280,26 @@ export function ReporteFacturacionTab() {
           : 'TURNO_DIURNO'
 
         // Contar días deduplicando por fecha (evita doble conteo con registros duplicados)
-        // Separa por modalidad+GNC para generar líneas de alquiler correctas
+        // Si es sin_cobro, no contar ningún día pero dejar pasar al conductor
         const fechasContadasR = diasContadosRecalc.get(ac.conductor_id)!
-        const cursorR = new Date(efectivoInicio)
-        while (cursorR <= efectivoFin) {
-          const key = format(cursorR, 'yyyy-MM-dd')
-          if (!fechasContadasR.has(key)) {
-            fechasContadasR.add(key)
-            // Evaluar GNC por fecha usando historial
-            const gncEsteDia = tieneGncEnFecha(vehiculoIdR, key, modalidadGnc, gncHistorialMapRecalc, vehiculoGncActual)
-            if (modalidadGnc === 'CARGO') {
-              if (gncEsteDia) prorrateo.CARGO++; else prorrateo.CARGO_SIN_GNC++
-            } else if (modalidadGnc === 'TURNO_NOCTURNO') {
-              if (gncEsteDia) prorrateo.TURNO_NOCTURNO++; else prorrateo.TURNO_NOCTURNO_SIN_GNC++
-            } else {
-              if (gncEsteDia) prorrateo.TURNO_DIURNO++; else prorrateo.TURNO_DIURNO_SIN_GNC++
+        if (!esSinCobroRecalc) {
+          const cursorR = new Date(efectivoInicio)
+          while (cursorR <= efectivoFin) {
+            const key = format(cursorR, 'yyyy-MM-dd')
+            if (!fechasContadasR.has(key)) {
+              fechasContadasR.add(key)
+              // Evaluar GNC por fecha usando historial
+              const gncEsteDia = tieneGncEnFecha(vehiculoIdR, key, modalidadGnc, gncHistorialMapRecalc, vehiculoGncActual)
+              if (modalidadGnc === 'CARGO') {
+                if (gncEsteDia) prorrateo.CARGO++; else prorrateo.CARGO_SIN_GNC++
+              } else if (modalidadGnc === 'TURNO_NOCTURNO') {
+                if (gncEsteDia) prorrateo.TURNO_NOCTURNO++; else prorrateo.TURNO_NOCTURNO_SIN_GNC++
+              } else {
+                if (gncEsteDia) prorrateo.TURNO_DIURNO++; else prorrateo.TURNO_DIURNO_SIN_GNC++
+              }
             }
+            cursorR.setDate(cursorR.getDate() + 1)
           }
-          cursorR.setDate(cursorR.getDate() + 1)
         }
 
         // Detectar descuento por hora de entrega (mismas reglas que Vista Previa)
@@ -3341,8 +3400,8 @@ export function ReporteFacturacionTab() {
           }
         }
 
-        // Excluir conductores con 0 días, SALVO que tengan penalidades pendientes
-        if (totalDias === 0 && !dnisConPenalidadesRecalc.has(control.numero_dni)) continue
+        // Excluir conductores con 0 días, SALVO que tengan penalidades pendientes o sean sin_cobro
+        if (totalDias === 0 && !dnisConPenalidadesRecalc.has(control.numero_dni) && !conductoresSinCobroRecalc.has(conductorData.id)) continue
 
         // Priorizar estado_id: si el conductor está ACTIVO, no importa fecha_terminacion vieja
         const esDeBaja = conductorData.estado_id !== ESTADO_ACTIVO_ID_RECALC
@@ -3740,6 +3799,30 @@ export function ReporteFacturacionTab() {
         const diasCargoTotal = conductor.dias_cargo + conductor.dias_cargo_sin_gnc
         const tipoAlquilerPrincipal = diasCargoTotal >= diasTurnoTotal ? 'CARGO' : 'TURNO'
 
+        // Calcular proyectado_alquiler (misma lógica que cargarFacturacion post-load)
+        let proyectadoAlquiler = alquilerTotal
+        if (conductor.total_dias > 0 && alquilerTotal > 0) {
+          if (conductor.estado_billing === 'De baja') {
+            proyectadoAlquiler = alquilerTotal
+          } else {
+            const primeraFechaR = primeraFechaRecalc.get(conductor.conductor_id)
+            const descuentoR = descuentosPorHoraRecalc.get(conductor.conductor_id)?.descuento || 0
+            let diasCalendarioR = 7
+            if (primeraFechaR) {
+              diasCalendarioR = Math.min(7, Math.max(1,
+                Math.round((finSemanaRecalc.getTime() - primeraFechaR.getTime()) / (1000 * 60 * 60 * 24)) + 1
+              ))
+            }
+            const diasProyectadosR = Math.max(1, diasCalendarioR - descuentoR)
+            if (conductor.total_dias < diasProyectadosR) {
+              const precioDiarioR = alquilerTotal / conductor.total_dias
+              proyectadoAlquiler = Math.round(precioDiarioR * diasProyectadosR)
+            }
+          }
+        } else {
+          proyectadoAlquiler = 0
+        }
+
         // UPSERT facturacion_conductores (actualiza si ya existe)
         const { data: factConductor, error: errFact } = await (supabase
           .from('facturacion_conductores') as any)
@@ -3756,6 +3839,7 @@ export function ReporteFacturacionTab() {
             turnos_cobrados: conductor.total_dias,
             factor_proporcional: factorProporcional,
             subtotal_alquiler: alquilerTotal,
+            proyectado_alquiler: proyectadoAlquiler,
             subtotal_garantia: cuotaGarantiaProporcional,
             subtotal_cargos: subtotalCargos,
             subtotal_descuentos: subtotalDescuentos,
@@ -11120,7 +11204,7 @@ export function ReporteFacturacionTab() {
                             {diasModalData.devolucion.ultimo_dia_cobro && (
                               <div style={{ fontSize: '10px', marginTop: '4px', paddingLeft: '16px' }}>
                                 <span style={{ padding: '1px 6px', borderRadius: '3px', background: 'rgba(139, 92, 246, 0.1)', color: '#8b5cf6', fontWeight: 600 }}>
-                                  Último día de cobro: {diasModalData.devolucion.ultimo_dia_cobro === 'dia_entrega' ? 'Día de entrega' : diasModalData.devolucion.ultimo_dia_cobro === 'fecha_baja' ? 'Fecha de baja' : diasModalData.devolucion.ultimo_dia_cobro}
+                                  Último día de cobro: {diasModalData.devolucion.ultimo_dia_cobro === 'dia_entrega' ? 'Día de entrega' : diasModalData.devolucion.ultimo_dia_cobro === 'fecha_baja' ? 'Fecha de baja' : diasModalData.devolucion.ultimo_dia_cobro === 'sin_cobro' ? 'Sin cobro' : diasModalData.devolucion.ultimo_dia_cobro}
                                 </span>
                               </div>
                             )}
