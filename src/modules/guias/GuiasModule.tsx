@@ -666,7 +666,7 @@ export function GuiasModule() {
     try {
       const { data, error } = await supabase
         .from('guias_seguimiento')
-        .select('id, rango_nombre, sub_rango_nombre, desde, hasta, color')
+        .select('id, rango_nombre, sub_rango_nombre, desde, hasta, color, gnc')
         .order('desde', { ascending: true });
       if (error) throw error;
       if (data) setSeguimientoRules(data);
@@ -953,80 +953,19 @@ export function GuiasModule() {
 
         const map = new Map<string, { alquiler: number; garantia: number; total: number; proyectado: number }>();
 
-        if (periodoData && (periodoData as any).estado === 'cerrado') {
-          // Periodo cerrado: obtener facturacion_conductores + precio_unitario para proyectado
+        if (periodoData) {
+          // Periodo existente (abierto o cerrado): leer directo de facturacion_conductores
+          // para que los datos coincidan con el módulo de Facturación
           const { data: facturacionRows } = await supabase
             .from('facturacion_conductores')
-            .select('id, conductor_id, subtotal_alquiler, subtotal_garantia, turnos_cobrados, estado')
+            .select('conductor_id, subtotal_alquiler, subtotal_garantia, proyectado_alquiler')
             .eq('periodo_id', periodoData.id)
             .in('conductor_id', conductorIds);
-
-          // Obtener precio_unitario desde facturacion_detalle (para saber si tiene datos de alquiler)
-          const facIds = (facturacionRows || []).map((r: any) => r.id).filter(Boolean)
-          const puMap = new Map<string, number>()
-          if (facIds.length > 0) {
-            const { data: alquilerDetalle } = await (supabase.from('facturacion_detalle') as any)
-              .select('facturacion_id, precio_unitario')
-              .in('facturacion_id', facIds)
-              .in('concepto_codigo', ['P001', 'P002', 'P013', 'P014', 'P015', 'P016'])
-            ;(alquilerDetalle || []).forEach((d: any) => {
-              const pu = Number(d.precio_unitario) || 0
-              if (pu > 0) puMap.set(d.facturacion_id, pu)
-            })
-          }
-
-          // Obtener primera fecha de asignación por conductor y fecha fin del período
-          const { data: periodoFechas } = await supabase
-            .from('periodos_facturacion')
-            .select('fecha_fin')
-            .eq('id', periodoData.id)
-            .single()
-          const fechaFinPeriodo = periodoFechas ? new Date((periodoFechas as any).fecha_fin) : sundayDate
-
-          const asigCondIds = (facturacionRows || []).map((r: any) => r.conductor_id).filter(Boolean)
-          const primeraFechaMap = new Map<string, Date>()
-          if (asigCondIds.length > 0) {
-            const { data: asigData } = await (supabase.from('asignaciones_conductores') as any)
-              .select('conductor_id, fecha_inicio, asignaciones!inner(estado, fecha_inicio)')
-              .in('conductor_id', asigCondIds)
-              .in('estado', ['asignado', 'activo', 'activa', 'finalizado', 'finalizada', 'completado'])
-            ;(asigData || []).forEach((ac: any) => {
-              const asignacion = ac.asignaciones
-              if (!asignacion) return
-              const estadoPadre = (asignacion.estado || '').toLowerCase()
-              if (['programado', 'programada', 'cancelado', 'cancelada'].includes(estadoPadre)) return
-              const acInicioStr = ac.fecha_inicio || asignacion.fecha_inicio
-              if (!acInicioStr) return
-              const acInicio = new Date(acInicioStr)
-              const existing = primeraFechaMap.get(ac.conductor_id)
-              if (!existing || acInicio < existing) {
-                primeraFechaMap.set(ac.conductor_id, acInicio)
-              }
-            })
-          }
 
           (facturacionRows || []).forEach((row: any) => {
             const alquiler = Number(row.subtotal_alquiler) || 0;
             const garantia = Number(row.subtotal_garantia) || 0;
-            const diasRaw = Number(row.turnos_cobrados) || 0;
-            const pu = puMap.get(row.id) || 0;
-
-            let proyectado = alquiler;
-            // Misma lógica que ReporteFacturacionTab
-            if (pu > 0 && diasRaw > 0) {
-              const primeraFecha = primeraFechaMap.get(row.conductor_id)
-              let diasCalendario = 7
-              if (primeraFecha) {
-                diasCalendario = Math.min(7, Math.max(1,
-                  Math.round((fechaFinPeriodo.getTime() - primeraFecha.getTime()) / (1000 * 60 * 60 * 24)) + 1
-                ))
-              }
-              const diasProyectados = Math.max(1, diasCalendario)
-              if (diasRaw < diasProyectados) {
-                proyectado = Math.round((alquiler / diasRaw) * diasProyectados)
-              }
-            }
-
+            const proyectado = Number(row.proyectado_alquiler) || alquiler;
             map.set(row.conductor_id, { alquiler, garantia, total: alquiler + garantia, proyectado });
           });
           return map;
@@ -1322,19 +1261,21 @@ export function GuiasModule() {
       const processedDrivers: any[] = [];
         const updatesToPerform: any[] = [];
         
-        // Pre-agrupar seguimientoRules por turno dominante — O(1) por conductor en vez de O(rules) c/u
-        // Clave especial '__ALL__' para reglas sin sub_rango (aplican a todos los turnos)
-        const seguimientoRulesByTurno = new Map<string, any[]>()
+        // Pre-agrupar seguimientoRules por turno+gnc — O(1) por conductor
+        // Claves: "DIURNO_true", "DIURNO_false", "__ALL___true", "__ALL___false", etc.
+        const seguimientoRulesByKey = new Map<string, any[]>()
         ;(seguimientoRules || []).forEach((rule: any) => {
           let sub = (rule.sub_rango_nombre || '').toString().toUpperCase().trim()
           if (sub) {
             sub = sub.replace(/[_\s]+/g, ' ').trim()
             if (sub === 'A CARGO') sub = 'CARGO'
           }
-          const key = sub || '__ALL__'
-          const arr = seguimientoRulesByTurno.get(key) || []
+          const turnoPart = sub || '__ALL__'
+          const gncPart = rule.gnc === true ? 'true' : 'false'
+          const key = `${turnoPart}_${gncPart}`
+          const arr = seguimientoRulesByKey.get(key) || []
           arr.push(rule)
-          seguimientoRulesByTurno.set(key, arr)
+          seguimientoRulesByKey.set(key, arr)
         })
 
         for (const historial of historialData) {
@@ -1416,10 +1357,13 @@ export function GuiasModule() {
 
           let matchingSeguimientoRules: any[] = [];
           if (dominantTurno && seguimientoRules && seguimientoRules.length > 0) {
-            // O(1) lookup en Map pre-agrupado — antes: O(rules) con .filter() por conductor
+            // Determinar GNC del vehiculo asignado
+            const conductorGnc = baseConductor.vehiculo_asignado?.gnc === true
+            const gncStr = conductorGnc ? 'true' : 'false'
+            // Buscar reglas por turno+gnc, con fallback a generico+gnc
             matchingSeguimientoRules = [
-              ...(seguimientoRulesByTurno.get(dominantTurno) || []),
-              ...(seguimientoRulesByTurno.get('__ALL__') || []),
+              ...(seguimientoRulesByKey.get(`${dominantTurno}_${gncStr}`) || []),
+              ...(seguimientoRulesByKey.get(`__ALL___${gncStr}`) || []),
             ]
           }
 
@@ -2048,14 +1992,17 @@ export function GuiasModule() {
         case 'seguimientoSemanal':
           result = result.filter(d => {
             const total = Number((d as any).facturacion_app) || 0;
+            const dGnc = (d as any).vehiculo_asignado?.gnc === true;
             let ruleMatch = null;
             if (seguimientoRules && seguimientoRules.length > 0) {
               for (const rule of seguimientoRules) {
+                // Filtrar por GNC si la regla lo especifica
+                if (rule.gnc !== null && rule.gnc !== undefined && rule.gnc !== dGnc) continue;
                 const desde = Number(rule.desde || 0);
                 const hasta = rule.hasta !== null && rule.hasta !== undefined ? Number(rule.hasta) : null;
                 const matchesLower = total >= desde;
                 const matchesUpper = hasta === null || total <= hasta;
-                
+
                 if (matchesLower && matchesUpper) {
                   ruleMatch = rule;
                   break;
@@ -2064,7 +2011,7 @@ export function GuiasModule() {
             }
             if (!ruleMatch) return false;
             const nombre = ruleMatch.rango_nombre?.toLowerCase() || '';
-            
+
             if (activeStatFilter === 'seguimientoDiario') return nombre.includes('diario');
             if (activeStatFilter === 'seguimientoCercano') return nombre.includes('cercano');
             if (activeStatFilter === 'seguimientoSemanal') return nombre.includes('semanal');
@@ -2714,14 +2661,14 @@ export function GuiasModule() {
         cell: ({ row }) => {
           const hasBilling = (row.original as any).hasBillingData;
           const proyectado = (row.original as any).billing_proyectado as number;
-          const alquiler = (row.original as any).billing_alquiler as number;
+          const cobroApp = (row.original as any).facturacion_app as number || 0;
 
           if (!hasBilling || proyectado === 0) {
             return <span className="italic" style={{ color: 'var(--text-tertiary)', fontSize: '11px' }} title="Sin datos de facturación">-</span>;
           }
 
-          const porcentaje = proyectado > 0 ? Math.min(100, Math.round((alquiler / proyectado) * 100)) : 0;
-          const completo = alquiler >= proyectado && alquiler > 0;
+          const porcentaje = proyectado > 0 ? Math.min(100, Math.round((cobroApp / proyectado) * 100)) : 0;
+          const completo = cobroApp >= proyectado && cobroApp > 0;
 
           return (
             <div style={{ fontSize: '11px', minWidth: '80px' }}>
@@ -2753,7 +2700,7 @@ export function GuiasModule() {
                 justifyContent: 'space-between',
                 alignItems: 'center'
               }}>
-                <span>{porcentaje}%</span>
+                <span>{cobroApp === 0 ? 'Sin datos' : `${porcentaje}%`}</span>
                 {completo && <span style={{ color: '#10b981', fontWeight: 600 }}>✓</span>}
               </div>
             </div>
@@ -2984,15 +2931,17 @@ export function GuiasModule() {
                     }
 
                     const total = Number((d as any).facturacion_app) || 0;
+                    const dGnc = (d as any).vehiculo_asignado?.gnc === true;
                     let ruleMatch = null;
 
                     if (seguimientoRules && seguimientoRules.length > 0) {
                       for (const rule of seguimientoRules) {
+                        if (rule.gnc !== null && rule.gnc !== undefined && rule.gnc !== dGnc) continue;
                         const desde = Number(rule.desde || 0);
                         const hasta = rule.hasta !== null && rule.hasta !== undefined ? Number(rule.hasta) : null;
                         const matchesLower = total >= desde;
                         const matchesUpper = hasta === null || total <= hasta;
-                        
+
                         if (matchesLower && matchesUpper) {
                           ruleMatch = rule;
                           break;
