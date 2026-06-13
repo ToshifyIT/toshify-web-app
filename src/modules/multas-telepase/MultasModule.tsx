@@ -14,7 +14,7 @@ import Swal from 'sweetalert2'
 import { showSuccess, showError } from '../../utils/toast'
 import { useSede } from '../../contexts/SedeContext'
 import { useAuth } from '../../contexts/AuthContext'
-import { crearCobroDesdeMulta, resolverMontoMulta } from './services/crearCobroDesdeMulta'
+import { crearCobroDesdeMulta } from './services/crearCobroDesdeMulta'
 import { desestimarMulta as svcDesestimarMulta, reactivarMulta as svcReactivarMulta } from './services/desestimarMulta'
 import { withAudit, logMultaAudit } from './services/auditMulta'
 import { format } from 'date-fns'
@@ -83,6 +83,13 @@ function formatFecha(fecha: string | null): string {
   } catch {
     return fecha
   }
+}
+
+// Fecha local de hoy en formato YYYY-MM-DD. No usamos toISOString() porque
+// convierte a UTC y cerca de medianoche (AR = UTC-3) devolveria el dia equivocado.
+function getHoyLocal(): string {
+  const d = new Date()
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 }
 
 function splitDateTime(dateStr: string | null): { date: string; time: string } {
@@ -689,10 +696,8 @@ export default function MultasModule() {
     // FIX 2026-05-19: si la multa tiene descuento y vencio respecto al periodo
     // abierto, pedir confirmacion mostrando ambos importes antes de enviar.
     const sedeIdParaConsulta = sedeActualId || sedeUsuario?.id
-    let fechaCobro: string = (() => {
-      const d = new Date()
-      return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
-    })()
+    const hoy = getHoyLocal()
+    let fechaCobro: string = hoy
     if (sedeIdParaConsulta) {
       const { data: periodos } = await (supabase.from('periodos_facturacion' as any) as any)
         .select('fecha_inicio')
@@ -702,47 +707,39 @@ export default function MultasModule() {
         .limit(1)
       if (periodos && periodos[0]?.fecha_inicio) fechaCobro = periodos[0].fecha_inicio
     }
-    const { descuentoAplicado, descuentoVencio } = resolverMontoMulta(multa, fechaCobro)
+    // FIX 2026-06-12: la vigencia del descuento se decide contra HOY (solo fecha),
+    // no contra la fecha del periodo de facturacion. Si venc_desc <= hoy el descuento
+    // se considera VENCIDO (el dia limite ya no aplica) y el modal solo ofrece el
+    // importe total, sin selector. El monto real del cobro sigue resolviendose con
+    // fechaCobro dentro de crearCobroDesdeMulta.
+    const vencDesc = (multa.fecha_vencimiento_descuento || '').slice(0, 10)
+    const descNumMulta = parseImporte(multa.importe_descuento)
+    const tieneDescuento = descNumMulta > 0 && !!vencDesc
+    const descuentoVencio = tieneDescuento && vencDesc <= hoy
     // FIX 2026-05-20: monto a enviar (puede sobreescribirse si el usuario elige otra opcion en el modal)
     let montoOverride: number | undefined = undefined
-    if (descuentoVencio) {
-      const vencFmt = formatFecha(multa.fecha_vencimiento_descuento || null)
-      const confirm = await Swal.fire({
-        icon: 'warning',
-        title: 'Descuento vencido',
-        html: `
-          <div style="text-align:left; font-size: 13px; line-height: 1.5;">
-            <p style="margin: 0 0 10px;">La multa tiene un descuento que venció el <strong>${vencFmt}</strong>.</p>
-            <p style="margin: 0 0 10px;">Se enviará el <strong>importe total</strong> a facturación:</p>
-            <ul style="margin: 0 0 10px 20px; padding: 0;">
-              <li>Importe descuento (vencido): <strong style="color:#10b981;">${formatMoney(multa.importe_descuento)}</strong></li>
-              <li>Importe total a cobrar: <strong style="color:#ef4444;">${formatMoney(multa.importe)}</strong></li>
-            </ul>
-            <p style="margin: 0;">¿Confirmás el envío?</p>
-          </div>
-        `,
-        showCancelButton: true,
-        confirmButtonText: 'Sí, enviar importe total',
-        cancelButtonText: 'Cancelar',
-        confirmButtonColor: '#ef4444',
-      })
-      if (!confirm.isConfirmed) return
-    } else if (descuentoAplicado) {
-      // FIX 2026-05-20: modal chico (Swal) con selector de monto cuando hay descuento vigente
+    // FIX 2026-06-12: un solo modal "Seleccionar monto a cobrar" cuando la multa tiene descuento.
+    // Si esta VIGENTE (venc > hoy): ambas opciones seleccionables, descuento preseleccionado.
+    // Si esta VENCIDO (venc <= hoy): la opcion de descuento se muestra pero deshabilitada/tachada,
+    // y queda preseleccionado el importe total.
+    if (tieneDescuento) {
       const totalNum = parseImporte(multa.importe)
       const descNum = parseImporte(multa.importe_descuento)
       const vencFmt = formatFecha(multa.fecha_vencimiento_descuento || null)
+      const intro = descuentoVencio
+        ? `El descuento de esta multa <strong>venció el ${vencFmt}</strong>. La opción con descuento ya no está disponible:`
+        : `La multa tiene un descuento vigente hasta el <strong>${vencFmt}</strong>. Elegí qué importe vas a cobrar:`
       const result = await Swal.fire({
         title: 'Seleccionar monto a cobrar',
         html: `
           <div style="text-align:left; font-size: 13px; line-height: 1.5;">
-            <p style="margin: 0 0 12px; color:#6b7280;">La multa tiene un descuento vigente hasta el <strong>${vencFmt}</strong>. Elegí qué importe vas a cobrar:</p>
-            <label style="display:flex; align-items:center; gap:8px; padding:8px 10px; border:1px solid #bbf7d0; background:#f0fdf4; border-radius:6px; margin-bottom:6px; cursor:pointer;">
-              <input type="radio" name="opcionMonto" value="descuento" checked>
-              <span style="color:#10b981; font-weight:500;">Importe con descuento: <strong>${formatMoney(multa.importe_descuento)}</strong></span>
+            <p style="margin: 0 0 12px; color:#6b7280;">${intro}</p>
+            <label style="display:flex; align-items:center; gap:8px; padding:8px 10px; border:1px solid ${descuentoVencio ? '#e5e7eb' : '#bbf7d0'}; background:${descuentoVencio ? '#f9fafb' : '#f0fdf4'}; border-radius:6px; margin-bottom:6px; cursor:${descuentoVencio ? 'not-allowed' : 'pointer'}; opacity:${descuentoVencio ? 0.6 : 1};">
+              <input type="radio" name="opcionMonto" value="descuento" ${descuentoVencio ? 'disabled' : 'checked'}>
+              <span style="color:${descuentoVencio ? '#9ca3af' : '#10b981'}; font-weight:500; ${descuentoVencio ? 'text-decoration:line-through;' : ''}">Importe con descuento: <strong>${formatMoney(multa.importe_descuento)}</strong>${descuentoVencio ? ' <span style="text-decoration:none; font-style:italic;">(vencido)</span>' : ''}</span>
             </label>
             <label style="display:flex; align-items:center; gap:8px; padding:8px 10px; border:1px solid #e5e7eb; border-radius:6px; cursor:pointer;">
-              <input type="radio" name="opcionMonto" value="total">
+              <input type="radio" name="opcionMonto" value="total" ${descuentoVencio ? 'checked' : ''}>
               <span style="font-weight:500;">Importe total: <strong>${formatMoney(multa.importe)}</strong></span>
             </label>
           </div>
@@ -1073,12 +1070,14 @@ export default function MultasModule() {
       cell: ({ row }) => {
         const v = row.original.fecha_vencimiento_descuento
         if (!v) return <span style={{ color: '#9ca3af' }}>—</span>
-        // Indicar visualmente si ya vencio
-        const hoy = new Date().toISOString().slice(0, 10)
-        const vencido = v < hoy
+        // FIX 2026-06-12: truncar la fecha (solo YYYY-MM-DD) sin pasar por new Date(),
+        // que la interpretaria en UTC y la correria un dia. Se muestra tal cual la BD.
+        const ymd = v.slice(0, 10)
+        // El dia exacto del vencimiento ya cuenta como vencido (<=), coherente con el modal de Enviar.
+        const vencido = ymd <= getHoyLocal()
         return (
           <span style={{ whiteSpace: 'nowrap', color: vencido ? '#ef4444' : '#374151', fontWeight: vencido ? 600 : 400 }}>
-            {formatFecha(v)}
+            {ymd}
           </span>
         )
       }
