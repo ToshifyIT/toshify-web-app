@@ -10,7 +10,7 @@
  */
 
 import { useState, useEffect } from 'react'
-import { ChevronDown, ChevronUp, Eye } from 'lucide-react'
+import { ChevronDown, ChevronUp, Eye, Info, X } from 'lucide-react'
 import { supabase } from '../../../lib/supabase'
 import { useSede } from '../../../contexts/SedeContext'
 // import { useAuth } from '../../../contexts/AuthContext'
@@ -67,7 +67,10 @@ interface PenalidadRow {
   conductor_nombre: string | null
   vehiculo_patente: string | null
   fecha: string
+  created_at: string
   observaciones: string | null
+  detalle: string | null
+  area_responsable: string | null
   conductor: ConductorRelation | null
 }
 
@@ -80,7 +83,10 @@ interface PenalidadFraccionada {
   conductor_nombre: string | null
   vehiculo_patente: string | null
   fecha: string
+  created_at: string | null
   observaciones: string | null
+  detalle: string | null
+  area_responsable: string | null
   cuotas: Cuota[]
   semana_inicio: number | null
   anio_inicio: number | null
@@ -138,6 +144,7 @@ export function CobrosFraccionadosTab({ periodoActual }: CobrosFraccionadosTabPr
   const [filtroEstado, setFiltroEstado] = useState<FiltroEstado>('activos')
   const [filtroTipo, setFiltroTipo] = useState<'todos' | 'saldo' | 'multa'>('todos')
   const [busqueda, setBusqueda] = useState('')
+  const [modalIncidencia, setModalIncidencia] = useState<PenalidadFraccionada | null>(null)
 
   useEffect(() => {
     cargarCobrosFraccionados()
@@ -155,7 +162,8 @@ export function CobrosFraccionadosTab({ periodoActual }: CobrosFraccionadosTabPr
       ] = await Promise.all([
         aplicarFiltroSede(supabase.from('penalidades').select(`
           id, monto, fraccionado, cantidad_cuotas, conductor_id, conductor_nombre,
-          vehiculo_patente, fecha, observaciones, conductor:conductores(id, nombres, apellidos)
+          vehiculo_patente, fecha, created_at, observaciones, detalle, area_responsable,
+          conductor:conductores(id, nombres, apellidos)
         `)).eq('fraccionado', true).order('fecha', { ascending: false }),
         aplicarFiltroSede(supabase.from('penalidades_cuotas').select('id, penalidad_id, numero_cuota, monto_cuota, semana, anio, aplicado, fecha_aplicacion, estado')).order('numero_cuota', { ascending: true }),
         aplicarFiltroSede(supabase.from('cobros_fraccionados').select(`
@@ -241,6 +249,9 @@ export function CobrosFraccionadosTab({ periodoActual }: CobrosFraccionadosTabPr
           vehiculo_patente: null,
           fecha: primerCuota.created_at,
           observaciones: primerCuota.descripcion || 'Saldo inicial fraccionado',
+          created_at: primerCuota.created_at,
+          detalle: null,
+          area_responsable: null,
           semana_inicio: primeraCuotaSaldo?.semana || null,
           anio_inicio: primeraCuotaSaldo?.anio || null,
           cuotas: cuotasSaldo.map((c) => ({
@@ -529,6 +540,19 @@ export function CobrosFraccionadosTab({ periodoActual }: CobrosFraccionadosTabPr
                       }}>
                         {esTipoSaldo(cobro) ? 'Saldo' : 'Incidencia'}
                       </span>
+                      {!esTipoSaldo(cobro) && (
+                        <button
+                          onClick={(e) => { e.stopPropagation(); setModalIncidencia(cobro) }}
+                          title="Ver detalle de la incidencia"
+                          style={{
+                            marginLeft: '6px', background: 'none', border: 'none',
+                            cursor: 'pointer', padding: '2px', color: '#EA580C',
+                            display: 'inline-flex', alignItems: 'center',
+                          }}
+                        >
+                          <Info size={14} />
+                        </button>
+                      )}
                     </div>
                     <div className="cobro-detalles">
                       <span className="monto">
@@ -684,6 +708,65 @@ export function CobrosFraccionadosTab({ periodoActual }: CobrosFraccionadosTabPr
               </div>
             )
           })}
+        </div>
+      )}
+
+      {/* Modal detalle de incidencia */}
+      {modalIncidencia && (
+        <div
+          onClick={() => setModalIncidencia(null)}
+          style={{
+            position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            zIndex: 9999,
+          }}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              background: 'var(--bg-primary)', borderRadius: '12px',
+              padding: '24px', width: '440px', maxWidth: '90vw',
+              boxShadow: '0 20px 60px rgba(0,0,0,0.3)',
+            }}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+              <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 700 }}>Detalle de Incidencia</h3>
+              <button onClick={() => setModalIncidencia(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-secondary)' }}>
+                <X size={18} />
+              </button>
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+              {[
+                { label: 'Conductor', value: formatNombreCompleto(modalIncidencia.conductor?.nombre_completo || modalIncidencia.conductor_nombre) },
+                { label: 'Vehículo', value: modalIncidencia.vehiculo_patente || '-' },
+                { label: 'Fecha de la incidencia', value: modalIncidencia.fecha ? new Date(modalIncidencia.fecha).toLocaleDateString('es-AR') : '-' },
+                { label: 'Fecha de registro', value: modalIncidencia.created_at ? new Date(modalIncidencia.created_at).toLocaleDateString('es-AR') : '-' },
+                { label: 'Monto total', value: formatCurrency(modalIncidencia.monto) },
+                { label: 'Cuotas', value: `${modalIncidencia.cantidad_cuotas} cuota${modalIncidencia.cantidad_cuotas !== 1 ? 's' : ''}` },
+                ...(modalIncidencia.observaciones ? [{ label: 'Observaciones', value: modalIncidencia.observaciones }] : []),
+                ...(modalIncidencia.detalle ? [{ label: 'Detalle', value: modalIncidencia.detalle }] : []),
+                ...(modalIncidencia.area_responsable ? [{ label: 'Área responsable', value: modalIncidencia.area_responsable }] : []),
+              ].map(({ label, value }) => (
+                <div key={label} style={{ display: 'flex', gap: '12px' }}>
+                  <span style={{ fontSize: '12px', color: 'var(--text-secondary)', width: '120px', flexShrink: 0, paddingTop: '1px' }}>{label}</span>
+                  <span style={{ fontSize: '13px', fontWeight: 500, color: 'var(--text-primary)' }}>{value}</span>
+                </div>
+              ))}
+
+              <div style={{ display: 'flex', gap: '12px' }}>
+                <span style={{ fontSize: '12px', color: 'var(--text-secondary)', width: '120px', flexShrink: 0, paddingTop: '1px' }}>Semana de inicio</span>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                  <span style={{ fontSize: '13px', fontWeight: 500, color: 'var(--text-primary)' }}>
+                    {modalIncidencia.semana_inicio && modalIncidencia.anio_inicio ? `Semana ${modalIncidencia.semana_inicio} / ${modalIncidencia.anio_inicio}` : '-'}
+                  </span>
+                  <span style={{ fontSize: '10px', color: 'var(--text-secondary)', fontStyle: 'italic' }}>
+                    Cuando empieza a cobrarse el fraccionado
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
       )}
     </div>
