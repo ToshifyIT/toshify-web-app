@@ -40,14 +40,17 @@ function buildHistoricoQuery(
   sedePatentes: string[] | null,
   options?: USSHistoricoQueryOptions
 ) {
+  // Leemos las columnas _gmt3 (ya en GMT-3) y las aliaseamos a los nombres que usa
+  // la UI, igual que hace el RPC get_historico_combinado. Así el dato llega tal cual
+  // sin que el frontend tenga que aplicar conversión de zona horaria.
   const cols = table === 'uss_historico'
-    ? 'id, patente, conductor, conductor_raw, ibutton, observaciones, fecha_hora_inicio, fecha_hora_final, kilometraje'
-    : 'id, patente, conductor, ibutton, observaciones, fecha_hora_inicio, fecha_hora_final, kilometraje';
+    ? 'id, patente, conductor, conductor_raw, ibutton, observaciones, fecha_hora_inicio:fecha_hora_inicio_gmt3, fecha_hora_final:fecha_hora_fin_gmt3, kilometraje'
+    : 'id, patente, conductor, ibutton, observaciones, fecha_hora_inicio:fecha_hora_inicio_gmt3, fecha_hora_final:fecha_hora_fin_gmt3, kilometraje';
   let query = supabase
     .from(table)
     .select(cols, { count: 'exact' })
-    .gte('fecha_hora_inicio', `${startDate}T00:00:00`)
-    .lt('fecha_hora_inicio', `${endStr}T00:00:00`);
+    .gte('fecha_hora_inicio_gmt3', `${startDate}T00:00:00`)
+    .lt('fecha_hora_inicio_gmt3', `${endStr}T00:00:00`);
 
   if (sedePatentes !== null && sedePatentes.length > 0) {
     query = query.in('patente', sedePatentes);

@@ -26,30 +26,25 @@ interface HistoricoTableProps {
   headerControls?: React.ReactNode;
 }
 
-// Formatear timestamp a DD/MM HH:MM:SS
-// Las fechas de uss_historico se almacenan en UTC, se convierten a Argentina (UTC-3)
+// Formatear timestamp a DD/MM HH:MM:SS mostrando el valor TAL CUAL viene de la BD.
+// La data llega de las columnas fecha_hora_inicio_gmt3 / fecha_hora_fin_gmt3, que ya
+// están en GMT-3. No se aplica ninguna conversión de zona horaria: solo se reformatea
+// el string crudo "YYYY-MM-DD HH:MM:SS" (o ISO con "T") a "DD/MM HH:MM:SS".
 function formatTimestamp(ts: string | null): string {
   if (!ts) return '-';
-  // Forzar interpretación como UTC agregando Z si no tiene offset
-  const isoStr = ts.includes('Z') || ts.includes('+') || ts.includes('-', 10) ? ts : ts.replace(' ', 'T') + 'Z';
-  const d = new Date(isoStr);
-  if (isNaN(d.getTime())) return '-';
-  // Convertir a Argentina (UTC-3)
-  const ar = new Date(d.getTime() - 3 * 60 * 60 * 1000);
-  const dd = String(ar.getUTCDate()).padStart(2, '0');
-  const mm = String(ar.getUTCMonth() + 1).padStart(2, '0');
-  const hh = String(ar.getUTCHours()).padStart(2, '0');
-  const mi = String(ar.getUTCMinutes()).padStart(2, '0');
-  const ss = String(ar.getUTCSeconds()).padStart(2, '0');
+  // Tomar la parte de fecha y hora del string sin construir un Date (evita shifts de TZ)
+  const m = ts.match(/^(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2}):(\d{2})/);
+  if (!m) return ts;
+  const [, , mm, dd, hh, mi, ss] = m;
   return `${dd}/${mm} ${hh}:${mi}:${ss}`;
 }
 
-// Formatear km
+// Formatear km: redondear a 2 decimales y usar coma decimal (es-AR).
 function formatKm(km: string | null): string {
   if (!km) return '0';
   const n = parseFloat(km);
   if (isNaN(n)) return '0';
-  return n.toLocaleString('es-AR', { maximumFractionDigits: 1 });
+  return n.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
 // Parsea conductor_raw de USS: "142-NATALIA IRENE RIVAS, 15-EMMANUEL SEBASTIAN RAMIREZ"
