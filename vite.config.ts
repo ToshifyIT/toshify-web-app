@@ -10,27 +10,34 @@ export default defineConfig({
   build: {
     rollupOptions: {
       output: {
-        manualChunks: {
+        // Vite 8 (Rolldown) ya no admite manualChunks como objeto; se usa
+        // la forma de función, que mapea cada módulo de node_modules a su
+        // chunk por nombre de paquete. Reproduce la agrupación previa.
+        manualChunks(id) {
+          if (!id.includes('node_modules')) return undefined
+
           // React core — se carga siempre, cacheable a largo plazo
-          'vendor-react': ['react', 'react-dom', 'react-router', 'react-router-dom'],
+          if (/[\\/]node_modules[\\/](react|react-dom|react-router|react-router-dom|scheduler)[\\/]/.test(id)) return 'vendor-react'
           // Supabase client — se carga siempre
-          'vendor-supabase': ['@supabase/supabase-js'],
+          if (id.includes('/node_modules/@supabase/')) return 'vendor-supabase'
           // Charts (recharts + d3) — solo dashboards/reportes los necesitan
-          'vendor-charts': ['recharts'],
+          if (id.includes('/node_modules/recharts/') || id.includes('/node_modules/d3-')) return 'vendor-charts'
           // PDF export — solo se usa al exportar
-          'vendor-pdf': ['jspdf', 'html2canvas'],
+          if (id.includes('/node_modules/jspdf/') || id.includes('/node_modules/html2canvas/')) return 'vendor-pdf'
           // Excel — solo se usa al exportar
-          'vendor-xlsx': ['xlsx'],
+          if (id.includes('/node_modules/xlsx/') || id.includes('/vendor/xlsx')) return 'vendor-xlsx'
           // SweetAlert2 — se usa en muchos módulos
-          'vendor-swal': ['sweetalert2'],
+          if (id.includes('/node_modules/sweetalert2/')) return 'vendor-swal'
           // TanStack Table — se usa en DataTable
-          'vendor-table': ['@tanstack/react-table'],
+          if (id.includes('/node_modules/@tanstack/')) return 'vendor-table'
           // Lucide icons — SVGs cacheables por separado
-          'vendor-icons': ['lucide-react'],
+          if (id.includes('/node_modules/lucide-react/')) return 'vendor-icons'
           // Date utilities
-          'vendor-date': ['date-fns'],
+          if (id.includes('/node_modules/date-fns/')) return 'vendor-date'
           // Calendar — solo módulo visitas
-          'vendor-calendar': ['react-big-calendar'],
+          if (id.includes('/node_modules/react-big-calendar/')) return 'vendor-calendar'
+
+          return undefined
         },
       },
     },
