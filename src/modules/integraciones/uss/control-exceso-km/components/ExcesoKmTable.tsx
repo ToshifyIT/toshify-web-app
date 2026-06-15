@@ -142,7 +142,12 @@ export function ExcesoKmTable({
       // Límite según la modalidad resuelta. Sin asignación (null) => límite de turno
       // (1800, el más estricto) para no subestimar el exceso.
       const limite = lista[0].limiteSemanal || (modalidad === 'a_cargo' ? 3600 : 1800)
-      const excedido = Math.max(0, km - limite)
+      // Filas "Sin conductor" (GEOTAB pre-NFC): informativas, no generan exceso cobrable
+      // (no hay a quién crear la incidencia). Forzamos excedido = 0 => botón Crear off.
+      // El nombre llega como "Sin conductor · PATENTE" (un "—" inicial es opcional).
+      const esSinConductor = !lista[lista.length - 1].conductorId &&
+        /^(—\s*)?Sin conductor\b/.test(lista[lista.length - 1].conductor || '')
+      const excedido = esSinConductor ? 0 : Math.max(0, km - limite)
       // patente principal: la que más km tiene en la semana
       const kmPorPatente = new Map<string, number>()
       for (const m of lista) {
@@ -175,7 +180,9 @@ export function ExcesoKmTable({
         semanaFin: semanaInfo.fin,
         semanaKey: semanaInfo.key,
         conductorId: ultima.conductorId,
-        conductorNombre: ultima.conductor,
+        // Sin conductor: la marcación trae "Sin conductor · PATENTE" (la patente
+        // sirve solo como clave de agrupación por vehículo); mostramos solo el texto.
+        conductorNombre: esSinConductor ? 'Sin conductor' : ultima.conductor,
         conductorDni: ultima.conductorDni ?? null,
         ibutton: ultima.ibutton,
         patente,
