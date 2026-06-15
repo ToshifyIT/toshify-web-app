@@ -47,15 +47,11 @@ export async function recalcGarantiasForConductors(
 ): Promise<GarantiaSyncResult[]> {
   if (conductorIds.length === 0) return []
 
-  const [garantiasRes, periodosCerradosRes, conductoresRes] = await Promise.all([
+  const [garantiasRes, conductoresRes] = await Promise.all([
     (supabase
       .from('garantias_conductores') as any)
       .select('id, conductor_id, conductor_nombre, cuotas_pagadas, cuotas_totales, monto_pagado, monto_realmente_pagado, monto_total, monto_cuota_semanal, estado, fecha_completada')
       .in('conductor_id', conductorIds),
-    (supabase
-      .from('periodos_facturacion') as any)
-      .select('id')
-      .eq('estado', 'cerrado'),
     (supabase
       .from('conductores') as any)
       .select('id, estado_id, conductores_estados(codigo)')
@@ -63,20 +59,17 @@ export async function recalcGarantiasForConductors(
   ])
 
   const garantias = (garantiasRes.data || []) as any[]
-  const periodosCerrados = (periodosCerradosRes.data || []) as any[]
   const conductores = (conductoresRes.data || []) as any[]
 
-  if (garantias.length === 0 || periodosCerrados.length === 0) return []
+  if (garantias.length === 0) return []
 
-  const periodoIdsCerrados = periodosCerrados.map((p: any) => p.id)
-
-  // Cargar facturación cerrada (para calcular ratio garantía/total) + pagos.
+  // Cargar TODA la facturación del conductor (no solo cerrados).
+  // Si la cuota ya se facturo, cuenta como pagada para la garantia.
   const [facturasRes, pagosRes] = await Promise.all([
     (supabase
       .from('facturacion_conductores') as any)
       .select('conductor_id, subtotal_garantia, total_a_pagar')
-      .in('conductor_id', conductorIds)
-      .in('periodo_id', periodoIdsCerrados),
+      .in('conductor_id', conductorIds),
     (supabase
       .from('pagos_conductores') as any)
       .select('conductor_id, monto, tipo_cobro')
@@ -133,17 +126,14 @@ export async function recalcGarantiasForConductors(
     )
 
     // --- monto_realmente_pagado: sum(subtotal_garantia) directo (tracking garantía) ---
-    // Refleja lo realmente facturado como garantía. Lo no cubierto en efectivo
-    // pasa a saldo pendiente, por lo que se considera pagado para la garantía.
+    // Refleja lo realmente facturado como garantía, SIN cap.
+    // Puede superar monto_total cuando hay cuotas extra (excedente).
     // MAX-only: preserva valores de backfill/Excel histórico.
-    const montoRealNuevo = Math.min(
-      Math.max(montoRealActual, garFact),
-      montoTotal
-    )
+    const montoRealNuevo = Math.max(montoRealActual, garFact)
 
     // Cuotas referenciales: derivadas de monto_realmente_pagado / cuota_semanal.
     const cuotasNuevas = cuotaSemanal > 0
-      ? Math.min(Math.round(montoRealNuevo / cuotaSemanal), g.cuotas_totales || 0)
+      ? Math.round(montoRealNuevo / cuotaSemanal)
       : 0
 
     // Nota: el constraint solo permite pendiente/en_curso/completada/cancelada/

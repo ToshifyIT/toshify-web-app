@@ -1602,7 +1602,11 @@ export function GarantiasTab() {
       accessorFn: (row) => Math.round((row.monto_total || 0) - (row.monto_realmente_pagado || row.monto_pagado || 0)),
       cell: ({ row }) => {
         const pendiente = row.original.monto_total - (row.original.monto_realmente_pagado || row.original.monto_pagado)
-        return <span className={`fact-precio ${pendiente > 0 ? 'fact-precio-negative' : ''}`}>{formatCurrency(pendiente)}</span>
+        if (pendiente < -1) {
+          // Excedente: pagó más del objetivo
+          return <span className="fact-precio" style={{ color: '#16a34a', fontWeight: 600 }}>+{formatCurrency(Math.abs(pendiente))}</span>
+        }
+        return <span className={`fact-precio ${pendiente > 0 ? 'fact-precio-negative' : ''}`}>{formatCurrency(Math.max(0, pendiente))}</span>
       }
     },
     {
@@ -2151,34 +2155,37 @@ export function GarantiasTab() {
             f.estado = 'otro'
           }
         }
-        // Inyectar semanas de facturacion_conductores que no están en el kardex
-        // SOLO cuando el total real pagado ya superó el monto_total ($1M),
-        // es decir, son cuotas de excedente genuino. Las cuotas normales
-        // deben estar en el kardex (control_garantias) vía syncKardexForPeriodo.
+        // Inyectar semanas de facturacion_conductores que no están en el kardex.
+        // Siempre se inyectan para mostrar el historial completo de lo facturado.
+        // Calcular acumulado del kardex para determinar cuáles son excedente.
+        const montoTotalGarantia = Number(g.monto_total) || 1000000
         const totalFacturadoKardex = Array.from(consolidadasMap.values())
           .reduce((sum, f) => sum + (Number(f.monto_cuota) || 0), 0)
-        const montoTotalGarantia = Number(g.monto_total) || 1000000
-        const hayExcedenteReal = totalFacturadoKardex >= montoTotalGarantia
+        let acumuladoParaExtra = totalFacturadoKardex
 
-        if (hayExcedenteReal) {
-          for (const sf of kardexModal.semanasFacturacion) {
-            if (sf.anio === anioActual && sf.semana === semanaActual) continue
-            const key = `${sf.anio}-${sf.semana}`
-            if (!consolidadasMap.has(key)) {
-              consolidadasMap.set(key, {
-                key,
-                anio: sf.anio,
-                semana: sf.semana,
-                fecha: '',
-                cuota_ref: 0,
-                monto_cuota: sf.subtotalGarantia,
-                aplicado: 0,
-                estado: 'no-cubierta',
-                tipo_movimiento: 'facturacion',
-                referencia: 'Cobro via facturación',
-                ids: [],
-              })
-            }
+        // Ordenar semanas de facturacion cronologicamente para inyectar en orden
+        const semanasOrdenadas = [...kardexModal.semanasFacturacion]
+          .sort((a, b) => a.anio !== b.anio ? a.anio - b.anio : a.semana - b.semana)
+
+        for (const sf of semanasOrdenadas) {
+          if (sf.anio === anioActual && sf.semana === semanaActual) continue
+          const key = `${sf.anio}-${sf.semana}`
+          if (!consolidadasMap.has(key)) {
+            const esExcedente = acumuladoParaExtra >= montoTotalGarantia
+            consolidadasMap.set(key, {
+              key,
+              anio: sf.anio,
+              semana: sf.semana,
+              fecha: '',
+              cuota_ref: 0,
+              monto_cuota: sf.subtotalGarantia,
+              aplicado: 0,
+              estado: 'no-cubierta',
+              tipo_movimiento: esExcedente ? 'facturacion' : 'cuota_facturada',
+              referencia: esExcedente ? 'Cobro via facturación' : 'Cuota sin kardex',
+              ids: [],
+            })
+            acumuladoParaExtra += sf.subtotalGarantia
           }
         }
 
@@ -2196,9 +2203,10 @@ export function GarantiasTab() {
         const consolidadas = Array.from(consolidadasMap.values())
           .sort((a, b) => (a.anio !== b.anio ? b.anio - a.anio : b.semana - a.semana))
 
-        // Total real pagado: viene de garantias_conductores.monto_pagado (Excel + post-backfill)
-        // NO se calcula sumando kardex porque el backfill puede tener menos registros que semanas reales
-        const totalRealPagado = facturado  // facturado = g.monto_pagado
+        // Total real pagado: suma de todas las filas consolidadas (kardex + facturacion).
+        // Usa MAX contra g.monto_realmente_pagado para preservar imports historicos.
+        const totalSumaConsolidadas = consolidadas.reduce((sum, f) => sum + (Number(f.monto_cuota) || 0), 0)
+        const totalRealPagado = Math.max(facturado, totalSumaConsolidadas)
         const excedente = totalRealPagado - total
         const tieneExcedente = excedente > 1
 
@@ -2382,6 +2390,10 @@ export function GarantiasTab() {
                                   {formatCurrency(Math.round(f.monto_cuota || 0))}
                                 </td>
                                 {(() => {
+                                  // Filas EXTRA (excedente) no se comparan contra cuota fija
+                                  if (esExtraFacturacion) {
+                                    return <td style={{ padding: '10px 12px', textAlign: 'right', fontFamily: 'monospace', fontSize: '11px', color: 'var(--text-tertiary)' }}>-</td>
+                                  }
                                   const diff = Math.round((f.monto_cuota || 0) - montoCuotaFijo)
                                   if (diff === 0) return <td style={{ padding: '10px 12px', textAlign: 'right', fontFamily: 'monospace', fontSize: '11px', color: 'var(--text-tertiary)' }}>-</td>
                                   const esExcedenteDiff = diff > 0

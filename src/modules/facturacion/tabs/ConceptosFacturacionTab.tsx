@@ -115,6 +115,11 @@ export function ConceptosFacturacionTab() {
               <input id="swal-iva" type="number" class="fact-form-input" value="0" step="0.01">
             </div>
           </div>
+          <div class="fact-form-group" id="swal-semanal-group">
+            <label class="fact-form-label">Precio Semanal (monto redondo)</label>
+            <input id="swal-precio-semanal" type="number" class="fact-form-input" placeholder="Ej: 299000" step="0.01">
+            <small style="color: var(--text-tertiary); font-size: 11px; margin-top: 4px; display: block;">Monto que se factura por semana completa (7 días). Si queda en 0 se usa Precio × 7.</small>
+          </div>
           <div class="fact-form-checkboxes">
             <label class="fact-checkbox-label">
               <input id="swal-variable" type="checkbox" class="fact-checkbox"> Es monto variable
@@ -151,6 +156,15 @@ export function ConceptosFacturacionTab() {
         }
         updatePrecioLabel()
         tipoParamSelect.addEventListener('change', updatePrecioLabel)
+
+        // Mostrar/ocultar "Precio Semanal" según "Es monto variable"
+        const variableCheck = document.getElementById('swal-variable') as HTMLInputElement
+        const semanalGroup = document.getElementById('swal-semanal-group') as HTMLDivElement
+        const toggleSemanal = () => {
+          semanalGroup.style.display = variableCheck.checked ? 'none' : 'block'
+        }
+        toggleSemanal()
+        variableCheck.addEventListener('change', toggleSemanal)
       },
       preConfirm: () => {
         const codigo = (document.getElementById('swal-codigo') as HTMLInputElement).value
@@ -159,6 +173,7 @@ export function ConceptosFacturacionTab() {
         const tipoParametro = (document.getElementById('swal-tipo-param') as HTMLSelectElement).value
         const precioBase = parseFloat((document.getElementById('swal-precio') as HTMLInputElement).value) || 0
         const ivaPorcentaje = parseFloat((document.getElementById('swal-iva') as HTMLInputElement).value) || 0
+        const precioSemanal = parseFloat((document.getElementById('swal-precio-semanal') as HTMLInputElement).value) || 0
         const esVariable = (document.getElementById('swal-variable') as HTMLInputElement).checked
         const aplicaTurno = (document.getElementById('swal-turno') as HTMLInputElement).checked
         const aplicaCargo = (document.getElementById('swal-cargo') as HTMLInputElement).checked
@@ -168,6 +183,9 @@ export function ConceptosFacturacionTab() {
           return false
         }
 
+        // es_semanal (oculto): true cuando no es variable y tiene precio semanal > 0
+        const esSemanal = !esVariable && precioSemanal > 0
+
         return {
           codigo: codigo.toUpperCase(),
           descripcion,
@@ -176,6 +194,8 @@ export function ConceptosFacturacionTab() {
           precio_base: ivaPorcentaje === 0 ? precioBase : Number((precioBase / (1 + ivaPorcentaje / 100)).toFixed(2)),
           iva_porcentaje: ivaPorcentaje,
           precio_final: precioBase,
+          precio_semanal: esVariable ? 0 : precioSemanal,
+          es_semanal: esSemanal,
           es_variable: esVariable,
           aplica_turno: aplicaTurno,
           aplica_cargo: aplicaCargo,
@@ -244,6 +264,11 @@ export function ConceptosFacturacionTab() {
               <input id="swal-iva" type="number" class="fact-form-input" value="${concepto.iva_porcentaje || 0}" step="0.01">
             </div>
           </div>
+          <div class="fact-form-group" id="swal-semanal-group" style="${concepto.es_variable ? 'display:none;' : ''}">
+            <label class="fact-form-label">Precio Semanal (monto redondo)</label>
+            <input id="swal-precio-semanal" type="number" class="fact-form-input" value="${concepto.precio_semanal || 0}" step="0.01" placeholder="Ej: 299000">
+            <small style="color: var(--text-tertiary); font-size: 11px; margin-top: 4px; display: block;">Monto que se factura por semana completa (7 días). Si queda en 0 se usa Precio × 7.</small>
+          </div>
           <div class="fact-form-group" id="swal-vigencia-group" style="display:none; margin-top: 8px; padding: 10px; background: var(--bg-tertiary); border-radius: 6px; border: 1px solid var(--border-primary);">
             <label class="fact-form-label" style="color: var(--color-primary); font-weight: 600;">Nuevo precio aplica desde:</label>
             <input id="swal-vigencia" type="date" class="fact-form-input" value="${hoyStr}">
@@ -301,6 +326,15 @@ export function ConceptosFacturacionTab() {
         }
         updatePrecioLabel()
         tipoParamSelect.addEventListener('change', updatePrecioLabel)
+
+        // Mostrar/ocultar "Precio Semanal" según "Es monto variable" (los variables no tienen semanal)
+        const variableCheck = document.getElementById('swal-variable') as HTMLInputElement
+        const semanalGroup = document.getElementById('swal-semanal-group') as HTMLDivElement
+        const toggleSemanal = () => {
+          semanalGroup.style.display = variableCheck.checked ? 'none' : 'block'
+        }
+        toggleSemanal()
+        variableCheck.addEventListener('change', toggleSemanal)
       },
       preConfirm: () => {
         const descripcion = (document.getElementById('swal-desc') as HTMLInputElement).value
@@ -308,6 +342,7 @@ export function ConceptosFacturacionTab() {
         const tipoParametro = (document.getElementById('swal-tipo-param') as HTMLSelectElement).value
         const precioBase = parseFloat((document.getElementById('swal-precio') as HTMLInputElement).value) || 0
         const ivaPorcentaje = parseFloat((document.getElementById('swal-iva') as HTMLInputElement).value) || 0
+        const precioSemanal = parseFloat((document.getElementById('swal-precio-semanal') as HTMLInputElement).value) || 0
         const esVariable = (document.getElementById('swal-variable') as HTMLInputElement).checked
         const aplicaTurno = (document.getElementById('swal-turno') as HTMLInputElement).checked
         const aplicaCargo = (document.getElementById('swal-cargo') as HTMLInputElement).checked
@@ -329,6 +364,9 @@ export function ConceptosFacturacionTab() {
           return false
         }
 
+        // es_semanal (oculto): true cuando el concepto no es variable y tiene precio semanal > 0
+        const esSemanal = !esVariable && precioSemanal > 0
+
         return {
           descripcion,
           tipo,
@@ -336,6 +374,8 @@ export function ConceptosFacturacionTab() {
           precio_base: newBase,
           iva_porcentaje: ivaPorcentaje,
           precio_final: newFinal,
+          precio_semanal: esVariable ? 0 : precioSemanal,
+          es_semanal: esSemanal,
           es_variable: esVariable,
           aplica_turno: aplicaTurno,
           aplica_cargo: aplicaCargo,
@@ -523,11 +563,12 @@ export function ConceptosFacturacionTab() {
     {
       id: 'total_semana',
       header: 'Total x Semana (.00)',
-      accessorFn: (row) => row.es_variable ? null : Math.round((row.precio_final || 0) * 7),
+      // Lee precio_semanal de la BD (monto redondo). Respaldo: precio_final×7 si está vacío.
+      accessorFn: (row) => row.es_variable ? null : (row.precio_semanal || Math.round((row.precio_final || 0) * 7)),
       cell: ({ row }) => row.original.es_variable
         ? <span style={{ color: '#6B7280', fontStyle: 'italic' }}>-</span>
         : <span style={{ fontFamily: 'monospace', fontWeight: 600 }}>
-            {formatCurrency(Math.round((row.original.precio_final || 0) * 7))}
+            {formatCurrency(row.original.precio_semanal || Math.round((row.original.precio_final || 0) * 7))}
           </span>
     },
     {

@@ -47,6 +47,8 @@ import { useSede } from '../../../contexts/SedeContext'
 import { formatCurrency, formatDate, FACTURACION_CONFIG } from '../../../types/facturacion.types'
 import { normalizeDni, normalizePatente, normalizeCuit } from '../../../utils/normalizeDocuments'
 import { insertControlSaldo } from '../../../services/controlSaldosService'
+import { syncKardexForPeriodo } from '../../../services/controlGarantiasService'
+import { recalcGarantiasForPeriodo } from '../../../services/garantiasService'
 import { format, startOfWeek, endOfWeek, addWeeks, subWeeks, getWeek, getYear, parseISO, startOfDay, differenceInCalendarDays } from 'date-fns'
 import { es } from 'date-fns/locale'
 import { RITPreviewTable, type RITPreviewRow } from '../components/RITPreviewTable'
@@ -975,9 +977,9 @@ export function ReporteFacturacionTab() {
           // Solo aplica si la asignación es NUEVA en esta semana (misma lógica que tabla/recalcular)
           // Si el conductor ya tenía asignación activa antes de esta semana, no aplicar descuento (cambio de vehículo)
           const asignacionesConDias = historialFiltrado.filter(h => h.dias > 0)
-          const tieneAsignacionPrevia = asignacionesConDias.some(h => !h.nuevaEnSemana) || asignacionesConDias.length > 1
+          const tieneAsignacionPrevia = asignacionesConDias.some(h => !h.nuevaEnSemana)
           if (tieneAsignacionPrevia) return 0
-          const primeraConEntrega = historialFiltrado.find(h => h.horaEntrega && h.dias > 0 && h.nuevaEnSemana)
+          const primeraConEntrega = [...historialFiltrado].sort((a, b) => a.fechaInicio.localeCompare(b.fechaInicio)).find(h => h.horaEntrega && h.dias > 0 && h.nuevaEnSemana)
           if (!primeraConEntrega || !primeraConEntrega.horaEntrega) return 0
           const hora = parseInt(primeraConEntrega.horaEntrega.split(':')[0])
           const modalidad = primeraConEntrega.horario
@@ -4072,7 +4074,13 @@ export function ReporteFacturacionTab() {
         })
         .eq('id', periodoId)
 
-      // 9. Recargar datos
+      // 9. Sincronizar kardex de garantías (actualiza montos si cambiaron)
+      await syncKardexForPeriodo(periodoId)
+
+      // 10. Recalcular garantías maestras (actualiza monto_realmente_pagado)
+      await recalcGarantiasForPeriodo(periodoId)
+
+      // 11. Recargar datos
       await cargarFacturacion()
 
       if (totalErrores > 0) {
@@ -10947,10 +10955,10 @@ export function ReporteFacturacionTab() {
                             if (alerta) return alerta;
                             // Si el conductor ya tenía asignación activa antes de esta semana, no aplicar descuento (cambio de vehículo)
                             const asignacionesConDiasModal = diasModalData.historial.filter(h => h.dias > 0);
-                            const tieneAsignacionPreviaModal = asignacionesConDiasModal.some(h => !h.nuevaEnSemana) || asignacionesConDiasModal.length > 1;
+                            const tieneAsignacionPreviaModal = asignacionesConDiasModal.some(h => !h.nuevaEnSemana);
                             if (tieneAsignacionPreviaModal) return null;
                             // Buscar primera asignación NUEVA EN LA SEMANA con hora de entrega
-                            const primeraConHora = diasModalData.historial.find(h => h.horaEntrega && h.dias > 0 && h.nuevaEnSemana);
+                            const primeraConHora = [...diasModalData.historial].sort((a, b) => a.fechaInicio.localeCompare(b.fechaInicio)).find(h => h.horaEntrega && h.dias > 0 && h.nuevaEnSemana);
                             if (!primeraConHora?.horaEntrega) return null;
                             const [hh] = primeraConHora.horaEntrega.split(':').map(Number);
                             const horario = primeraConHora.horario?.toUpperCase();
