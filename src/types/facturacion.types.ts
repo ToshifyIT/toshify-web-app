@@ -316,6 +316,7 @@ export interface ConceptoFacturacion {
   aplica_cargo: boolean
   activo: boolean
   orden: number
+  precio_semanal?: number
   created_at: string
   updated_at: string
 }
