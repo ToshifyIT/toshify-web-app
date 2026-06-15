@@ -1168,6 +1168,18 @@ export function ReporteFacturacionTab() {
         .in('estado', ['asignado', 'activo', 'activa', 'finalizado', 'finalizada', 'completado', 'cancelado', 'cancelada'])
       : { data: [] }
 
+      // Estado REAL de la garantia por conductor (garantias_conductores).
+      // facturacion_conductores NO persiste este estado, asi que lo cruzamos aca para
+      // que la columna "Gar." distinga COMPLETADA / en_devolucion igual que en la vista previa.
+      const { data: garantiasLoad } = conductorIdsLoad.length > 0 ? await (supabase
+        .from('garantias_conductores') as any)
+        .select('conductor_id, estado')
+        .in('conductor_id', conductorIdsLoad)
+      : { data: [] }
+      const garantiaEstadoMapLoad = new Map<string, string>(
+        (garantiasLoad || []).map((g: any) => [g.conductor_id, g.estado])
+      )
+
       // Calcular grupo_flota GANADOR por conductor en la semana
       // Regla: GRUPO CG es el grupo "base", cualquier otro tiene prioridad.
       // 1. Juntar todos los grupos con sus fechas de asignación
@@ -1284,6 +1296,7 @@ export function ReporteFacturacionTab() {
             : f.conductor_nombre || '',
           estado_billing: estadoBilling,
           fecha_baja_no_coincide: fechaBajaNoCoincideLoad,
+          garantia_estado: garantiaEstadoMapLoad.get(f.conductor_id) || undefined,
           prorrateo_diurno_dias: f.prorrateo_diurno_dias ?? (horarioInfo?.diurno || 0),
           prorrateo_nocturno_dias: f.prorrateo_nocturno_dias ?? (horarioInfo?.nocturno || 0),
           prorrateo_cargo_dias: f.prorrateo_cargo_dias ?? (horarioInfo?.cargo || 0),
@@ -9376,9 +9389,10 @@ export function ReporteFacturacionTab() {
         const garantiaCompletada = garEstado === 'completada'
 
         // COMPLETADA: solo si la garantia esta realmente completada (gana siempre).
-        // N/A: la garantia NO esta completada y NO se le esta cobrando esta semana
-        //      (ej. conductor de baja / en devolucion que solo entra por una multa).
-        const noAplica = !garantiaCompletada && garantia === 0
+        // N/A: SOLO para conductores de baja cuya garantia esta en devolucion.
+        //      (cualquier otro caso con garantia 0, ej. 0 dias por multa, sigue mostrando el desglose).
+        const esDeBaja = row.original.estado_billing === 'De baja'
+        const noAplica = esDeBaja && garEstado === 'en_devolucion'
         const isCompletada = garantiaCompletada
 
         // Calcular restante de cobro app después de cubrir alquiler
