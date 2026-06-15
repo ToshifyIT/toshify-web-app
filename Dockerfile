@@ -4,7 +4,10 @@ FROM node:22-alpine AS builder
 WORKDIR /app
 
 # Copy package files first (better cache - only reinstalls when deps change)
+# vendor/ contains the patched SheetJS tarball referenced via file: in package.json,
+# so it must be present before npm ci resolves the lockfile.
 COPY package*.json ./
+COPY vendor ./vendor
 
 # Install ALL dependencies for build with BuildKit cache mount
 RUN --mount=type=cache,target=/root/.npm \
@@ -48,7 +51,9 @@ FROM node:22-alpine
 WORKDIR /app
 
 # Copy package files and install production dependencies only
+# vendor/ holds the patched SheetJS tarball (file: dependency in package.json).
 COPY package*.json ./
+COPY vendor ./vendor
 RUN --mount=type=cache,target=/root/.npm \
     npm ci --omit=dev --ignore-scripts
 
