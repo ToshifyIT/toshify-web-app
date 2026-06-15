@@ -1598,8 +1598,15 @@ export function ReporteFacturacionTab() {
         return { ...f, proyectado_alquiler: Math.round(precioDiario * diasProyectados), _diasProyectados: diasProyectados }
       })
 
+      // Excluir conductores con 0 días y sin penalidades (igual que en Vista Previa)
+      facturacionesTransformadas = facturacionesTransformadas.filter((f: any) => {
+        const diasTotales = f.turnos_cobrados || 0
+        const tienePenalidades = (f.monto_penalidades || 0) !== 0
+        return diasTotales > 0 || tienePenalidades
+      })
+
       // Ordenar por nombre
-      facturacionesTransformadas.sort((a: any, b: any) => 
+      facturacionesTransformadas.sort((a: any, b: any) =>
         (a.conductor_nombre || '').localeCompare(b.conductor_nombre || '')
       )
 
