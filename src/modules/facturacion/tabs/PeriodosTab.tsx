@@ -920,7 +920,11 @@ export function PeriodosTab() {
             referencia_id: cuota.id,
             referencia_tipo: 'penalidad_cuota'
           })
-          // NO marcar como aplicado — eso se hace cuando se PAGA, no cuando se factura
+          // Marcar cuota de penalidad como aplicada al cerrar el período
+          await (supabase
+            .from('penalidades_cuotas') as any)
+            .update({ aplicado: true, fecha_aplicacion: new Date().toISOString() })
+            .eq('id', cuota.id)
         }
       }
 

@@ -189,6 +189,7 @@ export async function insertMovimientoGarantia(params: {
  */
 export async function syncKardexForPeriodo(periodoId: string): Promise<{
   created: number
+  updated: number
   skipped: number
   errors: number
 }> {
@@ -199,7 +200,7 @@ export async function syncKardexForPeriodo(periodoId: string): Promise<{
     .eq('id', periodoId)
     .single()
 
-  if (!periodo) return { created: 0, skipped: 0, errors: 0 }
+  if (!periodo) return { created: 0, updated: 0, skipped: 0, errors: 0 }
 
   const semana = periodo.semana as number
   const anio = periodo.anio as number
@@ -211,49 +212,76 @@ export async function syncKardexForPeriodo(periodoId: string): Promise<{
     .eq('periodo_id', periodoId)
     .gt('subtotal_garantia', 0)
 
-  if (!facturas || facturas.length === 0) return { created: 0, skipped: 0, errors: 0 }
+  if (!facturas || facturas.length === 0) return { created: 0, updated: 0, skipped: 0, errors: 0 }
 
   const conductorIds = facturas.map((f: any) => f.conductor_id).filter(Boolean)
 
   // 3. Verificar cuáles ya tienen kardex para esta semana/anio
   const { data: existentes } = await (supabase
     .from('control_garantias') as any)
-    .select('conductor_id')
+    .select('id, conductor_id, monto_facturado')
     .in('conductor_id', conductorIds)
     .eq('semana', semana)
     .eq('anio', anio)
+    .eq('tipo_movimiento', 'cuota_facturada')
 
-  const yaExiste = new Set(((existentes || []) as any[]).map((e: any) => e.conductor_id))
+  const existenteMap = new Map<string, { id: string; monto_facturado: number }>()
+  for (const e of (existentes || []) as any[]) {
+    existenteMap.set(e.conductor_id, { id: e.id, monto_facturado: Number(e.monto_facturado) || 0 })
+  }
 
-  // 4. Obtener garantías maestras para los conductores que necesitan kardex
-  const faltantes = facturas.filter((f: any) => !yaExiste.has(f.conductor_id))
-  if (faltantes.length === 0) return { created: 0, skipped: 0, errors: 0 }
-
-  const faltanteIds = faltantes.map((f: any) => f.conductor_id)
+  // 4. Obtener garantías maestras para TODOS los conductores (nuevos + existentes que puedan necesitar update)
   const { data: garantias } = await (supabase
     .from('garantias_conductores') as any)
     .select('id, conductor_id, conductor_nombre, conductor_dni, conductor_cuit, sede_id, monto_cuota_semanal')
-    .in('conductor_id', faltanteIds)
+    .in('conductor_id', conductorIds)
 
   const garMap = new Map<string, any>()
   for (const g of (garantias || []) as any[]) {
     garMap.set(g.conductor_id, g)
   }
 
-  // 5. Insertar movimientos faltantes
+  // 5. Insertar nuevos o actualizar existentes si el monto cambió
   let created = 0
+  let updated = 0
   let skipped = 0
   let errors = 0
 
-  for (const f of faltantes as any[]) {
+  for (const f of facturas as any[]) {
     const g = garMap.get(f.conductor_id)
     if (!g) {
-      // Sin garantía maestra, no se puede crear kardex
       skipped++
       continue
     }
 
     const cuota = Math.min(Number(f.subtotal_garantia) || 0, Number(g.monto_cuota_semanal) || 50000)
+    const existente = existenteMap.get(f.conductor_id)
+
+    if (existente) {
+      // Ya existe: actualizar solo si el monto cambió
+      if (Math.abs(existente.monto_facturado - cuota) > 0.01) {
+        const { error: updErr } = await (supabase
+          .from('control_garantias') as any)
+          .update({
+            monto_facturado: cuota,
+            monto_pagado_real: cuota,
+            observaciones: `Actualizado por recálculo S${semana}/${anio}`
+          })
+          .eq('id', existente.id)
+
+        if (updErr) {
+          errors++
+          console.error(`Error actualizando kardex para ${f.conductor_id} S${semana}/${anio}:`, updErr.message)
+        } else {
+          updated++
+        }
+      } else {
+        skipped++
+      }
+      continue
+    }
+
+    // No existe: insertar nuevo
     const result = await insertMovimientoGarantia({
       garantiaId: g.id,
       conductorId: f.conductor_id,
@@ -283,5 +311,5 @@ export async function syncKardexForPeriodo(periodoId: string): Promise<{
     }
   }
 
-  return { created, skipped, errors }
+  return { created, updated, skipped, errors }
 }

@@ -695,23 +695,11 @@ export default function MultasModule() {
 
     // FIX 2026-05-19: si la multa tiene descuento y vencio respecto al periodo
     // abierto, pedir confirmacion mostrando ambos importes antes de enviar.
-    const sedeIdParaConsulta = sedeActualId || sedeUsuario?.id
     const hoy = getHoyLocal()
-    let fechaCobro: string = hoy
-    if (sedeIdParaConsulta) {
-      const { data: periodos } = await (supabase.from('periodos_facturacion' as any) as any)
-        .select('fecha_inicio')
-        .eq('sede_id', sedeIdParaConsulta)
-        .eq('estado', 'abierto')
-        .order('fecha_inicio', { ascending: false })
-        .limit(1)
-      if (periodos && periodos[0]?.fecha_inicio) fechaCobro = periodos[0].fecha_inicio
-    }
     // FIX 2026-06-12: la vigencia del descuento se decide contra HOY (solo fecha),
     // no contra la fecha del periodo de facturacion. Si venc_desc <= hoy el descuento
     // se considera VENCIDO (el dia limite ya no aplica) y el modal solo ofrece el
-    // importe total, sin selector. El monto real del cobro sigue resolviendose con
-    // fechaCobro dentro de crearCobroDesdeMulta.
+    // importe total, sin selector.
     const vencDesc = (multa.fecha_vencimiento_descuento || '').slice(0, 10)
     const descNumMulta = parseImporte(multa.importe_descuento)
     const tieneDescuento = descNumMulta > 0 && !!vencDesc
