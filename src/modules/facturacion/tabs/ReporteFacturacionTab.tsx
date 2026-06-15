@@ -1170,7 +1170,7 @@ export function ReporteFacturacionTab() {
 
       // Estado REAL de la garantia por conductor (garantias_conductores).
       // facturacion_conductores NO persiste este estado, asi que lo cruzamos aca para
-      // que la columna "Gar." distinga COMPLETADA / en_devolucion igual que en la vista previa.
+      // que la columna "Gar." distinga COMPLETADA del resto.
       const { data: garantiasLoad } = conductorIdsLoad.length > 0 ? await (supabase
         .from('garantias_conductores') as any)
         .select('conductor_id, estado')
@@ -1291,7 +1291,7 @@ export function ReporteFacturacionTab() {
         const fechaBajaNoCoincideLoad = esDeBajaLoad && !!(ftStrLoad && maxFinAsigLoad && ftStrLoad !== maxFinAsigLoad)
         return {
           ...f,
-          conductor_nombre: f.conductor 
+          conductor_nombre: f.conductor
             ? `${f.conductor.nombres || ''} ${f.conductor.apellidos || ''}`.trim()
             : f.conductor_nombre || '',
           estado_billing: estadoBilling,
@@ -9389,10 +9389,10 @@ export function ReporteFacturacionTab() {
         const garantiaCompletada = garEstado === 'completada'
 
         // COMPLETADA: solo si la garantia esta realmente completada (gana siempre).
-        // N/A: SOLO para conductores de baja cuya garantia esta en devolucion.
-        //      (cualquier otro caso con garantia 0, ej. 0 dias por multa, sigue mostrando el desglose).
-        const esDeBaja = row.original.estado_billing === 'De baja'
-        const noAplica = esDeBaja && garEstado === 'en_devolucion'
+        // N/A: cuando NO se le facturo garantia este periodo (subtotal_garantia === 0).
+        //      Ej. conductor que entro solo por una multa (0 dias / 0 alquiler).
+        //      Si tiene garantia facturada (> 0), muestra el monto. Salvo completada, que gana arriba.
+        const noAplica = !garantiaCompletada && garantia === 0
         const isCompletada = garantiaCompletada
 
         // Calcular restante de cobro app después de cubrir alquiler
