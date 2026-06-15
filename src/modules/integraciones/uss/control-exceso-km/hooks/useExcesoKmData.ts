@@ -16,6 +16,10 @@ import type { Marcacion } from '../../bitacora/hooks/useUSSHistoricoData'
 
 const TIMEZONE_ARGENTINA = 'America/Argentina/Buenos_Aires'
 
+// Conductor sentinela para trips GEOTAB sin conductor (histórico pre-NFC).
+// Se muestra tal cual en la columna Conductor y agrupa por patente.
+const SIN_CONDUCTOR_PREFIX = 'Sin conductor'
+
 function toArgentinaDateString(date: Date): string {
   return date.toLocaleDateString('en-CA', { timeZone: TIMEZONE_ARGENTINA })
 }
@@ -356,8 +360,16 @@ export function useExcesoKmData(sedeId?: string | null) {
         return a.inicioMs - b.inicioMs
       })
       for (const t of ordenados) {
-        const cond = t.condEf || ''
-        if (!cond) continue
+        // GEOTAB sin conductor: en el histórico viejo (pre-NFC) no hay a quién
+        // atribuir el turno. En vez de descartarlo, lo agrupamos POR PATENTE bajo un
+        // conductor sentinela "— Sin conductor · <patente>" para que el vehículo
+        // igual aparezca (informativo). USS conserva su lógica: sin conductor se omite
+        // (ya heredó del vecino vía conductor_raw en el paso 2).
+        let cond = t.condEf || ''
+        if (!cond) {
+          if (t.gpsOrigen !== 'GEOTAB') continue
+          cond = `${SIN_CONDUCTOR_PREFIX} · ${t.patente || t.patenteNorm}`
+        }
         if (!actual || actual.gpsOrigen !== t.gpsOrigen || actual.patenteNorm !== t.patenteNorm || actual.conductor !== cond) {
           if (actual) turnos.push(actual)
           actual = { conductor: cond, patenteNorm: t.patenteNorm, patente: t.patente, gpsOrigen: t.gpsOrigen, trips: [t] }
@@ -566,6 +578,15 @@ export function useExcesoKmData(sedeId?: string | null) {
         sumKmPorConductor.set(key, prev)
       }
       for (const m of marcs) {
+        // Filas "Sin conductor" (GEOTAB pre-NFC): informativas. Muestran sus km pero
+        // NO generan exceso cobrable — no hay conductor al que crear la incidencia.
+        const esSinConductor = !m.conductorId && m.conductor.startsWith(SIN_CONDUCTOR_PREFIX)
+        if (esSinConductor) {
+          m.kmSemanaConductor = m.kmTotal
+          m.limiteSemanal = limiteTurno
+          m.excedeLimite = false
+          continue
+        }
         const conductorKey = m.conductorId || m.conductor || ''
         const key = `${m.excesoKmSemanaKey || 'sin-semana'}|${conductorKey}`
         const acc = sumKmPorConductor.get(key)

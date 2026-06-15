@@ -249,11 +249,15 @@ export function ExcesosTable({
     {
       accessorKey: 'ibutton',
       header: 'iButton',
-      cell: ({ row }) => (
-        <span style={{ color: 'var(--text-tertiary)', fontSize: '12px' }}>
-          {row.original.ibutton || '-'}
-        </span>
-      ),
+      cell: ({ row }) => {
+        const ibutton = row.original.ibutton?.trim();
+        const isEmpty = !ibutton || /^0+$/.test(ibutton);
+        return (
+          <span style={{ color: 'var(--text-tertiary)', fontSize: '12px' }}>
+            {isEmpty ? '-' : ibutton}
+          </span>
+        );
+      },
     },
     {
       accessorKey: 'conductor_wialon',
