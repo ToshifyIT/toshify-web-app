@@ -4,8 +4,11 @@
 // por wialon_bitacora. Razon: un turno que cruza el corte semanal debe partirse,
 // y los km del domingo van a la semana del domingo, los del lunes a la siguiente.
 //
-// Solo lectura. NO toca uss_historico, geotab ni wialon_bitacora.
-// Solo USS (geotab queda excluido en este modulo).
+// Solo lectura. Va DIRECTO a uss_historico + geotab_historico (NO usa *_bitacora).
+// Ambas fuentes se traen con la misma ventana y se etiquetan con gpsOrigen.
+// Diferencia de esquema: geotab_historico NO tiene conductor_raw (un trip = un
+// conductor ya resuelto en `conductor`), así que esas filas no pasan por la lógica
+// multi-conductor; cada turno se mantiene dentro de un único origen GPS.
 
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { supabase } from '../../../../../lib/supabase'
@@ -71,10 +74,13 @@ function parseRawConductores(raw: string | null): string[] {
   }).filter(n => n.length > 0)
 }
 
+type GpsOrigen = 'USS' | 'GEOTAB'
+
 interface UssTripRaw {
   id: number
   patente: string
   conductor: string | null
+  // Geotab NO tiene columna conductor_raw: para esas filas llega null.
   conductor_raw: string | null
   ibutton: string | null
   fecha_hora_inicio_gmt3: string
@@ -89,6 +95,7 @@ interface TripEnriched extends UssTripRaw {
   inicioMs: number
   finMs: number
   kmNum: number
+  gpsOrigen: GpsOrigen
 }
 
 export interface ExcesoKmDateRange {
@@ -178,22 +185,50 @@ export function useExcesoKmData(sedeId?: string | null) {
       // Paginación: PostgREST limita a 1000 filas por request. Un rango de mes/año
       // supera ese tope (un mes ~6k viajes), así que iteramos con .range() hasta
       // agotar; de lo contrario el desglose semanal quedaría incompleto.
+      // Traemos USS y GEOTAB con la MISMA ventana. Diferencias de esquema:
+      //  - geotab_historico NO tiene columna conductor_raw (un trip = un conductor,
+      //    ya resuelto en `conductor`); para esas filas conductor_raw = null.
+      //  - el resto de columnas (_gmt3, sede_id, ibutton, kilometraje) coincide.
       const PAGE = 1000
-      const rows: UssTripRaw[] = []
-      for (let offset = 0; ; offset += PAGE) {
-        const { data: page, error: e } = await supabase
-          .from('uss_historico')
-          .select('id, patente, conductor, conductor_raw, ibutton, fecha_hora_inicio_gmt3, fecha_hora_fin_gmt3, kilometraje, sede_id')
-          .gte('fecha_hora_inicio_gmt3', desdeExt)
-          .lte('fecha_hora_inicio_gmt3', hastaExt)
-          .order('patente', { ascending: true })
-          .order('fecha_hora_inicio_gmt3', { ascending: true })
-          .range(offset, offset + PAGE - 1)
-        if (e) throw e
-        const batch = (page || []) as UssTripRaw[]
-        rows.push(...batch)
-        if (batch.length < PAGE) break
+      const fetchTabla = async (
+        tabla: 'uss_historico' | 'geotab_historico',
+        cols: string,
+        origen: GpsOrigen,
+      ): Promise<UssTripRaw[]> => {
+        const out: UssTripRaw[] = []
+        for (let offset = 0; ; offset += PAGE) {
+          const { data: page, error: e } = await supabase
+            .from(tabla)
+            .select(cols)
+            .gte('fecha_hora_inicio_gmt3', desdeExt)
+            .lte('fecha_hora_inicio_gmt3', hastaExt)
+            .order('patente', { ascending: true })
+            .order('fecha_hora_inicio_gmt3', { ascending: true })
+            .range(offset, offset + PAGE - 1)
+          if (e) throw e
+          const batch = (page || []) as unknown as Omit<UssTripRaw, 'conductor_raw'>[]
+          // Geotab no trae conductor_raw: lo normalizamos a null para el resto del pipeline.
+          for (const r of batch) {
+            out.push({ ...(r as UssTripRaw), conductor_raw: (r as UssTripRaw).conductor_raw ?? null })
+          }
+          if (batch.length < PAGE) break
+        }
+        return out.map(r => ({ ...r, __origen: origen } as UssTripRaw & { __origen: GpsOrigen }))
       }
+
+      const [ussRows, geotabRows] = await Promise.all([
+        fetchTabla(
+          'uss_historico',
+          'id, patente, conductor, conductor_raw, ibutton, fecha_hora_inicio_gmt3, fecha_hora_fin_gmt3, kilometraje, sede_id',
+          'USS',
+        ),
+        fetchTabla(
+          'geotab_historico',
+          'id, patente, conductor, ibutton, fecha_hora_inicio_gmt3, fecha_hora_fin_gmt3, kilometraje, sede_id',
+          'GEOTAB',
+        ),
+      ])
+      const rows = [...ussRows, ...geotabRows] as (UssTripRaw & { __origen: GpsOrigen })[]
 
       const tripsArr: TripEnriched[] = []
       for (const r of rows) {
@@ -212,10 +247,23 @@ export function useExcesoKmData(sedeId?: string | null) {
           inicioMs,
           finMs,
           kmNum: Math.round(km * 100) / 100,
+          gpsOrigen: r.__origen,
         })
       }
 
-      // 2) Resolver conductor efectivo (huerfano hereda, multi se asigna al vecino mas cercano)
+      // Ordenar por (origen, patente, inicio) ANTES de resolver vecinos. Como ahora
+      // mezclamos USS + GEOTAB en un solo array, el orden por-patente que traía cada
+      // query por separado se pierde al concatenar; sin reordenar, el `break` por
+      // cambio de patente cortaría mal. Agrupar por origen además garantiza que un
+      // huérfano nunca herede conductor de la otra fuente.
+      tripsArr.sort((a, b) => {
+        if (a.gpsOrigen !== b.gpsOrigen) return a.gpsOrigen < b.gpsOrigen ? -1 : 1
+        if (a.patenteNorm !== b.patenteNorm) return a.patenteNorm.localeCompare(b.patenteNorm)
+        return a.inicioMs - b.inicioMs
+      })
+
+      // 2) Resolver conductor efectivo (huerfano hereda, multi se asigna al vecino mas cercano).
+      //    La búsqueda de vecinos se acota a la MISMA patente y el MISMO origen GPS.
       for (let i = 0; i < tripsArr.length; i++) {
         const t = tripsArr[i]
         const cs = parseRawConductores(t.conductor_raw)
@@ -226,11 +274,11 @@ export function useExcesoKmData(sedeId?: string | null) {
           let prev: TripEnriched | null = null
           let next: TripEnriched | null = null
           for (let j = i - 1; j >= 0; j--) {
-            if (tripsArr[j].patenteNorm !== t.patenteNorm) break
+            if (tripsArr[j].gpsOrigen !== t.gpsOrigen || tripsArr[j].patenteNorm !== t.patenteNorm) break
             if ((tripsArr[j].conductor || '').trim()) { prev = tripsArr[j]; break }
           }
           for (let j = i + 1; j < tripsArr.length; j++) {
-            if (tripsArr[j].patenteNorm !== t.patenteNorm) break
+            if (tripsArr[j].gpsOrigen !== t.gpsOrigen || tripsArr[j].patenteNorm !== t.patenteNorm) break
             if ((tripsArr[j].conductor || '').trim()) { next = tripsArr[j]; break }
           }
           let chosen: TripEnriched | null = null
@@ -247,7 +295,7 @@ export function useExcesoKmData(sedeId?: string | null) {
         if (cs.length >= 2) {
           const bestGap = new Map<string, number>()
           for (let j = i - 1; j >= 0; j--) {
-            if (tripsArr[j].patenteNorm !== t.patenteNorm) break
+            if (tripsArr[j].gpsOrigen !== t.gpsOrigen || tripsArr[j].patenteNorm !== t.patenteNorm) break
             const vr = parseRawConductores(tripsArr[j].conductor_raw)
             if (vr.length !== 1) continue
             if (!cs.includes(vr[0])) continue
@@ -257,7 +305,7 @@ export function useExcesoKmData(sedeId?: string | null) {
             break
           }
           for (let j = i + 1; j < tripsArr.length; j++) {
-            if (tripsArr[j].patenteNorm !== t.patenteNorm) break
+            if (tripsArr[j].gpsOrigen !== t.gpsOrigen || tripsArr[j].patenteNorm !== t.patenteNorm) break
             const vr = parseRawConductores(tripsArr[j].conductor_raw)
             if (vr.length !== 1) continue
             if (!cs.includes(vr[0])) continue
@@ -295,20 +343,24 @@ export function useExcesoKmData(sedeId?: string | null) {
         conductor: string
         patenteNorm: string
         patente: string
+        gpsOrigen: GpsOrigen
         trips: TripEnriched[]
       }
       const turnos: Turno[] = []
       let actual: Turno | null = null
+      // Ordenar por (origen, patente, inicio): un turno no debe mezclar USS y GEOTAB,
+      // así la tabla puede contabilizar km por origen correctamente.
       const ordenados = [...tripsSemana].sort((a, b) => {
+        if (a.gpsOrigen !== b.gpsOrigen) return a.gpsOrigen < b.gpsOrigen ? -1 : 1
         if (a.patenteNorm !== b.patenteNorm) return a.patenteNorm.localeCompare(b.patenteNorm)
         return a.inicioMs - b.inicioMs
       })
       for (const t of ordenados) {
         const cond = t.condEf || ''
         if (!cond) continue
-        if (!actual || actual.patenteNorm !== t.patenteNorm || actual.conductor !== cond) {
+        if (!actual || actual.gpsOrigen !== t.gpsOrigen || actual.patenteNorm !== t.patenteNorm || actual.conductor !== cond) {
           if (actual) turnos.push(actual)
-          actual = { conductor: cond, patenteNorm: t.patenteNorm, patente: t.patente, trips: [t] }
+          actual = { conductor: cond, patenteNorm: t.patenteNorm, patente: t.patente, gpsOrigen: t.gpsOrigen, trips: [t] }
         } else {
           actual.trips.push(t)
         }
@@ -492,7 +544,7 @@ export function useExcesoKmData(sedeId?: string | null) {
           gncCargado: false,
           lavadoRealizado: false,
           naftaCargada: false,
-          gpsOrigen: 'USS',
+          gpsOrigen: t.gpsOrigen,
           excesoKmSemana: semanaInfo.semana,
           excesoKmAnio: semanaInfo.anio,
           excesoKmSemanaInicio: semanaInfo.inicio,
