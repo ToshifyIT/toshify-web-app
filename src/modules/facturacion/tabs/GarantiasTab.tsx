@@ -2374,7 +2374,7 @@ export function GarantiasTab() {
                   <div style={{ flex: 1, minWidth: '120px' }}>
                     <div style={{ fontSize: '10px', textTransform: 'uppercase', color: 'var(--text-secondary)', fontWeight: 600, letterSpacing: '0.3px' }}>Total real pagado</div>
                     <div style={{ fontSize: '15px', fontWeight: 700, fontFamily: 'monospace', color: tieneExcedente ? '#16a34a' : 'var(--text-primary)', marginTop: '2px' }}>
-                      {formatCurrency(Math.round(totalRealPagado))}
+                      {formatCurrency(totalRealPagado)}
                     </div>
                   </div>
                   {tieneExcedente && (
@@ -2483,7 +2483,7 @@ export function GarantiasTab() {
                                   {origenLabel}
                                 </td>
                                 <td style={{ padding: '10px 12px', textAlign: 'right', fontFamily: 'monospace', color: montoColor, fontWeight: 700 }}>
-                                  {formatCurrency(Math.round(f.monto_cuota || 0))}
+                                  {formatCurrency(f.monto_cuota || 0)}
                                 </td>
                                 {(() => {
                                   // Filas EXTRA (excedente) no se comparan contra cuota fija
@@ -2525,7 +2525,7 @@ export function GarantiasTab() {
                                 {cuotasPagadasRef}
                               </div>
                               <div style={{ fontSize: '11px', color: '#16a34a', marginTop: '2px', fontWeight: 500 }}>
-                                {formatCurrency(Math.round(totalRealPagado))}
+                                {formatCurrency(totalRealPagado)}
                               </div>
                             </div>
                             <div style={{ padding: '12px 16px', textAlign: 'center', gridColumn: 'span 3' }}>
