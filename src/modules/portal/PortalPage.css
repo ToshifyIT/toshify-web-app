@@ -4,9 +4,14 @@
    Usa CSS variables del theme system (dark mode compatible)
    ===================================================== */
 
-/* Layout principal */
+/* Layout principal: ocupa exactamente el viewport. El header queda fijo arriba,
+   el footer (nota legal, sticky) pegado abajo, y SOLO el área central scrollea.
+   La página principal nunca scrollea. */
 .portal {
-  min-height: 100vh;
+  height: 100vh;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
   background: var(--bg-primary);
   font-family: 'Roboto', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   color: var(--text-primary);
@@ -122,8 +127,8 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  position: sticky;
-  top: 0;
+  /* Fijo arriba, no se encoge: el área central de abajo absorbe el alto restante. */
+  flex: 0 0 auto;
   z-index: 10;
 }
 
@@ -172,12 +177,17 @@
 /* Contenedor fluido: crece con la pantalla (y con el zoom alejado) en vez de
    quedar fijo en 1200px con margenes blancos a los costados. */
 .portal-content {
+  width: 100%;
   max-width: min(1680px, 96%);
   margin: 0 auto;
-  padding: 16px clamp(16px, 2vw, 36px) 28px;
+  padding: 16px clamp(16px, 2vw, 36px) 0;
   display: flex;
   flex-direction: column;
   gap: 16px;
+  /* Área central: ocupa el alto restante (viewport − header) y scrollea por dentro. */
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
 }
 
 /* =====================================================
@@ -202,7 +212,13 @@
     display: grid;
     grid-template-columns: 210px minmax(0, 1fr);
     gap: 20px;
-    align-items: start;
+    align-items: stretch;
+    /* Llena el alto del área scrolleable para que el footer pueda ir al fondo. */
+    min-height: 100%;
+  }
+  /* El sidebar no se estira con la columna; queda anclado arriba. */
+  .portal-sidebar {
+    align-self: start;
   }
 
   .portal-sidebar {
@@ -539,6 +555,203 @@
   align-items: start;
 }
 
+/* Km recorridos: una sola columna de cards (barras vs límite), arriba de los cobros.
+   Ocupa todo el ancho disponible; las semanas se apilan verticalmente. */
+.portal-km-col {
+  width: 100%;
+}
+
+/* Card de cobro fraccionado de km: layout detallado con chips de semana + barra. */
+.portal-km-cobro-card {
+  background: var(--card-bg);
+  border: 1px solid var(--border-primary);
+  border-radius: 10px;
+  padding: 14px 16px;
+}
+.portal-km-cobro-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+}
+.portal-km-cobro-info { min-width: 0; }
+.portal-km-cobro-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 6px;
+}
+.portal-km-cobro-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.portal-km-chip {
+  font-size: 11px;
+  font-weight: 600;
+  background: var(--bg-secondary);
+  color: var(--text-secondary);
+  border-radius: 6px;
+  padding: 2px 8px;
+}
+.portal-km-chip--cuotas {
+  background: #faeeda;
+  color: #854f0b;
+}
+.portal-km-chip--pagada {
+  background: #e1f5ee;
+  color: #0f6e56;
+}
+.portal-km-cobro-periodo {
+  font-size: 11px;
+  color: var(--text-tertiary);
+  margin-top: 6px;
+}
+.portal-km-cobro-monto-wrap {
+  text-align: right;
+  flex-shrink: 0;
+}
+.portal-km-cobro-cuotas-count {
+  font-size: 11px;
+  font-weight: 600;
+  color: #d97706;
+  margin-top: 2px;
+}
+.portal-km-cobro-progreso { margin-top: 12px; }
+.portal-km-cobro-progreso-head {
+  display: flex;
+  justify-content: space-between;
+  font-size: 10px;
+  color: var(--text-tertiary);
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  margin-bottom: 4px;
+}
+.portal-km-cobro-faltan {
+  font-weight: 700;
+  color: #d97706;
+  letter-spacing: 0;
+}
+.portal-km-cobro-bar {
+  height: 6px;
+  background: var(--bg-secondary);
+  border-radius: 3px;
+  overflow: hidden;
+}
+.portal-km-cobro-bar-fill {
+  height: 100%;
+  background: #d97706;
+  border-radius: 3px;
+}
+
+/* Mis Multas: dos columnas (Pendientes / Pagadas).
+   NO se fuerza la cadena flex de los contenedores padres (frágil y rompía las
+   otras pestañas). En su lugar, cada columna acota su lista al alto del viewport
+   con calc() y scrollea internamente. Esto es independiente del layout padre. */
+.portal-multas-cols {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 16px;
+  align-items: start;
+}
+.portal-multas-col {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+}
+.portal-multas-col-head {
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-bottom: 6px;
+  border-bottom: 2px solid var(--border-primary);
+  flex: 0 0 auto;
+}
+.portal-multas-col-head--pendiente { color: var(--color-primary); }
+.portal-multas-col-head--pagada { color: #059669; }
+.portal-multas-col-head--fraccionada { color: #d97706; }
+/* Semana en que se facturó la multa (solo cards de la columna Pagadas). */
+.portal-multa-facturada {
+  margin-top: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #059669;
+}
+/* Badge de fecha/hora de la infracción, al inicio de la card de multa. */
+.portal-multa-fecha-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--bg-secondary);
+  border-radius: 6px;
+  padding: 3px 10px;
+  margin-bottom: 8px;
+  color: var(--text-secondary);
+}
+.portal-multa-fecha-d {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+.portal-multa-fecha-h {
+  font-size: 12px;
+  color: var(--text-secondary);
+  font-family: 'SF Mono', 'Consolas', monospace;
+}
+/* Conteo de cuotas (solo cards de la columna Fraccionadas). */
+.portal-multa-cuotas {
+  margin-top: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #d97706;
+}
+/* Monto de una multa fraccionada (naranja, igual que su columna). */
+.portal-week-total.frac { color: #d97706; }
+.portal-multas-count {
+  font-size: 11px;
+  font-weight: 700;
+  background: var(--border-primary);
+  color: var(--text-secondary);
+  border-radius: 999px;
+  padding: 1px 8px;
+  font-family: 'SF Mono', 'Consolas', monospace;
+}
+/* Desktop: SOLO en la sección Multas el scroll vive en cada columna, NO en el área
+   central (evita doble scroll). En KM las columnas fluyen con el scroll de la página,
+   por eso estos selectores se acotan a [data-msec="multas"]. */
+@media (min-width: 901px) {
+  .portal-content[data-active="multas"] {
+    overflow: hidden;
+  }
+  /* Cada columna scrollea internamente. La lista se acota al alto del viewport con
+     calc() (header del portal + título + headers de columna + footer ≈ 240px), así
+     columna + footer entran sin empujar la página. El header de columna queda fijo
+     arriba porque está fuera de este contenedor scrolleable. */
+  .portal-msec[data-msec="multas"] .portal-multas-col .portal-weeks {
+    max-height: calc(100vh - 240px);
+    overflow-y: auto;
+    padding-right: 4px;
+  }
+  .portal-msec[data-msec="multas"] .portal-multas-col .portal-weeks::-webkit-scrollbar { width: 8px; }
+  .portal-msec[data-msec="multas"] .portal-multas-col .portal-weeks::-webkit-scrollbar-thumb {
+    background: var(--border-primary);
+    border-radius: 4px;
+  }
+  .portal-msec[data-msec="multas"] .portal-multas-col .portal-weeks::-webkit-scrollbar-track { background: transparent; }
+}
+@media (max-width: 900px) {
+  /* En mobile las columnas se apilan y fluyen con la página: sin scroll anidado. */
+  .portal-multas-cols {
+    grid-template-columns: 1fr;
+    gap: 20px;
+  }
+}
+
 .portal-week-card {
   background: var(--card-bg);
   border: 1px solid var(--border-primary);
@@ -599,6 +812,15 @@
 
 .portal-week-total.credit {
   color: #059669;
+}
+
+/* Importe total tachado (precio sin descuento) sobre el precio con descuento. */
+.portal-multa-total-tachado {
+  font-size: 12px;
+  font-weight: 600;
+  font-family: 'SF Mono', 'Consolas', monospace;
+  color: var(--text-tertiary);
+  text-decoration: line-through;
 }
 
 .portal-week-arrow {
@@ -770,9 +992,26 @@
 
 .portal-detail-item-name {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 8px;
   color: var(--text-primary);
+}
+/* El dot del concepto se alinea con la primera línea del texto. */
+.portal-detail-item-name .portal-detail-item-dot {
+  margin-top: 6px;
+}
+/* Wrapper del texto del concepto: apila descripción + fecha de infracción. */
+.portal-detail-item-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+/* Fecha/hora de la infracción: línea aparte debajo del concepto de multa. */
+.portal-detail-item-infraccion {
+  margin-top: 2px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-secondary);
 }
 
 .portal-detail-item-dot {
@@ -1123,9 +1362,9 @@
 }
 
 .portal-nota-legal {
-  position: sticky;
-  bottom: 0;
-  margin-top: 24px;
+  /* margin-top:auto empuja la nota al fondo del área central cuando el contenido
+     es corto (p.ej. KM); cuando el contenido es largo, queda tras él al hacer scroll. */
+  margin-top: auto;
   padding: 14px 16px;
   text-align: center;
   font-size: 13px;
@@ -1133,7 +1372,6 @@
   font-style: italic;
   border-top: 1px solid var(--border-primary);
   background: var(--bg-primary);
-  z-index: 10;
 }
 
 .portal-empty-note {
@@ -1419,4 +1657,31 @@
 @media (max-width: 640px) {
   .portal-modal-overlay { padding: 12px; }
   .portal-modal-card { padding: 16px 16px 20px; }
+}
+
+/* Viewports de poco alto en desktop (p.ej. 1378×768, HD 1366×768, 1024×800):
+   se baja un escalón la tipografía y se compactan paddings/gaps para que entre
+   más contenido sin scroll de página. Respeta la misma escala del sistema (los
+   mismos tamaños que el override mobile ≤640px). Solo desktop (≥901px) para no
+   pisar el ajuste mobile, y solo por ALTO (el problema es vertical, no de ancho). */
+@media (min-width: 901px) and (max-height: 820px) {
+  /* Cards de semanas / multas / km */
+  .portal-week-card { padding: 12px 14px; }
+  .portal-week-title { font-size: 14px; }
+  .portal-week-total { font-size: 14px; }
+  .portal-week-dates { font-size: 11px; }
+  .portal-week-info { font-size: 10px; }
+  .portal-weeks { gap: 8px; }
+
+  /* Headers de sección y de columna */
+  .portal-weeks-header { font-size: 11px; }
+  .portal-multas-col-head { font-size: 11px; }
+
+  /* KPIs del resumen: menos alto para que el dashboard entre */
+  .portal-stat-card { padding: 12px 14px; }
+
+  /* Columnas de multas: recalcular el alto disponible para el menor viewport */
+  .portal-msec[data-msec="multas"] .portal-multas-col .portal-weeks {
+    max-height: calc(100vh - 200px);
+  }
 }
