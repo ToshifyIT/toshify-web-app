@@ -2273,6 +2273,7 @@ export function ReporteFacturacionTab() {
         { data: tickets },
         { data: excesosData },
         { data: dniMapeoData },
+        { data: garantiaHistorialVP },
       ] = await Promise.all([
         // Saldos: leer último saldo del kardex (control_saldos) incluyendo pagos de la misma semana
         // Si hay pagos manuales/efectivo dentro de la semana, se reflejan en el saldo
@@ -2306,7 +2307,18 @@ export function ReporteFacturacionTab() {
           .in('conductor_id', conductorIds),
         supabase.from('cabify_dni_mapeo')
           .select('cabify_hash, dni_real'),
+        // Acumulado real de garantía facturada por conductor (fuente de verdad para stop billing)
+        (supabase.from('facturacion_conductores') as any)
+          .select('conductor_id, subtotal_garantia')
+          .in('conductor_id', conductorIds)
+          .gt('subtotal_garantia', 0),
       ])
+
+      // Mapa acumulado de garantía facturada por conductor (suma histórica de subtotal_garantia)
+      const garantiaAcumuladaVP = new Map<string, number>()
+      for (const f of (garantiaHistorialVP || []) as any[]) {
+        garantiaAcumuladaVP.set(f.conductor_id, (garantiaAcumuladaVP.get(f.conductor_id) || 0) + (Number(f.subtotal_garantia) || 0))
+      }
 
       // Mapa de CABIFY_hash → DNI real para resolver hashes de Cabify
       const cabifyHashMap = new Map<string, string>(
@@ -2601,14 +2613,18 @@ export function ReporteFacturacionTab() {
           : FACTURACION_CONFIG.GARANTIA_CUOTAS_TURNO
 
         if (garantia) {
-          if (garantia.estado === 'completada' || garantia.monto_pagado >= garantia.monto_total) {
+          const montoTotal = garantia.monto_total || 1000000
+          // Fuente de verdad: suma histórica de subtotal_garantia en facturacion_conductores
+          const acumuladoFacturado = garantiaAcumuladaVP.get(conductorId) || 0
+          const garantiaCompletadaVP = garantia.estado === 'completada' || acumuladoFacturado >= montoTotal
+          if (garantiaCompletadaVP) {
             subtotalGarantia = 0
             cuotaGarantiaNumero = 'NA'
           } else {
             const cuotaNormal = garantia.monto_cuota_semanal || cuotaGarantiaSemanalVP
-            const pendiente = garantia.monto_total - garantia.monto_pagado
+            const pendiente = montoTotal - acumuladoFacturado
             // Si el pendiente es menor que la cuota normal, cobrar solo el restante
-            subtotalGarantia = Math.min(cuotaNormal, pendiente)
+            subtotalGarantia = Math.round(Math.min(cuotaNormal, pendiente) * 100) / 100
             const cuotaActual = garantia.cuotas_pagadas + 1
             cuotaGarantiaNumero = `${cuotaActual} de ${garantia.cuotas_totales}`
           }
@@ -3514,7 +3530,7 @@ export function ReporteFacturacionTab() {
       // 5. Obtener datos adicionales en paralelo
       // NOTA: multas_historico DESACTIVADO temporalmente — reactivar cuando se defina el flujo
       const MULTAS_HABILITADAS = false
-      const [penalidadesRes, ticketsRes, saldosRes, excesosRes, cabifyRes, garantiasRes, cobrosRes, multasRes, dniMapeoResRecalc] = await Promise.all([
+      const [penalidadesRes, ticketsRes, saldosRes, excesosRes, cabifyRes, garantiasRes, cobrosRes, multasRes, dniMapeoResRecalc, garantiaHistorialRecalcRes] = await Promise.all([
         (supabase.from('penalidades') as any).select('*, tipos_cobro_descuento(categoria, es_a_favor, nombre), incidencias(descripcion)').in('conductor_id', conductorIds).eq('semana_aplicacion', semanaNum).eq('anio_aplicacion', anioNum).eq('aplicado', true).eq('fraccionado', false).neq('rechazado', true),
         (supabase.from('tickets_favor') as any).select('*').in('conductor_id', conductorIds).eq('estado', 'aprobado'),
         // Saldos: leer último saldo del kardex (control_saldos) incluyendo pagos de la misma semana
@@ -3539,7 +3555,18 @@ export function ReporteFacturacionTab() {
           ? (supabase.from('multas_historico') as any).select('patente, importe, fecha_infraccion').is('deleted_at', null).gte('fecha_infraccion', fechaInicio).lte('fecha_infraccion', fechaFin)
           : Promise.resolve({ data: [] }),
         supabase.from('cabify_dni_mapeo').select('cabify_hash, dni_real'),
+        // Acumulado real de garantía facturada por conductor (fuente de verdad para stop billing)
+        (supabase.from('facturacion_conductores') as any)
+          .select('conductor_id, subtotal_garantia')
+          .in('conductor_id', conductorIds)
+          .gt('subtotal_garantia', 0),
       ])
+
+      // Mapa acumulado de garantía facturada por conductor
+      const garantiaAcumuladaRecalc = new Map<string, number>()
+      for (const f of (garantiaHistorialRecalcRes.data || []) as any[]) {
+        garantiaAcumuladaRecalc.set(f.conductor_id, (garantiaAcumuladaRecalc.get(f.conductor_id) || 0) + (Number(f.subtotal_garantia) || 0))
+      }
 
       // 5b. Cargar penalidades_cuotas (cuotas de penalidades fraccionadas) hasta esta semana + pagos para cruzar
       const [penalidadesCuotasResult, pagosCuotasRecalcRes, todasCuotasPenIdsRes] = await Promise.all([
@@ -3736,13 +3763,15 @@ export function ReporteFacturacionTab() {
         // Si garantía completada o cuotas completas, cobrar $0
         const factorProporcional = conductor.total_dias / 7
         const garantiaConductor = garantiasMapById.get(conductor.conductor_id)
-        const garantiaCompletada = garantiaConductor?.estado === 'completada' || 
-          (garantiaConductor && garantiaConductor.monto_pagado >= garantiaConductor.monto_total)
+        const montoTotalGarantia = garantiaConductor?.monto_total || 1000000
+        // Fuente de verdad: suma histórica de subtotal_garantia en facturacion_conductores
+        const acumuladoFacturadoRecalc = garantiaAcumuladaRecalc.get(conductor.conductor_id) || 0
+        const garantiaCompletada = garantiaConductor?.estado === 'completada' || acumuladoFacturadoRecalc >= montoTotalGarantia
         const cuotaNormalRecalc = garantiaConductor?.monto_cuota_semanal || cuotaGarantia
-        const pendienteRecalc = garantiaConductor ? (garantiaConductor.monto_total - garantiaConductor.monto_pagado) : cuotaNormalRecalc
-        const cuotaGarantiaProporcional = conductor.total_dias === 0 || garantiaCompletada
-          ? 0 
-          : Math.min(cuotaNormalRecalc, pendienteRecalc)
+        const pendienteRecalc = montoTotalGarantia - acumuladoFacturadoRecalc
+        const cuotaGarantiaProporcional = Math.round((conductor.total_dias === 0 || garantiaCompletada
+          ? 0
+          : Math.min(cuotaNormalRecalc, Math.max(0, pendienteRecalc))) * 100) / 100
         const cuotaActual = garantiaCompletada ? 0 : (garantiaConductor?.cuotas_pagadas || 0) + 1
         const totalCuotas = garantiaConductor?.cuotas_totales || 16
 
@@ -11535,9 +11564,15 @@ export function ReporteFacturacionTab() {
                               </button>
                             </div>
                             <span style={{ fontSize: '12px', fontWeight: 600, fontFamily: 'monospace', color: 'var(--text-primary)', flexShrink: 0, marginLeft: '8px' }}>
-                              {/* Mostrar monto redondo (entero): el precio diario x cantidad arrastra
-                                  centavos (7 x 42714,29 = 299000,03). Solo visual, no toca la BD. */}
-                              {formatCurrency(Math.round(Number(item.cantidad || 0) * Number(item.precio_unitario || 0)) || Math.round(Number(item.total || 0)))}
+                              {/* Redondear SOLO conceptos de alquiler (P001/P002/P013/P014/P015/P016):
+                                  el precio diario x cantidad arrastra centavos (7 x 42714,29 = 299000,03).
+                                  Los demás conceptos (P003 Garantía, P004 Descuentos, P005 Peajes, etc.)
+                                  se muestran con sus decimales exactos. Solo visual, no toca la BD. */}
+                              {(() => {
+                                const esAlquiler = ['P001','P002','P013','P014','P015','P016'].includes(item.concepto_codigo || '')
+                                const monto = Number(item.cantidad || 0) * Number(item.precio_unitario || 0) || Number(item.total || 0)
+                                return formatCurrency(esAlquiler ? Math.round(monto) : Math.round(monto * 100) / 100)
+                              })()}
                             </span>
                           </div>
                         );
@@ -11555,9 +11590,11 @@ export function ReporteFacturacionTab() {
                           Subtotal Cargos
                         </span>
                         <span style={{ fontSize: '13px', fontWeight: 700, fontFamily: 'monospace', color: 'var(--text-primary)' }}>
-                          {/* Suma de items redondeados al entero (coincide con lo que muestra cada item arriba) */}
+                          {/* Subtotal: alquiler redondeado a entero, resto con 2 decimales (igual que cada ítem) */}
                           {formatCurrency(detalleCargos.reduce((sum, d) => {
-                            const calc = Math.round(Number(d.cantidad || 0) * Number(d.precio_unitario || 0)) || Math.round(Number(d.total || 0))
+                            const esAlquiler = ['P001','P002','P013','P014','P015','P016'].includes(d.concepto_codigo || '')
+                            const monto = Number(d.cantidad || 0) * Number(d.precio_unitario || 0) || Number(d.total || 0)
+                            const calc = esAlquiler ? Math.round(monto) : Math.round(monto * 100) / 100
                             return sum + calc
                           }, 0))}
                         </span>
@@ -11699,8 +11736,8 @@ export function ReporteFacturacionTab() {
                       margin: '6px 0',
                       color: totalRealDetalle > 0 ? '#ff0033' : '#059669',
                     }}>
-                      {/* Mostrar redondo (entero): el alquiler arrastra centavos del precio diario. Solo visual. */}
-                      {formatCurrency(Math.round(totalRealDetalle))}
+                      {/* Total = suma de ítems ya procesados (alquiler entero, resto con 2 decimales). Solo visual. */}
+                      {formatCurrency(Math.round(totalRealDetalle * 100) / 100)}
                     </span>
                     <span style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>
                       {totalRealDetalle > 0 ? 'El conductor debe pagar' : 'Saldo a favor del conductor'}
