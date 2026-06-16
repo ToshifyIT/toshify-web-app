@@ -65,6 +65,7 @@ export async function getFacturacionGarantiaConductor(conductorDni: string): Pro
   semana: number
   anio: number
   subtotalGarantia: number
+  fecha: string
 }[]> {
   // 1. Obtener registros de facturacion con garantia > 0
   const { data: facts, error: e1 } = await (supabase
@@ -75,27 +76,27 @@ export async function getFacturacionGarantiaConductor(conductorDni: string): Pro
 
   if (e1 || !facts || facts.length === 0) return []
 
-  // 2. Obtener semana/anio de cada periodo
+  // 2. Obtener semana/anio/fecha_fin de cada periodo
   const periodoIds = [...new Set(facts.map((f: any) => f.periodo_id))] as string[]
   const { data: periodos, error: e2 } = await (supabase
     .from('periodos_facturacion') as any)
-    .select('id, semana, anio')
+    .select('id, semana, anio, fecha_fin')
     .in('id', periodoIds)
 
   if (e2 || !periodos) return []
 
-  const periodoMap = new Map<string, { semana: number; anio: number }>()
+  const periodoMap = new Map<string, { semana: number; anio: number; fecha: string }>()
   for (const p of periodos) {
-    periodoMap.set(p.id, { semana: p.semana, anio: p.anio })
+    periodoMap.set(p.id, { semana: p.semana, anio: p.anio, fecha: p.fecha_fin || '' })
   }
 
   return facts
     .map((f: any) => {
       const p = periodoMap.get(f.periodo_id)
       if (!p) return null
-      return { semana: p.semana, anio: p.anio, subtotalGarantia: Number(f.subtotal_garantia) || 0 }
+      return { semana: p.semana, anio: p.anio, subtotalGarantia: Number(f.subtotal_garantia) || 0, fecha: p.fecha }
     })
-    .filter(Boolean) as { semana: number; anio: number; subtotalGarantia: number }[]
+    .filter(Boolean) as { semana: number; anio: number; subtotalGarantia: number; fecha: string }[]
 }
 
 /**

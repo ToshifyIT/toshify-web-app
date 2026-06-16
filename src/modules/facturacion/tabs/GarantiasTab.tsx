@@ -99,7 +99,7 @@ export function GarantiasTab() {
     search: string
     semanaFilter: string
     tipoFilter: string
-    semanasFacturacion: { semana: number; anio: number; subtotalGarantia: number }[]
+    semanasFacturacion: { semana: number; anio: number; subtotalGarantia: number; fecha: string }[]
   }>({ open: false, garantia: null, rows: [], loading: false, search: '', semanaFilter: '', tipoFilter: '', semanasFacturacion: [] })
 
   async function abrirKardex(garantia: GarantiaConductor) {
@@ -127,6 +127,84 @@ export function GarantiasTab() {
     document.addEventListener('click', handleClick)
     return () => document.removeEventListener('click', handleClick)
   }, [openColumnFilter])
+
+  // Sincronizar garantias_conductores cuando el modal calcula valores distintos a los guardados.
+  // El modal es la fuente de verdad: suma kardex + facturacion en vivo.
+  useEffect(() => {
+    if (kardexModal.loading || !kardexModal.open || !kardexModal.garantia) return
+    const g = kardexModal.garantia
+    const montoTotalGarantia = Number(g.monto_total) || 1000000
+    const montoCuotaFijo = Number((g as any).monto_cuota_semanal) || 50000
+
+    // Calcular semana actual para excluirla
+    const hoy = new Date()
+    const tmp = new Date(hoy.getFullYear(), hoy.getMonth(), hoy.getDate())
+    const dayOfWeek = tmp.getDay() || 7
+    tmp.setDate(tmp.getDate() + 4 - dayOfWeek)
+    const semanaActual = Math.ceil((((tmp.getTime() - new Date(tmp.getFullYear(), 0, 1).getTime()) / 86400000) + 1) / 7)
+    const anioActual = tmp.getFullYear()
+
+    // Consolidar semanas unicas de kardex (sin semana actual)
+    const semanasKardex = new Set<string>()
+    let montoKardex = 0
+    for (const r of kardexModal.rows) {
+      if (Number(r.anio) === anioActual && Number(r.semana) === semanaActual) continue
+      if (r.tipo_movimiento !== 'cuota_facturada') continue
+      const key = `${r.anio}-${r.semana}`
+      if (!semanasKardex.has(key)) {
+        semanasKardex.add(key)
+        montoKardex += Number(r.monto_facturado) || 0
+      }
+    }
+
+    // Agregar semanas de facturacion no presentes en kardex
+    let acumulado = montoKardex
+    for (const sf of kardexModal.semanasFacturacion) {
+      if (sf.anio === anioActual && sf.semana === semanaActual) continue
+      const key = `${sf.anio}-${sf.semana}`
+      if (!semanasKardex.has(key)) {
+        const esExcedente = acumulado >= montoTotalGarantia
+        if (!esExcedente) {
+          montoKardex += sf.subtotalGarantia > 0 ? montoCuotaFijo : 0
+        } else {
+          montoKardex += sf.subtotalGarantia
+        }
+        acumulado += sf.subtotalGarantia
+        semanasKardex.add(key)
+      }
+    }
+
+    const totalRealPagadoCalc = montoKardex
+    const cuotasPagadasCalc = semanasKardex.size
+
+    const dbMonto = Number(g.monto_realmente_pagado || g.monto_pagado) || 0
+    const dbCuotas = Number(g.cuotas_pagadas) || 0
+
+    const montoDiferente = Math.abs(totalRealPagadoCalc - dbMonto) > 0.01
+    const cuotasDiferente = cuotasPagadasCalc !== dbCuotas
+
+    if (!montoDiferente && !cuotasDiferente) return
+
+    // Actualizar silenciosamente en background
+    ;(supabase.from('garantias_conductores') as any)
+      .update({
+        monto_realmente_pagado: totalRealPagadoCalc,
+        cuotas_pagadas: cuotasPagadasCalc,
+      })
+      .eq('id', g.id)
+      .then(({ error }: { error: any }) => {
+        if (error) {
+          console.error('Error sincronizando garantía:', error.message)
+          return
+        }
+        // Reflejar cambio en la tabla sin recargar todo
+        setGarantias(prev => prev.map(gar =>
+          gar.id === g.id
+            ? { ...gar, monto_realmente_pagado: totalRealPagadoCalc, cuotas_pagadas: cuotasPagadasCalc }
+            : gar
+        ))
+      })
+  }, [kardexModal.loading, kardexModal.open])
 
   // Listas únicas para filtros
   const conductoresUnicos = useMemo(() =>
@@ -2176,7 +2254,7 @@ export function GarantiasTab() {
               key,
               anio: sf.anio,
               semana: sf.semana,
-              fecha: '',
+              fecha: sf.fecha || '',
               cuota_ref: 0,
               monto_cuota: sf.subtotalGarantia,
               aplicado: 0,
@@ -2200,13 +2278,31 @@ export function GarantiasTab() {
           else if (f.aplicado > 0.01) f.estado = 'parcial'
           else f.estado = 'no-cubierta'
         }
+
+        // Asignar cuota_ref secuencial a todas las filas cuota_facturada en orden cronologico.
+        // Se ignora el valor guardado en control_garantias.cuotas_facturadas para evitar
+        // saltos causados por filas stale, duplicados o contadores reseteados.
+        const todasOrdenadas = Array.from(consolidadasMap.values())
+          .sort((a, b) => (a.anio !== b.anio ? a.anio - b.anio : a.semana - b.semana))
+        let contadorCuota = 0
+        for (const f of todasOrdenadas) {
+          if (f.tipo_movimiento === 'cuota_facturada') {
+            contadorCuota++
+            f.cuota_ref = contadorCuota
+          }
+        }
+        // Total de cuotas necesarias para llegar al objetivo con los montos reales.
+        // Es dinamico: si hay cuotas parciales se necesitan mas de 20 para llegar al millon.
+        const totalCuotasNecesarias = contadorCuota
+
         const consolidadas = Array.from(consolidadasMap.values())
           .sort((a, b) => (a.anio !== b.anio ? b.anio - a.anio : b.semana - a.semana))
 
-        // Total real pagado: suma de todas las filas consolidadas (kardex + facturacion).
-        // Usa MAX contra g.monto_realmente_pagado para preservar imports historicos.
+        // Total real pagado: se prioriza la suma de filas consolidadas (kardex + facturacion)
+        // para que el header siempre refleje lo que muestran las filas del modal.
+        // Si no hay filas (caso extremo), cae al valor guardado en DB como fallback.
         const totalSumaConsolidadas = consolidadas.reduce((sum, f) => sum + (Number(f.monto_cuota) || 0), 0)
-        const totalRealPagado = Math.max(facturado, totalSumaConsolidadas)
+        const totalRealPagado = totalSumaConsolidadas > 0 ? totalSumaConsolidadas : facturado
         const excedente = totalRealPagado - total
         const tieneExcedente = excedente > 1
 
@@ -2381,7 +2477,7 @@ export function GarantiasTab() {
                                   )}
                                 </td>
                                 <td style={{ padding: '10px 12px', textAlign: 'center', whiteSpace: 'nowrap', fontFamily: 'monospace', fontSize: '12px', fontWeight: 600, color: esExtraFacturacion ? '#b45309' : 'var(--text-primary)' }}>
-                                  {esExtraFacturacion ? '-' : <>{f.cuota_ref}<span style={{ color: 'var(--text-tertiary)', fontWeight: 400 }}>/20</span></>}
+                                  {esExtraFacturacion ? '-' : <>{f.cuota_ref}</>}
                                 </td>
                                 <td style={{ padding: '10px 12px', color: esExtraFacturacion ? '#b45309' : 'var(--text-secondary)', fontSize: '11px', maxWidth: '240px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={origenLabel}>
                                   {origenLabel}
@@ -2416,17 +2512,17 @@ export function GarantiasTab() {
                       marginTop: '8px', background: 'var(--bg-secondary)',
                       border: '1px solid var(--border-primary)', borderRadius: '6px', overflow: 'hidden',
                     }}>
-                      {/* Footer: cuotas calculadas desde totalRealPagado / 50k (referencial) */}
+                      {/* Footer: cuotas pagadas = total de filas cuota_facturada (dinamico, no hardcodeado a 20) */}
                       {(() => {
-                        const cuotasPagadasRef = Math.floor(totalRealPagado / montoCuotaFijo)
-                        const cuotasRestantes = Math.max(0, 20 - cuotasPagadasRef)
+                        const cuotasPagadasRef = totalCuotasNecesarias
+                        const cuotasRestantes = Math.max(0, totalCuotasNecesarias - cuotasPagadasRef)
                         const montoRestante = Math.max(0, total - totalRealPagado)
                         return (
                           <>
                             <div style={{ padding: '12px 16px', borderRight: '1px solid var(--border-primary)', textAlign: 'center' }}>
                               <div style={{ fontSize: '10px', textTransform: 'uppercase', color: 'var(--text-secondary)', fontWeight: 600, letterSpacing: '0.4px' }}>Pagadas</div>
                               <div style={{ fontSize: '16px', fontWeight: 700, color: '#16a34a', fontFamily: 'monospace', marginTop: '4px' }}>
-                                {cuotasPagadasRef} <span style={{ fontSize: '11px', color: 'var(--text-tertiary)', fontWeight: 500 }}>/ 20</span>
+                                {cuotasPagadasRef}
                               </div>
                               <div style={{ fontSize: '11px', color: '#16a34a', marginTop: '2px', fontWeight: 500 }}>
                                 {formatCurrency(Math.round(totalRealPagado))}
@@ -2435,7 +2531,7 @@ export function GarantiasTab() {
                             <div style={{ padding: '12px 16px', textAlign: 'center', gridColumn: 'span 3' }}>
                               <div style={{ fontSize: '10px', textTransform: 'uppercase', color: 'var(--text-secondary)', fontWeight: 600, letterSpacing: '0.4px' }}>Restantes</div>
                               <div style={{ fontSize: '16px', fontWeight: 700, color: 'var(--text-secondary)', fontFamily: 'monospace', marginTop: '4px' }}>
-                                {cuotasRestantes} <span style={{ fontSize: '11px', color: 'var(--text-tertiary)', fontWeight: 500 }}>/ 20</span>
+                                {cuotasRestantes}
                               </div>
                               <div style={{ fontSize: '11px', color: 'var(--text-secondary)', marginTop: '2px', fontWeight: 500 }}>
                                 {montoRestante > 0 ? `${formatCurrency(Math.round(montoRestante))} a futuro` : 'Completada'}
