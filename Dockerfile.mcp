@@ -4,7 +4,10 @@ FROM node:22-alpine
 WORKDIR /app
 
 # Copy package files and install production dependencies
+# vendor/ holds the patched SheetJS tarball referenced as a file: dependency in
+# package.json; npm ci needs it present even though the MCP server doesn't use xlsx.
 COPY package*.json ./
+COPY vendor ./vendor
 RUN npm ci --omit=dev --ignore-scripts
 
 # Copy MCP server and docs
