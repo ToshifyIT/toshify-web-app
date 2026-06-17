@@ -2333,7 +2333,7 @@ export function PortalPage() {
             {/* ===== SECCIÓN: KM RECORRIDOS (desde junio 2026) ===== */}
             <section className="portal-msec" data-msec="km">
                 {/* Km recorridos por semana (barras vs límite), una sola columna arriba */}
-                <div className="portal-weeks-header">Km recorridos (desde junio)</div>
+                <div className="portal-weeks-header">Km recorridos</div>
                 {kmSemanas.length > 0 ? (
                   <div className="portal-weeks portal-km-col">
                     {kmSemanas.map(k => {
