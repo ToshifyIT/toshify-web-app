@@ -568,6 +568,12 @@
   border-radius: 10px;
   padding: 14px 16px;
 }
+/* Fila superior: chip de semana del exceso alineado a la derecha (igual que Multas). */
+.portal-km-cobro-fila-top {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 10px;
+}
 .portal-km-cobro-top {
   display: flex;
   justify-content: space-between;
@@ -589,10 +595,11 @@
 .portal-km-chip {
   font-size: 11px;
   font-weight: 600;
-  background: var(--bg-secondary);
-  color: var(--text-secondary);
+  background: #e1f5ee;
+  color: #0f6e56;
   border-radius: 6px;
-  padding: 2px 8px;
+  padding: 3px 10px;
+  white-space: nowrap;
 }
 .portal-km-chip--cuotas {
   background: #faeeda;
@@ -610,6 +617,14 @@
 .portal-km-cobro-monto-wrap {
   text-align: right;
   flex-shrink: 0;
+}
+/* Semana + período del exceso, sobre el monto. */
+.portal-km-cobro-sem-periodo {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-tertiary);
+  margin-bottom: 2px;
+  white-space: nowrap;
 }
 .portal-km-cobro-cuotas-count {
   font-size: 11px;
@@ -676,25 +691,75 @@
 .portal-multas-col-head--pagada { color: #059669; }
 .portal-multas-col-head--fraccionada { color: #d97706; }
 /* Semana en que se facturó la multa (solo cards de la columna Pagadas). */
-.portal-multa-facturada {
-  margin-top: 4px;
-  font-size: 11px;
-  font-weight: 600;
-  color: #059669;
+/* Card de multa: apila la fila de fecha (full-width) sobre el cuerpo (texto + monto).
+   Especificidad doble (.portal-week-card.portal-multa-card) para ganarle al
+   align-items:center de .portal-week-card, que si no centra el contenido y deja hueco. */
+.portal-week-card.portal-multa-card {
+  flex-direction: column;
+  align-items: stretch;
 }
-/* Badge de fecha/hora de la infracción, al inicio de la card de multa. */
+/* Cuerpo de la card de multa: descripción/datos (izq) + monto/botones (der). */
+.portal-multa-cuerpo {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+/* Fila superior de la card: fecha de infracción (izq) + chip de semana (der, si pagada).
+   El chip se empuja a la derecha con margin-left:auto; si no entra en la línea, baja
+   debajo del badge (wrap) sin apretarse. */
+.portal-multa-fecha-fila {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+.portal-multa-fecha-fila .portal-multa-sem-chip {
+  margin-left: auto;
+}
+/* Badge de fecha/hora de la infracción, al inicio de la card. La etiqueta va arriba
+   y la fecha+hora debajo (salto de línea) para que no quede abultado en una sola fila. */
 .portal-multa-fecha-badge {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
   background: var(--bg-secondary);
   border-radius: 6px;
-  padding: 3px 10px;
-  margin-bottom: 8px;
+  padding: 5px 10px;
   color: var(--text-secondary);
+  min-width: 0;
+}
+.portal-multa-fecha-txt {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.25;
+}
+.portal-multa-fecha-dh {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+}
+/* Chip de semana de facturación (solo cards pagadas), a la derecha de la fila. */
+.portal-multa-sem-chip {
+  font-size: 11px;
+  font-weight: 600;
+  background: #e1f5ee;
+  color: #0f6e56;
+  border-radius: 6px;
+  padding: 3px 10px;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.portal-multa-fecha-lbl {
+  font-size: 9px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  color: var(--text-tertiary);
 }
 .portal-multa-fecha-d {
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 600;
   color: var(--text-primary);
 }

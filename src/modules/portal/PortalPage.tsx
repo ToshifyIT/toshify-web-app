@@ -1742,27 +1742,36 @@ export function PortalPage() {
     const cuotasFaltan = esFraccionada ? Math.max(0, (estado!.cuotasTotal || 0) - (estado!.cuotasPagadas || 0)) : 0
 
     return (
-      <div key={m.id} className="portal-week-card" style={{ cursor: 'default' }}>
+      <div key={m.id} className="portal-week-card portal-multa-card" style={{ cursor: 'default' }}>
+        {/* Fila superior full-width: fecha/hora de infracción + (si pagada) semana de facturación */}
+        {(fechaBadge || esPagada) && (
+          <div className="portal-multa-fecha-fila">
+            {fechaBadge && (
+              <div className="portal-multa-fecha-badge">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <rect x="3" y="4" width="18" height="18" rx="2" /><line x1="16" y1="2" x2="16" y2="6" /><line x1="8" y1="2" x2="8" y2="6" /><line x1="3" y1="10" x2="21" y2="10" />
+                </svg>
+                <div className="portal-multa-fecha-txt">
+                  <span className="portal-multa-fecha-lbl">Fecha de infracción</span>
+                  <span className="portal-multa-fecha-dh">
+                    <span className="portal-multa-fecha-d">{fechaBadge}</span>
+                    {horaBadge && <span className="portal-multa-fecha-h">{horaBadge}</span>}
+                  </span>
+                </div>
+              </div>
+            )}
+            {esPagada && (
+              <span className="portal-multa-sem-chip">Semana {estado!.semana}/{estado!.anio}</span>
+            )}
+          </div>
+        )}
+        {/* Fila contenido: descripción/datos (izq) + monto/botones (der) */}
+        <div className="portal-multa-cuerpo">
         <div className="portal-week-left">
-          {/* Fecha/hora de la infracción destacada al inicio de la card */}
-          {fechaBadge && (
-            <div className="portal-multa-fecha-badge">
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                <rect x="3" y="4" width="18" height="18" rx="2" /><line x1="16" y1="2" x2="16" y2="6" /><line x1="8" y1="2" x2="8" y2="6" /><line x1="3" y1="10" x2="21" y2="10" />
-              </svg>
-              <span className="portal-multa-fecha-d">{fechaBadge}</span>
-              {horaBadge && <span className="portal-multa-fecha-h">{horaBadge}</span>}
-            </div>
-          )}
           {/* infraccion en BD = N° de acta; la descripcion real esta en detalle */}
           <div className="portal-week-title">{m.detalle || 'Multa de tránsito'}</div>
           <div className="portal-week-dates">{m.patente || '-'} · Acta {m.infraccion || '-'}</div>
           {ubic && <div className="portal-week-info">{ubic}</div>}
-          {esPagada && (
-            <div className="portal-multa-facturada">
-              Semana {estado!.semana}/{estado!.anio}
-            </div>
-          )}
           {esFraccionada && (
             <div className="portal-multa-cuotas">
               {estado!.cuotasPagadas} de {estado!.cuotasTotal} cuotas
@@ -1785,6 +1794,7 @@ export function PortalPage() {
             )}
           </div>
         </div>
+        </div>{/* /portal-multa-cuerpo */}
       </div>
     )
   }
@@ -1811,21 +1821,22 @@ export function PortalPage() {
 
     return (
       <div key={c.id} className="portal-km-cobro-card">
+        {/* Fila superior: chip de semana del exceso a la derecha (igual que Multas) */}
+        {c.semanaExceso != null && (
+          <div className="portal-km-cobro-fila-top">
+            <span className="portal-km-chip">Semana {c.semanaExceso}/{c.anio}</span>
+          </div>
+        )}
+        {/* Cuerpo: título + período (izq) + monto (der) */}
         <div className="portal-km-cobro-top">
           <div className="portal-km-cobro-info">
             <div className="portal-km-cobro-title">Exceso de km</div>
-            <div className="portal-km-cobro-chips">
-              {c.semanaExceso != null && (
-                <span className="portal-km-chip">Exceso S{c.semanaExceso}</span>
-              )}
-              {c.estado === 'fraccionada' && rangoCuotas && (
-                <span className="portal-km-chip portal-km-chip--cuotas">Cuotas {rangoCuotas}</span>
-              )}
-              {c.estado === 'pagada' && (
-                <span className="portal-km-chip portal-km-chip--pagada">Pagado S{c.semana}</span>
-              )}
-            </div>
             {periodo && <div className="portal-km-cobro-periodo">Período {periodo}</div>}
+            {c.estado === 'fraccionada' && rangoCuotas && (
+              <div className="portal-km-cobro-chips" style={{ marginTop: '6px' }}>
+                <span className="portal-km-chip portal-km-chip--cuotas">Cuotas {rangoCuotas}</span>
+              </div>
+            )}
           </div>
           <div className="portal-km-cobro-monto-wrap">
             <div className={`portal-week-total ${montoClase}`}>{formatCurrency(c.monto)}</div>
