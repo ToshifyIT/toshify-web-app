@@ -2,7 +2,7 @@
 // Portal público para conductores - Mi Espacio
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import { jsPDF } from 'jspdf'
-import { format, parseISO, getISOWeek, startOfISOWeek, endOfISOWeek } from 'date-fns'
+import { format, parseISO, getISOWeek, startOfISOWeek, endOfISOWeek, differenceInCalendarDays, subDays } from 'date-fns'
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts'
 import { supabase } from '../../lib/supabase'
 import { formatCurrency } from '../../types/facturacion.types'
@@ -33,6 +33,21 @@ interface PortalMulta {
   lugar_detalle: string | null // "Lugar: <direccion> | Estado: <estado>"
   detalle: string | null       // descripcion real de la infraccion
   drive_url: string | null
+  importe_descuento: string | null            // importe con descuento por pago temprano (texto, ej "$71.249,25")
+  fecha_vencimiento_descuento: string | null  // date "YYYY-MM-DD" hasta cuándo aplica el descuento
+}
+
+// Estado de facturación de una multa, derivado de penalidades/cuotas/periodos.
+// Determina en qué columna cae (Pagadas o Fraccionadas) y qué monto mostrar.
+// Las multas SIN entrada en el Map son "pendientes".
+interface PortalMultaEstado {
+  tipo: 'pagada' | 'fraccionada'
+  montoFacturado: number        // penalidades.monto (lo que se cobró / se viene cobrando)
+  semana: number                // semana de aplicación (la más reciente, para "pagada")
+  anio: number
+  // Solo para fraccionadas: conteo de cuotas (canceladas cuentan como faltantes).
+  cuotasTotal?: number
+  cuotasPagadas?: number
 }
 
 // Km de una semana (seccion nueva). limite/excedido segun modalidad por contrato.
@@ -45,6 +60,24 @@ interface PortalKmSemana {
   limite: number
   excedido: number
   modalidad: string // 'turno' | 'a_cargo'
+}
+
+// Cobro por exceso de km (tipo_cobro_descuento EXCESO_KM). Cada cobro es una card en
+// la sección KM, clasificada igual que las multas: pendiente / pagada / fraccionada.
+// A diferencia de las multas, NO hay descuento ni fecha de vencimiento; el monto es directo.
+interface PortalCobroKm {
+  id: string
+  descripcion: string
+  monto: number
+  estado: 'pendiente' | 'pagada' | 'fraccionada'
+  semana: number              // semana de aplicación (para pagada)
+  anio: number
+  semanaExceso?: number       // penalidades.semana: semana en que se dio el exceso
+  cuotasTotal?: number        // solo fraccionada
+  cuotasPagadas?: number
+  cuotaSemanaIni?: number     // solo fraccionada: 1ª semana de cuotas
+  cuotaSemanaFin?: number     // solo fraccionada: última semana de cuotas
+  estimado?: boolean          // pendiente con monto ESTIMADO (exceso sin cobro generado)
 }
 
 interface PortalPeriodo {
@@ -86,6 +119,9 @@ interface PortalDetalle {
   es_descuento: boolean
   referencia_id?: string | null
   referencia_tipo?: string | null
+  // Solo para conceptos que son penalidades de multa: fecha/hora de la infracción
+  // (resuelta vía penalidad/cuota -> incidencia -> multa). Se muestra en el detalle.
+  fecha_infraccion?: string | null
 }
 
 interface PortalSaldo {
@@ -217,6 +253,39 @@ const NAV_ITEMS: { key: SectionKey; label: string; short: string; ico: React.Rea
   { key: 'multas', label: 'Multas', short: 'Multas', ico: ICON_MULTAS },
   { key: 'km', label: 'Km recorridos', short: 'KM', ico: ICON_KM },
 ]
+const SECTION_KEYS: SectionKey[] = ['resumen', 'historial', 'multas', 'km']
+
+// Persistencia de sesión del portal en localStorage: documento con el que se
+// ingresó (para re-buscar el conductor al refrescar) y última pestaña activa.
+// Se limpian al tocar "Salir".
+const PORTAL_AUTH_KEY = 'portal_auth_doc'
+const PORTAL_TAB_KEY = 'portal_active_section'
+
+// Importe a mostrar para una multa PENDIENTE según el descuento por pago temprano.
+// Regla (solo por fecha, sin hora): si faltan 7 días o más para el vencimiento del
+// descuento, se muestra el importe con descuento; si faltan menos de 7 (o ya venció),
+// se muestra el importe total. Sin fecha/importe de descuento -> importe total normal.
+// Cuando hay descuento vigente, devuelve también el total (para tacharlo) y la fecha
+// límite (para mostrar "Descuento hasta DD/MM/YYYY").
+function importePendiente(m: PortalMulta, hoy: Date): {
+  texto: string
+  conDescuento: boolean
+  totalTachado?: string
+  vence?: string
+} {
+  const total = m.importe || '-'
+  if (!m.importe_descuento || !m.fecha_vencimiento_descuento) return { texto: total, conDescuento: false }
+  const fechaVenc = parseISO(m.fecha_vencimiento_descuento)
+  const dias = differenceInCalendarDays(fechaVenc, hoy)
+  if (dias >= 7) {
+    // El portal deja de mostrar el descuento 7 días ANTES del vencimiento real (regla
+    // dias >= 7). Por coherencia, la fecha límite mostrada es vencimiento − 7 días: ese
+    // es el último día en que el conductor verá el descuento en el portal.
+    const limitePortal = format(subDays(fechaVenc, 7), 'yyyy-MM-dd')
+    return { texto: m.importe_descuento, conDescuento: true, totalTachado: total, vence: limitePortal }
+  }
+  return { texto: total, conDescuento: false }
+}
 
 // =====================================================
 // LOGO PRELOAD (para PDF)
@@ -258,7 +327,18 @@ export function PortalPage() {
 
   // Secciones nuevas: Multas y Km recorridos
   const [multas, setMultas] = useState<PortalMulta[]>([])
+  // Estado de facturación de cada multa (Map id(string) -> PortalMultaEstado), para
+  // separar en columnas Pendientes / Pagadas / Fraccionadas y mostrar el monto facturado.
+  // Map separado porque la carga de multas (por nombre) y este cálculo (por conductor_id)
+  // son queries independientes que resuelven en cualquier orden. Las multas que no están
+  // en el Map son "pendientes" (se muestran con su importe original).
+  const [multasEstado, setMultasEstado] = useState<Map<string, PortalMultaEstado>>(new Map())
   const [kmSemanas, setKmSemanas] = useState<PortalKmSemana[]>([])
+  // Cobros por exceso de km del conductor (3 columnas: pendientes/pagadas/fraccionadas).
+  const [cobrosKm, setCobrosKm] = useState<PortalCobroKm[]>([])
+  // Previsiones de exceso de km: semanas excedidas (de las barras) SIN cobro generado,
+  // con monto ESTIMADO según la fórmula de creación. Van a la columna Pendientes.
+  const [kmPrevisiones, setKmPrevisiones] = useState<PortalCobroKm[]>([])
 
   // Modales (detalle de semana + detalle de multa). Se renderizan como overlay
   // sobre el dashboard (antes el detalle reemplazaba toda la vista con setView).
@@ -267,7 +347,14 @@ export function PortalPage() {
 
   // Navegacion por secciones en TODAS las vistas: tabs arriba en desktop,
   // bottom-nav en mobile. El CSS muestra solo la seccion activa.
-  const [activeSection, setActiveSection] = useState<SectionKey>('resumen')
+  // Se inicializa desde localStorage para conservar la pestaña al refrescar.
+  const [activeSection, setActiveSection] = useState<SectionKey>(() => {
+    try {
+      const saved = localStorage.getItem(PORTAL_TAB_KEY) as SectionKey | null
+      if (saved && SECTION_KEYS.includes(saved)) return saved
+    } catch { /* storage no disponible */ }
+    return 'resumen'
+  })
 
   // UI state
   const [loginInput, setLoginInput] = useState('')
@@ -292,12 +379,69 @@ export function PortalPage() {
     return () => window.removeEventListener('keydown', onKey)
   }, [showDetalleModal, selectedMulta])
 
+  // Persistir la pestaña activa para conservarla al refrescar.
+  useEffect(() => {
+    try { localStorage.setItem(PORTAL_TAB_KEY, activeSection) } catch { /* storage no disponible */ }
+  }, [activeSection])
+
+  // Restaurar sesión al montar: si hay un documento guardado, re-buscar el
+  // conductor (datos siempre frescos) y entrar al dashboard sin pedir DNI/CUIT.
+  useEffect(() => {
+    let cancelado = false
+    let doc: string | null = null
+    try { doc = localStorage.getItem(PORTAL_AUTH_KEY) } catch { /* storage no disponible */ }
+    if (!doc) return
+    buscarConductor(doc)
+      .then(found => {
+        if (cancelado) return
+        if (found) {
+          setConductor(found)
+          setView('dashboard')
+        } else {
+          // Documento guardado ya no resuelve: limpiar para no reintentar en loop.
+          try { localStorage.removeItem(PORTAL_AUTH_KEY) } catch { /* noop */ }
+        }
+      })
+      .catch(() => { /* sin conexión: queda en login, el usuario reintenta */ })
+    return () => { cancelado = true }
+    // Solo al montar.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
   // =====================================================
   // LOGIN
   // =====================================================
 
   // Rate limiting: máximo 5 intentos por minuto
   const [loginAttempts, setLoginAttempts] = useState<number[]>([])
+
+  // Busca un conductor por DNI o CUIT (primero DNI exacto, luego CUIT).
+  // Reutilizada por el login manual y por la restauración de sesión al montar.
+  async function buscarConductor(input: string): Promise<PortalConductor | null> {
+    const normalizedDni = normalizeDni(input)
+    const normalizedCuit = normalizeCuit(input)
+
+    const resDni = await supabase
+      .from('conductores')
+      .select('id, nombres, apellidos, numero_dni, numero_cuit')
+      .eq('numero_dni', normalizedDni)
+      .limit(1)
+
+    let data = resDni.data
+    if (!data || data.length === 0) {
+      const resCuit = await supabase
+        .from('conductores')
+        .select('id, nombres, apellidos, numero_dni, numero_cuit')
+        .eq('numero_cuit', normalizedCuit)
+        .limit(1)
+      if (resCuit.error) throw resCuit.error
+      data = resCuit.data
+    } else if (resDni.error) {
+      throw resDni.error
+    }
+
+    return data && data.length > 0 ? (data[0] as PortalConductor) : null
+  }
 
   async function handleLogin(e: React.FormEvent) {
     e.preventDefault()
@@ -323,43 +467,14 @@ export function PortalPage() {
     setLoginError('')
 
     try {
-      // Normalizar: quitar guiones, puntos y espacios
-      const normalizedDni = normalizeDni(input)
-      const normalizedCuit = normalizeCuit(input)
-
-      // Buscar primero por DNI exacto, luego por CUIT
-      let data: any[] | null = null
-      let error: any = null
-
-      // Intentar por DNI normalizado
-      const resDni = await supabase
-        .from('conductores')
-        .select('id, nombres, apellidos, numero_dni, numero_cuit')
-        .eq('numero_dni', normalizedDni)
-        .limit(1)
-
-      if (resDni.data && resDni.data.length > 0) {
-        data = resDni.data
-        error = resDni.error
-      } else {
-        // Intentar por CUIT normalizado
-        const resCuit = await supabase
-          .from('conductores')
-          .select('id, nombres, apellidos, numero_dni, numero_cuit')
-          .eq('numero_cuit', normalizedCuit)
-          .limit(1)
-        data = resCuit.data
-        error = resCuit.error
-      }
-
-      if (error) throw error
-
-      if (!data || data.length === 0) {
+      const found = await buscarConductor(input)
+      if (!found) {
         setLoginError('No se encontró un conductor con ese DNI o CUIT')
         return
       }
-
-      setConductor(data[0] as PortalConductor)
+      // Persistir el documento para restaurar sesión al refrescar (hasta "Salir").
+      try { localStorage.setItem(PORTAL_AUTH_KEY, input) } catch { /* storage no disponible */ }
+      setConductor(found)
       setView('dashboard')
     } catch {
       setLoginError('Error de conexión. Intentá de nuevo.')
@@ -566,8 +681,78 @@ export function PortalPage() {
         .sort((a, b) => (b.anio - a.anio) || (b.semana - a.semana))
 
       setKmSemanas(lista)
+
+      // ===== Previsión de cobro por exceso (semanas excedidas sin cobro generado) =====
+      // Replica la fórmula de crearIncidenciaExcesoKm: % por km × (precio_final UA × 7) × 1.21.
+      const excedidas = lista.filter(s => s.excedido > 0)
+      if (excedidas.length === 0) { setKmPrevisiones([]); return }
+
+      // a) Valor del alquiler: concepto UA según modalidad + horario + GNC del auto asignado.
+      let tieneGnc = true
+      let horario = 'diurno'
+      const { data: asigAct } = await (supabase
+        .from('asignaciones')
+        .select('estado, asignaciones_conductores!inner(conductor_id, horario, estado), vehiculo:vehiculos(gnc)')
+        .eq('estado', 'activa')
+        .eq('asignaciones_conductores.conductor_id', cond.id) as any)
+      const aAct = (asigAct || [])[0]
+      if (aAct) {
+        tieneGnc = !!aAct.vehiculo?.gnc
+        horario = (aAct.asignaciones_conductores || [])[0]?.horario || 'diurno'
+      }
+      let codigoUA = 'P001'
+      if (modalidad === 'a_cargo') codigoUA = tieneGnc ? 'P002' : 'P016'
+      else if (horario === 'nocturno') codigoUA = tieneGnc ? 'P013' : 'P015'
+      else codigoUA = tieneGnc ? 'P001' : 'P014'
+      let valorAlquiler = modalidad === 'a_cargo' ? 360000 : 245000
+      const { data: concepto } = await (supabase
+        .from('conceptos_nomina')
+        .select('precio_final')
+        .eq('codigo', codigoUA).eq('activo', true).maybeSingle() as any)
+      if (concepto && Number(concepto.precio_final) > 0) valorAlquiler = Number(concepto.precio_final) * 7
+
+      // b) Períodos de cobros de exceso YA generados (de la descripción), para excluir.
+      const { data: cobrosPrev } = await (supabase.from('penalidades' as any) as any)
+        .select('incidencias!inner(descripcion, tipo, tipos_cobro_descuento!inner(codigo))')
+        .eq('conductor_id', cond.id)
+        .eq('incidencias.tipo', 'cobro')
+        .eq('incidencias.tipos_cobro_descuento.codigo', 'EXCESO_KM')
+      // Set de fechas "d/m" del inicio de período ya cobrado (ej "1/6") para comparar.
+      const periodosCobrados = new Set<string>()
+      for (const row of (cobrosPrev || []) as Array<{ incidencias: { descripcion: string | null } | null }>) {
+        const desc = row.incidencias?.descripcion || ''
+        const m = desc.match(/(\d{1,2})\/(\d{1,2})/)
+        if (m) periodosCobrados.add(`${Number(m[1])}/${Number(m[2])}`)
+      }
+
+      const porcentajePorKm = (km: number) => km > 150 ? 35 : km > 100 ? 25 : km > 50 ? 20 : 15
+      const previsiones: PortalCobroKm[] = excedidas
+        .filter(s => {
+          // Excluir si el inicio del período de la semana ya coincide con un cobro existente.
+          const ini = parseISO(s.fecha_inicio)
+          const clave = `${ini.getDate()}/${ini.getMonth() + 1}`
+          return !periodosCobrados.has(clave)
+        })
+        .map(s => {
+          const pct = porcentajePorKm(s.excedido)
+          const monto = Math.round(valorAlquiler * (pct / 100) * 1.21)
+          const ini = parseISO(s.fecha_inicio), fin = parseISO(s.fecha_fin)
+          const periodo = `${ini.getDate()}/${ini.getMonth() + 1} - ${fin.getDate()}/${fin.getMonth() + 1}`
+          return {
+            id: `km-prev-${s.anio}-${s.semana}`,
+            descripcion: `Exceso km ${periodo} (${pct}%)`,
+            monto,
+            estado: 'pendiente' as const,
+            semana: s.semana,
+            anio: s.anio,
+            semanaExceso: s.semana,
+            estimado: true,
+          }
+        })
+      setKmPrevisiones(previsiones)
     } catch {
       setKmSemanas([])
+      setKmPrevisiones([])
     }
   }, [])
 
@@ -623,7 +808,7 @@ export function PortalPage() {
       // conductor_responsable contenga nombre Y apellido. Excluye borradas/desestimadas.
       supabase
         .from('multas_historico')
-        .select('id, infraccion, patente, fecha_infraccion, importe, lugar, lugar_detalle, detalle, drive_url, conductor_responsable')
+        .select('id, infraccion, patente, fecha_infraccion, importe, lugar, lugar_detalle, detalle, drive_url, importe_descuento, fecha_vencimiento_descuento, conductor_responsable')
         .ilike('conductor_responsable', `%${primerApellido}%`)
         .is('deleted_at', null)
         .is('desestimada_at', null)
@@ -634,16 +819,156 @@ export function PortalPage() {
           const n = norm(primerNombre), a = norm(primerApellido)
           const filtradas = ((data || []) as Array<PortalMulta & { conductor_responsable?: string }>)
             .filter(m => {
-              const cr = norm(m.conductor_responsable || '')
+              const crRaw = m.conductor_responsable || ''
+              // Responsable COMPARTIDO (varios conductores separados por coma): no se
+              // atribuye a un conductor individual, por lo que no se muestra en su portal.
+              if (crRaw.includes(',')) return false
+              const cr = norm(crRaw)
               return cr.includes(n) && cr.includes(a)
             })
             .map((m): PortalMulta => ({
               id: m.id, infraccion: m.infraccion, patente: m.patente,
               fecha_infraccion: m.fecha_infraccion, importe: m.importe,
               lugar: m.lugar, lugar_detalle: m.lugar_detalle, detalle: m.detalle, drive_url: m.drive_url,
+              importe_descuento: m.importe_descuento, fecha_vencimiento_descuento: m.fecha_vencimiento_descuento,
             }))
           setMultas(filtradas)
         })
+
+      // ===== Estado de facturación de cada multa (cruce por conductor.id) =====
+      // Clasificación en 3 columnas:
+      //  - FRACCIONADA: penalidad con fraccionado=true (pago en cuotas). Muestra monto
+      //    total que se viene facturando + cuotas pagadas/totales (canceladas = faltantes).
+      //  - PAGADA: penalidad NO fraccionada, aplicada en un periodo CERRADO. Muestra el
+      //    monto con que se facturó (penalidades.monto) y la semana.
+      //  - PENDIENTE: el resto (sin procesar, semana abierta, rechazada) -> no entra al Map,
+      //    se muestra con el importe original de la multa.
+      Promise.all([
+        (supabase.from('penalidades' as any) as any)
+          .select('monto, semana_aplicacion, anio_aplicacion, aplicado, rechazado, fraccionado, cantidad_cuotas, incidencias!inner(multa_id), penalidades_cuotas(numero_cuota, aplicado, semana, anio)')
+          .eq('conductor_id', conductor.id)
+          .not('incidencias.multa_id', 'is', null),
+        supabase
+          .from('periodos_facturacion')
+          .select('semana, anio')
+          .eq('estado', 'cerrado'),
+      ]).then(([penRes, perRes]) => {
+        const cerradas = new Set<string>(
+          ((perRes.data || []) as Array<{ semana: number; anio: number }>)
+            .map(p => `${p.semana}-${p.anio}`)
+        )
+        const estados = new Map<string, PortalMultaEstado>()
+        for (const row of (penRes.data || []) as Array<{
+          monto: string | number | null
+          semana_aplicacion: number | null
+          anio_aplicacion: number | null
+          aplicado: boolean | null
+          rechazado: boolean | null
+          fraccionado: boolean | null
+          cantidad_cuotas: number | null
+          incidencias: { multa_id: number | null } | null
+          penalidades_cuotas: Array<{ numero_cuota: number | null; aplicado: boolean | null; semana: number | null; anio: number | null }> | null
+        }>) {
+          const mid = row.incidencias?.multa_id
+          if (mid == null) continue
+          const key = String(mid)
+          const monto = Number(row.monto) || 0
+          const sem = row.semana_aplicacion ?? 0, anio = row.anio_aplicacion ?? 0
+
+          if (row.fraccionado) {
+            // Cuotas: deduplicar por numero_cuota. Una cuota cuenta como PAGADA con el
+            // mismo criterio que las pagadas (aplicado=true + semana cerrada), porque el
+            // campo 'estado' de la cuota a veces no se actualiza. Las no pagadas (incl.
+            // canceladas) cuentan como faltantes.
+            const porNumero = new Map<number, boolean>()
+            for (const c of (row.penalidades_cuotas || [])) {
+              if (c.numero_cuota == null) continue
+              const pagada = c.aplicado === true && cerradas.has(`${c.semana}-${c.anio}`)
+              // Si hay filas repetidas para la misma cuota, basta con que una esté pagada.
+              porNumero.set(c.numero_cuota, (porNumero.get(c.numero_cuota) || false) || pagada)
+            }
+            const total = porNumero.size || row.cantidad_cuotas || 0
+            let pagadas = 0
+            for (const ok of porNumero.values()) if (ok) pagadas++
+            estados.set(key, { tipo: 'fraccionada', montoFacturado: monto, semana: sem, anio, cuotasTotal: total, cuotasPagadas: pagadas })
+            continue
+          }
+
+          // No fraccionada: pagada solo si aplicada, no rechazada y en semana cerrada.
+          if (row.aplicado === true && row.rechazado !== true && cerradas.has(`${sem}-${anio}`)) {
+            const prev = estados.get(key)
+            if (!prev || prev.tipo !== 'fraccionada') {
+              // Conservar la aplicación más reciente.
+              if (!prev || anio > prev.anio || (anio === prev.anio && sem > prev.semana)) {
+                estados.set(key, { tipo: 'pagada', montoFacturado: monto, semana: sem, anio })
+              }
+            }
+          }
+        }
+        setMultasEstado(estados)
+      })
+
+      // ===== COBROS por exceso de km (3 columnas en la sección KM) =====
+      // Penalidades del conductor cuya incidencia es un cobro tipo EXCESO_KM. Clasificación
+      // igual que multas: fraccionada (cuotas) / pagada (aplicada en semana cerrada) / pendiente.
+      Promise.all([
+        (supabase.from('penalidades' as any) as any)
+          .select('id, monto, semana, semana_aplicacion, anio_aplicacion, aplicado, rechazado, fraccionado, cantidad_cuotas, incidencias!inner(descripcion, tipo, tipos_cobro_descuento!inner(codigo)), penalidades_cuotas(numero_cuota, aplicado, semana, anio)')
+          .eq('conductor_id', conductor.id)
+          .eq('incidencias.tipo', 'cobro')
+          .eq('incidencias.tipos_cobro_descuento.codigo', 'EXCESO_KM'),
+        supabase
+          .from('periodos_facturacion')
+          .select('semana, anio')
+          .eq('estado', 'cerrado'),
+      ]).then(([penRes, perRes]) => {
+        const cerradas = new Set<string>(
+          ((perRes.data || []) as Array<{ semana: number; anio: number }>).map(p => `${p.semana}-${p.anio}`)
+        )
+        const cobros: PortalCobroKm[] = []
+        for (const row of (penRes.data || []) as Array<{
+          id: string
+          monto: string | number | null
+          semana: number | null
+          semana_aplicacion: number | null
+          anio_aplicacion: number | null
+          aplicado: boolean | null
+          rechazado: boolean | null
+          fraccionado: boolean | null
+          cantidad_cuotas: number | null
+          incidencias: { descripcion: string | null } | null
+          penalidades_cuotas: Array<{ numero_cuota: number | null; aplicado: boolean | null; semana: number | null; anio: number | null }> | null
+        }>) {
+          const monto = Number(row.monto) || 0
+          const sem = row.semana_aplicacion ?? 0, anio = row.anio_aplicacion ?? 0
+          const descripcion = (row.incidencias?.descripcion || 'Exceso de km').replace(/\s*\n\s*/g, ' ').trim()
+          // semana del exceso = penalidades.semana (dato de la BD, sin parsear texto).
+          const semanaExceso = row.semana ?? undefined
+          const base = { id: String(row.id), descripcion, monto, semanaExceso }
+
+          if (row.fraccionado) {
+            const porNumero = new Map<number, boolean>()
+            const semanasCuota: number[] = []
+            for (const c of (row.penalidades_cuotas || [])) {
+              if (c.numero_cuota == null) continue
+              const pagada = c.aplicado === true && cerradas.has(`${c.semana}-${c.anio}`)
+              porNumero.set(c.numero_cuota, (porNumero.get(c.numero_cuota) || false) || pagada)
+              if (c.semana != null) semanasCuota.push(c.semana)
+            }
+            const total = porNumero.size || row.cantidad_cuotas || 0
+            let pagadas = 0
+            for (const ok of porNumero.values()) if (ok) pagadas++
+            const cuotaSemanaIni = semanasCuota.length ? Math.min(...semanasCuota) : undefined
+            const cuotaSemanaFin = semanasCuota.length ? Math.max(...semanasCuota) : undefined
+            cobros.push({ ...base, estado: 'fraccionada', semana: sem, anio, cuotasTotal: total, cuotasPagadas: pagadas, cuotaSemanaIni, cuotaSemanaFin })
+          } else if (row.aplicado === true && row.rechazado !== true && cerradas.has(`${sem}-${anio}`)) {
+            cobros.push({ ...base, estado: 'pagada', semana: sem, anio })
+          } else {
+            cobros.push({ ...base, estado: 'pendiente', semana: sem, anio })
+          }
+        }
+        setCobrosKm(cobros)
+      })
 
       // ===== Seccion nueva: KM RECORRIDOS por semana (desde junio 2026) =====
       loadKmRecorridos(conductor)
@@ -741,6 +1066,47 @@ export function PortalPage() {
               }
             }
           }
+        }
+      }
+
+      // Enriquecer conceptos de MULTA con la fecha/hora de la infracción.
+      // Cadena: item.referencia_id -> penalidad (directa) o penalidad_cuota -> penalidad
+      //         -> incidencia.multa_id -> multas_historico.fecha_infraccion.
+      const multaItems = items.filter(i =>
+        i.concepto_codigo === 'P007' && i.referencia_id &&
+        (i.referencia_tipo === 'penalidad' || i.referencia_tipo === 'penalidad_cuota')
+      )
+      if (multaItems.length > 0) {
+        // 1) Resolver cuotas -> su penalidad padre.
+        const cuotaIds = multaItems.filter(i => i.referencia_tipo === 'penalidad_cuota').map(i => i.referencia_id!)
+        const cuotaToPen = new Map<string, string>()
+        if (cuotaIds.length > 0) {
+          const { data: cuotas } = await (supabase.from('penalidades_cuotas') as any)
+            .select('id, penalidad_id').in('id', cuotaIds)
+          for (const c of (cuotas || []) as Array<{ id: string; penalidad_id: string }>) {
+            if (c.penalidad_id) cuotaToPen.set(c.id, c.penalidad_id)
+          }
+        }
+        // 2) Por cada item, su penalidad efectiva (directa o la de la cuota).
+        const penPorItem = new Map<string, string>() // item.id -> penalidad_id
+        for (const it of multaItems) {
+          const penId = it.referencia_tipo === 'penalidad_cuota' ? cuotaToPen.get(it.referencia_id!) : it.referencia_id!
+          if (penId) penPorItem.set(it.id, penId)
+        }
+        // 3) penalidad -> fecha_infraccion (vía incidencia -> multa).
+        const penIds = [...new Set(penPorItem.values())]
+        const penToFecha = new Map<string, string | null>()
+        if (penIds.length > 0) {
+          const { data: pens } = await (supabase.from('penalidades') as any)
+            .select('id, incidencias(multas_historico(fecha_infraccion))').in('id', penIds)
+          for (const p of (pens || []) as Array<{ id: string; incidencias: { multas_historico: { fecha_infraccion: string | null } | null } | null }>) {
+            penToFecha.set(p.id, p.incidencias?.multas_historico?.fecha_infraccion ?? null)
+          }
+        }
+        // 4) Volcar la fecha a cada item.
+        for (const it of multaItems) {
+          const penId = penPorItem.get(it.id)
+          if (penId) it.fecha_infraccion = penToFecha.get(penId) ?? null
         }
       }
 
@@ -986,6 +1352,8 @@ export function PortalPage() {
     setSelectedMulta(null)
     setLoginInput('')
     setLoginError('')
+    // Cerrar sesión de verdad: borrar el documento persistido (la pestaña se conserva).
+    try { localStorage.removeItem(PORTAL_AUTH_KEY) } catch { /* storage no disponible */ }
     setView('login')
   }
 
@@ -1034,6 +1402,38 @@ export function PortalPage() {
 
     return { sum, promedio, ultima, variacion, totalSemanas: facturas.length, chartData, ultimaGanancia }
   }, [facturas, cabifyPorSemana, pagadoPorSemana])
+
+  // Multas en 3 grupos: Pendientes / Pagadas / Fraccionadas, según multasEstado.
+  const { multasPendientes, multasPagadas, multasFraccionadas } = useMemo(() => {
+    const pend: PortalMulta[] = []
+    const pag: PortalMulta[] = []
+    const frac: PortalMulta[] = []
+    for (const m of multas) {
+      const est = multasEstado.get(String(m.id))
+      if (est?.tipo === 'fraccionada') frac.push(m)
+      else if (est?.tipo === 'pagada') pag.push(m)
+      else pend.push(m)
+    }
+    return { multasPendientes: pend, multasPagadas: pag, multasFraccionadas: frac }
+  }, [multas, multasEstado])
+
+  // Cobros de km en 3 grupos, TODOS desde penalidades reales (cobrosKm). Un exceso
+  // solo aparece si ya generó una penalidad; según su estado va a pendiente/pagado/
+  // fraccionado. Si el exceso aún no tiene penalidad (se ve solo en las barras), no
+  // aparece — así no se duplica con su cobro. Las barras de arriba son solo informativas.
+  const { kmPendientes, kmPagados, kmFraccionados } = useMemo(() => {
+    const pend: PortalCobroKm[] = []
+    const pag: PortalCobroKm[] = []
+    const frac: PortalCobroKm[] = []
+    for (const c of cobrosKm) {
+      if (c.estado === 'fraccionada') frac.push(c)
+      else if (c.estado === 'pagada') pag.push(c)
+      else pend.push(c)
+    }
+    // Pendientes = cobros reales no aplicados + previsiones estimadas (excesos sin cobro).
+    // Las previsiones ya excluyen semanas con cobro, así que no se duplican.
+    return { kmPendientes: [...pend, ...kmPrevisiones], kmPagados: pag, kmFraccionados: frac }
+  }, [cobrosKm, kmPrevisiones])
 
 
 
@@ -1168,8 +1568,21 @@ export function PortalPage() {
                       <div key={item.id} className="portal-detail-item">
                         <span className="portal-detail-item-name">
                           <span className="portal-detail-item-dot cargo" />
-                          {getConceptoLabel(item)}
-                          {item.cantidad > 1 && ` x${item.cantidad}`}
+                          <span className="portal-detail-item-text">
+                            {getConceptoLabel(item)}
+                            {item.cantidad > 1 && ` x${item.cantidad}`}
+                            {item.fecha_infraccion && (
+                              <span className="portal-detail-item-infraccion">
+                                Fecha infracción: {(() => {
+                                  // Mismo formato que el módulo de multas: 'dd/mm/aaaa hh:mm a. m./p. m.'
+                                  const d = new Date(item.fecha_infraccion)
+                                  const fecha = d.toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric' })
+                                  const hora = d.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' })
+                                  return `${fecha} ${hora}`
+                                })()}
+                              </span>
+                            )}
+                          </span>
                         </span>
                         <span className="portal-detail-item-amount">{formatCurrency(item.total)}</span>
                       </div>
@@ -1304,6 +1717,148 @@ export function PortalPage() {
     )
   })() : null
 
+  // Card de una multa. El monto y la info extra dependen del estado:
+  //  - pendiente (sin estado): importe original de la multa, en rojo (debit).
+  //  - pagada: monto facturado (penalidades.monto) en verde + "Semana NN/AAAA".
+  //  - fraccionada: monto total que se viene facturando en naranja + "X de Y cuotas".
+  const renderMultaCard = (m: PortalMulta, estado?: PortalMultaEstado) => {
+    // Fecha/hora de la infracción para el badge superior (formato es-AR con a. m./p. m.).
+    const fInfr = m.fecha_infraccion ? new Date(m.fecha_infraccion) : null
+    const fechaBadge = fInfr ? fInfr.toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric' }) : null
+    const horaBadge = fInfr ? fInfr.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' }) : null
+    // lugar_detalle = "Lugar: <direccion> | Estado: <estado>" -> extraer direccion
+    const dirMatch = m.lugar_detalle ? m.lugar_detalle.match(/Lugar:\s*([^|]+)/i) : null
+    const direccion = dirMatch ? dirMatch[1].trim() : ''
+    const ubic = [m.lugar, direccion].filter(Boolean).join(' — ')
+
+    const esPagada = estado?.tipo === 'pagada'
+    const esFraccionada = estado?.tipo === 'fraccionada'
+    // Monto a mostrar: facturado para pagada/fraccionada. Para pendiente, el importe
+    // depende del descuento por pago temprano (importePendiente aplica la regla de fecha).
+    const pendImporte = !estado ? importePendiente(m, new Date()) : null
+    const montoStr = estado ? formatCurrency(estado.montoFacturado) : (pendImporte!.texto)
+    // Pendiente siempre en rojo (con o sin descuento). pagada=verde, fraccionada=naranja.
+    const montoClase = esPagada ? 'credit' : esFraccionada ? 'frac' : 'debit'
+    const cuotasFaltan = esFraccionada ? Math.max(0, (estado!.cuotasTotal || 0) - (estado!.cuotasPagadas || 0)) : 0
+
+    return (
+      <div key={m.id} className="portal-week-card portal-multa-card" style={{ cursor: 'default' }}>
+        {/* Fila superior full-width: fecha/hora de infracción + (si pagada) semana de facturación */}
+        {(fechaBadge || esPagada) && (
+          <div className="portal-multa-fecha-fila">
+            {fechaBadge && (
+              <div className="portal-multa-fecha-badge">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <rect x="3" y="4" width="18" height="18" rx="2" /><line x1="16" y1="2" x2="16" y2="6" /><line x1="8" y1="2" x2="8" y2="6" /><line x1="3" y1="10" x2="21" y2="10" />
+                </svg>
+                <div className="portal-multa-fecha-txt">
+                  <span className="portal-multa-fecha-lbl">Fecha de infracción</span>
+                  <span className="portal-multa-fecha-dh">
+                    <span className="portal-multa-fecha-d">{fechaBadge}</span>
+                    {horaBadge && <span className="portal-multa-fecha-h">{horaBadge}</span>}
+                  </span>
+                </div>
+              </div>
+            )}
+            {esPagada && (
+              <span className="portal-multa-sem-chip">Semana {estado!.semana}/{estado!.anio}</span>
+            )}
+          </div>
+        )}
+        {/* Fila contenido: descripción/datos (izq) + monto/botones (der) */}
+        <div className="portal-multa-cuerpo">
+        <div className="portal-week-left">
+          {/* infraccion en BD = N° de acta; la descripcion real esta en detalle */}
+          <div className="portal-week-title">{m.detalle || 'Multa de tránsito'}</div>
+          <div className="portal-week-dates">{m.patente || '-'} · Acta {m.infraccion || '-'}</div>
+          {ubic && <div className="portal-week-info">{ubic}</div>}
+          {esFraccionada && (
+            <div className="portal-multa-cuotas">
+              {estado!.cuotasPagadas} de {estado!.cuotasTotal} cuotas
+              {cuotasFaltan > 0 ? ` · falta${cuotasFaltan > 1 ? 'n' : ''} ${cuotasFaltan}` : ' · completo'}
+            </div>
+          )}
+        </div>
+        <div className="portal-week-right">
+          {/* Descuento vigente: total tachado arriba, precio con descuento abajo. */}
+          {pendImporte?.conDescuento && pendImporte.totalTachado && (
+            <div className="portal-multa-total-tachado">{pendImporte.totalTachado}</div>
+          )}
+          <div className={`portal-week-total ${montoClase}`}>{montoStr}</div>
+          <div style={{ display: 'flex', gap: '8px', marginTop: '4px' }}>
+            <button className="portal-back-btn" style={{ margin: 0, padding: '6px 12px', fontSize: '12px', cursor: 'pointer' }} onClick={() => setSelectedMulta(m)}>Ver</button>
+            {m.drive_url ? (
+              <a className="portal-pdf-btn" style={{ padding: '6px 14px', fontSize: '12px' }} href={driveDownloadUrl(m.drive_url)} download={`Multa_${m.infraccion || 'acta'}.pdf`} rel="noopener noreferrer">Descargar</a>
+            ) : (
+              <span style={{ fontSize: '12px', color: 'var(--text-tertiary)', padding: '6px 12px', border: '1px solid var(--border-primary)', borderRadius: '6px' }}>Sin PDF</span>
+            )}
+          </div>
+        </div>
+        </div>{/* /portal-multa-cuerpo */}
+      </div>
+    )
+  }
+
+  // Card de un cobro por exceso de km. Sin botones (no hay PDF de acta). Monto directo
+  // (sin descuento). Color: pagada=verde, fraccionada=naranja, pendiente=rojo.
+  // Card de cobro por exceso de km. Las 3 columnas comparten el MISMO molde
+  // (.portal-km-cobro-card): título + chips de semana + período + monto. El pie y el
+  // color del monto varían según el estado (pagada/fraccionada/pendiente-estimada).
+  const renderCobroKmCard = (c: PortalCobroKm) => {
+    const montoClase = c.estado === 'pagada' ? 'credit' : c.estado === 'fraccionada' ? 'frac' : 'debit'
+    // Período del texto "Exceso km 1/06 - 7/06" -> "1/06 – 7/06".
+    const periodoMatch = c.descripcion.match(/(\d{1,2}\/\d{1,2}(?:\/\d{2,4})?)\s*[-–]\s*(\d{1,2}\/\d{1,2}(?:\/\d{2,4})?)/)
+    const periodo = periodoMatch ? `${periodoMatch[1]} – ${periodoMatch[2]}` : null
+    // Rango de cuotas (solo fraccionada): "S24–S25" o "S24".
+    const rangoCuotas = c.cuotaSemanaIni != null && c.cuotaSemanaFin != null
+      ? (c.cuotaSemanaIni === c.cuotaSemanaFin ? `S${c.cuotaSemanaIni}` : `S${c.cuotaSemanaIni}–S${c.cuotaSemanaFin}`)
+      : null
+    // Datos del pie según estado.
+    const total = c.cuotasTotal || 0
+    const pagadas = c.cuotasPagadas || 0
+    const faltan = Math.max(0, total - pagadas)
+    const pctPago = total > 0 ? Math.round((pagadas / total) * 100) : 0
+
+    return (
+      <div key={c.id} className="portal-km-cobro-card">
+        {/* Fila superior: chip de semana del exceso a la derecha (igual que Multas) */}
+        {c.semanaExceso != null && (
+          <div className="portal-km-cobro-fila-top">
+            <span className="portal-km-chip">Semana {c.semanaExceso}/{c.anio}</span>
+          </div>
+        )}
+        {/* Cuerpo: título + período (izq) + monto (der) */}
+        <div className="portal-km-cobro-top">
+          <div className="portal-km-cobro-info">
+            <div className="portal-km-cobro-title">Exceso de km</div>
+            {periodo && <div className="portal-km-cobro-periodo">Período {periodo}</div>}
+            {c.estado === 'fraccionada' && rangoCuotas && (
+              <div className="portal-km-cobro-chips" style={{ marginTop: '6px' }}>
+                <span className="portal-km-chip portal-km-chip--cuotas">Cuotas {rangoCuotas}</span>
+              </div>
+            )}
+          </div>
+          <div className="portal-km-cobro-monto-wrap">
+            <div className={`portal-week-total ${montoClase}`}>{formatCurrency(c.monto)}</div>
+            {c.estado === 'fraccionada' && (
+              <div className="portal-km-cobro-cuotas-count">{pagadas} de {total} cuotas</div>
+            )}
+          </div>
+        </div>
+
+        {c.estado === 'fraccionada' && (
+          <div className="portal-km-cobro-progreso">
+            <div className="portal-km-cobro-progreso-head">
+              <span>Progreso de pago</span>
+              <span className="portal-km-cobro-faltan">{faltan > 0 ? `Falta${faltan > 1 ? 'n' : ''} ${faltan}` : 'Completo'}</span>
+            </div>
+            <div className="portal-km-cobro-bar"><div className="portal-km-cobro-bar-fill" style={{ width: `${pctPago}%` }} /></div>
+          </div>
+        )}
+      </div>
+    )
+  }
+
   // Modal de detalle de multa (boton "Ver" de Mis multas).
   // OJO con el modelo de datos real de multas_historico:
   //   - infraccion    = N° de acta/expediente (ej "Q37295361")
@@ -1325,6 +1880,10 @@ export function PortalPage() {
     const previewUrl = drivePreviewUrl(m.drive_url)
     const fechaInfraccion = m.fecha_infraccion ? format(parseISO(m.fecha_infraccion), 'dd/MM/yyyy') : '-'
     const horaInfraccion = m.fecha_infraccion ? format(parseISO(m.fecha_infraccion), 'HH:mm') : ''
+    // Importe coherente con la card: facturado si pagada/fraccionada; si pendiente,
+    // aplica la regla de descuento por pago temprano (mismo helper que renderMultaCard).
+    const estadoFact = multasEstado.get(String(m.id))
+    const importeModal = estadoFact ? formatCurrency(estadoFact.montoFacturado) : importePendiente(m, new Date()).texto
     return (
     <div className="portal-modal-overlay" onClick={() => setSelectedMulta(null)}>
       <div className="portal-multa-modal" onClick={e => e.stopPropagation()}>
@@ -1368,7 +1927,7 @@ export function PortalPage() {
                   </tr>
                   <tr>
                     <td className="portal-multa-label">Importe</td>
-                    <td className="portal-multa-value portal-multa-importe">{m.importe || '-'}</td>
+                    <td className="portal-multa-value portal-multa-importe">{importeModal}</td>
                   </tr>
                   <tr>
                     <td className="portal-multa-label">Acta</td>
@@ -1731,35 +2290,40 @@ export function PortalPage() {
             <section className="portal-msec" data-msec="multas">
                 <div className="portal-weeks-header">Mis multas</div>
                 {multas.length > 0 ? (
-                  <div className="portal-weeks portal-weeks--grid">
-                    {multas.map(m => {
-                      const fecha = m.fecha_infraccion ? format(parseISO(m.fecha_infraccion), 'dd/MM/yyyy HH:mm') : 's/fecha'
-                      // lugar_detalle = "Lugar: <direccion> | Estado: <estado>" -> extraer direccion
-                      const dirMatch = m.lugar_detalle ? m.lugar_detalle.match(/Lugar:\s*([^|]+)/i) : null
-                      const direccion = dirMatch ? dirMatch[1].trim() : ''
-                      const ubic = [m.lugar, direccion].filter(Boolean).join(' — ')
-                      return (
-                        <div key={m.id} className="portal-week-card" style={{ cursor: 'default' }}>
-                          <div className="portal-week-left">
-                            {/* infraccion en BD = N° de acta; la descripcion real esta en detalle */}
-                            <div className="portal-week-title">{m.detalle || 'Multa de tránsito'}</div>
-                            <div className="portal-week-dates">{m.patente || '-'} · {fecha} · Acta {m.infraccion || '-'}</div>
-                            {ubic && <div className="portal-week-info">{ubic}</div>}
-                          </div>
-                          <div className="portal-week-right">
-                            <div className="portal-week-total debit">{m.importe || '-'}</div>
-                            <div style={{ display: 'flex', gap: '8px', marginTop: '4px' }}>
-                              <button className="portal-back-btn" style={{ margin: 0, padding: '6px 12px', fontSize: '12px', cursor: 'pointer' }} onClick={() => setSelectedMulta(m)}>Ver</button>
-                              {m.drive_url ? (
-                                <a className="portal-pdf-btn" style={{ padding: '6px 14px', fontSize: '12px' }} href={driveDownloadUrl(m.drive_url)} download={`Multa_${m.infraccion || 'acta'}.pdf`} rel="noopener noreferrer">Descargar</a>
-                              ) : (
-                                <span style={{ fontSize: '12px', color: 'var(--text-tertiary)', padding: '6px 12px', border: '1px solid var(--border-primary)', borderRadius: '6px' }}>Sin PDF</span>
-                              )}
-                            </div>
-                          </div>
-                        </div>
-                      )
-                    })}
+                  <div className="portal-multas-cols">
+                    {/* Pendientes: no facturadas (importe original de la multa) */}
+                    <div className="portal-multas-col">
+                      <div className="portal-multas-col-head portal-multas-col-head--pendiente">
+                        Pendientes <span className="portal-multas-count">{multasPendientes.length}</span>
+                      </div>
+                      {multasPendientes.length > 0 ? (
+                        <div className="portal-weeks">{multasPendientes.map(m => renderMultaCard(m))}</div>
+                      ) : (
+                        <div className="portal-empty-note">Sin multas pendientes.</div>
+                      )}
+                    </div>
+                    {/* Pagadas: facturadas de una vez en semana cerrada (monto facturado) */}
+                    <div className="portal-multas-col">
+                      <div className="portal-multas-col-head portal-multas-col-head--pagada">
+                        Pagadas <span className="portal-multas-count">{multasPagadas.length}</span>
+                      </div>
+                      {multasPagadas.length > 0 ? (
+                        <div className="portal-weeks">{multasPagadas.map(m => renderMultaCard(m, multasEstado.get(String(m.id))))}</div>
+                      ) : (
+                        <div className="portal-empty-note">Sin multas pagadas.</div>
+                      )}
+                    </div>
+                    {/* Fraccionadas: pago en cuotas (monto total + cuotas pagadas/totales) */}
+                    <div className="portal-multas-col">
+                      <div className="portal-multas-col-head portal-multas-col-head--fraccionada">
+                        Fraccionadas <span className="portal-multas-count">{multasFraccionadas.length}</span>
+                      </div>
+                      {multasFraccionadas.length > 0 ? (
+                        <div className="portal-weeks">{multasFraccionadas.map(m => renderMultaCard(m, multasEstado.get(String(m.id))))}</div>
+                      ) : (
+                        <div className="portal-empty-note">Sin multas fraccionadas.</div>
+                      )}
+                    </div>
                   </div>
                 ) : (
                   <div className="portal-empty-note">No tenés multas registradas.</div>
@@ -1768,9 +2332,10 @@ export function PortalPage() {
 
             {/* ===== SECCIÓN: KM RECORRIDOS (desde junio 2026) ===== */}
             <section className="portal-msec" data-msec="km">
-                <div className="portal-weeks-header">Km recorridos (desde junio)</div>
+                {/* Km recorridos por semana (barras vs límite), una sola columna arriba */}
+                <div className="portal-weeks-header">Km recorridos</div>
                 {kmSemanas.length > 0 ? (
-                  <div className="portal-weeks portal-weeks--grid">
+                  <div className="portal-weeks portal-km-col">
                     {kmSemanas.map(k => {
                       const pct = Math.min(100, Math.round((k.km / k.limite) * 100))
                       const excedido = k.excedido > 0
@@ -1812,6 +2377,47 @@ export function PortalPage() {
                   </div>
                 ) : (
                   <div className="portal-empty-note">Sin viajes registrados desde junio.</div>
+                )}
+
+                {/* Cobros por exceso de km: 3 columnas (Pendientes / Pagados / Fraccionados) */}
+                <div className="portal-weeks-header" style={{ marginTop: '24px' }}>Cobros por exceso de km</div>
+                {cobrosKm.length > 0 ? (
+                  <>
+                    <div className="portal-multas-cols">
+                      <div className="portal-multas-col">
+                        <div className="portal-multas-col-head portal-multas-col-head--pendiente">
+                          Pendientes <span className="portal-multas-count">{kmPendientes.length}</span>
+                        </div>
+                        {kmPendientes.length > 0 ? (
+                          <div className="portal-weeks">{kmPendientes.map(c => renderCobroKmCard(c))}</div>
+                        ) : (
+                          <div className="portal-empty-note">Sin cobros pendientes.</div>
+                        )}
+                      </div>
+                      <div className="portal-multas-col">
+                        <div className="portal-multas-col-head portal-multas-col-head--pagada">
+                          Pagados <span className="portal-multas-count">{kmPagados.length}</span>
+                        </div>
+                        {kmPagados.length > 0 ? (
+                          <div className="portal-weeks">{kmPagados.map(c => renderCobroKmCard(c))}</div>
+                        ) : (
+                          <div className="portal-empty-note">Sin cobros pagados.</div>
+                        )}
+                      </div>
+                      <div className="portal-multas-col">
+                        <div className="portal-multas-col-head portal-multas-col-head--fraccionada">
+                          Fraccionados <span className="portal-multas-count">{kmFraccionados.length}</span>
+                        </div>
+                        {kmFraccionados.length > 0 ? (
+                          <div className="portal-weeks">{kmFraccionados.map(c => renderCobroKmCard(c))}</div>
+                        ) : (
+                          <div className="portal-empty-note">Sin cobros fraccionados.</div>
+                        )}
+                      </div>
+                    </div>
+                  </>
+                ) : (
+                  <div className="portal-empty-note">No tenés cobros por exceso de km.</div>
                 )}
             </section>{/* /km */}
 
