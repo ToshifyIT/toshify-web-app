@@ -137,6 +137,10 @@ export function DateRangeSelector({
   // Rango libre: primer clic fija el ancla (inicio); segundo clic cierra el rango.
   // null = esperando el primer clic.
   const [rangeAnchor, setRangeAnchor] = useState<{ year: number; month: number; day: number } | null>(null)
+  // true mientras el usuario está eligiendo un rango nuevo (entró a la pestaña Rango
+  // y aún no completó los dos clics). Mientras esté activo, el calendario NO pinta el
+  // rango anterior (selectedRange): arranca limpio para que elija desde cero.
+  const [rangeSelecting, setRangeSelecting] = useState(false)
   const dropdownRef = useRef<HTMLDivElement>(null)
 
   // Pre-calcular rango seleccionado
@@ -191,8 +195,10 @@ export function DateRangeSelector({
     function handleClickOutside(event: MouseEvent) {
       if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
         setIsOpen(false)
-        // Descartar un ancla a medio elegir al cerrar sin completar el rango.
+        // Descartar un ancla a medio elegir al cerrar sin completar el rango,
+        // y salir del modo "eligiendo" para que al reabrir se vea el rango vigente.
         setRangeAnchor(null)
+        setRangeSelecting(false)
       }
     }
     document.addEventListener('mousedown', handleClickOutside)
@@ -337,10 +343,15 @@ export function DateRangeSelector({
   const handleModeChange = (mode: SelectionMode) => {
     setSelectionMode(mode)
     if (mode === 'range') {
-      // Reiniciar el ancla: el rango se arma con dos clics en el calendario.
+      // Reiniciar: el calendario arranca limpio (sin el rango anterior resaltado) y
+      // se arma con dos clics. rangeSelecting=true suprime el pintado de selectedRange.
       setRangeAnchor(null)
+      setRangeSelecting(true)
       return
     }
+    // Salir del modo Rango hacia otra pestaña: limpiar el estado de "eligiendo".
+    setRangeAnchor(null)
+    setRangeSelecting(false)
     if (mode === 'month') {
       emitMonthRange(viewDate.getFullYear(), viewDate.getMonth(), false)
     } else if (mode === 'year') {
@@ -408,6 +419,8 @@ export function DateRangeSelector({
       } else {
         emitCustomRange(rangeAnchor, punto)
         setRangeAnchor(null)
+        // Rango completo: vuelve a pintarse el rango ya elegido (selectedRange).
+        setRangeSelecting(false)
       }
     } else {
       // Modo semana: seleccionar semana completa
@@ -621,9 +634,12 @@ export function DateRangeSelector({
                 selectedRange.startDate === toISODateString(dayInfo.year, dayInfo.month, dayInfo.day)
 
               const isRangeMode = selectionMode === 'week' || selectionMode === 'month' || selectionMode === 'year' || selectionMode === 'range'
-              const isInRange = isRangeMode && isDayInSelectedRange(dayInfo.timestamp)
-              const isStart = isRangeMode && isRangeStart(dayInfo.timestamp)
-              const isEnd = isRangeMode && isRangeEnd(dayInfo.timestamp)
+              // Mientras se está eligiendo un rango nuevo, NO pintar el selectedRange
+              // anterior: el calendario queda limpio hasta cerrar los dos clics.
+              const showSelectedRange = isRangeMode && !rangeSelecting
+              const isInRange = showSelectedRange && isDayInSelectedRange(dayInfo.timestamp)
+              const isStart = showSelectedRange && isRangeStart(dayInfo.timestamp)
+              const isEnd = showSelectedRange && isRangeEnd(dayInfo.timestamp)
               // En modo Rango, resaltar el ancla mientras se espera el 2do clic.
               const isAnchor = selectionMode === 'range' && rangeAnchor != null &&
                 getDayTimestamp(rangeAnchor.year, rangeAnchor.month, rangeAnchor.day) === dayInfo.timestamp
