@@ -187,15 +187,33 @@ export const wialonBitacoraService = {
       }
     }
 
-    // Builder de query reutilizable para wialon_bitacora y geotab_bitacora
+    // dia siguiente a endDate (para filtrar timestamp de geotab con < limite exclusivo)
+    const endDateNext = (() => {
+      const d = new Date(endDate + 'T00:00:00Z')
+      d.setUTCDate(d.getUTCDate() + 1)
+      return d.toISOString().slice(0, 10)
+    })()
+
+    // Builder de query reutilizable para wialon_bitacora y geotab_bitacora.
+    // GEOTAB se filtra por fecha_hora_fin_gmt3 (fecha de FIN en hora AR real): un turno
+    // pertenece a la semana donde TERMINA. USS sigue filtrando por fecha_turno (no tiene gmt3).
     const buildQuery = (tabla: 'wialon_bitacora' | 'geotab_bitacora') => {
       let q = supabase
         .from(tabla)
         .select('*', { count: 'exact' })
-        .gte('fecha_turno', startDate)
-        .lte('fecha_turno', endDate)
-        .order('fecha_turno', { ascending: false })
-        .order('hora_inicio', { ascending: false })
+
+      if (tabla === 'geotab_bitacora') {
+        q = q
+          .gte('fecha_hora_fin_gmt3', startDate)
+          .lt('fecha_hora_fin_gmt3', endDateNext)
+          .order('fecha_hora_fin_gmt3', { ascending: false })
+      } else {
+        q = q
+          .gte('fecha_turno', startDate)
+          .lte('fecha_turno', endDate)
+          .order('fecha_turno', { ascending: false })
+          .order('hora_inicio', { ascending: false })
+      }
 
       if (patentesSede) {
         q = q.in('patente_normalizada', patentesSede)
@@ -221,10 +239,16 @@ export const wialonBitacoraService = {
       return q
     }
 
-    // Ejecutar ambas queries en paralelo: USS (wialon_bitacora) + GEOTAB (geotab_bitacora)
-    const [wialonRes, geotabRes] = await Promise.all([
+    // Ejecutar queries en paralelo: USS (wialon_bitacora) + GEOTAB (geotab_bitacora)
+    // + asignaciones (para resolver modalidad/turno por patente en filas GEOTAB, que
+    //   no traen vehiculo_modalidad/horario desde el sync de Geotab).
+    const [wialonRes, geotabRes, asigRes] = await Promise.all([
       buildQuery('wialon_bitacora'),
       buildQuery('geotab_bitacora'),
+      supabase
+        .from('asignaciones_conductores')
+        .select('horario, estado, conductores(nombres, apellidos), asignaciones!inner(horario, estado, vehiculos!inner(patente))')
+        .in('estado', ['asignado', 'activo', 'activa']),
     ])
 
     if (wialonRes.error) {
@@ -235,16 +259,53 @@ export const wialonBitacoraService = {
       console.warn('[wialonBitacoraService] geotab_bitacora query falló:', geotabRes.error.message)
     }
 
+    // Cruces desde asignaciones_conductores para completar modalidad/turno en filas GEOTAB:
+    //   - modalidad del vehiculo (por PATENTE): asignaciones.horario 'todo_dia' -> 'a_cargo', sino 'turno'.
+    //   - turno del conductor (por PATENTE + CONDUCTOR): asignaciones_conductores.horario
+    //     ('diurno' | 'nocturno' | 'todo_dia'). Es un DATO de la asignacion, no se deriva de la hora.
+    const modalidadPorPatente = new Map<string, string>()
+    const horarioPorPatenteConductor = new Map<string, string>()
+    const normNombre = (s: string) => (s || '').toUpperCase().replace(/\s+/g, ' ').trim()
+    for (const ac of (asigRes.data || []) as any[]) {
+      const pat = ac?.asignaciones?.vehiculos?.patente
+      if (!pat) continue
+      const norm = pat.replace(/[\s\-.]/g, '').toUpperCase()
+      if (!modalidadPorPatente.has(norm)) {
+        const modAsig = (ac.asignaciones?.horario || '').toLowerCase()
+        modalidadPorPatente.set(norm, modAsig === 'todo_dia' ? 'a_cargo' : 'turno')
+      }
+      const c = ac.conductores
+      const nombre = c ? normNombre(`${c.nombres || ''} ${c.apellidos || ''}`) : ''
+      if (nombre) {
+        const key = `${norm}|${nombre}`
+        if (!horarioPorPatenteConductor.has(key)) {
+          horarioPorPatenteConductor.set(key, (ac.horario || 'todo_dia').toLowerCase())
+        }
+      }
+    }
+
     const mapRow = (row: WialonBitacoraRow, origen: 'USS' | 'GEOTAB'): BitacoraRegistroTransformado => {
       // Map DB columns to display fields
       let tipoTurno: string | null = null
       let turnoIndicador: string | null = null
 
+      // Geotab no trae modalidad ni horario: resolverlos desde asignaciones.
+      //   modalidad -> por patente | horario (turno del conductor) -> por patente + conductor.
+      const esGeotab = origen === 'GEOTAB'
+      const modGeo = esGeotab ? modalidadPorPatente.get(row.patente_normalizada) : undefined
+      const nombreCond = normNombre(row.conductor_wialon || '')
+      const horGeo = esGeotab && nombreCond
+        ? horarioPorPatenteConductor.get(`${row.patente_normalizada}|${nombreCond}`)
+        : undefined
+
       if (row.vehiculo_modalidad) {
         tipoTurno = row.vehiculo_modalidad === 'a_cargo' ? 'a_cargo' : row.vehiculo_modalidad
+      } else if (modGeo) {
+        tipoTurno = modGeo
       }
-      if (row.horario) {
-        turnoIndicador = row.horario === 'diurno' ? 'diurno' : row.horario === 'nocturno' ? 'nocturno' : 'todo_dia'
+      const horarioEfectivo = (row.horario && row.horario !== 'todo_dia') ? row.horario : (horGeo ?? row.horario)
+      if (horarioEfectivo) {
+        turnoIndicador = horarioEfectivo === 'diurno' ? 'diurno' : horarioEfectivo === 'nocturno' ? 'nocturno' : 'todo_dia'
       }
 
       return {
@@ -277,12 +338,16 @@ export const wialonBitacoraService = {
     const registrosGeotab = ((geotabRes.data || []) as WialonBitacoraRow[]).map(r => mapRow(r, 'GEOTAB'))
     const registros: BitacoraRegistroTransformado[] = [...registrosWialon, ...registrosGeotab]
 
-    // Ordenar combinado por fecha_turno desc, hora_inicio desc
+    // Orden por defecto: fecha+hora de INICIO real (periodo_inicio) descendente.
+    // Usa el timestamp real, asi los turnos que cruzan medianoche quedan en su
+    // posicion cronologica correcta (no descolocados por fecha_turno).
     registros.sort((a, b) => {
+      const ta = a.periodo_inicio ? new Date(a.periodo_inicio).getTime() : 0
+      const tb = b.periodo_inicio ? new Date(b.periodo_inicio).getTime() : 0
+      if (ta !== tb) return tb - ta
+      // Desempate por fecha_turno + hora si faltara periodo_inicio
       if (a.fecha_turno !== b.fecha_turno) return a.fecha_turno < b.fecha_turno ? 1 : -1
-      const ha = a.hora_inicio || ''
-      const hb = b.hora_inicio || ''
-      return ha < hb ? 1 : ha > hb ? -1 : 0
+      return (a.hora_inicio || '') < (b.hora_inicio || '') ? 1 : -1
     })
 
     // No consolidar: el sync ya entrega 1 fila por marcación.
