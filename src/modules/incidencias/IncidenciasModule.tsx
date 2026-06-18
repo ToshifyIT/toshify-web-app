@@ -1504,7 +1504,7 @@ export function IncidenciasModule() {
         }
         if (row.tipo_cobro_descuento_id) {
           const tipo = tiposCobroDescuentoMap.get(row.tipo_cobro_descuento_id)
-          if (tipo?.categoria) return codIncLabels[tipo.categoria] || tipo.categoria
+          if (tipo?.categoria) return codIncLabels[tipo.categoria] || tipo.nombre || tipo.categoria
         }
         return '-'
       },
@@ -1520,7 +1520,7 @@ export function IncidenciasModule() {
           return <span style={{ fontWeight: 600, color: '#1a1a1a', fontSize: '12px', background: '#fef3c7', padding: '2px 8px', borderRadius: '4px' }}>{nombre}</span>
         }
         if (!tipo?.categoria) return '-'
-        const label = codIncLabels[tipo.categoria] || tipo.categoria
+        const label = codIncLabels[tipo.categoria] || tipo.nombre || tipo.categoria
         const bg = tipo.categoria === 'P004' ? '#dcfce7' : '#fee2e2'
         return <span style={{ fontWeight: 600, color: '#1a1a1a', fontSize: '12px', background: bg, padding: '2px 8px', borderRadius: '4px' }}>{label}</span>
       }
