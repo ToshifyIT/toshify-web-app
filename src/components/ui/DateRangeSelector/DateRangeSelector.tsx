@@ -629,9 +629,12 @@ export function DateRangeSelector({
                 selectedRange.startDate === toISODateString(dayInfo.year, dayInfo.month, dayInfo.day)
 
               const isRangeMode = selectionMode === 'week' || selectionMode === 'month' || selectionMode === 'year' || selectionMode === 'range'
-              const isInRange = isRangeMode && isDayInSelectedRange(dayInfo.timestamp)
-              const isStart = isRangeMode && isRangeStart(dayInfo.timestamp)
-              const isEnd = isRangeMode && isRangeEnd(dayInfo.timestamp)
+              // Mientras se está eligiendo un rango nuevo, NO pintar el selectedRange
+              // anterior: el calendario queda limpio hasta cerrar los dos clics.
+              const showSelectedRange = isRangeMode && !rangeSelecting
+              const isInRange = showSelectedRange && isDayInSelectedRange(dayInfo.timestamp)
+              const isStart = showSelectedRange && isRangeStart(dayInfo.timestamp)
+              const isEnd = showSelectedRange && isRangeEnd(dayInfo.timestamp)
               // En modo Rango, resaltar el ancla mientras se espera el 2do clic.
               const isAnchor = selectionMode === 'range' && rangeAnchor != null &&
                 getDayTimestamp(rangeAnchor.year, rangeAnchor.month, rangeAnchor.day) === dayInfo.timestamp
