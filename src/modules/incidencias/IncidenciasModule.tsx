@@ -2511,6 +2511,29 @@ export function IncidenciasModule() {
           .update({ ...dataToSave, updated_by: profile?.full_name || 'Sistema' })
           .eq('id', selectedIncidencia.id)
         if (error) throw error
+
+        // Sincronizar penalidad vinculada (solo si aún no fue aplicada ni rechazada)
+        if (esCobro) {
+          const vehiculo = vehiculos.find(v => v.id === incidenciaForm.vehiculo_id)
+          const conductor = conductores.find(c => c.id === incidenciaForm.conductor_id)
+          await (supabase.from('penalidades' as any) as any)
+            .update({
+              monto: incidenciaForm.monto || 0,
+              vehiculo_id: incidenciaForm.vehiculo_id || null,
+              vehiculo_patente: vehiculo?.patente || null,
+              conductor_id: incidenciaForm.conductor_id || null,
+              conductor_nombre: conductor ? `${conductor.nombres} ${conductor.apellidos}` : null,
+              tipo_cobro_descuento_id: tipoCobroId && !esLogisticaTipo ? tipoCobroId : null,
+              semana: semanaCalculada,
+              fecha: incidenciaForm.fecha,
+              turno: incidenciaForm.turno || null,
+              observaciones: incidenciaForm.descripcion || '',
+            })
+            .eq('incidencia_id', selectedIncidencia.id)
+            .eq('aplicado', false)
+            .eq('rechazado', false)
+        }
+
         showSuccess('Guardado', 'Incidencia actualizada correctamente')
       } else {
         // Insertar incidencia
@@ -3969,6 +3992,7 @@ export function IncidenciasModule() {
                     incidencia={selectedIncidencia}
                     onEdit={() => handleEditarIncidencia(selectedIncidencia)}
                     tiposCobroDescuento={tiposCobroDescuento}
+                    penalidadVinculada={penalidades.find(p => p.incidencia_id === selectedIncidencia.id) ?? null}
                   />
                 ) : modalType === 'penalidad' && selectedPenalidad ? (
                   <PenalidadDetailView
@@ -5243,9 +5267,10 @@ interface IncidenciaDetailViewProps {
   incidencia: IncidenciaCompleta
   onEdit: () => void
   tiposCobroDescuento: TipoCobroDescuento[]
+  penalidadVinculada?: PenalidadCompleta | null
 }
 
-function IncidenciaDetailView({ incidencia, onEdit, tiposCobroDescuento }: IncidenciaDetailViewProps) {
+function IncidenciaDetailView({ incidencia, onEdit, tiposCobroDescuento, penalidadVinculada }: IncidenciaDetailViewProps) {
   function formatDate(dateStr: string | undefined | null) {
     if (!dateStr) return '-'
     const [year, month, day] = dateStr.split('T')[0].split('-')
@@ -5267,7 +5292,7 @@ function IncidenciaDetailView({ incidencia, onEdit, tiposCobroDescuento }: Incid
   const tipoIncidenciaNombre = esTelepaseInc ? 'Telepase' : (tipoObj?.nombre || '-')
   const codInc = esTelepaseInc
     ? (tipoObj?.nombre || '-')
-    : (tipoObj?.categoria ? (codIncLabels[tipoObj.categoria] || tipoObj.categoria) : '-')
+    : (tipoObj?.categoria ? (codIncLabels[tipoObj.categoria] || tipoObj?.nombre || tipoObj.categoria) : '-')
   const esCobro = incidencia.tipo === 'cobro'
   const esAFavor = tipoObj?.es_a_favor || false
 
@@ -5289,7 +5314,14 @@ function IncidenciaDetailView({ incidencia, onEdit, tiposCobroDescuento }: Incid
           {/* FIX 2026-05-20: mostrar ID completo en el modal de detalle */}
           <p className="detail-id" style={{ fontSize: '11px', color: 'var(--text-tertiary)', marginBottom: '4px', fontFamily: 'monospace', wordBreak: 'break-all' }}>ID: {incidencia.id}</p>
           <h3 className="detail-title" style={{ fontSize: '18px', fontWeight: 700, marginBottom: '8px' }}>{incidencia.patente_display || 'Sin patente'}</h3>
-          <span className={`estado-badge estado-${incidencia.estado_color}`}>{incidencia.estado_nombre}</span>
+          {(() => {
+            const estadoEfectivo = penalidadVinculada?.rechazado
+              ? { nombre: 'Rechazado', color: 'red' }
+              : penalidadVinculada?.aplicado
+              ? { nombre: 'Aplicado', color: 'green' }
+              : { nombre: incidencia.estado_nombre, color: incidencia.estado_color }
+            return <span className={`estado-badge estado-${estadoEfectivo.color}`}>{estadoEfectivo.nombre}</span>
+          })()}
         </div>
         <button className="btn-secondary" onClick={onEdit}>
           <Edit2 size={14} />
@@ -5319,7 +5351,14 @@ function IncidenciaDetailView({ incidencia, onEdit, tiposCobroDescuento }: Incid
             <div style={cellStyle}>
               <span style={labelStyle}>Estado</span>
               <span style={valueStyle}>
-                <span className={`estado-badge estado-${incidencia.estado_color}`} style={{ fontSize: '11px', padding: '2px 8px' }}>{incidencia.estado_nombre}</span>
+                {(() => {
+                  const ef = penalidadVinculada?.rechazado
+                    ? { nombre: 'Rechazado', color: 'red' }
+                    : penalidadVinculada?.aplicado
+                    ? { nombre: 'Aplicado', color: 'green' }
+                    : { nombre: incidencia.estado_nombre, color: incidencia.estado_color }
+                  return <span className={`estado-badge estado-${ef.color}`} style={{ fontSize: '11px', padding: '2px 8px' }}>{ef.nombre}</span>
+                })()}
               </span>
             </div>
           </div>

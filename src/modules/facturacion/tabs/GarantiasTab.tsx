@@ -85,6 +85,12 @@ export function GarantiasTab() {
   const garantiasVisiblesRef = useRef<any[]>([])
   const [asignadoFilter, setAsignadoFilter] = useState<'todos' | 'asignado' | 'no_asignado'>('todos')
   const [conductoresAsignados, setConductoresAsignados] = useState<Set<string>>(new Set())
+  // Clave: garantia_id (garantias_conductores.id)
+  const [ultimaSemanaMap, setUltimaSemanaMap] = useState<Map<string, { semana: number; anio: number }>>(new Map())
+  // Clave: garantia_id -> cuotas únicas reales (desde control_garantias, sin depender de cuotas_pagadas en BD)
+  const [cuotasRealesMap, setCuotasRealesMap] = useState<Map<string, number>>(new Map())
+  // Overrides del modal: monto_realmente_pagado recalculado sin mutar el array garantias (evita reset de paginación)
+  const [garantiasOverrides, setGarantiasOverrides] = useState<Map<string, number>>(new Map())
 
   // Estados para filtros Excel - Movimientos
   const [movConductorFilter, setMovConductorFilter] = useState<string[]>([])
@@ -197,12 +203,8 @@ export function GarantiasTab() {
           console.error('Error sincronizando garantía:', error.message)
           return
         }
-        // Reflejar cambio en la tabla sin recargar todo
-        setGarantias(prev => prev.map(gar =>
-          gar.id === g.id
-            ? { ...gar, monto_realmente_pagado: totalRealPagadoCalc, cuotas_pagadas: cuotasPagadasCalc }
-            : gar
-        ))
+        // Reflejar monto recalculado sin mutar el array garantias (evita reset de paginación)
+        setGarantiasOverrides(prev => new Map(prev).set(g.id, totalRealPagadoCalc))
       })
   }, [kardexModal.loading, kardexModal.open])
 
@@ -326,6 +328,95 @@ export function GarantiasTab() {
       setConductoresAsignados(idsAsignados)
 
       setGarantias(garantiasConEstado)
+
+      // Calcular cuotas reales y última semana — bloque aislado con su propio try/catch
+      // para que un fallo aquí no afecte la carga principal ni viceversa.
+      ;(async () => {
+        try {
+          // Fuente 1: control_garantias (kardex), ordenado DESC para que el primer hit sea el máximo
+          const [kardexRes, factRes] = await Promise.all([
+            (supabase.from('control_garantias') as any)
+              .select('garantia_id, semana, anio')
+              .eq('tipo_movimiento', 'cuota_facturada')
+              .not('semana', 'is', null)
+              .not('garantia_id', 'is', null)
+              .order('anio', { ascending: false })
+              .order('semana', { ascending: false })
+              .limit(50000),
+            (supabase.from('facturacion_conductores') as any)
+              .select('conductor_id, periodo_id')
+              .gt('subtotal_garantia', 0)
+              .limit(50000),
+          ])
+
+          // Mapa garantia_id -> Set<"anio-semana"> desde kardex
+          const kardexSemanas = new Map<string, Set<string>>()
+          for (const r of (kardexRes.data || []) as any[]) {
+            if (!kardexSemanas.has(r.garantia_id)) kardexSemanas.set(r.garantia_id, new Set())
+            kardexSemanas.get(r.garantia_id)!.add(`${Number(r.anio)}-${Number(r.semana)}`)
+          }
+
+          // Fuente 2: facturacion_conductores -> join con periodos_facturacion en batches
+          const periodoIdsFacturacion = [...new Set(
+            (factRes.data || []).map((r: any) => r.periodo_id).filter(Boolean)
+          )] as string[]
+
+          const periodosMap = new Map<string, { semana: number; anio: number }>()
+          if (periodoIdsFacturacion.length > 0) {
+            const batchSize = 250
+            const batchPromises: Promise<any>[] = []
+            for (let i = 0; i < periodoIdsFacturacion.length; i += batchSize) {
+              batchPromises.push(
+                (supabase.from('periodos_facturacion') as any)
+                  .select('id, semana, anio')
+                  .in('id', periodoIdsFacturacion.slice(i, i + batchSize))
+              )
+            }
+            const batchResults = await Promise.all(batchPromises)
+            for (const res of batchResults) {
+              for (const p of (res.data || []) as any[]) {
+                periodosMap.set(p.id, { semana: Number(p.semana), anio: Number(p.anio) })
+              }
+            }
+          }
+
+          // Mapa conductor_id -> Set<"anio-semana"> desde facturacion
+          const factSemanas = new Map<string, Set<string>>()
+          for (const r of (factRes.data || []) as any[]) {
+            if (!r.conductor_id || !r.periodo_id) continue
+            const p = periodosMap.get(r.periodo_id)
+            if (!p) continue
+            if (!factSemanas.has(r.conductor_id)) factSemanas.set(r.conductor_id, new Set())
+            factSemanas.get(r.conductor_id)!.add(`${p.anio}-${p.semana}`)
+          }
+
+          // Combinar ambas fuentes y calcular máximo por garantia_id
+          const uMap = new Map<string, { semana: number; anio: number }>()
+          const cuotasRealesResult = new Map<string, number>()
+
+          for (const g of garantiasConEstado as any[]) {
+            const garantiaId = g.id as string
+            const conductorId = g.conductor_id as string
+            const semanasKardex = kardexSemanas.get(garantiaId) || new Set<string>()
+            const semanasFacturacion = factSemanas.get(conductorId) || new Set<string>()
+            const todasSemanas = new Set(semanasKardex)
+            for (const s of semanasFacturacion) todasSemanas.add(s)
+            cuotasRealesResult.set(garantiaId, todasSemanas.size)
+
+            let maxAnio = 0, maxSemana = 0
+            for (const key of todasSemanas) {
+              const [a, s] = key.split('-').map(Number)
+              if (a > maxAnio || (a === maxAnio && s > maxSemana)) { maxAnio = a; maxSemana = s }
+            }
+            if (maxAnio > 0) uMap.set(garantiaId, { semana: maxSemana, anio: maxAnio })
+          }
+
+          setUltimaSemanaMap(uMap)
+          setCuotasRealesMap(cuotasRealesResult)
+        } catch (err) {
+          console.error('Error cargando métricas de garantías (cuotas/última semana):', err)
+        }
+      })()
 
       // Cargar todos los pagos para el sub-tab "Movimientos"
       const { data: pagos, error: errorPagos } = await aplicarFiltroSede(supabase
@@ -1658,18 +1749,37 @@ export function GarantiasTab() {
     {
       accessorKey: 'monto_realmente_pagado',
       header: 'Pagado',
-      cell: ({ row }) => <span className="fact-precio" style={{ color: '#16a34a' }}>{formatCurrency(row.original.monto_realmente_pagado || row.original.monto_pagado)}</span>
+      cell: ({ row }) => {
+        const monto = garantiasOverrides.get(row.original.id) ?? row.original.monto_realmente_pagado ?? row.original.monto_pagado
+        return <span className="fact-precio" style={{ color: '#16a34a' }}>{formatCurrency(monto)}</span>
+      }
     },
     {
       id: 'cuotas_pagadas',
       header: 'Cuotas (ref.)',
-      accessorFn: (row) => Math.floor((row.monto_realmente_pagado || row.monto_pagado || 0) / 50000),
+      accessorFn: (row) => cuotasRealesMap.get(row.id) ?? Number(row.cuotas_pagadas) ?? 0,
       cell: ({ row }) => {
-        const cuotasTotales = Math.ceil((row.original.monto_total || 0) / 50000)
-        const cuotasPagadas = Math.floor((row.original.monto_realmente_pagado || row.original.monto_pagado || 0) / 50000)
+        const cuotasPagadas = cuotasRealesMap.get(row.original.id) ?? Number(row.original.cuotas_pagadas) ?? 0
         return (
-          <span className="dt-badge dt-badge-blue" style={{ fontSize: '11px' }} title={`${cuotasPagadas} de ${cuotasTotales} cuotas de $50.000 (referencial)`}>
-            {cuotasPagadas}/{cuotasTotales}
+          <span className="dt-badge dt-badge-blue" style={{ fontSize: '11px' }} title={`${cuotasPagadas} cuotas cobradas`}>
+            {cuotasPagadas}
+          </span>
+        )
+      }
+    },
+    {
+      id: 'ultima_semana',
+      header: 'Últ. Semana',
+      accessorFn: (row) => {
+        const u = ultimaSemanaMap.get(row.id)
+        return u ? u.anio * 100 + u.semana : 0
+      },
+      cell: ({ row }) => {
+        const u = ultimaSemanaMap.get(row.original.id)
+        if (!u) return <span style={{ color: 'var(--text-tertiary)', fontSize: '11px' }}>-</span>
+        return (
+          <span style={{ fontSize: '11px', fontFamily: 'monospace', color: 'var(--text-primary)', fontWeight: 600 }}>
+            S{String(u.semana).padStart(2, '0')} {u.anio}
           </span>
         )
       }
@@ -1802,7 +1912,7 @@ export function GarantiasTab() {
         )
       }
     }
-  ], [conductorFilter, conductorSearch, conductoresFiltrados, estadoFilter, openColumnFilter])
+  ], [conductorFilter, conductorSearch, conductoresFiltrados, estadoFilter, openColumnFilter, ultimaSemanaMap, cuotasRealesMap, garantiasOverrides])
 
   // ========== COLUMNAS TABLA MOVIMIENTOS ==========
 
@@ -2171,11 +2281,7 @@ export function GarantiasTab() {
         const tmp = new Date(hoy.getFullYear(), hoy.getMonth(), hoy.getDate())
         const dayOfWeek = tmp.getDay() || 7
         tmp.setDate(tmp.getDate() + 4 - dayOfWeek)
-        const semanaActual = Math.ceil((((tmp.getTime() - new Date(tmp.getFullYear(), 0, 1).getTime()) / 86400000) + 1) / 7)
-        const anioActual = tmp.getFullYear()
-
-        // Excluir semana actual: aún no se facturó
-        const rowsSinSemanaActual = kardexModal.rows.filter(r => !(Number(r.anio) === anioActual && Number(r.semana) === semanaActual))
+        const rowsSinSemanaActual = kardexModal.rows
 
         const deudaReal = Math.max(0, rowsSinSemanaActual.reduce((s, r) => s + (Number(r.delta_deuda) || 0), 0))
         const pctFact = Math.min(100, (facturado / total) * 100)
@@ -2196,6 +2302,7 @@ export function GarantiasTab() {
           tipo_movimiento: string
           referencia: string
           ids: string[]
+          esExcedenteReal?: boolean  // true si el acumulado cronológico supera monto_total
         }
         const consolidadasMap = new Map<string, FilaConsolidada>()
         for (const r of rowsSinSemanaActual) {
@@ -2246,7 +2353,6 @@ export function GarantiasTab() {
           .sort((a, b) => a.anio !== b.anio ? a.anio - b.anio : a.semana - b.semana)
 
         for (const sf of semanasOrdenadas) {
-          if (sf.anio === anioActual && sf.semana === semanaActual) continue
           const key = `${sf.anio}-${sf.semana}`
           if (!consolidadasMap.has(key)) {
             const esExcedente = acumuladoParaExtra >= montoTotalGarantia
@@ -2294,6 +2400,14 @@ export function GarantiasTab() {
         // Total de cuotas necesarias para llegar al objetivo con los montos reales.
         // Es dinamico: si hay cuotas parciales se necesitan mas de 20 para llegar al millon.
         const totalCuotasNecesarias = contadorCuota
+
+        // Marcar filas que superan el monto objetivo en orden cronológico
+        let acumExcedente = 0
+        for (const f of todasOrdenadas) {
+          const monto = Number(f.monto_cuota) || 0
+          acumExcedente += monto
+          f.esExcedenteReal = acumExcedente > total
+        }
 
         const consolidadas = Array.from(consolidadasMap.values())
           .sort((a, b) => (a.anio !== b.anio ? b.anio - a.anio : b.semana - a.semana))
@@ -2381,7 +2495,7 @@ export function GarantiasTab() {
                     <div style={{ flex: 1, minWidth: '120px' }}>
                       <div style={{ fontSize: '10px', textTransform: 'uppercase', color: 'var(--text-secondary)', fontWeight: 600, letterSpacing: '0.3px' }}>Excedente</div>
                       <div style={{ fontSize: '15px', fontWeight: 700, fontFamily: 'monospace', color: '#16a34a', marginTop: '2px' }}>
-                        +{formatCurrency(Math.round(excedente))}
+                        +{formatCurrency(excedente)}
                       </div>
                     </div>
                   )}
@@ -2458,19 +2572,25 @@ export function GarantiasTab() {
                           {rowsFiltradas.map((f) => {
                             const fecha = f.fecha ? new Date(f.fecha).toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: '2-digit' }) : '-'
                             const esExtraFacturacion = f.tipo_movimiento === 'facturacion'
-                            const montoColor = esExtraFacturacion ? '#b45309' : 'var(--text-primary)'
+                            const esExcedente = !esExtraFacturacion && !!f.esExcedenteReal
+                            const montoColor = esExtraFacturacion ? '#b45309' : esExcedente ? '#b45309' : 'var(--text-primary)'
                             const origenLabel = esExtraFacturacion
                               ? `Excedente facturado S${f.semana}/${f.anio}`
                               : `Cuota Garantía S${f.semana}/${f.anio}`
                             return (
                               <tr key={f.key} style={{
                                 borderBottom: '1px solid var(--border-primary)',
-                                background: esExtraFacturacion ? '#fffbeb' : undefined,
+                                background: esExtraFacturacion || esExcedente ? '#fffbeb' : undefined,
                               }}>
                                 <td style={{ padding: '10px 12px', color: 'var(--text-secondary)', fontSize: '11px', whiteSpace: 'nowrap' }}>{fecha}</td>
                                 <td style={{ padding: '10px 12px', fontWeight: 600, color: 'var(--text-primary)', whiteSpace: 'nowrap' }}>
                                   {f.anio} S{String(f.semana || '').padStart(2, '0')}
                                   {esExtraFacturacion && (
+                                    <span style={{ fontSize: '9px', marginLeft: '4px', padding: '1px 5px', borderRadius: '3px', background: '#fde68a', color: '#92400e', fontWeight: 600 }}>
+                                      EXTRA
+                                    </span>
+                                  )}
+                                  {esExcedente && (
                                     <span style={{ fontSize: '9px', marginLeft: '4px', padding: '1px 5px', borderRadius: '3px', background: '#fde68a', color: '#92400e', fontWeight: 600 }}>
                                       EXTRA
                                     </span>
@@ -2490,8 +2610,8 @@ export function GarantiasTab() {
                                   if (esExtraFacturacion) {
                                     return <td style={{ padding: '10px 12px', textAlign: 'right', fontFamily: 'monospace', fontSize: '11px', color: 'var(--text-tertiary)' }}>-</td>
                                   }
-                                  const diff = Math.round((f.monto_cuota || 0) - montoCuotaFijo)
-                                  if (diff === 0) return <td style={{ padding: '10px 12px', textAlign: 'right', fontFamily: 'monospace', fontSize: '11px', color: 'var(--text-tertiary)' }}>-</td>
+                                  const diff = (f.monto_cuota || 0) - montoCuotaFijo
+                                  if (Math.abs(diff) < 0.01) return <td style={{ padding: '10px 12px', textAlign: 'right', fontFamily: 'monospace', fontSize: '11px', color: 'var(--text-tertiary)' }}>-</td>
                                   const esExcedenteDiff = diff > 0
                                   return (
                                     <td style={{ padding: '10px 12px', textAlign: 'right', fontFamily: 'monospace', fontSize: '11px', fontWeight: 600, color: esExcedenteDiff ? '#16a34a' : '#ef4444' }}>

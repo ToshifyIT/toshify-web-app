@@ -44,7 +44,7 @@ import { LoadingOverlay } from '../../../components/ui/LoadingOverlay'
 import { useAuth } from '../../../contexts/AuthContext'
 import { usePermissions } from '../../../contexts/PermissionsContext'
 import { useSede } from '../../../contexts/SedeContext'
-import { formatCurrency, formatDate, FACTURACION_CONFIG } from '../../../types/facturacion.types'
+import { formatCurrency, formatDate } from '../../../types/facturacion.types'
 import { normalizeDni, normalizePatente, normalizeCuit } from '../../../utils/normalizeDocuments'
 import { insertControlSaldo } from '../../../services/controlSaldosService'
 import { syncKardexForPeriodo } from '../../../services/controlGarantiasService'
@@ -2608,10 +2608,6 @@ export function ReporteFacturacionTab() {
         const garantia = garantiasMap.get(conductorId)
         let subtotalGarantia = 0
         let cuotaGarantiaNumero = ''
-        const cuotasTotales = tipoAlquiler === 'CARGO'
-          ? FACTURACION_CONFIG.GARANTIA_CUOTAS_CARGO
-          : FACTURACION_CONFIG.GARANTIA_CUOTAS_TURNO
-
         if (garantia) {
           const montoTotal = garantia.monto_total || 1000000
           // Fuente de verdad: suma histórica de subtotal_garantia en facturacion_conductores
@@ -2626,11 +2622,11 @@ export function ReporteFacturacionTab() {
             // Si el pendiente es menor que la cuota normal, cobrar solo el restante
             subtotalGarantia = Math.round(Math.min(cuotaNormal, pendiente) * 100) / 100
             const cuotaActual = garantia.cuotas_pagadas + 1
-            cuotaGarantiaNumero = `${cuotaActual} de ${garantia.cuotas_totales}`
+            cuotaGarantiaNumero = `${cuotaActual}`
           }
         } else {
           subtotalGarantia = cuotaGarantiaSemanalVP
-          cuotaGarantiaNumero = `1 de ${cuotasTotales}`
+          cuotaGarantiaNumero = `1`
         }
 
         // Si tiene 0 días (entró solo por penalidades), no cobrar garantía
@@ -3627,6 +3623,35 @@ export function ReporteFacturacionTab() {
       const garantiasMapById = new Map<string, any>(
         (garantias as any[]).map((g: any) => [g.conductor_id, g])
       )
+
+      // Auto-crear garantias_conductores para conductores TURNO que no tienen registro aún.
+      // Esto evita que el sistema cobre P003 sin dejar rastro en garantias_conductores.
+      const conductoresSinGarantia = conductoresProcesados.filter(
+        (c) => !garantiasMapById.has(c.conductor_id)
+      )
+      if (conductoresSinGarantia.length > 0) {
+        const nuevasGarantias = conductoresSinGarantia.map((c) => ({
+          conductor_id: c.conductor_id,
+          conductor_nombre: c.conductor_nombre,
+          tipo_alquiler: 'TURNO',
+          monto_total: 1000000,
+          monto_cuota_semanal: 50000,
+          cuotas_totales: 20,
+          monto_pagado: 0,
+          monto_realmente_pagado: 0,
+          cuotas_pagadas: 0,
+          estado: 'en_curso',
+          semana_inicio: semanaNum,
+          anio_inicio: anioNum,
+        }))
+        const { data: insertadas } = await (supabase.from('garantias_conductores') as any)
+          .insert(nuevasGarantias)
+          .select()
+        for (const g of (insertadas || [])) {
+          garantiasMapById.set(g.conductor_id, g)
+        }
+      }
+
       const penalidadesGrouped = new Map<string, any[]>()
       ;(penalidades as any[]).forEach((p: any) => {
         const arr = penalidadesGrouped.get(p.conductor_id) || []
@@ -3773,7 +3798,6 @@ export function ReporteFacturacionTab() {
           ? 0
           : Math.min(cuotaNormalRecalc, Math.max(0, pendienteRecalc))) * 100) / 100
         const cuotaActual = garantiaCompletada ? 0 : (garantiaConductor?.cuotas_pagadas || 0) + 1
-        const totalCuotas = garantiaConductor?.cuotas_totales || 16
 
         // Penalidades - segmentar por categoría de tipo_cobro_descuento
         // Excluir penalidades fraccionadas: por ID en penalidades_cuotas O por cantidad_cuotas > 1
@@ -3941,7 +3965,7 @@ export function ReporteFacturacionTab() {
         // P003 - Garantía
         const descripcionGarantia = garantiaCompletada
           ? 'Garantía completada'
-          : `Cuota de Garantía ${cuotaActual} de ${totalCuotas}`
+          : `Cuota de Garantía ${cuotaActual}`
         todosDetalles.push({
           facturacion_id: facturacionId, concepto_codigo: 'P003', concepto_descripcion: descripcionGarantia,
           cantidad: 1, precio_unitario: cuotaGarantiaProporcional,
@@ -4408,7 +4432,7 @@ export function ReporteFacturacionTab() {
           id: `det-garantia-${facturacion.conductor_id}`,
           facturacion_id: facturacion.id,
           concepto_codigo: 'P003',
-          concepto_descripcion: `Cuota de Garantía${facturacion.cuota_garantia_numero ? ` ${facturacion.cuota_garantia_numero}` : ''}`,
+          concepto_descripcion: `Cuota de Garantía${facturacion.cuota_garantia_numero ? ` ${facturacion.cuota_garantia_numero.toString().split(' de ')[0]}` : ''}`,
           cantidad: 1,
           precio_unitario: facturacion.subtotal_garantia,
           subtotal: facturacion.subtotal_garantia,
@@ -6721,7 +6745,7 @@ export function ReporteFacturacionTab() {
             } else if (det.concepto_codigo === 'P016') {
               descripcionAdicional = 'Alquiler a Cargo Sin GNC'
             } else if (det.concepto_codigo === 'P003') {
-              descripcionAdicional = `Cuota de Garantía ${fact.cuota_garantia_numero || '1 de 16'}`
+              descripcionAdicional = `Cuota de Garantía ${(fact.cuota_garantia_numero || '1').toString().split(' de ')[0]}`
             } else if (det.concepto_codigo === 'P005') {
               descripcionAdicional = 'Peajes'
             } else if (det.concepto_codigo === 'P006') {
@@ -6770,7 +6794,7 @@ export function ReporteFacturacionTab() {
               fact,
               fact.subtotal_garantia,
               'P003',
-              `Cuota de Garantía ${fact.cuota_garantia_numero || '1 de 16'}`,
+              `Cuota de Garantía ${(fact.cuota_garantia_numero || '1').toString().split(' de ')[0]}`,
               fact.id
             ))
           }
@@ -7277,7 +7301,7 @@ export function ReporteFacturacionTab() {
         const garantia = garantiasMap.get(fact.conductor_id)
         if (garantia && garantia.cuotas_pagadas < garantia.cuotas_totales) {
           const cuotaActual = garantia.cuotas_pagadas + 1
-          const descripcionGarantia = `Cuota de Garantía ${cuotaActual} de ${garantia.cuotas_totales}`
+          const descripcionGarantia = `Cuota de Garantía ${cuotaActual}`
           filasPreview.push(crearFilaPreview(
             numeroFactura++,
             fact,
@@ -7507,12 +7531,11 @@ export function ReporteFacturacionTab() {
             } else {
               // Conductor con registro de garantía: mostrar siguiente cuota a pagar
               const cuotaActual = garantia.cuotas_pagadas + 1
-              numeroCuota = `${cuotaActual} de ${garantia.cuotas_totales}`
+              numeroCuota = `${cuotaActual}`
             }
           } else {
             // Conductor nuevo sin registro: primera cuota
-            const cuotasTotales = fc.tipo_alquiler === 'CARGO' ? 20 : 16
-            numeroCuota = `1 de ${cuotasTotales}`
+            numeroCuota = `1`
           }
         }
 
