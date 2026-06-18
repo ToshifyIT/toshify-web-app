@@ -2332,8 +2332,10 @@ export function PortalPage() {
 
             {/* ===== SECCIÓN: KM RECORRIDOS (desde junio 2026) ===== */}
             <section className="portal-msec" data-msec="km">
-                {/* Km recorridos por semana (barras vs límite), una sola columna arriba */}
+                {/* Mitad superior: KM RECORRIDOS (barras), con scroll propio */}
+                <div className="portal-km-mitad">
                 <div className="portal-weeks-header">Km recorridos</div>
+                <div className="portal-km-mitad-scroll">
                 {kmSemanas.length > 0 ? (
                   <div className="portal-weeks portal-km-col">
                     {kmSemanas.map(k => {
@@ -2378,9 +2380,13 @@ export function PortalPage() {
                 ) : (
                   <div className="portal-empty-note">Sin viajes registrados desde junio.</div>
                 )}
+                </div>{/* /portal-km-mitad-scroll */}
+                </div>{/* /portal-km-mitad (superior) */}
 
-                {/* Cobros por exceso de km: 3 columnas (Pendientes / Pagados / Fraccionados) */}
-                <div className="portal-weeks-header" style={{ marginTop: '24px' }}>Cobros por exceso de km</div>
+                {/* Mitad inferior: COBROS POR EXCESO DE KM (3 columnas), con scroll propio */}
+                <div className="portal-km-mitad">
+                <div className="portal-weeks-header">Cobros por exceso de km</div>
+                <div className="portal-km-mitad-scroll">
                 {cobrosKm.length > 0 ? (
                   <>
                     <div className="portal-multas-cols">
@@ -2419,6 +2425,8 @@ export function PortalPage() {
                 ) : (
                   <div className="portal-empty-note">No tenés cobros por exceso de km.</div>
                 )}
+                </div>{/* /portal-km-mitad-scroll */}
+                </div>{/* /portal-km-mitad (inferior) */}
             </section>{/* /km */}
 
             {/* Nota legal */}

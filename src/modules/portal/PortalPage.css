@@ -561,6 +561,53 @@
   width: 100%;
 }
 
+/* Pestaña KM en desktop: la sección ocupa el alto del viewport y se divide en dos
+   mitades verticales (KM recorridos arriba / Cobros abajo). Cada mitad tiene su header
+   fijo y su propia área con scroll. La página principal no scrollea. */
+@media (min-width: 901px) {
+  .portal-content[data-active="km"] {
+    overflow: hidden;
+  }
+  .portal-content[data-active="km"] .portal-msec[data-msec="km"] {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    /* Descuenta header del portal (~64px) + nota legal (~56px) + respiros, para que
+       el footer quede visible y no se corte. */
+    height: calc(100vh - 180px);
+    min-height: 0;
+  }
+  .portal-km-mitad {
+    flex: 1 1 50%;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+  }
+  /* Segunda mitad (Cobros): separación visual de la de arriba. */
+  .portal-km-mitad + .portal-km-mitad {
+    border-top: 1px solid var(--border-primary);
+    padding-top: 12px;
+  }
+  /* Header de cada mitad: fijo arriba, no se encoge. */
+  .portal-km-mitad > .portal-weeks-header {
+    flex: 0 0 auto;
+    margin-bottom: 10px;
+  }
+  /* Área scrolleable de cada mitad. */
+  .portal-km-mitad-scroll {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+    padding-right: 4px;
+  }
+  .portal-km-mitad-scroll::-webkit-scrollbar { width: 8px; }
+  .portal-km-mitad-scroll::-webkit-scrollbar-thumb {
+    background: var(--border-primary);
+    border-radius: 4px;
+  }
+  .portal-km-mitad-scroll::-webkit-scrollbar-track { background: transparent; }
+}
+
 /* Card de cobro fraccionado de km: layout detallado con chips de semana + barra. */
 .portal-km-cobro-card {
   background: var(--card-bg);
