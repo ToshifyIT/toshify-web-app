@@ -195,8 +195,10 @@ export function DateRangeSelector({
     function handleClickOutside(event: MouseEvent) {
       if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
         setIsOpen(false)
-        // Descartar un ancla a medio elegir al cerrar sin completar el rango.
+        // Descartar un ancla a medio elegir al cerrar sin completar el rango,
+        // y salir del modo "eligiendo" para que al reabrir se vea el rango vigente.
         setRangeAnchor(null)
+        setRangeSelecting(false)
       }
     }
     document.addEventListener('mousedown', handleClickOutside)
@@ -347,6 +349,9 @@ export function DateRangeSelector({
       setRangeSelecting(true)
       return
     }
+    // Salir del modo Rango hacia otra pestaña: limpiar el estado de "eligiendo".
+    setRangeAnchor(null)
+    setRangeSelecting(false)
     if (mode === 'month') {
       emitMonthRange(viewDate.getFullYear(), viewDate.getMonth(), false)
     } else if (mode === 'year') {

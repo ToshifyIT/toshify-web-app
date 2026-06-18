@@ -645,6 +645,10 @@ export function useExcesoKmData(sedeId?: string | null) {
   }, [loadData])
 
   const setDateRangePreset = useCallback((preset: string) => {
+    // Bloquear de inmediato: el selector usa `loading` para deshabilitarse. Sin esto
+    // hay un micro-gap (loading=false) entre elegir el filtro y que arranque loadData,
+    // en el que se podría disparar otro filtro encima del que está cargando.
+    setLoading(true)
     const today = getToday()
     switch (preset) {
       case 'today':
@@ -683,6 +687,9 @@ export function useExcesoKmData(sedeId?: string | null) {
   }, [])
 
   const setCustomDateRange = useCallback((startDate: string, endDate: string, label?: string) => {
+    // Bloquear de inmediato (ver nota en setDateRangePreset): cierra el micro-gap en
+    // el que el selector aún no está deshabilitado mientras arranca la carga.
+    setLoading(true)
     setDateRange({ startDate, endDate, label: label || 'Personalizado' })
   }, [])
 
