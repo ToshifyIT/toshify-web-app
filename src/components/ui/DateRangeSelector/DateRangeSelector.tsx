@@ -88,7 +88,12 @@ const getSundayOfWeek = (year: number, month: number, day: number): { year: numb
   return { year: sunday.getFullYear(), month: sunday.getMonth(), day: sunday.getDate() }
 }
 
-type SelectionMode = 'day' | 'week' | 'month' | 'year'
+type SelectionMode = 'day' | 'week' | 'month' | 'year' | 'range'
+
+// Formatea una fecha como "5 jun" / "22 jun 2026" para el label de un rango libre.
+const MONTH_SHORT = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic']
+const formatRangeLabelPart = (year: number, month: number, day: number, withYear: boolean): string =>
+  withYear ? `${day} ${MONTH_SHORT[month]} ${year}` : `${day} ${MONTH_SHORT[month]}`
 
 // Rango de semanas COMPLETAS (lunes-domingo) que cubren un mes.
 // Se extiende: del lunes de la semana que contiene el día 1, al domingo de la
@@ -126,8 +131,12 @@ export function DateRangeSelector({
     if (allowMonthYear && (selectedRange?.type === 'month' || selectedRange?.type === 'year')) {
       return selectedRange.type
     }
+    if (allowMonthYear && selectedRange?.type === 'custom') return 'range'
     return 'week'
   })
+  // Rango libre: primer clic fija el ancla (inicio); segundo clic cierra el rango.
+  // null = esperando el primer clic.
+  const [rangeAnchor, setRangeAnchor] = useState<{ year: number; month: number; day: number } | null>(null)
   const dropdownRef = useRef<HTMLDivElement>(null)
 
   // Pre-calcular rango seleccionado
@@ -148,6 +157,7 @@ export function DateRangeSelector({
     if (allowMonthYear) {
       if (selectedRange.type === 'month') setSelectionMode('month')
       else if (selectedRange.type === 'year') setSelectionMode('year')
+      else if (selectedRange.type === 'custom') setSelectionMode('range')
       else setSelectionMode('week')
     }
     let year: number
@@ -181,6 +191,8 @@ export function DateRangeSelector({
     function handleClickOutside(event: MouseEvent) {
       if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
         setIsOpen(false)
+        // Descartar un ancla a medio elegir al cerrar sin completar el rango.
+        setRangeAnchor(null)
       }
     }
     document.addEventListener('mousedown', handleClickOutside)
@@ -290,14 +302,45 @@ export function DateRangeSelector({
     if (close) setIsOpen(false)
   }
 
+  // Emitir un RANGO LIBRE entre dos fechas EXACTAS (no se estira a semana completa).
+  // Trae solo los días entre inicio y fin tal cual los eligió el usuario; la tabla
+  // luego agrupa por semana ISO según la fecha de cada viaje, así que las semanas
+  // borde quedan PARCIALES (solo los días dentro del rango). El límite por modalidad
+  // de cada fila no cambia: lo resuelve useExcesoKmData según la asignación.
+  const emitCustomRange = (
+    a: { year: number; month: number; day: number },
+    b: { year: number; month: number; day: number },
+    close = true,
+  ) => {
+    // Ordenar (el usuario puede clicar el fin antes que el inicio)
+    const aTs = getDayTimestamp(a.year, a.month, a.day)
+    const bTs = getDayTimestamp(b.year, b.month, b.day)
+    const [lo, hi] = aTs <= bTs ? [a, b] : [b, a]
+    const sameYear = lo.year === hi.year
+    const label = `${formatRangeLabelPart(lo.year, lo.month, lo.day, !sameYear)} – ${formatRangeLabelPart(hi.year, hi.month, hi.day, true)}`
+    onRangeChange({
+      startDate: toISODateString(lo.year, lo.month, lo.day),
+      endDate: toISODateString(hi.year, hi.month, hi.day),
+      label,
+      type: 'custom',
+    })
+    if (close) setIsOpen(false)
+  }
+
   // Cambiar de pestaña. Cada modo emite un rango coherente de inmediato para que el
   // resaltado y los datos se actualicen sin tener que clicar un día:
   //  - Mes/Año: selecciona el mes/año que se está viendo en el calendario.
   //  - Semana: selecciona una semana dentro del período visible (la semana de hoy si
   //    cae en el mes/año visible; si no, la primera semana del mes visible). Así no
   //    queda el mes completo seleccionado al pasar de Mes a Semana.
+  //  - Rango: no emite todavía; espera dos clics en el calendario (ancla + cierre).
   const handleModeChange = (mode: SelectionMode) => {
     setSelectionMode(mode)
+    if (mode === 'range') {
+      // Reiniciar el ancla: el rango se arma con dos clics en el calendario.
+      setRangeAnchor(null)
+      return
+    }
     if (mode === 'month') {
       emitMonthRange(viewDate.getFullYear(), viewDate.getMonth(), false)
     } else if (mode === 'year') {
@@ -356,6 +399,16 @@ export function DateRangeSelector({
     } else if (selectionMode === 'year') {
       // Modo año: trae todas las semanas completas (lunes-domingo) del año del día clicado.
       emitYearRange(dayInfo.year)
+    } else if (selectionMode === 'range') {
+      // Rango libre: 1er clic fija el ancla; 2do clic cierra el rango (se extiende a
+      // semanas completas). Mantiene el dropdown abierto hasta cerrar el rango.
+      const punto = { year: dayInfo.year, month: dayInfo.month, day: dayInfo.day }
+      if (!rangeAnchor) {
+        setRangeAnchor(punto)
+      } else {
+        emitCustomRange(rangeAnchor, punto)
+        setRangeAnchor(null)
+      }
     } else {
       // Modo semana: seleccionar semana completa
       const monday = getMondayOfWeek(dayInfo.year, dayInfo.month, dayInfo.day)
@@ -518,6 +571,13 @@ export function DateRangeSelector({
             >
               Año
             </button>
+            <button
+              type="button"
+              className={`date-range-tab ${selectionMode === 'range' ? 'active' : ''}`}
+              onClick={() => handleModeChange('range')}
+            >
+              Rango
+            </button>
           </div>
           )}
 
@@ -560,19 +620,22 @@ export function DateRangeSelector({
                 selectedRange?.type === 'day' &&
                 selectedRange.startDate === toISODateString(dayInfo.year, dayInfo.month, dayInfo.day)
 
-              const isRangeMode = selectionMode === 'week' || selectionMode === 'month' || selectionMode === 'year'
+              const isRangeMode = selectionMode === 'week' || selectionMode === 'month' || selectionMode === 'year' || selectionMode === 'range'
               const isInRange = isRangeMode && isDayInSelectedRange(dayInfo.timestamp)
               const isStart = isRangeMode && isRangeStart(dayInfo.timestamp)
               const isEnd = isRangeMode && isRangeEnd(dayInfo.timestamp)
+              // En modo Rango, resaltar el ancla mientras se espera el 2do clic.
+              const isAnchor = selectionMode === 'range' && rangeAnchor != null &&
+                getDayTimestamp(rangeAnchor.year, rangeAnchor.month, rangeAnchor.day) === dayInfo.timestamp
 
               const classes = [
                 'date-range-day',
                 !dayInfo.isCurrentMonth && 'other-month',
-                (isDaySelected || isInRange) && 'selected',
+                (isDaySelected || isInRange || isAnchor) && 'selected',
                 isDaySelected && 'day-selected',
-                isStart && 'range-start',
-                isEnd && 'range-end',
-                isToday && !isDaySelected && !isInRange && 'today',
+                (isStart || isAnchor) && 'range-start',
+                (isEnd || isAnchor) && 'range-end',
+                isToday && !isDaySelected && !isInRange && !isAnchor && 'today',
                 isInRange && isFirstInRow && 'row-start',
                 isInRange && isLastInRow && 'row-end',
               ].filter(Boolean).join(' ')
@@ -590,6 +653,15 @@ export function DateRangeSelector({
               )
             })}
           </div>
+
+          {/* Ayuda modo Rango: indica el paso actual (elegir inicio / fin) */}
+          {selectionMode === 'range' && (
+            <div className="date-range-hint">
+              {rangeAnchor
+                ? `Inicio: ${rangeAnchor.day}/${rangeAnchor.month + 1} — elegí la fecha final`
+                : 'Elegí la fecha de inicio del rango'}
+            </div>
+          )}
 
           {/* Atajos rápidos */}
           <div className="date-range-shortcuts">

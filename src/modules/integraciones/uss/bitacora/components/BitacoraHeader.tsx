@@ -46,6 +46,9 @@ export function BitacoraHeader({
       type = 'year'
     } else if (/^(Este mes|Mes pasado)$/i.test(dateRange.label) || /^(Enero|Febrero|Marzo|Abril|Mayo|Junio|Julio|Agosto|Septiembre|Octubre|Noviembre|Diciembre)\s+\d{4}$/i.test(dateRange.label)) {
       type = 'month'
+    } else if (/\s[–-]\s/.test(dateRange.label)) {
+      // Rango libre: label tipo "5 jun – 22 jun 2026" (con guion/en-dash).
+      type = 'custom'
     } else {
       type = 'week'
     }
