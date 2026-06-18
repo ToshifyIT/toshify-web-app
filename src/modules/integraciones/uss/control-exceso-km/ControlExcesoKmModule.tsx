@@ -269,6 +269,10 @@ export function ControlExcesoKmModule() {
   }, [marcaciones, conductoresConIncidencia])
 
   // KPIs
+  // Nota: km y monto son TOTALES del rango visible (cada semana se cobra aparte, así
+  // que sumar las semanas es correcto). En cambio "Conductores excediendo" cuenta
+  // CONDUCTORES DISTINTOS — no grupos conductor-semana — para que un mismo conductor
+  // que excede en varias semanas no infle el número al mirar un mes/rango.
   const stats = useMemo(() => {
     const kmExcedidosTotal = resumen.reduce((s, r) => s + r.excedido, 0)
     const pendientes = resumen.filter(r => !r.ya)
@@ -277,8 +281,11 @@ export function ControlExcesoKmModule() {
       const pct = porcentajePorKm(r.excedido)
       return s + Math.round(valor * (pct / 100) * 1.21)
     }, 0)
+    const conductoresDistintos = new Set(
+      resumen.map(r => r.conductorId || r.key.split('|')[1] || r.key),
+    ).size
     return {
-      conductoresExcediendo: resumen.length,
+      conductoresExcediendo: conductoresDistintos,
       kmExcedidosTotal: Math.round(kmExcedidosTotal),
       montoSugerido,
       creadas: resumen.filter(r => r.ya).length,

@@ -199,7 +199,12 @@ export function useExcesoKmData(sedeId?: string | null) {
         cols: string,
         origen: GpsOrigen,
       ): Promise<UssTripRaw[]> => {
-        const out: UssTripRaw[] = []
+        // Acumulamos en un Map por `id`: la paginación con .range() solo es estable
+        // si el ORDER BY es ÚNICO. Como muchos trips comparten (patente, inicio),
+        // sin desempatar por `id` Postgres puede repetir filas entre páginas y los km
+        // se duplicarían (se ve al filtrar un MES: >1000 filas => varias páginas).
+        // El desempate por `id` + el dedup por `id` garantizan contar cada trip 1 vez.
+        const byId = new Map<number, UssTripRaw>()
         for (let offset = 0; ; offset += PAGE) {
           const { data: page, error: e } = await supabase
             .from(tabla)
@@ -208,16 +213,18 @@ export function useExcesoKmData(sedeId?: string | null) {
             .lte('fecha_hora_inicio_gmt3', hastaExt)
             .order('patente', { ascending: true })
             .order('fecha_hora_inicio_gmt3', { ascending: true })
+            .order('id', { ascending: true })
             .range(offset, offset + PAGE - 1)
           if (e) throw e
           const batch = (page || []) as unknown as Omit<UssTripRaw, 'conductor_raw'>[]
           // Geotab no trae conductor_raw: lo normalizamos a null para el resto del pipeline.
           for (const r of batch) {
-            out.push({ ...(r as UssTripRaw), conductor_raw: (r as UssTripRaw).conductor_raw ?? null })
+            const row = r as UssTripRaw
+            byId.set(row.id, { ...row, conductor_raw: row.conductor_raw ?? null })
           }
           if (batch.length < PAGE) break
         }
-        return out.map(r => ({ ...r, __origen: origen } as UssTripRaw & { __origen: GpsOrigen }))
+        return [...byId.values()].map(r => ({ ...r, __origen: origen } as UssTripRaw & { __origen: GpsOrigen }))
       }
 
       const [ussRows, geotabRows] = await Promise.all([
@@ -348,10 +355,20 @@ export function useExcesoKmData(sedeId?: string | null) {
         patenteNorm: string
         patente: string
         gpsOrigen: GpsOrigen
+        semanaKey: string
         trips: TripEnriched[]
       }
       const turnos: Turno[] = []
       let actual: Turno | null = null
+      // Semana ISO (lunes-domingo, ART) de un trip. Es la clave de corte semanal:
+      // un turno NO debe cruzar el corte. Sin esto, al elegir un MES (el rango abarca
+      // varias semanas) los trips consecutivos del mismo conductor+patente se fusionan
+      // en una sola marcación y sus km se suman a TODAS las semanas en una (se veía
+      // como "acumulado": misma semana daba más km en vista mes que en vista semana).
+      const semanaKeyDe = (t: TripEnriched): string => {
+        const fecha = new Date(t.inicioMs).toLocaleDateString('en-CA', { timeZone: TIMEZONE_ARGENTINA })
+        return getISOWeekInfo(fecha).key
+      }
       // Ordenar por (origen, patente, inicio): un turno no debe mezclar USS y GEOTAB,
       // así la tabla puede contabilizar km por origen correctamente.
       const ordenados = [...tripsSemana].sort((a, b) => {
@@ -360,6 +377,7 @@ export function useExcesoKmData(sedeId?: string | null) {
         return a.inicioMs - b.inicioMs
       })
       for (const t of ordenados) {
+        const tSemanaKey = semanaKeyDe(t)
         // GEOTAB sin conductor: en el histórico viejo (pre-NFC) no hay a quién
         // atribuir el turno. En vez de descartarlo, lo agrupamos POR PATENTE bajo un
         // conductor sentinela "— Sin conductor · <patente>" para que el vehículo
@@ -370,9 +388,9 @@ export function useExcesoKmData(sedeId?: string | null) {
           if (t.gpsOrigen !== 'GEOTAB') continue
           cond = `${SIN_CONDUCTOR_PREFIX} · ${t.patente || t.patenteNorm}`
         }
-        if (!actual || actual.gpsOrigen !== t.gpsOrigen || actual.patenteNorm !== t.patenteNorm || actual.conductor !== cond) {
+        if (!actual || actual.gpsOrigen !== t.gpsOrigen || actual.patenteNorm !== t.patenteNorm || actual.conductor !== cond || actual.semanaKey !== tSemanaKey) {
           if (actual) turnos.push(actual)
-          actual = { conductor: cond, patenteNorm: t.patenteNorm, patente: t.patente, gpsOrigen: t.gpsOrigen, trips: [t] }
+          actual = { conductor: cond, patenteNorm: t.patenteNorm, patente: t.patente, gpsOrigen: t.gpsOrigen, semanaKey: tSemanaKey, trips: [t] }
         } else {
           actual.trips.push(t)
         }
