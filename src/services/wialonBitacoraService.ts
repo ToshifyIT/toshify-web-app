@@ -311,9 +311,13 @@ export const wialonBitacoraService = {
       // Geotab no trae modalidad ni horario: resolverlos desde asignaciones.
       //   modalidad -> por patente | horario (turno del conductor) -> por patente + conductor
       //   + fecha del turno (toma la asignacion vigente en esa fecha, aunque hoy este completada).
+      // Las filas SIN conductor (ej. "Sin conductor"/DESC de Geotab) NO llevan modalidad ni turno:
+      // no hay a quien atribuirle el turno, asi que se dejan vacios (igual que en Geotab).
       const esGeotab = origen === 'GEOTAB'
-      const modGeo = esGeotab ? resolverModalidadGeotab(row.patente_normalizada, row.fecha_turno) : undefined
       const nombreCond = normNombre(row.conductor_wialon || '')
+      const modGeo = (esGeotab && nombreCond)
+        ? resolverModalidadGeotab(row.patente_normalizada, row.fecha_turno)
+        : undefined
       const horGeo = esGeotab && nombreCond
         ? resolverHorarioGeotab(row.patente_normalizada, nombreCond, row.fecha_turno)
         : undefined
