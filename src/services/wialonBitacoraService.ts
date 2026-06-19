@@ -247,8 +247,8 @@ export const wialonBitacoraService = {
       buildQuery('geotab_bitacora'),
       supabase
         .from('asignaciones_conductores')
-        .select('horario, estado, conductores(nombres, apellidos), asignaciones!inner(horario, estado, vehiculos!inner(patente))')
-        .in('estado', ['asignado', 'activo', 'activa']),
+        .select('horario, estado, fecha_inicio, fecha_fin, conductores(nombres, apellidos), asignaciones!inner(horario, estado, vehiculos!inner(patente))')
+        .in('estado', ['asignado', 'activo', 'activa', 'completado', 'completada', 'finalizado', 'finalizada', 'cancelado', 'cancelada']),
     ])
 
     if (wialonRes.error) {
@@ -261,28 +261,47 @@ export const wialonBitacoraService = {
 
     // Cruces desde asignaciones_conductores para completar modalidad/turno en filas GEOTAB:
     //   - modalidad del vehiculo (por PATENTE): asignaciones.horario 'todo_dia' -> 'a_cargo', sino 'turno'.
-    //   - turno del conductor (por PATENTE + CONDUCTOR): asignaciones_conductores.horario
-    //     ('diurno' | 'nocturno' | 'todo_dia'). Es un DATO de la asignacion, no se deriva de la hora.
-    const modalidadPorPatente = new Map<string, string>()
-    const horarioPorPatenteConductor = new Map<string, string>()
+    //   - turno del conductor (por PATENTE + CONDUCTOR + FECHA del turno): se cruza contra la
+    //     asignacion que estuvo VIGENTE en la fecha del turno (aunque hoy este completada/cancelada),
+    //     respetando el historial. asignaciones_conductores.horario = 'diurno' | 'nocturno' | 'todo_dia'.
+    // patente -> lista de asignaciones (modalidad del vehiculo) con su vigencia
+    type ModVig = { modalidad: string; ini: number; fin: number }
+    const modsPorPatente = new Map<string, ModVig[]>()
+    // patente|conductor -> lista de asignaciones (turno del conductor) con su vigencia
+    type AsigVig = { horario: string; ini: number; fin: number }
+    const asigsPorPatenteConductor = new Map<string, AsigVig[]>()
     const normNombre = (s: string) => (s || '').toUpperCase().replace(/\s+/g, ' ').trim()
     for (const ac of (asigRes.data || []) as any[]) {
       const pat = ac?.asignaciones?.vehiculos?.patente
       if (!pat) continue
       const norm = pat.replace(/[\s\-.]/g, '').toUpperCase()
-      if (!modalidadPorPatente.has(norm)) {
-        const modAsig = (ac.asignaciones?.horario || '').toLowerCase()
-        modalidadPorPatente.set(norm, modAsig === 'todo_dia' ? 'a_cargo' : 'turno')
-      }
+      const ini = ac.fecha_inicio ? new Date(ac.fecha_inicio).getTime() : 0
+      const fin = ac.fecha_fin ? new Date(ac.fecha_fin).getTime() : Number.POSITIVE_INFINITY
+      // modalidad del vehiculo (por patente + fecha)
+      const modAsig = (ac.asignaciones?.horario || '').toLowerCase()
+      const mods = modsPorPatente.get(norm) || []
+      mods.push({ modalidad: modAsig === 'todo_dia' ? 'a_cargo' : 'turno', ini, fin })
+      modsPorPatente.set(norm, mods)
+      // turno del conductor (por patente + conductor + fecha)
       const c = ac.conductores
       const nombre = c ? normNombre(`${c.nombres || ''} ${c.apellidos || ''}`) : ''
-      if (nombre) {
-        const key = `${norm}|${nombre}`
-        if (!horarioPorPatenteConductor.has(key)) {
-          horarioPorPatenteConductor.set(key, (ac.horario || 'todo_dia').toLowerCase())
-        }
-      }
+      if (!nombre) continue
+      const key = `${norm}|${nombre}`
+      const arr = asigsPorPatenteConductor.get(key) || []
+      arr.push({ horario: (ac.horario || 'todo_dia').toLowerCase(), ini, fin })
+      asigsPorPatenteConductor.set(key, arr)
     }
+    const vigenteEn = <T extends { ini: number; fin: number }>(arr: T[] | undefined, fechaTurno: string): T | undefined => {
+      if (!arr || !arr.length) return undefined
+      const t = new Date(fechaTurno + 'T12:00:00').getTime()
+      return arr.find(a => t >= a.ini && t <= a.fin) || arr[0]
+    }
+    // Modalidad del vehiculo vigente en la fecha del turno.
+    const resolverModalidadGeotab = (patNorm: string, fechaTurno: string): string | undefined =>
+      vigenteEn(modsPorPatente.get(patNorm), fechaTurno)?.modalidad
+    // Turno del conductor vigente en la fecha del turno (aunque la asignacion este completada).
+    const resolverHorarioGeotab = (patNorm: string, nombre: string, fechaTurno: string): string | undefined =>
+      vigenteEn(asigsPorPatenteConductor.get(`${patNorm}|${nombre}`), fechaTurno)?.horario
 
     const mapRow = (row: WialonBitacoraRow, origen: 'USS' | 'GEOTAB'): BitacoraRegistroTransformado => {
       // Map DB columns to display fields
@@ -290,12 +309,13 @@ export const wialonBitacoraService = {
       let turnoIndicador: string | null = null
 
       // Geotab no trae modalidad ni horario: resolverlos desde asignaciones.
-      //   modalidad -> por patente | horario (turno del conductor) -> por patente + conductor.
+      //   modalidad -> por patente | horario (turno del conductor) -> por patente + conductor
+      //   + fecha del turno (toma la asignacion vigente en esa fecha, aunque hoy este completada).
       const esGeotab = origen === 'GEOTAB'
-      const modGeo = esGeotab ? modalidadPorPatente.get(row.patente_normalizada) : undefined
+      const modGeo = esGeotab ? resolverModalidadGeotab(row.patente_normalizada, row.fecha_turno) : undefined
       const nombreCond = normNombre(row.conductor_wialon || '')
       const horGeo = esGeotab && nombreCond
-        ? horarioPorPatenteConductor.get(`${row.patente_normalizada}|${nombreCond}`)
+        ? resolverHorarioGeotab(row.patente_normalizada, nombreCond, row.fecha_turno)
         : undefined
 
       if (row.vehiculo_modalidad) {
