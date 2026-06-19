@@ -1,6 +1,6 @@
  
 // src/modules/incidencias/IncidenciasModule.tsx
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useRef } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../contexts/AuthContext'
@@ -1134,6 +1134,10 @@ export function IncidenciasModule() {
   // Incidencias filtradas según tab activo
   const incidenciasFiltradas = activeTab === 'logistica' ? incidenciasLogisticas : incidenciasCobro
 
+  // Refs para filas visibles en tabla (respetan filtros, búsqueda y filtros Excel)
+  const incidenciasVisiblesRef = useRef<IncidenciaCompleta[]>([])
+  const penalidadesVisiblesRef = useRef<PenalidadCompleta[]>([])
+
   // Custom Global Filter para Incidencias
   // Permite filtrar estrictamente por estado "Pendiente" cuando se busca esa palabra exacta
   const customGlobalFilter = useMemo<FilterFn<IncidenciaCompleta>>(() => {
@@ -1299,30 +1303,6 @@ export function IncidenciasModule() {
           const match = pen?.detalle?.match(/^\[([A-Z0-9]+)\]/)
           if (match) return match[1]
           return '-'
-        }
-        // Para logística, los tipos empiezan con "__"
-        if (tipoId.startsWith('__')) {
-          // Mapear tipos de logística a nombres legibles
-          const tiposLogistica: Record<string, string> = {
-            '__ENTREGA_TARDIA': 'Entrega tardía',
-            '__LLEGADA_TARDE_REVISION': 'Llegada tarde revisión',
-            '__ZONAS_RESTRINGIDAS': 'Zonas restringidas',
-            '__FALTA_LAVADO': 'Falta de lavado',
-            '__FALTA_RESTITUCION_UNIDAD': 'Falta restitución unidad',
-            '__PERDIDA_DANO_SEGURIDAD': 'Pérdida/daño seguridad',
-            '__FALTA_RESTITUCION_GNC': 'Falta restitución GNC',
-            '__FALTA_RESTITUCION_NAFTA': 'Falta restitución nafta',
-            '__MORA_CANON': 'Mora en canon',
-            '__MANIPULACION_GPS': 'Manipulación GPS',
-            '__ABANDONO_VEHICULO': 'Abandono vehículo',
-            '__SIN_LUGAR_GUARDA': 'Sin lugar de guarda',
-            '__IBUTTON': 'iButton',
-            '__MULTA_TRANSITO': 'Multa de tránsito',
-            '__REPARACION_SINIESTRO': 'Reparación siniestro',
-            '__FALTA_REPORTE': 'Falta de reporte',
-            '__OTRO': 'Otro'
-          }
-          return tiposLogistica[tipoId] || tipoId.replace('__', '')
         }
         const tipo = tiposCobroDescuento.find(t => t.id === tipoId)
         return tipo?.nombre || '-'
@@ -2463,11 +2443,6 @@ export function IncidenciasModule() {
     // Es cobro si: estamos en la pestaña cobro O si la incidencia que editamos ya era de tipo cobro
     const esCobro = activeTab === 'cobro' || (modalMode === 'edit' && selectedIncidencia?.tipo === 'cobro')
     if (esCobro) {
-      // Validar que el tipo no sea un pseudo-ID de logistica
-      if (incidenciaForm.tipo_cobro_descuento_id?.startsWith('__')) {
-        Swal.fire('Error', 'Tipo de incidencia no valido para cobro.', 'warning')
-        return
-      }
       if (!incidenciaForm.monto || incidenciaForm.monto <= 0) {
         Swal.fire('Error', 'Por favor ingrese el monto del cobro', 'warning')
         return
@@ -2479,10 +2454,7 @@ export function IncidenciasModule() {
       // Calcular semana basada en la fecha
       const semanaCalculada = getWeekNumber(incidenciaForm.fecha)
       
-      // Para logística, el tipo_cobro_descuento_id viene con prefijo "__" (no es UUID)
-      // En ese caso, guardamos el valor en tipo_incidencia (legacy) y no en la FK
       const tipoCobroId = incidenciaForm.tipo_cobro_descuento_id
-      const esLogisticaTipo = tipoCobroId?.startsWith('__')
       
       // Construir objeto solo con campos que existen en la tabla incidencias
       const dataToSave: Record<string, unknown> = {
@@ -2500,7 +2472,7 @@ export function IncidenciasModule() {
         registrado_por: incidenciaForm.registrado_por || null,
         created_by: user?.id,
         tipo: esCobro ? 'cobro' : 'logistica',
-        tipo_cobro_descuento_id: esCobro && tipoCobroId && !esLogisticaTipo ? tipoCobroId : null,
+        tipo_cobro_descuento_id: esCobro && tipoCobroId ? tipoCobroId : null,
         monto: esCobro ? (incidenciaForm.monto || 0) : null,
         km_exceso: esCobro ? (incidenciaForm.km_exceso || null) : null,
         sede_id: modalMode === 'edit' ? (incidenciaForm.sede_id || sedeActualId || sedeUsuario?.id) : (sedeActualId || sedeUsuario?.id),
@@ -2523,7 +2495,7 @@ export function IncidenciasModule() {
               vehiculo_patente: vehiculo?.patente || null,
               conductor_id: incidenciaForm.conductor_id || null,
               conductor_nombre: conductor ? `${conductor.nombres} ${conductor.apellidos}` : null,
-              tipo_cobro_descuento_id: tipoCobroId && !esLogisticaTipo ? tipoCobroId : null,
+              tipo_cobro_descuento_id: tipoCobroId || null,
               semana: semanaCalculada,
               fecha: incidenciaForm.fecha,
               turno: incidenciaForm.turno || null,
@@ -2553,7 +2525,7 @@ export function IncidenciasModule() {
               incidencia_id: incidenciaCreada.id,
               vehiculo_id: incidenciaForm.vehiculo_id || null,
               conductor_id: incidenciaForm.conductor_id || null,
-              tipo_cobro_descuento_id: tipoCobroId && !esLogisticaTipo ? tipoCobroId : null,
+              tipo_cobro_descuento_id: tipoCobroId || null,
               semana: semanaCalculada,
               fecha: incidenciaForm.fecha,
               turno: incidenciaForm.turno || null,
@@ -3049,12 +3021,13 @@ export function IncidenciasModule() {
   }
 
   function handleExportarIncidencias() {
-    if (incidenciasFiltradas.length === 0) {
+    const filas = incidenciasVisiblesRef.current.length > 0 ? incidenciasVisiblesRef.current : incidenciasFiltradas
+    if (filas.length === 0) {
       Swal.fire('Sin datos', 'No hay incidencias para exportar', 'info')
       return
     }
 
-    const dataExport = incidenciasFiltradas.map(i => ({
+    const dataExport = filas.map((i: IncidenciaCompleta) => ({
       'Fecha': formatDate(i.fecha),
       'Semana': i.semana || '',
       'Patente': i.patente_display || '',
@@ -3087,12 +3060,13 @@ export function IncidenciasModule() {
   }
 
   function handleExportarPenalidades() {
-    if (penalidadesFiltradas.length === 0) {
+    const filas = penalidadesVisiblesRef.current.length > 0 ? penalidadesVisiblesRef.current : penalidadesFiltradas
+    if (filas.length === 0) {
       Swal.fire('Sin datos', 'No hay penalidades para exportar', 'info')
       return
     }
 
-    const dataExport = penalidadesFiltradas.map(p => ({
+    const dataExport = filas.map((p: PenalidadCompleta) => ({
       'Fecha': formatDate(p.fecha),
       'Semana': p.semana || '',
       'Patente': p.patente_display || '',
@@ -3391,6 +3365,7 @@ export function IncidenciasModule() {
             columns={incidenciasColumns}
             globalFilterFn={customGlobalFilter}
             loading={loading}
+            onFilteredDataChange={(rows) => { incidenciasVisiblesRef.current = rows }}
             searchPlaceholder="Buscar por patente, conductor..."
             emptyIcon={<Shield size={48}
           />}
@@ -3632,6 +3607,7 @@ export function IncidenciasModule() {
             columns={incidenciasCobroColumns}
             globalFilterFn={customGlobalFilter}
             loading={loading}
+            onFilteredDataChange={(rows) => { incidenciasVisiblesRef.current = rows }}
             searchPlaceholder="Buscar por patente, conductor..."
             emptyIcon={<DollarSign size={48}
           />}
@@ -3802,6 +3778,7 @@ export function IncidenciasModule() {
             data={penalidadesFiltradas}
             columns={penalidadesColumns}
             loading={loading}
+            onFilteredDataChange={(rows) => { penalidadesVisiblesRef.current = rows }}
             searchPlaceholder="Buscar por patente, conductor..."
             emptyIcon={<Shield size={48}
           />}
@@ -4958,23 +4935,23 @@ function IncidenciaForm({ formData, setFormData, estados, vehiculos, conductores
                 ...tiposSinCategoria.filter(t => t.codigo !== 'CONCEPTO_FACTURACION').map<SearchableSelectOption>(t => ({ value: t.id, label: t.nombre, group: 'Sin categoría' })),
                 ...tiposConcepto.map<SearchableSelectOption>(t => ({ value: t.id, label: t.nombre, group: 'Conceptos de facturación', searchText: `${t.codigo} ${t.nombre}` })),
               ] : [
-                { value: '__ENTREGA_TARDIA', label: 'Entrega tardía del vehículo' },
-                { value: '__LLEGADA_TARDE_REVISION', label: 'Llegada tarde o inasistencia injustificada a revisión técnica' },
-                { value: '__ZONAS_RESTRINGIDAS', label: 'Ingreso a zonas restringidas' },
-                { value: '__FALTA_LAVADO', label: 'Falta de lavado' },
-                { value: '__FALTA_RESTITUCION_UNIDAD', label: 'Falta de restitución de la unidad' },
-                { value: '__PERDIDA_DANO_SEGURIDAD', label: 'Pérdida o daño de elementos de seguridad' },
-                { value: '__FALTA_RESTITUCION_GNC', label: 'Falta restitución de GNC' },
-                { value: '__FALTA_RESTITUCION_NAFTA', label: 'Falta restitución de Nafta' },
-                { value: '__MORA_CANON', label: 'Mora en canon' },
-                { value: '__MANIPULACION_GPS', label: 'Manipulación no autorizada de GPS' },
-                { value: '__ABANDONO_VEHICULO', label: 'Abandono del vehículo' },
-                { value: '__SIN_LUGAR_GUARDA', label: 'No disponer de lugar seguro para la guarda del vehículo' },
-                { value: '__IBUTTON', label: 'I button' },
-                { value: '__MULTA_TRANSITO', label: 'Multa de tránsito' },
-                { value: '__REPARACION_SINIESTRO', label: 'Reparación Siniestro' },
-                { value: '__FALTA_REPORTE', label: 'Falta de reporte (Intercom)' },
-                { value: '__OTRO', label: 'Otro' },
+                { value: '2daf805a-6c7b-4e55-9e33-8827bbba6a3f', label: 'Entrega tardía del vehículo' },
+                { value: '27e631d1-9285-4ae6-99e6-a4cd9dbf6ebf', label: 'Llegada tarde o inasistencia injustificada a revisión técnica' },
+                { value: '5b5516b9-5315-4e2b-933e-9c1dccde4107', label: 'Ingreso a zonas restringidas' },
+                { value: 'a42bcd84-f870-413e-b0f7-a5b5a73f19b1', label: 'Falta de lavado' },
+                { value: 'a4a30524-862d-4c5b-b7e0-00b1199aaa51', label: 'Falta de restitución de la unidad' },
+                { value: '1bc1bce2-60ad-48a0-ae8a-cb6f39ac2221', label: 'Pérdida o daño de elementos de seguridad' },
+                { value: 'a743e141-c8cc-4844-b58b-6e471d15d8cb', label: 'Falta restitución de GNC' },
+                { value: 'bed5c3d9-1573-4329-b80e-79600ddcacc6', label: 'Falta restitución de Nafta' },
+                { value: 'd2297d73-88ca-49a3-b114-561763a22aae', label: 'Mora en canon' },
+                { value: '0b0b6dc0-1924-46a0-aca3-36ea62a6e091', label: 'Manipulación no autorizada de GPS' },
+                { value: '9f344b7f-ec63-4b12-9701-b6f4df9b4a88', label: 'Abandono del vehículo' },
+                { value: '01e86b79-4f82-4d53-a0ec-acbed57eff3d', label: 'No disponer de lugar seguro para la guarda del vehículo' },
+                { value: '8864f1e0-c8e0-4173-a6a6-91defa2bf2b3', label: 'I button' },
+                { value: 'c728aecf-b8d2-4953-813e-0985fcb11f2e', label: 'Multa de tránsito' },
+                { value: 'b08fb44e-d5eb-4777-934b-eec5791f2de5', label: 'Reparación Siniestro' },
+                { value: '74988e65-6418-46f8-a569-9eb827d83673', label: 'Falta de reporte (Intercom)' },
+                { value: '11bdc2ce-c0f9-49f5-b67f-c4d241c368ea', label: 'Otro' },
               ]) as SearchableSelectOption[]}
               placeholder="Seleccionar"
               searchPlaceholder="Buscar tipo..."
