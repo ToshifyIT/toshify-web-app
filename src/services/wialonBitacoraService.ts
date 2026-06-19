@@ -247,8 +247,8 @@ export const wialonBitacoraService = {
       buildQuery('geotab_bitacora'),
       supabase
         .from('asignaciones_conductores')
-        .select('horario, estado, conductores(nombres, apellidos), asignaciones!inner(horario, estado, vehiculos!inner(patente))')
-        .in('estado', ['asignado', 'activo', 'activa']),
+        .select('horario, estado, fecha_inicio, fecha_fin, conductores(nombres, apellidos), asignaciones!inner(horario, estado, vehiculos!inner(patente))')
+        .in('estado', ['asignado', 'activo', 'activa', 'completado', 'completada', 'finalizado', 'finalizada', 'cancelado', 'cancelada']),
     ])
 
     if (wialonRes.error) {
@@ -261,10 +261,13 @@ export const wialonBitacoraService = {
 
     // Cruces desde asignaciones_conductores para completar modalidad/turno en filas GEOTAB:
     //   - modalidad del vehiculo (por PATENTE): asignaciones.horario 'todo_dia' -> 'a_cargo', sino 'turno'.
-    //   - turno del conductor (por PATENTE + CONDUCTOR): asignaciones_conductores.horario
-    //     ('diurno' | 'nocturno' | 'todo_dia'). Es un DATO de la asignacion, no se deriva de la hora.
+    //   - turno del conductor (por PATENTE + CONDUCTOR + FECHA del turno): se cruza contra la
+    //     asignacion que estuvo VIGENTE en la fecha del turno (aunque hoy este completada/cancelada),
+    //     respetando el historial. asignaciones_conductores.horario = 'diurno' | 'nocturno' | 'todo_dia'.
     const modalidadPorPatente = new Map<string, string>()
-    const horarioPorPatenteConductor = new Map<string, string>()
+    // patente|conductor -> lista de asignaciones con su vigencia (para elegir por fecha del turno)
+    type AsigVig = { horario: string; ini: number; fin: number }
+    const asigsPorPatenteConductor = new Map<string, AsigVig[]>()
     const normNombre = (s: string) => (s || '').toUpperCase().replace(/\s+/g, ' ').trim()
     for (const ac of (asigRes.data || []) as any[]) {
       const pat = ac?.asignaciones?.vehiculos?.patente
@@ -276,12 +279,21 @@ export const wialonBitacoraService = {
       }
       const c = ac.conductores
       const nombre = c ? normNombre(`${c.nombres || ''} ${c.apellidos || ''}`) : ''
-      if (nombre) {
-        const key = `${norm}|${nombre}`
-        if (!horarioPorPatenteConductor.has(key)) {
-          horarioPorPatenteConductor.set(key, (ac.horario || 'todo_dia').toLowerCase())
-        }
-      }
+      if (!nombre) continue
+      const key = `${norm}|${nombre}`
+      const ini = ac.fecha_inicio ? new Date(ac.fecha_inicio).getTime() : 0
+      const fin = ac.fecha_fin ? new Date(ac.fecha_fin).getTime() : Number.POSITIVE_INFINITY
+      const arr = asigsPorPatenteConductor.get(key) || []
+      arr.push({ horario: (ac.horario || 'todo_dia').toLowerCase(), ini, fin })
+      asigsPorPatenteConductor.set(key, arr)
+    }
+    // Resuelve el horario del conductor vigente en la fecha del turno (fecha_turno YYYY-MM-DD).
+    const resolverHorarioGeotab = (patNorm: string, nombre: string, fechaTurno: string): string | undefined => {
+      const arr = asigsPorPatenteConductor.get(`${patNorm}|${nombre}`)
+      if (!arr || !arr.length) return undefined
+      const t = new Date(fechaTurno + 'T12:00:00').getTime()
+      const vigente = arr.find(a => t >= a.ini && t <= a.fin)
+      return (vigente || arr[0]).horario  // si ninguna cubre la fecha, cae a la primera
     }
 
     const mapRow = (row: WialonBitacoraRow, origen: 'USS' | 'GEOTAB'): BitacoraRegistroTransformado => {
@@ -290,12 +302,13 @@ export const wialonBitacoraService = {
       let turnoIndicador: string | null = null
 
       // Geotab no trae modalidad ni horario: resolverlos desde asignaciones.
-      //   modalidad -> por patente | horario (turno del conductor) -> por patente + conductor.
+      //   modalidad -> por patente | horario (turno del conductor) -> por patente + conductor
+      //   + fecha del turno (toma la asignacion vigente en esa fecha, aunque hoy este completada).
       const esGeotab = origen === 'GEOTAB'
       const modGeo = esGeotab ? modalidadPorPatente.get(row.patente_normalizada) : undefined
       const nombreCond = normNombre(row.conductor_wialon || '')
       const horGeo = esGeotab && nombreCond
-        ? horarioPorPatenteConductor.get(`${row.patente_normalizada}|${nombreCond}`)
+        ? resolverHorarioGeotab(row.patente_normalizada, nombreCond, row.fecha_turno)
         : undefined
 
       if (row.vehiculo_modalidad) {
