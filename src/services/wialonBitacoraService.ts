@@ -242,13 +242,17 @@ export const wialonBitacoraService = {
     // Ejecutar queries en paralelo: USS (wialon_bitacora) + GEOTAB (geotab_bitacora)
     // + asignaciones (para resolver modalidad/turno por patente en filas GEOTAB, que
     //   no traen vehiculo_modalidad/horario desde el sync de Geotab).
-    const [wialonRes, geotabRes, asigRes] = await Promise.all([
+    const [wialonRes, geotabRes, asigRes, condRes] = await Promise.all([
       buildQuery('wialon_bitacora'),
       buildQuery('geotab_bitacora'),
       supabase
         .from('asignaciones_conductores')
         .select('horario, estado, fecha_inicio, fecha_fin, conductores(nombres, apellidos), asignaciones!inner(horario, estado, vehiculos!inner(patente))')
         .in('estado', ['asignado', 'activo', 'activa', 'completado', 'completada', 'finalizado', 'finalizada', 'cancelado', 'cancelada']),
+      // Catalogo de conductores reales del sistema. Solo para filtrar filas GEOTAB:
+      // un nombre que viene de Geotab (ej. "Karen Torres") que NO existe como conductor
+      // real NO debe aparecer en la bitacora. (USS no se toca.)
+      supabase.from('conductores').select('nombres, apellidos'),
     ])
 
     if (wialonRes.error) {
@@ -264,11 +268,11 @@ export const wialonBitacoraService = {
     //   - turno del conductor (por PATENTE + CONDUCTOR + FECHA del turno): se cruza contra la
     //     asignacion que estuvo VIGENTE en la fecha del turno (aunque hoy este completada/cancelada),
     //     respetando el historial. asignaciones_conductores.horario = 'diurno' | 'nocturno' | 'todo_dia'.
-    // patente -> lista de asignaciones (modalidad del vehiculo) con su vigencia
-    type ModVig = { modalidad: string; ini: number; fin: number }
-    const modsPorPatente = new Map<string, ModVig[]>()
-    // patente|conductor -> lista de asignaciones (turno del conductor) con su vigencia
-    type AsigVig = { horario: string; ini: number; fin: number }
+    // patente|conductor -> lista de asignaciones (modalidad + turno del conductor) con su vigencia.
+    // IMPORTANTE: la modalidad se cruza por patente + CONDUCTOR (no solo patente), porque una
+    // misma patente puede tener conductores con modalidades distintas a la vez (uno "turno",
+    // otro "a_cargo"). Cruzar solo por patente devolvia la modalidad de otro conductor.
+    type AsigVig = { modalidad: string; horario: string; ini: number; fin: number }
     const asigsPorPatenteConductor = new Map<string, AsigVig[]>()
     const normNombre = (s: string) => (s || '').toUpperCase().replace(/\s+/g, ' ').trim()
     for (const ac of (asigRes.data || []) as any[]) {
@@ -277,28 +281,47 @@ export const wialonBitacoraService = {
       const norm = pat.replace(/[\s\-.]/g, '').toUpperCase()
       const ini = ac.fecha_inicio ? new Date(ac.fecha_inicio).getTime() : 0
       const fin = ac.fecha_fin ? new Date(ac.fecha_fin).getTime() : Number.POSITIVE_INFINITY
-      // modalidad del vehiculo (por patente + fecha)
-      const modAsig = (ac.asignaciones?.horario || '').toLowerCase()
-      const mods = modsPorPatente.get(norm) || []
-      mods.push({ modalidad: modAsig === 'todo_dia' ? 'a_cargo' : 'turno', ini, fin })
-      modsPorPatente.set(norm, mods)
-      // turno del conductor (por patente + conductor + fecha)
       const c = ac.conductores
       const nombre = c ? normNombre(`${c.nombres || ''} ${c.apellidos || ''}`) : ''
       if (!nombre) continue
+      // modalidad del vehiculo: asignaciones.horario 'todo_dia' -> 'a_cargo', sino 'turno'
+      const modAsig = (ac.asignaciones?.horario || '').toLowerCase()
       const key = `${norm}|${nombre}`
       const arr = asigsPorPatenteConductor.get(key) || []
-      arr.push({ horario: (ac.horario || 'todo_dia').toLowerCase(), ini, fin })
+      arr.push({
+        modalidad: modAsig === 'todo_dia' ? 'a_cargo' : 'turno',
+        horario: (ac.horario || 'todo_dia').toLowerCase(),
+        ini, fin,
+      })
       asigsPorPatenteConductor.set(key, arr)
     }
+    // Set de nombres de conductores REALES del sistema (para filtrar filas GEOTAB).
+    // Se guardan en ambos ordenes ("NOMBRES APELLIDOS" y "APELLIDOS NOMBRES") porque
+    // Geotab puede traer el nombre en cualquier orden.
+    const conductoresReales = new Set<string>()
+    for (const c of (condRes.data || []) as any[]) {
+      const nom = normNombre(c?.nombres || '')
+      const ape = normNombre(c?.apellidos || '')
+      if (!nom && !ape) continue
+      if (nom && ape) {
+        conductoresReales.add(`${nom} ${ape}`)
+        conductoresReales.add(`${ape} ${nom}`)
+      } else {
+        conductoresReales.add(nom || ape)
+      }
+    }
+    // Un nombre de Geotab es "conductor real" si coincide exacto con el catalogo.
+    const esConductorReal = (nombre: string): boolean => conductoresReales.has(normNombre(nombre))
+
     const vigenteEn = <T extends { ini: number; fin: number }>(arr: T[] | undefined, fechaTurno: string): T | undefined => {
       if (!arr || !arr.length) return undefined
       const t = new Date(fechaTurno + 'T12:00:00').getTime()
       return arr.find(a => t >= a.ini && t <= a.fin) || arr[0]
     }
-    // Modalidad del vehiculo vigente en la fecha del turno.
-    const resolverModalidadGeotab = (patNorm: string, fechaTurno: string): string | undefined =>
-      vigenteEn(modsPorPatente.get(patNorm), fechaTurno)?.modalidad
+    // Modalidad del vehiculo para ESE conductor, vigente en la fecha del turno.
+    // (Por patente + conductor: un mismo vehiculo puede tener un conductor "turno" y otro "a_cargo".)
+    const resolverModalidadGeotab = (patNorm: string, nombre: string, fechaTurno: string): string | undefined =>
+      vigenteEn(asigsPorPatenteConductor.get(`${patNorm}|${nombre}`), fechaTurno)?.modalidad
     // Turno del conductor vigente en la fecha del turno (aunque la asignacion este completada).
     const resolverHorarioGeotab = (patNorm: string, nombre: string, fechaTurno: string): string | undefined =>
       vigenteEn(asigsPorPatenteConductor.get(`${patNorm}|${nombre}`), fechaTurno)?.horario
@@ -316,7 +339,7 @@ export const wialonBitacoraService = {
       const esGeotab = origen === 'GEOTAB'
       const nombreCond = normNombre(row.conductor_wialon || '')
       const modGeo = (esGeotab && nombreCond)
-        ? resolverModalidadGeotab(row.patente_normalizada, row.fecha_turno)
+        ? resolverModalidadGeotab(row.patente_normalizada, nombreCond, row.fecha_turno)
         : undefined
       const horGeo = esGeotab && nombreCond
         ? resolverHorarioGeotab(row.patente_normalizada, nombreCond, row.fecha_turno)
@@ -357,9 +380,14 @@ export const wialonBitacoraService = {
       }
     }
 
-    // Combinar filas de ambas fuentes
+    // Combinar filas de ambas fuentes.
+    // GEOTAB: mostrar SOLO las filas cuyo conductor existe como conductor real del sistema.
+    //   Asi se descartan nombres de Geotab que no son conductores (ej. "Karen Torres") y las
+    //   filas sin conductor (DESC). USS NO se filtra (se muestra tal cual).
     const registrosWialon = ((wialonRes.data || []) as WialonBitacoraRow[]).map(r => mapRow(r, 'USS'))
-    const registrosGeotab = ((geotabRes.data || []) as WialonBitacoraRow[]).map(r => mapRow(r, 'GEOTAB'))
+    const registrosGeotab = ((geotabRes.data || []) as WialonBitacoraRow[])
+      .filter(r => esConductorReal(r.conductor_wialon || ''))
+      .map(r => mapRow(r, 'GEOTAB'))
     const registros: BitacoraRegistroTransformado[] = [...registrosWialon, ...registrosGeotab]
 
     // Orden por defecto: fecha+hora de INICIO real (periodo_inicio) descendente.
