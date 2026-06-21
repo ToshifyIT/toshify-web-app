@@ -199,7 +199,7 @@ const getPedidoSla = (pedido: PedidoAgrupado) => {
 
   if (diffDias < 0) return { label: 'Fecha vencida', className: 'sla-danger' }
   if (diffDias === 0) return { label: 'Vence hoy', className: 'sla-warning' }
-  if (diffDias <= 2) return { label: `${diffDias} dias`, className: 'sla-info' }
+  if (diffDias <= 2) return { label: `${diffDias} días`, className: 'sla-info' }
   return { label: 'En plazo', className: 'sla-ok' }
 }
 
@@ -2825,6 +2825,60 @@ export function PedidosUnificadoModule() {
           white-space: nowrap;
         }
 
+        .pedidos-section-actions {
+          display: flex;
+          flex-direction: column;
+          align-items: flex-end;
+          gap: 8px;
+          flex-shrink: 0;
+        }
+
+        .pedidos-followup-search {
+          width: 300px;
+          min-height: 34px;
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          padding: 0 8px 0 10px;
+          border: 1px solid var(--border-primary);
+          border-radius: 8px;
+          background: var(--input-bg);
+          color: var(--text-secondary);
+        }
+
+        .pedidos-followup-search input {
+          width: 100%;
+          min-width: 0;
+          border: none;
+          outline: none;
+          background: transparent;
+          color: var(--text-primary);
+          font-size: 12px;
+        }
+
+        .pedidos-followup-search input::placeholder {
+          color: var(--text-tertiary);
+        }
+
+        .pedidos-followup-clear {
+          width: 22px;
+          height: 22px;
+          border: none;
+          border-radius: 6px;
+          background: var(--bg-secondary);
+          color: var(--text-secondary);
+          cursor: pointer;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          flex-shrink: 0;
+        }
+
+        .pedidos-followup-clear:hover {
+          color: var(--color-primary);
+          background: var(--badge-red-bg);
+        }
+
         button.pedidos-section-pill {
           border: none;
           cursor: pointer;
@@ -3000,55 +3054,264 @@ export function PedidosUnificadoModule() {
           border: 1px solid var(--border-primary);
           border-left: 4px solid var(--color-warning);
           border-radius: 8px;
-          padding: 14px;
+          overflow: hidden;
         }
 
         .excepcion-card.critica {
           border-left-color: var(--color-danger);
         }
 
-        .excepcion-header {
-          display: flex;
-          justify-content: space-between;
-          gap: 12px;
+        .excepcion-top {
+          display: grid;
+          grid-template-columns: auto minmax(0, 1fr) auto;
+          gap: 14px;
           align-items: flex-start;
-          margin-bottom: 10px;
+          padding: 16px;
+          border-bottom: 1px solid var(--border-primary);
+        }
+
+        .excepcion-status-icon {
+          width: 38px;
+          height: 38px;
+          border-radius: 8px;
+          background: var(--badge-yellow-bg);
+          color: var(--badge-yellow-text);
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          flex-shrink: 0;
+        }
+
+        .excepcion-status-icon.critica {
+          background: var(--badge-red-bg);
+          color: var(--badge-red-text);
+        }
+
+        .excepcion-eyebrow {
+          color: var(--text-tertiary);
+          font-size: 10px;
+          font-weight: 700;
+          text-transform: uppercase;
+          margin-bottom: 4px;
+        }
+
+        .excepcion-title-line {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          flex-wrap: wrap;
         }
 
         .excepcion-title {
           color: var(--text-primary);
-          font-size: 14px;
+          font-size: 15px;
           font-weight: 700;
         }
 
         .excepcion-meta {
           color: var(--text-secondary);
           font-size: 12px;
-          margin-top: 3px;
+          line-height: 1.45;
+          margin-top: 5px;
         }
 
-        .excepcion-list {
-          display: grid;
-          gap: 8px;
-          margin-top: 10px;
+        .excepcion-reasons {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 6px;
+          margin-top: 8px;
         }
 
-        .excepcion-row {
-          display: grid;
-          grid-template-columns: minmax(0, 1fr) auto;
-          gap: 10px;
+        .excepcion-reason {
+          display: inline-flex;
           align-items: center;
-          padding: 8px 10px;
+          padding: 3px 8px;
+          border-radius: 999px;
           background: var(--bg-secondary);
+          color: var(--text-secondary);
+          font-size: 11px;
+          font-weight: 700;
+        }
+
+        .excepcion-impact {
+          min-width: 120px;
+          text-align: right;
+        }
+
+        .excepcion-impact span,
+        .excepcion-impact small {
+          display: block;
+          color: var(--text-secondary);
+          font-size: 11px;
+        }
+
+        .excepcion-impact strong {
+          display: block;
+          color: var(--text-primary);
+          font-size: 22px;
+          line-height: 1.1;
+          margin: 2px 0;
+        }
+
+        .excepcion-guidance {
+          display: grid;
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+          background: var(--bg-secondary);
+          border-bottom: 1px solid var(--border-primary);
+        }
+
+        .excepcion-guidance-block {
+          padding: 12px 16px;
+        }
+
+        .excepcion-guidance-block + .excepcion-guidance-block {
+          border-left: 1px solid var(--border-primary);
+        }
+
+        .excepcion-guidance-label {
+          display: block;
+          color: var(--text-tertiary);
+          font-size: 10px;
+          font-weight: 700;
+          text-transform: uppercase;
+          margin-bottom: 4px;
+        }
+
+        .excepcion-guidance-title {
+          display: block;
+          color: var(--text-primary);
+          font-size: 13px;
+          font-weight: 700;
+          line-height: 1.3;
+        }
+
+        .excepcion-guidance-text {
+          margin: 4px 0 0;
+          color: var(--text-secondary);
+          font-size: 12px;
+          line-height: 1.45;
+        }
+
+        .excepcion-details {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 8px;
+          padding: 12px 16px;
+          border-bottom: 1px solid var(--border-primary);
+        }
+
+        .excepcion-detail {
+          display: inline-flex;
+          align-items: center;
+          gap: 6px;
+          padding: 6px 9px;
+          border: 1px solid var(--border-primary);
           border-radius: 6px;
           color: var(--text-secondary);
           font-size: 12px;
         }
 
+        .excepcion-detail strong {
+          color: var(--text-primary);
+        }
+
+        .excepcion-products {
+          padding: 12px 16px 14px;
+        }
+
+        .excepcion-products-header {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 12px;
+          margin-bottom: 8px;
+          color: var(--text-primary);
+          font-size: 12px;
+          font-weight: 700;
+        }
+
+        .excepcion-products-header span {
+          color: var(--text-secondary);
+          font-weight: 600;
+        }
+
+        .excepcion-list {
+          display: grid;
+          border-top: 1px solid var(--border-primary);
+        }
+
+        .excepcion-row {
+          display: grid;
+          grid-template-columns: minmax(0, 1fr) 78px 78px 78px;
+          gap: 12px;
+          align-items: center;
+          padding: 10px 0;
+          border-bottom: 1px solid var(--border-primary);
+        }
+
+        .excepcion-row:last-child {
+          border-bottom: none;
+        }
+
+        .excepcion-product-code {
+          display: block;
+          color: var(--color-primary);
+          font-size: 12px;
+          font-weight: 700;
+        }
+
+        .excepcion-product-name {
+          display: block;
+          color: var(--text-secondary);
+          font-size: 12px;
+          line-height: 1.35;
+          margin-top: 3px;
+        }
+
+        .excepcion-quantity {
+          text-align: right;
+        }
+
+        .excepcion-quantity span {
+          display: block;
+          color: var(--text-tertiary);
+          font-size: 10px;
+          font-weight: 700;
+          text-transform: uppercase;
+        }
+
+        .excepcion-quantity strong {
+          display: block;
+          color: var(--text-primary);
+          font-size: 13px;
+          margin-top: 3px;
+        }
+
+        .excepcion-quantity.pending strong {
+          color: var(--color-warning);
+        }
+
+        .excepcion-more {
+          padding: 9px 0 0;
+          color: var(--text-secondary);
+          font-size: 12px;
+          font-weight: 600;
+        }
+
         .excepcion-footer {
           display: flex;
-          justify-content: flex-end;
-          margin-top: 12px;
+          align-items: center;
+          justify-content: space-between;
+          gap: 12px;
+          padding: 12px 16px;
+          background: var(--bg-secondary);
+          border-top: 1px solid var(--border-primary);
+        }
+
+        .excepcion-footer-note {
+          color: var(--text-secondary);
+          font-size: 12px;
+          line-height: 1.4;
         }
 
         .excepcion-action {
@@ -3066,7 +3329,9 @@ export function PedidosUnificadoModule() {
         }
 
         .excepcion-action:hover {
-          background: var(--bg-secondary);
+          border-color: var(--color-primary);
+          color: var(--color-primary);
+          background: var(--card-bg);
         }
 
         .item-exception-badge {
@@ -3086,6 +3351,15 @@ export function PedidosUnificadoModule() {
 
           .pedidos-section-intro {
             flex-direction: column;
+          }
+
+          .pedidos-section-actions {
+            width: 100%;
+            align-items: stretch;
+          }
+
+          .pedidos-followup-search {
+            width: 100%;
           }
 
           .pedidos-tabs {
@@ -3108,6 +3382,50 @@ export function PedidosUnificadoModule() {
             justify-content: center;
             text-align: center;
             min-height: 42px;
+          }
+
+          .excepcion-guidance,
+          .excepcion-row {
+            grid-template-columns: 1fr;
+          }
+
+          .excepcion-top {
+            grid-template-columns: auto minmax(0, 1fr);
+          }
+
+          .excepcion-impact {
+            grid-column: 1 / -1;
+            display: flex;
+            align-items: baseline;
+            gap: 6px;
+            padding-top: 10px;
+            border-top: 1px solid var(--border-primary);
+          }
+
+          .excepcion-impact span,
+          .excepcion-impact small,
+          .excepcion-impact strong {
+            display: inline;
+            margin: 0;
+          }
+
+          .excepcion-quantity {
+            text-align: left;
+          }
+
+          .excepcion-guidance-block + .excepcion-guidance-block {
+            border-left: none;
+            border-top: 1px solid var(--border-primary);
+          }
+
+          .excepcion-footer {
+            align-items: stretch;
+            flex-direction: column;
+          }
+
+          .excepcion-action {
+            justify-content: center;
+            width: 100%;
           }
 
           .movimiento-body {
@@ -3666,44 +3984,38 @@ export function PedidosUnificadoModule() {
                   Primero registra la respuesta del proveedor. Cuando confirme entrega y llegue la mercadería, usa “Registrar recepción” para ingresarla al stock.
                 </div>
               </div>
-              <button
-                type="button"
-                className="pedidos-section-pill"
-                onClick={() => setShowSeguimientoData(true)}
-                aria-label={`Ver data de ${totalPedidosProveedor} pedidos en seguimiento`}
-                title="Ver data de pedidos en seguimiento"
-              >
-                <Package size={13} />
-                {totalPedidosProveedor} en seguimiento
-              </button>
-            </div>
-
-            <div style={{ position: 'relative', maxWidth: '400px', marginBottom: '16px' }}>
-              <Search
-                size={18}
-                style={{
-                  position: 'absolute',
-                  left: '12px',
-                  top: '50%',
-                  transform: 'translateY(-50%)',
-                  color: 'var(--text-tertiary)'
-                }}
-              />
-              <input
-                type="text"
-                placeholder="Buscar pedido, proveedor o producto..."
-                value={searchPedidos}
-                onChange={(e) => setSearchPedidos(e.target.value)}
-                style={{
-                  width: '100%',
-                  padding: '10px 10px 10px 40px',
-                  border: '1px solid var(--border-primary)',
-                  borderRadius: '8px',
-                  fontSize: '14px',
-                  background: 'var(--input-bg)',
-                  color: 'var(--text-primary)'
-                }}
-              />
+              <div className="pedidos-section-actions">
+                <button
+                  type="button"
+                  className="pedidos-section-pill"
+                  onClick={() => setShowSeguimientoData(true)}
+                  aria-label={`Ver data de ${totalPedidosProveedor} pedidos en seguimiento`}
+                  title="Ver data de pedidos en seguimiento"
+                >
+                  <Package size={13} />
+                  {totalPedidosProveedor} en seguimiento
+                </button>
+                <div className="pedidos-followup-search">
+                  <Search size={16} aria-hidden="true" />
+                  <input
+                    type="search"
+                    aria-label="Filtrar pedidos en seguimiento"
+                    placeholder="Filtrar pedidos en seguimiento"
+                    value={searchPedidos}
+                    onChange={(e) => setSearchPedidos(e.target.value)}
+                  />
+                  {searchPedidos.trim() && (
+                    <button
+                      type="button"
+                      className="pedidos-followup-clear"
+                      onClick={() => setSearchPedidos('')}
+                      aria-label="Limpiar filtro de seguimiento"
+                    >
+                      <X size={13} />
+                    </button>
+                  )}
+                </div>
+              </div>
             </div>
 
             {loadingPedidos ? (
@@ -3979,12 +4291,12 @@ export function PedidosUnificadoModule() {
               <div>
                 <div className="pedidos-section-title">Alertas operativas</div>
                 <div className="pedidos-section-text">
-                  Son pedidos que necesitan revisión: fecha vencida o faltante, vencen hoy, o tienen recepción parcial con saldo pendiente.
+                  Pedidos que requieren acción antes de cerrar la recepción. Cada alerta muestra el motivo, el saldo pendiente y el siguiente paso.
                 </div>
               </div>
               <span className="pedidos-section-pill">
                 <AlertTriangle size={13} />
-                {totalExcepciones} alertas
+                {totalExcepciones} por revisar
               </span>
             </div>
 
@@ -3998,60 +4310,151 @@ export function PedidosUnificadoModule() {
               <div className="excepciones-grid">
                 {pedidosConExcepcion.map((pedido) => {
                   const sla = getPedidoSla(pedido)
+                  const sinFecha = !pedido.fecha_estimada_llegada
+                  const fechaVencida = sla.className === 'sla-danger'
+                  const venceHoy = sla.label === 'Vence hoy'
                   const itemsParciales = pedido.items.filter(item =>
                     item.cantidad_recibida > 0 && item.cantidad_pendiente > 0
                   )
                   const itemsPendientes = pedido.items.filter(item => item.cantidad_pendiente > 0)
+                  const unidadesPendientes = itemsPendientes.reduce((acc, item) =>
+                    acc + Number(item.cantidad_pendiente || 0), 0
+                  )
+                  const unidadesRecibidas = pedido.items.reduce((acc, item) =>
+                    acc + Number(item.cantidad_recibida || 0), 0
+                  )
+                  const motivos = [
+                    itemsParciales.length > 0 ? 'Recepción parcial' : null,
+                  ].filter(Boolean) as string[]
+
+                  let revisionTitulo = 'Revisar seguimiento del proveedor'
+                  let revisionTexto = 'El pedido sigue abierto y necesita confirmación antes de cerrar la recepción.'
+                  let accionTitulo = 'Resolver en seguimiento'
+                  let accionTexto = 'Abre el pedido para actualizar respuesta, fecha o recepción según corresponda.'
+
+                  if (sinFecha) {
+                    revisionTitulo = 'Falta fecha comprometida'
+                    revisionTexto = 'No hay una fecha de entrega registrada, por eso no se puede medir si el proveedor está a tiempo.'
+                    accionTitulo = 'Completar respuesta del proveedor'
+                    accionTexto = 'Registra la fecha comprometida o deja claro que el proveedor aún no confirmó entrega.'
+                  } else if (fechaVencida) {
+                    revisionTitulo = 'La fecha comprometida ya pasó'
+                    revisionTexto = 'Todavía queda saldo por recibir. Hay que confirmar si llegó mercadería o reclamar al proveedor.'
+                    accionTitulo = 'Reclamar o registrar recepción'
+                    accionTexto = 'Si llegó el producto, ingresa la recepción. Si no llegó, actualiza el seguimiento con el proveedor.'
+                  } else if (venceHoy) {
+                    revisionTitulo = 'La entrega vence hoy'
+                    revisionTexto = 'Conviene confirmar si el proveedor entrega hoy para evitar que el pedido quede vencido.'
+                    accionTitulo = 'Confirmar entrega de hoy'
+                    accionTexto = 'Valida con el proveedor y registra recepción o nueva fecha comprometida.'
+                  }
+
+                  if (itemsParciales.length > 0 && !fechaVencida && !sinFecha && !venceHoy) {
+                    revisionTitulo = 'Recepción parcial pendiente'
+                    revisionTexto = 'Ya ingresó parte del pedido, pero todavía quedan unidades por recibir.'
+                    accionTitulo = 'Completar recepción pendiente'
+                    accionTexto = 'Registra lo que llegó o deja documentado el saldo que seguirá pendiente.'
+                  }
 
                   return (
                     <div
                       key={pedido.pedido_id}
                       className={`excepcion-card ${sla.className === 'sla-danger' ? 'critica' : ''}`}
                     >
-                      <div className="excepcion-header">
-                        <div>
-                          <div className="excepcion-title">{pedido.numero_pedido}</div>
-                          <div className="excepcion-meta">
-                            {pedido.proveedor_nombre} • {itemsPendientes.length} items pendientes
-                          </div>
+                      <div className="excepcion-top">
+                        <div className={`excepcion-status-icon ${sla.className === 'sla-danger' ? 'critica' : ''}`}>
+                          <AlertTriangle size={18} />
                         </div>
-                        <span className={`sla-badge ${sla.className}`}>{sla.label}</span>
+                        <div>
+                          <div className="excepcion-eyebrow">Pedido a proveedor</div>
+                          <div className="excepcion-title-line">
+                            <div className="excepcion-title">{pedido.numero_pedido}</div>
+                            <span className={`sla-badge ${sla.className}`}>{sla.label}</span>
+                          </div>
+                          <div className="excepcion-meta">
+                            {pedido.proveedor_nombre} · {itemsPendientes.length} productos con saldo · {unidadesPendientes} unidades por recibir
+                          </div>
+                          {motivos.length > 0 && (
+                            <div className="excepcion-reasons">
+                              {motivos.map((motivo) => (
+                                <span key={motivo} className="excepcion-reason">{motivo}</span>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                        <div className="excepcion-impact">
+                          <span>Saldo pendiente</span>
+                          <strong>{unidadesPendientes}</strong>
+                          <small>unidades</small>
+                        </div>
                       </div>
 
-                      <div className="excepcion-list">
-                        {!pedido.fecha_estimada_llegada && (
-                          <div className="excepcion-row">
-                            <span>Fecha estimada pendiente</span>
-                            <strong>Completar seguimiento</strong>
-                          </div>
-                        )}
-                        {sla.className === 'sla-danger' && (
-                          <div className="excepcion-row">
-                            <span>Pedido vencido</span>
-                            <strong>Reclamar proveedor</strong>
-                          </div>
-                        )}
-                        {itemsParciales.length > 0 && (
-                          <div className="excepcion-row">
-                            <span>Recepción parcial</span>
-                            <strong>{itemsParciales.length} items</strong>
-                          </div>
-                        )}
-                        {itemsPendientes.slice(0, 3).map((item) => (
-                          <div key={item.item_id} className="excepcion-row">
-                            <span>{item.producto_codigo} - {item.producto_nombre}</span>
-                            <strong>{item.cantidad_pendiente} pendientes</strong>
-                          </div>
-                        ))}
-                        {itemsPendientes.length > 3 && (
-                          <div className="excepcion-row">
-                            <span>Items adicionales con saldo</span>
-                            <strong>+{itemsPendientes.length - 3}</strong>
+                      <div className="excepcion-guidance">
+                        <div className="excepcion-guidance-block">
+                          <span className="excepcion-guidance-label">Qué revisar</span>
+                          <strong className="excepcion-guidance-title">{revisionTitulo}</strong>
+                          <p className="excepcion-guidance-text">{revisionTexto}</p>
+                        </div>
+                        <div className="excepcion-guidance-block">
+                          <span className="excepcion-guidance-label">Siguiente paso</span>
+                          <strong className="excepcion-guidance-title">{accionTitulo}</strong>
+                          <p className="excepcion-guidance-text">{accionTexto}</p>
+                        </div>
+                      </div>
+
+                      <div className="excepcion-details">
+                        <span className="excepcion-detail">
+                          <Calendar size={13} />
+                          Pedido <strong>{formatFechaCorta(pedido.fecha_pedido)}</strong>
+                        </span>
+                        <span className="excepcion-detail">
+                          <Clock size={13} />
+                          Comprometida <strong>{formatFechaCorta(pedido.fecha_estimada_llegada)}</strong>
+                        </span>
+                        <span className="excepcion-detail">
+                          <Package size={13} />
+                          Recibido <strong>{unidadesRecibidas}</strong>
+                        </span>
+                      </div>
+
+                      <div className="excepcion-products">
+                        <div className="excepcion-products-header">
+                          <strong>Productos pendientes</strong>
+                          <span>{itemsPendientes.length} con saldo</span>
+                        </div>
+                        <div className="excepcion-list">
+                          {itemsPendientes.slice(0, 4).map((item) => (
+                            <div key={item.item_id} className="excepcion-row">
+                              <div>
+                                <span className="excepcion-product-code">{item.producto_codigo}</span>
+                                <span className="excepcion-product-name">{item.producto_nombre}</span>
+                              </div>
+                              <div className="excepcion-quantity">
+                                <span>Pedido</span>
+                                <strong>{item.cantidad_pedida}</strong>
+                              </div>
+                              <div className="excepcion-quantity">
+                                <span>Recibido</span>
+                                <strong>{item.cantidad_recibida}</strong>
+                              </div>
+                              <div className="excepcion-quantity pending">
+                                <span>Falta</span>
+                                <strong>{item.cantidad_pendiente}</strong>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                        {itemsPendientes.length > 4 && (
+                          <div className="excepcion-more">
+                            +{itemsPendientes.length - 4} productos pendientes adicionales
                           </div>
                         )}
                       </div>
 
                       <div className="excepcion-footer">
+                        <div className="excepcion-footer-note">
+                          La alerta se cierra cuando el pedido queda recibido completo o sin saldo pendiente por revisar.
+                        </div>
                         <button
                           type="button"
                           className="excepcion-action"
@@ -4065,7 +4468,7 @@ export function PedidosUnificadoModule() {
                           }}
                         >
                           <Eye size={14} />
-                          Ver y resolver
+                          Resolver en seguimiento
                         </button>
                       </div>
                     </div>
