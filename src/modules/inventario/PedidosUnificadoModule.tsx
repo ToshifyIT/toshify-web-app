@@ -41,6 +41,7 @@ import {
   Trash2,
   ClipboardList,
   CheckCircle2,
+  HelpCircle,
 } from 'lucide-react'
 
 // ============= TIPOS =============
@@ -176,6 +177,15 @@ interface PedidoDraftItem {
 type TabActiva = 'nuevo' | 'entradas' | 'pedidos' | 'pendientes' | 'historico' | 'excepciones'
 type FiltroTipo = 'todos' | 'entrada' | 'salida' | 'asignacion' | 'devolucion'
 
+const parseFechaOperativa = (value: string) => {
+  const datePart = value.split('T')[0]
+  const [year, month, day] = datePart.split('-').map(Number)
+  if (year && month && day) {
+    return new Date(year, month - 1, day)
+  }
+  return new Date(value)
+}
+
 const getPedidoSla = (pedido: PedidoAgrupado) => {
   if (!pedido.fecha_estimada_llegada) {
     return { label: 'Sin fecha', className: 'sla-warning' }
@@ -183,7 +193,7 @@ const getPedidoSla = (pedido: PedidoAgrupado) => {
 
   const hoy = new Date()
   hoy.setHours(0, 0, 0, 0)
-  const fecha = new Date(pedido.fecha_estimada_llegada)
+  const fecha = parseFechaOperativa(pedido.fecha_estimada_llegada)
   fecha.setHours(0, 0, 0, 0)
   const diffDias = Math.ceil((fecha.getTime() - hoy.getTime()) / 86400000)
 
@@ -210,6 +220,30 @@ const escapeHtml = (value: string | number | null | undefined) =>
     .replace(/'/g, '&#39;')
 
 const todayInputValue = () => new Date().toISOString().slice(0, 10)
+
+const formatFechaCorta = (value?: string | null) => {
+  if (!value) return '—'
+  const fecha = parseFechaOperativa(value)
+  return Number.isNaN(fecha.getTime()) ? value : fecha.toLocaleDateString('es-CL')
+}
+
+const getPedidoRecepcionResumen = (pedido: PedidoAgrupado) => pedido.items.reduce(
+  (acc, item) => {
+    const pedidoCantidad = Number(item.cantidad_pedida || 0)
+    const confirmado = item.estado_confirmacion === 'rechazado'
+      ? 0
+      : Number(item.cantidad_confirmada ?? item.cantidad_pedida ?? 0)
+    const recibido = Number(item.cantidad_recibida || 0)
+
+    return {
+      pedido: acc.pedido + pedidoCantidad,
+      confirmado: acc.confirmado + confirmado,
+      recibido: acc.recibido + recibido,
+      pendiente: acc.pendiente + Math.max(confirmado - recibido, 0),
+    }
+  },
+  { pedido: 0, confirmado: 0, recibido: 0, pendiente: 0 }
+)
 
 export function PedidosUnificadoModule() {
   const navigate = useNavigate()
@@ -272,6 +306,9 @@ export function PedidosUnificadoModule() {
   const [proveedorFilter, setProveedorFilter] = useState<string[]>([])
   const [tipoProductoFilter] = useState<string[]>([])
   const filterRef = useRef<HTMLDivElement>(null)
+  const [showFlowHelp, setShowFlowHelp] = useState(false)
+  const [showProcesadosHelp, setShowProcesadosHelp] = useState(false)
+  const [showSeguimientoData, setShowSeguimientoData] = useState(false)
 
   const userRole = profile?.roles?.name || ''
   const canApprove = userRole === 'encargado' || userRole === 'admin' || userRole === 'supervisor'
@@ -455,17 +492,17 @@ export function PedidosUnificadoModule() {
     if (completo) idx = 4
     else if (recibidoAlgo || confirmado) idx = 3  // confirmado o recibiendo → "En recepción"
     else if (rechazado) idx = 2                    // rechazado → se queda en "Respondido" (fin)
-    else if (resp === 'enviado') idx = 2           // enviado → paso actual "Respondido" (a registrar)
-    else idx = 1                                   // sin enviar → recién "Enviado"
+    else if (resp === 'enviado') idx = 2           // enviado → paso actual "Respuesta proveedor"
+    else idx = 0                                   // sin enviar → queda en "Creado"
 
-    const ultimoLabel = rechazado ? 'Rechazado' : 'Recibido'
+    const ultimoLabel = rechazado ? 'Rechazado' : 'Finalizado'
     const ultimoSub = rechazado ? 'fin' : (completo ? 'completo' : '—')
 
     const pasos = [
-      { label: 'Creado', sub: pedido.fecha_pedido ? new Date(pedido.fecha_pedido).toLocaleDateString('es-CL') : '' },
-      { label: 'Enviado', sub: 'correo' },
-      { label: 'Respondido', sub: resp === 'enviado' ? 'registrar' : (rechazado ? 'rechazó' : (confirmado || recibidoAlgo ? 'ok' : '—')) },
-      { label: 'En recepción', sub: completo ? 'ok' : (recibidoAlgo ? 'parcial' : (confirmado ? 'por recibir' : '—')) },
+      { label: 'Creado', sub: pedido.fecha_pedido ? formatFechaCorta(pedido.fecha_pedido) : '' },
+      { label: 'Enviado', sub: resp === 'sin_enviar' ? 'pendiente' : 'correo/manual' },
+      { label: 'Respuesta proveedor', sub: resp === 'enviado' ? 'pendiente' : (rechazado ? 'rechazó' : (confirmado || recibidoAlgo ? 'ok' : '—')) },
+      { label: 'Recepción', sub: completo ? 'ok' : (recibidoAlgo ? 'parcial' : (confirmado ? 'por ingresar' : '—')) },
       { label: ultimoLabel, sub: ultimoSub }
     ]
     return pasos.map((p, i) => ({
@@ -615,7 +652,7 @@ export function PedidosUnificadoModule() {
       case 'confirmado_ajustes': return { texto: 'Listo para recibir (c/ajustes)', clase: 'warn' }
       case 'rechazado': return { texto: 'Rechazado por proveedor', clase: 'danger' }
       case 'enviado': return { texto: 'Enviado · esperando respuesta', clase: 'info' }
-      default: return { texto: 'Sin enviar', clase: 'muted' }
+      default: return { texto: 'Creado · sin respuesta', clase: 'muted' }
     }
   }
 
@@ -740,11 +777,6 @@ export function PedidosUnificadoModule() {
     if (!proveedorPedidoId) return 'Debes seleccionar un proveedor'
     if (pedidoItemsValidos.length === 0) return 'Debes agregar al menos un producto con cantidad valida'
 
-    const proveedor = getPedidoProveedorSeleccionado()
-    if (!proveedor?.email?.trim()) {
-      return 'El proveedor no tiene email configurado. Carga el email en Proveedores antes de crear el pedido.'
-    }
-
     const productoIds = pedidoItemsValidos.map(item => item.producto_id)
     if (new Set(productoIds).size !== productoIds.length) {
       return 'Hay productos repetidos en el pedido. Unifica las cantidades antes de enviar.'
@@ -850,12 +882,13 @@ export function PedidosUnificadoModule() {
     }
 
     const proveedor = getPedidoProveedorSeleccionado()
+    const tieneEmail = Boolean(proveedor?.email?.trim())
     const result = await Swal.fire({
-      title: 'Crear y enviar pedido',
+      title: tieneEmail ? 'Crear pedido y enviar correo' : 'Crear pedido sin correo',
       html: buildPedidoPreviewHtml(),
       icon: 'question',
       showCancelButton: true,
-      confirmButtonText: 'Crear y enviar',
+      confirmButtonText: tieneEmail ? 'Crear y enviar' : 'Crear pedido',
       cancelButtonText: 'Cancelar',
       confirmButtonColor: '#FF0033',
       width: 760
@@ -885,14 +918,22 @@ export function PedidosUnificadoModule() {
 
       if (error) throw error
 
-      try {
-        await enviarCorreoPedidoProveedor()
-        showSuccess('Pedido enviado', `Pedido ${numeroPedidoDraft} creado y enviado a ${proveedor?.email}`)
-      } catch (emailError: any) {
+      if (tieneEmail) {
+        try {
+          await enviarCorreoPedidoProveedor()
+          showSuccess('Pedido enviado', `Pedido ${numeroPedidoDraft} creado y enviado a ${proveedor?.email}`)
+        } catch (emailError: any) {
+          await Swal.fire({
+            icon: 'warning',
+            title: 'Pedido creado, correo pendiente',
+            text: emailError.message || 'El pedido quedó creado pero no se pudo enviar el correo.'
+          })
+        }
+      } else {
         await Swal.fire({
           icon: 'warning',
-          title: 'Pedido creado, correo pendiente',
-          text: emailError.message || 'El pedido quedó creado pero no se pudo enviar el correo.'
+          title: 'Pedido creado sin correo',
+          text: 'El pedido quedó registrado. Contacta al proveedor por fuera y luego registra su respuesta en el seguimiento.'
         })
       }
 
@@ -908,12 +949,12 @@ export function PedidosUnificadoModule() {
 
   const confirmarEntradaSimple = async (entrada: EntradaTransito) => {
     const { value: cantidad } = await Swal.fire({
-      title: 'Confirmar Recepcion',
+      title: 'Confirmar recepción de entrada directa',
       html: `
         <div style="text-align: left; margin-bottom: 16px;">
           <p><strong>Producto:</strong> ${entrada.producto_codigo} - ${entrada.producto_nombre}</p>
           <p><strong>Proveedor:</strong> ${entrada.proveedor_nombre}</p>
-          <p><strong>Cantidad en transito:</strong> ${entrada.cantidad} unidades</p>
+          <p><strong>Cantidad en tránsito:</strong> ${entrada.cantidad} unidades</p>
         </div>
         <label style="display: block; margin-bottom: 8px; font-weight: 600;">
           Cantidad recibida:
@@ -923,7 +964,7 @@ export function PedidosUnificadoModule() {
       inputValue: String(entrada.cantidad),
       inputAttributes: { autocomplete: 'off', inputmode: 'numeric', pattern: '[0-9]*' },
       showCancelButton: true,
-      confirmButtonText: 'Confirmar Recepcion',
+      confirmButtonText: 'Confirmar y pasar a stock',
       confirmButtonColor: '#059669',
       cancelButtonText: 'Cancelar',
       didOpen: () => {
@@ -956,7 +997,7 @@ export function PedidosUnificadoModule() {
 
       if (error) throw error
       const result = data as { success: boolean; error?: string; mensaje?: string }
-      if (!result.success) throw new Error(result.error || 'Error procesando recepcion')
+      if (!result.success) throw new Error(result.error || 'Error procesando recepción')
 
       showSuccess('Recepción confirmada', result.mensaje || `Se recibieron ${cantidad} unidades`)
       loadPedidosData()
@@ -1034,7 +1075,7 @@ export function PedidosUnificadoModule() {
 
       setHistorico(historicoFormateado)
     } catch {
-      Swal.fire('Error', 'No se pudo cargar el histórico de aprobaciones', 'error')
+      Swal.fire('Error', 'No se pudieron cargar las aprobaciones procesadas', 'error')
     } finally {
       setLoadingHistorico(false)
     }
@@ -1328,11 +1369,34 @@ export function PedidosUnificadoModule() {
     return sla.className === 'sla-danger' || sla.className === 'sla-warning' || tieneParcial
   }), [pedidos])
 
-  const totalRecepcionesPendientes = entradasSimples.length + pedidos.length
+  const totalPedidosProveedor = pedidos.length
+  const totalEntradasDirectas = entradasSimples.length
+  const totalRecepcionesPendientes = totalEntradasDirectas + totalPedidosProveedor
   const totalExcepciones = pedidosConExcepcion.length
+  const totalAprobacionesPendientes = movimientos.length
+  const totalHistoricoResumen = canApprove && (activeTab === 'historico' || historico.length > 0)
+    ? String(historico.length)
+    : '—'
   const sedeOperativaLabel = verTodas ? 'Todas las sedes' : (sedeActual?.nombre || 'Sede actual')
   const proveedorPedidoSeleccionado = getPedidoProveedorSeleccionado()
   const proveedorPedidoTieneEmail = Boolean(proveedorPedidoSeleccionado?.email?.trim())
+
+  const verPedidoEnListado = (pedidoId: string) => {
+    setShowSeguimientoData(false)
+    setActiveTab('pedidos')
+    setSearchPedidos('')
+    setExpandedPedidos(prev => {
+      const next = new Set(prev)
+      next.add(pedidoId)
+      return next
+    })
+    window.setTimeout(() => {
+      document.getElementById(`pedido-card-${pedidoId}`)?.scrollIntoView({
+        behavior: 'smooth',
+        block: 'start',
+      })
+    }, 80)
+  }
 
   // Columnas para Entradas Simples
   const entradasColumns = useMemo<ColumnDef<EntradaTransito, any>[]>(() => [
@@ -1463,7 +1527,7 @@ export function PedidosUnificadoModule() {
     },
     {
       id: 'acciones',
-      header: 'Acciones',
+      header: 'Recepción',
       cell: ({ row }) => (
         <div style={{ textAlign: 'center' }}>
           <button
@@ -1485,7 +1549,7 @@ export function PedidosUnificadoModule() {
             }}
           >
             <CheckCircle size={15} />
-            {processingItem === row.original.id ? 'Procesando...' : 'Recepcionar'}
+            {processingItem === row.original.id ? 'Procesando...' : 'Confirmar recepción'}
           </button>
         </div>
       )
@@ -1897,6 +1961,15 @@ export function PedidosUnificadoModule() {
           background: var(--bg-secondary);
           color: var(--text-tertiary);
           border: 1.5px solid var(--border-primary);
+        }
+
+        .pedido-check.optional {
+          color: var(--text-secondary);
+        }
+
+        .pedido-check.optional .pedido-check-mark {
+          background: var(--badge-yellow-bg);
+          color: var(--badge-yellow-text);
         }
 
         .pedido-info-box {
@@ -2517,6 +2590,376 @@ export function PedidosUnificadoModule() {
           margin-top: 5px;
         }
 
+        .pedidos-section-title-wrap {
+          display: inline-flex;
+          align-items: center;
+          gap: 7px;
+          margin-bottom: 3px;
+        }
+
+        .pedidos-flow-help-btn {
+          width: 26px;
+          height: 26px;
+          border: 1px solid var(--border-primary);
+          border-radius: 50%;
+          background: var(--card-bg);
+          color: var(--text-secondary);
+          cursor: pointer;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          flex-shrink: 0;
+        }
+
+        .pedidos-flow-help-btn:hover {
+          color: var(--color-primary);
+          background: var(--bg-secondary);
+        }
+
+        .pedidos-flow-modal-overlay {
+          position: fixed;
+          inset: 0;
+          z-index: 2100;
+          background: rgba(17, 24, 39, 0.48);
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          padding: 20px;
+        }
+
+        .pedidos-flow-modal {
+          width: min(720px, 100%);
+          max-height: 88vh;
+          overflow-y: auto;
+          background: var(--card-bg);
+          border: 1px solid var(--border-primary);
+          border-radius: 10px;
+          box-shadow: 0 18px 45px rgba(15, 23, 42, 0.22);
+          padding: 0;
+        }
+
+        .pedidos-flow-modal-header {
+          display: flex;
+          align-items: flex-start;
+          justify-content: space-between;
+          gap: 14px;
+          padding: 16px 20px 13px;
+          border-bottom: 1px solid var(--border-primary);
+        }
+
+        .pedidos-flow-modal-title {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          color: var(--text-primary);
+          font-size: 16px;
+          font-weight: 700;
+        }
+
+        .pedidos-flow-modal-title-icon {
+          width: 30px;
+          height: 30px;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          border-radius: 8px;
+          background: var(--bg-secondary);
+          color: var(--color-primary);
+        }
+
+        .pedidos-flow-modal-subtitle {
+          margin-top: 4px;
+          color: var(--text-secondary);
+          font-size: 12px;
+          line-height: 1.45;
+        }
+
+        .pedidos-flow-close {
+          border: none;
+          background: transparent;
+          color: var(--text-secondary);
+          cursor: pointer;
+          width: 30px;
+          height: 30px;
+          border-radius: 8px;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+        }
+
+        .pedidos-flow-close:hover {
+          color: var(--text-primary);
+          background: var(--bg-secondary);
+        }
+
+        .pedidos-flow-modal-steps {
+          display: grid;
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+          gap: 10px;
+          padding: 16px 20px 12px;
+        }
+
+        .pedidos-flow-modal-step {
+          display: flex;
+          flex-direction: column;
+          gap: 10px;
+          position: relative;
+          min-height: 128px;
+          padding: 12px;
+          border: 1px solid var(--border-primary);
+          border-radius: 8px;
+          background: var(--bg-secondary);
+        }
+
+        .pedidos-flow-modal-icon {
+          width: 28px;
+          height: 28px;
+          border-radius: 7px;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          background: var(--card-bg);
+          color: var(--color-primary);
+          border: 1px solid var(--border-primary);
+          flex-shrink: 0;
+        }
+
+        .pedidos-flow-modal-step-head {
+          display: flex;
+          align-items: center;
+          gap: 10px;
+        }
+
+        .pedidos-flow-modal-eyebrow {
+          color: var(--text-tertiary);
+          font-size: 10px;
+          font-weight: 700;
+          letter-spacing: 0;
+          text-transform: uppercase;
+          margin-bottom: 2px;
+        }
+
+        .pedidos-flow-modal-step strong {
+          display: block;
+          color: var(--text-primary);
+          font-size: 13px;
+          line-height: 1.25;
+        }
+
+        .pedidos-flow-modal-copy {
+          margin: 2px 0 0;
+          color: var(--text-secondary);
+          font-size: 12px;
+          line-height: 1.45;
+        }
+
+        .pedidos-flow-modal-definitions {
+          display: grid;
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+          gap: 10px;
+          margin: 0 20px 18px;
+          padding-top: 12px;
+          border-top: 1px solid var(--border-primary);
+        }
+
+        .pedidos-flow-modal-definition {
+          background: var(--bg-secondary);
+          border: 1px solid var(--border-primary);
+          border-radius: 8px;
+          padding: 10px 12px;
+          color: var(--text-secondary);
+          font-size: 12px;
+          line-height: 1.45;
+        }
+
+        .pedidos-flow-modal-definition strong {
+          color: var(--text-primary);
+        }
+
+        @media (max-width: 640px) {
+          .pedidos-flow-modal-steps,
+          .pedidos-flow-modal-definitions {
+            grid-template-columns: 1fr;
+          }
+
+          .pedidos-flow-modal-step {
+            min-height: auto;
+          }
+        }
+
+        .pedidos-section-intro {
+          display: flex;
+          align-items: flex-start;
+          justify-content: space-between;
+          gap: 16px;
+          border: 1px solid var(--border-primary);
+          border-radius: 8px;
+          background: var(--card-bg);
+          padding: 12px 14px;
+          margin-bottom: 14px;
+        }
+
+        .pedidos-section-title {
+          color: var(--text-primary);
+          font-size: 14px;
+          font-weight: 700;
+          margin-bottom: 3px;
+        }
+
+        .pedidos-section-text {
+          color: var(--text-secondary);
+          font-size: 12px;
+          line-height: 1.45;
+        }
+
+        .pedidos-section-pill {
+          display: inline-flex;
+          align-items: center;
+          gap: 6px;
+          padding: 5px 10px;
+          border-radius: 999px;
+          background: var(--bg-secondary);
+          color: var(--text-secondary);
+          font-size: 11px;
+          font-weight: 700;
+          white-space: nowrap;
+        }
+
+        button.pedidos-section-pill {
+          border: none;
+          cursor: pointer;
+          transition: background 0.15s ease, color 0.15s ease;
+        }
+
+        button.pedidos-section-pill:hover {
+          background: var(--badge-red-bg);
+          color: var(--color-primary);
+        }
+
+        button.pedidos-section-pill:focus-visible {
+          outline: 2px solid var(--color-primary);
+          outline-offset: 2px;
+        }
+
+        .pedidos-data-modal {
+          width: min(820px, 100%);
+        }
+
+        .pedidos-data-list {
+          display: grid;
+          gap: 10px;
+          padding: 16px 20px 20px;
+        }
+
+        .pedidos-data-row {
+          display: grid;
+          grid-template-columns: minmax(170px, 1fr) minmax(170px, 0.9fr) minmax(240px, 1.2fr) auto;
+          gap: 14px;
+          align-items: center;
+          border: 1px solid var(--border-primary);
+          border-radius: 8px;
+          background: var(--bg-secondary);
+          padding: 12px;
+        }
+
+        .pedidos-data-main strong {
+          display: block;
+          color: var(--text-primary);
+          font-size: 13px;
+          line-height: 1.25;
+        }
+
+        .pedidos-data-main span,
+        .pedidos-data-meta span {
+          display: block;
+          color: var(--text-secondary);
+          font-size: 12px;
+          line-height: 1.45;
+          margin-top: 3px;
+        }
+
+        .pedidos-data-meta .sla-badge,
+        .pedidos-data-meta .pedido-resp-badge {
+          display: inline-flex;
+          width: fit-content;
+          margin: 7px 6px 0 0;
+        }
+
+        .pedidos-data-meta strong {
+          display: block;
+          color: var(--text-primary);
+          font-size: 12px;
+          line-height: 1.35;
+        }
+
+        .pedidos-data-metrics {
+          display: grid;
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+          gap: 6px;
+        }
+
+        .pedidos-data-metric {
+          min-width: 0;
+          border: 1px solid var(--border-primary);
+          border-radius: 6px;
+          background: var(--card-bg);
+          padding: 7px;
+        }
+
+        .pedidos-data-metric span {
+          display: block;
+          color: var(--text-tertiary);
+          font-size: 9px;
+          line-height: 1.2;
+          font-weight: 700;
+          text-transform: uppercase;
+        }
+
+        .pedidos-data-metric strong {
+          display: block;
+          color: var(--text-primary);
+          font-size: 14px;
+          margin-top: 3px;
+        }
+
+        .pedidos-data-action {
+          border: 1px solid var(--border-primary);
+          border-radius: 8px;
+          background: var(--card-bg);
+          color: var(--text-primary);
+          cursor: pointer;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          gap: 6px;
+          padding: 8px 10px;
+          font-size: 12px;
+          font-weight: 700;
+          white-space: nowrap;
+        }
+
+        .pedidos-data-action:hover {
+          border-color: var(--color-primary);
+          color: var(--color-primary);
+        }
+
+        .pedidos-data-empty {
+          padding: 24px 20px;
+          color: var(--text-secondary);
+          font-size: 13px;
+          text-align: center;
+        }
+
+        @media (max-width: 860px) {
+          .pedidos-data-row {
+            grid-template-columns: 1fr;
+          }
+
+          .pedidos-data-action {
+            width: 100%;
+          }
+        }
+
         .sla-badge {
           display: inline-flex;
           align-items: center;
@@ -2641,6 +3084,10 @@ export function PedidosUnificadoModule() {
             grid-template-columns: repeat(2, minmax(0, 1fr));
           }
 
+          .pedidos-section-intro {
+            flex-direction: column;
+          }
+
           .pedidos-tabs {
             gap: 8px;
             flex-wrap: wrap;
@@ -2763,24 +3210,26 @@ export function PedidosUnificadoModule() {
             <div className="pedidos-summary-note"><MapPin size={12} style={{ verticalAlign: 'middle' }} /> contexto operativo</div>
           </div>
           <div className="pedidos-summary-card">
-            <div className="pedidos-summary-label">Recepciones</div>
+            <div className="pedidos-summary-label">Por recibir</div>
             <div className="pedidos-summary-value">{totalRecepcionesPendientes}</div>
-            <div className="pedidos-summary-note">entradas y pedidos en transito</div>
+            <div className="pedidos-summary-note">
+              {totalPedidosProveedor} pedidos · {totalEntradasDirectas} entradas directas
+            </div>
           </div>
           <div className="pedidos-summary-card">
-            <div className="pedidos-summary-label">Aprobaciones</div>
-            <div className="pedidos-summary-value">{movimientos.length}</div>
-            <div className="pedidos-summary-note">salidas, asignaciones y devoluciones</div>
+            <div className="pedidos-summary-label">Por aprobar</div>
+            <div className="pedidos-summary-value">{totalAprobacionesPendientes}</div>
+            <div className="pedidos-summary-note">movimientos internos pendientes</div>
           </div>
           <div className="pedidos-summary-card">
-            <div className="pedidos-summary-label">Excepciones</div>
+            <div className="pedidos-summary-label">Alertas</div>
             <div className="pedidos-summary-value">{totalExcepciones}</div>
-            <div className="pedidos-summary-note">SLA o recepcion parcial</div>
+            <div className="pedidos-summary-note">vencidos, sin fecha o parciales</div>
           </div>
           <div className="pedidos-summary-card">
-            <div className="pedidos-summary-label">Historico</div>
-            <div className="pedidos-summary-value">{historico.length}</div>
-            <div className="pedidos-summary-note">procesados cargados</div>
+            <div className="pedidos-summary-label">Procesados</div>
+            <div className="pedidos-summary-value">{totalHistoricoResumen}</div>
+            <div className="pedidos-summary-note">aprobados/rechazados al abrir</div>
           </div>
         </div>
 
@@ -2792,7 +3241,7 @@ export function PedidosUnificadoModule() {
               onClick={() => setActiveTab('nuevo')}
             >
               <Mail size={16} />
-              Nuevo Pedido
+              1. Nuevo pedido
             </button>
           )}
           {canViewTab('inventario-pedidos:pedidos') && (
@@ -2801,7 +3250,7 @@ export function PedidosUnificadoModule() {
               onClick={() => setActiveTab('pedidos')}
             >
               <Package size={16} />
-              Pedidos a proveedor
+              2. Seguimiento proveedor
               {pedidos.length > 0 && (
                 <span className="pedidos-tab-badge">{pedidos.length}</span>
               )}
@@ -2813,7 +3262,7 @@ export function PedidosUnificadoModule() {
               onClick={() => setActiveTab('entradas')}
             >
               <ArrowDownCircle size={16} />
-              Entradas Simples
+              Entradas directas
               {entradasSimples.length > 0 && (
                 <span className="pedidos-tab-badge">{entradasSimples.length}</span>
               )}
@@ -2827,7 +3276,7 @@ export function PedidosUnificadoModule() {
                 onClick={() => setActiveTab('pendientes')}
               >
                 <Clock size={16} />
-                Aprobaciones
+                Aprobaciones internas
                 {movimientos.length > 0 && (
                   <span className="pedidos-tab-badge">{movimientos.length}</span>
                 )}
@@ -2840,7 +3289,7 @@ export function PedidosUnificadoModule() {
               onClick={() => setActiveTab('historico')}
             >
               <History size={16} />
-              Historico
+              Procesados
             </button>
           )}
           {canViewTab('inventario-pedidos:pedidos') && (
@@ -2849,7 +3298,7 @@ export function PedidosUnificadoModule() {
               onClick={() => setActiveTab('excepciones')}
             >
               <AlertTriangle size={16} />
-              Excepciones
+              Alertas
               {totalExcepciones > 0 && (
                 <span className="pedidos-tab-badge">{totalExcepciones}</span>
               )}
@@ -2869,7 +3318,7 @@ export function PedidosUnificadoModule() {
               {!canCreatePedido && (
                 <div className="no-permission" style={{ padding: '20px 0' }}>
                   <Clock size={32} />
-                  <h3>Accion no disponible</h3>
+                  <h3>Acción no disponible</h3>
                   <p>No tienes permisos para crear pedidos de inventario.</p>
                 </div>
               )}
@@ -3079,11 +3528,11 @@ export function PedidosUnificadoModule() {
                       type="button"
                       className="btn-primary"
                       onClick={crearPedidoProveedor}
-                      disabled={creatingPedido || loadingCatalogoPedido || !proveedorPedidoTieneEmail}
-                      title={!proveedorPedidoTieneEmail ? 'El proveedor debe tener email configurado' : 'Crear y enviar pedido'}
+                      disabled={creatingPedido || loadingCatalogoPedido}
+                      title={proveedorPedidoTieneEmail ? 'Crear pedido y enviar correo' : 'Crear pedido sin envío automático'}
                     >
                       <Send size={15} />
-                      {creatingPedido ? 'Procesando...' : 'Crear y enviar'}
+                      {creatingPedido ? 'Procesando...' : proveedorPedidoTieneEmail ? 'Crear y enviar' : 'Crear sin correo'}
                     </button>
                   </div>
                 </>
@@ -3133,25 +3582,25 @@ export function PedidosUnificadoModule() {
                 </h3>
                 {(() => {
                   const checks = [
-                    { ok: Boolean(proveedorPedidoId), label: 'Proveedor seleccionado' },
-                    { ok: proveedorPedidoTieneEmail, label: 'Proveedor con email configurado' },
-                    { ok: pedidoItemsValidos.length > 0, label: 'Al menos 1 item con cantidad > 0' },
-                    { ok: Boolean(numeroPedidoDraft.trim()), label: 'Número de pedido cargado' }
+                    { ok: Boolean(proveedorPedidoId), label: 'Proveedor seleccionado', required: true },
+                    { ok: pedidoItemsValidos.length > 0, label: 'Al menos 1 item con cantidad > 0', required: true },
+                    { ok: Boolean(numeroPedidoDraft.trim()), label: 'Número de pedido cargado', required: true },
+                    { ok: proveedorPedidoTieneEmail, label: 'Email para envío automático', required: false }
                   ]
-                  const faltantes = checks.filter(c => !c.ok).length
+                  const faltantes = checks.filter(c => c.required && !c.ok).length
                   return (
                     <>
                       <div className="pedido-checklist">
                         {checks.map((check, i) => (
-                          <div key={i} className={`pedido-check ${check.ok ? 'done' : 'todo'}`}>
-                            <span className="pedido-check-mark">{check.ok ? '✓' : '!'}</span>
+                          <div key={i} className={`pedido-check ${check.ok ? 'done' : check.required ? 'todo' : 'optional'}`}>
+                            <span className="pedido-check-mark">{check.ok ? '✓' : check.required ? '!' : 'i'}</span>
                             {check.label}
                           </div>
                         ))}
                       </div>
                       <span className={`pedido-status-pill ${faltantes === 0 ? '' : 'warning'}`} style={{ marginTop: '14px' }}>
                         {faltantes === 0
-                          ? <><CheckCircle2 size={13} /> Listo para crear y enviar</>
+                          ? <><CheckCircle2 size={13} /> {proveedorPedidoTieneEmail ? 'Listo para crear y enviar' : 'Listo para crear sin correo'}</>
                           : <><AlertTriangle size={13} /> Falta{faltantes > 1 ? 'n' : ''} {faltantes} requisito{faltantes > 1 ? 's' : ''}</>}
                       </span>
                     </>
@@ -3160,7 +3609,7 @@ export function PedidosUnificadoModule() {
               </div>
 
               <p className="pedido-info-box">
-                Al crear el pedido se registra en inventario como <strong>pedido en tránsito</strong>. El correo al proveedor se envía desde el servidor; el envío es obligatorio para pedidos a proveedor.
+                Al crear el pedido queda en <strong>seguimiento de proveedor</strong>. Si el proveedor tiene email, el sistema envía el correo; si no, el pedido queda creado para contacto manual y registro posterior de respuesta.
               </p>
             </aside>
           </div>
@@ -3168,23 +3617,67 @@ export function PedidosUnificadoModule() {
 
         {/* ==================== TAB: ENTRADAS SIMPLES ==================== */}
         {activeTab === 'entradas' && (
-          <DataTable
-            data={entradasFiltered}
-            columns={entradasColumns}
-            loading={loadingPedidos}
-            searchPlaceholder="Buscar por producto o proveedor..."
-            emptyIcon={<ArrowDownCircle size={48}
-          />}
-            emptyTitle="No hay entradas pendientes de recepcion"
-            emptyDescription="Las entradas aprobadas pendientes de recepcionar apareceran aqui"
-pageSize={100}
-            pageSizeOptions={[10, 20, 50, 100]}
-          />
+          <>
+            <div className="pedidos-section-intro">
+              <div>
+                <div className="pedidos-section-title">Entradas directas pendientes de recepción</div>
+                <div className="pedidos-section-text">
+                  Usar cuando el ingreso no nació de un pedido enviado al proveedor por correo. Se registra desde Movimientos como entrada directa y queda pendiente hasta confirmar la recepción.
+                </div>
+              </div>
+              <span className="pedidos-section-pill">
+                <ArrowDownCircle size={13} />
+                {totalEntradasDirectas} por confirmar
+              </span>
+            </div>
+
+            <DataTable
+              data={entradasFiltered}
+              columns={entradasColumns}
+              loading={loadingPedidos}
+              searchPlaceholder="Buscar por producto o proveedor..."
+              emptyIcon={<ArrowDownCircle size={48} />}
+              emptyTitle="No hay entradas directas pendientes"
+              emptyDescription="Las entradas directas aprobadas y pendientes de recepción aparecerán aquí"
+              pageSize={100}
+              pageSizeOptions={[10, 20, 50, 100]}
+            />
+          </>
         )}
 
         {/* ==================== TAB: PEDIDOS POR LOTE ==================== */}
         {activeTab === 'pedidos' && (
           <>
+            <div className="pedidos-section-intro">
+              <div>
+                <div className="pedidos-section-title-wrap">
+                  <div className="pedidos-section-title">Seguimiento de pedidos a proveedor</div>
+                  <button
+                    type="button"
+                    className="pedidos-flow-help-btn"
+                    onClick={() => setShowFlowHelp(true)}
+                    aria-label="Ver flujo de seguimiento proveedor"
+                    title="Ver flujo de seguimiento proveedor"
+                  >
+                    <HelpCircle size={15} />
+                  </button>
+                </div>
+                <div className="pedidos-section-text">
+                  Primero registra la respuesta del proveedor. Cuando confirme entrega y llegue la mercadería, usa “Registrar recepción” para ingresarla al stock.
+                </div>
+              </div>
+              <button
+                type="button"
+                className="pedidos-section-pill"
+                onClick={() => setShowSeguimientoData(true)}
+                aria-label={`Ver data de ${totalPedidosProveedor} pedidos en seguimiento`}
+                title="Ver data de pedidos en seguimiento"
+              >
+                <Package size={13} />
+                {totalPedidosProveedor} en seguimiento
+              </button>
+            </div>
+
             <div style={{ position: 'relative', maxWidth: '400px', marginBottom: '16px' }}>
               <Search
                 size={18}
@@ -3220,8 +3713,8 @@ pageSize={100}
             ) : pedidosFiltrados.length === 0 ? (
               <div className="empty-state">
                 <Truck size={48} />
-                <h3>No hay pedidos en transito</h3>
-                <p>Los pedidos con productos pendientes de recepcion apareceran aqui</p>
+                <h3>No hay pedidos en seguimiento</h3>
+                <p>Los pedidos con productos pendientes de respuesta o recepción aparecerán aquí</p>
               </div>
             ) : (
               <div style={{ display: 'grid', gap: '16px' }}>
@@ -3230,6 +3723,7 @@ pageSize={100}
                   return (
                     <div
                       key={pedido.pedido_id}
+                      id={`pedido-card-${pedido.pedido_id}`}
                       style={{
                         background: 'var(--card-bg)',
                         borderRadius: '12px',
@@ -3275,11 +3769,11 @@ pageSize={100}
                           <div style={{ textAlign: 'right' }}>
                             <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px', color: 'var(--text-secondary)' }}>
                               <Calendar size={14} />
-                              {new Date(pedido.fecha_pedido).toLocaleDateString('es-CL')}
+                              {formatFechaCorta(pedido.fecha_pedido)}
                             </div>
                             {pedido.fecha_estimada_llegada && (
                               <div style={{ fontSize: '11px', color: 'var(--text-tertiary)', marginTop: '2px' }}>
-                                Est: {new Date(pedido.fecha_estimada_llegada).toLocaleDateString('es-CL')}
+                                Est: {formatFechaCorta(pedido.fecha_estimada_llegada)}
                               </div>
                             )}
                           </div>
@@ -3333,13 +3827,13 @@ pageSize={100}
                                     onClick={() => navigate(`/logistica/inventario/movimientos?tipo=entrada&pedido=${pedido.pedido_id}`)}
                                   >
                                     <ArrowDownCircle size={14} />
-                                    {esLote ? 'Generar entrada por lote' : 'Generar entrada'}
+                                    {esLote ? 'Registrar recepción por lote' : 'Registrar recepción'}
                                   </button>
                                 )}
                                 {canCreatePedido && pedido.estado_respuesta !== 'rechazado' && (
                                   <button type="button" className="pedido-detalle-btn" onClick={() => abrirRespuestaPedido(pedido)}>
                                     <Mail size={14} />
-                                    {pedido.estado_respuesta === 'enviado' || !pedido.estado_respuesta ? 'Registrar respuesta' : 'Editar respuesta'}
+                                    {pedido.estado_respuesta === 'enviado' || !pedido.estado_respuesta ? 'Registrar respuesta proveedor' : 'Editar respuesta proveedor'}
                                   </button>
                                 )}
                                 <button type="button" className="pedido-detalle-btn" onClick={() => toggleTimeline(pedido.pedido_id)}>
@@ -3385,16 +3879,16 @@ pageSize={100}
                                   Pedido
                                 </th>
                                 <th style={{ padding: '10px', textAlign: 'center', fontSize: '11px', fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase' }}>
-                                  Confirmada
+                                  Confirmado proveedor
                                 </th>
                                 <th style={{ padding: '10px', textAlign: 'center', fontSize: '11px', fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase' }}>
-                                  Pendiente
+                                  Por recibir
                                 </th>
                                 <th style={{ padding: '10px', textAlign: 'center', fontSize: '11px', fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase' }}>
                                   Recibido
                                 </th>
                                 <th style={{ padding: '10px', textAlign: 'center', fontSize: '11px', fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase' }}>
-                                  Accion
+                                  Estado
                                 </th>
                               </tr>
                             </thead>
@@ -3481,11 +3975,24 @@ pageSize={100}
         {/* ==================== TAB: EXCEPCIONES ==================== */}
         {activeTab === 'excepciones' && (
           <>
+            <div className="pedidos-section-intro">
+              <div>
+                <div className="pedidos-section-title">Alertas operativas</div>
+                <div className="pedidos-section-text">
+                  Son pedidos que necesitan revisión: fecha vencida o faltante, vencen hoy, o tienen recepción parcial con saldo pendiente.
+                </div>
+              </div>
+              <span className="pedidos-section-pill">
+                <AlertTriangle size={13} />
+                {totalExcepciones} alertas
+              </span>
+            </div>
+
             {pedidosConExcepcion.length === 0 ? (
               <div className="empty-state">
                 <CheckCircle size={48} />
-                <h3>Sin excepciones operativas</h3>
-                <p>No hay pedidos con fecha vencida, sin fecha o con recepcion parcial pendiente.</p>
+                <h3>Sin alertas operativas</h3>
+                <p>No hay pedidos con fecha vencida, sin fecha o con recepción parcial pendiente.</p>
               </div>
             ) : (
               <div className="excepciones-grid">
@@ -3526,7 +4033,7 @@ pageSize={100}
                         )}
                         {itemsParciales.length > 0 && (
                           <div className="excepcion-row">
-                            <span>Recepcion parcial</span>
+                            <span>Recepción parcial</span>
                             <strong>{itemsParciales.length} items</strong>
                           </div>
                         )}
@@ -3558,7 +4065,7 @@ pageSize={100}
                           }}
                         >
                           <Eye size={14} />
-                          Ver pedido
+                          Ver y resolver
                         </button>
                       </div>
                     </div>
@@ -3572,6 +4079,19 @@ pageSize={100}
         {/* ==================== TAB: APROBACIONES INTERNAS ==================== */}
         {activeTab === 'pendientes' && (
           <>
+            <div className="pedidos-section-intro">
+              <div>
+                <div className="pedidos-section-title">Aprobaciones internas</div>
+                <div className="pedidos-section-text">
+                  Salidas, usos de herramienta y devoluciones no actualizan stock hasta que un encargado las aprueba o rechaza.
+                </div>
+              </div>
+              <span className="pedidos-section-pill">
+                <Clock size={13} />
+                {totalAprobacionesPendientes} pendientes
+              </span>
+            </div>
+
             {!canApprove ? (
               <div className="no-permission">
                 <Clock size={48} />
@@ -3705,14 +4225,39 @@ pageSize={100}
           </>
         )}
 
-        {/* ==================== TAB: HISTORICO ==================== */}
+        {/* ==================== TAB: APROBACIONES PROCESADAS ==================== */}
         {activeTab === 'historico' && (
           <>
+            <div className="pedidos-section-intro">
+              <div>
+                <div className="pedidos-section-title-wrap">
+                  <div className="pedidos-section-title">Aprobaciones procesadas</div>
+                  <button
+                    type="button"
+                    className="pedidos-flow-help-btn"
+                    onClick={() => setShowProcesadosHelp(true)}
+                    aria-label="Ver explicación de aprobaciones procesadas"
+                    title="Qué se muestra acá"
+                  >
+                    <HelpCircle size={15} />
+                  </button>
+                </div>
+                <div className="pedidos-section-text">
+                  Movimientos internos que un encargado ya cerró: aprobados o rechazados.
+                  No es el seguimiento del pedido al proveedor.
+                </div>
+              </div>
+              <span className="pedidos-section-pill">
+                <History size={13} />
+                Últimos 50
+              </span>
+            </div>
+
             {!canApprove ? (
               <div className="no-permission">
                 <History size={48} />
                 <h3>Acceso Restringido</h3>
-                <p>Solo los usuarios con rol de Encargado o Admin pueden ver el histórico.</p>
+                <p>Solo los usuarios con rol de Encargado o Admin pueden ver aprobaciones procesadas.</p>
               </div>
             ) : (
               <>
@@ -3730,8 +4275,8 @@ pageSize={100}
                 ) : historico.length === 0 ? (
                   <div className="empty-state">
                     <History size={48} />
-                    <h3>No hay histórico de aprobaciones</h3>
-                    <p>Aún no se han procesado movimientos</p>
+                    <h3>No hay aprobaciones procesadas</h3>
+                    <p>Cuando un encargado apruebe o rechace un movimiento, aparecerá aquí.</p>
                   </div>
                 ) : (
                   <div className="historico-grid">
@@ -3790,6 +4335,268 @@ pageSize={100}
         )}
       </div>
 
+      {/* ==================== MODAL: AYUDA SEGUIMIENTO PROVEEDOR ==================== */}
+      {showFlowHelp && (
+        <div className="pedidos-flow-modal-overlay" onClick={() => setShowFlowHelp(false)}>
+          <div className="pedidos-flow-modal" onClick={(event) => event.stopPropagation()}>
+            <div className="pedidos-flow-modal-header">
+              <div>
+                <div className="pedidos-flow-modal-title">
+                  <span className="pedidos-flow-modal-title-icon">
+                    <ClipboardList size={17} />
+                  </span>
+                  Seguimiento proveedor
+                </div>
+                <div className="pedidos-flow-modal-subtitle">
+                  Flujo para pedidos enviados o coordinados con proveedor antes de ingresar stock.
+                </div>
+              </div>
+              <button
+                type="button"
+                className="pedidos-flow-close"
+                onClick={() => setShowFlowHelp(false)}
+                aria-label="Cerrar ayuda"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="pedidos-flow-modal-steps">
+              <div className="pedidos-flow-modal-step">
+                <div className="pedidos-flow-modal-step-head">
+                  <span className="pedidos-flow-modal-icon"><Mail size={15} /></span>
+                  <div>
+                    <div className="pedidos-flow-modal-eyebrow">Paso 1</div>
+                    <strong>Nuevo pedido</strong>
+                  </div>
+                </div>
+                <p className="pedidos-flow-modal-copy">
+                  Se crea la solicitud al proveedor. Si tiene email, el sistema envía el correo; si
+                  no, queda para contacto manual.
+                </p>
+              </div>
+              <div className="pedidos-flow-modal-step">
+                <div className="pedidos-flow-modal-step-head">
+                  <span className="pedidos-flow-modal-icon"><CheckCircle2 size={15} /></span>
+                  <div>
+                    <div className="pedidos-flow-modal-eyebrow">Paso 2</div>
+                    <strong>Respuesta proveedor</strong>
+                  </div>
+                </div>
+                <p className="pedidos-flow-modal-copy">
+                  Se registra qué productos confirma, ajusta o rechaza el proveedor. Esto todavía
+                  no ingresa stock.
+                </p>
+              </div>
+              <div className="pedidos-flow-modal-step">
+                <div className="pedidos-flow-modal-step-head">
+                  <span className="pedidos-flow-modal-icon"><ArrowDownCircle size={15} /></span>
+                  <div>
+                    <div className="pedidos-flow-modal-eyebrow">Paso 3</div>
+                    <strong>Recepción</strong>
+                  </div>
+                </div>
+                <p className="pedidos-flow-modal-copy">
+                  Cuando llega la mercadería, se usa “Registrar recepción” para pasar lo recibido a
+                  stock disponible.
+                </p>
+              </div>
+              <div className="pedidos-flow-modal-step">
+                <div className="pedidos-flow-modal-step-head">
+                  <span className="pedidos-flow-modal-icon"><AlertTriangle size={15} /></span>
+                  <div>
+                    <div className="pedidos-flow-modal-eyebrow">Control</div>
+                    <strong>Alertas</strong>
+                  </div>
+                </div>
+                <p className="pedidos-flow-modal-copy">
+                  Muestra pedidos vencidos, sin fecha comprometida o con recepción parcial
+                  pendiente.
+                </p>
+              </div>
+            </div>
+
+            <div className="pedidos-flow-modal-definitions">
+              <div className="pedidos-flow-modal-definition">
+                <strong>Entradas directas:</strong> ingresos manuales que no nacen de este seguimiento proveedor.
+              </div>
+              <div className="pedidos-flow-modal-definition">
+                <strong>Procesados:</strong> aprobaciones internas ya cerradas; no muestra el detalle completo del pedido al proveedor.
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ==================== MODAL: AYUDA APROBACIONES PROCESADAS ==================== */}
+      {showProcesadosHelp && (
+        <div className="pedidos-flow-modal-overlay" onClick={() => setShowProcesadosHelp(false)}>
+          <div className="pedidos-flow-modal" onClick={(event) => event.stopPropagation()}>
+            <div className="pedidos-flow-modal-header">
+              <div>
+                <div className="pedidos-flow-modal-title">
+                  <span className="pedidos-flow-modal-title-icon">
+                    <History size={17} />
+                  </span>
+                  Aprobaciones procesadas
+                </div>
+                <div className="pedidos-flow-modal-subtitle">
+                  Registro de decisiones internas ya cerradas por un encargado o admin.
+                </div>
+              </div>
+              <button
+                type="button"
+                className="pedidos-flow-close"
+                onClick={() => setShowProcesadosHelp(false)}
+                aria-label="Cerrar ayuda"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="pedidos-flow-modal-steps">
+              <div className="pedidos-flow-modal-step">
+                <div className="pedidos-flow-modal-step-head">
+                  <span className="pedidos-flow-modal-icon"><CheckCircle2 size={15} /></span>
+                  <div>
+                    <div className="pedidos-flow-modal-eyebrow">Qué entra</div>
+                    <strong>Movimientos ya cerrados</strong>
+                  </div>
+                </div>
+                <p className="pedidos-flow-modal-copy">
+                  Entradas, salidas, asignaciones o devoluciones que ya fueron aprobadas o rechazadas.
+                </p>
+              </div>
+              <div className="pedidos-flow-modal-step">
+                <div className="pedidos-flow-modal-step-head">
+                  <span className="pedidos-flow-modal-icon"><ClipboardList size={15} /></span>
+                  <div>
+                    <div className="pedidos-flow-modal-eyebrow">Qué datos ves</div>
+                    <strong>Auditoría de la decisión</strong>
+                  </div>
+                </div>
+                <p className="pedidos-flow-modal-copy">
+                  Producto, cantidad, tipo de movimiento, quién lo registró, quién lo procesó, estado y fecha.
+                </p>
+              </div>
+              <div className="pedidos-flow-modal-step">
+                <div className="pedidos-flow-modal-step-head">
+                  <span className="pedidos-flow-modal-icon"><Package size={15} /></span>
+                  <div>
+                    <div className="pedidos-flow-modal-eyebrow">Qué no entra</div>
+                    <strong>Pedidos al proveedor</strong>
+                  </div>
+                </div>
+                <p className="pedidos-flow-modal-copy">
+                  El avance del pedido, respuesta del proveedor y recepción se revisan en “Seguimiento proveedor”.
+                </p>
+              </div>
+              <div className="pedidos-flow-modal-step">
+                <div className="pedidos-flow-modal-step-head">
+                  <span className="pedidos-flow-modal-icon"><Clock size={15} /></span>
+                  <div>
+                    <div className="pedidos-flow-modal-eyebrow">Límite</div>
+                    <strong>Últimos 50 registros</strong>
+                  </div>
+                </div>
+                <p className="pedidos-flow-modal-copy">
+                  La vista muestra los últimos movimientos procesados para revisión rápida.
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ==================== MODAL: DATA SEGUIMIENTO PROVEEDOR ==================== */}
+      {showSeguimientoData && (
+        <div className="pedidos-flow-modal-overlay" onClick={() => setShowSeguimientoData(false)}>
+          <div
+            className="pedidos-flow-modal pedidos-data-modal"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="pedidos-flow-modal-header">
+              <div>
+                <div className="pedidos-flow-modal-title">
+                  <span className="pedidos-flow-modal-title-icon">
+                    <Package size={17} />
+                  </span>
+                  Pedidos en seguimiento
+                </div>
+                <div className="pedidos-flow-modal-subtitle">
+                  Detalle que compone el contador de seguimiento proveedor.
+                </div>
+              </div>
+              <button
+                type="button"
+                className="pedidos-flow-close"
+                onClick={() => setShowSeguimientoData(false)}
+                aria-label="Cerrar data de seguimiento"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            {pedidos.length === 0 ? (
+              <div className="pedidos-data-empty">No hay pedidos en seguimiento.</div>
+            ) : (
+              <div className="pedidos-data-list">
+                {pedidos.map((pedido) => {
+                  const resumen = getPedidoRecepcionResumen(pedido)
+                  const fase = labelFasePedido(pedido)
+                  const sla = getPedidoSla(pedido)
+
+                  return (
+                    <div className="pedidos-data-row" key={pedido.pedido_id}>
+                      <div className="pedidos-data-main">
+                        <strong>{pedido.numero_pedido}</strong>
+                        <span>{pedido.proveedor_nombre} · {pedido.items.length} items</span>
+                      </div>
+
+                      <div className="pedidos-data-meta">
+                        <strong>Pedido: {formatFechaCorta(pedido.fecha_pedido)}</strong>
+                        <span>Estimada: {formatFechaCorta(pedido.fecha_estimada_llegada)}</span>
+                        <span>Comprometida: {formatFechaCorta(pedido.fecha_comprometida)}</span>
+                        <span className={`sla-badge ${sla.className}`}>{sla.label}</span>
+                        <span className={`pedido-resp-badge ${fase.clase}`}>{fase.texto}</span>
+                      </div>
+
+                      <div className="pedidos-data-metrics">
+                        <div className="pedidos-data-metric">
+                          <span>Solicitado</span>
+                          <strong>{resumen.pedido}</strong>
+                        </div>
+                        <div className="pedidos-data-metric">
+                          <span>Confirmado</span>
+                          <strong>{resumen.confirmado}</strong>
+                        </div>
+                        <div className="pedidos-data-metric">
+                          <span>Recibido</span>
+                          <strong>{resumen.recibido}</strong>
+                        </div>
+                        <div className="pedidos-data-metric">
+                          <span>Pendiente</span>
+                          <strong>{resumen.pendiente}</strong>
+                        </div>
+                      </div>
+
+                      <button
+                        type="button"
+                        className="pedidos-data-action"
+                        onClick={() => verPedidoEnListado(pedido.pedido_id)}
+                      >
+                        <Eye size={14} />
+                        Ver pedido
+                      </button>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* ==================== MODAL: RESPUESTA DEL PROVEEDOR ==================== */}
       {respuestaPedido && (
         <div className="pedido-resp-overlay" onClick={() => !savingRespuesta && setRespuestaPedido(null)}>
@@ -3803,7 +4610,7 @@ pageSize={100}
                 <X size={18} />
               </button>
             </div>
-            <p className="pedido-resp-sub">Marcá, por producto, qué confirma el proveedor. Lo confirmado será la base para la recepción.</p>
+            <p className="pedido-resp-sub">Marca qué confirma el proveedor. Esto no ingresa stock: deja definida la base para registrar la recepción cuando llegue la mercadería.</p>
 
             <div className="pedido-resp-table">
               <div className="pedido-resp-row header">
@@ -3891,7 +4698,7 @@ pageSize={100}
               <button type="button" className="btn-secondary" onClick={() => setRespuestaPedido(null)} disabled={savingRespuesta}>Cancelar</button>
               <button type="button" className="btn-primary" onClick={guardarRespuestaProveedor} disabled={savingRespuesta}>
                 <Check size={15} />
-                {savingRespuesta ? 'Guardando…' : 'Guardar respuesta'}
+                {savingRespuesta ? 'Guardando…' : 'Guardar y habilitar recepción'}
               </button>
             </div>
           </div>

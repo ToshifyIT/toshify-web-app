@@ -149,7 +149,7 @@ export function MovimientosModule() {
   const [numeroPedido, setNumeroPedido] = useState('')
   const [fechaEstimadaLlegada, setFechaEstimadaLlegada] = useState('')
 
-  // Si la entrada viene de "Generar entrada" de un pedido, guardamos su id para mapear el movimiento al pedido
+  // Si la entrada viene de "Registrar recepción" de un pedido, guardamos su id para mapear el movimiento al pedido
   const [pedidoOrigenId, setPedidoOrigenId] = useState<string | null>(null)
 
   // Form data - Salida
@@ -236,7 +236,7 @@ export function MovimientosModule() {
     setPrefillSearchApplied(location.search)
   }, [location.search, prefillSearchApplied, productos, tipoMovimiento])
 
-  // "Generar entrada" desde un pedido: precarga el form de entrada (simple si 1 item, lote si varios)
+  // "Registrar recepción" desde un pedido: precarga el form de entrada (simple si 1 item, lote si varios)
   useEffect(() => {
     if (!location.search) return
     const params = new URLSearchParams(location.search)
@@ -653,7 +653,7 @@ export function MovimientosModule() {
   const handleLoteEntrada = async () => {
     if (!validateLoteEntrada()) return
 
-    // Si la entrada viene de "Generar entrada" de un pedido → recepción que mapea al pedido
+    // Si la entrada viene de "Registrar recepción" de un pedido → recepción que mapea al pedido
     if (pedidoOrigenId) {
       await recibirEntradaDePedido(productosLote.map(pl => ({ producto_id: pl.producto_id, cantidad: pl.cantidad })))
       return
@@ -678,7 +678,7 @@ export function MovimientosModule() {
         })
         if (error) throw error
 
-        showSuccess('Pedido creado', `Pedido ${numeroPedido} creado con ${productosLote.length} productos en tránsito`)
+        showSuccess('Entrada directa por lote creada', `${productosLote.length} productos quedaron pendientes de recepción`)
       } else {
         for (const pl of productosLote) {
           const { error } = await (supabase.rpc as any)('procesar_movimiento_inventario', {
@@ -748,7 +748,7 @@ export function MovimientosModule() {
 
       // Para ENTRADA: usar el RPC (va a tránsito)
       if (tipoMovimiento === 'entrada') {
-        // Si la entrada viene de "Generar entrada" de un pedido → recepción que mapea al pedido
+        // Si la entrada viene de "Registrar recepción" de un pedido → recepción que mapea al pedido
         if (pedidoOrigenId) {
           await recibirEntradaDePedido([{ producto_id: productoId, cantidad }])
           return
@@ -771,7 +771,7 @@ export function MovimientosModule() {
         })
         if (error) throw error
 
-        showSuccess('Entrada registrada', 'El producto está en tránsito. Confirma recepción desde "Pedidos en Tránsito".')
+        showSuccess('Entrada directa creada', 'Confirma la recepción desde Pedidos > Entradas directas para pasarla a stock.')
         resetForm()
         loadData()
         return
@@ -1020,6 +1020,17 @@ export function MovimientosModule() {
   }
 
   const productoSeleccionado = productos.find(p => p.id === productoId)
+  const entradaDesdePedido = Boolean(pedidoOrigenId)
+  const submitLabel = (() => {
+    if (tipoMovimiento === 'entrada') {
+      if (entradaDesdePedido) {
+        return modoLote ? 'Confirmar recepción por lote' : 'Confirmar recepción del pedido'
+      }
+      return modoLote ? 'Crear entrada directa por lote' : 'Crear entrada directa'
+    }
+
+    return requiereAprobacion() ? 'Enviar para Aprobación' : `Registrar ${getTipoLabel(tipoMovimiento)}`
+  })()
 
   return (
     <div
@@ -1088,7 +1099,7 @@ export function MovimientosModule() {
           gap: '8px'
         }}>
           <Clock size={16} />
-          Los movimientos de salida, uso y devolucion requieren aprobacion de un encargado
+          Los movimientos de salida, uso y devolución requieren aprobación de un encargado
         </div>
       )}
 
@@ -1156,30 +1167,40 @@ export function MovimientosModule() {
               >
                 <div>
                   <div style={{ fontWeight: 600, fontSize: '14px', color: 'var(--text-primary)', marginBottom: '4px' }}>
-                    {modoLote ? <><Package size={14} style={{ display: 'inline', verticalAlign: 'middle' }} /> Ingreso por Lote/Pedido</> : <><FileText size={14} style={{ display: 'inline', verticalAlign: 'middle' }} /> Ingreso Simple</>}
+                    {entradaDesdePedido ? (
+                      <><Package size={14} style={{ display: 'inline', verticalAlign: 'middle' }} /> Recepción de pedido</>
+                    ) : modoLote ? (
+                      <><Package size={14} style={{ display: 'inline', verticalAlign: 'middle' }} /> Entrada directa por lote</>
+                    ) : (
+                      <><FileText size={14} style={{ display: 'inline', verticalAlign: 'middle' }} /> Entrada directa</>
+                    )}
                   </div>
                   <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
-                    {modoLote
-                      ? 'Registra múltiples productos en un solo pedido'
-                      : 'Registra un producto a la vez'
+                    {entradaDesdePedido
+                      ? 'Viene del seguimiento del pedido; al confirmar se descuenta el pendiente y entra a stock.'
+                      : modoLote
+                        ? 'Carga varios productos de una compra o referencia sin pedido por correo.'
+                        : 'Carga un producto de una compra o entrega manual sin pedido por correo.'
                     }
                   </div>
                 </div>
                 <button
                   className="mov-toggle-button"
                   onClick={handleToggleModoLote}
+                  disabled={entradaDesdePedido}
                   style={{
                     padding: '8px 16px',
                     background: modoLote ? 'var(--color-primary)' : 'var(--text-secondary)',
                     color: 'white',
                     border: 'none',
                     borderRadius: '6px',
-                    cursor: 'pointer',
+                    cursor: entradaDesdePedido ? 'not-allowed' : 'pointer',
                     fontSize: '13px',
-                    fontWeight: 600
+                    fontWeight: 600,
+                    opacity: entradaDesdePedido ? 0.65 : 1
                   }}
                 >
-                  {modoLote ? 'Cambiar a Simple' : 'Cambiar a Lote'}
+                  {entradaDesdePedido ? 'Definido por pedido' : modoLote ? 'Cambiar a directa simple' : 'Cambiar a lote'}
                 </button>
               </div>
 
@@ -1199,22 +1220,28 @@ export function MovimientosModule() {
                 />
               </div>
 
-              {/* Aviso de que siempre va a tránsito */}
+              {/* Aviso del flujo de entrada */}
               <div style={{
-                background: 'var(--badge-yellow-bg)',
-                border: '1px solid var(--color-warning)',
+                background: entradaDesdePedido ? 'var(--badge-green-bg)' : 'var(--badge-yellow-bg)',
+                border: `1px solid ${entradaDesdePedido ? 'var(--color-success)' : 'var(--color-warning)'}`,
                 borderRadius: '8px',
                 padding: '12px',
                 fontSize: '13px',
-                color: 'var(--badge-yellow-text)',
+                color: entradaDesdePedido ? 'var(--badge-green-text)' : 'var(--badge-yellow-text)',
                 display: 'flex',
                 alignItems: 'center',
                 gap: '8px'
               }}>
                 <Truck size={18} />
                 <div>
-                  <strong style={{ color: 'var(--color-warning)' }}>Los productos ingresarán en estado "En Tránsito".</strong>
-                  <div style={{ fontSize: '12px', marginTop: '2px' }}>Deberás confirmar su recepción desde "Pedidos en Tránsito" para que pasen a stock disponible.</div>
+                  <strong style={{ color: entradaDesdePedido ? 'var(--color-success)' : 'var(--color-warning)' }}>
+                    {entradaDesdePedido ? 'Esta acción confirma una recepción de pedido.' : 'La entrada directa queda pendiente de recepción.'}
+                  </strong>
+                  <div style={{ fontSize: '12px', marginTop: '2px' }}>
+                    {entradaDesdePedido
+                      ? 'Se usa cuando el pedido a proveedor ya tuvo respuesta y llegó la mercadería.'
+                      : 'Después debes confirmarla desde Pedidos > Entradas directas para que pase a stock disponible.'}
+                  </div>
                 </div>
               </div>
 
@@ -1222,13 +1249,14 @@ export function MovimientosModule() {
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '16px' }}>
                 <div>
                   <label style={{ display: 'block', marginBottom: '8px', fontSize: '14px', fontWeight: 600, color: 'var(--text-secondary)' }}>
-                    N° Pedido/Referencia *
+                    {entradaDesdePedido ? 'Pedido origen' : 'N° Pedido/Referencia *'}
                   </label>
                   <input
                     type="text"
                     placeholder="Ej: PED-001, FAC-123"
                     value={numeroPedido}
                     onChange={(e) => setNumeroPedido(e.target.value)}
+                    disabled={entradaDesdePedido}
                     style={{
                       width: '100%',
                       padding: '10px',
@@ -1979,7 +2007,7 @@ export function MovimientosModule() {
               }}
             >
               {getTipoIcon(tipoMovimiento)}
-              {requiereAprobacion() ? 'Enviar para Aprobación' : `Registrar ${getTipoLabel(tipoMovimiento)}`}
+              {submitLabel}
             </button>
           </div>
         </div>
