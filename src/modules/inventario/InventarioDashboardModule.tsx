@@ -45,6 +45,9 @@ interface PendientesOperativos {
   movimientosPendientes: number
 }
 
+const formatProductosLabel = (cantidad: number, detalle: string) =>
+  `${cantidad} producto${cantidad === 1 ? '' : 's'} ${detalle}`
+
 export function InventarioDashboardModule() {
   const navigate = useNavigate()
   const { sedeActualId } = useSede()
@@ -355,16 +358,30 @@ export function InventarioDashboardModule() {
 
   // Calcular totales generales
   // Stock Total = Disponible + En Uso (NO incluye dañado ni perdido)
-  const totales = filteredData.reduce(
+  const resumenInventario = useMemo(() => categoryFilteredData.reduce(
     (acc, item) => ({
       total: acc.total + item.disponible + item.en_uso,
       disponible: acc.disponible + item.disponible,
       en_uso: acc.en_uso + item.en_uso,
       dañado: acc.dañado + item.dañado,
-      perdido: acc.perdido + item.perdido
+      perdido: acc.perdido + item.perdido,
+      productosDisponibles: acc.productosDisponibles + (item.disponible > 0 ? 1 : 0),
+      productosEnUso: acc.productosEnUso + (item.en_uso > 0 ? 1 : 0),
+      productosDañados: acc.productosDañados + (item.dañado > 0 ? 1 : 0),
+      productosPerdidos: acc.productosPerdidos + (item.perdido > 0 ? 1 : 0)
     }),
-    { total: 0, disponible: 0, en_uso: 0, dañado: 0, perdido: 0 }
-  )
+    {
+      total: 0,
+      disponible: 0,
+      en_uso: 0,
+      dañado: 0,
+      perdido: 0,
+      productosDisponibles: 0,
+      productosEnUso: 0,
+      productosDañados: 0,
+      productosPerdidos: 0
+    }
+  ), [categoryFilteredData])
 
   // Definir columnas para TanStack Table
   const columns = useMemo<ColumnDef<StockProducto>[]>(
@@ -533,55 +550,122 @@ export function InventarioDashboardModule() {
 
       {/* Stats Cards - Estado de Stock (clickeables como filtros) */}
       <div className="inv-stats">
-        <div className="inv-stats-grid">
+        <div className="inv-stats-header">
+          <div>
+            <h2>Estado del stock</h2>
+            <span>Unidades por condición. Clic en una tarjeta para filtrar la tabla.</span>
+          </div>
           <button
-            className={`stat-card${filterEstadoStock === 'all' ? ' active' : ''}`}
-            onClick={() => setFilterEstadoStock(filterEstadoStock === 'all' ? 'all' : 'all')}
+            type="button"
+            className="inv-stats-reset"
+            onClick={() => setFilterEstadoStock('all')}
+            disabled={filterEstadoStock === 'all'}
           >
-            <Package size={18} className="stat-icon" />
-            <div className="stat-content">
-              <span className="stat-value">{categoryFilteredData.length}</span>
-              <span className="stat-label">Productos</span>
-            </div>
+            Ver todo
           </button>
+        </div>
+        <div className="inv-stats-grid">
           <button
             className={`stat-card${filterEstadoStock === 'disponible' ? ' active' : ''}`}
             onClick={() => setFilterEstadoStock(filterEstadoStock === 'disponible' ? 'all' : 'disponible')}
+            title="Filtrar productos con stock disponible"
           >
-            <CheckCircle size={18} className="stat-icon" />
             <div className="stat-content">
-              <span className="stat-value">{totales.disponible}</span>
-              <span className="stat-label">Disponible</span>
+              <span className="stat-card-top">
+                <span className="stat-title-group">
+                  <CheckCircle size={16} className="stat-icon" />
+                  <span className="stat-label">Disponibles</span>
+                </span>
+                <span className="stat-filter-chip">
+                  {filterEstadoStock === 'disponible' ? 'Activo' : 'Filtrar'}
+                </span>
+              </span>
+              <span className="stat-value-row">
+                <span className="stat-value">{resumenInventario.disponible}</span>
+                <span className="stat-unit">unidades</span>
+              </span>
+              <span className="stat-helper">
+                {formatProductosLabel(resumenInventario.productosDisponibles, 'con saldo')}
+              </span>
             </div>
           </button>
           <button
             className={`stat-card${filterEstadoStock === 'en_uso' ? ' active' : ''}`}
             onClick={() => setFilterEstadoStock(filterEstadoStock === 'en_uso' ? 'all' : 'en_uso')}
+            title="Filtrar productos con unidades en uso"
           >
-            <Activity size={18} className="stat-icon" />
             <div className="stat-content">
-              <span className="stat-value">{totales.en_uso}</span>
-              <span className="stat-label">En Uso</span>
+              <span className="stat-card-top">
+                <span className="stat-title-group">
+                  <Activity size={16} className="stat-icon" />
+                  <span className="stat-label">En uso</span>
+                </span>
+                <span className="stat-filter-chip">
+                  {filterEstadoStock === 'en_uso' ? 'Activo' : 'Filtrar'}
+                </span>
+              </span>
+              <span className="stat-value-row">
+                <span className="stat-value">{resumenInventario.en_uso}</span>
+                <span className="stat-unit">unidades</span>
+              </span>
+              <span className="stat-helper">
+                {formatProductosLabel(
+                  resumenInventario.productosEnUso,
+                  resumenInventario.productosEnUso === 1 ? 'asignado' : 'asignados'
+                )}
+              </span>
             </div>
           </button>
           <button
             className={`stat-card${filterEstadoStock === 'dañado' ? ' active' : ''}`}
             onClick={() => setFilterEstadoStock(filterEstadoStock === 'dañado' ? 'all' : 'dañado')}
+            title="Filtrar productos con unidades dañadas"
           >
-            <AlertTriangle size={18} className="stat-icon" />
             <div className="stat-content">
-              <span className="stat-value">{totales.dañado}</span>
-              <span className="stat-label">Dañado</span>
+              <span className="stat-card-top">
+                <span className="stat-title-group">
+                  <AlertTriangle size={16} className="stat-icon" />
+                  <span className="stat-label">Dañadas</span>
+                </span>
+                <span className="stat-filter-chip">
+                  {filterEstadoStock === 'dañado' ? 'Activo' : 'Filtrar'}
+                </span>
+              </span>
+              <span className="stat-value-row">
+                <span className="stat-value">{resumenInventario.dañado}</span>
+                <span className="stat-unit">unidades</span>
+              </span>
+              <span className="stat-helper">
+                {resumenInventario.productosDañados > 0
+                  ? formatProductosLabel(resumenInventario.productosDañados, 'por revisar')
+                  : 'Sin daño registrado'}
+              </span>
             </div>
           </button>
           <button
             className={`stat-card${filterEstadoStock === 'perdido' ? ' active' : ''}`}
             onClick={() => setFilterEstadoStock(filterEstadoStock === 'perdido' ? 'all' : 'perdido')}
+            title="Filtrar productos con unidades perdidas"
           >
-            <XCircle size={18} className="stat-icon" />
             <div className="stat-content">
-              <span className="stat-value">{totales.perdido}</span>
-              <span className="stat-label">Perdido</span>
+              <span className="stat-card-top">
+                <span className="stat-title-group">
+                  <XCircle size={16} className="stat-icon" />
+                  <span className="stat-label">Perdidas</span>
+                </span>
+                <span className="stat-filter-chip">
+                  {filterEstadoStock === 'perdido' ? 'Activo' : 'Filtrar'}
+                </span>
+              </span>
+              <span className="stat-value-row">
+                <span className="stat-value">{resumenInventario.perdido}</span>
+                <span className="stat-unit">unidades</span>
+              </span>
+              <span className="stat-helper">
+                {resumenInventario.productosPerdidos > 0
+                  ? formatProductosLabel(resumenInventario.productosPerdidos, 'por cerrar')
+                  : 'Sin pérdida registrada'}
+              </span>
             </div>
           </button>
         </div>
