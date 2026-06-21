@@ -523,7 +523,7 @@ export function MovimientosModule() {
       return false
     }
     if (estadoInicial === 'en_transito' && !numeroPedido.trim()) {
-      showIncompleteWarning('Debes ingresar un número de pedido para productos en tránsito')
+      showIncompleteWarning('Debes ingresar una referencia de compra o entrega')
       return false
     }
     return true
@@ -897,7 +897,7 @@ export function MovimientosModule() {
     const labels: Record<TipoMovimiento, string> = {
       entrada: 'Entrada',
       salida: 'Salida',
-      asignacion: 'Uso de Herramienta',
+      asignacion: 'Asignar herramienta',
       devolucion: 'Devolución'
     }
     return labels[tipo]
@@ -1099,7 +1099,7 @@ export function MovimientosModule() {
           gap: '8px'
         }}>
           <Clock size={16} />
-          Los movimientos de salida, uso y devolución requieren aprobación de un encargado
+          Los movimientos de salida, asignación y devolución requieren aprobación de un encargado
         </div>
       )}
 
@@ -1249,11 +1249,11 @@ export function MovimientosModule() {
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '16px' }}>
                 <div>
                   <label style={{ display: 'block', marginBottom: '8px', fontSize: '14px', fontWeight: 600, color: 'var(--text-secondary)' }}>
-                    {entradaDesdePedido ? 'Pedido origen' : 'N° Pedido/Referencia *'}
+                    {entradaDesdePedido ? 'Pedido origen' : 'Referencia de compra o entrega *'}
                   </label>
                   <input
                     type="text"
-                    placeholder="Ej: PED-001, FAC-123"
+                    placeholder={entradaDesdePedido ? 'Pedido origen' : 'Ej: OC-001, FAC-123, Remito-45'}
                     value={numeroPedido}
                     onChange={(e) => setNumeroPedido(e.target.value)}
                     disabled={entradaDesdePedido}
@@ -1808,7 +1808,7 @@ export function MovimientosModule() {
               padding: '16px'
             }}>
               <h3 style={{ fontSize: '16px', fontWeight: 600, color: 'var(--text-primary)', marginBottom: '12px' }}>
-                Productos del pedido ({productosLote.length})
+                Productos de la entrada ({productosLote.length})
               </h3>
 
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '8px', marginBottom: '12px' }}>

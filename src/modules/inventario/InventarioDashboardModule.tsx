@@ -48,6 +48,15 @@ interface PendientesOperativos {
 const formatProductosLabel = (cantidad: number, detalle: string) =>
   `${cantidad} producto${cantidad === 1 ? '' : 's'} ${detalle}`
 
+const parseFechaOperativa = (value: string) => {
+  const datePart = value.split('T')[0]
+  const [year, month, day] = datePart.split('-').map(Number)
+  if (year && month && day) {
+    return new Date(year, month - 1, day)
+  }
+  return new Date(value)
+}
+
 export function InventarioDashboardModule() {
   const navigate = useNavigate()
   const { sedeActualId } = useSede()
@@ -132,7 +141,7 @@ export function InventarioDashboardModule() {
         (pedidosData as any[])
           .filter(p => {
             if (!p.fecha_estimada_llegada) return false
-            const fecha = new Date(p.fecha_estimada_llegada)
+            const fecha = parseFechaOperativa(p.fecha_estimada_llegada)
             fecha.setHours(0, 0, 0, 0)
             return fecha < hoy
           })
@@ -183,7 +192,7 @@ export function InventarioDashboardModule() {
         id: 'bajo-minimo',
         severidad: 'critico',
         titulo: `${productosBajoMinimo.length} producto${plural ? 's' : ''} por reponer`,
-        detalle: `Stock por debajo del mínimo. Ej: ${productoCritico.codigo} ${productoCritico.nombre}: quedan ${productoCritico.disponible}, mínimo ${productoCritico.stock_minimo || 0}. Hacé un pedido al proveedor.`,
+        detalle: `Stock por debajo del mínimo. Ej: ${productoCritico.codigo} ${productoCritico.nombre}: quedan ${productoCritico.disponible}, mínimo ${productoCritico.stock_minimo || 0}. Crea un pedido al proveedor.`,
         accion: 'Crear pedido',
         destino: '/logistica/inventario/pedidos?tab=nuevo'
       })
@@ -195,7 +204,7 @@ export function InventarioDashboardModule() {
         id: 'pedidos-vencidos',
         severidad: 'critico',
         titulo: `${pendientes.pedidosVencidos} pedido${plural ? 's' : ''} atrasado${plural ? 's' : ''}`,
-        detalle: `Pedido${plural ? 's' : ''} a proveedor que ya pasó su fecha estimada de llegada. Revisá la recepción o reclamá al proveedor.`,
+        detalle: `Pedido${plural ? 's' : ''} a proveedor que ya pasó su fecha estimada de llegada. Revisa la recepción o reclama al proveedor.`,
         accion: 'Ver pedidos',
         destino: '/logistica/inventario/pedidos?tab=pedidos'
       })
@@ -203,14 +212,24 @@ export function InventarioDashboardModule() {
 
     if (pendientes.entradasTransito + pendientes.pedidosTransito > 0) {
       const total = pendientes.entradasTransito + pendientes.pedidosTransito
-      const plural = total > 1
+      const detalleRecepciones = [
+        pendientes.pedidosTransito > 0
+          ? `${pendientes.pedidosTransito} pedido${pendientes.pedidosTransito === 1 ? '' : 's'} a proveedor`
+          : null,
+        pendientes.entradasTransito > 0
+          ? `${pendientes.entradasTransito} entrada${pendientes.entradasTransito === 1 ? '' : 's'} directa${pendientes.entradasTransito === 1 ? '' : 's'}`
+          : null,
+      ].filter(Boolean).join(' + ')
+
       acciones.push({
         id: 'recepciones',
         severidad: 'atencion',
-        titulo: `${total} pedido${plural ? 's' : ''} por recibir`,
-        detalle: `Mercadería que llegó o está por llegar y falta ingresar al stock. Generá la entrada para sumarla al inventario.`,
+        titulo: total === 1 ? '1 recepción por completar' : `${total} recepciones por completar`,
+        detalle: `${detalleRecepciones}. Mercadería que llegó o está por llegar y falta ingresar al stock.`,
         accion: 'Recepcionar',
-        destino: '/logistica/inventario/pedidos?tab=pedidos'
+        destino: pendientes.pedidosTransito > 0
+          ? '/logistica/inventario/pedidos?tab=pedidos'
+          : '/logistica/inventario/pedidos?tab=entradas'
       })
     }
 
@@ -233,7 +252,7 @@ export function InventarioDashboardModule() {
         id: 'sin-cierre',
         severidad: 'atencion',
         titulo: `${productosSinCierre.length} producto${plural ? 's' : ''} con daño o pérdida`,
-        detalle: `Unidades marcadas como dañadas o perdidas. Ej: ${productoSinCierre.codigo} ${productoSinCierre.nombre}: ${productoSinCierre.dañado + productoSinCierre.perdido} unidades. Revisá y dá de baja si corresponde.`,
+        detalle: `Unidades marcadas como dañadas o perdidas. Ej: ${productoSinCierre.codigo} ${productoSinCierre.nombre}: ${productoSinCierre.dañado + productoSinCierre.perdido} unidades. Revisa y da de baja si corresponde.`,
         accion: 'Ver stock',
         destino: '/logistica/inventario/dashboard'
       })
@@ -676,7 +695,7 @@ export function InventarioDashboardModule() {
           <div className="inv-panel-header">
             <div>
               <h2>Pendientes operativos</h2>
-              <span>Stock, recepciones, aprobaciones y cierres que requieren atencion</span>
+              <span>Stock, recepciones, aprobaciones y cierres que requieren atención</span>
             </div>
             <span className="inv-panel-badge">{accionesOperativas.length} pendientes</span>
           </div>
@@ -693,7 +712,7 @@ export function InventarioDashboardModule() {
                 onClick={() => navigate(action.destino)}
               >
                 <span className="inv-action-status">
-                  {action.severidad === 'critico' ? 'Critico' : action.severidad === 'atencion' ? 'Atencion' : 'Revisar'}
+                  {action.severidad === 'critico' ? 'Crítico' : action.severidad === 'atencion' ? 'Atención' : 'Revisar'}
                 </span>
                 <span className="inv-action-copy">
                   <strong>{action.titulo}</strong>

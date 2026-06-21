@@ -307,7 +307,7 @@ export function PedidosUnificadoModule() {
   const [tipoProductoFilter] = useState<string[]>([])
   const filterRef = useRef<HTMLDivElement>(null)
   const [showFlowHelp, setShowFlowHelp] = useState(false)
-  const [showProcesadosHelp, setShowProcesadosHelp] = useState(false)
+  const [showAprobacionesCerradasHelp, setShowAprobacionesCerradasHelp] = useState(false)
   const [showSeguimientoData, setShowSeguimientoData] = useState(false)
 
   const userRole = profile?.roles?.name || ''
@@ -1075,7 +1075,7 @@ export function PedidosUnificadoModule() {
 
       setHistorico(historicoFormateado)
     } catch {
-      Swal.fire('Error', 'No se pudieron cargar las aprobaciones procesadas', 'error')
+      Swal.fire('Error', 'No se pudieron cargar las aprobaciones cerradas', 'error')
     } finally {
       setLoadingHistorico(false)
     }
@@ -3227,9 +3227,9 @@ export function PedidosUnificadoModule() {
             <div className="pedidos-summary-note">vencidos, sin fecha o parciales</div>
           </div>
           <div className="pedidos-summary-card">
-            <div className="pedidos-summary-label">Procesados</div>
+            <div className="pedidos-summary-label">Aprobaciones cerradas</div>
             <div className="pedidos-summary-value">{totalHistoricoResumen}</div>
-            <div className="pedidos-summary-note">aprobados/rechazados al abrir</div>
+            <div className="pedidos-summary-note">aprobadas/rechazadas al abrir</div>
           </div>
         </div>
 
@@ -3289,7 +3289,7 @@ export function PedidosUnificadoModule() {
               onClick={() => setActiveTab('historico')}
             >
               <History size={16} />
-              Procesados
+              Aprobaciones cerradas
             </button>
           )}
           {canViewTab('inventario-pedidos:pedidos') && (
@@ -4130,7 +4130,7 @@ export function PedidosUnificadoModule() {
                     <h3>No hay aprobaciones pendientes</h3>
                     <p>
                       {filtroTipo === 'todos'
-                        ? 'Todos los movimientos internos han sido procesados'
+                        ? 'Todos los movimientos internos están cerrados'
                         : `No hay ${getTipoLabel(filtroTipo).toLowerCase()}s pendientes de aprobación`}
                     </p>
                   </div>
@@ -4231,12 +4231,12 @@ export function PedidosUnificadoModule() {
             <div className="pedidos-section-intro">
               <div>
                 <div className="pedidos-section-title-wrap">
-                  <div className="pedidos-section-title">Aprobaciones procesadas</div>
+                  <div className="pedidos-section-title">Aprobaciones cerradas</div>
                   <button
                     type="button"
                     className="pedidos-flow-help-btn"
-                    onClick={() => setShowProcesadosHelp(true)}
-                    aria-label="Ver explicación de aprobaciones procesadas"
+                    onClick={() => setShowAprobacionesCerradasHelp(true)}
+                    aria-label="Ver explicación de aprobaciones cerradas"
                     title="Qué se muestra acá"
                   >
                     <HelpCircle size={15} />
@@ -4257,7 +4257,7 @@ export function PedidosUnificadoModule() {
               <div className="no-permission">
                 <History size={48} />
                 <h3>Acceso Restringido</h3>
-                <p>Solo los usuarios con rol de Encargado o Admin pueden ver aprobaciones procesadas.</p>
+                <p>Solo los usuarios con rol de Encargado o Admin pueden ver aprobaciones cerradas.</p>
               </div>
             ) : (
               <>
@@ -4275,7 +4275,7 @@ export function PedidosUnificadoModule() {
                 ) : historico.length === 0 ? (
                   <div className="empty-state">
                     <History size={48} />
-                    <h3>No hay aprobaciones procesadas</h3>
+                    <h3>No hay aprobaciones cerradas</h3>
                     <p>Cuando un encargado apruebe o rechace un movimiento, aparecerá aquí.</p>
                   </div>
                 ) : (
@@ -4421,16 +4421,16 @@ export function PedidosUnificadoModule() {
                 <strong>Entradas directas:</strong> ingresos manuales que no nacen de este seguimiento proveedor.
               </div>
               <div className="pedidos-flow-modal-definition">
-                <strong>Procesados:</strong> aprobaciones internas ya cerradas; no muestra el detalle completo del pedido al proveedor.
+                <strong>Aprobaciones cerradas:</strong> decisiones internas ya aprobadas o rechazadas; no muestra el detalle completo del pedido al proveedor.
               </div>
             </div>
           </div>
         </div>
       )}
 
-      {/* ==================== MODAL: AYUDA APROBACIONES PROCESADAS ==================== */}
-      {showProcesadosHelp && (
-        <div className="pedidos-flow-modal-overlay" onClick={() => setShowProcesadosHelp(false)}>
+      {/* ==================== MODAL: AYUDA APROBACIONES CERRADAS ==================== */}
+      {showAprobacionesCerradasHelp && (
+        <div className="pedidos-flow-modal-overlay" onClick={() => setShowAprobacionesCerradasHelp(false)}>
           <div className="pedidos-flow-modal" onClick={(event) => event.stopPropagation()}>
             <div className="pedidos-flow-modal-header">
               <div>
@@ -4438,7 +4438,7 @@ export function PedidosUnificadoModule() {
                   <span className="pedidos-flow-modal-title-icon">
                     <History size={17} />
                   </span>
-                  Aprobaciones procesadas
+                  Aprobaciones cerradas
                 </div>
                 <div className="pedidos-flow-modal-subtitle">
                   Registro de decisiones internas ya cerradas por un encargado o admin.
@@ -4447,7 +4447,7 @@ export function PedidosUnificadoModule() {
               <button
                 type="button"
                 className="pedidos-flow-close"
-                onClick={() => setShowProcesadosHelp(false)}
+                onClick={() => setShowAprobacionesCerradasHelp(false)}
                 aria-label="Cerrar ayuda"
               >
                 <X size={18} />
@@ -4500,7 +4500,7 @@ export function PedidosUnificadoModule() {
                   </div>
                 </div>
                 <p className="pedidos-flow-modal-copy">
-                  La vista muestra los últimos movimientos procesados para revisión rápida.
+                  La vista muestra los últimos movimientos cerrados para revisión rápida.
                 </p>
               </div>
             </div>
