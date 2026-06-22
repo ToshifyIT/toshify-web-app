@@ -8,7 +8,7 @@ import { useMemo, useState, useRef, useEffect } from 'react';
 import { type ColumnDef } from '@tanstack/react-table';
 import { DataTable } from '../../../../../components/ui/DataTable/DataTable';
 import { ExcelColumnFilter, useExcelFilters } from '../../../../../components/ui/DataTable/ExcelColumnFilter';
-import { Search, ClipboardList, Download, ChevronDown, Fuel, Droplets, Sun, Moon, Clock, X } from 'lucide-react';
+import { Search, ClipboardList, Download, ChevronDown, Fuel, Droplets, Sun, Moon, Clock, X, AlertTriangle } from 'lucide-react';
 import type { Marcacion } from '../hooks/useUSSHistoricoData';
 import { normalizePatente } from '../../../../../utils/normalizeDocuments';
 import * as XLSX from 'xlsx';
@@ -113,6 +113,57 @@ function getEstadoColor(estado: string): string {
   }
 }
 
+/**
+ * Una marcación quedó "sin match" cuando el cruce con asignaciones no pudo
+ * resolver ni la modalidad del vehículo ni el turno del conductor.
+ * En la tabla se ve como MODALIDAD = "-" y TURNO = "-".
+ * Estas filas se marcan con un badge de Alerta clickeable en la columna Estado.
+ */
+function sinMatchTurno(m: Marcacion): boolean {
+  const tieneModalidad = !!m.vehiculoModalidad;
+  const tieneTurno = m.horario === 'diurno' || m.horario === 'nocturno';
+  return !tieneModalidad && !tieneTurno;
+}
+
+/**
+ * Estado visual que se muestra en la columna ESTADO (y por el que se filtra).
+ *   - 'Alerta'   → no se resolvió turno/modalidad (clickeable, abre modal)
+ *   - 'En Curso' → turno aún abierto
+ *   - 'OK'       → turno resuelto correctamente
+ */
+function estadoVisual(m: Marcacion): 'Alerta' | 'En Curso' | 'OK' {
+  if (sinMatchTurno(m)) return 'Alerta';
+  if (m.estado === 'En Curso') return 'En Curso';
+  return 'OK';
+}
+
+/**
+ * Clasifica una alerta en uno de los 3 patrones (cerrados) y devuelve una
+ * etiqueta corta + motivo en una línea + color. Toda alerta cae siempre en uno:
+ *   A · Sin conductor   → el GPS no identificó al conductor (iButton sin asignar)
+ *   B · Sin cruce       → hay conductor pero no se vinculó a su asignación
+ *   C · Sin asignación  → conductor sin asignación vigente en esta patente
+ */
+type AlertaTipo = {
+  etiqueta: string;   // chip corto
+  titulo: string;     // frase de una línea
+  color: string;      // color del chip/badge
+};
+
+function clasificarAlerta(m: Marcacion): AlertaTipo {
+  const cond = conductorLabel(m.conductor);
+  // A — sin identidad
+  if (cond === 'Sin conductor') {
+    return { etiqueta: 'Sin conductor', titulo: 'El GPS no identificó al conductor (iButton sin asignar).', color: '#6b7280' };
+  }
+  // B — hay conductor vinculado (conductorId) pero no se resolvió el turno
+  if (m.conductorId) {
+    return { etiqueta: 'Sin cruce', titulo: 'No se pudo determinar el turno de este conductor.', color: '#dc2626' };
+  }
+  // C — conductor con nombre pero sin vínculo a asignación en esta patente
+  return { etiqueta: 'Sin asignación', titulo: 'El conductor no tiene asignación vigente en esta patente.', color: '#d97706' };
+}
+
 export function MarcacionesTable({
   marcaciones,
   isLoading,
@@ -135,6 +186,8 @@ export function MarcacionesTable({
   const [gpsFilter, setGpsFilter] = useState<'USS' | 'GEOTAB' | null>(null);
   // Marcación seleccionada para ver detalle de trips USS por patente
   const [detalleMarcacion, setDetalleMarcacion] = useState<Marcacion | null>(null);
+  // Marcación seleccionada para ver el modal de alerta (turno/modalidad sin match)
+  const [alertaMarcacion, setAlertaMarcacion] = useState<Marcacion | null>(null);
 
   // Conteos por proveedor GPS (sobre el universo cargado, no afectado por otros filtros)
   const gpsCounts = useMemo(() => {
@@ -162,7 +215,7 @@ export function MarcacionesTable({
     })
   , [marcaciones]);
   const estadosUnicos = useMemo(() =>
-    [...new Set(marcaciones.map(m => m.estado))].filter(Boolean).sort()
+    [...new Set(marcaciones.map(m => estadoVisual(m)))].filter(Boolean).sort()
   , [marcaciones]);
   const getHorarioLabel = (h: string, mod: string | null): string => {
     if (h === 'diurno') return 'Diurno';
@@ -200,7 +253,7 @@ export function MarcacionesTable({
       filtered = filtered.filter(m => fechaFilter.includes(formatFecha(m.fecha)));
     }
     if (estadoFilter.length > 0) {
-      filtered = filtered.filter(m => estadoFilter.includes(m.estado));
+      filtered = filtered.filter(m => estadoFilter.includes(estadoVisual(m)));
     }
     if (horarioFilter.length > 0) {
       filtered = filtered.filter(m => horarioFilter.includes(getHorarioLabel(m.horario, m.vehiculoModalidad)));
@@ -440,15 +493,50 @@ export function MarcacionesTable({
         <ExcelColumnFilter label="Estado" options={estadosUnicos} selectedValues={estadoFilter}
           onSelectionChange={setEstadoFilter} filterId="m-estado" openFilterId={openFilterId} onOpenChange={setOpenFilterId} />
       ),
-      cell: ({ row }) => (
-        <span style={{
-          fontSize: '11px', fontWeight: 600, padding: '2px 8px',
-          borderRadius: '10px', color: '#fff',
-          background: getEstadoColor(row.original.estado),
-        }}>
-          {row.original.estado === 'Turno Finalizado' ? 'Finalizado' : row.original.estado}
-        </span>
-      ),
+      cell: ({ row }) => {
+        const m = row.original;
+        // Sin match de turno/modalidad → badge clickeable que indica el TIPO de alerta
+        // (Sin conductor / Sin cruce / Sin asignación), con su color. Abre el modal.
+        if (sinMatchTurno(m)) {
+          const a = clasificarAlerta(m);
+          return (
+            <button
+              type="button"
+              onClick={() => setAlertaMarcacion(m)}
+              title={a.titulo}
+              style={{
+                display: 'inline-flex', alignItems: 'center', gap: '4px',
+                fontSize: '11px', fontWeight: 600, padding: '2px 8px',
+                borderRadius: '10px', color: '#fff', background: a.color,
+                border: 'none', cursor: 'pointer', whiteSpace: 'nowrap',
+              }}
+            >
+              <AlertTriangle size={12} />
+              {a.etiqueta}
+            </button>
+          );
+        }
+        // Caso especial visible (no es error): turno aún en curso.
+        if (m.estado === 'En Curso') {
+          return (
+            <span style={{
+              fontSize: '11px', fontWeight: 600, padding: '2px 8px',
+              borderRadius: '10px', color: '#fff', background: getEstadoColor('En Curso'),
+            }}>
+              En Curso
+            </span>
+          );
+        }
+        // Resto: turno resuelto correctamente → OK.
+        return (
+          <span style={{
+            fontSize: '11px', fontWeight: 600, padding: '2px 8px',
+            borderRadius: '10px', color: '#fff', background: '#16a34a',
+          }}>
+            OK
+          </span>
+        );
+      },
       enableSorting: false,
     },
     {
@@ -696,6 +784,75 @@ export function MarcacionesTable({
         semanaFin={semanaFin || ''}
         onClose={() => setDetalleMarcacion(null)}
       />
+
+      {/* Modal de alerta: turno/modalidad sin match */}
+      {alertaMarcacion && (
+        <div
+          onClick={() => setAlertaMarcacion(null)}
+          style={{
+            position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            zIndex: 1000,
+          }}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              background: 'var(--bg-primary, #fff)', borderRadius: '12px',
+              padding: '20px', width: '460px', maxWidth: '90vw',
+              boxShadow: '0 10px 40px rgba(0,0,0,0.25)',
+            }}
+          >
+            {(() => { const a = clasificarAlerta(alertaMarcacion); return (
+            <>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <AlertTriangle size={18} color={a.color} />
+                <h3 style={{ margin: 0, fontSize: '15px', fontWeight: 700, color: 'var(--text-primary)' }}>
+                  Sin turno asignado
+                </h3>
+                <span style={{
+                  fontSize: '11px', fontWeight: 600, padding: '2px 8px',
+                  borderRadius: '999px', color: '#fff', background: a.color,
+                }}>
+                  {a.etiqueta}
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setAlertaMarcacion(null)}
+                style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-secondary)', padding: 4 }}
+                title="Cerrar"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <p style={{ margin: '0 0 16px', fontSize: '13px', lineHeight: 1.5, color: 'var(--text-secondary)' }}>
+              {a.titulo}
+            </p>
+            </>
+            ); })()}
+
+            <div style={{
+              display: 'grid', gridTemplateColumns: 'auto 1fr', gap: '6px 12px',
+              fontSize: '12px', background: 'var(--bg-secondary, #f8f9fa)',
+              borderRadius: '8px', padding: '12px',
+            }}>
+              <span style={{ fontWeight: 600, color: 'var(--text-secondary)' }}>Patente</span>
+              <span style={{ color: 'var(--text-primary)' }}>{alertaMarcacion.patente}</span>
+              <span style={{ fontWeight: 600, color: 'var(--text-secondary)' }}>Conductor</span>
+              <span style={{ color: 'var(--text-primary)' }}>{conductorLabel(alertaMarcacion.conductor)}</span>
+              <span style={{ fontWeight: 600, color: 'var(--text-secondary)' }}>Fecha del turno</span>
+              <span style={{ color: 'var(--text-primary)' }}>{formatFecha(alertaMarcacion.fecha)}</span>
+              <span style={{ fontWeight: 600, color: 'var(--text-secondary)' }}>iButton</span>
+              <span style={{ color: 'var(--text-primary)' }}>{alertaMarcacion.ibutton || '—'}</span>
+              <span style={{ fontWeight: 600, color: 'var(--text-secondary)' }}>GPS</span>
+              <span style={{ color: 'var(--text-primary)' }}>{alertaMarcacion.gpsOrigen || 'USS'}</span>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
