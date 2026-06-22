@@ -512,6 +512,31 @@ export function MovimientosModule() {
     Swal.fire({ icon: 'warning', title: 'Datos incompletos', text })
   }
 
+  const getEntradaManualObservaciones = () => {
+    const partes = [`Referencia: ${numeroPedido.trim()}`]
+    if (observaciones.trim()) partes.push(observaciones.trim())
+    return partes.join(' - ')
+  }
+
+  const crearMovimientoEntradaManual = async (
+    producto_id: string,
+    cantidadMovimiento: number,
+    usuarioId?: string
+  ) => {
+    const { error } = await (supabase.from('movimientos') as any).insert({
+      producto_id,
+      tipo_movimiento: 'entrada',
+      cantidad: cantidadMovimiento,
+      proveedor_id: proveedorId || null,
+      usuario_id: usuarioId,
+      observaciones: getEntradaManualObservaciones(),
+      estado_aprobacion: 'aprobado',
+      usuario_aprobador_id: usuarioId,
+      fecha_aprobacion: new Date().toISOString()
+    })
+    if (error) throw error
+  }
+
   /** Valida el lote de entrada. Retorna true si es válido. */
   const validateLoteEntrada = (): boolean => {
     if (!proveedorId) {
@@ -519,7 +544,7 @@ export function MovimientosModule() {
       return false
     }
     if (productosLote.length === 0) {
-      showIncompleteWarning('Debes agregar al menos un producto al lote')
+      showIncompleteWarning('Debes agregar al menos un producto a la lista')
       return false
     }
     if (estadoInicial === 'en_transito' && !numeroPedido.trim()) {
@@ -532,7 +557,7 @@ export function MovimientosModule() {
   /** Valida el lote de salida. Retorna true si es válido. */
   const validateLoteSalida = (): boolean => {
     if (productosLoteSalida.length === 0) {
-      showIncompleteWarning('Debes agregar al menos un producto al lote')
+      showIncompleteWarning('Debes agregar al menos un producto a la lista')
       return false
     }
     if (!motivoSalida) {
@@ -555,6 +580,16 @@ export function MovimientosModule() {
 
     if (tipoMovimiento === 'entrada' && !proveedorId) {
       showIncompleteWarning('Debes seleccionar un proveedor para la entrada')
+      return false
+    }
+
+    if (
+      tipoMovimiento === 'entrada' &&
+      !pedidoOrigenId &&
+      estadoInicial === 'en_transito' &&
+      !numeroPedido.trim()
+    ) {
+      showIncompleteWarning('Debes ingresar una referencia de compra o entrega')
       return false
     }
 
@@ -613,21 +648,51 @@ export function MovimientosModule() {
     try {
       const { data: { user } } = await supabase.auth.getUser()
 
-      // Traer los item_id del pedido para mapear producto → pedido_item
+      // Traer los item_id y saldos actuales para no permitir sobre-recepciones.
       const { data: items } = await supabase
         .from('pedido_items')
-        .select('id, producto_id')
+        .select('id, producto_id, cantidad_pedida, cantidad_confirmada, cantidad_recibida, estado_confirmacion, productos(codigo, nombre)')
         .eq('pedido_id', pedidoOrigenId)
-      const mapItem = new Map<string, string>((items || []).map((it: any) => [it.producto_id, it.id]))
+      type PedidoItemRecepcion = {
+        id: string
+        producto_id: string
+        cantidad_pedida: number
+        cantidad_confirmada?: number | null
+        cantidad_recibida?: number | null
+        estado_confirmacion?: string | null
+        productos?: { codigo?: string | null; nombre?: string | null } | null
+      }
+      const mapItem = new Map<string, PedidoItemRecepcion>(
+        (items || []).map((it: any) => [it.producto_id, it as PedidoItemRecepcion])
+      )
 
       let ok = 0
       const errores: string[] = []
       for (const ln of lineas) {
         if (ln.cantidad <= 0) continue
-        const itemId = mapItem.get(ln.producto_id)
-        if (!itemId) { errores.push('Producto sin línea en el pedido'); continue }
+        const pedidoItem = mapItem.get(ln.producto_id)
+        if (!pedidoItem) { errores.push('Producto sin línea en el pedido'); continue }
+
+        const productoLabel = pedidoItem.productos?.codigo || 'Producto del pedido'
+        if (pedidoItem.estado_confirmacion === 'rechazado') {
+          errores.push(`${productoLabel}: el proveedor lo rechazó`)
+          continue
+        }
+
+        const objetivo = Number(pedidoItem.cantidad_confirmada ?? pedidoItem.cantidad_pedida ?? 0)
+        const recibido = Number(pedidoItem.cantidad_recibida || 0)
+        const pendiente = Math.max(0, objetivo - recibido)
+        if (pendiente <= 0) {
+          errores.push(`${productoLabel}: no tiene saldo pendiente por recibir`)
+          continue
+        }
+        if (ln.cantidad > pendiente) {
+          errores.push(`${productoLabel}: quedan ${pendiente} por recibir y se intentó recibir ${ln.cantidad}`)
+          continue
+        }
+
         const { data, error } = await (supabase.rpc as any)('procesar_recepcion_pedido', {
-          p_pedido_item_id: itemId,
+          p_pedido_item_id: pedidoItem.id,
           p_cantidad_recibida: ln.cantidad,
           p_usuario_id: user?.id
         })
@@ -639,13 +704,13 @@ export function MovimientosModule() {
       }
 
       if (errores.length > 0) {
-        Swal.fire({ icon: ok > 0 ? 'warning' : 'error', title: ok > 0 ? 'Entrada parcial' : 'No se pudo generar la entrada', html: `${ok} producto(s) ingresados.<br>${errores.join('<br>')}` })
+        Swal.fire({ icon: ok > 0 ? 'warning' : 'error', title: ok > 0 ? 'Recepción parcial' : 'No se pudo confirmar la recepción', html: `${ok} producto(s) ingresados.<br>${errores.join('<br>')}` })
       } else {
-        showSuccess('Entrada generada', `${ok} producto(s) ingresados al stock.`)
+        showSuccess('Recepción confirmada', `${ok} producto(s) ingresados al stock.`)
       }
       navigate('/logistica/inventario/pedidos')
     } catch (error: any) {
-      Swal.fire({ icon: 'error', title: 'Error', text: error.message || 'No se pudo generar la entrada' })
+      Swal.fire({ icon: 'error', title: 'Error', text: error.message || 'No se pudo confirmar la recepción' })
     }
   }
 
@@ -663,22 +728,14 @@ export function MovimientosModule() {
       const { data: { user } } = await supabase.auth.getUser()
 
       if (estadoInicial === 'en_transito') {
-        const items = productosLote.map(pl => ({
-          producto_id: pl.producto_id,
-          cantidad: pl.cantidad
-        }))
+        for (const pl of productosLote) {
+          await crearMovimientoEntradaManual(pl.producto_id, pl.cantidad, user?.id)
+        }
 
-        const { error } = await (supabase.rpc as any)('crear_pedido_inventario', {
-          p_numero_pedido: numeroPedido,
-          p_proveedor_id: proveedorId,
-          p_fecha_estimada: fechaEstimadaLlegada || null,
-          p_observaciones: observaciones || null,
-          p_usuario_id: user?.id,
-          p_items: JSON.stringify(items)
-        })
-        if (error) throw error
-
-        showSuccess('Entrada directa por lote creada', `${productosLote.length} productos quedaron pendientes de recepción`)
+        showSuccess('Ingreso manual registrado', `${productosLote.length} productos quedaron pendientes de confirmación.`)
+        resetForm()
+        navigate('/logistica/inventario/pedidos?tab=entradas')
+        return
       } else {
         for (const pl of productosLote) {
           const { error } = await (supabase.rpc as any)('procesar_movimiento_inventario', {
@@ -687,17 +744,17 @@ export function MovimientosModule() {
             p_cantidad: pl.cantidad,
             p_proveedor_id: proveedorId,
             p_usuario_id: user?.id,
-            p_observaciones: observaciones || `Entrada en lote`
+            p_observaciones: observaciones || 'Ingresar varios productos'
           })
           if (error) throw error
         }
 
-        showSuccess('Éxito', `Entrada de ${productosLote.length} productos registrada correctamente`)
+        showSuccess('Ingreso registrado', `${productosLote.length} productos ingresados correctamente`)
       }
 
       resetForm()
     } catch (error: any) {
-      Swal.fire({ icon: 'error', title: 'Error', text: error.message || 'No se pudo procesar el lote' })
+      Swal.fire({ icon: 'error', title: 'Error', text: error.message || 'No se pudo procesar la lista de productos' })
     }
   }
 
@@ -716,7 +773,7 @@ export function MovimientosModule() {
           proveedor_id: null, // Se determinará al aprobar según stock disponible
           vehiculo_destino_id: item.vehiculo_id || null,
           usuario_id: userData.user?.id,
-          observaciones: observaciones || `Salida en lote - ${item.vehiculo?.patente || 'Sin vehículo'}`,
+          observaciones: observaciones || `Retiro de varios productos - ${item.vehiculo?.patente || 'Sin vehículo'}`,
           motivo_salida: motivoSalida,
           estado_aprobacion: 'pendiente',
           categoria_servicio: motivoSalida === 'consumo_servicio' ? categoriaServicio : null
@@ -726,11 +783,14 @@ export function MovimientosModule() {
         if (error) throw error
       }
 
-      showSuccess('Lote enviado para aprobación', `${productosLoteSalida.length} salidas registradas para aprobación.`)
+      showSuccess(
+        'Retiro enviado a aprobación',
+        getRetiroPendienteMessage(`${productosLoteSalida.length} productos`)
+      )
       resetForm()
       loadData()
     } catch (error: any) {
-      Swal.fire({ icon: 'error', title: 'Error', text: error.message || 'No se pudo procesar el lote de salidas' })
+      Swal.fire({ icon: 'error', title: 'Error', text: error.message || 'No se pudo procesar la lista de productos a retirar' })
     }
   }
 
@@ -754,6 +814,15 @@ export function MovimientosModule() {
           return
         }
 
+        if (estadoInicial === 'en_transito') {
+          await crearMovimientoEntradaManual(productoId, cantidad, userData.user?.id)
+
+          showSuccess('Ingreso manual registrado', 'Quedó pendiente de confirmación y todavía no suma al stock disponible.')
+          resetForm()
+          navigate('/logistica/inventario/pedidos?tab=entradas')
+          return
+        }
+
         const { error } = await (supabase.rpc as any)('procesar_movimiento_inventario', {
           p_producto_id: productoId,
           p_tipo_movimiento: tipoMovimiento,
@@ -771,7 +840,7 @@ export function MovimientosModule() {
         })
         if (error) throw error
 
-        showSuccess('Entrada directa creada', 'Confirma la recepción desde Pedidos > Entradas directas para pasarla a stock.')
+        showSuccess('Ingreso registrado', 'El producto ingresó correctamente.')
         resetForm()
         loadData()
         return
@@ -796,7 +865,11 @@ export function MovimientosModule() {
       const { error } = await (supabase.from('movimientos') as any).insert(movimientoData)
       if (error) throw error
 
-      showSuccess('Movimiento enviado para aprobación', `${getTipoLabel(tipoMovimiento)} registrada. Pendiente de aprobación.`)
+      if (tipoMovimiento === 'salida') {
+        showSuccess('Retiro enviado a aprobación', getRetiroPendienteMessage(`${cantidad} unidades`))
+      } else {
+        showSuccess('Movimiento enviado a aprobación', `${getTipoResultadoLabel(tipoMovimiento)} pendiente de aprobación.`)
+      }
       resetForm()
       loadData()
     } catch (err: any) {
@@ -895,10 +968,20 @@ export function MovimientosModule() {
 
   const getTipoLabel = (tipo: TipoMovimiento): string => {
     const labels: Record<TipoMovimiento, string> = {
-      entrada: 'Entrada',
-      salida: 'Salida',
+      entrada: 'Ingresar stock',
+      salida: 'Retirar stock',
       asignacion: 'Asignar herramienta',
-      devolucion: 'Devolución'
+      devolucion: 'Devolver herramienta'
+    }
+    return labels[tipo]
+  }
+
+  const getTipoResultadoLabel = (tipo: TipoMovimiento): string => {
+    const labels: Record<TipoMovimiento, string> = {
+      entrada: 'Ingreso',
+      salida: 'Retiro',
+      asignacion: 'Asignación de herramienta',
+      devolucion: 'Devolución de herramienta'
     }
     return labels[tipo]
   }
@@ -916,12 +999,20 @@ export function MovimientosModule() {
   const getMotivoLabel = (motivo: MotivoSalida): string => {
     const labels: Record<MotivoSalida, string> = {
       venta: 'Venta',
-      consumo_servicio: 'Consumo en servicio',
+      consumo_servicio: 'Uso en servicio',
       dañado: 'Dañado',
       perdido: 'Perdido'
     }
     return labels[motivo]
   }
+
+  const esRetiroDefinitivo = (motivo: MotivoSalida) => motivo === 'dañado' || motivo === 'perdido'
+
+  const getRetiroPendienteMessage = (alcance: string) => (
+    esRetiroDefinitivo(motivoSalida)
+      ? `${alcance} quedaron pendientes de aprobación. Si se aprueban, se descuentan definitivamente del stock disponible.`
+      : `${alcance} quedaron pendientes de aprobación. El stock se descuenta recién cuando un encargado aprueba.`
+  )
 
   // Filtrar productos
   const productosFiltrados = useMemo(() => {
@@ -1024,12 +1115,12 @@ export function MovimientosModule() {
   const submitLabel = (() => {
     if (tipoMovimiento === 'entrada') {
       if (entradaDesdePedido) {
-        return modoLote ? 'Confirmar recepción por lote' : 'Confirmar recepción del pedido'
+        return modoLote ? 'Confirmar recepción de varios productos' : 'Confirmar recepción del pedido'
       }
-      return modoLote ? 'Crear entrada directa por lote' : 'Crear entrada directa'
+      return modoLote ? 'Registrar varios productos' : 'Registrar ingreso manual'
     }
 
-    return requiereAprobacion() ? 'Enviar para Aprobación' : `Registrar ${getTipoLabel(tipoMovimiento)}`
+    return requiereAprobacion() ? 'Enviar a aprobación' : `Registrar ${getTipoResultadoLabel(tipoMovimiento).toLowerCase()}`
   })()
 
   return (
@@ -1099,14 +1190,16 @@ export function MovimientosModule() {
           gap: '8px'
         }}>
           <Clock size={16} />
-          Los movimientos de salida, asignación y devolución requieren aprobación de un encargado
+          {tipoMovimiento === 'salida'
+            ? 'Todo retiro queda pendiente de aprobación. El stock se descuenta recién cuando un encargado aprueba.'
+            : 'Los retiros de stock, asignaciones y devoluciones requieren aprobación de un encargado.'}
         </div>
       )}
 
       {/* Selector de Tipo de Movimiento (sin Daño ni Pérdida) */}
       <div style={{ marginBottom: '24px' }}>
         <label style={{ display: 'block', marginBottom: '12px', fontSize: '14px', fontWeight: 600, color: 'var(--text-primary)' }}>
-          Tipo de Movimiento
+          Qué vas a registrar
         </label>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '12px' }}>
           {(['entrada', 'salida', 'asignacion', 'devolucion'] as TipoMovimiento[]).map((tipo) => (
@@ -1170,17 +1263,17 @@ export function MovimientosModule() {
                     {entradaDesdePedido ? (
                       <><Package size={14} style={{ display: 'inline', verticalAlign: 'middle' }} /> Recepción de pedido</>
                     ) : modoLote ? (
-                      <><Package size={14} style={{ display: 'inline', verticalAlign: 'middle' }} /> Entrada directa por lote</>
+                      <><Package size={14} style={{ display: 'inline', verticalAlign: 'middle' }} /> Ingresar varios productos</>
                     ) : (
-                      <><FileText size={14} style={{ display: 'inline', verticalAlign: 'middle' }} /> Entrada directa</>
+                      <><FileText size={14} style={{ display: 'inline', verticalAlign: 'middle' }} /> Ingresar un producto</>
                     )}
                   </div>
                   <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
                     {entradaDesdePedido
                       ? 'Viene del seguimiento del pedido; al confirmar se descuenta el pendiente y entra a stock.'
                       : modoLote
-                        ? 'Carga varios productos de una compra o referencia sin pedido por correo.'
-                        : 'Carga un producto de una compra o entrega manual sin pedido por correo.'
+                        ? 'Úsalo cuando llegaron varios productos sin haber creado antes un pedido a proveedor en el sistema.'
+                        : 'Úsalo cuando llegó un producto sin haber creado antes un pedido a proveedor en el sistema.'
                     }
                   </div>
                 </div>
@@ -1200,7 +1293,7 @@ export function MovimientosModule() {
                     opacity: entradaDesdePedido ? 0.65 : 1
                   }}
                 >
-                  {entradaDesdePedido ? 'Definido por pedido' : modoLote ? 'Cambiar a directa simple' : 'Cambiar a lote'}
+                  {entradaDesdePedido ? 'Definido por pedido' : modoLote ? 'Ingresar un producto' : 'Ingresar varios productos'}
                 </button>
               </div>
 
@@ -1235,12 +1328,12 @@ export function MovimientosModule() {
                 <Truck size={18} />
                 <div>
                   <strong style={{ color: entradaDesdePedido ? 'var(--color-success)' : 'var(--color-warning)' }}>
-                    {entradaDesdePedido ? 'Esta acción confirma una recepción de pedido.' : 'La entrada directa queda pendiente de recepción.'}
+                    {entradaDesdePedido ? 'Esta acción confirma una recepción de pedido.' : 'Este ingreso queda pendiente de confirmación.'}
                   </strong>
                   <div style={{ fontSize: '12px', marginTop: '2px' }}>
                     {entradaDesdePedido
                       ? 'Se usa cuando el pedido a proveedor ya tuvo respuesta y llegó la mercadería.'
-                      : 'Después debes confirmarla desde Pedidos > Entradas directas para que pase a stock disponible.'}
+                      : 'Luego confírmalo desde Pedidos > Ingresos por confirmar para que pase a stock disponible.'}
                   </div>
                 </div>
               </div>
@@ -1270,7 +1363,7 @@ export function MovimientosModule() {
                 </div>
                 <div>
                   <label style={{ display: 'block', marginBottom: '8px', fontSize: '14px', fontWeight: 600, color: 'var(--text-secondary)' }}>
-                    Fecha Estimada Llegada
+                    Fecha estimada de llegada
                   </label>
                   <input
                     type="date"
@@ -1309,12 +1402,12 @@ export function MovimientosModule() {
               >
                 <div>
                   <div style={{ fontWeight: 600, fontSize: '14px', color: 'var(--text-primary)', marginBottom: '4px' }}>
-                    {modoLoteSalida ? <><Package size={14} style={{ display: 'inline', verticalAlign: 'middle' }} /> Salida por Lote</> : <><FileText size={14} style={{ display: 'inline', verticalAlign: 'middle' }} /> Salida Simple</>}
+                    {modoLoteSalida ? <><Package size={14} style={{ display: 'inline', verticalAlign: 'middle' }} /> Retirar varios productos</> : <><FileText size={14} style={{ display: 'inline', verticalAlign: 'middle' }} /> Retirar un producto</>}
                   </div>
                   <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
                     {modoLoteSalida
-                      ? 'Registra salidas de múltiples productos a diferentes vehículos'
-                      : 'Registra la salida de un producto a la vez'
+                      ? 'Úsalo cuando debes retirar más de un producto del stock en una misma solicitud.'
+                      : 'Úsalo cuando debes retirar un solo producto del stock.'
                     }
                   </div>
                 </div>
@@ -1332,14 +1425,14 @@ export function MovimientosModule() {
                     fontWeight: 600
                   }}
                 >
-                  {modoLoteSalida ? 'Cambiar a Simple' : 'Cambiar a Lote'}
+                  {modoLoteSalida ? 'Retirar un producto' : 'Retirar varios productos'}
                 </button>
               </div>
 
               {/* Motivo de Salida */}
               <div>
                 <label style={{ display: 'block', marginBottom: '8px', fontSize: '14px', fontWeight: 600, color: 'var(--text-primary)' }}>
-                  Motivo de Salida *
+                  Motivo del retiro *
                 </label>
                 <div
                   className="mov-motivo-grid"
@@ -1374,11 +1467,32 @@ export function MovimientosModule() {
                 </div>
               </div>
 
+              {esRetiroDefinitivo(motivoSalida) && (
+                <div style={{
+                  padding: '10px 12px',
+                  background: 'var(--badge-red-bg)',
+                  border: '1px solid var(--color-danger)',
+                  borderRadius: '8px',
+                  color: 'var(--badge-red-text)',
+                  display: 'flex',
+                  alignItems: 'flex-start',
+                  gap: '8px',
+                  fontSize: '13px',
+                  lineHeight: 1.45
+                }}>
+                  <AlertTriangle size={16} style={{ flexShrink: 0, marginTop: '1px' }} />
+                  <span>
+                    Al aprobar este retiro, las unidades se descuentan definitivamente del stock disponible.
+                    Si se rechaza, el stock no cambia.
+                  </span>
+                </div>
+              )}
+
               {/* Categoría de servicio (obligatorio si es consumo) */}
               {motivoSalida === 'consumo_servicio' && (
                 <div>
                   <label style={{ display: 'block', marginBottom: '8px', fontSize: '14px', fontWeight: 600, color: 'var(--text-primary)' }}>
-                    Categoría de Servicio *
+                    Servicio donde se usó *
                   </label>
                   <select
                     value={categoriaServicio}
@@ -1430,7 +1544,7 @@ export function MovimientosModule() {
                   padding: '16px'
                 }}>
                   <h3 style={{ fontSize: '16px', fontWeight: 600, color: 'var(--text-primary)', marginBottom: '12px' }}>
-                    Productos a dar salida ({productosLoteSalida.length})
+                    Productos a retirar ({productosLoteSalida.length})
                   </h3>
 
                   {/* Agregar nuevo item */}
@@ -1546,7 +1660,7 @@ export function MovimientosModule() {
                     </div>
                   ) : (
                     <p style={{ fontSize: '13px', color: 'var(--text-secondary)', fontStyle: 'italic', textAlign: 'center', padding: '16px' }}>
-                      No hay productos agregados. Busca un producto, selecciona el vehículo destino y agrega.
+                      No hay productos agregados. Busca un producto, selecciona un vehículo si aplica y agrégalo.
                     </p>
                   )}
                 </div>
@@ -1587,7 +1701,7 @@ export function MovimientosModule() {
               {/* Categoría de servicio (obligatorio) */}
               <div>
                 <label style={{ display: 'block', marginBottom: '8px', fontSize: '14px', fontWeight: 600, color: 'var(--text-primary)' }}>
-                  Categoría de Servicio *
+                  Servicio donde se usará *
                 </label>
                 <select
                   value={categoriaServicio}
@@ -1663,7 +1777,7 @@ export function MovimientosModule() {
               {vehiculoId && productoId && (
                 <div>
                   <label style={{ display: 'block', marginBottom: '8px', fontSize: '14px', fontWeight: 600, color: 'var(--text-primary)' }}>
-                    Categoría de Servicio
+                    Servicio asociado
                   </label>
                   <select
                     value={categoriaServicioDevolucion}
@@ -1954,12 +2068,17 @@ export function MovimientosModule() {
           <div>
             <label style={{ display: 'block', marginBottom: '8px', fontSize: '14px', fontWeight: 600, color: 'var(--text-primary)' }}>
               Observaciones {(tipoMovimiento === 'devolucion' && estadoRetorno !== 'operativa') ? '*' : ''}
+              {tipoMovimiento === 'salida' && esRetiroDefinitivo(motivoSalida) ? ' (recomendado)' : ''}
             </label>
             <textarea
               value={observaciones}
               onChange={(e) => setObservaciones(e.target.value)}
               rows={3}
-              placeholder="Detalles adicionales..."
+              placeholder={
+                tipoMovimiento === 'salida' && esRetiroDefinitivo(motivoSalida)
+                  ? 'Describe por qué se retira definitivamente del stock...'
+                  : 'Detalles adicionales...'
+              }
               style={{
                 width: '100%',
                 padding: '10px',
