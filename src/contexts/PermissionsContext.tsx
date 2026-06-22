@@ -299,25 +299,73 @@ export function PermissionsProvider({ children }: { children: React.ReactNode })
             permission_source: (r.permission_source || 'role_inherited') as 'user_override' | 'role_inherited'
           }))
 
-        submenusData = rpcRows
+        // Obtener IDs de los submenús que el usuario puede ver
+        const visibleSubmenuIds = rpcRows
           .filter((r: any) => !r.is_menu && r.can_view)
-          .map((r: any) => ({
-            id: r.menu_id,
-            name: r.menu_name,
-            label: r.menu_label,
-            route: r.menu_route || '',
-            order_index: r.order_index || 0,
-            menu_id: r.parent_menu_id,
-            parent_id: null,
-            level: 1,
+          .map((r: any) => r.menu_id)
+
+        // Fetchear parent_id y level reales desde la tabla submenus
+        // (la RPC no los devuelve, vienen hardcodeados en el fallback anterior)
+        const { data: submenuDetails } = visibleSubmenuIds.length > 0
+          ? await (supabase.from('submenus') as any)
+              .select('id, parent_id, level, menu_id, name, label, route, order_index')
+              .in('id', visibleSubmenuIds)
+          : { data: [] }
+
+        const submenuDetailMap = new Map(
+          ((submenuDetails || []) as any[]).map((s: any) => [s.id, s])
+        )
+
+        // Recolectar parent_ids que NO están en los permisos del rol
+        // (submenús contenedor como "INTEGRACIONES GPS" pueden no tener permiso explícito
+        //  pero deben mostrarse para mantener la jerarquía)
+        const missingParentIds = new Set<string>()
+        for (const detail of (submenuDetails || []) as any[]) {
+          if (detail.parent_id && !submenuDetailMap.has(detail.parent_id)) {
+            missingParentIds.add(detail.parent_id)
+          }
+        }
+
+        // Fetchear los submenús padre faltantes
+        if (missingParentIds.size > 0) {
+          const { data: parentDetails } = await (supabase.from('submenus') as any)
+            .select('id, parent_id, level, menu_id, name, label, route, order_index')
+            .in('id', Array.from(missingParentIds))
+          for (const p of (parentDetails || []) as any[]) {
+            submenuDetailMap.set(p.id, p)
+          }
+        }
+
+        // Construir submenusData usando los datos reales de jerarquía
+        const rpcSubmenuMap = new Map(
+          rpcRows
+            .filter((r: any) => !r.is_menu && r.can_view)
+            .map((r: any) => [r.menu_id, r])
+        )
+
+        submenusData = Array.from(submenuDetailMap.values()).map((detail: any) => {
+          const rpcRow = rpcSubmenuMap.get(detail.id)
+          return {
+            id: detail.id,
+            // Para entries con permiso explícito, usar el nombre que devuelve el RPC
+            // (es el que usa ProtectedRoute en submenuName="...").
+            // Para padres auto-incluidos (sin rpcRow), usar el nombre de la tabla.
+            name: rpcRow?.menu_name ?? detail.name,
+            label: rpcRow?.menu_label ?? detail.label,
+            route: rpcRow?.menu_route ?? detail.route ?? '',
+            order_index: rpcRow?.order_index ?? detail.order_index ?? 0,
+            menu_id: detail.menu_id,
+            parent_id: detail.parent_id ?? null,
+            level: detail.level ?? 1,
             permissions: {
-              can_view: r.can_view || false,
-              can_create: r.can_create || false,
-              can_edit: r.can_edit || false,
-              can_delete: r.can_delete || false
+              can_view: rpcRow?.can_view ?? true,
+              can_create: rpcRow?.can_create ?? false,
+              can_edit: rpcRow?.can_edit ?? false,
+              can_delete: rpcRow?.can_delete ?? false
             },
-            permission_source: (r.permission_source || 'role_inherited') as 'user_override' | 'role_inherited'
-          }))
+            permission_source: ((rpcRow?.permission_source) || 'role_inherited') as 'user_override' | 'role_inherited'
+          }
+        })
 
         // Cargar permisos de tabs via RPC
         const { data: rpcTabs, error: rpcTabError } = await supabase
@@ -659,6 +707,7 @@ const permissionsFallback: PermissionsContextType = {
   canDelete: () => false,
 }
 
+// eslint-disable-next-line react-refresh/only-export-components
 export function usePermissions() {
   const context = useContext(PermissionsContext)
   if (context === undefined) {

@@ -41,7 +41,7 @@ const menuIcons: Record<string, LucideIcon> = {
   'proveedores': Users,
   'ctrl-exceso-vel': Gauge,
   'ctrl-exceso-km': Gauge,
-  'bitacora-uss': History,
+  'bitacora-gps': History,
   'cabify': MapPin,
   'gestion-usuarios': UserCog,
   'roles': Shield,
@@ -455,10 +455,7 @@ export function HomePage() {
             <button
               className="nav-nested-header"
               onClick={() => {
-                // Si tiene ruta, navegar; si no, solo toggle
-                if (submenu.submenu_route) {
-                  navigate(submenu.submenu_route)
-                }
+                // Grupos con hijos solo hacen toggle, no navegan
                 toggleNestedMenu(submenu.submenu_id)
               }}
             >
@@ -2018,8 +2015,13 @@ export function HomePage() {
                   <LazyPage><USSPage /></LazyPage>
                 </ProtectedRoute>
               } />
+              <Route path="/integraciones/gps/exceso-velocidad" element={
+                <ProtectedRoute submenuName="ctrl-exceso-vel" action="view">
+                  <LazyPage><USSPage /></LazyPage>
+                </ProtectedRoute>
+              } />
               <Route path="/integraciones/gps/bitacora" element={
-                <ProtectedRoute submenuName="bitacora-uss" action="view">
+                <ProtectedRoute submenuName="bitacora-gps" action="view">
                   <LazyPage><BitacoraPage /></LazyPage>
                 </ProtectedRoute>
               } />
