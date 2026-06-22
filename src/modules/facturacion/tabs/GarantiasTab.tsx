@@ -1757,9 +1757,9 @@ export function GarantiasTab() {
     {
       id: 'cuotas_pagadas',
       header: 'Cuotas (ref.)',
-      accessorFn: (row) => cuotasRealesMap.get(row.id) ?? Number(row.cuotas_pagadas) ?? 0,
+      accessorFn: (row) => (cuotasRealesMap.get(row.id) ?? Number(row.cuotas_pagadas)) || 0,
       cell: ({ row }) => {
-        const cuotasPagadas = cuotasRealesMap.get(row.original.id) ?? Number(row.original.cuotas_pagadas) ?? 0
+        const cuotasPagadas = (cuotasRealesMap.get(row.original.id) ?? Number(row.original.cuotas_pagadas)) || 0
         return (
           <span className="dt-badge dt-badge-blue" style={{ fontSize: '11px' }} title={`${cuotasPagadas} cuotas cobradas`}>
             {cuotasPagadas}
@@ -2342,18 +2342,34 @@ export function GarantiasTab() {
         }
         // Inyectar semanas de facturacion_conductores que no están en el kardex.
         // Siempre se inyectan para mostrar el historial completo de lo facturado.
-        // Calcular acumulado del kardex para determinar cuáles son excedente.
         const montoTotalGarantia = Number(g.monto_total) || 1000000
-        const totalFacturadoKardex = Array.from(consolidadasMap.values())
-          .reduce((sum, f) => sum + (Number(f.monto_cuota) || 0), 0)
-        let acumuladoParaExtra = totalFacturadoKardex
 
         // Ordenar semanas de facturacion cronologicamente para inyectar en orden
         const semanasOrdenadas = [...kardexModal.semanasFacturacion]
           .sort((a, b) => a.anio !== b.anio ? a.anio - b.anio : a.semana - b.semana)
 
+        // Calcular acumulado cronológicamente mezclando kardex + facturación en orden real.
+        // Evita que entradas posteriores del kardex (ej. S24, S25) inflen el acumulado
+        // de semanas anteriores que solo están en facturación y no en el kardex (ej. S23).
+        const kardexOrdenado = Array.from(consolidadasMap.values())
+          .sort((a, b) => (a.anio !== b.anio ? (a.anio || 0) - (b.anio || 0) : (a.semana || 0) - (b.semana || 0)))
+        let acumuladoParaExtra = 0
+        let kardexIdx = 0
+
         for (const sf of semanasOrdenadas) {
           const key = `${sf.anio}-${sf.semana}`
+          // Acumular todas las entradas del kardex que vienen ANTES de esta semana
+          while (kardexIdx < kardexOrdenado.length) {
+            const k = kardexOrdenado[kardexIdx]
+            const kAnio = k.anio || 0
+            const kSemana = k.semana || 0
+            if (kAnio < sf.anio || (kAnio === sf.anio && kSemana < sf.semana)) {
+              acumuladoParaExtra += Number(k.monto_cuota) || 0
+              kardexIdx++
+            } else {
+              break
+            }
+          }
           if (!consolidadasMap.has(key)) {
             const esExcedente = acumuladoParaExtra >= montoTotalGarantia
             consolidadasMap.set(key, {
@@ -2525,16 +2541,6 @@ export function GarantiasTab() {
                         const [a, s] = sem.split('-')
                         return <option key={sem} value={sem}>{a} S{String(s).padStart(2, '0')}</option>
                       })}
-                    </select>
-                    <select
-                      value={kardexModal.tipoFilter}
-                      onChange={e => setKardexModal(prev => ({ ...prev, tipoFilter: e.target.value }))}
-                      style={{ padding: '5px 8px', fontSize: '11px', border: '1px solid var(--border-primary)', borderRadius: '4px', background: 'var(--card-bg, #fff)', color: 'var(--text-secondary)' }}
-                    >
-                      <option value="">Todos los estados</option>
-                      <option value="cubierta">Cubiertas</option>
-                      <option value="parcial">Parciales</option>
-                      <option value="no-cubierta">No cubiertas</option>
                     </select>
                   </div>
                 )}
