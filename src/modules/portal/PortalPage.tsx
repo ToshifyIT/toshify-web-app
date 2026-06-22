@@ -315,6 +315,9 @@ export function PortalPage() {
   const [conductor, setConductor] = useState<PortalConductor | null>(null)
   const [facturas, setFacturas] = useState<PortalFacturacion[]>([])
   const [pagadoPorSemana, setPagadoPorSemana] = useState<Record<string, number>>({})
+  // Total referencial por factura calculado igual que el modal (suma del detalle, que se
+  // guarda redondeado). Se usa en el card del historial para que muestre el MISMO monto que el modal.
+  const [referencialPorFactura, setReferencialPorFactura] = useState<Record<string, number>>({})
   const [selectedFactura, setSelectedFactura] = useState<PortalFacturacion | null>(null)
   const [detalleItems, setDetalleItems] = useState<PortalDetalle[]>([])
   const [detallePagos, setDetallePagos] = useState<Array<{ id: string; tipo: string; monto: number; referencia: string | null; fecha: string }>>([])
@@ -593,9 +596,29 @@ export function PortalPage() {
         map[key] = (map[key] || 0) + Number(p.monto_movimiento || 0)
       })
       setPagadoPorSemana(map)
+
+      // Total referencial por factura = suma del detalle, igual que el modal (openDetail).
+      // Una sola query batch para todas las facturas visibles; el card lo usa para mostrar
+      // exactamente el mismo monto que el modal (el detalle se guarda redondeado, por eso
+      // difiere de total_a_pagar de la cabecera por unos centavos).
+      const facturaIds = facturasData.map(f => f.id)
+      const refMap: Record<string, number> = {}
+      if (facturaIds.length > 0) {
+        const { data: detalleData } = await supabase
+          .from('facturacion_detalle')
+          .select('facturacion_id, total, es_descuento')
+          .in('facturacion_id', facturaIds)
+        ;(detalleData || []).forEach((d: { facturacion_id: string; total: number; es_descuento: boolean }) => {
+          const t = Number(d.total) || 0
+          if (t === 0) return
+          refMap[d.facturacion_id] = (refMap[d.facturacion_id] || 0) + (d.es_descuento ? -t : t)
+        })
+      }
+      setReferencialPorFactura(refMap)
     } catch {
       setFacturas([])
       setPagadoPorSemana({})
+      setReferencialPorFactura({})
     } finally {
       setLoadingFacturas(false)
     }
@@ -2236,14 +2259,17 @@ export function PortalPage() {
                   {facturas.map((f) => {
                     const p = f.periodos_facturacion
                     const pagado = pagadoPorSemana[`${p.semana}-${p.anio}`] || 0
-                    // Calculo de cobertura: pagado vs total a pagar
-                    const referencial = f.total_a_pagar || 0
+                    // Referencial = suma del detalle (mismo valor que muestra el modal).
+                    // Fallback a total_a_pagar de la cabecera si el detalle aun no cargo.
+                    const referencial = referencialPorFactura[f.id] ?? (f.total_a_pagar || 0)
                     const saldo = referencial - pagado
                     const cobertura = referencial > 0 ? Math.min(100, (pagado / referencial) * 100) : (pagado > 0 ? 100 : 0)
-                    // Estado: cubierto (saldo <= 0.01), pendiente (saldo > 0.01), a favor (saldo < -0.01)
+                    // Estado: diferencias menores a $1 son redondeo de centavos (Cabify deposita
+                    // montos que no caen exactos sobre el referencial), no deuda/saldo real -> Cubierto.
+                    const TOLERANCIA = 1
                     let estado: 'cubierto' | 'pendiente' | 'favor' = 'cubierto'
-                    if (saldo > 0.01) estado = 'pendiente'
-                    else if (saldo < -0.01) estado = 'favor'
+                    if (saldo > TOLERANCIA) estado = 'pendiente'
+                    else if (saldo < -TOLERANCIA) estado = 'favor'
                     const fillColor = estado === 'pendiente'
                       ? 'linear-gradient(90deg, #f59e0b, #dc2626)'
                       : estado === 'favor' ? '#10b981' : '#059669'
