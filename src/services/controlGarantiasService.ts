@@ -206,22 +206,29 @@ export async function syncKardexForPeriodo(periodoId: string): Promise<{
   const semana = periodo.semana as number
   const anio = periodo.anio as number
 
-  // 2. Obtener facturacion con garantía > 0 para este período
-  const { data: facturas } = await (supabase
+  let deleted = 0
+
+  // 2. Obtener TODA la facturacion del período (con y sin garantía)
+  // para detectar conductores cuyo subtotal_garantia bajó a 0 por un recálculo.
+  const { data: todasFacturas } = await (supabase
     .from('facturacion_conductores') as any)
     .select('conductor_id, conductor_nombre, conductor_dni, subtotal_garantia')
     .eq('periodo_id', periodoId)
-    .gt('subtotal_garantia', 0)
 
-  if (!facturas || facturas.length === 0) return { created: 0, updated: 0, skipped: 0, errors: 0 }
+  const facturas = (todasFacturas || []).filter((f: any) => Number(f.subtotal_garantia) > 0)
+  const conductoresConCero = (todasFacturas || [])
+    .filter((f: any) => Number(f.subtotal_garantia) === 0)
+    .map((f: any) => f.conductor_id)
+    .filter(Boolean) as string[]
 
   const conductorIds = facturas.map((f: any) => f.conductor_id).filter(Boolean)
 
   // 3. Verificar cuáles ya tienen kardex para esta semana/anio
+  const todosLosIds = [...new Set([...conductorIds, ...conductoresConCero])]
   const { data: existentes } = await (supabase
     .from('control_garantias') as any)
     .select('id, conductor_id, monto_facturado')
-    .in('conductor_id', conductorIds)
+    .in('conductor_id', todosLosIds)
     .eq('semana', semana)
     .eq('anio', anio)
     .eq('tipo_movimiento', 'cuota_facturada')
@@ -230,6 +237,22 @@ export async function syncKardexForPeriodo(periodoId: string): Promise<{
   for (const e of (existentes || []) as any[]) {
     existenteMap.set(e.conductor_id, { id: e.id, monto_facturado: Number(e.monto_facturado) || 0 })
   }
+
+  // 3b. Eliminar entradas stale: conductores con subtotal_garantia = 0 que aún
+  // tienen un kardex de una versión anterior del cálculo.
+  const idsParaEliminar = conductoresConCero
+    .filter(cid => existenteMap.has(cid))
+    .map(cid => existenteMap.get(cid)!.id)
+  if (idsParaEliminar.length > 0) {
+    await (supabase
+      .from('control_garantias') as any)
+      .delete()
+      .in('id', idsParaEliminar)
+    deleted = idsParaEliminar.length
+  }
+
+  // Si no hay facturas con garantía activa, retornar (ya se limpió lo stale arriba)
+  if (facturas.length === 0) return { created: 0, updated: 0, skipped: 0, errors: 0, deleted } as any
 
   // 4. Obtener garantías maestras para TODOS los conductores (nuevos + existentes que puedan necesitar update)
   const { data: garantias } = await (supabase
@@ -312,5 +335,5 @@ export async function syncKardexForPeriodo(periodoId: string): Promise<{
     }
   }
 
-  return { created, updated, skipped, errors }
+  return { created, updated, skipped, errors, deleted } as any
 }
