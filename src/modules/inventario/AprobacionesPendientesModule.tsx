@@ -40,6 +40,8 @@ interface MovimientoHistorico {
   estado_aprobacion: 'aprobado' | 'rechazado'
   fecha_aprobacion: string | null
   motivo_rechazo: string | null
+  motivo_salida: string | null
+  estado_retorno: string | null
   producto_nombre: string
   usuario_registrador_nombre: string
   usuario_aprobador_nombre: string | null
@@ -81,7 +83,7 @@ export function AprobacionesPendientesModule() {
         .order('created_at', { ascending: false })
 
       if (error) throw error
-      setMovimientos(data || [])
+      setMovimientos(((data || []) as MovimientoPendiente[]).filter(movimiento => movimiento.tipo !== 'entrada'))
     } catch (error) {
       Swal.fire('Error', 'No se pudieron cargar los movimientos pendientes', 'error')
     } finally {
@@ -103,11 +105,14 @@ export function AprobacionesPendientesModule() {
           estado_aprobacion,
           fecha_aprobacion,
           motivo_rechazo,
+          motivo_salida,
+          estado_retorno,
           usuario_id,
           productos (nombre),
           aprobador:usuario_aprobador_id (full_name)
         `)
         .in('estado_aprobacion', ['aprobado', 'rechazado'])
+        .neq('tipo_movimiento', 'entrada')
         .order('fecha_aprobacion', { ascending: false, nullsFirst: false })
         .limit(50)
 
@@ -131,6 +136,8 @@ export function AprobacionesPendientesModule() {
         estado_aprobacion: mov.estado_aprobacion,
         fecha_aprobacion: mov.fecha_aprobacion,
         motivo_rechazo: mov.motivo_rechazo,
+        motivo_salida: mov.motivo_salida,
+        estado_retorno: mov.estado_retorno,
         producto_nombre: mov.productos?.nombre || 'Producto eliminado',
         usuario_registrador_nombre: perfilesMap.get(mov.usuario_id) || 'Usuario desconocido',
         usuario_aprobador_nombre: mov.aprobador?.full_name || null
@@ -138,10 +145,80 @@ export function AprobacionesPendientesModule() {
 
       setHistorico(historicoFormateado)
     } catch (error) {
-      Swal.fire('Error', 'No se pudo cargar el histórico de aprobaciones', 'error')
+      Swal.fire('Error', 'No se pudieron cargar los movimientos procesados', 'error')
     } finally {
       setLoadingHistorico(false)
     }
+  }
+
+  const esRetiroDefinitivo = (movimiento: MovimientoPendiente) => {
+    const motivo = movimiento.motivo_salida?.toLowerCase()
+    return movimiento.tipo === 'salida' && ['dañado', 'danado', 'perdido'].includes(motivo || '')
+  }
+
+  const esHistoricoRetiroDefinitivo = (movimiento: MovimientoHistorico) => {
+    const motivo = movimiento.motivo_salida?.toLowerCase()
+    return movimiento.tipo === 'salida' && ['dañado', 'danado', 'perdido'].includes(motivo || '')
+  }
+
+  const getImpactoAprobacionTexto = (movimiento: MovimientoPendiente) => {
+    if (esRetiroDefinitivo(movimiento)) {
+      return 'Descuento definitivo del stock disponible'
+    }
+    if (movimiento.tipo === 'salida') {
+      return 'Descuento del stock disponible al aprobar'
+    }
+    return null
+  }
+
+  const getImpactoAprobacionHtml = (movimiento: MovimientoPendiente) => {
+    const impacto = getImpactoAprobacionTexto(movimiento)
+    if (!impacto) return ''
+
+    return `
+      <div style="margin-top: 12px; padding: 10px 12px; border-radius: 8px; background: #FEF2F2; border: 1px solid #FCA5A5; color: #991B1B;">
+        <strong>Impacto al aprobar:</strong> ${impacto}.
+        ${esRetiroDefinitivo(movimiento) ? 'Si se rechaza, el stock no cambia.' : ''}
+      </div>
+    `
+  }
+
+  const getMensajeAprobacionExitosa = (movimiento: MovimientoPendiente) => {
+    if (esRetiroDefinitivo(movimiento)) {
+      return 'Retiro aprobado. Las unidades quedaron descontadas definitivamente del stock disponible.'
+    }
+    if (movimiento.tipo === 'salida') {
+      return 'Retiro aprobado. El stock disponible fue descontado.'
+    }
+    return 'El movimiento ha sido aprobado y el stock actualizado'
+  }
+
+  const getImpactoRechazoHtml = () => `
+    <div style="margin-top: 12px; padding: 10px 12px; border-radius: 8px; background: #F8FAFC; border: 1px solid #CBD5E1; color: #475569;">
+      <strong>Impacto al rechazar:</strong> el stock no cambia. El movimiento queda cerrado con el motivo registrado.
+    </div>
+  `
+
+  const getImpactoHistoricoTexto = (movimiento: MovimientoHistorico) => {
+    if (movimiento.estado_aprobacion === 'rechazado') {
+      return 'Stock sin cambios; decisión cerrada con motivo de rechazo.'
+    }
+    if (esHistoricoRetiroDefinitivo(movimiento)) {
+      return 'Retiro definitivo: salió del stock disponible.'
+    }
+    if (movimiento.tipo === 'salida') {
+      return 'Stock disponible descontado al aprobar.'
+    }
+    if (movimiento.tipo === 'asignacion') {
+      return 'Herramienta asignada; salió del stock disponible.'
+    }
+    if (movimiento.tipo === 'devolucion') {
+      if (movimiento.estado_retorno && movimiento.estado_retorno !== 'operativa') {
+        return `Retorno ${getEstadoRetornoLabel(movimiento.estado_retorno).toLowerCase()}; no queda disponible.`
+      }
+      return 'Herramienta devuelta al stock disponible.'
+    }
+    return null
   }
 
   const aprobarMovimiento = async (movimiento: MovimientoPendiente) => {
@@ -159,6 +236,7 @@ export function AprobacionesPendientesModule() {
           ${vehiculoInfo}
           <p><strong>Registrado por:</strong> ${movimiento.usuario_registrador_nombre}</p>
           ${movimiento.observaciones ? `<p><strong>Observaciones:</strong> ${movimiento.observaciones}</p>` : ''}
+          ${getImpactoAprobacionHtml(movimiento)}
         </div>
       `,
       icon: 'question',
@@ -183,7 +261,7 @@ export function AprobacionesPendientesModule() {
       if (rpcError) throw rpcError
       if (rpcResult && !rpcResult.success) throw new Error(rpcResult.error)
 
-      showSuccess('¡Aprobado!', 'El movimiento ha sido aprobado y el stock actualizado')
+      showSuccess('¡Aprobado!', getMensajeAprobacionExitosa(movimiento))
 
       cargarMovimientosPendientes()
     } catch (error: any) {
@@ -207,6 +285,7 @@ export function AprobacionesPendientesModule() {
           <p><strong>Cantidad:</strong> ${movimiento.cantidad}</p>
           ${vehiculoInfo}
           <p><strong>Registrado por:</strong> ${movimiento.usuario_registrador_nombre}</p>
+          ${getImpactoRechazoHtml()}
         </div>
       `,
       input: 'textarea',
@@ -244,7 +323,7 @@ export function AprobacionesPendientesModule() {
 
       await Swal.fire({
         title: 'Rechazado',
-        text: 'El movimiento ha sido rechazado',
+        text: 'El movimiento fue rechazado. El stock no cambió y el motivo quedó registrado.',
         icon: 'info',
         timer: 2000,
         showConfirmButton: false
@@ -345,6 +424,7 @@ export function AprobacionesPendientesModule() {
     const labels: Record<string, string> = {
       venta: 'Venta',
       consumo_servicio: 'Consumo en servicio',
+      dañado: 'Dañado',
       danado: 'Dañado',
       perdido: 'Perdido'
     }
@@ -354,6 +434,7 @@ export function AprobacionesPendientesModule() {
   const getEstadoRetornoLabel = (estado: string): string => {
     const labels: Record<string, string> = {
       operativa: 'Operativa',
+      dañada: 'Dañada',
       danada: 'Dañada',
       perdida: 'Perdida'
     }
@@ -369,7 +450,7 @@ export function AprobacionesPendientesModule() {
       <div style={{ padding: '20px', textAlign: 'center', color: 'var(--text-secondary)' }}>
         <Clock size={48} style={{ marginBottom: '16px', opacity: 0.5 }} />
         <h3>Acceso Restringido</h3>
-        <p>Solo los usuarios con rol de Encargado o Admin pueden aprobar movimientos.</p>
+        <p>Solo los usuarios con rol de Encargado, Admin o Supervisor pueden aprobar movimientos.</p>
       </div>
     )
   }
@@ -722,6 +803,13 @@ export function AprobacionesPendientesModule() {
           margin-top: 4px;
         }
 
+        .historico-impacto {
+          font-size: 12px;
+          color: var(--text-primary);
+          font-weight: 600;
+          margin-top: 6px;
+        }
+
         .historico-estado {
           text-align: right;
         }
@@ -802,7 +890,7 @@ export function AprobacionesPendientesModule() {
             onClick={() => setTabActiva('historico')}
           >
             <History size={16} />
-            Histórico
+            Procesados
           </button>
         </div>
 
@@ -816,7 +904,6 @@ export function AprobacionesPendientesModule() {
                 onChange={(e) => setFiltroTipo(e.target.value as FiltroTipo)}
               >
                 <option value="todos">Todos los tipos</option>
-                <option value="entrada">Entradas</option>
                 <option value="salida">Salidas</option>
                 <option value="asignacion">Asignaciones</option>
                 <option value="devolucion">Devoluciones</option>
@@ -829,7 +916,7 @@ export function AprobacionesPendientesModule() {
           </div>
         )}
 
-        {/* Controles - Solo para pestaña histórico */}
+        {/* Controles - Solo para pestaña procesados */}
         {tabActiva === 'historico' && (
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', alignItems: 'center' }}>
             <button className="refresh-btn" onClick={cargarHistorico}>
@@ -897,6 +984,12 @@ export function AprobacionesPendientesModule() {
                           <span className="field-value">{getMotivoSalidaLabel(movimiento.motivo_salida)}</span>
                         </div>
                       )}
+                      {getImpactoAprobacionTexto(movimiento) && (
+                        <div className="movimiento-field full-width">
+                          <span className="field-label">Impacto al aprobar</span>
+                          <span className="field-value">{getImpactoAprobacionTexto(movimiento)}</span>
+                        </div>
+                      )}
                       <div className="movimiento-field full-width">
                         <span className="field-label">Registrado por</span>
                         <span className="field-value">{movimiento.usuario_registrador_nombre}</span>
@@ -941,7 +1034,7 @@ export function AprobacionesPendientesModule() {
           </>
         )}
 
-        {/* Tab: Histórico */}
+        {/* Tab: Movimientos procesados */}
         {tabActiva === 'historico' && (
           <>
             {loadingHistorico ? (
@@ -951,8 +1044,8 @@ export function AprobacionesPendientesModule() {
             ) : historico.length === 0 ? (
               <div className="empty-state">
                 <History size={48} />
-                <h3>No hay histórico de aprobaciones</h3>
-                <p>Aún no se han procesado movimientos</p>
+                <h3>No hay movimientos procesados</h3>
+                <p>Cuando se apruebe o rechace un movimiento interno, aparecerá aquí.</p>
               </div>
             ) : (
               <div className="historico-grid">
@@ -975,6 +1068,18 @@ export function AprobacionesPendientesModule() {
                           <> • Procesado por: {item.usuario_aprobador_nombre}</>
                         )}
                       </div>
+                      {(item.motivo_salida || item.estado_retorno) && (
+                        <div className="historico-meta">
+                          {item.motivo_salida && <>Motivo: {getMotivoSalidaLabel(item.motivo_salida)}</>}
+                          {item.motivo_salida && item.estado_retorno && <> • </>}
+                          {item.estado_retorno && <>Retorno: {getEstadoRetornoLabel(item.estado_retorno)}</>}
+                        </div>
+                      )}
+                      {getImpactoHistoricoTexto(item) && (
+                        <div className="historico-impacto">
+                          Impacto: {getImpactoHistoricoTexto(item)}
+                        </div>
+                      )}
                       {item.motivo_rechazo && (
                         <div className="historico-meta" style={{ color: 'var(--color-danger)', marginTop: '4px' }}>
                           Motivo: {item.motivo_rechazo}

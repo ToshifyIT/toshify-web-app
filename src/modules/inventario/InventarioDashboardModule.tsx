@@ -13,7 +13,9 @@ import {
   Activity,
   Settings,
   Droplets,
-  ArrowRight
+  ArrowRight,
+  ChevronDown,
+  ChevronUp
 } from 'lucide-react'
 import { type ColumnDef } from '@tanstack/react-table'
 import { DataTable } from '../../components/ui/DataTable'
@@ -69,6 +71,7 @@ export function InventarioDashboardModule() {
   })
   const [loading, setLoading] = useState(true)
   const [filterEstadoStock, setFilterEstadoStock] = useState<FilterEstadoStock>('all')
+  const [showPendientesOperativos, setShowPendientesOperativos] = useState(false)
 
   // Excel-style column filter states con Portal
   const { openFilterId, setOpenFilterId } = useExcelFilters()
@@ -171,10 +174,6 @@ export function InventarioDashboardModule() {
     productosConStock.filter(p => (p.stock_minimo || 0) > 0 && p.disponible <= (p.stock_minimo || 0)),
     [productosConStock]
   )
-  const productosSinCierre = useMemo(() =>
-    productosConStock.filter(p => p.dañado > 0 || p.perdido > 0),
-    [productosConStock]
-  )
   const accionesOperativas = useMemo(() => {
     const acciones: Array<{
       id: string
@@ -217,7 +216,7 @@ export function InventarioDashboardModule() {
           ? `${pendientes.pedidosTransito} pedido${pendientes.pedidosTransito === 1 ? '' : 's'} a proveedor`
           : null,
         pendientes.entradasTransito > 0
-          ? `${pendientes.entradasTransito} entrada${pendientes.entradasTransito === 1 ? '' : 's'} directa${pendientes.entradasTransito === 1 ? '' : 's'}`
+          ? `${pendientes.entradasTransito} ingreso${pendientes.entradasTransito === 1 ? '' : 's'} manual${pendientes.entradasTransito === 1 ? '' : 'es'}`
           : null,
       ].filter(Boolean).join(' + ')
 
@@ -245,21 +244,8 @@ export function InventarioDashboardModule() {
       })
     }
 
-    if (productosSinCierre.length > 0) {
-      const productoSinCierre = productosSinCierre[0]
-      const plural = productosSinCierre.length > 1
-      acciones.push({
-        id: 'sin-cierre',
-        severidad: 'atencion',
-        titulo: `${productosSinCierre.length} producto${plural ? 's' : ''} con daño o pérdida`,
-        detalle: `Unidades marcadas como dañadas o perdidas. Ej: ${productoSinCierre.codigo} ${productoSinCierre.nombre}: ${productoSinCierre.dañado + productoSinCierre.perdido} unidades. Revisa y da de baja si corresponde.`,
-        accion: 'Ver stock',
-        destino: '/logistica/inventario/dashboard'
-      })
-    }
-
     return acciones.slice(0, 5)
-  }, [pendientes, productosBajoMinimo, productosSinCierre])
+  }, [pendientes, productosBajoMinimo])
 
   // Contar por categoría en una sola pasada O(n) en vez de O(4n)
   const conteosPorCategoria = useMemo(() => {
@@ -638,7 +624,7 @@ export function InventarioDashboardModule() {
           <button
             className={`stat-card${filterEstadoStock === 'dañado' ? ' active' : ''}`}
             onClick={() => setFilterEstadoStock(filterEstadoStock === 'dañado' ? 'all' : 'dañado')}
-            title="Filtrar productos con unidades dañadas"
+            title="Filtrar productos con unidades dañadas fuera del disponible"
           >
             <div className="stat-content">
               <span className="stat-card-top">
@@ -656,7 +642,7 @@ export function InventarioDashboardModule() {
               </span>
               <span className="stat-helper">
                 {resumenInventario.productosDañados > 0
-                  ? formatProductosLabel(resumenInventario.productosDañados, 'por revisar')
+                  ? formatProductosLabel(resumenInventario.productosDañados, 'fuera del disponible')
                   : 'Sin daño registrado'}
               </span>
             </div>
@@ -664,7 +650,7 @@ export function InventarioDashboardModule() {
           <button
             className={`stat-card${filterEstadoStock === 'perdido' ? ' active' : ''}`}
             onClick={() => setFilterEstadoStock(filterEstadoStock === 'perdido' ? 'all' : 'perdido')}
-            title="Filtrar productos con unidades perdidas"
+            title="Filtrar productos con unidades perdidas fuera del disponible"
           >
             <div className="stat-content">
               <span className="stat-card-top">
@@ -682,7 +668,7 @@ export function InventarioDashboardModule() {
               </span>
               <span className="stat-helper">
                 {resumenInventario.productosPerdidos > 0
-                  ? formatProductosLabel(resumenInventario.productosPerdidos, 'por cerrar')
+                  ? formatProductosLabel(resumenInventario.productosPerdidos, 'fuera del disponible')
                   : 'Sin pérdida registrada'}
               </span>
             </div>
@@ -692,39 +678,55 @@ export function InventarioDashboardModule() {
 
       <div className="inv-cockpit">
         <div className="inv-actions-panel">
-          <div className="inv-panel-header">
+          <div className={`inv-panel-header ${showPendientesOperativos ? '' : 'collapsed'}`}>
             <div>
               <h2>Pendientes operativos</h2>
               <span>Stock, recepciones, aprobaciones y cierres que requieren atención</span>
             </div>
-            <span className="inv-panel-badge">{accionesOperativas.length} pendientes</span>
-          </div>
-          <div className="inv-action-list">
-            {accionesOperativas.length === 0 ? (
-              <div className="inv-action-empty">
-                <CheckCircle size={18} />
-                No hay pendientes operativos criticos.
-              </div>
-            ) : accionesOperativas.map(action => (
+            <div className="inv-panel-controls">
+              <span className="inv-panel-badge">
+                {accionesOperativas.length === 1 ? '1 pendiente' : `${accionesOperativas.length} pendientes`}
+              </span>
               <button
-                key={action.id}
-                className={`inv-action-item ${action.severidad}`}
-                onClick={() => navigate(action.destino)}
+                type="button"
+                className="inv-panel-toggle"
+                onClick={() => setShowPendientesOperativos(prev => !prev)}
+                aria-expanded={showPendientesOperativos}
+                aria-controls="pendientes-operativos-list"
               >
-                <span className="inv-action-status">
-                  {action.severidad === 'critico' ? 'Crítico' : action.severidad === 'atencion' ? 'Atención' : 'Revisar'}
-                </span>
-                <span className="inv-action-copy">
-                  <strong>{action.titulo}</strong>
-                  <small>{action.detalle}</small>
-                </span>
-                <span className="inv-action-cta">
-                  {action.accion}
-                  <ArrowRight size={14} />
-                </span>
+                {showPendientesOperativos ? 'Ocultar' : 'Ver detalle'}
+                {showPendientesOperativos ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
               </button>
-            ))}
+            </div>
           </div>
+          {showPendientesOperativos && (
+            <div className="inv-action-list" id="pendientes-operativos-list">
+              {accionesOperativas.length === 0 ? (
+                <div className="inv-action-empty">
+                  <CheckCircle size={18} />
+                  No hay pendientes operativos críticos.
+                </div>
+              ) : accionesOperativas.map(action => (
+                <button
+                  key={action.id}
+                  className={`inv-action-item ${action.severidad}`}
+                  onClick={() => navigate(action.destino)}
+                >
+                  <span className="inv-action-status">
+                    {action.severidad === 'critico' ? 'Crítico' : action.severidad === 'atencion' ? 'Atención' : 'Revisar'}
+                  </span>
+                  <span className="inv-action-copy">
+                    <strong>{action.titulo}</strong>
+                    <small>{action.detalle}</small>
+                  </span>
+                  <span className="inv-action-cta">
+                    {action.accion}
+                    <ArrowRight size={14} />
+                  </span>
+                </button>
+              ))}
+            </div>
+          )}
         </div>
       </div>
 
