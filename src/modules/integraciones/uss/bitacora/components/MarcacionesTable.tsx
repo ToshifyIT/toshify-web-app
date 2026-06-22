@@ -14,6 +14,14 @@ import { normalizePatente } from '../../../../../utils/normalizeDocuments';
 import * as XLSX from 'xlsx';
 import { PatenteDetalleDrawer } from './PatenteDetalleDrawer';
 
+// Conductor malformado de Wialon: iButton sin nombre (ej: "81-", "142-").
+// Lo mostramos como "Sin conductor" para que no aparezca como basura en el filtro.
+function conductorLabel(conductor: string | null | undefined): string {
+  const c = (conductor || '').trim();
+  if (!c || /^\d+\s*-?\s*$/.test(c)) return 'Sin conductor';
+  return c;
+}
+
 interface MarcacionesTableProps {
   marcaciones: Marcacion[];
   isLoading: boolean;
@@ -138,11 +146,11 @@ export function MarcacionesTable({
     return { uss, geotab };
   }, [marcaciones]);
 
-  // Listas únicas
+  // Listas únicas — filtro por nombre de conductor (sin patente)
   const conductorPatenteUnicos = useMemo(() => {
     const set = new Set<string>();
     for (const m of marcaciones) {
-      set.add(`${m.conductor} | ${normalizePatente(m.patente)}`);
+      set.add(conductorLabel(m.conductor));
     }
     return [...set].sort();
   }, [marcaciones]);
@@ -186,7 +194,7 @@ export function MarcacionesTable({
     let filtered = marcaciones;
 
     if (conductorFilter.length > 0) {
-      filtered = filtered.filter(m => conductorFilter.includes(`${m.conductor} | ${normalizePatente(m.patente)}`));
+      filtered = filtered.filter(m => conductorFilter.includes(conductorLabel(m.conductor)));
     }
     if (fechaFilter.length > 0) {
       filtered = filtered.filter(m => fechaFilter.includes(formatFecha(m.fecha)));

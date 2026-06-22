@@ -10,7 +10,6 @@ import { DataTable } from '../../../../../components/ui/DataTable/DataTable';
 import { ExcelColumnFilter, useExcelFilters } from '../../../../../components/ui/DataTable/ExcelColumnFilter';
 import { Search, ChevronsLeft, ChevronLeft, ChevronRight, ChevronsRight, ClipboardList, Download, ChevronDown, X } from 'lucide-react';
 import type { USSHistoricoRegistro } from '../../../../../services/ussHistoricoService';
-import { normalizePatente } from '../../../../../utils/normalizeDocuments';
 import * as XLSX from 'xlsx';
 
 interface HistoricoTableProps {
@@ -50,6 +49,14 @@ function formatKm(km: string | null): string {
 // Parsea conductor_raw de USS: "142-NATALIA IRENE RIVAS, 15-EMMANUEL SEBASTIAN RAMIREZ"
 // -> ["NATALIA IRENE RIVAS", "EMMANUEL SEBASTIAN RAMIREZ"]
 // Descarta entradas vacías o sin nombre (ej: "81-")
+// Conductor malformado de Wialon: iButton sin nombre (ej: "81-", "142-").
+// Lo mostramos como "Sin conductor" para que no aparezca como basura en el filtro.
+function conductorLabel(conductor: string | null | undefined): string {
+  const c = (conductor || '').trim();
+  if (!c || /^\d+\s*-?\s*$/.test(c)) return 'Sin conductor';
+  return c;
+}
+
 function parseConductoresRaw(raw: string | null): string[] {
   if (!raw) return [];
   return raw
@@ -89,9 +96,7 @@ export function HistoricoTable({
   const conductorPatenteUnicos = useMemo(() => {
     const set = new Set<string>();
     for (const r of registros) {
-      const conductor = r.conductor || 'Sin conductor';
-      const patente = r.patente ? normalizePatente(r.patente) : '-';
-      set.add(`${conductor} | ${patente}`);
+      set.add(conductorLabel(r.conductor));
     }
     return [...set].sort();
   }, [registros]);
@@ -114,17 +119,10 @@ export function HistoricoTable({
     onSearchChange('');
   };
 
-  // Helper para obtener la clave combinada de un registro
-  const getConductorPatenteKey = (r: USSHistoricoRegistro) => {
-    const conductor = r.conductor || 'Sin conductor';
-    const patente = r.patente ? normalizePatente(r.patente) : '-';
-    return `${conductor} | ${patente}`;
-  };
-
   // Filtrado local
   const registrosFiltrados = useMemo(() => {
     return registros.filter(r => {
-      if (conductorFilter.length > 0 && !conductorFilter.includes(getConductorPatenteKey(r))) return false;
+      if (conductorFilter.length > 0 && !conductorFilter.includes(conductorLabel(r.conductor))) return false;
       if (gpsFilter !== null && (r as any).gps_origen !== gpsFilter) return false;
       return true;
     });
@@ -160,7 +158,7 @@ export function HistoricoTable({
       id: 'conductor_patente',
       accessorKey: 'conductor',
       header: () => (
-        <ExcelColumnFilter label="Conductor / Patente" options={conductorPatenteUnicos} selectedValues={conductorFilter}
+        <ExcelColumnFilter label="Conductor" options={conductorPatenteUnicos} selectedValues={conductorFilter}
           onSelectionChange={setConductorFilter} filterId="h-conductor" openFilterId={openFilterId} onOpenChange={setOpenFilterId} />
       ),
       cell: ({ row }) => {
