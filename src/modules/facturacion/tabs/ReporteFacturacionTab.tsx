@@ -195,6 +195,10 @@ interface FacturacionConductor {
   cubre_cuota?: boolean
   cuota_garantia_numero?: string // ej: "15/20"
   garantia_estado?: string // estado real de la garantia: 'completada' | 'en_curso' | 'pendiente' | ... (para distinguir N/A de COMPLETADA)
+  garantia_acumulada?: number // suma de subtotal_garantia cobrado hasta este período (inclusive), para determinar COMPLETADA históricamente
+  garantia_monto_total?: number // monto_total real del conductor en garantias_conductores (varía por conductor)
+  garantia_ultima_cobro?: string | null // periodo_id de la última semana en que se cobró garantía
+  garantia_es_periodo_completado?: boolean // true si este período es el último donde se cobró garantía (= semana de completado)
   // Datos detallados para RIT export (P005, P006, P007)
   monto_peajes?: number       // P005 - Peajes de Cabify
   monto_excesos?: number      // P006 - Excesos de KM
@@ -1173,12 +1177,73 @@ export function ReporteFacturacionTab() {
       // que la columna "Gar." distinga COMPLETADA del resto.
       const { data: garantiasLoad } = conductorIdsLoad.length > 0 ? await (supabase
         .from('garantias_conductores') as any)
-        .select('conductor_id, estado')
+        .select('conductor_id, estado, monto_total')
         .in('conductor_id', conductorIdsLoad)
       : { data: [] }
       const garantiaEstadoMapLoad = new Map<string, string>(
         (garantiasLoad || []).map((g: any) => [g.conductor_id, g.estado])
       )
+      const garantiaMontoTotalMapLoad = new Map<string, number>(
+        (garantiasLoad || []).map((g: any) => [g.conductor_id, Number(g.monto_total) || 1_000_000])
+      )
+
+      // Acumulado histórico de garantía por conductor HASTA este período (inclusive).
+      // facturacion_conductores NO tiene semana/anio directamente, se filtra por periodo_id
+      // usando fecha_fin del período actual como referencia.
+      const fechaFinActualLoad = (periodoData as any).fecha_fin as string
+      const periodoIdActualLoad = (periodoData as any).id as string
+      // Obtener IDs de todos los períodos hasta este (inclusive) por fecha_fin
+      const { data: periodosHastaLoad } = await (supabase
+        .from('periodos_facturacion') as any)
+        .select('id, semana, anio')
+        .lte('fecha_fin', fechaFinActualLoad)
+      const periodoIdsHastaLoad = ((periodosHastaLoad || []) as any[]).map((p: any) => p.id)
+      const periodoIdsHastaSet = new Set(periodoIdsHastaLoad)
+      const periodoSemanaAnioMap = new Map<string, { semana: number; anio: number }>(
+        ((periodosHastaLoad || []) as any[]).map((p: any) => [p.id, { semana: Number(p.semana), anio: Number(p.anio) }])
+      )
+      const { data: garantiaHistLoad } = conductorIdsLoad.length > 0 && periodoIdsHastaLoad.length > 0 ? await (supabase
+        .from('facturacion_conductores') as any)
+        .select('conductor_id, subtotal_garantia, periodo_id')
+        .in('conductor_id', conductorIdsLoad)
+        .in('periodo_id', periodoIdsHastaLoad)
+        .gt('subtotal_garantia', 0)
+      : { data: [] }
+
+      // Query global (sin filtro de fecha) para detectar si el conductor tiene cobros
+      // en períodos POSTERIORES al visualizado. Si los tiene, el período actual NO es
+      // el período de completado real (aunque sea el último cobro dentro del rango visualizado).
+      const { data: garantiaHistGlobalLoad } = conductorIdsLoad.length > 0 ? await (supabase
+        .from('facturacion_conductores') as any)
+        .select('conductor_id, periodo_id')
+        .in('conductor_id', conductorIdsLoad)
+        .gt('subtotal_garantia', 0)
+      : { data: [] }
+      const conductoresConCobrosFuturos = new Set<string>()
+      for (const f of (garantiaHistGlobalLoad || []) as any[]) {
+        if (f.conductor_id && !periodoIdsHastaSet.has(f.periodo_id)) {
+          conductoresConCobrosFuturos.add(f.conductor_id)
+        }
+      }
+
+      const garantiaAcumuladaMapLoad = new Map<string, number>()
+      // Último periodo_id en que se cobró garantía dentro del rango visualizado
+      const garantiaUltimaCobroMapLoad = new Map<string, string>() // conductor_id → periodo_id
+      for (const f of (garantiaHistLoad || []) as any[]) {
+        garantiaAcumuladaMapLoad.set(f.conductor_id, (garantiaAcumuladaMapLoad.get(f.conductor_id) || 0) + (Number(f.subtotal_garantia) || 0))
+        // El último período en el que se cobró es el más reciente (mayor fecha_fin dentro de los filtrados)
+        // Como el array puede venir en cualquier orden, guardamos el periodo_id y comparamos por semana/anio
+        const prevPeriodoId = garantiaUltimaCobroMapLoad.get(f.conductor_id)
+        if (!prevPeriodoId) {
+          garantiaUltimaCobroMapLoad.set(f.conductor_id, f.periodo_id)
+        } else {
+          const prev = periodoSemanaAnioMap.get(prevPeriodoId)
+          const curr = periodoSemanaAnioMap.get(f.periodo_id)
+          if (curr && prev && (curr.anio > prev.anio || (curr.anio === prev.anio && curr.semana > prev.semana))) {
+            garantiaUltimaCobroMapLoad.set(f.conductor_id, f.periodo_id)
+          }
+        }
+      }
 
       // Calcular grupo_flota GANADOR por conductor en la semana
       // Regla: GRUPO CG es el grupo "base", cualquier otro tiene prioridad.
@@ -1297,6 +1362,13 @@ export function ReporteFacturacionTab() {
           estado_billing: estadoBilling,
           fecha_baja_no_coincide: fechaBajaNoCoincideLoad,
           garantia_estado: garantiaEstadoMapLoad.get(f.conductor_id) || undefined,
+          garantia_acumulada: garantiaAcumuladaMapLoad.get(f.conductor_id) || 0,
+          garantia_monto_total: garantiaMontoTotalMapLoad.get(f.conductor_id) || 1_000_000,
+          garantia_ultima_cobro: garantiaUltimaCobroMapLoad.get(f.conductor_id) || null, // periodo_id de la última semana cobrada
+          // true solo si: este período es el último donde se cobró Y no hay cobros en períodos posteriores.
+          // Evita marcar como "completado" un período intermedio cuando el real cobro final es posterior.
+          garantia_es_periodo_completado: !conductoresConCobrosFuturos.has(f.conductor_id)
+            && garantiaUltimaCobroMapLoad.get(f.conductor_id) === periodoIdActualLoad,
           prorrateo_diurno_dias: f.prorrateo_diurno_dias ?? (horarioInfo?.diurno || 0),
           prorrateo_nocturno_dias: f.prorrateo_nocturno_dias ?? (horarioInfo?.nocturno || 0),
           prorrateo_cargo_dias: f.prorrateo_cargo_dias ?? (horarioInfo?.cargo || 0),
@@ -2316,8 +2388,14 @@ export function ReporteFacturacionTab() {
 
       // Mapa acumulado de garantía facturada por conductor (suma histórica de subtotal_garantia)
       const garantiaAcumuladaVP = new Map<string, number>()
+      const garantiaUltimaCobroVP = new Map<string, { semana: number; anio: number }>()
       for (const f of (garantiaHistorialVP || []) as any[]) {
         garantiaAcumuladaVP.set(f.conductor_id, (garantiaAcumuladaVP.get(f.conductor_id) || 0) + (Number(f.subtotal_garantia) || 0))
+        const prev = garantiaUltimaCobroVP.get(f.conductor_id)
+        const fAnio = Number(f.anio), fSem = Number(f.semana)
+        if (!prev || fAnio > prev.anio || (fAnio === prev.anio && fSem > prev.semana)) {
+          garantiaUltimaCobroVP.set(f.conductor_id, { semana: fSem, anio: fAnio })
+        }
       }
 
       // Mapa de CABIFY_hash → DNI real para resolver hashes de Cabify
@@ -2713,6 +2791,10 @@ export function ReporteFacturacionTab() {
           cubre_cuota: cubreCuota,
           cuota_garantia_numero: cuotaGarantiaNumero,
           garantia_estado: garantia?.estado || undefined, // estado real para distinguir COMPLETADA de N/A
+          garantia_acumulada: (garantiaAcumuladaVP.get(conductorId) || 0) + subtotalGarantia, // incluye la cuota de esta semana
+          garantia_monto_total: Number(garantia?.monto_total) || 1_000_000,
+          garantia_ultima_cobro: null, // en VP no se usa para esPeriodoCompletado
+          garantia_es_periodo_completado: false, // en preview (período abierto) nunca es el período de completado
           // Datos detallados para RIT export
             monto_peajes: montoPeajes,       // P005
             peajes_detalle: peajesDetalleMap.get(dniConductor) || [],
@@ -9442,17 +9524,24 @@ export function ReporteFacturacionTab() {
         const garantia = row.original.subtotal_garantia
         const cobroApp = row.original.ganancia_cabify || 0
         const alquiler = row.original.subtotal_alquiler
-        // Estado REAL de la garantia (de garantias_conductores): asi distinguimos
-        // "completada" (pago el 100%) de "no aplica / en devolucion" (de baja, sin completar).
+        // Usar acumulado histórico hasta esta semana para determinar COMPLETADA
+        const acumulado = row.original.garantia_acumulada || 0
+        const montoTotal = row.original.garantia_monto_total || 1_000_000
         const garEstado = row.original.garantia_estado || null
-        const garantiaCompletada = garEstado === 'completada'
-
-        // COMPLETADA: solo si la garantia esta realmente completada (gana siempre).
-        // N/A: cuando NO se le facturo garantia este periodo (subtotal_garantia === 0).
-        //      Ej. conductor que entro solo por una multa (0 dias / 0 alquiler).
-        //      Si tiene garantia facturada (> 0), muestra el monto. Salvo completada, que gana arriba.
-        const noAplica = !garantiaCompletada && garantia === 0
-        const isCompletada = garantiaCompletada
+        // COMPLETADA en tres casos:
+        //   1. Numérico: acumulado hasta esta semana >= monto_total.
+        //   2. Último cobro real: garEstado='completada' + este es el último período donde
+        //      se cobró Y no hay cobros posteriores (esPeriodoCompletado).
+        //      Cubre el caso MAX-only donde la suma de facturación < monto_total pero
+        //      el sistema ya marcó la garantía como completada.
+        //   3. Post-completada sin cobro: garEstado='completada' + garantia === 0.
+        //      Todas las semanas posteriores al completado donde ya no se cobra.
+        const esPeriodoCompletado = row.original.garantia_es_periodo_completado === true
+        const isCompletada =
+          (montoTotal > 0 && Math.round(acumulado) >= Math.round(montoTotal))
+          || (garEstado === 'completada' && garantia > 0 && esPeriodoCompletado)
+          || (garEstado === 'completada' && garantia === 0)
+        const noAplica = !isCompletada && garantia === 0
 
         // Calcular restante de cobro app después de cubrir alquiler
         const restante = Math.max(0, cobroApp - alquiler)
