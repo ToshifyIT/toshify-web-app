@@ -212,6 +212,34 @@ export function OfertaLocacionListModule() {
 
   const columns: ColumnDef<OfertaLocacion>[] = useMemo(() => [
     {
+      accessorKey: 'created_at',
+      header: 'Creado / Editado',
+      cell: ({ row }) => {
+        const o = row.original
+        const fmtFecha = (d: string | null) =>
+          d ? new Date(d).toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric' }) : null
+        return (
+          <div style={{ fontSize: '11px', lineHeight: '1.5' }}>
+            <div style={{ color: 'var(--text-primary)' }}>
+              <span style={{ color: 'var(--text-tertiary)' }}>Alta: </span>
+              {fmtFecha(o.created_at) || '-'}
+              {o.created_by_name && (
+                <span style={{ color: 'var(--text-tertiary)' }}> · {o.created_by_name}</span>
+              )}
+            </div>
+            {(o as any).updated_by_name && (
+              <div style={{ color: 'var(--text-secondary)' }}>
+                <span style={{ color: 'var(--text-tertiary)' }}>Edición: </span>
+                {fmtFecha(o.updated_at) || '-'}
+                <span style={{ color: 'var(--text-tertiary)' }}> · {(o as any).updated_by_name}</span>
+              </div>
+            )}
+          </div>
+        )
+      },
+      sortingFn: 'datetime',
+    },
+    {
       accessorKey: 'patente',
       header: 'Patente',
       cell: ({ row }) => (
@@ -318,14 +346,6 @@ export function OfertaLocacionListModule() {
       },
     },
     {
-      accessorKey: 'created_at',
-      header: 'Creado',
-      cell: ({ row }) => {
-        const d = row.original.created_at
-        return d ? new Date(d).toLocaleDateString('es-AR') : '-'
-      },
-    },
-    {
       id: 'acciones',
       header: 'Acciones',
       enableSorting: false,
@@ -356,6 +376,7 @@ export function OfertaLocacionListModule() {
         return <ActionsMenu actions={actions} />
       },
     },
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   ], [socioFilter, sociosUnicos, openFilterId])
 
   const externalFilters = useMemo(() => {
@@ -500,6 +521,8 @@ function OfertaLocacionEditWrapper({ oferta, sedeId, userId, userName, onClose }
     updated_at: '',
     created_by: null,
     created_by_name: null,
+    updated_by: null,
+    updated_by_name: null,
   }
 
   return (
