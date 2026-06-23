@@ -29,6 +29,8 @@ export interface Titular {
   updated_at: string
   created_by: string | null
   created_by_name: string | null
+  updated_by: string | null
+  updated_by_name: string | null
 }
 
 export interface VehiculoTitular {
@@ -47,6 +49,8 @@ export interface VehiculoTitular {
     patente: string
     marca: string
     modelo: string
+    estado_id?: string | null
+    vehiculos_estados?: { descripcion: string } | null
   }
   titulares?: Titular
 }
@@ -78,4 +82,5 @@ export interface TitularStats {
   personas: number
   empresas: number
   activos: number
+  inactivos: number
 }
