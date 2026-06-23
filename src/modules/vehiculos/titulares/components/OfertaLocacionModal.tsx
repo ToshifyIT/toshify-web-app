@@ -256,7 +256,7 @@ export function OfertaLocacionModal({ vehiculoTitular, titular, sedeId, userId, 
         // Update
         const { error } = await supabase
           .from('ofertas_locacion')
-          .update(payload)
+          .update({ ...payload, updated_by: userId, updated_by_name: userName })
           .eq('id', existingRecord.id)
         if (error) throw error
         showSuccess('Oferta de locacion actualizada')
@@ -338,8 +338,8 @@ export function OfertaLocacionModal({ vehiculoTitular, titular, sedeId, userId, 
   const tabs = [
     { key: 'titular' as const, label: 'Titular' },
     { key: 'vehiculo' as const, label: 'Vehiculo' },
-    { key: 'contrato' as const, label: 'Contrato' },
     { key: 'estado' as const, label: 'Estado y Seguridad' },
+    { key: 'contrato' as const, label: 'Contrato' },
     { key: 'danios' as const, label: 'Relevamiento' },
     { key: 'costos' as const, label: 'Costos' },
   ]
@@ -466,8 +466,8 @@ export function OfertaLocacionModal({ vehiculoTitular, titular, sedeId, userId, 
                   <input style={readonlyStyle} value={formData.color} readOnly />
                 </div>
                 <div style={fieldGroup}>
-                  <label style={labelStyle}>Kilometraje</label>
-                  <input style={inputStyle} type="number" value={formData.kilometraje ?? ''} onChange={e => updateField('kilometraje', e.target.value ? Number(e.target.value) : null)} />
+                  <label style={labelStyle}>Cantidad de Llaves</label>
+                  <input style={readonlyStyle} value={formData.cantidad_llaves ?? ''} readOnly />
                 </div>
               </div>
               <div className="ol-grid-2">
@@ -478,6 +478,27 @@ export function OfertaLocacionModal({ vehiculoTitular, titular, sedeId, userId, 
                 <div style={fieldGroup}>
                   <label style={labelStyle}>Numero Chasis</label>
                   <input style={readonlyStyle} value={formData.numero_chasis} readOnly />
+                </div>
+              </div>
+              <div style={{ ...sectionTitle, marginTop: '24px' }}>Vencimientos</div>
+              <div className="ol-grid-2">
+                <div style={fieldGroup}>
+                  <label style={labelStyle}>Vencimiento Seguro</label>
+                  <input style={readonlyStyle} value={formData.vencimiento_seguro || 'No definido'} readOnly />
+                </div>
+                <div style={fieldGroup}>
+                  <label style={labelStyle}>Vto. VTV</label>
+                  <input style={readonlyStyle} value={formData.vto_vtv || 'No definido'} readOnly />
+                </div>
+              </div>
+              <div className="ol-grid-2">
+                <div style={fieldGroup}>
+                  <label style={labelStyle}>Vto. GNC</label>
+                  <input style={readonlyStyle} value={formData.vto_gnc || 'No definido'} readOnly />
+                </div>
+                <div style={fieldGroup}>
+                  <label style={labelStyle}>Vto. Matafuego</label>
+                  <input style={readonlyStyle} value={formData.vto_matafuego || 'No definido'} readOnly />
                 </div>
               </div>
             </div>
@@ -549,30 +570,8 @@ export function OfertaLocacionModal({ vehiculoTitular, titular, sedeId, userId, 
                 </div>
               </div>
               <div style={fieldGroup}>
-                <label style={labelStyle}>Cantidad de Llaves</label>
-                <input style={{ ...readonlyStyle, maxWidth: '120px' }} value={formData.cantidad_llaves ?? ''} readOnly />
-              </div>
-
-              <div style={{ ...sectionTitle, marginTop: '24px' }}>Vencimientos</div>
-              <div className="ol-grid-2">
-                <div style={fieldGroup}>
-                  <label style={labelStyle}>Vencimiento Seguro</label>
-                  <input style={readonlyStyle} value={formData.vencimiento_seguro || 'No definido'} readOnly />
-                </div>
-                <div style={fieldGroup}>
-                  <label style={labelStyle}>Vto. VTV</label>
-                  <input style={readonlyStyle} value={formData.vto_vtv || 'No definido'} readOnly />
-                </div>
-              </div>
-              <div className="ol-grid-2">
-                <div style={fieldGroup}>
-                  <label style={labelStyle}>Vto. GNC</label>
-                  <input style={readonlyStyle} value={formData.vto_gnc || 'No definido'} readOnly />
-                </div>
-                <div style={fieldGroup}>
-                  <label style={labelStyle}>Vto. Matafuego</label>
-                  <input style={readonlyStyle} value={formData.vto_matafuego || 'No definido'} readOnly />
-                </div>
+                <label style={labelStyle}>Kilometraje</label>
+                <input style={inputStyle} type="number" value={formData.kilometraje ?? ''} onChange={e => updateField('kilometraje', e.target.value ? Number(e.target.value) : null)} />
               </div>
 
               <div style={{ ...sectionTitle, marginTop: '24px' }}>Elementos de Seguridad</div>
@@ -679,21 +678,21 @@ export function OfertaLocacionModal({ vehiculoTitular, titular, sedeId, userId, 
               <div className="ol-grid-2">
                 <div style={fieldGroup}>
                   <label style={labelStyle}>Costo Multas ($)</label>
-                  <input style={inputStyle} type="number" step="0.01" value={formData.costo_multas ?? ''} onChange={e => updateField('costo_multas', e.target.value ? Number(e.target.value) : null)} />
+                  <input style={inputStyle} type="number" step="0.01" placeholder="0.00" value={formData.costo_multas ?? ''} onChange={e => updateField('costo_multas', e.target.value !== '' ? Number(e.target.value) : null)} />
                 </div>
                 <div style={fieldGroup}>
                   <label style={labelStyle}>Costo Patente ($)</label>
-                  <input style={inputStyle} type="number" step="0.01" value={formData.costo_patente ?? ''} onChange={e => updateField('costo_patente', e.target.value ? Number(e.target.value) : null)} />
+                  <input style={inputStyle} type="number" step="0.01" placeholder="0.00" value={formData.costo_patente ?? ''} onChange={e => updateField('costo_patente', e.target.value !== '' ? Number(e.target.value) : null)} />
                 </div>
               </div>
               <div className="ol-grid-2">
                 <div style={fieldGroup}>
                   <label style={labelStyle}>Costo Mantenimiento / Reparacion ($)</label>
-                  <input style={inputStyle} type="number" step="0.01" value={formData.costo_mantenimiento_reparacion ?? ''} onChange={e => updateField('costo_mantenimiento_reparacion', e.target.value ? Number(e.target.value) : null)} />
+                  <input style={inputStyle} type="number" step="0.01" placeholder="0.00" value={formData.costo_mantenimiento_reparacion ?? ''} onChange={e => updateField('costo_mantenimiento_reparacion', e.target.value !== '' ? Number(e.target.value) : null)} />
                 </div>
                 <div style={fieldGroup}>
                   <label style={labelStyle}>Otros Costos ($)</label>
-                  <input style={inputStyle} type="number" step="0.01" value={formData.otros_costos ?? ''} onChange={e => updateField('otros_costos', e.target.value ? Number(e.target.value) : null)} />
+                  <input style={inputStyle} type="number" step="0.01" placeholder="0.00" value={formData.otros_costos ?? ''} onChange={e => updateField('otros_costos', e.target.value !== '' ? Number(e.target.value) : null)} />
                 </div>
               </div>
             </div>

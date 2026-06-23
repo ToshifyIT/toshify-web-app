@@ -13,6 +13,15 @@ import { showSuccess } from '../../../utils/toast'
 import type { Titular, TitularFormData, TitularStats, VehiculoTitular } from './types/titulares.types'
 import '../VehicleManagement.css'
 
+// Códigos de vehiculos_estados que consideran ACTIVO a un titular
+const CODIGOS_TITULAR_ACTIVO = new Set([
+  'EN_USO',
+  'PKG_ON_BASE',
+  'TALLER_CHAPA_PINTURA',
+  'TALLER_KALZALO',
+  'RETENIDO_COMISARIA',
+])
+
 const EMPTY_FORM: TitularFormData = {
   tipo: 'persona',
   dni_cuit: '',
@@ -41,6 +50,8 @@ export function TitularesModule() {
   const canDelete = canDeleteInMenu('vehiculos')
 
   const [titulares, setTitulares] = useState<Titular[]>([])
+  // Map titular_id → true si tiene al menos un vehículo con estado activo
+  const [titularActivoMap, setTitularActivoMap] = useState<Map<string, boolean>>(new Map())
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
@@ -77,9 +88,30 @@ export function TitularesModule() {
         query = query.or(`sede_id.eq.${sedeActualId},sede_id.is.null`)
       }
 
-      const { data, error: err } = await query
+      // Query paralela: vehículos activos por titular con su estado
+      const [{ data, error: err }, { data: vtData }] = await Promise.all([
+        query,
+        (supabase
+          .from('vehiculos_titulares')
+          .select('titular_id, vehiculos(estado_id, vehiculos_estados(codigo))')
+          .eq('activo', true) as any),
+      ])
+
       if (err) throw err
       setTitulares((data || []) as Titular[])
+
+      // Construir mapa titular_id → activo (true si ≥1 vehículo tiene código activo)
+      const activoMap = new Map<string, boolean>()
+      for (const vt of (vtData || []) as any[]) {
+        if (!vt.titular_id) continue
+        const codigo: string = vt.vehiculos?.vehiculos_estados?.codigo ?? ''
+        if (CODIGOS_TITULAR_ACTIVO.has(codigo)) {
+          activoMap.set(vt.titular_id, true)
+        } else if (!activoMap.has(vt.titular_id)) {
+          activoMap.set(vt.titular_id, false)
+        }
+      }
+      setTitularActivoMap(activoMap)
     } catch (e: any) {
       setError(e.message)
     } finally {
@@ -94,9 +126,10 @@ export function TitularesModule() {
     const total = titulares.length
     const personas = titulares.filter(t => t.tipo === 'persona').length
     const empresas = titulares.filter(t => t.tipo === 'empresa').length
-    const activos = titulares.filter(t => t.estado === 'activo').length
-    return { total, personas, empresas, activos }
-  }, [titulares])
+    const activos = titulares.filter(t => titularActivoMap.get(t.id) === true).length
+    const inactivos = total - activos
+    return { total, personas, empresas, activos, inactivos }
+  }, [titulares, titularActivoMap])
 
   // ---------- Filtrado ----------
   const filteredTitulares = useMemo(() => {
@@ -105,10 +138,13 @@ export function TitularesModule() {
       result = result.filter(t => tipoFilter.includes(t.tipo))
     }
     if (estadoFilter.length > 0) {
-      result = result.filter(t => estadoFilter.includes(t.estado))
+      result = result.filter(t => {
+        const isActivo = titularActivoMap.get(t.id) === true
+        return estadoFilter.includes(isActivo ? 'activo' : 'inactivo')
+      })
     }
     return result
-  }, [titulares, tipoFilter, estadoFilter])
+  }, [titulares, tipoFilter, estadoFilter, titularActivoMap])
 
   const externalFilters = useMemo(() => {
     const filters: Array<{ id: string; label: string; onClear: () => void }> = []
@@ -254,6 +290,8 @@ export function TitularesModule() {
         email: formData.email.trim() || null,
         telefono: formData.telefono.trim() || null,
         updated_at: new Date().toISOString(),
+        updated_by: userId || null,
+        updated_by_name: userName || null,
       }
 
       if (formData.tipo === 'persona') {
@@ -442,7 +480,7 @@ export function TitularesModule() {
     try {
       const { data } = await supabase
         .from('vehiculos_titulares')
-        .select('*, vehiculos(patente, marca, modelo)')
+        .select('*, vehiculos(patente, marca, modelo, estado_id, vehiculos_estados(descripcion))')
         .eq('titular_id', titular.id)
         .order('activo', { ascending: false })
         .order('fecha_desde', { ascending: false })
@@ -558,11 +596,8 @@ export function TitularesModule() {
 
   // ---------- Columnas ----------
   const tiposUnicos = ['persona', 'empresa']
-  const estadosUnicos = useMemo(() => {
-    const set = new Set<string>()
-    titulares.forEach(t => { if (t.estado) set.add(t.estado) })
-    return Array.from(set).sort()
-  }, [titulares])
+  // El estado derivado siempre es binario: activo o inactivo
+  const estadosUnicos = ['activo', 'inactivo']
 
   const columns: ColumnDef<Titular, any>[] = useMemo(() => [
     {
@@ -648,8 +683,7 @@ export function TitularesModule() {
         />
       ),
       cell: ({ row }) => {
-        const estado = row.original.estado
-        const isActivo = estado === 'activo'
+        const isActivo = titularActivoMap.get(row.original.id) === true
         return (
           <span style={{
             padding: '2px 8px',
@@ -659,10 +693,24 @@ export function TitularesModule() {
             background: isActivo ? '#d1fae5' : '#fee2e2',
             color: isActivo ? '#065f46' : '#991b1b',
           }}>
-            {isActivo ? 'ACTIVO' : estado?.toUpperCase()}
+            {isActivo ? 'ACTIVO' : 'INACTIVO'}
           </span>
         )
       },
+    },
+    {
+      accessorKey: 'created_at',
+      header: 'Fecha de Creación',
+      cell: ({ row }) => {
+        const fecha = row.original.created_at
+        if (!fecha) return 'N/A'
+        return new Date(fecha).toLocaleDateString('es-AR', {
+          day: '2-digit',
+          month: '2-digit',
+          year: 'numeric',
+        })
+      },
+      sortingFn: 'datetime',
     },
     {
       id: 'acciones',
@@ -697,7 +745,8 @@ export function TitularesModule() {
         return <ActionsMenu actions={actions} />
       },
     },
-  ], [tipoFilter, estadoFilter, tiposUnicos, estadosUnicos, canEdit, canDelete, openFilterId])
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  ], [tipoFilter, estadoFilter, tiposUnicos, canEdit, canDelete, openFilterId, titularActivoMap])
 
   // ---------- Render Form ----------
   const renderForm = () => {
@@ -755,12 +804,12 @@ export function TitularesModule() {
               </div>
             </div>
             <div>
-              <label style={labelStyle}>Domicilio</label>
+              <label style={labelStyle}>Domicilio <span style={{ color: '#f59e0b' }}>*</span></label>
               <input style={inputStyle} value={formData.domicilio} onChange={(e) => setFormData({ ...formData, domicilio: e.target.value })} disabled={saving} />
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
               <div>
-                <label style={labelStyle}>Email</label>
+                <label style={labelStyle}>Email <span style={{ color: '#f59e0b' }}>*</span></label>
                 <input style={inputStyle} type="email" value={formData.email} onChange={(e) => setFormData({ ...formData, email: e.target.value })} disabled={saving} />
               </div>
               <div>
@@ -770,7 +819,7 @@ export function TitularesModule() {
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
               <div>
-                <label style={labelStyle}>Conyugue (tiene/no tiene)</label>
+                <label style={labelStyle}>Conyugue (tiene/no tiene) <span style={{ color: '#f59e0b' }}>*</span></label>
                 <select style={inputStyle} value={formData.conyugue} onChange={(e) => setFormData({ ...formData, conyugue: e.target.value })} disabled={saving}>
                   <option value="">Seleccionar</option>
                   <option value="si">Tiene</option>
@@ -788,7 +837,7 @@ export function TitularesModule() {
             </div>
             {formData.conyugue === 'si' && (
               <div>
-                <label style={labelStyle}>Nombre y Apellidos Conyugue</label>
+                <label style={labelStyle}>Nombre y Apellidos Conyugue <span style={{ color: '#f59e0b' }}>*</span></label>
                 <input style={inputStyle} value={formData.nombre_conyugue} onChange={(e) => setFormData({ ...formData, nombre_conyugue: e.target.value })} disabled={saving} />
               </div>
             )}
@@ -801,7 +850,7 @@ export function TitularesModule() {
               <input style={inputStyle} value={formData.razon_social} onChange={(e) => setFormData({ ...formData, razon_social: e.target.value })} disabled={saving} />
             </div>
             <div>
-              <label style={labelStyle}>Representante Administrativo</label>
+              <label style={labelStyle}>Representante Administrativo <span style={{ color: '#f59e0b' }}>*</span></label>
               <input style={inputStyle} value={formData.representante_administrativo} onChange={(e) => setFormData({ ...formData, representante_administrativo: e.target.value })} disabled={saving} />
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
@@ -810,17 +859,17 @@ export function TitularesModule() {
                 <input style={inputStyle} value={formData.dni_representante} onChange={(e) => setFormData({ ...formData, dni_representante: e.target.value })} disabled={saving} />
               </div>
               <div>
-                <label style={labelStyle}>Email Representante</label>
+                <label style={labelStyle}>Email Representante <span style={{ color: '#f59e0b' }}>*</span></label>
                 <input style={inputStyle} type="email" value={formData.email_representante} onChange={(e) => setFormData({ ...formData, email_representante: e.target.value })} disabled={saving} />
               </div>
             </div>
             <div>
-              <label style={labelStyle}>Domicilio Fiscal</label>
+              <label style={labelStyle}>Domicilio Fiscal <span style={{ color: '#f59e0b' }}>*</span></label>
               <input style={inputStyle} value={formData.domicilio_fiscal} onChange={(e) => setFormData({ ...formData, domicilio_fiscal: e.target.value })} disabled={saving} />
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
               <div>
-                <label style={labelStyle}>Email General</label>
+                <label style={labelStyle}>Email General <span style={{ color: '#f59e0b' }}>*</span></label>
                 <input style={inputStyle} type="email" value={formData.email} onChange={(e) => setFormData({ ...formData, email: e.target.value })} disabled={saving} />
               </div>
               <div>
@@ -839,33 +888,73 @@ export function TitularesModule() {
     <div className="veh-module">
       {/* Stats */}
       <div className="veh-stats">
-        <div className="veh-stats-grid" style={{ gridTemplateColumns: 'repeat(4, 1fr)' }}>
-          <div className="stat-card">
+        <div className="veh-stats-grid" style={{ gridTemplateColumns: 'repeat(6, 1fr)' }}>
+          {/* Total — limpia todos los filtros */}
+          <div
+            className="stat-card"
+            onClick={() => { setTipoFilter([]); setEstadoFilter([]) }}
+            style={{ cursor: 'pointer' }}
+          >
             <Users size={18} className="stat-icon" />
             <div className="stat-content">
               <span className="stat-value">{stats.total}</span>
               <span className="stat-label">Total Titulares</span>
             </div>
           </div>
-          <div className="stat-card">
+          {/* Personas */}
+          <div
+            className="stat-card"
+            onClick={() => { setEstadoFilter([]); setTipoFilter(prev => prev.length === 1 && prev[0] === 'persona' ? [] : ['persona']) }}
+            style={{ cursor: 'pointer' }}
+          >
             <Users size={18} className="stat-icon" />
             <div className="stat-content">
               <span className="stat-value">{stats.personas}</span>
               <span className="stat-label">Personas</span>
             </div>
           </div>
-          <div className="stat-card">
+          {/* Empresas */}
+          <div
+            className="stat-card"
+            onClick={() => { setEstadoFilter([]); setTipoFilter(prev => prev.length === 1 && prev[0] === 'empresa' ? [] : ['empresa']) }}
+            style={{ cursor: 'pointer' }}
+          >
             <Building2 size={18} className="stat-icon" />
             <div className="stat-content">
               <span className="stat-value">{stats.empresas}</span>
               <span className="stat-label">Empresas</span>
             </div>
           </div>
-          <div className="stat-card">
+          {/* Activos */}
+          <div
+            className="stat-card"
+            onClick={() => { setTipoFilter([]); setEstadoFilter(prev => prev.length === 1 && prev[0] === 'activo' ? [] : ['activo']) }}
+            style={{ cursor: 'pointer' }}
+          >
             <UserCheck size={18} className="stat-icon" />
             <div className="stat-content">
               <span className="stat-value">{stats.activos}</span>
               <span className="stat-label">Activos</span>
+            </div>
+          </div>
+          {/* Inactivos */}
+          <div
+            className="stat-card"
+            onClick={() => { setTipoFilter([]); setEstadoFilter(prev => prev.length === 1 && prev[0] === 'inactivo' ? [] : ['inactivo']) }}
+            style={{ cursor: 'pointer' }}
+          >
+            <UserCheck size={18} className="stat-icon" />
+            <div className="stat-content">
+              <span className="stat-value">{stats.inactivos}</span>
+              <span className="stat-label">Inactivos</span>
+            </div>
+          </div>
+          {/* % Activos */}
+          <div className="stat-card">
+            <FileText size={18} className="stat-icon" />
+            <div className="stat-content">
+              <span className="stat-value">{stats.total > 0 ? Math.round((stats.activos / stats.total) * 100) : 0}%</span>
+              <span className="stat-label">% Activos</span>
             </div>
           </div>
         </div>
@@ -1031,7 +1120,7 @@ export function TitularesModule() {
       {/* Modal Vehículos asociados */}
       {showVehiculosModal && selectedTitular && (
         <div className="modal-overlay" onClick={() => setShowVehiculosModal(false)}>
-          <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '600px' }}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '860px', width: '95vw' }}>
             <div className="modal-header">
               <h3>Vehículos de {getNombre(selectedTitular)}</h3>
               <button className="modal-close" onClick={() => setShowVehiculosModal(false)}>&times;</button>
@@ -1061,16 +1150,24 @@ export function TitularesModule() {
                         <td style={{ padding: '8px' }}>{vt.fecha_desde ? new Date(vt.fecha_desde).toLocaleDateString('es-AR') : 'N/A'}</td>
                         <td style={{ padding: '8px' }}>{vt.fecha_hasta ? new Date(vt.fecha_hasta).toLocaleDateString('es-AR') : 'Vigente'}</td>
                         <td style={{ padding: '8px' }}>
-                          <span style={{
-                            padding: '2px 8px',
-                            borderRadius: '12px',
-                            fontSize: '11px',
-                            fontWeight: 500,
-                            background: vt.activo ? '#d1fae5' : '#f3f4f6',
-                            color: vt.activo ? '#065f46' : '#6b7280',
-                          }}>
-                            {vt.activo ? 'Activo' : 'Inactivo'}
-                          </span>
+                          {(() => {
+                            const estadoVehiculo = vt.vehiculos?.vehiculos_estados?.descripcion
+                            const label = estadoVehiculo ?? (vt.activo ? 'Activo' : 'Inactivo')
+                            const isActivo = !estadoVehiculo && vt.activo
+                            return (
+                              <span style={{
+                                padding: '2px 8px',
+                                borderRadius: '12px',
+                                fontSize: '11px',
+                                fontWeight: 500,
+                                whiteSpace: 'nowrap',
+                                background: isActivo ? '#d1fae5' : estadoVehiculo ? '#fef3c7' : '#f3f4f6',
+                                color: isActivo ? '#065f46' : estadoVehiculo ? '#92400e' : '#6b7280',
+                              }}>
+                                {label}
+                              </span>
+                            )
+                          })()}
                         </td>
                         <td style={{ padding: '8px', textAlign: 'center' }}>
                           <button

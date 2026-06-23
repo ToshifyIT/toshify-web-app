@@ -229,6 +229,7 @@ export function VehicleManagement() {
   // ✅ OPTIMIZADO: Carga unificada en paralelo (recarga al cambiar sede)
   useEffect(() => {
     loadAllData()
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sedeActualId])
 
   // Cerrar dropdown titular edición al clic fuera
@@ -1665,6 +1666,7 @@ export function VehicleManagement() {
     }
 
     return filters
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeStatCard, patenteFilter, marcaFilter, modeloFilter, anioFilter, colorFilter, titularFilter, kmFilter, estadoFilter, gncFilter])
 
   // Limpiar todos los filtros
@@ -2240,6 +2242,7 @@ export function VehicleManagement() {
         enableSorting: false,
       },
     ],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     [canUpdate, canDelete, patenteFilter, marcaFilter, modeloFilter, titularFilter, anioFilter, colorFilter, kmFilter, estadoFilter, openFilterId, patentesUnicas, marcasExistentes, modelosExistentes, titularesUnicos, aniosUnicos, coloresUnicos, estadosUnicos, ussPatentes]
   )
 
@@ -2739,7 +2742,7 @@ export function VehicleManagement() {
               </div>
 
               <div className="form-group">
-                <label className="form-label">Kilometraje Actual</label>
+                <label className="form-label">Kilometraje Actual <span style={{ color: '#f59e0b' }}>*</span></label>
                 <input
                   type="number"
                   className="form-input"
@@ -2864,7 +2867,7 @@ export function VehicleManagement() {
 
             <div className="form-row">
               <div className="form-group">
-                <label className="form-label">Vencimiento Seguro</label>
+                <label className="form-label">Vencimiento Seguro <span style={{ color: '#f59e0b' }}>*</span></label>
                 <input
                   type="date"
                   className="form-input"
@@ -3015,7 +3018,7 @@ export function VehicleManagement() {
             </div>
             <div className="form-row">
               <div className="form-group">
-                <label className="form-label">Cantidad de llaves de encendido</label>
+                <label className="form-label">Cantidad de llaves de encendido <span style={{ color: '#f59e0b' }}>*</span></label>
                 <select
                   className="form-input"
                   value={formData.cantidad_llaves}
@@ -3032,7 +3035,7 @@ export function VehicleManagement() {
             {/* Vencimientos opcionales (VTV / GNC / Matafuego) */}
             <div className="form-row">
               <div className="form-group">
-                <label className="form-label">Vencimiento VTV</label>
+                <label className="form-label">Vencimiento VTV <span style={{ color: '#f59e0b' }}>*</span></label>
                 <select
                   className="form-input"
                   value={formData.vto_vtv_aplica ? 'si' : 'no'}
@@ -3048,7 +3051,7 @@ export function VehicleManagement() {
                 </select>
               </div>
               <div className="form-group">
-                <label className="form-label">Fecha VTV</label>
+                <label className="form-label">Fecha VTV <span style={{ color: '#f59e0b' }}>*</span></label>
                 <input
                   type="date"
                   className="form-input"
@@ -3061,7 +3064,7 @@ export function VehicleManagement() {
 
             <div className="form-row">
               <div className="form-group">
-                <label className="form-label">Vencimiento GNC</label>
+                <label className="form-label">Vencimiento GNC <span style={{ color: '#f59e0b' }}>*</span></label>
                 <select
                   className="form-input"
                   value={formData.vto_gnc_aplica ? 'si' : 'no'}
@@ -3077,7 +3080,7 @@ export function VehicleManagement() {
                 </select>
               </div>
               <div className="form-group">
-                <label className="form-label">Fecha GNC</label>
+                <label className="form-label">Fecha GNC <span style={{ color: '#f59e0b' }}>*</span></label>
                 <input
                   type="date"
                   className="form-input"
@@ -3090,7 +3093,7 @@ export function VehicleManagement() {
 
             <div className="form-row">
               <div className="form-group">
-                <label className="form-label">Vencimiento Matafuego</label>
+                <label className="form-label">Vencimiento Matafuego <span style={{ color: '#f59e0b' }}>*</span></label>
                 <select
                   className="form-input"
                   value={formData.vto_matafuego_aplica ? 'si' : 'no'}
@@ -3106,7 +3109,7 @@ export function VehicleManagement() {
                 </select>
               </div>
               <div className="form-group">
-                <label className="form-label">Fecha Matafuego</label>
+                <label className="form-label">Fecha Matafuego <span style={{ color: '#f59e0b' }}>*</span></label>
                 <input
                   type="date"
                   className="form-input"
