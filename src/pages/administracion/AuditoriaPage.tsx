@@ -4,3 +4,6 @@ import { AuditModule } from '../../components/admin/AuditModule'
 export function AuditoriaPage() {
   return <AuditModule />
 }
+
+
+
