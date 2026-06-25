@@ -230,17 +230,65 @@ export function useUSSHistoricoData(sedeId?: string | null) {
 
       // 3) Traer SUMA de km semanales por conductor desde wialon_bitacora + geotab_bitacora
       // Filtrar por periodo_inicio (entrada real del turno), no por fecha_turno.
+      //
+      // REGLA DE NEGOCIO: NO se cuentan los km de turnos donde el conductor manejó una
+      // patente que NO tenía asignada en esa fecha. Si la patente no está dentro de la
+      // asignación del conductor, es un error/inconsistencia del GPS (USS/Geotab), no un
+      // km real atribuible a ese conductor. Esos turnos se ven como "Sin asignación" en
+      // la grilla y quedan EXCLUIDOS del acumulado semanal y de la alerta de exceso.
+      //
+      // Cargar asignaciones (conductor -> patentes con su vigencia) una sola vez para cruzar.
+      const { data: asigData } = await supabase
+        .from('asignaciones_conductores')
+        .select('conductor_id, fecha_inicio, fecha_fin, conductores(nombres, apellidos), asignaciones!inner(vehiculos!inner(patente))');
+      const normNombre = (s: string) => (s || '').toUpperCase().replace(/\s+/g, ' ').trim();
+      const normPat = (p: string) => (p || '').replace(/[\s\-.%]/g, '').toUpperCase();
+      // Índice: "patenteNorm|claveConductor" -> lista de rangos [ini, fin]. La clave de
+      // conductor se guarda tanto por conductor_id como por nombre normalizado, para poder
+      // cruzar filas que sólo tienen uno u otro.
+      const asigIndex = new Map<string, { ini: number; fin: number }[]>();
+      const addAsig = (patNorm: string, condKey: string, ini: number, fin: number) => {
+        if (!patNorm || !condKey) return;
+        const k = `${patNorm}|${condKey}`;
+        const arr = asigIndex.get(k) || [];
+        arr.push({ ini, fin });
+        asigIndex.set(k, arr);
+      };
+      for (const ac of (asigData || []) as any[]) {
+        const pat = normPat(ac?.asignaciones?.vehiculos?.patente || '');
+        if (!pat) continue;
+        const ini = ac.fecha_inicio ? new Date(ac.fecha_inicio).getTime() : 0;
+        const fin = ac.fecha_fin ? new Date(ac.fecha_fin).getTime() : Number.POSITIVE_INFINITY;
+        if (ac.conductor_id) addAsig(pat, String(ac.conductor_id), ini, fin);
+        const c = ac.conductores;
+        const nombre = c ? normNombre(`${c.nombres || ''} ${c.apellidos || ''}`) : '';
+        if (nombre) addAsig(pat, nombre, ini, fin);
+      }
+      // ¿El conductor tenía esa patente asignada en esa fecha?
+      const tieneAsignacion = (patNorm: string, conductorId: string | null, conductorNombre: string | null, fecha: string): boolean => {
+        const t = new Date(fecha + 'T12:00:00-03:00').getTime();
+        const probar = (condKey: string | null): boolean => {
+          if (!condKey) return false;
+          const arr = asigIndex.get(`${patNorm}|${condKey}`);
+          return !!arr && arr.some(r => t >= r.ini && t <= r.fin);
+        };
+        return probar(conductorId ? String(conductorId) : null) || probar(conductorNombre ? normNombre(conductorNombre) : null);
+      };
+
       const sumKmPorConductor = new Map<string, { km: number; modalidad: string }>(); // key = conductor_id || conductor_wialon
       const fetchSemanaTabla = async (tabla: 'wialon_bitacora' | 'geotab_bitacora') => {
         const { data } = await supabase
           .from(tabla)
-          .select('conductor_id, conductor_wialon, kilometraje, vehiculo_modalidad, periodo_inicio')
+          .select('conductor_id, conductor_wialon, kilometraje, vehiculo_modalidad, periodo_inicio, patente_normalizada, fecha_turno')
           .gte('periodo_inicio', lunesIso)
           .lt('periodo_inicio', lunesSigIso)
           .neq('estado', 'Sin Actividad');
         for (const r of (data || []) as any[]) {
           const key = r.conductor_id || r.conductor_wialon || '';
           if (!key) continue;
+          // EXCLUIR: conductor sin asignación vigente en esa patente/fecha (error del GPS).
+          const patNorm = normPat(r.patente_normalizada || '');
+          if (!tieneAsignacion(patNorm, r.conductor_id, r.conductor_wialon, r.fecha_turno)) continue;
           const prev = sumKmPorConductor.get(key) || { km: 0, modalidad: r.vehiculo_modalidad || 'turno' };
           prev.km += Number(r.kilometraje) || 0;
           // Si la modalidad varía, gana 'a_cargo' (limite mas alto)
