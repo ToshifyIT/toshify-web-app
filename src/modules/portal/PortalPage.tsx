@@ -321,6 +321,14 @@ export function PortalPage() {
   const [selectedFactura, setSelectedFactura] = useState<PortalFacturacion | null>(null)
   const [detalleItems, setDetalleItems] = useState<PortalDetalle[]>([])
   const [detallePagos, setDetallePagos] = useState<Array<{ id: string; tipo: string; monto: number; referencia: string | null; fecha: string }>>([])
+  // Desglose del saldo anterior: saldo previo + pago manual/efectivo = resultado.
+  // Solo display; se lee del kardex (control_saldos). No afecta cálculos.
+  const [detalleSaldoBreakdown, setDetalleSaldoBreakdown] = useState<{
+    saldoPrevio: number
+    pago: number
+    pagoRef: string
+    resultado: number
+  } | null>(null)
   const [saldo, setSaldo] = useState<PortalSaldo | null>(null)
   const [fraccionamientos, setFraccionamientos] = useState<PortalFraccionamiento[]>([])
   // El bloque UI que muestra `fraccionamientos` está oculto (comentado), pero
@@ -408,7 +416,7 @@ export function PortalPage() {
       .catch(() => { /* sin conexión: queda en login, el usuario reintenta */ })
     return () => { cancelado = true }
     // Solo al montar.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
   }, [])
 
   // =====================================================
@@ -520,7 +528,7 @@ export function PortalPage() {
       // Backfill missing vehiculo_patente from assignment history
       const missingPatente = facturasData.filter(f => !f.vehiculo_patente)
       if (missingPatente.length > 0) {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+         
         const { data: asignaciones } = await (supabase
           .from('asignaciones_conductores') as any)
           .select(`
@@ -532,9 +540,9 @@ export function PortalPage() {
           .order('created_at', { ascending: false })
 
         if (asignaciones && asignaciones.length > 0) {
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+           
           const validAsignaciones = (asignaciones as any[]).filter(
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+             
             (ac: any) => ac.asignaciones?.vehiculos?.patente && ac.asignaciones.estado !== 'programado'
           )
 
@@ -544,7 +552,7 @@ export function PortalPage() {
             const semFin = new Date(p.fecha_fin + 'T23:59:59')
 
             // Try date overlap match first
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+             
             const match = validAsignaciones.find((ac: any) => {
               const asig = ac.asignaciones
               const acInicio = ac.fecha_inicio ? new Date(ac.fecha_inicio) : new Date(asig.fecha_inicio)
@@ -1008,6 +1016,7 @@ export function PortalPage() {
     setLoadingDetalle(true)
     setDetalleError('')
     setDetallePagos([])
+    setDetalleSaldoBreakdown(null)
 
     // Pagos del conductor en esa semana/año desde control_saldos (kardex)
     const periodo = factura.periodos_facturacion
@@ -1029,6 +1038,45 @@ export function PortalPage() {
           fecha: p.created_at,
         })))
       })
+
+    // Desglose del saldo anterior desde el kardex (control_saldos).
+    // Busca el movimiento de pago manual/efectivo cuyo saldo resultante coincide
+    // con el saldo_anterior de esta facturación, para mostrar: saldo previo, pago y resultado.
+    // Solo es visual: no modifica totales ni la facturación.
+    const saldoAnt = factura.saldo_anterior || 0
+    if (saldoAnt !== 0) {
+      ;(supabase
+        .from('control_saldos') as any)
+        .select('tipo_movimiento, saldo_adeudado, saldo_pendiente, monto_movimiento, referencia, created_at')
+        .eq('conductor_id', factura.conductor_id)
+        .order('created_at', { ascending: false })
+        .limit(15)
+        .then(({ data }: { data: Array<{ tipo_movimiento: string; saldo_adeudado: number | null; saldo_pendiente: number | null; monto_movimiento: number | null; referencia: string | null }> | null }) => {
+          if (!data) return
+          // El saldo_pendiente del kardex tiene signo invertido respecto a saldo_anterior
+          // (a favor = positivo en kardex, negativo en facturación).
+          const objetivo = -saldoAnt
+          const tiposManuales = ['pago_manual', 'pago_efectivo', 'ajuste_manual']
+          const match = data.find(m =>
+            Math.round((m.saldo_pendiente || 0) * 100) === Math.round(objetivo * 100) &&
+            (m.monto_movimiento || 0) > 0 &&
+            tiposManuales.includes(m.tipo_movimiento)
+          )
+          if (match) {
+            const pago = match.monto_movimiento || 0
+            const resultado = match.saldo_pendiente || 0
+            const saldoPrevio = match.saldo_adeudado != null && match.saldo_adeudado > 0
+              ? match.saldo_adeudado
+              : pago - resultado
+            setDetalleSaldoBreakdown({
+              saldoPrevio,
+              pago,
+              pagoRef: match.referencia || 'Pago en efectivo',
+              resultado,
+            })
+          }
+        })
+    }
 
     try {
       const { data, error } = await supabase
@@ -1643,10 +1691,34 @@ export function PortalPage() {
                   <div className="portal-detail-section" style={{ marginTop: '8px' }}>
                     <div className="portal-detail-section-title" style={{ color: saldoAnterior > 0 ? '#dc2626' : '#059669' }}>Saldo Anterior</div>
                     <div className="portal-detail-items">
+                      {detalleSaldoBreakdown && (
+                        <>
+                          <div className="portal-detail-item">
+                            <span className="portal-detail-item-name" style={{ color: '#9ca3af' }}>
+                              <span className="portal-detail-item-dot" style={{ background: '#d1d5db' }} />
+                              Saldo adeudado anterior
+                            </span>
+                            <span className="portal-detail-item-amount" style={{ color: '#9ca3af', fontStyle: 'italic' }}>
+                              {formatCurrency(detalleSaldoBreakdown.saldoPrevio)}
+                            </span>
+                          </div>
+                          <div className="portal-detail-item">
+                            <span className="portal-detail-item-name" style={{ color: '#9ca3af' }}>
+                              <span className="portal-detail-item-dot" style={{ background: '#d1d5db' }} />
+                              {detalleSaldoBreakdown.pagoRef || 'Pago'}
+                            </span>
+                            <span className="portal-detail-item-amount" style={{ color: '#9ca3af', fontStyle: 'italic' }}>
+                              -{formatCurrency(detalleSaldoBreakdown.pago)}
+                            </span>
+                          </div>
+                        </>
+                      )}
                       <div className="portal-detail-item">
                         <span className="portal-detail-item-name">
                           <span className="portal-detail-item-dot" style={{ background: saldoAnterior > 0 ? '#dc2626' : '#059669' }} />
-                          {saldoAnterior > 0 ? 'Deuda pendiente semana anterior' : 'Saldo a favor semana anterior'}
+                          {detalleSaldoBreakdown
+                            ? (saldoAnterior > 0 ? 'Resultado: deuda pendiente' : 'Resultado: saldo a favor')
+                            : (saldoAnterior > 0 ? 'Deuda pendiente semana anterior' : 'Saldo a favor semana anterior')}
                         </span>
                         <span className="portal-detail-item-amount" style={{ color: saldoAnterior > 0 ? '#dc2626' : '#059669' }}>
                           {saldoAnterior > 0 ? '+' : '-'}{formatCurrency(Math.abs(saldoAnterior))}

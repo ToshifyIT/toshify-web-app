@@ -476,7 +476,16 @@ export function ReporteFacturacionTab() {
     tipo_cobro: string
   }[]>([])
 
-  
+  // Desglose del saldo anterior: saldo previo + pago manual/efectivo = resultado.
+  // Solo display; se lee del kardex (control_saldos). No afecta cálculos.
+  const [detalleSaldoBreakdown, setDetalleSaldoBreakdown] = useState<{
+    saldoPrevio: number
+    pago: number
+    pagoRef: string
+    resultado: number
+  } | null>(null)
+
+
 
   // Memoized filtered detalle items to avoid recalculation on each render
   const detalleCargos = useMemo(() => detalleItems.filter(d => !d.es_descuento && d.total !== 0), [detalleItems])
@@ -3694,10 +3703,11 @@ export function ReporteFacturacionTab() {
       const saldos = saldosRes.data || []
       const excesosArr = excesosRes.data || []
       const garantias = garantiasRes.data || []
-      // Cobros fraccionados: incluir todos los no pagados de esta semana.
-      // El flag aplicado ya no se usa como filtro aquí porque recalcular no lo modifica.
-      // Solo se excluyen los que ya tienen un pago registrado en pagos_conductores.
-      const cobros = (cobrosRes.data || []).filter((c: any) => !cuotasPagadasRecalcIds.has(c.id))
+      // Cobros fraccionados: excluir los ya aplicados (cerrados en períodos anteriores)
+      // y los que ya tienen un pago registrado en pagos_conductores.
+      const cobros = (cobrosRes.data || []).filter((c: any) =>
+        c.aplicado !== true && !cuotasPagadasRecalcIds.has(c.id)
+      )
 
       // ─── O(1) lookup Maps — construidos una vez, usados en el loop por conductor ───
       // Antes: cada iteración hacía .find()/.filter() sobre el array completo → O(n²)
@@ -4444,6 +4454,7 @@ export function ReporteFacturacionTab() {
     setLoadingDetalle(true)
     setShowDetalle(true)
     setDetalleFacturacion(facturacion)
+    setDetalleSaldoBreakdown(null)
 
     // En modo Vista Previa, generar detalles simulados desde los datos calculados
     if (modoVistaPrevia || facturacion.id.startsWith('preview-')) {
@@ -4813,6 +4824,47 @@ export function ReporteFacturacionTab() {
         .eq('tipo_cobro', 'facturacion_semanal')
         .order('fecha_pago', { ascending: false })
       setDetallePagos(pagos || [])
+
+      // Desglose del saldo anterior desde el kardex (control_saldos).
+      // Busca el movimiento de pago manual/efectivo cuyo saldo resultante coincide
+      // con el saldo_anterior de esta facturación, para mostrar: saldo previo, pago y resultado.
+      // Solo es visual: no modifica totales ni la facturación.
+      try {
+        const saldoAnt = facturacion.saldo_anterior || 0
+        if (saldoAnt !== 0) {
+          const { data: movs } = await (supabase.from('control_saldos') as any)
+            .select('tipo_movimiento, saldo_adeudado, saldo_a_favor, saldo_pendiente, monto_movimiento, referencia, created_at')
+            .eq('conductor_id', facturacion.conductor_id)
+            .order('created_at', { ascending: false })
+            .limit(15)
+          // El saldo_pendiente del kardex tiene signo invertido respecto a saldo_anterior
+          // (a favor = positivo en kardex, negativo en facturación).
+          const objetivo = -saldoAnt
+          const tiposManuales = ['pago_manual', 'pago_efectivo', 'ajuste_manual']
+          const match = (movs || []).find((m: any) =>
+            Math.round((m.saldo_pendiente || 0) * 100) === Math.round(objetivo * 100) &&
+            (m.monto_movimiento || 0) > 0 &&
+            tiposManuales.includes(m.tipo_movimiento)
+          )
+          if (match) {
+            const pago = match.monto_movimiento || 0
+            const resultado = match.saldo_pendiente || 0
+            // saldo previo = lo que debía antes del pago = pago - resultado
+            const saldoPrevio = match.saldo_adeudado != null && match.saldo_adeudado > 0
+              ? match.saldo_adeudado
+              : pago - resultado
+            setDetalleSaldoBreakdown({
+              saldoPrevio,
+              pago,
+              pagoRef: match.referencia || 'Pago en efectivo',
+              resultado,
+            })
+          }
+        }
+      } catch {
+        // Si falla la lectura del desglose, se mantiene la vista simple (sin romper el modal).
+        setDetalleSaldoBreakdown(null)
+      }
     } catch {
       Swal.fire('Error', 'No se pudo cargar el detalle', 'error')
       setShowDetalle(false)
@@ -11526,11 +11578,11 @@ export function ReporteFacturacionTab() {
 
       {/* Modal de detalle */}
       {showDetalle && (
-        <div className="fact-modal-overlay" onClick={() => { setShowDetalle(false); setDetallePagos([]) }}>
+        <div className="fact-modal-overlay" onClick={() => { setShowDetalle(false); setDetallePagos([]); setDetalleSaldoBreakdown(null) }}>
           <div className="fact-modal-content" style={{ maxWidth: '580px' }} onClick={(e) => e.stopPropagation()}>
             <div className="fact-modal-header">
               <h2>Detalle de Facturación</h2>
-              <button className="fact-modal-close" onClick={() => { setShowDetalle(false); setDetallePagos([]) }}>
+              <button className="fact-modal-close" onClick={() => { setShowDetalle(false); setDetallePagos([]); setDetalleSaldoBreakdown(null) }}>
                 <X size={20} />
               </button>
             </div>
@@ -11808,9 +11860,33 @@ export function ReporteFacturacionTab() {
                       }}>
                         Saldo Anterior
                       </div>
+                      {detalleSaldoBreakdown && (
+                        <div style={{
+                          display: 'flex', flexDirection: 'column', gap: '4px',
+                          padding: '7px 12px', borderRadius: '6px 6px 0 0',
+                          background: 'var(--bg-secondary)',
+                          border: '1px solid var(--border-primary)', borderBottom: 'none',
+                        }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>Saldo adeudado anterior</span>
+                            <span style={{ fontSize: '12px', fontWeight: 600, fontFamily: 'monospace', color: '#ff0033' }}>
+                              {formatCurrency(detalleSaldoBreakdown.saldoPrevio)}
+                            </span>
+                          </div>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
+                              {detalleSaldoBreakdown.pagoRef || 'Pago'}
+                            </span>
+                            <span style={{ fontSize: '12px', fontWeight: 600, fontFamily: 'monospace', color: '#059669' }}>
+                              -{formatCurrency(detalleSaldoBreakdown.pago)}
+                            </span>
+                          </div>
+                        </div>
+                      )}
                       <div style={{
                         display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                        padding: '7px 12px', borderRadius: '6px',
+                        padding: '7px 12px',
+                        borderRadius: detalleSaldoBreakdown ? '0 0 6px 6px' : '6px',
                         background: conceptosFaltantes.saldo > 0 ? 'rgba(255, 0, 51, 0.04)' : 'rgba(16, 185, 129, 0.04)',
                         border: `1px solid ${conceptosFaltantes.saldo > 0 ? 'rgba(255, 0, 51, 0.12)' : 'rgba(16, 185, 129, 0.12)'}`,
                       }}>
@@ -11821,7 +11897,9 @@ export function ReporteFacturacionTab() {
                             flexShrink: 0,
                           }} />
                           <span style={{ fontSize: '12px', color: 'var(--text-primary)' }}>
-                            {conceptosFaltantes.saldo > 0 ? 'Deuda pendiente semana anterior' : 'Saldo a favor semana anterior'}
+                            {detalleSaldoBreakdown
+                              ? (conceptosFaltantes.saldo > 0 ? 'Resultado: deuda pendiente' : 'Resultado: saldo a favor')
+                              : (conceptosFaltantes.saldo > 0 ? 'Deuda pendiente semana anterior' : 'Saldo a favor semana anterior')}
                           </span>
                         </div>
                         <span style={{

@@ -1,4 +1,4 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
+ 
 import { useState, useEffect, useMemo } from 'react'
 import { supabase } from '../../../lib/supabase'
 import { useAuth } from '../../../contexts/AuthContext'
@@ -349,7 +349,7 @@ export function PeriodosTab() {
       const ESTADO_ACTIVO_ID_GEN = '57e9de5f-e6fc-4ff7-8d14-cf8e13e9dbe2'
       const conductoresProcesados: ConductorProcesado[] = []
 
-      for (const [_conductorId, { conductor, modalidad, patente, horarioConductor }] of conductoresAsignados.entries()) {
+      for (const { conductor, modalidad, patente, horarioConductor } of conductoresAsignados.values()) {
         const conductorData = conductoresMap.get(normalizeDni(conductor.numero_dni))
         if (!conductorData) continue
 
@@ -894,11 +894,12 @@ export function PeriodosTab() {
             referencia_tipo: 'cobro_fraccionado'
           })
 
-          // Marcar cobro como aplicado
-          await (supabase
+          // Marcar cobro como aplicado (el estado definitivo se fija al cerrar el período)
+          const { error: errCobro } = await (supabase
             .from('cobros_fraccionados') as any)
             .update({ aplicado: true, fecha_aplicacion: new Date().toISOString() })
             .eq('id', (cobro as any).id)
+          if (errCobro) console.error('Error marcando cobro fraccionado como aplicado:', errCobro)
         }
 
         // Insertar cuotas de penalidades fraccionadas como detalle
@@ -979,6 +980,38 @@ export function PeriodosTab() {
         .eq('id', semana.periodo_id)
 
       if (error) throw error
+
+      // Al cerrar el período, marcar todos los cobros_fraccionados incluidos
+      // en él como aplicado=true y estado='pagada', para que no se dupliquen
+      // en períodos futuros.
+      const { data: facturacionIds } = await (supabase
+        .from('facturacion_conductores') as any)
+        .select('id')
+        .eq('periodo_id', semana.periodo_id)
+
+      if (facturacionIds && facturacionIds.length > 0) {
+        const ids = facturacionIds.map((r: any) => r.id)
+        const { data: detallesCobros } = await (supabase
+          .from('facturacion_detalle') as any)
+          .select('referencia_id')
+          .in('facturacion_id', ids)
+          .eq('referencia_tipo', 'cobro_fraccionado')
+
+        const cobrosIds = (detallesCobros || [])
+          .map((d: any) => d.referencia_id)
+          .filter(Boolean)
+
+        if (cobrosIds.length > 0) {
+          await (supabase
+            .from('cobros_fraccionados') as any)
+            .update({
+              aplicado: true,
+              estado: 'pagada',
+              fecha_aplicacion: new Date().toISOString()
+            })
+            .in('id', cobrosIds)
+        }
+      }
 
       // Sincroniza cuotas de garantía: cada período cerrado con
       // subtotal_garantia > 0 cuenta como una cuota pagada. Idempotente.
