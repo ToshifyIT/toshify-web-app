@@ -474,13 +474,18 @@ export function useExcesoKmData(sedeId?: string | null) {
       }
       // Mapa resultado: `${conductorId}|${semanaKey}` -> { modalidad, horario }
       const asignByCondSemana = new Map<string, { modalidad: string | null; horario: string | null }>()
+      // Mapa: `${conductorId}|${semanaKey}` -> Set de patentes que el conductor tenía
+      // asignadas esa semana. Se usa para excluir del acumulado los km de patentes que
+      // NO eran del conductor (manejó un vehículo ajeno => error/inconsistencia GPS).
+      const patentesAsignadasPorCondSemana = new Map<string, Set<string>>()
       if (condIdsUnicos.length > 0) {
         // Traer todas las asignaciones_conductores de esos conductores + su asignación padre.
         const { data: acRows } = await supabase
           .from('asignaciones_conductores')
-          .select('conductor_id, horario, estado, fecha_inicio, fecha_fin, asignaciones(modalidad, estado)')
+          .select('conductor_id, horario, estado, fecha_inicio, fecha_fin, asignaciones(modalidad, estado, vehiculos(patente))')
           .in('conductor_id', condIdsUnicos)
-        type AsigJoin = { modalidad: string | null; estado: string | null }
+        type VehJoin = { patente: string | null }
+        type AsigJoin = { modalidad: string | null; estado: string | null; vehiculos: VehJoin | VehJoin[] | null }
         type AcRow = {
           conductor_id: string
           horario: string | null
@@ -493,6 +498,11 @@ export function useExcesoKmData(sedeId?: string | null) {
         // La asignación padre puede venir como objeto o array de 1 elemento.
         const asigDe = (r: AcRow): AsigJoin | null =>
           Array.isArray(r.asignaciones) ? (r.asignaciones[0] ?? null) : (r.asignaciones ?? null)
+        const patenteDe = (a: AsigJoin | null): string | null => {
+          if (!a) return null
+          const v = Array.isArray(a.vehiculos) ? (a.vehiculos[0] ?? null) : (a.vehiculos ?? null)
+          return v?.patente ?? null
+        }
         // Estados válidos
         const acEstadoOk = (e: string | null) => e == null || ['asignado', 'completado', 'activo', 'activa'].includes(e)
         const asigEstadoOk = (e: string | null) => e == null || ['activa', 'activo', 'finalizada', 'finalizado'].includes(e)
@@ -503,6 +513,7 @@ export function useExcesoKmData(sedeId?: string | null) {
             conductor_id: r.conductor_id,
             horario: r.horario,
             modalidad: asigDe(r)?.modalidad ?? null,
+            patenteNorm: normalizarPatente(patenteDe(asigDe(r))),
             iniMs: new Date(r.fecha_inicio as string).getTime(),
             finMs: r.fecha_fin ? new Date(r.fecha_fin).getTime() : Number.POSITIVE_INFINITY,
           }))
@@ -512,13 +523,19 @@ export function useExcesoKmData(sedeId?: string | null) {
             // Vigentes en la semana: empezaron antes/durante el domingo y no terminaron antes del lunes
             const vigentes = delCond.filter(r => r.iniMs <= domingoMs && r.finMs >= lunesMs)
             if (vigentes.length === 0) continue
-            // Gana la última que empezó
+            // Gana la última que empezó (para modalidad/horario)
             vigentes.sort((a, b) => b.iniMs - a.iniMs)
             const elegida = vigentes[0]
             asignByCondSemana.set(`${condId}|${semanaKey}`, {
               modalidad: elegida.modalidad,
               horario: elegida.horario,
             })
+            // Set de TODAS las patentes que el conductor tuvo asignadas esa semana
+            // (puede tener más de una asignación vigente). Se usa para NO contar km
+            // de patentes que NO eran suyas (error/inconsistencia del GPS).
+            const pats = new Set<string>()
+            for (const v of vigentes) { if (v.patenteNorm) pats.add(v.patenteNorm) }
+            patentesAsignadasPorCondSemana.set(`${condId}|${semanaKey}`, pats)
           }
         }
       }
@@ -584,11 +601,26 @@ export function useExcesoKmData(sedeId?: string | null) {
         return m
       })
 
-      // 8) Calcular suma semanal por conductor para aplicar excedeLimite
+      // Match aproximado de patente: la patente del turno debe estar entre las que el
+      // conductor tenía asignadas esa semana. Comparación por patente normalizada.
+      // REGLA: los km de un turno SOLO cuentan si esa patente estaba asignada al conductor
+      // esa semana. Si manejó un vehículo que no era suyo (error/inconsistencia USS/Geotab),
+      // ese km NO se acumula a su exceso. Si el conductor no tiene conductor_id (no
+      // identificado) no se puede validar => se cuenta como antes (conservador).
+      const turnoEnPatentePropia = (m: Marcacion): boolean => {
+        if (!m.conductorId) return true // sin id no se puede cruzar -> no excluir
+        const set = patentesAsignadasPorCondSemana.get(`${m.conductorId}|${m.excesoKmSemanaKey || ''}`)
+        if (!set || set.size === 0) return false // tiene id pero sin patente asignada esa semana -> no es suya
+        return set.has(m.patenteNormalizada)
+      }
+
+      // 8) Calcular suma semanal por conductor para aplicar excedeLimite.
+      //    Solo se acumulan los km de turnos en patente propia (asignada esa semana).
       const sumKmPorConductor = new Map<string, { km: number; modalidad: string }>()
       for (const m of marcs) {
         const conductorKey = m.conductorId || m.conductor || ''
         if (!conductorKey) continue
+        if (!turnoEnPatentePropia(m)) continue // km de patente ajena: NO suma al exceso
         const key = `${m.excesoKmSemanaKey || 'sin-semana'}|${conductorKey}`
         const prev = sumKmPorConductor.get(key) || { km: 0, modalidad: m.vehiculoModalidad || 'turno' }
         prev.km += m.kmTotal
