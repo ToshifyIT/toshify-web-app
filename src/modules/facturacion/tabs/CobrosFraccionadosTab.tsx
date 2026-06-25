@@ -1,4 +1,4 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
+
 /**
  * Tab: Cobros Fraccionados en Facturación
  * Control de cuotas aplicadas, próximas a cobrar, y % de completado
@@ -681,7 +681,7 @@ export function CobrosFraccionadosTab({ periodoActual }: CobrosFraccionadosTabPr
                               {cuota.pagado && cuota.fecha_pago
                                 ? new Date(cuota.fecha_pago).toLocaleDateString('es-AR')
                                 : cuota.fecha_aplicacion
-                                  ? new Date(cuota.fecha_aplicacion).toLocaleDateString('es-AR')
+                                  ? new Date(cuota.fecha_aplicacion + 'T00:00:00').toLocaleDateString('es-AR')
                                   : '-'
                               }
                             </td>

@@ -1,4 +1,4 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
+
 import { useState, useEffect, useMemo } from 'react'
 import { supabase } from '../../../lib/supabase'
 import { useAuth } from '../../../contexts/AuthContext'
@@ -292,8 +292,8 @@ export function PeriodosTab() {
 
       // Mapear conductores con asignación que se solapó con la semana
       // Mapear conductores con asignación que se solapó con la semana
-      const conductoresAsignados = new Map<string, { 
-        conductor: any; modalidad: string; patente: string | null; horarioConductor: string | null 
+      const conductoresAsignados = new Map<string, {
+        conductor: any; modalidad: string; patente: string | null; horarioConductor: string | null
       }>()
       const semanaInicioDate = new Date(semana.fecha_inicio + 'T00:00:00')
       const semanaFinDate = new Date(semana.fecha_fin + 'T23:59:59')
@@ -311,13 +311,13 @@ export function PeriodosTab() {
         const acFinStr = ac.fecha_fin ? new Date(ac.fecha_fin).toISOString().split('T')[0] : null
         const acInicio = acInicioStr ? new Date(acInicioStr + 'T00:00:00') : new Date('2020-01-01')
         const acFin = acFinStr ? new Date(acFinStr + 'T23:59:59') : new Date('2099-12-31')
-        
+
         // Si la asignación terminó antes de la semana o empezó después, no cuenta
         if (acFin < semanaInicioDate || acInicio > semanaFinDate) continue
-        
+
         const modalidad = asig.horario === 'todo_dia' ? 'CARGO' : 'TURNO'
         const patente = asig.vehiculos?.patente || null
-        
+
         // Si ya está mapeado, no sobreescribir
         if (!conductoresAsignados.has(conductor.id)) {
           conductoresAsignados.set(conductor.id, { conductor, modalidad, patente, horarioConductor: ac.horario || null })
@@ -349,7 +349,7 @@ export function PeriodosTab() {
       const ESTADO_ACTIVO_ID_GEN = '57e9de5f-e6fc-4ff7-8d14-cf8e13e9dbe2'
       const conductoresProcesados: ConductorProcesado[] = []
 
-      for (const [_conductorId, { conductor, modalidad, patente, horarioConductor }] of conductoresAsignados.entries()) {
+      for (const { conductor, modalidad, patente, horarioConductor } of conductoresAsignados.values()) {
         const conductorData = conductoresMap.get(normalizeDni(conductor.numero_dni))
         if (!conductorData) continue
 
@@ -361,13 +361,13 @@ export function PeriodosTab() {
         const modalidadFinal = modalidad === 'CARGO' ? 'CARGO' : 'TURNO'
         const horarioConductorNorm = (horarioConductor || '').toLowerCase().trim()
         const esTurnoNocturno = modalidadFinal === 'TURNO' && (horarioConductorNorm === 'nocturno' || horarioConductorNorm === 'n')
-        
+
         // Si tiene fecha_terminacion en la semana, calcular días hasta esa fecha
         let diasMaximos = 7
         if (fechaTermGen && fechaTermGen >= semanaInicioDate && fechaTermGen <= semanaFinDate) {
           diasMaximos = Math.max(0, Math.ceil((fechaTermGen.getTime() - semanaInicioDate.getTime()) / (1000 * 60 * 60 * 24)) + 1)
         }
-        
+
         const diasTurno = modalidadFinal === 'TURNO' && !esTurnoNocturno ? diasMaximos : 0
         const diasTurnoNocturno = esTurnoNocturno ? diasMaximos : 0
         const diasCargo = modalidadFinal === 'CARGO' ? diasMaximos : 0
@@ -414,7 +414,7 @@ export function PeriodosTab() {
       const precioCargoDiario = ((conceptos || []) as any[]).find((c: any) => c.codigo === 'P002')?.precio_base || 75429
       const cuotaGarantiaDiaria = ((conceptos || []) as any[]).find((c: any) => c.codigo === 'P003')?.precio_base || 7143
       const precioTurnoNocturnoDiario = ((conceptos || []) as any[]).find((c: any) => c.codigo === 'P013')?.precio_base || 32714
-      
+
       // Precios semanales (7 días)
       const precioTurnoDiurno = precioTurnoDiurnoDiario * 7  // P001
       const precioTurnoNocturno = precioTurnoNocturnoDiario * 7  // P013
@@ -619,9 +619,9 @@ export function PeriodosTab() {
 
         // Obtener número de cuota de garantía y verificar si ya está completada
         const garantiaConductor = (garantias as any[]).find((g: any) => g.conductor_id === conductor.conductor_id)
-        const garantiaCompletada = garantiaConductor?.estado === 'completada' || 
+        const garantiaCompletada = garantiaConductor?.estado === 'completada' ||
           (garantiaConductor?.monto_pagado >= garantiaConductor?.monto_total)
-        
+
         // Si la garantía está completada, no cobrar más cuotas
         // Si el pendiente es menor que la cuota normal, cobrar solo el restante
         const pendienteGarantia = garantiaConductor ? (garantiaConductor.monto_total - garantiaConductor.monto_pagado) : cuotaGarantia
@@ -878,9 +878,9 @@ export function PeriodosTab() {
         // Insertar cobros fraccionados como detalle (P010)
         for (const cobro of cobrosConductor) {
           const montoCuotaReal = calcMontoCuota(cobro)
-          const descripcionCobro = (cobro as any).descripcion || 
+          const descripcionCobro = (cobro as any).descripcion ||
             `Cuota ${(cobro as any).numero_cuota} de ${(cobro as any).total_cuotas}`
-          
+
           await (supabase.from('facturacion_detalle') as any).insert({
             facturacion_id: facturacionId,
             concepto_codigo: 'P010',
@@ -894,11 +894,12 @@ export function PeriodosTab() {
             referencia_tipo: 'cobro_fraccionado'
           })
 
-          // Marcar cobro como aplicado
-          await (supabase
+          // Marcar cobro como aplicado (el estado definitivo se fija al cerrar el período)
+          const { error: errCobro } = await (supabase
             .from('cobros_fraccionados') as any)
             .update({ aplicado: true, fecha_aplicacion: new Date().toISOString() })
             .eq('id', (cobro as any).id)
+          if (errCobro) console.error('Error marcando cobro fraccionado como aplicado:', errCobro)
         }
 
         // Insertar cuotas de penalidades fraccionadas como detalle
@@ -979,6 +980,38 @@ export function PeriodosTab() {
         .eq('id', semana.periodo_id)
 
       if (error) throw error
+
+      // Al cerrar el período, marcar todos los cobros_fraccionados incluidos
+      // en él como aplicado=true y estado='pagada', para que no se dupliquen
+      // en períodos futuros.
+      const { data: facturacionIds } = await (supabase
+        .from('facturacion_conductores') as any)
+        .select('id')
+        .eq('periodo_id', semana.periodo_id)
+
+      if (facturacionIds && facturacionIds.length > 0) {
+        const ids = facturacionIds.map((r: any) => r.id)
+        const { data: detallesCobros } = await (supabase
+          .from('facturacion_detalle') as any)
+          .select('referencia_id')
+          .in('facturacion_id', ids)
+          .eq('referencia_tipo', 'cobro_fraccionado')
+
+        const cobrosIds = (detallesCobros || [])
+          .map((d: any) => d.referencia_id)
+          .filter(Boolean)
+
+        if (cobrosIds.length > 0) {
+          await (supabase
+            .from('cobros_fraccionados') as any)
+            .update({
+              aplicado: true,
+              estado: 'pagada',
+              fecha_aplicacion: new Date().toISOString()
+            })
+            .in('id', cobrosIds)
+        }
+      }
 
       // Sincroniza cuotas de garantía: cada período cerrado con
       // subtotal_garantia > 0 cuenta como una cuota pagada. Idempotente.
