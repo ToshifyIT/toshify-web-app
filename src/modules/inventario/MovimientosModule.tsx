@@ -825,7 +825,7 @@ export function MovimientosModule() {
           producto_id: item.producto_id,
           tipo_movimiento: 'salida',
           cantidad: item.cantidad,
-          proveedor_id: null, // Se determinará al aprobar según stock disponible
+          proveedor_id: item.proveedor_id || null,
           vehiculo_destino_id: item.vehiculo_id || null,
           usuario_id: userData.user?.id,
           observaciones: observaciones || `Retiro de varios productos - ${item.vehiculo?.patente || 'Sin vehículo'}`,
@@ -987,12 +987,33 @@ export function MovimientosModule() {
     setCantidad(1)
   }
 
-  const handleAgregarProductoLoteSalida = () => {
+  const handleAgregarProductoLoteSalida = async () => {
     if (!productoId || cantidad <= 0) return
     const prod = productos.find(p => p.id === productoId)
     if (!prod) return
 
-    if ((prod.stock_disponible || 0) < cantidad) {
+    const { data: stockDisponible, error } = await supabase
+      .from('inventario')
+      .select('id, proveedor_id, cantidad')
+      .eq('producto_id', productoId)
+      .eq('estado', 'disponible')
+      .gt('cantidad', 0)
+      .order('cantidad', { ascending: false })
+
+    if (error) {
+      Swal.fire({
+        icon: 'error',
+        title: 'No se pudo validar el stock',
+        text: 'Intenta nuevamente antes de agregar el producto.'
+      })
+      return
+    }
+
+    const inventarioConStock = (stockDisponible || []).find((item: any) =>
+      Number(item.cantidad || 0) >= cantidad
+    )
+
+    if (!inventarioConStock) {
       Swal.fire({
         icon: 'warning',
         title: 'Stock insuficiente',
@@ -1008,7 +1029,9 @@ export function MovimientosModule() {
       producto: prod,
       vehiculo_id: vehiculoId,
       vehiculo: veh,
-      cantidad: cantidad
+      cantidad: cantidad,
+      proveedor_id: inventarioConStock.proveedor_id,
+      inventario_id: inventarioConStock.id
     }
     setProductosLoteSalida([...productosLoteSalida, nuevoItem])
     setProductoId('')
