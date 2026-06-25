@@ -106,18 +106,18 @@ export function SaldosAbonosTab() {
   const [kardexModal, setKardexModal] = useState<{
     open: boolean
     saldo: SaldoConductor | null
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+     
     rows: any[]
     loading: boolean
     // FIX 2026-05-20: facturacion por anio-semana para columna "Facturado" + detalle
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+     
     facMap?: Map<string, any>
   }>({ open: false, saldo: null, rows: [], loading: false, facMap: new Map() })
 
   // FIX 2026-05-20: mini-modal con desglose de facturacion al click en "Facturado"
   const [factDetailModal, setFactDetailModal] = useState<{
     open: boolean
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+     
     fact: any | null
     anio: number | null
     semana: number | null
@@ -221,7 +221,7 @@ export function SaldosAbonosTab() {
     // Cargar tasa de mora desde P009
     ;(async () => {
       try {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+         
         const { data: p009 } = await (supabase.from('conceptos_nomina') as any)
           .select('precio_base')
           .eq('codigo', 'P009')
@@ -706,7 +706,7 @@ export function SaldosAbonosTab() {
       const fechaReferencia = new Date(formValues.fecha + 'T12:00:00').toISOString()
 
       // Verificar si ya existe saldo para este conductor
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+       
       const { data: saldoExistente } = await (supabase.from('saldos_conductores') as any)
         .select('id, saldo_actual')
         .eq('conductor_id', formValues.conductorId)
@@ -715,7 +715,7 @@ export function SaldosAbonosTab() {
       if (saldoExistente) {
         // Actualizar saldo existente (sumar al saldo actual)
         const nuevoSaldo = (saldoExistente.saldo_actual || 0) + formValues.saldo
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+         
         const { error: errorUpdate } = await (supabase.from('saldos_conductores') as any)
           .update({
             saldo_actual: nuevoSaldo,
@@ -725,7 +725,7 @@ export function SaldosAbonosTab() {
         if (errorUpdate) throw errorUpdate
       } else {
         // Crear nuevo registro
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+         
         const insertData: Record<string, unknown> = {
             conductor_id: formValues.conductorId,
             conductor_nombre: conductorNombre,
@@ -743,7 +743,7 @@ export function SaldosAbonosTab() {
       }
 
       // Registrar en historial de abonos
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+       
       await (supabase.from('abonos_conductores') as any).insert({
         conductor_id: formValues.conductorId,
         tipo: 'cargo',
@@ -790,7 +790,7 @@ export function SaldosAbonosTab() {
           const montoCuotaFinal = i === formValues.cuotas
             ? montoAbsoluto - (montoCuota * (formValues.cuotas - 1))
             : montoCuota
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+           
           await (supabase.from('cobros_fraccionados') as any).insert({
             conductor_id: formValues.conductorId,
             descripcion: `${formValues.concepto} - Cuota ${i}/${formValues.cuotas}`,
@@ -817,7 +817,7 @@ export function SaldosAbonosTab() {
 
       // Recargar datos
       cargarSaldos()
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+     
     } catch (error: any) {
       Swal.fire('Error', error.message || 'No se pudo agregar el saldo', 'error')
     }
@@ -972,7 +972,7 @@ export function SaldosAbonosTab() {
 
     try {
       // Re-verificar concurrencia: que no se haya creado otro plan entre apertura y confirmación
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+       
       const { data: pendientes } = await (supabase.from('cobros_fraccionados') as any)
         .select('id')
         .eq('conductor_id', saldo.conductor_id)
@@ -997,7 +997,7 @@ export function SaldosAbonosTab() {
         const montoCuotaFinal = i === formValues.cuotas
           ? montoDeuda - (montoCuota * (formValues.cuotas - 1))
           : montoCuota
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+         
         const { error } = await (supabase.from('cobros_fraccionados') as any).insert({
           conductor_id: saldo.conductor_id,
           descripcion: `Fraccionamiento de saldo - Cuota ${i}/${formValues.cuotas}`,
@@ -1015,7 +1015,7 @@ export function SaldosAbonosTab() {
         if (semIter > 52) { semIter = 1; anioIter++ }
       }
 
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+       
       const { error: errorUpdate } = await (supabase.from('saldos_conductores') as any)
         .update({
           saldo_actual: 0,
@@ -1047,7 +1047,7 @@ export function SaldosAbonosTab() {
 
       showSuccess('Saldo Fraccionado', `${formValues.cuotas} cuotas de ${formatCurrency(montoCuota)}`)
       cargarSaldos()
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+     
     } catch (error: any) {
       Swal.fire('Error', error.message || 'No se pudo fraccionar el saldo', 'error')
     }
@@ -1159,7 +1159,7 @@ export function SaldosAbonosTab() {
     try {
       const montoFinal = formValues.tipo === 'abono' ? formValues.monto : -formValues.monto
 
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+       
       const { error: errorAbono } = await (supabase.from('abonos_conductores') as any).insert({
           conductor_id: saldo.conductor_id,
           tipo: formValues.tipo,
@@ -1174,7 +1174,7 @@ export function SaldosAbonosTab() {
       if (errorAbono) throw errorAbono
 
       const nuevoSaldo = saldo.saldo_actual + montoFinal
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+       
       const { error: errorUpdate } = await (supabase.from('saldos_conductores') as any)
         .update({ saldo_actual: nuevoSaldo, ultima_actualizacion: new Date().toISOString() })
         .eq('id', saldo.id)
@@ -1196,7 +1196,7 @@ export function SaldosAbonosTab() {
       showSuccess(formValues.tipo === 'abono' ? 'Abono Registrado' : 'Cargo Registrado', `Nuevo saldo: ${formatCurrency(nuevoSaldo)}`)
 
       cargarSaldos()
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+     
     } catch (error: any) {
       Swal.fire('Error', error.message || 'No se pudo registrar', 'error')
     }
@@ -1269,7 +1269,7 @@ export function SaldosAbonosTab() {
 
     try {
       // Pago = abono (suma al saldo, reduce deuda)
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+       
       const { error: errorAbono } = await (supabase.from('abonos_conductores') as any).insert({
         conductor_id: saldo.conductor_id,
         tipo: 'abono',
@@ -1292,7 +1292,7 @@ export function SaldosAbonosTab() {
       if (nuevoSaldo >= 0) {
         updateData.dias_mora = 0
       }
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+       
       const { error: errorUpdate } = await (supabase.from('saldos_conductores') as any)
         .update(updateData)
         .eq('id', saldo.id)
@@ -1318,7 +1318,7 @@ export function SaldosAbonosTab() {
 
       showSuccess('Pago Registrado', `Nuevo saldo: ${formatCurrency(nuevoSaldo)}`)
       cargarSaldos()
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+     
     } catch (error: any) {
       Swal.fire('Error', error.message || 'No se pudo registrar el pago', 'error')
     }
@@ -1414,7 +1414,7 @@ export function SaldosAbonosTab() {
     // Obtener tasa de mora desde P009
     let tasaMora = 1 // default 1%
     try {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+       
       const { data: p009 } = await (supabase.from('conceptos_nomina') as any)
         .select('precio_base')
         .eq('codigo', 'P009')
@@ -1512,7 +1512,7 @@ export function SaldosAbonosTab() {
       const diasMora = formValues.diasMora
       const moraAcum = formValues.moraAcum
 
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+       
       const { error } = await (supabase.from('saldos_conductores') as any)
         .update({
           saldo_actual: formValues.saldoActual,
@@ -1541,7 +1541,7 @@ export function SaldosAbonosTab() {
       showSuccess('Actualizado', 'El saldo ha sido actualizado correctamente')
 
       cargarSaldos()
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+     
     } catch (error: any) {
       Swal.fire('Error', error.message || 'No se pudo actualizar el saldo', 'error')
     }
@@ -1592,7 +1592,7 @@ export function SaldosAbonosTab() {
     if (!formValues) return
 
     try {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+       
       const { error } = await (supabase.from('saldos_conductores') as any)
         .update({
           dias_mora: formValues.diasMora,
@@ -1624,7 +1624,7 @@ export function SaldosAbonosTab() {
 
       showSuccess('Actualizado', 'Mora actualizada correctamente')
       cargarSaldos()
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+     
     } catch (error: any) {
       Swal.fire('Error', error.message || 'No se pudo actualizar la mora', 'error')
     }
@@ -1693,7 +1693,7 @@ export function SaldosAbonosTab() {
       // Buscar hoja "Saldos" o usar la primera
       const sheetName = wb.SheetNames.includes('Saldos') ? 'Saldos' : wb.SheetNames[0]
       const ws = wb.Sheets[sheetName]
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+       
       const rows: any[] = XLSX.utils.sheet_to_json(ws, { raw: false })
 
       if (rows.length === 0) {
@@ -1870,7 +1870,7 @@ export function SaldosAbonosTab() {
       const anioImp = new Date().getFullYear()
 
       for (const c of cambios) {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+         
         const { error } = await (supabase.from('saldos_conductores') as any)
           .update({
             saldo_actual: c.saldo_actual,
@@ -1970,7 +1970,7 @@ export function SaldosAbonosTab() {
   async function verHistorial(saldo: SaldoConductor) {
     setKardexModal({ open: true, saldo, rows: [], loading: true })
     try {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+       
       const { data: rows, error } = await (supabase.from('control_saldos') as any)
         .select('id, semana, anio, tipo_movimiento, monto_movimiento, referencia, saldo_adeudado, saldo_a_favor, saldo_pendiente, saldo_previo, dias_mora, interes_mora, created_at, created_by_name')
         .eq('conductor_id', saldo.conductor_id)
@@ -1979,7 +1979,7 @@ export function SaldosAbonosTab() {
         .order('created_at', { ascending: false })
       if (error) throw error
       // FIX 2026-05-20: traer facturacion_conductores para mostrar columna "Facturado" + detalle
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+       
       const { data: facts } = await (supabase.from('facturacion_conductores') as any)
         .select('id, periodo_id, subtotal_alquiler, subtotal_garantia, subtotal_cargos, subtotal_descuentos, subtotal_neto, saldo_anterior, total_a_pagar, periodo:periodos_facturacion(anio, semana)')
         .eq('conductor_id', saldo.conductor_id)
@@ -2914,8 +2914,8 @@ export function SaldosAbonosTab() {
                                   <td style={{ padding: '5px 8px', textAlign: 'right', fontFamily: 'monospace', whiteSpace: 'nowrap' }}>
                                     {/* FIX 2026-05-20: columna Facturado - click abre detalle + redondeo residuos */}
                                     {(() => {
-                                      // Ajustes manuales y cancelaciones por baja no tienen facturación asociada
-                                      if (tipo === 'ajuste_manual' || tipo === 'cancelacion_fraccionado_baja') return <span style={{ color: 'var(--text-tertiary)' }}>—</span>
+                                      // Ajustes manuales, pagos manuales y cancelaciones por baja no tienen facturación asociada
+                                      if (tipo === 'ajuste_manual' || tipo === 'cancelacion_fraccionado_baja' || tipo === 'pago_manual') return <span style={{ color: 'var(--text-tertiary)' }}>—</span>
                                       const fac = (kardexModal as any).facMap?.get(`${r.anio}-${r.semana}`)
                                       if (!fac) return <span style={{ color: 'var(--text-tertiary)' }}>—</span>
                                       // Redondear a entero para no mostrar decimales tipo $371.688,03
