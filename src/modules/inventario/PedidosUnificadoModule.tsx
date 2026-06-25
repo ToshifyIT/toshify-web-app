@@ -178,6 +178,30 @@ interface PedidoDraftItem {
 
 type TabActiva = 'nuevo' | 'entradas' | 'pedidos' | 'pendientes' | 'historico' | 'excepciones'
 type FiltroTipo = 'todos' | 'entrada' | 'salida' | 'asignacion' | 'devolucion'
+type PedidosModuleMode = 'pedidos' | 'control'
+
+interface PedidosUnificadoModuleProps {
+  mode?: PedidosModuleMode
+}
+
+const PEDIDOS_TABS: TabActiva[] = ['nuevo', 'pedidos', 'excepciones']
+const CONTROL_MOVIMIENTOS_TABS: TabActiva[] = ['entradas', 'pendientes', 'historico']
+const ALL_PEDIDOS_TABS: TabActiva[] = [...PEDIDOS_TABS, ...CONTROL_MOVIMIENTOS_TABS]
+
+const normalizeTabParam = (tab: string | null): TabActiva | null => {
+  if (!tab) return null
+
+  const aliases: Record<string, TabActiva> = {
+    seguimiento: 'pedidos',
+    alertas: 'excepciones',
+    ingresos: 'entradas',
+    aprobaciones: 'pendientes',
+    procesados: 'historico',
+  }
+
+  if (aliases[tab]) return aliases[tab]
+  return ALL_PEDIDOS_TABS.includes(tab as TabActiva) ? tab as TabActiva : null
+}
 
 const parseFechaOperativa = (value: string) => {
   const datePart = value.split('T')[0]
@@ -247,19 +271,37 @@ const getPedidoRecepcionResumen = (pedido: PedidoAgrupado) => pedido.items.reduc
   { pedido: 0, confirmado: 0, recibido: 0, pendiente: 0 }
 )
 
-export function PedidosUnificadoModule() {
+const getItemObjetivoRecepcion = (item: PedidoItem) => item.estado_confirmacion === 'rechazado'
+  ? 0
+  : Number(item.cantidad_confirmada ?? item.cantidad_pedida ?? 0)
+
+const getItemPendienteRecepcion = (item: PedidoItem) =>
+  Math.max(getItemObjetivoRecepcion(item) - Number(item.cantidad_recibida || 0), 0)
+
+const getPedidoItemsPendientesRecepcion = (pedido: PedidoAgrupado) =>
+  pedido.items.filter(item =>
+    item.estado_confirmacion !== 'rechazado' && getItemPendienteRecepcion(item) > 0
+  )
+
+export function PedidosUnificadoModule({ mode = 'pedidos' }: PedidosUnificadoModuleProps) {
   const navigate = useNavigate()
   const location = useLocation()
   const { user, profile } = useAuth()
   const { canCreateInSubmenu, canEditInSubmenu, canViewTab } = usePermissions()
   const { sedeActual, verTodas } = useSede()
+  const isControlMode = mode === 'control'
+  const defaultTab: TabActiva = isControlMode ? 'entradas' : 'nuevo'
 
   // Permisos específicos para el submenú de pedidos
   const canEdit = canEditInSubmenu('inventario-pedidos') || canEditInSubmenu('pedidos')
   const canCreatePedido = canCreateInSubmenu('inventario-pedidos') || canCreateInSubmenu('pedidos') || canEdit
+  const canViewPedidosFlow = canViewTab('inventario-pedidos:pedidos')
+  const canViewIngresosControl = canViewTab('inventario-control-movimientos:ingresos')
+  const canViewAprobacionesControl = canViewTab('inventario-control-movimientos:aprobaciones')
+  const canViewProcesadosControl = canViewTab('inventario-control-movimientos:procesados')
 
   // Estado de tab activa — abre en "Nuevo Pedido" por defecto
-  const [activeTab, setActiveTab] = useState<TabActiva>('nuevo')
+  const [activeTab, setActiveTab] = useState<TabActiva>(defaultTab)
 
   // Estados para Pedidos en Tránsito
   const [pedidos, setPedidos] = useState<PedidoAgrupado[]>([])
@@ -269,7 +311,13 @@ export function PedidosUnificadoModule() {
   const [searchPedidos, setSearchPedidos] = useState('')
   const [expandedAlertas, setExpandedAlertas] = useState<Set<string>>(new Set())
   const [searchAlertas, setSearchAlertas] = useState('')
+  const [searchAprobaciones, setSearchAprobaciones] = useState('')
   const [processingItem, setProcessingItem] = useState<string | null>(null)
+  const [entradaConfirmacion, setEntradaConfirmacion] = useState<EntradaTransito | null>(null)
+  const [cantidadConfirmacion, setCantidadConfirmacion] = useState('')
+  const [pedidoRecepcion, setPedidoRecepcion] = useState<PedidoAgrupado | null>(null)
+  const [recepcionCantidades, setRecepcionCantidades] = useState<Record<string, string>>({})
+  const [savingRecepcion, setSavingRecepcion] = useState(false)
 
   // Registrar respuesta del proveedor (panel item-por-item)
   const [respuestaPedido, setRespuestaPedido] = useState<PedidoAgrupado | null>(null)
@@ -321,12 +369,25 @@ export function PedidosUnificadoModule() {
   // Abrir pestaña según ?tab= en la URL (ej. desde "Pendientes operativos" del Dashboard)
   useEffect(() => {
     const params = new URLSearchParams(location.search)
-    const tab = params.get('tab') as TabActiva | null
-    const validas: TabActiva[] = ['nuevo', 'entradas', 'pedidos', 'pendientes', 'historico', 'excepciones']
-    if (tab && validas.includes(tab)) {
+    const tab = normalizeTabParam(params.get('tab'))
+    const tabsDelModo = isControlMode ? CONTROL_MOVIMIENTOS_TABS : PEDIDOS_TABS
+    const tabsDelOtroModo = isControlMode ? PEDIDOS_TABS : CONTROL_MOVIMIENTOS_TABS
+
+    if (tab && tabsDelModo.includes(tab)) {
       setActiveTab(tab)
+      return
     }
-  }, [location.search])
+
+    if (tab && tabsDelOtroModo.includes(tab)) {
+      const targetRoute = isControlMode
+        ? '/logistica/inventario/pedidos'
+        : '/logistica/inventario/control-movimientos'
+      navigate(`${targetRoute}?tab=${tab}`, { replace: true })
+      return
+    }
+
+    setActiveTab(defaultTab)
+  }, [defaultTab, isControlMode, location.search, navigate])
 
   useEffect(() => {
     loadPedidosData()
@@ -463,7 +524,7 @@ export function PedidosUnificadoModule() {
       }
 
       setPedidos(Array.from(pedidosMap.values()))
-      setExpandedPedidos(new Set(pedidosMap.keys()))
+      setExpandedPedidos(new Set())
     } catch {
       // silently ignored
     }
@@ -480,7 +541,7 @@ export function PedidosUnificadoModule() {
   }
 
   // ===== Pipeline de estados del pedido =====
-  // 5 pasos: Creado → Enviado → Respondido → En recepción → Recibido.
+  // 5 pasos: Creado → Contacto proveedor → Respondido → En recepción → Recibido.
   // No hay "Confirmado" como paso muerto: apenas el proveedor confirma/ajusta,
   // el pedido queda "En recepción" (listo para recibir). Si rechaza todo, el
   // último paso muestra "Rechazado" (fin del flujo, no hay nada que recibir).
@@ -490,6 +551,8 @@ export function PedidosUnificadoModule() {
     const completo = pedido.estado_pedido === 'recibido_completo'
     const rechazado = resp === 'rechazado'
     const confirmado = resp === 'confirmado' || resp === 'confirmado_ajustes'
+    const tieneEmail = pedidoProveedorTieneEmail(pedido)
+    const pasoContactoLabel = tieneEmail ? 'Enviado' : 'Contacto proveedor'
 
     // índice del paso actual (0..4)
     let idx: number
@@ -504,7 +567,10 @@ export function PedidosUnificadoModule() {
 
     const pasos = [
       { label: 'Creado', sub: pedido.fecha_pedido ? formatFechaCorta(pedido.fecha_pedido) : '' },
-      { label: 'Enviado', sub: resp === 'sin_enviar' ? 'pendiente' : 'correo/manual' },
+      {
+        label: pasoContactoLabel,
+        sub: resp === 'sin_enviar' ? 'pendiente' : tieneEmail ? 'correo enviado' : 'contacto manual'
+      },
       { label: 'Respuesta proveedor', sub: resp === 'enviado' ? 'pendiente' : (rechazado ? 'rechazó' : (confirmado || recibidoAlgo ? 'ok' : '—')) },
       { label: 'Recepción', sub: completo ? 'ok' : (recibidoAlgo ? 'parcial' : (confirmado ? 'por ingresar' : '—')) },
       { label: ultimoLabel, sub: ultimoSub }
@@ -664,7 +730,12 @@ export function PedidosUnificadoModule() {
       case 'confirmado': return { texto: 'Listo para recibir', clase: 'ok' }
       case 'confirmado_ajustes': return { texto: 'Listo para recibir (c/ajustes)', clase: 'warn' }
       case 'rechazado': return { texto: 'Rechazado por proveedor', clase: 'danger' }
-      case 'enviado': return { texto: 'Enviado · esperando respuesta', clase: 'info' }
+      case 'enviado': return {
+        texto: pedidoProveedorTieneEmail(pedido)
+          ? 'Enviado · esperando respuesta'
+          : 'Contacto manual · esperando respuesta',
+        clase: 'info'
+      }
       default: return { texto: 'Creado · sin respuesta', clase: 'muted' }
     }
   }
@@ -687,6 +758,11 @@ export function PedidosUnificadoModule() {
 
   const getPedidoProveedorSeleccionado = () =>
     proveedoresPedido.find(proveedor => proveedor.id === proveedorPedidoId) || null
+
+  const pedidoProveedorTieneEmail = (pedido: PedidoAgrupado) =>
+    Boolean(proveedoresPedido.find(proveedor =>
+      proveedor.razon_social.trim().toLowerCase() === pedido.proveedor_nombre.trim().toLowerCase()
+    )?.email?.trim())
 
   const proveedorPedidoOptions = useMemo<SearchableSelectOption[]>(() =>
     proveedoresPedido.map(proveedor => ({
@@ -960,44 +1036,37 @@ export function PedidosUnificadoModule() {
     }
   }
 
-  const confirmarEntradaSimple = async (entrada: EntradaTransito) => {
-    const { value: cantidad } = await Swal.fire({
-      title: 'Confirmar ingreso manual',
-      html: `
-        <div style="text-align: left; margin-bottom: 16px;">
-          <p><strong>Producto:</strong> ${entrada.producto_codigo} - ${entrada.producto_nombre}</p>
-          <p><strong>Proveedor:</strong> ${entrada.proveedor_nombre}</p>
-          <p><strong>Cantidad en tránsito:</strong> ${entrada.cantidad} unidades</p>
-        </div>
-        <label style="display: block; margin-bottom: 8px; font-weight: 600;">
-          Cantidad recibida:
-        </label>
-      `,
-      input: 'text',
-      inputValue: String(entrada.cantidad),
-      inputAttributes: { autocomplete: 'off', inputmode: 'numeric', pattern: '[0-9]*' },
-      showCancelButton: true,
-      confirmButtonText: 'Confirmar y pasar a stock',
-      confirmButtonColor: '#059669',
-      cancelButtonText: 'Cancelar',
-      didOpen: () => {
-        const input = Swal.getInput()
-        if (input) {
-          input.addEventListener('input', (e) => {
-            const target = e.target as HTMLInputElement
-            target.value = target.value.replace(/[^0-9]/g, '').replace(/^0+/, '') || ''
-          })
-        }
-      },
-      inputValidator: (value) => {
-        const num = parseInt(value, 10)
-        if (!value || isNaN(num) || num <= 0) return 'Ingresa una cantidad valida'
-        if (num > entrada.cantidad) return `La cantidad no puede exceder ${entrada.cantidad}`
-        return null
-      }
-    })
+  const abrirConfirmacionEntrada = (entrada: EntradaTransito) => {
+    setEntradaConfirmacion(entrada)
+    setCantidadConfirmacion(String(entrada.cantidad))
+  }
 
-    if (!cantidad) return
+  const cerrarConfirmacionEntrada = () => {
+    if (processingItem) return
+    setEntradaConfirmacion(null)
+    setCantidadConfirmacion('')
+  }
+
+  const getErrorCantidadConfirmacion = () => {
+    if (!entradaConfirmacion) return 'No hay ingreso seleccionado'
+    const cantidad = Number(cantidadConfirmacion)
+    if (!cantidadConfirmacion || Number.isNaN(cantidad) || cantidad <= 0) {
+      return 'Ingresa una cantidad mayor a cero'
+    }
+    if (cantidad > entradaConfirmacion.cantidad) {
+      return `La cantidad no puede superar ${entradaConfirmacion.cantidad}`
+    }
+    return ''
+  }
+
+  const confirmarEntradaSimple = async () => {
+    if (!entradaConfirmacion) return
+
+    const errorCantidad = getErrorCantidadConfirmacion()
+    if (errorCantidad) return
+
+    const entrada = entradaConfirmacion
+    const cantidad = Number(cantidadConfirmacion)
 
     try {
       setProcessingItem(entrada.id)
@@ -1013,11 +1082,126 @@ export function PedidosUnificadoModule() {
       if (!result.success) throw new Error(result.error || 'Error procesando recepción')
 
       showSuccess('Recepción confirmada', result.mensaje || `Se recibieron ${cantidad} unidades`)
+      setEntradaConfirmacion(null)
+      setCantidadConfirmacion('')
       loadPedidosData()
     } catch (err: any) {
       Swal.fire({ icon: 'error', title: 'Error', text: err.message || 'No se pudo procesar' })
     } finally {
       setProcessingItem(null)
+    }
+  }
+
+  const abrirRecepcionPedido = (pedido: PedidoAgrupado) => {
+    const itemsPendientes = getPedidoItemsPendientesRecepcion(pedido)
+
+    if (itemsPendientes.length === 0) {
+      Swal.fire({
+        icon: 'warning',
+        title: 'Sin saldo por recibir',
+        text: 'Este pedido no tiene productos pendientes de recepción.'
+      })
+      return
+    }
+
+    setPedidoRecepcion(pedido)
+    setRecepcionCantidades(Object.fromEntries(
+      itemsPendientes.map(item => [item.item_id, String(getItemPendienteRecepcion(item))])
+    ))
+  }
+
+  const cerrarRecepcionPedido = () => {
+    if (savingRecepcion) return
+    setPedidoRecepcion(null)
+    setRecepcionCantidades({})
+  }
+
+  const setRecepcionCantidad = (itemId: string, value: string) => {
+    setRecepcionCantidades(prev => ({
+      ...prev,
+      [itemId]: value.replace(/[^0-9]/g, '')
+    }))
+  }
+
+  const getErrorRecepcionPedido = () => {
+    if (!pedidoRecepcion) return 'No hay pedido seleccionado'
+
+    const itemsPendientes = getPedidoItemsPendientesRecepcion(pedidoRecepcion)
+    let totalARecibir = 0
+
+    for (const item of itemsPendientes) {
+      const cantidadTexto = recepcionCantidades[item.item_id] || ''
+      const cantidad = cantidadTexto ? Number(cantidadTexto) : 0
+      const pendiente = getItemPendienteRecepcion(item)
+
+      if (Number.isNaN(cantidad) || cantidad < 0) {
+        return `Revisa la cantidad de ${item.producto_codigo}`
+      }
+
+      if (cantidad > pendiente) {
+        return `${item.producto_codigo}: quedan ${pendiente} por recibir`
+      }
+
+      totalARecibir += cantidad
+    }
+
+    if (totalARecibir <= 0) return 'Ingresa al menos una cantidad a recibir'
+    return ''
+  }
+
+  const confirmarRecepcionPedido = async () => {
+    if (!pedidoRecepcion) return
+
+    const errorRecepcion = getErrorRecepcionPedido()
+    if (errorRecepcion) return
+
+    const pedido = pedidoRecepcion
+    const itemsARecibir = getPedidoItemsPendientesRecepcion(pedido)
+      .map(item => ({
+        item,
+        cantidad: Number(recepcionCantidades[item.item_id] || 0)
+      }))
+      .filter(linea => linea.cantidad > 0)
+
+    try {
+      setSavingRecepcion(true)
+      const { data: { user: authUser } } = await supabase.auth.getUser()
+
+      let ok = 0
+      const errores: string[] = []
+
+      for (const linea of itemsARecibir) {
+        const { data, error } = await (supabase.rpc as any)('procesar_recepcion_pedido', {
+          p_pedido_item_id: linea.item.item_id,
+          p_cantidad_recibida: linea.cantidad,
+          p_usuario_id: authUser?.id || user?.id
+        })
+
+        if (error || (data && data.success === false)) {
+          errores.push(error?.message || data?.error || `${linea.item.producto_codigo}: no se pudo recibir`)
+        } else {
+          ok++
+        }
+      }
+
+      if (errores.length > 0) {
+        await Swal.fire({
+          icon: ok > 0 ? 'warning' : 'error',
+          title: ok > 0 ? 'Recepción parcial' : 'No se pudo confirmar la recepción',
+          html: `${ok} producto(s) ingresados.<br>${errores.map(escapeHtml).join('<br>')}`
+        })
+      } else {
+        showSuccess('Recepción confirmada', `${ok} producto(s) ingresados al stock.`)
+      }
+
+      setPedidoRecepcion(null)
+      setRecepcionCantidades({})
+      await loadPedidosData()
+      if (timelinePedidoId === pedido.pedido_id) cargarTimeline(pedido.pedido_id)
+    } catch (error: any) {
+      Swal.fire({ icon: 'error', title: 'Error', text: error.message || 'No se pudo confirmar la recepción' })
+    } finally {
+      setSavingRecepcion(false)
     }
   }
 
@@ -1438,9 +1622,32 @@ export function PedidosUnificadoModule() {
     return data
   }, [entradasSimples, productoFilter, proveedorFilter, tipoProductoFilter])
 
-  const movimientosFiltrados = filtroTipo === 'todos'
-    ? movimientos
-    : movimientos.filter(m => m.tipo === filtroTipo)
+  const movimientosFiltrados = useMemo(() => {
+    let data = filtroTipo === 'todos'
+      ? movimientos
+      : movimientos.filter(m => m.tipo === filtroTipo)
+
+    const term = searchAprobaciones.trim().toLowerCase()
+    if (!term) return data
+
+    data = data.filter(movimiento => {
+      const textoBusqueda = [
+        getTipoLabel(movimiento.tipo),
+        getMotivoSalidaLabel(movimiento.motivo_salida || ''),
+        movimiento.producto_nombre,
+        movimiento.vehiculo_patente,
+        movimiento.usuario_registrador_nombre,
+        movimiento.observaciones,
+      ]
+        .filter(Boolean)
+        .join(' ')
+        .toLowerCase()
+
+      return textoBusqueda.includes(term)
+    })
+
+    return data
+  }, [filtroTipo, movimientos, searchAprobaciones])
 
   const pedidosFiltrados = useMemo(() => {
     if (!searchPedidos.trim()) return pedidos
@@ -1505,7 +1712,6 @@ export function PedidosUnificadoModule() {
 
   const totalPedidosProveedor = pedidos.length
   const totalEntradasDirectas = entradasSimples.length
-  const totalRecepcionesPendientes = totalEntradasDirectas + totalPedidosProveedor
   const totalExcepciones = pedidosConExcepcion.length
   const totalAprobacionesPendientes = movimientos.length
   const totalHistoricoResumen = canApprove && (activeTab === 'historico' || historico.length > 0)
@@ -1665,7 +1871,7 @@ export function PedidosUnificadoModule() {
       cell: ({ row }) => (
         <div style={{ textAlign: 'center' }}>
           <button
-            onClick={() => confirmarEntradaSimple(row.original)}
+            onClick={() => abrirConfirmacionEntrada(row.original)}
             disabled={processingItem === row.original.id}
             style={{
               padding: '8px 14px',
@@ -2245,9 +2451,183 @@ export function PedidosUnificadoModule() {
         .pedido-resp-footer .btn-secondary { border: 1px solid var(--border-primary); background: var(--bg-secondary); color: var(--text-primary); }
         .pedido-resp-footer .btn-primary { border: none; background: var(--color-primary); color: #fff; }
         .pedido-resp-footer button:disabled { opacity: .6; cursor: not-allowed; }
+        .recepcion-confirm-modal { max-width: 560px; }
+        .recepcion-confirm-summary {
+          display: grid;
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+          gap: 10px;
+          margin-top: 16px;
+        }
+        .recepcion-confirm-item {
+          border: 1px solid var(--border-primary);
+          border-radius: 8px;
+          background: var(--bg-secondary);
+          padding: 10px 12px;
+          min-width: 0;
+        }
+        .recepcion-confirm-item span {
+          display: block;
+          color: var(--text-tertiary);
+          font-size: 10px;
+          font-weight: 700;
+          line-height: 1.2;
+          text-transform: uppercase;
+        }
+        .recepcion-confirm-item strong {
+          display: block;
+          color: var(--text-primary);
+          font-size: 13px;
+          line-height: 1.35;
+          margin-top: 4px;
+          overflow-wrap: anywhere;
+        }
+        .recepcion-confirm-quantity {
+          display: grid;
+          gap: 6px;
+          margin-top: 14px;
+        }
+        .recepcion-confirm-quantity label {
+          color: var(--text-primary);
+          font-size: 13px;
+          font-weight: 700;
+        }
+        .recepcion-confirm-quantity input {
+          width: 100%;
+          height: 40px;
+          border: 1px solid var(--border-primary);
+          border-radius: 8px;
+          background: var(--input-bg);
+          color: var(--text-primary);
+          font-size: 14px;
+          font-weight: 600;
+          padding: 0 12px;
+        }
+        .recepcion-confirm-note {
+          margin-top: 12px;
+          border: 1px solid var(--border-primary);
+          border-radius: 8px;
+          background: var(--bg-secondary);
+          color: var(--text-secondary);
+          font-size: 12px;
+          line-height: 1.45;
+          padding: 10px 12px;
+        }
+        .recepcion-confirm-error {
+          color: var(--color-danger);
+          font-size: 12px;
+          font-weight: 600;
+        }
+        .pedido-recepcion-modal {
+          max-width: 760px;
+        }
+        .pedido-recepcion-summary {
+          display: grid;
+          grid-template-columns: repeat(3, minmax(0, 1fr));
+          gap: 10px;
+          margin-top: 16px;
+        }
+        .pedido-recepcion-summary-item,
+        .pedido-recepcion-note {
+          border: 1px solid var(--border-primary);
+          border-radius: 8px;
+          background: var(--bg-secondary);
+          padding: 10px 12px;
+          min-width: 0;
+        }
+        .pedido-recepcion-summary-item span {
+          display: block;
+          color: var(--text-tertiary);
+          font-size: 10px;
+          font-weight: 700;
+          line-height: 1.2;
+          text-transform: uppercase;
+        }
+        .pedido-recepcion-summary-item strong {
+          display: block;
+          color: var(--text-primary);
+          font-size: 13px;
+          line-height: 1.35;
+          margin-top: 4px;
+          overflow-wrap: anywhere;
+        }
+        .pedido-recepcion-table {
+          border: 1px solid var(--border-primary);
+          border-radius: 8px;
+          overflow: hidden;
+          margin-top: 12px;
+        }
+        .pedido-recepcion-row {
+          display: grid;
+          grid-template-columns: minmax(0, 1.4fr) 80px 90px 120px;
+          gap: 10px;
+          align-items: center;
+          padding: 10px 12px;
+          border-bottom: 1px solid var(--border-primary);
+        }
+        .pedido-recepcion-row:last-child {
+          border-bottom: none;
+        }
+        .pedido-recepcion-row.header {
+          background: var(--bg-secondary);
+          color: var(--text-tertiary);
+          font-size: 10px;
+          font-weight: 700;
+          text-transform: uppercase;
+        }
+        .pedido-recepcion-product strong {
+          display: block;
+          color: var(--color-primary);
+          font-size: 12px;
+          line-height: 1.25;
+        }
+        .pedido-recepcion-product span {
+          display: block;
+          color: var(--text-secondary);
+          font-size: 12px;
+          line-height: 1.35;
+          margin-top: 3px;
+        }
+        .pedido-recepcion-number {
+          color: var(--text-primary);
+          font-size: 13px;
+          font-weight: 700;
+          text-align: center;
+        }
+        .pedido-recepcion-input {
+          width: 100%;
+          height: 34px;
+          border: 1px solid var(--border-primary);
+          border-radius: 7px;
+          background: var(--input-bg);
+          color: var(--text-primary);
+          font-size: 13px;
+          font-weight: 700;
+          padding: 0 10px;
+          text-align: center;
+        }
+        .pedido-recepcion-note {
+          color: var(--text-secondary);
+          font-size: 12px;
+          line-height: 1.45;
+          margin-top: 12px;
+        }
+        .pedido-recepcion-error {
+          color: var(--color-danger);
+          font-size: 12px;
+          font-weight: 600;
+          margin-top: 10px;
+        }
         @media (max-width: 640px) {
           .pedido-resp-row { grid-template-columns: 1fr; gap: 6px; }
           .pedido-resp-grid { grid-template-columns: 1fr; }
+          .recepcion-confirm-summary { grid-template-columns: 1fr; }
+          .pedido-recepcion-summary,
+          .pedido-recepcion-row {
+            grid-template-columns: 1fr;
+          }
+          .pedido-recepcion-number {
+            text-align: left;
+          }
         }
 
         .pedido-icon-button {
@@ -2987,6 +3367,11 @@ export function PedidosUnificadoModule() {
           color: var(--text-secondary);
         }
 
+        .controls-row .pedidos-followup-search {
+          width: min(420px, 100%);
+          margin-right: auto;
+        }
+
         .pedidos-followup-search input {
           width: 100%;
           min-width: 0;
@@ -3718,6 +4103,10 @@ export function PedidosUnificadoModule() {
             align-items: stretch;
           }
 
+          .controls-row .pedidos-followup-search {
+            width: 100%;
+          }
+
           .excepcion-header {
             flex-direction: column;
           }
@@ -3789,33 +4178,48 @@ export function PedidosUnificadoModule() {
             <div className="pedidos-summary-value" style={{ fontSize: '14px' }}>{sedeOperativaLabel}</div>
             <div className="pedidos-summary-note"><MapPin size={12} style={{ verticalAlign: 'middle' }} /> contexto operativo</div>
           </div>
-          <div className="pedidos-summary-card">
-            <div className="pedidos-summary-label">Por recibir</div>
-            <div className="pedidos-summary-value">{totalRecepcionesPendientes}</div>
-            <div className="pedidos-summary-note">
-              {totalPedidosProveedor} pedidos · {totalEntradasDirectas} ingresos manuales
-            </div>
-          </div>
-          <div className="pedidos-summary-card">
-            <div className="pedidos-summary-label">Por aprobar</div>
-            <div className="pedidos-summary-value">{totalAprobacionesPendientes}</div>
-            <div className="pedidos-summary-note">movimientos internos pendientes</div>
-          </div>
-          <div className="pedidos-summary-card">
-            <div className="pedidos-summary-label">Alertas</div>
-            <div className="pedidos-summary-value">{totalExcepciones}</div>
-            <div className="pedidos-summary-note">vencidos, sin fecha o parciales</div>
-          </div>
-          <div className="pedidos-summary-card">
-            <div className="pedidos-summary-label">Movimientos procesados</div>
-            <div className="pedidos-summary-value">{totalHistoricoResumen}</div>
-            <div className="pedidos-summary-note">aprobados/rechazados recientes</div>
-          </div>
+          {isControlMode ? (
+            <>
+              <div className="pedidos-summary-card">
+                <div className="pedidos-summary-label">Ingresos por confirmar</div>
+                <div className="pedidos-summary-value">{totalEntradasDirectas}</div>
+                <div className="pedidos-summary-note">compras manuales pendientes de recepción</div>
+              </div>
+              <div className="pedidos-summary-card">
+                <div className="pedidos-summary-label">Aprobaciones internas</div>
+                <div className="pedidos-summary-value">{totalAprobacionesPendientes}</div>
+                <div className="pedidos-summary-note">retiros, asignaciones y devoluciones</div>
+              </div>
+              <div className="pedidos-summary-card">
+                <div className="pedidos-summary-label">Movimientos procesados</div>
+                <div className="pedidos-summary-value">{totalHistoricoResumen}</div>
+                <div className="pedidos-summary-note">aprobados/rechazados recientes</div>
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="pedidos-summary-card">
+                <div className="pedidos-summary-label">Seguimiento proveedor</div>
+                <div className="pedidos-summary-value">{totalPedidosProveedor}</div>
+                <div className="pedidos-summary-note">pedidos abiertos antes de ingresar stock</div>
+              </div>
+              <div className="pedidos-summary-card">
+                <div className="pedidos-summary-label">Por recibir</div>
+                <div className="pedidos-summary-value">{totalPedidosProveedor}</div>
+                <div className="pedidos-summary-note">solo pedidos creados a proveedor</div>
+              </div>
+              <div className="pedidos-summary-card">
+                <div className="pedidos-summary-label">Alertas de pedidos</div>
+                <div className="pedidos-summary-value">{totalExcepciones}</div>
+                <div className="pedidos-summary-note">vencidos, sin fecha o parciales</div>
+              </div>
+            </>
+          )}
         </div>
 
         {/* Tabs principales - controlados por permisos de tab */}
         <div className="pedidos-tabs">
-          {canViewTab('inventario-pedidos:pedidos') && (
+          {!isControlMode && canViewPedidosFlow && (
             <button
               className={`pedidos-tab ${activeTab === 'nuevo' ? 'active' : ''}`}
               onClick={() => setActiveTab('nuevo')}
@@ -3824,7 +4228,7 @@ export function PedidosUnificadoModule() {
               1. Nuevo pedido
             </button>
           )}
-          {canViewTab('inventario-pedidos:pedidos') && (
+          {!isControlMode && canViewPedidosFlow && (
             <button
               className={`pedidos-tab ${activeTab === 'pedidos' ? 'active' : ''}`}
               onClick={() => setActiveTab('pedidos')}
@@ -3836,7 +4240,7 @@ export function PedidosUnificadoModule() {
               )}
             </button>
           )}
-          {canViewTab('inventario-pedidos:entradas') && (
+          {isControlMode && canViewIngresosControl && (
             <button
               className={`pedidos-tab ${activeTab === 'entradas' ? 'active' : ''}`}
               onClick={() => setActiveTab('entradas')}
@@ -3848,7 +4252,7 @@ export function PedidosUnificadoModule() {
               )}
             </button>
           )}
-          {canViewTab('inventario-pedidos:pendientes') && (
+          {isControlMode && canViewAprobacionesControl && (
             <>
               <span className="pedidos-tab-separator" aria-hidden="true" />
               <button
@@ -3863,7 +4267,7 @@ export function PedidosUnificadoModule() {
               </button>
             </>
           )}
-          {canViewTab('inventario-pedidos:historico') && (
+          {isControlMode && canViewProcesadosControl && (
             <button
               className={`pedidos-tab ${activeTab === 'historico' ? 'active' : ''}`}
               onClick={() => setActiveTab('historico')}
@@ -3872,7 +4276,7 @@ export function PedidosUnificadoModule() {
               Movimientos procesados
             </button>
           )}
-          {canViewTab('inventario-pedidos:pedidos') && (
+          {!isControlMode && canViewPedidosFlow && (
             <button
               className={`pedidos-tab ${activeTab === 'excepciones' ? 'active' : ''}`}
               onClick={() => setActiveTab('excepciones')}
@@ -4111,7 +4515,7 @@ export function PedidosUnificadoModule() {
                       disabled={creatingPedido || loadingCatalogoPedido}
                       title={proveedorPedidoTieneEmail ? 'Crear pedido y enviar correo' : 'Crear pedido sin envío automático'}
                     >
-                      <Send size={15} />
+                      {proveedorPedidoTieneEmail ? <Send size={15} /> : <Package size={15} />}
                       {creatingPedido ? 'Procesando...' : proveedorPedidoTieneEmail ? 'Crear y enviar' : 'Crear sin correo'}
                     </button>
                   </div>
@@ -4158,7 +4562,7 @@ export function PedidosUnificadoModule() {
               <div className="pedido-compose-card">
                 <h3 className="pedido-compose-title" style={{ fontSize: '14px' }}>
                   <CheckCircle2 size={16} />
-                  Para poder enviar
+                  Para crear el pedido
                 </h3>
                 {(() => {
                   const checks = [
@@ -4251,11 +4655,11 @@ export function PedidosUnificadoModule() {
                   type="button"
                   className="pedidos-section-pill"
                   onClick={() => setShowSeguimientoData(true)}
-                  aria-label={`Ver data de ${totalPedidosProveedor} pedidos en seguimiento`}
-                  title="Ver data de pedidos en seguimiento"
+                  aria-label={`Ver ${totalPedidosProveedor} pedidos en seguimiento`}
+                  title="Ver pedidos en seguimiento"
                 >
                   <Package size={13} />
-                  {totalPedidosProveedor} en seguimiento
+                  Ver {totalPedidosProveedor} en seguimiento
                 </button>
                 <div className="pedidos-followup-search">
                   <Search size={16} aria-hidden="true" />
@@ -4398,7 +4802,7 @@ export function PedidosUnificadoModule() {
                                   <button
                                     type="button"
                                     className="pedido-detalle-btn primary"
-                                    onClick={() => navigate(`/logistica/inventario/movimientos?tipo=entrada&pedido=${pedido.pedido_id}`)}
+                                    onClick={() => abrirRecepcionPedido(pedido)}
                                   >
                                     <ArrowDownCircle size={14} />
                                     {esLote ? 'Registrar recepción de varios productos' : 'Registrar recepción'}
@@ -4653,7 +5057,7 @@ export function PedidosUnificadoModule() {
                     impactoTexto = 'Si la mercadería no llegó, puede faltar stock para atender servicios o reposiciones.'
                     accionTitulo = 'Reclamar o registrar recepción'
                     accionTexto = 'Si llegó el producto, ingresa la recepción. Si no llegó, actualiza el seguimiento con el proveedor.'
-                    accionBoton = 'Resolver pedido'
+                    accionBoton = 'Ver pedido y resolver'
                     cierreTexto = 'La alerta se cierra al recibir el saldo o dejar el seguimiento actualizado.'
                   } else if (venceHoy) {
                     causaTitulo = 'La entrega vence hoy'
@@ -4848,6 +5252,26 @@ export function PedidosUnificadoModule() {
             ) : (
               <>
                 <div className="controls-row">
+                  <div className="pedidos-followup-search">
+                    <Search size={16} aria-hidden="true" />
+                    <input
+                      type="search"
+                      aria-label="Buscar aprobaciones internas"
+                      placeholder="Buscar por producto, vehículo o usuario..."
+                      value={searchAprobaciones}
+                      onChange={(e) => setSearchAprobaciones(e.target.value)}
+                    />
+                    {searchAprobaciones.trim() && (
+                      <button
+                        type="button"
+                        className="pedidos-followup-clear"
+                        onClick={() => setSearchAprobaciones('')}
+                        aria-label="Limpiar búsqueda de aprobaciones"
+                      >
+                        <X size={13} />
+                      </button>
+                    )}
+                  </div>
                   <div className="filter-select">
                     <Filter size={16} />
                     <select
@@ -4876,7 +5300,9 @@ export function PedidosUnificadoModule() {
                     <h3>No hay aprobaciones pendientes</h3>
                     <p>
                       {filtroTipo === 'todos'
-                        ? 'Todos los movimientos internos están cerrados'
+                        ? searchAprobaciones.trim()
+                          ? 'No hay movimientos pendientes que coincidan con la búsqueda'
+                          : 'Todos los movimientos internos están cerrados'
                         : `No hay ${getTipoLabel(filtroTipo).toLowerCase()}s pendientes de aprobación`}
                     </p>
                   </div>
@@ -5182,7 +5608,7 @@ export function PedidosUnificadoModule() {
 
             <div className="pedidos-flow-modal-definitions">
               <div className="pedidos-flow-modal-definition">
-                <strong>Ingresos manuales:</strong> productos cargados desde Movimientos sin un pedido a proveedor previo.
+                <strong>Ingresos manuales:</strong> productos cargados desde Movimientos sin un pedido a proveedor previo; se confirman en Movimientos &gt; Seguimiento.
               </div>
               <div className="pedidos-flow-modal-definition">
                 <strong>Movimientos procesados:</strong> decisiones internas ya aprobadas o rechazadas; no muestra el detalle completo del pedido al proveedor.
@@ -5252,7 +5678,7 @@ export function PedidosUnificadoModule() {
                   </div>
                 </div>
                 <p className="pedidos-flow-modal-copy">
-                  El avance del pedido se revisa en “Seguimiento proveedor”; los ingresos manuales se confirman en “Ingresos por confirmar”.
+                  El avance del pedido se revisa en “Seguimiento proveedor”; los ingresos manuales se confirman en “Movimientos &gt; Seguimiento”.
                 </p>
               </div>
               <div className="pedidos-flow-modal-step">
@@ -5357,6 +5783,221 @@ export function PedidosUnificadoModule() {
                 })}
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* ==================== MODAL: CONFIRMAR RECEPCIÓN DE PEDIDO ==================== */}
+      {pedidoRecepcion && (() => {
+        const itemsPendientes = getPedidoItemsPendientesRecepcion(pedidoRecepcion)
+        const totalPendiente = itemsPendientes.reduce(
+          (acc, item) => acc + getItemPendienteRecepcion(item),
+          0
+        )
+        const totalAIngresar = itemsPendientes.reduce(
+          (acc, item) => acc + Number(recepcionCantidades[item.item_id] || 0),
+          0
+        )
+        const errorRecepcion = getErrorRecepcionPedido()
+
+        return (
+          <div className="pedido-resp-overlay" onClick={cerrarRecepcionPedido}>
+            <div
+              className="pedido-resp-modal pedido-recepcion-modal"
+              onClick={(event) => event.stopPropagation()}
+            >
+              <div className="pedido-resp-header">
+                <div>
+                  <h3>Confirmar recepción del pedido</h3>
+                  <p>Revisa las cantidades antes de ingresar la mercadería al stock.</p>
+                </div>
+                <button
+                  type="button"
+                  className="pedido-resp-close"
+                  onClick={cerrarRecepcionPedido}
+                  aria-label="Cerrar"
+                  disabled={savingRecepcion}
+                >
+                  <X size={18} />
+                </button>
+              </div>
+
+              <div className="pedido-recepcion-summary">
+                <div className="pedido-recepcion-summary-item">
+                  <span>Pedido</span>
+                  <strong>{pedidoRecepcion.numero_pedido}</strong>
+                </div>
+                <div className="pedido-recepcion-summary-item">
+                  <span>Proveedor</span>
+                  <strong>{pedidoRecepcion.proveedor_nombre}</strong>
+                </div>
+                <div className="pedido-recepcion-summary-item">
+                  <span>A ingresar</span>
+                  <strong>{totalAIngresar} de {totalPendiente} unidades</strong>
+                </div>
+              </div>
+
+              <div className="pedido-recepcion-table">
+                <div className="pedido-recepcion-row header">
+                  <span>Producto</span>
+                  <span>Pedido</span>
+                  <span>Pendiente</span>
+                  <span>Recibir</span>
+                </div>
+                {itemsPendientes.map(item => {
+                  const pendiente = getItemPendienteRecepcion(item)
+
+                  return (
+                    <div className="pedido-recepcion-row" key={item.item_id}>
+                      <div className="pedido-recepcion-product">
+                        <strong>{item.producto_codigo}</strong>
+                        <span>{item.producto_nombre}</span>
+                      </div>
+                      <div className="pedido-recepcion-number">
+                        {item.cantidad_pedida}
+                      </div>
+                      <div className="pedido-recepcion-number">
+                        {pendiente}
+                      </div>
+                      <input
+                        className="pedido-recepcion-input"
+                        type="number"
+                        min="0"
+                        max={pendiente}
+                        value={recepcionCantidades[item.item_id] || ''}
+                        onChange={(event) => setRecepcionCantidad(item.item_id, event.target.value)}
+                        disabled={savingRecepcion}
+                        aria-label={`Cantidad a recibir de ${item.producto_codigo}`}
+                      />
+                    </div>
+                  )
+                })}
+              </div>
+
+              <div className="pedido-recepcion-note">
+                Al confirmar, solo las cantidades indicadas entran a stock disponible. Si recibes
+                menos del pendiente, el saldo seguirá en seguimiento.
+              </div>
+              {errorRecepcion && (
+                <div className="pedido-recepcion-error">{errorRecepcion}</div>
+              )}
+
+              <div className="pedido-resp-footer">
+                <button
+                  type="button"
+                  className="btn-secondary"
+                  onClick={cerrarRecepcionPedido}
+                  disabled={savingRecepcion}
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  className="btn-primary"
+                  onClick={confirmarRecepcionPedido}
+                  disabled={Boolean(errorRecepcion) || savingRecepcion}
+                >
+                  <CheckCircle size={15} />
+                  {savingRecepcion ? 'Confirmando...' : 'Confirmar recepción'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )
+      })()}
+
+      {/* ==================== MODAL: CONFIRMAR INGRESO MANUAL ==================== */}
+      {entradaConfirmacion && (
+        <div className="pedido-resp-overlay" onClick={cerrarConfirmacionEntrada}>
+          <div
+            className="pedido-resp-modal recepcion-confirm-modal"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="pedido-resp-header">
+              <div>
+                <h3>Confirmar ingreso a stock</h3>
+                <p>Revisa los datos antes de pasar el ingreso manual a stock disponible.</p>
+              </div>
+              <button
+                type="button"
+                className="pedido-resp-close"
+                onClick={cerrarConfirmacionEntrada}
+                aria-label="Cerrar"
+                disabled={processingItem === entradaConfirmacion.id}
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="recepcion-confirm-summary">
+              <div className="recepcion-confirm-item">
+                <span>Producto</span>
+                <strong>{entradaConfirmacion.producto_codigo} - {entradaConfirmacion.producto_nombre}</strong>
+              </div>
+              <div className="recepcion-confirm-item">
+                <span>Proveedor</span>
+                <strong>{entradaConfirmacion.proveedor_nombre || 'Sin proveedor'}</strong>
+              </div>
+              <div className="recepcion-confirm-item">
+                <span>Referencia</span>
+                <strong>{entradaConfirmacion.observaciones || 'Sin referencia'}</strong>
+              </div>
+              <div className="recepcion-confirm-item">
+                <span>Cantidad pendiente</span>
+                <strong>{entradaConfirmacion.cantidad} unidades</strong>
+              </div>
+              <div className="recepcion-confirm-item">
+                <span>Registrado por</span>
+                <strong>{entradaConfirmacion.usuario_registro || 'Sistema'}</strong>
+              </div>
+              <div className="recepcion-confirm-item">
+                <span>Aprobado por</span>
+                <strong>{entradaConfirmacion.aprobador_nombre || 'Sistema'}</strong>
+              </div>
+            </div>
+
+            <div className="recepcion-confirm-quantity">
+              <label htmlFor="cantidad-confirmacion-recepcion">Cantidad a ingresar</label>
+              <input
+                id="cantidad-confirmacion-recepcion"
+                type="number"
+                min="1"
+                max={entradaConfirmacion.cantidad}
+                value={cantidadConfirmacion}
+                onChange={(event) => {
+                  setCantidadConfirmacion(event.target.value.replace(/[^0-9]/g, ''))
+                }}
+                disabled={processingItem === entradaConfirmacion.id}
+              />
+              {getErrorCantidadConfirmacion() && (
+                <span className="recepcion-confirm-error">{getErrorCantidadConfirmacion()}</span>
+              )}
+            </div>
+
+            <div className="recepcion-confirm-note">
+              Al confirmar, la cantidad indicada entra a stock disponible y este ingreso sale de
+              los pendientes de recepción.
+            </div>
+
+            <div className="pedido-resp-footer">
+              <button
+                type="button"
+                className="btn-secondary"
+                onClick={cerrarConfirmacionEntrada}
+                disabled={processingItem === entradaConfirmacion.id}
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                className="btn-primary"
+                onClick={confirmarEntradaSimple}
+                disabled={Boolean(getErrorCantidadConfirmacion()) || processingItem === entradaConfirmacion.id}
+              >
+                <CheckCircle size={15} />
+                {processingItem === entradaConfirmacion.id ? 'Confirmando...' : 'Confirmar ingreso a stock'}
+              </button>
+            </div>
           </div>
         </div>
       )}

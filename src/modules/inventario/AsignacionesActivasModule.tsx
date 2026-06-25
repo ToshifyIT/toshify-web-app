@@ -339,7 +339,7 @@ export function AsignacionesActivasModule() {
             }}
           >
             <AlertTriangle size={14} />
-            Reportar
+            Reportar daño/pérdida
           </button>
         </div>
       )

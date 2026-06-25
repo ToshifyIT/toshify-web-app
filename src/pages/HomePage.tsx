@@ -53,6 +53,8 @@ const menuIcons: Record<string, LucideIcon> = {
   'multas': FileWarning,
   'inventario-dashboard': BarChart3,
   'inventario-movimientos': Package,
+  'inventario-movimientos-registrar': Package,
+  'inventario-control-movimientos': ClipboardList,
   'inventario-asignaciones': Users,
   'inventario-historial': History,
   'inventario-pedidos': ClipboardList,
@@ -234,6 +236,7 @@ const FacturacionPage = lazy(() => import('./facturacion/FacturacionPage').then(
 const IncidenciasPage = lazy(() => import('./incidencias/IncidenciasPage').then(m => ({ default: m.IncidenciasPage })))
 const ProgramacionPage = lazy(() => import('./onboarding/ProgramacionPage'))
 const MovimientosPage = lazy(() => import('./inventario/MovimientosPage').then(m => ({ default: m.MovimientosPage })))
+const ControlMovimientosPage = lazy(() => import('./inventario/ControlMovimientosPage').then(m => ({ default: m.ControlMovimientosPage })))
 const AsignacionesPage = lazy(() => import('./asignaciones/AsignacionesPage').then(m => ({ default: m.AsignacionesPage })))
 const UsuariosPage = lazy(() => import('./usuarios/UsuariosPage').then(m => ({ default: m.UsuariosPage })))
 const VehiculosPage = lazy(() => import('./vehiculos/VehiculosPage').then(m => ({ default: m.VehiculosPage })))
@@ -427,8 +430,12 @@ export function HomePage() {
   }
 
   const isActiveRoute = (path: string) => {
-    return location.pathname === path
+    if (!path) return false
+    return location.pathname === path || location.pathname.startsWith(`${path}/`)
   }
+
+  const hasActiveSubmenu = (submenus: SubmenuWithHierarchy[]) =>
+    submenus.some(submenu => isActiveRoute(submenu.submenu_route))
 
   // Función recursiva para renderizar submenús anidados
   const renderSubmenus = (
@@ -446,14 +453,17 @@ export function HomePage() {
     return children.map(submenu => {
       // Verificar si este submenú tiene hijos
       const hasChildren = allSubmenus.some(sub => sub.parent_id === submenu.submenu_id)
-      const isNestedOpen = openNestedMenus[submenu.submenu_id] || false
+      const hasActiveChild = allSubmenus.some(sub =>
+        sub.parent_id === submenu.submenu_id && isActiveRoute(sub.submenu_route)
+      )
+      const isNestedOpen = openNestedMenus[submenu.submenu_id] || hasActiveChild
 
       if (hasChildren) {
         // Este submenú tiene hijos - renderizar como grupo colapsable
         return (
           <div key={submenu.submenu_id} className="nav-nested-group">
             <button
-              className="nav-nested-header"
+              className={`nav-nested-header ${hasActiveChild ? 'active' : ''}`}
               onClick={() => {
                 // Grupos con hijos solo hacen toggle, no navegan
                 toggleNestedMenu(submenu.submenu_id)
@@ -1019,6 +1029,11 @@ export function HomePage() {
           color: var(--text-primary);
         }
 
+        .nav-nested-header.active {
+          background: var(--bg-tertiary);
+          color: var(--text-primary);
+        }
+
         .nav-nested-arrow {
           font-size: 10px;
           transition: transform 0.2s;
@@ -1500,7 +1515,6 @@ export function HomePage() {
             {visibleMenus.length > 0 ? (
               visibleMenus.map((menu) => {
                 let submenus = getVisibleSubmenusForMenu(menu.menu_id)
-                const isMenuOpen = openMenus[menu.menu_name] || false
                 // Display label and route overrides (DB stores original name, frontend can rename)
                 const menuLabel = menu.menu_name === 'visitas' ? 'Gestión de Visitas' : menu.menu_label
                 const menuRoute = menu.menu_name === 'visitas' ? '/gestion-de-visitas' : menu.menu_route
@@ -1534,6 +1548,7 @@ export function HomePage() {
                 }
 
                 const hasSubmenus = submenus.length > 0
+                const isMenuOpen = openMenus[menu.menu_name] || hasActiveSubmenu(submenus as SubmenuWithHierarchy[])
 
                 if (hasSubmenus) {
                   // Menú con submenús
@@ -1940,9 +1955,16 @@ export function HomePage() {
                 </ProtectedRoute>
               } />
               <Route path="/logistica/inventario/movimientos" element={
-                <ProtectedRoute submenuName="inventario-movimientos" action="view">
+                <ProtectedRoute submenuName="inventario-movimientos-registrar" action="view">
                   <LazyPage>
                     <MovimientosPage />
+                  </LazyPage>
+                </ProtectedRoute>
+              } />
+              <Route path="/logistica/inventario/control-movimientos" element={
+                <ProtectedRoute submenuName="inventario-control-movimientos" action="view">
+                  <LazyPage>
+                    <ControlMovimientosPage />
                   </LazyPage>
                 </ProtectedRoute>
               } />
