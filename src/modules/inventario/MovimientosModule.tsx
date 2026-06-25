@@ -17,6 +17,7 @@ import {
   AlertTriangle,
   CheckCircle,
   XCircle,
+  X,
   Package,
   FileText
 } from 'lucide-react'
@@ -94,6 +95,11 @@ interface ProductoLote {
   producto?: Producto
 }
 
+interface LineaRecepcionPedido {
+  producto_id: string
+  cantidad: number
+}
+
 interface ProductoLoteSalida {
   id: string // ID único para el item
   producto_id: string
@@ -151,6 +157,8 @@ export function MovimientosModule() {
 
   // Si la entrada viene de "Registrar recepción" de un pedido, guardamos su id para mapear el movimiento al pedido
   const [pedidoOrigenId, setPedidoOrigenId] = useState<string | null>(null)
+  const [recepcionPedidoModal, setRecepcionPedidoModal] = useState<LineaRecepcionPedido[] | null>(null)
+  const [confirmandoRecepcionPedido, setConfirmandoRecepcionPedido] = useState(false)
 
   // Form data - Salida
   const [motivoSalida, setMotivoSalida] = useState<MotivoSalida>('consumo_servicio')
@@ -246,7 +254,7 @@ export function MovimientosModule() {
     const cargarPedido = async () => {
       const { data: cab } = await supabase
         .from('pedidos_inventario')
-        .select('id, numero_pedido, proveedor_id')
+        .select('id, numero_pedido, proveedor_id, estado_respuesta')
         .eq('id', pedidoId)
         .single()
       if (!cab) return
@@ -256,6 +264,21 @@ export function MovimientosModule() {
         .select('producto_id, cantidad_pedida, cantidad_confirmada, cantidad_recibida, estado_confirmacion, productos(codigo, nombre)')
         .eq('pedido_id', pedidoId)
       if (!rows) return
+
+      const recibidoAlgo = (rows as any[]).some(r => Number(r.cantidad_recibida || 0) > 0)
+      const tieneRespuestaParaRecibir = ['confirmado', 'confirmado_ajustes'].includes(
+        String((cab as any).estado_respuesta || '')
+      )
+
+      if (!tieneRespuestaParaRecibir && !recibidoAlgo) {
+        await Swal.fire({
+          icon: 'warning',
+          title: 'Primero registra la respuesta del proveedor',
+          text: 'La recepción se habilita cuando el proveedor confirma qué productos entregará.'
+        })
+        navigate('/logistica/inventario/pedidos?tab=pedidos', { replace: true })
+        return
+      }
 
       // Items pendientes de recibir (objetivo = confirmado, fallback a pedido)
       const items = (rows as any[])
@@ -530,6 +553,7 @@ export function MovimientosModule() {
       proveedor_id: proveedorId || null,
       usuario_id: usuarioId,
       observaciones: getEntradaManualObservaciones(),
+      estado_destino: 'en_transito',
       estado_aprobacion: 'aprobado',
       usuario_aprobador_id: usuarioId,
       fecha_aprobacion: new Date().toISOString()
@@ -642,8 +666,24 @@ export function MovimientosModule() {
   // MANEJADORES DE MOVIMIENTO
   // =====================================================
 
+  const abrirModalRecepcionPedido = (lineas: LineaRecepcionPedido[]) => {
+    const lineasValidas = lineas.filter(linea => linea.cantidad > 0)
+
+    if (lineasValidas.length === 0) {
+      showIncompleteWarning('No hay productos con cantidad para recibir')
+      return
+    }
+
+    setRecepcionPedidoModal(lineasValidas)
+  }
+
+  const cerrarModalRecepcionPedido = () => {
+    if (confirmandoRecepcionPedido) return
+    setRecepcionPedidoModal(null)
+  }
+
   /** Recepción desde un pedido: genera el movimiento de entrada mapeado al pedido (procesar_recepcion_pedido) */
-  const recibirEntradaDePedido = async (lineas: { producto_id: string; cantidad: number }[]) => {
+  const recibirEntradaDePedido = async (lineas: LineaRecepcionPedido[]) => {
     if (!pedidoOrigenId) return
     try {
       const { data: { user } } = await supabase.auth.getUser()
@@ -714,13 +754,28 @@ export function MovimientosModule() {
     }
   }
 
+  const confirmarRecepcionPedido = async () => {
+    if (!recepcionPedidoModal) return
+
+    try {
+      setConfirmandoRecepcionPedido(true)
+      await recibirEntradaDePedido(recepcionPedidoModal)
+      setRecepcionPedidoModal(null)
+    } finally {
+      setConfirmandoRecepcionPedido(false)
+    }
+  }
+
   /** Procesa entrada en modo lote */
   const handleLoteEntrada = async () => {
     if (!validateLoteEntrada()) return
 
     // Si la entrada viene de "Registrar recepción" de un pedido → recepción que mapea al pedido
     if (pedidoOrigenId) {
-      await recibirEntradaDePedido(productosLote.map(pl => ({ producto_id: pl.producto_id, cantidad: pl.cantidad })))
+      abrirModalRecepcionPedido(productosLote.map(pl => ({
+        producto_id: pl.producto_id,
+        cantidad: pl.cantidad
+      })))
       return
     }
 
@@ -734,7 +789,7 @@ export function MovimientosModule() {
 
         showSuccess('Ingreso manual registrado', `${productosLote.length} productos quedaron pendientes de confirmación.`)
         resetForm()
-        navigate('/logistica/inventario/pedidos?tab=entradas')
+        navigate('/logistica/inventario/control-movimientos?tab=ingresos')
         return
       } else {
         for (const pl of productosLote) {
@@ -770,7 +825,7 @@ export function MovimientosModule() {
           producto_id: item.producto_id,
           tipo_movimiento: 'salida',
           cantidad: item.cantidad,
-          proveedor_id: null, // Se determinará al aprobar según stock disponible
+          proveedor_id: item.proveedor_id || null,
           vehiculo_destino_id: item.vehiculo_id || null,
           usuario_id: userData.user?.id,
           observaciones: observaciones || `Retiro de varios productos - ${item.vehiculo?.patente || 'Sin vehículo'}`,
@@ -810,7 +865,7 @@ export function MovimientosModule() {
       if (tipoMovimiento === 'entrada') {
         // Si la entrada viene de "Registrar recepción" de un pedido → recepción que mapea al pedido
         if (pedidoOrigenId) {
-          await recibirEntradaDePedido([{ producto_id: productoId, cantidad }])
+          abrirModalRecepcionPedido([{ producto_id: productoId, cantidad }])
           return
         }
 
@@ -819,7 +874,7 @@ export function MovimientosModule() {
 
           showSuccess('Ingreso manual registrado', 'Quedó pendiente de confirmación y todavía no suma al stock disponible.')
           resetForm()
-          navigate('/logistica/inventario/pedidos?tab=entradas')
+          navigate('/logistica/inventario/control-movimientos?tab=ingresos')
           return
         }
 
@@ -932,12 +987,33 @@ export function MovimientosModule() {
     setCantidad(1)
   }
 
-  const handleAgregarProductoLoteSalida = () => {
+  const handleAgregarProductoLoteSalida = async () => {
     if (!productoId || cantidad <= 0) return
     const prod = productos.find(p => p.id === productoId)
     if (!prod) return
 
-    if ((prod.stock_disponible || 0) < cantidad) {
+    const { data: stockDisponible, error } = await supabase
+      .from('inventario')
+      .select('id, proveedor_id, cantidad')
+      .eq('producto_id', productoId)
+      .eq('estado', 'disponible')
+      .gt('cantidad', 0)
+      .order('cantidad', { ascending: false })
+
+    if (error) {
+      Swal.fire({
+        icon: 'error',
+        title: 'No se pudo validar el stock',
+        text: 'Intenta nuevamente antes de agregar el producto.'
+      })
+      return
+    }
+
+    const inventarioConStock = (stockDisponible || []).find((item: any) =>
+      Number(item.cantidad || 0) >= cantidad
+    )
+
+    if (!inventarioConStock) {
       Swal.fire({
         icon: 'warning',
         title: 'Stock insuficiente',
@@ -953,7 +1029,9 @@ export function MovimientosModule() {
       producto: prod,
       vehiculo_id: vehiculoId,
       vehiculo: veh,
-      cantidad: cantidad
+      cantidad: cantidad,
+      proveedor_id: inventarioConStock.proveedor_id,
+      inventario_id: inventarioConStock.id
     }
     setProductosLoteSalida([...productosLoteSalida, nuevoItem])
     setProductoId('')
@@ -1111,6 +1189,19 @@ export function MovimientosModule() {
   }
 
   const productoSeleccionado = productos.find(p => p.id === productoId)
+  const proveedorSeleccionado = proveedores.find(p => p.id === proveedorId)
+  const recepcionPedidoDetalle = (recepcionPedidoModal || []).map(linea => {
+    const producto = productos.find(p => p.id === linea.producto_id)
+      || productosLote.find(item => item.producto_id === linea.producto_id)?.producto
+
+    return {
+      ...linea,
+      codigo: producto?.codigo || 'Producto',
+      nombre: producto?.nombre || 'Producto del pedido',
+      unidad: producto?.unidades_medida?.descripcion || producto?.unidades_medida?.codigo || 'unidades'
+    }
+  })
+  const totalRecepcionPedido = recepcionPedidoDetalle.reduce((acc, linea) => acc + linea.cantidad, 0)
   const entradaDesdePedido = Boolean(pedidoOrigenId)
   const submitLabel = (() => {
     if (tipoMovimiento === 'entrada') {
@@ -1134,9 +1225,215 @@ export function MovimientosModule() {
           box-sizing: border-box;
         }
 
+        .mov-confirm-overlay {
+          position: fixed;
+          inset: 0;
+          z-index: 2200;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          padding: 20px;
+          background: rgba(17, 24, 39, 0.48);
+        }
+
+        .mov-confirm-modal {
+          width: min(640px, 100%);
+          max-height: 88vh;
+          overflow-y: auto;
+          background: var(--card-bg);
+          border: 1px solid var(--border-primary);
+          border-radius: 10px;
+          box-shadow: 0 18px 45px rgba(15, 23, 42, 0.22);
+        }
+
+        .mov-confirm-header {
+          display: flex;
+          align-items: flex-start;
+          justify-content: space-between;
+          gap: 14px;
+          padding: 18px 20px 14px;
+          border-bottom: 1px solid var(--border-primary);
+        }
+
+        .mov-confirm-header h3 {
+          margin: 0;
+          color: var(--text-primary);
+          font-size: 17px;
+          font-weight: 700;
+        }
+
+        .mov-confirm-header p {
+          margin: 4px 0 0;
+          color: var(--text-secondary);
+          font-size: 12px;
+          line-height: 1.45;
+        }
+
+        .mov-confirm-close {
+          width: 30px;
+          height: 30px;
+          border: none;
+          border-radius: 8px;
+          background: transparent;
+          color: var(--text-tertiary);
+          cursor: pointer;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+        }
+
+        .mov-confirm-close:hover {
+          background: var(--bg-secondary);
+          color: var(--text-primary);
+        }
+
+        .mov-confirm-close:disabled {
+          opacity: .55;
+          cursor: not-allowed;
+        }
+
+        .mov-confirm-body {
+          display: grid;
+          gap: 12px;
+          padding: 16px 20px 0;
+        }
+
+        .mov-confirm-summary {
+          display: grid;
+          grid-template-columns: repeat(3, minmax(0, 1fr));
+          gap: 10px;
+        }
+
+        .mov-confirm-summary-item,
+        .mov-confirm-note {
+          border: 1px solid var(--border-primary);
+          border-radius: 8px;
+          background: var(--bg-secondary);
+          padding: 10px 12px;
+        }
+
+        .mov-confirm-summary-item span {
+          display: block;
+          color: var(--text-tertiary);
+          font-size: 10px;
+          font-weight: 700;
+          text-transform: uppercase;
+        }
+
+        .mov-confirm-summary-item strong {
+          display: block;
+          color: var(--text-primary);
+          font-size: 13px;
+          line-height: 1.35;
+          margin-top: 4px;
+          overflow-wrap: anywhere;
+        }
+
+        .mov-confirm-table {
+          border: 1px solid var(--border-primary);
+          border-radius: 8px;
+          overflow: hidden;
+        }
+
+        .mov-confirm-row {
+          display: grid;
+          grid-template-columns: minmax(0, 1fr) 120px;
+          gap: 12px;
+          align-items: center;
+          padding: 11px 12px;
+          border-bottom: 1px solid var(--border-primary);
+        }
+
+        .mov-confirm-row:last-child {
+          border-bottom: none;
+        }
+
+        .mov-confirm-row.header {
+          background: var(--bg-secondary);
+          color: var(--text-tertiary);
+          font-size: 10px;
+          font-weight: 700;
+          text-transform: uppercase;
+        }
+
+        .mov-confirm-product strong {
+          display: block;
+          color: var(--text-primary);
+          font-size: 13px;
+          line-height: 1.3;
+        }
+
+        .mov-confirm-product span {
+          display: block;
+          color: var(--text-secondary);
+          font-size: 12px;
+          line-height: 1.35;
+          margin-top: 2px;
+        }
+
+        .mov-confirm-quantity {
+          color: var(--text-primary);
+          font-size: 13px;
+          font-weight: 700;
+          text-align: right;
+        }
+
+        .mov-confirm-note {
+          color: var(--text-secondary);
+          font-size: 12px;
+          line-height: 1.45;
+        }
+
+        .mov-confirm-footer {
+          display: flex;
+          justify-content: flex-end;
+          gap: 10px;
+          margin-top: 16px;
+          padding: 16px 20px 18px;
+          border-top: 1px solid var(--border-primary);
+        }
+
+        .mov-confirm-footer button {
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          gap: 6px;
+          border-radius: 7px;
+          padding: 9px 18px;
+          font-size: 14px;
+          font-weight: 600;
+          cursor: pointer;
+        }
+
+        .mov-confirm-secondary {
+          border: 1px solid var(--border-primary);
+          background: var(--bg-secondary);
+          color: var(--text-primary);
+        }
+
+        .mov-confirm-primary {
+          border: none;
+          background: var(--color-primary);
+          color: #fff;
+        }
+
+        .mov-confirm-footer button:disabled {
+          opacity: .6;
+          cursor: not-allowed;
+        }
+
         @media (max-width: 640px) {
           .mov-form-card {
             padding: 16px !important;
+          }
+
+          .mov-confirm-summary,
+          .mov-confirm-row {
+            grid-template-columns: 1fr;
+          }
+
+          .mov-confirm-quantity {
+            text-align: left;
           }
 
           .mov-toggle-row {
@@ -1333,7 +1630,7 @@ export function MovimientosModule() {
                   <div style={{ fontSize: '12px', marginTop: '2px' }}>
                     {entradaDesdePedido
                       ? 'Se usa cuando el pedido a proveedor ya tuvo respuesta y llegó la mercadería.'
-                      : 'Luego confírmalo desde Pedidos > Ingresos por confirmar para que pase a stock disponible.'}
+                      : 'Luego confírmalo desde Movimientos > Seguimiento para que pase a stock disponible.'}
                   </div>
                 </div>
               </div>
@@ -2131,6 +2428,88 @@ export function MovimientosModule() {
           </div>
         </div>
       </div>
+
+      {recepcionPedidoModal && (
+        <div className="mov-confirm-overlay" onClick={cerrarModalRecepcionPedido}>
+          <div className="mov-confirm-modal" onClick={(event) => event.stopPropagation()}>
+            <div className="mov-confirm-header">
+              <div>
+                <h3>Confirmar recepción del pedido</h3>
+                <p>Revisa lo que entrará a stock disponible antes de registrar la recepción.</p>
+              </div>
+              <button
+                type="button"
+                className="mov-confirm-close"
+                onClick={cerrarModalRecepcionPedido}
+                disabled={confirmandoRecepcionPedido}
+                aria-label="Cerrar"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="mov-confirm-body">
+              <div className="mov-confirm-summary">
+                <div className="mov-confirm-summary-item">
+                  <span>Pedido origen</span>
+                  <strong>{numeroPedido || 'Sin número'}</strong>
+                </div>
+                <div className="mov-confirm-summary-item">
+                  <span>Proveedor</span>
+                  <strong>{proveedorSeleccionado?.razon_social || 'Sin proveedor'}</strong>
+                </div>
+                <div className="mov-confirm-summary-item">
+                  <span>Total a ingresar</span>
+                  <strong>{totalRecepcionPedido} unidades</strong>
+                </div>
+              </div>
+
+              <div className="mov-confirm-table">
+                <div className="mov-confirm-row header">
+                  <span>Producto</span>
+                  <span>Cantidad</span>
+                </div>
+                {recepcionPedidoDetalle.map(linea => (
+                  <div className="mov-confirm-row" key={linea.producto_id}>
+                    <div className="mov-confirm-product">
+                      <strong>{linea.codigo}</strong>
+                      <span>{linea.nombre}</span>
+                    </div>
+                    <div className="mov-confirm-quantity">
+                      {linea.cantidad} {linea.unidad}
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              <div className="mov-confirm-note">
+                Al confirmar, estas cantidades se registran como recibidas del pedido y pasan a
+                stock disponible.
+              </div>
+            </div>
+
+            <div className="mov-confirm-footer">
+              <button
+                type="button"
+                className="mov-confirm-secondary"
+                onClick={cerrarModalRecepcionPedido}
+                disabled={confirmandoRecepcionPedido}
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                className="mov-confirm-primary"
+                onClick={confirmarRecepcionPedido}
+                disabled={confirmandoRecepcionPedido}
+              >
+                <CheckCircle size={15} />
+                {confirmandoRecepcionPedido ? 'Confirmando...' : 'Confirmar recepción'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

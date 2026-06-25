@@ -86,7 +86,7 @@ export function SaldosAbonosTab() {
   // Sub-tab activo
   // Sub-tabs removidos — solo se muestra Saldos
   // const [activeSubTab, setActiveSubTab] = useState<'saldos' | 'abonos'>('saldos')
-  
+
   const [saldos, setSaldos] = useState<SaldoConductor[]>([])
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [_todosLosAbonos, setTodosLosAbonos] = useState<AbonoRow[]>([])
@@ -106,18 +106,18 @@ export function SaldosAbonosTab() {
   const [kardexModal, setKardexModal] = useState<{
     open: boolean
     saldo: SaldoConductor | null
-     
+
     rows: any[]
     loading: boolean
     // FIX 2026-05-20: facturacion por anio-semana para columna "Facturado" + detalle
-     
+
     facMap?: Map<string, any>
   }>({ open: false, saldo: null, rows: [], loading: false, facMap: new Map() })
 
   // FIX 2026-05-20: mini-modal con desglose de facturacion al click en "Facturado"
   const [factDetailModal, setFactDetailModal] = useState<{
     open: boolean
-     
+
     fact: any | null
     anio: number | null
     semana: number | null
@@ -221,7 +221,7 @@ export function SaldosAbonosTab() {
     // Cargar tasa de mora desde P009
     ;(async () => {
       try {
-         
+
         const { data: p009 } = await (supabase.from('conceptos_nomina') as any)
           .select('precio_base')
           .eq('codigo', 'P009')
@@ -427,7 +427,7 @@ export function SaldosAbonosTab() {
     // Fecha de hoy en formato YYYY-MM-DD
     const hoy = new Date()
     const hoyStr = `${hoy.getFullYear()}-${String(hoy.getMonth() + 1).padStart(2, '0')}-${String(hoy.getDate()).padStart(2, '0')}`
-    
+
     // Calcular semana actual y anterior
     const semanaActual = getWeekNumber(hoyStr)
     const anioActual = hoy.getFullYear()
@@ -460,14 +460,14 @@ export function SaldosAbonosTab() {
               La fecha de referencia se usa para calcular días de mora. Indica desde cuándo se considera este saldo.
             </div>
           </div>
-          
+
           <div style="margin-bottom: 12px; position: relative;">
             <label style="display: block; font-size: 12px; color: #374151; margin-bottom: 4px; font-weight: 500;">Conductor:</label>
             <input id="swal-conductor-search" type="text" class="swal2-input" style="font-size: 14px; margin: 0; width: 100%;" placeholder="Buscar conductor..." autocomplete="off">
             <input type="hidden" id="swal-conductor" value="">
             <div id="swal-conductor-dropdown" style="display: none; position: absolute; top: 100%; left: 0; right: 0; max-height: 200px; overflow-y: auto; background: white; border: 1px solid #e5e5e5; border-top: none; border-radius: 0 0 6px 6px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); z-index: 9999;"></div>
           </div>
-          
+
           <div style="margin-bottom: 12px;">
             <label style="display: block; font-size: 12px; color: #374151; margin-bottom: 4px; font-weight: 500;">Saldo Inicial (Deuda):</label>
             <input id="swal-saldo" type="number" class="swal2-input" style="font-size: 14px; margin: 0; width: 100%;" placeholder="Ej: 50000 (se registrará como deuda)">
@@ -499,20 +499,20 @@ export function SaldosAbonosTab() {
             <input id="swal-cuotas" type="number" min="2" max="52" class="swal2-input" style="font-size: 14px; margin: 0; width: 100%;" value="4" placeholder="Ej: 4">
             <div id="preview-cuotas" style="margin-top: 8px; font-size: 12px; color: #059669; font-weight: 500;"></div>
           </div>
-          
+
           <div style="margin-bottom: 12px;">
             <label style="display: block; font-size: 12px; color: #374151; margin-bottom: 4px; font-weight: 500;">Semana de inicio:</label>
             <select id="swal-semana" class="swal2-select" style="font-size: 14px; margin: 0; width: 100%; padding: 8px;">
               ${semanaOptions}
             </select>
           </div>
-          
+
           <div style="margin-bottom: 12px;">
             <label style="display: block; font-size: 12px; color: #374151; margin-bottom: 4px; font-weight: 500;">Fecha de Referencia:</label>
             <input id="swal-fecha" type="date" class="swal2-input" style="font-size: 14px; margin: 0; width: 100%;" value="${hoyStr}">
             <span style="font-size: 10px; color: #6B7280;">Fecha desde la cual se considera este saldo para cálculo de mora</span>
           </div>
-          
+
           <div>
             <label style="display: block; font-size: 12px; color: #374151; margin-bottom: 4px; font-weight: 500;">Concepto (opcional):</label>
             <input id="swal-concepto" type="text" class="swal2-input" style="font-size: 14px; margin: 0; width: 100%;" placeholder="Ej: Regularización de saldo" value="Saldo inicial - Regularización">
@@ -536,14 +536,14 @@ export function SaldosAbonosTab() {
         const searchInput = document.getElementById('swal-conductor-search') as HTMLInputElement
         const hiddenInput = document.getElementById('swal-conductor') as HTMLInputElement
         const dropdown = document.getElementById('swal-conductor-dropdown') as HTMLDivElement
-        
+
         const renderDropdown = (filter: string) => {
           const filterLower = filter.toLowerCase()
           const filtered = conductoresParaModal.filter(c => {
             const fullName = `${c.apellidos} ${c.nombres} ${c.dni || ''}`.toLowerCase()
             return fullName.includes(filterLower)
           }).slice(0, 50)
-          
+
           if (filtered.length === 0) {
             dropdown.innerHTML = '<div style="padding: 12px; color: #999; text-align: center;">No se encontraron resultados</div>'
           } else {
@@ -552,7 +552,7 @@ export function SaldosAbonosTab() {
                 <strong style="color: #ff0033;">${c.apellidos}, ${c.nombres}</strong>
               </div>
             `).join('')
-            
+
             dropdown.querySelectorAll('.conductor-option').forEach(opt => {
               opt.addEventListener('mouseenter', () => (opt as HTMLElement).style.background = '#f5f5f5')
               opt.addEventListener('mouseleave', () => (opt as HTMLElement).style.background = 'white')
@@ -563,18 +563,18 @@ export function SaldosAbonosTab() {
                   searchInput.value = `${c.apellidos}, ${c.nombres}`
                   hiddenInput.value = id
                   dropdown.style.display = 'none'
-                  
+
                   // Verificar si tiene fraccionamiento pendiente
                   const radioFracc = document.getElementById('swal-fraccionado') as HTMLInputElement
                   const labelFracc = document.getElementById('label-fraccionado') as HTMLElement
-                  
+
                   const { data: pendientes } = await supabase
                     .from('cobros_fraccionados')
                     .select('id')
                     .eq('conductor_id', id)
                     .eq('aplicado', false)
                     .limit(1)
-                  
+
                   void pendientes // Permitir multiples fraccionamientos
                   radioFracc.disabled = false
                   labelFracc.style.opacity = '1'
@@ -586,17 +586,17 @@ export function SaldosAbonosTab() {
           }
           dropdown.style.display = 'block'
         }
-        
+
         searchInput.addEventListener('focus', () => renderDropdown(searchInput.value))
         searchInput.addEventListener('input', () => renderDropdown(searchInput.value))
-        
+
         // Cerrar dropdown al hacer click fuera
         document.addEventListener('click', (e) => {
           if (!searchInput.contains(e.target as Node) && !dropdown.contains(e.target as Node)) {
             dropdown.style.display = 'none'
           }
         })
-        
+
         // Configurar toggle completo/fraccionado
         const radioCompleto = document.getElementById('swal-completo') as HTMLInputElement
         const radioFraccionado = document.getElementById('swal-fraccionado') as HTMLInputElement
@@ -640,7 +640,7 @@ export function SaldosAbonosTab() {
         inputCuotas.addEventListener('input', updatePreview)
         inputSaldo.addEventListener('input', updatePreview)
         updateStyles()
-        
+
         searchInput.focus()
       },
       preConfirm: async () => {
@@ -678,7 +678,7 @@ export function SaldosAbonosTab() {
             .eq('conductor_id', conductorId)
             .eq('aplicado', false)
             .limit(1)
-          
+
           void pendientes // Permitir multiples fraccionamientos
         }
 
@@ -706,7 +706,7 @@ export function SaldosAbonosTab() {
       const fechaReferencia = new Date(formValues.fecha + 'T12:00:00').toISOString()
 
       // Verificar si ya existe saldo para este conductor
-       
+
       const { data: saldoExistente } = await (supabase.from('saldos_conductores') as any)
         .select('id, saldo_actual')
         .eq('conductor_id', formValues.conductorId)
@@ -715,7 +715,7 @@ export function SaldosAbonosTab() {
       if (saldoExistente) {
         // Actualizar saldo existente (sumar al saldo actual)
         const nuevoSaldo = (saldoExistente.saldo_actual || 0) + formValues.saldo
-         
+
         const { error: errorUpdate } = await (supabase.from('saldos_conductores') as any)
           .update({
             saldo_actual: nuevoSaldo,
@@ -725,7 +725,7 @@ export function SaldosAbonosTab() {
         if (errorUpdate) throw errorUpdate
       } else {
         // Crear nuevo registro
-         
+
         const insertData: Record<string, unknown> = {
             conductor_id: formValues.conductorId,
             conductor_nombre: conductorNombre,
@@ -743,7 +743,7 @@ export function SaldosAbonosTab() {
       }
 
       // Registrar en historial de abonos
-       
+
       await (supabase.from('abonos_conductores') as any).insert({
         conductor_id: formValues.conductorId,
         tipo: 'cargo',
@@ -790,7 +790,7 @@ export function SaldosAbonosTab() {
           const montoCuotaFinal = i === formValues.cuotas
             ? montoAbsoluto - (montoCuota * (formValues.cuotas - 1))
             : montoCuota
-           
+
           await (supabase.from('cobros_fraccionados') as any).insert({
             conductor_id: formValues.conductorId,
             descripcion: `${formValues.concepto} - Cuota ${i}/${formValues.cuotas}`,
@@ -817,7 +817,7 @@ export function SaldosAbonosTab() {
 
       // Recargar datos
       cargarSaldos()
-     
+
     } catch (error: any) {
       Swal.fire('Error', error.message || 'No se pudo agregar el saldo', 'error')
     }
@@ -972,7 +972,7 @@ export function SaldosAbonosTab() {
 
     try {
       // Re-verificar concurrencia: que no se haya creado otro plan entre apertura y confirmación
-       
+
       const { data: pendientes } = await (supabase.from('cobros_fraccionados') as any)
         .select('id')
         .eq('conductor_id', saldo.conductor_id)
@@ -997,7 +997,7 @@ export function SaldosAbonosTab() {
         const montoCuotaFinal = i === formValues.cuotas
           ? montoDeuda - (montoCuota * (formValues.cuotas - 1))
           : montoCuota
-         
+
         const { error } = await (supabase.from('cobros_fraccionados') as any).insert({
           conductor_id: saldo.conductor_id,
           descripcion: `Fraccionamiento de saldo - Cuota ${i}/${formValues.cuotas}`,
@@ -1015,7 +1015,7 @@ export function SaldosAbonosTab() {
         if (semIter > 52) { semIter = 1; anioIter++ }
       }
 
-       
+
       const { error: errorUpdate } = await (supabase.from('saldos_conductores') as any)
         .update({
           saldo_actual: 0,
@@ -1047,7 +1047,7 @@ export function SaldosAbonosTab() {
 
       showSuccess('Saldo Fraccionado', `${formValues.cuotas} cuotas de ${formatCurrency(montoCuota)}`)
       cargarSaldos()
-     
+
     } catch (error: any) {
       Swal.fire('Error', error.message || 'No se pudo fraccionar el saldo', 'error')
     }
@@ -1143,10 +1143,10 @@ export function SaldosAbonosTab() {
           return false
         }
 
-        return { 
-          tipo, 
-          monto: parseFloat(monto), 
-          concepto, 
+        return {
+          tipo,
+          monto: parseFloat(monto),
+          concepto,
           referencia: referencia || null,
           semana,
           anio: anioSel
@@ -1159,7 +1159,7 @@ export function SaldosAbonosTab() {
     try {
       const montoFinal = formValues.tipo === 'abono' ? formValues.monto : -formValues.monto
 
-       
+
       const { error: errorAbono } = await (supabase.from('abonos_conductores') as any).insert({
           conductor_id: saldo.conductor_id,
           tipo: formValues.tipo,
@@ -1174,7 +1174,7 @@ export function SaldosAbonosTab() {
       if (errorAbono) throw errorAbono
 
       const nuevoSaldo = saldo.saldo_actual + montoFinal
-       
+
       const { error: errorUpdate } = await (supabase.from('saldos_conductores') as any)
         .update({ saldo_actual: nuevoSaldo, ultima_actualizacion: new Date().toISOString() })
         .eq('id', saldo.id)
@@ -1196,7 +1196,7 @@ export function SaldosAbonosTab() {
       showSuccess(formValues.tipo === 'abono' ? 'Abono Registrado' : 'Cargo Registrado', `Nuevo saldo: ${formatCurrency(nuevoSaldo)}`)
 
       cargarSaldos()
-     
+
     } catch (error: any) {
       Swal.fire('Error', error.message || 'No se pudo registrar', 'error')
     }
@@ -1269,7 +1269,7 @@ export function SaldosAbonosTab() {
 
     try {
       // Pago = abono (suma al saldo, reduce deuda)
-       
+
       const { error: errorAbono } = await (supabase.from('abonos_conductores') as any).insert({
         conductor_id: saldo.conductor_id,
         tipo: 'abono',
@@ -1285,14 +1285,14 @@ export function SaldosAbonosTab() {
 
       const nuevoSaldo = saldo.saldo_actual + formValues.monto
       // Si el nuevo saldo >= 0 (sin deuda), resetear dias_mora a 0
-      const updateData: Record<string, unknown> = { 
-        saldo_actual: nuevoSaldo, 
-        ultima_actualizacion: new Date().toISOString() 
+      const updateData: Record<string, unknown> = {
+        saldo_actual: nuevoSaldo,
+        ultima_actualizacion: new Date().toISOString()
       }
       if (nuevoSaldo >= 0) {
         updateData.dias_mora = 0
       }
-       
+
       const { error: errorUpdate } = await (supabase.from('saldos_conductores') as any)
         .update(updateData)
         .eq('id', saldo.id)
@@ -1318,7 +1318,7 @@ export function SaldosAbonosTab() {
 
       showSuccess('Pago Registrado', `Nuevo saldo: ${formatCurrency(nuevoSaldo)}`)
       cargarSaldos()
-     
+
     } catch (error: any) {
       Swal.fire('Error', error.message || 'No se pudo registrar el pago', 'error')
     }
@@ -1414,7 +1414,7 @@ export function SaldosAbonosTab() {
     // Obtener tasa de mora desde P009
     let tasaMora = 1 // default 1%
     try {
-       
+
       const { data: p009 } = await (supabase.from('conceptos_nomina') as any)
         .select('precio_base')
         .eq('codigo', 'P009')
@@ -1512,7 +1512,7 @@ export function SaldosAbonosTab() {
       const diasMora = formValues.diasMora
       const moraAcum = formValues.moraAcum
 
-       
+
       const { error } = await (supabase.from('saldos_conductores') as any)
         .update({
           saldo_actual: formValues.saldoActual,
@@ -1541,7 +1541,7 @@ export function SaldosAbonosTab() {
       showSuccess('Actualizado', 'El saldo ha sido actualizado correctamente')
 
       cargarSaldos()
-     
+
     } catch (error: any) {
       Swal.fire('Error', error.message || 'No se pudo actualizar el saldo', 'error')
     }
@@ -1592,7 +1592,7 @@ export function SaldosAbonosTab() {
     if (!formValues) return
 
     try {
-       
+
       const { error } = await (supabase.from('saldos_conductores') as any)
         .update({
           dias_mora: formValues.diasMora,
@@ -1624,7 +1624,7 @@ export function SaldosAbonosTab() {
 
       showSuccess('Actualizado', 'Mora actualizada correctamente')
       cargarSaldos()
-     
+
     } catch (error: any) {
       Swal.fire('Error', error.message || 'No se pudo actualizar la mora', 'error')
     }
@@ -1693,7 +1693,7 @@ export function SaldosAbonosTab() {
       // Buscar hoja "Saldos" o usar la primera
       const sheetName = wb.SheetNames.includes('Saldos') ? 'Saldos' : wb.SheetNames[0]
       const ws = wb.Sheets[sheetName]
-       
+
       const rows: any[] = XLSX.utils.sheet_to_json(ws, { raw: false })
 
       if (rows.length === 0) {
@@ -1870,7 +1870,7 @@ export function SaldosAbonosTab() {
       const anioImp = new Date().getFullYear()
 
       for (const c of cambios) {
-         
+
         const { error } = await (supabase.from('saldos_conductores') as any)
           .update({
             saldo_actual: c.saldo_actual,
@@ -1970,7 +1970,7 @@ export function SaldosAbonosTab() {
   async function verHistorial(saldo: SaldoConductor) {
     setKardexModal({ open: true, saldo, rows: [], loading: true })
     try {
-       
+
       const { data: rows, error } = await (supabase.from('control_saldos') as any)
         .select('id, semana, anio, tipo_movimiento, monto_movimiento, referencia, saldo_adeudado, saldo_a_favor, saldo_pendiente, saldo_previo, dias_mora, interes_mora, created_at, created_by_name')
         .eq('conductor_id', saldo.conductor_id)
@@ -1979,7 +1979,7 @@ export function SaldosAbonosTab() {
         .order('created_at', { ascending: false })
       if (error) throw error
       // FIX 2026-05-20: traer facturacion_conductores para mostrar columna "Facturado" + detalle
-       
+
       const { data: facts } = await (supabase.from('facturacion_conductores') as any)
         .select('id, periodo_id, subtotal_alquiler, subtotal_garantia, subtotal_cargos, subtotal_descuentos, subtotal_neto, saldo_anterior, total_a_pagar, periodo:periodos_facturacion(anio, semana)')
         .eq('conductor_id', saldo.conductor_id)
@@ -2040,7 +2040,7 @@ export function SaldosAbonosTab() {
             </div>
             <div style="color: #6B7280; font-size: 11px; margin-top: 2px;">${movimiento.concepto}</div>
           </div>
-          
+
           <div style="margin-bottom: 10px;">
             <label style="display: block; font-size: 12px; color: #374151; margin-bottom: 4px; font-weight: 500;">Semana:</label>
             <select id="swal-semana" class="swal2-select" style="font-size: 14px; margin: 0; width: 100%; padding: 8px;">
@@ -2048,12 +2048,12 @@ export function SaldosAbonosTab() {
               ${semanaOptions}
             </select>
           </div>
-          
+
           <div style="margin-bottom: 10px;">
             <label style="display: block; font-size: 12px; color: #374151; margin-bottom: 4px; font-weight: 500;">Concepto:</label>
             <input id="swal-concepto" type="text" class="swal2-input" style="font-size: 14px; margin: 0; width: 100%;" value="${movimiento.concepto || ''}">
           </div>
-          
+
           <div>
             <label style="display: block; font-size: 12px; color: #374151; margin-bottom: 4px; font-weight: 500;">Referencia:</label>
             <input id="swal-referencia" type="text" class="swal2-input" style="font-size: 14px; margin: 0; width: 100%;" value="${movimiento.referencia || ''}" placeholder="Opcional">
@@ -2177,13 +2177,13 @@ export function SaldosAbonosTab() {
       cell: ({ row }) => {
         const estado = row.original.conductor_estado
         if (!estado) return <span className="text-gray-400">-</span>
-        
+
         const esActivo = estado.toUpperCase() === 'ACTIVO'
         const esBaja = estado.toUpperCase() === 'BAJA' || estado.toUpperCase() === 'INACTIVO'
-        
+
         return (
-          <span 
-            className="fact-badge" 
+          <span
+            className="fact-badge"
             style={{
               backgroundColor: esActivo ? '#DCFCE7' : esBaja ? '#FEE2E2' : '#FEF3C7',
               color: esActivo ? '#166534' : esBaja ? '#991B1B' : '#92400E',
@@ -2365,12 +2365,12 @@ export function SaldosAbonosTab() {
     const enMora = conductoresMora.length
     const totalFavor = conductoresFavor.reduce((sum, s) => sum + s.saldo_actual, 0)
     const totalDeuda = conductoresDeuda.reduce((sum, s) => sum + Math.abs(s.saldo_actual), 0)
-    
+
     // Stats de fraccionados
     const totalFraccionado = cobrosFraccionados.reduce((sum, c) => sum + c.monto_cuota, 0)
     const cuotasPendientes = cobrosFraccionados.length
-    
-    return { 
+
+    return {
       total, conFavor, conDeuda, enMora, totalFavor, totalDeuda,
       conductoresFavor, conductoresDeuda, conductoresMora,
       totalFraccionado, cuotasPendientes

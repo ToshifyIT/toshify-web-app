@@ -416,7 +416,7 @@ export function PortalPage() {
       .catch(() => { /* sin conexión: queda en login, el usuario reintenta */ })
     return () => { cancelado = true }
     // Solo al montar.
-     
+
   }, [])
 
   // =====================================================
@@ -528,7 +528,7 @@ export function PortalPage() {
       // Backfill missing vehiculo_patente from assignment history
       const missingPatente = facturasData.filter(f => !f.vehiculo_patente)
       if (missingPatente.length > 0) {
-         
+
         const { data: asignaciones } = await (supabase
           .from('asignaciones_conductores') as any)
           .select(`
@@ -540,9 +540,9 @@ export function PortalPage() {
           .order('created_at', { ascending: false })
 
         if (asignaciones && asignaciones.length > 0) {
-           
+
           const validAsignaciones = (asignaciones as any[]).filter(
-             
+
             (ac: any) => ac.asignaciones?.vehiculos?.patente && ac.asignaciones.estado !== 'programado'
           )
 
@@ -552,7 +552,7 @@ export function PortalPage() {
             const semFin = new Date(p.fecha_fin + 'T23:59:59')
 
             // Try date overlap match first
-             
+
             const match = validAsignaciones.find((ac: any) => {
               const asig = ac.asignaciones
               const acInicio = ac.fecha_inicio ? new Date(ac.fecha_inicio) : new Date(asig.fecha_inicio)

@@ -932,6 +932,14 @@ export function ProductosModule() {
   return (
     <div className="prod-module">
       <LoadingOverlay show={loading} message="Cargando productos..." size="lg" />
+      <div className="prod-header">
+        <div className="prod-header-title">
+          <h1>Productos</h1>
+          <span className="prod-header-subtitle">
+            Catálogo de repuestos, herramientas e insumos usados en stock, pedidos y movimientos.
+          </span>
+        </div>
+      </div>
       {/* Stats Cards - Estilo Bitacora (clickeables como filtros) */}
       <div className="prod-stats">
         <div className="prod-stats-grid">
@@ -1018,6 +1026,8 @@ export function ProductosModule() {
       />}
         emptyTitle="No hay productos registrados"
         emptyDescription={canCreate ? 'Crea el primero usando el boton "+ Crear Producto".' : ''}
+        pageSize={20}
+        pageSizeOptions={[10, 20, 50, 100]}
         headerAction={
           canCreate ? (
             <button className="btn-primary" onClick={openCreateModal}>

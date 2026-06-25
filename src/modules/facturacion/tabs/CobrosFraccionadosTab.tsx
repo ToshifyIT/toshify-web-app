@@ -1,4 +1,4 @@
- 
+
 /**
  * Tab: Cobros Fraccionados en Facturación
  * Control de cuotas aplicadas, próximas a cobrar, y % de completado

@@ -150,6 +150,14 @@ htmlcov/
 .output/
 
 # ==========================================
+# QA VIDEOS / LOCAL EVIDENCE
+# ==========================================
+videos/
+videos-qa-logistica/
+demo-logistica-funcionalidad.mp4
+video-flujo-pedido-proveedor.mp4
+
+# ==========================================
 # SCRIPTS (local development)
 # ==========================================
 scripts/

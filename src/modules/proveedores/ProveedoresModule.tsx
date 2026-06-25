@@ -781,6 +781,14 @@ export function ProveedoresModule() {
   return (
     <div className="prov-module">
       <LoadingOverlay show={loading} message="Cargando proveedores..." size="lg" />
+      <div className="prov-header">
+        <div className="prov-header-title">
+          <h1>Proveedores</h1>
+          <span className="prov-header-subtitle">
+            Gestiona los proveedores usados en pedidos e ingresos manuales de stock.
+          </span>
+        </div>
+      </div>
       {/* Stats Cards - Estilo Bitacora */}
       <div className="prov-stats">
         <div className="prov-stats-grid">
@@ -857,6 +865,8 @@ export function ProveedoresModule() {
       />}
         emptyTitle="No hay proveedores registrados"
         emptyDescription={canCreate ? 'Crea el primero usando el boton "+ Crear Proveedor".' : ''}
+        pageSize={20}
+        pageSizeOptions={[10, 20, 50, 100]}
         headerAction={
           canCreate ? (
             <button className="btn-primary" onClick={openCreateModal}>

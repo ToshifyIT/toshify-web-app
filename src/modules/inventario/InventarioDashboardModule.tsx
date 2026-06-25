@@ -209,26 +209,27 @@ export function InventarioDashboardModule() {
       })
     }
 
-    if (pendientes.entradasTransito + pendientes.pedidosTransito > 0) {
-      const total = pendientes.entradasTransito + pendientes.pedidosTransito
-      const detalleRecepciones = [
-        pendientes.pedidosTransito > 0
-          ? `${pendientes.pedidosTransito} pedido${pendientes.pedidosTransito === 1 ? '' : 's'} a proveedor`
-          : null,
-        pendientes.entradasTransito > 0
-          ? `${pendientes.entradasTransito} ingreso${pendientes.entradasTransito === 1 ? '' : 's'} manual${pendientes.entradasTransito === 1 ? '' : 'es'}`
-          : null,
-      ].filter(Boolean).join(' + ')
-
+    if (pendientes.pedidosTransito > 0) {
+      const plural = pendientes.pedidosTransito > 1
       acciones.push({
-        id: 'recepciones',
+        id: 'pedidos-por-recibir',
         severidad: 'atencion',
-        titulo: total === 1 ? '1 recepción por completar' : `${total} recepciones por completar`,
-        detalle: `${detalleRecepciones}. Mercadería que llegó o está por llegar y falta ingresar al stock.`,
-        accion: 'Recepcionar',
-        destino: pendientes.pedidosTransito > 0
-          ? '/logistica/inventario/pedidos?tab=pedidos'
-          : '/logistica/inventario/pedidos?tab=entradas'
+        titulo: `${pendientes.pedidosTransito} pedido${plural ? 's' : ''} por recibir`,
+        detalle: `Pedido${plural ? 's' : ''} a proveedor con mercadería pendiente de recepción. Registra la respuesta y luego la recepción cuando llegue.`,
+        accion: 'Ver pedidos',
+        destino: '/logistica/inventario/pedidos?tab=pedidos'
+      })
+    }
+
+    if (pendientes.entradasTransito > 0) {
+      const plural = pendientes.entradasTransito > 1
+      acciones.push({
+        id: 'ingresos-manuales',
+        severidad: 'atencion',
+        titulo: `${pendientes.entradasTransito} ingreso${plural ? 's' : ''} manual${plural ? 'es' : ''} por confirmar`,
+        detalle: `Compra o entrega registrada desde Movimientos sin pedido previo. Confirma la recepción para que pase a stock disponible.`,
+        accion: 'Confirmar ingreso',
+        destino: '/logistica/inventario/control-movimientos?tab=ingresos'
       })
     }
 
@@ -240,7 +241,7 @@ export function InventarioDashboardModule() {
         titulo: `${pendientes.movimientosPendientes} movimiento${plural ? 's' : ''} por aprobar`,
         detalle: `Salidas, asignaciones y devoluciones esperando aprobación de un encargado.`,
         accion: 'Revisar',
-        destino: '/logistica/inventario/pedidos?tab=pendientes'
+        destino: '/logistica/inventario/control-movimientos?tab=aprobaciones'
       })
     }
 

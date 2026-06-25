@@ -114,15 +114,20 @@ function getEstadoColor(estado: string): string {
 }
 
 /**
- * Una marcación quedó "sin match" cuando el cruce con asignaciones no pudo
- * resolver ni la modalidad del vehículo ni el turno del conductor.
- * En la tabla se ve como MODALIDAD = "-" y TURNO = "-".
- * Estas filas se marcan con un badge de Alerta clickeable en la columna Estado.
+ * Una marcación es ALERTA cuando le falta info obligatoria de turno/modalidad.
+ * Regla de negocio:
+ *   - Modalidad 'a_cargo'  → NO requiere turno (es normal) → nunca alerta por esto.
+ *   - Modalidad 'turno'    → OBLIGATORIO tener turno (diurno/nocturno). Si no lo tiene → ALERTA.
+ *   - Sin modalidad        → no se resolvió nada → ALERTA.
  */
 function sinMatchTurno(m: Marcacion): boolean {
-  const tieneModalidad = !!m.vehiculoModalidad;
   const tieneTurno = m.horario === 'diurno' || m.horario === 'nocturno';
-  return !tieneModalidad && !tieneTurno;
+  // a_cargo es válido sin turno
+  if (m.vehiculoModalidad === 'a_cargo') return false;
+  // modalidad 'turno' SIN diurno/nocturno → inconsistente → alerta
+  if (m.vehiculoModalidad === 'turno') return !tieneTurno;
+  // sin modalidad → alerta (salvo que ya tenga turno resuelto, raro)
+  return !tieneTurno;
 }
 
 /**
@@ -152,9 +157,15 @@ type AlertaTipo = {
 
 function clasificarAlerta(m: Marcacion): AlertaTipo {
   const cond = conductorLabel(m.conductor);
+  const tieneTurno = m.horario === 'diurno' || m.horario === 'nocturno';
   // A — sin identidad
   if (cond === 'Sin conductor') {
     return { etiqueta: 'Sin conductor', titulo: 'El GPS no identificó al conductor (iButton sin asignar).', color: '#6b7280' };
+  }
+  // D — modalidad 'turno' pero SIN turno resuelto: el conductor manejó sin asignación
+  // vigente en esa patente/fecha, por eso no se pudo determinar diurno/nocturno.
+  if (m.vehiculoModalidad === 'turno' && !tieneTurno) {
+    return { etiqueta: 'Falta turno', titulo: 'Modalidad Turno sin diurno/nocturno: el conductor no tiene asignación vigente en esta patente para esa fecha.', color: '#d97706' };
   }
   // B — hay conductor vinculado (conductorId) pero no se resolvió el turno
   if (m.conductorId) {

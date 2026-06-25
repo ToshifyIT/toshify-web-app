@@ -149,7 +149,7 @@ export function PedidosTransitoModule() {
       }
 
       setPedidos(Array.from(pedidosMap.values()))
-      setExpandedPedidos(new Set(pedidosMap.keys()))
+      setExpandedPedidos(new Set())
     } catch {
       // silently ignored
     }
