@@ -712,10 +712,10 @@
    con calc() y scrollea internamente. Esto es independiente del layout padre. */
 .portal-multas-cols {
   display: grid;
-  /* Tantas columnas como entren con un mínimo de 330px (lo que necesita el contenido
-     de la card sin apretarse): 3 en desktop ancho, 2 si no hay lugar, 1 en mobile.
-     Evita que las columnas se vuelvan demasiado angostas y corten el contenido. */
-  grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
+  /* Las 3 columnas (Pendientes / Pagadas / Fraccionadas) siempre lado a lado; se
+     achican en pantallas chicas pero no se apilan (evita huecos y desparejo entre
+     columnas de distinto largo). En mobile pasan a 1 sola (ver @media max-width:900). */
+  grid-template-columns: 1fr 1fr 1fr;
   gap: 16px;
   align-items: start;
 }
@@ -1811,8 +1811,10 @@
 
   /* KPIs del resumen: menos alto para que el dashboard entre */
   .portal-stat-card { padding: 12px 14px; }
+}
 
-  /* Columnas de multas: recalcular el alto disponible para el menor viewport */
+/* Columnas de multas: recalcular el alto disponible para el menor viewport. */
+@media (min-width: 901px) and (max-height: 820px) {
   .portal-msec[data-msec="multas"] .portal-multas-col .portal-weeks {
     max-height: calc(100vh - 200px);
   }
