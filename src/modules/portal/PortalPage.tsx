@@ -261,6 +261,23 @@ const SECTION_KEYS: SectionKey[] = ['resumen', 'historial', 'multas', 'km']
 const PORTAL_AUTH_KEY = 'portal_auth_doc'
 const PORTAL_TAB_KEY = 'portal_active_section'
 
+// Convierte un importe en texto formato argentino ("$71.249,25") a número (71249.25).
+// Mismo criterio que el resto de los módulos de multas. Se usa para totalizar columnas.
+function parseImporte(importe: string | number | null | undefined): number {
+  if (importe == null || importe === '') return 0
+  if (typeof importe === 'number') return importe
+  let s = importe.replace(/[^\d,.-]/g, '')
+  const lastComma = s.lastIndexOf(',')
+  const lastDot = s.lastIndexOf('.')
+  if (lastComma > lastDot) {
+    s = s.replace(/\./g, '').replace(',', '.')
+  } else if (lastDot !== -1 && lastComma !== -1) {
+    s = s.replace(/,/g, '')
+  }
+  const num = parseFloat(s)
+  return isNaN(num) ? 0 : num
+}
+
 // Importe a mostrar para una multa PENDIENTE según el descuento por pago temprano.
 // Regla (solo por fecha, sin hora): si faltan 7 días o más para el vencimiento del
 // descuento, se muestra el importe con descuento; si faltan menos de 7 (o ya venció),
@@ -1880,16 +1897,18 @@ export function PortalPage() {
             <div className="portal-multa-total-tachado">{pendImporte.totalTachado}</div>
           )}
           <div className={`portal-week-total ${montoClase}`}>{montoStr}</div>
-          <div style={{ display: 'flex', gap: '8px', marginTop: '4px' }}>
-            <button className="portal-back-btn" style={{ margin: 0, padding: '6px 12px', fontSize: '12px', cursor: 'pointer' }} onClick={() => setSelectedMulta(m)}>Ver</button>
-            {m.drive_url ? (
-              <a className="portal-pdf-btn" style={{ padding: '6px 14px', fontSize: '12px' }} href={driveDownloadUrl(m.drive_url)} download={`Multa_${m.infraccion || 'acta'}.pdf`} rel="noopener noreferrer">Descargar</a>
-            ) : (
-              <span style={{ fontSize: '12px', color: 'var(--text-tertiary)', padding: '6px 12px', border: '1px solid var(--border-primary)', borderRadius: '6px' }}>Sin PDF</span>
-            )}
-          </div>
         </div>
         </div>{/* /portal-multa-cuerpo */}
+        {/* Footer: botones full-width abajo, fuera del cuerpo (no compiten por ancho con
+            la descripción y el monto). */}
+        <div className="portal-multa-footer">
+          <button className="portal-back-btn" style={{ margin: 0, padding: '6px 12px', fontSize: '12px', cursor: 'pointer' }} onClick={() => setSelectedMulta(m)}>Ver</button>
+          {m.drive_url ? (
+            <a className="portal-pdf-btn" style={{ padding: '6px 14px', fontSize: '12px' }} href={driveDownloadUrl(m.drive_url)} download={`Multa_${m.infraccion || 'acta'}.pdf`} rel="noopener noreferrer">Descargar</a>
+          ) : (
+            <span style={{ fontSize: '12px', color: 'var(--text-tertiary)', padding: '6px 12px', border: '1px solid var(--border-primary)', borderRadius: '6px' }}>Sin PDF</span>
+          )}
+        </div>
       </div>
     )
   }
@@ -2392,7 +2411,10 @@ export function PortalPage() {
                     {/* Pendientes: no facturadas (importe original de la multa) */}
                     <div className="portal-multas-col">
                       <div className="portal-multas-col-head portal-multas-col-head--pendiente">
-                        Pendientes <span className="portal-multas-count">{multasPendientes.length}</span>
+                        <span>Pendientes <span className="portal-multas-count">{multasPendientes.length}</span></span>
+                        {/* Total = suma del valor en rojo de cada multa (importePendiente aplica la
+                            regla de descuento por fecha): cambia solo cuando una multa vence el descuento. */}
+                        <span className="portal-multas-col-total">{formatCurrency(multasPendientes.reduce((s, m) => s + parseImporte(importePendiente(m, new Date()).texto), 0))}</span>
                       </div>
                       {multasPendientes.length > 0 ? (
                         <div className="portal-weeks">{multasPendientes.map(m => renderMultaCard(m))}</div>
@@ -2403,7 +2425,8 @@ export function PortalPage() {
                     {/* Pagadas: facturadas de una vez en semana cerrada (monto facturado) */}
                     <div className="portal-multas-col">
                       <div className="portal-multas-col-head portal-multas-col-head--pagada">
-                        Pagadas <span className="portal-multas-count">{multasPagadas.length}</span>
+                        <span>Pagadas <span className="portal-multas-count">{multasPagadas.length}</span></span>
+                        <span className="portal-multas-col-total">{formatCurrency(multasPagadas.reduce((s, m) => s + (multasEstado.get(String(m.id))?.montoFacturado || 0), 0))}</span>
                       </div>
                       {multasPagadas.length > 0 ? (
                         <div className="portal-weeks">{multasPagadas.map(m => renderMultaCard(m, multasEstado.get(String(m.id))))}</div>
@@ -2414,7 +2437,8 @@ export function PortalPage() {
                     {/* Fraccionadas: pago en cuotas (monto total + cuotas pagadas/totales) */}
                     <div className="portal-multas-col">
                       <div className="portal-multas-col-head portal-multas-col-head--fraccionada">
-                        Fraccionadas <span className="portal-multas-count">{multasFraccionadas.length}</span>
+                        <span>Fraccionadas <span className="portal-multas-count">{multasFraccionadas.length}</span></span>
+                        <span className="portal-multas-col-total">{formatCurrency(multasFraccionadas.reduce((s, m) => s + (multasEstado.get(String(m.id))?.montoFacturado || 0), 0))}</span>
                       </div>
                       {multasFraccionadas.length > 0 ? (
                         <div className="portal-weeks">{multasFraccionadas.map(m => renderMultaCard(m, multasEstado.get(String(m.id))))}</div>
@@ -2490,7 +2514,8 @@ export function PortalPage() {
                     <div className="portal-multas-cols">
                       <div className="portal-multas-col">
                         <div className="portal-multas-col-head portal-multas-col-head--pendiente">
-                          Pendientes <span className="portal-multas-count">{kmPendientes.length}</span>
+                          <span>Pendientes <span className="portal-multas-count">{kmPendientes.length}</span></span>
+                          <span className="portal-multas-col-total">{formatCurrency(kmPendientes.reduce((s, c) => s + (c.monto || 0), 0))}</span>
                         </div>
                         {kmPendientes.length > 0 ? (
                           <div className="portal-weeks">{kmPendientes.map(c => renderCobroKmCard(c))}</div>
@@ -2500,7 +2525,8 @@ export function PortalPage() {
                       </div>
                       <div className="portal-multas-col">
                         <div className="portal-multas-col-head portal-multas-col-head--pagada">
-                          Pagados <span className="portal-multas-count">{kmPagados.length}</span>
+                          <span>Pagados <span className="portal-multas-count">{kmPagados.length}</span></span>
+                          <span className="portal-multas-col-total">{formatCurrency(kmPagados.reduce((s, c) => s + (c.monto || 0), 0))}</span>
                         </div>
                         {kmPagados.length > 0 ? (
                           <div className="portal-weeks">{kmPagados.map(c => renderCobroKmCard(c))}</div>
@@ -2510,7 +2536,8 @@ export function PortalPage() {
                       </div>
                       <div className="portal-multas-col">
                         <div className="portal-multas-col-head portal-multas-col-head--fraccionada">
-                          Fraccionados <span className="portal-multas-count">{kmFraccionados.length}</span>
+                          <span>Fraccionados <span className="portal-multas-count">{kmFraccionados.length}</span></span>
+                          <span className="portal-multas-col-total">{formatCurrency(kmFraccionados.reduce((s, c) => s + (c.monto || 0), 0))}</span>
                         </div>
                         {kmFraccionados.length > 0 ? (
                           <div className="portal-weeks">{kmFraccionados.map(c => renderCobroKmCard(c))}</div>

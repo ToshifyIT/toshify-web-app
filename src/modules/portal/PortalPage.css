@@ -712,7 +712,10 @@
    con calc() y scrollea internamente. Esto es independiente del layout padre. */
 .portal-multas-cols {
   display: grid;
-  grid-template-columns: 1fr 1fr 1fr;
+  /* Tantas columnas como entren con un mínimo de 330px (lo que necesita el contenido
+     de la card sin apretarse): 3 en desktop ancho, 2 si no hay lugar, 1 en mobile.
+     Evita que las columnas se vuelvan demasiado angostas y corten el contenido. */
+  grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
   gap: 16px;
   align-items: start;
 }
@@ -729,6 +732,7 @@
   letter-spacing: 0.4px;
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: 8px;
   padding-bottom: 6px;
   border-bottom: 2px solid var(--border-primary);
@@ -737,6 +741,7 @@
 .portal-multas-col-head--pendiente { color: var(--color-primary); }
 .portal-multas-col-head--pagada { color: #059669; }
 .portal-multas-col-head--fraccionada { color: #d97706; }
+.portal-multas-col-total { font-family: monospace; font-weight: 800; }
 /* Semana en que se facturó la multa (solo cards de la columna Pagadas). */
 /* Card de multa: apila la fila de fecha (full-width) sobre el cuerpo (texto + monto).
    Especificidad doble (.portal-week-card.portal-multa-card) para ganarle al
@@ -745,12 +750,27 @@
   flex-direction: column;
   align-items: stretch;
 }
-/* Cuerpo de la card de multa: descripción/datos (izq) + monto/botones (der). */
+/* Cuerpo de la card de multa: descripción/datos (izq) + monto (der). */
 .portal-multa-cuerpo {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
   gap: 12px;
+}
+/* Footer de la card de multa: botones Ver / Descargar en una fila propia, abajo,
+   separada del cuerpo. Así no compiten por ancho con la descripción y el monto. */
+.portal-multa-footer {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border-primary);
+}
+/* El monto no se parte en dos líneas (ej. "$" arriba y la cifra abajo) cuando la
+   columna del monto es angosta. */
+.portal-multa-card .portal-week-total {
+  white-space: nowrap;
 }
 /* Fila superior de la card: fecha de infracción (izq) + chip de semana (der, si pagada).
    El chip se empuja a la derecha con margin-left:auto; si no entra en la línea, baja
