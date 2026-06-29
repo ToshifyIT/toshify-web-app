@@ -1008,7 +1008,10 @@ export function PortalPage() {
             for (const ok of porNumero.values()) if (ok) pagadas++
             const cuotaSemanaIni = semanasCuota.length ? Math.min(...semanasCuota) : undefined
             const cuotaSemanaFin = semanasCuota.length ? Math.max(...semanasCuota) : undefined
-            cobros.push({ ...base, estado: 'fraccionada', semana: sem, anio, cuotasTotal: total, cuotasPagadas: pagadas, cuotaSemanaIni, cuotaSemanaFin })
+            // Si ya pagó todas las cuotas, el fraccionamiento está saldado -> va a PAGADOS.
+            // Se conservan los datos de cuotas (total/pagadas/semanas) para no perder la info.
+            const estadoFrac: PortalCobroKm['estado'] = (total > 0 && pagadas >= total) ? 'pagada' : 'fraccionada'
+            cobros.push({ ...base, estado: estadoFrac, semana: sem, anio, cuotasTotal: total, cuotasPagadas: pagadas, cuotaSemanaIni, cuotaSemanaFin })
           } else if (row.aplicado === true && row.rechazado !== true && cerradas.has(`${sem}-${anio}`)) {
             cobros.push({ ...base, estado: 'pagada', semana: sem, anio })
           } else {
@@ -1932,6 +1935,9 @@ export function PortalPage() {
     const pagadas = c.cuotasPagadas || 0
     const faltan = Math.max(0, total - pagadas)
     const pctPago = total > 0 ? Math.round((pagadas / total) * 100) : 0
+    // Un cobro pagado en cuotas conserva su desglose (cuotas/progreso) aunque ya esté
+    // saldado y haya pasado a la columna Pagados. "Tiene cuotas" = se fraccionó.
+    const tieneCuotas = total > 1
 
     return (
       <div key={c.id} className="portal-km-cobro-card">
@@ -1946,7 +1952,7 @@ export function PortalPage() {
           <div className="portal-km-cobro-info">
             <div className="portal-km-cobro-title">Exceso de km</div>
             {periodo && <div className="portal-km-cobro-periodo">Período {periodo}</div>}
-            {c.estado === 'fraccionada' && rangoCuotas && (
+            {tieneCuotas && rangoCuotas && (
               <div className="portal-km-cobro-chips" style={{ marginTop: '6px' }}>
                 <span className="portal-km-chip portal-km-chip--cuotas">Cuotas {rangoCuotas}</span>
               </div>
@@ -1954,19 +1960,19 @@ export function PortalPage() {
           </div>
           <div className="portal-km-cobro-monto-wrap">
             <div className={`portal-week-total ${montoClase}`}>{formatCurrency(c.monto)}</div>
-            {c.estado === 'fraccionada' && (
+            {tieneCuotas && (
               <div className="portal-km-cobro-cuotas-count">{pagadas} de {total} cuotas</div>
             )}
           </div>
         </div>
 
-        {c.estado === 'fraccionada' && (
+        {tieneCuotas && (
           <div className="portal-km-cobro-progreso">
             <div className="portal-km-cobro-progreso-head">
               <span>Progreso de pago</span>
               <span className="portal-km-cobro-faltan">{faltan > 0 ? `Falta${faltan > 1 ? 'n' : ''} ${faltan}` : 'Completo'}</span>
             </div>
-            <div className="portal-km-cobro-bar"><div className="portal-km-cobro-bar-fill" style={{ width: `${pctPago}%` }} /></div>
+            <div className="portal-km-cobro-bar"><div className={`portal-km-cobro-bar-fill${c.estado === 'pagada' ? ' completo' : ''}`} style={{ width: `${pctPago}%` }} /></div>
           </div>
         )}
       </div>
