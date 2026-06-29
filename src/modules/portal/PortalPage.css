@@ -705,6 +705,10 @@
   background: #d97706;
   border-radius: 3px;
 }
+/* Cobro saldado (todas las cuotas pagadas): barra verde, en línea con el monto de Pagados. */
+.portal-km-cobro-bar-fill.completo {
+  background: #059669;
+}
 
 /* Mis Multas: dos columnas (Pendientes / Pagadas).
    NO se fuerza la cadena flex de los contenedores padres (frágil y rompía las
