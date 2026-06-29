@@ -757,6 +757,19 @@
   justify-content: space-between;
   gap: 12px;
 }
+/* La descripción cede el ancho: se encoge y parte el texto largo, en vez de empujar
+   al monto fuera de la card. */
+.portal-multa-card .portal-week-left {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+.portal-multa-card .portal-week-title {
+  overflow-wrap: anywhere;
+}
+/* El bloque del monto nunca se encoge ni se sale: la cifra siempre se ve completa. */
+.portal-multa-card .portal-week-right {
+  flex: 0 0 auto;
+}
 /* Footer de la card de multa: botones Ver / Descargar en una fila propia, abajo,
    separada del cuerpo. Así no compiten por ancho con la descripción y el monto. */
 .portal-multa-footer {
