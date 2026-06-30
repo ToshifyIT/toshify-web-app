@@ -110,7 +110,7 @@ interface PermissionsContextType {
 const PermissionsContext = createContext<PermissionsContextType | undefined>(undefined)
 
 export function PermissionsProvider({ children }: { children: React.ReactNode }) {
-  const { user, loading: authLoading } = useAuth()
+  const { user, profile, loading: authLoading } = useAuth()
   const [userPermissions, setUserPermissions] = useState<UserPermissionsResponse | null>(null)
   const [loading, setLoading] = useState(true)
   const hasLoadedOnce = useRef(false)
@@ -126,7 +126,7 @@ export function PermissionsProvider({ children }: { children: React.ReactNode })
 
     loadPermissions()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user?.id, authLoading])
+  }, [user?.id, profile?.id, authLoading])
 
   const loadPermissions = async () => {
     if (!user) {
@@ -178,14 +178,18 @@ export function PermissionsProvider({ children }: { children: React.ReactNode })
   // Fallback cuando el edge function no está disponible
   const loadPermissionsFallback = async () => {
     try {
-      // Cargar perfil del usuario con su rol
-      const { data: profileData, error: profileError } = await supabase
-        .from('user_profiles')
-        .select('*, roles(*)')
-        .eq('id', user!.id)
-        .single()
-
-      if (profileError) throw profileError
+      // Reusar el perfil que AuthContext ya cargó (evita re-pedir user_profiles, que cruza
+      // la red a Europa otra vez). Solo consultar la BD si Auth aún no tiene el profile.
+      let profileData: any = profile
+      if (!profileData) {
+        const { data, error: profileError } = await supabase
+          .from('user_profiles')
+          .select('*, roles(*)')
+          .eq('id', user!.id)
+          .single()
+        if (profileError) throw profileError
+        profileData = data
+      }
       if (!profileData) throw new Error('No profile data')
 
       // Verificar si es admin
