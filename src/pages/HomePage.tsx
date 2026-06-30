@@ -302,7 +302,7 @@ export function HomePage() {
   const { sedes, sedeActual, verTodas, cambiarSede, puedeVerTodasSedes, puedeCambiarSede, sedeActualId } = useSede()
   const navigate = useNavigate()
   const location = useLocation()
-  const { getVisibleMenus, getVisibleSubmenusForMenu, loading, isAdmin } = useEffectivePermissions()
+  const { getVisibleMenus, getVisibleSubmenusForMenu, userPermissions, loading, isAdmin } = useEffectivePermissions()
   useTheme() // Para mantener el contexto del tema activo
   const [sedeDropdownOpen, setSedeDropdownOpen] = useState(false)
   const [sidebarOpen, setSidebarOpen] = useState(false)
@@ -319,31 +319,30 @@ export function HomePage() {
       const { fetchGuias } = await import('../modules/guias/guiasService')
       const guiasData = await fetchGuias()
       setGuias(guiasData)
-      
+
       // Auto-sync guías como submenús: only for admin, once per session
       if (!isAdmin() || guiaSyncDone) return
+      // Esperar a que los permisos esten en memoria (los reusamos en vez de re-consultar BD)
+      if (!userPermissions?.menus || !userPermissions?.submenus) return
       guiaSyncDone = true
 
-      const { data: menusData } = await supabase
-        .from('menus')
-        .select('id, name')
-        .eq('is_active', true)
-        .eq('name', 'seguimiento-conductores')
-        .single()
-      
+      // OPT-07: reusar menus/submenus que PermissionsContext YA cargo en memoria,
+      // en vez de re-consultar la BD (cada query cruza ARG->EU ~530ms). El write-path
+      // (insert/permisos/delete) solo se ejecuta cuando faltan guias, que es lo raro.
+      const menusData = (userPermissions.menus as any[]).find(
+        (m: any) => m.name === 'seguimiento-conductores'
+      )
+
       if (menusData) {
         setSeguimientoMenuId(menusData.id)
-        const { data: existingSubmenus } = await supabase
-          .from('submenus')
-          .select('id, name')
-          .eq('is_active', true)
-          .eq('menu_id', menusData.id)
-          .like('name', 'guia-%')
-        
+        const existingSubmenus = (userPermissions.submenus as any[]).filter(
+          (s: any) => s.menu_id === menusData.id && typeof s.name === 'string' && s.name.startsWith('guia-')
+        )
+
         const existingGuiaIds = new Set((existingSubmenus || []).map((s: any) => s.name.replace('guia-', '')))
         const activeGuiaIds = new Set(guiasData.map((g: Guia) => g.id))
         const missingGuias = guiasData.filter((g: Guia) => !existingGuiaIds.has(g.id))
-        
+
         // Agregar submenús para guías nuevas
         if (missingGuias.length > 0) {
           const { data: insertedSubmenus } = await supabase.from('submenus').insert(
@@ -399,7 +398,7 @@ export function HomePage() {
     }
     initGuias()
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  }, [userPermissions?.menus, userPermissions?.submenus])
 
   const distributeDrivers = async () => {
     if (guias.length > 0) {
