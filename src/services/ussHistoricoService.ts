@@ -4,11 +4,8 @@
  */
 
 import { supabase } from '../lib/supabase';
-
-/** Normaliza patente: quita espacios, guiones y pasa a mayúsculas */
-function normalizarPatente(p: string): string {
-  return p.replace(/[\s\-]/g, '').toUpperCase();
-}
+// OPT-05: cache de patentes por sede COMPARTIDO con wialonBitacoraService (evita doble fetch).
+import { getPatentesPorSede } from './patentesSedeCache';
 
 export type GpsOrigen = 'USS' | 'GEOTAB';
 
@@ -80,18 +77,11 @@ export const ussHistoricoService = {
     endDate: string,
     options?: USSHistoricoQueryOptions
   ): Promise<{ data: USSHistoricoRegistro[]; count: number }> {
-    // Resolver patentes de la sede una sola vez
+    // Resolver patentes de la sede una sola vez (cache compartido con wialonBitacoraService, OPT-05)
     let sedePatentes: string[] | null = null;
     if (options?.sedeId) {
-      const { data: vehiculos } = await supabase
-        .from('vehiculos')
-        .select('patente')
-        .eq('sede_id', options.sedeId)
-        .is('deleted_at', null);
-
-      if (vehiculos && vehiculos.length > 0) {
-        sedePatentes = vehiculos.map((v: { patente: string }) => normalizarPatente(v.patente));
-      } else {
+      sedePatentes = await getPatentesPorSede(options.sedeId);
+      if (!sedePatentes || sedePatentes.length === 0) {
         return { data: [], count: 0 };
       }
     }

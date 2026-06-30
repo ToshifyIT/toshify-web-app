@@ -8,34 +8,9 @@ import type {
   BitacoraStats,
   BitacoraQueryOptions,
 } from '../modules/integraciones/uss/bitacora/types/bitacora.types'
-
-/** Normaliza patente: quita espacios, guiones y pasa a mayúsculas */
-function normalizarPatente(p: string): string {
-  return p.replace(/[\s\-]/g, '').toUpperCase()
-}
-
-/** Cache de patentes normalizadas por sede (evita queries repetidas) */
-const patentesPorSedeCache = new Map<string, { patentes: string[]; expires: number }>()
-const PATENTES_CACHE_TTL = 5 * 60 * 1000 // 5 minutos
-
-async function getPatentesPorSede(sedeId: string): Promise<string[] | null> {
-  const cached = patentesPorSedeCache.get(sedeId)
-  if (cached && Date.now() < cached.expires) {
-    return cached.patentes
-  }
-
-  const { data: vehiculos } = await supabase
-    .from('vehiculos')
-    .select('patente')
-    .eq('sede_id', sedeId)
-    .is('deleted_at', null)
-
-  if (!vehiculos || vehiculos.length === 0) return null
-
-  const patentes = vehiculos.map((v: { patente: string }) => normalizarPatente(v.patente))
-  patentesPorSedeCache.set(sedeId, { patentes, expires: Date.now() + PATENTES_CACHE_TTL })
-  return patentes
-}
+// OPT-05: cache de patentes por sede COMPARTIDO con ussHistoricoService (evita doble fetch de
+// vehiculos?select=patente, cada uno ~530ms a EU).
+import { getPatentesPorSede } from './patentesSedeCache'
 
 // Tipo para registro de bitácora
 export interface BitacoraRegistroTransformado {

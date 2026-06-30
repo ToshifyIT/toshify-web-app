@@ -223,6 +223,7 @@ export function useEffectivePermissions() {
   // =====================================================
 
   return {
+    userPermissions,
     menuPermissions,
     submenuPermissions,
     loading,

@@ -182,8 +182,10 @@ export function useUSSHistoricoData(sedeId?: string | null) {
     try {
       const offset = (page - 1) * pageSize;
 
-      // Cargar Histórico (uss_historico) + Marcaciones (wialon_bitacora) en paralelo
-      const [paginatedResult, bitacoraResult] = await Promise.all([
+      // Cargar Histórico + Marcaciones + límites km EN PARALELO (OPT-03bis).
+      // parametros_sistema no depende de los otros dos resultados: sacarlo de la cascada
+      // ahorra una ida-vuelta a EU (~530ms).
+      const [paginatedResult, bitacoraResult, limiteParamsRes] = await Promise.all([
         ussHistoricoService.getRegistros(dateRange.startDate, dateRange.endDate, {
           limit: pageSize,
           offset,
@@ -191,6 +193,10 @@ export function useUSSHistoricoData(sedeId?: string | null) {
           sedeId,
         }),
         wialonBitacoraService.getBitacora(dateRange.startDate, dateRange.endDate, { sedeId }),
+        supabase
+          .from('parametros_sistema')
+          .select('clave, valor')
+          .in('clave', ['limite_km_semanal_turno', 'limite_km_semanal_a_cargo']),
       ]);
 
       setRegistros(paginatedResult.data);
@@ -198,11 +204,8 @@ export function useUSSHistoricoData(sedeId?: string | null) {
       const marcacionesTransformadas = bitacoraResult.data.map(transformarMarcacion).filter(m => m.estado !== 'Sin Actividad');
 
       // ===== ALERTA LIMITE KM SEMANAL =====
-      // 1) Cargar limites configurables (parametros_sistema)
-      const { data: limiteParams } = await supabase
-        .from('parametros_sistema')
-        .select('clave, valor')
-        .in('clave', ['limite_km_semanal_turno', 'limite_km_semanal_a_cargo']);
+      // 1) Límites configurables (ya traídos en paralelo arriba)
+      const limiteParams = limiteParamsRes.data;
       let limiteTurno = 1800;
       let limiteACargo = 3600;
       for (const p of (limiteParams || []) as any[]) {

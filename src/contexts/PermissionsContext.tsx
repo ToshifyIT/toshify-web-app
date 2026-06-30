@@ -277,9 +277,15 @@ export function PermissionsProvider({ children }: { children: React.ReactNode })
         // que bypasean RLS y combinan permisos de rol + usuario
         const userId = user!.id
 
-        // Cargar permisos de menús y submenús via RPC
-        const { data: rpcPerms, error: rpcError } = await supabase
-          .rpc('get_user_permissions', { p_user_id: userId })
+        // OPT-08: lanzar AMBAS RPC en paralelo desde el inicio. get_user_tab_permissions NO
+        // depende de get_user_permissions (solo usa p_user_id), asi evitamos una ida-vuelta
+        // extra a EU (~530ms). supabase.rpc() NO rechaza la promise -> conservamos ambos checks.
+        const [permsRes, tabsRes] = await Promise.all([
+          supabase.rpc('get_user_permissions', { p_user_id: userId }),
+          supabase.rpc('get_user_tab_permissions', { p_user_id: userId }),
+        ])
+        const { data: rpcPerms, error: rpcError } = permsRes
+        const { data: rpcTabs, error: rpcTabError } = tabsRes
 
         if (rpcError) throw rpcError
 
@@ -371,10 +377,7 @@ export function PermissionsProvider({ children }: { children: React.ReactNode })
           }
         })
 
-        // Cargar permisos de tabs via RPC
-        const { data: rpcTabs, error: rpcTabError } = await supabase
-          .rpc('get_user_tab_permissions', { p_user_id: userId })
-
+        // Permisos de tabs: ya se trajeron en paralelo arriba (OPT-08). Solo validar y usar.
         if (rpcTabError) throw rpcTabError
 
         tabsData = ((rpcTabs || []) as any[])
