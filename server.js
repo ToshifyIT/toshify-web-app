@@ -4,6 +4,7 @@
  */
 
 import express from 'express'
+import compression from 'compression'
 import { fileURLToPath } from 'url'
 import { dirname, join } from 'path'
 import { google } from 'googleapis'
@@ -17,6 +18,10 @@ const __dirname = dirname(__filename)
 
 const app = express()
 const PORT = process.env.PORT || 80
+
+// Compresion gzip/brotli de las respuestas (JS/CSS/JSON viajan ~75% mas chicos).
+// Va PRIMERO para comprimir todo lo que sigue (estaticos y APIs).
+app.use(compression())
 
 app.use(express.json())
 app.use(express.urlencoded({ extended: true }))
@@ -2781,11 +2786,25 @@ app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() })
 })
 
-// Serve static files from dist
-app.use(express.static(join(__dirname, 'dist')))
+// Serve static files from dist.
+// Los archivos de /assets tienen hash en el nombre (ej. index-DNj5pJjJ.js): si cambia el
+// contenido cambia el hash, asi que se pueden cachear 1 ano de forma segura (immutable).
+// El resto (index.html, favicon) NO se cachea para que siempre tome la ultima version.
+app.use(express.static(join(__dirname, 'dist'), {
+  setHeaders: (res, filePath) => {
+    if (filePath.includes(`${join('dist', 'assets')}`) || /[/\\]assets[/\\]/.test(filePath)) {
+      // assets hasheados: cache larga e inmutable
+      res.setHeader('Cache-Control', 'public, max-age=31536000, immutable')
+    } else {
+      // index.html y demas: no cachear (siempre la ultima version)
+      res.setHeader('Cache-Control', 'no-cache')
+    }
+  }
+}))
 
-// SPA fallback - all routes go to index.html
+// SPA fallback - all routes go to index.html (nunca cachear el HTML de entrada)
 app.get('*', (req, res) => {
+  res.setHeader('Cache-Control', 'no-cache')
   res.sendFile(join(__dirname, 'dist', 'index.html'))
 })
 
