@@ -37,6 +37,7 @@
     "@supabase/supabase-js": "^2.76.1",
     "@tanstack/react-table": "^8.21.3",
     "axios": "^1.13.2",
+    "compression": "^1.8.1",
     "date-fns": "^4.1.0",
     "docxtemplater": "^3.68.5",
     "dompurify": "^3.3.0",
