@@ -200,16 +200,6 @@ export function MarcacionesTable({
   // Marcación seleccionada para ver el modal de alerta (turno/modalidad sin match)
   const [alertaMarcacion, setAlertaMarcacion] = useState<Marcacion | null>(null);
 
-  // Conteos por proveedor GPS (sobre el universo cargado, no afectado por otros filtros)
-  const gpsCounts = useMemo(() => {
-    let uss = 0, geotab = 0;
-    for (const m of marcaciones) {
-      if (m.gpsOrigen === 'GEOTAB') geotab++;
-      else uss++;
-    }
-    return { uss, geotab };
-  }, [marcaciones]);
-
   // Listas únicas — filtro por nombre de conductor (sin patente)
   const conductorPatenteUnicos = useMemo(() => {
     const set = new Set<string>();
@@ -237,8 +227,14 @@ export function MarcacionesTable({
   const horariosUnicos = useMemo(() =>
     [...new Set(marcaciones.map(m => getHorarioLabel(m.horario, m.vehiculoModalidad)))].filter(Boolean).sort()
   , [marcaciones]);
+  // Etiqueta legible de la modalidad para el filtro y la celda (evita mostrar 'a_cargo'/'turno' crudos).
+  const modalidadLabel = (mod: string | null | undefined): string => {
+    if (mod === 'a_cargo') return 'A Cargo';
+    if (mod === 'turno') return 'Turno';
+    return 'Sin asignación';
+  };
   const turnosUnicos = useMemo(() =>
-    [...new Set(marcaciones.map(m => m.vehiculoModalidad || 'Sin asignar'))].filter(Boolean).sort()
+    [...new Set(marcaciones.map(m => modalidadLabel(m.vehiculoModalidad)))].filter(Boolean).sort()
   , [marcaciones]);
 
   const hasActiveFilters = conductorFilter.length > 0 || fechaFilter.length > 0 || estadoFilter.length > 0 || horarioFilter.length > 0 || turnoFilter.length > 0 || gpsFilter !== null || searchTerm.trim() !== '';
@@ -253,8 +249,11 @@ export function MarcacionesTable({
     onSearchChange('');
   };
 
-   // Filtrado local + búsqueda
-  const marcacionesFiltradas = useMemo(() => {
+   // Filtrado local + búsqueda.
+   // marcacionesSinGps = todos los filtros aplicados EXCEPTO el de proveedor GPS.
+   // Sobre este conjunto se cuentan los chips USS/Geotab, así los contadores reflejan
+   // el resultado filtrado (búsqueda, semana, etc.) sin anular al propio chip GPS.
+  const marcacionesSinGps = useMemo(() => {
     let filtered = marcaciones;
 
     if (conductorFilter.length > 0) {
@@ -270,12 +269,8 @@ export function MarcacionesTable({
       filtered = filtered.filter(m => horarioFilter.includes(getHorarioLabel(m.horario, m.vehiculoModalidad)));
     }
     if (turnoFilter.length > 0) {
-      filtered = filtered.filter(m => turnoFilter.includes(m.vehiculoModalidad || 'Sin asignar'));
+      filtered = filtered.filter(m => turnoFilter.includes(modalidadLabel(m.vehiculoModalidad)));
     }
-    if (gpsFilter !== null) {
-      filtered = filtered.filter(m => (m.gpsOrigen || 'USS') === gpsFilter);
-    }
-
     if (searchTerm.trim()) {
       const term = searchTerm.toLowerCase();
       const termPatente = normalizePatente(searchTerm).toLowerCase();
@@ -284,9 +279,24 @@ export function MarcacionesTable({
         normalizePatente(m.patente).toLowerCase().includes(termPatente)
       );
     }
-
     return filtered;
-  }, [marcaciones, conductorFilter, fechaFilter, estadoFilter, horarioFilter, turnoFilter, gpsFilter, searchTerm]);
+  }, [marcaciones, conductorFilter, fechaFilter, estadoFilter, horarioFilter, turnoFilter, searchTerm]);
+
+  const marcacionesFiltradas = useMemo(() => {
+    if (gpsFilter === null) return marcacionesSinGps;
+    return marcacionesSinGps.filter(m => (m.gpsOrigen || 'USS') === gpsFilter);
+  }, [marcacionesSinGps, gpsFilter]);
+
+  // Conteos por proveedor GPS sobre el resultado ya filtrado (menos el propio chip GPS),
+  // para que los chips reflejen lo que se está viendo (búsqueda, semana, otros filtros).
+  const gpsCounts = useMemo(() => {
+    let uss = 0, geotab = 0;
+    for (const m of marcacionesSinGps) {
+      if (m.gpsOrigen === 'GEOTAB') geotab++;
+      else uss++;
+    }
+    return { uss, geotab, total: uss + geotab };
+  }, [marcacionesSinGps]);
 
   // Columnas
   const columns = useMemo<ColumnDef<Marcacion, unknown>[]>(() => [
@@ -618,8 +628,11 @@ export function MarcacionesTable({
   }, [showExportMenu]);
 
   function getExportData() {
+    // Exporta EXACTAMENTE lo que se ve en pantalla (marcacionesFiltradas), con las
+    // mismas etiquetas que las columnas: Conductor, Modalidad (Turno/A Cargo),
+    // Turno (Diurno/Nocturno) y Estado (OK/Alerta/En Curso).
     return marcacionesFiltradas.map(m => ({
-      'Conductor': m.conductor,
+      'Conductor': conductorLabel(m.conductor),
       'Patente': m.patente,
       'iButton': m.ibutton || '',
       'Fecha Turno': formatFecha(m.fecha),
@@ -629,9 +642,9 @@ export function MarcacionesTable({
         : resolverFechaHora(m.periodoFin, m.fecha, m.salida, m.horario),
       'Duración': formatDuracion(m.duracionMinutos),
       'Km Total': m.kmTotal,
-      'Turno': m.vehiculoModalidad === 'a_cargo' ? 'A Cargo' : m.vehiculoModalidad === 'turno' ? 'Turno' : '-',
-      'Estado': m.estado,
-      'Horario': getHorarioLabel(m.horario, m.vehiculoModalidad),
+      'Modalidad': modalidadLabel(m.vehiculoModalidad),
+      'Turno': getHorarioLabel(m.horario, m.vehiculoModalidad),
+      'Estado': estadoVisual(m),
       'GNC': m.gncCargado ? 'Sí' : 'No',
       'Lavado': m.lavadoRealizado ? 'Sí' : 'No',
       'Nafta': m.naftaCargada ? 'Sí' : 'No',
@@ -738,7 +751,7 @@ export function MarcacionesTable({
           GPS:
         </span>
         {[
-          { key: null as null | 'USS' | 'GEOTAB', label: 'Todos', color: 'var(--color-primary)', count: marcaciones.length },
+          { key: null as null | 'USS' | 'GEOTAB', label: 'Todos', color: 'var(--color-primary)', count: gpsCounts.total },
           { key: 'USS' as const, label: 'USS', color: '#10b981', count: gpsCounts.uss },
           { key: 'GEOTAB' as const, label: 'Geotab', color: '#3b82f6', count: gpsCounts.geotab },
         ].map(opt => {
