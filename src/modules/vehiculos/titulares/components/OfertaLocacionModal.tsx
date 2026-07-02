@@ -624,7 +624,7 @@ export function OfertaLocacionModal({ vehiculoTitular, titular, sedeId, userId, 
           {/* Tab: Relevamiento de danios */}
           {activeTab === 'danios' && (
             <div>
-              <div style={sectionTitle}>Relevamiento de Danios</div>
+              <div style={sectionTitle}>Relevamiento del Vehiculo</div>
               {([
                 ['detalle_parte_frontal', 'Parte Frontal (paragolpe delantero)'],
                 ['detalle_parte_trasera', 'Parte Trasera (paragolpe trasero)'],
@@ -640,7 +640,7 @@ export function OfertaLocacionModal({ vehiculoTitular, titular, sedeId, userId, 
                     style={{ ...inputStyle, minHeight: '50px', resize: 'vertical' }}
                     value={formData[field] as string}
                     onChange={e => updateField(field, e.target.value)}
-                    placeholder="Describir danios si los hubiera..."
+                    placeholder="Describir datos del vehiculo..."
                   />
                 </div>
               ))}
