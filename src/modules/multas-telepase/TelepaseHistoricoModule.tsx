@@ -93,6 +93,10 @@ export default function TelepaseHistoricoModule() {
   const canBorrar = isGodMode
   const [loading, setLoading] = useState(true)
   const [registros, setRegistros] = useState<TelepaseRegistro[]>([])
+  // Filas realmente visibles en la tabla tras aplicar los filtros internos del
+  // DataTable (búsqueda global, filtros Excel de columna y fecha). Se llena vía
+  // onFilteredDataChange. Es null hasta que la tabla reporta por primera vez.
+  const [registrosVisibles, setRegistrosVisibles] = useState<TelepaseRegistro[] | null>(null)
   const [selectedRegistro, setSelectedRegistro] = useState<TelepaseRegistro | null>(null)
   const [showModal, setShowModal] = useState(false)
   const [showEditModal, setShowEditModal] = useState(false)
@@ -315,28 +319,34 @@ export default function TelepaseHistoricoModule() {
   ], [totalActivas, totalEnviadas, totalDesestimadas])
 
   // Calcular totales
+  // Los KPIs se calculan sobre las filas realmente visibles en la tabla
+  // (registrosVisibles) para que reflejen también la búsqueda global y los
+  // filtros internos del DataTable. Hasta que la tabla reporta por primera vez
+  // usamos registrosFiltrados como respaldo para evitar un parpadeo en 0.
+  const registrosKpi = registrosVisibles ?? registrosFiltrados
+
   const totalTarifa = useMemo(() => {
-    return registrosFiltrados.reduce((sum, r) => {
+    return registrosKpi.reduce((sum, r) => {
       if (!r.tarifa) return sum
       // Formato europeo: "3.622,54" -> quitar puntos de miles, coma a punto decimal
       const cleaned = r.tarifa.replace(/\./g, '').replace(',', '.')
       const tarifa = parseFloat(cleaned)
       return sum + (isNaN(tarifa) ? 0 : tarifa)
     }, 0)
-  }, [registrosFiltrados])
+  }, [registrosKpi])
 
   // Estadísticas adicionales
-  const patentesUnicasCount = useMemo(() => 
-    new Set(registrosFiltrados.map(r => r.patente).filter(Boolean)).size
-  , [registrosFiltrados])
+  const patentesUnicasCount = useMemo(() =>
+    new Set(registrosKpi.map(r => r.patente).filter(Boolean)).size
+  , [registrosKpi])
 
-  const conductoresUnicosCount = useMemo(() => 
-    new Set(registrosFiltrados.map(r => r.conductor).filter(Boolean)).size
-  , [registrosFiltrados])
+  const conductoresUnicosCount = useMemo(() =>
+    new Set(registrosKpi.map(r => r.conductor).filter(Boolean)).size
+  , [registrosKpi])
 
-  const conObservaciones = useMemo(() => 
-    registrosFiltrados.filter(r => r.observaciones && r.observaciones.trim() !== '').length
-  , [registrosFiltrados])
+  const conObservaciones = useMemo(() =>
+    registrosKpi.filter(r => r.observaciones && r.observaciones.trim() !== '').length
+  , [registrosKpi])
 
   // Ver detalle
   function handleVerDetalle(registro: TelepaseRegistro) {
@@ -859,7 +869,7 @@ export default function TelepaseHistoricoModule() {
           <div className="stat-card">
             <FileText size={18} className="stat-icon" />
             <div className="stat-content">
-              <span className="stat-value">{registrosFiltrados.length}</span>
+              <span className="stat-value">{registrosKpi.length}</span>
               <span className="stat-label">Total</span>
             </div>
           </div>
@@ -901,6 +911,7 @@ export default function TelepaseHistoricoModule() {
         searchPlaceholder="Buscar por patente, conductor..."
         externalFilters={activeFilters}
         onClearAllFilters={clearAllFilters}
+        onFilteredDataChange={setRegistrosVisibles}
         headerAction={
           <div style={{ display: 'inline-flex', alignItems: 'center', gap: 12 }}>
             {/* Tabs de vista: Activas / Enviadas a facturación / Desestimadas */}

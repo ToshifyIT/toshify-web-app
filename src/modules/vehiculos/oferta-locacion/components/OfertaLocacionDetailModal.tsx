@@ -143,7 +143,7 @@ export function OfertaLocacionDetailModal({ oferta, onClose }: Props) {
             <div><div style={labelStyle}>Exterior</div><div style={valueStyle}>{o.limpieza_exterior || '-'}</div></div>
           </div>
 
-          <div style={sectionTitle}>Relevamiento de Danios</div>
+          <div style={sectionTitle}>Relevamiento del Vehiculo</div>
           {([
             ['detalle_parte_frontal', 'Parte Frontal'], ['detalle_parte_trasera', 'Parte Trasera'],
             ['detalle_lateral_derecho', 'Lateral Derecho'], ['detalle_lateral_izquierdo', 'Lateral Izquierdo'],
