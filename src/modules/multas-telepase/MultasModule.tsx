@@ -1,4 +1,4 @@
-/* eslint-disable @typescript-eslint/no-explicit-any, react-hooks/exhaustive-deps */
+/* eslint-disable react-hooks/exhaustive-deps */
 // src/modules/multas-telepase/MultasModule.tsx
 import { useState, useEffect, useMemo, useCallback } from 'react'
 import { supabase } from '../../lib/supabase'
@@ -119,6 +119,10 @@ export default function MultasModule() {
   const { user, profile } = useAuth()
   const [loading, setLoading] = useState(true)
   const [multas, setMultas] = useState<Multa[]>([])
+  // Filas realmente visibles en la tabla tras aplicar los filtros internos del
+  // DataTable (búsqueda global, filtros Excel de columna y fecha). Se llena vía
+  // onFilteredDataChange. Es null hasta que la tabla reporta por primera vez.
+  const [multasVisibles, setMultasVisibles] = useState<Multa[] | null>(null)
   const [vehiculos, setVehiculos] = useState<Vehiculo[]>([])
   const [multasEnviadas, setMultasEnviadas] = useState<Set<number>>(new Set())
   const [selectedMulta, setSelectedMulta] = useState<Multa | null>(null)
@@ -205,7 +209,7 @@ export default function MultasModule() {
         setConductoresStatus(statusMap)
         setConductoresOptions([...new Set(options)].sort())
       }
-    } catch (_error) {
+    } catch {
       // silently ignored
     }
   }
@@ -234,7 +238,7 @@ export default function MultasModule() {
           .filter((v): v is number => v != null)
       )
       setMultasEnviadas(enviadas)
-    } catch (_error) {
+    } catch {
       Swal.fire('Error', 'No se pudieron cargar las multas', 'error')
     } finally {
       setLoading(false)
@@ -405,17 +409,23 @@ export default function MultasModule() {
   ], [totalActivas, totalEnviadas, totalDesestimadas])
 
   // Estadisticas
+  // Los KPIs se calculan sobre las filas realmente visibles en la tabla
+  // (multasVisibles) para que reflejen también la búsqueda global y los filtros
+  // internos del DataTable. Hasta que la tabla reporta por primera vez usamos
+  // multasFiltradas como respaldo para evitar un parpadeo en 0.
+  const multasKpi = multasVisibles ?? multasFiltradas
+
   const totalImporte = useMemo(() =>
-    multasFiltradas.reduce((sum, m) => sum + parseImporte(m.importe), 0)
-  , [multasFiltradas])
+    multasKpi.reduce((sum, m) => sum + parseImporte(m.importe), 0)
+  , [multasKpi])
 
   const patentesUnicasCount = useMemo(() =>
-    new Set(multasFiltradas.map(m => m.patente).filter(Boolean)).size
-  , [multasFiltradas])
+    new Set(multasKpi.map(m => m.patente).filter(Boolean)).size
+  , [multasKpi])
 
   const conductoresUnicosCount = useMemo(() =>
-    new Set(multasFiltradas.map(m => m.conductor_responsable).filter(Boolean)).size
-  , [multasFiltradas])
+    new Set(multasKpi.map(m => m.conductor_responsable).filter(Boolean)).size
+  , [multasKpi])
 
   // Ver detalle
   function handleVerDetalle(multa: Multa) {
@@ -1273,7 +1283,7 @@ export default function MultasModule() {
           <div className="stat-card">
             <AlertTriangle size={18} className="stat-icon" />
             <div className="stat-content">
-              <span className="stat-value">{multasFiltradas.length}</span>
+              <span className="stat-value">{multasKpi.length}</span>
               <span className="stat-label">Total Multas</span>
             </div>
           </div>
@@ -1324,6 +1334,7 @@ export default function MultasModule() {
         searchPlaceholder="Buscar por patente, conductor, lugar..."
         externalFilters={activeFilters}
         onClearAllFilters={clearAllFilters}
+        onFilteredDataChange={setMultasVisibles}
         headerAction={
           <div className="multas-header-actions">
             {/* Toggle vista activas / enviadas / desestimadas */}
