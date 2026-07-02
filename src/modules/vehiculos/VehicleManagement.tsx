@@ -1501,7 +1501,7 @@ export function VehicleManagement() {
         setStatCardExcludeMode(false)
         break
       case 'pkgOff':
-        setStatCardEstadoFilter(['PKG OFF', 'PKG OFF - Francia'])
+        setStatCardEstadoFilter(['PKG_OFF_BASE', 'PKG_OFF_FRANCIA'])
         setStatCardExcludeMode(false)
         break
       case 'destruccion':
@@ -1824,8 +1824,10 @@ export function VehicleManagement() {
         return statCardExcludeMode ? !matches : matches
       })
     } else {
-      // Por defecto (sin stat card activa): excluir estados fuera de flota activa
-      const estadosExcluidosTabla = ['JUBILADO', 'DEVUELTO_PROVEEDOR']
+      // Por defecto (sin stat card activa): excluir estados fuera de flota activa.
+      // Debe coincidir con los estados excluidos en calculatedStats para que los
+      // filtros de GNC / Telepase / Categoría muestren lo mismo que las métricas.
+      const estadosExcluidosTabla = ['ROBO', 'DESTRUCCION_TOTAL', 'JUBILADO', 'DEVUELTO_PROVEEDOR']
       result = result.filter(v => {
         const estadoCodigo = v.vehiculos_estados?.codigo || ''
         return !estadosExcluidosTabla.includes(estadoCodigo)
