@@ -2,11 +2,12 @@
 // Portal público para conductores - Mi Espacio
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import { jsPDF } from 'jspdf'
-import { format, parseISO, getISOWeek, startOfISOWeek, endOfISOWeek, differenceInCalendarDays, subDays } from 'date-fns'
+import { format, parseISO, differenceInCalendarDays, subDays } from 'date-fns'
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts'
 import { supabase } from '../../lib/supabase'
 import { formatCurrency } from '../../types/facturacion.types'
 import { normalizeDni, normalizeCuit } from '../../utils/normalizeDocuments'
+import { calcularKmSemanasConductor } from './kmRecorridos'
 import logoToshifyUrl from '../../assets/logo-toshify.png'
 import './PortalPage.css'
 
@@ -691,84 +692,13 @@ export function PortalPage() {
   }, [])
 
   // ===== Carga de KM recorridos por semana (desde junio 2026) =====
-  // Suma kilometraje de uss_historico por semana ISO, resuelve modalidad/limite por contrato
-  // y calcula el excedido. El conductor en uss_historico es texto; matcheamos por nombre.
+  // El cálculo replica EXACTAMENTE la lógica del módulo interno Control de
+  // Exceso de KM (conductor efectivo por trip, USS + Geotab, corte semanal ART,
+  // solo patente propia por semana). Ver ./kmRecorridos.ts.
   const loadKmRecorridos = useCallback(async (cond: PortalConductor) => {
     try {
-      // Corte fijo: km recorridos se muestran desde junio 2026 (el 1/6 es lunes,
-      // arranque exacto de la semana ISO 23). Se listan todas las semanas desde ahi.
-      const DESDE = '2026-06-01'
-      const nombreCompleto = `${cond.nombres} ${cond.apellidos}`.trim()
-      const primerApe = cond.apellidos.split(' ')[0]
-
-      // 1) Viajes del conductor en la ventana (km + patente + fecha)
-      const { data: viajes } = await supabase
-        .from('uss_historico')
-        .select('kilometraje, patente, fecha_hora_inicio_gmt3, conductor')
-        .ilike('conductor', `%${primerApe}%`)
-        .gte('fecha_hora_inicio_gmt3', DESDE)
-        .limit(8000)
-
-      const normName = (s: string) => (s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toUpperCase().replace(/\s+/g, ' ').trim()
-      const target = normName(nombreCompleto)
-      const tokens = target.split(' ').filter(t => t.length >= 3)
-
-      // 2) Limites por modalidad (params configurables, mismos defaults que Control Exceso KM)
-      let limiteTurno = 1800
-      let limiteACargo = 3600
-      const { data: limiteParams } = await (supabase.from('parametros_sistema' as any) as any)
-        .select('clave, valor')
-        .in('clave', ['limite_km_semanal_turno', 'limite_km_semanal_a_cargo'])
-      for (const p of (limiteParams || []) as any[]) {
-        const v = Number(p.valor)
-        if (!isNaN(v)) {
-          if (p.clave === 'limite_km_semanal_turno') limiteTurno = v
-          if (p.clave === 'limite_km_semanal_a_cargo') limiteACargo = v
-        }
-      }
-
-      // 3) Modalidad del conductor (turno / a_cargo) via asignaciones vigentes
-      let modalidad: string = 'turno'
-      const { data: asigs } = await (supabase
-        .from('asignaciones_conductores')
-        .select('asignacion:asignaciones(modalidad, estado)')
-        .eq('conductor_id', cond.id) as any)
-      for (const a of (asigs || []) as any[]) {
-        const m = a.asignacion?.modalidad
-        const est = a.asignacion?.estado
-        if (m && ['activa', 'activo', 'programado'].includes(est || '')) { modalidad = m; break }
-        if (m) modalidad = m
-      }
-      const limite = modalidad === 'a_cargo' ? limiteACargo : limiteTurno
-
-      // 4) Agrupar km por semana ISO (filtrando los viajes que realmente son del conductor)
-      const porSemana = new Map<string, { km: number; semana: number; anio: number; ini: Date; fin: Date }>()
-      for (const v of (viajes || []) as any[]) {
-        const condNorm = normName(v.conductor || '')
-        const matchea = condNorm === target || (tokens.length > 0 && tokens.every(t => condNorm.includes(t)))
-        if (!matchea) continue
-        const km = Number(v.kilometraje) || 0
-        if (km <= 0) continue
-        const dt = new Date(v.fecha_hora_inicio_gmt3)
-        const semana = getISOWeek(dt)
-        const anio = dt.getFullYear()
-        const key = `${anio}-${semana}`
-        const cur = porSemana.get(key) || { km: 0, semana, anio, ini: startOfISOWeek(dt), fin: endOfISOWeek(dt) }
-        cur.km += km
-        porSemana.set(key, cur)
-      }
-
-      const lista: PortalKmSemana[] = [...porSemana.values()]
-        .map(s => ({
-          semana: s.semana, anio: s.anio,
-          fecha_inicio: format(s.ini, 'yyyy-MM-dd'),
-          fecha_fin: format(s.fin, 'yyyy-MM-dd'),
-          km: Math.round(s.km), limite,
-          excedido: Math.max(0, Math.round(s.km) - limite),
-          modalidad,
-        }))
-        .sort((a, b) => (b.anio - a.anio) || (b.semana - a.semana))
-
+      const { semanas, modalidadActual } = await calcularKmSemanasConductor(supabase, cond)
+      const lista: PortalKmSemana[] = semanas
       setKmSemanas(lista)
 
       // ===== Previsión de cobro por exceso (semanas excedidas sin cobro generado) =====
@@ -790,10 +720,10 @@ export function PortalPage() {
         horario = (aAct.asignaciones_conductores || [])[0]?.horario || 'diurno'
       }
       let codigoUA = 'P001'
-      if (modalidad === 'a_cargo') codigoUA = tieneGnc ? 'P002' : 'P016'
+      if (modalidadActual === 'a_cargo') codigoUA = tieneGnc ? 'P002' : 'P016'
       else if (horario === 'nocturno') codigoUA = tieneGnc ? 'P013' : 'P015'
       else codigoUA = tieneGnc ? 'P001' : 'P014'
-      let valorAlquiler = modalidad === 'a_cargo' ? 360000 : 245000
+      let valorAlquiler = modalidadActual === 'a_cargo' ? 360000 : 245000
       const { data: concepto } = await (supabase
         .from('conceptos_nomina')
         .select('precio_final')
