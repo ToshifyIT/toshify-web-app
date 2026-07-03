@@ -1,7 +1,8 @@
-import { useState } from 'react'
+import { useState, useCallback } from 'react'
 import { AlertOctagon, AlertTriangle, CheckCircle, Wrench, Gauge } from 'lucide-react'
 import { useSede } from '../../../contexts/SedeContext'
 import { useAuth } from '../../../contexts/AuthContext'
+import { fetchAlertaDetalle } from '../../../services/alertasService'
 import { useAlertasData } from './hooks/useAlertasData'
 import { AlertasTable } from './components/AlertasTable'
 import { AlertaDetalleDrawer } from './components/AlertaDetalleDrawer'
@@ -20,6 +21,18 @@ export function AlertasMantenimientoModule() {
   } = useAlertasData(sedeActualId)
 
   const [selected, setSelected] = useState<AlertaMantenimiento | null>(null)
+
+  // El listado viaja con select liviano; el detalle completo (recomendación,
+  // lámparas, etc.) se trae recién al abrir el drawer.
+  const abrirDetalle = useCallback(async (a: AlertaMantenimiento) => {
+    setSelected(a)
+    try {
+      const full = await fetchAlertaDetalle(a.id)
+      setSelected(prev => (prev?.id === a.id ? { ...a, ...full } : prev))
+    } catch {
+      // El drawer queda con los datos básicos del listado
+    }
+  }, [])
 
   return (
     <div className="veh-module">
@@ -69,7 +82,7 @@ export function AlertasMantenimientoModule() {
         <AlertasTable
           alertas={alertas}
           loading={loading}
-          onRowClick={setSelected}
+          onRowClick={abrirDetalle}
           onAtender={(a) => accionAtender(a.id, userName)}
           onDescartar={(a) => accionDescartar(a.id, userName)}
           onReactivar={(a) => accionReactivar(a.id)}

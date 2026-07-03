@@ -1,9 +1,18 @@
-import { useState, useEffect, useCallback, useMemo } from 'react'
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { supabase } from '../../../../lib/supabase'
-import { fetchAlertas, marcarAtendida, descartarAlerta, reactivarAlerta } from '../../../../services/alertasService'
+import { fetchAlertasPage, marcarAtendida, descartarAlerta, reactivarAlerta } from '../../../../services/alertasService'
 import type { AlertaMantenimiento, AlertasStats } from '../types/alertas.types'
 
 const SERVICE_INTERVAL = 10000
+
+// Carga progresiva: el primer lote pinta la tabla enseguida (clave en
+// conexiones lentas); el resto baja en background sin bloquear la UI.
+const PRIMER_LOTE = 100
+const LOTE_BACKGROUND = 1000
+const MAX_FILAS = 10000
+// El realtime dispara muchos eventos por corrida del sync (cada ~1 min).
+// Coalescemos: como mucho un refetch por minuto.
+const REFETCH_MIN_MS = 60_000
 
 /**
  * Calcula prioridad del vehículo según km que faltan para el próximo service.
@@ -25,15 +34,36 @@ export function useAlertasData(sedeId?: string | null) {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
+  // Generación de carga: si arranca una carga nueva (cambio de sede, refetch),
+  // los lotes en background de la carga anterior se descartan.
+  const generacionRef = useRef(0)
+  const ultimoFetchRef = useRef(0)
+
   const cargar = useCallback(async () => {
+    const gen = ++generacionRef.current
+    ultimoFetchRef.current = Date.now()
     setLoading(true)
     setError(null)
     try {
-      const data = await fetchAlertas(sedeId)
-      setAlertasRaw(data)
+      // Primer lote: rápido, pinta la tabla
+      const primerLote = await fetchAlertasPage(sedeId, 0, PRIMER_LOTE - 1)
+      if (gen !== generacionRef.current) return
+      setAlertasRaw(primerLote)
+      setLoading(false)
+      // Resto en background, por lotes
+      if (primerLote.length < PRIMER_LOTE) return
+      let desde = PRIMER_LOTE
+      while (desde < MAX_FILAS) {
+        const lote = await fetchAlertasPage(sedeId, desde, desde + LOTE_BACKGROUND - 1)
+        if (gen !== generacionRef.current) return
+        if (lote.length === 0) break
+        setAlertasRaw(prev => [...prev, ...lote])
+        if (lote.length < LOTE_BACKGROUND) break
+        desde += LOTE_BACKGROUND
+      }
     } catch (e) {
+      if (gen !== generacionRef.current) return
       setError(e instanceof Error ? e.message : 'Error desconocido')
-    } finally {
       setLoading(false)
     }
   }, [sedeId])
@@ -51,17 +81,28 @@ export function useAlertasData(sedeId?: string | null) {
 
   useEffect(() => { cargar() }, [cargar])
 
-  // Realtime: cuando el cron actualiza la tabla, refrescamos automaticamente
+  // Realtime: cuando el cron actualiza la tabla, refrescamos automaticamente.
+  // Debounced: el sync dispara un evento por fila tocada; sin esto se
+  // re-descargaba el listado completo varias veces por minuto.
   useEffect(() => {
+    let timer: ReturnType<typeof setTimeout> | null = null
     const channel = supabase
       .channel('geotab_fault_data_changes')
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'geotab_fault_data' },
-        () => { cargar() }
+        () => {
+          if (timer) return // ya hay un refetch programado
+          const transcurrido = Date.now() - ultimoFetchRef.current
+          const espera = Math.max(5_000, REFETCH_MIN_MS - transcurrido)
+          timer = setTimeout(() => { timer = null; cargar() }, espera)
+        }
       )
       .subscribe()
-    return () => { channel.unsubscribe() }
+    return () => {
+      if (timer) clearTimeout(timer)
+      channel.unsubscribe()
+    }
   }, [cargar])
 
   // Stats derivadas
