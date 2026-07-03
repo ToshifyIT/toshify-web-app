@@ -1,7 +1,7 @@
  
 // src/modules/vehiculos/VehicleManagement.tsx
 import { useState, useEffect, useMemo, useRef } from 'react'
-import { AlertTriangle, Eye, Edit, Trash2, Info, Car, Wrench, Briefcase, PaintBucket, Warehouse, FolderOpen, FolderPlus, Undo2, History, Fuel, CreditCard, Download, Tag, X } from 'lucide-react'
+import { AlertTriangle, Eye, Edit, Trash2, Info, Car, Wrench, Briefcase, PaintBucket, Warehouse, FolderOpen, FolderPlus, Undo2, History, Fuel, CreditCard, Download, Tag, X, Lock } from 'lucide-react'
 import * as XLSX from 'xlsx'
 import { ActionsMenu } from '../../components/ui/ActionsMenu'
 import { VerLogsButton } from '../../components/ui/VerLogsButton'
@@ -275,6 +275,7 @@ export function VehicleManagement() {
     let vehiculosRobo = 0
     let vehiculosPkgOff = 0
     let vehiculosDestruccion = 0
+    let vehiculosRetenido = 0
     let vehiculosSinGnc = 0
     let vehiculosConGnc = 0
     let vehiculosConTelepase = 0
@@ -333,6 +334,8 @@ export function VehicleManagement() {
         vehiculosPkgOff++
       } else if (estadoCodigo === 'DESTRUCCION_TOTAL') {
         vehiculosDestruccion++
+      } else if (estadoCodigo === 'RETENIDO_COMISARIA') {
+        vehiculosRetenido++
       }
     }
 
@@ -351,6 +354,7 @@ export function VehicleManagement() {
       vehiculosRobo,
       vehiculosPkgOff,
       vehiculosDestruccion,
+      vehiculosRetenido,
       categoriaCountMap,
     }
   }, [vehiculos])
@@ -1508,6 +1512,10 @@ export function VehicleManagement() {
         setStatCardEstadoFilter(['Destruccion'])
         setStatCardExcludeMode(false)
         break
+      case 'retenido':
+        setStatCardEstadoFilter(['RETENIDO_COMISARIA'])
+        setStatCardExcludeMode(false)
+        break
       case 'enCochera':
         setStatCardEstadoFilter(estadosEnCochera)
         setStatCardExcludeMode(false)
@@ -1587,6 +1595,7 @@ export function VehicleManagement() {
         robo: 'Robo',
         pkgOff: 'PKG OFF',
         destruccion: 'Destruccion Total',
+        retenido: 'Retenido',
         sinGnc: 'Sin GNC',
         conGnc: 'Con GNC',
         telepase: 'Telepase Propio',
@@ -2398,6 +2407,10 @@ export function VehicleManagement() {
           <div className={`stat-card stat-card-clickable ${activeStatCard === 'pkgOff' ? 'stat-card-active' : ''}`} onClick={() => handleStatCardClick('pkgOff')} title="Click para filtrar: PKG OFF">
             <Warehouse size={18} className="stat-icon" style={{ color: '#9ca3af' }} />
             <div className="stat-content"><span className="stat-value">{calculatedStats.vehiculosPkgOff}</span><span className="stat-label">PKG OFF</span></div>
+          </div>
+          <div className={`stat-card stat-card-clickable ${activeStatCard === 'retenido' ? 'stat-card-active' : ''}`} onClick={() => handleStatCardClick('retenido')} title="Click para filtrar: Retenido en Comisaria">
+            <Lock size={18} className="stat-icon" style={{ color: '#dc2626' }} />
+            <div className="stat-content"><span className="stat-value">{calculatedStats.vehiculosRetenido}</span><span className="stat-label">Retenido</span></div>
           </div>
           <div className={`stat-card stat-card-clickable ${activeStatCard === 'robo' ? 'stat-card-active' : ''}`} onClick={() => handleStatCardClick('robo')} title="Click para filtrar: Vehiculos robados">
             <AlertTriangle size={18} className="stat-icon" style={{ color: '#dc2626' }} />
