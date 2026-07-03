@@ -1033,14 +1033,20 @@
   border: 1px solid var(--border-primary);
   border-radius: 12px;
   overflow: hidden;
+  /* Rellena el modal y permite que el cuerpo interno haga scroll. */
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
 }
 
 .portal-detail-header {
-  padding: 20px 24px;
+  padding: 16px 72px 16px 30px;
   border-bottom: 1px solid var(--border-primary);
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
+  flex-shrink: 0;
 }
 
 .portal-detail-conductor {
@@ -1072,10 +1078,11 @@
 .portal-detail-info {
   display: flex;
   gap: 24px;
-  padding: 12px 24px;
+  padding: 11px 30px;
   background: var(--bg-secondary);
   border-bottom: 1px solid var(--border-primary);
   font-size: 13px;
+  flex-shrink: 0;
 }
 
 .portal-detail-info-item {
@@ -1095,11 +1102,15 @@
 
 /* Sections */
 .portal-detail-body {
-  padding: 20px 24px;
+  padding: 18px 30px;
+  /* Única zona con scroll: header e info bar quedan fijos arriba. */
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
 }
 
 .portal-detail-section {
-  margin-bottom: 20px;
+  margin-bottom: 18px;
 }
 
 .portal-detail-section-title {
@@ -1107,8 +1118,8 @@
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.5px;
-  margin: 0 0 10px;
-  padding-bottom: 6px;
+  margin: 0 0 6px;
+  padding-bottom: 5px;
   border-bottom: 1px solid var(--border-primary);
 }
 
@@ -1123,14 +1134,14 @@
 .portal-detail-items {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 3px;
 }
 
 .portal-detail-item {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 8px 12px;
+  padding: 6px 12px;
   border-radius: 6px;
   font-size: 13px;
 }
@@ -1206,12 +1217,21 @@
 
 /* Total */
 .portal-detail-total {
-  margin: 24px 0;
-  padding: 20px;
+  margin: 12px 0 4px;
+  padding: 16px 18px;
   background: var(--bg-secondary);
   border: 1px solid var(--border-primary);
   border-radius: 10px;
   text-align: center;
+}
+
+/* El desglose interno del recuadro final va más junto (líneas de detalle). */
+.portal-detail-total .portal-detail-items {
+  gap: 0;
+}
+
+.portal-detail-total .portal-detail-item {
+  padding: 3px 8px;
 }
 
 .portal-detail-total-label {
@@ -1245,10 +1265,11 @@
 
 /* Footer actions */
 .portal-detail-actions {
-  padding: 16px 24px;
+  padding: 14px 30px;
   border-top: 1px solid var(--border-primary);
   display: flex;
   justify-content: center;
+  flex-shrink: 0;
 }
 
 .portal-pdf-btn {
@@ -1557,9 +1578,14 @@
   width: 100%;
   max-width: 720px;
   margin: auto;
-  padding: 20px 24px 24px;
+  padding: 0;
   box-shadow: 0 12px 40px rgba(0, 0, 0, 0.35);
   animation: portal-modal-pop 0.15s ease;
+  /* Acota el modal a la pantalla: header + info bar fijos, cuerpo scrolleable. */
+  max-height: calc(100dvh - 48px);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
 }
 
 .portal-modal-card--sm {
@@ -1765,7 +1791,7 @@
 /* Dentro del modal, el header debe dejar espacio a la derecha para no
    solaparse con el boton X (que esta en top/right del card). */
 .portal-modal-card .portal-detail-header {
-  padding-right: 44px;
+  padding-right: 76px;
 }
 
 .portal-modal-close {
@@ -1805,7 +1831,8 @@
 
 @media (max-width: 640px) {
   .portal-modal-overlay { padding: 12px; }
-  .portal-modal-card { padding: 16px 16px 20px; }
+  /* El padding lo manejan header/body/actions; el card queda flush para el layout flex. */
+  .portal-modal-card { padding: 0; }
 }
 
 /* Viewports de poco alto en desktop (p.ej. 1378×768, HD 1366×768, 1024×800):
