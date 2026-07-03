@@ -212,7 +212,7 @@ export function AlertasTable({ alertas, loading, onRowClick, onAtender, onDescar
     },
     {
       accessorKey: 'estado',
-      header: 'Alerta',
+      header: 'Gestión',
       size: 90,
       cell: ({ getValue }) => estadoBadge(getValue() as string),
     },
