@@ -10,34 +10,33 @@ export default defineConfig({
   build: {
     rollupOptions: {
       output: {
-        // Vite 8 (Rolldown) ya no admite manualChunks como objeto; se usa
-        // la forma de función, que mapea cada módulo de node_modules a su
-        // chunk por nombre de paquete. Reproduce la agrupación previa.
-        manualChunks(id) {
-          if (!id.includes('node_modules')) return undefined
-
-          // React core — se carga siempre, cacheable a largo plazo
-          if (/[\\/]node_modules[\\/](react|react-dom|react-router|react-router-dom|scheduler)[\\/]/.test(id)) return 'vendor-react'
-          // Supabase client — se carga siempre
-          if (id.includes('/node_modules/@supabase/')) return 'vendor-supabase'
-          // Charts (recharts + d3) — solo dashboards/reportes los necesitan
-          if (id.includes('/node_modules/recharts/') || id.includes('/node_modules/d3-')) return 'vendor-charts'
-          // PDF export — solo se usa al exportar
-          if (id.includes('/node_modules/jspdf/') || id.includes('/node_modules/html2canvas/')) return 'vendor-pdf'
-          // Excel — solo se usa al exportar
-          if (id.includes('/node_modules/xlsx/') || id.includes('/vendor/xlsx')) return 'vendor-xlsx'
-          // SweetAlert2 — se usa en muchos módulos
-          if (id.includes('/node_modules/sweetalert2/')) return 'vendor-swal'
-          // TanStack Table — se usa en DataTable
-          if (id.includes('/node_modules/@tanstack/')) return 'vendor-table'
-          // Lucide icons — SVGs cacheables por separado
-          if (id.includes('/node_modules/lucide-react/')) return 'vendor-icons'
-          // Date utilities
-          if (id.includes('/node_modules/date-fns/')) return 'vendor-date'
-          // Calendar — solo módulo visitas
-          if (id.includes('/node_modules/react-big-calendar/')) return 'vendor-calendar'
-
-          return undefined
+        // advancedChunks es la API nativa de Rolldown (Vite 8). A diferencia
+        // de la emulación de manualChunks, respeta los límites eager/lazy:
+        // un grupo que solo importan páginas lazy (jspdf, calendar, xlsx)
+        // NO entra al grafo estático del entry / login.
+        advancedChunks: {
+          groups: [
+            // React core — se carga siempre, cacheable a largo plazo
+            { name: 'vendor-react', test: /[\\/]node_modules[\\/](react|react-dom|react-router|react-router-dom|scheduler)[\\/]/ },
+            // Supabase client — se carga siempre
+            { name: 'vendor-supabase', test: /[\\/]node_modules[\\/]@supabase[\\/]/ },
+            // Charts (recharts + d3) — solo dashboards/reportes los necesitan
+            { name: 'vendor-charts', test: /[\\/]node_modules[\\/](recharts|d3-)/ },
+            // PDF export — solo se usa al exportar
+            { name: 'vendor-pdf', test: /[\\/]node_modules[\\/](jspdf|html2canvas)[\\/]/ },
+            // Excel — solo se usa al exportar
+            { name: 'vendor-xlsx', test: /[\\/](node_modules[\\/]xlsx|vendor[\\/]xlsx)/ },
+            // SweetAlert2 — se usa en muchos módulos
+            { name: 'vendor-swal', test: /[\\/]node_modules[\\/]sweetalert2[\\/]/ },
+            // TanStack Table — se usa en DataTable
+            { name: 'vendor-table', test: /[\\/]node_modules[\\/]@tanstack[\\/]/ },
+            // Lucide icons — SVGs cacheables por separado
+            { name: 'vendor-icons', test: /[\\/]node_modules[\\/]lucide-react[\\/]/ },
+            // Date utilities
+            { name: 'vendor-date', test: /[\\/]node_modules[\\/]date-fns[\\/]/ },
+            // Calendar — solo módulo visitas
+            { name: 'vendor-calendar', test: /[\\/]node_modules[\\/]react-big-calendar[\\/]/ },
+          ],
         },
       },
     },

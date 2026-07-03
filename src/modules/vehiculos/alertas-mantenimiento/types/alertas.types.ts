@@ -4,35 +4,37 @@ export type AlertaSeveridad = 'Critical' | 'High' | 'Medium' | 'Low'
 export type AlertaEstado = 'activa' | 'atendida' | 'descartada'
 
 export interface AlertaMantenimiento {
+  // Campos del select liviano del listado (siempre presentes)
   id: string
-  geotab_fault_id: string
-  geotab_device_id: string | null
   vehiculo_id: string | null
   patente: string | null
   fecha_evento: string
   severidad: AlertaSeveridad
-  diagnostic_code: string | null
   diagnostic_name: string | null
-  failure_mode: string | null
-  controller: string | null
   count: number
-  lampara_red: boolean
-  lampara_amber: boolean
-  lampara_malfunction: boolean
-  lampara_protect: boolean
-  fault_description: string | null
-  effect_on_component: string | null
-  recommendation: string | null
-  source_address: string | null
   estado: AlertaEstado
-  dismiss_user: string | null
   dismiss_at: string | null
-  conductor_id: string | null
-  conductor_name: string | null
   sede_id: string | null
-  created_at: string
-  updated_at: string
-  synced_at: string
+  // Campos pesados: solo llegan con fetchAlertaDetalle (drawer)
+  geotab_fault_id?: string
+  geotab_device_id?: string | null
+  diagnostic_code?: string | null
+  failure_mode?: string | null
+  controller?: string | null
+  lampara_red?: boolean
+  lampara_amber?: boolean
+  lampara_malfunction?: boolean
+  lampara_protect?: boolean
+  fault_description?: string | null
+  effect_on_component?: string | null
+  recommendation?: string | null
+  source_address?: string | null
+  dismiss_user?: string | null
+  conductor_id?: string | null
+  conductor_name?: string | null
+  created_at?: string
+  updated_at?: string
+  synced_at?: string
   // Joinables (vehiculos)
   vehiculo?: {
     marca?: string | null
