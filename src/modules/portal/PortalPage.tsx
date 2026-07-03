@@ -335,6 +335,9 @@ export function PortalPage() {
   // Total referencial por factura calculado igual que el modal (suma del detalle, que se
   // guarda redondeado). Se usa en el card del historial para que muestre el MISMO monto que el modal.
   const [referencialPorFactura, setReferencialPorFactura] = useState<Record<string, number>>({})
+  // Aportes efectivos por factura = pagos de la semana SIN el que ya quedó aplicado en el
+  // saldo anterior (mismo criterio que el modal, evita el doble conteo en el card del historial).
+  const [pagosEfectivosPorFactura, setPagosEfectivosPorFactura] = useState<Record<string, number>>({})
   const [selectedFactura, setSelectedFactura] = useState<PortalFacturacion | null>(null)
   const [detalleItems, setDetalleItems] = useState<PortalDetalle[]>([])
   const [detallePagos, setDetallePagos] = useState<Array<{ id: string; tipo: string; monto: number; referencia: string | null; fecha: string }>>([])
@@ -345,6 +348,13 @@ export function PortalPage() {
     pago: number
     pagoRef: string
     resultado: number
+    // ID del movimiento del kardex que ya quedó aplicado en el saldo anterior.
+    // Se usa para no volver a descontarlo dentro de "Aportes".
+    pagoId?: string | null
+    // Tipo del movimiento (para etiquetar el aporte arriba, ej. "Pago Manual").
+    pagoTipo?: string | null
+    // Fecha del movimiento (para mostrarla junto al aporte arriba).
+    pagoFecha?: string | null
   } | null>(null)
   const [saldo, setSaldo] = useState<PortalSaldo | null>(null)
   const [fraccionamientos, setFraccionamientos] = useState<PortalFraccionamiento[]>([])
@@ -609,18 +619,48 @@ export function PortalPage() {
 
       setFacturas(facturasData)
 
-      // Cargar total pagado por semana/año desde control_saldos
-      const { data: pagosData } = await supabase
-        .from('control_saldos')
-        .select('semana, anio, monto_movimiento')
+      // Pagos del conductor desde control_saldos. Traemos saldo_pendiente y tipo para poder
+      // replicar el desglose del modal (identificar el pago ya aplicado en el saldo anterior).
+      const { data: pagosData } = await (supabase
+        .from('control_saldos') as any)
+        .select('id, semana, anio, tipo_movimiento, monto_movimiento, saldo_pendiente')
         .eq('conductor_id', conductorId)
-        .in('tipo_movimiento', ['pago_cabify', 'pago_manual', 'pago', 'pago_cuota'])
+        .order('created_at', { ascending: false })
+      type PagoRow = { id: string; semana: number; anio: number; tipo_movimiento: string; monto_movimiento: number; saldo_pendiente: number | null }
+      const pagosRows = (pagosData || []) as PagoRow[]
+      const tiposAporte = ['pago_cabify', 'pago_manual', 'pago', 'pago_cuota']
+
+      // Total pagado por semana/año (suma simple de todos los aportes) — usado como fallback.
       const map: Record<string, number> = {}
-      ;(pagosData || []).forEach((p: { semana: number; anio: number; monto_movimiento: number }) => {
+      pagosRows.forEach((p) => {
+        if (!tiposAporte.includes(p.tipo_movimiento)) return
         const key = `${p.semana}-${p.anio}`
         map[key] = (map[key] || 0) + Number(p.monto_movimiento || 0)
       })
       setPagadoPorSemana(map)
+
+      // Aportes efectivos por factura = aportes de la semana EXCLUYENDO el pago que ya quedó
+      // aplicado dentro del saldo anterior (mismo criterio que el modal, evita doble conteo).
+      const tiposManuales = ['pago_manual', 'pago_efectivo', 'ajuste_manual']
+      const pagosEfectivos: Record<string, number> = {}
+      facturasData.forEach((f) => {
+        const per = f.periodos_facturacion
+        const saldoAnt = f.saldo_anterior || 0
+        let matchedId: string | null = null
+        if (saldoAnt !== 0) {
+          const objetivo = -saldoAnt
+          const match = pagosRows.find((m) =>
+            Math.round((m.saldo_pendiente || 0) * 100) === Math.round(objetivo * 100) &&
+            (m.monto_movimiento || 0) > 0 &&
+            tiposManuales.includes(m.tipo_movimiento)
+          )
+          matchedId = match?.id || null
+        }
+        pagosEfectivos[f.id] = pagosRows
+          .filter((p) => p.semana === per.semana && p.anio === per.anio && tiposAporte.includes(p.tipo_movimiento) && p.id !== matchedId)
+          .reduce((s, p) => s + Number(p.monto_movimiento || 0), 0)
+      })
+      setPagosEfectivosPorFactura(pagosEfectivos)
 
       // Total referencial por factura = suma del detalle, igual que el modal (openDetail).
       // Una sola query batch para todas las facturas visibles; el card lo usa para mostrar
@@ -644,6 +684,7 @@ export function PortalPage() {
       setFacturas([])
       setPagadoPorSemana({})
       setReferencialPorFactura({})
+      setPagosEfectivosPorFactura({})
     } finally {
       setLoadingFacturas(false)
     }
@@ -1067,11 +1108,11 @@ export function PortalPage() {
     if (saldoAnt !== 0) {
       ;(supabase
         .from('control_saldos') as any)
-        .select('tipo_movimiento, saldo_adeudado, saldo_pendiente, monto_movimiento, referencia, created_at')
+        .select('id, tipo_movimiento, saldo_adeudado, saldo_pendiente, monto_movimiento, referencia, created_at')
         .eq('conductor_id', factura.conductor_id)
         .order('created_at', { ascending: false })
         .limit(15)
-        .then(({ data }: { data: Array<{ tipo_movimiento: string; saldo_adeudado: number | null; saldo_pendiente: number | null; monto_movimiento: number | null; referencia: string | null }> | null }) => {
+        .then(({ data }: { data: Array<{ id: string; tipo_movimiento: string; saldo_adeudado: number | null; saldo_pendiente: number | null; monto_movimiento: number | null; referencia: string | null; created_at: string }> | null }) => {
           if (!data) return
           // El saldo_pendiente del kardex tiene signo invertido respecto a saldo_anterior
           // (a favor = positivo en kardex, negativo en facturación).
@@ -1093,6 +1134,9 @@ export function PortalPage() {
               pago,
               pagoRef: match.referencia || 'Pago en efectivo',
               resultado,
+              pagoId: match.id,
+              pagoTipo: match.tipo_movimiento,
+              pagoFecha: match.created_at,
             })
           }
         })
@@ -1325,6 +1369,10 @@ export function PortalPage() {
       y += 5
       pdf.text(`Modalidad: ${selectedFactura.tipo_alquiler}`, margin, y)
       pdf.text(`Turnos: ${selectedFactura.turnos_cobrados}/${selectedFactura.turnos_base}`, pageWidth / 2, y)
+      y += 5
+      const sinGncPdf = detalleItems.some(d => ['P014', 'P015', 'P016'].includes(d.concepto_codigo))
+      pdf.text(`Combustible: ${sinGncPdf ? 'Sin GNC' : 'GNC'}`, margin, y)
+      if (selectedFactura.grupo_flota) pdf.text(`Flota: ${selectedFactura.grupo_flota}`, pageWidth / 2, y)
       y += 10
 
       // Línea separadora
@@ -1333,11 +1381,22 @@ export function PortalPage() {
       pdf.line(margin, y, pageWidth - margin, y)
       y += 8
 
-      // CONCEPTOS (cargos + descuentos unificados, sin subtotales)
+      // CONCEPTOS (cargos + descuentos)
       const cargos = detalleItems.filter(d => !d.es_descuento && d.total !== 0 && d.concepto_codigo !== 'SALDO')
       const descuentos = detalleItems.filter(d => d.es_descuento && d.total !== 0 && d.concepto_codigo !== 'SALDO')
       const saldoItemPdf = detalleItems.find(d => d.concepto_codigo === 'SALDO')
       const saldoAntPdf = saldoItemPdf ? (saldoItemPdf.es_descuento ? -saldoItemPdf.total : saldoItemPdf.total) : 0
+
+      // Salto de página automático si el contenido se acerca al pie.
+      const pageHeight = pdf.internal.pageSize.getHeight()
+      const checkPage = (needed: number) => {
+        if (y > pageHeight - margin - needed) { pdf.addPage(); y = 20 }
+      }
+      const tipoLabelPdf: Record<string, string> = {
+        pago_cabify: 'Pago Cabify', pago_manual: 'Pago Manual', pago: 'Pago',
+        pago_cuota: 'Pago Cuota', ajuste_manual: 'Ajuste', pago_efectivo: 'Pago en efectivo',
+      }
+      const fechaCorta = (iso: string) => new Date(iso).toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: '2-digit' })
 
       pdf.setFontSize(11)
       pdf.setTextColor(negro)
@@ -1348,6 +1407,7 @@ export function PortalPage() {
       pdf.setFontSize(10)
       pdf.setFont('helvetica', 'normal')
       cargos.forEach(cargo => {
+        checkPage(10)
         pdf.setTextColor(negro)
         const cargoDesc = getConceptoLabel(cargo)
         const cargoLabel = cargo.cantidad > 1
@@ -1358,6 +1418,7 @@ export function PortalPage() {
         y += 5
       })
       descuentos.forEach(desc => {
+        checkPage(10)
         pdf.setTextColor(negro)
         const descDesc = getConceptoLabel(desc)
         const descLabel = desc.cantidad > 1
@@ -1369,38 +1430,103 @@ export function PortalPage() {
         y += 5
       })
 
-      // SALDO ANTERIOR en PDF
-      if (saldoAntPdf !== 0) {
-        y += 4
-        pdf.setFont('helvetica', 'bold')
-        pdf.setFontSize(10)
-        pdf.setTextColor(negro)
-        pdf.text('SALDO ANTERIOR', margin, y)
-        y += 5
-        pdf.setFont('helvetica', 'normal')
-        pdf.text(saldoAntPdf > 0 ? 'Deuda pendiente semana anterior' : 'Saldo a favor semana anterior', margin, y)
-        pdf.setTextColor(saldoAntPdf > 0 ? rojo : verde)
-        pdf.text(`${saldoAntPdf > 0 ? '+' : '-'}${formatCurrency(Math.abs(saldoAntPdf))}`, pageWidth - margin, y, { align: 'right' })
+      const subtotalCargos = cargos.reduce((sum, c) => sum + c.total, 0)
+      const subtotalDescPdf = descuentos.reduce((sum, d) => sum + d.total, 0)
+
+      // Subtotal Cargos (y Descuentos si aplica)
+      y += 1
+      pdf.setDrawColor(230, 230, 230); pdf.setLineWidth(0.2); pdf.line(margin, y, pageWidth - margin, y); y += 5
+      pdf.setFont('helvetica', 'bold'); pdf.setTextColor(negro)
+      pdf.text('Subtotal Cargos', margin, y)
+      pdf.text(formatCurrency(subtotalCargos), pageWidth - margin, y, { align: 'right' })
+      y += 5
+      if (subtotalDescPdf > 0) {
+        pdf.text('Subtotal Descuentos', margin, y)
+        pdf.setTextColor(verde)
+        pdf.text(`-${formatCurrency(subtotalDescPdf)}`, pageWidth - margin, y, { align: 'right' })
         y += 5
       }
 
-      // TOTAL
+      // SALDO ANTERIOR (desglose completo, igual que el modal)
+      if (saldoAntPdf !== 0) {
+        checkPage(28)
+        y += 3
+        pdf.setFont('helvetica', 'bold'); pdf.setFontSize(10); pdf.setTextColor(negro)
+        pdf.text('SALDO ANTERIOR', margin, y); y += 6
+        pdf.setFont('helvetica', 'normal'); pdf.setFontSize(10)
+        if (detalleSaldoBreakdown) {
+          pdf.setTextColor(gris)
+          pdf.text('Saldo adeudado anterior', margin, y)
+          pdf.text(formatCurrency(detalleSaldoBreakdown.saldoPrevio), pageWidth - margin, y, { align: 'right' })
+          y += 5
+          const pagoLbl = tipoLabelPdf[detalleSaldoBreakdown.pagoTipo || ''] || 'Pago Manual'
+          const pagoRef = detalleSaldoBreakdown.pagoRef ? ` · ${detalleSaldoBreakdown.pagoRef}` : ''
+          const pagoFec = detalleSaldoBreakdown.pagoFecha ? ` · ${fechaCorta(detalleSaldoBreakdown.pagoFecha)}` : ''
+          pdf.setTextColor(negro)
+          pdf.text(`${pagoLbl}${pagoRef}${pagoFec}`, margin, y)
+          pdf.setTextColor(verde)
+          pdf.text(`-${formatCurrency(detalleSaldoBreakdown.pago)}`, pageWidth - margin, y, { align: 'right' })
+          y += 5
+          pdf.setTextColor(negro)
+          pdf.text(saldoAntPdf > 0 ? 'Resultado: deuda pendiente' : 'Resultado: saldo a favor', margin, y)
+          pdf.setTextColor(saldoAntPdf > 0 ? rojo : verde)
+          pdf.text(`${saldoAntPdf > 0 ? '+' : '-'}${formatCurrency(Math.abs(saldoAntPdf))}`, pageWidth - margin, y, { align: 'right' })
+          y += 6
+        } else {
+          pdf.setTextColor(negro)
+          pdf.text(saldoAntPdf > 0 ? 'Deuda pendiente semana anterior' : 'Saldo a favor semana anterior', margin, y)
+          pdf.setTextColor(saldoAntPdf > 0 ? rojo : verde)
+          pdf.text(`${saldoAntPdf > 0 ? '+' : '-'}${formatCurrency(Math.abs(saldoAntPdf))}`, pageWidth - margin, y, { align: 'right' })
+          y += 6
+        }
+      }
+
+      // APORTES (excluye el pago ya aplicado en el saldo anterior, igual que el modal)
+      const pagoYaAplicadoIdPdf = detalleSaldoBreakdown?.pagoId || null
+      const pagosAportesPdf = pagoYaAplicadoIdPdf
+        ? detallePagos.filter(p => p.id !== pagoYaAplicadoIdPdf)
+        : detallePagos
+      const totalPagadoSemanaPdf = pagosAportesPdf.reduce((s, p) => s + p.monto, 0)
+      if (pagosAportesPdf.length > 0) {
+        checkPage(16 + pagosAportesPdf.length * 5)
+        y += 3
+        pdf.setFont('helvetica', 'bold'); pdf.setFontSize(10); pdf.setTextColor(verde)
+        pdf.text('APORTES', margin, y); y += 6
+        pdf.setFont('helvetica', 'normal'); pdf.setFontSize(10)
+        pagosAportesPdf.forEach(p => {
+          checkPage(10)
+          const lbl = tipoLabelPdf[p.tipo] || p.tipo
+          const ref = p.referencia ? ` · ${p.referencia}` : ''
+          pdf.setTextColor(negro)
+          pdf.text(`${lbl}${ref} · ${fechaCorta(p.fecha)}`, margin, y)
+          pdf.setTextColor(verde)
+          pdf.text(`-${formatCurrency(p.monto)}`, pageWidth - margin, y, { align: 'right' })
+          y += 5
+        })
+        pdf.setFont('helvetica', 'bold'); pdf.setTextColor(negro)
+        pdf.text('Total aportado', margin, y)
+        pdf.setTextColor(verde)
+        pdf.text(`-${formatCurrency(totalPagadoSemanaPdf)}`, pageWidth - margin, y, { align: 'right' })
+        y += 6
+      }
+
+      // TOTALES: Monto Total Referencial + Pendiente de Pago
+      const totalAPagarPdf = subtotalCargos - subtotalDescPdf + saldoAntPdf
+      const saldoPendientePdf = totalAPagarPdf - totalPagadoSemanaPdf
+      checkPage(28)
       y += 5
-      pdf.setDrawColor(200, 200, 200)
-      pdf.setLineWidth(0.5)
-      pdf.line(margin, y, pageWidth - margin, y)
-      y += 8
+      pdf.setDrawColor(200, 200, 200); pdf.setLineWidth(0.5); pdf.line(margin, y, pageWidth - margin, y); y += 8
 
-      const subtotalCargos = cargos.reduce((sum, c) => sum + c.total, 0)
-      const subtotalDescPdf = descuentos.reduce((sum, d) => sum + d.total, 0)
-      const totalFinal = subtotalCargos - subtotalDescPdf + saldoAntPdf
-      const saldoColor = totalFinal > 0 ? rojo : verde
+      pdf.setFontSize(12); pdf.setFont('helvetica', 'bold'); pdf.setTextColor(negro)
+      pdf.text('Monto Total Referencial', margin, y)
+      pdf.text(formatCurrency(totalAPagarPdf), pageWidth - margin, y, { align: 'right' })
+      y += 9
 
-      pdf.setFontSize(14)
-      pdf.setTextColor(saldoColor)
-      pdf.setFont('helvetica', 'bold')
-      pdf.text('MONTO TOTAL REFERENCIAL', margin, y)
-      pdf.text(formatCurrency(totalFinal), pageWidth - margin, y, { align: 'right' })
+      const pendLabelPdf = saldoPendientePdf < -0.01 ? 'SALDO A FAVOR' : 'PENDIENTE DE PAGO'
+      const pendColorPdf = saldoPendientePdf > 0.01 ? rojo : verde
+      pdf.setFontSize(14); pdf.setTextColor(pendColorPdf)
+      pdf.text(pendLabelPdf, margin, y)
+      pdf.text(formatCurrency(Math.abs(saldoPendientePdf) < 0.01 ? 0 : Math.abs(saldoPendientePdf)), pageWidth - margin, y, { align: 'right' })
 
       // Nota legal
       y += 12
@@ -1581,9 +1707,15 @@ export function PortalPage() {
     const subtotalCargos = cargos.reduce((sum, d) => sum + d.total, 0)
     const subtotalDescuentos = descuentos.reduce((sum, d) => sum + d.total, 0)
     const totalAPagar = subtotalCargos - subtotalDescuentos + saldoAnterior
+    // El pago que ya quedó aplicado dentro del "Saldo Anterior" no debe volver a
+    // descontarse acá (si no, se resta dos veces). Lo excluimos de los aportes por su ID.
+    const pagoYaAplicadoId = detalleSaldoBreakdown?.pagoId || null
+    const pagosAportes = pagoYaAplicadoId
+      ? detallePagos.filter(p => p.id !== pagoYaAplicadoId)
+      : detallePagos
     // Saldo real = referencial - lo ya pagado (Cabify + ajustes + transferencias).
     // Si > 0 = todavia debe. Si <= 0 = cubierto o a favor.
-    const totalPagadoSemana = detallePagos.reduce((s, p) => s + p.monto, 0)
+    const totalPagadoSemana = pagosAportes.reduce((s, p) => s + p.monto, 0)
     const saldoPendiente = totalAPagar - totalPagadoSemana
 
     return (
@@ -1723,11 +1855,21 @@ export function PortalPage() {
                             </span>
                           </div>
                           <div className="portal-detail-item">
-                            <span className="portal-detail-item-name" style={{ color: '#9ca3af' }}>
-                              <span className="portal-detail-item-dot" style={{ background: '#d1d5db' }} />
-                              {detalleSaldoBreakdown.pagoRef || 'Pago'}
+                            <span className="portal-detail-item-name">
+                              <span className="portal-detail-item-dot" style={{ background: '#059669' }} />
+                              {({
+                                pago_manual: 'Pago Manual',
+                                pago_efectivo: 'Pago en efectivo',
+                                pago_cabify: 'Pago Cabify',
+                                pago_cuota: 'Pago Cuota',
+                                ajuste_manual: 'Ajuste',
+                              } as Record<string, string>)[detalleSaldoBreakdown.pagoTipo || ''] || 'Pago Manual'}
+                              <span style={{ color: 'var(--text-secondary)', marginLeft: '6px', fontSize: '11px' }}>
+                                {detalleSaldoBreakdown.pagoRef ? `· ${detalleSaldoBreakdown.pagoRef}` : ''}
+                                {detalleSaldoBreakdown.pagoFecha ? ` · ${new Date(detalleSaldoBreakdown.pagoFecha).toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: '2-digit' })}` : ''}
+                              </span>
                             </span>
-                            <span className="portal-detail-item-amount" style={{ color: '#9ca3af', fontStyle: 'italic' }}>
+                            <span className="portal-detail-item-amount" style={{ color: '#059669', fontWeight: 600 }}>
                               -{formatCurrency(detalleSaldoBreakdown.pago)}
                             </span>
                           </div>
@@ -1748,8 +1890,10 @@ export function PortalPage() {
                   </div>
                 )}
 
-                {/* PAGOS REALIZADOS EN ESTA SEMANA */}
-                {detallePagos.length > 0 && (() => {
+                {/* PAGOS REALIZADOS EN ESTA SEMANA
+                    Excluye el pago que ya quedó aplicado dentro del "Saldo Anterior"
+                    (pagosAportes), para no mostrarlo ni descontarlo dos veces. */}
+                {pagosAportes.length > 0 && (() => {
                   const tipoLabel: Record<string, string> = {
                     pago_cabify: 'Pago Cabify',
                     pago_manual: 'Pago Manual',
@@ -1757,7 +1901,7 @@ export function PortalPage() {
                     pago_cuota: 'Pago Cuota',
                     ajuste_manual: 'Ajuste',
                   }
-                  const totalPagado = detallePagos.reduce((s, p) => s + p.monto, 0)
+                  const totalPagado = pagosAportes.reduce((s, p) => s + p.monto, 0)
                   return (
                     <div className="portal-detail-section" style={{ marginTop: '8px' }}>
                       <div
@@ -1768,7 +1912,7 @@ export function PortalPage() {
                         Aportes
                       </div>
                       <div className="portal-detail-items">
-                        {detallePagos.map((p) => {
+                        {pagosAportes.map((p) => {
                           const fecha = new Date(p.fecha).toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: '2-digit' })
                           return (
                             <div key={p.id} className="portal-detail-item">
@@ -1794,19 +1938,48 @@ export function PortalPage() {
                   )
                 })()}
 
-                {/* TOTAL — color segun saldo pendiente real (referencial - pagos):
-                    rojo si todavia debe, verde si esta cubierto o a favor */}
+                {/* DETALLE FINAL — un solo recuadro, formato lista descripción/monto.
+                    Cargos (+ descuentos) + saldo anterior = Monto Total Referencial;
+                    menos Total aportado = Pendiente de Pago (único total resaltado).
+                    Las líneas de detalle van en gris (referenciales), sin repetir datos. */}
                 <div className="portal-detail-total">
-                  <div className="portal-detail-total-label">Monto Total Referencial</div>
-                  <div className={`portal-detail-total-amount ${saldoPendiente > 0.01 ? 'debit' : 'credit'}`}>
-                    {formatCurrency(totalAPagar)}
+                  <div className="portal-detail-items" style={{ marginBottom: '8px' }}>
+                    <div className="portal-detail-item">
+                      <span className="portal-detail-item-name" style={{ color: '#9ca3af' }}>Subtotal Cargos</span>
+                      <span className="portal-detail-item-amount" style={{ color: '#9ca3af' }}>{formatCurrency(subtotalCargos)}</span>
+                    </div>
+                    {subtotalDescuentos > 0 && (
+                      <div className="portal-detail-item">
+                        <span className="portal-detail-item-name" style={{ color: '#9ca3af' }}>Subtotal Descuentos</span>
+                        <span className="portal-detail-item-amount" style={{ color: '#9ca3af' }}>-{formatCurrency(subtotalDescuentos)}</span>
+                      </div>
+                    )}
+                    {saldoAnterior !== 0 && (
+                      <div className="portal-detail-item">
+                        <span className="portal-detail-item-name" style={{ color: '#9ca3af' }}>{saldoAnterior > 0 ? 'Saldo anterior (deuda)' : 'Saldo anterior (a favor)'}</span>
+                        <span className="portal-detail-item-amount" style={{ color: '#9ca3af' }}>
+                          {saldoAnterior > 0 ? '+' : '-'}{formatCurrency(Math.abs(saldoAnterior))}
+                        </span>
+                      </div>
+                    )}
+                    {/* Subtotal referencial (divisor arriba) */}
+                    <div className="portal-detail-item" style={{ borderTop: '1px solid var(--border-primary)', paddingTop: '6px', marginTop: '4px' }}>
+                      <span className="portal-detail-item-name" style={{ fontWeight: 600, fontSize: '12px' }}>Monto Total Referencial</span>
+                      <span className="portal-detail-item-amount" style={{ fontWeight: 600 }}>{formatCurrency(totalAPagar)}</span>
+                    </div>
+                    {totalPagadoSemana > 0 && (
+                      <div className="portal-detail-item">
+                        <span className="portal-detail-item-name" style={{ color: '#9ca3af' }}>Total aportado</span>
+                        <span className="portal-detail-item-amount" style={{ color: '#9ca3af' }}>-{formatCurrency(totalPagadoSemana)}</span>
+                      </div>
+                    )}
                   </div>
-                  <div className="portal-detail-total-note">
-                    {saldoPendiente > 0.01
-                      ? `Pendiente de pago: ${formatCurrency(saldoPendiente)}`
-                      : saldoPendiente < -0.01
-                        ? `Saldo a favor: ${formatCurrency(Math.abs(saldoPendiente))}`
-                        : 'Cubierto'}
+                  {/* Único total resaltado: Pendiente de Pago (divisor arriba) */}
+                  <div style={{ borderTop: '1px solid var(--border-primary)', paddingTop: '10px' }}>
+                    <div className="portal-detail-total-label">{saldoPendiente < -0.01 ? 'Saldo a Favor' : 'Pendiente de Pago'}</div>
+                    <div className={`portal-detail-total-amount ${saldoPendiente > 0.01 ? 'debit' : 'credit'}`}>
+                      {formatCurrency(Math.abs(saldoPendiente) < 0.01 ? 0 : Math.abs(saldoPendiente))}
+                    </div>
                   </div>
                 </div>
               </div>
@@ -1824,7 +1997,7 @@ export function PortalPage() {
             </div>
           )}
           {/* Nota legal */}
-          <div className="portal-nota-legal" style={{ padding: '0 4px' }}>
+          <div className="portal-nota-legal" style={{ padding: '0 24px 18px', flexShrink: 0 }}>
             La información presentada es de carácter referencial y no constituye un comprobante fiscal válido.
           </div>
         </div>
@@ -2355,10 +2528,16 @@ export function PortalPage() {
                 <div className="portal-weeks portal-weeks--grid">
                   {facturas.map((f) => {
                     const p = f.periodos_facturacion
-                    const pagado = pagadoPorSemana[`${p.semana}-${p.anio}`] || 0
-                    // Referencial = suma del detalle (mismo valor que muestra el modal).
-                    // Fallback a total_a_pagar de la cabecera si el detalle aun no cargo.
-                    const referencial = referencialPorFactura[f.id] ?? (f.total_a_pagar || 0)
+                    // Monto Total Referencial = cargos - descuentos + saldo anterior (igual que el modal).
+                    // referencialPorFactura guarda la suma del detalle (cargos - descuentos); le
+                    // sumamos el saldo anterior. Si el detalle aún no cargó, usamos total_a_pagar
+                    // de la cabecera (que ya incluye el saldo).
+                    const detalleC = referencialPorFactura[f.id]
+                    const referencial = detalleC != null
+                      ? detalleC + (f.saldo_anterior || 0)
+                      : (f.total_a_pagar || 0)
+                    // Aportes efectivos (sin el pago ya aplicado en el saldo anterior); fallback al total por semana.
+                    const pagado = pagosEfectivosPorFactura[f.id] ?? (pagadoPorSemana[`${p.semana}-${p.anio}`] || 0)
                     const saldo = referencial - pagado
                     const cobertura = referencial > 0 ? Math.min(100, (pagado / referencial) * 100) : (pagado > 0 ? 100 : 0)
                     // Estado: diferencias menores a $1 son redondeo de centavos (Cabify deposita
