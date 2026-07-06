@@ -1399,21 +1399,30 @@ export function ReporteFacturacionTab() {
         { data: cabifyPeajes },
         { data: dniMapeoData },
         { data: conductoresLicData },
+        { data: cabifyHistoricoReciente },
       ] = await Promise.all([
         supabase.from(cabifyTable)
           .select('dni, licencia, nombre, apellido, cobro_app, cabify_driver_id, cabify_company_id, permiso_efectivo')
           .gte('fecha_inicio', periodoInicio + 'T00:00:00')
           .lte('fecha_inicio', periodoFin + 'T23:59:59'),
         supabase.from(cabifyTable)
-          .select('dni, peajes, fecha_inicio, cabify_driver_id, cabify_company_id')
+          .select('dni, licencia, nombre, apellido, peajes, fecha_inicio, cabify_driver_id, cabify_company_id')
           .gte('fecha_inicio', peajesInicioSemAnt + 'T00:00:00')
           .lte('fecha_inicio', peajesFinSemAnt + 'T23:59:59'),
         supabase.from('cabify_dni_mapeo').select('cabify_hash, dni_real'),
         conductorIdsLoad.length > 0
           ? (supabase.from('conductores') as any)
-              .select('id, numero_dni, numero_licencia, nombres, apellidos')
+              .select('id, numero_dni, numero_cuit, numero_licencia, nombres, apellidos')
               .in('id', conductorIdsLoad)
           : Promise.resolve({ data: [] as any[] }),
+        // Identidad Cabify reciente (30 días previos al período): fallback para el botón
+        // de efectivo (rayito) cuando el conductor no tiene registros esta semana
+        supabase.from(cabifyTable)
+          .select('dni, licencia, nombre, apellido, cabify_driver_id, cabify_company_id, permiso_efectivo, fecha_inicio')
+          .gte('fecha_inicio', format(subWeeks(parseISO(periodoInicio), 4), 'yyyy-MM-dd') + 'T00:00:00')
+          .lt('fecha_inicio', periodoInicio + 'T00:00:00')
+          .order('fecha_inicio', { ascending: false })
+          .limit(5000),
       ])
 
       // Mapa de hash Cabify → DNI real (configurado manualmente en cabify_dni_mapeo)
@@ -1434,13 +1443,18 @@ export function ReporteFacturacionTab() {
         return s
       }
 
-      // Mapas auxiliares: licencia y nombre normalizado del conductor (fallback de match)
+      // Mapas auxiliares: claves de match de los conductores del período.
       // Licencia mínima 7 dígitos (DNI/licencia argentina) — evita falsos positivos con "B1 D1" → "11".
+      const conductorDniSet = new Set<string>()
+      const conductorCuitSet = new Set<string>()
       const licenciaToDniLocal = new Map<string, string>()
       const nombreToDniLocal = new Map<string, string>()
       ;(conductoresLicData || []).forEach((c: any) => {
         const dni = String(c.numero_dni || '').trim()
         if (!dni) return
+        conductorDniSet.add(normalizeDni(dni))
+        const cuitNorm = normalizeCuit(c.numero_cuit)
+        if (cuitNorm) conductorCuitSet.add(cuitNorm)
         const lic = String(c.numero_licencia || '').replace(/\D/g, '').trim()
         if (lic.length >= 7 && !licenciaToDniLocal.has(lic)) {
           licenciaToDniLocal.set(lic, normalizeDni(dni))
@@ -1451,32 +1465,43 @@ export function ReporteFacturacionTab() {
         if (nombreNorm && !nombreToDniLocal.has(nombreNorm)) nombreToDniLocal.set(nombreNorm, normalizeDni(dni))
       })
 
+      // Resolver a qué conductor pertenece un registro Cabify con la regla de match:
+      // prioridad DNI → CUIT → licencia → nombre; con que UNA clave cruce, hay match.
+      // Devuelve el DNI normalizado bajo el que se agrupa el registro.
+      // Si no cruza con ningún conductor del período, mantiene su propio DNI real
+      // (comportamiento previo) o null si tampoco tiene DNI resoluble.
+      const resolverConductorCabify = (c: any): string | null => {
+        const dniReal = resolverDniCabify(c.dni)
+        if (dniReal) {
+          const norm = normalizeDni(dniReal)
+          if (conductorDniSet.has(norm) || conductorCuitSet.has(norm)) return norm
+        }
+        if (c.licencia) {
+          const licNorm = String(c.licencia).replace(/\D/g, '').trim()
+          if (licNorm.length >= 7) {
+            const porLic = licenciaToDniLocal.get(licNorm)
+            if (porLic) return porLic
+          }
+        }
+        if (c.nombre && c.apellido) {
+          const nombreNorm = `${c.nombre} ${c.apellido}`
+            .normalize('NFD').replace(/[̀-ͯ]/g, '')
+            .toUpperCase().replace(/\s+/g, ' ').trim()
+          const porNombre = nombreToDniLocal.get(nombreNorm)
+          if (porNombre) return porNombre
+        }
+        return dniReal ? normalizeDni(dniReal) : null
+      }
+
       // Agrupar cobro_app por DNI (semana actual) - lo que Cabify cobra al conductor
       const cobroAppPorDni = new Map<string, number>()
       const dnisConRegistroCabify = new Set<string>()
       const cabifyEfectivoMapPeriodo = new Map<string, { permiso_efectivo: string | null; cabify_driver_id: string | null; cabify_company_id: string | null }>()
       ;(cabifyGanancias || []).forEach((c: any) => {
-        // 1) Resolver DNI real (si viene hasheado, traducir vía cabify_dni_mapeo)
-        let dniReal = resolverDniCabify(c.dni)
+        // Match con la regla completa: DNI → CUIT → licencia → nombre (resolverConductorCabify)
+        const dniNorm = resolverConductorCabify(c)
+        if (!dniNorm) return
 
-        // 2) Fallback por licencia si DNI hash sin mapeo (mínimo 7 dígitos para evitar
-        //    falsos positivos con licencias categóricas tipo "B1 D1")
-        if (!dniReal && c.licencia) {
-          const licNorm = String(c.licencia).replace(/\D/g, '').trim()
-          if (licNorm.length >= 7) dniReal = licenciaToDniLocal.get(licNorm) || null
-        }
-
-        // 3) Fallback por nombre completo si tampoco hay licencia
-        if (!dniReal && c.nombre && c.apellido) {
-          const nombreNorm = `${c.nombre} ${c.apellido}`
-            .normalize('NFD').replace(/[̀-ͯ]/g, '')
-            .toUpperCase().replace(/\s+/g, ' ').trim()
-          if (nombreNorm) dniReal = nombreToDniLocal.get(nombreNorm) || null
-        }
-
-        if (!dniReal) return
-
-        const dniNorm = normalizeDni(dniReal)
         dnisConRegistroCabify.add(dniNorm)
         cobroAppPorDni.set(dniNorm, (cobroAppPorDni.get(dniNorm) || 0) + (parseFloat(c.cobro_app) || 0))
         // Guardar permiso_efectivo y IDs Cabify (último registro gana)
@@ -1493,9 +1518,8 @@ export function ReporteFacturacionTab() {
       const peajesPorDni = new Map<string, number>()
       const peajesDetalleMap = new Map<string, Array<{ fecha: string; monto: number }>>()
       ;(cabifyPeajes || []).forEach((c: any) => {
-        const dniReal = resolverDniCabify(c.dni)
-        if (!dniReal) return
-        const dniNorm = normalizeDni(dniReal)
+        const dniNorm = resolverConductorCabify(c)
+        if (!dniNorm) return
         const monto = parseFloat(String(c.peajes)) || 0
         if (monto > 0) {
           peajesPorDni.set(dniNorm, (peajesPorDni.get(dniNorm) || 0) + monto)
@@ -1504,6 +1528,21 @@ export function ReporteFacturacionTab() {
         const fecha = c.fecha_inicio ? c.fecha_inicio.split('T')[0] : 's/f'
         if (!peajesDetalleMap.has(dniNorm)) peajesDetalleMap.set(dniNorm, [])
         peajesDetalleMap.get(dniNorm)!.push({ fecha, monto })
+      })
+
+      // Identidad Cabify histórica (30 días previos, más reciente primero): fallback para
+      // que el botón de efectivo (rayito) aparezca aunque el conductor no tenga registros
+      // esta semana. Solo aporta driver_id/company/permiso — no toca montos ni cobertura.
+      const cabifyEfectivoMapHistorico = new Map<string, { permiso_efectivo: string | null; cabify_driver_id: string | null; cabify_company_id: string | null }>()
+      ;(cabifyHistoricoReciente || []).forEach((c: any) => {
+        if (!c.cabify_driver_id) return
+        const dniNorm = resolverConductorCabify(c)
+        if (!dniNorm || cabifyEfectivoMapHistorico.has(dniNorm)) return // viene ordenado desc: el primero es el más reciente
+        cabifyEfectivoMapHistorico.set(dniNorm, {
+          permiso_efectivo: c.permiso_efectivo || null,
+          cabify_driver_id: c.cabify_driver_id || null,
+          cabify_company_id: c.cabify_company_id || null,
+        })
       })
 
       // Agregar cobro_app de Cabify a cada facturación (para barras de cobertura)
@@ -1518,6 +1557,8 @@ export function ReporteFacturacionTab() {
         const cuotaFija = f.subtotal_alquiler + f.subtotal_garantia
         const efectivoInfo = (dniNorm && cabifyEfectivoMapPeriodo.get(dniNorm))
           || (cuitNorm && cabifyEfectivoMapPeriodo.get(cuitNorm))
+          || (dniNorm && cabifyEfectivoMapHistorico.get(dniNorm))
+          || (cuitNorm && cabifyEfectivoMapHistorico.get(cuitNorm))
           || null
         return {
           ...f,
@@ -10508,7 +10549,13 @@ export function ReporteFacturacionTab() {
 
       {/* Modal de Discrepancias */}
       {showDiscrepancyModal && (
-        <DiscrepancyReportModal onClose={() => setShowDiscrepancyModal(false)} />
+        <DiscrepancyReportModal
+          onClose={() => setShowDiscrepancyModal(false)}
+          periodoId={periodo?.id || null}
+          periodoInicio={periodo?.fecha_inicio || format(semanaActual.inicio, 'yyyy-MM-dd')}
+          periodoFin={periodo?.fecha_fin || format(semanaActual.fin, 'yyyy-MM-dd')}
+          sedeId={periodo?.sede_id || sedeActualId || null}
+        />
       )}
 
       {/* Estado del período */}
