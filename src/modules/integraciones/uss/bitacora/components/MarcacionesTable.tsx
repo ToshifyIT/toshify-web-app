@@ -442,7 +442,7 @@ export function MarcacionesTable({
     },
     {
       accessorKey: 'duracionMinutos',
-      header: 'Duración',
+      header: 'Tiempo Conducido',
       cell: ({ row }) => (
         <span style={{ color: 'var(--text-secondary)', fontSize: '12px' }}>
           {formatDuracion(row.original.duracionMinutos)}
@@ -640,7 +640,7 @@ export function MarcacionesTable({
       'Salida': m.estado === 'En Curso'
         ? (() => { const s = resolverFechaHora(m.periodoFin, m.fecha, m.salida, m.horario); return s !== '-' ? `${s} (en curso)` : 'En curso'; })()
         : resolverFechaHora(m.periodoFin, m.fecha, m.salida, m.horario),
-      'Duración': formatDuracion(m.duracionMinutos),
+      'Tiempo Conducido': formatDuracion(m.duracionMinutos),
       'Km Total': m.kmTotal,
       'Modalidad': modalidadLabel(m.vehiculoModalidad),
       'Turno': getHorarioLabel(m.horario, m.vehiculoModalidad),

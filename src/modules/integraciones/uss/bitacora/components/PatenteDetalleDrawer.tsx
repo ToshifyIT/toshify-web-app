@@ -384,7 +384,7 @@ export function PatenteDetalleDrawer({ marcacion, semanaInicio, semanaFin, onClo
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 11 }}>
               <thead>
                 <tr>
-                  {['Inicio', 'Fin', 'Conductor', 'iButton', 'Km', 'Duración'].map((h, idx) => (
+                  {['Inicio', 'Fin', 'Conductor', 'iButton', 'Km', 'Tiempo Conducido'].map((h, idx) => (
                     <th key={h} style={{
                       position: 'sticky', top: 0, background: 'var(--bg-secondary, #f9fafb)',
                       padding: '8px 12px', textAlign: idx >= 4 ? 'right' : 'left',
@@ -427,7 +427,7 @@ export function PatenteDetalleDrawer({ marcacion, semanaInicio, semanaFin, onClo
               <strong style={{ fontFamily: 'monospace' }}>{totalKm.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong>
             </span>
             <span>
-              <span style={{ color: 'var(--text-tertiary)', marginRight: 4 }}>Duración:</span>
+              <span style={{ color: 'var(--text-tertiary)', marginRight: 4 }}>Tiempo Conducido:</span>
               <strong style={{ fontFamily: 'monospace' }}>{totalDuracion}</strong>
             </span>
           </div>
