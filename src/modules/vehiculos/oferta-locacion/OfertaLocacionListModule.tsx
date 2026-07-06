@@ -404,7 +404,7 @@ export function OfertaLocacionListModule() {
     <div className="veh-module">
       {/* Stats */}
       <div className="veh-stats">
-        <div className="veh-stats-grid" style={{ gridTemplateColumns: 'repeat(4, 1fr)' }}>
+        <div className="veh-stats-grid" style={{ gridTemplateColumns: window.innerWidth < 768 ? undefined : 'repeat(4, 1fr)' }}>
           <div className={`stat-card ${activeStatCard === null ? '' : 'stat-card-inactive'}`} onClick={() => setActiveStatCard(null)} style={{ cursor: 'pointer' }}>
             <FileText size={18} className="stat-icon" />
             <div className="stat-content">

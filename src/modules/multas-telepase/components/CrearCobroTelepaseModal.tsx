@@ -446,7 +446,7 @@ export function CrearCobroTelepaseModal({ isOpen, registro, onClose, onSaved }: 
                   </div>
                 </div>
 
-                <div className="form-row" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                <div className="form-row" style={{ display: 'grid', gridTemplateColumns: window.innerWidth < 640 ? '1fr' : '1fr 1fr', gap: '16px' }}>
                   <div className="form-group">
                     <label>Tipo de Incidencia <span className="required">*</span></label>
                     <select value={tipoCobroId} onChange={e => setTipoCobroId(e.target.value)} disabled={saving}>
@@ -488,7 +488,7 @@ export function CrearCobroTelepaseModal({ isOpen, registro, onClose, onSaved }: 
                   </div>
                 </div>
 
-                <div className="form-row" style={{ gridTemplateColumns: '1fr 1fr' }}>
+                <div className="form-row" style={{ gridTemplateColumns: window.innerWidth < 640 ? '1fr' : '1fr 1fr' }}>
                   <div className="form-group">
                     <label>Sede</label>
                     <select value={sedeId} onChange={e => setSedeId(e.target.value)} disabled={saving}>
@@ -509,7 +509,7 @@ export function CrearCobroTelepaseModal({ isOpen, registro, onClose, onSaved }: 
                   </div>
                 </div>
 
-                <div className="form-row" style={{ gridTemplateColumns: '1fr 1fr' }}>
+                <div className="form-row" style={{ gridTemplateColumns: window.innerWidth < 640 ? '1fr' : '1fr 1fr' }}>
                   <div className="form-group">
                     <label>Registrado por</label>
                     <input type="text" value="R2D2" readOnly className="form-input-readonly" />

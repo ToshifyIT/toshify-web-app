@@ -4919,7 +4919,7 @@ function IncidenciaForm({ formData, setFormData, estados, vehiculos, conductores
             </select>
           </div>
         </div>
-        <div className="form-row" style={{ display: 'grid', gridTemplateColumns: esCobro ? '1fr 1fr' : '1fr 1fr 1fr', gap: '16px' }}>
+        <div className="form-row" style={{ display: 'grid', gridTemplateColumns: window.innerWidth < 640 ? '1fr' : esCobro ? '1fr 1fr' : '1fr 1fr 1fr', gap: '16px' }}>
           <div className="form-group">
             <label>Tipo de Incidencia <span className="required">*</span></label>
             <SearchableSelect
@@ -4981,7 +4981,7 @@ function IncidenciaForm({ formData, setFormData, estados, vehiculos, conductores
             </div>
           )}
         </div>
-        <div className="form-row" style={{ gridTemplateColumns: '1fr 1fr' }}>
+        <div className="form-row" style={{ gridTemplateColumns: window.innerWidth < 640 ? '1fr' : '1fr 1fr' }}>
           <div className="form-group">
             <label>Sede</label>
             <select value={formData.sede_id || ''} onChange={e => setFormData((prev: any) => ({ ...prev, sede_id: e.target.value }))} disabled={disabled}>
@@ -5004,7 +5004,7 @@ function IncidenciaForm({ formData, setFormData, estados, vehiculos, conductores
         </div>
         {/* Monto y KM Excedidos - solo para cobro */}
         {esCobro && (
-          <div className="form-row" style={{ gridTemplateColumns: esExcesoKm ? '1fr 1fr 1fr' : '1fr 1fr' }}>
+          <div className="form-row" style={{ gridTemplateColumns: window.innerWidth < 640 ? '1fr' : esExcesoKm ? '1fr 1fr 1fr' : '1fr 1fr' }}>
             {esExcesoKm && (
               <div className="form-group">
                 <label>KM Excedidos</label>

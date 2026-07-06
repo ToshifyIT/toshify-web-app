@@ -105,8 +105,11 @@ export function GarantiasTab() {
     search: string
     semanaFilter: string
     tipoFilter: string
-    semanasFacturacion: { semana: number; anio: number; subtotalGarantia: number; fecha: string }[]
+    semanasFacturacion: { semana: number; anio: number; subtotalGarantia: number; fecha: string; estado: string; fechaCierre: string | null }[]
   }>({ open: false, garantia: null, rows: [], loading: false, search: '', semanaFilter: '', tipoFilter: '', semanasFacturacion: [] })
+  // Tooltip flotante (posición fixed) para el aviso de semana no cerrada en el kardex.
+  // Se usa fixed para que no lo recorte el contenedor con scroll de la tabla.
+  const [alertTip, setAlertTip] = useState<{ x: number; y: number } | null>(null)
 
   async function abrirKardex(garantia: GarantiaConductor) {
     setKardexModal({ open: true, garantia, rows: [], loading: true, search: '', semanaFilter: '', tipoFilter: '', semanasFacturacion: [] })
@@ -142,19 +145,25 @@ export function GarantiasTab() {
     const montoTotalGarantia = Number(g.monto_total) || 1000000
     const montoCuotaFijo = Number((g as any).monto_cuota_semanal) || 50000
 
-    // Calcular semana actual para excluirla
-    const hoy = new Date()
-    const tmp = new Date(hoy.getFullYear(), hoy.getMonth(), hoy.getDate())
-    const dayOfWeek = tmp.getDay() || 7
-    tmp.setDate(tmp.getDate() + 4 - dayOfWeek)
-    const semanaActual = Math.ceil((((tmp.getTime() - new Date(tmp.getFullYear(), 0, 1).getTime()) / 86400000) + 1) / 7)
-    const anioActual = tmp.getFullYear()
+    // Fuente de verdad para "semana cerrada": el estado del período (periodos_facturacion).
+    // Una semana solo cuenta al total cuando su período está en estado 'cerrado'.
+    // Las semanas abiertas (o desconocidas por no tener facturación) se excluyen.
+    const estadoSemanaMap = new Map<string, string>()
+    for (const sf of kardexModal.semanasFacturacion) {
+      estadoSemanaMap.set(`${sf.anio}-${sf.semana}`, sf.estado)
+    }
+    // "No cerrada": el período existe y su estado no es 'cerrado' (abierto o procesando).
+    // Si no hay info de período (semana histórica sin facturación), se considera cerrada y cuenta.
+    const semanaNoCerrada = (anio: number | null, semana: number | null) => {
+      const e = estadoSemanaMap.get(`${Number(anio)}-${Number(semana)}`)
+      return e !== undefined && e !== 'cerrado'
+    }
 
-    // Consolidar semanas unicas de kardex (sin semana actual)
+    // Consolidar semanas unicas de kardex (solo semanas cerradas)
     const semanasKardex = new Set<string>()
     let montoKardex = 0
     for (const r of kardexModal.rows) {
-      if (Number(r.anio) === anioActual && Number(r.semana) === semanaActual) continue
+      if (semanaNoCerrada(r.anio, r.semana)) continue
       if (r.tipo_movimiento !== 'cuota_facturada') continue
       const key = `${r.anio}-${r.semana}`
       if (!semanasKardex.has(key)) {
@@ -166,7 +175,7 @@ export function GarantiasTab() {
     // Agregar semanas de facturacion no presentes en kardex
     let acumulado = montoKardex
     for (const sf of kardexModal.semanasFacturacion) {
-      if (sf.anio === anioActual && sf.semana === semanaActual) continue
+      if (sf.estado !== 'cerrado') continue
       const key = `${sf.anio}-${sf.semana}`
       if (!semanasKardex.has(key)) {
         const esExcedente = acumulado >= montoTotalGarantia
@@ -2276,12 +2285,21 @@ export function GarantiasTab() {
         // Deuda real = suma de delta_deuda del kardex (NO la diferencia facturado-pagado).
         // delta_deuda solo se llena cuando un pago Cabify no cubrió la cuota completa.
         // Si la cuota está facturada pero todavía no entró el pago Cabify, NO es deuda aún.
-        // Calcular semana actual (ISO: lunes = inicio de semana)
-        const hoy = new Date()
-        const tmp = new Date(hoy.getFullYear(), hoy.getMonth(), hoy.getDate())
-        const dayOfWeek = tmp.getDay() || 7
-        tmp.setDate(tmp.getDate() + 4 - dayOfWeek)
         const rowsSinSemanaActual = kardexModal.rows
+
+        // Estado de cierre por semana (fuente de verdad: periodos_facturacion).
+        // Una semana solo cuenta al total y muestra fecha cuando su período está 'cerrado'.
+        const periodoInfoMap = new Map<string, { estado: string; fechaCierre: string | null }>()
+        for (const sf of kardexModal.semanasFacturacion) {
+          periodoInfoMap.set(`${sf.anio}-${sf.semana}`, { estado: sf.estado, fechaCierre: sf.fechaCierre })
+        }
+        // Semana cerrada: período en estado 'cerrado', o sin info de período (histórica) → cuenta.
+        const semanaCerrada = (anio: number, semana: number) => {
+          const info = periodoInfoMap.get(`${anio}-${semana}`)
+          return !info || info.estado === 'cerrado'
+        }
+        const fechaCierreSemana = (anio: number, semana: number) =>
+          periodoInfoMap.get(`${anio}-${semana}`)?.fechaCierre || null
 
         const deudaReal = Math.max(0, rowsSinSemanaActual.reduce((s, r) => s + (Number(r.delta_deuda) || 0), 0))
         const pctFact = Math.min(100, (facturado / total) * 100)
@@ -2428,10 +2446,12 @@ export function GarantiasTab() {
         const consolidadas = Array.from(consolidadasMap.values())
           .sort((a, b) => (a.anio !== b.anio ? b.anio - a.anio : b.semana - a.semana))
 
-        // Total real pagado: se prioriza la suma de filas consolidadas (kardex + facturacion)
-        // para que el header siempre refleje lo que muestran las filas del modal.
-        // Si no hay filas (caso extremo), cae al valor guardado en DB como fallback.
-        const totalSumaConsolidadas = consolidadas.reduce((sum, f) => sum + (Number(f.monto_cuota) || 0), 0)
+        // Total real pagado: suma de filas consolidadas, PERO solo de semanas cerradas.
+        // La semana abierta (en curso) se muestra como fila pero no suma hasta que cierre.
+        // Si no hay filas cerradas (caso extremo), cae al valor guardado en DB como fallback.
+        const totalSumaConsolidadas = consolidadas.reduce((sum, f) => (
+          semanaCerrada(f.anio, f.semana) ? sum + (Number(f.monto_cuota) || 0) : sum
+        ), 0)
         const totalRealPagado = totalSumaConsolidadas > 0 ? totalSumaConsolidadas : facturado
         const excedente = totalRealPagado - total
         const tieneExcedente = excedente > 1
@@ -2576,7 +2596,11 @@ export function GarantiasTab() {
                         </thead>
                         <tbody>
                           {rowsFiltradas.map((f) => {
-                            const fecha = f.fecha ? new Date(f.fecha).toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: '2-digit' }) : '-'
+                            // FECHA: solo se muestra cuando la semana está cerrada, usando la
+                            // fecha_cierre del período. Semana en curso (abierta) → vacío.
+                            const cerrada = semanaCerrada(f.anio, f.semana)
+                            const fechaBase = cerrada ? (fechaCierreSemana(f.anio, f.semana) || f.fecha) : ''
+                            const fecha = fechaBase ? new Date(fechaBase).toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: '2-digit' }) : ''
                             const esExtraFacturacion = f.tipo_movimiento === 'facturacion'
                             const esExcedente = !esExtraFacturacion && !!f.esExcedenteReal
                             const montoColor = esExtraFacturacion ? '#b45309' : esExcedente ? '#b45309' : 'var(--text-primary)'
@@ -2588,7 +2612,21 @@ export function GarantiasTab() {
                                 borderBottom: '1px solid var(--border-primary)',
                                 background: esExtraFacturacion || esExcedente ? '#fffbeb' : undefined,
                               }}>
-                                <td style={{ padding: '10px 12px', color: 'var(--text-secondary)', fontSize: '11px', whiteSpace: 'nowrap' }}>{fecha}</td>
+                                <td style={{ padding: '10px 12px', color: 'var(--text-secondary)', fontSize: '11px', whiteSpace: 'nowrap' }}>
+                                  {cerrada ? fecha : (
+                                    <span
+                                      style={{ display: 'inline-flex', cursor: 'help' }}
+                                      title="Esta semana aún no está cerrada, por lo tanto el monto aún no se considera en el Total Real Pagado"
+                                      onMouseEnter={(e) => {
+                                        const r = e.currentTarget.getBoundingClientRect()
+                                        setAlertTip({ x: r.right + 8, y: r.top + r.height / 2 })
+                                      }}
+                                      onMouseLeave={() => setAlertTip(null)}
+                                    >
+                                      <AlertTriangle size={14} color="#f59e0b" />
+                                    </span>
+                                  )}
+                                </td>
                                 <td style={{ padding: '10px 12px', fontWeight: 600, color: 'var(--text-primary)', whiteSpace: 'nowrap' }}>
                                   {f.anio} S{String(f.semana || '').padStart(2, '0')}
                                   {esExtraFacturacion && (
@@ -2640,7 +2678,8 @@ export function GarantiasTab() {
                     }}>
                       {/* Footer: cuotas pagadas = total de filas cuota_facturada (dinamico, no hardcodeado a 20) */}
                       {(() => {
-                        const cuotasPagadasRef = totalCuotasNecesarias
+                        // Pagadas = cuotas de semanas CERRADAS (la semana en curso no cuenta aún).
+                        const cuotasPagadasRef = consolidadas.filter(f => f.tipo_movimiento === 'cuota_facturada' && semanaCerrada(f.anio, f.semana)).length
                         const cuotasRestantes = Math.max(0, totalCuotasNecesarias - cuotasPagadasRef)
                         const montoRestante = Math.max(0, total - totalRealPagado)
                         return (
@@ -2683,6 +2722,16 @@ export function GarantiasTab() {
                 )}
               </div>
             </div>
+            {alertTip && (
+              <div style={{
+                position: 'fixed', left: alertTip.x, top: alertTip.y, transform: 'translateY(-50%)',
+                zIndex: 3000, maxWidth: '260px', background: '#1f2937', color: '#fff',
+                padding: '8px 10px', borderRadius: '6px', fontSize: '11px', lineHeight: 1.35,
+                boxShadow: '0 6px 20px rgba(0,0,0,0.28)', pointerEvents: 'none',
+              }}>
+                Esta semana aún no está cerrada, por lo tanto el monto aún no se considera en el Total Real Pagado
+              </div>
+            )}
           </div>
         )
       })()}

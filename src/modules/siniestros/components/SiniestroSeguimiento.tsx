@@ -814,7 +814,7 @@ export function SiniestroSeguimiento({ siniestro, onReload, readonly = false }: 
                 </div>
 
                 {/* Fecha, Semana, Turno */}
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '16px', marginBottom: '16px' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: window.innerWidth < 640 ? '1fr' : window.innerWidth < 768 ? '1fr 1fr' : '1fr 1fr 1fr', gap: '16px', marginBottom: '16px' }}>
                   <div className="form-group">
                     <label style={{ fontSize: '13px', fontWeight: 500, marginBottom: '6px', display: 'block', color: 'var(--text-secondary)' }}>
                       Fecha <span style={{ color: '#dc2626' }}>*</span>
@@ -848,7 +848,7 @@ export function SiniestroSeguimiento({ siniestro, onReload, readonly = false }: 
                 </div>
 
                 {/* Tipo de Incidencia, Área, Estado */}
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '16px', marginBottom: '16px' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: window.innerWidth < 640 ? '1fr' : window.innerWidth < 768 ? '1fr 1fr' : '1fr 1fr 1fr', gap: '16px', marginBottom: '16px' }}>
                   <div className="form-group">
                     <label style={{ fontSize: '13px', fontWeight: 500, marginBottom: '6px', display: 'block', color: 'var(--text-secondary)' }}>
                       Tipo de Incidencia <span style={{ color: '#dc2626' }}>*</span>

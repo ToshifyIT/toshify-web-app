@@ -83,7 +83,7 @@ export function SedesModule() {
 
       if (error) throw error
       setSedes(data || [])
-    } catch (error) {
+    } catch {
       Swal.fire('Error', 'No se pudieron cargar las sedes', 'error')
     } finally {
       setLoading(false)
@@ -222,7 +222,7 @@ export function SedesModule() {
       if (error) throw error
       showSuccess('Sede desactivada')
       cargarSedes()
-    } catch (error) {
+    } catch {
       Swal.fire('Error', 'No se pudo desactivar la sede', 'error')
     }
   }
@@ -238,7 +238,7 @@ export function SedesModule() {
       if (error) throw error
       showSuccess('Sede reactivada')
       cargarSedes()
-    } catch (error) {
+    } catch {
       Swal.fire('Error', 'No se pudo reactivar la sede', 'error')
     }
   }
@@ -430,7 +430,7 @@ export function SedesModule() {
   // Render form fields (shared between create & edit)
   const renderForm = () => (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: window.innerWidth < 640 ? '1fr' : '1fr 1fr', gap: '12px' }}>
         <div>
           <label style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '4px', display: 'block' }}>
             Nombre *
@@ -466,7 +466,7 @@ export function SedesModule() {
         </div>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: window.innerWidth < 640 ? '1fr' : '1fr 1fr', gap: '12px' }}>
         <div>
           <label style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '4px', display: 'block' }}>
             País
@@ -518,7 +518,7 @@ export function SedesModule() {
         />
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: window.innerWidth < 640 ? '1fr' : '1fr 1fr', gap: '12px' }}>
         <div>
           <label style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '4px', display: 'block' }}>
             Teléfono
