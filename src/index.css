@@ -315,7 +315,16 @@ body.device-touch .show-touch-only {
    En viewport >= 641px: respeta el width del código pero acotado a 92vw.
    En viewport <= 640px: fuerza 92vw para legibilidad mobile. */
 .swal2-popup {
-  max-width: min(92vw, 760px) !important;
+  max-width: min(92vw, 900px) !important;
+}
+/* Tablas dentro de Swal: scroll horizontal en mobile */
+.swal2-html-container table {
+  display: block;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+.swal2-html-container {
+  overflow-x: auto !important;
 }
 
 .swal-popup-fix {

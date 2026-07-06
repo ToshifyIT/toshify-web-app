@@ -371,7 +371,7 @@ export function PatenteDetalleDrawer({ marcacion, semanaInicio, semanaFin, onClo
         </div>
 
         {/* TABLA */}
-        <div style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden' }}>
+        <div style={{ flex: 1, overflowY: 'auto', overflowX: 'auto' }}>
           {error && (
             <div style={{ padding: 16, color: '#dc2626', fontSize: 12 }}>{error}</div>
           )}
