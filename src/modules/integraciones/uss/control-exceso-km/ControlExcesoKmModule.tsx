@@ -432,8 +432,6 @@ export function ControlExcesoKmModule() {
       <ExcesoKmDetalleDrawer
         row={detalle}
         onClose={() => setDetalle(null)}
-        semanaInicio={detalle?.semanaInicio || dateRange.startDate}
-        semanaFin={detalle?.semanaFin || dateRange.endDate}
       />
     </div>
   )

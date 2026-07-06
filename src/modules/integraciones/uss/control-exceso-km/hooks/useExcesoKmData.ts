@@ -568,6 +568,23 @@ export function useExcesoKmData(sedeId?: string | null) {
         }
         const duracionMin = Math.round(t.trips.reduce((s, x) => s + (x.finMs - x.inicioMs), 0) / 60000)
 
+        // Km por día calendario ART (solo presentación, para el drawer de detalle).
+        // Cada trip aporta al día de su fecha de inicio — mismo criterio con el que
+        // el módulo asigna km a la semana. No altera ningún cálculo: la suma de los
+        // días es exactamente kmTotal.
+        const kmPorDia = new Map<string, number>()
+        for (const x of t.trips) {
+          const f = new Date(x.inicioMs).toLocaleDateString('en-CA', { timeZone: TIMEZONE_ARGENTINA })
+          kmPorDia.set(f, (kmPorDia.get(f) || 0) + x.kmNum)
+        }
+        const desgloseDiario = [...kmPorDia.entries()]
+          .sort((a, b) => a[0].localeCompare(b[0]))
+          .map(([fecha, km]) => ({
+            fecha,
+            kmTotal: Math.round(km * 100) / 100,
+            patente: t.patente,
+          }))
+
         const m: Marcacion = {
           id: `excesoKM-${semanaInfo.key}-${idx}`,
           conductor: t.conductor,
@@ -597,6 +614,7 @@ export function useExcesoKmData(sedeId?: string | null) {
           excesoKmSemanaInicio: semanaInfo.inicio,
           excesoKmSemanaFin: semanaInfo.fin,
           excesoKmSemanaKey: semanaInfo.key,
+          desgloseDiario,
         }
         return m
       })
