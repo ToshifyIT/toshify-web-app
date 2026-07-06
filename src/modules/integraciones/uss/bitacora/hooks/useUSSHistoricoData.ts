@@ -67,6 +67,10 @@ export interface Marcacion {
   entradaSemana?: { fecha: string; hora: string; periodoInicio: string | null }; // primer trip de la semana
   salidaSemana?: { fecha: string; hora: string; periodoFin: string | null }; // ultimo trip de la semana
   marcacionesDetalle?: Array<{ fecha: string; entrada: string; salida: string; kmTotal: number; duracionMinutos: number | null; patente: string; estado: string; gpsOrigen: 'USS' | 'GEOTAB' }>;
+  // Km por día calendario ART del turno — solo presentación (drawer de Control de
+  // Exceso KM). Cada trip aporta al día de su fecha de inicio; la suma de los días
+  // es exactamente kmTotal.
+  desgloseDiario?: Array<{ fecha: string; kmTotal: number; patente: string }>;
 }
 
 export interface USSHistoricoDateRange {
