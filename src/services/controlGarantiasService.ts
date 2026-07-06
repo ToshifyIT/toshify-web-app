@@ -66,6 +66,8 @@ export async function getFacturacionGarantiaConductor(conductorDni: string): Pro
   anio: number
   subtotalGarantia: number
   fecha: string
+  estado: string
+  fechaCierre: string | null
 }[]> {
   // 1. Obtener registros de facturacion con garantia > 0
   const { data: facts, error: e1 } = await (supabase
@@ -76,27 +78,42 @@ export async function getFacturacionGarantiaConductor(conductorDni: string): Pro
 
   if (e1 || !facts || facts.length === 0) return []
 
-  // 2. Obtener semana/anio/fecha_fin de cada periodo
+  // 2. Obtener semana/anio/fecha_fin + estado y fecha_cierre de cada periodo.
+  //    estado/fecha_cierre se usan para decidir si la semana ya está cerrada:
+  //    recién ahí la cuota cuenta al total real pagado y muestra su fecha de cierre.
   const periodoIds = [...new Set(facts.map((f: any) => f.periodo_id))] as string[]
   const { data: periodos, error: e2 } = await (supabase
     .from('periodos_facturacion') as any)
-    .select('id, semana, anio, fecha_fin')
+    .select('id, semana, anio, fecha_fin, estado, fecha_cierre')
     .in('id', periodoIds)
 
   if (e2 || !periodos) return []
 
-  const periodoMap = new Map<string, { semana: number; anio: number; fecha: string }>()
+  const periodoMap = new Map<string, { semana: number; anio: number; fecha: string; estado: string; fechaCierre: string | null }>()
   for (const p of periodos) {
-    periodoMap.set(p.id, { semana: p.semana, anio: p.anio, fecha: p.fecha_fin || '' })
+    periodoMap.set(p.id, {
+      semana: p.semana,
+      anio: p.anio,
+      fecha: p.fecha_fin || '',
+      estado: p.estado || 'abierto',
+      fechaCierre: p.fecha_cierre || null,
+    })
   }
 
   return facts
     .map((f: any) => {
       const p = periodoMap.get(f.periodo_id)
       if (!p) return null
-      return { semana: p.semana, anio: p.anio, subtotalGarantia: Number(f.subtotal_garantia) || 0, fecha: p.fecha }
+      return {
+        semana: p.semana,
+        anio: p.anio,
+        subtotalGarantia: Number(f.subtotal_garantia) || 0,
+        fecha: p.fecha,
+        estado: p.estado,
+        fechaCierre: p.fechaCierre,
+      }
     })
-    .filter(Boolean) as { semana: number; anio: number; subtotalGarantia: number; fecha: string }[]
+    .filter(Boolean) as { semana: number; anio: number; subtotalGarantia: number; fecha: string; estado: string; fechaCierre: string | null }[]
 }
 
 /**

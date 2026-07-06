@@ -793,7 +793,7 @@ export function TitularesModule() {
         {formData.tipo === 'persona' ? (
           <>
             {/* Campos persona */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: window.innerWidth < 640 ? '1fr' : '1fr 1fr', gap: '12px' }}>
               <div>
                 <label style={labelStyle}>Nombres <span style={{ color: '#dc2626' }}>*</span></label>
                 <input style={inputStyle} value={formData.nombres} onChange={(e) => setFormData({ ...formData, nombres: e.target.value })} disabled={saving} />
@@ -807,7 +807,7 @@ export function TitularesModule() {
               <label style={labelStyle}>Domicilio <span style={{ color: '#f59e0b' }}>*</span></label>
               <input style={inputStyle} value={formData.domicilio} onChange={(e) => setFormData({ ...formData, domicilio: e.target.value })} disabled={saving} />
             </div>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: window.innerWidth < 640 ? '1fr' : '1fr 1fr', gap: '12px' }}>
               <div>
                 <label style={labelStyle}>Email <span style={{ color: '#f59e0b' }}>*</span></label>
                 <input style={inputStyle} type="email" value={formData.email} onChange={(e) => setFormData({ ...formData, email: e.target.value })} disabled={saving} />
@@ -817,7 +817,7 @@ export function TitularesModule() {
                 <input style={inputStyle} value={formData.telefono} onChange={(e) => setFormData({ ...formData, telefono: e.target.value })} disabled={saving} />
               </div>
             </div>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: window.innerWidth < 640 ? '1fr' : '1fr 1fr', gap: '12px' }}>
               <div>
                 <label style={labelStyle}>Conyugue (tiene/no tiene) <span style={{ color: '#f59e0b' }}>*</span></label>
                 <select style={inputStyle} value={formData.conyugue} onChange={(e) => setFormData({ ...formData, conyugue: e.target.value })} disabled={saving}>
@@ -853,7 +853,7 @@ export function TitularesModule() {
               <label style={labelStyle}>Representante Administrativo <span style={{ color: '#f59e0b' }}>*</span></label>
               <input style={inputStyle} value={formData.representante_administrativo} onChange={(e) => setFormData({ ...formData, representante_administrativo: e.target.value })} disabled={saving} />
             </div>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: window.innerWidth < 640 ? '1fr' : '1fr 1fr', gap: '12px' }}>
               <div>
                 <label style={labelStyle}>DNI Representante</label>
                 <input style={inputStyle} value={formData.dni_representante} onChange={(e) => setFormData({ ...formData, dni_representante: e.target.value })} disabled={saving} />
@@ -867,7 +867,7 @@ export function TitularesModule() {
               <label style={labelStyle}>Domicilio Fiscal <span style={{ color: '#f59e0b' }}>*</span></label>
               <input style={inputStyle} value={formData.domicilio_fiscal} onChange={(e) => setFormData({ ...formData, domicilio_fiscal: e.target.value })} disabled={saving} />
             </div>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: window.innerWidth < 640 ? '1fr' : '1fr 1fr', gap: '12px' }}>
               <div>
                 <label style={labelStyle}>Email General <span style={{ color: '#f59e0b' }}>*</span></label>
                 <input style={inputStyle} type="email" value={formData.email} onChange={(e) => setFormData({ ...formData, email: e.target.value })} disabled={saving} />
@@ -888,7 +888,7 @@ export function TitularesModule() {
     <div className="veh-module">
       {/* Stats */}
       <div className="veh-stats">
-        <div className="veh-stats-grid" style={{ gridTemplateColumns: 'repeat(6, 1fr)' }}>
+        <div className="veh-stats-grid" style={{ gridTemplateColumns: window.innerWidth < 768 ? undefined : 'repeat(6, 1fr)' }}>
           {/* Total — limpia todos los filtros */}
           <div
             className="stat-card"
@@ -1034,7 +1034,7 @@ export function TitularesModule() {
               <button className="modal-close" onClick={() => setShowDetailModal(false)}>&times;</button>
             </div>
             <div className="modal-body">
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', fontSize: '13px' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: window.innerWidth < 640 ? '1fr' : '1fr 1fr', gap: '16px', fontSize: '13px' }}>
                 <div>
                   <label style={{ fontSize: '11px', color: 'var(--text-tertiary)', textTransform: 'uppercase' }}>Tipo</label>
                   <div style={{ fontWeight: 500 }}>{selectedTitular.tipo === 'persona' ? 'Persona' : 'Empresa'}</div>

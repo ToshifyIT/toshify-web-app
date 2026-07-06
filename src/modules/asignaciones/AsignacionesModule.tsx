@@ -3035,7 +3035,7 @@ export function AsignacionesModule() {
 
       {/* Stats Cards - Estilo Bitácora */}
       <div className="asig-stats">
-        <div className="asig-stats-grid" style={{ gridTemplateColumns: 'repeat(3, 1fr)' }}>
+        <div className="asig-stats-grid">
           <div
             className={`stat-card stat-card-clickable ${activeStatCard === 'programadas' ? 'stat-card-active' : ''}`}
             title="Asignaciones en estado programado pendientes de confirmación"
@@ -3071,7 +3071,7 @@ export function AsignacionesModule() {
           </div>
         </div>
         {/* Segunda fila de stats - Métricas por tipo de documento */}
-        <div className="asig-stats-grid" style={{ gridTemplateColumns: 'repeat(3, 1fr)', marginTop: '12px' }}>
+        <div className="asig-stats-grid" style={{ marginTop: '12px' }}>
           <div
             className={`stat-card stat-card-clickable ${activeStatCard === 'cartaOferta' ? 'stat-card-active' : ''}`}
             title="Conductores nuevos que firmaron Carta Oferta (conteo por conductor único)"
@@ -4037,7 +4037,7 @@ export function AsignacionesModule() {
                 <div style={sectionTitleStyle}>
                   <Car size={14} /> Asignación
                 </div>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '20px' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: window.innerWidth < 640 ? '1fr' : '1fr 1fr', gap: '10px', marginBottom: '20px' }}>
                   <div style={{ padding: '10px 12px', background: 'var(--bg-secondary)', borderRadius: '8px', border: '1px solid var(--border-primary)' }}>
                     <span style={{ fontSize: '10px', fontWeight: 600, color: 'var(--text-tertiary)', textTransform: 'uppercase' as const, letterSpacing: '0.04em' }}>Vehículo</span>
                     <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-primary)', marginTop: '2px' }}>{vehiculoLabel}</div>
@@ -4050,7 +4050,7 @@ export function AsignacionesModule() {
 
                 {/* Conductor(es) */}
                 {conductoresAsig.length > 1 ? (
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '20px' }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: window.innerWidth < 640 ? '1fr' : '1fr 1fr', gap: '10px', marginBottom: '20px' }}>
                     {conductoresAsig.map(c => (
                       <div key={c.id} style={{ padding: '10px 12px', background: 'var(--bg-secondary)', borderRadius: '8px', border: '1px solid var(--border-primary)' }}>
                         <span style={{ fontSize: '10px', fontWeight: 600, color: 'var(--text-tertiary)', textTransform: 'uppercase' as const, letterSpacing: '0.04em' }}>{c.horario === 'diurno' ? 'Conductor Diurno' : 'Conductor Nocturno'}</span>
@@ -4069,7 +4069,7 @@ export function AsignacionesModule() {
                 <div style={sectionTitleStyle}>
                   <FileText size={14} /> Datos del control
                 </div>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: isControlBariloche ? '16px' : '0' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: window.innerWidth < 640 ? '1fr' : '1fr 1fr', gap: '12px', marginBottom: isControlBariloche ? '16px' : '0' }}>
                   <div>
                     <label style={labelStyle}>Kilometraje <span style={{ color: '#dc2626' }}>*</span></label>
                     <input type="text" placeholder="Ej: 45.000" value={controlForm.km} onChange={(e) => setControlForm(p => ({ ...p, km: e.target.value }))} disabled={controlSaving} style={inputStyle} />
@@ -4103,7 +4103,7 @@ export function AsignacionesModule() {
                       <label style={labelStyle}>Estado de Cristales</label>
                       <input type="text" placeholder="Ej: Buen estado, sin rajaduras" value={controlForm.cristal_status} onChange={(e) => setControlForm(p => ({ ...p, cristal_status: e.target.value }))} disabled={controlSaving} style={inputStyle} />
                     </div>
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '12px' }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: window.innerWidth < 640 ? '1fr' : '1fr 1fr', gap: '12px', marginBottom: '12px' }}>
                       <div>
                         <label style={labelStyle}>Bajos y Carter</label>
                         <input type="text" placeholder="Ej: Sin pérdidas" value={controlForm.carter} onChange={(e) => setControlForm(p => ({ ...p, carter: e.target.value }))} disabled={controlSaving} style={inputStyle} />
@@ -4113,7 +4113,7 @@ export function AsignacionesModule() {
                         <input type="text" placeholder="Ej: Buen estado" value={controlForm.tires} onChange={(e) => setControlForm(p => ({ ...p, tires: e.target.value }))} disabled={controlSaving} style={inputStyle} />
                       </div>
                     </div>
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '12px' }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: window.innerWidth < 640 ? '1fr' : '1fr 1fr', gap: '12px', marginBottom: '12px' }}>
                       <div>
                         <label style={labelStyle}>Otros Documentos</label>
                         <input type="text" placeholder="Ej: VTV, seguro" value={controlForm.others_docs} onChange={(e) => setControlForm(p => ({ ...p, others_docs: e.target.value }))} disabled={controlSaving} style={inputStyle} />
@@ -4123,7 +4123,7 @@ export function AsignacionesModule() {
                         <input type="text" placeholder="Ej: Matafuegos, baliza" value={controlForm.other_accesory} onChange={(e) => setControlForm(p => ({ ...p, other_accesory: e.target.value }))} disabled={controlSaving} style={inputStyle} />
                       </div>
                     </div>
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '12px', marginBottom: '12px' }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: window.innerWidth < 640 ? '1fr' : window.innerWidth < 768 ? '1fr 1fr' : '1fr 1fr 1fr', gap: '12px', marginBottom: '12px' }}>
                       <div>
                         <label style={labelStyle}>Marca Cadenas</label>
                         <input type="text" placeholder="-" value={controlForm.make_chains} onChange={(e) => setControlForm(p => ({ ...p, make_chains: e.target.value }))} disabled={controlSaving} style={inputStyle} />

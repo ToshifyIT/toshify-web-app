@@ -2741,7 +2741,7 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
 
             <div className="step-item">
               <div className={`step-circle ${step >= 3 ? 'active' : ''} ${step > 3 ? 'completed' : ''}`}>
-                {step > 3 ? <Check size={16} /> : '3'}
+                {step > 3 ? <Check size={16} /> : '4'}
               </div>
               <span className={`step-label ${step >= 3 ? 'active' : ''} ${step > 3 ? 'completed' : ''}`}>
                 Conductores
@@ -2751,7 +2751,7 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
             <div className={`step-connector ${step > 3 ? 'completed' : ''}`} />
 
             <div className="step-item">
-              <div className={`step-circle ${step >= 4 ? 'active' : ''}`}>4</div>
+              <div className={`step-circle ${step >= 4 ? 'active' : ''}`}>5</div>
               <span className={`step-label ${step >= 4 ? 'active' : ''}`}>Detalles</span>
             </div>
           </div>
@@ -3013,15 +3013,16 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
                 </div>
 
                 {/* Buscador y Filtro */}
-                <div style={{ marginBottom: '20px', maxWidth: '900px', margin: '0 auto 20px auto', display: 'flex', gap: '12px' }}>
+                <div style={{ marginBottom: '20px', maxWidth: '900px', margin: '0 auto 20px auto', display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
                   <input
                     type="text"
                     placeholder="Buscar por patente, marca o modelo..."
                     value={vehicleSearch}
                     onChange={(e) => setVehicleSearch(e.target.value)}
                     style={{
-                      flex: 1,
-                      padding: '12px 16px',
+                      flex: '1 1 200px',
+                      minWidth: 0,
+                      padding: '10px 12px',
                       border: '2px solid var(--border-primary)',
                       borderRadius: '8px',
                       fontSize: 'clamp(12px, 1vw, 14px)',
@@ -3032,14 +3033,15 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
                     value={vehicleAvailabilityFilter}
                     onChange={(e) => setVehicleAvailabilityFilter(e.target.value)}
                     style={{
-                      padding: '12px 16px',
+                      padding: '10px 12px',
                       border: '2px solid var(--border-primary)',
                       borderRadius: '8px',
                       fontSize: 'clamp(12px, 1vw, 14px)',
                       fontFamily: 'inherit',
                       background: 'var(--modal-bg)',
                       cursor: 'pointer',
-                      minWidth: '180px'
+                      flex: '0 1 auto',
+                      minWidth: '120px'
                     }}
                   >
                     <option value="">Todos</option>
@@ -3049,7 +3051,7 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
                   </select>
                 </div>
 
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr auto 1fr', gap: '16px', maxWidth: '900px', margin: '0 auto', alignItems: 'start' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: window.innerWidth < 768 ? '1fr' : '1fr auto 1fr', gap: window.innerWidth < 768 ? '8px' : '16px', maxWidth: '900px', margin: '0 auto', alignItems: 'start' }}>
                   {/* Columna izquierda: Vehículo a cambiar (origen) - solo En Uso */}
                   <div>
                     <div style={{
@@ -3123,8 +3125,8 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
                   </div>
 
                   {/* Icono de flecha central */}
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', paddingTop: '60px' }}>
-                    <ArrowLeftRight size={24} style={{ color: 'var(--text-tertiary)' }} />
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: window.innerWidth < 768 ? '4px 0' : '60px 0 0 0' }}>
+                    <ArrowLeftRight size={24} style={{ color: 'var(--text-tertiary)', transform: window.innerWidth < 768 ? 'rotate(90deg)' : 'none' }} />
                   </div>
 
                   {/* Columna derecha: Vehículo nuevo (destino) - Disponibles + En Uso */}
@@ -3708,7 +3710,7 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
 
                 <div className="step4-form" style={{ maxWidth: '700px', margin: '0 auto' }}>
                   {/* Fecha y Hora (compartidos) */}
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '16px', marginBottom: '24px' }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: window.innerWidth < 640 ? '1fr' : window.innerWidth < 768 ? '1fr 1fr' : '1fr 1fr 1fr', gap: '16px', marginBottom: '24px' }}>
                     <div>
                       <label>Fecha de Cita *</label>
                       <input

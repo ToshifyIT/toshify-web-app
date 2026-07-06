@@ -406,29 +406,62 @@ export function LeadsModule() {
     'Convocatoria Inducción', 'Apto Inducción', 'Descartado',
   ] as const
 
-  /** Calcula el estado correcto de un lead basándose en proceso y entrevista_ia.
-   *  Si el lead tiene un estado asignado manualmente (ej: DAMARO), lo respeta. */
+  /** Pipeline de progresion de estados: indice mayor = mas avanzado.
+   *  calcularEstadoLead solo puede AVANZAR, nunca retroceder. */
+  const ESTADO_ORDEN: Record<string, number> = {
+    'Inicio conversación': 0,
+    'Acepta oferta': 1,
+    'Pendiente - Hireflix': 2,
+    'Ayuda - Hireflix': 3,
+    'Apto - Hireflix': 4,
+    'No Apto - Hireflix': 4,
+    'Documentos enviados': 5,
+    'Documentos pendientes': 5,
+    'Auto del pueblo': 5,
+    'No le interesa': 5,
+    'No cumple edad': 5,
+    'Convocatoria Inducción': 6,
+    'Apto Inducción': 7,
+    'Conductor': 8,
+    'Descartado': 5,
+  }
+
+  /** Calcula el estado correcto de un lead basandose en proceso y entrevista_ia.
+   *  Regla: solo puede avanzar en el pipeline, nunca retroceder.
+   *  Si el lead ya esta en un estado mas avanzado, lo respeta. */
   function calcularEstadoLead(lead: Lead): string {
     const proceso = (lead.proceso || '').toLowerCase()
     const entrevista = lead.entrevista_ia || ''
+    const estadoActual = lead.estado_de_lead || 'Inicio conversación'
+    const nivelActual = ESTADO_ORDEN[estadoActual] ?? 0
 
+    // Conductor siempre gana (nivel 8, maximo)
     if (proceso === 'convertido' || proceso === 'conductor') return 'Conductor'
-    if (entrevista === 'No Apto') return 'No Apto - Hireflix'
-    if (entrevista === 'Apto') return 'Apto - Hireflix'
-    // Si tiene dato en ayuda_entrevista, asignar "Ayuda - Hireflix"
-    if (lead.ayuda_entrevista && lead.ayuda_entrevista.trim() !== '') return 'Ayuda - Hireflix'
-    // Si fase_de_preguntas es "Video Entrevista" y aún está en "Acepta oferta", pasa a pendiente
-    if (lead.fase_de_preguntas === 'Video Entrevista' && lead.estado_de_lead === 'Acepta oferta') return 'Pendiente - Hireflix'
-    // Normalizar estados con formato invertido (ej: "Hireflix - Apto" -> "Apto - Hireflix")
-    if (lead.estado_de_lead) {
-      const el = lead.estado_de_lead.toLowerCase()
-      if (el.includes('hireflix') && el.includes('no apto')) return 'No Apto - Hireflix'
-      if (el.includes('hireflix') && el.includes('apto')) return 'Apto - Hireflix'
-      if (el.includes('hireflix') && el.includes('ayuda')) return 'Ayuda - Hireflix'
+
+    // Calcular estado sugerido por las reglas automaticas
+    let estadoSugerido = estadoActual
+
+    if (entrevista === 'No Apto') {
+      estadoSugerido = 'No Apto - Hireflix'
+    } else if (entrevista === 'Apto') {
+      estadoSugerido = 'Apto - Hireflix'
+    } else if (lead.ayuda_entrevista && lead.ayuda_entrevista.trim() !== '') {
+      estadoSugerido = 'Ayuda - Hireflix'
+    } else if (lead.fase_de_preguntas === 'Video Entrevista' && estadoActual === 'Acepta oferta') {
+      estadoSugerido = 'Pendiente - Hireflix'
+    } else if (estadoActual) {
+      // Normalizar formatos invertidos (ej: "Hireflix - Apto" -> "Apto - Hireflix")
+      const el = estadoActual.toLowerCase()
+      if (el.includes('hireflix') && el.includes('no apto')) estadoSugerido = 'No Apto - Hireflix'
+      else if (el.includes('hireflix') && el.includes('apto')) estadoSugerido = 'Apto - Hireflix'
+      else if (el.includes('hireflix') && el.includes('ayuda')) estadoSugerido = 'Ayuda - Hireflix'
     }
-    // Si ya tiene un estado asignado (no vacío y no "Inicio conversación"), respetarlo
-    if (lead.estado_de_lead && lead.estado_de_lead !== 'Inicio conversación') return lead.estado_de_lead
-    return 'Inicio conversación'
+
+    // Solo avanzar, nunca retroceder
+    const nivelSugerido = ESTADO_ORDEN[estadoSugerido] ?? 0
+    if (nivelSugerido < nivelActual) return estadoActual
+
+    return estadoSugerido || 'Inicio conversación'
   }
 
   async function handleInlineUpdate(leadId: string, field: keyof Lead, value: string) {
@@ -563,13 +596,15 @@ export function LeadsModule() {
             return acc
           }, {})
           for (const [estado, batchIds] of Object.entries(porEstado)) {
-            await supabase
+            const { error: syncErr } = await supabase
               .from('leads')
               .update({ estado_de_lead: estado, updated_at: new Date().toISOString() })
               .in('id', batchIds)
+            if (syncErr) {
+              console.error(`Error sincronizando estado "${estado}" para ${batchIds.length} leads:`, syncErr.message)
+            }
           }
         }
-
       }
 
     } catch (err) {
