@@ -1863,3 +1863,13 @@
     max-height: calc(100vh - 200px);
   }
 }
+
+/* ===== Modo embebido (Panel de Conductores / admin) ===== */
+/* Reusa el portal Mi Espacio dentro del admin: sin pantalla completa y sin gráficos. */
+.portal-embedded {
+  min-height: auto;
+  background: transparent;
+}
+.portal-embedded .portal-chart-card {
+  display: none;
+}
