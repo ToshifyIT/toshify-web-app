@@ -31,10 +31,12 @@ export function ConductorDetalleModal({ conductor, onClose }: { conductor: Condu
   const [semanaSel, setSemanaSel] = useState<FacturacionSemana | null>(null)
 
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
+    // Escape cierra este modal solo si NO hay un modal de semana abierto encima
+    // (en ese caso Escape lo maneja el modal de semana, que está al frente).
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape' && !semanaSel) onClose() }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [onClose])
+  }, [onClose, semanaSel])
 
   useEffect(() => {
     let vivo = true
@@ -130,7 +132,7 @@ export function ConductorDetalleModal({ conductor, onClose }: { conductor: Condu
                       <td>{fmtFecha(m.fecha)}</td>
                       <td className="cdet-trunc" title={m.infraccion || ''}>{m.infraccion || '—'}</td>
                       <td>{m.patente || '—'}</td>
-                      <td><span className={`cdet-tag ${m.estado === 'pagada' ? 'ok' : 'pend'}`}>{m.estado === 'pagada' ? 'Pagada' : 'Pendiente'}</span></td>
+                      <td><span className={`cdet-tag ${m.estado === 'pagada' ? 'ok' : m.estado === 'impaga' ? 'impaga' : 'pend'}`}>{m.estado === 'pagada' ? 'Pagada' : m.estado === 'impaga' ? 'Impaga' : 'Sin facturar'}</span></td>
                       <td className="r">{formatCurrency(m.monto)}</td>
                     </tr>
                   ))}
