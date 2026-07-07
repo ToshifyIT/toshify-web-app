@@ -123,6 +123,9 @@ export default function MultasModule() {
   // DataTable (búsqueda global, filtros Excel de columna y fecha). Se llena vía
   // onFilteredDataChange. Es null hasta que la tabla reporta por primera vez.
   const [multasVisibles, setMultasVisibles] = useState<Multa[] | null>(null)
+  // Búsqueda global CONTROLADA: la usamos también para las métricas de monto por
+  // estado (Sin Facturar / Facturadas / Total), que son cross-tab y no salen de multasVisibles.
+  const [busqueda, setBusqueda] = useState('')
   const [vehiculos, setVehiculos] = useState<Vehiculo[]>([])
   const [multasEnviadas, setMultasEnviadas] = useState<Set<number>>(new Set())
   const [selectedMulta, setSelectedMulta] = useState<Multa | null>(null)
@@ -415,9 +418,30 @@ export default function MultasModule() {
   // multasFiltradas como respaldo para evitar un parpadeo en 0.
   const multasKpi = multasVisibles ?? multasFiltradas
 
-  const totalImporte = useMemo(() =>
-    multasKpi.reduce((sum, m) => sum + parseImporte(m.importe), 0)
-  , [multasKpi])
+  // Coincidencia de búsqueda por multa (misma lógica que se pasa al DataTable como
+  // globalFilterFn, para que tabla y métricas usen exactamente el mismo criterio).
+  const matchBusqueda = useCallback((m: Multa, term: string): boolean => {
+    const t = (term || '').toLowerCase().trim()
+    if (!t) return true
+    const hay = [m.patente, m.conductor_responsable, m.lugar, m.infraccion, m.detalle, m.ibutton, m.importe]
+      .map(x => String(x ?? '').toLowerCase()).join(' ')
+    return t.split(/\s+/).filter(Boolean).every(w => hay.includes(w))
+  }, [])
+
+  // Montos por estado (cross-tab): respetan filtros de columna (getFilteredData) y la
+  // búsqueda, excluyen desestimadas y multas con 2 conductores (con coma).
+  const montosPorEstado = useMemo(() => {
+    const base = getFilteredData().filter(m =>
+      !m.desestimada_at && !tieneConductorConComa(m) && matchBusqueda(m, busqueda)
+    )
+    let sinFacturar = 0, facturadas = 0
+    for (const m of base) {
+      const imp = parseImporte(m.importe)
+      if (fueEnviadaAFacturacion(m)) facturadas += imp
+      else sinFacturar += imp
+    }
+    return { sinFacturar, facturadas, total: sinFacturar + facturadas }
+  }, [getFilteredData, busqueda, matchBusqueda, fueEnviadaAFacturacion])
 
   const patentesUnicasCount = useMemo(() =>
     new Set(multasKpi.map(m => m.patente).filter(Boolean)).size
@@ -1304,7 +1328,21 @@ export default function MultasModule() {
           <div className="stat-card">
             <DollarSign size={18} className="stat-icon" />
             <div className="stat-content">
-              <span className="stat-value">{formatMoney(totalImporte)}</span>
+              <span className="stat-value">{formatMoney(montosPorEstado.sinFacturar)}</span>
+              <span className="stat-label">Monto Total sin Facturar</span>
+            </div>
+          </div>
+          <div className="stat-card">
+            <DollarSign size={18} className="stat-icon" />
+            <div className="stat-content">
+              <span className="stat-value">{formatMoney(montosPorEstado.facturadas)}</span>
+              <span className="stat-label">Monto Total Facturadas</span>
+            </div>
+          </div>
+          <div className="stat-card">
+            <DollarSign size={18} className="stat-icon" />
+            <div className="stat-content">
+              <span className="stat-value">{formatMoney(montosPorEstado.total)}</span>
               <span className="stat-label">Monto Total</span>
             </div>
           </div>
@@ -1335,6 +1373,9 @@ export default function MultasModule() {
         externalFilters={activeFilters}
         onClearAllFilters={clearAllFilters}
         onFilteredDataChange={setMultasVisibles}
+        globalFilter={busqueda}
+        onGlobalFilterChange={setBusqueda}
+        globalFilterFn={(row, _c, val) => matchBusqueda(row.original as Multa, String(val ?? ''))}
         headerAction={
           <div className="multas-header-actions">
             {/* Toggle vista activas / enviadas / desestimadas */}

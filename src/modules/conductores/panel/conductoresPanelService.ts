@@ -28,11 +28,20 @@ export interface ConductorPanelRow {
   vehiculoAsignado: string | null   // patente del auto asignado ahora mismo
   cantidadMultas: number
   vehiculos: string[]        // patentes distintas de sus multas
-  montoTotalMultas: number
-  multasPagadas: number
-  multasPendientes: number
+  // Montos con IMPORTE COMPLETO (nominal), igual que el modulo de Multas.
+  montoTotalMultas: number   // todas las multas
+  montoFacturado: number     // facturadas (tiene incidencia) = enviadas a facturacion
+  montoSinFacturar: number   // activas (sin incidencia)
+  // Estados de pago (subdivision de las facturadas). Facturadas = impagas + pagadas.
+  //  - sinFacturar: sin incidencia (todavia no se mando a facturacion)
+  //  - impagas: facturada pero su semana NO quedo cubierta (o sin penalidad aplicada)
+  //  - pagadas: facturada en una semana cubierta al 100% (pagada de verdad)
+  sinFacturar: number
+  impagas: number
+  pagadas: number
+  montoImpaga: number
   montoPagado: number
-  montoPendiente: number
+  montoPendiente: number     // = montoSinFacturar + montoImpaga (todo lo no pagado)
 }
 
 // Parsea importes que en la BD vienen en DOS formatos mezclados:
@@ -56,14 +65,6 @@ export function parseImporte(v: unknown): number {
   }
   const n = parseFloat(s)
   return Number.isFinite(n) ? n : 0
-}
-
-// Monto de una multa: el importe CON descuento por pago temprano cuando existe
-// (es lo que realmente paga el conductor y lo que muestra el portal Mi Espacio),
-// cayendo al importe pleno cuando no hay descuento.
-export function montoDeMulta(importe: unknown, importeDescuento: unknown): number {
-  const desc = parseImporte(importeDescuento)
-  return desc > 0 ? desc : parseImporte(importe)
 }
 
 function normalize(s: string | null | undefined): string {
@@ -108,7 +109,6 @@ interface RawMulta {
   id: number | string
   patente: string | null
   importe: unknown
-  importe_descuento: unknown
   conductor_responsable: string | null
 }
 
@@ -168,7 +168,7 @@ export async function cargarPanelConductores(sedeId?: string | null): Promise<Co
   const multas = await fetchAll<RawMulta>((from, to) =>
     supabase
       .from('multas_historico')
-      .select('id, patente, importe, importe_descuento, conductor_responsable')
+      .select('id, patente, importe, conductor_responsable')
       .is('deleted_at', null)
       .is('desestimada_at', null)
       .not('conductor_responsable', 'is', null)
@@ -184,30 +184,67 @@ export async function cargarPanelConductores(sedeId?: string | null): Promise<Co
       .range(from, to)
   )
 
-  // 5. Periodos cerrados (para clasificar pagada).
-  const periodos = await fetchAll<{ semana: number; anio: number }>((from, to) =>
+  // 4b. Incidencias: set de multa_id que YA se mandaron a facturacion (mismo criterio
+  // que el modulo de Multas para "Enviadas a facturacion").
+  const incidencias = await fetchAll<{ multa_id: number | string | null }>((from, to) =>
+    supabase.from('incidencias').select('multa_id').not('multa_id', 'is', null).range(from, to)
+  )
+  const facturadaSet = new Set<string>(incidencias.map(i => String(i.multa_id)))
+
+  // 5. Facturacion por semana (proforma) y aportes (control_saldos) por conductor,
+  // para determinar que semanas quedaron CUBIERTAS (proforma - aportes <= 0).
+  const facturacion = await fetchAll<{
+    conductor_id: string | null
+    total_a_pagar: unknown
+    periodos_facturacion: { semana: number | null; anio: number | null } | null
+  }>((from, to) =>
     supabase
-      .from('periodos_facturacion')
-      .select('semana, anio')
-      .eq('estado', 'cerrado')
+      .from('facturacion_conductores')
+      .select('conductor_id, total_a_pagar, periodos_facturacion!inner(semana, anio)')
       .range(from, to)
   )
-  const cerradas = new Set<string>(periodos.map(p => `${p.semana}-${p.anio}`))
+  const aportes = await fetchAll<{ conductor_id: string | null; semana: number | null; anio: number | null; tipo_movimiento: string | null; monto_movimiento: unknown }>((from, to) =>
+    supabase
+      .from('control_saldos')
+      .select('conductor_id, semana, anio, tipo_movimiento, monto_movimiento')
+      .range(from, to)
+  )
+  const tiposAporte = new Set(['pago_cabify', 'pago_manual', 'pago', 'pago_cuota'])
+  const proformaPorSem = new Map<string, number>()   // conductor|sem-anio -> proforma
+  for (const f of facturacion) {
+    const per = f.periodos_facturacion
+    if (!f.conductor_id || !per?.semana || !per?.anio) continue
+    const k = `${f.conductor_id}|${per.semana}-${per.anio}`
+    proformaPorSem.set(k, (proformaPorSem.get(k) || 0) + parseImporte(f.total_a_pagar))
+  }
+  const aportePorSem = new Map<string, number>()
+  for (const a of aportes) {
+    if (!a.conductor_id || !tiposAporte.has(a.tipo_movimiento || '')) continue
+    const k = `${a.conductor_id}|${a.semana}-${a.anio}`
+    aportePorSem.set(k, (aportePorSem.get(k) || 0) + Number(a.monto_movimiento || 0))
+  }
+  // Semana cubierta = proforma - aportes <= 1 (tolerancia de centavos), con proforma > 0.
+  const semanaCubierta = (conductorId: string, sem: number, anio: number): boolean => {
+    const k = `${conductorId}|${sem}-${anio}`
+    const prof = proformaPorSem.get(k) || 0
+    if (prof <= 0) return false
+    return prof - (aportePorSem.get(k) || 0) <= 1
+  }
 
-  // Mapa (conductor_id + '|' + multa_id) -> monto facturado (pagada/fraccionada).
-  const pagadaMonto = new Map<string, number>()
+  // Mapa (conductor_id|multa_id) -> penalidad (facturada). Guarda la aplicacion mas reciente.
+  interface PenInfo { fraccionado: boolean; sem: number; anio: number }
+  const penPorMulta = new Map<string, PenInfo>()
   for (const p of penalidades) {
     const mid = p.incidencias?.multa_id
     if (mid == null || !p.conductor_id) continue
+    // Solo cuenta como facturada si esta aplicada y no rechazada.
+    if (p.aplicado !== true || p.rechazado === true) continue
     const key = `${p.conductor_id}|${mid}`
-    const monto = parseImporte(p.monto)
     const sem = p.semana_aplicacion ?? 0
     const anio = p.anio_aplicacion ?? 0
-    const esPagada = p.fraccionado === true ||
-      (p.aplicado === true && p.rechazado !== true && cerradas.has(`${sem}-${anio}`))
-    if (esPagada) {
-      // Conserva el mayor monto facturado si hay varias penalidades para la misma multa.
-      pagadaMonto.set(key, Math.max(pagadaMonto.get(key) || 0, monto))
+    const prev = penPorMulta.get(key)
+    if (!prev || anio > prev.anio || (anio === prev.anio && sem > prev.sem)) {
+      penPorMulta.set(key, { fraccionado: p.fraccionado === true, sem, anio })
     }
   }
 
@@ -238,25 +275,28 @@ export async function cargarPanelConductores(sedeId?: string | null): Promise<Co
   const rows: ConductorPanelRow[] = conductoresNorm.map(c => {
     const ms = multasPorConductor.get(c.id) || []
     const patentes = [...new Set(ms.map(m => m.patente).filter((x): x is string => !!x))]
-    let multasPagadas = 0
-    let multasPendientes = 0
-    let montoPagado = 0
-    let montoPendiente = 0
+    let sinFacturar = 0, impagas = 0, pagadas = 0
+    let montoSinFacturar = 0, montoImpaga = 0, montoPagado = 0
     let montoTotalMultas = 0
     for (const m of ms) {
-      const imp = montoDeMulta(m.importe, m.importe_descuento)
+      // IMPORTE COMPLETO (nominal), igual que el modulo de Multas.
+      const imp = parseImporte(m.importe)
       montoTotalMultas += imp
-      // El estado de pago se detecta por penalidad, pero el MONTO es el de la multa
-      // (con descuento), no el facturado. Asi montoPagado + montoPendiente == montoTotalMultas.
-      const esPagada = pagadaMonto.has(`${c.id}|${m.id}`)
-      if (esPagada) {
-        multasPagadas++
-        montoPagado += imp
+      if (!facturadaSet.has(String(m.id))) {
+        // Sin incidencia => todavia no se mando a facturacion.
+        sinFacturar++; montoSinFacturar += imp
       } else {
-        multasPendientes++
-        montoPendiente += imp
+        // Facturada (tiene incidencia). Se subdivide en pagada/impaga por cobertura.
+        const pen = penPorMulta.get(`${c.id}|${m.id}`)
+        if (pen && !pen.fraccionado && semanaCubierta(c.id, pen.sem, pen.anio)) {
+          pagadas++; montoPagado += imp
+        } else {
+          impagas++; montoImpaga += imp
+        }
       }
     }
+    const montoFacturado = montoImpaga + montoPagado
+    const montoPendiente = montoSinFacturar + montoImpaga
     const estadoCodigo = c.conductores_estados?.codigo?.toLowerCase() || null
     const vehiculoAsignado = vehiculoPorConductor.get(c.id) || null
     return {
@@ -272,8 +312,12 @@ export async function cargarPanelConductores(sedeId?: string | null): Promise<Co
       cantidadMultas: ms.length,
       vehiculos: patentes,
       montoTotalMultas,
-      multasPagadas,
-      multasPendientes,
+      montoFacturado,
+      montoSinFacturar,
+      sinFacturar,
+      impagas,
+      pagadas,
+      montoImpaga,
       montoPagado,
       montoPendiente,
     }

@@ -129,7 +129,8 @@
   border-radius: 999px;
 }
 .cdet-tag.ok { background: #dcfce7; color: #15803d; }
-.cdet-tag.pend { background: #fef3c7; color: #b45309; }
+.cdet-tag.impaga { background: #fee2e2; color: #b91c1c; }
+.cdet-tag.pend { background: #f3f4f6; color: #6b7280; }
 
 .cdet-empty {
   text-align: center;
