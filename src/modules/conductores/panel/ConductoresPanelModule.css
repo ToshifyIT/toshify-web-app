@@ -1,0 +1,33 @@
+/* Helpers del Panel de Conductores. El layout general (cond-module, stat-cards)
+   y la tabla los aportan ConductoresModule.css y el componente DataTable. */
+
+.cpanel-num { font-variant-numeric: tabular-nums; }
+
+.cpanel-badge {
+  display: inline-block;
+  padding: 3px 9px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.cpanel-badge.ok { background: #dcfce7; color: #15803d; }
+.cpanel-badge.off { background: #f3f4f6; color: #6b7280; text-transform: capitalize; }
+.cpanel-badge.asig { background: #dbeafe; color: #1d4ed8; letter-spacing: .03em; }
+.cpanel-badge.noasig { background: #fef3c7; color: #b45309; }
+
+.cpanel-ver {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 6px 10px;
+  border: 1px solid var(--border-primary, #e5e7eb);
+  background: var(--card-bg, #fff);
+  border-radius: 7px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #dc2626;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.cpanel-ver:hover { background: #fef2f2; border-color: #fecaca; }
