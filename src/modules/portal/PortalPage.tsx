@@ -327,7 +327,10 @@ _logoImg.onload = () => {
 // COMPONENT
 // =====================================================
 
-export function PortalPage() {
+// `embeddedConductorId`: modo embebido para el Panel de Conductores (admin). Cuando
+// se pasa, el portal entra directo al dashboard de ESE conductor (sin login), oculta
+// el header propio y los gráficos. Sin la prop, /mi-espacio se comporta igual que siempre.
+export function PortalPage({ embeddedConductorId }: { embeddedConductorId?: string } = {}) {
   // State
   const [view, setView] = useState<View>('login')
   const [conductor, setConductor] = useState<PortalConductor | null>(null)
@@ -388,6 +391,9 @@ export function PortalPage() {
   // bottom-nav en mobile. El CSS muestra solo la seccion activa.
   // Se inicializa desde localStorage para conservar la pestaña al refrescar.
   const [activeSection, setActiveSection] = useState<SectionKey>(() => {
+    // En modo embebido no se persiste ni restaura la pestaña (arranca en resumen,
+    // que en desktop muestra los datos de facturación sin los gráficos).
+    if (embeddedConductorId) return 'resumen'
     try {
       const saved = localStorage.getItem(PORTAL_TAB_KEY) as SectionKey | null
       if (saved && SECTION_KEYS.includes(saved)) return saved
@@ -418,14 +424,37 @@ export function PortalPage() {
     return () => window.removeEventListener('keydown', onKey)
   }, [showDetalleModal, selectedMulta])
 
-  // Persistir la pestaña activa para conservarla al refrescar.
+  // Persistir la pestaña activa para conservarla al refrescar (no en modo embebido).
   useEffect(() => {
+    if (embeddedConductorId) return
     try { localStorage.setItem(PORTAL_TAB_KEY, activeSection) } catch { /* storage no disponible */ }
-  }, [activeSection])
+  }, [activeSection, embeddedConductorId])
+
+  // Modo embebido (Panel de Conductores): cargar el conductor por id y entrar directo
+  // al dashboard, sin login ni persistencia de sesión.
+  useEffect(() => {
+    if (!embeddedConductorId) return
+    let cancelado = false
+    supabase
+      .from('conductores')
+      .select('id, nombres, apellidos, numero_dni, numero_cuit')
+      .eq('id', embeddedConductorId)
+      .limit(1)
+      .then(({ data }) => {
+        if (cancelado) return
+        const found = (data && data.length > 0) ? (data[0] as PortalConductor) : null
+        if (found) {
+          setConductor(found)
+          setView('dashboard')
+        }
+      })
+    return () => { cancelado = true }
+  }, [embeddedConductorId])
 
   // Restaurar sesión al montar: si hay un documento guardado, re-buscar el
   // conductor (datos siempre frescos) y entrar al dashboard sin pedir DNI/CUIT.
   useEffect(() => {
+    if (embeddedConductorId) return // en modo embebido el conductor se carga por id
     let cancelado = false
     let doc: string | null = null
     try { doc = localStorage.getItem(PORTAL_AUTH_KEY) } catch { /* storage no disponible */ }
@@ -443,9 +472,8 @@ export function PortalPage() {
       })
       .catch(() => { /* sin conexión: queda en login, el usuario reintenta */ })
     return () => { cancelado = true }
-    // Solo al montar.
-
-  }, [])
+    // Solo al montar (o al cambiar el modo embebido).
+  }, [embeddedConductorId])
 
   // =====================================================
   // LOGIN
@@ -1550,6 +1578,21 @@ export function PortalPage() {
     return { sum, promedio, ultima, variacion, totalSemanas: facturas.length, chartData, ultimaGanancia }
   }, [facturas, cabifyPorSemana, pagadoPorSemana])
 
+  // Saldo actual REAL: saldo de la ÚLTIMA semana facturada (referencial - aportes),
+  // que via saldo_anterior ya arrastra el acumulado. Es el mismo número que muestra
+  // esa semana en el historial. Reemplaza al kardex saldos_conductores, que puede
+  // quedar en 0 con la semana abierta todavía pendiente.
+  // Positivo = pendiente (deuda), negativo = a favor.
+  const saldoActualCalc = useMemo(() => {
+    if (facturas.length === 0) return 0
+    const f = facturas[0] // más reciente (loadFacturas ordena por created_at desc)
+    const p = f.periodos_facturacion
+    const detalleC = referencialPorFactura[f.id]
+    const referencial = detalleC != null ? detalleC + (f.saldo_anterior || 0) : (f.total_a_pagar || 0)
+    const pagado = pagosEfectivosPorFactura[f.id] ?? (pagadoPorSemana[`${p.semana}-${p.anio}`] || 0)
+    return referencial - pagado
+  }, [facturas, referencialPorFactura, pagosEfectivosPorFactura, pagadoPorSemana])
+
   // Multas en 3 grupos: Pendientes / Pagadas / Fraccionadas, según multasEstado.
   const { multasPendientes, multasPagadas, multasFraccionadas } = useMemo(() => {
     const pend: PortalMulta[] = []
@@ -1587,6 +1630,11 @@ export function PortalPage() {
   // =====================================================
   // RENDER: LOGIN
   // =====================================================
+
+  // En modo embebido nunca se muestra el login: mientras carga el conductor, un spinner.
+  if (embeddedConductorId && (view === 'login' || !conductor)) {
+    return <div className="portal portal-embedded"><div className="portal-loading">Cargando datos del conductor…</div></div>
+  }
 
   if (view === 'login') {
     return (
@@ -2197,7 +2245,8 @@ export function PortalPage() {
   // =====================================================
 
   return (
-    <div className="portal">
+    <div className={`portal${embeddedConductorId ? ' portal-embedded' : ''}`}>
+      {!embeddedConductorId && (
       <header className="portal-header">
         <div className="portal-header-left">
           <img src={logoToshifyUrl} alt="Toshify" className="portal-header-logo" />
@@ -2212,6 +2261,7 @@ export function PortalPage() {
           Salir
         </button>
       </header>
+      )}
 
       <div className="portal-content" data-active={activeSection}>
         {loadingFacturas ? (
@@ -2278,18 +2328,12 @@ export function PortalPage() {
                   Saldo actual
                   <span className="portal-stat-tooltip" data-tooltip="Saldo referencial acumulado. En rojo si está pendiente, en verde si tienes a favor.">ⓘ</span>
                 </div>
-                {saldo ? (
-                  <>
-                    <div className={`portal-stat-value ${saldo.saldo_actual < 0 ? 'debit' : 'credit'}`}>
-                      {saldo.saldo_actual < 0 ? '-' : ''}{formatCurrency(Math.abs(saldo.saldo_actual))}
-                    </div>
-                    <div className="portal-stat-sub">
-                      {saldo.saldo_actual > 0 ? 'A favor' : saldo.saldo_actual < 0 ? 'Pendiente' : 'Sin saldo'}
-                    </div>
-                  </>
-                ) : (
-                  <div className="portal-stat-value">-</div>
-                )}
+                <div className={`portal-stat-value ${saldoActualCalc > 1 ? 'debit' : 'credit'}`}>
+                  {formatCurrency(Math.abs(saldoActualCalc) < 1 ? 0 : Math.abs(saldoActualCalc))}
+                </div>
+                <div className="portal-stat-sub">
+                  {saldoActualCalc > 1 ? 'Pendiente' : saldoActualCalc < -1 ? 'A favor' : 'Sin saldo'}
+                </div>
               </div>
             </div>
 

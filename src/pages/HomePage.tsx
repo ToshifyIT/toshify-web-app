@@ -231,6 +231,8 @@ const LazyPage = ({ children }: { children: ReactNode }) => (
 
 // Todas las páginas son lazy — el bundle inicial solo carga el shell de navegación
 const ConductoresPage = lazy(() => import('./conductores/ConductoresPage').then(m => ({ default: m.ConductoresPage })))
+const ConductoresPanelPage = lazy(() => import('./conductores/ConductoresPanelPage').then(m => ({ default: m.ConductoresPanelPage })))
+const ConductorDetallePage = lazy(() => import('./conductores/ConductorDetallePage').then(m => ({ default: m.ConductorDetallePage })))
 const LeadsPage = lazy(() => import('./leads/LeadsPage').then(m => ({ default: m.LeadsPage })))
 const FacturacionPage = lazy(() => import('./facturacion/FacturacionPage').then(m => ({ default: m.FacturacionPage })))
 const IncidenciasPage = lazy(() => import('./incidencias/IncidenciasPage').then(m => ({ default: m.IncidenciasPage })))
@@ -1927,6 +1929,20 @@ export function HomePage() {
                 <ProtectedRoute menuName="conductores" action="view">
                   <LazyPage>
                     <ConductoresPage />
+                  </LazyPage>
+                </ProtectedRoute>
+              } />
+              <Route path="/conductores/panel" element={
+                <ProtectedRoute menuName="conductores" action="view">
+                  <LazyPage>
+                    <ConductoresPanelPage />
+                  </LazyPage>
+                </ProtectedRoute>
+              } />
+              <Route path="/conductores/panel/:id" element={
+                <ProtectedRoute menuName="conductores" action="view">
+                  <LazyPage>
+                    <ConductorDetallePage />
                   </LazyPage>
                 </ProtectedRoute>
               } />
