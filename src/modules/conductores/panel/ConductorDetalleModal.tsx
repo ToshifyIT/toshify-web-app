@@ -3,11 +3,11 @@
 // Reusa la misma logica de datos que el portal Mi Espacio.
 
 import { useState, useEffect, useMemo } from 'react'
-import { X, AlertTriangle, Wallet, Gauge, Receipt } from 'lucide-react'
+import { X, AlertTriangle, Wallet, Gauge, Receipt, Info } from 'lucide-react'
 import { supabase } from '../../../lib/supabase'
 import { formatCurrency } from '../../../types/facturacion.types'
 import { calcularKmSemanasConductor, type KmSemanaConductor } from '../../portal/kmRecorridos'
-import { cargarMultasConductor, cargarFacturacionConductor, cargarResumenExtra, type MultaDetalle, type FacturacionSemana, type ResumenExtra } from './conductorDetalleService'
+import { cargarMultasConductor, cargarFacturacionConductor, cargarResumenExtra, cargarExcesoKmConductor, type MultaDetalle, type FacturacionSemana, type ResumenExtra, type ExcesoKmConductor } from './conductorDetalleService'
 import type { ConductorPanelRow } from './conductoresPanelService'
 import { SemanaDetalleModal } from './SemanaDetalleModal'
 import './ConductorDetalleModal.css'
@@ -21,44 +21,77 @@ function fmtFecha(s: string | null): string {
   return d.toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric' })
 }
 
+// Etiqueta legible de la modalidad de alquiler.
+const MODALIDAD_LABEL: Record<string, string> = { a_cargo: 'A cargo', turno: 'Turno' }
+function modalidadLabel(m: string | null): string {
+  if (!m) return '—'
+  return MODALIDAD_LABEL[m] || (m.charAt(0).toUpperCase() + m.slice(1))
+}
+
+// Estado de facturación de la semana (misma lógica/etiquetas que el portal Mi Espacio).
+const ESTADO_FACT: Record<string, { txt: string; cls: string }> = {
+  cubierto: { txt: 'Cubierto', cls: 'ok' },
+  pendiente: { txt: 'Pendiente', cls: 'impaga' },
+  favor: { txt: 'A favor', cls: 'ok' },
+}
+
 export function ConductorDetalleModal({ conductor, onClose }: { conductor: ConductorPanelRow; onClose: () => void }) {
   const [tab, setTab] = useState<Tab>('multas')
   const [multas, setMultas] = useState<MultaDetalle[]>([])
   const [facturacion, setFacturacion] = useState<FacturacionSemana[]>([])
   const [km, setKm] = useState<KmSemanaConductor[]>([])
+  const [excesoKm, setExcesoKm] = useState<ExcesoKmConductor>({ porSemana: new Map(), pendienteTotal: 0 })
   const [resumen, setResumen] = useState<ResumenExtra>({ gananciaCabify: 0 })
   const [loading, setLoading] = useState(true)
+  const [kmLoading, setKmLoading] = useState(true)
   const [semanaSel, setSemanaSel] = useState<FacturacionSemana | null>(null)
+  const [deudaOpen, setDeudaOpen] = useState(false)
 
   useEffect(() => {
-    // Escape cierra este modal solo si NO hay un modal de semana abierto encima
-    // (en ese caso Escape lo maneja el modal de semana, que está al frente).
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape' && !semanaSel) onClose() }
+    // Escape cierra el modal de arriba: primero el detalle de deuda, luego el de
+    // semana (que lo maneja él mismo), y por último este modal.
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return
+      if (deudaOpen) { setDeudaOpen(false); return }
+      if (!semanaSel) onClose()
+    }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [onClose, semanaSel])
+  }, [onClose, semanaSel, deudaOpen])
 
   useEffect(() => {
     let vivo = true
     setLoading(true)
+    setKmLoading(true)
+
+    // GRUPO RÁPIDO (multas + facturación + exceso KM): destraba el modal. La pestaña
+    // Multas (la que se ve por defecto) y los KPIs de deuda/facturación dependen solo
+    // de esto, así que se muestran apenas resuelve, sin esperar al cálculo de km.
     Promise.all([
       cargarMultasConductor({ id: conductor.id, nombres: conductor.nombres, apellidos: conductor.apellidos }),
       cargarFacturacionConductor(conductor.id),
-      calcularKmSemanasConductor(supabase, { id: conductor.id, nombres: conductor.nombres || '', apellidos: conductor.apellidos || '' })
-        .then(r => r.semanas).catch(() => [] as KmSemanaConductor[]),
-    ]).then(async ([m, f, k]) => {
+      cargarExcesoKmConductor(conductor.id).catch(() => ({ porSemana: new Map<number, number>(), pendienteTotal: 0 })),
+    ]).then(([m, f, ex]) => {
       if (!vivo) return
-      setMultas(m); setFacturacion(f); setKm(k)
-      // Resumen extra (Cabify + saldo) usa el rango de la última semana facturada.
+      setMultas(m); setFacturacion(f); setExcesoKm(ex)
+      // Resumen extra (Cabify) usa el rango de la última semana facturada. Se dispara
+      // en cuanto está la facturación, en paralelo con el cálculo de km.
       const rango = f.length && f[0].fechaInicio && f[0].fechaFin
         ? { inicio: f[0].fechaInicio, fin: f[0].fechaFin }
         : null
-      const ext = await cargarResumenExtra(
+      cargarResumenExtra(
         { id: conductor.id, nombres: conductor.nombres, apellidos: conductor.apellidos, dni: conductor.dni },
         rango,
-      ).catch(() => ({ gananciaCabify: 0 }))
-      if (vivo) setResumen(ext)
+      ).then(ext => { if (vivo) setResumen(ext) }).catch(() => { /* ignora */ })
     }).finally(() => { if (vivo) setLoading(false) })
+
+    // KM en paralelo y sin bloquear: es el cálculo más pesado (recorre viajes GPS).
+    // Alimenta solo la pestaña Km y el KPI "Km última semana".
+    calcularKmSemanasConductor(supabase, { id: conductor.id, nombres: conductor.nombres || '', apellidos: conductor.apellidos || '' })
+      .then(r => { if (vivo) setKm(r.semanas) })
+      .catch(() => { if (vivo) setKm([]) })
+      .finally(() => { if (vivo) setKmLoading(false) })
+
     return () => { vivo = false }
   }, [conductor.id, conductor.nombres, conductor.apellidos, conductor.dni])
 
@@ -75,16 +108,34 @@ export function ConductorDetalleModal({ conductor, onClose }: { conductor: Condu
     return { ultima, variacion, promedio: totales.length ? sum / totales.length : 0, totalSemanas: totales.length, saldoNet }
   }, [facturacion])
 
+  // Estado de facturación por semana (para la columna Estado del tab Km).
+  const estadoFactPorSemana = useMemo(() => {
+    const m = new Map<string, FacturacionSemana['estado']>()
+    for (const f of facturacion) m.set(`${f.semana}-${f.anio}`, f.estado)
+    return m
+  }, [facturacion])
+
   const kpis = useMemo(() => {
-    const kmUltima = km.length ? km[km.length - 1].km : 0
+    // km viene ordenado de la semana más reciente a la más antigua: la última semana es km[0].
+    const kmUltima = km.length ? km[0].km : 0
     const factUltima = facturacion.length ? facturacion[0].proforma : 0
+    // Deuda pendiente = multas pendientes de pago + saldo pendiente (Saldo Actual)
+    //   + penalidades de exceso de KM en estado pendiente (aún no aplicadas).
+    // Los tres componentes son disjuntos (lo pendiente aún no entró a facturación).
+    const multasPendientes = conductor.montoPendiente
+    const saldoPendiente = Math.max(0, factStats.saldoNet)
+    const excesoPendiente = excesoKm.pendienteTotal
+    const deuda = multasPendientes + saldoPendiente + excesoPendiente
     return {
       multas: conductor.cantidadMultas,
-      deuda: conductor.montoPendiente,
+      deuda,
+      multasPendientes,
+      saldoPendiente,
+      excesoPendiente,
       kmUltima,
       factUltima,
     }
-  }, [km, facturacion, conductor])
+  }, [km, facturacion, conductor, factStats.saldoNet, excesoKm.pendienteTotal])
 
   return (
     <div className="cdet-overlay" onClick={onClose}>
@@ -107,8 +158,17 @@ export function ConductorDetalleModal({ conductor, onClose }: { conductor: Condu
         {/* KPIs */}
         <div className="cdet-kpis">
           <div className="cdet-kpi"><span className="cdet-kpi-ico"><AlertTriangle size={15} /></span><div><div className="cdet-kpi-val">{kpis.multas}</div><div className="cdet-kpi-lbl">Multas</div></div></div>
-          <div className="cdet-kpi"><span className="cdet-kpi-ico"><Wallet size={15} /></span><div><div className="cdet-kpi-val danger">{formatCurrency(kpis.deuda)}</div><div className="cdet-kpi-lbl">Deuda pendiente</div></div></div>
-          <div className="cdet-kpi"><span className="cdet-kpi-ico"><Gauge size={15} /></span><div><div className="cdet-kpi-val">{Math.round(kpis.kmUltima).toLocaleString('es-AR')} km</div><div className="cdet-kpi-lbl">Km última semana</div></div></div>
+          <div className="cdet-kpi">
+            <span className="cdet-kpi-ico"><Wallet size={15} /></span>
+            <div>
+              <div className="cdet-kpi-val danger">{formatCurrency(kpis.deuda)}</div>
+              <div className="cdet-kpi-lbl">Deuda pendiente</div>
+            </div>
+            <button className="cdet-kpi-detalle" onClick={() => setDeudaOpen(true)} title="Ver detalle del cálculo">
+              <Info size={12} /> Detalle
+            </button>
+          </div>
+          <div className="cdet-kpi"><span className="cdet-kpi-ico"><Gauge size={15} /></span><div><div className="cdet-kpi-val">{kmLoading ? '…' : `${Math.round(kpis.kmUltima).toLocaleString('es-AR')} km`}</div><div className="cdet-kpi-lbl">Km última semana</div></div></div>
           <div className="cdet-kpi"><span className="cdet-kpi-ico"><Receipt size={15} /></span><div><div className="cdet-kpi-val">{formatCurrency(kpis.factUltima)}</div><div className="cdet-kpi-lbl">Facturación última semana</div></div></div>
         </div>
 
@@ -125,17 +185,34 @@ export function ConductorDetalleModal({ conductor, onClose }: { conductor: Condu
           ) : tab === 'multas' ? (
             multas.length === 0 ? <div className="cdet-empty">Sin multas atribuidas.</div> : (
               <table className="cdet-table">
-                <thead><tr><th>Fecha</th><th>Infracción</th><th>Patente</th><th>Estado</th><th className="r">Monto</th></tr></thead>
+                <thead><tr>
+                  <th>Fecha</th><th>Infracción</th><th>Patente</th><th>Estado</th>
+                  <th className="r">Importe</th><th className="r">Con desc.</th><th>Vto. desc.</th><th className="r">Monto</th>
+                </tr></thead>
                 <tbody>
-                  {multas.map(m => (
-                    <tr key={m.id}>
-                      <td>{fmtFecha(m.fecha)}</td>
-                      <td className="cdet-trunc" title={m.infraccion || ''}>{m.infraccion || '—'}</td>
-                      <td>{m.patente || '—'}</td>
-                      <td><span className={`cdet-tag ${m.estado === 'pagada' ? 'ok' : m.estado === 'impaga' ? 'impaga' : 'pend'}`}>{m.estado === 'pagada' ? 'Pagada' : m.estado === 'impaga' ? 'Impaga' : 'Sin facturar'}</span></td>
-                      <td className="r">{formatCurrency(m.monto)}</td>
-                    </tr>
-                  ))}
+                  {multas.map(m => {
+                    // Resaltar en verde el importe que se aplica (solo para pendientes).
+                    const aplicaImporte = m.estado === 'pendiente' && !m.usaDescuento
+                    const aplicaDesc = m.estado === 'pendiente' && m.usaDescuento
+                    return (
+                      <tr key={m.id}>
+                        <td>{fmtFecha(m.fecha)}</td>
+                        <td className="cdet-trunc" title={m.infraccion || ''}>{m.infraccion || '—'}</td>
+                        <td>{m.patente || '—'}</td>
+                        <td><span className={`cdet-tag ${m.estado === 'pagada' ? 'ok' : m.estado === 'enProceso' ? 'impaga' : 'pend'}`}>{m.estado === 'pagada' ? 'Pagada' : m.estado === 'enProceso' ? 'En proceso' : 'Pendiente'}</span></td>
+                        <td className={`r ${aplicaImporte ? 'cdet-aplica' : ''}`}>{formatCurrency(m.importe)}</td>
+                        <td className={`r ${aplicaDesc ? 'cdet-aplica' : ''}`}>{m.importeDescuento > 0 ? formatCurrency(m.importeDescuento) : '—'}</td>
+                        <td>
+                          {m.fechaVencDescuento
+                            ? <span className={m.descuentoVigente ? 'cdet-venc-ok' : 'cdet-venc-off'}>
+                                {fmtFecha(m.fechaVencDescuento)}{m.descuentoVigente ? '' : ' · vencido'}
+                              </span>
+                            : '—'}
+                        </td>
+                        <td className="r"><b>{formatCurrency(m.monto)}</b></td>
+                      </tr>
+                    )
+                  })}
                 </tbody>
               </table>
             )
@@ -200,19 +277,29 @@ export function ConductorDetalleModal({ conductor, onClose }: { conductor: Condu
               )}
             </>
           ) : (
-            km.length === 0 ? <div className="cdet-empty">Sin km registrados.</div> : (
+            kmLoading ? <div className="cdet-empty">Cargando…</div> : km.length === 0 ? <div className="cdet-empty">Sin km registrados.</div> : (
               <table className="cdet-table">
-                <thead><tr><th>Semana</th><th className="r">Km</th><th className="r">Límite</th><th className="r">Excedido</th><th>Modalidad</th></tr></thead>
+                <thead><tr>
+                  <th>Semana</th><th className="r">Km</th><th className="r">Límite</th><th className="r">Excedido</th>
+                  <th>Estado</th><th>Modalidad</th><th className="r">Monto</th>
+                </tr></thead>
                 <tbody>
-                  {[...km].reverse().map(k => (
-                    <tr key={`${k.semana}-${k.anio}`}>
-                      <td>S{k.semana}/{k.anio}</td>
-                      <td className="r">{Math.round(k.km).toLocaleString('es-AR')}</td>
-                      <td className="r">{Math.round(k.limite).toLocaleString('es-AR')}</td>
-                      <td className={`r ${k.excedido > 0 ? 'danger' : ''}`}>{k.excedido > 0 ? Math.round(k.excedido).toLocaleString('es-AR') : '—'}</td>
-                      <td>{k.modalidad || '—'}</td>
-                    </tr>
-                  ))}
+                  {km.map(k => {
+                    const est = estadoFactPorSemana.get(`${k.semana}-${k.anio}`)
+                    const estCfg = est ? ESTADO_FACT[est] : null
+                    const monto = excesoKm.porSemana.get(k.semana)
+                    return (
+                      <tr key={`${k.semana}-${k.anio}`}>
+                        <td>S{k.semana}/{k.anio}</td>
+                        <td className="r">{Math.round(k.km).toLocaleString('es-AR')}</td>
+                        <td className="r">{Math.round(k.limite).toLocaleString('es-AR')}</td>
+                        <td className={`r ${k.excedido > 0 ? 'danger' : ''}`}>{k.excedido > 0 ? Math.round(k.excedido).toLocaleString('es-AR') : '—'}</td>
+                        <td>{estCfg ? <span className={`cdet-tag ${estCfg.cls}`}>{estCfg.txt}</span> : '—'}</td>
+                        <td>{modalidadLabel(k.modalidad)}</td>
+                        <td className={`r ${monto != null && monto > 0 ? 'danger' : ''}`}>{monto != null ? formatCurrency(monto) : 'N/A'}</td>
+                      </tr>
+                    )
+                  })}
                 </tbody>
               </table>
             )
@@ -223,9 +310,47 @@ export function ConductorDetalleModal({ conductor, onClose }: { conductor: Condu
       {semanaSel && (
         <SemanaDetalleModal
           conductor={{ nombre: conductor.nombre, dni: conductor.dni }}
+          conductorId={conductor.id}
           semana={semanaSel}
           onClose={() => setSemanaSel(null)}
         />
+      )}
+
+      {deudaOpen && (
+        <div className="cdet-deuda-overlay" onClick={(e) => { e.stopPropagation(); setDeudaOpen(false) }}>
+          <div className="cdet-deuda-modal" onClick={e => e.stopPropagation()}>
+            <button className="cdet-deuda-close" onClick={() => setDeudaOpen(false)} aria-label="Cerrar"><X size={16} /></button>
+            <div className="cdet-deuda-title">Detalle de la deuda pendiente</div>
+            <div className="cdet-deuda-sub">Cómo se compone el total</div>
+
+            <div className="cdet-deuda-row">
+              <div>
+                <div className="cdet-deuda-lbl">Multas pendientes de pago</div>
+                <div className="cdet-deuda-hint">Multas en estado Pendiente (con descuento si sigue vigente)</div>
+              </div>
+              <span className="cdet-deuda-amt">{formatCurrency(kpis.multasPendientes)}</span>
+            </div>
+            <div className="cdet-deuda-row">
+              <div>
+                <div className="cdet-deuda-lbl">Saldo pendiente</div>
+                <div className="cdet-deuda-hint">Saldo actual de facturación (última semana)</div>
+              </div>
+              <span className="cdet-deuda-amt">{formatCurrency(kpis.saldoPendiente)}</span>
+            </div>
+            <div className="cdet-deuda-row">
+              <div>
+                <div className="cdet-deuda-lbl">Exceso de KM pendiente</div>
+                <div className="cdet-deuda-hint">Penalidades de exceso de km por aplicar (aún no facturadas)</div>
+              </div>
+              <span className="cdet-deuda-amt">{formatCurrency(kpis.excesoPendiente)}</span>
+            </div>
+
+            <div className="cdet-deuda-total">
+              <span>Deuda pendiente</span>
+              <span className="danger">{formatCurrency(kpis.deuda)}</span>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   )

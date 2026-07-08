@@ -1,5 +1,4 @@
 // src/modules/leads/components/LeadWizard.tsx
-/* eslint-disable @typescript-eslint/no-explicit-any */
 import { useState, useEffect, useRef } from 'react'
 import { Check, ChevronLeft, ChevronRight } from 'lucide-react'
 import { AddressAutocomplete } from '../../../components/ui/AddressAutocomplete'
@@ -47,7 +46,7 @@ function calcularEdad(fechaNac: string): number | undefined {
   return edad >= 0 ? edad : undefined
 }
 
-export function LeadWizard({ formData, setFormData, onSave, onCancel, saving = false, errors = {}, categoriasLicencia = [], estadosLicencia = [], tiposLicencia = [] }: LeadWizardProps) {
+export function LeadWizard({ formData, setFormData, onSave, onCancel, saving = false, errors = {}, categoriasLicencia = [] }: LeadWizardProps) {
   const [currentStep, setCurrentStep] = useState(1)
   const { sedes } = useSede()
 
@@ -497,32 +496,6 @@ export function LeadWizard({ formData, setFormData, onSave, onCancel, saving = f
             </div>
             <div className="lead-wizard-form-group">
               <div className="lead-wizard-field">
-                <label>Estado Licencia</label>
-                <select
-                  value={formData.estado_licencia || ''}
-                  onChange={e => updateField('estado_licencia', e.target.value)}
-                >
-                  <option value="">Seleccionar...</option>
-                  {estadosLicencia.map(e => (
-                    <option key={e.id} value={e.descripcion}>{e.descripcion}</option>
-                  ))}
-                </select>
-              </div>
-              <div className="lead-wizard-field">
-                <label>Tipo Licencia</label>
-                <select
-                  value={formData.tipo_licencia || ''}
-                  onChange={e => updateField('tipo_licencia', e.target.value)}
-                >
-                  <option value="">Seleccionar...</option>
-                  {tiposLicencia.map(t => (
-                    <option key={t.id} value={t.descripcion}>{t.descripcion}</option>
-                  ))}
-                </select>
-              </div>
-            </div>
-            <div className="lead-wizard-form-group">
-              <div className="lead-wizard-field">
                 <label>RNR</label>
                 <select value={formData.rnr || ''} onChange={e => updateField('rnr', e.target.value)}>
                   <option value="">Seleccionar</option>
@@ -541,24 +514,6 @@ export function LeadWizard({ formData, setFormData, onSave, onCancel, saving = f
             </div>
             <div className="lead-wizard-form-group">
               <div className="lead-wizard-field">
-                <label>DNI Archivo</label>
-                <select value={formData.dni_archivo || ''} onChange={e => updateField('dni_archivo', e.target.value)}>
-                  <option value="">Seleccionar</option>
-                  <option value="Si">Si</option>
-                  <option value="No">No</option>
-                </select>
-              </div>
-              <div className="lead-wizard-field">
-                <label>D1</label>
-                <select value={formData.d1 || ''} onChange={e => updateField('d1', e.target.value)}>
-                  <option value="">Seleccionar</option>
-                  <option value="Si">Si</option>
-                  <option value="No">No</option>
-                </select>
-              </div>
-            </div>
-            <div className="lead-wizard-form-group">
-              <div className="lead-wizard-field">
                 <label>Certificado Dirección</label>
                 <select value={formData.certificado_direccion || ''} onChange={e => updateField('certificado_direccion', e.target.value)}>
                   <option value="">Seleccionar</option>
@@ -567,13 +522,28 @@ export function LeadWizard({ formData, setFormData, onSave, onCancel, saving = f
                 </select>
               </div>
               <div className="lead-wizard-field">
-                <label>Experiencia Previa</label>
+                <label>Experiencia Previa <span className="required">*</span></label>
                 <input
                   type="text"
+                  className={errors.experiencia_previa ? 'field-error' : ''}
                   value={formData.experiencia_previa || ''}
                   onChange={e => updateField('experiencia_previa', e.target.value)}
                   placeholder="Ej: 3 años Uber y Cabify"
                 />
+                {errors.experiencia_previa && <span className="error-text">{errors.experiencia_previa}</span>}
+              </div>
+            </div>
+            <div className="lead-wizard-form-group">
+              <div className="lead-wizard-field" style={{ flex: 1 }}>
+                <label>Link de Documentación (Drive) <span className="required">*</span></label>
+                <input
+                  type="url"
+                  className={errors.url_folder ? 'field-error' : ''}
+                  value={formData.url_folder || ''}
+                  onChange={e => updateField('url_folder', e.target.value)}
+                  placeholder="https://drive.google.com/..."
+                />
+                {errors.url_folder && <span className="error-text">{errors.url_folder}</span>}
               </div>
             </div>
           </>
@@ -593,16 +563,6 @@ export function LeadWizard({ formData, setFormData, onSave, onCancel, saving = f
                 </select>
               </div>
               <div className="lead-wizard-field">
-                <label>Disponibilidad</label>
-                <input
-                  type="date"
-                  value={formData.disponibilidad || ''}
-                  onChange={e => updateField('disponibilidad', e.target.value)}
-                />
-              </div>
-            </div>
-            <div className="lead-wizard-form-group">
-              <div className="lead-wizard-field">
                 <label>Cuenta Cabify</label>
                 <select value={formData.cuenta_cabify || ''} onChange={e => updateField('cuenta_cabify', e.target.value)}>
                   <option value="">Seleccionar</option>
@@ -613,52 +573,20 @@ export function LeadWizard({ formData, setFormData, onSave, onCancel, saving = f
                   <option value="Verificar Activa">Verificar Activa</option>
                 </select>
               </div>
-              <div className="lead-wizard-field">
-                <label>Monotributo</label>
-                <select value={formData.monotributo || ''} onChange={e => updateField('monotributo', e.target.value)}>
-                  <option value="">Seleccionar</option>
-                  <option value="Si">Si</option>
-                  <option value="No">No</option>
-                </select>
-              </div>
             </div>
             <div className="lead-wizard-form-group">
               <div className="lead-wizard-field">
-                <label>Cochera</label>
-                <select value={formData.cochera || ''} onChange={e => updateField('cochera', e.target.value)}>
+                <label>Cochera <span className="required">*</span></label>
+                <select
+                  className={errors.cochera ? 'field-error' : ''}
+                  value={formData.cochera || ''}
+                  onChange={e => updateField('cochera', e.target.value)}
+                >
                   <option value="">Seleccionar</option>
                   <option value="Si">Si</option>
                   <option value="No">No</option>
                 </select>
-              </div>
-              <div className="lead-wizard-field">
-                <label>Rueda</label>
-                <select value={formData.rueda || ''} onChange={e => updateField('rueda', e.target.value)}>
-                  <option value="">Seleccionar</option>
-                  <option value="Si">Si</option>
-                  <option value="No">No</option>
-                </select>
-              </div>
-            </div>
-            <div className="lead-wizard-form-group">
-              <div className="lead-wizard-field">
-                <label>CBU</label>
-                <input
-                  type="text"
-                  value={formData.cbu || ''}
-                  onChange={e => updateField('cbu', e.target.value)}
-                  placeholder="22 dígitos"
-                  maxLength={22}
-                />
-              </div>
-              <div className="lead-wizard-field">
-                <label>BCRA</label>
-                <input
-                  type="text"
-                  value={formData.bcra || ''}
-                  onChange={e => updateField('bcra', e.target.value)}
-                  placeholder="Estado BCRA"
-                />
+                {errors.cochera && <span className="error-text">{errors.cochera}</span>}
               </div>
             </div>
           </>

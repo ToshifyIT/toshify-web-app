@@ -196,6 +196,7 @@ function formatPhoneAR(raw: unknown): string | null {
 
 function leadToFormData(lead: Lead): LeadFormData {
   return {
+    url_folder: lead.url_folder || '',
     nombre_completo: lead.nombre_completo || '',
     primer_nombre: lead.primer_nombre || '',
     apellido: lead.apellido || '',
@@ -316,6 +317,14 @@ function getProcesoClass(proceso: string | undefined | null): string {
   if (p.includes('convertido')) return 'lead-estado-convertido'
   if (p.includes('proceso')) return 'lead-estado-proceso'
   return 'lead-estado-pendiente'
+}
+
+// Etiqueta visible del estado del lead. "No cumple edad" se muestra como "Descartado".
+// Es SOLO visual: el valor real (estado_de_lead) no cambia, y los conteos/filtros
+// siguen usando el estado real, no esta etiqueta.
+function displayEstadoLead(estado: string | undefined | null): string {
+  if (estado === 'No cumple edad') return 'Descartado'
+  return estado || '-'
 }
 
 // =====================================================
@@ -1054,6 +1063,9 @@ export function LeadsModule() {
     if (!lead.numero_licencia?.trim()) camposFaltantes.push('Nro. Licencia')
     if (!lead.categorias_licencia || lead.categorias_licencia.length === 0) camposFaltantes.push('Categorías de licencia')
     if (!lead.vencimiento_licencia) camposFaltantes.push('Vencimiento de licencia')
+    if (!lead.experiencia_previa?.trim()) camposFaltantes.push('Experiencia previa')
+    if (!lead.cochera?.trim()) camposFaltantes.push('Cochera')
+    if (!lead.url_folder?.trim()) camposFaltantes.push('Link de Documentación (Drive)')
 
     if (camposFaltantes.length > 0) {
       await Swal.fire({
@@ -1074,7 +1086,7 @@ export function LeadsModule() {
 
     // Verificar si ya existe un conductor con el mismo DNI o CUIT
     // Normalizamos quitando espacios y guiones para comparar correctamente
-    const normalizarDoc = (val: string) => val.replace(/[\s\-]/g, '')
+    const normalizarDoc = (val: string) => val.replace(/[\s-]/g, '')
     let conductorExistente: Record<string, unknown> | null = null
 
     const dniLimpio = lead.dni?.trim() ? normalizarDoc(lead.dni.trim()) : ''
@@ -1236,6 +1248,8 @@ export function LeadsModule() {
         contacto_emergencia: lead.contacto_de_emergencia || lead.datos_de_emergencia || null,
         telefono_emergencia: lead.telefono_emergencia || null,
         parentesco_emergencia: lead.parentesco_emergencia || null,
+        direccion_emergencia: lead.direccion_emergencia || null,
+        experiencia_previa: lead.experiencia_previa || null,
         observaciones: lead.observaciones || null,
         cochera_propia: lead.cochera?.toLowerCase() === 'si' || lead.cochera?.toLowerCase() === 'sí' || false,
         antecedentes_penales: lead.antecedentes_penales ?? false,
@@ -2180,8 +2194,10 @@ export function LeadsModule() {
         const estado = lead.estado_de_lead
         const isOpen = estadoDropdownId === lead.id
 
-        const badgeClass = estado
-          ? `lead-estado-badge lead-estado-${estado.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/\s/g, '-')}`
+        // "No cumple edad" se muestra visualmente como "Descartado" (solo estilo/etiqueta).
+        const estadoVisual = estado === 'No cumple edad' ? 'Descartado' : estado
+        const badgeClass = estadoVisual
+          ? `lead-estado-badge lead-estado-${estadoVisual.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/\s/g, '-')}`
           : ''
 
         return (
@@ -2400,25 +2416,7 @@ export function LeadsModule() {
       size: 70,
       enableSorting: true,
     },
-    {
-      id: 'monotributo',
-      accessorFn: (row) => row.monotributo || '-',
-      header: 'Mono.',
-      cell: ({ row }) => (
-        <SiNoDropdownCell
-          leadId={row.original.id}
-          field="monotributo"
-          value={row.original.monotributo}
-          isOpen={sinoDropdownKey === `${row.original.id}::monotributo`}
-          canEdit={canEdit}
-          onToggle={(k) => setSinoDropdownKey(sinoDropdownKey === k ? null : k)}
-          onChange={handleInlineUpdate}
-          onClose={() => setSinoDropdownKey(null)}
-        />
-      ),
-      size: 55,
-      enableSorting: true,
-    },
+    /* Columna Monotributo oculta */
     /* Columna Guia oculta */
     /* Columna Fecha Entrevista oculta */
     {
@@ -3067,7 +3065,7 @@ function EstadoDropdownCell({ leadId, estado, badgeClass, isOpen, canEdit, onTog
         style={{ cursor: canEdit ? 'pointer' : 'default' }}
         onClick={canEdit ? (e) => { e.stopPropagation(); onToggle(leadId) } : undefined}
       >
-        {estado || '-'}
+        {displayEstadoLead(estado)}
       </span>
       {isOpen && canEdit && createPortal(
         <div
@@ -3284,7 +3282,7 @@ function LeadDetailView({ lead, onEdit, onConvert, zonasRestringidas = [], enZon
           <div className="lead-detail-card-title">Proceso y Evaluación</div>
           <div className="lead-detail-item">
             <span className="lead-detail-item-label">Estado de Lead</span>
-            <span className="lead-detail-item-value">{lead.estado_de_lead || '-'}</span>
+            <span className="lead-detail-item-value">{displayEstadoLead(lead.estado_de_lead)}</span>
           </div>
           {lead.estado_de_lead === 'No le interesa' && (
           <div className="lead-detail-item">

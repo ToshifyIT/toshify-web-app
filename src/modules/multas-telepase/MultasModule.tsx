@@ -128,6 +128,11 @@ export default function MultasModule() {
   const [busqueda, setBusqueda] = useState('')
   const [vehiculos, setVehiculos] = useState<Vehiculo[]>([])
   const [multasEnviadas, setMultasEnviadas] = useState<Set<number>>(new Set())
+  // Estado de pago por multa (segun facturacion / penalidades, misma logica que Mi Espacio):
+  // pagada = penalidad no fraccionada aplicada en periodo cerrado; fraccionada = penalidad fraccionada.
+  // Las multas que NO estan en este mapa se consideran pendientes. `monto` = monto facturado (penalidad).
+  const [multasEstadoPago, setMultasEstadoPago] = useState<Map<number, { estado: 'pagada' | 'fraccionada'; monto: number }>>(new Map())
+  const [showPendienteModal, setShowPendienteModal] = useState(false)
   const [selectedMulta, setSelectedMulta] = useState<Multa | null>(null)
   const [showModal, setShowModal] = useState(false)
   const [showEditModal, setShowEditModal] = useState(false)
@@ -222,13 +227,18 @@ export default function MultasModule() {
     try {
       // Traemos activas (deleted_at IS NULL) — incluye tanto las desestimadas como las no desestimadas.
       // Las borradas reales (deleted_at NOT NULL) se omiten — son las eliminadas con el botón rojo.
-      const [multasRes, vehiculosRes, incidenciasRes] = await Promise.all([
+      const [multasRes, vehiculosRes, incidenciasRes, penalidadesRes, periodosRes] = await Promise.all([
         aplicarFiltroSede(supabase.from('multas_historico').select('*').is('deleted_at', null)).order('created_at', { ascending: false }).limit(5000),
         aplicarFiltroSede(supabase.from('vehiculos').select('id, patente').is('deleted_at', null)),
         // IDs de multas que ya tienen incidencia (=ya fueron enviadas a facturación)
         (supabase.from('incidencias' as any) as any)
           .select('multa_id')
-          .not('multa_id', 'is', null)
+          .not('multa_id', 'is', null),
+        // Penalidades de multas (para estado de pago pagada/fraccionada + monto facturado)
+        (supabase.from('penalidades' as any) as any)
+          .select('monto, fraccionado, aplicado, rechazado, semana_aplicacion, anio_aplicacion, incidencias!inner(multa_id)')
+          .not('incidencias.multa_id', 'is', null),
+        supabase.from('periodos_facturacion').select('semana, anio').eq('estado', 'cerrado'),
       ])
 
       if (multasRes.error) throw multasRes.error
@@ -241,6 +251,25 @@ export default function MultasModule() {
           .filter((v): v is number => v != null)
       )
       setMultasEnviadas(enviadas)
+
+      // Estado de pago por multa (misma lógica que Mi Espacio).
+      const cerradas = new Set<string>(
+        ((periodosRes.data || []) as Array<{ semana: number; anio: number }>).map(p => `${p.semana}-${p.anio}`)
+      )
+      const estadoMap = new Map<number, { estado: 'pagada' | 'fraccionada'; monto: number }>()
+      for (const p of (penalidadesRes.data || []) as Array<any>) {
+        const mid = p.incidencias?.multa_id
+        if (mid == null) continue
+        const monto = parseImporte(p.monto)
+        if (p.fraccionado === true) {
+          // Fraccionada tiene prioridad sobre pagada.
+          estadoMap.set(mid, { estado: 'fraccionada', monto })
+        } else if (p.aplicado === true && p.rechazado !== true && cerradas.has(`${p.semana_aplicacion}-${p.anio_aplicacion}`)) {
+          const prev = estadoMap.get(mid)
+          if (!prev || prev.estado !== 'fraccionada') estadoMap.set(mid, { estado: 'pagada', monto })
+        }
+      }
+      setMultasEstadoPago(estadoMap)
     } catch {
       Swal.fire('Error', 'No se pudieron cargar las multas', 'error')
     } finally {
@@ -442,6 +471,36 @@ export default function MultasModule() {
     }
     return { sinFacturar, facturadas, total: sinFacturar + facturadas }
   }, [getFilteredData, busqueda, matchBusqueda, fueEnviadaAFacturacion])
+
+  // Métricas independientes por estado de pago (misma lógica que Mi Espacio).
+  // Pendiente: importe de la multa, con descuento solo si la fecha de vencimiento
+  // del descuento es POSTERIOR a hoy (hoy o pasada -> importe pleno).
+  // Pagado / En proceso: monto facturado (penalidad) de las multas pagadas / fraccionadas.
+  const montosPorPago = useMemo(() => {
+    const base = getFilteredData().filter(m =>
+      !m.desestimada_at && !tieneConductorConComa(m) && matchBusqueda(m, busqueda)
+    )
+    const hoyStr = new Date().toISOString().slice(0, 10)
+    let pendiente = 0, pagado = 0, proceso = 0
+    // Detalle de las multas que arman el Monto Total Pendiente, con la columna usada.
+    const pendienteDetalle: Array<{ multa: Multa; columna: 'IMPORTE' | 'IMP_DESC'; monto: number }> = []
+    for (const m of base) {
+      const est = multasEstadoPago.get(m.id)
+      if (est?.estado === 'pagada') {
+        pagado += est.monto
+      } else if (est?.estado === 'fraccionada') {
+        proceso += est.monto
+      } else {
+        const desc = parseImporte(m.importe_descuento)
+        const vencStr = m.fecha_vencimiento_descuento ? String(m.fecha_vencimiento_descuento).slice(0, 10) : ''
+        const usarDescuento = desc > 0 && vencStr > hoyStr
+        const monto = usarDescuento ? desc : parseImporte(m.importe)
+        pendiente += monto
+        pendienteDetalle.push({ multa: m, columna: usarDescuento ? 'IMP_DESC' : 'IMPORTE', monto })
+      }
+    }
+    return { pendiente, pagado, proceso, pendienteDetalle }
+  }, [getFilteredData, busqueda, matchBusqueda, multasEstadoPago])
 
   const patentesUnicasCount = useMemo(() =>
     new Set(multasKpi.map(m => m.patente).filter(Boolean)).size
@@ -1346,6 +1405,35 @@ export default function MultasModule() {
               <span className="stat-label">Monto Total</span>
             </div>
           </div>
+          <div className="stat-card">
+            <DollarSign size={18} className="stat-icon" style={{ color: '#dc2626' }} />
+            <div className="stat-content">
+              <span className="stat-value">{formatMoney(montosPorPago.pendiente)}</span>
+              <span className="stat-label">Monto Total Pendiente</span>
+            </div>
+            <button
+              type="button"
+              onClick={() => setShowPendienteModal(true)}
+              title="Ver detalle del cálculo"
+              style={{ marginLeft: 'auto', border: '1px solid var(--border-primary, #e5e7eb)', background: 'var(--card-bg, #fff)', borderRadius: 6, padding: '4px 8px', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 11, color: '#dc2626', fontWeight: 600 }}
+            >
+              <Eye size={13} /> Detalle
+            </button>
+          </div>
+          <div className="stat-card">
+            <DollarSign size={18} className="stat-icon" style={{ color: '#059669' }} />
+            <div className="stat-content">
+              <span className="stat-value">{formatMoney(montosPorPago.pagado)}</span>
+              <span className="stat-label">Monto Total Pagado</span>
+            </div>
+          </div>
+          <div className="stat-card">
+            <DollarSign size={18} className="stat-icon" style={{ color: '#d97706' }} />
+            <div className="stat-content">
+              <span className="stat-value">{formatMoney(montosPorPago.proceso)}</span>
+              <span className="stat-label">Monto Total en Proceso</span>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -1952,6 +2040,62 @@ export default function MultasModule() {
         onClose={() => { setShowCobroModal(false); setMultaParaCobro(null) }}
         onSaved={cargarDatos}
       />
+
+      {showPendienteModal && (
+        <div className="multas-modal-overlay" onClick={() => setShowPendienteModal(false)}>
+          <div
+            onClick={e => e.stopPropagation()}
+            style={{ background: 'var(--card-bg, #fff)', borderRadius: 12, width: '95%', maxWidth: 1040, maxHeight: '86vh', display: 'flex', flexDirection: 'column', overflow: 'hidden', border: '1px solid var(--border-primary, #e5e7eb)' }}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', padding: '16px 20px', borderBottom: '1px solid var(--border-primary, #eef0f2)' }}>
+              <div>
+                <h3 style={{ margin: 0, fontSize: 16, fontWeight: 700 }}>Detalle Monto Total Pendiente</h3>
+                <div style={{ fontSize: 12, color: 'var(--text-secondary, #6b7280)', marginTop: 2 }}>
+                  {montosPorPago.pendienteDetalle.length} multas · Total {formatMoney(montosPorPago.pendiente)}. La columna resaltada en verde es la que se usó por cada multa.
+                </div>
+              </div>
+              <button onClick={() => setShowPendienteModal(false)} aria-label="Cerrar" style={{ border: 'none', background: 'transparent', cursor: 'pointer', color: '#6b7280', padding: 4 }}><X size={18} /></button>
+            </div>
+            <div style={{ overflow: 'auto', padding: '8px 20px 20px' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12, whiteSpace: 'nowrap' }}>
+                <thead>
+                  <tr style={{ textAlign: 'left', color: '#6b7280', fontSize: 11, textTransform: 'uppercase' }}>
+                    <th style={{ padding: '8px 10px', borderBottom: '1px solid #eef0f2' }}>Fec. Infracción</th>
+                    <th style={{ padding: '8px 10px', borderBottom: '1px solid #eef0f2' }}>Patente</th>
+                    <th style={{ padding: '8px 10px', borderBottom: '1px solid #eef0f2' }}>Conductor</th>
+                    <th style={{ padding: '8px 10px', borderBottom: '1px solid #eef0f2' }}>Infracción</th>
+                    <th style={{ padding: '8px 10px', borderBottom: '1px solid #eef0f2', textAlign: 'right' }}>Importe</th>
+                    <th style={{ padding: '8px 10px', borderBottom: '1px solid #eef0f2', textAlign: 'right' }}>Imp. Desc.</th>
+                    <th style={{ padding: '8px 10px', borderBottom: '1px solid #eef0f2' }}>Venc. Desc.</th>
+                    <th style={{ padding: '8px 10px', borderBottom: '1px solid #eef0f2', textAlign: 'right' }}>Monto usado</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {montosPorPago.pendienteDetalle.map(({ multa, columna, monto }) => {
+                    const usoImporte = columna === 'IMPORTE'
+                    const hl = { background: '#dcfce7', color: '#15803d', fontWeight: 700 }
+                    return (
+                      <tr key={multa.id}>
+                        <td style={{ padding: '8px 10px', borderBottom: '1px solid #f6f7f8' }}>{multa.fecha_infraccion ? new Date(multa.fecha_infraccion).toLocaleDateString('es-AR') : '-'}</td>
+                        <td style={{ padding: '8px 10px', borderBottom: '1px solid #f6f7f8', fontWeight: 600 }}>{multa.patente || '-'}</td>
+                        <td style={{ padding: '8px 10px', borderBottom: '1px solid #f6f7f8' }}>{multa.conductor_responsable || '-'}</td>
+                        <td style={{ padding: '8px 10px', borderBottom: '1px solid #f6f7f8', maxWidth: 220, overflow: 'hidden', textOverflow: 'ellipsis' }} title={multa.infraccion || ''}>{multa.infraccion || '-'}</td>
+                        <td style={{ padding: '8px 10px', borderBottom: '1px solid #f6f7f8', textAlign: 'right', ...(usoImporte ? hl : {}) }}>{multa.importe || '-'}</td>
+                        <td style={{ padding: '8px 10px', borderBottom: '1px solid #f6f7f8', textAlign: 'right', ...(!usoImporte ? hl : {}) }}>{multa.importe_descuento || '-'}</td>
+                        <td style={{ padding: '8px 10px', borderBottom: '1px solid #f6f7f8' }}>{multa.fecha_vencimiento_descuento ? String(multa.fecha_vencimiento_descuento).slice(0, 10) : '-'}</td>
+                        <td style={{ padding: '8px 10px', borderBottom: '1px solid #f6f7f8', textAlign: 'right', fontWeight: 700 }}>
+                          {formatMoney(monto)}
+                          <span style={{ marginLeft: 6, fontSize: 10, fontWeight: 600, padding: '1px 6px', borderRadius: 999, background: '#dcfce7', color: '#15803d' }}>{usoImporte ? 'Importe' : 'Imp. Desc.'}</span>
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

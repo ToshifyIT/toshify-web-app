@@ -10,8 +10,13 @@ export interface MultaDetalle {
   fecha: string | null
   infraccion: string | null
   patente: string | null
-  estado: 'sinFacturar' | 'impaga' | 'pagada'
-  monto: number
+  estado: 'pendiente' | 'enProceso' | 'pagada'
+  monto: number                    // monto efectivo (penalidad si pagada/proceso; importe con/sin descuento si pendiente)
+  importe: number                  // importe original de la multa
+  importeDescuento: number         // importe con descuento (0 si no tiene)
+  fechaVencDescuento: string | null
+  descuentoVigente: boolean        // hay descuento y su vencimiento es posterior a hoy
+  usaDescuento: boolean            // el monto pendiente se calcula con el importe con descuento
 }
 
 export interface FacturacionSemana {
@@ -27,6 +32,7 @@ export interface FacturacionSemana {
   proforma: number
   pagado: number
   saldo: number
+  saldoAnterior: number                   // arrastre de semanas previas (ya incluido en proforma)
   cobertura: number                       // 0..100
   estado: 'cubierto' | 'pendiente' | 'favor'
 }
@@ -44,46 +50,39 @@ export async function cargarMultasConductor(cond: { id: string; nombres: string 
   const primerApellido = primera(cond.apellidos)
   if (!primerNombre || !primerApellido) return []
 
-  const [{ data: multasRaw }, penRes, factRes, pagosRes] = await Promise.all([
+  const [{ data: multasRaw }, penRes, perRes] = await Promise.all([
     supabase
       .from('multas_historico')
-      .select('id, infraccion, patente, fecha_infraccion, importe, conductor_responsable')
+      .select('id, infraccion, patente, fecha_infraccion, importe, importe_descuento, fecha_vencimiento_descuento, conductor_responsable')
       .ilike('conductor_responsable', `%${primerApellido}%`)
       .is('deleted_at', null)
       .is('desestimada_at', null)
       .order('fecha_infraccion', { ascending: false })
       .limit(500),
     (supabase.from('penalidades' as any) as any)
-      .select('semana_aplicacion, anio_aplicacion, aplicado, rechazado, fraccionado, incidencias!inner(multa_id)')
+      .select('monto, semana_aplicacion, anio_aplicacion, aplicado, rechazado, fraccionado, incidencias!inner(multa_id)')
       .eq('conductor_id', cond.id)
       .not('incidencias.multa_id', 'is', null),
-    supabase.from('facturacion_conductores').select('total_a_pagar, periodos_facturacion!inner(semana, anio)').eq('conductor_id', cond.id),
-    (supabase.from('control_saldos') as any).select('semana, anio, tipo_movimiento, monto_movimiento').eq('conductor_id', cond.id),
+    supabase.from('periodos_facturacion').select('semana, anio').eq('estado', 'cerrado'),
   ])
 
-  // Cobertura por semana: proforma - aportes <= 0 => cubierta.
-  const tiposAporte = new Set(['pago_cabify', 'pago_manual', 'pago', 'pago_cuota'])
-  const prof: Record<string, number> = {}
-  for (const f of (factRes.data || []) as Array<any>) {
-    const per = f.periodos_facturacion
-    if (!per?.semana || !per?.anio) continue
-    prof[`${per.semana}-${per.anio}`] = (prof[`${per.semana}-${per.anio}`] || 0) + parseImporte(f.total_a_pagar)
-  }
-  const apor: Record<string, number> = {}
-  for (const p of (pagosRes.data || []) as Array<any>) {
-    if (!tiposAporte.has(p.tipo_movimiento)) continue
-    apor[`${p.semana}-${p.anio}`] = (apor[`${p.semana}-${p.anio}`] || 0) + Number(p.monto_movimiento || 0)
-  }
-  const cubierta = (k: string) => (prof[k] || 0) > 0 && (prof[k] || 0) - (apor[k] || 0) <= 1
-
-  // Estado por multa: facturada (penalidad aplicada) en semana cubierta = pagada;
-  // facturada en semana no cubierta (o fraccionada) = impaga; sin penalidad = sin facturar.
-  const penPorMulta = new Map<string, { fraccionado: boolean; k: string }>()
+  // Estado por multa (misma logica que Mi Espacio / modulo de Multas):
+  //  fraccionada = penalidad fraccionada; pagada = no fraccionada, aplicada, en periodo cerrado.
+  const cerradas = new Set<string>(((perRes.data || []) as Array<{ semana: number; anio: number }>).map(p => `${p.semana}-${p.anio}`))
+  const estadoPorMulta = new Map<string, { estado: 'pagada' | 'fraccionada'; monto: number }>()
   for (const row of (penRes.data || []) as Array<any>) {
     const mid = row.incidencias?.multa_id
-    if (mid == null || row.aplicado !== true || row.rechazado === true) continue
-    penPorMulta.set(String(mid), { fraccionado: row.fraccionado === true, k: `${row.semana_aplicacion ?? 0}-${row.anio_aplicacion ?? 0}` })
+    if (mid == null) continue
+    const monto = parseImporte(row.monto)
+    if (row.fraccionado === true) {
+      estadoPorMulta.set(String(mid), { estado: 'fraccionada', monto })
+    } else if (row.aplicado === true && row.rechazado !== true && cerradas.has(`${row.semana_aplicacion}-${row.anio_aplicacion}`)) {
+      const prev = estadoPorMulta.get(String(mid))
+      if (!prev || prev.estado !== 'fraccionada') estadoPorMulta.set(String(mid), { estado: 'pagada', monto })
+    }
   }
+
+  const hoyStr = new Date().toISOString().slice(0, 10)
 
   const filtradas = ((multasRaw || []) as Array<any>).filter(m => {
     const cr = m.conductor_responsable || ''
@@ -92,36 +91,47 @@ export async function cargarMultasConductor(cond: { id: string; nombres: string 
     return c.includes(primerNombre) && c.includes(primerApellido)
   })
 
-  // Facturada = la multa tiene una incidencia (mismo criterio que el modulo de Multas).
-  let facturadaSet = new Set<string>()
-  if (filtradas.length > 0) {
-    const { data: inc } = await supabase
-      .from('incidencias')
-      .select('multa_id')
-      .in('multa_id', filtradas.map(m => m.id))
-      .not('multa_id', 'is', null)
-    facturadaSet = new Set(((inc || []) as Array<any>).map(i => String(i.multa_id)))
-  }
+  const detalle = filtradas.map((m): MultaDetalle => {
+    const est = estadoPorMulta.get(String(m.id))
+    const importe = parseImporte(m.importe)
+    const importeDescuento = parseImporte(m.importe_descuento)
+    const vencStr = m.fecha_vencimiento_descuento ? String(m.fecha_vencimiento_descuento).slice(0, 10) : ''
+    const descuentoVigente = importeDescuento > 0 && vencStr > hoyStr
 
-  return filtradas.map((m): MultaDetalle => {
-    const id = String(m.id)
     let estado: MultaDetalle['estado']
-    if (!facturadaSet.has(id)) {
-      estado = 'sinFacturar'
+    let monto: number
+    let usaDescuento = false
+    if (est?.estado === 'pagada') {
+      estado = 'pagada'; monto = est.monto
+    } else if (est?.estado === 'fraccionada') {
+      estado = 'enProceso'; monto = est.monto
     } else {
-      const pen = penPorMulta.get(id)
-      estado = (pen && !pen.fraccionado && cubierta(pen.k)) ? 'pagada' : 'impaga'
+      estado = 'pendiente'
+      usaDescuento = descuentoVigente
+      monto = usaDescuento ? importeDescuento : importe
     }
     return {
-      id,
+      id: String(m.id),
       fecha: m.fecha_infraccion,
       infraccion: m.infraccion,
       patente: m.patente,
       estado,
-      // IMPORTE COMPLETO (nominal), igual que el modulo de Multas y la tabla del panel.
-      monto: parseImporte(m.importe),
+      monto,
+      importe,
+      importeDescuento,
+      fechaVencDescuento: m.fecha_vencimiento_descuento ? String(m.fecha_vencimiento_descuento).slice(0, 10) : null,
+      descuentoVigente,
+      usaDescuento,
     }
   })
+
+  // Orden por fecha de infracción, de la más reciente a la más antigua.
+  detalle.sort((a, b) => {
+    const fa = a.fecha ? Date.parse(a.fecha) : 0
+    const fb = b.fecha ? Date.parse(b.fecha) : 0
+    return fb - fa
+  })
+  return detalle
 }
 
 export interface ConceptoDetalle {
@@ -129,15 +139,33 @@ export interface ConceptoDetalle {
   total: number
   esDescuento: boolean
 }
+export interface PagoAporte {
+  id: string
+  tipo: string            // pago_cabify | pago_manual | pago | pago_cuota
+  monto: number
+  referencia: string | null
+  fecha: string | null
+}
 export interface SemanaDetalle {
   conceptos: ConceptoDetalle[]
   grupoFlota: string | null
   gnc: boolean | null
+  pagos: PagoAporte[]     // aportes de la semana (Cabify, manuales, etc.)
 }
 
-// Detalle de una semana de facturación: conceptos (cargos/descuentos) + datos del vehículo.
-export async function cargarDetalleSemana(facturaId: string, patente: string | null): Promise<SemanaDetalle> {
-  const [{ data: det }, vehRes] = await Promise.all([
+// Tipos de movimiento que cuentan como aporte del conductor (mismo criterio que el portal).
+const TIPOS_APORTE = ['pago_cabify', 'pago_manual', 'pago', 'pago_cuota']
+
+// Detalle de una semana de facturación: conceptos (cargos/descuentos) + datos del
+// vehículo + aportes (pagos) de la semana desde el kardex (control_saldos).
+export async function cargarDetalleSemana(
+  facturaId: string,
+  patente: string | null,
+  conductorId: string,
+  semana: number,
+  anio: number,
+): Promise<SemanaDetalle> {
+  const [{ data: det }, vehRes, pagosRes] = await Promise.all([
     supabase
       .from('facturacion_detalle')
       .select('concepto_codigo, concepto_descripcion, total, es_descuento')
@@ -146,6 +174,13 @@ export async function cargarDetalleSemana(facturaId: string, patente: string | n
     patente
       ? supabase.from('vehiculos').select('grupo_flota, gnc').eq('patente', patente).limit(1)
       : Promise.resolve({ data: [] as any[] }),
+    (supabase.from('control_saldos') as any)
+      .select('id, tipo_movimiento, monto_movimiento, referencia, created_at')
+      .eq('conductor_id', conductorId)
+      .eq('semana', semana)
+      .eq('anio', anio)
+      .in('tipo_movimiento', TIPOS_APORTE)
+      .order('created_at', { ascending: true }),
   ])
 
   const conceptos: ConceptoDetalle[] = ((det || []) as Array<any>)
@@ -156,8 +191,53 @@ export async function cargarDetalleSemana(facturaId: string, patente: string | n
       esDescuento: d.es_descuento === true,
     }))
 
+  const pagos: PagoAporte[] = ((pagosRes.data || []) as Array<any>).map(p => ({
+    id: String(p.id),
+    tipo: p.tipo_movimiento,
+    monto: Number(p.monto_movimiento) || 0,
+    referencia: p.referencia ?? null,
+    fecha: p.created_at ?? null,
+  }))
+
   const veh = (vehRes.data && vehRes.data.length > 0) ? (vehRes.data[0] as any) : null
-  return { conceptos, grupoFlota: veh?.grupo_flota ?? null, gnc: veh?.gnc ?? null }
+  return { conceptos, grupoFlota: veh?.grupo_flota ?? null, gnc: veh?.gnc ?? null, pagos }
+}
+
+export interface ExcesoKmConductor {
+  // Monto cobrado por exceso de KM por semana (clave = nro de semana ISO). Sale de
+  // la incidencia (incidencias.km_exceso not null). Si una semana tiene exceso pero
+  // NO tiene incidencia cargada, no aparece en el mapa (=> N/A en la tabla de Km).
+  porSemana: Map<number, number>
+  // Total de penalidades de exceso de KM en estado PENDIENTE (por aplicar): aún no
+  // se aplicaron, por lo que todavía no entraron a facturación. Se suma a la deuda.
+  pendienteTotal: number
+}
+
+export async function cargarExcesoKmConductor(conductorId: string): Promise<ExcesoKmConductor> {
+  const [{ data: incs }, { data: pens }] = await Promise.all([
+    (supabase.from('incidencias' as any) as any)
+      .select('semana, monto, km_exceso')
+      .eq('conductor_id', conductorId)
+      .not('km_exceso', 'is', null),
+    (supabase.from('penalidades' as any) as any)
+      .select('monto, aplicado, rechazado, incidencias!inner(km_exceso, conductor_id)')
+      .eq('incidencias.conductor_id', conductorId)
+      .not('incidencias.km_exceso', 'is', null),
+  ])
+
+  const porSemana = new Map<number, number>()
+  for (const r of (incs || []) as Array<{ semana: number | null; monto: unknown }>) {
+    if (r.semana == null) continue
+    porSemana.set(r.semana, (porSemana.get(r.semana) || 0) + parseImporte(r.monto))
+  }
+
+  // Pendiente = penalidad de exceso KM no aplicada y no rechazada (estado "Por Aplicar").
+  let pendienteTotal = 0
+  for (const p of (pens || []) as Array<{ monto: unknown; aplicado: boolean | null; rechazado: boolean | null }>) {
+    if (p.aplicado !== true && p.rechazado !== true) pendienteTotal += parseImporte(p.monto)
+  }
+
+  return { porSemana, pendienteTotal }
 }
 
 export interface ResumenExtra {
@@ -197,7 +277,7 @@ export async function cargarFacturacionConductor(conductorId: string): Promise<F
   const [{ data: facts }, { data: pagos }] = await Promise.all([
     supabase
       .from('facturacion_conductores')
-      .select('id, total_a_pagar, vehiculo_patente, tipo_alquiler, turnos_base, turnos_cobrados, periodos_facturacion!inner(semana, anio, fecha_inicio, fecha_fin)')
+      .select('id, total_a_pagar, saldo_anterior, vehiculo_patente, tipo_alquiler, turnos_base, turnos_cobrados, periodos_facturacion!inner(semana, anio, fecha_inicio, fecha_fin)')
       .eq('conductor_id', conductorId),
     (supabase.from('control_saldos') as any)
       .select('semana, anio, tipo_movimiento, monto_movimiento')
@@ -221,6 +301,7 @@ export async function cargarFacturacionConductor(conductorId: string): Promise<F
     if (!semana || !anio) continue
     if (!(anio > ANIO_MIN || (anio === ANIO_MIN && semana >= SEMANA_MIN))) continue
     const proforma = parseImporte(f.total_a_pagar)
+    const saldoAnterior = parseImporte(f.saldo_anterior)
     const pagado = pagadoPorSemana[`${semana}-${anio}`] || 0
     const saldo = proforma - pagado
     const cobertura = proforma > 0 ? Math.min(100, (pagado / proforma) * 100) : (pagado > 0 ? 100 : 0)
@@ -234,7 +315,7 @@ export async function cargarFacturacionConductor(conductorId: string): Promise<F
       modalidad: f.tipo_alquiler ?? null,
       turnosCobrados: Number(f.turnos_cobrados || 0),
       turnosBase: Number(f.turnos_base || 0),
-      proforma, pagado, saldo, cobertura, estado,
+      proforma, pagado, saldo, saldoAnterior, cobertura, estado,
     })
   }
   return rows.sort((a, b) => b.anio - a.anio || b.semana - a.semana)
