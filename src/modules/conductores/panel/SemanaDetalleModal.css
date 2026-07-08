@@ -47,6 +47,7 @@
 .csem-empty { text-align: center; color: #9ca3af; padding: 30px; }
 
 .csem-sect-title { font-size: 12px; font-weight: 700; color: #dc2626; text-transform: uppercase; letter-spacing: .5px; margin-bottom: 8px; }
+.csem-sect-title.aportes { color: #059669; margin-top: 14px; }
 .csem-row {
   display: flex; align-items: center; gap: 8px;
   padding: 10px 12px; margin-bottom: 4px;
@@ -55,8 +56,12 @@
 }
 .csem-dot { width: 7px; height: 7px; border-radius: 50%; background: #dc2626; flex-shrink: 0; }
 .csem-dot.desc { background: #059669; }
+.csem-dot.aporte { background: #059669; }
 .csem-row.desc { color: #059669; }
+.csem-row.aporte { color: #065f46; }
+.csem-ref { color: #9ca3af; font-size: 11px; font-weight: 400; }
 .csem-amt { margin-left: auto; font-weight: 700; color: var(--text-primary, #111827); }
+.csem-amt.credit { color: #059669; }
 
 .csem-subtotal {
   display: flex; justify-content: space-between;
@@ -64,12 +69,16 @@
   font-size: 14px; font-weight: 700; color: var(--text-primary, #111827);
   background: #f3f4f6; border-radius: 8px;
 }
+.csem-subtotal .debit { color: #dc2626; }
+.csem-subtotal .credit { color: #059669; }
 
 .csem-total-box {
   margin-top: 12px; padding: 14px;
   background: #f9fafb; border-radius: 12px;
 }
-.csem-total-row { display: flex; justify-content: space-between; font-size: 14px; font-weight: 700; padding-bottom: 12px; border-bottom: 1px solid #e5e7eb; }
+.csem-total-ref { padding-bottom: 12px; border-bottom: 1px solid #e5e7eb; }
+.csem-ref-row { display: flex; justify-content: space-between; font-size: 13px; color: #9ca3af; padding: 2px 0; }
+.csem-total-row { display: flex; justify-content: space-between; font-size: 14px; font-weight: 700; color: var(--text-primary, #111827); padding: 5px 0 2px; }
 .csem-pend { text-align: center; padding-top: 14px; }
 .csem-pend-lbl { font-size: 12px; font-weight: 700; color: #9ca3af; letter-spacing: .5px; }
 .csem-pend-amt { font-size: 30px; font-weight: 800; margin-top: 4px; }

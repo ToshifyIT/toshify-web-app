@@ -209,6 +209,7 @@ export interface LeadFormData {
   observaciones?: string
   fuente_de_lead?: string
   codigo_referido?: string
+  url_folder?: string
 }
 
 export interface LeadStats {

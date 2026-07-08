@@ -1,5 +1,4 @@
 // src/modules/conductores/components/ConductorWizard.tsx
-/* eslint-disable @typescript-eslint/no-explicit-any */
 import { useState } from 'react'
 import { User, CreditCard, FileCheck, Phone, Shield, Check, ChevronLeft, ChevronRight, ExternalLink } from 'lucide-react'
 import { AddressAutocomplete } from '../../../components/ui/AddressAutocomplete'
@@ -27,6 +26,9 @@ interface ConductorFormData {
   nacionalidad_id: string
   contacto_emergencia: string
   telefono_emergencia: string
+  parentesco_emergencia: string
+  direccion_emergencia: string
+  experiencia_previa: string
   antecedentes_penales: boolean
   cochera_propia: boolean
   fecha_contratacion: string
@@ -70,8 +72,6 @@ export function ConductorWizard({
   nacionalidades,
   categoriasLicencia,
   estadosConductor,
-  estadosLicencia,
-  tiposLicencia,
   sedes,
   onCancel,
   onSubmit,
@@ -104,6 +104,7 @@ export function ConductorWizard({
       if (!formData.telefono_contacto.trim()) newErrors.telefono_contacto = 'El teléfono es requerido'
       if (!formData.email.trim()) newErrors.email = 'El email es requerido'
       if (!formData.direccion.trim()) newErrors.direccion = 'La dirección es requerida'
+      if (!formData.experiencia_previa.trim()) newErrors.experiencia_previa = 'Requerido'
     }
 
     setErrors(newErrors)
@@ -264,33 +265,7 @@ export function ConductorWizard({
               <h3>Información Fiscal</h3>
               <span className="optional-badge">Opcional</span>
             </div>
-            <p className="step-description">Datos bancarios y fiscales del conductor.</p>
-
-            <div className="form-row">
-              <div className="form-group">
-                <label className="form-label">CBU</label>
-                <input
-                  type="text"
-                  className="form-input"
-                  placeholder="0150806001000158141270"
-                  maxLength={22}
-                  value={formData.cbu}
-                  onChange={(e) => setFormData({ ...formData, cbu: e.target.value })}
-                  disabled={saving}
-                />
-              </div>
-              <div className="form-group" style={{ display: 'flex', alignItems: 'flex-end' }}>
-                <label className="checkbox-container">
-                  <input
-                    type="checkbox"
-                    checked={formData.monotributo}
-                    onChange={(e) => setFormData({ ...formData, monotributo: e.target.checked })}
-                    disabled={saving}
-                  />
-                  <span className="checkbox-label">Monotributo</span>
-                </label>
-              </div>
-            </div>
+            <p className="step-description">No hay datos fiscales para completar en este paso.</p>
           </div>
         )
 
@@ -345,37 +320,6 @@ export function ConductorWizard({
                   disabled={saving}
                 />
                 {errors.licencia_vencimiento && <span className="error-message">{errors.licencia_vencimiento}</span>}
-              </div>
-            </div>
-
-            <div className="form-row">
-              <div className="form-group">
-                <label className="form-label">Estado Licencia</label>
-                <select
-                  className="form-input"
-                  value={formData.licencia_estado_id}
-                  onChange={(e) => setFormData({ ...formData, licencia_estado_id: e.target.value })}
-                  disabled={saving}
-                >
-                  <option value="">Seleccionar...</option>
-                  {estadosLicencia.map((e: any) => (
-                    <option key={e.id} value={e.id}>{e.descripcion}</option>
-                  ))}
-                </select>
-              </div>
-              <div className="form-group">
-                <label className="form-label">Tipo Licencia</label>
-                <select
-                  className="form-input"
-                  value={formData.licencia_tipo_id}
-                  onChange={(e) => setFormData({ ...formData, licencia_tipo_id: e.target.value })}
-                  disabled={saving}
-                >
-                  <option value="">Seleccionar...</option>
-                  {tiposLicencia.map((t: any) => (
-                    <option key={t.id} value={t.id}>{t.descripcion}</option>
-                  ))}
-                </select>
               </div>
             </div>
           </div>
@@ -468,6 +412,43 @@ export function ConductorWizard({
                   onChange={(e) => setFormData({ ...formData, telefono_emergencia: e.target.value })}
                   disabled={saving}
                 />
+              </div>
+            </div>
+            <div className="form-row">
+              <div className="form-group">
+                <label className="form-label">Parentesco</label>
+                <input
+                  type="text"
+                  className="form-input"
+                  value={formData.parentesco_emergencia}
+                  onChange={(e) => setFormData({ ...formData, parentesco_emergencia: e.target.value })}
+                  disabled={saving}
+                />
+              </div>
+              <div className="form-group">
+                <label className="form-label">Dirección Emergencia</label>
+                <input
+                  type="text"
+                  className="form-input"
+                  value={formData.direccion_emergencia}
+                  onChange={(e) => setFormData({ ...formData, direccion_emergencia: e.target.value })}
+                  disabled={saving}
+                />
+              </div>
+            </div>
+            <div className="section-divider">Experiencia</div>
+            <div className="form-row">
+              <div className="form-group">
+                <label className="form-label">Experiencia Previa *</label>
+                <input
+                  type="text"
+                  className={`form-input ${errors.experiencia_previa ? 'input-error' : ''}`}
+                  value={formData.experiencia_previa}
+                  onChange={(e) => setFormData({ ...formData, experiencia_previa: e.target.value })}
+                  disabled={saving}
+                  placeholder="Ej: 3 años Uber y Cabify"
+                />
+                {errors.experiencia_previa && <span className="error-message">{errors.experiencia_previa}</span>}
               </div>
             </div>
           </div>

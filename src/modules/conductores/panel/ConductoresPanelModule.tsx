@@ -27,6 +27,17 @@ const CARD_LABELS: Record<CardKey, string> = {
   pendientes: 'Con Multas Pendientes',
 }
 
+// Etiqueta legible del turno (horario de la asignacion actual).
+const TURNO_LABELS: Record<string, string> = {
+  diurno: 'Diurno',
+  nocturno: 'Nocturno',
+  todo_dia: 'Todo el día',
+}
+function turnoLabel(t: string | null): string {
+  if (!t) return '—'
+  return TURNO_LABELS[t] || t
+}
+
 export function ConductoresPanelModule() {
   const { sedeActualId } = useSede()
 
@@ -53,7 +64,7 @@ export function ConductoresPanelModule() {
     conAuto: rows.filter(c => c.tieneAsignacion).length,
     sinAuto: rows.filter(c => !c.tieneAsignacion).length,
     conMultas: rows.filter(c => c.cantidadMultas > 0).length,
-    pendientes: rows.filter(c => c.sinFacturar + c.impagas > 0).length,
+    pendientes: rows.filter(c => c.pendientes + c.enProceso > 0).length,
   }), [rows])
 
   const filteredRows = useMemo(() => {
@@ -61,7 +72,7 @@ export function ConductoresPanelModule() {
       case 'conAuto': return rows.filter(c => c.tieneAsignacion)
       case 'sinAuto': return rows.filter(c => !c.tieneAsignacion)
       case 'conMultas': return rows.filter(c => c.cantidadMultas > 0)
-      case 'pendientes': return rows.filter(c => c.sinFacturar + c.impagas > 0)
+      case 'pendientes': return rows.filter(c => c.pendientes + c.enProceso > 0)
       default: return rows
     }
   }, [rows, activeCard])
@@ -80,22 +91,35 @@ export function ConductoresPanelModule() {
   const columns = useMemo<ColumnDef<ConductorPanelRow, unknown>[]>(() => [
     {
       id: 'conductor',
-      accessorFn: (r) => `${r.nombre} ${r.dni || ''}`,
+      accessorFn: (r) => `${r.nombre} ${r.dni || ''} ${r.ruc || ''}`,
       header: 'Conductor',
       cell: ({ row }) => (
         <div>
           <div style={{ fontWeight: 600, color: 'var(--text-primary, #111827)' }}>{row.original.nombre || '—'}</div>
-          <div style={{ fontSize: 12, color: 'var(--text-tertiary, #9ca3af)' }}>{row.original.dni || '—'}</div>
+          <div style={{ fontSize: 12, color: 'var(--text-tertiary, #9ca3af)' }}>
+            DNI: {row.original.dni || '—'}
+          </div>
+          <div style={{ fontSize: 12, color: 'var(--text-tertiary, #9ca3af)' }}>
+            RUC: {row.original.ruc || '—'}
+          </div>
         </div>
       ),
     },
     {
-      id: 'asignacion',
+      id: 'patente',
       accessorFn: (r) => r.vehiculoAsignado || '',
-      header: 'Asignación',
+      header: 'Patente',
       cell: ({ row }) => row.original.vehiculoAsignado
         ? <span className="cpanel-badge asig">{row.original.vehiculoAsignado}</span>
         : <span className="cpanel-badge noasig">Sin asignación</span>,
+    },
+    {
+      id: 'turno',
+      accessorFn: (r) => turnoLabel(r.turno),
+      header: 'Turno',
+      cell: ({ row }) => row.original.turno
+        ? <span className={`cpanel-badge turno ${row.original.turno}`}>{turnoLabel(row.original.turno)}</span>
+        : <span className="cpanel-num">—</span>,
     },
     {
       id: 'estado',
@@ -108,18 +132,19 @@ export function ConductoresPanelModule() {
       ),
     },
     { accessorKey: 'cantidadMultas', header: 'Multas', cell: ({ getValue }) => <span className="cpanel-num">{getValue() as number}</span> },
+    { accessorKey: 'pendientes', header: 'Pendientes', cell: ({ getValue }) => <span className="cpanel-num">{getValue() as number}</span> },
+    { accessorKey: 'enProceso', header: 'En Proceso', cell: ({ getValue }) => <span className="cpanel-num">{getValue() as number}</span> },
+    { accessorKey: 'pagadas', header: 'Pagadas', cell: ({ getValue }) => <span className="cpanel-num">{getValue() as number}</span> },
     {
       id: 'vehiculos',
       accessorFn: (r) => r.vehiculos.length,
       header: 'Vehículos',
       cell: ({ row }) => <span className="cpanel-num" title={row.original.vehiculos.join(', ')}>{row.original.vehiculos.length}</span>,
     },
+    { accessorKey: 'montoPendiente', header: 'Multas Pendientes', cell: ({ getValue }) => <span className="cpanel-num">{formatCurrency(getValue() as number)}</span> },
+    { accessorKey: 'montoEnProceso', header: 'Multas En Proceso', cell: ({ getValue }) => <span className="cpanel-num">{formatCurrency(getValue() as number)}</span> },
+    { accessorKey: 'montoPagado', header: 'Multas Pagadas', cell: ({ getValue }) => <span className="cpanel-num">{formatCurrency(getValue() as number)}</span> },
     { accessorKey: 'montoTotalMultas', header: 'Monto Total', cell: ({ getValue }) => <span className="cpanel-num">{formatCurrency(getValue() as number)}</span> },
-    { accessorKey: 'montoFacturado', header: 'Monto Facturado', cell: ({ getValue }) => <span className="cpanel-num">{formatCurrency(getValue() as number)}</span> },
-    { accessorKey: 'montoSinFacturar', header: 'Monto Sin Facturar', cell: ({ getValue }) => <span className="cpanel-num">{formatCurrency(getValue() as number)}</span> },
-    { accessorKey: 'sinFacturar', header: 'Sin Facturar', cell: ({ getValue }) => <span className="cpanel-num">{getValue() as number}</span> },
-    { accessorKey: 'impagas', header: 'Impagas', cell: ({ getValue }) => <span className="cpanel-num">{getValue() as number}</span> },
-    { accessorKey: 'pagadas', header: 'Pagadas', cell: ({ getValue }) => <span className="cpanel-num">{getValue() as number}</span> },
     {
       id: 'acciones',
       header: 'Acciones',
