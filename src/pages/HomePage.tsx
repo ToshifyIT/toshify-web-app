@@ -1,5 +1,5 @@
 // src/pages/HomePage.tsx
-import { useState, useEffect, lazy, Suspense, Component } from 'react'
+import { useState, useEffect, useMemo, lazy, Suspense, Component } from 'react'
 import type { ReactNode, ErrorInfo } from 'react'
 import { supabase } from '../lib/supabase'
 import { 
@@ -430,9 +430,24 @@ export function HomePage() {
     setOpenNestedMenus(prev => ({ ...prev, [submenuId]: !prev[submenuId] }))
   }
 
+  // Set de todas las rutas registradas (menús + submenús), para no marcar activo
+  // a un padre por prefijo cuando la ruta actual es un ítem propio (ej. /conductores
+  // vs /conductores/panel).
+  const registeredRoutes = useMemo(() => {
+    const set = new Set<string>()
+    ;(userPermissions?.menus as Array<{ route?: string | null }> | undefined)?.forEach(m => { if (m?.route) set.add(m.route) })
+    ;(userPermissions?.submenus as Array<{ route?: string | null }> | undefined)?.forEach(s => { if (s?.route) set.add(s.route) })
+    return set
+  }, [userPermissions?.menus, userPermissions?.submenus])
+
   const isActiveRoute = (path: string) => {
     if (!path) return false
-    return location.pathname === path || location.pathname.startsWith(`${path}/`)
+    if (location.pathname === path) return true
+    // Si la ruta actual coincide EXACTAMENTE con otra ruta registrada, no usar el
+    // match por prefijo (evita que /conductores se marque activo estando en
+    // /conductores/panel, que es su propio ítem hermano).
+    if (registeredRoutes.has(location.pathname)) return false
+    return location.pathname.startsWith(`${path}/`)
   }
 
   const hasActiveSubmenu = (submenus: SubmenuWithHierarchy[]) =>

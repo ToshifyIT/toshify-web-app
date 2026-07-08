@@ -15,6 +15,10 @@
 .cpanel-badge.off { background: #f3f4f6; color: #6b7280; text-transform: capitalize; }
 .cpanel-badge.asig { background: #dbeafe; color: #1d4ed8; letter-spacing: .03em; }
 .cpanel-badge.noasig { background: #fef3c7; color: #b45309; }
+.cpanel-badge.turno { text-transform: none; }
+.cpanel-badge.turno.diurno { background: #fef9c3; color: #a16207; }
+.cpanel-badge.turno.nocturno { background: #e0e7ff; color: #4338ca; }
+.cpanel-badge.turno.todo_dia { background: #f3e8ff; color: #7e22ce; }
 
 .cpanel-ver {
   display: inline-flex;

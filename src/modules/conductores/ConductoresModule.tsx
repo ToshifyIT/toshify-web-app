@@ -307,6 +307,9 @@ export function ConductoresModule() {
     nacionalidad_id: "",
     contacto_emergencia: "",
     telefono_emergencia: "",
+    parentesco_emergencia: "",
+    direccion_emergencia: "",
+    experiencia_previa: "",
     antecedentes_penales: false,
     cochera_propia: false,
     fecha_contratacion: "",
@@ -1060,6 +1063,9 @@ export function ConductoresModule() {
             nacionalidad_id: formData.nacionalidad_id || null,
             contacto_emergencia: formData.contacto_emergencia || null,
             telefono_emergencia: formData.telefono_emergencia || null,
+            parentesco_emergencia: formData.parentesco_emergencia || null,
+            direccion_emergencia: formData.direccion_emergencia || null,
+            experiencia_previa: formData.experiencia_previa || null,
             antecedentes_penales: formData.antecedentes_penales,
             cochera_propia: formData.cochera_propia,
             fecha_contratacion: formData.fecha_contratacion || null,
@@ -1644,6 +1650,9 @@ export function ConductoresModule() {
         nacionalidad_id: formData.nacionalidad_id || null,
         contacto_emergencia: formData.contacto_emergencia || null,
         telefono_emergencia: formData.telefono_emergencia || null,
+        parentesco_emergencia: formData.parentesco_emergencia || null,
+        direccion_emergencia: formData.direccion_emergencia || null,
+        experiencia_previa: formData.experiencia_previa || null,
         antecedentes_penales: formData.antecedentes_penales,
         cochera_propia: formData.cochera_propia,
         fecha_contratacion: formData.fecha_contratacion || null,
@@ -2173,6 +2182,9 @@ export function ConductoresModule() {
       nacionalidad_id: fc.nacionalidad_id || "",
       contacto_emergencia: fc.contacto_emergencia || "",
       telefono_emergencia: fc.telefono_emergencia || "",
+      parentesco_emergencia: (fc as any).parentesco_emergencia || "",
+      direccion_emergencia: (fc as any).direccion_emergencia || "",
+      experiencia_previa: (fc as any).experiencia_previa || "",
       antecedentes_penales: fc.antecedentes_penales,
       cochera_propia: fc.cochera_propia,
       fecha_contratacion: fc.fecha_contratacion || "",
@@ -2413,6 +2425,9 @@ export function ConductoresModule() {
       nacionalidad_id: "",
       contacto_emergencia: "",
       telefono_emergencia: "",
+      parentesco_emergencia: "",
+      direccion_emergencia: "",
+      experiencia_previa: "",
       antecedentes_penales: false,
       cochera_propia: false,
       fecha_contratacion: "",
@@ -4237,6 +4252,43 @@ function ModalEditar({
                 })
               }
               disabled={saving}
+            />
+          </div>
+        </div>
+        <div className="form-row">
+          <div className="form-group">
+            <label className="form-label">Parentesco</label>
+            <input
+              type="text"
+              className="form-input"
+              value={formData.parentesco_emergencia}
+              onChange={(e) => setFormData({ ...formData, parentesco_emergencia: e.target.value })}
+              disabled={saving}
+            />
+          </div>
+          <div className="form-group">
+            <label className="form-label">Dirección Emergencia</label>
+            <input
+              type="text"
+              className="form-input"
+              value={formData.direccion_emergencia}
+              onChange={(e) => setFormData({ ...formData, direccion_emergencia: e.target.value })}
+              disabled={saving}
+            />
+          </div>
+        </div>
+
+        <div className="section-title">Experiencia</div>
+        <div className="form-row">
+          <div className="form-group">
+            <label className="form-label">Experiencia Previa *</label>
+            <input
+              type="text"
+              className="form-input"
+              value={formData.experiencia_previa}
+              onChange={(e) => setFormData({ ...formData, experiencia_previa: e.target.value })}
+              disabled={saving}
+              placeholder="Ej: 3 años Uber y Cabify"
             />
           </div>
         </div>
