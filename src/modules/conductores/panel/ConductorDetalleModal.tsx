@@ -7,12 +7,25 @@ import { X, AlertTriangle, Wallet, Gauge, Receipt, Info } from 'lucide-react'
 import { supabase } from '../../../lib/supabase'
 import { formatCurrency } from '../../../types/facturacion.types'
 import { calcularKmSemanasConductor, type KmSemanaConductor } from '../../portal/kmRecorridos'
-import { cargarMultasConductor, cargarFacturacionConductor, cargarResumenExtra, cargarExcesoKmConductor, type MultaDetalle, type FacturacionSemana, type ResumenExtra, type ExcesoKmConductor } from './conductorDetalleService'
+import { cargarMultasConductor, cargarFacturacionConductor, cargarResumenExtra, cargarExcesoKmConductor, cargarAsignacionesConductor, cargarHistorialBajasConductor, type MultaDetalle, type FacturacionSemana, type ResumenExtra, type ExcesoKmConductor, type AsignacionHist, type BajaHist } from './conductorDetalleService'
 import type { ConductorPanelRow } from './conductoresPanelService'
 import { SemanaDetalleModal } from './SemanaDetalleModal'
 import './ConductorDetalleModal.css'
 
-type Tab = 'multas' | 'facturacion' | 'km'
+type Tab = 'multas' | 'facturacion' | 'km' | 'asignaciones' | 'bajas'
+
+// Etiqueta legible de turno/horario y estados para los historiales.
+function horarioLabel(h: string | null): string {
+  if (h === 'nocturno') return 'Nocturno'
+  if (h === 'diurno') return 'Diurno'
+  if (h === 'todo_dia') return 'A cargo'
+  return h || '—'
+}
+function fmtFechaCorta(s: string | null): string {
+  if (!s) return '—'
+  const d = new Date(s)
+  return isNaN(d.getTime()) ? '—' : d.toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric' })
+}
 
 function fmtFecha(s: string | null): string {
   if (!s) return '—'
@@ -36,6 +49,9 @@ export function ConductorDetalleModal({ conductor, onClose }: { conductor: Condu
   const [facturacion, setFacturacion] = useState<FacturacionSemana[]>([])
   const [km, setKm] = useState<KmSemanaConductor[]>([])
   const [excesoKm, setExcesoKm] = useState<ExcesoKmConductor>({ porSemana: new Map(), pendienteTotal: 0 })
+  const [asignaciones, setAsignaciones] = useState<AsignacionHist[]>([])
+  const [bajas, setBajas] = useState<BajaHist[]>([])
+  const [loadingHist, setLoadingHist] = useState(true)
   const [resumen, setResumen] = useState<ResumenExtra>({ gananciaCabify: 0 })
   const [loading, setLoading] = useState(true)
   const [kmLoading, setKmLoading] = useState(true)
@@ -79,6 +95,16 @@ export function ConductorDetalleModal({ conductor, onClose }: { conductor: Condu
         rango,
       ).then(ext => { if (vivo) setResumen(ext) }).catch(() => { /* ignora */ })
     }).finally(() => { if (vivo) setLoading(false) })
+
+    // Historiales de asignaciones y bajas (consultas livianas, en paralelo).
+    setLoadingHist(true)
+    Promise.all([
+      cargarAsignacionesConductor(conductor.id).catch(() => [] as AsignacionHist[]),
+      cargarHistorialBajasConductor(conductor.id).catch(() => [] as BajaHist[]),
+    ]).then(([asig, bj]) => {
+      if (!vivo) return
+      setAsignaciones(asig); setBajas(bj)
+    }).finally(() => { if (vivo) setLoadingHist(false) })
 
     // KM en paralelo y sin bloquear: es el cálculo más pesado (recorre viajes GPS).
     // Alimenta solo la pestaña Km y el KPI "Km última semana".
@@ -171,6 +197,8 @@ export function ConductorDetalleModal({ conductor, onClose }: { conductor: Condu
           <button className={tab === 'multas' ? 'active' : ''} onClick={() => setTab('multas')}>Multas</button>
           <button className={tab === 'facturacion' ? 'active' : ''} onClick={() => setTab('facturacion')}>Facturación</button>
           <button className={tab === 'km' ? 'active' : ''} onClick={() => setTab('km')}>Km recorridos</button>
+          <button className={tab === 'asignaciones' ? 'active' : ''} onClick={() => setTab('asignaciones')}>Historial de asignaciones</button>
+          <button className={tab === 'bajas' ? 'active' : ''} onClick={() => setTab('bajas')}>Historial de bajas</button>
         </div>
 
         <div className="cdet-body">
@@ -315,7 +343,7 @@ export function ConductorDetalleModal({ conductor, onClose }: { conductor: Condu
               </div>
               )}
             </>
-          ) : (
+          ) : tab === 'km' ? (
             kmLoading ? <div className="cdet-empty">Cargando…</div> : km.length === 0 ? <div className="cdet-empty">Sin km registrados.</div> : (
               <table className="cdet-table">
                 <thead><tr>
@@ -359,6 +387,48 @@ export function ConductorDetalleModal({ conductor, onClose }: { conductor: Condu
                   })}
                 </tbody>
               </table>
+            )
+          ) : tab === 'asignaciones' ? (
+            loadingHist ? <div className="cdet-empty">Cargando…</div> : asignaciones.length === 0 ? <div className="cdet-empty">Sin asignaciones registradas.</div> : (
+              <table className="cdet-table">
+                <thead><tr>
+                  <th>Patente</th><th>Vehículo</th><th>Turno</th><th>Estado</th><th>Desde</th><th>Hasta</th>
+                </tr></thead>
+                <tbody>
+                  {asignaciones.map(a => {
+                    const activa = a.estadoAsig === 'activa'
+                    return (
+                      <tr key={a.id}>
+                        <td><b>{a.patente || '—'}</b></td>
+                        <td className="cdet-trunc" title={a.vehiculo || ''}>{a.vehiculo || '—'}</td>
+                        <td>{a.modalidad === 'a_cargo' ? 'A cargo' : horarioLabel(a.horario)}</td>
+                        <td><span className={`cdet-tag ${activa ? 'ok' : 'pend'}`}>{activa ? 'Activa' : (a.estadoAsig || a.estado || '—')}</span></td>
+                        <td>{fmtFechaCorta(a.fechaInicio)}</td>
+                        <td>{a.fechaFin ? fmtFechaCorta(a.fechaFin) : '—'}</td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            )
+          ) : (
+            loadingHist ? <div className="cdet-empty">Cargando…</div> : bajas.length === 0 ? <div className="cdet-empty">Sin bajas ni reactivaciones registradas.</div> : (
+              <div className="cdet-bajas-list">
+                {bajas.map(b => {
+                  const esBaja = b.tipoEvento === 'baja'
+                  return (
+                    <div key={b.id} className={`cdet-baja-item ${esBaja ? 'baja' : 'reac'}`}>
+                      <div className="cdet-baja-top">
+                        <span className={`cdet-baja-badge ${esBaja ? 'baja' : 'reac'}`}>{esBaja ? 'Baja' : 'Reactivación'}</span>
+                        <span className="cdet-baja-estado">{(b.estadoAnterior || '—')} → {(b.estadoNuevo || '—')}</span>
+                        <span className="cdet-baja-fecha">{fmtFechaCorta(b.fecha)}</span>
+                      </div>
+                      {b.motivo && <div className="cdet-baja-motivo"><b>Motivo:</b> {b.motivo}</div>}
+                      <div className="cdet-baja-usuario">Por {b.usuario || '—'}</div>
+                    </div>
+                  )
+                })}
+              </div>
             )
           )}
         </div>
