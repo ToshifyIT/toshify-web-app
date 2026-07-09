@@ -152,11 +152,11 @@ export async function cargarPanelConductores(sedeId?: string | null): Promise<Co
       conductor_id: string | null
       estado: string | null
       horario: string | null
-      asignaciones: { estado: string | null; sede_id: string | null; vehiculos: { patente: string | null } | null } | null
+      asignaciones: { estado: string | null; sede_id: string | null; modalidad: string | null; vehiculos: { patente: string | null } | null } | null
     }>((from, to) =>
       supabase
         .from('asignaciones_conductores')
-        .select('conductor_id, estado, horario, asignaciones(estado, sede_id, vehiculos(patente))')
+        .select('conductor_id, estado, horario, asignaciones(estado, sede_id, modalidad, vehiculos(patente))')
         .not('conductor_id', 'is', null)
         .range(from, to)
     ),
@@ -195,7 +195,10 @@ export async function cargarPanelConductores(sedeId?: string | null): Promise<Co
     if (!ac.conductor_id || !a.vehiculos?.patente) continue
     if (!vehiculoPorConductor.has(ac.conductor_id)) {
       vehiculoPorConductor.set(ac.conductor_id, a.vehiculos.patente)
-      if (ac.horario) turnoPorConductor.set(ac.conductor_id, ac.horario)
+      // Turno = modalidad "a cargo" -> 'a_cargo'; si no, el horario (diurno/nocturno).
+      // (El horario 'todo_dia' corresponde a la modalidad a_cargo.)
+      const turno = (a.modalidad === 'a_cargo' || ac.horario === 'todo_dia') ? 'a_cargo' : ac.horario
+      if (turno) turnoPorConductor.set(ac.conductor_id, turno)
     }
   }
 
