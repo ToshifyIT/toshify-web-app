@@ -387,3 +387,67 @@ export async function cargarFacturacionConductor(conductorId: string): Promise<F
   }
   return rows.sort((a, b) => b.anio - a.anio || b.semana - a.semana)
 }
+
+// Historial de asignaciones de vehículos del conductor (mismo criterio que el
+// módulo de Conductores: excluye las asignaciones canceladas).
+export interface AsignacionHist {
+  id: string
+  patente: string | null
+  vehiculo: string | null        // marca modelo (año)
+  horario: string | null         // diurno / nocturno / todo_dia
+  modalidad: string | null       // turno / a_cargo
+  estado: string | null          // estado de asignaciones_conductores
+  estadoAsig: string | null      // estado de la asignación padre
+  fechaInicio: string | null
+  fechaFin: string | null
+}
+export async function cargarAsignacionesConductor(conductorId: string): Promise<AsignacionHist[]> {
+  const { data } = await supabase
+    .from('asignaciones_conductores')
+    .select('id, horario, estado, fecha_inicio, fecha_fin, created_at, asignaciones!inner(codigo, estado, modalidad, fecha_inicio, fecha_fin, vehiculos(patente, marca, modelo, anio))')
+    .eq('conductor_id', conductorId)
+    .not('asignaciones.estado', 'eq', 'cancelada')
+    .order('created_at', { ascending: false })
+  return ((data || []) as Array<any>).map((r) => {
+    const a = r.asignaciones
+    const v = a?.vehiculos
+    const veh = v ? [v.marca, v.modelo].filter(Boolean).join(' ') + (v.anio ? ` (${v.anio})` : '') : null
+    return {
+      id: String(r.id),
+      patente: v?.patente ?? a?.codigo ?? null,
+      vehiculo: veh || null,
+      horario: r.horario ?? null,
+      modalidad: a?.modalidad ?? null,
+      estado: r.estado ?? null,
+      estadoAsig: a?.estado ?? null,
+      fechaInicio: r.fecha_inicio ?? a?.fecha_inicio ?? null,
+      fechaFin: r.fecha_fin ?? a?.fecha_fin ?? null,
+    }
+  })
+}
+
+// Historial de bajas y reactivaciones del conductor (tabla conductores_historial_bajas).
+export interface BajaHist {
+  id: string
+  tipoEvento: string             // baja / reactivacion
+  estadoAnterior: string | null
+  estadoNuevo: string | null
+  motivo: string | null
+  usuario: string | null
+  fecha: string | null
+}
+export async function cargarHistorialBajasConductor(conductorId: string): Promise<BajaHist[]> {
+  const { data } = await (supabase.from('conductores_historial_bajas' as any) as any)
+    .select('id, tipo_evento, estado_anterior, estado_nuevo, motivo_baja, usuario_nombre, created_at')
+    .eq('conductor_id', conductorId)
+    .order('created_at', { ascending: false })
+  return ((data || []) as Array<any>).map((r) => ({
+    id: String(r.id),
+    tipoEvento: r.tipo_evento ?? '',
+    estadoAnterior: r.estado_anterior ?? null,
+    estadoNuevo: r.estado_nuevo ?? null,
+    motivo: r.motivo_baja ?? null,
+    usuario: r.usuario_nombre ?? null,
+    fecha: r.created_at ?? null,
+  }))
+}
