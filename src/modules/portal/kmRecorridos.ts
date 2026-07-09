@@ -35,6 +35,7 @@ export interface KmSemanaConductor {
   limite: number
   excedido: number
   modalidad: string
+  horario: string | null   // diurno / nocturno / todo_dia de la asignación de esa semana
 }
 
 interface TripRow {
@@ -200,7 +201,7 @@ export async function calcularKmSemanasConductor(
   // 3) Semanas desde junio 2026 hasta hoy (ART): para cada una, asignación
   //    elegida (última que empezó vigente esa semana) y patentes propias.
   const desdeMs = new Date(`${DESDE}T00:00:00-03:00`).getTime()
-  const porSemanaAsign = new Map<string, { info: WeekInfo; modalidad: string | null; patentes: Set<string> }>()
+  const porSemanaAsign = new Map<string, { info: WeekInfo; modalidad: string | null; horario: string | null; patentes: Set<string> }>()
   for (let cursorMs = desdeMs; cursorMs <= nowMs; cursorMs += 7 * 86400000) {
     const wi = getISOWeekInfo(fechaART(cursorMs))
     const lunesMs = new Date(`${wi.inicio}T00:00:00-03:00`).getTime()
@@ -210,7 +211,7 @@ export async function calcularKmSemanasConductor(
     vigentes.sort((a, b) => b.iniMs - a.iniMs)
     const pats = new Set<string>()
     for (const v of vigentes) { if (v.patenteNorm) pats.add(v.patenteNorm) }
-    porSemanaAsign.set(wi.key, { info: wi, modalidad: vigentes[0].modalidad, patentes: pats })
+    porSemanaAsign.set(wi.key, { info: wi, modalidad: vigentes[0].modalidad, horario: vigentes[0].horario, patentes: pats })
   }
 
   // Patentes a consultar: todas las que tuvo asignadas en la ventana.
@@ -389,6 +390,7 @@ export async function calcularKmSemanasConductor(
         limite,
         excedido: Math.max(0, kmRed - limite),
         modalidad,
+        horario: asign.horario ?? null,
       }
     })
     .sort((a, b) => (b.anio - a.anio) || (b.semana - a.semana))
