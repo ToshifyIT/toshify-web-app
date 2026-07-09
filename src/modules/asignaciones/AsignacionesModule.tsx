@@ -1,7 +1,7 @@
 // src/modules/asignaciones/AsignacionesModule.tsx
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { useState, useEffect, useMemo } from 'react'
-import { Eye, Trash2, CheckCircle, XCircle, FileText, Calendar, UserPlus, UserCheck, Ban, Plus, Pencil, ArrowLeftRight, FolderOpen, ClipboardCheck, Car } from 'lucide-react'
+import { Eye, Trash2, CheckCircle, XCircle, FileText, Calendar, UserPlus, UserCheck, Ban, Plus, Pencil, ArrowLeftRight, FolderOpen, ClipboardCheck, Car, History, X } from 'lucide-react'
 import { type ColumnDef } from '@tanstack/react-table'
 import { DataTable } from '../../components/ui/DataTable/DataTable'
 import { LoadingOverlay } from '../../components/ui/LoadingOverlay'
@@ -98,6 +98,14 @@ async function fetchProgramaciones(): Promise<any[]> {
   }
 }
 
+// Helper: de una lista de filas de conductor, la del tramo más reciente (por fecha_inicio,
+// o fecha_fin como respaldo). Evita depender del orden azaroso de las filas.
+function ultimoConductorPorFecha(arr: any[]): any {
+  if (!arr || !arr.length) return undefined
+  return arr.reduce((a, b) =>
+    String(b?.fecha_inicio || b?.fecha_fin || '') >= String(a?.fecha_inicio || a?.fecha_fin || '') ? b : a)
+}
+
 // Helper: mapear motivos de programación a asignaciones
 function buildAsignacionesConMotivo(asignaciones: any[], programaciones: any[]) {
   const motivosMap = new Map<string, { tipo: string; observaciones?: string; programadoPor?: string; cambioVehiculo?: boolean; vehiculoCambioPatente?: string; vehiculoCambioModelo?: string; vehiculoCambioId?: string }>()
@@ -153,6 +161,68 @@ export function AsignacionesModule() {
   const [showViewModal, setShowViewModal] = useState(false)
   const [viewAsignacion, setViewAsignacion] = useState<Asignacion | null>(null)
   const [viewDriveUrls, setViewDriveUrls] = useState<Record<string, string>>({})
+  // Historial de conductores anteriores de una asignación (los que ya pasaron y fueron reemplazados).
+  const [showHistorialCond, setShowHistorialCond] = useState(false)
+  const [historialCond, setHistorialCond] = useState<any[]>([])
+  const [loadingHistorialCond, setLoadingHistorialCond] = useState(false)
+
+  // IDs de los conductores ACTUALES tal como los muestra la sección "Conductores Asignados"
+  // del modal (mismo criterio: último por turno/cargo entre asignado/activo/completado, en el
+  // orden en que vienen las filas). El historial es EXACTAMENTE el complemento de esto, así
+  // ningún conductor queda ni duplicado ni afuera.
+  const conductoresActualesIds = (asig: Asignacion | null): Set<string> => {
+    const ids = new Set<string>()
+    if (!asig) return ids
+    const acs = (asig.asignaciones_conductores || []) as any[]
+    const filt = acs.filter((c) => ['asignado', 'activo', 'completado'].includes(c.estado))
+    // Conductor actual por turno: el activo/asignado; si no hay (asignación finalizada), el
+    // de fecha_inicio más reciente. (No depende del orden azaroso de las filas.)
+    const pick = (arr: any[]) => {
+      if (!arr.length) return
+      const act = arr.filter((c) => c.estado === 'asignado' || c.estado === 'activo')
+      const pool = act.length ? act : arr
+      const latest = pool.reduce((a, b) =>
+        String(b.fecha_inicio || b.fecha_fin || '') >= String(a.fecha_inicio || a.fecha_fin || '') ? b : a)
+      ids.add(latest.id)
+    }
+    if (asig.horario === 'todo_dia') {
+      pick(filt)
+    } else {
+      pick(filt.filter((c) => c.horario === 'diurno'))
+      pick(filt.filter((c) => c.horario === 'nocturno'))
+    }
+    return ids
+  }
+
+  // Hay anteriores si alguna fila no es de los conductores actuales mostrados.
+  const tieneConductoresAnteriores = (asig: Asignacion | null): boolean => {
+    if (!asig) return false
+    const acs = (asig.asignaciones_conductores || []) as any[]
+    const actuales = conductoresActualesIds(asig)
+    return acs.some((c) => !actuales.has(c.id))
+  }
+
+  const abrirHistorialConductores = async () => {
+    if (!viewAsignacion) return
+    setShowHistorialCond(true)
+    setLoadingHistorialCond(true)
+    try {
+      // "Actuales" = los que muestra el modal principal; el resto son anteriores.
+      const actuales = conductoresActualesIds(viewAsignacion)
+      const { data } = await supabase
+        .from('asignaciones_conductores')
+        .select('id, estado, horario, fecha_inicio, fecha_fin, confirmado, fecha_confirmacion, conductores(nombres, apellidos, numero_licencia, conductores_estados(codigo))')
+        .eq('asignacion_id', viewAsignacion.id)
+      const anteriores = ((data || []) as any[])
+        .filter((c) => !actuales.has(c.id))
+        .sort((a, b) => String(a.fecha_inicio || '').localeCompare(String(b.fecha_inicio || '')))
+      setHistorialCond(anteriores)
+    } catch {
+      setHistorialCond([])
+    } finally {
+      setLoadingHistorialCond(false)
+    }
+  }
   const [conductoresToConfirm, setConductoresToConfirm] = useState<string[]>([])
   const [isSubmitting, setIsSubmitting] = useState(false)
   
@@ -591,7 +661,7 @@ export function AsignacionesModule() {
             id, codigo, vehiculo_id, horario, fecha_programada, fecha_inicio, fecha_fin, estado, control_completado, created_at, sede_id, notas,
             vehiculos (patente, marca, modelo),
             asignaciones_conductores (
-              id, conductor_id, estado, horario, confirmado, fecha_confirmacion, documento,
+              id, conductor_id, estado, horario, confirmado, fecha_confirmacion, documento, fecha_inicio, fecha_fin,
               conductores (nombres, apellidos, numero_licencia, estado_id, cochera_propia, contacto_emergencia, telefono_emergencia, parentesco_emergencia, conductores_estados(codigo))
             )
           `))
@@ -753,7 +823,7 @@ export function AsignacionesModule() {
             id, codigo, vehiculo_id, horario, fecha_programada, fecha_inicio, fecha_fin, estado, control_completado, created_at, sede_id, notas,
             vehiculos (patente, marca, modelo),
             asignaciones_conductores (
-              id, conductor_id, estado, horario, confirmado, fecha_confirmacion, documento,
+              id, conductor_id, estado, horario, confirmado, fecha_confirmacion, documento, fecha_inicio, fecha_fin,
               conductores (nombres, apellidos, numero_licencia, estado_id, drive_contract_folder_url, cochera_propia, contacto_emergencia, telefono_emergencia, parentesco_emergencia, conductores_estados(codigo))
             )
           `))
@@ -1079,12 +1149,12 @@ export function AsignacionesModule() {
         const esActiva = asignacion.estado === 'activa' || asignacion.estado === 'activo'
         const diurnoActivo = conductoresDiurno.find(ac => ac.estado !== 'completado' && ac.estado !== 'finalizado' && ac.estado !== 'cancelado')
         const diurno = diurnoActivo || (esAsignacionFinalizada
-          ? conductoresDiurno[conductoresDiurno.length - 1]
+          ? ultimoConductorPorFecha(conductoresDiurno)
           : esActiva ? null : conductoresDiurno.find(ac => ac.estado === 'cancelado') || null)
-        
+
         const nocturnoActivo = conductoresNocturno.find(ac => ac.estado !== 'completado' && ac.estado !== 'finalizado' && ac.estado !== 'cancelado')
         const nocturno = nocturnoActivo || (esAsignacionFinalizada
-          ? conductoresNocturno[conductoresNocturno.length - 1]
+          ? ultimoConductorPorFecha(conductoresNocturno)
           : esActiva ? null : conductoresNocturno.find(ac => ac.estado === 'cancelado') || null)
 
         return {
@@ -3311,6 +3381,67 @@ export function AsignacionesModule() {
       )}
 
       {/* Modal de Visualización */}
+      {showHistorialCond && (
+        <div className="asig-hist-overlay" onClick={() => setShowHistorialCond(false)}>
+          <div className="asig-hist-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="asig-hist-header">
+              <div>
+                <h3 className="asig-hist-title">Historial de conductores</h3>
+                <p className="asig-hist-sub">Conductores que pasaron por {viewAsignacion?.codigo || 'esta asignación'}</p>
+              </div>
+              <button className="asig-hist-close" onClick={() => setShowHistorialCond(false)} aria-label="Cerrar"><X size={18} /></button>
+            </div>
+            <div className="asig-hist-body">
+              {loadingHistorialCond ? (
+                <div className="asig-hist-empty">Cargando…</div>
+              ) : historialCond.length === 0 ? (
+                <div className="asig-hist-empty">Sin conductores anteriores.</div>
+              ) : (
+                <div className="asig-hist-list">
+                  {historialCond.map((c) => {
+                    const cancelada = c.estado === 'cancelado'
+                    const nombre = `${c.conductores?.nombres || ''} ${c.conductores?.apellidos || ''}`.trim() || '-'
+                    const turno = c.horario === 'todo_dia' ? 'A cargo' : c.horario === 'diurno' ? 'Diurno' : c.horario === 'nocturno' ? 'Nocturno' : (c.horario || '-')
+                    const fmt = (s: any) => s ? new Date(s).toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric', timeZone: 'America/Argentina/Buenos_Aires' }) : null
+                    const ini = fmt(c.fecha_inicio); const fin = fmt(c.fecha_fin)
+                    const estadoCond = (c.conductores?.conductores_estados?.codigo || '').toUpperCase()
+                    const deBaja = estadoCond.includes('BAJA')
+                    const estadoTramo = cancelada ? 'Cancelada' : c.estado === 'completado' ? 'Finalizada' : (c.estado || '-')
+                    const fmtConf = (s: any) => s ? new Date(s).toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric', timeZone: 'America/Argentina/Buenos_Aires' }) : ''
+                    const confirmadoTxt = c.confirmado ? `Sí${c.fecha_confirmacion ? ` · ${fmtConf(c.fecha_confirmacion)}` : ''}` : 'No'
+                    return (
+                      <div key={c.id} className={`asig-hist-item ${cancelada ? 'cancel' : ''}`}>
+                        <div className="asig-hist-item-main">
+                          <span className="asig-hist-name">{nombre}</span>
+                          {cancelada && <span className="asig-hist-tag cancel">Cancelada</span>}
+                        </div>
+                        <div className="asig-hist-fields">
+                          <div><span className="asig-hist-flabel">Turno</span><span className="asig-hist-fvalue">{turno}</span></div>
+                          <div><span className="asig-hist-flabel">Licencia</span><span className="asig-hist-fvalue">{c.conductores?.numero_licencia || '-'}</span></div>
+                          <div><span className="asig-hist-flabel">Fecha inicio</span><span className="asig-hist-fvalue">{ini || '—'}</span></div>
+                          <div><span className="asig-hist-flabel">Fecha fin asignación</span><span className="asig-hist-fvalue">{fin || '—'}</span></div>
+                          <div><span className="asig-hist-flabel">Estado del tramo</span><span className="asig-hist-fvalue">{estadoTramo}</span></div>
+                          <div>
+                            <span className="asig-hist-flabel">Confirmado</span>
+                            <span className="asig-hist-fvalue" style={{ color: c.confirmado ? '#16a34a' : '#9ca3af' }}>{confirmadoTxt}</span>
+                          </div>
+                          <div>
+                            <span className="asig-hist-flabel">Estado del conductor</span>
+                            <span className="asig-hist-fvalue" style={{ color: estadoCond ? (deBaja ? '#dc2626' : '#16a34a') : undefined }}>
+                              {estadoCond ? (deBaja ? 'De baja' : 'Activo') : '—'}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
       {showViewModal && viewAsignacion && (
         <div className="asig-modal-overlay">
           <div className="asig-modal-content wide">
@@ -3466,7 +3597,23 @@ export function AsignacionesModule() {
                   )}
 
                   <div>
-                    <label className="asig-detail-label">Conductores Asignados</label>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
+                      <label className="asig-detail-label">Conductores Asignados</label>
+                      {(() => {
+                        const hayAnteriores = tieneConductoresAnteriores(viewAsignacion)
+                        return (
+                          <button
+                            type="button"
+                            className="asig-btn-historial"
+                            disabled={!hayAnteriores}
+                            title={!hayAnteriores ? 'Sin conductores anteriores' : 'Ver conductores que pasaron por esta asignación'}
+                            onClick={abrirHistorialConductores}
+                          >
+                            <History size={13} /> Historial conductores
+                          </button>
+                        )
+                      })()}
+                    </div>
                     {viewAsignacion.asignaciones_conductores?.length ? (
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                         {(() => {
@@ -3474,14 +3621,23 @@ export function AsignacionesModule() {
                             c.estado === 'asignado' || c.estado === 'activo' || c.estado === 'completado'
                           )
                           const esCargo = viewAsignacion.horario === 'todo_dia'
+                          // Conductor actual por turno: el activo/asignado; si no hay, el de
+                          // fecha_inicio más reciente. (No depende del orden azaroso de las filas.)
+                          const pickAct = (arr: any[]) => {
+                            if (!arr.length) return null
+                            const act = arr.filter((c: any) => c.estado === 'asignado' || c.estado === 'activo')
+                            const pool = act.length ? act : arr
+                            return pool.reduce((a: any, b: any) =>
+                              String(b.fecha_inicio || b.fecha_fin || '') >= String(a.fecha_inicio || a.fecha_fin || '') ? b : a)
+                          }
                           const lista = esCargo
-                            ? [conductoresFiltrados[conductoresFiltrados.length - 1]]
+                            ? [pickAct(conductoresFiltrados)].filter(Boolean)
                             : (() => {
                                 const diurnos = conductoresFiltrados.filter((c: any) => c.horario === 'diurno')
                                 const nocturnos = conductoresFiltrados.filter((c: any) => c.horario === 'nocturno')
                                 const result: any[] = []
-                                if (diurnos.length > 0) result.push(diurnos[diurnos.length - 1])
-                                if (nocturnos.length > 0) result.push(nocturnos[nocturnos.length - 1])
+                                const d = pickAct(diurnos); if (d) result.push(d)
+                                const n = pickAct(nocturnos); if (n) result.push(n)
                                 return result
                               })()
                           return lista

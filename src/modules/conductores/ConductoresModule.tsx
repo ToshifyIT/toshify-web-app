@@ -4677,6 +4677,8 @@ function ModalDetalles({
 }: any) {
   const [vehiculosAsignados, setVehiculosAsignados] = useState<any[]>([]);
   const [loadingVehiculos, setLoadingVehiculos] = useState(true);
+  const [historialBajas, setHistorialBajas] = useState<any[]>([]);
+  const [loadingBajas, setLoadingBajas] = useState(true);
   const [syncingEmail, setSyncingEmail] = useState(false);
   const [conductorEmail, setConductorEmail] = useState<string>(selectedConductor?.email || '');
   const [editingEmail, setEditingEmail] = useState(false);
@@ -4821,6 +4823,28 @@ function ModalDetalles({
     };
 
     fetchVehiculosAsignados();
+  }, [selectedConductor?.id]);
+
+  // Cargar historial de bajas/reactivaciones del conductor.
+  useEffect(() => {
+    const fetchHistorialBajas = async () => {
+      if (!selectedConductor?.id) return;
+      setLoadingBajas(true);
+      try {
+        const { data, error } = await supabase
+          .from('conductores_historial_bajas')
+          .select('id, tipo_evento, estado_anterior, estado_nuevo, motivo_baja, usuario_nombre, fecha_terminacion_nueva, created_at')
+          .eq('conductor_id', selectedConductor.id)
+          .order('created_at', { ascending: false });
+        if (error) throw error;
+        setHistorialBajas(data || []);
+      } catch {
+        setHistorialBajas([]);
+      } finally {
+        setLoadingBajas(false);
+      }
+    };
+    fetchHistorialBajas();
   }, [selectedConductor?.id]);
 
   // Helper para obtener el estado badge del conductor en la asignación
@@ -5309,6 +5333,59 @@ function ModalDetalles({
                           {(item.fecha_fin || asig?.fecha_fin) && ` - ${new Date(item.fecha_fin || asig.fecha_fin).toLocaleDateString('es-AR', { timeZone: 'America/Argentina/Buenos_Aires' })}`}
                         </span>
                       )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
+        {/* Historial de Bajas y Reactivaciones */}
+        <div className="section-title" style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '16px' }}>
+          Historial de Bajas y Reactivaciones
+          {!loadingBajas && (
+            <span style={{ fontSize: '12px', color: 'var(--text-tertiary)', fontWeight: 'normal' }}>
+              ({historialBajas.length})
+            </span>
+          )}
+        </div>
+        <div className="vehiculos-historial-container">
+          {loadingBajas ? (
+            <div style={{ padding: '20px', textAlign: 'center', color: 'var(--text-tertiary)', fontSize: '13px' }}>
+              Cargando historial...
+            </div>
+          ) : historialBajas.length === 0 ? (
+            <div style={{ padding: '20px', textAlign: 'center', color: 'var(--text-tertiary)', fontSize: '13px', background: 'var(--bg-secondary)', borderRadius: '8px' }}>
+              Sin bajas ni reactivaciones registradas
+            </div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              {historialBajas.map((b) => {
+                const esBaja = b.tipo_evento === 'baja';
+                const color = esBaja ? '#dc2626' : '#059669';
+                const bg = esBaja ? 'rgba(220,38,38,0.06)' : 'rgba(5,150,105,0.06)';
+                const fecha = b.created_at
+                  ? new Date(b.created_at).toLocaleDateString('es-AR', { timeZone: 'America/Argentina/Buenos_Aires', day: '2-digit', month: '2-digit', year: 'numeric' })
+                  : '—';
+                return (
+                  <div key={b.id} style={{ borderLeft: `3px solid ${color}`, background: bg, borderRadius: '8px', padding: '10px 12px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                      <span style={{ background: color, color: '#fff', fontSize: '11px', fontWeight: 700, padding: '2px 8px', borderRadius: '999px' }}>
+                        {esBaja ? 'Baja' : 'Reactivación'}
+                      </span>
+                      <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
+                        {(b.estado_anterior || '—')} → {(b.estado_nuevo || '—')}
+                      </span>
+                      <span style={{ marginLeft: 'auto', fontSize: '12px', color: 'var(--text-tertiary)' }}>{fecha}</span>
+                    </div>
+                    {b.motivo_baja && (
+                      <div style={{ marginTop: '4px', fontSize: '13px', color: 'var(--text-primary)' }}>
+                        <b>Motivo:</b> {b.motivo_baja}
+                      </div>
+                    )}
+                    <div style={{ marginTop: '4px', fontSize: '12px', color: 'var(--text-tertiary)' }}>
+                      Por {b.usuario_nombre || '—'}
                     </div>
                   </div>
                 );
