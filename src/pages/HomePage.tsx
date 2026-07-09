@@ -280,6 +280,7 @@ const ParametrosUssPage = lazy(() => import('./parametros/ParametrosUssPage').th
 const ParametrosAsignacionesPage = lazy(() => import('./parametros/ParametrosAsignacionesPage').then(m => ({ default: m.ParametrosAsignacionesPage })))
 const GruposFlotaPage = lazy(() => import('./parametros/GruposFlotaPage').then(m => ({ default: m.GruposFlotaPage })))
 const IntegracionesTokensPage = lazy(() => import('./administracion/IntegracionesTokensPage').then(m => ({ default: m.IntegracionesTokensPage })))
+const PromptChatbotPage = lazy(() => import('./administracion/PromptChatbotPage').then(m => ({ default: m.PromptChatbotPage })))
 const GuiasPage = lazy(() => import('./GuiasPage').then(m => ({ default: m.GuiasPage })))
 const EscuelaPage = lazy(() => import('./EscuelaPage').then(m => ({ default: m.EscuelaPage })))
 import type { Guia } from '../modules/guias/guiasService'
@@ -2150,6 +2151,11 @@ export function HomePage() {
               <Route path="/administracion/integraciones-tokens" element={
                 <ProtectedRoute submenuName="integraciones-tokens" action="view">
                   <LazyPage><IntegracionesTokensPage /></LazyPage>
+                </ProtectedRoute>
+              } />
+              <Route path="/administracion/prompt-chatbot" element={
+                <ProtectedRoute submenuName="prompt-chatbot" action="view">
+                  <LazyPage><PromptChatbotPage /></LazyPage>
                 </ProtectedRoute>
               } />
 
