@@ -418,16 +418,18 @@ export function HomePage() {
     navigate('/login')
   }
 
-  const toggleMenu = (menuName: string) => {
-    setOpenMenus(prev => ({ ...prev, [menuName]: !prev[menuName] }))
+  // Recibe el estado efectivo (incluye auto-abierto por ruta activa) para que
+  // el click del usuario siempre lo invierta, aun con un submenú seleccionado.
+  const toggleMenu = (menuName: string, isCurrentlyOpen: boolean) => {
+    setOpenMenus(prev => ({ ...prev, [menuName]: !isCurrentlyOpen }))
   }
 
   const toggleSidebar = () => {
     setSidebarOpen(!sidebarOpen)
   }
 
-  const toggleNestedMenu = (submenuId: string) => {
-    setOpenNestedMenus(prev => ({ ...prev, [submenuId]: !prev[submenuId] }))
+  const toggleNestedMenu = (submenuId: string, isCurrentlyOpen: boolean) => {
+    setOpenNestedMenus(prev => ({ ...prev, [submenuId]: !isCurrentlyOpen }))
   }
 
   // Set de todas las rutas registradas (menús + submenús), para no marcar activo
@@ -472,7 +474,7 @@ export function HomePage() {
       const hasActiveChild = allSubmenus.some(sub =>
         sub.parent_id === submenu.submenu_id && isActiveRoute(sub.submenu_route)
       )
-      const isNestedOpen = openNestedMenus[submenu.submenu_id] || hasActiveChild
+      const isNestedOpen = openNestedMenus[submenu.submenu_id] ?? hasActiveChild
 
       if (hasChildren) {
         // Este submenú tiene hijos - renderizar como grupo colapsable
@@ -482,7 +484,7 @@ export function HomePage() {
               className={`nav-nested-header ${hasActiveChild ? 'active' : ''}`}
               onClick={() => {
                 // Grupos con hijos solo hacen toggle, no navegan
-                toggleNestedMenu(submenu.submenu_id)
+                toggleNestedMenu(submenu.submenu_id, isNestedOpen)
               }}
             >
               <span>{submenu.submenu_label === 'Telepase Histórico' ? 'Telepase' : submenu.submenu_label}</span>
@@ -1564,7 +1566,7 @@ export function HomePage() {
                 }
 
                 const hasSubmenus = submenus.length > 0
-                const isMenuOpen = openMenus[menu.menu_name] || hasActiveSubmenu(submenus as SubmenuWithHierarchy[])
+                const isMenuOpen = openMenus[menu.menu_name] ?? hasActiveSubmenu(submenus as SubmenuWithHierarchy[])
 
                 if (hasSubmenus) {
                   // Menú con submenús
@@ -1575,7 +1577,7 @@ export function HomePage() {
                         <button
                           className="nav-section-header"
                           onClick={() => {
-                            if (!sidebarCollapsed) toggleMenu(menu.menu_name);
+                            if (!sidebarCollapsed) toggleMenu(menu.menu_name, isMenuOpen);
                             if (isSeguimiento) distributeDrivers();
                           }}
                         >
