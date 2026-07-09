@@ -18,7 +18,7 @@
 .cpanel-badge.turno { text-transform: none; }
 .cpanel-badge.turno.diurno { background: #fef9c3; color: #a16207; }
 .cpanel-badge.turno.nocturno { background: #e0e7ff; color: #4338ca; }
-.cpanel-badge.turno.todo_dia { background: #f3e8ff; color: #7e22ce; }
+.cpanel-badge.turno.a_cargo { background: #f3e8ff; color: #7e22ce; }
 
 .cpanel-ver {
   display: inline-flex;

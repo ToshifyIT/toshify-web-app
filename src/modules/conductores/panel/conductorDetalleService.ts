@@ -17,6 +17,11 @@ export interface MultaDetalle {
   fechaVencDescuento: string | null
   descuentoVigente: boolean        // hay descuento y su vencimiento es posterior a hoy
   usaDescuento: boolean            // el monto pendiente se calcula con el importe con descuento
+  // Semana de pago:
+  //  - pagada: semana en que se aplicó (cobró) la penalidad.
+  //  - enProceso (fraccionada): cuotas con su semana y si ya fue cobrada (aplicado).
+  semanaPago: string | null
+  cuotas: Array<{ numero: number; semana: number; anio: number; aplicado: boolean; monto: number }> | null
 }
 
 export interface FacturacionSemana {
@@ -53,14 +58,14 @@ export async function cargarMultasConductor(cond: { id: string; nombres: string 
   const [{ data: multasRaw }, penRes, perRes] = await Promise.all([
     supabase
       .from('multas_historico')
-      .select('id, infraccion, patente, fecha_infraccion, importe, importe_descuento, fecha_vencimiento_descuento, conductor_responsable')
+      .select('id, infraccion, patente, fecha_infraccion, importe, importe_descuento, fecha_vencimiento_descuento, conductor_responsable, created_at')
       .ilike('conductor_responsable', `%${primerApellido}%`)
       .is('deleted_at', null)
       .is('desestimada_at', null)
       .order('fecha_infraccion', { ascending: false })
       .limit(500),
     (supabase.from('penalidades' as any) as any)
-      .select('monto, semana_aplicacion, anio_aplicacion, aplicado, rechazado, fraccionado, incidencias!inner(multa_id)')
+      .select('id, monto, semana_aplicacion, anio_aplicacion, aplicado, rechazado, fraccionado, incidencias!inner(multa_id)')
       .eq('conductor_id', cond.id)
       .not('incidencias.multa_id', 'is', null),
     supabase.from('periodos_facturacion').select('semana, anio').eq('estado', 'cerrado'),
@@ -68,17 +73,34 @@ export async function cargarMultasConductor(cond: { id: string; nombres: string 
 
   // Estado por multa (misma logica que Mi Espacio / modulo de Multas):
   //  fraccionada = penalidad fraccionada; pagada = no fraccionada, aplicada, en periodo cerrado.
+  //  Se guarda tambien el id de la penalidad (para traer las cuotas) y la semana de aplicacion.
   const cerradas = new Set<string>(((perRes.data || []) as Array<{ semana: number; anio: number }>).map(p => `${p.semana}-${p.anio}`))
-  const estadoPorMulta = new Map<string, { estado: 'pagada' | 'fraccionada'; monto: number }>()
+  const estadoPorMulta = new Map<string, { estado: 'pagada' | 'fraccionada'; monto: number; penId: string | null; semana: number | null; anio: number | null }>()
+  const fraccPenIds = new Set<string>()
   for (const row of (penRes.data || []) as Array<any>) {
     const mid = row.incidencias?.multa_id
     if (mid == null) continue
     const monto = parseImporte(row.monto)
     if (row.fraccionado === true) {
-      estadoPorMulta.set(String(mid), { estado: 'fraccionada', monto })
+      estadoPorMulta.set(String(mid), { estado: 'fraccionada', monto, penId: row.id ?? null, semana: row.semana_aplicacion ?? null, anio: row.anio_aplicacion ?? null })
+      if (row.id) fraccPenIds.add(String(row.id))
     } else if (row.aplicado === true && row.rechazado !== true && cerradas.has(`${row.semana_aplicacion}-${row.anio_aplicacion}`)) {
       const prev = estadoPorMulta.get(String(mid))
-      if (!prev || prev.estado !== 'fraccionada') estadoPorMulta.set(String(mid), { estado: 'pagada', monto })
+      if (!prev || prev.estado !== 'fraccionada') estadoPorMulta.set(String(mid), { estado: 'pagada', monto, penId: row.id ?? null, semana: row.semana_aplicacion ?? null, anio: row.anio_aplicacion ?? null })
+    }
+  }
+
+  // Cuotas de las penalidades fraccionadas (una sola consulta). aplicado = cuota ya cobrada.
+  const cuotasPorPen = new Map<string, Array<{ numero: number; semana: number; anio: number; aplicado: boolean; monto: number }>>()
+  if (fraccPenIds.size > 0) {
+    const { data: cuotasData } = await (supabase.from('penalidades_cuotas' as any) as any)
+      .select('penalidad_id, numero_cuota, semana, anio, aplicado, monto_cuota')
+      .in('penalidad_id', [...fraccPenIds])
+      .order('numero_cuota', { ascending: true })
+    for (const c of (cuotasData || []) as Array<any>) {
+      const arr = cuotasPorPen.get(String(c.penalidad_id)) || []
+      arr.push({ numero: Number(c.numero_cuota) || 0, semana: Number(c.semana) || 0, anio: Number(c.anio) || 0, aplicado: c.aplicado === true, monto: parseImporte(c.monto_cuota) })
+      cuotasPorPen.set(String(c.penalidad_id), arr)
     }
   }
 
@@ -101,14 +123,21 @@ export async function cargarMultasConductor(cond: { id: string; nombres: string 
     let estado: MultaDetalle['estado']
     let monto: number
     let usaDescuento = false
+    let semanaPago: string | null = null
+    let cuotas: MultaDetalle['cuotas'] = null
+    const anioMulta = m.created_at ? new Date(m.created_at).getFullYear() : null
     if (est?.estado === 'pagada') {
       estado = 'pagada'; monto = est.monto
+      semanaPago = est.semana != null ? `S${est.semana}/${est.anio ?? anioMulta ?? ''}` : null
     } else if (est?.estado === 'fraccionada') {
       estado = 'enProceso'; monto = est.monto
+      cuotas = est.penId ? (cuotasPorPen.get(est.penId) || null) : null
     } else {
+      // Pendiente: no se pagó, así que no hay semana de pago.
       estado = 'pendiente'
       usaDescuento = descuentoVigente
       monto = usaDescuento ? importeDescuento : importe
+      semanaPago = null
     }
     return {
       id: String(m.id),
@@ -119,6 +148,8 @@ export async function cargarMultasConductor(cond: { id: string; nombres: string 
       monto,
       importe,
       importeDescuento,
+      semanaPago,
+      cuotas,
       fechaVencDescuento: m.fecha_vencimiento_descuento ? String(m.fecha_vencimiento_descuento).slice(0, 10) : null,
       descuentoVigente,
       usaDescuento,
@@ -203,11 +234,15 @@ export async function cargarDetalleSemana(
   return { conceptos, grupoFlota: veh?.grupo_flota ?? null, gnc: veh?.gnc ?? null, pagos }
 }
 
+export interface ExcesoKmSemana {
+  monto: number                 // monto cobrado por el exceso de esa semana
+  // Semana(s) en que se cobró el exceso (cuotas si es fraccionado; la semana de
+  // aplicación si es pago único). Vacío si la penalidad aún no se aplicó.
+  semanasPago: Array<{ semana: number; anio: number; aplicado: boolean }>
+}
 export interface ExcesoKmConductor {
-  // Monto cobrado por exceso de KM por semana (clave = nro de semana ISO). Sale de
-  // la incidencia (incidencias.km_exceso not null). Si una semana tiene exceso pero
-  // NO tiene incidencia cargada, no aparece en el mapa (=> N/A en la tabla de Km).
-  porSemana: Map<number, number>
+  // Por semana del exceso (clave = nro de semana ISO en que ocurrió el exceso).
+  porSemana: Map<number, ExcesoKmSemana>
   // Total de penalidades de exceso de KM en estado PENDIENTE (por aplicar): aún no
   // se aplicaron, por lo que todavía no entraron a facturación. Se suma a la deuda.
   pendienteTotal: number
@@ -216,25 +251,57 @@ export interface ExcesoKmConductor {
 export async function cargarExcesoKmConductor(conductorId: string): Promise<ExcesoKmConductor> {
   const [{ data: incs }, { data: pens }] = await Promise.all([
     (supabase.from('incidencias' as any) as any)
-      .select('semana, monto, km_exceso')
+      .select('id, semana, monto, km_exceso')
       .eq('conductor_id', conductorId)
       .not('km_exceso', 'is', null),
     (supabase.from('penalidades' as any) as any)
-      .select('monto, aplicado, rechazado, incidencias!inner(km_exceso, conductor_id)')
+      .select('id, incidencia_id, monto, semana_aplicacion, anio_aplicacion, aplicado, rechazado, fraccionado, incidencias!inner(km_exceso, conductor_id)')
       .eq('incidencias.conductor_id', conductorId)
       .not('incidencias.km_exceso', 'is', null),
   ])
 
-  const porSemana = new Map<number, number>()
-  for (const r of (incs || []) as Array<{ semana: number | null; monto: unknown }>) {
-    if (r.semana == null) continue
-    porSemana.set(r.semana, (porSemana.get(r.semana) || 0) + parseImporte(r.monto))
+  // Incidencia (exceso) por id -> semana del exceso + monto.
+  const incById = new Map<string, { semana: number | null; monto: number }>()
+  const porSemana = new Map<number, ExcesoKmSemana>()
+  for (const i of (incs || []) as Array<{ id: unknown; semana: number | null; monto: unknown }>) {
+    incById.set(String(i.id), { semana: i.semana ?? null, monto: parseImporte(i.monto) })
+    if (i.semana != null) {
+      const prev = porSemana.get(i.semana)
+      if (prev) prev.monto += parseImporte(i.monto)
+      else porSemana.set(i.semana, { monto: parseImporte(i.monto), semanasPago: [] })
+    }
   }
 
-  // Pendiente = penalidad de exceso KM no aplicada y no rechazada (estado "Por Aplicar").
+  // Cuotas de las penalidades de exceso fraccionadas (para las semanas de pago).
+  const fraccIds = ((pens || []) as Array<any>).filter(p => p.fraccionado === true).map(p => String(p.id))
+  const cuotasPorPen = new Map<string, Array<{ semana: number; anio: number; aplicado: boolean }>>()
+  if (fraccIds.length > 0) {
+    const { data: cu } = await (supabase.from('penalidades_cuotas' as any) as any)
+      .select('penalidad_id, semana, anio, aplicado, numero_cuota')
+      .in('penalidad_id', fraccIds)
+      .order('numero_cuota', { ascending: true })
+    for (const c of (cu || []) as Array<any>) {
+      const arr = cuotasPorPen.get(String(c.penalidad_id)) || []
+      arr.push({ semana: Number(c.semana) || 0, anio: Number(c.anio) || 0, aplicado: c.aplicado === true })
+      cuotasPorPen.set(String(c.penalidad_id), arr)
+    }
+  }
+
+  // Pendiente (por aplicar) + semanas de pago por exceso.
   let pendienteTotal = 0
-  for (const p of (pens || []) as Array<{ monto: unknown; aplicado: boolean | null; rechazado: boolean | null }>) {
+  for (const p of (pens || []) as Array<any>) {
     if (p.aplicado !== true && p.rechazado !== true) pendienteTotal += parseImporte(p.monto)
+    const inc = p.incidencia_id != null ? incById.get(String(p.incidencia_id)) : null
+    const sem = inc?.semana
+    if (sem == null) continue
+    let semanasPago: Array<{ semana: number; anio: number; aplicado: boolean }> = []
+    if (p.fraccionado === true) {
+      semanasPago = cuotasPorPen.get(String(p.id)) || []
+    } else if (p.aplicado === true && p.semana_aplicacion != null) {
+      semanasPago = [{ semana: p.semana_aplicacion, anio: p.anio_aplicacion ?? 0, aplicado: true }]
+    }
+    const entry = porSemana.get(sem)
+    if (entry) entry.semanasPago.push(...semanasPago)
   }
 
   return { porSemana, pendienteTotal }

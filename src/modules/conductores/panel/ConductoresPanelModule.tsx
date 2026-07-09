@@ -27,11 +27,11 @@ const CARD_LABELS: Record<CardKey, string> = {
   pendientes: 'Con Multas Pendientes',
 }
 
-// Etiqueta legible del turno (horario de la asignacion actual).
+// Etiqueta legible del turno de la asignacion actual.
 const TURNO_LABELS: Record<string, string> = {
   diurno: 'Diurno',
   nocturno: 'Nocturno',
-  todo_dia: 'Todo el día',
+  a_cargo: 'A cargo',
 }
 function turnoLabel(t: string | null): string {
   if (!t) return '—'
@@ -100,7 +100,7 @@ export function ConductoresPanelModule() {
             DNI: {row.original.dni || '—'}
           </div>
           <div style={{ fontSize: 12, color: 'var(--text-tertiary, #9ca3af)' }}>
-            RUC: {row.original.ruc || '—'}
+            CUIT: {row.original.ruc || '—'}
           </div>
         </div>
       ),

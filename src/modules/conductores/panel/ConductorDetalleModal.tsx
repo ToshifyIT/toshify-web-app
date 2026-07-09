@@ -21,18 +21,13 @@ function fmtFecha(s: string | null): string {
   return d.toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric' })
 }
 
-// Etiqueta legible de la modalidad de alquiler.
-const MODALIDAD_LABEL: Record<string, string> = { a_cargo: 'A cargo', turno: 'Turno' }
-function modalidadLabel(m: string | null): string {
-  if (!m) return '—'
-  return MODALIDAD_LABEL[m] || (m.charAt(0).toUpperCase() + m.slice(1))
-}
-
-// Estado de facturación de la semana (misma lógica/etiquetas que el portal Mi Espacio).
-const ESTADO_FACT: Record<string, { txt: string; cls: string }> = {
-  cubierto: { txt: 'Cubierto', cls: 'ok' },
-  pendiente: { txt: 'Pendiente', cls: 'impaga' },
-  favor: { txt: 'A favor', cls: 'ok' },
+// Turno de la semana: a cargo, o el horario (diurno/nocturno) si es modalidad turno.
+function turnoKmLabel(modalidad: string | null, horario: string | null): string {
+  if (modalidad === 'a_cargo' || horario === 'todo_dia') return 'A cargo'
+  if (horario === 'nocturno') return 'Nocturno'
+  if (horario === 'diurno') return 'Diurno'
+  if (modalidad) return modalidad.charAt(0).toUpperCase() + modalidad.slice(1)
+  return '—'
 }
 
 export function ConductorDetalleModal({ conductor, onClose }: { conductor: ConductorPanelRow; onClose: () => void }) {
@@ -70,7 +65,7 @@ export function ConductorDetalleModal({ conductor, onClose }: { conductor: Condu
     Promise.all([
       cargarMultasConductor({ id: conductor.id, nombres: conductor.nombres, apellidos: conductor.apellidos }),
       cargarFacturacionConductor(conductor.id),
-      cargarExcesoKmConductor(conductor.id).catch(() => ({ porSemana: new Map<number, number>(), pendienteTotal: 0 })),
+      cargarExcesoKmConductor(conductor.id).catch(() => ({ porSemana: new Map(), pendienteTotal: 0 })),
     ]).then(([m, f, ex]) => {
       if (!vivo) return
       setMultas(m); setFacturacion(f); setExcesoKm(ex)
@@ -108,13 +103,6 @@ export function ConductorDetalleModal({ conductor, onClose }: { conductor: Condu
     return { ultima, variacion, promedio: totales.length ? sum / totales.length : 0, totalSemanas: totales.length, saldoNet }
   }, [facturacion])
 
-  // Estado de facturación por semana (para la columna Estado del tab Km).
-  const estadoFactPorSemana = useMemo(() => {
-    const m = new Map<string, FacturacionSemana['estado']>()
-    for (const f of facturacion) m.set(`${f.semana}-${f.anio}`, f.estado)
-    return m
-  }, [facturacion])
-
   const kpis = useMemo(() => {
     // km viene ordenado de la semana más reciente a la más antigua: la última semana es km[0].
     const kmUltima = km.length ? km[0].km : 0
@@ -124,6 +112,10 @@ export function ConductorDetalleModal({ conductor, onClose }: { conductor: Condu
     // Los tres componentes son disjuntos (lo pendiente aún no entró a facturación).
     const multasPendientes = conductor.montoPendiente
     const saldoPendiente = Math.max(0, factStats.saldoNet)
+    // Segmentación del saldo pendiente: cuánto es arrastre de la semana anterior
+    // (saldo_anterior de la última semana) y cuánto es lo que se cobra esta semana.
+    const saldoAnterior = saldoPendiente > 0 ? (facturacion[0]?.saldoAnterior ?? 0) : 0
+    const saldoActualSemana = saldoPendiente - saldoAnterior
     const excesoPendiente = excesoKm.pendienteTotal
     const deuda = multasPendientes + saldoPendiente + excesoPendiente
     return {
@@ -131,6 +123,8 @@ export function ConductorDetalleModal({ conductor, onClose }: { conductor: Condu
       deuda,
       multasPendientes,
       saldoPendiente,
+      saldoAnterior,
+      saldoActualSemana,
       excesoPendiente,
       kmUltima,
       factUltima,
@@ -187,13 +181,24 @@ export function ConductorDetalleModal({ conductor, onClose }: { conductor: Condu
               <table className="cdet-table">
                 <thead><tr>
                   <th>Fecha</th><th>Infracción</th><th>Patente</th><th>Estado</th>
-                  <th className="r">Importe</th><th className="r">Con desc.</th><th>Vto. desc.</th><th className="r">Monto</th>
+                  <th className="r">Importe</th><th className="r">Con desc.</th><th>Vto. desc.</th><th className="r">Monto</th><th>Semana de pago</th>
                 </tr></thead>
                 <tbody>
                   {multas.map(m => {
-                    // Resaltar en verde el importe que se aplica (solo para pendientes).
-                    const aplicaImporte = m.estado === 'pendiente' && !m.usaDescuento
-                    const aplicaDesc = m.estado === 'pendiente' && m.usaDescuento
+                    // Resaltar en verde la columna cuyo importe se está cobrando (el que
+                    // coincide con "Monto"). Pendiente: importe o importe con descuento.
+                    // En proceso / Pagada: el monto facturado (penalidad) coincide con
+                    // uno de los dos, así que se resalta ese.
+                    let aplicaImporte = false
+                    let aplicaDesc = false
+                    if (m.estado === 'pendiente') {
+                      aplicaImporte = !m.usaDescuento
+                      aplicaDesc = m.usaDescuento
+                    } else {
+                      const cerca = (a: number, b: number) => Math.abs(a - b) < 1
+                      if (m.importeDescuento > 0 && cerca(m.monto, m.importeDescuento)) aplicaDesc = true
+                      else if (cerca(m.monto, m.importe)) aplicaImporte = true
+                    }
                     return (
                       <tr key={m.id}>
                         <td>{fmtFecha(m.fecha)}</td>
@@ -209,7 +214,41 @@ export function ConductorDetalleModal({ conductor, onClose }: { conductor: Condu
                               </span>
                             : '—'}
                         </td>
-                        <td className="r"><b>{formatCurrency(m.monto)}</b></td>
+                        <td className="r">
+                          {m.estado === 'enProceso'
+                            ? (m.cuotas && m.cuotas.length
+                                ? <div className="cdet-cuotas">
+                                    <div className="cdet-cuotas-head" aria-hidden="true">&nbsp;</div>
+                                    <div className="cdet-cuotas-list right">
+                                      {m.cuotas.map(c => (
+                                        <span key={c.numero} className={c.aplicado ? 'cuota-ok' : 'cuota-no'}>{formatCurrency(c.monto)}</span>
+                                      ))}
+                                    </div>
+                                  </div>
+                                : <b>—</b>)
+                            : <b>{formatCurrency(m.monto)}</b>}
+                        </td>
+                        <td>
+                          {m.estado === 'enProceso'
+                            ? (() => {
+                                const cu = m.cuotas || []
+                                if (cu.length === 0) return 'Fraccionada'
+                                const pagadas = cu.filter(c => c.aplicado).length
+                                return (
+                                  <div className="cdet-cuotas">
+                                    <div className="cdet-cuotas-head">{pagadas}/{cu.length} cuotas</div>
+                                    <div className="cdet-cuotas-list">
+                                      {cu.map(c => (
+                                        <span key={c.numero} className={c.aplicado ? 'cuota-ok' : 'cuota-no'}>
+                                          S{c.semana}/{c.anio} {c.aplicado ? '✓' : '✗'}
+                                        </span>
+                                      ))}
+                                    </div>
+                                  </div>
+                                )
+                              })()
+                            : (m.semanaPago || '—')}
+                        </td>
                       </tr>
                     )
                   })}
@@ -281,22 +320,40 @@ export function ConductorDetalleModal({ conductor, onClose }: { conductor: Condu
               <table className="cdet-table">
                 <thead><tr>
                   <th>Semana</th><th className="r">Km</th><th className="r">Límite</th><th className="r">Excedido</th>
-                  <th>Estado</th><th>Modalidad</th><th className="r">Monto</th>
+                  <th>Estado</th><th>Modalidad</th><th className="r">Monto</th><th>Semana de pago</th>
                 </tr></thead>
                 <tbody>
                   {km.map(k => {
-                    const est = estadoFactPorSemana.get(`${k.semana}-${k.anio}`)
-                    const estCfg = est ? ESTADO_FACT[est] : null
-                    const monto = excesoKm.porSemana.get(k.semana)
+                    // "Hay exceso" lo define el km recorrido de la semana (excedido > 0),
+                    // independientemente de si ya se generó la incidencia de cobro.
+                    const hayExceso = k.excedido > 0
+                    const ex = excesoKm.porSemana.get(k.semana)
+                    const monto = ex?.monto
+                    const semanasPago = ex?.semanasPago || []
+                    // Cubierto sólo si el exceso ya se cobró (todas las cuotas aplicadas).
+                    const excesoCubierto = semanasPago.length > 0 && semanasPago.every(s => s.aplicado)
                     return (
                       <tr key={`${k.semana}-${k.anio}`}>
                         <td>S{k.semana}/{k.anio}</td>
                         <td className="r">{Math.round(k.km).toLocaleString('es-AR')}</td>
                         <td className="r">{Math.round(k.limite).toLocaleString('es-AR')}</td>
                         <td className={`r ${k.excedido > 0 ? 'danger' : ''}`}>{k.excedido > 0 ? Math.round(k.excedido).toLocaleString('es-AR') : '—'}</td>
-                        <td>{estCfg ? <span className={`cdet-tag ${estCfg.cls}`}>{estCfg.txt}</span> : '—'}</td>
-                        <td>{modalidadLabel(k.modalidad)}</td>
-                        <td className={`r ${monto != null && monto > 0 ? 'danger' : ''}`}>{monto != null ? formatCurrency(monto) : 'N/A'}</td>
+                        <td>{!hayExceso ? 'N/A' : <span className={`cdet-tag ${excesoCubierto ? 'ok' : 'impaga'}`}>{excesoCubierto ? 'Cubierto' : 'Pendiente'}</span>}</td>
+                        <td>{turnoKmLabel(k.modalidad, k.horario)}</td>
+                        <td className={`r ${monto != null && monto > 0 ? 'danger' : ''}`}>{monto != null ? formatCurrency(monto) : (hayExceso ? 'Por cobrar' : 'N/A')}</td>
+                        <td>
+                          {!hayExceso
+                            ? '—'
+                            : semanasPago.length === 0
+                              ? <span className="cdet-tag pend">Por cobrar</span>
+                              : <div className="cdet-cuotas-list">
+                                  {semanasPago.map((s, i) => (
+                                    <span key={i} className={s.aplicado ? 'cuota-ok' : 'cuota-no'}>
+                                      S{s.semana}/{s.anio} {s.aplicado ? '✓' : '✗'}
+                                    </span>
+                                  ))}
+                                </div>}
+                        </td>
                       </tr>
                     )
                   })}
@@ -332,10 +389,17 @@ export function ConductorDetalleModal({ conductor, onClose }: { conductor: Condu
             </div>
             <div className="cdet-deuda-row">
               <div>
-                <div className="cdet-deuda-lbl">Saldo pendiente</div>
-                <div className="cdet-deuda-hint">Saldo actual de facturación (última semana)</div>
+                <div className="cdet-deuda-lbl">Saldo semana anterior</div>
+                <div className="cdet-deuda-hint">Arrastre pendiente de semanas previas</div>
               </div>
-              <span className="cdet-deuda-amt">{formatCurrency(kpis.saldoPendiente)}</span>
+              <span className="cdet-deuda-amt">{formatCurrency(kpis.saldoAnterior)}</span>
+            </div>
+            <div className="cdet-deuda-row">
+              <div>
+                <div className="cdet-deuda-lbl">Saldo actual (esta semana)</div>
+                <div className="cdet-deuda-hint">Lo que se le va a cobrar en la última semana</div>
+              </div>
+              <span className="cdet-deuda-amt">{formatCurrency(kpis.saldoActualSemana)}</span>
             </div>
             <div className="cdet-deuda-row">
               <div>
