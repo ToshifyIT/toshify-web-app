@@ -146,8 +146,8 @@ function estadoVisual(m: Marcacion): 'Alerta' | 'En Curso' | 'OK' {
  * Clasifica una alerta en uno de los 3 patrones (cerrados) y devuelve una
  * etiqueta corta + motivo en una línea + color. Toda alerta cae siempre en uno:
  *   A · Sin conductor   → el GPS no identificó al conductor (iButton sin asignar)
- *   B · Sin cruce       → hay conductor pero no se vinculó a su asignación
- *   C · Sin asignación  → conductor sin asignación vigente en esta patente
+ *   B · Sin asignación  → conductor identificado pero sin asignación vigente en esta patente
+ *   C · No identificado → el nombre del GPS no coincide con ningún conductor registrado
  */
 type AlertaTipo = {
   etiqueta: string;   // chip corto
@@ -169,10 +169,10 @@ function clasificarAlerta(m: Marcacion): AlertaTipo {
   }
   // B — hay conductor vinculado (conductorId) pero no se resolvió el turno
   if (m.conductorId) {
-    return { etiqueta: 'Sin cruce', titulo: 'No se pudo determinar el turno de este conductor.', color: '#dc2626' };
+    return { etiqueta: 'Sin asignación', titulo: 'Conductor identificado sin asignación vigente en esta patente para esa fecha.', color: '#dc2626' };
   }
-  // C — conductor con nombre pero sin vínculo a asignación en esta patente
-  return { etiqueta: 'Sin asignación', titulo: 'El conductor no tiene asignación vigente en esta patente.', color: '#d97706' };
+  // C — el nombre del GPS no coincide con ningún conductor registrado (sin conductor_id)
+  return { etiqueta: 'No identificado', titulo: 'El nombre del GPS no coincide con ningún conductor registrado.', color: '#d97706' };
 }
 
 export function MarcacionesTable({
@@ -517,7 +517,7 @@ export function MarcacionesTable({
       cell: ({ row }) => {
         const m = row.original;
         // Sin match de turno/modalidad → badge clickeable que indica el TIPO de alerta
-        // (Sin conductor / Sin cruce / Sin asignación), con su color. Abre el modal.
+        // (Sin conductor / Sin asignación / No identificado), con su color. Abre el modal.
         if (sinMatchTurno(m)) {
           const a = clasificarAlerta(m);
           return (
