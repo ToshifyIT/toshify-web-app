@@ -1,6 +1,6 @@
 /* eslint-disable react-hooks/exhaustive-deps */
 // src/modules/multas-telepase/MultasModule.tsx
-import { useState, useEffect, useMemo, useCallback } from 'react'
+import { useState, useEffect, useMemo, useCallback, Fragment } from 'react'
 import { supabase } from '../../lib/supabase'
 import { LoadingOverlay } from '../../components/ui/LoadingOverlay'
 import { ExcelColumnFilter } from '../../components/ui/DataTable/ExcelColumnFilter'
@@ -55,6 +55,8 @@ interface Vehiculo {
 }
 
 type VistaMultas = 'activas' | 'enviadas' | 'desestimadas'
+
+type CuotaProceso = { numero: number; monto: number; semana: number; anio: number; aplicado: boolean }
 
 function parseImporte(importe: string | number | null | undefined): number {
   if (importe == null || importe === '') return 0
@@ -131,8 +133,12 @@ export default function MultasModule() {
   // Estado de pago por multa (segun facturacion / penalidades, misma logica que Mi Espacio):
   // pagada = penalidad no fraccionada aplicada en periodo cerrado; fraccionada = penalidad fraccionada.
   // Las multas que NO estan en este mapa se consideran pendientes. `monto` = monto facturado (penalidad).
-  const [multasEstadoPago, setMultasEstadoPago] = useState<Map<number, { estado: 'pagada' | 'fraccionada'; monto: number }>>(new Map())
+  const [multasEstadoPago, setMultasEstadoPago] = useState<Map<number, { estado: 'pagada' | 'fraccionada'; monto: number; fraccionada: boolean }>>(new Map())
   const [showPendienteModal, setShowPendienteModal] = useState(false)
+  const [showPagadoModal, setShowPagadoModal] = useState(false)
+  const [showProcesoModal, setShowProcesoModal] = useState(false)
+  // Cuotas de las multas fraccionadas (por multa_id) para el detalle de "En Proceso".
+  const [multasCuotas, setMultasCuotas] = useState<Map<number, CuotaProceso[]>>(new Map())
   const [selectedMulta, setSelectedMulta] = useState<Multa | null>(null)
   const [showModal, setShowModal] = useState(false)
   const [showEditModal, setShowEditModal] = useState(false)
@@ -236,7 +242,7 @@ export default function MultasModule() {
           .not('multa_id', 'is', null),
         // Penalidades de multas (para estado de pago pagada/fraccionada + monto facturado)
         (supabase.from('penalidades' as any) as any)
-          .select('monto, fraccionado, aplicado, rechazado, semana_aplicacion, anio_aplicacion, incidencias!inner(multa_id)')
+          .select('id, monto, fraccionado, cantidad_cuotas, aplicado, rechazado, semana_aplicacion, anio_aplicacion, incidencias!inner(multa_id)')
           .not('incidencias.multa_id', 'is', null),
         supabase.from('periodos_facturacion').select('semana, anio').eq('estado', 'cerrado'),
       ])
@@ -252,21 +258,61 @@ export default function MultasModule() {
       )
       setMultasEnviadas(enviadas)
 
-      // Estado de pago por multa (misma lógica que Mi Espacio).
       const cerradas = new Set<string>(
         ((periodosRes.data || []) as Array<{ semana: number; anio: number }>).map(p => `${p.semana}-${p.anio}`)
       )
-      const estadoMap = new Map<number, { estado: 'pagada' | 'fraccionada'; monto: number }>()
+
+      // 1) Cuotas de las penalidades fraccionadas (agrupadas por penalidad y por multa).
+      const penaMultaFracc = new Map<string, number>() // penalidad_id -> multa_id
+      for (const p of (penalidadesRes.data || []) as Array<any>) {
+        const mid = p.incidencias?.multa_id
+        if (p.fraccionado === true && p.id != null && mid != null) penaMultaFracc.set(p.id, mid)
+      }
+      const cuotasPorPenalidad = new Map<string, CuotaProceso[]>()
+      const cuotasMap = new Map<number, CuotaProceso[]>() // por multa_id (para los modales)
+      if (penaMultaFracc.size > 0) {
+        const { data: cuotasData } = await (supabase.from('penalidades_cuotas' as any) as any)
+          .select('penalidad_id, numero_cuota, semana, anio, monto_cuota, aplicado')
+          .in('penalidad_id', [...penaMultaFracc.keys()])
+        for (const c of (cuotasData || []) as Array<any>) {
+          const cuota: CuotaProceso = {
+            numero: Number(c.numero_cuota) || 0,
+            monto: Number(c.monto_cuota) || 0,
+            semana: Number(c.semana) || 0,
+            anio: Number(c.anio) || 0,
+            aplicado: c.aplicado === true,
+          }
+          const pArr = cuotasPorPenalidad.get(c.penalidad_id) || []
+          pArr.push(cuota)
+          cuotasPorPenalidad.set(c.penalidad_id, pArr)
+          const mid = penaMultaFracc.get(c.penalidad_id)
+          if (mid != null) {
+            const mArr = cuotasMap.get(mid) || []
+            mArr.push(cuota)
+            cuotasMap.set(mid, mArr)
+          }
+        }
+        for (const arr of cuotasPorPenalidad.values()) arr.sort((a, b) => a.numero - b.numero)
+        for (const arr of cuotasMap.values()) arr.sort((a, b) => a.numero - b.numero)
+      }
+      setMultasCuotas(cuotasMap)
+
+      // 2) Estado de pago por multa. Una fraccionada con TODAS sus cuotas cobradas
+      //    pasa a "pagada"; si le falta alguna cuota, sigue "en proceso" (fraccionada).
+      const estadoMap = new Map<number, { estado: 'pagada' | 'fraccionada'; monto: number; fraccionada: boolean }>()
       for (const p of (penalidadesRes.data || []) as Array<any>) {
         const mid = p.incidencias?.multa_id
         if (mid == null) continue
         const monto = parseImporte(p.monto)
         if (p.fraccionado === true) {
-          // Fraccionada tiene prioridad sobre pagada.
-          estadoMap.set(mid, { estado: 'fraccionada', monto })
+          const cuotas = cuotasPorPenalidad.get(p.id) || []
+          const cantidad = Number(p.cantidad_cuotas) || 0
+          const todasCobradas = cuotas.length > 0 && cuotas.every(c => c.aplicado) && (cantidad === 0 || cuotas.length >= cantidad)
+          estadoMap.set(mid, { estado: todasCobradas ? 'pagada' : 'fraccionada', monto, fraccionada: true })
         } else if (p.aplicado === true && p.rechazado !== true && cerradas.has(`${p.semana_aplicacion}-${p.anio_aplicacion}`)) {
           const prev = estadoMap.get(mid)
-          if (!prev || prev.estado !== 'fraccionada') estadoMap.set(mid, { estado: 'pagada', monto })
+          // No pisar una entrada que ya viene de un fraccionamiento.
+          if (!prev || !prev.fraccionada) estadoMap.set(mid, { estado: 'pagada', monto, fraccionada: false })
         }
       }
       setMultasEstadoPago(estadoMap)
@@ -482,14 +528,18 @@ export default function MultasModule() {
     )
     const hoyStr = new Date().toISOString().slice(0, 10)
     let pendiente = 0, pagado = 0, proceso = 0
-    // Detalle de las multas que arman el Monto Total Pendiente, con la columna usada.
+    // Detalle de las multas que arman cada métrica.
     const pendienteDetalle: Array<{ multa: Multa; columna: 'IMPORTE' | 'IMP_DESC'; monto: number }> = []
+    const pagadoDetalle: Array<{ multa: Multa; monto: number; fraccionada: boolean }> = []
+    const procesoDetalle: Array<{ multa: Multa; monto: number; fraccionada: boolean }> = []
     for (const m of base) {
       const est = multasEstadoPago.get(m.id)
       if (est?.estado === 'pagada') {
         pagado += est.monto
+        pagadoDetalle.push({ multa: m, monto: est.monto, fraccionada: est.fraccionada })
       } else if (est?.estado === 'fraccionada') {
         proceso += est.monto
+        procesoDetalle.push({ multa: m, monto: est.monto, fraccionada: true })
       } else {
         const desc = parseImporte(m.importe_descuento)
         const vencStr = m.fecha_vencimiento_descuento ? String(m.fecha_vencimiento_descuento).slice(0, 10) : ''
@@ -499,7 +549,7 @@ export default function MultasModule() {
         pendienteDetalle.push({ multa: m, columna: usarDescuento ? 'IMP_DESC' : 'IMPORTE', monto })
       }
     }
-    return { pendiente, pagado, proceso, pendienteDetalle }
+    return { pendiente, pagado, proceso, pendienteDetalle, pagadoDetalle, procesoDetalle }
   }, [getFilteredData, busqueda, matchBusqueda, multasEstadoPago])
 
   const patentesUnicasCount = useMemo(() =>
@@ -1426,6 +1476,14 @@ export default function MultasModule() {
               <span className="stat-value">{formatMoney(montosPorPago.pagado)}</span>
               <span className="stat-label">Monto Total Pagado</span>
             </div>
+            <button
+              type="button"
+              onClick={() => setShowPagadoModal(true)}
+              title="Ver detalle del cálculo"
+              style={{ marginLeft: 'auto', border: '1px solid var(--border-primary, #e5e7eb)', background: 'var(--card-bg, #fff)', borderRadius: 6, padding: '4px 8px', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 11, color: '#059669', fontWeight: 600 }}
+            >
+              <Eye size={13} /> Detalle
+            </button>
           </div>
           <div className="stat-card">
             <DollarSign size={18} className="stat-icon" style={{ color: '#d97706' }} />
@@ -1433,6 +1491,14 @@ export default function MultasModule() {
               <span className="stat-value">{formatMoney(montosPorPago.proceso)}</span>
               <span className="stat-label">Monto Total en Proceso</span>
             </div>
+            <button
+              type="button"
+              onClick={() => setShowProcesoModal(true)}
+              title="Ver detalle del cálculo"
+              style={{ marginLeft: 'auto', border: '1px solid var(--border-primary, #e5e7eb)', background: 'var(--card-bg, #fff)', borderRadius: 6, padding: '4px 8px', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 11, color: '#d97706', fontWeight: 600 }}
+            >
+              <Eye size={13} /> Detalle
+            </button>
           </div>
         </div>
       </div>
@@ -2096,6 +2162,161 @@ export default function MultasModule() {
           </div>
         </div>
       )}
+
+      {(showPagadoModal || showProcesoModal) && (() => {
+        const esPagado = showPagadoModal
+        const detalle = esPagado ? montosPorPago.pagadoDetalle : montosPorPago.procesoDetalle
+        const total = esPagado ? montosPorPago.pagado : montosPorPago.proceso
+        const titulo = esPagado ? 'Detalle Monto Total Pagado' : 'Detalle Monto Total en Proceso'
+        const nota = esPagado
+          ? 'Incluye multas cobradas de contado y fraccionadas con todas sus cuotas ya cobradas.'
+          : 'Monto = penalidad fraccionada (cobro en cuotas), aún con cuotas pendientes.'
+        const acento = esPagado ? '#059669' : '#d97706'
+        const cerrar = () => { setShowPagadoModal(false); setShowProcesoModal(false) }
+        // Resumen de reconciliación (solo "En Proceso"): cómo se llega al total.
+        const resumen = esPagado ? null : (() => {
+          const rows = detalle.map(({ multa, monto }) => {
+            const cuotas = multasCuotas.get(multa.id) || []
+            const cobrado = cuotas.filter(c => c.aplicado).reduce((s, c) => s + c.monto, 0)
+            const pendiente = cuotas.filter(c => !c.aplicado).reduce((s, c) => s + c.monto, 0)
+            return { multa, proceso: monto, cobrado, pendiente }
+          })
+          return {
+            rows,
+            totalProceso: rows.reduce((s, r) => s + r.proceso, 0),
+            totalCobrado: rows.reduce((s, r) => s + r.cobrado, 0),
+            totalPendiente: rows.reduce((s, r) => s + r.pendiente, 0),
+          }
+        })()
+        return (
+          <div className="multas-modal-overlay" onClick={cerrar}>
+            <div
+              onClick={e => e.stopPropagation()}
+              style={{ background: 'var(--card-bg, #fff)', borderRadius: 12, width: '95%', maxWidth: esPagado ? 1040 : 1320, maxHeight: '86vh', display: 'flex', flexDirection: 'column', overflow: 'hidden', border: '1px solid var(--border-primary, #e5e7eb)' }}
+            >
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', padding: '16px 20px', borderBottom: '1px solid var(--border-primary, #eef0f2)' }}>
+                <div>
+                  <h3 style={{ margin: 0, fontSize: 16, fontWeight: 700 }}>{titulo}</h3>
+                  <div style={{ fontSize: 12, color: 'var(--text-secondary, #6b7280)', marginTop: 2 }}>
+                    {detalle.length} multas · Total {formatMoney(total)}. {nota}
+                  </div>
+                </div>
+                <button onClick={cerrar} aria-label="Cerrar" style={{ border: 'none', background: 'transparent', cursor: 'pointer', color: '#6b7280', padding: 4 }}><X size={18} /></button>
+              </div>
+              <div style={{ overflow: 'auto', padding: '8px 20px 20px', display: 'flex', gap: 16, alignItems: 'flex-start', flexWrap: 'wrap' }}>
+                <div style={{ flex: '1 1 560px', minWidth: 0, overflowX: 'auto' }}>
+                {detalle.length === 0 ? (
+                  <div style={{ padding: '24px 10px', textAlign: 'center', color: '#6b7280', fontSize: 13 }}>
+                    No hay multas en este estado con los filtros actuales.
+                  </div>
+                ) : (
+                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12, whiteSpace: 'nowrap' }}>
+                    <thead>
+                      <tr style={{ textAlign: 'left', color: '#6b7280', fontSize: 11, textTransform: 'uppercase' }}>
+                        <th style={{ padding: '8px 10px', borderBottom: '1px solid #eef0f2' }}>Fec. Infracción</th>
+                        <th style={{ padding: '8px 10px', borderBottom: '1px solid #eef0f2' }}>Patente</th>
+                        <th style={{ padding: '8px 10px', borderBottom: '1px solid #eef0f2' }}>Conductor</th>
+                        <th style={{ padding: '8px 10px', borderBottom: '1px solid #eef0f2' }}>Infracción</th>
+                        <th style={{ padding: '8px 10px', borderBottom: '1px solid #eef0f2', textAlign: 'right' }}>Importe multa</th>
+                        <th style={{ padding: '8px 10px', borderBottom: '1px solid #eef0f2', textAlign: 'right' }}>Monto {esPagado ? 'facturado' : 'en proceso'}</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {detalle.map(({ multa, monto, fraccionada }) => {
+                        const esFracc = Boolean(fraccionada)
+                        const cuotas = esFracc ? (multasCuotas.get(multa.id) || []) : []
+                        const cobradas = cuotas.filter(c => c.aplicado)
+                        const montoCobrado = cobradas.reduce((s, c) => s + c.monto, 0)
+                        const montoPendiente = cuotas.filter(c => !c.aplicado).reduce((s, c) => s + c.monto, 0)
+                        return (
+                          <Fragment key={multa.id}>
+                            <tr>
+                              <td style={{ padding: '8px 10px', borderBottom: cuotas.length ? 'none' : '1px solid #f6f7f8' }}>{multa.fecha_infraccion ? new Date(multa.fecha_infraccion).toLocaleDateString('es-AR') : '-'}</td>
+                              <td style={{ padding: '8px 10px', borderBottom: cuotas.length ? 'none' : '1px solid #f6f7f8', fontWeight: 600 }}>{multa.patente || '-'}</td>
+                              <td style={{ padding: '8px 10px', borderBottom: cuotas.length ? 'none' : '1px solid #f6f7f8' }}>{multa.conductor_responsable || '-'}</td>
+                              <td style={{ padding: '8px 10px', borderBottom: cuotas.length ? 'none' : '1px solid #f6f7f8', maxWidth: 220, overflow: 'hidden', textOverflow: 'ellipsis' }} title={multa.infraccion || ''}>{multa.infraccion || '-'}</td>
+                              <td style={{ padding: '8px 10px', borderBottom: cuotas.length ? 'none' : '1px solid #f6f7f8', textAlign: 'right' }}>{multa.importe || '-'}</td>
+                              <td style={{ padding: '8px 10px', borderBottom: cuotas.length ? 'none' : '1px solid #f6f7f8', textAlign: 'right', fontWeight: 700, color: acento }}>
+                                {formatMoney(monto)}
+                                {esPagado && esFracc && (
+                                  <span style={{ marginLeft: 6, fontSize: 10, fontWeight: 700, padding: '1px 6px', borderRadius: 999, background: '#e0e7ff', color: '#4338ca' }}>Fraccionada</span>
+                                )}
+                              </td>
+                            </tr>
+                            {cuotas.length > 0 && (
+                              <tr>
+                                <td colSpan={6} style={{ padding: '0 10px 10px', borderBottom: '1px solid #f6f7f8' }}>
+                                  <div style={{ background: 'var(--bg-secondary, #fafafa)', border: '1px solid #f0f0f0', borderRadius: 8, padding: '8px 12px' }}>
+                                    <div style={{ fontSize: 11, color: '#6b7280', marginBottom: 6 }}>
+                                      {cobradas.length} de {cuotas.length} cuotas cobradas · Cobrado {formatMoney(montoCobrado)} · Pendiente {formatMoney(montoPendiente)}
+                                    </div>
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                                      {cuotas.map(c => (
+                                        <div key={c.numero} style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 12 }}>
+                                          <span style={{ fontWeight: 600, minWidth: 96 }}>Cuota {c.numero} de {cuotas.length}</span>
+                                          <span style={{ color: '#6b7280', minWidth: 78 }}>S{c.semana}/{c.anio}</span>
+                                          <span style={{ minWidth: 110, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{formatMoney(c.monto)}</span>
+                                          <span style={{ fontSize: 10, fontWeight: 700, padding: '1px 8px', borderRadius: 999, background: c.aplicado ? '#dcfce7' : '#fef3c7', color: c.aplicado ? '#15803d' : '#b45309' }}>{c.aplicado ? 'Pagada' : 'Pendiente'}</span>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  </div>
+                                </td>
+                              </tr>
+                            )}
+                            {esFracc && cuotas.length === 0 && (
+                              <tr>
+                                <td colSpan={6} style={{ padding: '0 10px 8px', fontSize: 11, color: '#9ca3af', borderBottom: '1px solid #f6f7f8' }}>Sin cuotas registradas para esta penalidad.</td>
+                              </tr>
+                            )}
+                          </Fragment>
+                        )
+                      })}
+                    </tbody>
+                  </table>
+                )}
+                </div>
+                {!esPagado && resumen && detalle.length > 0 && (
+                  <aside style={{ flex: '0 0 300px', position: 'sticky', top: 0, alignSelf: 'flex-start', background: 'var(--bg-secondary, #fafafa)', border: '1px solid var(--border-primary, #eef0f2)', borderRadius: 10, padding: '14px 16px' }}>
+                    <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 10 }}>Cómo se calcula</div>
+
+                    <div style={{ fontSize: 11, color: '#6b7280', textTransform: 'uppercase', fontWeight: 600, marginBottom: 6 }}>Monto en proceso por multa</div>
+                    {resumen.rows.map(r => (
+                      <div key={r.multa.id} style={{ display: 'flex', justifyContent: 'space-between', gap: 8, fontSize: 12, padding: '3px 0' }}>
+                        <span style={{ color: 'var(--text-secondary, #6b7280)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={r.multa.conductor_responsable || r.multa.patente || ''}>
+                          {r.multa.conductor_responsable || r.multa.patente || '-'}
+                        </span>
+                        <span style={{ fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>{formatMoney(r.proceso)}</span>
+                      </div>
+                    ))}
+                    <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, fontSize: 13, fontWeight: 700, borderTop: '1px solid #e5e7eb', marginTop: 6, paddingTop: 6 }}>
+                      <span>Total en proceso</span>
+                      <span style={{ color: '#d97706', fontVariantNumeric: 'tabular-nums' }}>{formatMoney(resumen.totalProceso)}</span>
+                    </div>
+
+                    <div style={{ fontSize: 11, color: '#6b7280', textTransform: 'uppercase', fontWeight: 600, margin: '14px 0 6px' }}>Desglose de ese total</div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, fontSize: 12, padding: '3px 0' }}>
+                      <span style={{ color: 'var(--text-secondary, #6b7280)' }}>Cobrado (cuotas pagadas)</span>
+                      <span style={{ color: '#15803d', fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>{formatMoney(resumen.totalCobrado)}</span>
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, fontSize: 12, padding: '3px 0' }}>
+                      <span style={{ color: 'var(--text-secondary, #6b7280)' }}>Pendiente (por cobrar)</span>
+                      <span style={{ color: '#b45309', fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>{formatMoney(resumen.totalPendiente)}</span>
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, fontSize: 13, fontWeight: 700, borderTop: '1px solid #e5e7eb', marginTop: 6, paddingTop: 6 }}>
+                      <span>Cobrado + Pendiente</span>
+                      <span style={{ fontVariantNumeric: 'tabular-nums' }}>{formatMoney(resumen.totalCobrado + resumen.totalPendiente)}</span>
+                    </div>
+                    <div style={{ fontSize: 11, color: '#9ca3af', marginTop: 8, lineHeight: 1.4 }}>
+                      El "Monto en Proceso" suma la penalidad completa de cada multa fraccionada, incluidas las cuotas ya cobradas.
+                    </div>
+                  </aside>
+                )}
+              </div>
+            </div>
+          </div>
+        )
+      })()}
     </div>
   )
 }
