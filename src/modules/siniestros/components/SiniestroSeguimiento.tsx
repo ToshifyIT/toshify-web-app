@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 // src/modules/siniestros/components/SiniestroSeguimiento.tsx
 import { useState, useEffect, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
@@ -92,6 +91,31 @@ export function SiniestroSeguimiento({ siniestro, onReload, readonly = false }: 
   const [loading, setLoading] = useState(true)
   const [showForm, setShowForm] = useState(false)
   const [saving, setSaving] = useState(false)
+  // Modal de "Ver detalle incidencia" (solo lectura).
+  const [showDetalleIncidencia, setShowDetalleIncidencia] = useState(false)
+  const [incidenciaDetalle, setIncidenciaDetalle] = useState<any | null>(null)
+  const [loadingDetalleInc, setLoadingDetalleInc] = useState(false)
+
+  const verDetalleIncidencia = async (incidenciaId: string) => {
+    setShowDetalleIncidencia(true)
+    setLoadingDetalleInc(true)
+    setIncidenciaDetalle(null)
+    try {
+      const { data } = await (supabase.from('incidencias' as any) as any)
+        .select('id, fecha, semana, turno, area, tipo, descripcion, notas, monto, km_exceso, conductor_nombre, vehiculo_patente, created_by_name, created_at, incidencias_estados(codigo, nombre), tipos_cobro_descuento(codigo, nombre)')
+        .eq('id', incidenciaId)
+        .maybeSingle()
+      setIncidenciaDetalle(data)
+    } catch {
+      setIncidenciaDetalle(null)
+    } finally {
+      setLoadingDetalleInc(false)
+    }
+  }
+
+  const fmtFechaInc = (s: string | null) => s ? new Date(s + 'T00:00:00').toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric' }) : '—'
+  const fmtFechaHoraInc = (s: string | null) => s ? new Date(s).toLocaleString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', timeZone: 'America/Argentina/Buenos_Aires' }) : ''
+  const fmtMontoInc = (m: any) => (m == null || m === '') ? '—' : `$ ${Number(m).toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
   const [formData, setFormData] = useState<SeguimientoFormData>({
     tipo_evento: 'nota',
     descripcion: '',
@@ -128,7 +152,7 @@ export function SiniestroSeguimiento({ siniestro, onReload, readonly = false }: 
 
       if (error) throw error
       setSeguimientos(data || [])
-    } catch (_error) {
+    } catch {
       // silently ignored
     } finally {
       setLoading(false)
@@ -206,7 +230,7 @@ export function SiniestroSeguimiento({ siniestro, onReload, readonly = false }: 
         }, ...conductoresFormatted]
       }
       setConductores(conductoresFormatted)
-    } catch (_error) {
+    } catch {
       // silently ignored
     }
   }
@@ -245,7 +269,7 @@ export function SiniestroSeguimiento({ siniestro, onReload, readonly = false }: 
             turnoDetectado = ac?.horario === 'nocturno' ? 'Nocturno' : 'Diurno'
           }
         }
-      } catch (_e) { /* silently ignored */ }
+      } catch { /* silently ignored */ }
     }
 
     // Pre-cargar datos del siniestro en el formulario de incidencia
@@ -700,35 +724,60 @@ export function SiniestroSeguimiento({ siniestro, onReload, readonly = false }: 
                     <span style={{ fontSize: '12px', color: 'var(--text-tertiary)' }}>
                       Por: {seg.created_by_name || 'Sistema'}
                     </span>
-                    {(seg.incidencia_id || seg.penalidad_id) && (
-                      <button
-                        onClick={() => {
-                          if (seg.incidencia_id) {
-                            navigate(`/incidencias?id=${seg.incidencia_id}`)
-                          } else if (seg.penalidad_id) {
-                            navigate(`/incidencias?penalidad_id=${seg.penalidad_id}`)
-                          }
-                        }}
-                        style={{
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: '4px',
-                          fontSize: '12px',
-                          color: '#6366f1',
-                          background: 'none',
-                          border: 'none',
-                          cursor: 'pointer',
-                          padding: '4px 8px',
-                          borderRadius: '4px',
-                          transition: 'background 0.2s'
-                        }}
-                        onMouseOver={e => (e.currentTarget.style.background = 'rgba(99, 102, 241, 0.1)')}
-                        onMouseOut={e => (e.currentTarget.style.background = 'none')}
-                      >
-                        <ExternalLink size={12} />
-                        {seg.incidencia_id ? 'Ver Incidencia' : 'Ver Penalidad'}
-                      </button>
-                    )}
+                    <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
+                      {seg.incidencia_id && (
+                        <button
+                          onClick={() => verDetalleIncidencia(seg.incidencia_id as string)}
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '4px',
+                            fontSize: '12px',
+                            color: '#0ea5e9',
+                            background: 'none',
+                            border: '1px solid #bae6fd',
+                            cursor: 'pointer',
+                            padding: '4px 8px',
+                            borderRadius: '4px',
+                            transition: 'background 0.2s'
+                          }}
+                          onMouseOver={e => (e.currentTarget.style.background = 'rgba(14, 165, 233, 0.08)')}
+                          onMouseOut={e => (e.currentTarget.style.background = 'none')}
+                        >
+                          <FileText size={12} />
+                          Ver detalle incidencia
+                        </button>
+                      )}
+                      {(seg.incidencia_id || seg.penalidad_id) && (
+                        <button
+                          onClick={() => {
+                            if (seg.incidencia_id) {
+                              navigate(`/incidencias?id=${seg.incidencia_id}`)
+                            } else if (seg.penalidad_id) {
+                              navigate(`/incidencias?penalidad_id=${seg.penalidad_id}`)
+                            }
+                          }}
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '4px',
+                            fontSize: '12px',
+                            color: '#6366f1',
+                            background: 'none',
+                            border: 'none',
+                            cursor: 'pointer',
+                            padding: '4px 8px',
+                            borderRadius: '4px',
+                            transition: 'background 0.2s'
+                          }}
+                          onMouseOver={e => (e.currentTarget.style.background = 'rgba(99, 102, 241, 0.1)')}
+                          onMouseOut={e => (e.currentTarget.style.background = 'none')}
+                        >
+                          <ExternalLink size={12} />
+                          {seg.incidencia_id ? 'Ver Incidencia' : 'Ver Penalidad'}
+                        </button>
+                      )}
+                    </div>
                   </div>
                 </div>
               )
@@ -736,6 +785,65 @@ export function SiniestroSeguimiento({ siniestro, onReload, readonly = false }: 
           </div>
         )}
       </div>
+
+      {/* Modal "Ver detalle incidencia" (solo lectura) */}
+      {showDetalleIncidencia && (
+        <div onClick={() => setShowDetalleIncidencia(false)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 10001, padding: 24 }}>
+          <div onClick={e => e.stopPropagation()} style={{ background: 'var(--bg-primary)', borderRadius: 12, width: '100%', maxWidth: 640, maxHeight: '88vh', overflow: 'auto', border: '1px solid var(--border-primary)', boxShadow: '0 25px 50px -12px rgba(0,0,0,0.5)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '18px 22px', borderBottom: '1px solid var(--border-primary)' }}>
+              <h2 style={{ margin: 0, fontSize: 18, fontWeight: 700, color: 'var(--text-primary)' }}>Detalle de la incidencia</h2>
+              <button onClick={() => setShowDetalleIncidencia(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-tertiary)', padding: 4 }}><X size={18} /></button>
+            </div>
+            <div style={{ padding: 22 }}>
+              {loadingDetalleInc ? (
+                <div style={{ textAlign: 'center', color: 'var(--text-tertiary)', padding: 30 }}>Cargando…</div>
+              ) : !incidenciaDetalle ? (
+                <div style={{ textAlign: 'center', color: 'var(--text-tertiary)', padding: 30 }}>No se encontró la incidencia.</div>
+              ) : (
+                <>
+                  <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', marginBottom: 16 }}>
+                    {incidenciaDetalle.incidencias_estados?.nombre && (
+                      <span style={{ fontSize: 11, fontWeight: 700, color: '#fff', background: '#6366f1', padding: '2px 10px', borderRadius: 999 }}>{incidenciaDetalle.incidencias_estados.nombre}</span>
+                    )}
+                    {incidenciaDetalle.tipo && <span style={{ fontSize: 12, color: 'var(--text-secondary)', textTransform: 'capitalize' }}>Tipo: {incidenciaDetalle.tipo}</span>}
+                    <span style={{ marginLeft: 'auto', fontSize: 12, color: 'var(--text-tertiary)' }}>{fmtFechaInc(incidenciaDetalle.fecha)}</span>
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px 20px' }}>
+                    {[
+                      ['Área', incidenciaDetalle.area],
+                      ['Semana', incidenciaDetalle.semana],
+                      ['Turno', incidenciaDetalle.turno],
+                      ['Tipo de cobro/descuento', incidenciaDetalle.tipos_cobro_descuento?.nombre],
+                      ['Conductor', incidenciaDetalle.conductor_nombre],
+                      ['Vehículo', incidenciaDetalle.vehiculo_patente],
+                      ['Monto', fmtMontoInc(incidenciaDetalle.monto)],
+                      ...(incidenciaDetalle.km_exceso != null ? [['Km exceso', incidenciaDetalle.km_exceso]] : []),
+                    ].map(([label, value], i) => (
+                      <div key={i} style={{ display: 'flex', flexDirection: 'column' }}>
+                        <span style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '.03em', color: 'var(--text-tertiary)', fontWeight: 600 }}>{label}</span>
+                        <span style={{ fontSize: 13, color: 'var(--text-primary)', fontWeight: 600 }}>{value === null || value === undefined || value === '' ? '—' : String(value)}</span>
+                      </div>
+                    ))}
+                  </div>
+                  <div style={{ marginTop: 16 }}>
+                    <div style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '.03em', color: 'var(--text-tertiary)', fontWeight: 600, marginBottom: 4 }}>Descripción</div>
+                    <div style={{ fontSize: 13, color: 'var(--text-primary)', whiteSpace: 'pre-wrap', lineHeight: 1.55 }}>{incidenciaDetalle.descripcion || '—'}</div>
+                  </div>
+                  {incidenciaDetalle.notas && (
+                    <div style={{ marginTop: 12 }}>
+                      <div style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '.03em', color: 'var(--text-tertiary)', fontWeight: 600, marginBottom: 4 }}>Notas</div>
+                      <div style={{ fontSize: 13, color: 'var(--text-primary)', whiteSpace: 'pre-wrap', lineHeight: 1.55 }}>{incidenciaDetalle.notas}</div>
+                    </div>
+                  )}
+                  <div style={{ marginTop: 16, fontSize: 12, color: 'var(--text-tertiary)', borderTop: '1px solid var(--border-primary)', paddingTop: 10 }}>
+                    Creada por {incidenciaDetalle.created_by_name || '—'}{incidenciaDetalle.created_at ? ` · ${fmtFechaHoraInc(incidenciaDetalle.created_at)}` : ''}
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Modal de Incidencia */}
       {showIncidenciaModal && (

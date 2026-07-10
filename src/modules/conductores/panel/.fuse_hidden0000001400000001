@@ -466,7 +466,7 @@ export function ConductorDetalleModal({ conductor, onClose }: { conductor: Condu
             </div>
             <div className="cdet-deuda-row">
               <div>
-                <div className="cdet-deuda-lbl">Saldo actual</div>
+                <div className="cdet-deuda-lbl">Saldo actual (esta semana)</div>
                 <div className="cdet-deuda-hint">Lo que se le va a cobrar en la última semana</div>
               </div>
               <span className="cdet-deuda-amt">{formatCurrency(kpis.saldoActualSemana)}</span>
