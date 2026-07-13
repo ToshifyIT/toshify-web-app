@@ -130,10 +130,13 @@ export default function MultasModule() {
   const [busqueda, setBusqueda] = useState('')
   const [vehiculos, setVehiculos] = useState<Vehiculo[]>([])
   const [multasEnviadas, setMultasEnviadas] = useState<Set<number>>(new Set())
+  // Info de incidencia por multa (para la vista "Enviadas a facturación"): monto de la
+  // incidencia MÁS RECIENTE y cantidad de incidencias (para marcar duplicado).
+  const [multasIncidencia, setMultasIncidencia] = useState<Map<number, { monto: number; count: number; fechaEnvio: string }>>(new Map())
   // Estado de pago por multa (segun facturacion / penalidades, misma logica que Mi Espacio):
   // pagada = penalidad no fraccionada aplicada en periodo cerrado; fraccionada = penalidad fraccionada.
   // Las multas que NO estan en este mapa se consideran pendientes. `monto` = monto facturado (penalidad).
-  const [multasEstadoPago, setMultasEstadoPago] = useState<Map<number, { estado: 'pagada' | 'fraccionada'; monto: number; fraccionada: boolean }>>(new Map())
+  const [multasEstadoPago, setMultasEstadoPago] = useState<Map<number, { estado: 'pagada' | 'fraccionada'; monto: number; fraccionada: boolean; semanasPago: string[] }>>(new Map())
   const [showPendienteModal, setShowPendienteModal] = useState(false)
   const [showPagadoModal, setShowPagadoModal] = useState(false)
   const [showProcesoModal, setShowProcesoModal] = useState(false)
@@ -236,9 +239,10 @@ export default function MultasModule() {
       const [multasRes, vehiculosRes, incidenciasRes, penalidadesRes, periodosRes] = await Promise.all([
         aplicarFiltroSede(supabase.from('multas_historico').select('*').is('deleted_at', null)).order('created_at', { ascending: false }).limit(5000),
         aplicarFiltroSede(supabase.from('vehiculos').select('id, patente').is('deleted_at', null)),
-        // IDs de multas que ya tienen incidencia (=ya fueron enviadas a facturación)
+        // Incidencias de multas (=ya fueron enviadas a facturación): monto y fecha
+        // para calcular el monto de la incidencia más reciente y detectar duplicados.
         (supabase.from('incidencias' as any) as any)
-          .select('multa_id')
+          .select('multa_id, monto, created_at')
           .not('multa_id', 'is', null),
         // Penalidades de multas (para estado de pago pagada/fraccionada + monto facturado)
         (supabase.from('penalidades' as any) as any)
@@ -257,6 +261,21 @@ export default function MultasModule() {
           .filter((v): v is number => v != null)
       )
       setMultasEnviadas(enviadas)
+
+      // Monto de la incidencia más reciente + cantidad de incidencias por multa.
+      const incMap = new Map<number, { monto: number; count: number; fecha: string }>()
+      for (const r of (incidenciasRes.data || []) as Array<{ multa_id: number | null; monto: number | null; created_at: string | null }>) {
+        if (r.multa_id == null) continue
+        const fecha = r.created_at || ''
+        const prev = incMap.get(r.multa_id)
+        if (!prev) {
+          incMap.set(r.multa_id, { monto: Number(r.monto) || 0, count: 1, fecha })
+        } else {
+          prev.count += 1
+          if (fecha >= prev.fecha) { prev.monto = Number(r.monto) || 0; prev.fecha = fecha }
+        }
+      }
+      setMultasIncidencia(new Map([...incMap].map(([k, v]) => [k, { monto: v.monto, count: v.count, fechaEnvio: v.fecha }])))
 
       const cerradas = new Set<string>(
         ((periodosRes.data || []) as Array<{ semana: number; anio: number }>).map(p => `${p.semana}-${p.anio}`)
@@ -299,7 +318,7 @@ export default function MultasModule() {
 
       // 2) Estado de pago por multa. Una fraccionada con TODAS sus cuotas cobradas
       //    pasa a "pagada"; si le falta alguna cuota, sigue "en proceso" (fraccionada).
-      const estadoMap = new Map<number, { estado: 'pagada' | 'fraccionada'; monto: number; fraccionada: boolean }>()
+      const estadoMap = new Map<number, { estado: 'pagada' | 'fraccionada'; monto: number; fraccionada: boolean; semanasPago: string[] }>()
       for (const p of (penalidadesRes.data || []) as Array<any>) {
         const mid = p.incidencias?.multa_id
         if (mid == null) continue
@@ -308,11 +327,16 @@ export default function MultasModule() {
           const cuotas = cuotasPorPenalidad.get(p.id) || []
           const cantidad = Number(p.cantidad_cuotas) || 0
           const todasCobradas = cuotas.length > 0 && cuotas.every(c => c.aplicado) && (cantidad === 0 || cuotas.length >= cantidad)
-          estadoMap.set(mid, { estado: todasCobradas ? 'pagada' : 'fraccionada', monto, fraccionada: true })
+          // Semanas de las cuotas ya cobradas (cuando está pagada del todo son todas).
+          const semanasPago = cuotas.filter(c => c.aplicado).map(c => `S${c.semana}/${c.anio}`)
+          estadoMap.set(mid, { estado: todasCobradas ? 'pagada' : 'fraccionada', monto, fraccionada: true, semanasPago })
         } else if (p.aplicado === true && p.rechazado !== true && cerradas.has(`${p.semana_aplicacion}-${p.anio_aplicacion}`)) {
           const prev = estadoMap.get(mid)
           // No pisar una entrada que ya viene de un fraccionamiento.
-          if (!prev || !prev.fraccionada) estadoMap.set(mid, { estado: 'pagada', monto, fraccionada: false })
+          if (!prev || !prev.fraccionada) {
+            const sem = (p.semana_aplicacion != null && p.anio_aplicacion != null) ? [`S${p.semana_aplicacion}/${p.anio_aplicacion}`] : []
+            estadoMap.set(mid, { estado: 'pagada', monto, fraccionada: false, semanasPago: sem })
+          }
         }
       }
       setMultasEstadoPago(estadoMap)
@@ -503,21 +527,6 @@ export default function MultasModule() {
     return t.split(/\s+/).filter(Boolean).every(w => hay.includes(w))
   }, [])
 
-  // Montos por estado (cross-tab): respetan filtros de columna (getFilteredData) y la
-  // búsqueda, excluyen desestimadas y multas con 2 conductores (con coma).
-  const montosPorEstado = useMemo(() => {
-    const base = getFilteredData().filter(m =>
-      !m.desestimada_at && !tieneConductorConComa(m) && matchBusqueda(m, busqueda)
-    )
-    let sinFacturar = 0, facturadas = 0
-    for (const m of base) {
-      const imp = parseImporte(m.importe)
-      if (fueEnviadaAFacturacion(m)) facturadas += imp
-      else sinFacturar += imp
-    }
-    return { sinFacturar, facturadas, total: sinFacturar + facturadas }
-  }, [getFilteredData, busqueda, matchBusqueda, fueEnviadaAFacturacion])
-
   // Métricas independientes por estado de pago (misma lógica que Mi Espacio).
   // Pendiente: importe de la multa, con descuento solo si la fecha de vencimiento
   // del descuento es POSTERIOR a hoy (hoy o pasada -> importe pleno).
@@ -529,28 +538,49 @@ export default function MultasModule() {
     const hoyStr = new Date().toISOString().slice(0, 10)
     let pendiente = 0, pagado = 0, proceso = 0
     // Detalle de las multas que arman cada métrica.
-    const pendienteDetalle: Array<{ multa: Multa; columna: 'IMPORTE' | 'IMP_DESC'; monto: number }> = []
-    const pagadoDetalle: Array<{ multa: Multa; monto: number; fraccionada: boolean }> = []
-    const procesoDetalle: Array<{ multa: Multa; monto: number; fraccionada: boolean }> = []
+    const pendienteDetalle: Array<{ multa: Multa; columna: 'IMPORTE' | 'IMP_DESC'; monto: number; enviado: boolean }> = []
+    const pagadoDetalle: Array<{ multa: Multa; monto: number; fraccionada: boolean; semanasPago: string[] }> = []
+    const procesoDetalle: Array<{ multa: Multa; monto: number; fraccionada: boolean; semanasPago: string[] }> = []
     for (const m of base) {
       const est = multasEstadoPago.get(m.id)
       if (est?.estado === 'pagada') {
-        pagado += est.monto
-        pagadoDetalle.push({ multa: m, monto: est.monto, fraccionada: est.fraccionada })
+        // El monto pagado se toma de la incidencia (lo realmente enviado a facturar);
+        // la penalidad queda como respaldo si por algún motivo no hubiera incidencia.
+        const montoPagado = multasIncidencia.get(m.id)?.monto ?? est.monto
+        pagado += montoPagado
+        pagadoDetalle.push({ multa: m, monto: montoPagado, fraccionada: est.fraccionada, semanasPago: est.semanasPago })
       } else if (est?.estado === 'fraccionada') {
-        proceso += est.monto
-        procesoDetalle.push({ multa: m, monto: est.monto, fraccionada: true })
+        // El total en proceso se toma de la incidencia (con la penalidad como respaldo).
+        const montoTotal = multasIncidencia.get(m.id)?.monto ?? est.monto
+        proceso += montoTotal
+        procesoDetalle.push({ multa: m, monto: montoTotal, fraccionada: true, semanasPago: est.semanasPago })
       } else {
         const desc = parseImporte(m.importe_descuento)
         const vencStr = m.fecha_vencimiento_descuento ? String(m.fecha_vencimiento_descuento).slice(0, 10) : ''
         const usarDescuento = desc > 0 && vencStr > hoyStr
-        const monto = usarDescuento ? desc : parseImporte(m.importe)
+        const montoBase = usarDescuento ? desc : parseImporte(m.importe)
+        // Si ya fue enviada a incidencia, el monto pendiente es lo realmente enviado a
+        // facturar; si no, se usa la lógica de Importe / Imp. Desc.
+        const inci = multasIncidencia.get(m.id)
+        const monto = inci ? inci.monto : montoBase
         pendiente += monto
-        pendienteDetalle.push({ multa: m, columna: usarDescuento ? 'IMP_DESC' : 'IMPORTE', monto })
+        pendienteDetalle.push({ multa: m, columna: usarDescuento ? 'IMP_DESC' : 'IMPORTE', monto, enviado: !!inci })
       }
     }
     return { pendiente, pagado, proceso, pendienteDetalle, pagadoDetalle, procesoDetalle }
-  }, [getFilteredData, busqueda, matchBusqueda, multasEstadoPago])
+  }, [getFilteredData, busqueda, matchBusqueda, multasEstadoPago, multasIncidencia])
+
+  // Los botones "Detalle" (Pendiente / Pagado / En Proceso) solo se habilitan cuando
+  // la búsqueda coincide EXACTAMENTE con una patente o un conductor (no basta con un
+  // texto parcial como "karina").
+  const detalleHabilitado = useMemo(() => {
+    const term = busqueda.trim().toLowerCase()
+    if (!term) return false
+    return multas.some(m =>
+      (!!m.patente && m.patente.trim().toLowerCase() === term) ||
+      (!!m.conductor_responsable && m.conductor_responsable.trim().toLowerCase() === term)
+    )
+  }, [busqueda, multas])
 
   const patentesUnicasCount = useMemo(() =>
     new Set(multasKpi.map(m => m.patente).filter(Boolean)).size
@@ -1158,7 +1188,8 @@ export default function MultasModule() {
         </span>
       )
     },
-    {
+    // Importe: se oculta en la vista de enviadas (ahí se muestra Monto Mul-Inci).
+    ...(vista === 'enviadas' ? [] : ([{
       accessorKey: 'importe',
       size: 90,
       header: () => (
@@ -1172,18 +1203,52 @@ export default function MultasModule() {
           onOpenChange={setOpenFilterId}
         />
       ),
-      cell: ({ row }) => (
+      cell: ({ row }: { row: { original: Multa } }) => (
         <span className="font-medium text-orange-500" style={{ fontSize: '12px', whiteSpace: 'nowrap' }}>
           {row.original.importe}
         </span>
-      )
-    },
-    {
+      ),
+    }] as ColumnDef<Multa>[])),
+    // Columnas exclusivas de la vista "Enviadas a facturación".
+    ...(vista === 'enviadas' ? ([
+      {
+        id: 'monto_mul_inci',
+        size: 110,
+        header: 'Monto Mul-Inci',
+        cell: ({ row }: { row: { original: Multa } }) => {
+          const info = multasIncidencia.get(row.original.id)
+          if (!info) return <span style={{ color: '#9ca3af' }}>—</span>
+          return <span className="font-medium" style={{ whiteSpace: 'nowrap', color: '#7c3aed' }}>{formatMoney(info.monto)}</span>
+        },
+      },
+      {
+        id: 'estado_pago',
+        size: 100,
+        header: 'Estado',
+        cell: ({ row }: { row: { original: Multa } }) => {
+          const est = multasEstadoPago.get(row.original.id)
+          const label = est?.estado === 'pagada' ? 'Pagado' : est?.estado === 'fraccionada' ? 'En proceso' : 'Pendiente'
+          const col = label === 'Pagado' ? { bg: '#dcfce7', fg: '#15803d' } : label === 'En proceso' ? { bg: '#fef3c7', fg: '#b45309' } : { bg: '#fee2e2', fg: '#b91c1c' }
+          return <span style={{ fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 999, background: col.bg, color: col.fg, whiteSpace: 'nowrap' }}>{label}</span>
+        },
+      },
+      {
+        id: 'duplicado',
+        size: 90,
+        header: 'Duplicado',
+        cell: ({ row }: { row: { original: Multa } }) => {
+          const dup = (multasIncidencia.get(row.original.id)?.count || 0) > 1
+          return <span style={{ fontSize: 11, fontWeight: 700, color: dup ? '#b91c1c' : '#6b7280' }}>{dup ? 'Sí' : 'No'}</span>
+        },
+      },
+    ] as ColumnDef<Multa>[]) : []),
+    // Imp. Desc.: se oculta en la vista de enviadas.
+    ...(vista === 'enviadas' ? [] : ([{
       // FIX 2026-05-19: nueva columna Importe con descuento
       accessorKey: 'importe_descuento',
       size: 90,
       header: 'Imp. Desc.',
-      cell: ({ row }) => {
+      cell: ({ row }: { row: { original: Multa } }) => {
         const v = row.original.importe_descuento
         if (!v) return <span style={{ color: '#9ca3af' }}>—</span>
         return (
@@ -1191,8 +1256,8 @@ export default function MultasModule() {
             {v}
           </span>
         )
-      }
-    },
+      },
+    }] as ColumnDef<Multa>[])),
     {
       // FIX 2026-05-19: nueva columna Vencimiento del descuento
       accessorKey: 'fecha_vencimiento_descuento',
@@ -1386,7 +1451,7 @@ export default function MultasModule() {
         )
       }
     }
-  ], [patentesUnicas, patenteFilter, conductoresUnicos, conductorFilter, lugaresUnicos, lugarFilter, infraccionesUnicas, infraccionFilter, detallesUnicos, detalleFilter, semanasUnicas, semanaFilter, ibuttonsUnicos, ibuttonFilter, fechaInfraccionDesde, fechaInfraccionHasta, openFilterId, obsFilter, importesUnicos, importeFilter, fechaCargaDesde, fechaCargaHasta, multasEnviadas, canReactivar, canBorrar])
+  ], [patentesUnicas, patenteFilter, conductoresUnicos, conductorFilter, lugaresUnicos, lugarFilter, infraccionesUnicas, infraccionFilter, detallesUnicos, detalleFilter, semanasUnicas, semanaFilter, ibuttonsUnicos, ibuttonFilter, fechaInfraccionDesde, fechaInfraccionHasta, openFilterId, obsFilter, importesUnicos, importeFilter, fechaCargaDesde, fechaCargaHasta, multasEnviadas, canReactivar, canBorrar, vista, multasEstadoPago, multasIncidencia])
 
   // Exportar a Excel
   function handleExportar() {
@@ -1435,27 +1500,6 @@ export default function MultasModule() {
             </div>
           </div>
           <div className="stat-card">
-            <DollarSign size={18} className="stat-icon" />
-            <div className="stat-content">
-              <span className="stat-value">{formatMoney(montosPorEstado.sinFacturar)}</span>
-              <span className="stat-label">Monto Total sin Facturar</span>
-            </div>
-          </div>
-          <div className="stat-card">
-            <DollarSign size={18} className="stat-icon" />
-            <div className="stat-content">
-              <span className="stat-value">{formatMoney(montosPorEstado.facturadas)}</span>
-              <span className="stat-label">Monto Total Facturadas</span>
-            </div>
-          </div>
-          <div className="stat-card">
-            <DollarSign size={18} className="stat-icon" />
-            <div className="stat-content">
-              <span className="stat-value">{formatMoney(montosPorEstado.total)}</span>
-              <span className="stat-label">Monto Total</span>
-            </div>
-          </div>
-          <div className="stat-card">
             <DollarSign size={18} className="stat-icon" style={{ color: '#dc2626' }} />
             <div className="stat-content">
               <span className="stat-value">{formatMoney(montosPorPago.pendiente)}</span>
@@ -1463,9 +1507,10 @@ export default function MultasModule() {
             </div>
             <button
               type="button"
-              onClick={() => setShowPendienteModal(true)}
-              title="Ver detalle del cálculo"
-              style={{ marginLeft: 'auto', border: '1px solid var(--border-primary, #e5e7eb)', background: 'var(--card-bg, #fff)', borderRadius: 6, padding: '4px 8px', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 11, color: '#dc2626', fontWeight: 600 }}
+              disabled={!detalleHabilitado}
+              onClick={() => detalleHabilitado && setShowPendienteModal(true)}
+              title={detalleHabilitado ? 'Ver detalle del cálculo' : 'Filtrá una patente o conductor exacto para ver el detalle'}
+              style={{ marginLeft: 'auto', border: '1px solid var(--border-primary, #e5e7eb)', background: 'var(--card-bg, #fff)', borderRadius: 6, padding: '4px 8px', cursor: detalleHabilitado ? 'pointer' : 'not-allowed', opacity: detalleHabilitado ? 1 : 0.4, display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 11, color: '#dc2626', fontWeight: 600 }}
             >
               <Eye size={13} /> Detalle
             </button>
@@ -1478,9 +1523,10 @@ export default function MultasModule() {
             </div>
             <button
               type="button"
-              onClick={() => setShowPagadoModal(true)}
-              title="Ver detalle del cálculo"
-              style={{ marginLeft: 'auto', border: '1px solid var(--border-primary, #e5e7eb)', background: 'var(--card-bg, #fff)', borderRadius: 6, padding: '4px 8px', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 11, color: '#059669', fontWeight: 600 }}
+              disabled={!detalleHabilitado}
+              onClick={() => detalleHabilitado && setShowPagadoModal(true)}
+              title={detalleHabilitado ? 'Ver detalle del cálculo' : 'Filtrá una patente o conductor exacto para ver el detalle'}
+              style={{ marginLeft: 'auto', border: '1px solid var(--border-primary, #e5e7eb)', background: 'var(--card-bg, #fff)', borderRadius: 6, padding: '4px 8px', cursor: detalleHabilitado ? 'pointer' : 'not-allowed', opacity: detalleHabilitado ? 1 : 0.4, display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 11, color: '#059669', fontWeight: 600 }}
             >
               <Eye size={13} /> Detalle
             </button>
@@ -1493,9 +1539,10 @@ export default function MultasModule() {
             </div>
             <button
               type="button"
-              onClick={() => setShowProcesoModal(true)}
-              title="Ver detalle del cálculo"
-              style={{ marginLeft: 'auto', border: '1px solid var(--border-primary, #e5e7eb)', background: 'var(--card-bg, #fff)', borderRadius: 6, padding: '4px 8px', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 11, color: '#d97706', fontWeight: 600 }}
+              disabled={!detalleHabilitado}
+              onClick={() => detalleHabilitado && setShowProcesoModal(true)}
+              title={detalleHabilitado ? 'Ver detalle del cálculo' : 'Filtrá una patente o conductor exacto para ver el detalle'}
+              style={{ marginLeft: 'auto', border: '1px solid var(--border-primary, #e5e7eb)', background: 'var(--card-bg, #fff)', borderRadius: 6, padding: '4px 8px', cursor: detalleHabilitado ? 'pointer' : 'not-allowed', opacity: detalleHabilitado ? 1 : 0.4, display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 11, color: '#d97706', fontWeight: 600 }}
             >
               <Eye size={13} /> Detalle
             </button>
@@ -2111,13 +2158,13 @@ export default function MultasModule() {
         <div className="multas-modal-overlay" onClick={() => setShowPendienteModal(false)}>
           <div
             onClick={e => e.stopPropagation()}
-            style={{ background: 'var(--card-bg, #fff)', borderRadius: 12, width: '95%', maxWidth: 1040, maxHeight: '86vh', display: 'flex', flexDirection: 'column', overflow: 'hidden', border: '1px solid var(--border-primary, #e5e7eb)' }}
+            style={{ background: 'var(--card-bg, #fff)', borderRadius: 12, width: '95%', maxWidth: 1280, maxHeight: '86vh', display: 'flex', flexDirection: 'column', overflow: 'hidden', border: '1px solid var(--border-primary, #e5e7eb)' }}
           >
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', padding: '16px 20px', borderBottom: '1px solid var(--border-primary, #eef0f2)' }}>
               <div>
-                <h3 style={{ margin: 0, fontSize: 16, fontWeight: 700 }}>Detalle Monto Total Pendiente</h3>
+                <h3 style={{ margin: 0, fontSize: 16, fontWeight: 700 }}>{'Detalle Monto Total Pendiente' + (busqueda.trim() ? ` - ${busqueda.trim()}` : '')}</h3>
                 <div style={{ fontSize: 12, color: 'var(--text-secondary, #6b7280)', marginTop: 2 }}>
-                  {montosPorPago.pendienteDetalle.length} multas · Total {formatMoney(montosPorPago.pendiente)}. La columna resaltada en verde es la que se usó por cada multa.
+                  {montosPorPago.pendienteDetalle.length} multas · Total {formatMoney(montosPorPago.pendiente)}. Si la multa fue enviada a incidencia, el monto es el de la incidencia; si no, se usa Importe / Imp. Desc. (resaltado en verde).
                 </div>
               </div>
               <button onClick={() => setShowPendienteModal(false)} aria-label="Cerrar" style={{ border: 'none', background: 'transparent', cursor: 'pointer', color: '#6b7280', padding: 4 }}><X size={18} /></button>
@@ -2128,30 +2175,47 @@ export default function MultasModule() {
                   <tr style={{ textAlign: 'left', color: '#6b7280', fontSize: 11, textTransform: 'uppercase' }}>
                     <th style={{ padding: '8px 10px', borderBottom: '1px solid #eef0f2' }}>Fec. Infracción</th>
                     <th style={{ padding: '8px 10px', borderBottom: '1px solid #eef0f2' }}>Patente</th>
-                    <th style={{ padding: '8px 10px', borderBottom: '1px solid #eef0f2' }}>Conductor</th>
+                    <th style={{ padding: '8px 10px', borderBottom: '1px solid #eef0f2' }}>Detalle de Infracción</th>
                     <th style={{ padding: '8px 10px', borderBottom: '1px solid #eef0f2' }}>Infracción</th>
                     <th style={{ padding: '8px 10px', borderBottom: '1px solid #eef0f2', textAlign: 'right' }}>Importe</th>
                     <th style={{ padding: '8px 10px', borderBottom: '1px solid #eef0f2', textAlign: 'right' }}>Imp. Desc.</th>
                     <th style={{ padding: '8px 10px', borderBottom: '1px solid #eef0f2' }}>Venc. Desc.</th>
-                    <th style={{ padding: '8px 10px', borderBottom: '1px solid #eef0f2', textAlign: 'right' }}>Monto usado</th>
+                    <th style={{ padding: '8px 10px', borderBottom: '1px solid #eef0f2' }}>Estado facturación</th>
+                    <th style={{ padding: '8px 10px', borderBottom: '1px solid #eef0f2' }}>Semana envío</th>
+                    <th style={{ padding: '8px 10px', borderBottom: '1px solid #eef0f2', textAlign: 'right' }}>Monto Incidencia</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {montosPorPago.pendienteDetalle.map(({ multa, columna, monto }) => {
+                  {montosPorPago.pendienteDetalle.map(({ multa, columna, monto, enviado }) => {
                     const usoImporte = columna === 'IMPORTE'
-                    const hl = { background: '#dcfce7', color: '#15803d', fontWeight: 700 }
+                    // El resaltado verde de Importe / Imp. Desc. solo aplica cuando NO se
+                    // envió a incidencia (ahí el monto sale de la incidencia).
+                    const hl = !enviado ? { background: '#dcfce7', color: '#15803d', fontWeight: 700 } : {}
+                    const inci = multasIncidencia.get(multa.id)
+                    const semanaEnvio = enviado && inci?.fechaEnvio
+                      ? `S${getWeekNumber(inci.fechaEnvio) + 1}/${new Date(inci.fechaEnvio).getFullYear()}`
+                      : 'N/A'
                     return (
                       <tr key={multa.id}>
                         <td style={{ padding: '8px 10px', borderBottom: '1px solid #f6f7f8' }}>{multa.fecha_infraccion ? new Date(multa.fecha_infraccion).toLocaleDateString('es-AR') : '-'}</td>
                         <td style={{ padding: '8px 10px', borderBottom: '1px solid #f6f7f8', fontWeight: 600 }}>{multa.patente || '-'}</td>
-                        <td style={{ padding: '8px 10px', borderBottom: '1px solid #f6f7f8' }}>{multa.conductor_responsable || '-'}</td>
-                        <td style={{ padding: '8px 10px', borderBottom: '1px solid #f6f7f8', maxWidth: 220, overflow: 'hidden', textOverflow: 'ellipsis' }} title={multa.infraccion || ''}>{multa.infraccion || '-'}</td>
-                        <td style={{ padding: '8px 10px', borderBottom: '1px solid #f6f7f8', textAlign: 'right', ...(usoImporte ? hl : {}) }}>{multa.importe || '-'}</td>
-                        <td style={{ padding: '8px 10px', borderBottom: '1px solid #f6f7f8', textAlign: 'right', ...(!usoImporte ? hl : {}) }}>{multa.importe_descuento || '-'}</td>
+                        <td style={{ padding: '8px 10px', borderBottom: '1px solid #f6f7f8' }}>
+                          <span className="multa-detalle">
+                            <span className="multa-detalle-txt">{multa.detalle || '-'}</span>
+                            {multa.detalle && <span className="multa-detalle-tip">{multa.detalle}</span>}
+                          </span>
+                        </td>
+                        <td style={{ padding: '8px 10px', borderBottom: '1px solid #f6f7f8', maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis' }} title={multa.infraccion || ''}>{multa.infraccion || '-'}</td>
+                        <td style={{ padding: '8px 10px', borderBottom: '1px solid #f6f7f8', textAlign: 'right', ...(!enviado && usoImporte ? hl : {}) }}>{multa.importe || '-'}</td>
+                        <td style={{ padding: '8px 10px', borderBottom: '1px solid #f6f7f8', textAlign: 'right', ...(!enviado && !usoImporte ? hl : {}) }}>{multa.importe_descuento || '-'}</td>
                         <td style={{ padding: '8px 10px', borderBottom: '1px solid #f6f7f8' }}>{multa.fecha_vencimiento_descuento ? String(multa.fecha_vencimiento_descuento).slice(0, 10) : '-'}</td>
+                        <td style={{ padding: '8px 10px', borderBottom: '1px solid #f6f7f8' }}>
+                          <span style={{ fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 999, background: enviado ? '#dbeafe' : '#f3f4f6', color: enviado ? '#1d4ed8' : '#6b7280', whiteSpace: 'nowrap' }}>{enviado ? 'Enviado' : 'No enviado'}</span>
+                        </td>
+                        <td style={{ padding: '8px 10px', borderBottom: '1px solid #f6f7f8' }}>{semanaEnvio}</td>
                         <td style={{ padding: '8px 10px', borderBottom: '1px solid #f6f7f8', textAlign: 'right', fontWeight: 700 }}>
                           {formatMoney(monto)}
-                          <span style={{ marginLeft: 6, fontSize: 10, fontWeight: 600, padding: '1px 6px', borderRadius: 999, background: '#dcfce7', color: '#15803d' }}>{usoImporte ? 'Importe' : 'Imp. Desc.'}</span>
+                          <span style={{ marginLeft: 6, fontSize: 10, fontWeight: 600, padding: '1px 6px', borderRadius: 999, background: enviado ? '#ede9fe' : '#dcfce7', color: enviado ? '#6d28d9' : '#15803d' }}>{enviado ? 'Incidencia' : (usoImporte ? 'Importe' : 'Imp. Desc.')}</span>
                         </td>
                       </tr>
                     )
@@ -2167,32 +2231,18 @@ export default function MultasModule() {
         const esPagado = showPagadoModal
         const detalle = esPagado ? montosPorPago.pagadoDetalle : montosPorPago.procesoDetalle
         const total = esPagado ? montosPorPago.pagado : montosPorPago.proceso
-        const titulo = esPagado ? 'Detalle Monto Total Pagado' : 'Detalle Monto Total en Proceso'
+        const filtroTxt = busqueda.trim()
+        const titulo = (esPagado ? 'Detalle Monto Total Pagado' : 'Detalle Monto Total en Proceso') + (filtroTxt ? ` - ${filtroTxt}` : '')
         const nota = esPagado
           ? 'Incluye multas cobradas de contado y fraccionadas con todas sus cuotas ya cobradas.'
           : 'Monto = penalidad fraccionada (cobro en cuotas), aún con cuotas pendientes.'
         const acento = esPagado ? '#059669' : '#d97706'
         const cerrar = () => { setShowPagadoModal(false); setShowProcesoModal(false) }
-        // Resumen de reconciliación (solo "En Proceso"): cómo se llega al total.
-        const resumen = esPagado ? null : (() => {
-          const rows = detalle.map(({ multa, monto }) => {
-            const cuotas = multasCuotas.get(multa.id) || []
-            const cobrado = cuotas.filter(c => c.aplicado).reduce((s, c) => s + c.monto, 0)
-            const pendiente = cuotas.filter(c => !c.aplicado).reduce((s, c) => s + c.monto, 0)
-            return { multa, proceso: monto, cobrado, pendiente }
-          })
-          return {
-            rows,
-            totalProceso: rows.reduce((s, r) => s + r.proceso, 0),
-            totalCobrado: rows.reduce((s, r) => s + r.cobrado, 0),
-            totalPendiente: rows.reduce((s, r) => s + r.pendiente, 0),
-          }
-        })()
         return (
           <div className="multas-modal-overlay" onClick={cerrar}>
             <div
               onClick={e => e.stopPropagation()}
-              style={{ background: 'var(--card-bg, #fff)', borderRadius: 12, width: '95%', maxWidth: esPagado ? 1040 : 1320, maxHeight: '86vh', display: 'flex', flexDirection: 'column', overflow: 'hidden', border: '1px solid var(--border-primary, #e5e7eb)' }}
+              style={{ background: 'var(--card-bg, #fff)', borderRadius: 12, width: '95%', maxWidth: esPagado ? 1040 : 1340, maxHeight: '86vh', display: 'flex', flexDirection: 'column', overflow: 'hidden', border: '1px solid var(--border-primary, #e5e7eb)' }}
             >
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', padding: '16px 20px', borderBottom: '1px solid var(--border-primary, #eef0f2)' }}>
                 <div>
@@ -2203,8 +2253,7 @@ export default function MultasModule() {
                 </div>
                 <button onClick={cerrar} aria-label="Cerrar" style={{ border: 'none', background: 'transparent', cursor: 'pointer', color: '#6b7280', padding: 4 }}><X size={18} /></button>
               </div>
-              <div style={{ overflow: 'auto', padding: '8px 20px 20px', display: 'flex', gap: 16, alignItems: 'flex-start', flexWrap: 'wrap' }}>
-                <div style={{ flex: '1 1 560px', minWidth: 0, overflowX: 'auto' }}>
+              <div style={{ overflow: 'auto', padding: '8px 20px 20px' }}>
                 {detalle.length === 0 ? (
                   <div style={{ padding: '24px 10px', textAlign: 'center', color: '#6b7280', fontSize: 13 }}>
                     No hay multas en este estado con los filtros actuales.
@@ -2215,35 +2264,69 @@ export default function MultasModule() {
                       <tr style={{ textAlign: 'left', color: '#6b7280', fontSize: 11, textTransform: 'uppercase' }}>
                         <th style={{ padding: '8px 10px', borderBottom: '1px solid #eef0f2' }}>Fec. Infracción</th>
                         <th style={{ padding: '8px 10px', borderBottom: '1px solid #eef0f2' }}>Patente</th>
-                        <th style={{ padding: '8px 10px', borderBottom: '1px solid #eef0f2' }}>Conductor</th>
+                        <th style={{ padding: '8px 10px', borderBottom: '1px solid #eef0f2' }}>Detalle de Infracción</th>
                         <th style={{ padding: '8px 10px', borderBottom: '1px solid #eef0f2' }}>Infracción</th>
-                        <th style={{ padding: '8px 10px', borderBottom: '1px solid #eef0f2', textAlign: 'right' }}>Importe multa</th>
-                        <th style={{ padding: '8px 10px', borderBottom: '1px solid #eef0f2', textAlign: 'right' }}>Monto {esPagado ? 'facturado' : 'en proceso'}</th>
+                        {esPagado ? (
+                          <>
+                            <th style={{ padding: '8px 10px', borderBottom: '1px solid #eef0f2', textAlign: 'right' }}>Pagado</th>
+                            <th style={{ padding: '8px 10px', borderBottom: '1px solid #eef0f2' }}>Semana de Pago</th>
+                          </>
+                        ) : (
+                          <>
+                            <th style={{ padding: '8px 10px', borderBottom: '1px solid #eef0f2' }}>Semana</th>
+                            <th style={{ padding: '8px 10px', borderBottom: '1px solid #eef0f2' }}>Cant. Cuotas</th>
+                            <th style={{ padding: '8px 10px', borderBottom: '1px solid #eef0f2', textAlign: 'right' }}>Monto Pagado</th>
+                            <th style={{ padding: '8px 10px', borderBottom: '1px solid #eef0f2', textAlign: 'right' }}>Monto Pendiente</th>
+                            <th style={{ padding: '8px 10px', borderBottom: '1px solid #eef0f2', textAlign: 'right' }}>Total</th>
+                          </>
+                        )}
                       </tr>
                     </thead>
                     <tbody>
-                      {detalle.map(({ multa, monto, fraccionada }) => {
+                      {detalle.map(({ multa, monto, fraccionada, semanasPago }) => {
                         const esFracc = Boolean(fraccionada)
                         const cuotas = esFracc ? (multasCuotas.get(multa.id) || []) : []
                         const cobradas = cuotas.filter(c => c.aplicado)
                         const montoCobrado = cobradas.reduce((s, c) => s + c.monto, 0)
                         const montoPendiente = cuotas.filter(c => !c.aplicado).reduce((s, c) => s + c.monto, 0)
+                        // Sub-filas de cuotas: solo en el modal de Pagado.
+                        const showSub = esPagado && cuotas.length > 0
+                        const bb = showSub ? 'none' : '1px solid #f6f7f8'
+                        // Proceso: semanas de las cuotas ya cobradas.
+                        const semanasCobradas = cobradas.map(c => `S${c.semana}/${c.anio}`)
                         return (
                           <Fragment key={multa.id}>
                             <tr>
-                              <td style={{ padding: '8px 10px', borderBottom: cuotas.length ? 'none' : '1px solid #f6f7f8' }}>{multa.fecha_infraccion ? new Date(multa.fecha_infraccion).toLocaleDateString('es-AR') : '-'}</td>
-                              <td style={{ padding: '8px 10px', borderBottom: cuotas.length ? 'none' : '1px solid #f6f7f8', fontWeight: 600 }}>{multa.patente || '-'}</td>
-                              <td style={{ padding: '8px 10px', borderBottom: cuotas.length ? 'none' : '1px solid #f6f7f8' }}>{multa.conductor_responsable || '-'}</td>
-                              <td style={{ padding: '8px 10px', borderBottom: cuotas.length ? 'none' : '1px solid #f6f7f8', maxWidth: 220, overflow: 'hidden', textOverflow: 'ellipsis' }} title={multa.infraccion || ''}>{multa.infraccion || '-'}</td>
-                              <td style={{ padding: '8px 10px', borderBottom: cuotas.length ? 'none' : '1px solid #f6f7f8', textAlign: 'right' }}>{multa.importe || '-'}</td>
-                              <td style={{ padding: '8px 10px', borderBottom: cuotas.length ? 'none' : '1px solid #f6f7f8', textAlign: 'right', fontWeight: 700, color: acento }}>
-                                {formatMoney(monto)}
-                                {esPagado && esFracc && (
-                                  <span style={{ marginLeft: 6, fontSize: 10, fontWeight: 700, padding: '1px 6px', borderRadius: 999, background: '#e0e7ff', color: '#4338ca' }}>Fraccionada</span>
-                                )}
+                              <td style={{ padding: '8px 10px', borderBottom: bb }}>{multa.fecha_infraccion ? new Date(multa.fecha_infraccion).toLocaleDateString('es-AR') : '-'}</td>
+                              <td style={{ padding: '8px 10px', borderBottom: bb, fontWeight: 600 }}>{multa.patente || '-'}</td>
+                              <td style={{ padding: '8px 10px', borderBottom: bb }}>
+                                <span className="multa-detalle">
+                                  <span className="multa-detalle-txt">{multa.detalle || '-'}</span>
+                                  {multa.detalle && <span className="multa-detalle-tip">{multa.detalle}</span>}
+                                </span>
                               </td>
+                              <td style={{ padding: '8px 10px', borderBottom: bb, maxWidth: 220, overflow: 'hidden', textOverflow: 'ellipsis' }} title={multa.infraccion || ''}>{multa.infraccion || '-'}</td>
+                              {esPagado ? (
+                                <>
+                                  <td style={{ padding: '8px 10px', borderBottom: bb, textAlign: 'right', fontWeight: 700, color: acento }}>
+                                    {formatMoney(monto)}
+                                    {esFracc && (
+                                      <span style={{ marginLeft: 6, fontSize: 10, fontWeight: 700, padding: '1px 6px', borderRadius: 999, background: '#e0e7ff', color: '#4338ca' }}>Fraccionada</span>
+                                    )}
+                                  </td>
+                                  <td style={{ padding: '8px 10px', borderBottom: bb, whiteSpace: 'normal' }}>{semanasPago && semanasPago.length ? semanasPago.join(', ') : '-'}</td>
+                                </>
+                              ) : (
+                                <>
+                                  <td style={{ padding: '8px 10px', borderBottom: bb, whiteSpace: 'normal' }}>{semanasCobradas.length ? semanasCobradas.join(', ') : '-'}</td>
+                                  <td style={{ padding: '8px 10px', borderBottom: bb }}>{cuotas.length ? `${cobradas.length}/${cuotas.length}` : '-'}</td>
+                                  <td style={{ padding: '8px 10px', borderBottom: bb, textAlign: 'right', fontWeight: 700, color: '#15803d' }}>{formatMoney(montoCobrado)}</td>
+                                  <td style={{ padding: '8px 10px', borderBottom: bb, textAlign: 'right', fontWeight: 700, color: '#b45309' }}>{formatMoney(Math.max(0, monto - montoCobrado))}</td>
+                                  <td style={{ padding: '8px 10px', borderBottom: bb, textAlign: 'right', fontWeight: 700, color: acento }}>{formatMoney(monto)}</td>
+                                </>
+                              )}
                             </tr>
-                            {cuotas.length > 0 && (
+                            {showSub && (
                               <tr>
                                 <td colSpan={6} style={{ padding: '0 10px 10px', borderBottom: '1px solid #f6f7f8' }}>
                                   <div style={{ background: 'var(--bg-secondary, #fafafa)', border: '1px solid #f0f0f0', borderRadius: 8, padding: '8px 12px' }}>
@@ -2264,7 +2347,7 @@ export default function MultasModule() {
                                 </td>
                               </tr>
                             )}
-                            {esFracc && cuotas.length === 0 && (
+                            {esPagado && esFracc && cuotas.length === 0 && (
                               <tr>
                                 <td colSpan={6} style={{ padding: '0 10px 8px', fontSize: 11, color: '#9ca3af', borderBottom: '1px solid #f6f7f8' }}>Sin cuotas registradas para esta penalidad.</td>
                               </tr>
@@ -2274,43 +2357,6 @@ export default function MultasModule() {
                       })}
                     </tbody>
                   </table>
-                )}
-                </div>
-                {!esPagado && resumen && detalle.length > 0 && (
-                  <aside style={{ flex: '0 0 300px', position: 'sticky', top: 0, alignSelf: 'flex-start', background: 'var(--bg-secondary, #fafafa)', border: '1px solid var(--border-primary, #eef0f2)', borderRadius: 10, padding: '14px 16px' }}>
-                    <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 10 }}>Cómo se calcula</div>
-
-                    <div style={{ fontSize: 11, color: '#6b7280', textTransform: 'uppercase', fontWeight: 600, marginBottom: 6 }}>Monto en proceso por multa</div>
-                    {resumen.rows.map(r => (
-                      <div key={r.multa.id} style={{ display: 'flex', justifyContent: 'space-between', gap: 8, fontSize: 12, padding: '3px 0' }}>
-                        <span style={{ color: 'var(--text-secondary, #6b7280)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={r.multa.conductor_responsable || r.multa.patente || ''}>
-                          {r.multa.conductor_responsable || r.multa.patente || '-'}
-                        </span>
-                        <span style={{ fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>{formatMoney(r.proceso)}</span>
-                      </div>
-                    ))}
-                    <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, fontSize: 13, fontWeight: 700, borderTop: '1px solid #e5e7eb', marginTop: 6, paddingTop: 6 }}>
-                      <span>Total en proceso</span>
-                      <span style={{ color: '#d97706', fontVariantNumeric: 'tabular-nums' }}>{formatMoney(resumen.totalProceso)}</span>
-                    </div>
-
-                    <div style={{ fontSize: 11, color: '#6b7280', textTransform: 'uppercase', fontWeight: 600, margin: '14px 0 6px' }}>Desglose de ese total</div>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, fontSize: 12, padding: '3px 0' }}>
-                      <span style={{ color: 'var(--text-secondary, #6b7280)' }}>Cobrado (cuotas pagadas)</span>
-                      <span style={{ color: '#15803d', fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>{formatMoney(resumen.totalCobrado)}</span>
-                    </div>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, fontSize: 12, padding: '3px 0' }}>
-                      <span style={{ color: 'var(--text-secondary, #6b7280)' }}>Pendiente (por cobrar)</span>
-                      <span style={{ color: '#b45309', fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>{formatMoney(resumen.totalPendiente)}</span>
-                    </div>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, fontSize: 13, fontWeight: 700, borderTop: '1px solid #e5e7eb', marginTop: 6, paddingTop: 6 }}>
-                      <span>Cobrado + Pendiente</span>
-                      <span style={{ fontVariantNumeric: 'tabular-nums' }}>{formatMoney(resumen.totalCobrado + resumen.totalPendiente)}</span>
-                    </div>
-                    <div style={{ fontSize: 11, color: '#9ca3af', marginTop: 8, lineHeight: 1.4 }}>
-                      El "Monto en Proceso" suma la penalidad completa de cada multa fraccionada, incluidas las cuotas ya cobradas.
-                    </div>
-                  </aside>
                 )}
               </div>
             </div>
