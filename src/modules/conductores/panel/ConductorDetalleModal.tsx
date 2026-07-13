@@ -209,7 +209,7 @@ export function ConductorDetalleModal({ conductor, onClose }: { conductor: Condu
               <table className="cdet-table">
                 <thead><tr>
                   <th>Fecha</th><th>Infracción</th><th>Patente</th><th>Estado</th>
-                  <th className="r">Importe</th><th className="r">Con desc.</th><th>Vto. desc.</th><th className="r">Monto</th><th>Semana de pago</th>
+                  <th className="r">Importe</th><th className="r">Con desc.</th><th>Vto. desc.</th><th className="r">Monto de incidencia</th><th>Semana de pago</th>
                 </tr></thead>
                 <tbody>
                   {multas.map(m => {
@@ -217,9 +217,10 @@ export function ConductorDetalleModal({ conductor, onClose }: { conductor: Condu
                     // coincide con "Monto"). Pendiente: importe o importe con descuento.
                     // En proceso / Pagada: el monto facturado (penalidad) coincide con
                     // uno de los dos, así que se resalta ese.
+                    const tieneCuotas = !!(m.cuotas && m.cuotas.length)
                     let aplicaImporte = false
                     let aplicaDesc = false
-                    if (m.estado === 'pendiente') {
+                    if (!tieneCuotas && m.estado === 'pendiente') {
                       aplicaImporte = !m.usaDescuento
                       aplicaDesc = m.usaDescuento
                     } else {
@@ -232,7 +233,7 @@ export function ConductorDetalleModal({ conductor, onClose }: { conductor: Condu
                         <td>{fmtFecha(m.fecha)}</td>
                         <td className="cdet-trunc" title={m.infraccion || ''}>{m.infraccion || '—'}</td>
                         <td>{m.patente || '—'}</td>
-                        <td><span className={`cdet-tag ${m.estado === 'pagada' ? 'ok' : m.estado === 'enProceso' ? 'impaga' : 'pend'}`}>{m.estado === 'pagada' ? 'Pagada' : m.estado === 'enProceso' ? 'En proceso' : 'Pendiente'}</span></td>
+                        <td><span className={`cdet-tag ${m.estado === 'pagada' ? 'ok' : 'pend'}`}>{m.estado === 'pagada' ? 'Pagada' : 'Pendiente'}</span></td>
                         <td className={`r ${aplicaImporte ? 'cdet-aplica' : ''}`}>{formatCurrency(m.importe)}</td>
                         <td className={`r ${aplicaDesc ? 'cdet-aplica' : ''}`}>{m.importeDescuento > 0 ? formatCurrency(m.importeDescuento) : '—'}</td>
                         <td>
@@ -243,7 +244,7 @@ export function ConductorDetalleModal({ conductor, onClose }: { conductor: Condu
                             : '—'}
                         </td>
                         <td className="r">
-                          {m.estado === 'enProceso'
+                          {tieneCuotas
                             ? (m.cuotas && m.cuotas.length
                                 ? <div className="cdet-cuotas">
                                     <div className="cdet-cuotas-head" aria-hidden="true">&nbsp;</div>
@@ -257,7 +258,7 @@ export function ConductorDetalleModal({ conductor, onClose }: { conductor: Condu
                             : <b>{formatCurrency(m.monto)}</b>}
                         </td>
                         <td>
-                          {m.estado === 'enProceso'
+                          {tieneCuotas
                             ? (() => {
                                 const cu = m.cuotas || []
                                 if (cu.length === 0) return 'Fraccionada'

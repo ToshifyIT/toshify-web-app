@@ -58,10 +58,10 @@ export function SemanaDetalleModal({
   const totalAportado = pagos.reduce((s, p) => s + p.monto, 0)
   const saldoAnterior = semana.saldoAnterior
 
-  // Monto Total Referencial y saldo se calculan desde los conceptos, IGUAL que Mi Espacio:
-  //  referencial = cargos - descuentos + saldo anterior; pendiente = referencial - aportes.
-  // (No se usa total_a_pagar/proforma porque puede tener centavos de redondeo distintos.)
-  const montoReferencial = subtotalCargos - subtotalDescuentos + saldoAnterior
+  // Monto Total Referencial y Pendiente se toman del total_a_pagar de la factura
+  // (semana.proforma), que conserva los centavos reales. El desglose de conceptos
+  // puede sumar redondeado y quedar unos centavos por debajo del total.
+  const montoReferencial = semana.proforma
   const pendiente = montoReferencial - totalAportado
   const pendienteMostrado = Math.abs(pendiente) < 0.01 ? 0 : Math.abs(pendiente)
   const estadoTxt = pendiente > 0.01 ? 'Pendiente de pago' : pendiente < -0.01 ? 'Saldo a favor' : 'Sin saldo'
