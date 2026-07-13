@@ -23,23 +23,39 @@ export function ExcesoKmDetalleDrawer({ row, onClose }: Props) {
   // Agrupar el detalle por FECHA (día calendario ART). Cada marcación trae su
   // desgloseDiario (km por día ya calculado desde los trips en useExcesoKmData);
   // si faltara, cae al agregado de la marcación (fecha del primer trip).
-  const porFecha = new Map<string, { km: number; patentes: Set<string> }>()
+  const porFecha = new Map<string, { km: number; patentes: Set<string>; fechaFin: string; madrugada: boolean; noche: boolean }>()
   for (const m of row.detalle) {
     const dias = (m.desgloseDiario && m.desgloseDiario.length > 0)
       ? m.desgloseDiario
-      : [{ fecha: m.fecha, kmTotal: m.kmTotal || 0, patente: m.patente }]
+      : [{ fecha: m.fecha, fechaFin: m.fecha, kmTotal: m.kmTotal || 0, patente: m.patente, tieneMadrugada: false, tieneNoche: false }]
     for (const d of dias) {
-      const acc = porFecha.get(d.fecha) || { km: 0, patentes: new Set<string>() }
+      const acc = porFecha.get(d.fecha) || { km: 0, patentes: new Set<string>(), fechaFin: d.fecha, madrugada: false, noche: false }
       acc.km += d.kmTotal || 0
       if (d.patente) acc.patentes.add(d.patente.replace(/\s/g, ''))
+      if (d.fechaFin && d.fechaFin > acc.fechaFin) acc.fechaFin = d.fechaFin
+      if (d.tieneMadrugada) acc.madrugada = true
+      if (d.tieneNoche) acc.noche = true
       porFecha.set(d.fecha, acc)
     }
+  }
+  // Día siguiente de un YYYY-MM-DD (aritmética de calendario local, sin TZ)
+  const diaSiguiente = (fecha: string): string => {
+    const [y, m, d] = fecha.split('-').map(Number)
+    const dt = new Date(y, m - 1, d + 1, 12, 0, 0)
+    return `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}`
   }
   const diasOrdenados = [...porFecha.entries()].sort((a, b) => a[0].localeCompare(b[0]))
   let acumulado = 0
   const diasConAcum = diasOrdenados.map(([fecha, d]) => {
     acumulado += d.km
-    return { fecha, km: d.km, patentes: [...d.patentes], acumulado, excedeAqui: acumulado > row.limite }
+    // Evidencia del turno nocturno que sigue al día siguiente (solo fechas, sin horas):
+    // el día X muestra "X → X+1" si el conductor es nocturno, ese día tuvo actividad de
+    // noche y el día siguiente tiene actividad de madrugada (la cola del mismo turno).
+    // Los km de esa madrugada siguen contando al día siguiente (criterio por fecha).
+    const sig = diaSiguiente(fecha)
+    const cruzaTurno = row.horario === 'nocturno' && d.noche && (porFecha.get(sig)?.madrugada === true)
+    const fechaHasta = d.fechaFin > fecha ? d.fechaFin : (cruzaTurno ? sig : null)
+    return { fecha, fechaHasta, km: d.km, patentes: [...d.patentes], acumulado, excedeAqui: acumulado > row.limite }
   })
 
   return (
@@ -100,7 +116,7 @@ export function ExcesoKmDetalleDrawer({ row, onClose }: Props) {
             <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 10, textTransform: 'uppercase', letterSpacing: '0.3px' }}>
               Km recorridos por día ({diasConAcum.length})
             </div>
-            {diasConAcum.map(({ fecha, km, patentes, acumulado: acumActual, excedeAqui }) => {
+            {diasConAcum.map(({ fecha, fechaHasta, km, patentes, acumulado: acumActual, excedeAqui }) => {
               const pctAcum = (acumActual / row.limite) * 100
               const pctBar = Math.min(100, pctAcum)
               let barColor = '#16a34a'
@@ -119,6 +135,11 @@ export function ExcesoKmDetalleDrawer({ row, onClose }: Props) {
                     <div style={{ display: 'flex', flexDirection: 'column', lineHeight: 1.3, flex: 1, minWidth: 0 }}>
                       <span style={{ fontFamily: 'monospace', fontSize: 12, fontWeight: 600, color: 'var(--text-primary)' }}>
                         {formatFecha(fecha)}
+                        {/* Nocturnos: el turno de esta noche continuó a la madrugada del día
+                            siguiente — se evidencia el cruce solo con fechas (sin horas) */}
+                        {fechaHasta && (
+                          <span style={{ color: 'var(--text-tertiary)', fontWeight: 500 }}> → {formatFecha(fechaHasta)}</span>
+                        )}
                       </span>
                       <span style={{ fontSize: 10, color: 'var(--text-tertiary)' }}>
                         {patentes.join(' - ')}
