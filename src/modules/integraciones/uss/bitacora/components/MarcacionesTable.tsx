@@ -13,6 +13,7 @@ import type { Marcacion } from '../hooks/useUSSHistoricoData';
 import { normalizePatente } from '../../../../../utils/normalizeDocuments';
 import * as XLSX from 'xlsx';
 import { PatenteDetalleDrawer } from './PatenteDetalleDrawer';
+import { ConductorHistorialModal } from './ConductorHistorialModal';
 
 // Conductor malformado de Wialon: iButton sin nombre (ej: "81-", "142-").
 // Lo mostramos como "Sin conductor" para que no aparezca como basura en el filtro.
@@ -200,6 +201,22 @@ export function MarcacionesTable({
   // Marcación seleccionada para ver el modal de alerta (turno/modalidad sin match)
   const [alertaMarcacion, setAlertaMarcacion] = useState<Marcacion | null>(null);
 
+  // Modo historial (oculto): Ctrl+Shift+H habilita el click sobre el nombre del
+  // conductor para abrir su historial de vehículos y bajas. Mismo atajo para
+  // desactivarlo. Solo filas con conductor identificado (conductorId).
+  const [historialActivo, setHistorialActivo] = useState(false);
+  const [historialConductor, setHistorialConductor] = useState<{ id: string; nombre: string } | null>(null);
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.ctrlKey && e.shiftKey && (e.key === 'H' || e.key === 'h')) {
+        e.preventDefault();
+        setHistorialActivo(v => !v);
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
+
   // Listas únicas — filtro por nombre de conductor (sin patente)
   const conductorPatenteUnicos = useMemo(() => {
     const set = new Set<string>();
@@ -365,7 +382,18 @@ export function MarcacionesTable({
         const m = row.original;
         return (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '1px', lineHeight: 1.3 }}>
-            <span style={{ fontWeight: 600, fontSize: '13px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+            <span
+              style={{
+                fontWeight: 600, fontSize: '13px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+                ...(historialActivo && m.conductorId
+                  ? { color: 'var(--color-primary)', textDecoration: 'underline', cursor: 'pointer' }
+                  : {}),
+              }}
+              onClick={historialActivo && m.conductorId
+                ? () => setHistorialConductor({ id: String(m.conductorId), nombre: conductorLabel(m.conductor) })
+                : undefined}
+              title={historialActivo && m.conductorId ? 'Ver historial del conductor' : undefined}
+            >
               {m.conductor}
             </span>
             <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
@@ -612,7 +640,7 @@ export function MarcacionesTable({
       enableSorting: false,
     },
   ], [conductorPatenteUnicos, conductorFilter, fechasUnicas, fechaFilter,
-      estadosUnicos, estadoFilter, horariosUnicos, horarioFilter, turnosUnicos, turnoFilter, openFilterId, onUpdateChecklist]);
+      estadosUnicos, estadoFilter, horariosUnicos, horarioFilter, turnosUnicos, turnoFilter, openFilterId, onUpdateChecklist, historialActivo]);
 
   // Exportar
   const [showExportMenu, setShowExportMenu] = useState(false);
@@ -808,6 +836,15 @@ export function MarcacionesTable({
         semanaFin={semanaFin || ''}
         onClose={() => setDetalleMarcacion(null)}
       />
+
+      {/* Historial del conductor (modo oculto Ctrl+Shift+H) */}
+      {historialConductor && (
+        <ConductorHistorialModal
+          conductorId={historialConductor.id}
+          conductorNombre={historialConductor.nombre}
+          onClose={() => setHistorialConductor(null)}
+        />
+      )}
 
       {/* Modal de alerta: turno/modalidad sin match */}
       {alertaMarcacion && (
