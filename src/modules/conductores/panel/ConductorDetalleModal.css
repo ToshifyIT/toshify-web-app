@@ -12,7 +12,7 @@
 .cdet-modal {
   position: relative;
   width: 100%;
-  max-width: 980px;
+  max-width: 1200px;
   max-height: 88vh;
   display: flex;
   flex-direction: column;
@@ -164,6 +164,7 @@
   padding: 9px 10px;
   border-bottom: 1px solid #f6f7f8;
   color: #374151;
+  white-space: nowrap;
 }
 .cdet-table td.danger { color: #dc2626; font-weight: 600; }
 .cdet-trunc { max-width: 280px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

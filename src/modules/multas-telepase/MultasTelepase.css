@@ -368,3 +368,40 @@
   padding: 10px 0;
   color: var(--text-primary);
 }
+
+/* Celda "Detalle de Infracción" con tooltip completo al pasar el mouse */
+.multa-detalle {
+  position: relative;
+  display: inline-block;
+  max-width: 260px;
+  vertical-align: bottom;
+}
+.multa-detalle-txt {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.multa-detalle-tip {
+  display: none;
+  position: absolute;
+  left: 0;
+  bottom: calc(100% + 4px);
+  z-index: 100;
+  background: #111827;
+  color: #fff;
+  padding: 8px 10px;
+  border-radius: 8px;
+  font-size: 12px;
+  line-height: 1.4;
+  font-weight: 400;
+  white-space: normal;
+  width: max-content;
+  max-width: 340px;
+  text-transform: none;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.25);
+  pointer-events: none;
+}
+.multa-detalle:hover .multa-detalle-tip {
+  display: block;
+}

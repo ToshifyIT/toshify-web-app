@@ -10,8 +10,8 @@ export interface MultaDetalle {
   fecha: string | null
   infraccion: string | null
   patente: string | null
-  estado: 'pendiente' | 'enProceso' | 'pagada'
-  monto: number                    // monto efectivo (penalidad si pagada/proceso; importe con/sin descuento si pendiente)
+  estado: 'pendiente' | 'pagada'   // fraccionada: 'pagada' solo si TODAS las cuotas están cobradas; si no, 'pendiente'
+  monto: number                    // monto efectivo (penalidad si pagada/fraccionada; importe con/sin descuento si pendiente)
   importe: number                  // importe original de la multa
   importeDescuento: number         // importe con descuento (0 si no tiene)
   fechaVencDescuento: string | null
@@ -113,6 +113,25 @@ export async function cargarMultasConductor(cond: { id: string; nombres: string 
     return c.includes(primerNombre) && c.includes(primerApellido)
   })
 
+  // Monto de la incidencia MÁS RECIENTE por multa (lo realmente enviado a facturar).
+  // Si la multa tiene incidencia, ese monto tiene prioridad sobre la lógica de importe/desc.
+  const incidenciaMonto = new Map<string, number>()
+  const multaIds = filtradas.map(m => m.id)
+  if (multaIds.length > 0) {
+    const { data: incData } = await (supabase.from('incidencias' as any) as any)
+      .select('multa_id, monto, created_at')
+      .in('multa_id', multaIds)
+    const tmp = new Map<string, { monto: number; fecha: string }>()
+    for (const r of (incData || []) as Array<any>) {
+      if (r.multa_id == null) continue
+      const mid = String(r.multa_id)
+      const fecha = r.created_at || ''
+      const prev = tmp.get(mid)
+      if (!prev || fecha >= prev.fecha) tmp.set(mid, { monto: Number(r.monto) || 0, fecha })
+    }
+    for (const [k, v] of tmp) incidenciaMonto.set(k, v.monto)
+  }
+
   const detalle = filtradas.map((m): MultaDetalle => {
     const est = estadoPorMulta.get(String(m.id))
     const importe = parseImporte(m.importe)
@@ -130,8 +149,11 @@ export async function cargarMultasConductor(cond: { id: string; nombres: string 
       estado = 'pagada'; monto = est.monto
       semanaPago = est.semana != null ? `S${est.semana}/${est.anio ?? anioMulta ?? ''}` : null
     } else if (est?.estado === 'fraccionada') {
-      estado = 'enProceso'; monto = est.monto
+      // Fraccionada: se muestran las cuotas. Queda "pagada" solo si TODAS están cobradas.
       cuotas = est.penId ? (cuotasPorPen.get(est.penId) || null) : null
+      const todasCobradas = !!cuotas && cuotas.length > 0 && cuotas.every(c => c.aplicado)
+      estado = todasCobradas ? 'pagada' : 'pendiente'
+      monto = est.monto
     } else {
       // Pendiente: no se pagó, así que no hay semana de pago.
       estado = 'pendiente'
@@ -139,6 +161,9 @@ export async function cargarMultasConductor(cond: { id: string; nombres: string 
       monto = usaDescuento ? importeDescuento : importe
       semanaPago = null
     }
+    // Si la multa fue enviada a incidencia, el monto se toma de ahí (prioridad).
+    const inciMonto = incidenciaMonto.get(String(m.id))
+    if (inciMonto != null) monto = inciMonto
     return {
       id: String(m.id),
       fecha: m.fecha_infraccion,
@@ -199,7 +224,7 @@ export async function cargarDetalleSemana(
   const [{ data: det }, vehRes, pagosRes] = await Promise.all([
     supabase
       .from('facturacion_detalle')
-      .select('concepto_codigo, concepto_descripcion, total, es_descuento')
+      .select('concepto_codigo, concepto_descripcion, cantidad, precio_unitario, total, es_descuento')
       .eq('facturacion_id', facturaId)
       .order('es_descuento'),
     patente
@@ -216,11 +241,21 @@ export async function cargarDetalleSemana(
 
   const conceptos: ConceptoDetalle[] = ((det || []) as Array<any>)
     .filter(d => d.concepto_codigo !== 'SALDO' && Number(d.total || 0) !== 0)
-    .map(d => ({
-      nombre: d.concepto_descripcion || d.concepto_codigo || 'Concepto',
-      total: Number(d.total || 0),
-      esDescuento: d.es_descuento === true,
-    }))
+    .map(d => {
+      // Se prioriza precio_unitario × cantidad (el valor con centavos que usa la
+      // factura para el total_a_pagar). Si no hay unitario/cantidad, se usa el total
+      // guardado (que puede venir redondeado a entero).
+      const cant = Number(d.cantidad)
+      const pu = Number(d.precio_unitario)
+      const total = (Number.isFinite(cant) && cant !== 0 && Number.isFinite(pu) && pu !== 0)
+        ? cant * pu
+        : Number(d.total || 0)
+      return {
+        nombre: d.concepto_descripcion || d.concepto_codigo || 'Concepto',
+        total,
+        esDescuento: d.es_descuento === true,
+      }
+    })
 
   const pagos: PagoAporte[] = ((pagosRes.data || []) as Array<any>).map(p => ({
     id: String(p.id),
