@@ -69,8 +69,10 @@ export interface Marcacion {
   marcacionesDetalle?: Array<{ fecha: string; entrada: string; salida: string; kmTotal: number; duracionMinutos: number | null; patente: string; estado: string; gpsOrigen: 'USS' | 'GEOTAB' }>;
   // Km por día calendario ART del turno — solo presentación (drawer de Control de
   // Exceso KM). Cada trip aporta al día de su fecha de inicio; la suma de los días
-  // es exactamente kmTotal.
-  desgloseDiario?: Array<{ fecha: string; kmTotal: number; patente: string }>;
+  // es exactamente kmTotal. fechaFin = fecha ART en que terminó el último viaje
+  // iniciado ese día. tieneMadrugada/tieneNoche (viajes iniciados antes/después de
+  // las 12) permiten evidenciar turnos nocturnos que siguen al día siguiente, sin horas.
+  desgloseDiario?: Array<{ fecha: string; fechaFin: string; kmTotal: number; patente: string; tieneMadrugada: boolean; tieneNoche: boolean }>;
 }
 
 export interface USSHistoricoDateRange {

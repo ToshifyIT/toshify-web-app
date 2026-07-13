@@ -571,18 +571,34 @@ export function useExcesoKmData(sedeId?: string | null) {
         // Km por día calendario ART (solo presentación, para el drawer de detalle).
         // Cada trip aporta al día de su fecha de inicio — mismo criterio con el que
         // el módulo asigna km a la semana. No altera ningún cálculo: la suma de los
-        // días es exactamente kmTotal.
-        const kmPorDia = new Map<string, number>()
+        // días es exactamente kmTotal. fechaFin = fecha ART de fin del último viaje
+        // iniciado ese día. tieneMadrugada/tieneNoche (inicio antes/después de las 12,
+        // hora ART) sirven para que el drawer evidencie turnos nocturnos que continúan
+        // al día siguiente — USS corta los viajes en el encendido, así que un turno
+        // nocturno son viajes de noche + viajes de madrugada del día siguiente.
+        const kmPorDia = new Map<string, { km: number; finMs: number; madrugada: boolean; noche: boolean }>()
         for (const x of t.trips) {
           const f = new Date(x.inicioMs).toLocaleDateString('en-CA', { timeZone: TIMEZONE_ARGENTINA })
-          kmPorDia.set(f, (kmPorDia.get(f) || 0) + x.kmNum)
+          const hora = parseInt(new Date(x.inicioMs).toLocaleTimeString('en-GB', { timeZone: TIMEZONE_ARGENTINA, hour: '2-digit', hour12: false }), 10)
+          const esMadrugada = hora < 12
+          const d = kmPorDia.get(f)
+          if (!d) kmPorDia.set(f, { km: x.kmNum, finMs: x.finMs, madrugada: esMadrugada, noche: !esMadrugada })
+          else {
+            d.km += x.kmNum
+            if (x.finMs > d.finMs) d.finMs = x.finMs
+            if (esMadrugada) d.madrugada = true
+            else d.noche = true
+          }
         }
         const desgloseDiario = [...kmPorDia.entries()]
           .sort((a, b) => a[0].localeCompare(b[0]))
-          .map(([fecha, km]) => ({
+          .map(([fecha, d]) => ({
             fecha,
-            kmTotal: Math.round(km * 100) / 100,
+            fechaFin: new Date(d.finMs).toLocaleDateString('en-CA', { timeZone: TIMEZONE_ARGENTINA }),
+            kmTotal: Math.round(d.km * 100) / 100,
             patente: t.patente,
+            tieneMadrugada: d.madrugada,
+            tieneNoche: d.noche,
           }))
 
         const m: Marcacion = {
