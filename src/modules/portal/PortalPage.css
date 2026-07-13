@@ -746,6 +746,20 @@
 .portal-multas-col-head--pagada { color: #059669; }
 .portal-multas-col-head--fraccionada { color: #d97706; }
 .portal-multas-col-total { font-family: monospace; font-weight: 800; }
+/* Variante doble (solo Pendientes de multas): total original tachado arriba + total
+   con descuentos vigentes abajo, mismo patrón visual que las cards de multa. */
+.portal-multas-col-total--doble {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  line-height: 1.3;
+}
+.portal-multas-col-total-tachado {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--text-tertiary);
+  text-decoration: line-through;
+}
 /* Semana en que se facturó la multa (solo cards de la columna Pagadas). */
 /* Card de multa: apila la fila de fecha (full-width) sobre el cuerpo (texto + monto).
    Especificidad doble (.portal-week-card.portal-multa-card) para ganarle al
