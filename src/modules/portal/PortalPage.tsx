@@ -2571,9 +2571,24 @@ export function PortalPage({ embeddedConductorId }: { embeddedConductorId?: stri
                     <div className="portal-multas-col">
                       <div className="portal-multas-col-head portal-multas-col-head--pendiente">
                         <span>Pendientes <span className="portal-multas-count">{multasPendientes.length}</span></span>
-                        {/* Total = suma del valor en rojo de cada multa (importePendiente aplica la
-                            regla de descuento por fecha): cambia solo cuando una multa vence el descuento. */}
-                        <span className="portal-multas-col-total">{formatCurrency(multasPendientes.reduce((s, m) => s + parseImporte(importePendiente(m, new Date()).texto), 0))}</span>
+                        {/* Total con el mismo patrón visual que las cards: arriba tachado la suma de
+                            importes originales (lo que cuadra con el módulo interno de Multas); abajo
+                            en rojo la suma del valor vigente de cada multa (importePendiente aplica la
+                            regla de descuento por fecha). Si no hay descuentos vigentes coinciden y
+                            el tachado se oculta. */}
+                        {(() => {
+                          const hoy = new Date()
+                          const totalVigente = multasPendientes.reduce((s, m) => s + parseImporte(importePendiente(m, hoy).texto), 0)
+                          const totalOriginal = multasPendientes.reduce((s, m) => s + parseImporte(m.importe), 0)
+                          return (
+                            <span className="portal-multas-col-total portal-multas-col-total--doble">
+                              {totalOriginal - totalVigente > 0.01 && (
+                                <span className="portal-multas-col-total-tachado">{formatCurrency(totalOriginal)}</span>
+                              )}
+                              <span>{formatCurrency(totalVigente)}</span>
+                            </span>
+                          )
+                        })()}
                       </div>
                       {multasPendientes.length > 0 ? (
                         <div className="portal-weeks">{multasPendientes.map(m => renderMultaCard(m))}</div>
