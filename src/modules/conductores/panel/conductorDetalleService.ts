@@ -270,7 +270,8 @@ export async function cargarDetalleSemana(
 }
 
 export interface ExcesoKmSemana {
-  monto: number                 // monto cobrado por el exceso de esa semana
+  monto: number                 // monto cobrado por el exceso de esa semana (de la incidencia)
+  kmExceso: number              // km excedidos según la incidencia (fuente de verdad del cobro)
   // Semana(s) en que se cobró el exceso (cuotas si es fraccionado; la semana de
   // aplicación si es pago único). Vacío si la penalidad aún no se aplicó.
   semanasPago: Array<{ semana: number; anio: number; aplicado: boolean }>
@@ -298,12 +299,13 @@ export async function cargarExcesoKmConductor(conductorId: string): Promise<Exce
   // Incidencia (exceso) por id -> semana del exceso + monto.
   const incById = new Map<string, { semana: number | null; monto: number }>()
   const porSemana = new Map<number, ExcesoKmSemana>()
-  for (const i of (incs || []) as Array<{ id: unknown; semana: number | null; monto: unknown }>) {
+  for (const i of (incs || []) as Array<{ id: unknown; semana: number | null; monto: unknown; km_exceso: unknown }>) {
+    const km = Number(i.km_exceso) || 0
     incById.set(String(i.id), { semana: i.semana ?? null, monto: parseImporte(i.monto) })
     if (i.semana != null) {
       const prev = porSemana.get(i.semana)
-      if (prev) prev.monto += parseImporte(i.monto)
-      else porSemana.set(i.semana, { monto: parseImporte(i.monto), semanasPago: [] })
+      if (prev) { prev.monto += parseImporte(i.monto); prev.kmExceso += km }
+      else porSemana.set(i.semana, { monto: parseImporte(i.monto), kmExceso: km, semanasPago: [] })
     }
   }
 
@@ -435,18 +437,43 @@ export interface AsignacionHist {
   estadoAsig: string | null      // estado de la asignación padre
   fechaInicio: string | null
   fechaFin: string | null
+  companero: string | null       // conductor del otro turno en la misma asignación
 }
 export async function cargarAsignacionesConductor(conductorId: string): Promise<AsignacionHist[]> {
   const { data } = await supabase
     .from('asignaciones_conductores')
-    .select('id, horario, estado, fecha_inicio, fecha_fin, created_at, asignaciones!inner(codigo, estado, modalidad, fecha_inicio, fecha_fin, vehiculos(patente, marca, modelo, anio))')
+    .select('id, asignacion_id, horario, estado, fecha_inicio, fecha_fin, created_at, asignaciones!inner(codigo, estado, modalidad, fecha_inicio, fecha_fin, vehiculos(patente, marca, modelo, anio))')
     .eq('conductor_id', conductorId)
     .not('asignaciones.estado', 'eq', 'cancelada')
     .order('created_at', { ascending: false })
-  return ((data || []) as Array<any>).map((r) => {
+
+  const rows = (data || []) as Array<any>
+
+  // Compañero: el/los otro/s conductor/es de la misma asignación (el turno opuesto).
+  const companerosPorAsig = new Map<string, Set<string>>()
+  const asigIds = [...new Set(rows.map(r => r.asignacion_id).filter(Boolean).map(String))]
+  if (asigIds.length > 0) {
+    const { data: otros } = await supabase
+      .from('asignaciones_conductores')
+      .select('asignacion_id, conductor_id, conductores(nombres, apellidos)')
+      .in('asignacion_id', asigIds)
+      .neq('conductor_id', conductorId)
+    for (const o of (otros || []) as Array<any>) {
+      const c = o.conductores
+      const nombre = c ? [c.nombres, c.apellidos].filter(Boolean).join(' ').trim() : ''
+      if (!nombre) continue
+      const key = String(o.asignacion_id)
+      const set = companerosPorAsig.get(key) || new Set<string>()
+      set.add(nombre)
+      companerosPorAsig.set(key, set)
+    }
+  }
+
+  return rows.map((r) => {
     const a = r.asignaciones
     const v = a?.vehiculos
     const veh = v ? [v.marca, v.modelo].filter(Boolean).join(' ') + (v.anio ? ` (${v.anio})` : '') : null
+    const comp = companerosPorAsig.get(String(r.asignacion_id))
     return {
       id: String(r.id),
       patente: v?.patente ?? a?.codigo ?? null,
@@ -457,6 +484,7 @@ export async function cargarAsignacionesConductor(conductorId: string): Promise<
       estadoAsig: a?.estado ?? null,
       fechaInicio: r.fecha_inicio ?? a?.fecha_inicio ?? null,
       fechaFin: r.fecha_fin ?? a?.fecha_fin ?? null,
+      companero: comp && comp.size > 0 ? [...comp].join(', ') : null,
     }
   })
 }
