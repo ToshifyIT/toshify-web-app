@@ -38,6 +38,13 @@ function turnoLabel(t: string | null): string {
   return TURNO_LABELS[t] || t
 }
 
+// Valor para el filtro de las columnas de dinero: SIN separador de miles, para que
+// se pueda buscar tipeando el número plano (ej. "142498"). La tabla igual muestra el
+// monto formateado con coma en la celda.
+function montoFiltro(n: number | null | undefined): string {
+  return `$ ${Number(n || 0).toFixed(2)}`
+}
+
 export function ConductoresPanelModule() {
   const { sedeActualId } = useSede()
 
@@ -91,7 +98,9 @@ export function ConductoresPanelModule() {
   const columns = useMemo<ColumnDef<ConductorPanelRow, unknown>[]>(() => [
     {
       id: 'conductor',
-      accessorFn: (r) => `${r.nombre} ${r.dni || ''} ${r.ruc || ''}`,
+      // Solo el nombre: así el filtro de columna muestra únicamente nombres. La
+      // búsqueda global sigue matcheando por DNI/CUIT porque lee los campos crudos.
+      accessorFn: (r) => r.nombre || '',
       header: 'Conductor',
       cell: ({ row }) => (
         <div>
@@ -107,7 +116,8 @@ export function ConductoresPanelModule() {
     },
     {
       id: 'patente',
-      accessorFn: (r) => r.vehiculoAsignado || '',
+      // Sin patente -> "Sin asignación", para que aparezca como opción en el filtro.
+      accessorFn: (r) => r.vehiculoAsignado || 'Sin asignación',
       header: 'Patente',
       cell: ({ row }) => row.original.vehiculoAsignado
         ? <span className="cpanel-badge asig">{row.original.vehiculoAsignado}</span>
@@ -131,20 +141,77 @@ export function ConductoresPanelModule() {
         </span>
       ),
     },
-    { accessorKey: 'cantidadMultas', header: 'Multas', cell: ({ getValue }) => <span className="cpanel-num">{getValue() as number}</span> },
-    { accessorKey: 'pendientes', header: 'Pendientes', cell: ({ getValue }) => <span className="cpanel-num">{getValue() as number}</span> },
-    { accessorKey: 'enProceso', header: 'En Proceso', cell: ({ getValue }) => <span className="cpanel-num">{getValue() as number}</span> },
-    { accessorKey: 'pagadas', header: 'Pagadas', cell: ({ getValue }) => <span className="cpanel-num">{getValue() as number}</span> },
+    // Columnas de conteo con filtro de LISTA (valores únicos + buscador) en vez del
+    // rango Desde/Hasta. El id no usa palabras numéricas y el accessor devuelve texto,
+    // así el DataTable no las trata como numéricas. El orden numérico se mantiene con
+    // un sortingFn propio.
     {
-      id: 'vehiculos',
-      accessorFn: (r) => r.vehiculos.length,
+      id: 'qMul',
+      accessorFn: (r) => String(r.cantidadMultas),
+      header: 'Multas',
+      sortingFn: (a, b) => (a.original.cantidadMultas || 0) - (b.original.cantidadMultas || 0),
+      cell: ({ row }) => <span className="cpanel-num">{row.original.cantidadMultas}</span>,
+    },
+    {
+      id: 'qPend',
+      accessorFn: (r) => String(r.pendientes),
+      header: 'Pendientes',
+      sortingFn: (a, b) => (a.original.pendientes || 0) - (b.original.pendientes || 0),
+      cell: ({ row }) => <span className="cpanel-num">{row.original.pendientes}</span>,
+    },
+    {
+      id: 'qProc',
+      accessorFn: (r) => String(r.enProceso),
+      header: 'En Proceso',
+      sortingFn: (a, b) => (a.original.enProceso || 0) - (b.original.enProceso || 0),
+      cell: ({ row }) => <span className="cpanel-num">{row.original.enProceso}</span>,
+    },
+    {
+      id: 'qPag',
+      accessorFn: (r) => String(r.pagadas),
+      header: 'Pagadas',
+      sortingFn: (a, b) => (a.original.pagadas || 0) - (b.original.pagadas || 0),
+      cell: ({ row }) => <span className="cpanel-num">{row.original.pagadas}</span>,
+    },
+    {
+      id: 'qVeh',
+      accessorFn: (r) => String(r.vehiculos.length),
       header: 'Vehículos',
+      sortingFn: (a, b) => a.original.vehiculos.length - b.original.vehiculos.length,
       cell: ({ row }) => <span className="cpanel-num" title={row.original.vehiculos.join(', ')}>{row.original.vehiculos.length}</span>,
     },
-    { accessorKey: 'montoPendiente', header: 'Multas Pendientes', cell: ({ getValue }) => <span className="cpanel-num">{formatCurrency(getValue() as number)}</span> },
-    { accessorKey: 'montoEnProceso', header: 'Multas En Proceso', cell: ({ getValue }) => <span className="cpanel-num">{formatCurrency(getValue() as number)}</span> },
-    { accessorKey: 'montoPagado', header: 'Multas Pagadas', cell: ({ getValue }) => <span className="cpanel-num">{formatCurrency(getValue() as number)}</span> },
-    { accessorKey: 'montoTotalMultas', header: 'Monto Total', cell: ({ getValue }) => <span className="cpanel-num">{formatCurrency(getValue() as number)}</span> },
+    // Columnas de dinero con filtro de LISTA (valores únicos + buscador) en vez del
+    // rango Desde/Hasta. Para que el DataTable no las detecte como numéricas, el id no
+    // usa palabras de dinero y el accessor devuelve el valor formateado (texto). El
+    // orden numérico se preserva con un sortingFn propio que compara el número crudo.
+    {
+      id: 'fPendiente',
+      accessorFn: (r) => montoFiltro(r.montoPendiente),
+      header: 'Multas Pendientes',
+      sortingFn: (a, b) => (a.original.montoPendiente || 0) - (b.original.montoPendiente || 0),
+      cell: ({ row }) => <span className="cpanel-num">{formatCurrency(row.original.montoPendiente)}</span>,
+    },
+    {
+      id: 'fProceso',
+      accessorFn: (r) => montoFiltro(r.montoEnProceso),
+      header: 'Multas En Proceso',
+      sortingFn: (a, b) => (a.original.montoEnProceso || 0) - (b.original.montoEnProceso || 0),
+      cell: ({ row }) => <span className="cpanel-num">{formatCurrency(row.original.montoEnProceso)}</span>,
+    },
+    {
+      id: 'fPagadas',
+      accessorFn: (r) => montoFiltro(r.montoPagado),
+      header: 'Multas Pagadas',
+      sortingFn: (a, b) => (a.original.montoPagado || 0) - (b.original.montoPagado || 0),
+      cell: ({ row }) => <span className="cpanel-num">{formatCurrency(row.original.montoPagado)}</span>,
+    },
+    {
+      id: 'fGeneral',
+      accessorFn: (r) => montoFiltro(r.montoTotalMultas),
+      header: 'Monto Total',
+      sortingFn: (a, b) => (a.original.montoTotalMultas || 0) - (b.original.montoTotalMultas || 0),
+      cell: ({ row }) => <span className="cpanel-num">{formatCurrency(row.original.montoTotalMultas)}</span>,
+    },
     {
       id: 'acciones',
       header: 'Acciones',

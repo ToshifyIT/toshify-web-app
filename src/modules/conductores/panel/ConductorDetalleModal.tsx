@@ -353,23 +353,25 @@ export function ConductorDetalleModal({ conductor, onClose }: { conductor: Condu
                 </tr></thead>
                 <tbody>
                   {km.map(k => {
-                    // "Hay exceso" lo define el km recorrido de la semana (excedido > 0),
-                    // independientemente de si ya se generó la incidencia de cobro.
-                    const hayExceso = k.excedido > 0
+                    // Fuente de verdad del exceso: la INCIDENCIA. Una semana tiene exceso
+                    // (a cobrar) si tiene una incidencia de exceso de km. Su km excedido,
+                    // monto, estado y semana de pago salen de ahí.
                     const ex = excesoKm.porSemana.get(k.semana)
+                    const hayExceso = !!ex
                     const monto = ex?.monto
                     const semanasPago = ex?.semanasPago || []
-                    // Cubierto sólo si el exceso ya se cobró (todas las cuotas aplicadas).
-                    const excesoCubierto = semanasPago.length > 0 && semanasPago.every(s => s.aplicado)
+                    // Pagado sólo si el exceso ya se cobró (pago único aplicado o todas
+                    // las cuotas cobradas si es fraccionado).
+                    const excesoPagado = semanasPago.length > 0 && semanasPago.every(s => s.aplicado)
                     return (
                       <tr key={`${k.semana}-${k.anio}`}>
                         <td>S{k.semana}/{k.anio}</td>
                         <td className="r">{Math.round(k.km).toLocaleString('es-AR')}</td>
                         <td className="r">{Math.round(k.limite).toLocaleString('es-AR')}</td>
-                        <td className={`r ${k.excedido > 0 ? 'danger' : ''}`}>{k.excedido > 0 ? Math.round(k.excedido).toLocaleString('es-AR') : '—'}</td>
-                        <td>{!hayExceso ? 'N/A' : <span className={`cdet-tag ${excesoCubierto ? 'ok' : 'impaga'}`}>{excesoCubierto ? 'Cubierto' : 'Pendiente'}</span>}</td>
+                        <td className={`r ${hayExceso ? 'danger' : ''}`}>{ex ? Math.round(ex.kmExceso).toLocaleString('es-AR') : '—'}</td>
+                        <td>{!hayExceso ? 'N/A' : <span className={`cdet-tag ${excesoPagado ? 'ok' : 'impaga'}`}>{excesoPagado ? 'Pagado' : 'Pendiente'}</span>}</td>
                         <td>{turnoKmLabel(k.modalidad, k.horario)}</td>
-                        <td className={`r ${monto != null && monto > 0 ? 'danger' : ''}`}>{monto != null ? formatCurrency(monto) : (hayExceso ? 'Por cobrar' : 'N/A')}</td>
+                        <td className={`r ${monto != null && monto > 0 ? 'danger' : ''}`}>{monto != null ? formatCurrency(monto) : 'N/A'}</td>
                         <td>
                           {!hayExceso
                             ? '—'
@@ -393,7 +395,7 @@ export function ConductorDetalleModal({ conductor, onClose }: { conductor: Condu
             loadingHist ? <div className="cdet-empty">Cargando…</div> : asignaciones.length === 0 ? <div className="cdet-empty">Sin asignaciones registradas.</div> : (
               <table className="cdet-table">
                 <thead><tr>
-                  <th>Patente</th><th>Vehículo</th><th>Turno</th><th>Estado</th><th>Desde</th><th>Hasta</th>
+                  <th>Patente</th><th>Vehículo</th><th>Turno</th><th>Estado</th><th>Desde</th><th>Hasta</th><th>Compañero</th>
                 </tr></thead>
                 <tbody>
                   {asignaciones.map(a => {
@@ -406,6 +408,7 @@ export function ConductorDetalleModal({ conductor, onClose }: { conductor: Condu
                         <td><span className={`cdet-tag ${activa ? 'ok' : 'pend'}`}>{activa ? 'Activa' : (a.estadoAsig || a.estado || '—')}</span></td>
                         <td>{fmtFechaCorta(a.fechaInicio)}</td>
                         <td>{a.fechaFin ? fmtFechaCorta(a.fechaFin) : '—'}</td>
+                        <td className="cdet-trunc" title={a.companero || ''}>{a.companero || '—'}</td>
                       </tr>
                     )
                   })}
