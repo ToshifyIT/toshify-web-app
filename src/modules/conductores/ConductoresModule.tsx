@@ -5365,9 +5365,13 @@ function ModalDetalles({
                 const esBaja = b.tipo_evento === 'baja';
                 const color = esBaja ? '#dc2626' : '#059669';
                 const bg = esBaja ? 'rgba(220,38,38,0.06)' : 'rgba(5,150,105,0.06)';
-                const fecha = b.created_at
-                  ? new Date(b.created_at).toLocaleDateString('es-AR', { timeZone: 'America/Argentina/Buenos_Aires', day: '2-digit', month: '2-digit', year: 'numeric' })
-                  : '—';
+                // Mostrar la fecha efectiva de terminación (baja). Para reactivaciones,
+                // que no tienen fecha de terminación, se usa la de creación del registro.
+                const fecha = b.fecha_terminacion_nueva
+                  ? new Date(b.fecha_terminacion_nueva + 'T12:00:00').toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric' })
+                  : (b.created_at
+                      ? new Date(b.created_at).toLocaleDateString('es-AR', { timeZone: 'America/Argentina/Buenos_Aires', day: '2-digit', month: '2-digit', year: 'numeric' })
+                      : '—');
                 return (
                   <div key={b.id} style={{ borderLeft: `3px solid ${color}`, background: bg, borderRadius: '8px', padding: '10px 12px' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
