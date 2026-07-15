@@ -429,6 +429,7 @@ export function ReporteFacturacionTab() {
       observaciones: string | null
       fecha_baja: string | null
     } | null
+    fechaBaja?: string | null   // fecha_terminacion del conductor (baja), aunque no haya devolución
     preciosPorCodigo?: Record<string, number>
   } | null>(null)
   const [loadingDias, setLoadingDias] = useState(false)
@@ -1006,6 +1007,7 @@ export function ReporteFacturacionTab() {
         dias: diasSemana,
         historial: historialFiltrado,
         devolucion: devolucionInfo,
+        fechaBaja: conductorDesglose?.fecha_terminacion || null,
       })
     } catch {
       Swal.fire('Error', 'No se pudo cargar el desglose de días', 'error')
@@ -1720,11 +1722,15 @@ export function ReporteFacturacionTab() {
         return { ...f, proyectado_alquiler: Math.round(precioDiario * diasProyectados), _diasProyectados: diasProyectados }
       })
 
-      // Excluir conductores con 0 días y sin penalidades (igual que en Vista Previa)
+      // Excluir conductores con 0 días y sin penalidades (igual que en Vista Previa).
+      // Excepción: los dados de baja se muestran aunque queden en 0 días netos, porque
+      // pueden haber tenido un día que se descontó (ej. entrega fuera de turno el día de
+      // la baja). El recálculo solo les crea factura si tuvieron actividad real.
       facturacionesTransformadas = facturacionesTransformadas.filter((f: any) => {
         const diasTotales = f.turnos_cobrados || 0
         const tienePenalidades = (f.monto_penalidades || 0) !== 0
-        return diasTotales > 0 || tienePenalidades
+        const esDeBaja = f.estado_billing === 'De baja'
+        return diasTotales > 0 || tienePenalidades || esDeBaja
       })
 
       // Ordenar por nombre
@@ -2084,7 +2090,12 @@ export function ReporteFacturacionTab() {
         const cIni = ac.fecha_inicio ? parseISO(toArgDate(ac.fecha_inicio)) : null
         const pIni = asignacion.fecha_inicio ? parseISO(toArgDate(asignacion.fecha_inicio)) : null
         const inicioEfectivo = cIni && pIni ? (cIni > pIni ? cIni : pIni) : (cIni || pIni)
-        if (inicioEfectivo && inicioEfectivo < fechaInicioSemana) {
+        // Un tramo cuenta como "asignación previa" solo si se extiende más allá del primer día
+        // de la semana. Si terminó en el handoff del primer día, no aporta días -> no exime.
+        const cFinPrevVP = ac.fecha_fin ? parseISO(toArgDate(ac.fecha_fin)) : null
+        const pFinPrevVP = asignacion.fecha_fin ? parseISO(toArgDate(asignacion.fecha_fin)) : null
+        const finEfectivoPrevVP = cFinPrevVP && pFinPrevVP ? (cFinPrevVP < pFinPrevVP ? cFinPrevVP : pFinPrevVP) : (cFinPrevVP || pFinPrevVP)
+        if (inicioEfectivo && inicioEfectivo < fechaInicioSemana && (!finEfectivoPrevVP || finEfectivoPrevVP > fechaInicioSemana)) {
           conductoresConAsignacionPreviaVP.add(ac.conductor_id)
         }
         if (inicioEfectivo) {
@@ -3364,7 +3375,14 @@ export function ReporteFacturacionTab() {
         const cIni = ac.fecha_inicio ? parseISO(toArgDate(ac.fecha_inicio)) : null
         const pIni = asignacion.fecha_inicio ? parseISO(toArgDate(asignacion.fecha_inicio)) : null
         const inicioEfectivo = cIni && pIni ? (cIni > pIni ? cIni : pIni) : (cIni || pIni)
-        if (inicioEfectivo && inicioEfectivo < fechaInicioSemanaRecalc) {
+        // Un tramo cuenta como "asignación previa" (para eximir del descuento por entrega)
+        // solo si se extiende MÁS ALLÁ del primer día de la semana. Si terminó el mismo día
+        // en que arranca la semana (handoff), ese día lo toma la nueva asignación y este tramo
+        // no aporta días, así que no debe eximir del descuento (misma lógica que el desglose).
+        const cFinPrev = ac.fecha_fin ? parseISO(toArgDate(ac.fecha_fin)) : null
+        const pFinPrev = asignacion.fecha_fin ? parseISO(toArgDate(asignacion.fecha_fin)) : null
+        const finEfectivoPrev = cFinPrev && pFinPrev ? (cFinPrev < pFinPrev ? cFinPrev : pFinPrev) : (cFinPrev || pFinPrev)
+        if (inicioEfectivo && inicioEfectivo < fechaInicioSemanaRecalc && (!finEfectivoPrev || finEfectivoPrev > fechaInicioSemanaRecalc)) {
           conductoresConAsignacionPreviaRecalc.add(ac.conductor_id)
         }
         if (inicioEfectivo) {
@@ -3566,8 +3584,11 @@ export function ReporteFacturacionTab() {
           }
         }
 
-        // Excluir conductores con 0 días, SALVO que tengan penalidades pendientes o sean sin_cobro
-        if (totalDias === 0 && !dnisConPenalidadesRecalc.has(control.numero_dni) && !conductoresSinCobroRecalc.has(conductorData.id)) continue
+        // Excluir solo a los que NO tuvieron ningún día en la semana (nunca asignados).
+        // Si tuvo días brutos pero el neto quedó en 0 por descuento (ej. entrega fuera de
+        // turno), se mantiene visible con total_dias = 0. SALVO regla previa: penalidades
+        // pendientes o devolución sin_cobro también quedan.
+        if (totalDiasBrutos === 0 && !dnisConPenalidadesRecalc.has(control.numero_dni) && !conductoresSinCobroRecalc.has(conductorData.id)) continue
 
         // Priorizar estado_id: si el conductor está ACTIVO, no importa fecha_terminacion vieja
         const esDeBaja = conductorData.estado_id !== ESTADO_ACTIVO_ID_RECALC
@@ -11428,7 +11449,11 @@ export function ReporteFacturacionTab() {
                                     fontSize: '9px', padding: '1px 5px', borderRadius: '3px', fontWeight: 500,
                                     background: `${estadoColor}15`, color: estadoColor,
                                   }}>
-                                    {h.conductorEstado || h.padreEstado}
+                                    {esCompletada ? 'Finalizado'
+                                      : esActiva ? 'Activa'
+                                      : esCancelada ? 'Cancelada'
+                                      : esProgramada ? 'Programada'
+                                      : (h.conductorEstado || h.padreEstado)}
                                   </span>
                                 </div>
                               </div>
@@ -11477,6 +11502,29 @@ export function ReporteFacturacionTab() {
                                 </span>
                               </div>
                             )}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Sección Baja: si el conductor está dado de baja y NO hay registro de devolución */}
+                      {!diasModalData.devolucion && diasModalData.fechaBaja && (
+                        <div style={{ marginTop: '16px' }}>
+                          <div style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '8px' }}>
+                            Baja
+                          </div>
+                          <div style={{ padding: '10px 12px', borderRadius: '6px', background: 'rgba(220, 38, 38, 0.06)', border: '1px solid rgba(220, 38, 38, 0.15)' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                              <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#dc2626', flexShrink: 0 }} />
+                              <span style={{ fontSize: '11px', color: 'var(--text-primary)', fontWeight: 500, flex: 1 }}>
+                                Conductor dado de baja
+                              </span>
+                            </div>
+                            <div style={{ fontSize: '10px', color: 'var(--text-secondary)', marginTop: '4px', paddingLeft: '16px' }}>
+                              Fecha de Baja: {(() => { try { return format(parseISO(diasModalData.fechaBaja), 'dd/MM/yyyy') } catch { return '-' } })()}
+                            </div>
+                            <div style={{ fontSize: '10px', color: 'var(--text-tertiary)', marginTop: '2px', paddingLeft: '16px' }}>
+                              Sin registro de devolución cargado.
+                            </div>
                           </div>
                         </div>
                       )}
