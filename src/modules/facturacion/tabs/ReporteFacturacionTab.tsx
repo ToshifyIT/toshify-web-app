@@ -2418,7 +2418,7 @@ export function ReporteFacturacionTab() {
           .order('semana', { ascending: false })
           .order('created_at', { ascending: false }),
         (supabase.from('garantias_conductores') as any)
-          .select('conductor_id, conductor_nombre, estado, cuotas_pagadas, cuotas_totales, tipo_alquiler, monto_cuota_semanal, monto_pagado, monto_total')
+          .select('conductor_id, conductor_nombre, estado, cuotas_pagadas, cuotas_totales, tipo_alquiler, monto_cuota_semanal, monto_pagado, monto_total, monto_realmente_pagado')
           .in('conductor_id', conductorIds),
         Promise.all([
           supabase.from(getCabifyTable(sedeParaVP))
@@ -2483,6 +2483,7 @@ export function ReporteFacturacionTab() {
         monto_cuota_semanal: number | null;
         monto_pagado: number;
         monto_total: number;
+        monto_realmente_pagado: number | null;
       }>((garantias || []).filter((g: any) => g.conductor_id).map((g: any) => [g.conductor_id, g]))
 
       // Crear mapa de cobro_app Cabify por DNI + trackear raw para discrepancias
@@ -2749,15 +2750,18 @@ export function ReporteFacturacionTab() {
         let cuotaGarantiaNumero = ''
         if (garantia) {
           const montoTotal = garantia.monto_total || 1000000
-          // Fuente de verdad: suma histórica de subtotal_garantia en facturacion_conductores
+          // Acumulado real: incluye la base histórica ya pagada ANTES de que facturación
+          // tomara el control (monto_realmente_pagado). Antes solo se sumaba lo facturado por
+          // este módulo, lo que hacía que se siguiera cobrando más allá del objetivo.
           const acumuladoFacturado = garantiaAcumuladaVP.get(conductorId) || 0
-          const garantiaCompletadaVP = garantia.estado === 'completada' || acumuladoFacturado >= montoTotal
+          const acumuladoReal = Math.max(acumuladoFacturado, garantia.monto_realmente_pagado || 0)
+          const garantiaCompletadaVP = garantia.estado === 'completada' || acumuladoReal >= montoTotal
           if (garantiaCompletadaVP) {
             subtotalGarantia = 0
             cuotaGarantiaNumero = 'NA'
           } else {
             const cuotaNormal = garantia.monto_cuota_semanal || cuotaGarantiaSemanalVP
-            const pendiente = montoTotal - acumuladoFacturado
+            const pendiente = montoTotal - acumuladoReal
             // Si el pendiente es menor que la cuota normal, cobrar solo el restante
             subtotalGarantia = Math.round(Math.min(cuotaNormal, pendiente) * 100) / 100
             const cuotaActual = garantia.cuotas_pagadas + 1
@@ -3943,11 +3947,16 @@ export function ReporteFacturacionTab() {
         const factorProporcional = conductor.total_dias / 7
         const garantiaConductor = garantiasMapById.get(conductor.conductor_id)
         const montoTotalGarantia = garantiaConductor?.monto_total || 1000000
-        // Fuente de verdad: suma histórica de subtotal_garantia en facturacion_conductores
+        // Acumulado real: incluye la base histórica ya pagada ANTES de que facturación tomara
+        // el control (monto_realmente_pagado = base + todo lo facturado). Antes solo se contaba
+        // la suma de subtotal_garantia de este módulo, por lo que se seguía cobrando la cuota
+        // pasado el objetivo (ej: conductores que ya venían pagando garantía por otra vía).
+        // El período actual ya fue borrado arriba, así que acumuladoFacturadoRecalc es lo previo.
         const acumuladoFacturadoRecalc = garantiaAcumuladaRecalc.get(conductor.conductor_id) || 0
-        const garantiaCompletada = garantiaConductor?.estado === 'completada' || acumuladoFacturadoRecalc >= montoTotalGarantia
+        const acumuladoRealRecalc = Math.max(acumuladoFacturadoRecalc, garantiaConductor?.monto_realmente_pagado || 0)
+        const garantiaCompletada = garantiaConductor?.estado === 'completada' || acumuladoRealRecalc >= montoTotalGarantia
         const cuotaNormalRecalc = garantiaConductor?.monto_cuota_semanal || cuotaGarantia
-        const pendienteRecalc = montoTotalGarantia - acumuladoFacturadoRecalc
+        const pendienteRecalc = montoTotalGarantia - acumuladoRealRecalc
         const cuotaGarantiaProporcional = Math.round((conductor.total_dias === 0 || garantiaCompletada
           ? 0
           : Math.min(cuotaNormalRecalc, Math.max(0, pendienteRecalc))) * 100) / 100
