@@ -400,6 +400,9 @@ export default function TelepaseHistoricoModule() {
     if (result.ok) {
       Swal.fire({ icon: 'success', title: 'Incidencia creada', text: 'El cobro de peaje fue registrado correctamente', timer: 2000, showConfirmButton: false })
       cargarDatos()
+    } else if ('alreadyExists' in result) {
+      Swal.fire({ icon: 'info', title: 'Ya enviado', text: result.reason, timer: 1800, showConfirmButton: false })
+      cargarDatos()
     } else if ('needsManualInput' in result) {
       Swal.fire('No se pudo enviar automáticamente', result.reason, 'warning')
     } else {

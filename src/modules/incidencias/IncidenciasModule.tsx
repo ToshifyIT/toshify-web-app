@@ -116,6 +116,10 @@ export function IncidenciasModule() {
   const { sedeActualId, aplicarFiltroSede, sedeUsuario, sedes } = useSede()
   const [searchParams, setSearchParams] = useSearchParams()
 
+  // Semilla del buscador cuando se llega desde "Ver Incidencia" (Siniestros):
+  // en lugar de abrir el modal, se prellena el buscador de la tabla con el id.
+  const [busquedaIncidencia, setBusquedaIncidencia] = useState<string | undefined>(undefined)
+
   // Permisos específicos para el menú de incidencias
   // Solo admin/superadmin puede editar incidencias y aplicar/rechazar
   const roleName = ((profile as any)?.roles?.name || '').toLowerCase()
@@ -350,7 +354,20 @@ export function IncidenciasModule() {
   useEffect(() => {
     const incidenciaId = searchParams.get('id')
     const penalidadId = searchParams.get('penalidad_id')
-    
+    const buscarId = searchParams.get('buscar')
+
+    // `buscar`: dejar la incidencia como filtro en la tabla (NO abre modal).
+    // Usado por el botón "Ver Incidencia" de Siniestros.
+    if (buscarId && incidencias.length > 0) {
+      const incidencia = incidencias.find(i => i.id === buscarId)
+      if (incidencia) {
+        // Ir al tab correcto según el tipo y prellenar el buscador con el id.
+        setActiveTab(incidencia.tipo === 'cobro' ? 'cobro' : 'logistica')
+        setBusquedaIncidencia(buscarId)
+        setSearchParams({})
+      }
+    }
+
     if (incidenciaId && incidencias.length > 0) {
       const incidencia = incidencias.find(i => i.id === incidenciaId)
       if (incidencia) {
@@ -2601,10 +2618,44 @@ export function IncidenciasModule() {
       }
 
       if (modalMode === 'edit' && selectedPenalidad) {
+        // Nombre del conductor a partir del id elegido, para que la tabla, la incidencia
+        // y la multa reflejen el cambio (antes solo se guardaba conductor_id).
+        const condSel = conductores.find(c => c.id === penalidadForm.conductor_id)
+        const conductorNombre = condSel ? `${condSel.nombres} ${condSel.apellidos}`.trim() : (penalidadForm.conductor_nombre || null)
+
         const { error } = await (supabase.from('penalidades' as any) as any)
-          .update({ ...dataToSave, updated_by: profile?.full_name || 'Sistema' })
+          .update({
+            ...dataToSave,
+            // Preservar el vínculo con la incidencia (el form no lo trae).
+            incidencia_id: selectedPenalidad.incidencia_id ?? dataToSave.incidencia_id,
+            conductor_nombre: conductorNombre,
+            vehiculo_patente: penalidadForm.vehiculo_patente || null,
+            updated_by: profile?.full_name || 'Sistema',
+          })
           .eq('id', selectedPenalidad.id)
         if (error) throw error
+
+        // Reflejar el cambio en la incidencia y en la multa relacionadas.
+        const incidenciaId = selectedPenalidad.incidencia_id
+        if (incidenciaId) {
+          await (supabase.from('incidencias' as any) as any)
+            .update({
+              conductor_id: penalidadForm.conductor_id || null,
+              conductor_nombre: conductorNombre,
+              vehiculo_id: penalidadForm.vehiculo_id || null,
+              vehiculo_patente: penalidadForm.vehiculo_patente || null,
+              monto: penalidadForm.monto || null,
+            })
+            .eq('id', incidenciaId)
+          // Si la incidencia proviene de una multa, reflejar el conductor en la multa.
+          const { data: incRow } = await (supabase.from('incidencias' as any) as any)
+            .select('multa_id').eq('id', incidenciaId).maybeSingle()
+          if (incRow?.multa_id && conductorNombre) {
+            await (supabase.from('multas_historico') as any)
+              .update({ conductor_responsable: conductorNombre })
+              .eq('id', incRow.multa_id)
+          }
+        }
         showSuccess('Guardado', 'Penalidad actualizada correctamente')
       } else {
         const { error } = await (supabase.from('penalidades' as any) as any)
@@ -3364,6 +3415,7 @@ export function IncidenciasModule() {
             data={incidenciasLogisticas}
             columns={incidenciasColumns}
             globalFilterFn={customGlobalFilter}
+            initialSearch={busquedaIncidencia}
             loading={loading}
             onFilteredDataChange={(rows) => { incidenciasVisiblesRef.current = rows }}
             searchPlaceholder="Buscar por patente, conductor..."
@@ -3606,6 +3658,7 @@ export function IncidenciasModule() {
             data={soloPendientesEnviar ? incidenciasEnviables : incidenciasCobro}
             columns={incidenciasCobroColumns}
             globalFilterFn={customGlobalFilter}
+            initialSearch={busquedaIncidencia}
             loading={loading}
             onFilteredDataChange={(rows) => { incidenciasVisiblesRef.current = rows }}
             searchPlaceholder="Buscar por patente, conductor..."
@@ -4736,6 +4789,7 @@ function IncidenciaForm({ formData, setFormData, estados, vehiculos, conductores
 
       // 3. Si hay VARIAS activas simultaneas → modal con solo las activas
       if (activas.length > 1) {
+        // eslint-disable-next-line @typescript-eslint/no-unused-vars
         setPatentesAsignadas(activas.map(({ turno: _t, ...rest }) => rest))
         setShowPatenteSelectModal(true)
         return
@@ -4748,6 +4802,7 @@ function IncidenciaForm({ formData, setFormData, estados, vehiculos, conductores
         setFormData(prev => ({ ...prev, vehiculo_id: t.vehiculoId, turno: t.turno }))
         setVehiculoSearch('')
       } else if (todas.length > 1) {
+        // eslint-disable-next-line @typescript-eslint/no-unused-vars
         setPatentesAsignadas(todas.map(({ turno: _t, ...rest }) => rest))
         setShowPatenteSelectModal(true)
       }

@@ -33,6 +33,7 @@ export interface CrearCobroContext {
 export type CrearCobroResult =
   | { ok: true; incidenciaId: string; penalidadId: string }
   | { ok: false; needsManualInput: true; reason: string; prefilled?: PrefilledFromMulta }
+  | { ok: false; alreadyExists: true; reason: string; incidenciaId?: string }
   | { ok: false; error: string }
 
 export interface PrefilledFromMulta {
@@ -194,6 +195,17 @@ export async function crearCobroDesdeMulta(multa: MultaInput, ctx: CrearCobroCon
   const monto = ctx.montoOverride != null && ctx.montoOverride > 0 ? ctx.montoOverride : resolved.monto
   const descripcion = buildDescripcion(multa)
 
+  // 6.5 IDEMPOTENCIA: si esta multa ya tiene un cobro (incidencia), no crear otro.
+  // Evita duplicados por doble clic o envíos masivos. El candado definitivo es el
+  // índice único en incidencias(multa_id); este chequeo da un mensaje claro.
+  const { data: incExistente } = await (supabase.from('incidencias' as any) as any)
+    .select('id')
+    .eq('multa_id', multa.id)
+    .limit(1)
+  if (incExistente && incExistente.length > 0) {
+    return { ok: false, alreadyExists: true, reason: 'Esta multa ya tiene un cobro generado.', incidenciaId: incExistente[0].id }
+  }
+
   // 7. INSERT en incidencias
   const { data: incidenciaCreada, error: incError } = await (supabase.from('incidencias' as any) as any)
     .insert({
@@ -218,7 +230,14 @@ export async function crearCobroDesdeMulta(multa: MultaInput, ctx: CrearCobroCon
     })
     .select('id')
     .single()
-  if (incError || !incidenciaCreada) return { ok: false, error: incError?.message || 'Error al crear la incidencia' }
+  if (incError || !incidenciaCreada) {
+    // 23505 = unique_violation: el índice único por multa_id rechazó un duplicado
+    // creado por otra ejecución concurrente. No es error, ya existe el cobro.
+    if ((incError as { code?: string } | null)?.code === '23505') {
+      return { ok: false, alreadyExists: true, reason: 'Esta multa ya tiene un cobro generado.' }
+    }
+    return { ok: false, error: incError?.message || 'Error al crear la incidencia' }
+  }
 
   // 8. INSERT en penalidades — esto hace que aparezca en "Por Aplicar"
   const { data: penalidadCreada, error: penError } = await (supabase.from('penalidades' as any) as any)
@@ -244,7 +263,11 @@ export async function crearCobroDesdeMulta(multa: MultaInput, ctx: CrearCobroCon
     })
     .select('id')
     .single()
-  if (penError || !penalidadCreada) return { ok: false, error: penError?.message || 'Error al crear la penalidad' }
+  if (penError || !penalidadCreada) {
+    // Rollback: si la penalidad falla, borrar la incidencia recién creada para no dejarla a medias.
+    await (supabase.from('incidencias' as any) as any).delete().eq('id', incidenciaCreada.id)
+    return { ok: false, error: penError?.message || 'Error al crear la penalidad' }
+  }
 
   return { ok: true, incidenciaId: incidenciaCreada.id, penalidadId: penalidadCreada.id }
 }
@@ -268,4 +291,80 @@ function findConductorByName(
     return tokens.every(t => candidate.includes(t))
   })
   return c || null
+}
+
+export interface SyncCobroResult { ok: boolean; updated: boolean; error?: string }
+
+// Sincroniza la incidencia + penalidad "Por Aplicar" de una multa con los datos editados.
+// Solo actúa si el cobro todavía está POR APLICAR (penalidad aplicado=false y no rechazada).
+// Si ya está aplicada (en facturación) o rechazada, NO toca nada.
+// Re-deriva vehículo (patente), conductor (nombre), monto (importe) y descripción, igual
+// que la creación, para que la incidencia "Por Aplicar" refleje los cambios de la multa.
+export async function sincronizarCobroPorAplicar(multa: MultaInput, ctx: CrearCobroContext): Promise<SyncCobroResult> {
+  // 1) Incidencia de esta multa
+  const { data: incs } = await (supabase.from('incidencias' as any) as any)
+    .select('id')
+    .eq('multa_id', multa.id)
+    .limit(1)
+  const incidencia = incs && incs[0]
+  if (!incidencia) return { ok: true, updated: false } // sin cobro, nada que sincronizar
+
+  // 2) Penalidad ligada: solo sincronizamos si está POR APLICAR
+  const { data: pens } = await (supabase.from('penalidades' as any) as any)
+    .select('id, aplicado, rechazado')
+    .eq('incidencia_id', incidencia.id)
+  const porAplicar = (pens || []).filter((p: any) => p.aplicado !== true && p.rechazado !== true)
+  if (porAplicar.length === 0) return { ok: true, updated: false } // ya aplicada/rechazada: no tocar
+
+  // 3) Fecha del período abierto para recomputar el monto (misma lógica que la creación)
+  let fecha = getLocalDateString()
+  if (ctx.sedeId) {
+    const { data: periodos } = await (supabase.from('periodos_facturacion' as any) as any)
+      .select('fecha_inicio').eq('sede_id', ctx.sedeId).eq('estado', 'abierto')
+      .order('fecha_inicio', { ascending: false }).limit(1)
+    if (periodos && periodos[0]?.fecha_inicio) fecha = periodos[0].fecha_inicio
+  }
+
+  // 4) Re-derivar vehículo, conductor, monto y descripción desde la multa editada
+  const patNorm = normalizePatente(multa.patente)
+  const { data: vehiculos } = await supabase.from('vehiculos').select('id, patente').is('deleted_at', null)
+  const vehiculo = (vehiculos || []).find((v: any) => normalizePatente(v.patente) === patNorm) || null
+
+  const { data: conductoresRaw } = await supabase.from('conductores').select('id, nombres, apellidos')
+  const conductores = (conductoresRaw || []).map((c: any) => ({
+    id: c.id, nombre_completo: `${c.nombres || ''} ${c.apellidos || ''}`.trim()
+  }))
+  const conductor = findConductorByName(conductores, multa.conductor_responsable)
+
+  const monto = ctx.montoOverride != null && ctx.montoOverride > 0 ? ctx.montoOverride : resolverMontoMulta(multa, fecha).monto
+  const descripcion = buildDescripcion(multa)
+  const nombreTexto = conductor?.nombre_completo || (multa.conductor_responsable || '').trim()
+
+  // 5) Actualizar la incidencia
+  const { error: incErr } = await (supabase.from('incidencias' as any) as any)
+    .update({
+      vehiculo_id: vehiculo?.id ?? null,
+      vehiculo_patente: vehiculo?.patente ?? multa.patente,
+      conductor_id: conductor?.id ?? null,
+      conductor_nombre: nombreTexto,
+      monto,
+      descripcion,
+    })
+    .eq('id', incidencia.id)
+  if (incErr) return { ok: false, updated: false, error: incErr.message }
+
+  // 6) Actualizar la(s) penalidad(es) que estén por aplicar
+  const { error: penErr } = await (supabase.from('penalidades' as any) as any)
+    .update({
+      conductor_id: conductor?.id ?? null,
+      conductor_nombre: nombreTexto,
+      vehiculo_patente: vehiculo?.patente ?? multa.patente,
+      monto,
+      observaciones: descripcion,
+    })
+    .eq('incidencia_id', incidencia.id)
+    .eq('aplicado', false)
+  if (penErr) return { ok: false, updated: false, error: penErr.message }
+
+  return { ok: true, updated: true }
 }

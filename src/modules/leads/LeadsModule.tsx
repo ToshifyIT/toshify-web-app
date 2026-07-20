@@ -568,27 +568,37 @@ export function LeadsModule() {
         estadosCiviles: ecData,
       }
 
-      // Sincronizar en DB en lotes de 100 (en background, sin bloquear UI)
+      // La data ya está lista y cacheada: ocultar el overlay AHORA.
+      // La sincronización de estados en DB (abajo) corre en segundo plano y no
+      // debe bloquear la UI. Antes se await-eaba antes del `finally`, lo que
+      // mantenía el overlay "Cargando leads..." hasta terminar todos los UPDATE.
+      setLoading(false)
+
+      // Sincronizar en DB en lotes de 100 (en background, sin bloquear UI).
+      // Fire-and-forget: mismos writes, mismo agrupamiento y manejo de errores
+      // que antes, pero sin retener el spinner.
       if (actualizaciones.length > 0) {
-        const batchSize = 100
-        for (let i = 0; i < actualizaciones.length; i += batchSize) {
-          const batch = actualizaciones.slice(i, i + batchSize)
-          // Agrupar por estado para hacer menos queries
-          const porEstado = batch.reduce<Record<string, string[]>>((acc, b) => {
-            if (!acc[b.estado]) acc[b.estado] = []
-            acc[b.estado].push(b.id)
-            return acc
-          }, {})
-          for (const [estado, batchIds] of Object.entries(porEstado)) {
-            const { error: syncErr } = await supabase
-              .from('leads')
-              .update({ estado_de_lead: estado, updated_at: new Date().toISOString() })
-              .in('id', batchIds)
-            if (syncErr) {
-              console.error(`Error sincronizando estado "${estado}" para ${batchIds.length} leads:`, syncErr.message)
+        void (async () => {
+          const batchSize = 100
+          for (let i = 0; i < actualizaciones.length; i += batchSize) {
+            const batch = actualizaciones.slice(i, i + batchSize)
+            // Agrupar por estado para hacer menos queries
+            const porEstado = batch.reduce<Record<string, string[]>>((acc, b) => {
+              if (!acc[b.estado]) acc[b.estado] = []
+              acc[b.estado].push(b.id)
+              return acc
+            }, {})
+            for (const [estado, batchIds] of Object.entries(porEstado)) {
+              const { error: syncErr } = await supabase
+                .from('leads')
+                .update({ estado_de_lead: estado, updated_at: new Date().toISOString() })
+                .in('id', batchIds)
+              if (syncErr) {
+                console.error(`Error sincronizando estado "${estado}" para ${batchIds.length} leads:`, syncErr.message)
+              }
             }
           }
-        }
+        })()
       }
 
     } catch (err) {

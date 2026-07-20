@@ -1,12 +1,12 @@
 /* eslint-disable react-hooks/exhaustive-deps */
 // src/modules/multas-telepase/MultasModule.tsx
-import { useState, useEffect, useMemo, useCallback, Fragment } from 'react'
+import { useState, useEffect, useMemo, useCallback, useRef, Fragment } from 'react'
 import { supabase } from '../../lib/supabase'
 import { LoadingOverlay } from '../../components/ui/LoadingOverlay'
 import { ExcelColumnFilter } from '../../components/ui/DataTable/ExcelColumnFilter'
 import { ExcelDateRangeFilter } from '../../components/ui/DataTable/ExcelDateRangeFilter'
 import { DataTable } from '../../components/ui/DataTable'
-import { Download, AlertTriangle, Eye, Edit2, Trash2, Plus, X, Car, Users, DollarSign, CheckCircle, AlertCircle, FileText, Receipt, SendHorizonal, Archive, RotateCcw } from 'lucide-react'
+import { Download, AlertTriangle, Eye, Edit2, Trash2, Plus, X, Car, Users, DollarSign, CheckCircle, AlertCircle, FileText, Receipt, SendHorizonal, Archive, RotateCcw, Copy, History } from 'lucide-react'
 import { CrearCobroMultaModal } from './components/CrearCobroMultaModal'
 import { type ColumnDef } from '@tanstack/react-table'
 import * as XLSX from 'xlsx'
@@ -14,7 +14,7 @@ import Swal from 'sweetalert2'
 import { showSuccess, showError } from '../../utils/toast'
 import { useSede } from '../../contexts/SedeContext'
 import { useAuth } from '../../contexts/AuthContext'
-import { crearCobroDesdeMulta } from './services/crearCobroDesdeMulta'
+import { crearCobroDesdeMulta, sincronizarCobroPorAplicar } from './services/crearCobroDesdeMulta'
 import { desestimarMulta as svcDesestimarMulta, reactivarMulta as svcReactivarMulta } from './services/desestimarMulta'
 import { withAudit, logMultaAudit } from './services/auditMulta'
 import { format } from 'date-fns'
@@ -47,6 +47,8 @@ interface Multa {
   updated_at?: string | null
   updated_by?: string | null
   updated_by_name?: string | null
+  // Copia relacionada: si esta multa fue creada desde otra (ej. una rechazada)
+  multa_origen_id?: number | null
 }
 
 interface Vehiculo {
@@ -57,6 +59,10 @@ interface Vehiculo {
 type VistaMultas = 'activas' | 'enviadas' | 'desestimadas'
 
 type CuotaProceso = { numero: number; monto: number; semana: number; anio: number; aplicado: boolean }
+
+// Opciones fijas para los filtros de las columnas Estado y Duplicado (vista "Enviadas").
+const ESTADO_PAGO_OPCIONES = ['Pendiente', 'Aplicado', 'En proceso', 'Pagado', 'Rechazada']
+const DUPLICADO_OPCIONES = ['No', 'Sí']
 
 function parseImporte(importe: string | number | null | undefined): number {
   if (importe == null || importe === '') return 0
@@ -130,13 +136,35 @@ export default function MultasModule() {
   const [busqueda, setBusqueda] = useState('')
   const [vehiculos, setVehiculos] = useState<Vehiculo[]>([])
   const [multasEnviadas, setMultasEnviadas] = useState<Set<number>>(new Set())
+  // Guard sincrónico contra doble clic: multas cuyo envío está EN CURSO. Se chequea y
+  // marca de forma síncrona (antes del await), así dos clics rápidos no disparan dos cobros.
+  const enviandoRef = useRef<Set<number>>(new Set())
   // Info de incidencia por multa (para la vista "Enviadas a facturación"): monto de la
   // incidencia MÁS RECIENTE y cantidad de incidencias (para marcar duplicado).
   const [multasIncidencia, setMultasIncidencia] = useState<Map<number, { monto: number; count: number; fechaEnvio: string }>>(new Map())
   // Estado de pago por multa (segun facturacion / penalidades, misma logica que Mi Espacio):
   // pagada = penalidad no fraccionada aplicada en periodo cerrado; fraccionada = penalidad fraccionada.
   // Las multas que NO estan en este mapa se consideran pendientes. `monto` = monto facturado (penalidad).
-  const [multasEstadoPago, setMultasEstadoPago] = useState<Map<number, { estado: 'pagada' | 'fraccionada'; monto: number; fraccionada: boolean; semanasPago: string[] }>>(new Map())
+  const [multasEstadoPago, setMultasEstadoPago] = useState<Map<number, { estado: 'pagada' | 'fraccionada' | 'rechazado'; monto: number; fraccionada: boolean; semanasPago: string[]}>>(new Map())
+  // Estado del cobro por multa para decidir editabilidad: 'por_aplicar' (editable),
+  // 'aplicada' o 'rechazada' (NO editable, ya está en facturación / rechazada).
+  const [multaCobroEstado, setMultaCobroEstado] = useState<Map<number, 'por_aplicar' | 'aplicada' | 'rechazada'>>(new Map())
+  // Multa cuyo historial de copias/origen se está viendo (modal Historial)
+  const [historialMulta, setHistorialMulta] = useState<Multa | null>(null)
+
+  // Etiqueta de estado de la multa (badge y filtro). Prioridad:
+  // Rechazada > Pagado > En proceso > Aplicado > Pendiente.
+  // "Aplicado": ya aplicada a facturación pero la semana sigue abierta (no editable),
+  // el paso intermedio entre Pendiente (por aplicar, editable) y Pagado (semana cerrada).
+  const estadoMultaLabel = useCallback((multaId: number): 'Pendiente' | 'Aplicado' | 'En proceso' | 'Pagado' | 'Rechazada' => {
+    const e = multasEstadoPago.get(multaId)?.estado
+    const cobro = multaCobroEstado.get(multaId)
+    if (e === 'rechazado' || cobro === 'rechazada') return 'Rechazada'
+    if (e === 'pagada') return 'Pagado'
+    if (e === 'fraccionada') return 'En proceso'
+    if (cobro === 'aplicada') return 'Aplicado'
+    return 'Pendiente'
+  }, [multasEstadoPago, multaCobroEstado])
   const [showPendienteModal, setShowPendienteModal] = useState(false)
   const [showPagadoModal, setShowPagadoModal] = useState(false)
   const [showProcesoModal, setShowProcesoModal] = useState(false)
@@ -185,6 +213,9 @@ export default function MultasModule() {
   const [fechaCargaDesde, setFechaCargaDesde] = useState<string | null>(null)
   const [fechaCargaHasta, setFechaCargaHasta] = useState<string | null>(null)
   const [ibuttonFilter, setIbuttonFilter] = useState<string[]>([])
+  // Filtros de las columnas de la vista "Enviadas a facturación"
+  const [estadoPagoFilter, setEstadoPagoFilter] = useState<string[]>([])
+  const [duplicadoFilter, setDuplicadoFilter] = useState<string[]>([])
 
   // Opciones para autocompletado y validación
   const [conductoresOptions, setConductoresOptions] = useState<string[]>([])
@@ -318,11 +349,19 @@ export default function MultasModule() {
 
       // 2) Estado de pago por multa. Una fraccionada con TODAS sus cuotas cobradas
       //    pasa a "pagada"; si le falta alguna cuota, sigue "en proceso" (fraccionada).
-      const estadoMap = new Map<number, { estado: 'pagada' | 'fraccionada'; monto: number; fraccionada: boolean; semanasPago: string[] }>()
+      const estadoMap = new Map<number, { estado: 'pagada' | 'fraccionada' | 'rechazado'; monto: number; fraccionada: boolean; semanasPago: string[]}>()
       for (const p of (penalidadesRes.data || []) as Array<any>) {
         const mid = p.incidencias?.multa_id
         if (mid == null) continue
         const monto = parseImporte(p.monto)
+        // PRIORIDAD MÁXIMA: si la penalidad está rechazada, la multa queda "Rechazada"
+        // y no se toca, aunque la semana esté cerrada. Gana sobre pagada/en proceso/pendiente.
+        if (p.rechazado === true) {
+          estadoMap.set(mid, { estado: 'rechazado', monto, fraccionada: p.fraccionado === true, semanasPago: [] })
+          continue
+        }
+        // Una multa ya marcada como rechazada no se pisa con ningún otro estado.
+        if (estadoMap.get(mid)?.estado === 'rechazado') continue
         if (p.fraccionado === true) {
           const cuotas = cuotasPorPenalidad.get(p.id) || []
           const cantidad = Number(p.cantidad_cuotas) || 0
@@ -340,6 +379,18 @@ export default function MultasModule() {
         }
       }
       setMultasEstadoPago(estadoMap)
+
+      // Estado del cobro por multa (editabilidad). Bloqueo si hay una penalidad aplicada
+      // o rechazada; editable solo si el cobro sigue "Por Aplicar". aplicada/rechazada gana.
+      const cobroEstadoMap = new Map<number, 'por_aplicar' | 'aplicada' | 'rechazada'>()
+      for (const p of (penalidadesRes.data || []) as Array<any>) {
+        const mid = p.incidencias?.multa_id
+        if (mid == null) continue
+        const st: 'por_aplicar' | 'aplicada' | 'rechazada' = p.rechazado === true ? 'rechazada' : p.aplicado === true ? 'aplicada' : 'por_aplicar'
+        const prev = cobroEstadoMap.get(mid)
+        if (!prev || (prev === 'por_aplicar' && st !== 'por_aplicar')) cobroEstadoMap.set(mid, st)
+      }
+      setMultaCobroEstado(cobroEstadoMap)
     } catch {
       Swal.fire('Error', 'No se pudieron cargar las multas', 'error')
     } finally {
@@ -380,8 +431,17 @@ export default function MultasModule() {
       if (fechaCargaDesde && (!m.created_at || m.created_at < fechaCargaDesde)) return false
       if (fechaCargaHasta && (!m.created_at || m.created_at > `${fechaCargaHasta}T23:59:59`)) return false
       return true
+    },
+    estadoPago: (m: Multa) => {
+      if (estadoPagoFilter.length === 0) return true
+      return estadoPagoFilter.includes(estadoMultaLabel(m.id))
+    },
+    duplicado: (m: Multa) => {
+      if (duplicadoFilter.length === 0) return true
+      const dup = (multasIncidencia.get(m.id)?.count || 0) > 1 ? 'Sí' : 'No'
+      return duplicadoFilter.includes(dup)
     }
-  }), [obsFilter, importeFilter, patenteFilter, conductorFilter, lugarFilter, infraccionFilter, detalleFilter, semanaFilter, ibuttonFilter, fechaInfraccionDesde, fechaInfraccionHasta, fechaCargaDesde, fechaCargaHasta])
+  }), [obsFilter, importeFilter, patenteFilter, conductorFilter, lugarFilter, infraccionFilter, detalleFilter, semanaFilter, ibuttonFilter, fechaInfraccionDesde, fechaInfraccionHasta, fechaCargaDesde, fechaCargaHasta, estadoPagoFilter, duplicadoFilter, multasEstadoPago, multasIncidencia, estadoMultaLabel])
 
   const getFilteredData = useCallback((excludeKey?: string) => {
     return multas.filter(m => {
@@ -396,6 +456,8 @@ export default function MultasModule() {
       if (excludeKey !== 'ibutton' && !filterPredicates.ibutton(m)) return false
       if (excludeKey !== 'fecha' && !filterPredicates.fecha(m)) return false
       if (excludeKey !== 'fechaCarga' && !filterPredicates.fechaCarga(m)) return false
+      if (excludeKey !== 'estadoPago' && !filterPredicates.estadoPago(m)) return false
+      if (excludeKey !== 'duplicado' && !filterPredicates.duplicado(m)) return false
       return true
     })
   }, [multas, filterPredicates])
@@ -554,6 +616,9 @@ export default function MultasModule() {
         const montoTotal = multasIncidencia.get(m.id)?.monto ?? est.monto
         proceso += montoTotal
         procesoDetalle.push({ multa: m, monto: montoTotal, fraccionada: true, semanasPago: est.semanasPago })
+      } else if (est?.estado === 'rechazado') {
+        // Rechazada: no cuenta como pendiente ni como pagada. No se toca esta multa.
+        continue
       } else {
         const desc = parseImporte(m.importe_descuento)
         const vencStr = m.fecha_vencimiento_descuento ? String(m.fecha_vencimiento_descuento).slice(0, 10) : ''
@@ -582,13 +647,24 @@ export default function MultasModule() {
     )
   }, [busqueda, multas])
 
+  // KPIs de conteo: se ignoran las multas RECHAZADAS (no cuentan para sumar ni mostrar).
+  // Se mantienen visibles en la tabla de "Enviadas"; solo se excluyen de las métricas.
+  const multasKpiSinRechazadas = useMemo(() =>
+    multasKpi.filter(m => multasEstadoPago.get(m.id)?.estado !== 'rechazado')
+  , [multasKpi, multasEstadoPago])
+
+  // Ids de multas que tienen al menos una copia creada desde ellas (para el botón Historial).
+  const idsConCopias = useMemo(() =>
+    new Set((multas.map(m => m.multa_origen_id).filter((v): v is number => v != null)))
+  , [multas])
+
   const patentesUnicasCount = useMemo(() =>
-    new Set(multasKpi.map(m => m.patente).filter(Boolean)).size
-  , [multasKpi])
+    new Set(multasKpiSinRechazadas.map(m => m.patente).filter(Boolean)).size
+  , [multasKpiSinRechazadas])
 
   const conductoresUnicosCount = useMemo(() =>
-    new Set(multasKpi.map(m => m.conductor_responsable).filter(Boolean)).size
-  , [multasKpi])
+    new Set(multasKpiSinRechazadas.map(m => m.conductor_responsable).filter(Boolean)).size
+  , [multasKpiSinRechazadas])
 
   // Ver detalle
   function handleVerDetalle(multa: Multa) {
@@ -689,10 +765,150 @@ export default function MultasModule() {
   }
 
   // Editar multa
+  // Una multa solo es editable mientras su cobro está "Por Aplicar" (o si nunca se envió).
+  // Una vez aplicada (en facturación) o rechazada, queda bloqueada.
+  const multaEsEditable = useCallback((multaId: number) => {
+    const est = multaCobroEstado.get(multaId)
+    return est === undefined || est === 'por_aplicar'
+  }, [multaCobroEstado])
+
   function editarMulta(multa: Multa) {
+    const est = multaCobroEstado.get(multa.id)
+    if (est === 'aplicada' || est === 'rechazada') {
+      Swal.fire({
+        icon: 'info',
+        title: 'No se puede editar',
+        text: est === 'aplicada'
+          ? 'La multa ya está en facturación (incidencia aplicada). No se puede editar.'
+          : 'La incidencia de esta multa fue rechazada. No se puede editar.',
+      })
+      return
+    }
     setEditingMulta({ ...multa })
     setOnlyActiveConductors(false)
     setShowEditModal(true)
+  }
+
+  // Crear una copia de una multa RECHAZADA. El nuevo registro arranca limpio en
+  // "Activas" (sin incidencia ni desestimación) y guarda multa_origen_id apuntando
+  // a la multa original, para tener el historial de qué copia vino de cuál.
+  async function handleCrearCopia(multa: Multa) {
+    const confirm = await Swal.fire({
+      icon: 'question',
+      title: '¿Crear copia de esta multa?',
+      html: `Se creará una multa nueva en <strong>Activas</strong>, copia de la rechazada${multa.infraccion ? ` <strong>${multa.infraccion}</strong>` : ''}, para poder volver a enviarla a facturación. La original queda como está.`,
+      showCancelButton: true,
+      confirmButtonText: 'Sí, crear copia',
+      cancelButtonText: 'Cancelar',
+      confirmButtonColor: '#16a34a',
+    })
+    if (!confirm.isConfirmed) return
+    try {
+      await insertarCopiaMulta(multa)
+      showSuccess('Copia creada', 'La multa se copió a "Activas". Ya podés enviarla a facturación.')
+      setVista('activas')
+      cargarDatos()
+    } catch (error: any) {
+      Swal.fire('Error', error.message || 'No se pudo crear la copia', 'error')
+    }
+  }
+
+  // Inserta una copia de la multa en "Activas" (sin confirmación ni recarga). Reutilizable.
+  async function insertarCopiaMulta(multa: Multa) {
+    const copia = {
+      patente: multa.patente,
+      fecha_infraccion: multa.fecha_infraccion,
+      importe: multa.importe,
+      importe_descuento: multa.importe_descuento ?? null,
+      fecha_vencimiento_descuento: multa.fecha_vencimiento_descuento ?? null,
+      lugar: multa.lugar,
+      detalle: multa.detalle,
+      fecha_anotacion: multa.fecha_anotacion,
+      conductor_responsable: multa.conductor_responsable,
+      observaciones: multa.observaciones,
+      infraccion: multa.infraccion,
+      lugar_detalle: multa.lugar_detalle,
+      ibutton: multa.ibutton,
+      sede_id: multa.sede_id ?? null,
+      drive_url: multa.drive_url ?? null,
+      multa_origen_id: multa.id,
+      updated_by_name: profile?.full_name || user?.email || 'Sistema',
+    }
+    const { error } = await (supabase.from('multas_historico') as any).insert(copia)
+    if (error) throw error
+  }
+
+  // Rechazar el cobro de una multa PAGADA. Marca la penalidad como rechazada (con motivo e
+  // historial en penalidades_rechazos) y, si se tildó el check, crea una copia en Activas.
+  async function handleRechazarMulta(multa: Multa) {
+    const { isConfirmed, value } = await Swal.fire({
+      title: 'Rechazar multa',
+      html: `
+        <div style="text-align:left; font-size:13px; line-height:1.6;">
+          <p>Se va a <strong>rechazar el cobro</strong> de esta multa. Pasará de <strong>Pagado</strong> a <strong>Rechazada</strong>.</p>
+          <div style="background:#fef2f2; border:1px solid #fecaca; color:#b91c1c; border-radius:6px; padding:8px 10px; margin:10px 0; font-weight:500;">
+            Si esta multa ya se cobró, se debe crear una incidencia de descuento a favor del conductor.
+          </div>
+          <label style="display:block; margin-bottom:4px; font-weight:600;">Motivo del rechazo *</label>
+          <textarea id="rechazo-motivo" class="swal2-textarea" style="margin:0; width:100%; display:block;" placeholder="Ingresá el motivo del rechazo..."></textarea>
+          <label style="display:flex; align-items:center; gap:8px; margin-top:12px; cursor:pointer;">
+            <input type="checkbox" id="rechazo-copia" />
+            <span>Crear nueva Multa (copia en Activas para reenviar a facturación)</span>
+          </label>
+        </div>
+      `,
+      showCancelButton: true,
+      confirmButtonText: 'Rechazar',
+      cancelButtonText: 'Cancelar',
+      confirmButtonColor: '#ef4444',
+      focusConfirm: false,
+      preConfirm: () => {
+        const motivo = (document.getElementById('rechazo-motivo') as HTMLTextAreaElement)?.value?.trim() || ''
+        const crearCopia = (document.getElementById('rechazo-copia') as HTMLInputElement)?.checked || false
+        if (!motivo) { Swal.showValidationMessage('Debes ingresar un motivo'); return false }
+        return { motivo, crearCopia }
+      },
+    })
+    if (!isConfirmed || !value) return
+    const { motivo, crearCopia } = value as { motivo: string; crearCopia: boolean }
+    try {
+      // 1) Penalidades del cobro de esta multa (vía incidencia)
+      const { data: incs } = await (supabase.from('incidencias' as any) as any)
+        .select('id').eq('multa_id', multa.id)
+      const incIds = ((incs || []) as Array<{ id: string }>).map(i => i.id)
+      if (incIds.length === 0) { Swal.fire('Aviso', 'Esta multa no tiene un cobro asociado para rechazar.', 'warning'); return }
+      const { data: pens } = await (supabase.from('penalidades' as any) as any)
+        .select('id, monto, detalle, rechazado').in('incidencia_id', incIds)
+      const aRechazar = ((pens || []) as Array<any>).filter(p => p.rechazado !== true)
+      if (aRechazar.length === 0) { Swal.fire('Aviso', 'El cobro de esta multa ya estaba rechazado.', 'info'); return }
+      // 2) Rechazar cada penalidad: historial + marca
+      for (const pen of aRechazar) {
+        await (supabase.from('penalidades_rechazos' as any) as any).insert({
+          penalidad_id: pen.id,
+          motivo,
+          rechazado_por: user?.id,
+          rechazado_por_nombre: profile?.full_name || 'Sistema',
+          monto_al_rechazo: pen.monto,
+          detalle_al_rechazo: pen.detalle || '',
+        })
+        const { error } = await (supabase.from('penalidades' as any) as any).update({
+          rechazado: true, fecha_rechazo: new Date().toISOString(), motivo_rechazo: motivo,
+        }).eq('id', pen.id)
+        if (error) throw error
+      }
+      // 3) Copia opcional
+      if (crearCopia) await insertarCopiaMulta(multa)
+      showSuccess('Multa rechazada', crearCopia
+        ? 'El cobro se rechazó y se creó una copia en "Activas". Recordá crear el descuento a favor del conductor si ya se había cobrado.'
+        : 'El cobro se rechazó. Recordá crear el descuento a favor del conductor si ya se había cobrado.')
+      cargarDatos()
+    } catch (error: any) {
+      Swal.fire('Error', error.message || 'No se pudo rechazar la multa', 'error')
+    }
+  }
+
+  function handleVerHistorial(multa: Multa) {
+    setHistorialMulta(multa)
   }
 
   async function handleGuardarEdicion() {
@@ -728,6 +944,26 @@ export default function MultasModule() {
         datosNuevos: payload,
         ctx: auditCtx,
       })
+
+      // Propagar los cambios a la incidencia/penalidad SI está "Por Aplicar".
+      // Si ya está aplicada o rechazada, la función no toca nada (defensa extra al gate).
+      try {
+        await sincronizarCobroPorAplicar({
+          id: editingMulta.id,
+          patente: editingMulta.patente,
+          fecha_infraccion: editingMulta.fecha_infraccion,
+          importe: editingMulta.importe,
+          importe_descuento: editingMulta.importe_descuento,
+          fecha_vencimiento_descuento: editingMulta.fecha_vencimiento_descuento,
+          infraccion: editingMulta.infraccion || '',
+          lugar: editingMulta.lugar || '',
+          detalle: editingMulta.detalle || '',
+          conductor_responsable: editingMulta.conductor_responsable || '',
+        }, { userId: user?.id, sedeId: sedeActualId || sedeUsuario?.id })
+      } catch (syncErr) {
+        // No romper el guardado de la multa si la sincronización falla; se registra.
+        console.error('[Multas] Error al sincronizar la incidencia por aplicar:', syncErr)
+      }
 
       showSuccess('Actualizada')
       setShowEditModal(false)
@@ -855,6 +1091,10 @@ export default function MultasModule() {
 
   // Crear cobro directo (sin modal). Si falta info auto-detectable cae al modal.
   async function handleCrearCobroDirecto(multa: Multa) {
+    // Guard sincrónico anti doble clic: si ya hay un envío EN CURSO para esta multa, salir.
+    if (enviandoRef.current.has(multa.id)) return
+    enviandoRef.current.add(multa.id)
+    try {
     if (multasEnviadas.has(multa.id)) {
       Swal.fire({
         icon: 'info',
@@ -940,6 +1180,16 @@ export default function MultasModule() {
       showSuccess('Enviado a facturación', 'La incidencia fue creada y enviada a "Por Aplicar".')
       return
     }
+    if ('alreadyExists' in result) {
+      // La multa ya tenía un cobro (evita duplicados). Reflejarlo en la UI.
+      setMultasEnviadas(prev => {
+        const next = new Set(prev)
+        next.add(multa.id)
+        return next
+      })
+      Swal.fire({ icon: 'info', title: 'Ya enviada', text: result.reason, timer: 1800, showConfirmButton: false })
+      return
+    }
     if ('needsManualInput' in result) {
       Swal.fire({
         icon: 'info',
@@ -952,6 +1202,9 @@ export default function MultasModule() {
       return
     }
     Swal.fire('Error', result.error, 'error')
+    } finally {
+      enviandoRef.current.delete(multa.id)
+    }
   }
 
   // Filtros activos
@@ -1224,18 +1477,37 @@ export default function MultasModule() {
       {
         id: 'estado_pago',
         size: 100,
-        header: 'Estado',
+        header: () => (
+          <ExcelColumnFilter
+            label="Estado"
+            options={ESTADO_PAGO_OPCIONES}
+            selectedValues={estadoPagoFilter}
+            onSelectionChange={setEstadoPagoFilter}
+            filterId="estadoPago"
+            openFilterId={openFilterId}
+            onOpenChange={setOpenFilterId}
+          />
+        ),
         cell: ({ row }: { row: { original: Multa } }) => {
-          const est = multasEstadoPago.get(row.original.id)
-          const label = est?.estado === 'pagada' ? 'Pagado' : est?.estado === 'fraccionada' ? 'En proceso' : 'Pendiente'
-          const col = label === 'Pagado' ? { bg: '#dcfce7', fg: '#15803d' } : label === 'En proceso' ? { bg: '#fef3c7', fg: '#b45309' } : { bg: '#fee2e2', fg: '#b91c1c' }
+          const label = estadoMultaLabel(row.original.id)
+          const col = label === 'Rechazada' ? { bg: '#e5e7eb', fg: '#4b5563' } : label === 'Pagado' ? { bg: '#dcfce7', fg: '#15803d' } : label === 'En proceso' ? { bg: '#fef3c7', fg: '#b45309' } : label === 'Aplicado' ? { bg: '#dbeafe', fg: '#1d4ed8' } : { bg: '#fee2e2', fg: '#b91c1c' }
           return <span style={{ fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 999, background: col.bg, color: col.fg, whiteSpace: 'nowrap' }}>{label}</span>
         },
       },
       {
         id: 'duplicado',
         size: 90,
-        header: 'Duplicado',
+        header: () => (
+          <ExcelColumnFilter
+            label="Duplicado"
+            options={DUPLICADO_OPCIONES}
+            selectedValues={duplicadoFilter}
+            onSelectionChange={setDuplicadoFilter}
+            filterId="duplicado"
+            openFilterId={openFilterId}
+            onOpenChange={setOpenFilterId}
+          />
+        ),
         cell: ({ row }: { row: { original: Multa } }) => {
           const dup = (multasIncidencia.get(row.original.id)?.count || 0) > 1
           return <span style={{ fontSize: 11, fontWeight: 700, color: dup ? '#b91c1c' : '#6b7280' }}>{dup ? 'Sí' : 'No'}</span>
@@ -1394,12 +1666,23 @@ export default function MultasModule() {
               <Eye size={14} />
               <span style={labelStyle}>Ver</span>
             </button>
+            {(row.original.multa_origen_id != null || idsConCopias.has(row.original.id)) && (
+              <button
+                title="Historial: ver la multa de origen o las copias creadas desde esta multa"
+                onClick={() => handleVerHistorial(row.original)}
+                style={btnBase('#7c3aed')}
+              >
+                <History size={14} />
+                <span style={labelStyle}>Historial</span>
+              </button>
+            )}
             {!estaDesestimada && (
               <>
                 <button
-                  title="Editar multa"
+                  title={multaEsEditable(row.original.id) ? 'Editar multa' : 'No editable: la multa ya está en facturación o fue rechazada'}
                   onClick={() => editarMulta(row.original)}
-                  style={btnBase('#2563eb')}
+                  disabled={!multaEsEditable(row.original.id)}
+                  style={{ ...btnBase('#2563eb'), ...(multaEsEditable(row.original.id) ? {} : { opacity: 0.4, cursor: 'not-allowed' }) }}
                 >
                   <Edit2 size={14} />
                   <span style={labelStyle}>Editar</span>
@@ -1425,6 +1708,26 @@ export default function MultasModule() {
                   <Archive size={14} />
                   <span style={labelStyle}>Desestimar</span>
                 </button>
+                {multasEstadoPago.get(row.original.id)?.estado === 'pagada' && (
+                  <button
+                    title="Rechazar el cobro de esta multa pagada"
+                    onClick={() => handleRechazarMulta(row.original)}
+                    style={btnBase('#ef4444')}
+                  >
+                    <X size={14} />
+                    <span style={labelStyle}>Rechazar</span>
+                  </button>
+                )}
+                {multaCobroEstado.get(row.original.id) === 'rechazada' && (
+                  <button
+                    title="Crear una copia de esta multa rechazada (arranca en Activas para reenviar a facturación)"
+                    onClick={() => handleCrearCopia(row.original)}
+                    style={btnBase('#0ea5e9')}
+                  >
+                    <Copy size={14} />
+                    <span style={labelStyle}>Copiar</span>
+                  </button>
+                )}
               </>
             )}
             {estaDesestimada && canReactivar && (
@@ -1451,7 +1754,7 @@ export default function MultasModule() {
         )
       }
     }
-  ], [patentesUnicas, patenteFilter, conductoresUnicos, conductorFilter, lugaresUnicos, lugarFilter, infraccionesUnicas, infraccionFilter, detallesUnicos, detalleFilter, semanasUnicas, semanaFilter, ibuttonsUnicos, ibuttonFilter, fechaInfraccionDesde, fechaInfraccionHasta, openFilterId, obsFilter, importesUnicos, importeFilter, fechaCargaDesde, fechaCargaHasta, multasEnviadas, canReactivar, canBorrar, vista, multasEstadoPago, multasIncidencia])
+  ], [patentesUnicas, patenteFilter, conductoresUnicos, conductorFilter, lugaresUnicos, lugarFilter, infraccionesUnicas, infraccionFilter, detallesUnicos, detalleFilter, semanasUnicas, semanaFilter, ibuttonsUnicos, ibuttonFilter, fechaInfraccionDesde, fechaInfraccionHasta, openFilterId, obsFilter, importesUnicos, importeFilter, fechaCargaDesde, fechaCargaHasta, multasEnviadas, canReactivar, canBorrar, vista, multasEstadoPago, multasIncidencia, estadoPagoFilter, duplicadoFilter, multaEsEditable, multaCobroEstado, idsConCopias, estadoMultaLabel])
 
   // Exportar a Excel
   function handleExportar() {
@@ -1481,7 +1784,7 @@ export default function MultasModule() {
           <div className="stat-card">
             <AlertTriangle size={18} className="stat-icon" />
             <div className="stat-content">
-              <span className="stat-value">{multasKpi.length}</span>
+              <span className="stat-value">{multasKpiSinRechazadas.length}</span>
               <span className="stat-label">Total Multas</span>
             </div>
           </div>
@@ -1651,6 +1954,24 @@ export default function MultasModule() {
                   <span className="patente-badge">{selectedMulta.patente || '-'}</span>
                 </td>
               </tr>
+              {(() => {
+                const origen = selectedMulta.multa_origen_id ? multas.find(m => m.id === selectedMulta.multa_origen_id) : null
+                const copias = multas.filter(m => m.multa_origen_id === selectedMulta.id)
+                if (!selectedMulta.multa_origen_id && copias.length === 0) return null
+                return (
+                  <tr>
+                    <td className="multas-detail-label">Relación</td>
+                    <td className="multas-detail-value" style={{ fontSize: '12px' }}>
+                      {selectedMulta.multa_origen_id && (
+                        <div>Creada como copia de la multa #{selectedMulta.multa_origen_id}{origen?.infraccion ? ` (${origen.infraccion})` : ''}</div>
+                      )}
+                      {copias.length > 0 && (
+                        <div>Tiene {copias.length} copia{copias.length > 1 ? 's' : ''}: {copias.map(c => `#${c.id}${c.infraccion ? ` (${c.infraccion})` : ''}`).join(', ')}</div>
+                      )}
+                    </td>
+                  </tr>
+                )
+              })()}
               <tr>
                 <td className="multas-detail-label">Fecha Infraccion</td>
                 <td className="multas-detail-value">
@@ -2153,6 +2474,68 @@ export default function MultasModule() {
         onClose={() => { setShowCobroModal(false); setMultaParaCobro(null) }}
         onSaved={cargarDatos}
       />
+
+      {historialMulta && (() => {
+        const esCopia = historialMulta.multa_origen_id != null
+        const parent = esCopia ? multas.find(m => m.id === historialMulta.multa_origen_id) : null
+        const copias = multas.filter(m => m.multa_origen_id === historialMulta.id)
+        const fmtFecha = (s?: string | null) => s ? new Date(s).toLocaleString('es-AR') : '—'
+        const th = { padding: '6px 8px', borderBottom: '1px solid #eef0f2', textAlign: 'left' as const }
+        const td = { padding: '6px 8px', borderBottom: '1px solid #f6f7f8' }
+        return (
+          <div className="multas-modal-overlay" onClick={() => setHistorialMulta(null)}>
+            <div onClick={e => e.stopPropagation()} style={{ background: 'var(--card-bg, #fff)', borderRadius: 12, width: '95%', maxWidth: 760, maxHeight: '86vh', overflow: 'auto', border: '1px solid var(--border-primary, #e5e7eb)' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px 20px', borderBottom: '1px solid #eef0f2' }}>
+                <h3 style={{ margin: 0, fontSize: 16, fontWeight: 700 }}>Historial de la multa{historialMulta.infraccion ? ` · ${historialMulta.infraccion}` : ` #${historialMulta.id}`}</h3>
+                <button onClick={() => setHistorialMulta(null)} aria-label="Cerrar" style={{ border: 'none', background: 'transparent', cursor: 'pointer', color: '#6b7280', padding: 4 }}><X size={18} /></button>
+              </div>
+              <div style={{ padding: '16px 20px' }}>
+                {esCopia && (
+                  <div style={{ marginBottom: copias.length > 0 ? 20 : 0 }}>
+                    <div style={{ fontSize: 12, fontWeight: 700, color: '#6b7280', textTransform: 'uppercase', marginBottom: 8 }}>Esta multa es una copia de (origen)</div>
+                    {parent ? (
+                      <div style={{ border: '1px solid #e5e7eb', borderRadius: 8, padding: 12, fontSize: 13, lineHeight: 1.7 }}>
+                        <div><strong>Multa #{parent.id}</strong> · Acta {parent.infraccion || '—'} · <span style={{ fontWeight: 700, color: multaCobroEstado.get(parent.id) === 'rechazada' ? '#b91c1c' : '#6b7280' }}>{multaCobroEstado.get(parent.id) === 'rechazada' ? 'Rechazada' : 'Original'}</span></div>
+                        <div>Patente: {parent.patente || '—'} · Importe: {formatMoney(parent.importe)}</div>
+                        <div>Conductor: {parent.conductor_responsable || '—'}</div>
+                        <div>Lugar: {parent.lugar || '—'}</div>
+                        <div>Fecha infracción: {(() => { const { date, time } = splitDateTime(parent.fecha_infraccion); return `${date}${time ? ' ' + time : ''}` })()}</div>
+                      </div>
+                    ) : (
+                      <div style={{ fontSize: 13, color: '#6b7280' }}>La multa de origen (#{historialMulta.multa_origen_id}) no está disponible (pudo haber sido borrada).</div>
+                    )}
+                  </div>
+                )}
+                {copias.length > 0 && (
+                  <div>
+                    <div style={{ fontSize: 12, fontWeight: 700, color: '#6b7280', textTransform: 'uppercase', marginBottom: 8 }}>Copias creadas desde esta multa ({copias.length})</div>
+                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12, whiteSpace: 'nowrap' }}>
+                      <thead><tr style={{ color: '#6b7280', fontSize: 11, textTransform: 'uppercase' }}>
+                        <th style={th}>Multa</th><th style={th}>Patente</th><th style={th}>Importe</th><th style={th}>Conductor</th><th style={th}>Creada por</th><th style={th}>Fecha creación</th>
+                      </tr></thead>
+                      <tbody>
+                        {copias.map(c => (
+                          <tr key={c.id}>
+                            <td style={td}>#{c.id}</td>
+                            <td style={td}>{c.patente || '—'}</td>
+                            <td style={td}>{formatMoney(c.importe)}</td>
+                            <td style={td}>{c.conductor_responsable || '—'}</td>
+                            <td style={td}>{c.updated_by_name || '—'}</td>
+                            <td style={td}>{fmtFecha(c.created_at)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+                {!esCopia && copias.length === 0 && (
+                  <div style={{ fontSize: 13, color: '#6b7280' }}>Esta multa no tiene copias ni proviene de otra.</div>
+                )}
+              </div>
+            </div>
+          </div>
+        )
+      })()}
 
       {showPendienteModal && (
         <div className="multas-modal-overlay" onClick={() => setShowPendienteModal(false)}>
