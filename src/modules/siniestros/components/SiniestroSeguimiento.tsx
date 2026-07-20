@@ -752,7 +752,9 @@ export function SiniestroSeguimiento({ siniestro, onReload, readonly = false }: 
                         <button
                           onClick={() => {
                             if (seg.incidencia_id) {
-                              navigate(`/incidencias?id=${seg.incidencia_id}`)
+                              // Navegar dejando la incidencia como filtro en la tabla
+                              // (param `buscar`), en vez de abrir el modal de detalle.
+                              navigate(`/incidencias?buscar=${seg.incidencia_id}`)
                             } else if (seg.penalidad_id) {
                               navigate(`/incidencias?penalidad_id=${seg.penalidad_id}`)
                             }

@@ -29,6 +29,7 @@ export interface CrearCobroTelepaseCtx {
 export type CrearCobroTelepaseResult =
   | { ok: true; incidenciaId: string; penalidadId: string }
   | { ok: false; needsManualInput: true; reason: string }
+  | { ok: false; alreadyExists: true; reason: string; incidenciaId?: string }
   | { ok: false; error: string }
 
 function normalizePatente(value: string | null | undefined): string {
@@ -175,6 +176,17 @@ export async function crearCobroDesdeTelepase(
   const monto = parseTarifaToNumber(registro.tarifa)
   const descripcion = buildDescripcion(registro)
 
+  // 7.5 IDEMPOTENCIA: si este telepase ya tiene un cobro (incidencia), no crear otro.
+  // Evita duplicados por doble clic o envíos concurrentes. El candado definitivo es el
+  // índice único en incidencias(telepase_id); este chequeo da un mensaje claro.
+  const { data: incExistente } = await (supabase.from('incidencias' as any) as any)
+    .select('id')
+    .eq('telepase_id', registro.id)
+    .limit(1)
+  if (incExistente && incExistente.length > 0) {
+    return { ok: false, alreadyExists: true, reason: 'Este telepase ya tiene un cobro generado.', incidenciaId: incExistente[0].id }
+  }
+
   // 8) INSERT en incidencias
   const { data: incidenciaCreada, error: incError } = await (supabase.from('incidencias' as any) as any)
     .insert({
@@ -198,7 +210,14 @@ export async function crearCobroDesdeTelepase(
     })
     .select('id')
     .single()
-  if (incError || !incidenciaCreada) return { ok: false, error: incError?.message || 'Error al crear la incidencia' }
+  if (incError || !incidenciaCreada) {
+    // 23505 = unique_violation: el índice único por telepase_id rechazó un duplicado
+    // creado por otra ejecución concurrente. No es error, ya existe el cobro.
+    if ((incError as { code?: string } | null)?.code === '23505') {
+      return { ok: false, alreadyExists: true, reason: 'Este telepase ya tiene un cobro generado.' }
+    }
+    return { ok: false, error: incError?.message || 'Error al crear la incidencia' }
+  }
 
   // 9) INSERT en penalidades — hace que aparezca en "Por Aplicar"
   const { data: penalidadCreada, error: penError } = await (supabase.from('penalidades' as any) as any)
