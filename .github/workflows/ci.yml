@@ -1,15 +1,12 @@
 # CI/CD Pipeline Lineal
-# BUILD → MERGE STAGING → MERGE MAIN → DEPLOY
-# (Aprobaciones comentadas para deploys rapidos)
+# BUILD → APROBACIÓN → MERGE STAGING → MERGE MAIN → DEPLOY
+# Ningún merge avanza a staging/main sin aprobación en el environment Production
 
 name: CI/CD Pipeline
 
 on:
   push:
     branches: [development]
-  pull_request:
-    branches: [development]
-    types: [closed]
 
 # Cancelar runs anteriores del mismo branch cuando hay un nuevo push
 concurrency:
@@ -26,7 +23,6 @@ jobs:
   build:
     name: "1. Build"
     runs-on: ubuntu-latest
-    if: github.event_name == 'push' || (github.event_name == 'pull_request' && github.event.pull_request.merged == true)
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-node@v5
@@ -41,23 +37,23 @@ jobs:
           VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
 
   # ═══════════════════════════════════════════
-  # PASO 2: Aprobación para Staging (COMENTADO)
+  # PASO 2: Aprobación (revisores del environment Production)
   # ═══════════════════════════════════════════
-  # approval-staging:
-  #   name: "2. Approval Staging"
-  #   needs: build
-  #   runs-on: ubuntu-latest
-  #   environment:
-  #     name: staging
-  #   steps:
-  #     - run: echo "✅ Aprobado para Staging"
+  approval:
+    name: "2. Aprobación"
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: Production
+    steps:
+      - run: echo "Aprobado - continua el merge a staging, main y deploy"
 
   # ═══════════════════════════════════════════
-  # PASO 2: Merge a Staging (directo tras build)
+  # PASO 3: Merge a Staging (tras aprobación)
   # ═══════════════════════════════════════════
   merge-staging:
-    name: "2. Merge Staging"
-    needs: build
+    name: "3. Merge Staging"
+    needs: approval
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
@@ -74,22 +70,10 @@ jobs:
           git push origin staging
 
   # ═══════════════════════════════════════════
-  # PASO 3: Aprobación para Producción (COMENTADO)
-  # ═══════════════════════════════════════════
-  # approval-production:
-  #   name: "4. Approval Prod"
-  #   needs: merge-staging
-  #   runs-on: ubuntu-latest
-  #   environment:
-  #     name: production
-  #   steps:
-  #     - run: echo "✅ Aprobado para Producción"
-
-  # ═══════════════════════════════════════════
-  # PASO 3: Merge a Main + Deploy (directo tras staging)
+  # PASO 4: Merge a Main + Deploy
   # ═══════════════════════════════════════════
   merge-main:
-    name: "3. Merge Main + Deploy"
+    name: "4. Merge Main + Deploy"
     needs: merge-staging
     runs-on: ubuntu-latest
     steps:
@@ -110,4 +94,4 @@ jobs:
           curl -X POST "${{ secrets.DOKPLOY_WEBHOOK_URL }}" \
             -H "Content-Type: application/json" \
             --fail --silent --show-error
-          echo "🚀 Deploy triggered en Dokploy"
+          echo "Deploy triggered en Dokploy"
