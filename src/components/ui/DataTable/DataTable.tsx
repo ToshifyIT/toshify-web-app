@@ -576,6 +576,13 @@ export interface DataTableProps<T> {
   /** Callback al cambiar el filtro global (modo controlado) */
   onGlobalFilterChange?: (value: string) => void;
   /**
+   * Valor inicial/semilla del buscador en modo NO controlado. Cuando cambia,
+   * se escribe en el buscador interno una sola vez (el usuario puede seguir
+   * editándolo libremente después). Útil para prellenar el filtro desde afuera
+   * sin convertir la tabla a modo controlado (evita re-render en cada tecla).
+   */
+  initialSearch?: string;
+  /**
    * Callback opcional que se dispara cada vez que cambian las filas visibles tras
    * aplicar TODOS los filtros internos (columna Excel, fechas, números, búsqueda global).
    * Permite a un módulo padre conocer "lo que el usuario realmente ve en la tabla" —
@@ -619,6 +626,7 @@ export function DataTable<T>({
   globalFilterFn: customGlobalFilterFn,
   globalFilter: controlledGlobalFilter,
   onGlobalFilterChange: setControlledGlobalFilter,
+  initialSearch,
   onFilteredDataChange,
   manualPagination = false,
   rowCount,
@@ -629,6 +637,15 @@ export function DataTable<T>({
   const isControlled = controlledGlobalFilter !== undefined;
   const globalFilter = isControlled ? controlledGlobalFilter : internalGlobalFilter;
   const setGlobalFilter = isControlled ? (setControlledGlobalFilter || (() => {})) : setInternalGlobalFilter;
+
+  // Semilla externa del buscador (modo no controlado): cuando `initialSearch`
+  // cambia a un valor definido, se refleja en el buscador interno. No afecta el
+  // modo controlado ni el tipeo posterior del usuario.
+  useEffect(() => {
+    if (!isControlled && initialSearch !== undefined) {
+      setInternalGlobalFilter(initialSearch);
+    }
+  }, [initialSearch, isControlled]);
 
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [sorting, setSorting] = useState<SortingState>([]);
