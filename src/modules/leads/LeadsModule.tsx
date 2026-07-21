@@ -79,21 +79,100 @@ function loadGoogleMapsAPI(): Promise<void> {
   })
 }
 
-function geocodificarDireccion(direccion: string): Promise<{ lat: number; lng: number } | null> {
+// Normaliza el texto crudo de la dirección (viene de Intercom, suele estar mal
+// formado: "Croacia 1074.jose c paz. Bs.as"). El geocoder no parsea ese texto y
+// cae al centroide de la localidad; normalizándolo resuelve la calle correcta.
+function normalizarDireccion(direccion: string): string {
+  let d = ` ${direccion.trim()} `
+  // Abreviaturas frecuentes PRIMERO (antes de tocar los puntos, si no "Bs.as" se parte)
+  d = d.replace(/\bBs\.?\s*as\.?\b/gi, 'Buenos Aires')
+  d = d.replace(/\bpcia\.?\b/gi, 'Provincia')
+  d = d.replace(/\bprov\.?\b/gi, 'Provincia')
+  d = d.replace(/\bcaba\b/gi, 'CABA')
+  // Punto pegado entre dos caracteres alfanuméricos -> ", " (separa "1074.jose")
+  d = d.replace(/([0-9A-Za-zÁÉÍÓÚáéíóúÑñ])\.(?=[0-9A-Za-zÁÉÍÓÚáéíóúÑñ])/g, '$1, ')
+  // Puntos sueltos restantes -> coma
+  d = d.replace(/\s*\.\s*/g, ', ')
+  // Colapsar comas y espacios repetidos
+  d = d.replace(/\s+/g, ' ').replace(/\s*,\s*/g, ', ').replace(/(,\s*)+/g, ', ')
+  d = d.trim().replace(/^,\s*/, '').replace(/,\s*$/, '')
+  if (!/argentina/i.test(d)) d = `${d}, Argentina`
+  return d
+}
+
+// Fallback: Places findPlaceFromQuery, el mismo motor tolerante que usa la web de
+// Google Maps. Se usa cuando el geocoder devuelve un resultado aproximado.
+function buscarEnPlaces(query: string): Promise<{ lat: number; lng: number } | null> {
+  return new Promise((resolve) => {
+    const g = (window as any).google
+    if (!g?.maps?.places?.PlacesService) { resolve(null); return }
+    try {
+      const service = new g.maps.places.PlacesService(document.createElement('div'))
+      service.findPlaceFromQuery(
+        { query, fields: ['geometry'] },
+        (results: any, status: string) => {
+          if (status === g.maps.places.PlacesServiceStatus.OK && results && results[0]?.geometry?.location) {
+            const loc = results[0].geometry.location
+            resolve({ lat: loc.lat(), lng: loc.lng() })
+          } else {
+            resolve(null)
+          }
+        }
+      )
+    } catch {
+      resolve(null)
+    }
+  })
+}
+
+// resultado del geocoder:
+//  - coords presentes -> encontrado (estado 'ok' | 'aproximado')
+//  - coords null + sinResultado true  -> Google devolvió ZERO_RESULTS (permanente)
+//  - coords null + sinResultado false -> error transitorio (cuota, red): NO marcar permanente
+type GeocodeResultado = { lat: number; lng: number; estado: string } | { lat: null; lng: null; estado: null; sinResultado: boolean }
+
+function geocodificarConGeocoder(direccion: string): Promise<{ status: string; lat: number | null; lng: number | null; preciso: boolean }> {
   return new Promise((resolve) => {
     const geocoder = new (window as any).google.maps.Geocoder()
     geocoder.geocode(
       { address: direccion, region: 'ar' },
       (results: any, status: string) => {
         if (status === 'OK' && results && results[0]) {
-          const location = results[0].geometry.location
-          resolve({ lat: location.lat(), lng: location.lng() })
+          const r = results[0]
+          const location = r.geometry.location
+          const locType: string = r.geometry?.location_type || ''
+          const preciso = (locType === 'ROOFTOP' || locType === 'RANGE_INTERPOLATED') && !r.partial_match
+          resolve({ status, lat: location.lat(), lng: location.lng(), preciso })
         } else {
-          resolve(null)
+          resolve({ status, lat: null, lng: null, preciso: false })
         }
       }
     )
   })
+}
+
+async function geocodificarDireccion(direccion: string): Promise<GeocodeResultado> {
+  const normalizada = normalizarDireccion(direccion)
+
+  // 1) Geocoder con el texto normalizado (mejor precisión de altura)
+  const geo = await geocodificarConGeocoder(normalizada)
+  if (geo.lat != null && geo.lng != null && geo.preciso) {
+    return { lat: geo.lat, lng: geo.lng, estado: 'ok' }
+  }
+
+  // 2) Fallback a Places cuando el geocoder no ubicó la calle (aproximado o ZERO_RESULTS)
+  const place = await buscarEnPlaces(normalizada)
+  if (place) {
+    return { lat: place.lat, lng: place.lng, estado: 'aproximado' }
+  }
+
+  // 3) Sin Places: si el geocoder al menos dio un punto aproximado, lo usamos
+  if (geo.lat != null && geo.lng != null) {
+    return { lat: geo.lat, lng: geo.lng, estado: 'aproximado' }
+  }
+
+  // 4) Nada. Solo ZERO_RESULTS es permanente; el resto se reintenta.
+  return { lat: null, lng: null, estado: null, sinResultado: geo.status === 'ZERO_RESULTS' }
 }
 
 // =====================================================
@@ -636,11 +715,43 @@ export function LeadsModule() {
     return () => document.removeEventListener('click', handleClick)
   }, [estadoDropdownId])
 
-  // ---------- GEOCODIFICAR LEADS SIN COORDENADAS ----------
+  // ---------- GEOCODIFICAR DIRECCIÓN -> COLUMNAS direccion_latitud/longitud ----------
+  // Geocodifica el texto de la dirección y guarda el resultado en las columnas
+  // direccion_latitud/direccion_longitud (independientes de latitud/longitud, que
+  // vienen de una fuente externa). Devuelve true si actualizó la fila.
+  const geocodificarYGuardarDireccion = useCallback(async (lead: Lead): Promise<boolean> => {
+    if (!lead.direccion) return false
+    const res = await geocodificarDireccion(lead.direccion)
+    const now = new Date().toISOString()
+    if (res.lat != null && res.lng != null) {
+      await supabase
+        .from('leads')
+        .update({
+          direccion_latitud: res.lat,
+          direccion_longitud: res.lng,
+          direccion_geocode_estado: res.estado,
+          direccion_geocode_fecha: now,
+        })
+        .eq('id', lead.id)
+      return true
+    }
+    if (res.sinResultado) {
+      // Permanente: Google no ubicó la dirección. Se marca para no reintentar en bucle.
+      await supabase
+        .from('leads')
+        .update({ direccion_geocode_estado: 'sin_resultado', direccion_geocode_fecha: now })
+        .eq('id', lead.id)
+    }
+    // Error transitorio: no se toca nada, se reintenta en la próxima carga.
+    return false
+  }, [])
+
+  // ---------- GEOCODIFICAR LEADS SIN COORDENADAS NUEVAS ----------
   const geocodificarLeadsSinCoordenadas = useCallback(async (leadsList: Lead[]) => {
     try {
+      // Solo los que tienen dirección y todavía no tienen coordenadas geocodificadas
       const sinCoords = leadsList.filter(
-        l => l.direccion && (l.latitud == null || l.longitud == null)
+        l => l.direccion && l.direccion_latitud == null && l.direccion_geocode_estado !== 'sin_resultado'
       )
       if (sinCoords.length === 0) return
 
@@ -650,20 +761,21 @@ export function LeadsModule() {
         return
       }
 
+      // Tope por carga para no exceder la cuota de Google en un solo golpe.
+      // Los restantes se procesan en la siguiente carga (el proceso converge).
+      const LOTE_MAX = 150
+      const lote = sinCoords.slice(0, LOTE_MAX)
+
       let actualizado = false
-      for (const lead of sinCoords) {
+      for (const lead of lote) {
         try {
-          const coords = await geocodificarDireccion(lead.direccion || '')
-          if (coords) {
-            await supabase
-              .from('leads')
-              .update({ latitud: coords.lat, longitud: coords.lng })
-              .eq('id', lead.id)
-            actualizado = true
-          }
+          const ok = await geocodificarYGuardarDireccion(lead)
+          if (ok) actualizado = true
         } catch {
           // silently ignored
         }
+        // Pequeño respiro entre llamadas para respetar el rate limit del geocoder
+        await new Promise(r => setTimeout(r, 60))
       }
 
       if (actualizado) {
@@ -672,7 +784,22 @@ export function LeadsModule() {
     } catch (err) {
       console.error('[Leads] Error en geocodificarLeadsSinCoordenadas:', err)
     }
-  }, [loadLeads])
+  }, [loadLeads, geocodificarYGuardarDireccion])
+
+  // ---------- RECALCULAR UBICACIÓN DE UN LEAD (botón manual) ----------
+  const recalcularUbicacionLead = useCallback(async (lead: Lead) => {
+    try {
+      await loadGoogleMapsAPI()
+    } catch {
+      return
+    }
+    try {
+      await geocodificarYGuardarDireccion(lead)
+      loadLeads()
+    } catch (err) {
+      console.error('[Leads] Error recalculando ubicación:', err)
+    }
+  }, [loadLeads, geocodificarYGuardarDireccion])
 
   useEffect(() => {
     if (leads.length > 0) {
@@ -818,8 +945,8 @@ export function LeadsModule() {
     try {
     if (zonasRestringidas.length === 0) return map
     for (const lead of leads) {
-      if (lead.latitud == null || lead.longitud == null) continue
-      const punto = { lat: lead.latitud, lng: lead.longitud }
+      if (lead.direccion_latitud == null || lead.direccion_longitud == null) continue
+      const punto = { lat: lead.direccion_latitud, lng: lead.direccion_longitud }
       for (const zona of zonasRestringidas) {
         if (zona.poligono && Array.isArray(zona.poligono) && isPointInPolygon(punto, zona.poligono)) {
           map.set(lead.id, zona.nombre)
@@ -839,7 +966,7 @@ export function LeadsModule() {
     const inicio = leads.filter(l => l.estado_de_lead === 'Inicio conversación').length
     const aptos = leads.filter(l => l.estado_de_lead === 'Apto - Hireflix').length
     const noAptos = leads.filter(l => l.estado_de_lead === 'No Apto - Hireflix').length
-    const conCoordenadas = leads.filter(l => l.latitud != null && l.longitud != null)
+    const conCoordenadas = leads.filter(l => l.direccion_latitud != null && l.direccion_longitud != null)
     const enZonaRestringida = conCoordenadas.filter(l => leadsEnZona.has(l.id)).length
     const enZonaSegura = conCoordenadas.filter(l => !leadsEnZona.has(l.id)).length
     const convocatoria = leads.filter(l => l.estado_de_lead === 'Convocatoria Inducción' || l.estado_de_lead === 'Convocatoria Induccion').length
@@ -877,8 +1004,8 @@ export function LeadsModule() {
     else if (activeStatCard === 'aptos') result = result.filter(l => l.estado_de_lead === 'Apto - Hireflix')
     else if (activeStatCard === 'noAptos') result = result.filter(l => l.estado_de_lead === 'No Apto - Hireflix')
     else if (activeStatCard === 'convocatoria') result = result.filter(l => l.estado_de_lead === 'Convocatoria Inducción' || l.estado_de_lead === 'Convocatoria Induccion')
-    else if (activeStatCard === 'zonaSegura') result = result.filter(l => l.latitud != null && l.longitud != null && !leadsEnZona.has(l.id))
-    else if (activeStatCard === 'zonaRestringida') result = result.filter(l => l.latitud != null && l.longitud != null && leadsEnZona.has(l.id))
+    else if (activeStatCard === 'zonaSegura') result = result.filter(l => l.direccion_latitud != null && l.direccion_longitud != null && !leadsEnZona.has(l.id))
+    else if (activeStatCard === 'zonaRestringida') result = result.filter(l => l.direccion_latitud != null && l.direccion_longitud != null && leadsEnZona.has(l.id))
     else if (activeStatCard === 'intercom') result = result.filter(l => (l.fuente_de_lead || '').toLowerCase() !== 'damaro')
     else if (activeStatCard === 'damaro') result = result.filter(l => (l.fuente_de_lead || '').toLowerCase() === 'damaro')
     else if (activeStatCard === 'autoPueblo') result = result.filter(l => l.estado_de_lead === 'Auto del pueblo')
@@ -2077,7 +2204,7 @@ export function LeadsModule() {
         const direccion = row.original.direccion || ''
         const zonaRestringida = leadsEnZona.get(row.original.id)
         const enZonaRestringida = !!zonaRestringida
-        const tieneCoordenadas = row.original.latitud != null && row.original.longitud != null
+        const tieneCoordenadas = row.original.direccion_latitud != null && row.original.direccion_longitud != null
 
         return (
           <div
@@ -2750,6 +2877,7 @@ export function LeadsModule() {
                 lead={selectedLead}
                 zonasRestringidas={zonasRestringidas}
                 enZonaRestringida={leadsEnZona.get(selectedLead.id) || null}
+                onRecalcularUbicacion={recalcularUbicacionLead}
               />
             </div>
           </div>
