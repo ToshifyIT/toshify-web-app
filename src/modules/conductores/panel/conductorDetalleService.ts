@@ -297,15 +297,20 @@ export async function cargarExcesoKmConductor(conductorId: string): Promise<Exce
   ])
 
   // Incidencia (exceso) por id -> semana del exceso + monto.
+  // OJO: la incidencia/penalidad de exceso de KM se registra la semana SIGUIENTE a la del
+  // exceso (se procesa el lunes, cuando ya cerró la semana del km). Por eso `incidencias.semana`
+  // es la semana de registro, y la semana REAL del exceso (la que hay que alinear con la fila
+  // de km recorridos) es (semana - 1). Sin esto, el exceso aparecía en la semana equivocada.
   const incById = new Map<string, { semana: number | null; monto: number }>()
   const porSemana = new Map<number, ExcesoKmSemana>()
   for (const i of (incs || []) as Array<{ id: unknown; semana: number | null; monto: unknown; km_exceso: unknown }>) {
     const km = Number(i.km_exceso) || 0
-    incById.set(String(i.id), { semana: i.semana ?? null, monto: parseImporte(i.monto) })
-    if (i.semana != null) {
-      const prev = porSemana.get(i.semana)
+    const excesoWeek = i.semana != null ? i.semana - 1 : null
+    incById.set(String(i.id), { semana: excesoWeek, monto: parseImporte(i.monto) })
+    if (excesoWeek != null) {
+      const prev = porSemana.get(excesoWeek)
       if (prev) { prev.monto += parseImporte(i.monto); prev.kmExceso += km }
-      else porSemana.set(i.semana, { monto: parseImporte(i.monto), kmExceso: km, semanasPago: [] })
+      else porSemana.set(excesoWeek, { monto: parseImporte(i.monto), kmExceso: km, semanasPago: [] })
     }
   }
 

@@ -37,6 +37,11 @@ export interface Lead {
   sede_vehiculo?: string | null
   latitud?: number | null
   longitud?: number | null
+  // Coordenadas geocodificadas desde el texto de la dirección (independientes de latitud/longitud, que vienen de fuente externa)
+  direccion_latitud?: number | null
+  direccion_longitud?: number | null
+  direccion_geocode_estado?: string | null
+  direccion_geocode_fecha?: string | null
   estado_direccion?: string | null
   clasificacion_domicilio?: string | null
   country?: string | null

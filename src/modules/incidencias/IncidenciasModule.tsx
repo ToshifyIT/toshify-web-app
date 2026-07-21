@@ -5347,10 +5347,15 @@ function IncidenciaDetailView({ incidencia, onEdit, tiposCobroDescuento, penalid
           <p className="detail-id" style={{ fontSize: '11px', color: 'var(--text-tertiary)', marginBottom: '4px', fontFamily: 'monospace', wordBreak: 'break-all' }}>ID: {incidencia.id}</p>
           <h3 className="detail-title" style={{ fontSize: '18px', fontWeight: 700, marginBottom: '8px' }}>{incidencia.patente_display || 'Sin patente'}</h3>
           {(() => {
-            const estadoEfectivo = penalidadVinculada?.rechazado
-              ? { nombre: 'Rechazado', color: 'red' }
-              : penalidadVinculada?.aplicado
-              ? { nombre: 'Aplicado', color: 'green' }
+            // Para incidencias de facturación (con penalidad vinculada) el estado que se
+            // muestra es el de facturación (Por Aplicar/Aplicado/Rechazado), igual que en la
+            // tabla. Solo las incidencias sin penalidad usan su estado genérico.
+            const estadoEfectivo = penalidadVinculada
+              ? (penalidadVinculada.rechazado
+                  ? { nombre: 'Rechazado', color: 'red' }
+                  : penalidadVinculada.aplicado
+                  ? { nombre: 'Aplicado', color: 'green' }
+                  : { nombre: 'Por Aplicar', color: 'yellow' })
               : { nombre: incidencia.estado_nombre, color: incidencia.estado_color }
             return <span className={`estado-badge estado-${estadoEfectivo.color}`}>{estadoEfectivo.nombre}</span>
           })()}
@@ -5384,10 +5389,12 @@ function IncidenciaDetailView({ incidencia, onEdit, tiposCobroDescuento, penalid
               <span style={labelStyle}>Estado</span>
               <span style={valueStyle}>
                 {(() => {
-                  const ef = penalidadVinculada?.rechazado
-                    ? { nombre: 'Rechazado', color: 'red' }
-                    : penalidadVinculada?.aplicado
-                    ? { nombre: 'Aplicado', color: 'green' }
+                  const ef = penalidadVinculada
+                    ? (penalidadVinculada.rechazado
+                        ? { nombre: 'Rechazado', color: 'red' }
+                        : penalidadVinculada.aplicado
+                        ? { nombre: 'Aplicado', color: 'green' }
+                        : { nombre: 'Por Aplicar', color: 'yellow' })
                     : { nombre: incidencia.estado_nombre, color: incidencia.estado_color }
                   return <span className={`estado-badge estado-${ef.color}`} style={{ fontSize: '11px', padding: '2px 8px' }}>{ef.nombre}</span>
                 })()}
