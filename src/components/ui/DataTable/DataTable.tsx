@@ -53,6 +53,12 @@ function getJustifyContent(align?: ColumnAlignment): CSSProperties['justifyConte
 }
 
 // Calendar helper functions
+// Referencia estable para el default de alwaysVisibleColumns. Si se dejara como literal en
+// la firma (`= ["acciones","actions"]`), se recrearía en cada render, rompiendo la
+// memoización de las columnas y re-montando el header de los filtros (el foco del input
+// "Desde" saltaba al tipear en "Hasta").
+const DEFAULT_ALWAYS_VISIBLE_COLUMNS = ["acciones", "actions"];
+
 const DAYS_SHORT = ['LU', 'MA', 'MI', 'JU', 'VI', 'SA', 'DO'];
 const MONTH_NAMES_SHORT = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
                            'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
@@ -616,7 +622,7 @@ export function DataTable<T>({
   getRowClassName,
   getRowStyle,
   headerAction,
-  alwaysVisibleColumns = ["acciones", "actions"],
+  alwaysVisibleColumns = DEFAULT_ALWAYS_VISIBLE_COLUMNS,
   stickyFirstColumn = false,
   stickyLeftColumns,
   resetFiltersKey,
@@ -975,6 +981,14 @@ export function DataTable<T>({
     );
   }, [getDataFilteredExcluding, getNestedValueForFilter]);
 
+  // Ref a getUniqueValues para que el header lo llame SIN que sea dependencia del memo de
+  // columnas. Si estuviera en las deps, al tipear en un filtro numérico (que cambia
+  // numberFilters -> getDataFilteredExcluding -> getUniqueValues) se rearmaban las columnas
+  // y el header del filtro se re-montaba, disparando el autoFocus del input "Desde" (el foco
+  // saltaba de "Hasta" a "Desde" al escribir). Leyéndolo por ref, las columnas quedan estables.
+  const getUniqueValuesRef = useRef(getUniqueValues);
+  getUniqueValuesRef.current = getUniqueValues;
+
   // Filter data based on column filters and date filters
   const filteredData = useMemo(() => {
     let result = [...data];
@@ -1210,7 +1224,7 @@ export function DataTable<T>({
               isDate={isDate}
               isNumber={isNumber}
               isMoney={isMoney}
-              uniqueValues={isDate || isNumber ? [] : (isOpen ? getUniqueValues(colId) : [])}
+              uniqueValues={isDate || isNumber ? [] : (isOpen ? getUniqueValuesRef.current(colId) : [])}
               selectedValues={currentColumnFilters[colId] || []}
               dateFilter={currentDateFilters[colId]}
               numberFilter={currentNumberFilters[colId]}
@@ -1224,7 +1238,7 @@ export function DataTable<T>({
         },
       } as ColumnDef<T, unknown>;
     });
-  }, [regularColumns, disableAutoFilters, isDateColumn, isNumberColumn, isMoneyColumn, isNumericByData, openFilterId, getUniqueValues, handleFilterToggle, handleSelectValue, handleDateChange, handleNumberChange, handleClearFilter]);
+  }, [regularColumns, disableAutoFilters, isDateColumn, isNumberColumn, isMoneyColumn, isNumericByData, openFilterId, handleFilterToggle, handleSelectValue, handleDateChange, handleNumberChange, handleClearFilter]);
 
   // Memoize final columns — all regular columns with filters + actions
   const finalColumns = useMemo<ColumnDef<T, unknown>[]>(() => {

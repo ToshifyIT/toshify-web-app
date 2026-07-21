@@ -1,6 +1,6 @@
 // src/modules/leads/components/LeadDetailView.tsx
 import { useState, useEffect, useRef } from 'react'
-import { MessageCircle, Video, UserPlus, Edit2, MapPin, AlertTriangle, ExternalLink } from 'lucide-react'
+import { MessageCircle, Video, UserPlus, Edit2, MapPin, AlertTriangle, ExternalLink, RefreshCw } from 'lucide-react'
 import { GoogleMap, Marker, Polygon } from '@react-google-maps/api'
 import type { Lead } from '../../../types/leads.types'
 import { GOOGLE_MAPS_SCRIPT_URL } from '../../../lib/googleMaps'
@@ -110,15 +110,27 @@ interface LeadDetailViewProps {
   onConvert?: () => void
   zonasRestringidas?: ZonaRestringida[]
   enZonaRestringida?: string | null
+  onRecalcularUbicacion?: (lead: Lead) => Promise<void>
 }
 
-export function LeadDetailView({ lead, onEdit, onConvert, zonasRestringidas = [], enZonaRestringida }: LeadDetailViewProps) {
+export function LeadDetailView({ lead, onEdit, onConvert, zonasRestringidas = [], enZonaRestringida, onRecalcularUbicacion }: LeadDetailViewProps) {
   const mapRef = useRef<google.maps.Map | null>(null)
+  const [recalculando, setRecalculando] = useState(false)
 
   const handleRecenter = () => {
-    if (mapRef.current && lead.latitud != null && lead.longitud != null) {
-      mapRef.current.panTo({ lat: lead.latitud, lng: lead.longitud })
+    if (mapRef.current && lead.direccion_latitud != null && lead.direccion_longitud != null) {
+      mapRef.current.panTo({ lat: lead.direccion_latitud, lng: lead.direccion_longitud })
       mapRef.current.setZoom(14)
+    }
+  }
+
+  const handleRecalcular = async () => {
+    if (!onRecalcularUbicacion || recalculando) return
+    setRecalculando(true)
+    try {
+      await onRecalcularUbicacion(lead)
+    } finally {
+      setRecalculando(false)
     }
   }
 
@@ -255,7 +267,7 @@ export function LeadDetailView({ lead, onEdit, onConvert, zonasRestringidas = []
           <div className="lead-detail-item">
             <span className="lead-detail-item-label">Dirección</span>
             <span className="lead-detail-item-value" style={{ fontSize: '12px' }}>
-              {lead.direccion && lead.latitud != null && lead.longitud != null ? (
+              {lead.direccion && lead.direccion_latitud != null && lead.direccion_longitud != null ? (
                 <span
                   onClick={handleRecenter}
                   style={{ color: 'var(--color-primary)', cursor: 'pointer' }}
@@ -265,19 +277,53 @@ export function LeadDetailView({ lead, onEdit, onConvert, zonasRestringidas = []
               ) : (lead.direccion || '-')}
             </span>
           </div>
-          {lead.latitud != null && lead.longitud != null && (
-            <LeadDetailMap
-              lat={lead.latitud}
-              lng={lead.longitud}
-              zonasRestringidas={zonasRestringidas}
-              enZonaRestringida={!!enZonaRestringida}
-              nombreZona={enZonaRestringida || undefined}
-              mapRef={mapRef}
-            />
+          {lead.direccion_latitud != null && lead.direccion_longitud != null && (
+            <>
+              <LeadDetailMap
+                lat={lead.direccion_latitud}
+                lng={lead.direccion_longitud}
+                zonasRestringidas={zonasRestringidas}
+                enZonaRestringida={!!enZonaRestringida}
+                nombreZona={enZonaRestringida || undefined}
+                mapRef={mapRef}
+              />
+              {lead.direccion && onRecalcularUbicacion && (
+                <div style={{ marginTop: '6px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <button
+                    type="button"
+                    onClick={handleRecalcular}
+                    disabled={recalculando}
+                    style={{ fontSize: '11px', color: 'var(--color-primary)', background: 'none', border: '1px solid var(--color-primary)', borderRadius: '6px', padding: '3px 8px', cursor: recalculando ? 'default' : 'pointer', opacity: recalculando ? 0.6 : 1, display: 'flex', alignItems: 'center', gap: '4px' }}
+                  >
+                    <RefreshCw size={12} /> {recalculando ? 'Recalculando...' : 'Recalcular ubicación'}
+                  </button>
+                  {lead.direccion_geocode_estado === 'aproximado' && (
+                    <span style={{ fontSize: '11px', color: '#B45309' }}>Ubicación aproximada</span>
+                  )}
+                </div>
+              )}
+            </>
           )}
-          {lead.direccion && lead.latitud == null && (
+          {lead.direccion && lead.direccion_latitud == null && lead.direccion_geocode_estado !== 'sin_resultado' && (
             <div style={{ marginTop: '8px', padding: '8px 12px', background: '#FEF3C7', borderRadius: '6px', fontSize: '11px', color: '#92400E', display: 'flex', alignItems: 'center', gap: '6px' }}>
               <MapPin size={12} /> Geocodificando dirección...
+            </div>
+          )}
+          {lead.direccion && lead.direccion_latitud == null && lead.direccion_geocode_estado === 'sin_resultado' && (
+            <div style={{ marginTop: '8px', padding: '8px 12px', background: '#FEF3C7', borderRadius: '6px', fontSize: '11px', color: '#92400E', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '6px' }}>
+              <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <MapPin size={12} /> No se pudo ubicar la dirección
+              </span>
+              {onRecalcularUbicacion && (
+                <button
+                  type="button"
+                  onClick={handleRecalcular}
+                  disabled={recalculando}
+                  style={{ fontSize: '11px', color: '#92400E', background: 'none', border: '1px solid #92400E', borderRadius: '6px', padding: '3px 8px', cursor: recalculando ? 'default' : 'pointer', opacity: recalculando ? 0.6 : 1, display: 'flex', alignItems: 'center', gap: '4px' }}
+                >
+                  <RefreshCw size={12} /> {recalculando ? 'Recalculando...' : 'Reintentar'}
+                </button>
+              )}
             </div>
           )}
         </div>
