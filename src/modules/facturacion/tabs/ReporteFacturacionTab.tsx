@@ -2803,9 +2803,12 @@ export function ReporteFacturacionTab() {
         // Tickets a favor (descuentos) + P004 de penalidades
         const subtotalDescuentos = (ticketsMap.get(conductorId) || 0) + montoPenalidadesDescuento
 
-        // Saldo anterior: se LEE del tab Saldos (solo lectura, no se escribe de vuelta)
+        // Saldo anterior: se LEE del tab Saldos (solo lectura, no se escribe de vuelta).
+        // Se arrastra SIEMPRE (trabaje o no esa semana): es deuda previa, no un cargo
+        // de la semana. Antes se forzaba a 0 con "diasTotales === 0 ? 0 :", lo que hacía
+        // que los conductores de baja (0 días) perdieran la deuda arrastrada.
         const saldo = saldosMap.get(conductorId)
-        const saldoAnteriorRaw = diasTotales === 0 ? 0 : -(saldo?.saldo_actual || 0)
+        const saldoAnteriorRaw = -(saldo?.saldo_actual || 0)
         const saldoAnterior = Math.abs(saldoAnteriorRaw) < 0.01 ? 0 : Math.round(saldoAnteriorRaw * 100) / 100
         const diasMora = 0
         const montoMora = 0
@@ -4016,9 +4019,12 @@ export function ReporteFacturacionTab() {
         const montoMultas = multasVehiculo?.monto || 0
         const cantidadMultas = multasVehiculo?.cantidad || 0
 
-        // Saldo anterior: se LEE del tab Saldos (solo lectura, no se escribe de vuelta)
+        // Saldo anterior: se LEE del tab Saldos (solo lectura, no se escribe de vuelta).
+        // Se arrastra SIEMPRE (trabaje o no esa semana): es deuda previa, no un cargo
+        // de la semana. Antes se forzaba a 0 con "total_dias === 0 ? 0 :", lo que hacía
+        // que los conductores de baja (0 días) perdieran la deuda arrastrada.
         const saldoConductor = saldosMapById.get(conductor.conductor_id)
-        const saldoAnteriorRaw = conductor.total_dias === 0 ? 0 : -(saldoConductor?.saldo_actual || 0)
+        const saldoAnteriorRaw = -(saldoConductor?.saldo_actual || 0)
         const saldoAnterior = Math.abs(saldoAnteriorRaw) < 0.01 ? 0 : Math.round(saldoAnteriorRaw * 100) / 100
         const diasMora = 0
         const montoMora = 0
@@ -4920,10 +4926,12 @@ export function ReporteFacturacionTab() {
           if (match) {
             const pago = match.monto_movimiento || 0
             const resultado = match.saldo_pendiente || 0
-            // saldo previo = lo que debía antes del pago = pago - resultado
-            const saldoPrevio = match.saldo_adeudado != null && match.saldo_adeudado > 0
-              ? match.saldo_adeudado
-              : pago - resultado
+            // saldo previo = lo que debía ANTES del pago = pago - resultado.
+            // Nota: no se usa match.saldo_adeudado porque en el kardex ese campo es
+            // el saldo que quedó DESPUÉS del movimiento (no el previo), lo que hacía
+            // que en pagos parciales el desglose no reflejara la resta. pago - resultado
+            // reconstruye bien la deuda previa en todos los casos (parcial, exacto, a favor).
+            const saldoPrevio = pago - resultado
             setDetalleSaldoBreakdown({
               saldoPrevio,
               pago,

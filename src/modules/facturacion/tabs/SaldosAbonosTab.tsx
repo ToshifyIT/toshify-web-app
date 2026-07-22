@@ -2918,8 +2918,8 @@ export function SaldosAbonosTab() {
                                       if (tipo === 'ajuste_manual' || tipo === 'cancelacion_fraccionado_baja' || tipo === 'pago_manual') return <span style={{ color: 'var(--text-tertiary)' }}>—</span>
                                       const fac = (kardexModal as any).facMap?.get(`${r.anio}-${r.semana}`)
                                       if (!fac) return <span style={{ color: 'var(--text-tertiary)' }}>—</span>
-                                      // Redondear a entero para no mostrar decimales tipo $371.688,03
-                                      const total = Math.round(Number(fac.total_a_pagar) || 0)
+                                      // Mostrar el valor real con 2 decimales, sin redondear
+                                      const total = Number(fac.total_a_pagar) || 0
                                       return (
                                         <button
                                           type="button"
@@ -3170,15 +3170,15 @@ export function SaldosAbonosTab() {
                 </button>
               </div>
               <div className="fact-modal-body" style={{ padding: '16px' }}>
-                {/* FIX 2026-05-20: redondear a entero para que no se vean decimales tipo $0,03 */}
-                {row('Saldo previo', Math.round(Number(f.saldo_anterior) || 0), false, true)}
-                {row('Alquiler', Math.round(Number(f.subtotal_alquiler) || 0))}
-                {row('Garantía (P003)', Math.round(Number(f.subtotal_garantia) || 0))}
-                {row('Cargos', Math.round(Number(f.subtotal_cargos) - Number(f.subtotal_alquiler) - Number(f.subtotal_garantia)))}
-                {row('Descuentos', -Math.round(Number(f.subtotal_descuentos) || 0))}
+                {/* Mostrar valores reales con 2 decimales, sin redondear (formatCurrency ya da 2 decimales) */}
+                {row('Saldo previo', Number(f.saldo_anterior) || 0, false, true)}
+                {row('Alquiler', Number(f.subtotal_alquiler) || 0)}
+                {row('Garantía (P003)', Number(f.subtotal_garantia) || 0)}
+                {row('Cargos', Number(f.subtotal_cargos) - Number(f.subtotal_alquiler) - Number(f.subtotal_garantia))}
+                {row('Descuentos', -(Number(f.subtotal_descuentos) || 0))}
                 <div style={{ borderTop: '2px solid var(--border-primary)', marginTop: '6px', paddingTop: '6px' }}>
-                  {row('Subtotal Neto', Math.round(Number(f.subtotal_neto) || 0), false, true)}
-                  {row('Total a Pagar', Math.round(Number(f.total_a_pagar) || 0), true)}
+                  {row('Subtotal Neto', Number(f.subtotal_neto) || 0, false, true)}
+                  {row('Total a Pagar', Number(f.total_a_pagar) || 0, true)}
                 </div>
               </div>
             </div>
