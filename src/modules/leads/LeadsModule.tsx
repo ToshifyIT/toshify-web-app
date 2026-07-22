@@ -2369,7 +2369,15 @@ export function LeadsModule() {
     },
     {
       id: 'licencia',
-      accessorFn: (row) => row.licencia || '-',
+      // Normaliza para el filtro/orden: "Si"/"Sí"/"SI"/etc -> "Sí", "No"/"NO" -> "No".
+      // Así el filtro muestra una sola opción por valor y matchea todas las variantes.
+      // La celda sigue mostrando el valor crudo (row.original.licencia).
+      accessorFn: (row) => {
+        const v = (row.licencia || '').trim().toLowerCase()
+        if (v === 'si' || v === 'sí') return 'Sí'
+        if (v === 'no') return 'No'
+        return row.licencia?.trim() || '-'
+      },
       header: 'Licencia',
       cell: ({ row }) => (
         <SiNoDropdownCell
