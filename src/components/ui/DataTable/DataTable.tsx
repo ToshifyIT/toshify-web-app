@@ -603,6 +603,15 @@ export interface DataTableProps<T> {
   pageIndex?: number;
   /** Callback al cambiar de página o tamaño (para paginación servidor) */
   onPaginationChange?: (pageIndex: number, pageSize: number) => void;
+  /**
+   * Desactiva el auto-reset de página que hace TanStack Table cuando `data` cambia de
+   * referencia. Por defecto TanStack vuelve a la página 1 en cada cambio de datos (útil
+   * cuando un filtro reduce los resultados). Activar esta prop en módulos que hacen updates
+   * optimistas (setState local tras un guardado) que no deben mover al usuario de la página
+   * en la que está.
+   * @default false
+   */
+  disableAutoResetPageIndex?: boolean;
 }
 
 export function DataTable<T>({
@@ -638,6 +647,7 @@ export function DataTable<T>({
   rowCount,
   pageIndex: controlledPageIndex,
   onPaginationChange,
+  disableAutoResetPageIndex = false,
 }: DataTableProps<T>) {
   const [internalGlobalFilter, setInternalGlobalFilter] = useState("");
   const isControlled = controlledGlobalFilter !== undefined;
@@ -1297,6 +1307,7 @@ export function DataTable<T>({
   const table = useReactTable({
     data: filteredData,
     columns: finalColumns,
+    autoResetPageIndex: !disableAutoResetPageIndex,
     state: {
       sorting,
       globalFilter: debouncedSearch,
