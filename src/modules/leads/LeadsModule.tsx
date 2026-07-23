@@ -2783,6 +2783,7 @@ export function LeadsModule() {
         }
         externalFilters={externalFilters}
         onClearAllFilters={hasActiveFilters ? clearAllFilters : undefined}
+        disableAutoResetPageIndex
       />
 
       {/* Modal Crear */}
