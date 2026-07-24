@@ -23,52 +23,61 @@
 .portal-login {
   min-height: 100vh;
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
+  gap: 28px;
   padding: 20px;
-  background: var(--bg-primary);
+  background: radial-gradient(
+    120% 90% at 72% 0%,
+    rgba(255, 0, 51, 0.06) 0%,
+    rgba(255, 0, 51, 0.025) 40%,
+    rgba(255, 0, 51, 0) 72%
+  ), var(--bg-primary);
+}
+
+.portal-login-brand-logo {
+  display: block;
+  width: 148px;
+  height: 44px;
+  object-fit: contain;
+  object-position: center;
 }
 
 .portal-login-card {
   background: var(--card-bg);
   border: 1px solid var(--border-primary);
-  border-radius: 16px;
-  padding: 40px 36px;
+  border-radius: 24px;
+  padding: 44px 40px;
   width: 100%;
-  max-width: 400px;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.12);
-}
-
-.portal-login-logo {
-  display: block;
-  margin: 0 auto 12px;
-  height: 80px;
-  object-fit: contain;
+  max-width: 440px;
+  box-shadow: 0 24px 60px -12px rgba(17, 24, 39, 0.16), 0 4px 16px rgba(17, 24, 39, 0.04);
 }
 
 .portal-login-title {
   text-align: center;
-  font-size: 20px;
-  font-weight: 700;
+  font-size: 26px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
   color: var(--text-primary);
-  margin: 0 0 4px;
+  margin: 0 0 6px;
 }
 
 .portal-login-subtitle {
   text-align: center;
-  font-size: 13px;
+  font-size: 14px;
   color: var(--text-secondary);
-  margin: 0 0 28px;
+  margin: 0 0 32px;
 }
 
 .portal-login-input {
   width: 100%;
-  padding: 12px 14px;
+  padding: 14px 16px;
   border: 1.5px solid var(--border-primary);
-  border-radius: 8px;
+  border-radius: 12px;
   font-size: 15px;
   outline: none;
-  transition: border-color 0.2s;
+  transition: border-color 0.2s, box-shadow 0.2s;
   box-sizing: border-box;
   background: var(--bg-secondary);
   color: var(--text-primary);
@@ -76,7 +85,7 @@
 
 .portal-login-input:focus {
   border-color: var(--color-primary);
-  box-shadow: 0 0 0 3px rgba(255, 0, 51, 0.1);
+  box-shadow: 0 0 0 4px rgba(255, 0, 51, 0.1);
 }
 
 .portal-login-input::placeholder {
@@ -85,20 +94,24 @@
 
 .portal-login-btn {
   width: 100%;
-  padding: 12px;
-  margin-top: 16px;
+  padding: 15px;
+  margin-top: 10px;
   background: var(--color-primary);
   color: #fff;
   border: none;
-  border-radius: 8px;
-  font-size: 15px;
-  font-weight: 600;
+  border-radius: 999px;
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
   cursor: pointer;
-  transition: background 0.2s, opacity 0.2s;
+  box-shadow: 0 10px 24px -6px rgba(255, 0, 51, 0.45);
+  transition: background 0.2s, opacity 0.2s, transform 0.15s, box-shadow 0.2s;
 }
 
-.portal-login-btn:hover {
+.portal-login-btn:hover:not(:disabled) {
   background: #e0002d;
+  transform: translateY(-1px);
+  box-shadow: 0 14px 28px -6px rgba(255, 0, 51, 0.5);
 }
 
 .portal-login-btn:disabled {
@@ -115,6 +128,131 @@
   color: #ef4444;
   font-size: 13px;
   text-align: center;
+}
+
+.portal-login-error-list {
+  margin: 0;
+  padding-left: 18px;
+  text-align: left;
+}
+
+.portal-login-error-list li {
+  margin-bottom: 2px;
+}
+
+.portal-login-error-list li:last-child {
+  margin-bottom: 0;
+}
+
+/* Campo con label arriba (DNI, Contraseña) */
+.portal-login-field {
+  margin-bottom: 18px;
+  text-align: left;
+}
+
+.portal-login-field:first-of-type {
+  margin-top: 4px;
+}
+
+.portal-login-label {
+  display: block;
+  font-size: 13.5px;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin-bottom: 7px;
+}
+
+.portal-login-input-wrapper {
+  position: relative;
+}
+
+.portal-login-input-wrapper .portal-login-input {
+  padding-right: 42px;
+}
+
+.portal-login-toggle {
+  position: absolute;
+  right: 4px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 32px;
+  height: 32px;
+  background: none;
+  border: none;
+  border-radius: 8px;
+  color: var(--text-tertiary);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.portal-login-toggle:hover {
+  color: var(--text-secondary);
+  background: var(--bg-secondary);
+}
+
+/* "¿Olvidaste tu contraseña?" y "Volver a iniciar sesión" — botones con look
+   de texto/link, sin los estilos por defecto de <button>. */
+.portal-login-forgot {
+  display: block;
+  width: 100%;
+  margin: 20px 0 0;
+  padding: 0;
+  background: none;
+  border: none;
+  font: inherit;
+  text-align: center;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--color-primary);
+  cursor: pointer;
+}
+
+.portal-login-forgot:hover {
+  text-decoration: underline;
+}
+
+/* Mensaje de éxito tras pedir el reset o cambiar la contraseña por link */
+.portal-login-forgot-success {
+  margin-bottom: 20px;
+  padding: 14px 16px;
+  background: rgba(5, 150, 105, 0.08);
+  border: 1px solid rgba(5, 150, 105, 0.2);
+  border-radius: 10px;
+  color: #047857;
+  font-size: 13.5px;
+  line-height: 1.5;
+  text-align: center;
+}
+
+.portal-login-requirements {
+  margin-top: 4px;
+  margin-bottom: 16px;
+  background: var(--bg-secondary);
+  border-radius: 8px;
+  padding: 10px 12px;
+  text-align: left;
+}
+
+.portal-login-requirements-title {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 6px;
+}
+
+.portal-login-requirements ul {
+  margin: 0;
+  padding-left: 16px;
+  font-size: 12.5px;
+  color: var(--text-tertiary);
+}
+
+.portal-login-requirements li {
+  margin-bottom: 2px;
 }
 
 /* =====================================================
