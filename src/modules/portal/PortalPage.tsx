@@ -9,6 +9,7 @@ import { formatCurrency } from '../../types/facturacion.types'
 import { normalizeDni, normalizeCuit } from '../../utils/normalizeDocuments'
 import { calcularKmSemanasConductor } from './kmRecorridos'
 import logoToshifyUrl from '../../assets/logo-toshify.png'
+import logoToshifyWordmarkUrl from '../../assets/logo-toshify-wordmark.png'
 import './PortalPage.css'
 
 // =====================================================
@@ -21,6 +22,10 @@ interface PortalConductor {
   apellidos: string
   numero_dni: string | null
   numero_cuit: string | null
+  // No confundir con una columna real seleccionada por REST: este flag viaja
+  // únicamente a través de las RPC portal_login / restauración de sesión.
+  // portal_password_hash NUNCA se trae al cliente (bloqueado por REVOKE en DB).
+  portal_must_change_password?: boolean
 }
 
 // Multa del conductor (seccion nueva)
@@ -143,7 +148,7 @@ interface PortalFraccionamiento {
   anio: number
 }
 
-type View = 'login' | 'dashboard' | 'detail'
+type View = 'login' | 'changePassword' | 'forgotPassword' | 'resetPassword' | 'dashboard' | 'detail'
 
 // Mapeo de códigos de concepto a descripciones legibles
 const CONCEPTO_LABELS: Record<string, string> = {
@@ -403,8 +408,38 @@ export function PortalPage({ embeddedConductorId }: { embeddedConductorId?: stri
 
   // UI state
   const [loginInput, setLoginInput] = useState('')
+  const [loginPassword, setLoginPassword] = useState('')
+  const [showLoginPassword, setShowLoginPassword] = useState(false)
   const [loginLoading, setLoginLoading] = useState(false)
   const [loginError, setLoginError] = useState('')
+
+  // Cambio de contraseña forzado (primer ingreso, password inicial = DNI, o
+  // sesión restaurada que todavía no completó el cambio).
+  const [cambioPasswordActual, setCambioPasswordActual] = useState('')
+  const [cambioPasswordNueva, setCambioPasswordNueva] = useState('')
+  const [cambioPasswordConfirmar, setCambioPasswordConfirmar] = useState('')
+  const [showCambioPassword, setShowCambioPassword] = useState(false)
+  const [cambioPasswordLoading, setCambioPasswordLoading] = useState(false)
+  const [cambioPasswordErrors, setCambioPasswordErrors] = useState<string[]>([])
+
+  // "Olvidé mi contraseña": pide DNI, llama a /api/portal/forgot-password
+  // (server.js, ahí vive el envío por Resend) y muestra el correo enmascarado
+  // que devuelve. El link real solo llega por email, nunca por esta respuesta.
+  const [forgotDocumento, setForgotDocumento] = useState('')
+  const [forgotLoading, setForgotLoading] = useState(false)
+  const [forgotEmailMasked, setForgotEmailMasked] = useState('')
+  const [forgotError, setForgotError] = useState('')
+  const [forgotDone, setForgotDone] = useState(false)
+
+  // Reset de contraseña vía link del email (?reset=TOKEN en la URL).
+  const [resetToken, setResetToken] = useState('')
+  const [resetPasswordNueva, setResetPasswordNueva] = useState('')
+  const [resetPasswordConfirmar, setResetPasswordConfirmar] = useState('')
+  const [showResetPassword, setShowResetPassword] = useState(false)
+  const [resetLoading, setResetLoading] = useState(false)
+  const [resetErrors, setResetErrors] = useState<string[]>([])
+  const [resetDone, setResetDone] = useState(false)
+
   const [loadingFacturas, setLoadingFacturas] = useState(false)
   const [loadingDetalle, setLoadingDetalle] = useState(false)
   const [detalleError, setDetalleError] = useState('')
@@ -464,7 +499,10 @@ export function PortalPage({ embeddedConductorId }: { embeddedConductorId?: stri
         if (cancelado) return
         if (found) {
           setConductor(found)
-          setView('dashboard')
+          // Si quedó pendiente el cambio de contraseña (ej. cerró la pestaña
+          // en medio del flujo forzado), lo retomamos en vez de ir directo
+          // al dashboard.
+          setView(found.portal_must_change_password ? 'changePassword' : 'dashboard')
         } else {
           // Documento guardado ya no resuelve: limpiar para no reintentar en loop.
           try { localStorage.removeItem(PORTAL_AUTH_KEY) } catch { /* noop */ }
@@ -475,6 +513,25 @@ export function PortalPage({ embeddedConductorId }: { embeddedConductorId?: stri
     // Solo al montar (o al cambiar el modo embebido).
   }, [embeddedConductorId])
 
+  // Si la URL trae ?reset=TOKEN (link del email de "olvidé mi contraseña"),
+  // priorizar esa pantalla sobre cualquier sesión guardada: el conductor puede
+  // estar reseteando desde un dispositivo distinto al que tiene la sesión.
+  useEffect(() => {
+    if (embeddedConductorId) return
+    const params = new URLSearchParams(window.location.search)
+    const token = params.get('reset')
+    if (!token) return
+    setResetToken(token)
+    setView('resetPassword')
+    // Sacar el token de la URL visible (ya quedó en el state) para que no
+    // quede pegado en el historial del navegador más tiempo del necesario.
+    try {
+      const url = new URL(window.location.href)
+      url.searchParams.delete('reset')
+      window.history.replaceState(null, '', url.toString())
+    } catch { /* noop */ }
+  }, [embeddedConductorId])
+
   // =====================================================
   // LOGIN
   // =====================================================
@@ -482,15 +539,19 @@ export function PortalPage({ embeddedConductorId }: { embeddedConductorId?: stri
   // Rate limiting: máximo 5 intentos por minuto
   const [loginAttempts, setLoginAttempts] = useState<number[]>([])
 
-  // Busca un conductor por DNI o CUIT (primero DNI exacto, luego CUIT).
-  // Reutilizada por el login manual y por la restauración de sesión al montar.
+  // Busca un conductor por DNI o CUIT (primero DNI exacto, luego CUIT), SIN
+  // validar contraseña. Se usa solo para restaurar sesión al refrescar la
+  // página (el login real ahora pasa por la RPC portal_login, que sí valida
+  // contraseña). Nunca selecciona portal_password_hash: esa columna está
+  // bloqueada para anon/authenticated a nivel de base de datos.
   async function buscarConductor(input: string): Promise<PortalConductor | null> {
     const normalizedDni = normalizeDni(input)
     const normalizedCuit = normalizeCuit(input)
+    const columnas = 'id, nombres, apellidos, numero_dni, numero_cuit, portal_must_change_password'
 
     const resDni = await supabase
       .from('conductores')
-      .select('id, nombres, apellidos, numero_dni, numero_cuit')
+      .select(columnas)
       .eq('numero_dni', normalizedDni)
       .limit(1)
 
@@ -498,7 +559,7 @@ export function PortalPage({ embeddedConductorId }: { embeddedConductorId?: stri
     if (!data || data.length === 0) {
       const resCuit = await supabase
         .from('conductores')
-        .select('id, nombres, apellidos, numero_dni, numero_cuit')
+        .select(columnas)
         .eq('numero_cuit', normalizedCuit)
         .limit(1)
       if (resCuit.error) throw resCuit.error
@@ -507,21 +568,22 @@ export function PortalPage({ embeddedConductorId }: { embeddedConductorId?: stri
       throw resDni.error
     }
 
-    return data && data.length > 0 ? (data[0] as PortalConductor) : null
+    return data && data.length > 0 ? (data[0] as unknown as PortalConductor) : null
   }
 
   async function handleLogin(e: React.FormEvent) {
     e.preventDefault()
     const input = loginInput.trim()
-    if (!input) return
+    const password = loginPassword
+    if (!input || !password) return
 
-    // Validar que solo tenga números, puntos, guiones o espacios
+    // Validar que el documento solo tenga números, puntos, guiones o espacios
     if (!/^[\d.\-\s]+$/.test(input)) {
-      setLoginError('Ingresá solo números (DNI o CUIT)')
+      setLoginError('Ingresá solo números en el DNI o CUIT')
       return
     }
 
-    // Rate limiting
+    // Rate limiting (mismo criterio que antes: 5 intentos por minuto)
     const ahora = Date.now()
     const intentosRecientes = loginAttempts.filter(t => ahora - t < 60000)
     if (intentosRecientes.length >= 5) {
@@ -534,19 +596,178 @@ export function PortalPage({ embeddedConductorId }: { embeddedConductorId?: stri
     setLoginError('')
 
     try {
-      const found = await buscarConductor(input)
-      if (!found) {
-        setLoginError('No se encontró un conductor con ese DNI o CUIT')
+      // La validación de contraseña ocurre DENTRO de la función (SECURITY DEFINER):
+      // el navegador nunca compara contra el hash ni lo recibe.
+      const { data, error } = await (supabase.rpc as any)('portal_login', {
+        p_documento: input,
+        p_password: password,
+      })
+      if (error) throw error
+
+      const result = data as { success: boolean; error?: string; conductor?: PortalConductor }
+      if (!result?.success || !result.conductor) {
+        setLoginError(result?.error || 'Documento o contraseña incorrectos')
         return
       }
+
+      const found = result.conductor
       // Persistir el documento para restaurar sesión al refrescar (hasta "Salir").
+      // La contraseña NUNCA se guarda en localStorage.
       try { localStorage.setItem(PORTAL_AUTH_KEY, input) } catch { /* storage no disponible */ }
       setConductor(found)
-      setView('dashboard')
+      setLoginPassword('')
+      setView(found.portal_must_change_password ? 'changePassword' : 'dashboard')
     } catch {
       setLoginError('Error de conexión. Intentá de nuevo.')
     } finally {
       setLoginLoading(false)
+    }
+  }
+
+  // =====================================================
+  // CAMBIO DE CONTRASEÑA (forzado en primer ingreso)
+  // =====================================================
+
+  function validarNuevaPassword(password: string): string[] {
+    const errores: string[] = []
+    if (password.length < 8) errores.push('Mínimo 8 caracteres')
+    if (!/[A-Z]/.test(password)) errores.push('Al menos una mayúscula')
+    if (!/[a-z]/.test(password)) errores.push('Al menos una minúscula')
+    if (!/[0-9]/.test(password)) errores.push('Al menos un número')
+    return errores
+  }
+
+  async function handleCambiarPassword(e: React.FormEvent) {
+    e.preventDefault()
+    setCambioPasswordErrors([])
+
+    if (!conductor) return
+
+    if (!cambioPasswordActual) {
+      setCambioPasswordErrors(['Ingresá tu contraseña actual'])
+      return
+    }
+    if (cambioPasswordNueva !== cambioPasswordConfirmar) {
+      setCambioPasswordErrors(['Las contraseñas nuevas no coinciden'])
+      return
+    }
+    const erroresValidacion = validarNuevaPassword(cambioPasswordNueva)
+    if (erroresValidacion.length > 0) {
+      setCambioPasswordErrors(erroresValidacion)
+      return
+    }
+
+    setCambioPasswordLoading(true)
+    try {
+      const { data, error } = await (supabase.rpc as any)('portal_cambiar_password', {
+        p_conductor_id: conductor.id,
+        p_password_actual: cambioPasswordActual,
+        p_password_nueva: cambioPasswordNueva,
+      })
+      if (error) throw error
+
+      const result = data as { success: boolean; error?: string }
+      if (!result?.success) {
+        setCambioPasswordErrors([result?.error || 'No se pudo cambiar la contraseña'])
+        return
+      }
+
+      setCambioPasswordActual('')
+      setCambioPasswordNueva('')
+      setCambioPasswordConfirmar('')
+      setConductor({ ...conductor, portal_must_change_password: false })
+      setView('dashboard')
+    } catch {
+      setCambioPasswordErrors(['Error de conexión. Intentá de nuevo.'])
+    } finally {
+      setCambioPasswordLoading(false)
+    }
+  }
+
+  // =====================================================
+  // OLVIDÉ MI CONTRASEÑA
+  // =====================================================
+
+  async function handleForgotPassword(e: React.FormEvent) {
+    e.preventDefault()
+    const documento = forgotDocumento.trim()
+    if (!documento) return
+
+    setForgotLoading(true)
+    setForgotError('')
+    setForgotEmailMasked('')
+    setForgotDone(false)
+
+    try {
+      const res = await fetch('/api/portal/forgot-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ documento, origin: window.location.origin }),
+      })
+      const result = await res.json().catch(() => null) as { success: boolean; error?: string; email_masked?: string } | null
+
+      if (result?.success) {
+        setForgotEmailMasked(result.email_masked || '')
+        setForgotDone(true)
+        return
+      }
+
+      if (result?.error === 'sin_email') {
+        setForgotError('No hay un correo registrado para este conductor. Contactá a administración para recuperar el acceso.')
+      } else if (result?.error === 'ya_solicitado') {
+        setForgotError('Ya te enviamos un correo hace instantes. Revisá tu bandeja de entrada (y spam) antes de pedir otro.')
+      } else if (result?.error === 'no_encontrado') {
+        // Mensaje genérico a propósito: no confirma ni niega si el DNI existe.
+        setForgotError('No pudimos procesar la solicitud. Verificá el DNI e intentá de nuevo.')
+      } else {
+        setForgotError('Error de conexión. Intentá de nuevo.')
+      }
+    } catch {
+      setForgotError('Error de conexión. Intentá de nuevo.')
+    } finally {
+      setForgotLoading(false)
+    }
+  }
+
+  // =====================================================
+  // RESTABLECER CONTRASEÑA (vía link del email)
+  // =====================================================
+
+  async function handleResetPassword(e: React.FormEvent) {
+    e.preventDefault()
+    setResetErrors([])
+
+    if (resetPasswordNueva !== resetPasswordConfirmar) {
+      setResetErrors(['Las contraseñas no coinciden'])
+      return
+    }
+    const erroresValidacion = validarNuevaPassword(resetPasswordNueva)
+    if (erroresValidacion.length > 0) {
+      setResetErrors(erroresValidacion)
+      return
+    }
+
+    setResetLoading(true)
+    try {
+      const { data, error } = await (supabase.rpc as any)('portal_reset_password_con_token', {
+        p_token: resetToken,
+        p_password_nueva: resetPasswordNueva,
+      })
+      if (error) throw error
+
+      const result = data as { success: boolean; error?: string }
+      if (!result?.success) {
+        setResetErrors([result?.error || 'No se pudo restablecer la contraseña'])
+        return
+      }
+
+      setResetDone(true)
+      setResetPasswordNueva('')
+      setResetPasswordConfirmar('')
+    } catch {
+      setResetErrors(['Error de conexión. Intentá de nuevo.'])
+    } finally {
+      setResetLoading(false)
     }
   }
 
@@ -1526,7 +1747,21 @@ export function PortalPage({ embeddedConductorId }: { embeddedConductorId?: stri
     setShowDetalleModal(false)
     setSelectedMulta(null)
     setLoginInput('')
+    setLoginPassword('')
     setLoginError('')
+    setCambioPasswordActual('')
+    setCambioPasswordNueva('')
+    setCambioPasswordConfirmar('')
+    setCambioPasswordErrors([])
+    setForgotDocumento('')
+    setForgotEmailMasked('')
+    setForgotError('')
+    setForgotDone(false)
+    setResetToken('')
+    setResetPasswordNueva('')
+    setResetPasswordConfirmar('')
+    setResetErrors([])
+    setResetDone(false)
     // Cerrar sesión de verdad: borrar el documento persistido (la pestaña se conserva).
     try { localStorage.removeItem(PORTAL_AUTH_KEY) } catch { /* storage no disponible */ }
     setView('login')
@@ -1639,32 +1874,341 @@ export function PortalPage({ embeddedConductorId }: { embeddedConductorId?: stri
   if (view === 'login') {
     return (
       <div className="portal portal-login">
+        <img src={logoToshifyWordmarkUrl} alt="Toshify" className="portal-login-brand-logo" />
         <form className="portal-login-card" onSubmit={handleLogin}>
-          <img src={logoToshifyUrl} alt="Toshify" className="portal-login-logo" />
-          <h1 className="portal-login-title">Mi Espacio</h1>
-          <p className="portal-login-subtitle">Ingresá tu DNI o CUIT para ver tu proforma</p>
+          <h1 className="portal-login-title">Iniciar sesión</h1>
+          <p className="portal-login-subtitle">Portal de conductores</p>
 
-          <input
-            type="text"
-            className="portal-login-input"
-            placeholder="DNI o CUIT"
-            value={loginInput}
-            onChange={(e) => { setLoginInput(e.target.value); setLoginError('') }}
-            autoFocus
-            inputMode="numeric"
-          />
+          <div className="portal-login-field">
+            <label className="portal-login-label" htmlFor="portal-login-dni">DNI</label>
+            <input
+              id="portal-login-dni"
+              type="text"
+              className="portal-login-input"
+              value={loginInput}
+              onChange={(e) => { setLoginInput(e.target.value); setLoginError('') }}
+              autoFocus
+              inputMode="numeric"
+              autoComplete="username"
+            />
+          </div>
+
+          <div className="portal-login-field">
+            <label className="portal-login-label" htmlFor="portal-login-password">Contraseña</label>
+            <div className="portal-login-input-wrapper">
+              <input
+                id="portal-login-password"
+                type={showLoginPassword ? 'text' : 'password'}
+                className="portal-login-input"
+                value={loginPassword}
+                onChange={(e) => { setLoginPassword(e.target.value); setLoginError('') }}
+                autoComplete="current-password"
+              />
+              <button
+                type="button"
+                className="portal-login-toggle"
+                onClick={() => setShowLoginPassword(v => !v)}
+                tabIndex={-1}
+                aria-label={showLoginPassword ? 'Ocultar contraseña' : 'Mostrar contraseña'}
+              >
+                {showLoginPassword ? (
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
+                ) : (
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                )}
+              </button>
+            </div>
+          </div>
 
           <button
             type="submit"
             className="portal-login-btn"
-            disabled={loginLoading || !loginInput.trim()}
+            disabled={loginLoading || !loginInput.trim() || !loginPassword}
           >
-            {loginLoading ? 'Buscando...' : 'Ingresar'}
+            {loginLoading ? 'Ingresando...' : 'Ingresar'}
           </button>
 
           {loginError && (
             <div className="portal-login-error">{loginError}</div>
           )}
+
+          <button
+            type="button"
+            className="portal-login-forgot"
+            onClick={() => {
+              setForgotDocumento(loginInput)
+              setForgotError('')
+              setForgotDone(false)
+              setForgotEmailMasked('')
+              setView('forgotPassword')
+            }}
+          >
+            ¿Olvidaste tu contraseña?
+          </button>
+        </form>
+      </div>
+    )
+  }
+
+  if (view === 'forgotPassword') {
+    return (
+      <div className="portal portal-login">
+        <img src={logoToshifyWordmarkUrl} alt="Toshify" className="portal-login-brand-logo" />
+        <form className="portal-login-card" onSubmit={handleForgotPassword}>
+          <h1 className="portal-login-title">Recuperar contraseña</h1>
+          <p className="portal-login-subtitle">Portal de conductores</p>
+
+          {forgotDone ? (
+            <>
+              <div className="portal-login-forgot-success">
+                Te enviamos instrucciones para restablecer tu contraseña a{' '}
+                <strong>{forgotEmailMasked || 'tu correo registrado'}</strong>.
+                Revisá tu bandeja de entrada (y la carpeta de spam). El link vence en 1 hora.
+              </div>
+              <button
+                type="button"
+                className="portal-login-btn"
+                onClick={() => setView('login')}
+              >
+                Volver a iniciar sesión
+              </button>
+            </>
+          ) : (
+            <>
+              <div className="portal-login-field">
+                <label className="portal-login-label" htmlFor="portal-forgot-dni">DNI</label>
+                <input
+                  id="portal-forgot-dni"
+                  type="text"
+                  className="portal-login-input"
+                  value={forgotDocumento}
+                  onChange={(e) => { setForgotDocumento(e.target.value); setForgotError('') }}
+                  autoFocus
+                  inputMode="numeric"
+                  autoComplete="username"
+                />
+              </div>
+
+              <button
+                type="submit"
+                className="portal-login-btn"
+                disabled={forgotLoading || !forgotDocumento.trim()}
+              >
+                {forgotLoading ? 'Enviando...' : 'Enviar instrucciones'}
+              </button>
+
+              {forgotError && (
+                <div className="portal-login-error">{forgotError}</div>
+              )}
+
+              <button
+                type="button"
+                className="portal-login-forgot"
+                onClick={() => setView('login')}
+              >
+                ← Volver a iniciar sesión
+              </button>
+            </>
+          )}
+        </form>
+      </div>
+    )
+  }
+
+  if (view === 'resetPassword') {
+    return (
+      <div className="portal portal-login">
+        <img src={logoToshifyWordmarkUrl} alt="Toshify" className="portal-login-brand-logo" />
+        <form className="portal-login-card" onSubmit={handleResetPassword}>
+          <h1 className="portal-login-title">Crear nueva contraseña</h1>
+          <p className="portal-login-subtitle">Portal de conductores</p>
+
+          {resetDone ? (
+            <>
+              <div className="portal-login-forgot-success">
+                Tu contraseña se actualizó correctamente. Ya podés iniciar sesión con ella.
+              </div>
+              <button
+                type="button"
+                className="portal-login-btn"
+                onClick={() => setView('login')}
+              >
+                Ir a iniciar sesión
+              </button>
+            </>
+          ) : !resetToken ? (
+            <div className="portal-login-error">
+              Este link no es válido. Pedí uno nuevo desde "¿Olvidaste tu contraseña?".
+            </div>
+          ) : (
+            <>
+              <div className="portal-login-field">
+                <label className="portal-login-label" htmlFor="portal-rp-nueva">Nueva contraseña</label>
+                <div className="portal-login-input-wrapper">
+                  <input
+                    id="portal-rp-nueva"
+                    type={showResetPassword ? 'text' : 'password'}
+                    className="portal-login-input"
+                    value={resetPasswordNueva}
+                    onChange={(e) => { setResetPasswordNueva(e.target.value); setResetErrors([]) }}
+                    autoFocus
+                    autoComplete="new-password"
+                  />
+                  <button
+                    type="button"
+                    className="portal-login-toggle"
+                    onClick={() => setShowResetPassword(v => !v)}
+                    tabIndex={-1}
+                    aria-label={showResetPassword ? 'Ocultar contraseña' : 'Mostrar contraseña'}
+                  >
+                    {showResetPassword ? (
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
+                    ) : (
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                    )}
+                  </button>
+                </div>
+              </div>
+
+              <div className="portal-login-field">
+                <label className="portal-login-label" htmlFor="portal-rp-confirmar">Confirmar nueva contraseña</label>
+                <input
+                  id="portal-rp-confirmar"
+                  type={showResetPassword ? 'text' : 'password'}
+                  className="portal-login-input"
+                  value={resetPasswordConfirmar}
+                  onChange={(e) => { setResetPasswordConfirmar(e.target.value); setResetErrors([]) }}
+                  autoComplete="new-password"
+                />
+              </div>
+
+              {resetErrors.length > 0 && (
+                <div className="portal-login-error">
+                  <ul className="portal-login-error-list">
+                    {resetErrors.map((err, i) => <li key={i}>{err}</li>)}
+                  </ul>
+                </div>
+              )}
+
+              <div className="portal-login-requirements">
+                <div className="portal-login-requirements-title">Requisitos</div>
+                <ul>
+                  <li>Mínimo 8 caracteres</li>
+                  <li>Al menos una mayúscula</li>
+                  <li>Al menos una minúscula</li>
+                  <li>Al menos un número</li>
+                </ul>
+              </div>
+
+              <button
+                type="submit"
+                className="portal-login-btn"
+                disabled={resetLoading || !resetPasswordNueva || !resetPasswordConfirmar}
+              >
+                {resetLoading ? 'Guardando...' : 'Cambiar contraseña'}
+              </button>
+            </>
+          )}
+        </form>
+      </div>
+    )
+  }
+
+  if (view === 'changePassword') {
+    return (
+      <div className="portal portal-login">
+        <img src={logoToshifyWordmarkUrl} alt="Toshify" className="portal-login-brand-logo" />
+        <form className="portal-login-card" onSubmit={handleCambiarPassword}>
+          <h1 className="portal-login-title">Creá tu nueva contraseña</h1>
+          <p className="portal-login-subtitle">
+            {conductor ? `Hola, ${conductor.nombres}. ` : ''}Por seguridad tenés que elegir una contraseña nueva antes de continuar.
+          </p>
+
+          <div className="portal-login-field">
+            <label className="portal-login-label" htmlFor="portal-cp-actual">Contraseña actual</label>
+            <input
+              id="portal-cp-actual"
+              type="password"
+              className="portal-login-input"
+              value={cambioPasswordActual}
+              onChange={(e) => { setCambioPasswordActual(e.target.value); setCambioPasswordErrors([]) }}
+              autoFocus
+              autoComplete="current-password"
+            />
+          </div>
+
+          <div className="portal-login-field">
+            <label className="portal-login-label" htmlFor="portal-cp-nueva">Nueva contraseña</label>
+            <div className="portal-login-input-wrapper">
+              <input
+                id="portal-cp-nueva"
+                type={showCambioPassword ? 'text' : 'password'}
+                className="portal-login-input"
+                value={cambioPasswordNueva}
+                onChange={(e) => { setCambioPasswordNueva(e.target.value); setCambioPasswordErrors([]) }}
+                autoComplete="new-password"
+              />
+              <button
+                type="button"
+                className="portal-login-toggle"
+                onClick={() => setShowCambioPassword(v => !v)}
+                tabIndex={-1}
+                aria-label={showCambioPassword ? 'Ocultar contraseña' : 'Mostrar contraseña'}
+              >
+                {showCambioPassword ? (
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
+                ) : (
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                )}
+              </button>
+            </div>
+          </div>
+
+          <div className="portal-login-field">
+            <label className="portal-login-label" htmlFor="portal-cp-confirmar">Confirmar nueva contraseña</label>
+            <input
+              id="portal-cp-confirmar"
+              type={showCambioPassword ? 'text' : 'password'}
+              className="portal-login-input"
+              value={cambioPasswordConfirmar}
+              onChange={(e) => { setCambioPasswordConfirmar(e.target.value); setCambioPasswordErrors([]) }}
+              autoComplete="new-password"
+            />
+          </div>
+
+          {cambioPasswordErrors.length > 0 && (
+            <div className="portal-login-error">
+              <ul className="portal-login-error-list">
+                {cambioPasswordErrors.map((err, i) => <li key={i}>{err}</li>)}
+              </ul>
+            </div>
+          )}
+
+          <div className="portal-login-requirements">
+            <div className="portal-login-requirements-title">Requisitos</div>
+            <ul>
+              <li>Mínimo 8 caracteres</li>
+              <li>Al menos una mayúscula</li>
+              <li>Al menos una minúscula</li>
+              <li>Al menos un número</li>
+            </ul>
+          </div>
+
+          <button
+            type="submit"
+            className="portal-login-btn"
+            disabled={cambioPasswordLoading || !cambioPasswordActual || !cambioPasswordNueva || !cambioPasswordConfirmar}
+          >
+            {cambioPasswordLoading ? 'Guardando...' : 'Cambiar contraseña'}
+          </button>
+
+          <button
+            type="button"
+            className="portal-login-forgot"
+            onClick={handleLogout}
+          >
+            ← Volver a iniciar sesión
+          </button>
         </form>
       </div>
     )
