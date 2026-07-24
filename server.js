@@ -11,6 +11,7 @@ import { google } from 'googleapis'
 import PizZip from 'pizzip'
 import Docxtemplater from 'docxtemplater'
 import { Readable } from 'stream'
+import crypto from 'node:crypto'
 // API REST removida - reemplazada por MCP Server (mcp/server.js)
 
 const __filename = fileURLToPath(import.meta.url)
@@ -2778,6 +2779,185 @@ app.post('/api/logistica/enviar-pedido-proveedor', async (req, res) => {
   } catch (error) {
     console.error('[LogisticaEmail] Error:', error.message)
     res.status(500).json({ error: error.message || 'Error interno enviando correo' })
+  }
+})
+
+// =====================================================
+// Portal Conductor: "Olvidé mi contraseña"
+// =====================================================
+// Mismas reglas de normalizacion que src/utils/normalizeDocuments.ts y
+// sql/portal_conductor_password_auth.sql (portal_normalize_dni/cuit), para
+// que la busqueda del conductor sea consistente en los 3 lugares.
+function portalNormalizeDni(value) {
+  if (value == null || value === '') return ''
+  return String(value).trim().replace(/[.,\-\s]/g, '').replace(/^0+/, '') || ''
+}
+
+function portalNormalizeCuit(value) {
+  if (value == null || value === '') return ''
+  return String(value).trim().replace(/[-.\s]/g, '')
+}
+
+// Enmascara un email para mostrarlo en el frontend sin revelarlo completo,
+// ej. "genesis.pretell@gmail.com" -> "g***********@gmail.com"
+function maskEmail(email) {
+  const at = String(email || '').indexOf('@')
+  if (at <= 0) return email
+  const user = email.slice(0, at)
+  const domain = email.slice(at + 1)
+  const visible = user.slice(0, 1)
+  return `${visible}${'*'.repeat(Math.max(user.length - 1, 3))}@${domain}`
+}
+
+function buildPortalResetPasswordHtml({ resetLink }) {
+  return `
+    <div style="font-family:Arial,sans-serif;background:#f8fafc;padding:24px;">
+      <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:480px;margin:0 auto;background:#ffffff;border:1px solid #e5e7eb;border-radius:10px;overflow:hidden;">
+        <tr>
+          <td style="padding:22px 26px;border-bottom:3px solid #ff0033;">
+            <div style="font-size:12px;color:#6b7280;text-transform:uppercase;font-weight:700;">Toshify · Portal de Conductores</div>
+            <h1 style="margin:6px 0 0 0;font-size:20px;color:#111827;">Recuperá tu contraseña</h1>
+          </td>
+        </tr>
+        <tr>
+          <td style="padding:20px 26px;">
+            <p style="margin:0 0 16px 0;color:#374151;line-height:1.5;">
+              Recibimos un pedido para restablecer tu contraseña del Portal de Conductores. Si fuiste vos, tocá el botón de abajo para crear una nueva. El link vence en 1 hora y solo se puede usar una vez.
+            </p>
+            <table role="presentation" cellspacing="0" cellpadding="0" style="margin:0 auto 16px;">
+              <tr>
+                <td style="border-radius:999px;background:#ff0033;">
+                  <a href="${resetLink}" style="display:inline-block;padding:12px 28px;color:#ffffff;font-weight:700;text-decoration:none;font-size:15px;">Crear nueva contraseña</a>
+                </td>
+              </tr>
+            </table>
+            <p style="margin:0;color:#9ca3af;font-size:12px;line-height:1.5;">
+              Si no pediste este cambio, podés ignorar este correo — tu contraseña actual sigue funcionando.
+            </p>
+          </td>
+        </tr>
+      </table>
+    </div>
+  `
+}
+
+app.post('/api/portal/forgot-password', async (req, res) => {
+  try {
+    const supabaseUrl = process.env.VITE_SUPABASE_URL
+    const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+    const resendApiKey = process.env.RESEND_API_KEY || process.env.VITE_RESEND_API_KEY
+    const fromEmail = process.env.RESEND_FROM_EMAIL || 'Toshify <no-reply@toshify.com.ar>'
+
+    const { documento, origin } = req.body || {}
+    const documentoTrim = String(documento || '').trim()
+
+    if (!documentoTrim) {
+      return res.status(400).json({ success: false, error: 'Ingresá tu DNI' })
+    }
+    if (!supabaseUrl || !serviceKey) {
+      return res.status(500).json({ success: false, error: 'Falta configurar Supabase en el servidor' })
+    }
+    if (!resendApiKey) {
+      return res.status(500).json({ success: false, error: 'Falta configurar RESEND_API_KEY en el servidor' })
+    }
+
+    const dni = portalNormalizeDni(documentoTrim)
+    const cuit = portalNormalizeCuit(documentoTrim)
+    if (!dni && !cuit) {
+      return res.status(400).json({ success: false, error: 'DNI inválido' })
+    }
+
+    // 1) Buscar conductor. RPC privada: solo la service_role key puede llamarla.
+    const lookupRes = await fetch(`${supabaseUrl}/rest/v1/rpc/portal_buscar_conductor_reset`, {
+      method: 'POST',
+      headers: {
+        apikey: serviceKey,
+        Authorization: `Bearer ${serviceKey}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ p_documento: documentoTrim })
+    })
+    if (!lookupRes.ok) {
+      throw new Error(`No se pudo verificar el documento (HTTP ${lookupRes.status})`)
+    }
+    const lookup = await lookupRes.json()
+
+    // Sin revelar si el DNI existe o no: mismo shape de respuesta para "no
+    // encontrado" que para "encontrado pero sin email" — el frontend decide
+    // qué mensaje mostrar en cada caso.
+    if (!lookup?.found) {
+      return res.json({ success: false, error: 'no_encontrado' })
+    }
+    if (!lookup.email) {
+      return res.json({ success: false, error: 'sin_email' })
+    }
+
+    // 2) Cooldown: no permitir mas de 1 pedido cada 5 minutos por conductor,
+    //    para que no se pueda spamear el formulario y generar emails en cadena.
+    const cincoMinAtras = new Date(Date.now() - 5 * 60 * 1000).toISOString()
+    const cooldownRes = await fetch(
+      `${supabaseUrl}/rest/v1/portal_password_resets?conductor_id=eq.${lookup.conductor_id}&created_at=gte.${cincoMinAtras}&select=id&limit=1`,
+      { headers: { apikey: serviceKey, Authorization: `Bearer ${serviceKey}` } }
+    )
+    const cooldownRows = cooldownRes.ok ? await cooldownRes.json() : []
+    if (Array.isArray(cooldownRows) && cooldownRows.length > 0) {
+      return res.status(429).json({ success: false, error: 'ya_solicitado' })
+    }
+
+    // 3) Generar token de un solo uso. El token crudo SOLO va en el email;
+    //    acá guardamos únicamente su hash.
+    const token = crypto.randomBytes(32).toString('hex')
+    const tokenHash = crypto.createHash('sha256').update(token).digest('hex')
+    const expiresAt = new Date(Date.now() + 60 * 60 * 1000).toISOString() // 1 hora
+
+    const insertRes = await fetch(`${supabaseUrl}/rest/v1/portal_password_resets`, {
+      method: 'POST',
+      headers: {
+        apikey: serviceKey,
+        Authorization: `Bearer ${serviceKey}`,
+        'Content-Type': 'application/json',
+        Prefer: 'return=minimal'
+      },
+      body: JSON.stringify({
+        conductor_id: lookup.conductor_id,
+        token_hash: tokenHash,
+        expires_at: expiresAt
+      })
+    })
+    if (!insertRes.ok) {
+      throw new Error(`No se pudo generar el link de recuperación (HTTP ${insertRes.status})`)
+    }
+
+    // 4) Armar el link con el origin que mandó el frontend (mismo patrón que
+    //    ya usa AuthContext/LoginPage con window.location.origin), validando
+    //    que tenga forma de URL antes de meterlo en el email.
+    const origenValido = typeof origin === 'string' && /^https?:\/\/[a-zA-Z0-9.-]+(:\d+)?$/.test(origin)
+      ? origin
+      : 'https://app.toshify.com.ar'
+    const resetLink = `${origenValido}/mi-espacio?reset=${token}`
+
+    const emailRes = await fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${resendApiKey}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        from: fromEmail,
+        to: [lookup.email],
+        subject: 'Recuperá tu contraseña - Portal de Conductores Toshify',
+        html: buildPortalResetPasswordHtml({ resetLink })
+      })
+    })
+    const emailResult = await emailRes.json().catch(() => ({}))
+    if (!emailRes.ok) {
+      throw new Error(emailResult?.message || emailResult?.error || 'No se pudo enviar el correo')
+    }
+
+    res.json({ success: true, email_masked: maskEmail(lookup.email) })
+  } catch (error) {
+    console.error('[PortalForgotPassword] Error:', error.message)
+    res.status(500).json({ success: false, error: 'Error de conexión. Intentá de nuevo.' })
   }
 })
 
