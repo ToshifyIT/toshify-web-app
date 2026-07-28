@@ -495,9 +495,16 @@ export function PortalPage({ embeddedConductorId }: { embeddedConductorId?: stri
     try { doc = localStorage.getItem(PORTAL_AUTH_KEY) } catch { /* storage no disponible */ }
     if (!doc) return
     buscarConductor(doc)
-      .then(found => {
+      .then(async found => {
         if (cancelado) return
         if (found) {
+          // Si el conductor fue dado de baja, no se restaura la sesión: se
+          // limpia el documento guardado y queda en la pantalla de login.
+          if (await conductorEstaDeBaja(found.id)) {
+            try { localStorage.removeItem(PORTAL_AUTH_KEY) } catch { /* noop */ }
+            return
+          }
+          if (cancelado) return
           setConductor(found)
           // Si quedó pendiente el cambio de contraseña (ej. cerró la pestaña
           // en medio del flujo forzado), lo retomamos en vez de ir directo
@@ -571,6 +578,26 @@ export function PortalPage({ embeddedConductorId }: { embeddedConductorId?: stri
     return data && data.length > 0 ? (data[0] as unknown as PortalConductor) : null
   }
 
+  // Al portal solo pueden entrar conductores ACTIVOS. Un conductor dado de baja
+  // (conductores.estado_id -> conductores_estados.codigo = 'baja') queda
+  // bloqueado. Devuelve true SOLO si se pudo confirmar que está de baja; ante
+  // un error de red devuelve false para no bloquear un login legítimo por un
+  // fallo transitorio.
+  async function conductorEstaDeBaja(conductorId: string): Promise<boolean> {
+    try {
+      const { data, error } = await supabase
+        .from('conductores')
+        .select('conductores_estados(codigo)')
+        .eq('id', conductorId)
+        .maybeSingle()
+      if (error) return false
+      const codigo = (data as any)?.conductores_estados?.codigo
+      return typeof codigo === 'string' && codigo.toLowerCase() === 'baja'
+    } catch {
+      return false
+    }
+  }
+
   async function handleLogin(e: React.FormEvent) {
     e.preventDefault()
     const input = loginInput.trim()
@@ -611,6 +638,15 @@ export function PortalPage({ embeddedConductorId }: { embeddedConductorId?: stri
       }
 
       const found = result.conductor
+
+      // Solo conductores activos pueden ingresar: si está dado de baja, se
+      // rechaza el acceso aunque la contraseña sea correcta.
+      if (await conductorEstaDeBaja(found.id)) {
+        setLoginError('Tu cuenta está dada de baja. Si creés que es un error, comunicate con Toshify.')
+        setLoginPassword('')
+        return
+      }
+
       // Persistir el documento para restaurar sesión al refrescar (hasta "Salir").
       // La contraseña NUNCA se guarda en localStorage.
       try { localStorage.setItem(PORTAL_AUTH_KEY, input) } catch { /* storage no disponible */ }
@@ -1072,27 +1108,54 @@ export function PortalPage({ embeddedConductorId }: { embeddedConductorId?: stri
         })
 
       // ===== Seccion nueva: MULTAS del conductor =====
-      // Trae candidatas por primer apellido y filtra en cliente exigiendo que el
-      // conductor_responsable contenga nombre Y apellido. Excluye borradas/desestimadas.
+      // Atribución por NOMBRE mejorada. Antes se usaba includes() (subcadena) con el
+      // primer nombre y el primer token del apellido, lo que causaba falsos positivos:
+      // p.ej. el apellido "DE" (de "DE ASIS") se encontraba DENTRO de "MENDEZ", y una
+      // multa de "ANGEL FRANCISCO MENDEZ SILVA" se atribuía a "FRANCISCO JAVIER DE ASIS".
+      // Ahora se compara por PALABRA COMPLETA (tokens) exigiendo que el
+      // conductor_responsable contenga TODOS los apellidos significativos + el primer
+      // nombre del conductor.
+      const normTxt = (s: string) =>
+        (s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toUpperCase()
+      const tokenizar = (s: string) => normTxt(s).split(/[^A-Z0-9]+/).filter(Boolean)
+
+      const nombreTokens = tokenizar(conductor.nombres)       // ej: [FRANCISCO, JAVIER]
+      const apellidoTokens = tokenizar(conductor.apellidos)   // ej: [DE, ASIS]
+      // Apellidos "significativos" (>=3 letras): descarta partículas como DE/LA/DEL/DA
+      // para no exigirlas (la fuente a veces las omite), pero no rompen si están.
+      const apellidosFuertes = apellidoTokens.filter(t => t.length >= 3)
+      const apellidosRequeridos = apellidosFuertes.length > 0 ? apellidosFuertes : apellidoTokens
+      // Token más distintivo (el apellido fuerte más largo) para el prefiltro SQL.
+      const prefiltro =
+        [...apellidosRequeridos].sort((x, y) => y.length - x.length)[0]
+        || nombreTokens[0] || ''
+
+      // Coincide solo si el responsable contiene, como palabra completa, TODOS los
+      // apellidos requeridos y el primer nombre del conductor.
+      const coincideConductor = (responsable: string): boolean => {
+        const set = new Set(tokenizar(responsable))
+        if (set.size === 0) return false
+        const apellidoOk = apellidosRequeridos.length > 0 && apellidosRequeridos.every(t => set.has(t))
+        const nombreOk = nombreTokens.length > 0 && set.has(nombreTokens[0])
+        return apellidoOk && nombreOk
+      }
+
       supabase
         .from('multas_historico')
         .select('id, infraccion, patente, fecha_infraccion, importe, lugar, lugar_detalle, detalle, drive_url, importe_descuento, fecha_vencimiento_descuento, conductor_responsable')
-        .ilike('conductor_responsable', `%${primerApellido}%`)
+        .ilike('conductor_responsable', `%${prefiltro}%`)
         .is('deleted_at', null)
         .is('desestimada_at', null)
         .order('fecha_infraccion', { ascending: false })
         .limit(200)
         .then(({ data }) => {
-          const norm = (s: string) => (s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toUpperCase()
-          const n = norm(primerNombre), a = norm(primerApellido)
           const filtradas = ((data || []) as Array<PortalMulta & { conductor_responsable?: string }>)
             .filter(m => {
               const crRaw = m.conductor_responsable || ''
               // Responsable COMPARTIDO (varios conductores separados por coma): no se
               // atribuye a un conductor individual, por lo que no se muestra en su portal.
               if (crRaw.includes(',')) return false
-              const cr = norm(crRaw)
-              return cr.includes(n) && cr.includes(a)
+              return coincideConductor(crRaw)
             })
             .map((m): PortalMulta => ({
               id: m.id, infraccion: m.infraccion, patente: m.patente,

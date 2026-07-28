@@ -3,7 +3,7 @@ import { useState, useEffect, useMemo, useCallback, useRef, useLayoutEffect } fr
 import { createPortal } from 'react-dom'
 import {
   Eye, Edit2, Trash2, Users, UserPlus, Clock, RefreshCw, MessageCircle,
-  CheckCircle, AlertTriangle, X, Download, Upload, FolderOpen, Car,
+  CheckCircle, AlertTriangle, X, Download, Upload, FolderOpen, Car, Bell,
 } from 'lucide-react'
 import { ActionsMenu } from '../../components/ui/ActionsMenu'
 import { supabase } from '../../lib/supabase'
@@ -220,6 +220,14 @@ function normalizarTurno(turno: string | null | undefined): string {
  *   1155551234    -> +5491155551234
  *   +54 9 11 5555 1234 -> +5491155551234
  */
+// Detecta si un lead tiene una observación de "se está intentando comunicar
+// nuevamente" (recontacto). Hoy vive como texto libre dentro de `observaciones`,
+// que puede acumular varias entradas con fecha, por eso se busca por subcadena.
+const ALERTA_RECONTACTO_TEXTO = 'intentando comunicar'
+function tieneAlertaRecontacto(observaciones?: string | null): boolean {
+  return !!observaciones && observaciones.toLowerCase().includes(ALERTA_RECONTACTO_TEXTO)
+}
+
 function formatPhoneAR(raw: unknown): string | null {
   if (raw == null) return null
   let digits = String(raw).replace(/[^\d]/g, '')
@@ -974,7 +982,8 @@ export function LeadsModule() {
     const damaro = leads.filter(l => (l.fuente_de_lead || '').toLowerCase() === 'damaro').length
     const autoPueblo = leads.filter(l => l.estado_de_lead === 'Auto del pueblo').length
     const descartados = leads.filter(l => l.estado_de_lead === 'Descartado').length
-    return { total, inicio, aptos, noAptos, convocatoria, enZonaRestringida, enZonaSegura, intercom, damaro, autoPueblo, descartados }
+    const recontacto = leads.filter(l => l.estado_de_lead !== 'Conductor' && tieneAlertaRecontacto(l.observaciones)).length
+    return { total, inicio, aptos, noAptos, convocatoria, enZonaRestringida, enZonaSegura, intercom, damaro, autoPueblo, descartados, recontacto }
   }, [leads, leadsEnZona])
 
   // ---------- UNIQUE VALUES PARA FILTROS ----------
@@ -1009,6 +1018,7 @@ export function LeadsModule() {
     else if (activeStatCard === 'intercom') result = result.filter(l => (l.fuente_de_lead || '').toLowerCase() !== 'damaro')
     else if (activeStatCard === 'damaro') result = result.filter(l => (l.fuente_de_lead || '').toLowerCase() === 'damaro')
     else if (activeStatCard === 'autoPueblo') result = result.filter(l => l.estado_de_lead === 'Auto del pueblo')
+    else if (activeStatCard === 'recontacto') result = result.filter(l => tieneAlertaRecontacto(l.observaciones))
     else if (activeStatCard === 'descartados') result = result.filter(l => l.estado_de_lead === 'Descartado')
     else {
       // Por defecto: excluir descartados de la tabla
@@ -2202,6 +2212,7 @@ export function LeadsModule() {
         const dni = row.original.dni || ''
         const phone = row.original.phone || ''
         const direccion = row.original.direccion || ''
+        const alertaRecontacto = tieneAlertaRecontacto(row.original.observaciones)
         const zonaRestringida = leadsEnZona.get(row.original.id)
         const enZonaRestringida = !!zonaRestringida
         const tieneCoordenadas = row.original.direccion_latitud != null && row.original.direccion_longitud != null
@@ -2217,24 +2228,38 @@ export function LeadsModule() {
             }}
           >
             <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-              <a
-                href={`/leads?id=${row.original.id}`}
-                onClick={(e) => {
-                  if (!e.ctrlKey && !e.metaKey) {
-                    e.preventDefault()
-                    handleOpenDetails(row.original)
-                  }
-                }}
-                title={nombre}
-                style={{
-                  fontWeight: 600, color: enZonaRestringida ? 'var(--badge-red-text)' : 'var(--text-primary)',
-                  textDecoration: 'none', fontSize: '13px',
-                  display: 'block', maxWidth: '240px',
-                  overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-                }}
-              >
-                {nombre}
-              </a>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', minWidth: 0 }}>
+                <a
+                  href={`/leads?id=${row.original.id}`}
+                  onClick={(e) => {
+                    if (!e.ctrlKey && !e.metaKey) {
+                      e.preventDefault()
+                      handleOpenDetails(row.original)
+                    }
+                  }}
+                  title={nombre}
+                  style={{
+                    fontWeight: 600, color: enZonaRestringida ? 'var(--badge-red-text)' : 'var(--text-primary)',
+                    textDecoration: 'none', fontSize: '13px',
+                    display: 'block', maxWidth: '220px',
+                    overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                  }}
+                >
+                  {nombre}
+                </a>
+                {alertaRecontacto && (
+                  <span
+                    className="lead-alerta-recontacto"
+                    title={row.original.observaciones || 'Se está intentando comunicar nuevamente'}
+                    style={{
+                      display: 'inline-flex', alignItems: 'center', flexShrink: 0,
+                      color: 'var(--color-primary)', cursor: 'default',
+                    }}
+                  >
+                    <Bell size={14} />
+                  </span>
+                )}
+              </div>
               <span style={{ fontSize: '11px', color: 'var(--text-tertiary)' }}>
                 {dni ? `DNI: ${dni}` : ''}{dni && phone ? ' · ' : ''}{phone ? phone : ''}
               </span>
@@ -2717,6 +2742,16 @@ export function LeadsModule() {
             <div className="stat-content">
               <span className="stat-value">{stats.autoPueblo}</span>
               <span className="stat-label">Auto del pueblo</span>
+            </div>
+          </div>
+          <div
+            className={`stat-card stat-card-clickable ${activeStatCard === 'recontacto' ? 'stat-card-active' : ''}`}
+            onClick={() => handleStatClick('recontacto')}
+          >
+            <Bell size={18} className="stat-icon" style={{ color: '#dc2626' }} />
+            <div className="stat-content">
+              <span className="stat-value">{stats.recontacto}</span>
+              <span className="stat-label">Recontacto</span>
             </div>
           </div>
         </div>
