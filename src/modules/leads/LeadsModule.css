@@ -1000,4 +1000,19 @@
   }
 }
 
-
+
+/* Alerta de recontacto ("se está intentando comunicar nuevamente") en la
+   columna Candidato: campana con pulso sutil para que salte a la vista. */
+.lead-alerta-recontacto {
+  animation: lead-recontacto-pulse 1.8s ease-in-out infinite;
+}
+.lead-alerta-recontacto:hover {
+  animation: none;
+}
+@keyframes lead-recontacto-pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50%      { opacity: 0.55; transform: scale(1.12); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .lead-alerta-recontacto { animation: none; }
+}
