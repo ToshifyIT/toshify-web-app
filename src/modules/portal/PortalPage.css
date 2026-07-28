@@ -70,6 +70,28 @@
   margin: 0 0 32px;
 }
 
+/* Aviso "tu DNI es tu contraseña la primera vez" — tono informativo (azul),
+   distinto del rojo de error para que no se lea como una alerta. */
+.portal-login-hint {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 0 0 24px;
+  padding: 12px 14px;
+  background: rgba(37, 99, 235, 0.06);
+  border: 1px solid rgba(37, 99, 235, 0.18);
+  border-radius: 10px;
+  color: #1d4ed8;
+  font-size: 12.5px;
+  line-height: 1.45;
+  text-align: left;
+}
+
+.portal-login-hint svg {
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
 .portal-login-input {
   width: 100%;
   padding: 14px 16px;
