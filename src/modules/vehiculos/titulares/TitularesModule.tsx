@@ -22,6 +22,22 @@ const CODIGOS_TITULAR_ACTIVO = new Set([
   'RETENIDO_COMISARIA',
 ])
 
+// Paleta semántica para el badge de estado del vehículo (modal de titulares).
+// Mapea por el texto de la descripción para que cada estado tenga su propio color
+// en vez de mostrarse todos con el mismo tono ámbar.
+function getEstadoBadgeColors(label: string): { bg: string; color: string; border: string } {
+  const l = (label || '').toLowerCase()
+  if (l.includes('en uso') || l === 'activo') return { bg: '#dcfce7', color: '#166534', border: '#bbf7d0' }
+  if (l.includes('pkg on')) return { bg: '#ccfbf1', color: '#115e59', border: '#99f6e4' }
+  if (l.includes('corporativo')) return { bg: '#dbeafe', color: '#1e40af', border: '#bfdbfe' }
+  if (l.includes('taller') || l.includes('chapa') || l.includes('mecanic')) return { bg: '#ffedd5', color: '#9a3412', border: '#fed7aa' }
+  if (l.includes('robo') || l.includes('siniestro') || l.includes('retenido') || l.includes('comisaria')) return { bg: '#fee2e2', color: '#991b1b', border: '#fecaca' }
+  if (l.includes('pkg off')) return { bg: '#f1f5f9', color: '#475569', border: '#e2e8f0' }
+  if (l.includes('reserva') || l.includes('base')) return { bg: '#ede9fe', color: '#5b21b6', border: '#ddd6fe' }
+  if (l === 'inactivo') return { bg: '#f3f4f6', color: '#6b7280', border: '#e5e7eb' }
+  return { bg: '#f3f4f6', color: '#374151', border: '#e5e7eb' }
+}
+
 const EMPTY_FORM: TitularFormData = {
   tipo: 'persona',
   dni_cuit: '',
@@ -1132,37 +1148,55 @@ export function TitularesModule() {
                 </p>
               ) : (
                 <table style={{ width: '100%', fontSize: '13px', borderCollapse: 'collapse' }}>
+                  <caption style={{ captionSide: 'top', textAlign: 'left', padding: '0 8px 10px', fontSize: '12px', fontWeight: 600, color: 'var(--text-tertiary)' }}>
+                    {vehiculosTitular.length} {vehiculosTitular.length === 1 ? 'vehículo' : 'vehículos'}
+                  </caption>
                   <thead>
-                    <tr style={{ borderBottom: '1px solid var(--border-primary)' }}>
-                      <th style={{ textAlign: 'left', padding: '8px', fontSize: '11px', color: 'var(--text-tertiary)', textTransform: 'uppercase' }}>Patente</th>
-                      <th style={{ textAlign: 'left', padding: '8px', fontSize: '11px', color: 'var(--text-tertiary)', textTransform: 'uppercase' }}>Vehículo</th>
-                      <th style={{ textAlign: 'left', padding: '8px', fontSize: '11px', color: 'var(--text-tertiary)', textTransform: 'uppercase' }}>Desde</th>
-                      <th style={{ textAlign: 'left', padding: '8px', fontSize: '11px', color: 'var(--text-tertiary)', textTransform: 'uppercase' }}>Hasta</th>
-                      <th style={{ textAlign: 'left', padding: '8px', fontSize: '11px', color: 'var(--text-tertiary)', textTransform: 'uppercase' }}>Estado</th>
-                      <th style={{ textAlign: 'center', padding: '8px', fontSize: '11px', color: 'var(--text-tertiary)', textTransform: 'uppercase' }}>Reg. Oferta Locacion</th>
+                    <tr>
+                      <th style={{ textAlign: 'left', padding: '10px 8px', fontSize: '11px', color: 'var(--text-tertiary)', textTransform: 'uppercase', position: 'sticky', top: 0, background: 'var(--bg-primary, #fff)', borderBottom: '1px solid var(--border-primary)' }}>Patente</th>
+                      <th style={{ textAlign: 'left', padding: '10px 8px', fontSize: '11px', color: 'var(--text-tertiary)', textTransform: 'uppercase', position: 'sticky', top: 0, background: 'var(--bg-primary, #fff)', borderBottom: '1px solid var(--border-primary)' }}>Vehículo</th>
+                      <th style={{ textAlign: 'left', padding: '10px 8px', fontSize: '11px', color: 'var(--text-tertiary)', textTransform: 'uppercase', position: 'sticky', top: 0, background: 'var(--bg-primary, #fff)', borderBottom: '1px solid var(--border-primary)' }}>Desde</th>
+                      <th style={{ textAlign: 'left', padding: '10px 8px', fontSize: '11px', color: 'var(--text-tertiary)', textTransform: 'uppercase', position: 'sticky', top: 0, background: 'var(--bg-primary, #fff)', borderBottom: '1px solid var(--border-primary)' }}>Hasta</th>
+                      <th style={{ textAlign: 'left', padding: '10px 8px', fontSize: '11px', color: 'var(--text-tertiary)', textTransform: 'uppercase', position: 'sticky', top: 0, background: 'var(--bg-primary, #fff)', borderBottom: '1px solid var(--border-primary)' }}>Estado</th>
+                      <th style={{ textAlign: 'center', padding: '10px 8px', fontSize: '11px', color: 'var(--text-tertiary)', textTransform: 'uppercase', position: 'sticky', top: 0, background: 'var(--bg-primary, #fff)', borderBottom: '1px solid var(--border-primary)' }}>Reg. Oferta Locacion</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {vehiculosTitular.map(vt => (
-                      <tr key={vt.id} style={{ borderBottom: '1px solid var(--border-primary)' }}>
+                    {vehiculosTitular.map((vt, idx) => (
+                      <tr
+                        key={vt.id}
+                        style={{ borderBottom: '1px solid var(--border-primary)', background: idx % 2 === 1 ? 'var(--bg-secondary, rgba(0,0,0,0.03))' : 'transparent', transition: 'background 0.12s' }}
+                        onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--bg-hover, rgba(59,130,246,0.08))' }}
+                        onMouseLeave={(e) => { e.currentTarget.style.background = idx % 2 === 1 ? 'var(--bg-secondary, rgba(0,0,0,0.03))' : 'transparent' }}
+                      >
                         <td style={{ padding: '8px', fontWeight: 600 }}>{vt.vehiculos?.patente || 'N/A'}</td>
                         <td style={{ padding: '8px' }}>{vt.vehiculos ? `${vt.vehiculos.marca} ${vt.vehiculos.modelo}` : 'N/A'}</td>
                         <td style={{ padding: '8px' }}>{vt.fecha_desde ? new Date(vt.fecha_desde).toLocaleDateString('es-AR') : 'N/A'}</td>
-                        <td style={{ padding: '8px' }}>{vt.fecha_hasta ? new Date(vt.fecha_hasta).toLocaleDateString('es-AR') : 'Vigente'}</td>
+                        <td style={{ padding: '8px' }}>
+                          {vt.fecha_hasta
+                            ? new Date(vt.fecha_hasta).toLocaleDateString('es-AR')
+                            : (
+                              <span style={{ padding: '2px 8px', borderRadius: '999px', fontSize: '11px', fontWeight: 600, whiteSpace: 'nowrap', background: '#dcfce7', color: '#166534', border: '1px solid #bbf7d0' }}>
+                                Vigente
+                              </span>
+                            )}
+                        </td>
                         <td style={{ padding: '8px' }}>
                           {(() => {
                             const estadoVehiculo = vt.vehiculos?.vehiculos_estados?.descripcion
                             const label = estadoVehiculo ?? (vt.activo ? 'Activo' : 'Inactivo')
-                            const isActivo = !estadoVehiculo && vt.activo
+                            const c = getEstadoBadgeColors(label)
                             return (
                               <span style={{
-                                padding: '2px 8px',
-                                borderRadius: '12px',
+                                display: 'inline-block',
+                                padding: '3px 10px',
+                                borderRadius: '999px',
                                 fontSize: '11px',
-                                fontWeight: 500,
+                                fontWeight: 600,
                                 whiteSpace: 'nowrap',
-                                background: isActivo ? '#d1fae5' : estadoVehiculo ? '#fef3c7' : '#f3f4f6',
-                                color: isActivo ? '#065f46' : estadoVehiculo ? '#92400e' : '#6b7280',
+                                background: c.bg,
+                                color: c.color,
+                                border: `1px solid ${c.border}`,
                               }}>
                                 {label}
                               </span>

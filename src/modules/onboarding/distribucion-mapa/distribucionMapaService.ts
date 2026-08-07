@@ -53,7 +53,8 @@ export function coordsValidas(lat: unknown, lng: unknown): lat is number {
 export type TurnoEfectivo = 'DIURNO' | 'NOCTURNO' | 'SIN_PREFERENCIA'
 
 // De dónde salió el turno efectivo (para mostrarlo en el InfoWindow).
-export type OrigenTurno = 'asignacion' | 'preferencia' | 'ninguno'
+// 'lead' = fallback adicional: preferencia que tenía como lead (por DNI).
+export type OrigenTurno = 'asignacion' | 'preferencia' | 'lead' | 'ninguno'
 
 // Shape normalizado para el mapa: conductores y leads comparten estas claves,
 // aunque en BD las columnas de coordenadas se llamen distinto.
@@ -71,7 +72,9 @@ export interface EntidadMapa {
   estadoCodigo: string | null // codigo normalizado en minúsculas (activo / baja)
   estadoDescripcion: string | null
   esBaja: boolean
-  // Turno efectivo del conductor (última asignación → preferencia como fallback).
+  // true si el conductor tiene una asignación ACTIVA vigente (filtro con/sin asignación).
+  tieneAsignacionActiva: boolean
+  // Turno efectivo del conductor (última asignación → preferencia → turno del lead).
   turnoEfectivo: TurnoEfectivo | null
   turnoOrigen: OrigenTurno
   // Valor crudo del horario de la última asignación (diurno/nocturno/todo_dia), si hay.
@@ -201,13 +204,37 @@ function preferenciaATurno(pref: string | null | undefined): TurnoEfectivo | nul
   return null
 }
 
+// ---------- Añadidos (no alteran la lógica existente de arriba) ----------
+
+// Normaliza el turno que tenía el lead (leads.turno) a turno efectivo. Tolerante
+// a formato ("Diurno", "diurno", "Nocturno", etc.).
+function turnoLeadATurno(turno: string | null | undefined): TurnoEfectivo | null {
+  const t = (turno || '').toLowerCase()
+  if (t.includes('diurn')) return 'DIURNO'
+  if (t.includes('noctur')) return 'NOCTURNO'
+  if (t.includes('cargo') || t.includes('sin pref') || t.includes('todo')) return 'SIN_PREFERENCIA'
+  return null
+}
+
+// DNI a solo dígitos, para cruzar conductor (numero_dni) con lead (dni).
+function soloDigitos(dni: string | null | undefined): string {
+  return (dni || '').replace(/\D/g, '')
+}
+
+// "Con asignación" (asignación activa vigente) usa EXACTAMENTE el mismo criterio
+// que la columna Asignación del módulo de Conductores: la ASIGNACIÓN está activa
+// Y la fila del conductor está asignado/activo Y tiene vehículo Y (misma sede).
+const ESTADOS_ASIG_ACTIVA = new Set(['activo', 'activa'])   // asignaciones.estado
+const ESTADOS_AC_ACTIVA = new Set(['asignado', 'activo'])   // asignaciones_conductores.estado
+
 // =====================================================
 // Fetch conductores (activos + baja). La UI decide si muestra los de baja.
 // El turno efectivo sale de la última asignación; si no hay, de la preferencia.
 // =====================================================
 
 export async function fetchConductoresMapa(
-  aplicarFiltroSede: AplicarFiltroSede
+  aplicarFiltroSede: AplicarFiltroSede,
+  sedeActualId?: string | null
 ): Promise<EntidadMapa[]> {
   let query = supabase
     .from('conductores')
@@ -227,6 +254,20 @@ export async function fetchConductoresMapa(
   // reciente. Campo horario y fecha_asignacion están completos en la tabla.
   const ultimoHorario = await fetchUltimoHorarioPorConductor(rows.map((r) => r.id))
 
+  // AÑADIDO (independiente): set de conductores con asignación ACTIVA vigente,
+  // para el filtro con/sin asignación. No altera el cálculo de turno de arriba.
+  const asignacionActivaSet = await fetchAsignacionActivaSet(sedeActualId)
+
+  // AÑADIDO (independiente): fallback de turno al que tenían como lead. Solo para
+  // conductores que hoy quedarían "sin dato" (sin asignación y sin preferencia).
+  const dnisFallback: string[] = []
+  for (const r of rows) {
+    const tAsig = horarioATurno(ultimoHorario.get(r.id) || null)
+    const tPref = preferenciaATurno(r.preferencia_turno)
+    if (!tAsig && !tPref && r.numero_dni) dnisFallback.push(r.numero_dni)
+  }
+  const turnoLeadPorDni = await fetchTurnoLeadPorDni(dnisFallback)
+
   return rows.map((r) => {
     const codigo = r.conductores_estados?.codigo?.toLowerCase() || null
     const nombre = `${r.apellidos || ''}, ${r.nombres || ''}`.trim().replace(/^,|,$/g, '').trim()
@@ -244,8 +285,15 @@ export async function fetchConductoresMapa(
       turnoEfectivo = turnoPref
       turnoOrigen = 'preferencia'
     } else {
-      turnoEfectivo = null
-      turnoOrigen = 'ninguno'
+      // AÑADIDO: último recurso, turno que tenía como lead (por DNI).
+      const turnoLead = turnoLeadATurno(turnoLeadPorDni.get(soloDigitos(r.numero_dni)))
+      if (turnoLead) {
+        turnoEfectivo = turnoLead
+        turnoOrigen = 'lead'
+      } else {
+        turnoEfectivo = null
+        turnoOrigen = 'ninguno'
+      }
     }
 
     return {
@@ -261,6 +309,7 @@ export async function fetchConductoresMapa(
       estadoCodigo: codigo,
       estadoDescripcion: r.conductores_estados?.descripcion || null,
       esBaja: codigo === ESTADO_CONDUCTOR_EXCLUIDO,
+      tieneAsignacionActiva: asignacionActivaSet.has(r.id),
       turnoEfectivo,
       turnoOrigen,
       horarioUltimaAsignacion: horario,
@@ -291,6 +340,77 @@ async function fetchUltimoHorarioPorConductor(
   for (const row of data as { conductor_id: string; horario: string | null }[]) {
     if (!map.has(row.conductor_id)) {
       map.set(row.conductor_id, row.horario || null)
+    }
+  }
+  return map
+}
+
+// AÑADIDO: devuelve el Set de conductor_id con una asignación ACTIVA vigente,
+// usando EXACTAMENTE el mismo criterio que la columna Asignación del módulo de
+// Conductores (asignado/activo + asignación activa + con vehículo + misma sede).
+// Trae las filas con el estado/sede/vehículo de la asignación embebidos y pagina,
+// SIN el filtro .in(conductor_id, [...]) que —con el embed— hacía fallar la request
+// (net::ERR_FAILED). Best-effort: si falla, Set vacío.
+async function fetchAsignacionActivaSet(sedeActualId?: string | null): Promise<Set<string>> {
+  const set = new Set<string>()
+  const pageSize = 1000
+
+  for (let page = 0; page < 20; page++) {
+    const desde = page * pageSize
+    const { data, error } = await supabase
+      .from('asignaciones_conductores')
+      .select('conductor_id, estado, asignaciones(estado, sede_id, vehiculos(id))')
+      .not('conductor_id', 'is', null)
+      .range(desde, desde + pageSize - 1)
+
+    if (error) {
+      console.error('[DistribucionMapa] fetchAsignacionActivaSet error:', error)
+      break
+    }
+    if (!data || data.length === 0) break
+
+    for (const row of (data as any[])) {
+      const ac = (row.estado || '').toLowerCase()
+      // La relación embebida puede venir como objeto (to-one) o como array según los tipos.
+      const asigRaw = row.asignaciones
+      const asig = Array.isArray(asigRaw) ? asigRaw[0] : asigRaw
+      const asigEstado = (asig?.estado || '').toLowerCase()
+
+      if (!ESTADOS_ASIG_ACTIVA.has(asigEstado)) continue
+      if (!ESTADOS_AC_ACTIVA.has(ac)) continue
+      if (sedeActualId && asig?.sede_id && asig.sede_id !== sedeActualId) continue
+      // Debe tener vehículo asignado (igual que el módulo de Conductores).
+      const veh = asig?.vehiculos
+      const tieneVehiculo = Array.isArray(veh) ? veh.length > 0 : !!veh
+      if (!tieneVehiculo) continue
+
+      if (row.conductor_id) set.add(row.conductor_id as string)
+    }
+
+    if (data.length < pageSize) break
+  }
+
+  return set
+}
+
+// AÑADIDO: Map<dni(solo dígitos), turno> con el turno que tenía cada lead. Se usa
+// como último fallback de turno para conductores sin asignación. Best-effort.
+async function fetchTurnoLeadPorDni(dnis: string[]): Promise<Map<string, string | null>> {
+  const map = new Map<string, string | null>()
+  const limpios = [...new Set(dnis.filter(Boolean))]
+  if (limpios.length === 0) return map
+
+  const { data, error } = await supabase
+    .from('leads')
+    .select('dni, turno')
+    .in('dni', limpios)
+
+  if (error || !data) return map
+
+  for (const row of data as Array<{ dni: string | null; turno: string | null }>) {
+    const key = soloDigitos(row.dni)
+    if (key && row.turno && !map.has(key)) {
+      map.set(key, row.turno)
     }
   }
   return map
@@ -336,6 +456,7 @@ export async function fetchLeadsMapa(
       estadoCodigo: null,
       estadoDescripcion: null,
       esBaja: false,
+      tieneAsignacionActiva: false,
       turnoEfectivo: null,
       turnoOrigen: 'ninguno' as const,
       horarioUltimaAsignacion: null,

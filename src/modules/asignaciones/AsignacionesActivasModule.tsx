@@ -45,18 +45,37 @@ interface AsignacionActiva {
   }>
 }
 
-// Estados a EXCLUIR del total (igual que en vehículos)
-const ESTADOS_EXCLUIDOS = [
-  'ROBO',
-  'DESTRUCCION_TOTAL',
-  'JUBILADO',
-  'DEVUELTO_PROVEEDOR'
+// Normaliza la descripción del estado (sin acentos, minúsculas, espacios simples)
+// para comparar sin depender de mayúsculas/tildes/formato.
+const normEstadoFlota = (s: string) =>
+  (s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/\s+/g, ' ').trim()
+
+// Estados que SÍ cuentan para el "Total Flota". Se identifica por la descripción
+// del estado del vehículo (no por el código interno) para no depender de códigos.
+// Cada bucket tiene la etiqueta a mostrar en el popup y su regla de coincidencia.
+const ESTADOS_TOTAL_FLOTA: { label: string; match: (d: string) => boolean }[] = [
+  { label: 'En uso', match: d => d === 'en uso' },
+  { label: 'PKG ON', match: d => d.startsWith('pkg on') },
+  { label: 'PKG OFF - Base', match: d => d.includes('pkg off') && d.includes('base') },
+  { label: 'PKG OFF - Francia', match: d => d.includes('pkg off') && d.includes('franc') },
+  { label: 'Taller Mecánico', match: d => d.includes('taller') && d.includes('mecanic') },
+  { label: 'Taller Chapa y Pintura', match: d => d.includes('taller') && (d.includes('chapa') || d.includes('pintura')) },
+  { label: 'Retenido en Comisaría', match: d => d.includes('retenido') || d.includes('comisar') },
 ]
+
+// Devuelve el índice del bucket al que pertenece la descripción, o -1 si el
+// estado no cuenta para el total.
+function bucketEstadoFlota(descripcion: string): number {
+  const d = normEstadoFlota(descripcion)
+  return ESTADOS_TOTAL_FLOTA.findIndex(e => e.match(d))
+}
 
 export function AsignacionesActivasModule() {
   const { sedeActualId, aplicarFiltroSede } = useSede()
   const [asignaciones, setAsignaciones] = useState<AsignacionActiva[]>([])
   const [totalVehiculosFlota, setTotalVehiculosFlota] = useState(0)
+  // Desglose del Total Flota por estado (para el popup descriptivo)
+  const [desgloseFlota, setDesgloseFlota] = useState<{ label: string; count: number }[]>([])
   const [vehiculosOperativos, setVehiculosOperativos] = useState(0)
   const [vehiculosPkgOn, setVehiculosPkgOn] = useState(0)
   const [vehiculosEnUso, setVehiculosEnUso] = useState(0)
@@ -150,14 +169,20 @@ export function AsignacionesActivasModule() {
         let enUso = 0
         const pkgOnSinAsignacion: any[] = []
         const todosLosPkgOn: any[] = []
+        // Desglose por estado (mismo orden que ESTADOS_TOTAL_FLOTA)
+        const desglose = ESTADOS_TOTAL_FLOTA.map(e => ({ label: e.label, count: 0 }))
 
-        // REPLICAR EXACTAMENTE LA LÓGICA DE VEHÍCULOS
         for (const v of vehiculos) {
           const estadoCodigo = v.vehiculos_estados?.codigo || ''
-          
-          // Excluir del total (igual que en vehículos)
-          if (!ESTADOS_EXCLUIDOS.includes(estadoCodigo)) {
+          const estadoDescripcion = v.vehiculos_estados?.descripcion || ''
+
+          // Total Flota por INCLUSIÓN: solo cuenta si el estado está en la lista
+          // definida (En uso, PKG ON, PKG OFF - Base/Francia, Taller Mecánico,
+          // Taller Chapa y Pintura, Retenido en Comisaría).
+          const bucket = bucketEstadoFlota(estadoDescripcion)
+          if (bucket >= 0) {
             totalFlota++
+            desglose[bucket].count++
           }
 
           // Contar por estado (igual que en vehículos)
@@ -177,6 +202,7 @@ export function AsignacionesActivasModule() {
         }
 
         setTotalVehiculosFlota(totalFlota)
+        setDesgloseFlota(desglose)
         setVehiculosOperativos(operativos)
         setVehiculosPkgOn(pkgOn)
         setVehiculosEnUso(enUso)
@@ -712,8 +738,43 @@ export function AsignacionesActivasModule() {
       <div className="asig-stats">
         <div className="asig-stats-grid">
           <div
-            className="stat-card"
-            title="Total de vehículos en la flota (excluye robos, destruidos, jubilados)"
+            className="stat-card stat-card-clickable"
+            title="Cómo se calcula el Total Flota - Click para ver el detalle"
+            onClick={() => {
+              const filas = desgloseFlota.map(e =>
+                `<tr>
+                   <td style="padding:7px 12px;border-bottom:1px solid #eee;text-align:left;">${e.label}</td>
+                   <td style="padding:7px 12px;border-bottom:1px solid #eee;text-align:right;font-weight:600;">${e.count}</td>
+                 </tr>`
+              ).join('')
+              Swal.fire({
+                title: 'Total Flota',
+                html: `
+                  <p style="margin:0 0 12px;color:#6B7280;text-align:left;font-size:13px;">
+                    El <strong>Total Flota</strong> cuenta los vehículos cuyo estado actual es uno de los
+                    siguientes. Cualquier otro estado (robo, destrucción total, jubilado, devuelto al
+                    proveedor, disponible, corporativo, etc.) <strong>no</strong> se suma.
+                  </p>
+                  <table style="width:100%;border-collapse:collapse;font-size:14px;">
+                    <thead>
+                      <tr>
+                        <th style="text-align:left;padding:7px 12px;border-bottom:2px solid #e5e7eb;color:#6B7280;font-size:12px;">Estado considerado</th>
+                        <th style="text-align:right;padding:7px 12px;border-bottom:2px solid #e5e7eb;color:#6B7280;font-size:12px;">Vehículos</th>
+                      </tr>
+                    </thead>
+                    <tbody>${filas}</tbody>
+                    <tfoot>
+                      <tr>
+                        <td style="padding:9px 12px;font-weight:700;text-align:left;">Total Flota</td>
+                        <td style="padding:9px 12px;font-weight:700;text-align:right;color:#e6002e;">${stats.totalFlota}</td>
+                      </tr>
+                    </tfoot>
+                  </table>`,
+                confirmButtonText: 'Cerrar',
+                confirmButtonColor: '#e6002e',
+                width: 500,
+              })
+            }}
           >
             <Car size={18} className="stat-icon" />
             <div className="stat-content">
