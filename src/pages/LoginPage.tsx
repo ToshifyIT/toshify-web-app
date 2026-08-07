@@ -1,5 +1,5 @@
 // src/pages/LoginPage.tsx
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import type { FormEvent } from 'react'
 import { useAuth } from '../contexts/AuthContext'
 import { useNavigate } from 'react-router-dom'
@@ -13,8 +13,17 @@ export function LoginPage() {
   const [showPassword, setShowPassword] = useState(false)
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
-  const { signIn, signInWithGoogle } = useAuth()
+  const { signIn, signInWithGoogle, user } = useAuth()
   const navigate = useNavigate()
+
+  // Si ya hay sesión (recién logueado o entrando con sesión activa), ir a la app.
+  // Evita la carrera: signIn setea el usuario vía onAuthStateChange (asíncrono), y
+  // el navigate del submit podía correr antes de que `user` estuviera listo, con lo
+  // que ProtectedRoute rebotaba a /login. Con esto, al confirmarse la sesión se
+  // redirige de forma fiable (sirve para /login y /demo/login).
+  useEffect(() => {
+    if (user) navigate('/estado-de-flota', { replace: true })
+  }, [user, navigate])
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault()

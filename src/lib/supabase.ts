@@ -9,6 +9,14 @@ if (!supabaseUrl || !supabaseAnonKey) {
   throw new Error('Faltan variables de entorno de Supabase')
 }
 
+// Demo: si la URL arranca en /demo, la app lee/escribe en el esquema `demo`
+// (copia de `public`). Se detecta al cargar la página, igual que el basename
+// del router. En la app normal usa `public`. Cambiar entre demo y app real
+// requiere recargar la pestaña (el cliente se crea una sola vez).
+const isDemo =
+  typeof window !== 'undefined' &&
+  (window.location.pathname === '/demo' || window.location.pathname.startsWith('/demo/'))
+
 // Timeout duro para toda request de Supabase (auth, REST, RPC, storage).
 // Defensa ante MITM lento de antivirus (AVG/Avast "HTTPS scanning") que puede
 // dejar el handshake TLS pending sin reject -> la promesa de fetch nunca
@@ -35,7 +43,15 @@ const fetchWithTimeout: typeof fetch = (input, init) => {
 // Cliente Supabase con configuración nativa estable + timeout de red defensivo.
 // global.fetch solo cubre HTTP (no los WebSockets de Realtime), que es lo
 // deseado: no queremos abortar suscripciones long-lived.
-export const supabase = createClient<any>(supabaseUrl, supabaseAnonKey, {
+//
+// Nota: las opciones van casteadas a `any` para que al pasar `db.schema`
+// supabase-js NO intente inferir el nombre del esquema en el tipado (con
+// Database=any esa inferencia rompe los tipos de .from() en todo el proyecto).
+// El esquema en runtime funciona igual; solo evitamos el ruido de tipos.
+const supabaseOptions = {
+  db: {
+    schema: isDemo ? 'demo' : 'public',
+  },
   auth: {
     persistSession: true,
     autoRefreshToken: true,
@@ -44,4 +60,6 @@ export const supabase = createClient<any>(supabaseUrl, supabaseAnonKey, {
   global: {
     fetch: fetchWithTimeout,
   },
-})
+}
+
+export const supabase = createClient<any>(supabaseUrl, supabaseAnonKey, supabaseOptions as any)

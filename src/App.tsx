@@ -93,9 +93,18 @@ function DeviceTypeInitializer({ children }: { children: React.ReactNode }) {
   return <>{children}</>;
 }
 
+// Demo: si la URL arranca en /demo, montamos TODO el router bajo ese prefijo.
+// Con basename, las rutas absolutas ("/estado-de-flota"), navigate(...) y los
+// <Link> del menú (rutas que vienen de la BD) se sirven automáticamente bajo
+// /demo sin tocar HomePage ni los ~60 <Route>. Se fija al montar el Router:
+// cambiar entre /demo y la app real requiere recargar la pestaña (aceptado).
+const isDemo =
+  window.location.pathname === '/demo' ||
+  window.location.pathname.startsWith('/demo/')
+
 function App() {
   return (
-    <BrowserRouter>
+    <BrowserRouter basename={isDemo ? '/demo' : undefined}>
       <DeviceTypeInitializer>
         <Routes>
           {/* Portal público - fuera de auth providers (lazy: arrastra jsPDF + recharts) */}

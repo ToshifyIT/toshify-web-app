@@ -85,8 +85,15 @@ function turnoCategoria(e: EntidadMapa): string {
 const ORIGEN_TURNO_LABEL: Record<string, string> = {
   asignacion: 'última asignación',
   preferencia: 'preferencia',
+  lead: 'preferencia (lead)',
   ninguno: 'sin dato',
 }
+
+// Opciones del filtro con/sin asignación (activa vigente).
+const ASIGNACION_OPCIONES = [
+  { value: 'con', label: 'Con asignación' },
+  { value: 'sin', label: 'Sin asignación' },
+]
 
 export function DistribucionMapaModule() {
   const { sedeActualId, aplicarFiltroSede } = useSede()
@@ -109,6 +116,7 @@ export function DistribucionMapaModule() {
   const [verBaja, setVerBaja] = useState(false) // de baja: oculto por defecto
   const [verLeads, setVerLeads] = useState(false)
   const [turnosSel, setTurnosSel] = useState<Set<string>>(new Set()) // vacío = todos
+  const [asignacionSel, setAsignacionSel] = useState<Set<string>>(new Set()) // vacío = todos ('con' / 'sin')
   const [zonasSel, setZonasSel] = useState<Set<string>>(new Set(['CABA'])) // CABA por defecto
   const [search, setSearch] = useState('')
 
@@ -155,7 +163,7 @@ export function DistribucionMapaModule() {
     setError('')
     try {
       const [cond, lds] = await Promise.all([
-        fetchConductoresMapa(aplicarFiltroSede),
+        fetchConductoresMapa(aplicarFiltroSede, sedeActualId),
         fetchLeadsMapa(aplicarFiltroSede),
       ])
       setConductores(cond)
@@ -173,7 +181,7 @@ export function DistribucionMapaModule() {
           const actualizado = await geocodificarFaltantes(faltantes)
           if (actualizado) {
             const [cond2, lds2] = await Promise.all([
-              fetchConductoresMapa(aplicarFiltroSede),
+              fetchConductoresMapa(aplicarFiltroSede, sedeActualId),
               fetchLeadsMapa(aplicarFiltroSede),
             ])
             setConductores(cond2)
@@ -187,7 +195,7 @@ export function DistribucionMapaModule() {
     } finally {
       setLoading(false)
     }
-  }, [aplicarFiltroSede])
+  }, [aplicarFiltroSede, sedeActualId])
 
   useEffect(() => {
     geocodDoneRef.current = false
@@ -214,12 +222,24 @@ export function DistribucionMapaModule() {
 
     const matchZona = (e: EntidadMapa) => zonasSel.size === 0 || (e.zona ? zonasSel.has(e.zona) : false)
 
+    // Filtro con/sin asignación (activa vigente). Vacío o ambos = todos.
+    // Solo aplica a conductores con estado ACTIVO: cualquier otro estado queda fuera.
+    const matchAsignacion = (e: EntidadMapa) => {
+      if (asignacionSel.size === 0) return true
+      if (e.estadoCodigo !== 'activo') return false
+      const con = asignacionSel.has('con')
+      const sin = asignacionSel.has('sin')
+      if (con && sin) return true
+      return e.tieneAsignacionActiva ? con : sin
+    }
+
     const result: EntidadMapa[] = []
 
     if (verConductores) {
       for (const c of conUbicacion.conds) {
         if (c.esBaja && !verBaja) continue // de baja solo si el filtro está activo
         if (turnosSel.size > 0 && !turnosSel.has(turnoCategoria(c))) continue
+        if (!matchAsignacion(c)) continue
         if (!matchZona(c)) continue
         if (!matchSearch(c)) continue
         result.push(c)
@@ -236,7 +256,7 @@ export function DistribucionMapaModule() {
     }
 
     return result
-  }, [conUbicacion, verConductores, verBaja, verLeads, turnosSel, zonasSel, search])
+  }, [conUbicacion, verConductores, verBaja, verLeads, turnosSel, asignacionSel, zonasSel, search])
 
   const conteos = useMemo(() => {
     const c = filtradas.filter((e) => e.tipo === 'conductor').length
@@ -392,6 +412,23 @@ export function DistribucionMapaModule() {
                 ))}
                 <div style={{ fontSize: 10, color: 'var(--text-tertiary)', marginTop: 2 }}>
                   Sin selección = todos los turnos.
+                </div>
+              </FilterGroup>
+            )}
+
+            {/* Asignación (conductores) — filtro independiente */}
+            {verConductores && (
+              <FilterGroup title="Asignación">
+                {ASIGNACION_OPCIONES.map((a) => (
+                  <CheckRow
+                    key={a.value}
+                    label={a.label}
+                    checked={asignacionSel.has(a.value)}
+                    onChange={() => toggleSet(asignacionSel, a.value, setAsignacionSel)}
+                  />
+                ))}
+                <div style={{ fontSize: 10, color: 'var(--text-tertiary)', marginTop: 2 }}>
+                  Con asignación = tiene asignación activa vigente. Sin selección = todos.
                 </div>
               </FilterGroup>
             )}
