@@ -259,7 +259,7 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
         const [vehiculosRes, asignacionesRes, programacionesRes] = await Promise.all([
           filtrarPorSede(supabase
             .from('vehiculos')
-            .select('id, patente, marca, modelo, anio, color, vehiculos_estados!inner(codigo)')
+            .select('id, patente, marca, modelo, anio, color, grupo_flota, vehiculos_estados!inner(codigo)')
             .in('vehiculos_estados.codigo', ['PKG_ON_BASE', 'EN_USO', 'DISPONIBLE'])
             .is('deleted_at', null))
             .order('patente'),
@@ -871,12 +871,23 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
   }
 
   const handleSelectVehicle = (vehicle: Vehicle) => {
+    // Propietario: se autocompleta con el grupo de flota del vehiculo.
+    // vehiculos.grupo_flota guarda la razon_social de grupos_flota, que es el
+    // mismo valor que usan las opciones del select. Solo se aplica si matchea
+    // una opcion valida; si el vehiculo no tiene grupo (o no coincide), se
+    // respeta lo que el usuario ya haya elegido.
+    const grupoVehiculo = ((vehicle as any).grupo_flota || '').trim()
+    const propietarioAuto = gruposFlota.some(g => g.razon_social === grupoVehiculo)
+      ? grupoVehiculo
+      : formData.propietario
+
     setFormData({
       ...formData,
       vehiculo_id: vehicle.id,
       vehiculo_patente: vehicle.patente,
       vehiculo_modelo: `${vehicle.marca} ${vehicle.modelo}`,
-      vehiculo_color: vehicle.color || ''
+      vehiculo_color: vehicle.color || '',
+      propietario: propietarioAuto
     })
   }
 

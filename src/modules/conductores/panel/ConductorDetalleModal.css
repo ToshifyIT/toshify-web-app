@@ -195,7 +195,7 @@
 .cdet-cuotas-list.right { align-items: flex-end; }
 .cdet-cuotas-list span { font-size: 11px; font-weight: 600; padding: 1px 6px; border-radius: 4px; white-space: nowrap; }
 .cdet-cuotas-list .cuota-ok { background: #dcfce7; color: #15803d; }
-.cdet-cuotas-list .cuota-no { background: #fee2e2; color: #b91c1c; }
+.cdet-cuotas-list .cuota-no { background: #fef9c3; color: #a16207; }
 
 /* Historial de bajas / reactivaciones */
 .cdet-bajas-list { display: flex; flex-direction: column; gap: 8px; }
