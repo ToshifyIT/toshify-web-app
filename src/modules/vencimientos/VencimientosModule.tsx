@@ -11,6 +11,21 @@ import type { ColumnDef } from '@tanstack/react-table'
 import { normalizePatente } from '../../utils/normalizeDocuments'
 import './VencimientosModule.css'
 
+// Paleta semántica para el badge de estado del vehículo. Mapea por el texto de la
+// descripción para que cada estado tenga su propio color en vez de uno genérico.
+function getEstadoBadgeColors(label: string): { bg: string; color: string; border: string } {
+  const l = (label || '').toLowerCase()
+  if (l.includes('en uso') || l === 'activo') return { bg: '#dcfce7', color: '#166534', border: '#bbf7d0' }
+  if (l.includes('pkg on')) return { bg: '#ccfbf1', color: '#115e59', border: '#99f6e4' }
+  if (l.includes('corporativo')) return { bg: '#dbeafe', color: '#1e40af', border: '#bfdbfe' }
+  if (l.includes('taller') || l.includes('chapa') || l.includes('mecanic')) return { bg: '#ffedd5', color: '#9a3412', border: '#fed7aa' }
+  if (l.includes('robo') || l.includes('siniestro') || l.includes('retenido') || l.includes('comisaria')) return { bg: '#fee2e2', color: '#991b1b', border: '#fecaca' }
+  if (l.includes('pkg off')) return { bg: '#f1f5f9', color: '#475569', border: '#e2e8f0' }
+  if (l.includes('reserva') || l.includes('base')) return { bg: '#ede9fe', color: '#5b21b6', border: '#ddd6fe' }
+  if (l === 'inactivo') return { bg: '#f3f4f6', color: '#6b7280', border: '#e5e7eb' }
+  return { bg: '#f3f4f6', color: '#374151', border: '#e5e7eb' }
+}
+
 interface Vencimiento {
   id: string
   titular: string
@@ -181,6 +196,8 @@ export function VencimientosModule() {
 
   const [vehiculos, setVehiculos] = useState<Array<{ id: string; patente: string; marca: string; modelo: string; titular: string; sedeNombre?: string }>>([])
   const [patenteSedeMap, setPatenteSedeMap] = useState<Map<string, string>>(new Map())
+  // patente normalizada -> estado actual del vehículo (vehiculos_estados.descripcion)
+  const [patenteEstadoMap, setPatenteEstadoMap] = useState<Map<string, string>>(new Map())
   const [vehiculoSearch, setVehiculoSearch] = useState('')
   const [showVehiculoDropdown, setShowVehiculoDropdown] = useState(false)
 
@@ -265,7 +282,7 @@ export function VencimientosModule() {
     try {
       const { data, error } = await supabase
         .from('vehiculos' as any)
-        .select('id, patente, marca, modelo, titular, sede_id, sedes(nombre)')
+        .select('id, patente, marca, modelo, titular, sede_id, sedes(nombre), vehiculos_estados(descripcion)')
         .order('patente', { ascending: true })
 
       if (error) throw error
@@ -276,19 +293,26 @@ export function VencimientosModule() {
         marca: (v.marca || '') as string,
         modelo: (v.modelo || '') as string,
         titular: (v.titular || '') as string,
-        sedeNombre: v.sedes?.nombre as string
+        sedeNombre: v.sedes?.nombre as string,
+        estado: (v.vehiculos_estados?.descripcion || '') as string
       }))
 
       setVehiculos(mapped)
 
       // Crear mapa patente -> sede (normalizado)
       const map = new Map<string, string>()
+      // Crear mapa patente -> estado actual del vehículo (normalizado)
+      const estadoMap = new Map<string, string>()
       mapped.forEach((v: any) => {
         if (v.patente && v.sedeNombre) {
           map.set(normalizePatente(v.patente), v.sedeNombre)
         }
+        if (v.patente && v.estado) {
+          estadoMap.set(normalizePatente(v.patente), v.estado)
+        }
       })
       setPatenteSedeMap(map)
+      setPatenteEstadoMap(estadoMap)
     } catch (error) {
       console.error('Error cargando vehiculos para vencimientos:', error)
     }
@@ -595,6 +619,32 @@ export function VencimientosModule() {
       enableSorting: true
     },
     {
+      id: 'estado_vehiculo',
+      accessorFn: (row) => patenteEstadoMap.get(normalizePatente(row.patente)) || '',
+      header: 'Estado',
+      cell: ({ row }) => {
+        const estado = patenteEstadoMap.get(normalizePatente(row.original.patente))
+        if (!estado) return <span style={{ color: 'var(--text-tertiary)' }}>-</span>
+        const c = getEstadoBadgeColors(estado)
+        return (
+          <span style={{
+            display: 'inline-block',
+            padding: '3px 10px',
+            borderRadius: '999px',
+            fontSize: '11px',
+            fontWeight: 600,
+            whiteSpace: 'nowrap',
+            background: c.bg,
+            color: c.color,
+            border: `1px solid ${c.border}`,
+          }}>
+            {estado}
+          </span>
+        )
+      },
+      enableSorting: true
+    },
+    {
       accessorKey: 'documento',
       header: 'Doc.',
       cell: ({ getValue }) => (getValue() as string) || '-',
@@ -692,7 +742,7 @@ export function VencimientosModule() {
       ),
       enableSorting: false
     }
-  ], [patenteSedeMap])
+  ], [patenteEstadoMap])
 
   const exportToExcel = async () => {
     try {
@@ -700,6 +750,7 @@ export function VencimientosModule() {
       const rows = filteredItems.map(item => ({
         Titular: item.titular,
         Patente: item.patente,
+        Estado: patenteEstadoMap.get(normalizePatente(item.patente)) || '',
         Documento: item.documento || '',
         Fecha_entrega: formatDate(item.fecha_entrega),
         Fecha_vencimiento: formatDate(item.fecha_vencimiento),

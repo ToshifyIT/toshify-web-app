@@ -19,6 +19,8 @@ import { ProtectedRoute } from '../components/ProtectedRoute'
 import { ThemeToggle } from '../components/ui/ThemeToggle'
 import { Spinner } from '../components/ui/LoadingOverlay'
 // Mapeo de iconos por nombre de menú
+
+
 const menuIcons: Record<string, LucideIcon> = {
   'estado-de-flota': Activity,
   'vehiculos': Car,
