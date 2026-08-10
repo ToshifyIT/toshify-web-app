@@ -2853,10 +2853,14 @@ export function PortalPage({ embeddedConductorId }: { embeddedConductorId?: stri
 
   return (
     <div className={`portal${embeddedConductorId ? ' portal-embedded' : ''}`}>
-      {!embeddedConductorId && (
+      {/* Header: tambien se muestra en modo embebido (admin) para identificar de
+          quien son los datos. Ahi se omite el logo (ya esta en el layout del
+          admin) y el boton "Salir", que es el logout del conductor. */}
       <header className="portal-header">
         <div className="portal-header-left">
-          <img src={logoToshifyUrl} alt="Toshify" className="portal-header-logo" />
+          {!embeddedConductorId && (
+            <img src={logoToshifyUrl} alt="Toshify" className="portal-header-logo" />
+          )}
           <div>
             <div className="portal-header-name">
               {conductor?.nombres} {conductor?.apellidos}
@@ -2864,11 +2868,12 @@ export function PortalPage({ embeddedConductorId }: { embeddedConductorId?: stri
             <div className="portal-header-dni">DNI: {conductor?.numero_dni}</div>
           </div>
         </div>
-        <button className="portal-logout-btn" onClick={handleLogout}>
-          Salir
-        </button>
+        {!embeddedConductorId && (
+          <button className="portal-logout-btn" onClick={handleLogout}>
+            Salir
+          </button>
+        )}
       </header>
-      )}
 
       <div className="portal-content" data-active={activeSection}>
         {loadingFacturas ? (

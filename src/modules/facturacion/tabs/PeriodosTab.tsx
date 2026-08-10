@@ -28,6 +28,11 @@ import { es } from 'date-fns/locale'
 import { normalizeDni } from '../../../utils/normalizeDocuments'
 import { recalcGarantiasForPeriodo } from '../../../services/garantiasService'
 import { syncKardexForPeriodo } from '../../../services/controlGarantiasService'
+import {
+  camposLockLiberado,
+  filtroCandadoDisponible,
+  nuevoLockToken,
+} from '../utils/periodoLock'
 
 // Helper: tabla de cabify según sede (Bariloche usa tabla separada)
 const SEDE_BARILOCHE_ID = 'f37193f7-5805-4d87-820d-c4521824860e'
@@ -245,12 +250,19 @@ export function PeriodosTab() {
 
     setGenerando(`${semana.semana}-${semana.anio}`)
 
+    // Llave de esta ejecución (fencing token). Toda liberación del candado la
+    // exige, para que un proceso interrumpido que despierta tarde no suelte ni
+    // pise la corrida de otra persona.
+    const miToken = nuevoLockToken()
+    // Visible desde el catch (periodoId vive dentro del try)
+    let periodoIdLock: string | null = null
+
     try {
       // 1. Crear o actualizar el período
       let periodoId = semana.periodo_id
 
       if (!periodoId) {
-        // Crear nuevo período
+        // Crear nuevo período — ya nace con el candado tomado por nosotros
         const { data: nuevoPeriodo, error: errPeriodo } = await (supabase
           .from('periodos_facturacion') as any)
           .insert({
@@ -259,6 +271,9 @@ export function PeriodosTab() {
             fecha_inicio: semana.fecha_inicio,
             fecha_fin: semana.fecha_fin,
             estado: 'procesando',
+            procesando_desde: new Date().toISOString(),
+            procesando_por: profile?.full_name || 'Sistema',
+            lock_token: miToken,
             created_by_name: profile?.full_name || 'Sistema',
             sede_id: sedeActualId,
           })
@@ -268,12 +283,50 @@ export function PeriodosTab() {
         if (errPeriodo) throw errPeriodo
         periodoId = (nuevoPeriodo as any).id
       } else {
-        // Marcar como procesando
-        await (supabase
+        // ═══ TOMAR EL CANDADO (UPDATE condicional atómico) ═══
+        // Solo si está libre o si el candado anterior ya venció. Evita que
+        // dos personas generen/recalculen el mismo período en simultáneo,
+        // algo que corrompía los datos porque el proceso borra la
+        // facturación existente antes de regenerarla.
+        const { data: candado } = await (supabase
           .from('periodos_facturacion') as any)
-          .update({ estado: 'procesando' })
+          .update({
+            estado: 'procesando',
+            procesando_desde: new Date().toISOString(),
+            procesando_por: profile?.full_name || 'Sistema',
+            lock_token: miToken,
+            procesando_actual: 0,
+            procesando_total: 0,
+          })
           .eq('id', periodoId)
+          .or(filtroCandadoDisponible())
+          .select()
+          .maybeSingle()
+
+        if (!candado) {
+          const { data: actual } = await (supabase
+            .from('periodos_facturacion') as any)
+            .select('procesando_por, procesando_desde, estado')
+            .eq('id', periodoId)
+            .maybeSingle()
+
+          if ((actual as any)?.estado === 'cerrado') {
+            Swal.fire('Período cerrado', 'Este período ya fue cerrado.', 'info')
+          } else {
+            Swal.fire(
+              'Generación en curso',
+              `${(actual as any)?.procesando_por || 'Otro usuario'} está procesando este período. ` +
+              `Esperá a que termine para no duplicar el cálculo.`,
+              'info'
+            )
+          }
+          setGenerando(null)
+          return
+        }
       }
+
+      // A partir de acá el candado es nuestro: el catch debe poder soltarlo.
+      periodoIdLock = periodoId
 
       // 2. Obtener conductores desde asignaciones (detección automática)
 
@@ -330,8 +383,9 @@ export function PeriodosTab() {
       if (todosLosDnis.length === 0) {
         await (supabase
           .from('periodos_facturacion') as any)
-          .update({ estado: 'abierto', total_conductores: 0 })
+          .update({ estado: 'abierto', total_conductores: 0, ...camposLockLiberado() })
           .eq('id', periodoId)
+          .eq('lock_token', miToken)
         Swal.fire('Aviso', 'No hay conductores con asignación activa para esta semana', 'warning')
         cargarSemanas()
         return
@@ -394,8 +448,9 @@ export function PeriodosTab() {
       if (conductoresProcesados.length === 0) {
         await (supabase
           .from('periodos_facturacion') as any)
-          .update({ estado: 'abierto', total_conductores: 0 })
+          .update({ estado: 'abierto', total_conductores: 0, ...camposLockLiberado() })
           .eq('id', periodoId)
+          .eq('lock_token', miToken)
 
         Swal.fire('Aviso', 'No hay conductores con días trabajados para facturar', 'warning')
         cargarSemanas()
@@ -929,7 +984,7 @@ export function PeriodosTab() {
         }
       }
 
-      // 10. Actualizar totales del período
+      // 10. Actualizar totales del período y LIBERAR EL CANDADO
       await (supabase
         .from('periodos_facturacion') as any)
         .update({
@@ -937,15 +992,29 @@ export function PeriodosTab() {
           total_conductores: conductoresProcesadosCount,
           total_cargos: totalCargosGlobal,
           total_descuentos: totalDescuentosGlobal,
-          total_neto: totalCargosGlobal - totalDescuentosGlobal
+          total_neto: totalCargosGlobal - totalDescuentosGlobal,
+          ...camposLockLiberado()
         })
         .eq('id', periodoId)
+        .eq('lock_token', miToken)
 
       showSuccess('Facturación Generada', `Semana ${semana.semana}/${semana.anio} - ${conductoresProcesadosCount} conductores - ${formatCurrency(totalCargosGlobal - totalDescuentosGlobal)}`)
 
       cargarSemanas()
     } catch (error: any) {
+      // Liberar el candado también ante un error.
+      // Antes esto NO se hacía: cualquier fallo acá dejaba el período en
+      // 'procesando' de forma permanente y trababa el módulo de Reporte, que
+      // deshabilitaba su botón Recalcular con esa misma condición.
+      if (periodoIdLock) {
+        await (supabase
+          .from('periodos_facturacion') as any)
+          .update({ estado: 'abierto', ...camposLockLiberado() })
+          .eq('id', periodoIdLock)
+          .eq('lock_token', miToken)
+      }
       Swal.fire('Error', error.message || 'No se pudo generar la facturación', 'error')
+      cargarSemanas()
     } finally {
       setGenerando(null)
     }

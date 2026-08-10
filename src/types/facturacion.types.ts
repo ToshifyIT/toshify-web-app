@@ -23,6 +23,12 @@ export interface PeriodoFacturacion {
   created_by_name: string | null
   cerrado_por: string | null
   cerrado_por_name: string | null
+  // --- Candado de recálculo (ver sql/add_lock_periodos_facturacion.sql) ---
+  procesando_desde?: string | null
+  procesando_por?: string | null
+  lock_token?: string | null
+  procesando_actual?: number | null
+  procesando_total?: number | null
 }
 
 export interface PeriodoFacturacionFormData {
