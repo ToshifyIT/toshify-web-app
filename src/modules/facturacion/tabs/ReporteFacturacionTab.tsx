@@ -48,6 +48,16 @@ import { formatCurrency, formatDate } from '../../../types/facturacion.types'
 import { normalizeDni, normalizePatente, normalizeCuit } from '../../../utils/normalizeDocuments'
 import { insertControlSaldo } from '../../../services/controlSaldosService'
 import { syncKardexForPeriodo } from '../../../services/controlGarantiasService'
+import {
+  HEARTBEAT_CADA,
+  camposLockLiberado,
+  filtroCandadoDisponible,
+  lockVencidoAntesDe,
+  lockHuerfano,
+  lockVigente,
+  minutosDesde,
+  nuevoLockToken,
+} from '../utils/periodoLock'
 import { recalcGarantiasForPeriodo } from '../../../services/garantiasService'
 import { format, startOfWeek, endOfWeek, addWeeks, subWeeks, getWeek, getYear, parseISO, startOfDay, differenceInCalendarDays } from 'date-fns'
 import { es } from 'date-fns/locale'
@@ -295,6 +305,12 @@ interface PeriodoFacturacion {
   total_neto: number
   fecha_cierre: string | null
   sede_id: string | null
+  // --- Candado de recálculo (ver sql/add_lock_periodos_facturacion.sql) ---
+  procesando_desde?: string | null
+  procesando_por?: string | null
+  lock_token?: string | null
+  procesando_actual?: number | null
+  procesando_total?: number | null
 }
 
 // Función para obtener el inicio de semana en Argentina (lunes)
@@ -531,6 +547,11 @@ export function ReporteFacturacionTab() {
   // Recalcular período abierto
   const [recalculando, setRecalculando] = useState(false)
   const [recalculandoProgreso, setRecalculandoProgreso] = useState({ actual: 0, total: 0, nombre: '' })
+  // Llave de la ejecución en curso (fencing token). Toda escritura de cierre
+  // exige coincidencia, para que un proceso zombie que despierta tarde no
+  // libere ni pise la corrida de otra persona.
+  const lockTokenRef = useRef<string | null>(null)
+  const [desbloqueando, setDesbloqueando] = useState(false)
 
   // Cerrar período
   const [cerrando, setCerrando] = useState(false)
@@ -1153,6 +1174,35 @@ export function ReporteFacturacionTab() {
         // Cargar vista previa automática
         cargarVistaPreviaInterno()
         return
+      }
+
+      // ═══ AUTO-CURACIÓN DE CANDADOS HUÉRFANOS ═══
+      // Si el período quedó en 'procesando' por una ejecución que murió
+      // (F5, cierre de pestaña, suspensión del equipo, corte de red) nadie
+      // lo va a liberar. Pasado el TTL lo devolvemos a 'abierto' solo.
+      // Ojo: si el candado es de ESTA pestaña y sigue corriendo, no se toca.
+      if (lockHuerfano(periodoData as any) && (periodoData as any).lock_token !== lockTokenRef.current) {
+        const { data: liberado } = await (supabase.from('periodos_facturacion') as any)
+          .update({
+            estado: 'abierto',
+            ...camposLockLiberado(),
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', (periodoData as any).id)
+          .eq('estado', 'procesando')
+          .lt('procesando_desde', lockVencidoAntesDe())
+          .select()
+          .maybeSingle()
+
+        if (liberado) {
+          console.warn(
+            `[facturacion] Candado huérfano liberado automáticamente ` +
+            `(período ${(periodoData as any).semana}/${(periodoData as any).anio}, ` +
+            `tomado por ${(periodoData as any).procesando_por || 'desconocido'} ` +
+            `hace ${Math.round(minutosDesde((periodoData as any).procesando_desde))} min)`
+          )
+          Object.assign(periodoData as any, liberado)
+        }
       }
 
       setPeriodo(periodoData as PeriodoFacturacion)
@@ -3015,7 +3065,11 @@ export function ReporteFacturacionTab() {
 
     setGenerando(true)
     try {
-      // 1. Crear el período en BD con estado 'procesando'
+      // 1. Crear el período en BD como 'abierto'.
+      //    Antes se creaba directamente en 'procesando', pero eso dejaba un
+      //    candado tomado por nadie: si el auto-recálculo de abajo no llegaba
+      //    a ejecutarse, el período nacía trabado. Ahora el candado lo toma
+      //    recalcularPeriodoAbierto() de forma atómica, como corresponde.
       const { data: nuevoPeriodo, error: errPeriodo } = await (supabase
         .from('periodos_facturacion') as any)
         .insert({
@@ -3023,7 +3077,7 @@ export function ReporteFacturacionTab() {
           anio,
           fecha_inicio: fechaInicio,
           fecha_fin: fechaFin,
-          estado: 'procesando',
+          estado: 'abierto',
           created_by_name: profile?.full_name || 'Sistema',
           sede_id: sedeActualId || sedeUsuario?.id,
         })
@@ -3045,7 +3099,9 @@ export function ReporteFacturacionTab() {
 
   // Auto-recalcular después de crear un nuevo período
   useEffect(() => {
-    if (autoRecalcularRef.current && periodo && periodo.estado === 'procesando') {
+    // El período ahora nace 'abierto' (el candado lo toma recalcularPeriodoAbierto),
+    // así que el disparador es únicamente el flag, no el estado.
+    if (autoRecalcularRef.current && periodo) {
       autoRecalcularRef.current = false
       setGenerando(false)
       // Llamar recalcularPeriodoAbierto sin confirmación (ya se confirmó en generarNuevoPeriodo)
@@ -3053,11 +3109,135 @@ export function ReporteFacturacionTab() {
     }
   }, [periodo])
 
+  // ═══════════════════════════════════════════════════════════════════
+  // SINCRONIZACIÓN DEL CANDADO
+  // ═══════════════════════════════════════════════════════════════════
+
+  // Espejos en ref: los usan callbacks de realtime/listeners, que capturarían
+  // valores viejos si leyeran el state directamente.
+  const recalculandoRef = useRef(false)
+  const periodoEstadoRef = useRef<string | undefined>(undefined)
+  useEffect(() => { recalculandoRef.current = recalculando }, [recalculando])
+  useEffect(() => { periodoEstadoRef.current = periodo?.estado }, [periodo?.estado])
+
+  // Aviso antes de recargar/cerrar mientras se recalcula: un F5 a mitad de
+  // proceso dejaba el candado tomado y el módulo trabado.
+  useEffect(() => {
+    if (!recalculando) return
+    const avisar = (e: BeforeUnloadEvent) => { e.preventDefault(); e.returnValue = '' }
+    window.addEventListener('beforeunload', avisar)
+    return () => window.removeEventListener('beforeunload', avisar)
+  }, [recalculando])
+
+  // Realtime sobre el período (con polling de respaldo).
+  // Resuelve el caso inverso al candado huérfano: que el recálculo YA haya
+  // terminado bien en la base y la pantalla siguiera girando porque nadie
+  // volvía a consultar. También muestra en vivo el avance del otro usuario.
+  useEffect(() => {
+    const pid = periodo?.id
+    if (!pid) return
+
+    let respaldo: ReturnType<typeof setInterval> | null = null
+
+    const aplicarFila = (fila: any) => {
+      if (!fila) return
+      const estadoPrevio = periodoEstadoRef.current
+      setPeriodo(prev => (prev && prev.id === fila.id ? { ...prev, ...fila } : prev))
+      periodoEstadoRef.current = fila.estado
+      // El candado se soltó y no fuimos nosotros: recargar la grilla, porque
+      // los importes que hay en pantalla quedaron viejos.
+      if (estadoPrevio === 'procesando' && fila.estado !== 'procesando' && !recalculandoRef.current) {
+        void cargarFacturacion()
+      }
+    }
+
+    const releerPeriodo = async () => {
+      const { data } = await (supabase.from('periodos_facturacion') as any)
+        .select('*').eq('id', pid).maybeSingle()
+      aplicarFila(data)
+    }
+
+    const canal = supabase
+      .channel(`periodo-facturacion-${pid}`)
+      .on(
+        'postgres_changes' as any,
+        { event: 'UPDATE', schema: 'public', table: 'periodos_facturacion', filter: `id=eq.${pid}` },
+        (payload: any) => aplicarFila(payload.new)
+      )
+      .subscribe((status: string) => {
+        if (status === 'SUBSCRIBED') {
+          if (respaldo) { clearInterval(respaldo); respaldo = null }
+        } else if (['CHANNEL_ERROR', 'TIMED_OUT', 'CLOSED'].includes(status)) {
+          // Realtime no disponible en esta instancia: polling cada 5 s.
+          if (!respaldo) respaldo = setInterval(() => { void releerPeriodo() }, 5000)
+        }
+      })
+
+    return () => {
+      if (respaldo) clearInterval(respaldo)
+      void supabase.removeChannel(canal)
+    }
+  }, [periodo?.id])
+
+  // Al volver a la pestaña, releer el período si figura en 'procesando'.
+  // Cubre el caso de realtime caído mientras la pestaña estaba en background.
+  useEffect(() => {
+    const alVolver = () => {
+      if (document.visibilityState !== 'visible') return
+      if (periodoEstadoRef.current !== 'procesando') return
+      if (recalculandoRef.current) return
+      void cargarFacturacion()
+    }
+    document.addEventListener('visibilitychange', alVolver)
+    window.addEventListener('focus', alVolver)
+    return () => {
+      document.removeEventListener('visibilitychange', alVolver)
+      window.removeEventListener('focus', alVolver)
+    }
+  }, [])
+
   // Recalcular período abierto - REGENERACIÓN COMPLETA desde cero (misma lógica que PeriodosTab)
   async function recalcularPeriodoAbierto(skipConfirm = false) {
     if (!periodo || (periodo.estado !== 'abierto' && periodo.estado !== 'procesando')) {
       Swal.fire('Error', 'Solo se puede recalcular un período abierto', 'error')
       return
+    }
+
+    // Si otra persona tiene el candado y sigue vigente, no hay nada que hacer.
+    // (La adquisición atómica de más abajo lo volvería a comprobar igual, pero
+    //  así evitamos mostrarle el diálogo de confirmación al pedo.)
+    if (lockVigente(periodo) && periodo.lock_token !== lockTokenRef.current) {
+      Swal.fire(
+        'Recálculo en curso',
+        `${periodo.procesando_por || 'Otro usuario'} está recalculando este período ` +
+        `(comenzó hace ${Math.max(1, Math.round(minutosDesde(periodo.procesando_desde)))} min). ` +
+        `Esperá a que termine para evitar duplicar el cálculo.`,
+        'info'
+      )
+      await cargarFacturacion()
+      return
+    }
+
+    // Si el candado está vencido, el recálculo pasa a ser un "forzar": hay que
+    // avisar explícitamente, porque quizá el otro proceso sigue vivo pero lento.
+    if (lockHuerfano(periodo) && periodo.lock_token !== lockTokenRef.current) {
+      const forzar = await Swal.fire({
+        title: '¿Forzar recálculo?',
+        html:
+          `<p>El período figura como <strong>procesando</strong> desde hace ` +
+          `${Math.round(minutosDesde(periodo.procesando_desde))} minutos` +
+          `${periodo.procesando_por ? ` (${periodo.procesando_por})` : ''}.</p>` +
+          `<p>Lo más probable es que esa ejecución se haya interrumpido.</p>` +
+          `<p style="color:#b91c1c;"><small>Si el otro proceso siguiera activo, ` +
+          `forzar puede duplicar el cálculo.</small></p>`,
+        icon: 'warning',
+        showCancelButton: true,
+        confirmButtonText: 'Sí, forzar',
+        cancelButtonText: 'Cancelar',
+        confirmButtonColor: '#f59e0b'
+      })
+      if (!forzar.isConfirmed) return
+      skipConfirm = true // ya confirmó acá, no preguntar dos veces
     }
 
     if (!skipConfirm) {
@@ -3099,11 +3279,43 @@ export function ReporteFacturacionTab() {
       const periodoId = periodo.id
       const sedeDelPeriodo = periodo.sede_id || sedeActualId
 
-      // 0. Marcar período como 'procesando'
-      await (supabase.from('periodos_facturacion') as any)
-        .update({ estado: 'procesando', updated_at: new Date().toISOString() })
-        .eq('id', periodo.id)
-      setPeriodo(prev => prev ? { ...prev, estado: 'procesando' as const } : prev)
+      // ═══ 0. TOMAR EL CANDADO (UPDATE condicional atómico) ═══
+      // La condición vive en la BD, no en JavaScript. Si dos personas
+      // clickean con medio segundo de diferencia, Postgres serializa los
+      // UPDATE sobre la fila: el segundo reevalúa el WHERE contra la versión
+      // ya commiteada, ve 'procesando' reciente y afecta 0 filas.
+      // Un "leo y después escribo" desde el cliente dejaría una ventana de
+      // carrera en la que ambos leen 'abierto' y ambos borran la facturación.
+      const miToken = nuevoLockToken()
+      const { data: candado } = await (supabase.from('periodos_facturacion') as any)
+        .update({
+          estado: 'procesando',
+          procesando_desde: new Date().toISOString(),
+          procesando_por: profile?.full_name || 'Desconocido',
+          lock_token: miToken,
+          procesando_actual: 0,
+          procesando_total: 0,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', periodoId)
+        // Libre, o tomado por una ejecución ya vencida (huérfana)
+        .or(filtroCandadoDisponible())
+        .select()
+        .maybeSingle()
+
+      if (!candado) {
+        // Perdimos la carrera: alguien lo tomó en el intervalo.
+        await cargarFacturacion()
+        Swal.fire(
+          'Recálculo en curso',
+          'Otro usuario tomó el período justo antes. No se ejecutó ningún cambio.',
+          'info'
+        )
+        return
+      }
+
+      lockTokenRef.current = miToken
+      setPeriodo(prev => prev ? { ...prev, ...(candado as any) } : prev)
 
       // 1. RESET: Revertir flags de aplicado para registros vinculados a este período
       // Tickets: tienen periodo_aplicado_id
@@ -3246,9 +3458,16 @@ export function ReporteFacturacionTab() {
       }
 
       if (!conductoresControl || conductoresControl.length === 0) {
+        // Salida temprana: también hay que soltar el candado (con la llave)
         await (supabase.from('periodos_facturacion') as any)
-          .update({ estado: 'abierto', total_conductores: 0 })
+          .update({
+            estado: 'abierto',
+            total_conductores: 0,
+            ...camposLockLiberado(),
+            updated_at: new Date().toISOString()
+          })
           .eq('id', periodoId)
+          .eq('lock_token', miToken)
         await cargarFacturacion()
         Swal.fire('Aviso', 'No hay conductores con asignaciones ni penalidades en esta semana', 'warning')
         return
@@ -4293,6 +4512,22 @@ export function ReporteFacturacionTab() {
 
         conductoresProcesadosCount++
         setRecalculandoProgreso({ actual: conductoresProcesadosCount, total: conductoresProcesados.length, nombre: '' })
+
+        // ═══ HEARTBEAT ═══
+        // Refresca la antigüedad del candado (para que una corrida legítima
+        // larga no se auto-cancele por TTL) y publica el progreso, así quien
+        // espera del otro lado ve avanzar el contador en vivo.
+        // Sin await: es telemetría, no debe frenar el bucle.
+        if (conductoresProcesadosCount % HEARTBEAT_CADA === 0) {
+          void (supabase.from('periodos_facturacion') as any)
+            .update({
+              procesando_desde: new Date().toISOString(),
+              procesando_actual: conductoresProcesadosCount,
+              procesando_total: conductoresProcesados.length
+            })
+            .eq('id', periodoId)
+            .eq('lock_token', miToken)
+        }
       }
 
       // 7. Validar que se procesó al menos un conductor
@@ -4304,17 +4539,38 @@ export function ReporteFacturacionTab() {
         )
       }
 
-      // 8. Actualizar totales del período y volver a 'abierto'
-      await (supabase.from('periodos_facturacion') as any)
+      // 8. Actualizar totales del período y LIBERAR EL CANDADO
+      //    El .eq('lock_token') es imprescindible: si nuestra ejecución quedó
+      //    zombie (equipo suspendido), venció y otra persona tomó el período,
+      //    esta escritura afecta 0 filas y no le pisa los totales ni le suelta
+      //    el candado. Sin la llave, un proceso dormido puede corromper el
+      //    trabajo del que vino después.
+      const { data: cerrado } = await (supabase.from('periodos_facturacion') as any)
         .update({
           estado: 'abierto',
           total_conductores: conductoresProcesadosCount,
           total_cargos: totalCargosGlobal,
           total_descuentos: totalDescuentosGlobal,
           total_neto: totalCargosGlobal - totalDescuentosGlobal,
+          ...camposLockLiberado(),
           updated_at: new Date().toISOString()
         })
         .eq('id', periodoId)
+        .eq('lock_token', miToken)
+        .select()
+        .maybeSingle()
+
+      if (!cerrado) {
+        // Perdimos el candado a mitad de camino (vencido y tomado por otro).
+        await cargarFacturacion()
+        Swal.fire(
+          'Recálculo descartado',
+          'Este recálculo perdió el candado del período (probablemente por una interrupción larga) ' +
+          'y otra ejecución tomó el control. No se sobrescribieron los totales.',
+          'warning'
+        )
+        return
+      }
 
       // 9. Sincronizar kardex de garantías (actualiza montos si cambiaron)
       await syncKardexForPeriodo(periodoId)
@@ -4334,15 +4590,66 @@ export function ReporteFacturacionTab() {
       }
 
     } catch (error: any) {
-      // Recuperar estado en caso de error
+      // Recuperar estado en caso de error: liberar el candado con nuestra llave
       await (supabase.from('periodos_facturacion') as any)
-        .update({ estado: 'abierto' })
+        .update({
+          estado: 'abierto',
+          ...camposLockLiberado(),
+          updated_at: new Date().toISOString()
+        })
         .eq('id', periodo.id)
+        .eq('lock_token', lockTokenRef.current)
       setPeriodo(prev => prev ? { ...prev, estado: 'abierto' as const } : prev)
       Swal.fire('Error', error?.message || 'No se pudo recalcular el período', 'error')
+      // El paso 2 ya borró la facturación previa: hay que recargar para no
+      // dejar en pantalla filas que ya no existen en la base.
+      await cargarFacturacion()
     } finally {
+      lockTokenRef.current = null
       setRecalculando(false)
       setRecalculandoProgreso({ actual: 0, total: 0, nombre: '' })
+    }
+  }
+
+  // Liberar manualmente un candado huérfano (botón "Desbloquear" del banner).
+  // Es exactamente el UPDATE que antes había que correr a mano en la base.
+  async function desbloquearPeriodo() {
+    if (!periodo) return
+
+    const confirm = await Swal.fire({
+      title: '¿Desbloquear período?',
+      html:
+        `<p>El período quedó marcado como <strong>procesando</strong> desde hace ` +
+        `${Math.round(minutosDesde(periodo.procesando_desde))} minutos` +
+        `${periodo.procesando_por ? ` (${periodo.procesando_por})` : ''}.</p>` +
+        `<p>Desbloquearlo lo devuelve a <strong>abierto</strong> para poder recalcularlo.</p>` +
+        `<p style="color:#b91c1c;"><small>La facturación puede haber quedado incompleta: ` +
+        `conviene recalcular después de desbloquear.</small></p>`,
+      icon: 'question',
+      showCancelButton: true,
+      confirmButtonText: 'Sí, desbloquear',
+      cancelButtonText: 'Cancelar',
+      confirmButtonColor: '#f59e0b'
+    })
+    if (!confirm.isConfirmed) return
+
+    setDesbloqueando(true)
+    try {
+      await (supabase.from('periodos_facturacion') as any)
+        .update({
+          estado: 'abierto',
+          ...camposLockLiberado(),
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', periodo.id)
+        .eq('estado', 'procesando')
+      lockTokenRef.current = null
+      await cargarFacturacion()
+      showSuccess('Período desbloqueado', 'Ya podés volver a recalcular')
+    } catch (error: any) {
+      Swal.fire('Error', error?.message || 'No se pudo desbloquear el período', 'error')
+    } finally {
+      setDesbloqueando(false)
     }
   }
 
@@ -10530,22 +10837,49 @@ export function ReporteFacturacionTab() {
               Cierre la semana anterior primero
             </span>
           )}
-          {/* Botón Recalcular - solo cuando período está abierto/procesando */}
-          {(periodo?.estado === 'abierto' || periodo?.estado === 'procesando') && (
-            <button
-              className="fact-btn-primary"
-              onClick={() => recalcularPeriodoAbierto()}
-              disabled={recalculando || loading || periodo?.estado === 'procesando' || cerrando}
-              title="Recalcular incorporando excesos, tickets y penalidades"
-            >
-              <Calculator size={14} className={recalculando || periodo?.estado === 'procesando' ? 'spinning' : ''} />
-              {recalculando && recalculandoProgreso.total > 0
-                ? `${recalculandoProgreso.actual}/${recalculandoProgreso.total}`
-                : recalculando || periodo?.estado === 'procesando'
-                  ? 'Recalculando...'
-                  : 'Recalcular'}
-            </button>
-          )}
+          {/* Botón Recalcular — cuatro estados según el candado.
+              Antes se deshabilitaba con periodo.estado === 'procesando', que es
+              justo lo que dejaba al usuario sin salida: el candado impedía la
+              única acción que podía liberarlo. Ahora solo bloquea el estado
+              local (esta pestaña calculando) o un candado AJENO y VIGENTE. */}
+          {(periodo?.estado === 'abierto' || periodo?.estado === 'procesando') && (() => {
+            const esMiCandado = !!lockTokenRef.current && periodo?.lock_token === lockTokenRef.current
+            const candadoAjenoVigente = lockVigente(periodo) && !esMiCandado
+            const candadoHuerfano = lockHuerfano(periodo)
+
+            const etiqueta = recalculando
+              ? (recalculandoProgreso.total > 0
+                  ? `${recalculandoProgreso.actual}/${recalculandoProgreso.total}`
+                  : 'Recalculando...')
+              : candadoAjenoVigente
+                ? ((periodo?.procesando_total ?? 0) > 0
+                    ? `${periodo?.procesando_por || 'Otro usuario'} · ${periodo?.procesando_actual}/${periodo?.procesando_total}`
+                    : `${periodo?.procesando_por || 'Otro usuario'} recalculando...`)
+                : candadoHuerfano
+                  ? 'Forzar recálculo'
+                  : 'Recalcular'
+
+            return (
+              <button
+                className="fact-btn-primary"
+                onClick={() => recalcularPeriodoAbierto()}
+                disabled={recalculando || loading || cerrando || candadoAjenoVigente}
+                title={
+                  candadoAjenoVigente
+                    ? `${periodo?.procesando_por || 'Otro usuario'} empezó hace ${Math.max(1, Math.round(minutosDesde(periodo?.procesando_desde)))} min`
+                    : candadoHuerfano
+                      ? 'Una ejecución anterior quedó interrumpida — se puede forzar'
+                      : 'Recalcular incorporando excesos, tickets y penalidades'
+                }
+                style={candadoHuerfano && !recalculando ? { background: '#f59e0b', borderColor: '#f59e0b' } : undefined}
+              >
+                {candadoHuerfano && !recalculando
+                  ? <AlertTriangle size={14} />
+                  : <Calculator size={14} className={recalculando || candadoAjenoVigente ? 'spinning' : ''} />}
+                {etiqueta}
+              </button>
+            )
+          })()}
           {/* Botón Cerrar Período - SOLO cuando hay período abierto */}
           {periodo?.estado === 'abierto' && (
             <button
@@ -10916,7 +11250,12 @@ export function ReporteFacturacionTab() {
 
           {/* DataTable */}
           <div style={{ position: 'relative' }}>
-            {(periodo?.estado === 'procesando' || recalculando) && (
+            {/* Overlay de recálculo — antes se mostraba con
+                periodo.estado === 'procesando' a secas, así que un candado
+                huérfano dejaba la pantalla girando para siempre sin explicar
+                nada. Ahora distingue: yo calculando / otro calculando /
+                ejecución interrumpida (con salida). */}
+            {(recalculando || lockVigente(periodo)) && (
               <div style={{
                 position: 'absolute',
                 inset: 0,
@@ -10932,15 +11271,62 @@ export function ReporteFacturacionTab() {
               }}>
                 <Loader2 size={32} className="spinning" style={{ color: 'var(--color-primary)' }} />
                 <span style={{ fontSize: '14px', fontWeight: 500, color: 'var(--text-secondary)' }}>
-                  {recalculandoProgreso.total > 0
-                    ? `Recalculando ${recalculandoProgreso.actual} de ${recalculandoProgreso.total} conductores...`
-                    : 'Recalculando facturación...'}
+                  {recalculando
+                    ? (recalculandoProgreso.total > 0
+                        ? `Recalculando ${recalculandoProgreso.actual} de ${recalculandoProgreso.total} conductores...`
+                        : 'Recalculando facturación...')
+                    : ((periodo?.procesando_total ?? 0) > 0
+                        ? `${periodo?.procesando_por || 'Otro usuario'} está recalculando: ${periodo?.procesando_actual} de ${periodo?.procesando_total} conductores...`
+                        : `${periodo?.procesando_por || 'Otro usuario'} está recalculando este período...`)}
                 </span>
-                {recalculandoProgreso.nombre && (
+                {recalculando && recalculandoProgreso.nombre && (
                   <span style={{ fontSize: '12px', color: 'var(--text-tertiary)' }}>
                     {recalculandoProgreso.nombre}
                   </span>
                 )}
+                {!recalculando && (
+                  <span style={{ fontSize: '12px', color: 'var(--text-tertiary)' }}>
+                    Comenzó hace {Math.max(1, Math.round(minutosDesde(periodo?.procesando_desde)))} min ·
+                    la pantalla se actualiza sola al terminar
+                  </span>
+                )}
+              </div>
+            )}
+
+            {/* Banner de recuperación — candado huérfano (ejecución interrumpida).
+                Este es el caso que antes dejaba el módulo trabado y solo se
+                podía resolver con un UPDATE manual en la base de datos. */}
+            {lockHuerfano(periodo) && !recalculando && (
+              <div style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '12px',
+                padding: '12px 16px',
+                marginBottom: '12px',
+                background: 'var(--badge-yellow-bg, #fef3c7)',
+                border: '1px solid #f59e0b',
+                borderRadius: '8px',
+              }}>
+                <AlertTriangle size={18} style={{ color: '#f59e0b', flexShrink: 0 }} />
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-primary)' }}>
+                    Este período quedó marcado como “procesando” por una ejecución interrumpida
+                  </div>
+                  <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '2px' }}>
+                    {periodo?.procesando_por ? `Iniciada por ${periodo.procesando_por}, ` : ''}
+                    hace {Math.round(minutosDesde(periodo?.procesando_desde))} minutos.
+                    La facturación puede haber quedado incompleta — desbloqueá y volvé a recalcular.
+                  </div>
+                </div>
+                <button
+                  className="fact-btn-primary"
+                  onClick={desbloquearPeriodo}
+                  disabled={desbloqueando}
+                  style={{ background: '#f59e0b', borderColor: '#f59e0b', flexShrink: 0 }}
+                >
+                  <Unlock size={14} className={desbloqueando ? 'spinning' : ''} />
+                  {desbloqueando ? 'Desbloqueando...' : 'Desbloquear'}
+                </button>
               </div>
             )}
             {/* Filtros rápidos de alertas (período) */}

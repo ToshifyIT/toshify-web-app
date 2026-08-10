@@ -2039,11 +2039,9 @@
 }
 
 /* ===== Modo embebido (Panel de Conductores / admin) ===== */
-/* Reusa el portal Mi Espacio dentro del admin: sin pantalla completa y sin gráficos. */
+/* Reusa el portal Mi Espacio dentro del admin: misma data y mismos gráficos que
+   ve el conductor, solo que sin ocupar la pantalla completa. */
 .portal-embedded {
   min-height: auto;
   background: transparent;
-}
-.portal-embedded .portal-chart-card {
-  display: none;
 }
