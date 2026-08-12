@@ -51,6 +51,13 @@ export interface BitacoraQueryOptions {
   conductor?: string
   estado?: string
   sedeId?: string | null
+  /** Tabla de Geotab a consultar. Por defecto 'geotab_bitacora'.
+   *  El modulo de prueba (/integraciones/gps/bitacora_vprueba) pasa
+   *  'geotab_bitacora_vprueba' para no tocar los datos reales. */
+  tablaGeotab?: string
+  /** Si es true no se consulta wialon_bitacora: solo la tabla de Geotab.
+   *  Se usa en el modulo de prueba para ver unicamente esa tabla. */
+  soloGeotab?: boolean
 }
 
 export interface BitacoraDateRange {

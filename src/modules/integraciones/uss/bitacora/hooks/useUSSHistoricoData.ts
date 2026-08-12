@@ -107,7 +107,12 @@ function transformarMarcacion(reg: BitacoraRegistroTransformado): Marcacion {
   };
 }
 
-export function useUSSHistoricoData(sedeId?: string | null) {
+/** `opciones` permite apuntar a otra tabla de Geotab sin duplicar el modulo:
+ *  lo usa la version de prueba (/integraciones/gps/bitacora_vprueba). */
+export function useUSSHistoricoData(
+  sedeId?: string | null,
+  opciones?: { tablaGeotab?: string; soloGeotab?: boolean }
+) {
   const [dateRange, setDateRange] = useState<USSHistoricoDateRange>(() => {
     // Default: Semana actual completa (lunes a domingo) en zona ART.
     // Antes calculaba con getDay() en hora LOCAL del browser, lo cual descalibraba
@@ -198,7 +203,7 @@ export function useUSSHistoricoData(sedeId?: string | null) {
           patente: filterPatente || undefined,
           sedeId,
         }),
-        wialonBitacoraService.getBitacora(dateRange.startDate, dateRange.endDate, { sedeId }),
+        wialonBitacoraService.getBitacora(dateRange.startDate, dateRange.endDate, { sedeId, tablaGeotab: opciones?.tablaGeotab, soloGeotab: opciones?.soloGeotab }),
         supabase
           .from('parametros_sistema')
           .select('clave, valor')
@@ -305,7 +310,14 @@ export function useUSSHistoricoData(sedeId?: string | null) {
           sumKmPorConductor.set(key, prev);
         }
       };
-      await Promise.all([fetchSemanaTabla('wialon_bitacora'), fetchSemanaTabla('geotab_bitacora')]);
+      await Promise.all(
+        opciones?.soloGeotab
+          ? [fetchSemanaTabla((opciones?.tablaGeotab ?? 'geotab_bitacora') as 'geotab_bitacora')]
+          : [
+              fetchSemanaTabla('wialon_bitacora'),
+              fetchSemanaTabla((opciones?.tablaGeotab ?? 'geotab_bitacora') as 'geotab_bitacora'),
+            ]
+      );
 
       // 4) Aplicar a cada marcación
       for (const m of marcacionesTransformadas) {

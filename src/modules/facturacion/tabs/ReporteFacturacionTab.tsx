@@ -51,7 +51,6 @@ import { syncKardexForPeriodo } from '../../../services/controlGarantiasService'
 import {
   HEARTBEAT_CADA,
   camposLockLiberado,
-  filtroCandadoDisponible,
   lockVencidoAntesDe,
   lockHuerfano,
   lockVigente,
@@ -3287,23 +3286,62 @@ export function ReporteFacturacionTab() {
       // Un "leo y después escribo" desde el cliente dejaría una ventana de
       // carrera en la que ambos leen 'abierto' y ambos borran la facturación.
       const miToken = nuevoLockToken()
-      const { data: candado } = await (supabase.from('periodos_facturacion') as any)
-        .update({
-          estado: 'procesando',
-          procesando_desde: new Date().toISOString(),
-          procesando_por: profile?.full_name || 'Desconocido',
-          lock_token: miToken,
-          procesando_actual: 0,
-          procesando_total: 0,
-          updated_at: new Date().toISOString()
-        })
+      const camposCandado = {
+        estado: 'procesando',
+        procesando_desde: new Date().toISOString(),
+        procesando_por: profile?.full_name || 'Desconocido',
+        lock_token: miToken,
+        procesando_actual: 0,
+        procesando_total: 0,
+        updated_at: new Date().toISOString()
+      }
+
+      // NO usar .or(): PostgREST trata `,` `.` `:` como reservados dentro de
+      // or=(...) y el timestamp ISO rompe el parseo -> el UPDATE afectaba 0
+      // filas aunque el periodo estuviera libre. Se hacen dos UPDATE condicionales
+      // separados; cada uno sigue siendo atomico, que es lo que da la exclusion.
+      //   1) candado libre  -> estado = 'abierto'
+      //   2) candado vencido -> procesando_desde mas viejo que el TTL
+      let { data: candado, error: errorCandado } = await (supabase.from('periodos_facturacion') as any)
+        .update(camposCandado)
         .eq('id', periodoId)
-        // Libre, o tomado por una ejecución ya vencida (huérfana)
-        .or(filtroCandadoDisponible())
+        .eq('estado', 'abierto')
         .select()
         .maybeSingle()
 
+      if (!candado && !errorCandado) {
+        const reintento = await (supabase.from('periodos_facturacion') as any)
+          .update(camposCandado)
+          .eq('id', periodoId)
+          .lt('procesando_desde', lockVencidoAntesDe())
+          .select()
+          .maybeSingle()
+        candado = reintento.data
+        errorCandado = reintento.error
+      }
+
+      // Un error de la BD (permisos, filtro mal armado, red) NO es lo mismo que
+      // perder la carrera contra otro usuario: mostrarlo tal cual, si no cualquier
+      // falla se disfraza de "otro usuario tomo el periodo" y es indiagnosticable.
+      if (errorCandado) {
+        await cargarFacturacion()
+        Swal.fire(
+          'No se pudo iniciar el recálculo',
+          `La base rechazó la operación: ${errorCandado.message || errorCandado}`,
+          'error'
+        )
+        return
+      }
+
       if (!candado) {
+        // Diagnostico: 0 filas sin error significa que el WHERE no matcheo.
+        // Loguear que se envio exactamente, para poder comparar contra la BD.
+        console.warn('[candado] UPDATE afecto 0 filas', {
+          periodoId,
+          estadoEnMemoria: periodo.estado,
+          lockTokenEnMemoria: (periodo as any).lock_token,
+          procesandoDesdeEnMemoria: (periodo as any).procesando_desde,
+        })
         // Perdimos la carrera: alguien lo tomó en el intervalo.
         await cargarFacturacion()
         Swal.fire(

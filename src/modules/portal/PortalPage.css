@@ -2044,4 +2044,20 @@
 .portal-embedded {
   min-height: auto;
   background: transparent;
+  /* Dentro del admin la pagina ya tiene su propio scroll: el portal no debe
+     reservar un viewport completo ni recortar su contenido. */
+  height: auto;
+  overflow: visible;
+}
+
+/* El portal a pantalla completa centra su contenido al 96% con padding lateral
+   amplio; dentro del admin ese centrado dejaba franjas vacias a los costados.
+   Aca ocupa todo el ancho disponible con un margen chico de 8px. */
+.portal-embedded .portal-content {
+  max-width: 100%;
+  margin: 0;
+  /* Padding-top chico: separa el encabezado (nombre/DNI) de las metricas sin
+     agregar espacio por encima del encabezado. */
+  padding: 12px 8px 8px;
+  overflow-y: visible;
 }

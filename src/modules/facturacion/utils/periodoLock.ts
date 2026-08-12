@@ -79,7 +79,14 @@ export function camposLockLiberado() {
   }
 }
 
-/** Filtro PostgREST para tomar el candado: libre O vencido. */
+/** Filtro PostgREST para tomar el candado: libre O vencido.
+ *
+ *  El timestamp VA ENTRE COMILLAS DOBLES a proposito. Dentro de `or=(...)`
+ *  PostgREST trata `,` `.` `:` `(` `)` como caracteres reservados, y un ISO
+ *  como 2026-08-12T20:05:30.123Z tiene `:` y `.`: sin comillas el filtro se
+ *  parsea mal y el UPDATE no afecta ninguna fila (o devuelve 400). Como el
+ *  llamador solo mira `data`, eso se veia como "otro usuario tomo el periodo".
+ */
 export function filtroCandadoDisponible(): string {
-  return `estado.eq.abierto,procesando_desde.lt.${lockVencidoAntesDe()}`
+  return `estado.eq.abierto,procesando_desde.lt."${lockVencidoAntesDe()}"`
 }

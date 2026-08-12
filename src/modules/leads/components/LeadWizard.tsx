@@ -21,6 +21,10 @@ interface LeadWizardProps {
   categoriasLicencia?: CatalogoItem[]
   estadosLicencia?: CatalogoItem[]
   tiposLicencia?: CatalogoItem[]
+  // Catalogos compartidos con Conductores: las opciones salen de la misma tabla
+  // que usa el form de conductor, para que lo elegido aca se vea identico alla.
+  estadosCiviles?: CatalogoItem[]
+  nacionalidades?: CatalogoItem[]
 }
 
 const STEPS = [
@@ -46,7 +50,7 @@ function calcularEdad(fechaNac: string): number | undefined {
   return edad >= 0 ? edad : undefined
 }
 
-export function LeadWizard({ formData, setFormData, onSave, onCancel, saving = false, errors = {}, categoriasLicencia = [] }: LeadWizardProps) {
+export function LeadWizard({ formData, setFormData, onSave, onCancel, saving = false, errors = {}, categoriasLicencia = [], estadosCiviles = [], nacionalidades = [] }: LeadWizardProps) {
   const [currentStep, setCurrentStep] = useState(1)
   const { sedes } = useSede()
 
@@ -223,14 +227,9 @@ export function LeadWizard({ formData, setFormData, onSave, onCancel, saving = f
                 <label>Nacionalidad <span className="required">*</span></label>
                 <select className={errors.nacionalidad ? 'field-error' : ''} value={formData.nacionalidad || ''} onChange={e => updateField('nacionalidad', e.target.value)}>
                   <option value="">Seleccionar</option>
-                  <option value="ARGENTINA">ARGENTINA</option>
-                  <option value="BOLIVIANA">BOLIVIANA</option>
-                  <option value="PARAGUAYA">PARAGUAYA</option>
-                  <option value="PERUANA">PERUANA</option>
-                  <option value="URUGUAYA">URUGUAYA</option>
-                  <option value="VENEZOLANA">VENEZOLANA</option>
-                  <option value="CHILENA">CHILENA</option>
-                  <option value="COLOMBIANA">COLOMBIANA</option>
+                  {nacionalidades.map(n => (
+                    <option key={n.id} value={n.descripcion}>{n.descripcion}</option>
+                  ))}
                 </select>
                 {errors.nacionalidad && <span className="error-text">{errors.nacionalidad}</span>}
               </div>
@@ -240,11 +239,9 @@ export function LeadWizard({ formData, setFormData, onSave, onCancel, saving = f
                 <label>Estado Civil <span className="required">*</span></label>
                 <select className={errors.estado_civil ? 'field-error' : ''} value={formData.estado_civil || ''} onChange={e => updateField('estado_civil', e.target.value)}>
                   <option value="">Seleccionar</option>
-                  <option value="CASADO">CASADO</option>
-                  <option value="DIVORCIADO">DIVORCIADO</option>
-                  <option value="EN CONCUBINATO">EN CONCUBINATO</option>
-                  <option value="SOLTERO">SOLTERO</option>
-                  <option value="VIUDO">VIUDO</option>
+                  {estadosCiviles.map(ec => (
+                    <option key={ec.id} value={ec.descripcion}>{ec.descripcion}</option>
+                  ))}
                 </select>
                 {errors.estado_civil && <span className="error-text">{errors.estado_civil}</span>}
               </div>
