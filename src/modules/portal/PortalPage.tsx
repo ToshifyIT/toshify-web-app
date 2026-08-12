@@ -470,10 +470,18 @@ export function PortalPage({ embeddedConductorId }: { embeddedConductorId?: stri
   useEffect(() => {
     if (!embeddedConductorId) return
     let cancelado = false
-    supabase
+    // El parametro de la ruta acepta el UUID del conductor o directamente su DNI
+    // (mas comodo de escribir a mano). Si no tiene forma de UUID se busca por
+    // numero_dni normalizado, igual que hace el login del portal.
+    const esUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+      .test(embeddedConductorId)
+    const base = supabase
       .from('conductores')
       .select('id, nombres, apellidos, numero_dni, numero_cuit')
-      .eq('id', embeddedConductorId)
+    const consulta = esUuid
+      ? base.eq('id', embeddedConductorId)
+      : base.eq('numero_dni', normalizeDni(embeddedConductorId))
+    consulta
       .limit(1)
       .then(({ data }) => {
         if (cancelado) return

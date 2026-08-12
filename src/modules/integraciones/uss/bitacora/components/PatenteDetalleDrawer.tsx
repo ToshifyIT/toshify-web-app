@@ -24,6 +24,11 @@ interface Props {
   semanaInicio: string  // YYYY-MM-DD lunes
   semanaFin: string     // YYYY-MM-DD domingo
   onClose: () => void
+  /** Tabla de trips de Geotab. Por defecto 'geotab_historico'; el modulo de
+   *  prueba pasa 'geotab_historico_vprueba'. */
+  tablaGeotabHistorico?: string
+  /** Si es true no se consulta uss_historico: solo la tabla de Geotab. */
+  soloGeotab?: boolean
 }
 
 const DIAS = ['DOM', 'LUN', 'MAR', 'MIE', 'JUE', 'VIE', 'SAB']
@@ -84,7 +89,8 @@ function normalizarPatente(p: string | null | undefined): string {
   return (p || '').replace(/[\s-]/g, '').toUpperCase()
 }
 
-export function PatenteDetalleDrawer({ marcacion, semanaInicio, semanaFin, onClose }: Props) {
+export function PatenteDetalleDrawer({ marcacion, semanaInicio, semanaFin, onClose,
+  tablaGeotabHistorico = 'geotab_historico', soloGeotab = false }: Props) {
   const [trips, setTrips] = useState<Trip[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -103,8 +109,8 @@ export function PatenteDetalleDrawer({ marcacion, semanaInicio, semanaFin, onClo
     const desde = `${semanaInicio}T00:00:00`
     const hasta = `${semanaFin}T23:59:59`
 
-    const fetchTabla = async (tabla: 'uss_historico' | 'geotab_historico', origen: 'USS' | 'GEOTAB'): Promise<Trip[]> => {
-      const cols = tabla === 'uss_historico'
+    const fetchTabla = async (tabla: string, origen: 'USS' | 'GEOTAB'): Promise<Trip[]> => {
+      const cols = origen === 'USS'
         ? 'id, patente, conductor, conductor_raw, ibutton, fecha_hora_inicio_gmt3, fecha_hora_fin_gmt3, kilometraje'
         : 'id, patente, conductor, ibutton, fecha_hora_inicio_gmt3, fecha_hora_fin_gmt3, kilometraje'
       const { data, error: e } = await (supabase
@@ -122,8 +128,8 @@ export function PatenteDetalleDrawer({ marcacion, semanaInicio, semanaFin, onClo
     ;(async () => {
       try {
         const [uss, geotab] = await Promise.all([
-          fetchTabla('uss_historico', 'USS'),
-          fetchTabla('geotab_historico', 'GEOTAB'),
+          soloGeotab ? Promise.resolve([] as Trip[]) : fetchTabla('uss_historico', 'USS'),
+          fetchTabla(tablaGeotabHistorico, 'GEOTAB'),
         ])
         const todos = [...uss, ...geotab].sort((a, b) =>
           a.fecha_hora_inicio_gmt3.localeCompare(b.fecha_hora_inicio_gmt3),
@@ -249,6 +255,7 @@ export function PatenteDetalleDrawer({ marcacion, semanaInicio, semanaFin, onClo
         count++
       }
       // Strip los campos auxiliares para que el resto del drawer reciba Trip
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars -- se descartan a proposito
       const { tIniMs: _a, tFinMs: _b, ...rest } = t
       return { ...rest, inGroup, conductorEfectivo: condEf }
     })
