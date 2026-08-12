@@ -1151,7 +1151,8 @@ export function LeadsModule() {
   /** Match flexible: compara lowercase e intenta coincidencia parcial */
   function matchCatalogo(
     catalogo: Array<{ id: string; codigo: string; descripcion: string }>,
-    texto: string | null | undefined
+    texto: string | null | undefined,
+    nombreCampo?: string
   ): string | null {
     if (!texto || catalogo.length === 0) return null
     const t = texto.trim().toLowerCase()
@@ -1166,6 +1167,12 @@ export function LeadsModule() {
     // Último intento: comparar por código
     const porCodigo = catalogo.find(c => c.codigo.toLowerCase() === t)
     if (porCodigo) return porCodigo.id
+    // Sin equivalente en el catalogo: se avisa para que el valor no se pierda
+    // en silencio al convertir el lead (caso historico: "EN CONCUBINATO" del
+    // lead no existia como "Conviviente" en estados_civiles).
+    console.warn(
+      `[Lead -> Conductor] Sin equivalente${nombreCampo ? ` en el catalogo de ${nombreCampo}` : ''} para el valor "${texto}". El campo queda vacio.`
+    )
     return null
   }
 
@@ -1301,10 +1308,10 @@ export function LeadsModule() {
       else if (turnoLead.includes('cargo')) turnoMapped = 'A_CARGO'
 
       // Resolver textos a IDs usando match flexible
-      const licenciaEstadoId = matchCatalogo(estadosLicencia, lead.estado_licencia)
-      const licenciaTipoId = matchCatalogo(tiposLicencia, lead.tipo_licencia)
-      const nacionalidadId = matchCatalogo(nacionalidades, lead.nacionalidad)
-      const estadoCivilId = matchCatalogo(estadosCiviles, lead.estado_civil)
+      const licenciaEstadoId = matchCatalogo(estadosLicencia, lead.estado_licencia, 'estado de licencia')
+      const licenciaTipoId = matchCatalogo(tiposLicencia, lead.tipo_licencia, 'tipo de licencia')
+      const nacionalidadId = matchCatalogo(nacionalidades, lead.nacionalidad, 'nacionalidad')
+      const estadoCivilId = matchCatalogo(estadosCiviles, lead.estado_civil, 'estado civil')
 
       // Recalcular zona desde coordenadas o geocodificando la dirección
       let zonaCalculada = ''
@@ -2842,6 +2849,8 @@ export function LeadsModule() {
                 categoriasLicencia={categoriasLicencia}
                 estadosLicencia={estadosLicencia}
                 tiposLicencia={tiposLicencia}
+                estadosCiviles={estadosCiviles}
+                nacionalidades={nacionalidades}
               />
             </div>
           </div>
@@ -2869,6 +2878,8 @@ export function LeadsModule() {
                 categoriasLicencia={categoriasLicencia}
                 estadosLicencia={estadosLicencia}
                 tiposLicencia={tiposLicencia}
+                estadosCiviles={estadosCiviles}
+                nacionalidades={nacionalidades}
               />
             </div>
           </div>

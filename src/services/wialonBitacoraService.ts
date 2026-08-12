@@ -172,12 +172,16 @@ export const wialonBitacoraService = {
     // Builder de query reutilizable para wialon_bitacora y geotab_bitacora.
     // GEOTAB se filtra por fecha_hora_fin_gmt3 (fecha de FIN en hora AR real): un turno
     // pertenece a la semana donde TERMINA. USS sigue filtrando por fecha_turno (no tiene gmt3).
-    const buildQuery = (tabla: 'wialon_bitacora' | 'geotab_bitacora') => {
+    // Tabla de Geotab configurable: por defecto la real, el modulo de prueba
+    // pasa geotab_bitacora_vprueba. `esGeotab` decide los filtros (no el nombre,
+    // que ahora puede variar).
+    const tablaGeotab = options?.tablaGeotab ?? 'geotab_bitacora'
+    const buildQuery = (tabla: string, esGeotab: boolean) => {
       let q = supabase
         .from(tabla)
         .select('*', { count: 'exact' })
 
-      if (tabla === 'geotab_bitacora') {
+      if (esGeotab) {
         q = q
           .gte('fecha_hora_fin_gmt3', startDate)
           .lt('fecha_hora_fin_gmt3', endDateNext)
@@ -218,8 +222,11 @@ export const wialonBitacoraService = {
     // + asignaciones (para resolver modalidad/turno por patente en filas GEOTAB, que
     //   no traen vehiculo_modalidad/horario desde el sync de Geotab).
     const [wialonRes, geotabRes, asigRes, condRes] = await Promise.all([
-      buildQuery('wialon_bitacora'),
-      buildQuery('geotab_bitacora'),
+      // soloGeotab: el modulo de prueba no mezcla datos reales de USS/Wialon.
+      options?.soloGeotab
+        ? Promise.resolve({ data: [], error: null, count: 0 })
+        : buildQuery('wialon_bitacora', false),
+      buildQuery(tablaGeotab, true),
       supabase
         .from('asignaciones_conductores')
         .select('horario, estado, fecha_inicio, fecha_fin, conductores(nombres, apellidos), asignaciones!inner(horario, estado, vehiculos!inner(patente))')
@@ -235,7 +242,7 @@ export const wialonBitacoraService = {
     }
     // geotab_bitacora puede fallar si la tabla aún no está propagada en algún ambiente; no romper la pantalla
     if (geotabRes.error) {
-      console.warn('[wialonBitacoraService] geotab_bitacora query falló:', geotabRes.error.message)
+      console.warn(`[wialonBitacoraService] ${tablaGeotab} query falló:`, geotabRes.error.message)
     }
 
     // Cruces desde asignaciones_conductores para completar modalidad/turno en filas GEOTAB:

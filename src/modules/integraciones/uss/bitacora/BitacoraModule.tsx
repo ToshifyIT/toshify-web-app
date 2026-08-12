@@ -22,7 +22,10 @@ const TABS: { id: VistaType; label: string; icon: typeof UserCheck }[] = [
   { id: 'historico', label: 'Histórico', icon: List },
 ];
 
-export function BitacoraModule() {
+/** `tablaGeotab` / `soloGeotab`: sin props apunta a la bitacora real. El modulo
+ *  de prueba los pasa para leer geotab_bitacora_vprueba. */
+export function BitacoraModule({ tablaGeotab, tablaGeotabHistorico, soloGeotab }:
+  { tablaGeotab?: string; tablaGeotabHistorico?: string; soloGeotab?: boolean } = {}) {
   const { sedeActualId } = useSede();
   const {
     vista,
@@ -42,7 +45,7 @@ export function BitacoraModule() {
     searchTerm,
     handleSearchChange,
     updateChecklist,
-  } = useUSSHistoricoData(sedeActualId);
+  } = useUSSHistoricoData(sedeActualId, { tablaGeotab, soloGeotab });
 
   // Stats removed from here - now computed inside MarcacionesTable from filtered data
 
@@ -93,6 +96,8 @@ export function BitacoraModule() {
           headerControls={headerControls}
           semanaInicio={dateRange.startDate}
           semanaFin={dateRange.endDate}
+          tablaGeotabHistorico={tablaGeotabHistorico}
+          soloGeotab={soloGeotab}
           onUpdateChecklist={updateChecklist}
         />
       )}

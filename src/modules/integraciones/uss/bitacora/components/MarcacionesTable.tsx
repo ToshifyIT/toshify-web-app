@@ -32,6 +32,10 @@ interface MarcacionesTableProps {
   /** Rango semanal visible — usado para el drawer de detalle de patente */
   semanaInicio?: string;
   semanaFin?: string;
+  /** Tabla de trips de Geotab para el drawer de detalle (version de prueba). */
+  tablaGeotabHistorico?: string;
+  /** Si es true, el drawer solo consulta la tabla de Geotab. */
+  soloGeotab?: boolean;
   onUpdateChecklist: (id: string, updates: {
     gnc_cargado?: boolean;
     lavado_realizado?: boolean;
@@ -184,6 +188,8 @@ export function MarcacionesTable({
   headerControls,
   semanaInicio,
   semanaFin,
+  tablaGeotabHistorico,
+  soloGeotab,
   onUpdateChecklist,
 }: MarcacionesTableProps) {
   const { openFilterId, setOpenFilterId } = useExcelFilters();
@@ -834,6 +840,8 @@ export function MarcacionesTable({
         marcacion={detalleMarcacion}
         semanaInicio={semanaInicio || ''}
         semanaFin={semanaFin || ''}
+        tablaGeotabHistorico={tablaGeotabHistorico}
+        soloGeotab={soloGeotab}
         onClose={() => setDetalleMarcacion(null)}
       />
 

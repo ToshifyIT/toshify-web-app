@@ -263,6 +263,8 @@ const HistorialMovimientosPage = lazy(() => import('./inventario/HistorialMovimi
 const PedidosPage = lazy(() => import('./inventario/PedidosPage').then(m => ({ default: m.PedidosPage })))
 const USSPage = lazy(() => import('./integraciones/uss/USSPage').then(m => ({ default: m.USSPage })))
 const BitacoraPage = lazy(() => import('./integraciones/uss/BitacoraPage').then(m => ({ default: m.BitacoraPage })))
+// Version de prueba de la bitacora (tabla geotab_bitacora_vprueba)
+const BitacoraVPruebaPage = lazy(() => import('./integraciones/uss/BitacoraVPruebaPage').then(m => ({ default: m.BitacoraVPruebaPage })))
 const ControlExcesoKmPage = lazy(() => import('./integraciones/uss/ControlExcesoKmPage').then(m => ({ default: m.ControlExcesoKmPage })))
 const CabifyPage = lazy(() => import('./integraciones/cabify/CabifyPage').then(m => ({ default: m.CabifyPage })))
 const ReportesPage = lazy(() => import('./reportes/ReportesPage').then(m => ({ default: m.ReportesPage })))
@@ -2087,6 +2089,12 @@ export function HomePage() {
               <Route path="/integraciones/gps/bitacora" element={
                 <ProtectedRoute submenuName="bitacora-gps" action="view">
                   <LazyPage><BitacoraPage /></LazyPage>
+                </ProtectedRoute>
+              } />
+              {/* PRUEBA: misma pantalla apuntando a geotab_bitacora_vprueba */}
+              <Route path="/integraciones/gps/bitacora_vprueba" element={
+                <ProtectedRoute submenuName="bitacora-gps" action="view">
+                  <LazyPage><BitacoraVPruebaPage /></LazyPage>
                 </ProtectedRoute>
               } />
               <Route path="/integraciones/gps/exceso-km" element={
