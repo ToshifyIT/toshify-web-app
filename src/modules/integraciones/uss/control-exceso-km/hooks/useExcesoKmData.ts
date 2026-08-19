@@ -614,6 +614,11 @@ export function useExcesoKmData(sedeId?: string | null) {
           salida: fmtHora(ultimo.finMs),
           periodoInicio: inicioStr,
           periodoFin: finStr,
+          // Este modulo arma la Marcacion desde trips, no desde la bitacora: no
+          // tiene las columnas *_gmt3 del sync. inicioStr/finStr ya son ART y
+          // cubren la resolucion de fecha via periodo_*.
+          inicioGmt3: null,
+          finGmt3: null,
           kmTotal,
           duracionMinutos: duracionMin,
           estado: 'Turno Finalizado',

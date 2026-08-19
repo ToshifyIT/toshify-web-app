@@ -203,6 +203,73 @@ export function ConductoresPanelModule() {
       sortingFn: (a, b) => (a.original.montoTotalMultas || 0) - (b.original.montoTotalMultas || 0),
       cell: ({ row }) => <span className="cpanel-num">{formatCurrency(row.original.montoTotalMultas)}</span>,
     },
+    // --- Saldo y garantía ---
+    // Saldo pendiente = deuda del último movimiento del kardex (control_saldos),
+    // el mismo número que muestra la pestaña "Historial de saldo" del detalle.
+    // El accessor devuelve la DEUDA en positivo para que el filtro Desde/Hasta sea
+    // intuitivo; si el conductor está a favor, se muestra en verde y filtra como 0.
+    {
+      id: 'monto_saldo_pendiente',
+      accessorFn: (r) => r.saldoPendiente,
+      header: 'Saldo Pendiente',
+      sortingFn: (a, b) => (a.original.saldoPendiente || 0) - (b.original.saldoPendiente || 0),
+      cell: ({ row }) => {
+        const r = row.original
+        if (r.saldoPendiente > 0) {
+          return <span className="cpanel-num cpanel-deuda">{formatCurrency(r.saldoPendiente)}</span>
+        }
+        if (r.saldoAFavor > 0) {
+          return (
+            <span className="cpanel-num cpanel-favor" title="Saldo a favor del conductor">
+              {formatCurrency(r.saldoAFavor)}
+              <small> a favor</small>
+            </span>
+          )
+        }
+        return <span className="cpanel-num">{formatCurrency(0)}</span>
+      },
+    },
+    {
+      id: 'monto_garantia_pagada',
+      accessorFn: (r) => r.garantiaPagada,
+      header: 'Garantía Pagada',
+      sortingFn: (a, b) => (a.original.garantiaPagada || 0) - (b.original.garantiaPagada || 0),
+      cell: ({ row }) => {
+        const r = row.original
+        if (!r.tieneGarantia) return <span className="cpanel-num cpanel-nulo">Sin garantía</span>
+        return (
+          <span className="cpanel-num">
+            {formatCurrency(r.garantiaPagada)}
+            {r.garantiaTotal > 0 && <small> de {formatCurrency(r.garantiaTotal)}</small>}
+          </span>
+        )
+      },
+    },
+    // Diferencia = saldo pendiente − garantía pagada: cuánto de la deuda queda sin
+    // cubrir si se aplica el fondo de garantía. Positivo = todavía debe.
+    {
+      id: 'monto_saldo_menos_garantia',
+      accessorFn: (r) => r.saldoMenosGarantia,
+      header: 'Saldo − Garantía',
+      sortingFn: (a, b) => (a.original.saldoMenosGarantia || 0) - (b.original.saldoMenosGarantia || 0),
+      cell: ({ row }) => {
+        const d = row.original.saldoMenosGarantia
+        if (d > 0) {
+          return (
+            <span className="cpanel-num cpanel-deuda" title="La garantía no alcanza a cubrir el saldo pendiente">
+              {formatCurrency(d)}
+              <small> sin cubrir</small>
+            </span>
+          )
+        }
+        return (
+          <span className="cpanel-num cpanel-favor" title="La garantía cubre el saldo pendiente">
+            {formatCurrency(d)}
+            <small> cubierto</small>
+          </span>
+        )
+      },
+    },
     {
       id: 'acciones',
       header: 'Acciones',

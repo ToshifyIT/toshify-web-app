@@ -1,7 +1,12 @@
 /* Helpers del Panel de Conductores. El layout general (cond-module, stat-cards)
    y la tabla los aportan ConductoresModule.css y el componente DataTable. */
 
-.cpanel-num { font-variant-numeric: tabular-nums; }
+.cpanel-num { font-variant-numeric: tabular-nums; white-space: nowrap; }
+/* Montos de saldo / garantía: rojo = deuda o sin cubrir, verde = a favor o cubierto. */
+.cpanel-num.cpanel-deuda { color: #dc2626; font-weight: 600; }
+.cpanel-num.cpanel-favor { color: #16a34a; font-weight: 600; }
+.cpanel-num.cpanel-nulo { color: #9ca3af; }
+.cpanel-num small { font-size: 10px; font-weight: 500; color: #9ca3af; margin-left: 4px; }
 
 .cpanel-badge {
   display: inline-block;

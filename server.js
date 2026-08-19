@@ -12,6 +12,8 @@ import PizZip from 'pizzip'
 import Docxtemplater from 'docxtemplater'
 import { Readable } from 'stream'
 import crypto from 'node:crypto'
+// Integracion Dropbox Sign (HelloSign): toda la logica vive en server-hellosign.js
+import { hellosignRouter } from './server-hellosign.js'
 // API REST removida - reemplazada por MCP Server (mcp/server.js)
 
 const __filename = fileURLToPath(import.meta.url)
@@ -35,6 +37,9 @@ app.use((_req, res, next) => {
   res.setHeader('Content-Security-Policy', "frame-ancestors 'none'")
   next()
 })
+
+// Rutas /api/hellosign/* (integracion Dropbox Sign, archivo aparte)
+app.use('/api/hellosign', hellosignRouter)
 
 // Google Drive service
 function getDriveService(writeAccess = false) {

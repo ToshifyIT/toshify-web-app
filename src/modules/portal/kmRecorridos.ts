@@ -26,6 +26,15 @@ const DESDE = '2026-06-01'
 
 type GpsOrigen = 'USS' | 'GEOTAB'
 
+// Desglose diario dentro de una semana. Se arma con los MISMOS trips que suman
+// al total semanal (misma atribución de conductor y mismo filtro de patente),
+// así la suma de los días es exactamente el km de la semana.
+export interface KmDiaConductor {
+  fecha: string            // yyyy-MM-dd (hora Argentina)
+  km: number
+  viajes: number
+}
+
 export interface KmSemanaConductor {
   semana: number
   anio: number
@@ -36,6 +45,9 @@ export interface KmSemanaConductor {
   excedido: number
   modalidad: string
   horario: string | null   // diurno / nocturno / todo_dia de la asignación de esa semana
+  // Lunes -> domingo. En la semana en curso corta en el día de hoy (no lista
+  // días futuros). Los días sin viajes van con km 0.
+  dias: KmDiaConductor[]
 }
 
 interface TripRow {
@@ -365,14 +377,38 @@ export async function calcularKmSemanasConductor(
   }
 
   // 7) Acumular km por semana ISO (ART), solo patente propia de esa semana.
+  //    En la misma pasada se acumula el desglose por DIA con los mismos trips,
+  //    para que la suma de los días coincida siempre con el total de la semana.
   const kmPorSemana = new Map<string, number>()
+  const kmPorDia = new Map<string, { km: number; viajes: number }>()  // clave: `${semanaKey}|${yyyy-MM-dd}`
   for (const t of tripsArr) {
     if (!esDelConductor(t.condEf)) continue
-    const wi = getISOWeekInfo(fechaART(t.inicioMs))
+    const dia = fechaART(t.inicioMs)
+    const wi = getISOWeekInfo(dia)
     const asign = porSemanaAsign.get(wi.key)
     if (!asign) continue // semana sin asignación válida => no suma (regla del módulo)
     if (!asign.patentes.has(t.patenteNorm)) continue // patente ajena esa semana => no suma
     kmPorSemana.set(wi.key, Math.round(((kmPorSemana.get(wi.key) || 0) + t.kmNum) * 100) / 100)
+    const dk = `${wi.key}|${dia}`
+    const prev = kmPorDia.get(dk) || { km: 0, viajes: 0 }
+    kmPorDia.set(dk, { km: Math.round((prev.km + t.kmNum) * 100) / 100, viajes: prev.viajes + 1 })
+  }
+
+  // Días de una semana: lunes -> domingo, cortando en hoy si la semana está en
+  // curso. Los días sin viajes se listan igual, con 0.
+  const hoyART = fechaART(nowMs)
+  const diasDeSemana = (info: WeekInfo): KmDiaConductor[] => {
+    const out: KmDiaConductor[] = []
+    const [y, m, d] = info.inicio.split('-').map(Number)
+    for (let i = 0; i < 7; i++) {
+      const cur = new Date(y, m - 1, d + i, 12, 0, 0)
+      const fecha = toLocalDateString(cur)
+      if (fecha > info.fin) break
+      if (fecha > hoyART) break
+      const v = kmPorDia.get(`${info.key}|${fecha}`)
+      out.push({ fecha, km: v ? Math.round(v.km) : 0, viajes: v ? v.viajes : 0 })
+    }
+    return out
   }
 
   const semanas: KmSemanaConductor[] = [...kmPorSemana.entries()]
@@ -391,6 +427,7 @@ export async function calcularKmSemanasConductor(
         excedido: Math.max(0, kmRed - limite),
         modalidad,
         horario: asign.horario ?? null,
+        dias: diasDeSemana(asign.info),
       }
     })
     .sort((a, b) => (b.anio - a.anio) || (b.semana - a.semana))

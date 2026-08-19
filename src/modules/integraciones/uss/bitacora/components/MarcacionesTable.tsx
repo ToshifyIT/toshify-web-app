@@ -11,6 +11,7 @@ import { ExcelColumnFilter, useExcelFilters } from '../../../../../components/ui
 import { Search, ClipboardList, Download, ChevronDown, Fuel, Droplets, Sun, Moon, Clock, X, AlertTriangle } from 'lucide-react';
 import type { Marcacion } from '../hooks/useUSSHistoricoData';
 import { normalizePatente } from '../../../../../utils/normalizeDocuments';
+import { partesART } from '../../../../../utils/fechaArgentina';
 import * as XLSX from 'xlsx';
 import { PatenteDetalleDrawer } from './PatenteDetalleDrawer';
 import { ConductorHistorialModal } from './ConductorHistorialModal';
@@ -49,55 +50,118 @@ function formatFecha(fecha: string): string {
   return `${d}/${m}/${y.slice(2)}`;
 }
 
-/**
- * Formatea un ISO timestamp (periodo_inicio/periodo_fin) a DD/MM/YY HH:MM:SS
- * Los periodos vienen en UTC (+00), se les resta 3 horas para mostrar hora Argentina.
- */
-function formatPeriodo(iso: string | null): string {
-  if (!iso) return '-';
-  const d = new Date(iso);
-  if (isNaN(d.getTime())) return '-';
-  // Restar 3 horas para coincidir con hora real Argentina (UTC-3)
-  const ar = new Date(d.getTime() - 3 * 60 * 60 * 1000);
-  const dd = String(ar.getUTCDate()).padStart(2, '0');
-  const mm = String(ar.getUTCMonth() + 1).padStart(2, '0');
-  const yy = String(ar.getUTCFullYear()).slice(2);
-  const hh = String(ar.getUTCHours()).padStart(2, '0');
-  const mi = String(ar.getUTCMinutes()).padStart(2, '0');
-  const ss = String(ar.getUTCSeconds()).padStart(2, '0');
-  return `${dd}/${mm}/${yy} ${hh}:${mi}:${ss}`;
+// =====================================================
+// RESOLUCION DE FECHA/HORA PARA ENTRADA Y SALIDA
+// =====================================================
+// La HORA siempre sale de la base (hora_inicio / hora_cierre). Lo unico que hay
+// que resolver aca es la FECHA, que es lo que se complica en los turnos
+// nocturnos que cruzan medianoche.
+//
+// Orden de confianza para la fecha:
+//   1) fecha_hora_inicio_gmt3 / fecha_hora_fin_gmt3 -> es LA MISMA columna con la
+//      que wialonBitacoraService filtra la semana ("un turno pertenece a la
+//      semana donde TERMINA"). Usarla aca garantiza que lo mostrado y lo
+//      filtrado no puedan contradecirse.
+//   2) periodo_inicio / periodo_fin -> timestamp del sync (USS no los escribe).
+//   3) Reconstruccion desde fecha_turno. Ultimo recurso.
+//
+// En 1) y 2) el timestamp se descarta si no coincide en HH:MM con la hora de la
+// base: un timestamp desalineado (ej. un sync que convirtio mal la zona horaria)
+// no debe mandar sobre el dato que el operador esta viendo en la tabla.
+
+/** Hora de la base, o null si no hay. */
+function horaDb(h: string | null | undefined): string | null {
+  return h && h !== '-' ? h : null;
+}
+
+/** 'YYYY-MM-DD' del timestamp, solo si coincide en HH:MM con la hora de la base. */
+function fechaDeTimestamp(ts: string | null | undefined, hora: string | null): string | null {
+  const p = partesART(ts);
+  if (!p) return null;
+  if (hora && `${p.hora}:${p.minuto}` !== hora.slice(0, 5)) return null;
+  return `${p.anio}-${p.mes}-${p.dia}`;
+}
+
+/** 'HH:MM:SS' del timestamp. Respaldo para cuando la base no trae la hora. */
+function horaDeTimestamp(ts: string | null | undefined): string | null {
+  const p = partesART(ts);
+  return p ? `${p.hora}:${p.minuto}:${p.segundo}` : null;
+}
+
+/** Suma dias a 'YYYY-MM-DD'. Aritmetica en UTC: no se desfasa por la zona del browser. */
+function sumarDias(iso: string, dias: number): string {
+  const [y, m, d] = iso.split('-').map(Number);
+  const dt = new Date(Date.UTC(y, m - 1, d));
+  dt.setUTCDate(dt.getUTCDate() + dias);
+  return `${dt.getUTCFullYear()}-${String(dt.getUTCMonth() + 1).padStart(2, '0')}-${String(dt.getUTCDate()).padStart(2, '0')}`;
+}
+
+/** 'YYYY-MM-DD' -> 'DD/MM/YY' */
+function fechaCorta(iso: string | null): string | null {
+  if (!iso) return null;
+  const [y, m, d] = iso.split('-');
+  return y && m && d ? `${d}/${m}/${y.slice(2)}` : null;
+}
+
+/** Fecha ISO de la ENTRADA del turno. */
+function fechaEntradaISO(m: Marcacion): string | null {
+  const hora = horaDb(m.entrada);
+  const real = fechaDeTimestamp(m.inicioGmt3, hora) ?? fechaDeTimestamp(m.periodoInicio, hora);
+  if (real) return real;
+  if (!m.fecha) return null;
+  // Reconstruccion: un nocturno que arranca de madrugada corresponde al dia
+  // siguiente al de su fecha_turno.
+  const h = parseInt((hora || '').slice(0, 2), 10);
+  if (m.horario === 'nocturno' && h >= 0 && h < 6) return sumarDias(m.fecha, 1);
+  return m.fecha;
+}
+
+/** Fecha ISO de la SALIDA del turno. */
+function fechaSalidaISO(m: Marcacion): string | null {
+  const hora = horaDb(m.salida);
+  const real = fechaDeTimestamp(m.finGmt3, hora) ?? fechaDeTimestamp(m.periodoFin, hora);
+  if (real) return real;
+  const ini = fechaEntradaISO(m);
+  if (!ini) return null;
+  const horaIni = horaDb(m.entrada);
+  // Sin corte horario arbitrario: si la salida es mas temprana que la entrada, el
+  // turno cruzo medianoche. La regla anterior (hora < 6) dejaba pegadas al dia de
+  // inicio todas las salidas 06:14 / 06:22 / 07:30, que son las habituales de un
+  // turno nocturno, y hacian ver la salida ANTES que la entrada.
+  if (hora && horaIni && hora < horaIni) return sumarDias(ini, 1);
+  return ini;
+}
+
+/** Texto "DD/MM/YY HH:MM:SS" de la ENTRADA. */
+function textoEntrada(m: Marcacion): string {
+  const hora = horaDb(m.entrada) ?? horaDeTimestamp(m.inicioGmt3 ?? m.periodoInicio);
+  const fecha = fechaCorta(fechaEntradaISO(m));
+  return fecha && hora ? `${fecha} ${hora}` : '-';
+}
+
+/** Texto "DD/MM/YY HH:MM:SS" de la SALIDA. */
+function textoSalida(m: Marcacion): string {
+  const hora = horaDb(m.salida) ?? horaDeTimestamp(m.finGmt3 ?? m.periodoFin);
+  const fecha = fechaCorta(fechaSalidaISO(m));
+  return fecha && hora ? `${fecha} ${hora}` : '-';
 }
 
 /**
- * Resuelve la fecha+hora para Entrada o Salida.
- * Prioridad: periodo (ISO timestamp real) > reconstrucción desde fecha_turno + hora + horario.
- *
- * Lógica de turnos para reconstrucción:
- *   - Diurno: fecha real = fecha_turno (horas 06:00-17:59)
- *   - Nocturno inicio 18:00-23:59: fecha real = fecha_turno
- *   - Nocturno madrugada 00:00-05:59: fecha real = fecha_turno + 1 día
+ * Claves comparables "YYYY-MM-DDTHH:MM:SS" para ordenar ENTRADA / SALIDA.
+ * Salen de la MISMA resolucion que el texto que se muestra, asi que el orden de
+ * la columna siempre coincide con lo que el operador esta leyendo.
  */
-function resolverFechaHora(periodo: string | null, fechaTurno: string, hora: string, horario: string): string {
-  // Si tenemos el timestamp completo del periodo, usarlo directamente
-  if (periodo) {
-    const formatted = formatPeriodo(periodo);
-    if (formatted !== '-') return formatted;
-  }
-  // Fallback: reconstruir desde fecha_turno + hora + horario
-  if (!hora || hora === '-') return '-';
-  const horaNum = parseInt(hora.split(':')[0], 10);
-  // Nocturno con hora de madrugada → la fecha real es fecha_turno + 1
-  if (horario === 'nocturno' && horaNum >= 0 && horaNum < 6) {
-    const d = new Date(fechaTurno + 'T12:00:00');
-    d.setDate(d.getDate() + 1);
-    const yr = String(d.getFullYear()).slice(2);
-    const mo = String(d.getMonth() + 1).padStart(2, '0');
-    const da = String(d.getDate()).padStart(2, '0');
-    return `${da}/${mo}/${yr} ${hora}`;
-  }
-  // Diurno o nocturno con hora nocturna (18-23): fecha real = fecha_turno
-  const [y, m, dd] = fechaTurno.split('-');
-  return `${dd}/${m}/${y.slice(2)} ${hora}`;
+function normalizarHoraClave(h: string | null): string {
+  if (!h) return '00:00:00';
+  return h.length === 5 ? `${h}:00` : h;
+}
+function claveEntrada(m: Marcacion): string {
+  const h = normalizarHoraClave(horaDb(m.entrada) ?? horaDeTimestamp(m.inicioGmt3 ?? m.periodoInicio));
+  return `${fechaEntradaISO(m) ?? '0000-00-00'}T${h}`;
+}
+function claveSalida(m: Marcacion): string {
+  const h = normalizarHoraClave(horaDb(m.salida) ?? horaDeTimestamp(m.finGmt3 ?? m.periodoFin));
+  return `${fechaSalidaISO(m) ?? '0000-00-00'}T${h}`;
 }
 
 function formatDuracion(minutos: number | null): string {
@@ -231,13 +295,6 @@ export function MarcacionesTable({
     }
     return [...set].sort();
   }, [marcaciones]);
-  const fechasUnicas = useMemo(() =>
-    [...new Set(marcaciones.map(m => formatFecha(m.fecha)))].sort((a, b) => {
-      const [da, ma, ya] = a.split('/');
-      const [db, mb, yb] = b.split('/');
-      return `${yb}${mb}${db}`.localeCompare(`${ya}${ma}${da}`);
-    })
-  , [marcaciones]);
   const estadosUnicos = useMemo(() =>
     [...new Set(marcaciones.map(m => estadoVisual(m)))].filter(Boolean).sort()
   , [marcaciones]);
@@ -421,7 +478,7 @@ export function MarcacionesTable({
       header: 'Entrada',
       cell: ({ row }) => {
         const m = row.original;
-        const texto = resolverFechaHora(m.periodoInicio, m.fecha, m.entrada, m.horario);
+        const texto = textoEntrada(m);
         if (texto === '-') return <span style={{ fontSize: '12px', color: 'var(--text-tertiary)' }}>-</span>;
         const [fechaPart, horaPart] = texto.split(' ');
         return (
@@ -434,8 +491,8 @@ export function MarcacionesTable({
       enableSorting: true,
       // Ordenar por timestamp ISO completo (fecha+hora), no solo por la hora
       sortingFn: (a, b) => {
-        const av = a.original.periodoInicio || `${a.original.fecha}T${a.original.entrada}`;
-        const bv = b.original.periodoInicio || `${b.original.fecha}T${b.original.entrada}`;
+        const av = claveEntrada(a.original);
+        const bv = claveEntrada(b.original);
         return av.localeCompare(bv);
       },
     },
@@ -445,7 +502,7 @@ export function MarcacionesTable({
       cell: ({ row }) => {
         const m = row.original;
         if (m.estado === 'En Curso') {
-          const texto = resolverFechaHora(m.periodoFin, m.fecha, m.salida, m.horario);
+          const texto = textoSalida(m);
           if (texto !== '-') {
             const [fechaPart, horaPart] = texto.split(' ');
             return (
@@ -457,7 +514,7 @@ export function MarcacionesTable({
           }
           return <span style={{ fontSize: '12px', fontWeight: 600, fontStyle: 'italic', color: '#2563eb' }}>En curso</span>;
         }
-        const texto = resolverFechaHora(m.periodoFin, m.fecha, m.salida, m.horario);
+        const texto = textoSalida(m);
         if (texto === '-') return <span style={{ fontSize: '12px', color: 'var(--text-tertiary)' }}>-</span>;
         const [fechaPart, horaPart] = texto.split(' ');
         return (
@@ -469,8 +526,8 @@ export function MarcacionesTable({
       },
       enableSorting: true,
       sortingFn: (a, b) => {
-        const av = a.original.periodoFin || `${a.original.fecha}T${a.original.salida}`;
-        const bv = b.original.periodoFin || `${b.original.fecha}T${b.original.salida}`;
+        const av = claveSalida(a.original);
+        const bv = claveSalida(b.original);
         return av.localeCompare(bv);
       },
     },
@@ -645,8 +702,9 @@ export function MarcacionesTable({
       },
       enableSorting: false,
     },
-  ], [conductorPatenteUnicos, conductorFilter, fechasUnicas, fechaFilter,
-      estadosUnicos, estadoFilter, horariosUnicos, horarioFilter, turnosUnicos, turnoFilter, openFilterId, onUpdateChecklist, historialActivo]);
+  ], [conductorPatenteUnicos, conductorFilter,
+      estadosUnicos, estadoFilter, horariosUnicos, horarioFilter, turnosUnicos, turnoFilter, openFilterId,
+      setOpenFilterId, onUpdateChecklist, historialActivo]);
 
   // Exportar
   const [showExportMenu, setShowExportMenu] = useState(false);
@@ -670,10 +728,10 @@ export function MarcacionesTable({
       'Patente': m.patente,
       'iButton': m.ibutton || '',
       'Fecha Turno': formatFecha(m.fecha),
-      'Entrada': resolverFechaHora(m.periodoInicio, m.fecha, m.entrada, m.horario),
+      'Entrada': textoEntrada(m),
       'Salida': m.estado === 'En Curso'
-        ? (() => { const s = resolverFechaHora(m.periodoFin, m.fecha, m.salida, m.horario); return s !== '-' ? `${s} (en curso)` : 'En curso'; })()
-        : resolverFechaHora(m.periodoFin, m.fecha, m.salida, m.horario),
+        ? (() => { const s = textoSalida(m); return s !== '-' ? `${s} (en curso)` : 'En curso'; })()
+        : textoSalida(m),
       'Tiempo Conducido': formatDuracion(m.duracionMinutos),
       'Km Total': m.kmTotal,
       'Modalidad': modalidadLabel(m.vehiculoModalidad),

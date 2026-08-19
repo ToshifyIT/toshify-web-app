@@ -56,7 +56,8 @@
 
 .cdet-kpis {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  /* 10 KPIs: 5 por fila, dos filas. */
+  grid-template-columns: repeat(5, 1fr);
   gap: 10px;
   padding: 0 22px 16px;
 }
@@ -69,7 +70,24 @@
 .cdet-kpi-ico { color: #6b7280; display: flex; flex-shrink: 0; }
 .cdet-kpi-val { font-size: 16px; font-weight: 700; color: var(--text-primary, #111827); white-space: nowrap; }
 .cdet-kpi-val.danger { color: #dc2626; }
-.cdet-kpi-lbl { font-size: 11px; color: #9ca3af; }
+.cdet-kpi-val.ok { color: #16a34a; }
+.cdet-kpi-lbl { font-size: 11px; color: #9ca3af; line-height: 1.3; }
+/* Línea auxiliar de una tarjeta KPI: muestra los operandos de un cálculo. */
+.cdet-kpi-sub {
+  margin-top: 3px;
+  font-size: 10px;
+  color: #b0b6c0;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+/* Badge de estado dentro de una tarjeta KPI (estado de garantía). */
+.cdet-kpi-badge {
+  display: inline-block;
+  padding: 2px 8px; border-radius: 5px;
+  font-size: 12px; font-weight: 700; white-space: nowrap;
+  background: #f3f4f6; color: #6b7280;
+}
 .cdet-kpi-detalle {
   display: inline-flex; align-items: center; gap: 3px;
   margin-left: auto; flex-shrink: 0;
@@ -121,10 +139,18 @@
   gap: 4px;
   padding: 0 22px;
   border-bottom: 1px solid var(--border-primary, #eef0f2);
+  /* Con 7 pestañas puede no entrar todo en pantallas angostas: se scrollea en
+     horizontal en vez de comprimir o cortar las etiquetas. */
+  overflow-x: auto;
+  scrollbar-width: thin;
 }
+.cdet-tabs::-webkit-scrollbar { height: 4px; }
+.cdet-tabs::-webkit-scrollbar-thumb { background: #d1d5db; border-radius: 4px; }
 .cdet-tabs button {
   border: none;
   background: transparent;
+  flex: 0 0 auto;
+  white-space: nowrap;
   padding: 10px 14px;
   font-size: 13px;
   font-weight: 600;
@@ -160,6 +186,51 @@
   background: #fff;
 }
 .cdet-table th.r, .cdet-table td.r { text-align: right; }
+.cdet-table th.c, .cdet-table td.c { text-align: center; }
+
+/* --- Km recorridos: desglose diario desplegable --- */
+.cdet-km-toggle {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 24px; height: 24px;
+  border: 1px solid var(--border-primary, #e5e7eb);
+  background: #fff; color: #6b7280;
+  border-radius: 6px; cursor: pointer;
+  transition: transform .15s ease, background .15s ease, color .15s ease;
+}
+.cdet-km-toggle:hover:not(:disabled) { background: #f3f4f6; color: #dc2626; border-color: #fca5a5; }
+.cdet-km-toggle:disabled { opacity: .35; cursor: default; }
+.cdet-km-toggle.open { transform: rotate(180deg); color: #dc2626; border-color: #fca5a5; }
+.cdet-table tbody tr.cdet-km-open > td { background: #fef2f2; }
+
+.cdet-km-dias-row > td { padding: 0 !important; background: #f9fafb; }
+.cdet-km-dias { padding: 10px 14px 14px; }
+.cdet-km-dias-head {
+  font-size: 11px; font-weight: 700; color: #6b7280;
+  text-transform: uppercase; letter-spacing: .03em; margin-bottom: 8px;
+}
+.cdet-km-dias-tabla {
+  width: 100%; border-collapse: collapse; font-size: 12px;
+  background: #fff; border: 1px solid var(--border-primary, #e5e7eb); border-radius: 8px;
+  overflow: hidden;
+}
+.cdet-km-dias-tabla th {
+  text-align: left; padding: 6px 10px;
+  font-size: 10px; text-transform: uppercase; letter-spacing: .03em;
+  color: #9ca3af; font-weight: 600; background: #f9fafb;
+  border-bottom: 1px solid #e5e7eb;
+}
+.cdet-km-dias-tabla th.r, .cdet-km-dias-tabla td.r { text-align: right; }
+.cdet-km-dias-tabla td {
+  padding: 6px 10px; color: #374151;
+  border-bottom: 1px solid #f3f4f6;
+  font-variant-numeric: tabular-nums;
+}
+.cdet-km-dias-tabla tbody tr.vacio td { color: #b6bcc6; }
+.cdet-km-dias-tabla tfoot td {
+  padding: 7px 10px; font-weight: 700; color: #374151;
+  background: #f9fafb; border-top: 1px solid #e5e7eb;
+  font-variant-numeric: tabular-nums;
+}
 .cdet-table tbody td {
   padding: 9px 10px;
   border-bottom: 1px solid #f6f7f8;
@@ -264,6 +335,9 @@
 .cdet-fac-bar-fill.cubierto { background: #059669; }
 .cdet-fac-bar-fill.favor { background: #10b981; }
 
+@media (max-width: 1100px) {
+  .cdet-kpis { grid-template-columns: repeat(3, 1fr); }
+}
 @media (max-width: 640px) {
   .cdet-kpis, .cdet-fac-stats { grid-template-columns: repeat(2, 1fr); }
 }

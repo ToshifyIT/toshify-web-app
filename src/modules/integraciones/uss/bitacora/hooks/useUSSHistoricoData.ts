@@ -41,6 +41,11 @@ export interface Marcacion {
   salida: string; // HH:MM - último viaje
   periodoInicio: string | null; // ISO timestamp completo
   periodoFin: string | null; // ISO timestamp completo
+  // Timestamps reales en hora Argentina (sync de Geotab). Son la MISMA columna con
+  // la que wialonBitacoraService filtra la semana, asi que tienen prioridad sobre
+  // periodo_* para resolver la fecha que se muestra en ENTRADA / SALIDA.
+  inicioGmt3: string | null;
+  finGmt3: string | null;
   kmTotal: number;
   duracionMinutos: number | null;
   estado: string;
@@ -95,6 +100,8 @@ function transformarMarcacion(reg: BitacoraRegistroTransformado): Marcacion {
     salida: reg.hora_cierre || '-',
     periodoInicio: reg.periodo_inicio,
     periodoFin: reg.periodo_fin,
+    inicioGmt3: reg.fecha_hora_inicio_gmt3 ?? null,
+    finGmt3: reg.fecha_hora_fin_gmt3 ?? null,
     kmTotal: reg.kilometraje,
     duracionMinutos: reg.duracion_minutos,
     estado: reg.estado,
@@ -361,7 +368,7 @@ export function useUSSHistoricoData(
     } finally {
       setLoading(false);
     }
-  }, [dateRange, page, pageSize, filterPatente, sedeId]);
+  }, [dateRange, page, pageSize, filterPatente, sedeId, opciones?.soloGeotab, opciones?.tablaGeotab]);
 
   // Cargar al montar y cuando cambian parámetros
   const isFirstRender = useRef(true);

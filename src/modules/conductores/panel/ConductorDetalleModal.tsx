@@ -1,18 +1,22 @@
 // Modal "Ver detalle" del Panel de Conductores. Vista densa para admin:
-// cabecera + KPIs + 3 pestañas (Multas, Facturación, Km) como tablas compactas.
+// cabecera + KPIs + pestañas (Facturación, Historial de saldo, Historial de garantía,
+// Multas, Km recorridos, Historial de asignaciones, Historial de bajas) como tablas compactas.
 // Reusa la misma logica de datos que el portal Mi Espacio.
 
-import { useState, useEffect, useMemo } from 'react'
-import { X, AlertTriangle, Wallet, Gauge, Receipt, Info } from 'lucide-react'
+import { useState, useEffect, useMemo, Fragment } from 'react'
+import { X, AlertTriangle, Wallet, Gauge, Receipt, Info, ShieldCheck, BadgeCheck, CalendarDays, Hash, Scale, PiggyBank, ChevronDown } from 'lucide-react'
 import { supabase } from '../../../lib/supabase'
 import { formatCurrency } from '../../../types/facturacion.types'
 import { calcularKmSemanasConductor, type KmSemanaConductor } from '../../portal/kmRecorridos'
-import { cargarMultasConductor, cargarFacturacionConductor, cargarResumenExtra, cargarExcesoKmConductor, cargarAsignacionesConductor, cargarHistorialBajasConductor, type MultaDetalle, type FacturacionSemana, type ResumenExtra, type ExcesoKmConductor, type AsignacionHist, type BajaHist } from './conductorDetalleService'
+import { cargarMultasConductor, cargarFacturacionConductor, cargarResumenExtra, cargarExcesoKmConductor, cargarAsignacionesConductor, cargarHistorialBajasConductor, cargarGarantiaConductor, cargarKardexSaldoConductor, calcularResumenGarantia, saldoActualKardex, ESTADO_GARANTIA_UI, type MultaDetalle, type FacturacionSemana, type ResumenExtra, type ExcesoKmConductor, type AsignacionHist, type BajaHist, type GarantiaKardex, type SaldoKardex } from './conductorDetalleService'
 import type { ConductorPanelRow } from './conductoresPanelService'
 import { SemanaDetalleModal } from './SemanaDetalleModal'
+import { SaldoHistorialTab } from './SaldoHistorialTab'
+import { GarantiaHistorialTab } from './GarantiaHistorialTab'
 import './ConductorDetalleModal.css'
 
-type Tab = 'multas' | 'facturacion' | 'km' | 'asignaciones' | 'bajas'
+// Orden de las pestañas tal como se muestran en la barra (izq -> der).
+type Tab = 'facturacion' | 'saldo' | 'garantia' | 'multas' | 'km' | 'asignaciones' | 'bajas'
 
 // Etiqueta legible de turno/horario y estados para los historiales.
 function horarioLabel(h: string | null): string {
@@ -34,6 +38,25 @@ function fmtFecha(s: string | null): string {
   return d.toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric' })
 }
 
+// Fechas 'yyyy-MM-dd' del desglose diario de km: se parsean como fecha LOCAL.
+// Con `new Date('2026-08-03')` el string se interpreta como UTC y en zonas con
+// offset negativo (Lima, Buenos Aires) se mostraría el día anterior.
+function parseFechaDia(s: string): Date | null {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(s || '')
+  if (!m) return null
+  return new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]))
+}
+function fmtFechaDia(s: string): string {
+  const d = parseFechaDia(s)
+  return d ? d.toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: '2-digit' }) : '—'
+}
+function diaSemanaLabel(s: string): string {
+  const d = parseFechaDia(s)
+  if (!d) return '—'
+  const txt = d.toLocaleDateString('es-AR', { weekday: 'long' })
+  return txt.charAt(0).toUpperCase() + txt.slice(1)
+}
+
 // Turno de la semana: a cargo, o el horario (diurno/nocturno) si es modalidad turno.
 function turnoKmLabel(modalidad: string | null, horario: string | null): string {
   if (modalidad === 'a_cargo' || horario === 'todo_dia') return 'A cargo'
@@ -52,10 +75,19 @@ export function ConductorDetalleModal({ conductor, onClose }: { conductor: Condu
   const [asignaciones, setAsignaciones] = useState<AsignacionHist[]>([])
   const [bajas, setBajas] = useState<BajaHist[]>([])
   const [loadingHist, setLoadingHist] = useState(true)
+  // Garantía: se carga una sola vez y alimenta tanto los KPIs de la cabecera como
+  // la pestaña "Historial de garantía".
+  const [garantia, setGarantia] = useState<GarantiaKardex | null>(null)
+  const [garantiaLoading, setGarantiaLoading] = useState(true)
+  // Kardex de saldos: igual, una sola carga para los KPIs y la pestaña.
+  const [saldoKardex, setSaldoKardex] = useState<SaldoKardex | null>(null)
+  const [saldoLoading, setSaldoLoading] = useState(true)
   const [resumen, setResumen] = useState<ResumenExtra>({ gananciaCabify: 0 })
   const [loading, setLoading] = useState(true)
   const [kmLoading, setKmLoading] = useState(true)
   const [semanaSel, setSemanaSel] = useState<FacturacionSemana | null>(null)
+  // Semanas con el desglose diario de km desplegado (clave `${semana}-${anio}`).
+  const [kmAbiertas, setKmAbiertas] = useState<Set<string>>(new Set())
   const [deudaOpen, setDeudaOpen] = useState(false)
 
   useEffect(() => {
@@ -106,6 +138,20 @@ export function ConductorDetalleModal({ conductor, onClose }: { conductor: Condu
       setAsignaciones(asig); setBajas(bj)
     }).finally(() => { if (vivo) setLoadingHist(false) })
 
+    // Garantía (kardex + facturación de garantía), también en paralelo.
+    setGarantiaLoading(true)
+    cargarGarantiaConductor(conductor.id, conductor.dni)
+      .then(gk => { if (vivo) setGarantia(gk) })
+      .catch(() => { if (vivo) setGarantia(null) })
+      .finally(() => { if (vivo) setGarantiaLoading(false) })
+
+    // Kardex de saldos (control_saldos), también en paralelo.
+    setSaldoLoading(true)
+    cargarKardexSaldoConductor(conductor.id)
+      .then(sk => { if (vivo) setSaldoKardex(sk) })
+      .catch(() => { if (vivo) setSaldoKardex(null) })
+      .finally(() => { if (vivo) setSaldoLoading(false) })
+
     // KM en paralelo y sin bloquear: es el cálculo más pesado (recorre viajes GPS).
     // Alimenta solo la pestaña Km y el KPI "Km última semana".
     calcularKmSemanasConductor(supabase, { id: conductor.id, nombres: conductor.nombres || '', apellidos: conductor.apellidos || '' })
@@ -115,6 +161,22 @@ export function ConductorDetalleModal({ conductor, onClose }: { conductor: Condu
 
     return () => { vivo = false }
   }, [conductor.id, conductor.nombres, conductor.apellidos, conductor.dni])
+
+  // Resumen de garantía derivado del kardex: lo comparten los KPIs y la pestaña.
+  const garantiaResumen = useMemo(
+    () => (garantia ? calcularResumenGarantia(garantia, conductor.activo) : null),
+    [garantia, conductor.activo],
+  )
+
+  // Saldo vigente + su relación con el fondo de garantía (mismos criterios que la
+  // tabla del panel: la deuda se expresa en positivo y se le resta la garantía).
+  const saldoKpis = useMemo(() => {
+    const saldo = saldoActualKardex(saldoKardex)
+    const pendiente = Math.max(0, -saldo)
+    const aFavor = Math.max(0, saldo)
+    const garantiaPagada = garantiaResumen?.totalRealPagado ?? 0
+    return { saldo, pendiente, aFavor, garantiaPagada, diferencia: pendiente - garantiaPagada }
+  }, [saldoKardex, garantiaResumen])
 
   const factStats = useMemo(() => {
     const totales = facturacion.map(f => f.proforma)
@@ -190,19 +252,121 @@ export function ConductorDetalleModal({ conductor, onClose }: { conductor: Condu
           </div>
           <div className="cdet-kpi"><span className="cdet-kpi-ico"><Gauge size={15} /></span><div><div className="cdet-kpi-val">{kmLoading ? '…' : `${Math.round(kpis.kmUltima).toLocaleString('es-AR')} km`}</div><div className="cdet-kpi-lbl">Km última semana</div></div></div>
           <div className="cdet-kpi"><span className="cdet-kpi-ico"><Receipt size={15} /></span><div><div className="cdet-kpi-val">{formatCurrency(kpis.factUltima)}</div><div className="cdet-kpi-lbl">Facturación última semana</div></div></div>
+
+          {/* Saldo del último movimiento del kardex (mismo número que el hero de
+              la pestaña "Historial de saldo") y su diferencia contra la garantía. */}
+          <div className="cdet-kpi">
+            <span className="cdet-kpi-ico"><Scale size={15} /></span>
+            <div>
+              <div className={`cdet-kpi-val ${saldoKpis.pendiente > 0 ? 'danger' : saldoKpis.aFavor > 0 ? 'ok' : ''}`}>
+                {saldoLoading ? '…' : formatCurrency(saldoKpis.pendiente > 0 ? saldoKpis.pendiente : saldoKpis.aFavor)}
+              </div>
+              <div className="cdet-kpi-lbl">
+                {saldoKpis.pendiente > 0 ? 'Saldo pendiente' : saldoKpis.aFavor > 0 ? 'Saldo a favor' : 'Saldo pendiente'}
+              </div>
+            </div>
+          </div>
+          <div className="cdet-kpi">
+            <span className="cdet-kpi-ico"><PiggyBank size={15} /></span>
+            <div>
+              <div className={`cdet-kpi-val ${saldoKpis.diferencia > 0 ? 'danger' : 'ok'}`}>
+                {saldoLoading || garantiaLoading ? '…' : formatCurrency(saldoKpis.diferencia)}
+              </div>
+              <div className="cdet-kpi-lbl">
+                Saldo − garantía · {saldoKpis.diferencia > 0 ? 'sin cubrir' : 'cubierto'}
+              </div>
+              {/* Operandos a la vista: de dónde sale la resta. */}
+              <div
+                className="cdet-kpi-sub"
+                title={`Saldo pendiente ${formatCurrency(saldoKpis.pendiente)} − garantía pagada ${formatCurrency(saldoKpis.garantiaPagada)}`}
+              >
+                {formatCurrency(saldoKpis.pendiente)} − {formatCurrency(saldoKpis.garantiaPagada)}
+              </div>
+            </div>
+          </div>
+
+          {/* Garantía: mismos números que la pestaña "Historial de garantía".
+              Si el conductor no tiene garantía cargada, se muestran en gris. */}
+          <div className="cdet-kpi">
+            <span className="cdet-kpi-ico"><ShieldCheck size={15} /></span>
+            <div>
+              <div className="cdet-kpi-val">
+                {garantiaLoading ? '…' : garantiaResumen ? formatCurrency(garantiaResumen.totalRealPagado) : '—'}
+              </div>
+              <div className="cdet-kpi-lbl">
+                {garantiaResumen
+                  ? `Garantía pagada · de ${formatCurrency(Math.round(garantiaResumen.montoTotal))}`
+                  : 'Garantía pagada'}
+              </div>
+            </div>
+          </div>
+          <div className="cdet-kpi">
+            <span className="cdet-kpi-ico"><BadgeCheck size={15} /></span>
+            <div>
+              <div className="cdet-kpi-val">
+                {garantiaLoading ? '…' : garantiaResumen ? (() => {
+                  const ui = ESTADO_GARANTIA_UI[garantiaResumen.estado] || { label: garantiaResumen.estado, color: '#6b7280', bg: '#f3f4f6' }
+                  return <span className="cdet-kpi-badge" style={{ background: ui.bg, color: ui.color }}>{ui.label}</span>
+                })() : <span className="cdet-kpi-badge">Sin garantía</span>}
+              </div>
+              <div className="cdet-kpi-lbl">Estado de garantía</div>
+            </div>
+          </div>
+          <div className="cdet-kpi">
+            <span className="cdet-kpi-ico"><CalendarDays size={15} /></span>
+            <div>
+              <div className="cdet-kpi-val">
+                {garantiaLoading ? '…' : garantiaResumen?.ultimaSemanaPago
+                  ? `${garantiaResumen.ultimaSemanaPago.anio} S${String(garantiaResumen.ultimaSemanaPago.semana).padStart(2, '0')}`
+                  : '—'}
+              </div>
+              <div className="cdet-kpi-lbl">Última semana de pago</div>
+            </div>
+          </div>
+          <div className="cdet-kpi">
+            <span className="cdet-kpi-ico"><Hash size={15} /></span>
+            <div>
+              <div className="cdet-kpi-val">
+                {garantiaLoading ? '…' : garantiaResumen?.ultimaCuotaNumero != null ? garantiaResumen.ultimaCuotaNumero : '—'}
+              </div>
+              <div className="cdet-kpi-lbl">Último n° de cuota</div>
+            </div>
+          </div>
         </div>
 
         {/* Tabs */}
         <div className="cdet-tabs">
-          <button className={tab === 'multas' ? 'active' : ''} onClick={() => setTab('multas')}>Multas</button>
           <button className={tab === 'facturacion' ? 'active' : ''} onClick={() => setTab('facturacion')}>Facturación</button>
+          <button className={tab === 'saldo' ? 'active' : ''} onClick={() => setTab('saldo')}>Historial de saldo</button>
+          <button className={tab === 'garantia' ? 'active' : ''} onClick={() => setTab('garantia')}>Historial de garantía</button>
+          <button className={tab === 'multas' ? 'active' : ''} onClick={() => setTab('multas')}>Multas</button>
           <button className={tab === 'km' ? 'active' : ''} onClick={() => setTab('km')}>Km recorridos</button>
           <button className={tab === 'asignaciones' ? 'active' : ''} onClick={() => setTab('asignaciones')}>Historial de asignaciones</button>
           <button className={tab === 'bajas' ? 'active' : ''} onClick={() => setTab('bajas')}>Historial de bajas</button>
         </div>
 
         <div className="cdet-body">
-          {loading ? (
+          {/* Historial de saldo: kardex de control_saldos (mismo modal que Facturación > Saldos, solo lectura). */}
+          {tab === 'saldo' ? (
+            <SaldoHistorialTab
+              data={saldoKardex}
+              loading={saldoLoading}
+              nombre={conductor.nombre || '—'}
+              dni={conductor.dni}
+              cuit={conductor.ruc}
+              estado={conductor.activo ? 'ACTIVO' : (conductor.estadoCodigo || 'INACTIVO').toUpperCase()}
+            />
+          ) : tab === 'garantia' ? (
+            /* Historial de garantía: kardex de control_garantias (mismo modal que Facturación > Garantías, solo lectura). */
+            <GarantiaHistorialTab
+              data={garantia}
+              resumen={garantiaResumen}
+              loading={garantiaLoading}
+              nombre={conductor.nombre || '—'}
+              dni={conductor.dni}
+              cuit={conductor.ruc}
+            />
+          ) : loading ? (
             <div className="cdet-empty">Cargando…</div>
           ) : tab === 'multas' ? (
             multas.length === 0 ? <div className="cdet-empty">Sin multas atribuidas.</div> : (
@@ -350,6 +514,7 @@ export function ConductorDetalleModal({ conductor, onClose }: { conductor: Condu
                 <thead><tr>
                   <th>Semana</th><th className="r">Km</th><th className="r">Límite</th><th className="r">Excedido</th>
                   <th>Estado</th><th>Modalidad</th><th className="r">Monto</th><th>Semana de pago</th>
+                  <th className="c">Días</th>
                 </tr></thead>
                 <tbody>
                   {km.map(k => {
@@ -363,8 +528,12 @@ export function ConductorDetalleModal({ conductor, onClose }: { conductor: Condu
                     // Pagado sólo si el exceso ya se cobró (pago único aplicado o todas
                     // las cuotas cobradas si es fraccionado).
                     const excesoPagado = semanasPago.length > 0 && semanasPago.every(s => s.aplicado)
+                    const semKey = `${k.semana}-${k.anio}`
+                    const abierta = kmAbiertas.has(semKey)
+                    const dias = k.dias || []
                     return (
-                      <tr key={`${k.semana}-${k.anio}`}>
+                      <Fragment key={semKey}>
+                      <tr className={abierta ? 'cdet-km-open' : ''}>
                         <td>S{k.semana}/{k.anio}</td>
                         <td className="r">{Math.round(k.km).toLocaleString('es-AR')}</td>
                         <td className="r">{Math.round(k.limite).toLocaleString('es-AR')}</td>
@@ -385,7 +554,60 @@ export function ConductorDetalleModal({ conductor, onClose }: { conductor: Condu
                                   ))}
                                 </div>}
                         </td>
+                        <td className="c">
+                          {/* Desplegable del detalle diario de la semana. */}
+                          <button
+                            className={`cdet-km-toggle ${abierta ? 'open' : ''}`}
+                            onClick={() => setKmAbiertas(prev => {
+                              const next = new Set(prev)
+                              if (next.has(semKey)) next.delete(semKey); else next.add(semKey)
+                              return next
+                            })}
+                            disabled={dias.length === 0}
+                            title={dias.length === 0 ? 'Sin detalle diario' : (abierta ? 'Ocultar km por día' : 'Ver km por día')}
+                            aria-expanded={abierta}
+                          >
+                            <ChevronDown size={14} />
+                          </button>
+                        </td>
                       </tr>
+                      {abierta && (
+                        <tr className="cdet-km-dias-row">
+                          <td colSpan={9}>
+                            <div className="cdet-km-dias">
+                              <div className="cdet-km-dias-head">
+                                Km por día · {fmtFechaDia(k.fecha_inicio)} al {fmtFechaDia(k.fecha_fin)}
+                              </div>
+                              <table className="cdet-km-dias-tabla">
+                                <thead><tr>
+                                  <th>Día</th><th>Fecha</th><th className="r">Km</th><th className="r">Viajes</th><th className="r">% semana</th>
+                                </tr></thead>
+                                <tbody>
+                                  {dias.map(d => {
+                                    const pct = k.km > 0 ? (d.km / k.km) * 100 : 0
+                                    return (
+                                      <tr key={d.fecha} className={d.km === 0 ? 'vacio' : ''}>
+                                        <td>{diaSemanaLabel(d.fecha)}</td>
+                                        <td>{fmtFechaDia(d.fecha)}</td>
+                                        <td className="r"><b>{Math.round(d.km).toLocaleString('es-AR')}</b></td>
+                                        <td className="r">{d.viajes || '—'}</td>
+                                        <td className="r">{d.km > 0 ? `${pct.toFixed(1)}%` : '—'}</td>
+                                      </tr>
+                                    )
+                                  })}
+                                </tbody>
+                                <tfoot><tr>
+                                  <td colSpan={2}>Total semana</td>
+                                  <td className="r"><b>{Math.round(k.km).toLocaleString('es-AR')}</b></td>
+                                  <td className="r">{dias.reduce((s, d) => s + d.viajes, 0) || '—'}</td>
+                                  <td className="r">100%</td>
+                                </tr></tfoot>
+                              </table>
+                            </div>
+                          </td>
+                        </tr>
+                      )}
+                      </Fragment>
                     )
                   })}
                 </tbody>
