@@ -43,6 +43,19 @@ export interface ConductorPanelRow {
   montoEnProceso: number
   montoPagado: number
   montoTotalMultas: number   // = montoPendiente + montoEnProceso + montoPagado
+  // --- Saldo (kardex control_saldos) y garantía ---
+  // Saldo del ULTIMO movimiento del kardex, con el signo tal cual lo guarda la BD:
+  // positivo = a favor del conductor, negativo = deuda. Si no tiene kardex, cae al
+  // saldo_actual de saldos_conductores (mismo criterio que el modal de detalle).
+  ultimoSaldo: number
+  saldoPendiente: number      // deuda como numero positivo = max(0, -ultimoSaldo)
+  saldoAFavor: number         // a favor como numero positivo = max(0, ultimoSaldo)
+  garantiaPagada: number      // monto_realmente_pagado (o monto_pagado) de la garantia
+  garantiaTotal: number       // monto_total objetivo de la garantia (0 si no tiene)
+  tieneGarantia: boolean
+  // Cuanto de la deuda queda SIN cubrir si se aplica el fondo de garantia.
+  // Positivo = todavia debe; <= 0 = la garantia alcanza.
+  saldoMenosGarantia: number
 }
 
 // Parsea importes que en la BD vienen en DOS formatos mezclados:
@@ -135,7 +148,7 @@ export async function cargarPanelConductores(sedeId?: string | null): Promise<Co
   // Las 5 consultas son independientes entre si: se lanzan EN PARALELO para no
   // sumar la latencia de cada una (antes iban en serie). Los datos traidos y el
   // procesamiento posterior son identicos; solo cambia el "cuando" se piden.
-  const [conductores, asignacionesCond, multas, penalidades, periodos] = await Promise.all([
+  const [conductores, asignacionesCond, multas, penalidades, periodos, kardexSaldos, saldosResumen, garantias] = await Promise.all([
     // 1. Conductores (con estado y dni).
     fetchAll<RawConductor>((from, to) => {
       let q = supabase
@@ -182,7 +195,53 @@ export async function cargarPanelConductores(sedeId?: string | null): Promise<Co
     fetchAll<{ semana: number; anio: number }>((from, to) =>
       supabase.from('periodos_facturacion').select('semana, anio').eq('estado', 'cerrado').range(from, to)
     ),
+    // 6. Kardex de saldos, ordenado de mas reciente a mas viejo: la PRIMERA fila de
+    // cada conductor es su ultimo saldo. Mismo criterio que el hero de la pestaña
+    // "Historial de saldo" del modal de detalle (por eso los numeros coinciden).
+    fetchAll<{ conductor_id: string | null; saldo_pendiente: unknown }>((from, to) =>
+      (supabase.from('control_saldos') as any)
+        .select('conductor_id, saldo_pendiente')
+        .order('anio', { ascending: false })
+        .order('semana', { ascending: false })
+        .order('created_at', { ascending: false })
+        .range(from, to)
+    ),
+    // 7. Resumen de saldos: fallback para conductores sin movimientos en el kardex.
+    fetchAll<{ conductor_id: string | null; saldo_actual: unknown }>((from, to) =>
+      (supabase.from('saldos_conductores') as any)
+        .select('conductor_id, saldo_actual')
+        .range(from, to)
+    ),
+    // 8. Garantias: monto objetivo y monto realmente pagado (el mismo valor que
+    // muestra la tabla del modulo Facturacion > Garantias).
+    fetchAll<{ conductor_id: string | null; monto_total: unknown; monto_pagado: unknown; monto_realmente_pagado: unknown }>((from, to) =>
+      (supabase.from('garantias_conductores') as any)
+        .select('conductor_id, monto_total, monto_pagado, monto_realmente_pagado')
+        .range(from, to)
+    ),
   ])
+
+  // Ultimo saldo por conductor: primera aparicion en el kardex ya ordenado desc.
+  const ultimoSaldoPorConductor = new Map<string, number>()
+  for (const r of kardexSaldos) {
+    if (!r.conductor_id) continue
+    if (ultimoSaldoPorConductor.has(r.conductor_id)) continue
+    ultimoSaldoPorConductor.set(r.conductor_id, Number(r.saldo_pendiente) || 0)
+  }
+  const saldoResumenPorConductor = new Map<string, number>()
+  for (const r of saldosResumen) {
+    if (!r.conductor_id) continue
+    saldoResumenPorConductor.set(r.conductor_id, Number(r.saldo_actual) || 0)
+  }
+  // Garantia por conductor (si hay mas de una, gana la de mayor monto pagado).
+  const garantiaPorConductor = new Map<string, { pagada: number; total: number }>()
+  for (const gr of garantias) {
+    if (!gr.conductor_id) continue
+    const pagada = Number(gr.monto_realmente_pagado) || Number(gr.monto_pagado) || 0
+    const total = Number(gr.monto_total) || 0
+    const prev = garantiaPorConductor.get(gr.conductor_id)
+    if (!prev || pagada > prev.pagada) garantiaPorConductor.set(gr.conductor_id, { pagada, total })
+  }
 
   // Asignacion actual -> vehiculo + turno por conductor (mismo criterio que antes).
   const vehiculoPorConductor = new Map<string, string>()
@@ -282,6 +341,17 @@ export async function cargarPanelConductores(sedeId?: string | null): Promise<Co
     const montoTotalMultas = montoPendiente + montoEnProceso + montoPagado
     const estadoCodigo = c.conductores_estados?.codigo?.toLowerCase() || null
     const vehiculoAsignado = vehiculoPorConductor.get(c.id) || null
+
+    // Saldo: el del ultimo movimiento del kardex; si no hay kardex, el resumen.
+    const ultimoSaldo = ultimoSaldoPorConductor.get(c.id) ?? saldoResumenPorConductor.get(c.id) ?? 0
+    // Centavos residuales (<$1) se aplanan a 0, igual que en el modal.
+    const saldoLimpio = Math.abs(ultimoSaldo) < 1 ? 0 : ultimoSaldo
+    const saldoPendiente = Math.max(0, -saldoLimpio)
+    const saldoAFavor = Math.max(0, saldoLimpio)
+    const gar = garantiaPorConductor.get(c.id)
+    const garantiaPagada = gar?.pagada || 0
+    const garantiaTotal = gar?.total || 0
+
     return {
       id: c.id,
       nombre: `${c.nombres || ''} ${c.apellidos || ''}`.replace(/\s+/g, ' ').trim(),
@@ -303,6 +373,13 @@ export async function cargarPanelConductores(sedeId?: string | null): Promise<Co
       montoEnProceso,
       montoPagado,
       montoTotalMultas,
+      ultimoSaldo: saldoLimpio,
+      saldoPendiente,
+      saldoAFavor,
+      garantiaPagada,
+      garantiaTotal,
+      tieneGarantia: !!gar,
+      saldoMenosGarantia: saldoPendiente - garantiaPagada,
     }
   })
 

@@ -4,6 +4,7 @@
  */
 
 import { supabase } from '../lib/supabase'
+import { timestampART } from '../utils/fechaArgentina'
 import type {
   BitacoraStats,
   BitacoraQueryOptions,
@@ -25,6 +26,11 @@ export interface BitacoraRegistroTransformado {
   hora_cierre: string | null
   periodo_inicio: string | null
   periodo_fin: string | null
+  // Timestamps reales del turno en hora Argentina (columnas del sync de Geotab).
+  // Son LA MISMA columna con la que se filtra la semana en getBitacora, asi que
+  // usarlas para mostrar la fecha garantiza que display y filtro no se contradigan.
+  fecha_hora_inicio_gmt3: string | null
+  fecha_hora_fin_gmt3: string | null
   duracion_minutos: number | null
   kilometraje: number
   observaciones: string | null
@@ -50,6 +56,8 @@ interface WialonBitacoraRow {
   hora_cierre: string | null
   periodo_inicio: string | null
   periodo_fin: string | null
+  fecha_hora_inicio_gmt3: string | null
+  fecha_hora_fin_gmt3: string | null
   duracion_minutos: number | null
   kilometraje: number
   observaciones: string | null
@@ -122,14 +130,15 @@ class SimpleCache<T> {
 const bitacoraCache = new SimpleCache<BitacoraRegistroTransformado[]>(2) // Cache de 2 min para datos en tiempo real
 const statsCache = new SimpleCache<BitacoraStats>(2)
 
-// Helper para formatear hora (HH:MM)
+// Helper para normalizar la hora que viene de la base.
+// Conserva los segundos si la columna los trae (Postgres `time` -> "09:46:53"):
+// la bitacora muestra la hora exacta del registro, no una version truncada.
+// Las vistas que solo quieren HH:MM ya recortan por su cuenta con substring(0, 5).
 function formatearHora(hora: string | null): string | null {
   if (!hora) return null
-  // Si ya es HH:MM, devolverlo
-  if (/^\d{2}:\d{2}$/.test(hora)) return hora
-  // Si es HH:MM:SS, extraer HH:MM
-  const match = hora.match(/(\d{2}:\d{2})/)
-  return match ? match[1] : null
+  const match = hora.match(/(\d{2}):(\d{2})(?::(\d{2}))?/)
+  if (!match) return null
+  return match[3] ? `${match[1]}:${match[2]}:${match[3]}` : `${match[1]}:${match[2]}`
 }
 
 // =====================================================
@@ -170,8 +179,16 @@ export const wialonBitacoraService = {
     })()
 
     // Builder de query reutilizable para wialon_bitacora y geotab_bitacora.
-    // GEOTAB se filtra por fecha_hora_fin_gmt3 (fecha de FIN en hora AR real): un turno
-    // pertenece a la semana donde TERMINA. USS sigue filtrando por fecha_turno (no tiene gmt3).
+    // GEOTAB se filtra por fecha_hora_inicio_gmt3 (fecha de INICIO en hora AR real):
+    // un turno pertenece a la semana donde EMPIEZA. Asi un nocturno que arranca el
+    // domingo a la noche y termina el lunes a la manana cuenta en la semana del
+    // domingo, no en la siguiente.
+    //
+    // Antes se filtraba por fecha_hora_fin_gmt3 (semana donde TERMINA), lo que dejaba
+    // a este modulo en contra del resto del sistema: Historico (ussHistoricoService),
+    // Control de Exceso KM (useExcesoKmData) y el acumulado semanal de km de esta
+    // misma pantalla ya filtran por la fecha de INICIO. USS filtra por fecha_turno,
+    // que el sync tambien setea con la fecha de inicio del viaje.
     // Tabla de Geotab configurable: por defecto la real, el modulo de prueba
     // pasa geotab_bitacora_vprueba. `esGeotab` decide los filtros (no el nombre,
     // que ahora puede variar).
@@ -183,9 +200,9 @@ export const wialonBitacoraService = {
 
       if (esGeotab) {
         q = q
-          .gte('fecha_hora_fin_gmt3', startDate)
-          .lt('fecha_hora_fin_gmt3', endDateNext)
-          .order('fecha_hora_fin_gmt3', { ascending: false })
+          .gte('fecha_hora_inicio_gmt3', startDate)
+          .lt('fecha_hora_inicio_gmt3', endDateNext)
+          .order('fecha_hora_inicio_gmt3', { ascending: false })
       } else {
         q = q
           .gte('fecha_turno', startDate)
@@ -349,6 +366,8 @@ export const wialonBitacoraService = {
         hora_cierre: formatearHora(row.hora_cierre),
         periodo_inicio: row.periodo_inicio,
         periodo_fin: row.periodo_fin,
+        fecha_hora_inicio_gmt3: row.fecha_hora_inicio_gmt3 ?? null,
+        fecha_hora_fin_gmt3: row.fecha_hora_fin_gmt3 ?? null,
         duracion_minutos: row.duracion_minutos,
         kilometraje: Number(row.kilometraje) || 0,
         observaciones: row.observaciones,
@@ -376,8 +395,10 @@ export const wialonBitacoraService = {
     // Usa el timestamp real, asi los turnos que cruzan medianoche quedan en su
     // posicion cronologica correcta (no descolocados por fecha_turno).
     registros.sort((a, b) => {
-      const ta = a.periodo_inicio ? new Date(a.periodo_inicio).getTime() : 0
-      const tb = b.periodo_inicio ? new Date(b.periodo_inicio).getTime() : 0
+      // timestampART: si periodo_inicio viene sin offset se asume ART, no la zona
+      // del navegador. Con new Date() crudo el orden cambiaba de maquina en maquina.
+      const ta = timestampART(a.periodo_inicio)
+      const tb = timestampART(b.periodo_inicio)
       if (ta !== tb) return tb - ta
       // Desempate por fecha_turno + hora si faltara periodo_inicio
       if (a.fecha_turno !== b.fecha_turno) return a.fecha_turno < b.fecha_turno ? 1 : -1

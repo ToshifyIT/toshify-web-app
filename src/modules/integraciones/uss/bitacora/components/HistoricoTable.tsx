@@ -5,6 +5,7 @@
  */
 
 import { useMemo, useState, useRef, useEffect } from 'react';
+import { formatFechaHoraCortaART } from '../../../../../utils/fechaArgentina';
 import { type ColumnDef } from '@tanstack/react-table';
 import { DataTable } from '../../../../../components/ui/DataTable/DataTable';
 import { ExcelColumnFilter, useExcelFilters } from '../../../../../components/ui/DataTable/ExcelColumnFilter';
@@ -30,12 +31,9 @@ interface HistoricoTableProps {
 // están en GMT-3. No se aplica ninguna conversión de zona horaria: solo se reformatea
 // el string crudo "YYYY-MM-DD HH:MM:SS" (o ISO con "T") a "DD/MM HH:MM:SS".
 function formatTimestamp(ts: string | null): string {
-  if (!ts) return '-';
-  // Tomar la parte de fecha y hora del string sin construir un Date (evita shifts de TZ)
-  const m = ts.match(/^(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2}):(\d{2})/);
-  if (!m) return ts;
-  const [, , mm, dd, hh, mi, ss] = m;
-  return `${dd}/${mm} ${hh}:${mi}:${ss}`;
+  // Delega en el util compartido: sin offset lo lee tal cual (ya es ART) y con
+  // offset lo convierte a ART. En ningun caso depende de la zona del browser.
+  return formatFechaHoraCortaART(ts);
 }
 
 // Formatear km: redondear a 2 decimales y usar coma decimal (es-AR).
@@ -249,7 +247,7 @@ export function HistoricoTable({
       },
       enableSorting: false,
     },
-  ], [conductorPatenteUnicos, conductorFilter, openFilterId]);
+  ], [conductorPatenteUnicos, conductorFilter, openFilterId, setOpenFilterId]);
 
   // Exportar
   const [showExportMenu, setShowExportMenu] = useState(false);
