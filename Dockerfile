@@ -60,8 +60,12 @@ RUN --mount=type=cache,target=/root/.npm \
 # Copy built assets from builder
 COPY --from=builder /app/dist ./dist
 
-# Copy server file
+# Copy server files
+# OJO: la etapa final copia los archivos del servidor uno por uno. Todo modulo
+# local que server.js importe tiene que estar listado aca, o Node falla con
+# ERR_MODULE_NOT_FOUND al arrancar y el contenedor queda sin escuchar (502).
 COPY server.js ./
+COPY server-hellosign.js ./
 
 # Expose port 80
 EXPOSE 80
