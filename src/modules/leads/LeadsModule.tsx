@@ -1,5 +1,6 @@
 // src/modules/leads/LeadsModule.tsx
 import { useState, useEffect, useMemo, useCallback, useRef, useLayoutEffect } from 'react'
+import { inferirSedeDeLead, normalizarTexto } from '../../utils/sedeMatch'
 import { createPortal } from 'react-dom'
 import {
   Eye, Edit2, Trash2, Users, UserPlus, Clock, RefreshCw, MessageCircle,
@@ -703,6 +704,14 @@ export function LeadsModule() {
     } finally {
       if (!retryRef.current) setLoading(false)
     }
+    // NO agregar `calcularEstadoLead` a estas deps aunque lo pida la regla:
+    // es una function declarada dentro del componente, asi que cambia de
+    // identidad en cada render. Al entrar en las deps, loadLeads cambiaria
+    // siempre y el `useEffect(() => { loadLeads() }, [loadLeads])` de abajo
+    // quedaria en un bucle infinito de fetches. Para arreglarlo de verdad hay
+    // que sacar calcularEstadoLead fuera del componente o envolverlo en
+    // useCallback; mientras tanto, se silencia a proposito.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [aplicarFiltroSede, sedeKey])
 
   useEffect(() => { loadLeads() }, [loadLeads])
@@ -822,26 +831,48 @@ export function LeadsModule() {
     try {
       if (sedes.length === 0) return
 
-      // Traer todos los leads no convertidos
-      const { data: allLeads } = await supabase
-        .from('leads')
-        .select('id, sede, sede_id, fuente_de_lead, turno, estado_de_lead, zona')
-        .or('proceso.is.null,proceso.neq.Convertido')
-        .limit(5000)
+      // Traer TODOS los leads no convertidos, paginando con orden estable por id.
+      // Antes era un .limit(5000) sin .order(): Postgres devolvia un subconjunto
+      // arbitrario, asi que los leads que quedaban afuera nunca se corregian
+      // (asi quedo el lead de Jorge Farias con sede_id en NULL, invisible en el
+      // modulo pese a tener "buenos aires" escrito en el campo `sede`).
+      // Se suman direccion/city/region: son los campos donde suele estar la
+      // ubicacion real cuando `sede` trae la respuesta cruda del chatbot.
+      type LeadSync = {
+        id: string
+        sede: string | null
+        sede_id: string | null
+        fuente_de_lead: string | null
+        turno: string | null
+        estado_de_lead: string | null
+        zona: string | null
+        direccion: string | null
+        city: string | null
+        region: string | null
+      }
+      const PAGE_SYNC = 1000
+      const allLeads: LeadSync[] = []
+      for (let from = 0, guard = 0; guard < 50; guard++, from += PAGE_SYNC) {
+        const { data, error } = await supabase
+          .from('leads')
+          .select('id, sede, sede_id, fuente_de_lead, turno, estado_de_lead, zona, direccion, city, region')
+          .or('proceso.is.null,proceso.neq.Convertido')
+          .order('id', { ascending: true })
+          .range(from, from + PAGE_SYNC - 1)
+        if (error) throw error
+        const rows = (data || []) as unknown as LeadSync[]
+        allLeads.push(...rows)
+        if (rows.length < PAGE_SYNC) break
+      }
 
-      if (!allLeads || allLeads.length === 0) return
+      if (allLeads.length === 0) return
 
-      const sedePrincipal = sedes.find(s => s.es_principal) || sedes[0]
-      const sedeMap = new Map(sedes.map(s => [s.id, s.nombre?.toLowerCase() || '']))
-      // Resolución por sustring: cuando un lead llega sin sede o con un texto sucio
-      // ("Esty Bariloche", "BRC", etc.) intentamos inferirla por contenido en sede + zona.
-      const sedeBariloche = sedes.find(s =>
-        /bariloche|^brc$|patagonia/i.test(`${s.nombre || ''} ${s.codigo || ''}`)
-      )
-      const sedeBuenosAires = sedes.find(s =>
-        /buenos\s*aires|^bsas$|^bs\.?\s*as\.?$|^ba$/i.test(`${s.nombre || ''} ${s.codigo || ''}`)
-      ) || sedePrincipal
-      let actualizado = false
+      // La inferencia vive en utils/sedeMatch: normaliza acentos, mira los cinco
+      // campos de ubicacion y usa un diccionario de localidades. Lo que no
+      // reconoce cae en Buenos Aires (default de negocio: ningun lead queda sin
+      // sede, porque sin sede_id no se ve en el modulo).
+      const sedeMap = new Map(sedes.map(s => [s.id, normalizarTexto(s.nombre)]))
+      const actualizaciones: Array<{ id: string; payload: Record<string, unknown> }> = []
 
       for (const lead of allLeads) {
         const updateData: Record<string, unknown> = {}
@@ -850,14 +881,12 @@ export function LeadsModule() {
         // Regla: si el lead no tiene sede_id (o tiene un texto inconsistente),
         // inferimos la sede a partir de `sede` + `zona`. Si hay alguna referencia
         // a Bariloche → Bariloche; en cualquier otro caso → Buenos Aires (default).
-        const textoSede = (lead.sede || '').trim().toLowerCase()
+        const textoSede = normalizarTexto(lead.sede)
         const sedeActualNombre = lead.sede_id ? sedeMap.get(lead.sede_id) : null
-        const necesitaUpdateSede = !lead.sede_id || (textoSede && sedeActualNombre && !sedeActualNombre.includes(textoSede) && !textoSede.includes(sedeActualNombre))
+        const necesitaUpdateSede = !lead.sede_id || (!!textoSede && !!sedeActualNombre && !sedeActualNombre.includes(textoSede) && !textoSede.includes(sedeActualNombre))
 
         if (necesitaUpdateSede) {
-          const haystack = `${lead.sede || ''} ${lead.zona || ''}`.toLowerCase()
-          const refiereBariloche = /bariloche|\bbrc\b|patagonia/.test(haystack)
-          const sedeAsignada = (refiereBariloche ? sedeBariloche : sedeBuenosAires) || sedePrincipal
+          const sedeAsignada = inferirSedeDeLead(lead, sedes)
           if (sedeAsignada && lead.sede_id !== sedeAsignada.id) {
             updateData.sede_id = sedeAsignada.id
             updateData.sede = sedeAsignada.nombre
@@ -908,15 +937,40 @@ export function LeadsModule() {
 
         // Si no hay nada que actualizar, seguir
         if (Object.keys(updateData).length === 0) continue
+        actualizaciones.push({ id: lead.id, payload: updateData })
+      }
 
-        try {
-          await supabase
-            .from('leads')
-            .update(updateData)
-            .eq('id', lead.id)
-          actualizado = true
-        } catch {
-          // silently ignored
+      if (actualizaciones.length === 0) return
+
+      // Updates EN LOTE. Antes era un await por lead dentro del for: con miles de
+      // leads eran miles de round-trips secuenciales, y si el operador recargaba o
+      // navegaba fuera de /leads el barrido quedaba a medias (el effect corre una
+      // sola vez por montaje, no reintenta). Agrupando por payload identico —la
+      // mayoria comparte el mismo {sede_id, sede, fuente_de_lead}— quedan unas
+      // pocas queries.
+      const porPayload = new Map<string, { payload: Record<string, unknown>; ids: string[] }>()
+      for (const { id, payload } of actualizaciones) {
+        const clave = JSON.stringify(payload)
+        const grupo = porPayload.get(clave)
+        if (grupo) grupo.ids.push(id)
+        else porPayload.set(clave, { payload, ids: [id] })
+      }
+
+      let actualizado = false
+      const CHUNK_IDS = 200
+      for (const { payload, ids } of porPayload.values()) {
+        for (let i = 0; i < ids.length; i += CHUNK_IDS) {
+          const lote = ids.slice(i, i + CHUNK_IDS)
+          // IMPORTANTE: el cliente de Supabase NO lanza excepcion ante un error de
+          // base, resuelve con { data, error }. El try/catch anterior no atrapaba
+          // nada y marcaba el update como exitoso aunque hubiera fallado (RLS,
+          // constraint, lo que sea). Ahora se lee el error.
+          const { error } = await supabase.from('leads').update(payload).in('id', lote)
+          if (error) {
+            console.error(`[Leads] No se pudo sincronizar ${lote.length} leads:`, error.message, payload)
+          } else {
+            actualizado = true
+          }
         }
       }
 
@@ -1052,7 +1106,7 @@ export function LeadsModule() {
     }
 
     return result.sort((a, b) => getDateTime(b.created_at) - getDateTime(a.created_at))
-  }, [leads, activeStatCard, nombreFilter, zonaFilter, turnoFilter, disponibilidadFilter, fuenteFilter, estadoFilter])
+  }, [leads, activeStatCard, nombreFilter, zonaFilter, turnoFilter, disponibilidadFilter, fuenteFilter, estadoFilter, leadsEnZona])
 
   // ---------- HANDLERS ----------
   function handleOpenDetails(lead: Lead) {

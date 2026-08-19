@@ -5,6 +5,7 @@
 import { useEffect, useState, useRef, useMemo } from 'react'
 import { X } from 'lucide-react'
 import { supabase } from '../../../../../lib/supabase'
+import { toDateART, formatHoraART, fechaISOART } from '../../../../../utils/fechaArgentina'
 import type { Marcacion } from '../hooks/useUSSHistoricoData'
 
 interface Trip {
@@ -43,26 +44,10 @@ function fmtFechaCorta(iso: string): string {
 }
 /**
  * Los campos *_gmt3 vienen sin offset (ej. "2026-05-09 23:28:48") pero ya están en ART.
- * Agregamos el offset -03:00 explícito para que JS no los interprete como hora local del browser.
+ * toDateART les asume -03:00 para que JS no los interprete como hora local del browser.
  */
-function parseGmt3(s: string | null | undefined): Date | null {
-  if (!s) return null
-  // Si ya tiene zona, devolverlo tal cual; si no, asumir -03:00
-  const hasTz = /(Z|[+-]\d{2}:?\d{2})$/.test(s.trim())
-  const iso = hasTz ? s.replace(' ', 'T') : s.replace(' ', 'T') + '-03:00'
-  const d = new Date(iso)
-  return isNaN(d.getTime()) ? null : d
-}
-function fmtHora(iso: string | null): string {
-  const d = parseGmt3(iso)
-  if (!d) return '-'
-  // Mostrar en ART (UTC-3) para ser consistente con la data ART de USS
-  const ar = new Date(d.getTime() - 3 * 60 * 60 * 1000)
-  const hh = String(ar.getUTCHours()).padStart(2, '0')
-  const mi = String(ar.getUTCMinutes()).padStart(2, '0')
-  const ss = String(ar.getUTCSeconds()).padStart(2, '0')
-  return `${hh}:${mi}:${ss}`
-}
+const parseGmt3 = toDateART
+const fmtHora = formatHoraART
 function fmtDuracion(ini: string, fin: string | null): string {
   const dIni = parseGmt3(ini)
   const dFin = parseGmt3(fin)
@@ -77,13 +62,7 @@ function fmtDuracion(ini: string, fin: string | null): string {
 }
 function dayKey(iso: string): string {
   // Day en ART para agrupar bien (sin desfase por TZ)
-  const d = parseGmt3(iso)
-  if (!d) return iso.slice(0, 10)
-  const ar = new Date(d.getTime() - 3 * 60 * 60 * 1000)
-  const y = ar.getUTCFullYear()
-  const m = String(ar.getUTCMonth() + 1).padStart(2, '0')
-  const day = String(ar.getUTCDate()).padStart(2, '0')
-  return `${y}-${m}-${day}`
+  return fechaISOART(iso) || iso.slice(0, 10)
 }
 function normalizarPatente(p: string | null | undefined): string {
   return (p || '').replace(/[\s-]/g, '').toUpperCase()
@@ -143,7 +122,7 @@ export function PatenteDetalleDrawer({ marcacion, semanaInicio, semanaFin, onClo
     })()
 
     return () => { cancel = true }
-  }, [marcacion, semanaInicio, semanaFin])
+  }, [marcacion, semanaInicio, semanaFin, soloGeotab, tablaGeotabHistorico])
 
   // Determinar qué trips están "dentro" del agrupamiento de la marcación seleccionada.
   // Replica la lógica del sync sync-wialon-bitacora.ts:
@@ -155,8 +134,8 @@ export function PatenteDetalleDrawer({ marcacion, semanaInicio, semanaFin, onClo
   // (después de huérfano-inherit y multi-donate) coincide con el de la marcación.
   const { tripsConMarca, totalKm, totalDuracion, tripsEnAgrupamiento } = useMemo(() => {
     if (!marcacion) return { tripsConMarca: [], totalKm: 0, totalDuracion: '-', tripsEnAgrupamiento: 0 }
-    const ini = marcacion.periodoInicio ? new Date(marcacion.periodoInicio).getTime() : null
-    const fin = marcacion.periodoFin ? new Date(marcacion.periodoFin).getTime() : null
+    const ini = toDateART(marcacion.periodoInicio)?.getTime() ?? null
+    const fin = toDateART(marcacion.periodoFin)?.getTime() ?? null
     const conductorRef = (marcacion.conductor || '').trim().toUpperCase()
     const TOL = 60 * 1000
 

@@ -3,7 +3,10 @@
 // pero devuelve datos crudos para renderizar en tablas densas.
 
 import { supabase } from '../../../lib/supabase'
+import { patronIlikeSinAcentos } from '../../../utils/nombreMatch'
 import { parseImporte } from './conductoresPanelService'
+import { getKardexGarantia, getFacturacionGarantiaConductor, type ControlGarantiaRow } from '../../../services/controlGarantiasService'
+import type { GarantiaConductor } from '../../../types/facturacion.types'
 
 export interface MultaDetalle {
   id: string
@@ -55,15 +58,39 @@ export async function cargarMultasConductor(cond: { id: string; nombres: string 
   const primerApellido = primera(cond.apellidos)
   if (!primerNombre || !primerApellido) return []
 
-  const [{ data: multasRaw }, penRes, perRes] = await Promise.all([
-    supabase
-      .from('multas_historico')
-      .select('id, infraccion, patente, fecha_infraccion, importe, importe_descuento, fecha_vencimiento_descuento, conductor_responsable, created_at')
-      .ilike('conductor_responsable', `%${primerApellido}%`)
-      .is('deleted_at', null)
-      .is('desestimada_at', null)
-      .order('fecha_infraccion', { ascending: false })
-      .limit(500),
+  // Prefiltro SQL tolerante a acentos + paginado. Antes era
+  //     .ilike('conductor_responsable', `%${primerApellido}%`).limit(500)
+  // con primerApellido ya normalizado por norm(): para "CARREÑO" mandaba
+  // '%CARRENO%' contra un 'CARREÑO' guardado con ñ y la query volvia vacia
+  // (ILIKE ignora mayusculas pero no acentos). Ademas el limit cortaba ANTES del
+  // filtro fino, asi que en apellidos frecuentes se perdian multas viejas.
+  // patronIlikeSinAcentos devuelve un SUPERCONJUNTO del patron anterior: ninguna
+  // multa que hoy se muestre puede dejar de mostrarse.
+  const patronSql = patronIlikeSinAcentos(primerApellido)
+  const traerMultas = async (): Promise<Array<any>> => {
+    const PAGE = 1000
+    const out: Array<any> = []
+    for (let from = 0, guard = 0; guard < 50; guard++, from += PAGE) {
+      let q = supabase
+        .from('multas_historico')
+        .select('id, infraccion, patente, fecha_infraccion, importe, importe_descuento, fecha_vencimiento_descuento, conductor_responsable, created_at')
+        .is('deleted_at', null)
+        .is('desestimada_at', null)
+        .not('conductor_responsable', 'is', null)
+      if (patronSql) q = q.ilike('conductor_responsable', `%${patronSql}%`)
+      const { data, error } = await q
+        .order('fecha_infraccion', { ascending: false })
+        .range(from, from + PAGE - 1)
+      if (error) throw error
+      const rows = (data || []) as Array<any>
+      out.push(...rows)
+      if (rows.length < PAGE) break
+    }
+    return out
+  }
+
+  const [multasRaw, penRes, perRes] = await Promise.all([
+    traerMultas(),
     (supabase.from('penalidades' as any) as any)
       .select('id, monto, semana_aplicacion, anio_aplicacion, aplicado, rechazado, fraccionado, incidencias!inner(multa_id)')
       .eq('conductor_id', cond.id)
@@ -518,4 +545,356 @@ export async function cargarHistorialBajasConductor(conductorId: string): Promis
     usuario: r.usuario_nombre ?? null,
     fecha: r.created_at ?? null,
   }))
+}
+
+// ---------------------------------------------------------------------------
+// Historial de saldo (kardex de control_saldos)
+// Misma fuente y mismo shape que el modal "Control de Saldos" de
+// Facturación > Saldos (SaldosAbonosTab.verHistorial), pero en solo lectura.
+// ---------------------------------------------------------------------------
+
+export interface SaldoMovimiento {
+  id: string
+  semana: number | null
+  anio: number | null
+  tipoMovimiento: string
+  montoMovimiento: number
+  referencia: string | null
+  saldoPendiente: number
+  saldoPrevio: number | null      // null en filas viejas (se cae al saldo de la fila siguiente)
+  createdAt: string | null
+  usuario: string | null
+}
+
+// Resumen de la facturación de una semana, para la columna "Facturado" y su detalle.
+export interface FacturacionResumenSemana {
+  saldoAnterior: number
+  subtotalAlquiler: number
+  subtotalGarantia: number
+  subtotalCargos: number
+  subtotalDescuentos: number
+  subtotalNeto: number
+  totalAPagar: number
+}
+
+export interface SaldoKardex {
+  movimientos: SaldoMovimiento[]
+  saldoActual: number                                  // saldos_conductores.saldo_actual (fallback si no hay kardex)
+  cuit: string | null
+  facPorSemana: Map<string, FacturacionResumenSemana>  // clave `${anio}-${semana}`
+  detalleAbonos: Map<string, string>                   // clave `${referencia}_${monto}` -> referencia del abono
+}
+
+export async function cargarKardexSaldoConductor(conductorId: string): Promise<SaldoKardex> {
+  const [movRes, factRes, abonosRes, saldoRes] = await Promise.all([
+    (supabase.from('control_saldos') as any)
+      .select('id, semana, anio, tipo_movimiento, monto_movimiento, referencia, saldo_pendiente, saldo_previo, created_at, created_by_name')
+      .eq('conductor_id', conductorId)
+      .order('anio', { ascending: false })
+      .order('semana', { ascending: false })
+      .order('created_at', { ascending: false }),
+    (supabase.from('facturacion_conductores') as any)
+      .select('id, subtotal_alquiler, subtotal_garantia, subtotal_cargos, subtotal_descuentos, subtotal_neto, saldo_anterior, total_a_pagar, periodo:periodos_facturacion(anio, semana)')
+      .eq('conductor_id', conductorId),
+    (supabase.from('abonos_conductores' as any) as any)
+      .select('referencia, concepto, monto, fecha_abono')
+      .eq('conductor_id', conductorId)
+      .order('fecha_abono', { ascending: false }),
+    (supabase.from('saldos_conductores' as any) as any)
+      .select('saldo_actual, conductor_cuit')
+      .eq('conductor_id', conductorId)
+      .maybeSingle(),
+  ])
+
+  const movimientos: SaldoMovimiento[] = ((movRes.data || []) as Array<any>).map((r) => ({
+    id: String(r.id),
+    semana: r.semana ?? null,
+    anio: r.anio ?? null,
+    tipoMovimiento: r.tipo_movimiento || 'regularizado',
+    montoMovimiento: Number(r.monto_movimiento) || 0,
+    referencia: r.referencia ?? null,
+    saldoPendiente: Number(r.saldo_pendiente) || 0,
+    saldoPrevio: r.saldo_previo === null || r.saldo_previo === undefined ? null : Number(r.saldo_previo) || 0,
+    createdAt: r.created_at ?? null,
+    usuario: r.created_by_name ?? null,
+  }))
+
+  const facPorSemana = new Map<string, FacturacionResumenSemana>()
+  for (const f of (factRes.data || []) as Array<any>) {
+    const a = f.periodo?.anio
+    const s = f.periodo?.semana
+    if (!a || !s) continue
+    facPorSemana.set(`${a}-${s}`, {
+      saldoAnterior: Number(f.saldo_anterior) || 0,
+      subtotalAlquiler: Number(f.subtotal_alquiler) || 0,
+      subtotalGarantia: Number(f.subtotal_garantia) || 0,
+      subtotalCargos: Number(f.subtotal_cargos) || 0,
+      subtotalDescuentos: Number(f.subtotal_descuentos) || 0,
+      subtotalNeto: Number(f.subtotal_neto) || 0,
+      totalAPagar: Number(f.total_a_pagar) || 0,
+    })
+  }
+
+  const detalleAbonos = new Map<string, string>()
+  for (const ab of (abonosRes.data || []) as Array<any>) {
+    if (ab.referencia && ab.concepto) detalleAbonos.set(`${ab.concepto}_${ab.monto}`, ab.referencia)
+  }
+
+  return {
+    movimientos,
+    saldoActual: Number(saldoRes?.data?.saldo_actual) || 0,
+    cuit: saldoRes?.data?.conductor_cuit ?? null,
+    facPorSemana,
+    detalleAbonos,
+  }
+}
+
+// Saldo vigente del conductor = saldo del ÚLTIMO movimiento del kardex. Si no hay
+// kardex, cae al saldo_actual de saldos_conductores. Signo tal cual la BD:
+// positivo = a favor del conductor, negativo = deuda. Los centavos residuales
+// (<$1) se aplanan a 0 para no mostrar saldos tipo $0,03.
+export function saldoActualKardex(k: SaldoKardex | null): number {
+  if (!k) return 0
+  const v = k.movimientos.length > 0 ? k.movimientos[0].saldoPendiente : k.saldoActual
+  return Math.abs(v) < 1 ? 0 : v
+}
+
+// ---------------------------------------------------------------------------
+// Historial de garantía (kardex de control_garantias)
+// Misma fuente que el modal "Estado de Garantía" de Facturación > Garantías
+// (GarantiasTab.abrirKardex), pero en solo lectura.
+// ---------------------------------------------------------------------------
+
+export interface SemanaFacturacionGarantia {
+  semana: number
+  anio: number
+  subtotalGarantia: number
+  fecha: string
+  estado: string
+  fechaCierre: string | null
+}
+
+export interface GarantiaKardex {
+  garantia: GarantiaConductor | null          // null = el conductor no tiene garantía cargada
+  movimientos: ControlGarantiaRow[]
+  semanasFacturacion: SemanaFacturacionGarantia[]
+}
+
+export async function cargarGarantiaConductor(conductorId: string, dni: string | null): Promise<GarantiaKardex> {
+  const { data } = await (supabase.from('garantias_conductores' as any) as any)
+    .select('*')
+    .eq('conductor_id', conductorId)
+    .order('created_at', { ascending: false })
+    .limit(1)
+
+  const garantia = (data && data.length > 0 ? data[0] : null) as GarantiaConductor | null
+  if (!garantia) return { garantia: null, movimientos: [], semanasFacturacion: [] }
+
+  const [movimientos, semanasFacturacion] = await Promise.all([
+    getKardexGarantia(garantia.id).catch(() => [] as ControlGarantiaRow[]),
+    getFacturacionGarantiaConductor(garantia.conductor_dni || dni || '').catch(() => [] as SemanaFacturacionGarantia[]),
+  ])
+
+  return { garantia, movimientos, semanasFacturacion }
+}
+
+// Una fila por semana del historial de garantía: combina cuota_facturada +
+// pago_aplicado de esa semana (mismo criterio que GarantiasTab).
+export interface FilaGarantiaSemana {
+  key: string
+  anio: number
+  semana: number
+  fecha: string
+  cuotaRef: number
+  montoCuota: number             // la cuota P003 cobrada esa semana
+  aplicado: number               // cuánto del pago Cabify se aplicó realmente
+  estadoFila: 'cubierta' | 'parcial' | 'no-cubierta' | 'otro'
+  tipoMovimiento: string
+  referencia: string
+  esExcedenteReal: boolean       // el acumulado cronológico supera monto_total
+}
+
+export type EstadoGarantia = 'pendiente' | 'en_curso' | 'completada' | 'cancelada' | 'suspendida' | 'en_devolucion'
+
+export interface GarantiaResumen {
+  montoTotal: number
+  montoCuotaFijo: number
+  totalRealPagado: number
+  excedente: number
+  tieneExcedente: boolean
+  deudaReal: number
+  tieneDeuda: boolean
+  filas: FilaGarantiaSemana[]                 // de la semana más reciente a la más antigua
+  cuotasPagadas: number
+  cuotasNecesarias: number
+  cuotasRestantes: number
+  montoRestante: number
+  ultimaSemanaPago: { semana: number; anio: number } | null   // última cuota facturada (cerrada o no)
+  ultimaCuotaNumero: number | null
+  estado: EstadoGarantia
+  semanaCerrada: (anio: number, semana: number) => boolean
+  fechaCierreSemana: (anio: number, semana: number) => string | null
+}
+
+// Cálculo derivado del kardex de garantía. Es PURO (no toca la BD) para que lo
+// compartan los KPIs del modal y la pestaña "Historial de garantía" con una sola
+// carga. Replica la lógica del modal "Estado de Garantía" de Facturación.
+export function calcularResumenGarantia(k: GarantiaKardex, conductorActivo: boolean): GarantiaResumen | null {
+  const g = k.garantia
+  if (!g) return null
+
+  const facturado = Number(g.monto_realmente_pagado || g.monto_pagado) || 0
+  const montoTotal = Number(g.monto_total) || 1
+  const montoTotalGarantia = Number(g.monto_total) || 1000000
+  const montoCuotaFijo = Number(g.monto_cuota_semanal) || 50000
+
+  // Estado de cierre por semana (fuente de verdad: periodos_facturacion). Sin info
+  // de período (semana histórica sin facturación) se considera cerrada y cuenta.
+  const periodoInfo = new Map<string, { estado: string; fechaCierre: string | null }>()
+  for (const sf of k.semanasFacturacion) periodoInfo.set(`${sf.anio}-${sf.semana}`, { estado: sf.estado, fechaCierre: sf.fechaCierre })
+  const semanaCerrada = (anio: number, semana: number) => {
+    const info = periodoInfo.get(`${anio}-${semana}`)
+    return !info || info.estado === 'cerrado'
+  }
+  const fechaCierreSemana = (anio: number, semana: number) => periodoInfo.get(`${anio}-${semana}`)?.fechaCierre || null
+
+  // Deuda real = suma de delta_deuda (solo se llena cuando un pago Cabify no cubrió
+  // la cuota completa; una cuota facturada sin pago aún no es deuda).
+  const deudaReal = Math.max(0, k.movimientos.reduce((s, r) => s + (Number(r.delta_deuda) || 0), 0))
+
+  // Consolidar el kardex: 1 fila por semana.
+  const mapa = new Map<string, FilaGarantiaSemana>()
+  for (const r of k.movimientos) {
+    const key = `${r.anio}-${r.semana}`
+    const existente = mapa.get(key)
+    const f: FilaGarantiaSemana = existente ?? {
+      key,
+      anio: Number(r.anio) || 0,
+      semana: Number(r.semana) || 0,
+      fecha: r.created_at || '',
+      cuotaRef: Number(r.cuotas_facturadas) || 0,
+      montoCuota: 0,
+      aplicado: 0,
+      estadoFila: 'no-cubierta',
+      tipoMovimiento: r.tipo_movimiento,
+      referencia: r.referencia || '',
+      esExcedenteReal: false,
+    }
+    if (!existente) mapa.set(key, f)
+    if (r.created_at && r.created_at > f.fecha) f.fecha = r.created_at
+    if (r.tipo_movimiento === 'cuota_facturada') {
+      f.montoCuota += Number(r.monto_facturado) || 0
+      if (Number(r.cuotas_facturadas) > f.cuotaRef) f.cuotaRef = Number(r.cuotas_facturadas)
+    }
+    if (r.tipo_movimiento === 'pago_aplicado') {
+      f.aplicado += Number(r.monto_pagado_real) || 0
+      if (r.referencia) f.referencia = r.referencia
+    }
+    if (r.tipo_movimiento === 'ajuste_manual' || r.tipo_movimiento === 'eliminacion') f.estadoFila = 'otro'
+  }
+
+  // Inyectar semanas de facturacion_conductores que no están en el kardex, en orden
+  // cronológico real, para que el acumulado no se infle con entradas posteriores.
+  const semanasOrdenadas = [...k.semanasFacturacion].sort((a, b) => (a.anio !== b.anio ? a.anio - b.anio : a.semana - b.semana))
+  const kardexOrdenado = [...mapa.values()].sort((a, b) => (a.anio !== b.anio ? a.anio - b.anio : a.semana - b.semana))
+  let acumuladoExtra = 0
+  let idx = 0
+  for (const sf of semanasOrdenadas) {
+    const key = `${sf.anio}-${sf.semana}`
+    while (idx < kardexOrdenado.length) {
+      const kf = kardexOrdenado[idx]
+      if (kf.anio < sf.anio || (kf.anio === sf.anio && kf.semana < sf.semana)) { acumuladoExtra += kf.montoCuota || 0; idx++ }
+      else break
+    }
+    if (!mapa.has(key)) {
+      const esExcedente = acumuladoExtra >= montoTotalGarantia
+      mapa.set(key, {
+        key,
+        anio: sf.anio,
+        semana: sf.semana,
+        fecha: sf.fecha || '',
+        cuotaRef: 0,
+        montoCuota: sf.subtotalGarantia,
+        aplicado: 0,
+        estadoFila: 'no-cubierta',
+        tipoMovimiento: esExcedente ? 'facturacion' : 'cuota_facturada',
+        referencia: esExcedente ? 'Cobro via facturación' : 'Cuota sin kardex',
+        esExcedenteReal: false,
+      })
+      acumuladoExtra += sf.subtotalGarantia
+    }
+  }
+
+  // Estado de cada fila contra el valor fijo de la cuota.
+  for (const f of mapa.values()) {
+    if (f.estadoFila === 'otro') continue
+    const objetivo = f.montoCuota > 0 ? f.montoCuota : montoCuotaFijo
+    f.montoCuota = objetivo
+    if (f.aplicado >= objetivo - 0.01) f.estadoFila = 'cubierta'
+    else if (f.aplicado > 0.01) f.estadoFila = 'parcial'
+    else f.estadoFila = 'no-cubierta'
+  }
+
+  // Nº de cuota secuencial en orden cronológico (se ignora cuotas_facturadas de la BD
+  // para evitar saltos por filas stale o contadores reseteados).
+  const cronologicas = [...mapa.values()].sort((a, b) => (a.anio !== b.anio ? a.anio - b.anio : a.semana - b.semana))
+  let contador = 0
+  for (const f of cronologicas) {
+    if (f.tipoMovimiento === 'cuota_facturada') { contador++; f.cuotaRef = contador }
+  }
+  const cuotasNecesarias = contador
+
+  // Marcar filas que superan el objetivo en orden cronológico.
+  let acum = 0
+  for (const f of cronologicas) { acum += f.montoCuota || 0; f.esExcedenteReal = acum > montoTotal }
+
+  const filas = [...mapa.values()].sort((a, b) => (a.anio !== b.anio ? b.anio - a.anio : b.semana - a.semana))
+
+  // Total real pagado: solo semanas cerradas. La semana en curso se muestra pero no suma.
+  const suma = filas.reduce((s, f) => (semanaCerrada(f.anio, f.semana) ? s + (f.montoCuota || 0) : s), 0)
+  const totalRealPagado = suma > 0 ? suma : facturado
+  const excedente = totalRealPagado - montoTotal
+
+  const cuotasPagadas = filas.filter(f => f.tipoMovimiento === 'cuota_facturada' && semanaCerrada(f.anio, f.semana)).length
+  const cuotasRestantes = Math.max(0, cuotasNecesarias - cuotasPagadas)
+  const montoRestante = Math.max(0, montoTotal - totalRealPagado)
+
+  // Última cuota facturada: la semana más reciente con cobro de garantía, esté
+  // cerrada o no (filas ya viene de la más reciente a la más antigua).
+  const ultimaCuota = filas.find(f => f.tipoMovimiento === 'cuota_facturada') || null
+
+  // Estado: el guardado en BD, salvo que el conductor esté de baja con monto pagado
+  // (ahí es devolución, igual que la vista de Garantías, que tampoco lo persiste).
+  const necesitaDevolucion = !conductorActivo && totalRealPagado > 0 && g.estado !== 'cancelada'
+  const estado = (necesitaDevolucion ? 'en_devolucion' : g.estado) as EstadoGarantia
+
+  return {
+    montoTotal,
+    montoCuotaFijo,
+    totalRealPagado,
+    excedente,
+    tieneExcedente: excedente > 1,
+    deudaReal,
+    tieneDeuda: deudaReal > 1,
+    filas,
+    cuotasPagadas,
+    cuotasNecesarias,
+    cuotasRestantes,
+    montoRestante,
+    ultimaSemanaPago: ultimaCuota ? { semana: ultimaCuota.semana, anio: ultimaCuota.anio } : null,
+    ultimaCuotaNumero: ultimaCuota ? ultimaCuota.cuotaRef : null,
+    estado,
+    semanaCerrada,
+    fechaCierreSemana,
+  }
+}
+
+// Etiqueta y color del estado de la garantía (mismos que el módulo de Facturación).
+export const ESTADO_GARANTIA_UI: Record<string, { label: string; color: string; bg: string }> = {
+  completada: { label: 'Completada', color: '#16a34a', bg: '#dcfce7' },
+  en_curso: { label: 'En curso', color: '#b45309', bg: '#fef3c7' },
+  en_devolucion: { label: 'En devolución', color: '#2563eb', bg: '#dbeafe' },
+  pendiente: { label: 'Pendiente', color: '#6b7280', bg: '#f3f4f6' },
+  cancelada: { label: 'Cancelada', color: '#dc2626', bg: '#fee2e2' },
+  suspendida: { label: 'Suspendida', color: '#6b7280', bg: '#f3f4f6' },
 }

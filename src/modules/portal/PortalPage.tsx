@@ -1,6 +1,7 @@
 // src/modules/portal/PortalPage.tsx
 // Portal público para conductores - Mi Espacio
 import { useState, useEffect, useCallback, useMemo } from 'react'
+import { patronIlikeSinAcentos } from '../../utils/nombreMatch'
 import { jsPDF } from 'jspdf'
 import { format, parseISO, differenceInCalendarDays, subDays } from 'date-fns'
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts'
@@ -1138,6 +1139,23 @@ export function PortalPage({ embeddedConductorId }: { embeddedConductorId?: stri
         [...apellidosRequeridos].sort((x, y) => y.length - x.length)[0]
         || nombreTokens[0] || ''
 
+      // PREFILTRO SQL TOLERANTE A ACENTOS.
+      // El token sale de tokenizar(), que ya quitó tildes y ñ. Pero en la base el
+      // nombre SÍ las tiene, e ILIKE ignora mayúsculas pero NO acentos: para
+      // "CARREÑO" se mandaba '%CARRENO%' contra un 'RAMON ALBERTO CARREÑO' guardado
+      // con ñ, la query volvía VACÍA y el filtro fino de abajo ni se ejecutaba. Le
+      // pasaba a todo apellido con ñ o tilde (PEÑA, MUÑOZ, NÚÑEZ, GARCÍA...).
+      //
+      // Solución: cada caracter que puede llevar acento (vocales y N) se reemplaza
+      // por '_', el comodín de un caracter de LIKE. El patrón matchea la forma con
+      // acento y sin ella, y como '_' también matchea el caracter original el
+      // resultado es siempre un SUPERCONJUNTO del prefiltro anterior: ninguna multa
+      // que hoy se muestre puede dejar de mostrarse.
+      //
+      // El prefiltro sigue siendo solo una optimización de transferencia. El único
+      // que decide qué multa es de quién es coincideConductor().
+      const patronSql = patronIlikeSinAcentos(prefiltro)
+
       // Coincide solo si el responsable contiene, como palabra completa, TODOS los
       // apellidos requeridos y el primer nombre del conductor.
       const coincideConductor = (responsable: string): boolean => {
@@ -1148,16 +1166,35 @@ export function PortalPage({ embeddedConductorId }: { embeddedConductorId?: stri
         return apellidoOk && nombreOk
       }
 
-      supabase
-        .from('multas_historico')
-        .select('id, infraccion, patente, fecha_infraccion, importe, lugar, lugar_detalle, detalle, drive_url, importe_descuento, fecha_vencimiento_descuento, conductor_responsable')
-        .ilike('conductor_responsable', `%${prefiltro}%`)
-        .is('deleted_at', null)
-        .is('desestimada_at', null)
-        .order('fecha_infraccion', { ascending: false })
-        .limit(200)
-        .then(({ data }) => {
-          const filtradas = ((data || []) as Array<PortalMulta & { conductor_responsable?: string }>)
+      // Se trae paginando en vez de con .limit(200). El limit cortaba ANTES del
+      // filtro fino, ordenando por fecha desc: para un apellido frecuente traía
+      // multas de todos los homónimos, cortaba en 200 y recién ahí filtraba por
+      // conductor, así que las multas viejas se perdían en silencio.
+      const traerMultas = async (): Promise<Array<PortalMulta & { conductor_responsable?: string }>> => {
+        const PAGE = 1000
+        const out: Array<PortalMulta & { conductor_responsable?: string }> = []
+        for (let from = 0, guard = 0; guard < 50; guard++, from += PAGE) {
+          let q = supabase
+            .from('multas_historico')
+            .select('id, infraccion, patente, fecha_infraccion, importe, lugar, lugar_detalle, detalle, drive_url, importe_descuento, fecha_vencimiento_descuento, conductor_responsable')
+            .is('deleted_at', null)
+            .is('desestimada_at', null)
+            .not('conductor_responsable', 'is', null)
+          if (patronSql) q = q.ilike('conductor_responsable', `%${patronSql}%`)
+          const { data, error } = await q
+            .order('fecha_infraccion', { ascending: false })
+            .range(from, from + PAGE - 1)
+          if (error) throw error
+          const rows = (data || []) as Array<PortalMulta & { conductor_responsable?: string }>
+          out.push(...rows)
+          if (rows.length < PAGE) break
+        }
+        return out
+      }
+
+      traerMultas()
+        .then((rows) => {
+          const filtradas = rows
             .filter(m => {
               const crRaw = m.conductor_responsable || ''
               // Responsable COMPARTIDO (varios conductores separados por coma): no se
@@ -1173,6 +1210,7 @@ export function PortalPage({ embeddedConductorId }: { embeddedConductorId?: stri
             }))
           setMultas(filtradas)
         })
+        .catch(() => { /* sin conexión: la sección queda vacía y se reintenta al recargar */ })
 
       // ===== Estado de facturación de cada multa (cruce por conductor.id) =====
       // Clasificación en 3 columnas:
