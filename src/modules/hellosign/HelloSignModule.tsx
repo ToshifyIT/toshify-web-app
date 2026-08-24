@@ -15,6 +15,8 @@ import {
   Eye,
   FileSignature,
   FileSearch,
+  FileUp,
+  Send as SendIcon,
   FileText,
   Lock,
   PenLine,
@@ -42,6 +44,8 @@ import { UsarPlantillaModal } from './components/UsarPlantillaModal';
 import { TemplateVisorModal } from './components/TemplateVisorModal';
 import { CrearPlantillaModal } from './components/CrearPlantillaModal';
 import { ReemplazarDocumentoModal } from './components/ReemplazarDocumentoModal';
+import { EnviarConDocumentoModal } from './components/EnviarConDocumentoModal';
+import { DocumentosTab } from './components/DocumentosTab';
 import './HelloSignModule.css';
 
 /** Alta de plantillas directo en la web de Dropbox Sign. */
@@ -49,6 +53,8 @@ const URL_CREAR_EN_DROPBOX_SIGN = 'https://app.hellosign.com/home/createTemplate
 
 /** Días para considerar una plantilla "actualizada recientemente". */
 const DIAS_RECIENTE = 30;
+
+type Pestana = 'plantillas' | 'documentos';
 
 type StatCard = 'editables' | 'compartidas' | 'bloqueadas' | 'recientes';
 
@@ -60,6 +66,7 @@ const STAT_LABELS: Record<StatCard, string> = {
 };
 
 export function HelloSignModule() {
+  const [pestana, setPestana] = useState<Pestana>('plantillas');
   const [templates, setTemplates] = useState<HelloSignTemplate[]>([]);
   const [status, setStatus] = useState<HelloSignStatus | null>(null);
   const [loading, setLoading] = useState(true);
@@ -73,6 +80,8 @@ export function HelloSignModule() {
   const [reemplazarTemplate, setReemplazarTemplate] = useState<HelloSignTemplate | null>(
     null,
   );
+  const [enviarConDocTemplate, setEnviarConDocTemplate] =
+    useState<HelloSignTemplate | null>(null);
   const [menuCrearAbierto, setMenuCrearAbierto] = useState(false);
 
   const menuCrearRef = useRef<HTMLDivElement | null>(null);
@@ -249,6 +258,13 @@ export function HelloSignModule() {
                 variant: 'info',
               },
               {
+                icon: <FileUp size={15} />,
+                label: 'Enviar con otro documento',
+                onClick: () => setEnviarConDocTemplate(row.original),
+                disabled: (row.original.signer_roles ?? []).length === 0,
+                variant: 'info',
+              },
+              {
                 icon: <Replace size={15} />,
                 label: 'Reemplazar documento',
                 onClick: () => setReemplazarTemplate(row.original),
@@ -306,6 +322,32 @@ export function HelloSignModule() {
         )}
       </div>
 
+      {/* Pestañas */}
+      <div className="hs-tabs" role="tablist">
+        <button
+          role="tab"
+          aria-selected={pestana === 'plantillas'}
+          className={`hs-tab ${pestana === 'plantillas' ? 'hs-tab-activa' : ''}`}
+          onClick={() => setPestana('plantillas')}
+        >
+          <FileSignature size={15} />
+          Plantillas
+        </button>
+        <button
+          role="tab"
+          aria-selected={pestana === 'documentos'}
+          className={`hs-tab ${pestana === 'documentos' ? 'hs-tab-activa' : ''}`}
+          onClick={() => setPestana('documentos')}
+        >
+          <SendIcon size={15} />
+          Documentos enviados
+        </button>
+      </div>
+
+      {pestana === 'documentos' && <DocumentosTab />}
+
+      {pestana === 'plantillas' && (
+      <>
       {error && (
         <div className="hs-alert hs-alert-error">
           <AlertTriangle size={15} />
@@ -443,6 +485,9 @@ export function HelloSignModule() {
         }
       />
 
+      </>
+      )}
+
       {detalleTemplate && (
         <TemplateDetalleModal
           template={detalleTemplate}
@@ -473,6 +518,14 @@ export function HelloSignModule() {
           clientId={status?.clientId ?? null}
           onClose={() => setCrearAbierto(false)}
           onCreada={() => void cargar()}
+        />
+      )}
+
+      {enviarConDocTemplate && (
+        <EnviarConDocumentoModal
+          template={enviarConDocTemplate}
+          onClose={() => setEnviarConDocTemplate(null)}
+          onEnviado={() => void cargar()}
         />
       )}
 

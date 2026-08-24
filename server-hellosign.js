@@ -276,6 +276,159 @@ hellosignRouter.get('/templates/:templateId', async (req, res) => {
   }
 })
 
+/* -------------------------------------------------------------------------- */
+/* Documentos enviados (solicitudes de firma)                                 */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * GET /api/hellosign/signature-requests?page=&page_size=&query=
+ * Lista las solicitudes de firma enviadas.
+ * OJO: no incluye borradores sin enviar, esos solo existen en la web.
+ */
+hellosignRouter.get('/signature-requests', async (req, res) => {
+  try {
+    const params = new URLSearchParams()
+
+    const page = Number.parseInt(req.query.page, 10)
+    params.set('page', Number.isFinite(page) && page > 0 ? String(page) : '1')
+
+    const pageSize = Number.parseInt(req.query.page_size, 10)
+    params.set(
+      'page_size',
+      Number.isFinite(pageSize) ? String(Math.min(Math.max(pageSize, 1), 100)) : '100',
+    )
+
+    if (req.query.query) params.set('query', String(req.query.query))
+    if (req.query.account_id) params.set('account_id', String(req.query.account_id))
+
+    const data = await hellosignRequest(`/signature_request/list?${params.toString()}`)
+    res.json({
+      signature_requests: data?.signature_requests ?? [],
+      list_info: data?.list_info ?? { num_pages: 1, num_results: 0, page: 1, page_size: 100 },
+    })
+  } catch (err) {
+    sendError(res, err, 'GET /signature-requests')
+  }
+})
+
+/** GET /api/hellosign/signature-requests/:id - detalle con estado por firmante. */
+hellosignRouter.get('/signature-requests/:requestId', async (req, res) => {
+  try {
+    const { requestId } = req.params
+    if (!/^[A-Za-z0-9]+$/.test(requestId)) {
+      return res.status(400).json({ error: 'signature_request_id invalido' })
+    }
+
+    const data = await hellosignRequest(`/signature_request/${requestId}`)
+    res.json({ signature_request: data?.signature_request ?? null })
+  } catch (err) {
+    sendError(res, err, 'GET /signature-requests/:requestId')
+  }
+})
+
+/**
+ * GET /api/hellosign/signature-requests/:id/file?file_type=pdf|zip
+ * Documento con las firmas aplicadas, como binario.
+ */
+hellosignRouter.get('/signature-requests/:requestId/file', async (req, res) => {
+  try {
+    const { requestId } = req.params
+    if (!/^[A-Za-z0-9]+$/.test(requestId)) {
+      return res.status(400).json({ error: 'signature_request_id invalido' })
+    }
+
+    const fileType = req.query.file_type === 'zip' ? 'zip' : 'pdf'
+
+    const response = await fetch(
+      `${HELLOSIGN_API_BASE}/signature_request/files/${requestId}?file_type=${fileType}`,
+      { headers: { Authorization: getAuthHeader() } },
+    )
+
+    if (!response.ok) {
+      let mensaje = `Dropbox Sign respondio ${response.status}`
+      try {
+        const texto = await response.text()
+        mensaje = JSON.parse(texto)?.error?.error_msg || mensaje
+      } catch {
+        // Cuerpo binario o vacio: nos quedamos con el mensaje generico.
+      }
+      if (response.status === 409) {
+        mensaje =
+          'Dropbox Sign todavia esta preparando el documento. Proba de nuevo en unos segundos.'
+      }
+      console.error('[hellosign] GET /signature-requests/:requestId/file:', mensaje)
+      return res.status(response.status).json({ error: mensaje })
+    }
+
+    const buffer = Buffer.from(await response.arrayBuffer())
+
+    // Se embebe en un iframe de la propia app: se relajan los headers globales
+    // de server.js SOLO para esta respuesta (mismo origen).
+    res.removeHeader('X-Frame-Options')
+    res.setHeader('Content-Security-Policy', "frame-ancestors 'self'")
+
+    res.setHeader('Content-Type', fileType === 'zip' ? 'application/zip' : 'application/pdf')
+    res.setHeader('Content-Disposition', `inline; filename="documento-${requestId}.${fileType}"`)
+    res.setHeader('Cache-Control', 'private, max-age=300')
+    res.send(buffer)
+  } catch (err) {
+    sendError(res, err, 'GET /signature-requests/:requestId/file')
+  }
+})
+
+/**
+ * POST /api/hellosign/signature-requests/:id/remind
+ * Body: { email_address, name? } - reenvia el mail de firma a ESE firmante.
+ * La API exige el email: no existe un "recordar a todos".
+ */
+hellosignRouter.post('/signature-requests/:requestId/remind', async (req, res) => {
+  try {
+    const { requestId } = req.params
+    if (!/^[A-Za-z0-9]+$/.test(requestId)) {
+      return res.status(400).json({ error: 'signature_request_id invalido' })
+    }
+
+    const { email_address: emailAddress, name } = req.body ?? {}
+    if (!emailAddress) {
+      return res.status(400).json({ error: 'Falta el email del firmante a recordar.' })
+    }
+
+    const payload = { email_address: String(emailAddress).trim() }
+    if (name) payload.name = String(name).trim()
+
+    const data = await hellosignRequest(`/signature_request/remind/${requestId}`, {
+      method: 'POST',
+      body: payload,
+    })
+
+    res.json({ signature_request: data?.signature_request ?? null })
+  } catch (err) {
+    sendError(res, err, 'POST /signature-requests/:requestId/remind')
+  }
+})
+
+/**
+ * POST /api/hellosign/signature-requests/:id/cancel
+ * Cancela una solicitud pendiente. Es irreversible.
+ */
+hellosignRouter.post('/signature-requests/:requestId/cancel', async (req, res) => {
+  try {
+    const { requestId } = req.params
+    if (!/^[A-Za-z0-9]+$/.test(requestId)) {
+      return res.status(400).json({ error: 'signature_request_id invalido' })
+    }
+
+    await hellosignRequest(`/signature_request/cancel/${requestId}`, { method: 'POST' })
+    res.json({ ok: true })
+  } catch (err) {
+    sendError(res, err, 'POST /signature-requests/:requestId/cancel')
+  }
+})
+
+/* -------------------------------------------------------------------------- */
+/* Plantillas                                                                 */
+/* -------------------------------------------------------------------------- */
+
 /**
  * POST /api/hellosign/templates/embedded-draft
  * Crea un borrador de plantilla y devuelve el edit_url del editor embebido.

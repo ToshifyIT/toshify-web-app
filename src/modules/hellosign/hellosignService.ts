@@ -7,6 +7,8 @@
 
 import type {
   EmbeddedDraftResponse,
+  SignatureRequest,
+  SignatureRequestListResponse,
   UpdateFilesResponse,
   HelloSignStatus,
   HelloSignTemplate,
@@ -128,6 +130,72 @@ class HelloSignService {
       body: form,
     });
   }
+
+  /* ---------------------------- Documentos enviados ---------------------------- */
+
+  /** Una página del listado de solicitudes de firma. */
+  async listSignatureRequests(page = 1, pageSize = 100): Promise<SignatureRequestListResponse> {
+    const params = new URLSearchParams({
+      page: String(page),
+      page_size: String(pageSize),
+    });
+    return request<SignatureRequestListResponse>(`/signature-requests?${params.toString()}`);
+  }
+
+  /** Todas las solicitudes, recorriendo la paginación de la API. */
+  async listAllSignatureRequests(): Promise<SignatureRequest[]> {
+    const first = await this.listSignatureRequests(1, 100);
+    const documentos = [...first.signature_requests];
+
+    const numPages = Math.min(first.list_info?.num_pages ?? 1, MAX_PAGES);
+    for (let page = 2; page <= numPages; page += 1) {
+      const next = await this.listSignatureRequests(page, 100);
+      documentos.push(...next.signature_requests);
+    }
+
+    return documentos;
+  }
+
+  /** Detalle de una solicitud, con el estado de cada firmante. */
+  async getSignatureRequest(requestId: string): Promise<SignatureRequest | null> {
+    const data = await request<{ signature_request: SignatureRequest | null }>(
+      `/signature-requests/${requestId}`,
+    );
+    return data.signature_request;
+  }
+
+  /** URL del PDF firmado, servido por nuestro backend. */
+  getSignatureRequestFileUrl(requestId: string, fileType: 'pdf' | 'zip' = 'pdf'): string {
+    return `${API_BASE}/signature-requests/${requestId}/file?file_type=${fileType}`;
+  }
+
+  /**
+   * Reenvía el mail de firma a UN firmante. La API exige el email: no existe
+   * un "recordar a todos", hay que llamar una vez por persona.
+   */
+  async remindSignatureRequest(
+    requestId: string,
+    emailAddress: string,
+    name?: string,
+  ): Promise<void> {
+    await request<{ signature_request: SignatureRequest | null }>(
+      `/signature-requests/${requestId}/remind`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email_address: emailAddress, name }),
+      },
+    );
+  }
+
+  /** Cancela una solicitud pendiente. Es irreversible. */
+  async cancelSignatureRequest(requestId: string): Promise<void> {
+    await request<{ ok: boolean }>(`/signature-requests/${requestId}/cancel`, {
+      method: 'POST',
+    });
+  }
+
+  /* --------------------------------- Plantillas -------------------------------- */
 
   /** Elimina una plantilla. Es definitivo: Dropbox Sign no tiene papelera. */
   async deleteTemplate(templateId: string): Promise<void> {
