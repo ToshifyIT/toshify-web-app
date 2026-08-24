@@ -7,6 +7,7 @@
 import { useState, useRef, useEffect, type ReactElement } from 'react'
 import { createPortal } from 'react-dom'
 import { MoreVertical } from 'lucide-react'
+import { AdaptiveTooltip } from './AdaptiveTooltip'
 
 interface ActionButton {
   icon: ReactElement
@@ -21,6 +22,9 @@ interface ActionsMenuProps {
   actions: ActionButton[]
   maxVisible?: number // Cuantos botones mostrar antes de agrupar (default: 2)
 }
+
+/** Ancho del tooltip: entra en una linea el label mas largo que usamos hoy. */
+const TOOLTIP_WIDTH = 180
 
 export function ActionsMenu({ actions, maxVisible = 2 }: ActionsMenuProps) {
   const [isOpen, setIsOpen] = useState(false)
@@ -77,27 +81,30 @@ export function ActionsMenu({ actions, maxVisible = 2 }: ActionsMenuProps) {
     <div className="dt-actions">
       {/* Botones principales visibles */}
       {primaryActions.map((action, idx) => (
-        <button
-          key={idx}
-          onClick={action.onClick}
-          disabled={action.disabled}
-          className={`dt-btn-action ${action.variant ? `dt-btn-${action.variant}` : ''}`}
-          title={action.label}
-        >
-          {action.icon}
-        </button>
+        <AdaptiveTooltip key={idx} content={action.label} width={TOOLTIP_WIDTH}>
+          <button
+            onClick={action.onClick}
+            disabled={action.disabled}
+            className={`dt-btn-action ${action.variant ? `dt-btn-${action.variant}` : ''}`}
+            aria-label={action.label}
+          >
+            {action.icon}
+          </button>
+        </AdaptiveTooltip>
       ))}
       
       {/* Boton de menu - solo si hay acciones adicionales */}
       {showDropdown && (
-        <button
-          ref={buttonRef}
-          onClick={handleToggle}
-          className={`dt-btn-action dt-btn-more ${isOpen ? 'active' : ''}`}
-          title="Mas opciones"
-        >
-          <MoreVertical size={15} />
-        </button>
+        <AdaptiveTooltip content="Más opciones" width={TOOLTIP_WIDTH}>
+          <button
+            ref={buttonRef}
+            onClick={handleToggle}
+            className={`dt-btn-action dt-btn-more ${isOpen ? 'active' : ''}`}
+            aria-label="Más opciones"
+          >
+            <MoreVertical size={15} />
+          </button>
+        </AdaptiveTooltip>
       )}
 
       {/* Dropdown menu */}
