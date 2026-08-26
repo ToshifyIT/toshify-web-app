@@ -157,6 +157,9 @@ function FilterHeader({
 
   // Track previous isOpen to detect open transitions
   const prevIsOpenRef = useRef(isOpen);
+  // Sin array de dependencias a proposito: el guard con prevIsOpenRef ya limita el
+  // reset del calendario a la transicion cerrado -> abierto.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     // Only reset calendar view when transitioning from closed to open
     if (isOpen && !prevIsOpenRef.current && isDate) {
@@ -1354,7 +1357,6 @@ export function DataTable<T>({
     onFilteredDataChange(visibleRows.map(r => r.original));
     // visibleRows es estable mientras no cambien filtros/datos; depender directamente
     // de él es suficiente para que el callback solo dispare en cambios reales.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [visibleRows, onFilteredDataChange]);
 
   // Map de columnas con size REAL (definido por el usuario, no el default 150 de TanStack)
@@ -1373,7 +1375,17 @@ export function DataTable<T>({
 
   // Get active filters info for display
   const activeFiltersInfo = useMemo(() => {
-    const filters: Array<{ colId: string; label: string; type: 'column' | 'date'; values?: string[]; dateRange?: { from?: string; to?: string } }> = [];
+    const filters: Array<{ colId: string; label: string; type: 'column' | 'date' | 'number'; values?: string[]; dateRange?: { from?: string; to?: string }; numberRange?: { min?: number; max?: number } }> = [];
+
+    const getColLabel = (colId: string) => {
+      const col = columns.find(c => {
+        const def = c as { accessorKey?: string; id?: string };
+        return def.accessorKey === colId || def.id === colId;
+      });
+      const colDef = col as { header?: string | unknown };
+      const raw = typeof colDef?.header === 'string' ? colDef.header : colId;
+      return raw.charAt(0).toUpperCase() + raw.slice(1).replace(/_/g, ' ');
+    };
 
     // Column filters
     Object.entries(columnFilters).forEach(([colId, values]) => {
@@ -1404,8 +1416,15 @@ export function DataTable<T>({
       }
     });
 
+    // Number range filters (Desde / Hasta)
+    Object.entries(numberFilters).forEach(([colId, range]) => {
+      if (range.min !== undefined || range.max !== undefined) {
+        filters.push({ colId, label: getColLabel(colId), type: 'number', numberRange: range });
+      }
+    });
+
     return filters;
-  }, [columnFilters, dateFilters, columns]);
+  }, [columnFilters, dateFilters, numberFilters, columns]);
 
   // Check if there are any active filters (internal or external)
   const hasActiveFilters = activeFiltersInfo.length > 0 || externalFilters.length > 0;
@@ -1414,6 +1433,7 @@ export function DataTable<T>({
   const clearAllFilters = () => {
     setColumnFilters({});
     setDateFilters({});
+    setNumberFilters({});
     setOpenFilterId(null);
     // Also clear external filters
     externalFilters.forEach(f => f.onClear());
@@ -1422,11 +1442,15 @@ export function DataTable<T>({
   };
 
   // Clear a specific filter
-  const clearFilter = (colId: string, type: 'column' | 'date') => {
+  const clearFilter = (colId: string, type: 'column' | 'date' | 'number') => {
     if (type === 'column') {
       const newFilters = { ...columnFilters };
       delete newFilters[colId];
       setColumnFilters(newFilters);
+    } else if (type === 'number') {
+      const newNumberFilters = { ...numberFilters };
+      delete newNumberFilters[colId];
+      setNumberFilters(newNumberFilters);
     } else {
       const newDateFilters = { ...dateFilters };
       delete newDateFilters[colId];
@@ -1510,7 +1534,7 @@ export function DataTable<T>({
               ))}
               {/* Internal column filters */}
               {activeFiltersInfo.map(filter => (
-                <div key={filter.colId} className="dt-active-filter-chip">
+                <div key={`${filter.type}-${filter.colId}`} className="dt-active-filter-chip">
                   <span className="dt-chip-label">{filter.label}</span>
                   {filter.type === 'column' && filter.values && (
                     <span className="dt-chip-value">
@@ -1524,6 +1548,15 @@ export function DataTable<T>({
                         : filter.dateRange.from
                           ? `Desde ${filter.dateRange.from}`
                           : `Hasta ${filter.dateRange.to}`}
+                    </span>
+                  )}
+                  {filter.type === 'number' && filter.numberRange && (
+                    <span className="dt-chip-value">
+                      {filter.numberRange.min !== undefined && filter.numberRange.max !== undefined
+                        ? `${filter.numberRange.min} - ${filter.numberRange.max}`
+                        : filter.numberRange.min !== undefined
+                          ? `Desde ${filter.numberRange.min}`
+                          : `Hasta ${filter.numberRange.max}`}
                     </span>
                   )}
                   <button
@@ -1614,7 +1647,7 @@ export function DataTable<T>({
             ))}
             {/* Internal column filters */}
             {activeFiltersInfo.map(filter => (
-              <div key={filter.colId} className="dt-active-filter-chip">
+              <div key={`${filter.type}-${filter.colId}`} className="dt-active-filter-chip">
                 <span className="dt-chip-label">{filter.label}</span>
                 {filter.type === 'column' && filter.values && (
                   <span className="dt-chip-value">
@@ -1628,6 +1661,15 @@ export function DataTable<T>({
                       : filter.dateRange.from
                         ? `Desde ${filter.dateRange.from}`
                         : `Hasta ${filter.dateRange.to}`}
+                  </span>
+                )}
+                {filter.type === 'number' && filter.numberRange && (
+                  <span className="dt-chip-value">
+                    {filter.numberRange.min !== undefined && filter.numberRange.max !== undefined
+                      ? `${filter.numberRange.min} - ${filter.numberRange.max}`
+                      : filter.numberRange.min !== undefined
+                        ? `Desde ${filter.numberRange.min}`
+                        : `Hasta ${filter.numberRange.max}`}
                   </span>
                 )}
                 <button
@@ -1683,14 +1725,12 @@ export function DataTable<T>({
                         } else if (typeof header === 'string') {
                           headerLabel = header;
                         } else if (typeof header === 'function') {
-                          // eslint-disable-next-line @typescript-eslint/no-explicit-any
                           const rendered = header({ column: cell.column, header: cell.column.columnDef, table } as any);
                           if (typeof rendered === 'string') headerLabel = rendered;
                           const extractedLabel = extractHeaderText(rendered);
                           if (extractedLabel) headerLabel = extractedLabel;
                           // Para FilterHeader, extraer el label
                           if (rendered && typeof rendered === 'object' && 'props' in rendered) {
-                            // eslint-disable-next-line @typescript-eslint/no-explicit-any
                             const props = (rendered as any).props;
                             if (props?.label) headerLabel = props.label;
                           }

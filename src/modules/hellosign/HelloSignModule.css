@@ -729,3 +729,235 @@
   color: var(--color-primary);
   flex-shrink: 0;
 }
+
+/* =====================================================
+   PESTANAS (Plantillas / Documentos enviados)
+   ===================================================== */
+
+.hs-tabs {
+  display: flex;
+  gap: 4px;
+  background: var(--bg-primary);
+  border: 1px solid var(--border-primary);
+  border-radius: 8px;
+  padding: 4px;
+}
+
+.hs-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 9px 16px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.hs-tab:hover:not(.hs-tab-activa) {
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+}
+
+.hs-tab svg {
+  flex-shrink: 0;
+}
+
+.hs-tab-activa {
+  background: var(--color-primary);
+  color: var(--text-inverse);
+}
+
+.hs-tab-activa svg {
+  color: var(--text-inverse);
+}
+
+/* =====================================================
+   DOCUMENTOS ENVIADOS
+   ===================================================== */
+
+.hs-firmas-count {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.hs-badge-yellow {
+  background: var(--badge-yellow-bg);
+  color: var(--badge-yellow-text);
+}
+
+/* Lista de firmantes del detalle */
+.hs-firmante-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.hs-firmante-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  background: var(--bg-secondary);
+  border-radius: 8px;
+}
+
+.hs-firmante-datos {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.hs-firmante-nombre {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.hs-firmante-email {
+  font-size: 12px;
+  color: var(--text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.hs-firmante-meta {
+  font-size: 11px;
+  color: var(--text-tertiary);
+}
+
+.hs-firmante-acciones {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.hs-firmante-acciones .hs-badge {
+  gap: 4px;
+}
+
+.hs-btn-mini {
+  padding: 5px 10px;
+  font-size: 11px;
+}
+
+@media (max-width: 768px) {
+  .hs-tabs {
+    flex-direction: column;
+  }
+
+  .hs-firmante-item {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+}
+
+/* =====================================================
+   COLUMNA "ENVIADOS A" + TOOLTIP DE DESTINATARIOS
+   ===================================================== */
+
+/* Un destinatario por linea: se leen mejor apilados que en fila. */
+.hs-enviados {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  min-width: 0;
+}
+
+/* Los nombres pueden ser largos: se recortan para no ensanchar la tabla.
+   Apilados entra bastante mas texto que cuando iban en fila. */
+.hs-chip-persona {
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  display: inline-block;
+}
+
+/* Contenido del tooltip con la lista completa */
+.hs-tt-firmantes {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  text-align: left;
+}
+
+.hs-tt-titulo {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-tertiary);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--border-primary);
+}
+
+.hs-tt-firmante {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.hs-tt-datos {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+
+.hs-tt-datos b {
+  font-size: 12px;
+  color: var(--text-primary);
+}
+
+.hs-tt-datos span {
+  font-size: 11px;
+  color: var(--text-secondary);
+  word-break: break-all;
+}
+
+.hs-tt-estado {
+  font-weight: 600;
+}
+
+/* Punto de color que replica el estado del chip */
+.hs-punto {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  margin-top: 5px;
+}
+
+.hs-punto.hs-badge-green {
+  background: var(--badge-green-text);
+}
+
+.hs-punto.hs-badge-yellow {
+  background: var(--badge-yellow-text);
+}
+
+.hs-punto.hs-badge-red {
+  background: var(--badge-red-text);
+}
+
+@media (max-width: 768px) {
+  .hs-chip-persona {
+    max-width: 120px;
+  }
+}

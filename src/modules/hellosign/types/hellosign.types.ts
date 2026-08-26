@@ -142,7 +142,15 @@ export interface SignatureRequestSignature {
   signature_id: string;
   signer_email_address?: string | null;
   signer_name?: string | null;
+  signer_role?: string | null;
+  order?: number | null;
+  /** eg: awaiting_signature, signed, declined, on_hold */
   status_code?: string | null;
+  decline_reason?: string | null;
+  signed_at?: number | null;
+  last_viewed_at?: number | null;
+  last_reminded_at?: number | null;
+  error?: string | null;
 }
 
 export interface SignatureRequest {
@@ -151,10 +159,23 @@ export interface SignatureRequest {
   subject?: string | null;
   message?: string | null;
   is_complete?: boolean | null;
+  is_declined?: boolean | null;
+  has_error?: boolean | null;
   test_mode?: boolean | null;
+  created_at?: number | null;
+  expires_at?: number | null;
+  requester_email_address?: string | null;
+  cc_email_addresses?: string[] | null;
+  template_ids?: string[] | null;
   signing_url?: string | null;
   details_url?: string | null;
+  files_url?: string | null;
   signatures?: SignatureRequestSignature[];
+}
+
+export interface SignatureRequestListResponse {
+  signature_requests: SignatureRequest[];
+  list_info: HelloSignListInfo;
 }
 
 export interface SendWithTemplateResponse {

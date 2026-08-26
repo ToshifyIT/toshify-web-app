@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 import { useState, useEffect, useMemo, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import { supabase } from '../../../lib/supabase'
@@ -57,6 +56,43 @@ interface PagoGarantiaRow {
   semana: number | null
   anio: number | null
   conductor_nombre?: string
+}
+
+// Una garantia "Devuelta": esta en devolucion y ya no queda monto por devolver.
+// Misma condicion que se usaba para el texto "Devuelto" debajo del badge.
+function esGarantiaDevuelta(g: any): boolean {
+  if (!g || g.estado !== 'en_devolucion') return false
+  const pagado = g.monto_realmente_pagado || g.monto_pagado || 0
+  const devuelto = g.monto_devuelto || 0
+  return !((pagado - devuelto) > 0)
+}
+
+// Dias habiles transcurridos desde la baja del conductor (0 si esta activo).
+function calcularDiasBaja(g: any): number {
+  if (!g || g.estado_conductor === 'ACTIVO') return 0
+  const fechaBaja = g.fecha_baja
+  if (!fechaBaja) return 0
+  let dias = 0
+  const cur = new Date(fechaBaja)
+  const hoy = new Date()
+  while (cur <= hoy) { const d = cur.getDay(); if (d !== 0 && d !== 6) dias++; cur.setDate(cur.getDate() + 1) }
+  return dias
+}
+
+// Dias de baja a partir del cual la garantia ya deberia estar devuelta.
+const DIAS_BAJA_PARA_DEVOLVER = 120
+
+// Garantia "Por Devolver": mismo criterio que el filtro de la columna Dias Baja
+// (Desde 120 => >= 120), para que el KPI y la tabla den siempre el mismo numero.
+function garantiaPorDevolver(g: any): boolean {
+  return calcularDiasBaja(g) >= DIAS_BAJA_PARA_DEVOLVER
+}
+
+// Conductor de baja que nunca pago nada: la garantia NO APLICA (se muestra N/A).
+function garantiaNoAplica(g: any, montoPagadoOverride?: number): boolean {
+  if (!g || g.estado_conductor !== 'BAJA') return false
+  const pagado = montoPagadoOverride ?? (g.monto_realmente_pagado || g.monto_pagado || 0)
+  return !(pagado > 0)
 }
 
 export function GarantiasTab() {
@@ -122,6 +158,8 @@ export function GarantiasTab() {
 
   useEffect(() => {
     cargarGarantias()
+    // Solo debe recargar al cambiar de sede; cargarGarantias se recrea en cada render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sedeActualId])
 
   // Cerrar dropdown al hacer click fuera
@@ -215,6 +253,9 @@ export function GarantiasTab() {
         // Reflejar monto recalculado sin mutar el array garantias (evita reset de paginación)
         setGarantiasOverrides(prev => new Map(prev).set(g.id, totalRealPagadoCalc))
       })
+    // Depende solo de la apertura/carga del kardex: incluir el resto del modal
+    // relanzaria la sincronizacion en cada cambio de sus filas.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [kardexModal.loading, kardexModal.open])
 
   // Listas únicas para filtros
@@ -1721,30 +1762,15 @@ export function GarantiasTab() {
     {
       id: 'dias_desde_baja',
       header: 'Días Baja',
-      accessorFn: (row) => {
-        const estadoCond = (row as any).estado_conductor
-        if (estadoCond === 'ACTIVO') return 0
-        const fechaBaja = (row as any).fecha_baja
-        if (!fechaBaja) return 0
-        let dias = 0
-        const inicio = new Date(fechaBaja)
-        const hoy = new Date()
-        const cur = new Date(inicio)
-        while (cur <= hoy) { const d = cur.getDay(); if (d !== 0 && d !== 6) dias++; cur.setDate(cur.getDate() + 1) }
-        return dias
-      },
+      accessorFn: (row) => calcularDiasBaja(row),
       cell: ({ row }) => {
         const estadoCond = (row.original as any).estado_conductor
         if (estadoCond === 'ACTIVO') return <span style={{ color: 'var(--text-secondary)', fontSize: '11px' }}>N/A</span>
         const fechaBaja = (row.original as any).fecha_baja
         if (!fechaBaja) return <span style={{ color: 'var(--text-secondary)', fontSize: '11px' }}>N/A</span>
-        let dias = 0
-        const inicio = new Date(fechaBaja)
-        const hoy = new Date()
-        const cur = new Date(inicio)
-        while (cur <= hoy) { const d = cur.getDay(); if (d !== 0 && d !== 6) dias++; cur.setDate(cur.getDate() + 1) }
+        const dias = calcularDiasBaja(row.original)
         return (
-          <span style={{ fontSize: '11px', fontWeight: 600, color: dias >= 120 ? '#ef4444' : 'var(--text-primary)' }}>
+          <span style={{ fontSize: '11px', fontWeight: 600, color: dias >= DIAS_BAJA_PARA_DEVOLVER ? '#ef4444' : 'var(--text-primary)' }}>
             {dias} días
           </span>
         )
@@ -1760,6 +1786,10 @@ export function GarantiasTab() {
       header: 'Pagado',
       cell: ({ row }) => {
         const monto = garantiasOverrides.get(row.original.id) ?? row.original.monto_realmente_pagado ?? row.original.monto_pagado
+        // Conductor de baja sin nada pagado: la garantia no aplica.
+        if (garantiaNoAplica(row.original, monto)) {
+          return <span style={{ color: 'var(--text-secondary)', fontSize: '11px' }}>N/A</span>
+        }
         return <span className="fact-precio" style={{ color: '#16a34a' }}>{formatCurrency(monto)}</span>
       }
     },
@@ -1843,7 +1873,9 @@ export function GarantiasTab() {
                   { value: 'completada', label: 'Completada' },
                   { value: 'en_curso', label: 'En Curso' },
                   { value: 'en_devolucion', label: 'En Devolución' },
-                  { value: 'pendiente', label: 'Pendiente' }
+                  { value: 'devuelto', label: 'Devuelto' },
+                  { value: 'pendiente', label: 'Pendiente' },
+                  { value: 'no_aplica', label: 'N/A (no aplica)' }
                 ].map(e => (
                   <label key={e.value} className={`dt-column-filter-checkbox ${estadoFilter.includes(e.value) ? 'selected' : ''}`}>
                     <input type="checkbox" checked={estadoFilter.includes(e.value)} onChange={() => toggleEstadoFilter(e.value)} />
@@ -1863,6 +1895,10 @@ export function GarantiasTab() {
       ),
       cell: ({ row }) => {
         const estado = row.original.estado
+        // Baja sin nada pagado: la garantia no aplica.
+        if (garantiaNoAplica(row.original, garantiasOverrides.get(row.original.id))) {
+          return <span className="fact-badge fact-badge-gray" title="Conductor de baja sin pagos: la garantia no aplica">N/A</span>
+        }
         const config: Record<string, { class: string; label: string }> = {
           completada: { class: 'fact-badge-green', label: 'Completada' },
           en_curso: { class: 'fact-badge-yellow', label: 'En Curso' },
@@ -1873,11 +1909,15 @@ export function GarantiasTab() {
         if (estado === 'en_devolucion') {
           const devuelto = (row.original as any).monto_devuelto || 0
           const porDev = (row.original.monto_realmente_pagado || row.original.monto_pagado) - devuelto
+          // Ya devuelta por completo: un solo estado "Devuelto".
+          if (!(porDev > 0)) {
+            return <span className="fact-badge fact-badge-green">Devuelto</span>
+          }
           return (
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: '2px' }}>
               <span className={`fact-badge ${badgeClass}`}>{label}</span>
-              <span style={{ fontSize: '10px', color: porDev > 0 ? '#2563eb' : '#16a34a', fontWeight: 600 }}>
-                {porDev > 0 ? `Pend: ${formatCurrency(porDev)}` : 'Devuelto'}
+              <span style={{ fontSize: '10px', color: '#2563eb', fontWeight: 600 }}>
+                {`Pend: ${formatCurrency(porDev)}`}
               </span>
             </div>
           )
@@ -1921,6 +1961,9 @@ export function GarantiasTab() {
         )
       }
     }
+    // Los handlers (editar/eliminar/registrar devolucion) se recrean en cada render:
+    // incluirlos rearmaria las columnas siempre y romperia el memo.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   ], [conductorFilter, conductorSearch, conductoresFiltrados, estadoFilter, openColumnFilter, ultimaSemanaMap, cuotasRealesMap, garantiasOverrides])
 
   // ========== COLUMNAS TABLA MOVIMIENTOS ==========
@@ -2014,14 +2057,70 @@ export function GarantiasTab() {
         </div>
       )
     }
+    // Igual que en garantias: editarMovimiento se recrea en cada render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   ], [movConductorFilter, movConductorSearch, movConductoresFiltrados, openColumnFilter])
 
   // ========== DATOS FILTRADOS ==========
 
+  // Chips de "Filtros activos" para los filtros propios de la pestana
+  // (los de columna de la tabla ya los muestra DataTable por su cuenta).
+  const externalFilters = useMemo(() => {
+    const chips: Array<{ id: string; label: string; onClear: () => void }> = []
+
+    if (conductorFilter.length > 0) {
+      chips.push({
+        id: 'gar-conductor',
+        label: conductorFilter.length === 1 ? `Conductor: ${conductorFilter[0]}` : `Conductor: ${conductorFilter.length} seleccionados`,
+        onClear: () => { setConductorFilter([]); setConductorSearch('') }
+      })
+    }
+
+    if (estadoFilter.length > 0) {
+      const labelsEstado: Record<string, string> = {
+        completada: 'Completada',
+        en_curso: 'En Curso',
+        en_devolucion: 'En Devolución',
+        devuelto: 'Devuelto',
+        pendiente: 'Pendiente',
+        no_aplica: 'N/A (no aplica)'
+      }
+      chips.push({
+        id: 'gar-estado',
+        label: estadoFilter.length === 1
+          ? `Estado: ${labelsEstado[estadoFilter[0]] || estadoFilter[0]}`
+          : `Estado: ${estadoFilter.length} seleccionados`,
+        onClear: () => setEstadoFilter([])
+      })
+    }
+
+    if (estadoCondFilter !== 'todos') {
+      chips.push({
+        id: 'gar-estado-cond',
+        label: estadoCondFilter === 'activo' ? 'Conductores activos' : 'Conductores de baja',
+        onClear: () => setEstadoCondFilter('todos')
+      })
+    }
+
+    if (asignadoFilter !== 'todos') {
+      chips.push({
+        id: 'gar-asignado',
+        label: asignadoFilter === 'asignado' ? 'Asignados' : 'No asignados',
+        onClear: () => setAsignadoFilter('todos')
+      })
+    }
+
+    return chips
+  }, [conductorFilter, estadoFilter, estadoCondFilter, asignadoFilter])
+
   const garantiasFiltradas = useMemo(() => {
     return garantias.filter(g => {
       if (conductorFilter.length > 0 && !conductorFilter.includes(g.conductor_nombre || '')) return false
-      if (estadoFilter.length > 0 && !estadoFilter.includes(g.estado)) return false
+      // 'devuelto' es un estado derivado: en devolucion con todo el monto ya devuelto.
+      if (estadoFilter.length > 0) {
+        const estadoEfectivo = garantiaNoAplica(g) ? 'no_aplica' : (esGarantiaDevuelta(g) ? 'devuelto' : g.estado)
+        if (!estadoFilter.includes(estadoEfectivo)) return false
+      }
       // Filtro estado conductor
       if (estadoCondFilter !== 'todos') {
         const ec = ((g as any).estado_conductor || 'ACTIVO').toUpperCase()
@@ -2046,14 +2145,25 @@ export function GarantiasTab() {
 
   const stats = useMemo(() => {
     const total = garantias.length
-    const completadas = garantias.filter(g => g.estado === 'completada').length
-    const enCurso = garantias.filter(g => g.estado === 'en_curso').length
-    const enDevolucion = garantias.filter(g => g.estado === 'en_devolucion').length
+    const enCurso = garantias.filter(g => g.estado === 'en_curso' && !garantiaNoAplica(g)).length
+    const devueltas = garantias.filter(g => esGarantiaDevuelta(g)).length
+    const enDevolucion = garantias.filter(g => g.estado === 'en_devolucion' && !esGarantiaDevuelta(g)).length
     const totalRecaudado = garantias.reduce((sum, g) => sum + (g.monto_realmente_pagado || g.monto_pagado), 0)
-    const totalPorRecaudar = garantias.reduce((sum, g) => sum + (g.monto_total - (g.monto_realmente_pagado || g.monto_pagado)), 0)
-    const totalADevolver = garantias.filter(g => g.estado === 'en_devolucion').reduce((sum, g) => sum + (g.monto_realmente_pagado || g.monto_pagado), 0)
-    return { total, completadas, enCurso, enDevolucion, totalRecaudado, totalPorRecaudar, totalADevolver }
-  }, [garantias])
+    // Por Recaudar: solo conductores ACTIVOS con asignacion vigente (los de baja
+    // ya no generan cobro; los activos sin asignacion tampoco estan cobrando).
+    const totalPorRecaudar = garantias
+      .filter(g => ((g as any).estado_conductor || 'ACTIVO') !== 'BAJA' && conductoresAsignados.has(g.conductor_id))
+      .reduce((sum, g) => sum + (g.monto_total - (g.monto_realmente_pagado || g.monto_pagado)), 0)
+    // Vencidas: 120 dias o mas de baja (mismo criterio que el filtro de la tabla).
+    const porDevolver = garantias.filter(g => garantiaPorDevolver(g))
+    const cantPorDevolver = porDevolver.length
+    // Suma de la columna Pagado para ese mismo grupo (120 dias o mas de baja).
+    const pagadoPorDevolver = porDevolver.reduce((sum, g) => sum + (g.monto_realmente_pagado || g.monto_pagado || 0), 0)
+    const montoPorDevolver = porDevolver
+      .filter(g => !garantiaNoAplica(g) && !esGarantiaDevuelta(g))
+      .reduce((sum, g) => sum + ((g.monto_realmente_pagado || g.monto_pagado) - ((g as any).monto_devuelto || 0)), 0)
+    return { total, enCurso, devueltas, enDevolucion, cantPorDevolver, montoPorDevolver, pagadoPorDevolver, totalRecaudado, totalPorRecaudar }
+  }, [garantias, conductoresAsignados])
 
   // ========== RENDER ==========
 
@@ -2178,8 +2288,8 @@ export function GarantiasTab() {
               <div className="fact-stat-card">
                 <CheckCircle size={18} className="fact-stat-icon" />
                 <div className="fact-stat-content">
-                  <span className="fact-stat-value">{stats.completadas}</span>
-                  <span className="fact-stat-label">Completadas</span>
+                  <span className="fact-stat-value">{stats.devueltas}</span>
+                  <span className="fact-stat-label">Devueltas</span>
                 </div>
               </div>
               <div className="fact-stat-card">
@@ -2193,7 +2303,7 @@ export function GarantiasTab() {
                 <AlertTriangle size={18} className="fact-stat-icon" />
                 <div className="fact-stat-content">
                   <span className="fact-stat-value">{formatCurrency(stats.totalPorRecaudar)}</span>
-                  <span className="fact-stat-label">Por Recaudar</span>
+                  <span className="fact-stat-label" title="Solo conductores activos con asignacion">Por Recaudar</span>
                 </div>
               </div>
               {stats.enDevolucion > 0 && (
@@ -2202,6 +2312,30 @@ export function GarantiasTab() {
                   <div className="fact-stat-content">
                     <span className="fact-stat-value">{stats.enDevolucion}</span>
                     <span className="fact-stat-label">En Devolución</span>
+                  </div>
+                </div>
+              )}
+              {stats.cantPorDevolver > 0 && (
+                <div
+                  className="fact-stat-card"
+                  title={`Conductores con ${DIAS_BAJA_PARA_DEVOLVER} dias o mas de baja (mismo criterio que el filtro Dias Baja). Saldo pendiente de devolucion: ${formatCurrency(stats.montoPorDevolver)}`}
+                >
+                  <AlertTriangle size={18} className="fact-stat-icon" style={{ color: '#ef4444' }} />
+                  <div className="fact-stat-content">
+                    <span className="fact-stat-value" style={{ color: '#ef4444' }}>{stats.cantPorDevolver}</span>
+                    <span className="fact-stat-label">Por Devolver ({DIAS_BAJA_PARA_DEVOLVER}d o mas)</span>
+                  </div>
+                </div>
+              )}
+              {stats.cantPorDevolver > 0 && (
+                <div
+                  className="fact-stat-card"
+                  title={`Suma de la columna Pagado de los ${stats.cantPorDevolver} conductores con ${DIAS_BAJA_PARA_DEVOLVER} dias o mas de baja`}
+                >
+                  <DollarSign size={18} className="fact-stat-icon" style={{ color: '#ef4444' }} />
+                  <div className="fact-stat-content">
+                    <span className="fact-stat-value" style={{ color: '#ef4444' }}>{formatCurrency(stats.pagadoPorDevolver)}</span>
+                    <span className="fact-stat-label">Pagado ({DIAS_BAJA_PARA_DEVOLVER}d o mas)</span>
                   </div>
                 </div>
               )}
@@ -2217,6 +2351,7 @@ export function GarantiasTab() {
             globalFilter={garantiasGlobalSearch}
             onGlobalFilterChange={setGarantiasGlobalSearch}
             onFilteredDataChange={(rows) => { garantiasVisiblesRef.current = rows as any[] }}
+            externalFilters={externalFilters}
             emptyIcon={<Shield size={48}
           />}
             emptyTitle="Sin garantías"
