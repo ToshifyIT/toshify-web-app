@@ -21,7 +21,6 @@ interface Props {
   nombre: string
   dni: string | null
   cuit: string | null
-  estado: string | null      // ACTIVO / BAJA / ...
 }
 
 // Etiquetas legibles de tipo_movimiento (mismo mapa que el kardex de Facturación).
@@ -64,7 +63,7 @@ function clasificar(r: SaldoMovimiento, idx: number, rows: SaldoMovimiento[]): C
 // Limpia centavos residuales (<$1) para no mostrar saldos tipo $0,03.
 const cleanResiduo = (v: number) => (Math.abs(v) < 1 ? 0 : v)
 
-export function SaldoHistorialTab({ data, loading, nombre, dni, cuit, estado }: Props) {
+export function SaldoHistorialTab({ data, loading, nombre, dni, cuit }: Props) {
   const [search, setSearch] = useState('')
   const [semanaFilter, setSemanaFilter] = useState('')   // '' = todas, formato '2026-19'
   const [tipoFilter, setTipoFilter] = useState('')       // '' | cargo | abono | eliminacion
@@ -191,16 +190,10 @@ export function SaldoHistorialTab({ data, loading, nombre, dni, cuit, estado }: 
         marginBottom: '12px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start',
         paddingBottom: '12px', borderBottom: '1px solid var(--border-primary, #e5e7eb)', gap: '16px',
       }}>
+        {/* El nombre, DNI y estado ya estan en la cabecera del modal. */}
         <div style={{ minWidth: 0 }}>
-          <div style={{ fontSize: '15px', fontWeight: 700, color: 'var(--text-primary, #111827)' }}>{nombre}</div>
-          <div style={{ fontSize: '11px', color: 'var(--text-secondary, #6b7280)', marginTop: '3px' }}>
-            DNI: {dni || '-'} &middot; CUIT: {cuit || data?.cuit || '-'}
-            {estado && (
-              <> &middot; Estado: <span style={{
-                fontWeight: 700,
-                color: estado === 'BAJA' ? '#92400e' : estado === 'ACTIVO' ? '#16a34a' : 'var(--text-secondary, #6b7280)',
-              }}>{estado}</span></>
-            )}
+          <div style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-secondary, #6b7280)', textTransform: 'uppercase', letterSpacing: '0.3px' }}>
+            Saldo actual
           </div>
         </div>
         <div style={{ textAlign: 'right' }}>

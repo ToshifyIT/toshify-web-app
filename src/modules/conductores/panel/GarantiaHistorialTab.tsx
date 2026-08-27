@@ -9,19 +9,15 @@
 import { useMemo, useState } from 'react'
 import { AlertTriangle } from 'lucide-react'
 import { formatCurrency } from '../../../types/facturacion.types'
-import { formatNombreCompleto } from '../../../utils/conductorUtils'
 import type { GarantiaKardex, GarantiaResumen, FilaGarantiaSemana } from './conductorDetalleService'
 
 interface Props {
   data: GarantiaKardex | null
   resumen: GarantiaResumen | null
   loading: boolean
-  nombre: string
-  dni: string | null
-  cuit: string | null
 }
 
-export function GarantiaHistorialTab({ data, resumen, loading, nombre, dni, cuit }: Props) {
+export function GarantiaHistorialTab({ data, resumen, loading }: Props) {
   const [search, setSearch] = useState('')
   const [semanaFilter, setSemanaFilter] = useState('')
   const [alertTip, setAlertTip] = useState<{ x: number; y: number } | null>(null)
@@ -48,22 +44,20 @@ export function GarantiaHistorialTab({ data, resumen, loading, nombre, dni, cuit
 
   return (
     <div className="cdet-garantia">
-      {/* Hero: conductor + alerta de deuda real */}
-      <div style={{ marginBottom: '14px', paddingBottom: '12px', borderBottom: '1px solid var(--border-primary, #e5e7eb)' }}>
-        <div style={{ fontSize: '16px', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-          <span>{formatNombreCompleto(g.conductor_nombre || nombre)}</span>
-          {resumen.tieneDeuda && (
-            <span style={{
-              fontSize: '10px', fontWeight: 600, padding: '2px 8px', borderRadius: '4px',
-              background: '#fffbeb', color: '#92400e', border: '1px solid #fde68a',
-            }}>
-              ⚠ Deuda real ${resumen.deudaReal.toLocaleString('es-AR', { maximumFractionDigits: 0 })}
-            </span>
-          )}
-        </div>
-        <div style={{ fontSize: '11px', color: 'var(--text-secondary, #6b7280)', marginTop: '4px' }}>
-          DNI {g.conductor_dni || dni || '-'} · CUIT {g.conductor_cuit || cuit || '-'} · {g.tipo_alquiler}
-        </div>
+      {/* El nombre y el DNI ya estan en la cabecera del modal: aca solo el dato
+          propio de la garantia (modalidad) y la alerta de deuda, si la hay. */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', marginBottom: '10px' }}>
+        <span style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-secondary, #6b7280)', textTransform: 'uppercase', letterSpacing: '0.3px' }}>
+          {g.tipo_alquiler}
+        </span>
+        {resumen.tieneDeuda && (
+          <span style={{
+            fontSize: '10px', fontWeight: 600, padding: '2px 8px', borderRadius: '4px',
+            background: '#fffbeb', color: '#92400e', border: '1px solid #fde68a',
+          }}>
+            ⚠ Deuda real ${resumen.deudaReal.toLocaleString('es-AR', { maximumFractionDigits: 0 })}
+          </span>
+        )}
       </div>
 
       {/* Resumen: objetivo vs total real pagado (+ excedente) */}

@@ -354,7 +354,6 @@ export function ConductorDetalleModal({ conductor, onClose }: { conductor: Condu
               nombre={conductor.nombre || '—'}
               dni={conductor.dni}
               cuit={conductor.ruc}
-              estado={conductor.activo ? 'ACTIVO' : (conductor.estadoCodigo || 'INACTIVO').toUpperCase()}
             />
           ) : tab === 'garantia' ? (
             /* Historial de garantía: kardex de control_garantias (mismo modal que Facturación > Garantías, solo lectura). */
@@ -362,9 +361,6 @@ export function ConductorDetalleModal({ conductor, onClose }: { conductor: Condu
               data={garantia}
               resumen={garantiaResumen}
               loading={garantiaLoading}
-              nombre={conductor.nombre || '—'}
-              dni={conductor.dni}
-              cuit={conductor.ruc}
             />
           ) : loading ? (
             <div className="cdet-empty">Cargando…</div>

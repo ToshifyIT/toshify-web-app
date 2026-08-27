@@ -21,6 +21,7 @@ const TABLA_LABELS: Record<string, string> = {
   cobros_fraccionados: 'Cobros Fracc.', conceptos_nomina: 'Conceptos', conductores: 'Conductores',
   excesos_kilometraje: 'Excesos Km', facturacion_cabify: 'Fact. Cabify', facturacion_conductores: 'Facturación',
   facturacion_detalle: 'Fact. Detalle', garantias_conductores: 'Garantías', garantias_pagos: 'Garantía Pagos',
+  garantias_devoluciones: 'Garantía Devoluciones',
   guias_acciones_implementadas: 'Guías Acciones', guias_historial_semanal: 'Guías Historial',
   guias_seguimiento: 'Guías Seguimiento', incidencias: 'Incidencias', inventario: 'Inventario',
   movimientos: 'Movimientos', multas_historico: 'Multas', pagos_conductores: 'Pagos',

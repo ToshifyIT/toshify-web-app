@@ -39,6 +39,9 @@
   align-items: center;
   gap: 12px;
   padding: 20px 22px 14px;
+  /* El modal es flex column: sin esto, un contenido alto (Facturacion) comprime
+     la cabecera, los KPIs y las pestanas hasta recortarlos. */
+  flex-shrink: 0;
 }
 .cdet-avatar {
   width: 44px; height: 44px;
@@ -55,6 +58,7 @@
 .cdet-off { color: #6b7280; font-weight: 600; text-transform: capitalize; }
 
 .cdet-kpis {
+  flex-shrink: 0;
   display: grid;
   /* 10 KPIs: 5 por fila, dos filas. */
   grid-template-columns: repeat(5, 1fr);
@@ -135,6 +139,7 @@
 .cdet-deuda-total .danger { color: #dc2626; }
 
 .cdet-tabs {
+  flex-shrink: 0;
   display: flex;
   gap: 4px;
   padding: 0 22px;
@@ -162,9 +167,18 @@
 .cdet-tabs button.active { color: #dc2626; border-bottom-color: #dc2626; }
 
 .cdet-body {
+  flex: 1 1 auto;
+  /* min-height: 0 permite que este sea el area que se encoge y scrollea,
+     en vez de aplastar la cabecera y las pestanas. */
+  min-height: 0;
   overflow-y: auto;
+  /* El aire bajo las pestanas se da con padding-top del contenedor de scroll
+     via el margen de .cdet-tabs, para no romper los thead sticky (top: 0). */
   padding: 0 22px 22px;
 }
+
+/* Separacion fija entre las pestanas y el contenido (queda fuera del scroll). */
+.cdet-tabs { margin-bottom: 14px; }
 
 .cdet-table {
   width: 100%;
