@@ -9,7 +9,7 @@
 .leads-module {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 10px;
 }
 
 /* =====================================================
@@ -49,7 +49,7 @@
 .leads-stats {
   background: var(--bg-primary);
   border-radius: 8px;
-  padding: 16px;
+  padding: 10px;
   border: 1px solid var(--border-primary);
 }
 
@@ -74,14 +74,14 @@
 .leads-stats-grid {
   display: grid;
   grid-template-columns: repeat(6, 1fr);
-  gap: 12px;
+  gap: 8px;
 }
 
 .leads-stats .stat-card {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 12px;
+  gap: 8px;
+  padding: 8px 10px;
   background: var(--bg-secondary);
   border-radius: 6px;
 }
@@ -1015,4 +1015,30 @@
 }
 @media (prefers-reduced-motion: reduce) {
   .lead-alerta-recontacto { animation: none; }
+}
+
+/* =====================================================
+   COMPACTACION (solo Leads)
+   Reduce el alto de la barra de busqueda y de la paginacion
+   para dejar mas espacio visible a la tabla. Scopeado a
+   .leads-module para no afectar al resto de los modulos.
+   ===================================================== */
+
+.leads-module .dt-header-bar {
+  margin-bottom: 8px;
+}
+
+.leads-module .dt-search-input {
+  padding: 8px 12px 8px 40px;
+  font-size: 13px;
+}
+
+.leads-module .dt-pagination {
+  padding: 8px 16px;
+  gap: 10px;
+}
+
+.leads-module .dt-pagination-btn {
+  width: 30px;
+  height: 30px;
 }

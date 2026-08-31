@@ -25,7 +25,6 @@ import {
   RotateCcw,
   Download,
   Upload,
-  History,
 } from 'lucide-react'
 import { type ColumnDef } from '@tanstack/react-table'
 import { format, startOfWeek, endOfWeek, parseISO } from 'date-fns'
@@ -45,6 +44,27 @@ interface ConductorBasico {
   apellidos: string
 }
 
+interface DevolucionGarantiaRow {
+  id: string
+  monto: number
+  referencia: string | null
+  created_at: string
+  created_by_name: string | null
+}
+
+interface EdicionGarantiaRow {
+  id: string
+  created_at: string
+  created_by_name: string | null
+  motivo: string
+  monto_pagado_anterior: number
+  monto_pagado_nuevo: number
+  monto_total_anterior: number
+  monto_total_nuevo: number
+  estado_anterior: string | null
+  estado_nuevo: string | null
+}
+
 interface PagoGarantiaRow {
   id: string
   garantia_id: string
@@ -58,13 +78,40 @@ interface PagoGarantiaRow {
   conductor_nombre?: string
 }
 
-// Una garantia "Devuelta": esta en devolucion y ya no queda monto por devolver.
-// Misma condicion que se usaba para el texto "Devuelto" debajo del badge.
-function esGarantiaDevuelta(g: any): boolean {
+// Monto pagado de una garantia. UNICA fuente de verdad: todas las celdas, los
+// estados derivados y los KPIs deben usar esta funcion para no contradecirse.
+function montoPagadoGarantia(g: any, override?: number): number {
+  if (override !== undefined) return override
+  return (g?.monto_realmente_pagado || g?.monto_pagado || 0)
+}
+
+type FiltroKpi = 'en_curso' | 'devuelto' | 'en_devolucion' | 'con_pagos' | 'por_recaudar' | 'mas120' | null
+
+// Etiqueta del chip "Filtros activos" para cada tarjeta de KPI.
+const LABELS_FILTRO_KPI: Record<string, string> = {
+  en_curso: 'En Curso',
+  devuelto: 'Devueltas',
+  en_devolucion: 'En Devolución (pendientes)',
+  con_pagos: 'Con pagos (recaudado)',
+  por_recaudar: 'Activos con asignación',
+  mas120: 'Baja de 120 días o más'
+}
+
+// Diferencia maxima que se considera "ya devuelto": solo absorbe el ruido de
+// redondeo (menos de un centavo). Cualquier resto real -aunque sean $0,43- se
+// sigue mostrando como pendiente porque hay que devolverlo.
+const TOLERANCIA_DEVOLUCION = 0.01
+
+// Una garantia "Devuelta": esta en devolucion y ya no queda monto por devolver
+// (o lo que queda es menor a la tolerancia de redondeo).
+function esGarantiaDevuelta(g: any, override?: number): boolean {
   if (!g || g.estado !== 'en_devolucion') return false
-  const pagado = g.monto_realmente_pagado || g.monto_pagado || 0
+  const pagado = montoPagadoGarantia(g, override)
   const devuelto = g.monto_devuelto || 0
-  return !((pagado - devuelto) > 0)
+  if ((pagado - devuelto) >= TOLERANCIA_DEVOLUCION) return false
+  // Si hubo plata cobrada, tiene que existir al menos una devolucion registrada:
+  // asi un pago menor a la tolerancia no se marca como devuelto sin haberlo hecho.
+  return pagado <= 0 || devuelto > 0
 }
 
 // Dias habiles transcurridos desde la baja del conductor (0 si esta activo).
@@ -89,10 +136,9 @@ function garantiaPorDevolver(g: any): boolean {
 }
 
 // Conductor de baja que nunca pago nada: la garantia NO APLICA (se muestra N/A).
-function garantiaNoAplica(g: any, montoPagadoOverride?: number): boolean {
+function garantiaNoAplica(g: any, override?: number): boolean {
   if (!g || g.estado_conductor !== 'BAJA') return false
-  const pagado = montoPagadoOverride ?? (g.monto_realmente_pagado || g.monto_pagado || 0)
-  return !(pagado > 0)
+  return !(montoPagadoGarantia(g, override) > 0)
 }
 
 export function GarantiasTab() {
@@ -120,6 +166,9 @@ export function GarantiasTab() {
   // su prop `onFilteredDataChange`. La usamos en "Exportar Registros".
   const garantiasVisiblesRef = useRef<any[]>([])
   const [asignadoFilter, setAsignadoFilter] = useState<'todos' | 'asignado' | 'no_asignado'>('todos')
+  // Filtro aplicado al hacer click en una tarjeta de KPI. Cada valor filtra
+  // exactamente el mismo conjunto que cuenta la tarjeta.
+  const [filtroKpi, setFiltroKpi] = useState<FiltroKpi>(null)
   const [conductoresAsignados, setConductoresAsignados] = useState<Set<string>>(new Set())
   // Clave: garantia_id (garantias_conductores.id)
   const [ultimaSemanaMap, setUltimaSemanaMap] = useState<Map<string, { semana: number; anio: number }>>(new Map())
@@ -142,18 +191,47 @@ export function GarantiasTab() {
     semanaFilter: string
     tipoFilter: string
     semanasFacturacion: { semana: number; anio: number; subtotalGarantia: number; fecha: string; estado: string; fechaCierre: string | null }[]
-  }>({ open: false, garantia: null, rows: [], loading: false, search: '', semanaFilter: '', tipoFilter: '', semanasFacturacion: [] })
+    devoluciones: DevolucionGarantiaRow[]
+    ediciones: EdicionGarantiaRow[]
+    tab: 'movimientos' | 'devoluciones' | 'ediciones'
+  }>({ open: false, garantia: null, rows: [], loading: false, search: '', semanaFilter: '', tipoFilter: '', semanasFacturacion: [], devoluciones: [], ediciones: [], tab: 'movimientos' })
   // Tooltip flotante (posición fixed) para el aviso de semana no cerrada en el kardex.
   // Se usa fixed para que no lo recorte el contenedor con scroll de la tabla.
   const [alertTip, setAlertTip] = useState<{ x: number; y: number } | null>(null)
 
+  async function cargarEdiciones(garantiaId: string): Promise<EdicionGarantiaRow[]> {
+    const { data, error } = await (supabase.from('garantias_ediciones_historial') as any)
+      .select('*')
+      .eq('garantia_id', garantiaId)
+      .order('created_at', { ascending: false })
+    if (error) {
+      console.error('Error cargando historial de ediciones:', error.message)
+      return []
+    }
+    return (data || []) as EdicionGarantiaRow[]
+  }
+
+  async function cargarDevoluciones(garantiaId: string): Promise<DevolucionGarantiaRow[]> {
+    const { data, error } = await (supabase.from('garantias_devoluciones') as any)
+      .select('id, monto, referencia, created_at, created_by_name')
+      .eq('garantia_id', garantiaId)
+      .order('created_at', { ascending: true })
+    if (error) {
+      console.error('Error cargando devoluciones:', error.message)
+      return []
+    }
+    return (data || []) as DevolucionGarantiaRow[]
+  }
+
   async function abrirKardex(garantia: GarantiaConductor) {
-    setKardexModal({ open: true, garantia, rows: [], loading: true, search: '', semanaFilter: '', tipoFilter: '', semanasFacturacion: [] })
-    const [rows, facturacion] = await Promise.all([
+    setKardexModal({ open: true, garantia, rows: [], loading: true, search: '', semanaFilter: '', tipoFilter: '', semanasFacturacion: [], devoluciones: [], ediciones: [], tab: 'movimientos' })
+    const [rows, facturacion, devoluciones, ediciones] = await Promise.all([
       getKardexGarantia(garantia.id),
       getFacturacionGarantiaConductor(garantia.conductor_dni || ''),
+      cargarDevoluciones(garantia.id),
+      cargarEdiciones(garantia.id),
     ])
-    setKardexModal(prev => ({ ...prev, rows, loading: false, semanasFacturacion: facturacion }))
+    setKardexModal(prev => ({ ...prev, rows, loading: false, semanasFacturacion: facturacion, devoluciones, ediciones }))
   }
 
   useEffect(() => {
@@ -698,8 +776,14 @@ export function GarantiasTab() {
   }
 
   async function editarGarantia(garantia: GarantiaConductor) {
-    const montoPagadoActual = Math.round(garantia.monto_realmente_pagado || garantia.monto_pagado)
-    const montoTotalActual = Math.round(garantia.monto_total)
+    // Se trabaja con 2 decimales: antes se redondeaba a entero y una garantia de
+    // $144.285,71 se guardaba como $144.286 al editarla.
+    const dosDecimales = (n: number) => Math.round((Number(n) || 0) * 100) / 100
+    const montoPagadoHistorico = dosDecimales(montoPagadoGarantia(garantia, garantiasOverrides.get(garantia.id)))
+    const estaDevuelta = esGarantiaDevuelta(garantia, garantiasOverrides.get(garantia.id))
+    // Devuelta: el saldo vigente es 0, igual que en la columna Pagado de la tabla.
+    const montoPagadoActual = estaDevuelta ? 0 : montoPagadoHistorico
+    const montoTotalActual = dosDecimales(garantia.monto_total)
 
     const { value: formValues } = await Swal.fire({
       title: `<span style="font-size: 16px; font-weight: 600;">Editar Garantia</span>`,
@@ -708,17 +792,22 @@ export function GarantiasTab() {
           <div style="background: #F3F4F6; padding: 10px 12px; border-radius: 6px; margin-bottom: 12px;">
             <div style="font-weight: 600; color: #111827;">${garantia.conductor_nombre}</div>
           </div>
+          ${estaDevuelta ? `
+          <div style="background: #EFF6FF; border: 1px solid #BFDBFE; padding: 8px 10px; border-radius: 6px; margin-bottom: 12px; font-size: 11px; color: #1e40af;">
+            Garantia devuelta: el saldo vigente es $ 0,00 porque ya se reintegro.
+            Lo cobrado en su momento (${formatCurrency(montoPagadoHistorico)}) queda en el kardex.
+          </div>` : ''}
           <div style="margin-bottom: 12px;">
             <label style="display: block; font-size: 12px; color: #374151; margin-bottom: 4px;">Monto Pagado:</label>
-            <input id="swal-monto-pagado" type="number" class="swal2-input" style="font-size: 14px; margin: 0; width: 100%; background: #F3F4F6; color: #374151;" value="${montoPagadoActual}" readonly>
+            <input id="swal-monto-pagado" type="number" class="swal2-input" style="font-size: 14px; margin: 0; width: 100%; background: #F3F4F6; color: #374151;" value="${montoPagadoActual.toFixed(2)}" step="0.01" readonly>
           </div>
           <div style="margin-bottom: 12px;">
             <label style="display: block; font-size: 12px; color: #374151; margin-bottom: 4px;">Monto Total:</label>
-            <input id="swal-monto-total" type="number" class="swal2-input" style="font-size: 14px; margin: 0; width: 100%; background: #F3F4F6; color: #374151;" value="${montoTotalActual}" readonly>
+            <input id="swal-monto-total" type="number" class="swal2-input" style="font-size: 14px; margin: 0; width: 100%; background: #F3F4F6; color: #374151;" value="${montoTotalActual.toFixed(2)}" step="0.01" readonly>
           </div>
           <div style="margin-bottom: 12px;">
             <label style="display: block; font-size: 12px; color: #374151; margin-bottom: 4px;">Ajuste:</label>
-            <input id="swal-ajuste" type="number" class="swal2-input" style="font-size: 14px; margin: 0; width: 100%;" value="0" placeholder="0">
+            <input id="swal-ajuste" type="number" step="0.01" class="swal2-input" style="font-size: 14px; margin: 0; width: 100%;" value="0" placeholder="0">
             <span style="display: block; font-size: 10px; color: #9ca3af; margin-top: 3px;">Si ingresas numero negativo se restara del Monto Pagado</span>
           </div>
           <div>
@@ -738,13 +827,17 @@ export function GarantiasTab() {
         const pagadoInput = document.getElementById('swal-monto-pagado') as HTMLInputElement
         const base = montoPagadoActual
         ajusteInput.addEventListener('input', () => {
-          const ajuste = parseFloat(ajusteInput.value) || 0
-          pagadoInput.value = String(Math.round(base + ajuste))
+          const ajuste = parseFloat(String(ajusteInput.value).replace(',', '.')) || 0
+          pagadoInput.value = (Math.round((base + ajuste) * 100) / 100).toFixed(2)
         })
       },
       preConfirm: () => {
-        const montoPagado = Math.round(parseFloat((document.getElementById('swal-monto-pagado') as HTMLInputElement).value))
-        const montoTotal = Math.round(parseFloat((document.getElementById('swal-monto-total') as HTMLInputElement).value))
+        const leerMonto = (id: string) => {
+          const raw = String((document.getElementById(id) as HTMLInputElement).value).replace(',', '.')
+          return Math.round(parseFloat(raw) * 100) / 100
+        }
+        const montoPagado = leerMonto('swal-monto-pagado')
+        const montoTotal = leerMonto('swal-monto-total')
         const motivo = (document.getElementById('swal-motivo') as HTMLTextAreaElement).value.trim()
 
         if (isNaN(montoPagado) || montoPagado < 0) {
@@ -798,6 +891,12 @@ export function GarantiasTab() {
         .eq('id', garantia.id)
 
       if (error) throw error
+
+      // Si el modal de esta garantia esta abierto, refrescar su historial de ediciones.
+      if (kardexModal.open && kardexModal.garantia?.id === garantia.id) {
+        const ediciones = await cargarEdiciones(garantia.id)
+        setKardexModal(prev => ({ ...prev, ediciones }))
+      }
 
       showSuccess('Actualizado')
 
@@ -965,8 +1064,10 @@ export function GarantiasTab() {
 
   async function registrarDevolucion(garantia: GarantiaConductor) {
     const devuelto = (garantia as any).monto_devuelto || 0
-    const montoReal = garantia.monto_realmente_pagado || garantia.monto_pagado
-    const pendienteDevolver = montoReal - devuelto
+    // Mismo monto que muestra la columna Pagado (incluye el recalculo del kardex),
+    // para que el modal no proponga un pendiente distinto al de la tabla.
+    const montoReal = montoPagadoGarantia(garantia, garantiasOverrides.get(garantia.id))
+    const pendienteDevolver = Math.round((montoReal - devuelto) * 100) / 100
     const porcentajeDevuelto = montoReal > 0 ? Math.round((devuelto / montoReal) * 100) : 0
 
     const { value: formValues } = await Swal.fire({
@@ -999,7 +1100,7 @@ export function GarantiasTab() {
           </div>
           <div style="margin-bottom: 12px;">
             <label style="display: block; font-size: 12px; color: #374151; margin-bottom: 4px;">Monto a devolver:</label>
-            <input id="swal-monto-dev" type="number" class="swal2-input" style="font-size: 14px; margin: 0; width: 100%;" value="${pendienteDevolver}">
+            <input id="swal-monto-dev" type="number" step="0.01" min="0" class="swal2-input" style="font-size: 14px; margin: 0; width: 100%;" value="${pendienteDevolver.toFixed(2)}">
           </div>
           <div>
             <label style="display: block; font-size: 12px; color: #374151; margin-bottom: 4px;">Referencia (opcional):</label>
@@ -1016,12 +1117,15 @@ export function GarantiasTab() {
       preConfirm: () => {
         const montoRaw = (document.getElementById('swal-monto-dev') as HTMLInputElement).value
         const referencia = (document.getElementById('swal-ref-dev') as HTMLInputElement).value
-        const monto = Math.round(parseFloat(montoRaw))
+        // Se admiten centavos (y coma como separador decimal): antes se redondeaba
+        // a entero y cualquier devolucion menor a $0,50 quedaba en 0 -> invalida.
+        const monto = Math.round(parseFloat(String(montoRaw).replace(',', '.')) * 100) / 100
         if (!montoRaw || isNaN(monto) || monto <= 0) {
           Swal.showValidationMessage('Ingrese un monto válido')
           return false
         }
-        if (monto > Math.round(pendienteDevolver)) {
+        // Media centavo de tolerancia para no rechazar el pendiente exacto por redondeo.
+        if (monto > pendienteDevolver + 0.005) {
           Swal.showValidationMessage(`El monto no puede superar ${formatCurrency(pendienteDevolver)}`)
           return false
         }
@@ -1039,12 +1143,12 @@ export function GarantiasTab() {
           conductor_id: garantia.conductor_id,
           monto: formValues.monto,
           referencia: formValues.referencia || null,
-          created_by_name: null
+          created_by_name: profile?.full_name || null
         })
       if (errorDev) throw errorDev
 
       // 2. Actualizar monto_devuelto en garantias_conductores
-      const nuevoDevuelto = devuelto + formValues.monto
+      const nuevoDevuelto = Math.round((devuelto + formValues.monto) * 100) / 100
       const { error: errorUpdate } = await (supabase.from('garantias_conductores') as any)
         .update({
           monto_devuelto: nuevoDevuelto,
@@ -1053,95 +1157,17 @@ export function GarantiasTab() {
         .eq('id', garantia.id)
       if (errorUpdate) throw errorUpdate
 
+      // Si el kardex de esta garantia esta abierto, refrescar sus devoluciones.
+      if (kardexModal.open && kardexModal.garantia?.id === garantia.id) {
+        const devoluciones = await cargarDevoluciones(garantia.id)
+        setKardexModal(prev => ({ ...prev, devoluciones }))
+      }
       showSuccess('Devolución Registrada', `Se devolvieron ${formatCurrency(formValues.monto)} a ${garantia.conductor_nombre}`)
       cargarGarantias()
     } catch (error: any) {
       Swal.fire('Error', error.message || 'No se pudo registrar la devolución', 'error')
     }
   }
-
-  async function verHistorialEdiciones(garantia: GarantiaConductor) {
-    try {
-      const { data, error } = await (supabase.from('garantias_ediciones_historial') as any)
-        .select('*')
-        .eq('garantia_id', garantia.id)
-        .order('created_at', { ascending: false })
-
-      if (error) throw error
-
-      if (!data || data.length === 0) {
-        Swal.fire({
-          title: '<span style="font-size: 16px; font-weight: 600;">Historial de Ediciones</span>',
-          html: `
-            <div style="text-align: left; font-size: 13px;">
-              <div style="background: #F3F4F6; padding: 10px 12px; border-radius: 6px; margin-bottom: 12px;">
-                <div style="font-weight: 600;">${garantia.conductor_nombre}</div>
-              </div>
-              <div style="text-align: center; color: #9ca3af; padding: 20px 0;">Sin ediciones registradas</div>
-            </div>
-          `,
-          confirmButtonText: 'Cerrar',
-          confirmButtonColor: '#6b7280',
-          width: 420,
-        })
-        return
-      }
-
-      const rows = data.map((h: any) => {
-        const fecha = new Date(h.created_at).toLocaleString('es-AR', {
-          day: '2-digit', month: '2-digit', year: 'numeric',
-          hour: '2-digit', minute: '2-digit',
-          timeZone: 'America/Argentina/Buenos_Aires'
-        })
-        const cambios: string[] = []
-        if (h.monto_pagado_anterior !== h.monto_pagado_nuevo) {
-          cambios.push(`<div style="margin-bottom:4px;"><strong style="color:#6B7280;">Monto Pagado</strong></div><div style="display:flex;justify-content:space-between;"><span>Monto Antes:</span><span>${formatCurrency(h.monto_pagado_anterior)}</span></div><div style="display:flex;justify-content:space-between;"><span>Monto Modificado:</span><span style="font-weight:600;">${formatCurrency(h.monto_pagado_nuevo)}</span></div>`)
-        }
-        if (h.monto_total_anterior !== h.monto_total_nuevo) {
-          cambios.push(`<div style="margin-bottom:4px;${h.monto_pagado_anterior !== h.monto_pagado_nuevo ? 'margin-top:8px;padding-top:8px;border-top:1px solid #E5E7EB;' : ''}"><strong style="color:#6B7280;">Campo Total</strong></div><div style="display:flex;justify-content:space-between;"><span>Monto Antes:</span><span>${formatCurrency(h.monto_total_anterior)}</span></div><div style="display:flex;justify-content:space-between;"><span>Monto Modificado:</span><span style="font-weight:600;">${formatCurrency(h.monto_total_nuevo)}</span></div>`)
-        }
-        if (h.estado_anterior !== h.estado_nuevo) {
-          cambios.push(`<div style="margin-top:8px;padding-top:8px;border-top:1px solid #E5E7EB;display:flex;justify-content:space-between;"><span style="color:#6B7280;">Estado:</span><span>${h.estado_anterior} → <strong>${h.estado_nuevo}</strong></span></div>`)
-        }
-        return `
-          <div style="border: 1px solid #E5E7EB; border-radius: 8px; padding: 10px 12px; margin-bottom: 8px;">
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
-              <span style="font-size: 11px; color: #6B7280;">${fecha}</span>
-              <span style="font-size: 11px; color: #374151; font-weight: 600;">${h.created_by_name || 'Sistema'}</span>
-            </div>
-            <div style="font-size: 12px; color: #374151; margin-bottom: 6px;">
-              ${cambios.join('')}
-            </div>
-            <div style="font-size: 12px; background: #FEF9C3; padding: 6px 8px; border-radius: 4px; color: #854D0E;">
-              <strong>Motivo:</strong> ${h.motivo}
-            </div>
-          </div>
-        `
-      }).join('')
-
-      Swal.fire({
-        title: '<span style="font-size: 16px; font-weight: 600;">Historial de Ediciones</span>',
-        html: `
-          <div style="text-align: left; font-size: 13px;">
-            <div style="background: #F3F4F6; padding: 10px 12px; border-radius: 6px; margin-bottom: 12px;">
-              <div style="font-weight: 600;">${garantia.conductor_nombre}</div>
-              <div style="font-size: 11px; color: #6B7280;">${data.length} edicion(es) registrada(s)</div>
-            </div>
-            <div style="max-height: 350px; overflow-y: auto;">
-              ${rows}
-            </div>
-          </div>
-        `,
-        confirmButtonText: 'Cerrar',
-        confirmButtonColor: '#6b7280',
-        width: 460,
-      })
-    } catch (err: any) {
-      Swal.fire('Error', err.message || 'No se pudo cargar el historial', 'error')
-    }
-  }
-
-  // ========== FUNCIONES PARA MOVIMIENTOS ==========
 
   async function editarMovimiento(pago: PagoGarantiaRow) {
     // Generar opciones de semana
@@ -1691,6 +1717,14 @@ export function GarantiasTab() {
     }
   }
 
+  // Funciones de dos acciones hoy DESACTIVADAS en la interfaz, que se conservan
+  // para poder reactivarlas: el pago manual de garantia (se cobra via saldo
+  // pendiente) y la sincronizacion masiva de cuotas por sede.
+  // Estas dos lineas solo evitan el error TS6133 de noUnusedLocals; no ejecutan
+  // nada. Si se vuelve a colgar cada funcion de un boton, se pueden borrar.
+  void registrarPago
+  void sincronizarGarantias
+
   // ========== COLUMNAS TABLA GARANTÍAS ==========
 
   const columnsGarantias = useMemo<ColumnDef<GarantiaConductor>[]>(() => [
@@ -1785,7 +1819,12 @@ export function GarantiasTab() {
       accessorKey: 'monto_realmente_pagado',
       header: 'Pagado',
       cell: ({ row }) => {
-        const monto = garantiasOverrides.get(row.original.id) ?? row.original.monto_realmente_pagado ?? row.original.monto_pagado
+        const monto = montoPagadoGarantia(row.original, garantiasOverrides.get(row.original.id))
+        // Garantia ya devuelta: el saldo del conductor queda en cero.
+        // El detalle de lo cobrado y devuelto se conserva en el kardex y el historial.
+        if (esGarantiaDevuelta(row.original, garantiasOverrides.get(row.original.id))) {
+          return <span className="fact-precio" style={{ color: 'var(--text-secondary)' }} title="Garantia devuelta: el detalle queda en el kardex">{formatCurrency(0)}</span>
+        }
         // Conductor de baja sin nada pagado: la garantia no aplica.
         if (garantiaNoAplica(row.original, monto)) {
           return <span style={{ color: 'var(--text-secondary)', fontSize: '11px' }}>N/A</span>
@@ -1796,9 +1835,11 @@ export function GarantiasTab() {
     {
       id: 'cuotas_pagadas',
       header: 'Cuotas (ref.)',
-      accessorFn: (row) => (cuotasRealesMap.get(row.id) ?? Number(row.cuotas_pagadas)) || 0,
+      accessorFn: (row) => esGarantiaDevuelta(row, garantiasOverrides.get(row.id)) ? 0 : ((cuotasRealesMap.get(row.id) ?? Number(row.cuotas_pagadas)) || 0),
       cell: ({ row }) => {
-        const cuotasPagadas = (cuotasRealesMap.get(row.original.id) ?? Number(row.original.cuotas_pagadas)) || 0
+        const cuotasPagadas = esGarantiaDevuelta(row.original, garantiasOverrides.get(row.original.id))
+          ? 0
+          : (cuotasRealesMap.get(row.original.id) ?? Number(row.original.cuotas_pagadas)) || 0
         return (
           <span className="dt-badge dt-badge-blue" style={{ fontSize: '11px' }} title={`${cuotasPagadas} cuotas cobradas`}>
             {cuotasPagadas}
@@ -1810,11 +1851,12 @@ export function GarantiasTab() {
       id: 'ultima_semana',
       header: 'Últ. Semana',
       accessorFn: (row) => {
+        if (esGarantiaDevuelta(row, garantiasOverrides.get(row.id))) return 0
         const u = ultimaSemanaMap.get(row.id)
         return u ? u.anio * 100 + u.semana : 0
       },
       cell: ({ row }) => {
-        const u = ultimaSemanaMap.get(row.original.id)
+        const u = esGarantiaDevuelta(row.original, garantiasOverrides.get(row.original.id)) ? null : ultimaSemanaMap.get(row.original.id)
         if (!u) return <span style={{ color: 'var(--text-tertiary)', fontSize: '11px' }}>-</span>
         return (
           <span style={{ fontSize: '11px', fontFamily: 'monospace', color: 'var(--text-primary)', fontWeight: 600 }}>
@@ -1826,9 +1868,14 @@ export function GarantiasTab() {
     {
       id: 'pendiente',
       header: 'Pendiente',
-      accessorFn: (row) => Math.round((row.monto_total || 0) - (row.monto_realmente_pagado || row.monto_pagado || 0)),
+      accessorFn: (row) => esGarantiaDevuelta(row, garantiasOverrides.get(row.id))
+        ? 0
+        : Math.round((row.monto_total || 0) - montoPagadoGarantia(row)),
       cell: ({ row }) => {
-        const pendiente = row.original.monto_total - (row.original.monto_realmente_pagado || row.original.monto_pagado)
+        if (esGarantiaDevuelta(row.original, garantiasOverrides.get(row.original.id))) {
+          return <span className="fact-precio" style={{ color: 'var(--text-secondary)' }}>{formatCurrency(0)}</span>
+        }
+        const pendiente = row.original.monto_total - montoPagadoGarantia(row.original)
         if (pendiente < -1) {
           // Excedente: pagó más del objetivo
           return <span className="fact-precio" style={{ color: '#16a34a', fontWeight: 600 }}>+{formatCurrency(Math.abs(pendiente))}</span>
@@ -1839,11 +1886,13 @@ export function GarantiasTab() {
     {
       id: 'progreso',
       header: 'Progreso',
-      accessorFn: (row) => row.monto_total > 0 ? Math.round(((row.monto_realmente_pagado || row.monto_pagado) / row.monto_total) * 100) : 0,
+      accessorFn: (row) => (esGarantiaDevuelta(row, garantiasOverrides.get(row.id)) || row.monto_total <= 0)
+        ? 0
+        : Math.round((montoPagadoGarantia(row) / row.monto_total) * 100),
       cell: ({ row }) => {
-        const porcentaje = row.original.monto_total > 0
-          ? ((row.original.monto_realmente_pagado || row.original.monto_pagado) / row.original.monto_total) * 100
-          : 0
+        const porcentaje = (esGarantiaDevuelta(row.original, garantiasOverrides.get(row.original.id)) || row.original.monto_total <= 0)
+          ? 0
+          : (montoPagadoGarantia(row.original) / row.original.monto_total) * 100
         return (
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
             <div className="fact-progress-bar">
@@ -1895,6 +1944,10 @@ export function GarantiasTab() {
       ),
       cell: ({ row }) => {
         const estado = row.original.estado
+        // Devuelta: prevalece sobre "no aplica" (su saldo es 0 justamente porque se devolvio).
+        if (esGarantiaDevuelta(row.original, garantiasOverrides.get(row.original.id))) {
+          return <span className="fact-badge fact-badge-green">Devuelto</span>
+        }
         // Baja sin nada pagado: la garantia no aplica.
         if (garantiaNoAplica(row.original, garantiasOverrides.get(row.original.id))) {
           return <span className="fact-badge fact-badge-gray" title="Conductor de baja sin pagos: la garantia no aplica">N/A</span>
@@ -1907,12 +1960,9 @@ export function GarantiasTab() {
         }
         const { class: badgeClass, label } = config[estado] || { class: 'fact-badge-gray', label: estado }
         if (estado === 'en_devolucion') {
+          // Las devueltas ya salieron arriba: aca solo quedan las que tienen saldo.
           const devuelto = (row.original as any).monto_devuelto || 0
-          const porDev = (row.original.monto_realmente_pagado || row.original.monto_pagado) - devuelto
-          // Ya devuelta por completo: un solo estado "Devuelto".
-          if (!(porDev > 0)) {
-            return <span className="fact-badge fact-badge-green">Devuelto</span>
-          }
+          const porDev = montoPagadoGarantia(row.original, garantiasOverrides.get(row.original.id)) - devuelto
           return (
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: '2px' }}>
               <span className={`fact-badge ${badgeClass}`}>{label}</span>
@@ -1930,7 +1980,7 @@ export function GarantiasTab() {
       header: 'Acciones',
       cell: ({ row }) => {
         const esDevolucion = row.original.estado === 'en_devolucion'
-        const pendienteDevolver = esDevolucion && (row.original.monto_realmente_pagado || row.original.monto_pagado) > (row.original as any).monto_devuelto
+        const pendienteDevolver = esDevolucion && !esGarantiaDevuelta(row.original, garantiasOverrides.get(row.original.id))
         return (
           <div className="fact-table-actions">
             <button className="fact-table-btn fact-table-btn-view" onClick={() => abrirKardex(row.original)} data-tooltip="Ver kardex de garantía">
@@ -1945,11 +1995,6 @@ export function GarantiasTab() {
             {(isAdmin() || isAdministrativo()) && (
               <button className="fact-table-btn fact-table-btn-edit" onClick={() => editarGarantia(row.original)} data-tooltip="Editar">
                 <Edit3 size={14} />
-              </button>
-            )}
-            {(isAdmin() || isAdministrativo()) && (
-              <button className="fact-table-btn" onClick={() => verHistorialEdiciones(row.original)} data-tooltip="Historial de ediciones" style={{ color: '#8b5cf6' }}>
-                <History size={14} />
               </button>
             )}
             {isAdmin() && (
@@ -2102,6 +2147,14 @@ export function GarantiasTab() {
       })
     }
 
+    if (filtroKpi) {
+      chips.push({
+        id: 'gar-kpi',
+        label: LABELS_FILTRO_KPI[filtroKpi] || filtroKpi,
+        onClear: () => setFiltroKpi(null)
+      })
+    }
+
     if (asignadoFilter !== 'todos') {
       chips.push({
         id: 'gar-asignado',
@@ -2111,14 +2164,14 @@ export function GarantiasTab() {
     }
 
     return chips
-  }, [conductorFilter, estadoFilter, estadoCondFilter, asignadoFilter])
+  }, [conductorFilter, estadoFilter, estadoCondFilter, asignadoFilter, filtroKpi])
 
   const garantiasFiltradas = useMemo(() => {
     return garantias.filter(g => {
       if (conductorFilter.length > 0 && !conductorFilter.includes(g.conductor_nombre || '')) return false
       // 'devuelto' es un estado derivado: en devolucion con todo el monto ya devuelto.
       if (estadoFilter.length > 0) {
-        const estadoEfectivo = garantiaNoAplica(g) ? 'no_aplica' : (esGarantiaDevuelta(g) ? 'devuelto' : g.estado)
+        const estadoEfectivo = esGarantiaDevuelta(g) ? 'devuelto' : (garantiaNoAplica(g) ? 'no_aplica' : g.estado)
         if (!estadoFilter.includes(estadoEfectivo)) return false
       }
       // Filtro estado conductor
@@ -2130,9 +2183,20 @@ export function GarantiasTab() {
       // Filtro asignado
       if (asignadoFilter === 'asignado' && !conductoresAsignados.has(g.conductor_id)) return false
       if (asignadoFilter === 'no_asignado' && conductoresAsignados.has(g.conductor_id)) return false
+      // Filtro por tarjeta de KPI (mismo criterio con el que se calcula cada numero)
+      if (filtroKpi) {
+        const devuelta = esGarantiaDevuelta(g)
+        const estadoCond = ((g as any).estado_conductor || 'ACTIVO')
+        if (filtroKpi === 'en_curso' && !(g.estado === 'en_curso' && !garantiaNoAplica(g))) return false
+        if (filtroKpi === 'devuelto' && !devuelta) return false
+        if (filtroKpi === 'en_devolucion' && !(g.estado === 'en_devolucion' && !devuelta)) return false
+        if (filtroKpi === 'con_pagos' && (devuelta || montoPagadoGarantia(g) <= 0)) return false
+        if (filtroKpi === 'por_recaudar' && !(estadoCond !== 'BAJA' && conductoresAsignados.has(g.conductor_id))) return false
+        if (filtroKpi === 'mas120' && !garantiaPorDevolver(g)) return false
+      }
       return true
     })
-  }, [garantias, conductorFilter, estadoFilter, estadoCondFilter, asignadoFilter, conductoresAsignados])
+  }, [garantias, conductorFilter, estadoFilter, estadoCondFilter, asignadoFilter, conductoresAsignados, filtroKpi])
 
   const movimientosFiltrados = useMemo(() => {
     return todosLosPagos.filter(p => {
@@ -2148,22 +2212,42 @@ export function GarantiasTab() {
     const enCurso = garantias.filter(g => g.estado === 'en_curso' && !garantiaNoAplica(g)).length
     const devueltas = garantias.filter(g => esGarantiaDevuelta(g)).length
     const enDevolucion = garantias.filter(g => g.estado === 'en_devolucion' && !esGarantiaDevuelta(g)).length
-    const totalRecaudado = garantias.reduce((sum, g) => sum + (g.monto_realmente_pagado || g.monto_pagado), 0)
+    // Lo devuelto ya no esta recaudado: la plata volvio al conductor.
+    const totalRecaudado = garantias.reduce((sum, g) => sum + (esGarantiaDevuelta(g) ? 0 : montoPagadoGarantia(g)), 0)
     // Por Recaudar: solo conductores ACTIVOS con asignacion vigente (los de baja
     // ya no generan cobro; los activos sin asignacion tampoco estan cobrando).
     const totalPorRecaudar = garantias
       .filter(g => ((g as any).estado_conductor || 'ACTIVO') !== 'BAJA' && conductoresAsignados.has(g.conductor_id))
-      .reduce((sum, g) => sum + (g.monto_total - (g.monto_realmente_pagado || g.monto_pagado)), 0)
+      .reduce((sum, g) => sum + (g.monto_total - montoPagadoGarantia(g)), 0)
     // Vencidas: 120 dias o mas de baja (mismo criterio que el filtro de la tabla).
     const porDevolver = garantias.filter(g => garantiaPorDevolver(g))
     const cantPorDevolver = porDevolver.length
     // Suma de la columna Pagado para ese mismo grupo (120 dias o mas de baja).
-    const pagadoPorDevolver = porDevolver.reduce((sum, g) => sum + (g.monto_realmente_pagado || g.monto_pagado || 0), 0)
+    const pagadoPorDevolver = porDevolver.reduce((sum, g) => sum + (esGarantiaDevuelta(g) ? 0 : montoPagadoGarantia(g)), 0)
     const montoPorDevolver = porDevolver
       .filter(g => !garantiaNoAplica(g) && !esGarantiaDevuelta(g))
-      .reduce((sum, g) => sum + ((g.monto_realmente_pagado || g.monto_pagado) - ((g as any).monto_devuelto || 0)), 0)
+      .reduce((sum, g) => sum + (montoPagadoGarantia(g) - ((g as any).monto_devuelto || 0)), 0)
     return { total, enCurso, devueltas, enDevolucion, cantPorDevolver, montoPorDevolver, pagadoPorDevolver, totalRecaudado, totalPorRecaudar }
   }, [garantias, conductoresAsignados])
+
+  // Props comunes de una tarjeta de KPI: al hacer click aplica (o quita) el
+  // filtro que corresponde a ese numero.
+  const kpiCard = (valor: Exclude<FiltroKpi, null>) => ({
+    className: 'fact-stat-card',
+    onClick: () => setFiltroKpi(prev => (prev === valor ? null : valor)),
+    style: filtroKpi === valor
+      ? { cursor: 'pointer', outline: '2px solid #ff0033', outlineOffset: '-2px' }
+      : { cursor: 'pointer' }
+  })
+
+  const limpiarFiltrosGarantias = () => {
+    setFiltroKpi(null)
+    setEstadoFilter([])
+    setConductorFilter([])
+    setConductorSearch('')
+    setEstadoCondFilter('todos')
+    setAsignadoFilter('todos')
+  }
 
   // ========== RENDER ==========
 
@@ -2260,7 +2344,7 @@ export function GarantiasTab() {
                   </button>
                 ))}
               </div>
-              <VerLogsButton tablas={['garantias_conductores', 'garantias_pagos']} label="Garantías" />
+              <VerLogsButton tablas={['garantias_conductores', 'garantias_pagos', 'garantias_devoluciones']} label="Garantías" />
               <button className="fact-btn fact-btn-primary" onClick={agregarGarantia}>
                 <UserPlus size={16} />
                 Agregar Garantía
@@ -2271,43 +2355,43 @@ export function GarantiasTab() {
           {/* Stats */}
           <div className="fact-stats">
             <div className="fact-stats-grid">
-              <div className="fact-stat-card">
+              <div className="fact-stat-card" style={{ cursor: 'pointer' }} onClick={limpiarFiltrosGarantias} title="Ver todas las garantias (limpia los filtros)">
                 <Users size={18} className="fact-stat-icon" />
                 <div className="fact-stat-content">
                   <span className="fact-stat-value">{stats.total}</span>
                   <span className="fact-stat-label">Conductores</span>
                 </div>
               </div>
-              <div className="fact-stat-card">
+              <div {...kpiCard('en_curso')} title="Filtrar garantias en curso">
                 <Clock size={18} className="fact-stat-icon" />
                 <div className="fact-stat-content">
                   <span className="fact-stat-value">{stats.enCurso}</span>
                   <span className="fact-stat-label">En Curso</span>
                 </div>
               </div>
-              <div className="fact-stat-card">
+              <div {...kpiCard('devuelto')} title="Filtrar garantias ya devueltas">
                 <CheckCircle size={18} className="fact-stat-icon" />
                 <div className="fact-stat-content">
                   <span className="fact-stat-value">{stats.devueltas}</span>
                   <span className="fact-stat-label">Devueltas</span>
                 </div>
               </div>
-              <div className="fact-stat-card">
+              <div {...kpiCard('con_pagos')} title="Filtrar garantias con pagos (las que suman a Recaudado)">
                 <DollarSign size={18} className="fact-stat-icon" />
                 <div className="fact-stat-content">
                   <span className="fact-stat-value">{formatCurrency(stats.totalRecaudado)}</span>
                   <span className="fact-stat-label">Recaudado</span>
                 </div>
               </div>
-              <div className="fact-stat-card">
+              <div {...kpiCard('por_recaudar')} title="Filtrar conductores activos con asignacion">
                 <AlertTriangle size={18} className="fact-stat-icon" />
                 <div className="fact-stat-content">
                   <span className="fact-stat-value">{formatCurrency(stats.totalPorRecaudar)}</span>
-                  <span className="fact-stat-label" title="Solo conductores activos con asignacion">Por Recaudar</span>
+                  <span className="fact-stat-label">Por Recaudar</span>
                 </div>
               </div>
               {stats.enDevolucion > 0 && (
-                <div className="fact-stat-card">
+                <div {...kpiCard('en_devolucion')} title="Filtrar garantias en devolucion con saldo pendiente">
                   <RotateCcw size={18} className="fact-stat-icon" />
                   <div className="fact-stat-content">
                     <span className="fact-stat-value">{stats.enDevolucion}</span>
@@ -2317,8 +2401,8 @@ export function GarantiasTab() {
               )}
               {stats.cantPorDevolver > 0 && (
                 <div
-                  className="fact-stat-card"
-                  title={`Conductores con ${DIAS_BAJA_PARA_DEVOLVER} dias o mas de baja (mismo criterio que el filtro Dias Baja). Saldo pendiente de devolucion: ${formatCurrency(stats.montoPorDevolver)}`}
+                  {...kpiCard('mas120')}
+                  title={`Filtrar conductores con ${DIAS_BAJA_PARA_DEVOLVER} dias o mas de baja. Saldo pendiente de devolucion: ${formatCurrency(stats.montoPorDevolver)}`}
                 >
                   <AlertTriangle size={18} className="fact-stat-icon" style={{ color: '#ef4444' }} />
                   <div className="fact-stat-content">
@@ -2329,13 +2413,13 @@ export function GarantiasTab() {
               )}
               {stats.cantPorDevolver > 0 && (
                 <div
-                  className="fact-stat-card"
-                  title={`Suma de la columna Pagado de los ${stats.cantPorDevolver} conductores con ${DIAS_BAJA_PARA_DEVOLVER} dias o mas de baja`}
+                  {...kpiCard('mas120')}
+                  title={`Monto a devolver de los ${stats.cantPorDevolver} conductores con ${DIAS_BAJA_PARA_DEVOLVER} dias o mas de baja`}
                 >
                   <DollarSign size={18} className="fact-stat-icon" style={{ color: '#ef4444' }} />
                   <div className="fact-stat-content">
                     <span className="fact-stat-value" style={{ color: '#ef4444' }}>{formatCurrency(stats.pagadoPorDevolver)}</span>
-                    <span className="fact-stat-label">Pagado ({DIAS_BAJA_PARA_DEVOLVER}d o mas)</span>
+                    <span className="fact-stat-label">Por Devolver ($)</span>
                   </div>
                 </div>
               )}
@@ -2415,7 +2499,6 @@ export function GarantiasTab() {
       {kardexModal.open && kardexModal.garantia && (() => {
         const g = kardexModal.garantia
         const facturado = Number(g.monto_realmente_pagado || g.monto_pagado) || 0  // monto_realmente_pagado = lo facturado como garantia
-        const real = facturado
         const total = Number(g.monto_total) || 1
         // Deuda real = suma de delta_deuda del kardex (NO la diferencia facturado-pagado).
         // delta_deuda solo se llena cuando un pago Cabify no cubrió la cuota completa.
@@ -2437,8 +2520,6 @@ export function GarantiasTab() {
           periodoInfoMap.get(`${anio}-${semana}`)?.fechaCierre || null
 
         const deudaReal = Math.max(0, rowsSinSemanaActual.reduce((s, r) => s + (Number(r.delta_deuda) || 0), 0))
-        const pctFact = Math.min(100, (facturado / total) * 100)
-        const pctReal = Math.min(100, (real / total) * 100)
         const tieneDeuda = deudaReal > 1
 
         // CONSOLIDAR: 1 fila por semana (combinar cuota_facturada + pago_aplicado de la misma semana)
@@ -2641,9 +2722,6 @@ export function GarantiasTab() {
                   </div>
                 </div>
 
-                {/* Variables legadas (silenciar warning de unused) */}
-                {(() => { void real; void pctFact; void pctReal; void registrarPago; void sincronizarGarantias; return null })()}
-
                 {/* Resumen: total garantía vs total real pagado */}
                 <div style={{
                   display: 'flex', gap: '16px', marginBottom: '12px', padding: '10px 14px',
@@ -2662,6 +2740,14 @@ export function GarantiasTab() {
                       {formatCurrency(totalRealPagado)}
                     </div>
                   </div>
+                  {kardexModal.devoluciones.length > 0 && (
+                    <div style={{ flex: 1, minWidth: '120px' }}>
+                      <div style={{ fontSize: '10px', textTransform: 'uppercase', color: 'var(--text-secondary)', fontWeight: 600, letterSpacing: '0.3px' }}>Devuelto</div>
+                      <div style={{ fontSize: '15px', fontWeight: 700, fontFamily: 'monospace', color: '#2563eb', marginTop: '2px' }}>
+                        {formatCurrency(kardexModal.devoluciones.reduce((sum, d) => sum + (Number(d.monto) || 0), 0))}
+                      </div>
+                    </div>
+                  )}
                   {tieneExcedente && (
                     <div style={{ flex: 1, minWidth: '120px' }}>
                       <div style={{ fontSize: '10px', textTransform: 'uppercase', color: 'var(--text-secondary)', fontWeight: 600, letterSpacing: '0.3px' }}>Excedente</div>
@@ -2672,8 +2758,30 @@ export function GarantiasTab() {
                   )}
                 </div>
 
+                {/* Pestanas del modal: movimientos del kardex / devoluciones */}
+                <div style={{ display: 'flex', gap: '2px', marginBottom: '12px', background: 'var(--bg-secondary)', borderRadius: '6px', padding: '3px' }}>
+                  {([
+                    { value: 'movimientos' as const, label: `Movimientos (${kardexModal.rows.length})` },
+                    { value: 'devoluciones' as const, label: `Devoluciones (${kardexModal.devoluciones.length})` },
+                    { value: 'ediciones' as const, label: `Historial de Ediciones (${kardexModal.ediciones.length})` },
+                  ]).map(t => (
+                    <button
+                      key={t.value}
+                      onClick={() => setKardexModal(prev => ({ ...prev, tab: t.value }))}
+                      style={{
+                        flex: 1, padding: '6px 12px', fontSize: '11px', fontWeight: 600,
+                        borderRadius: '4px', border: 'none', cursor: 'pointer',
+                        background: kardexModal.tab === t.value ? '#ff0033' : 'transparent',
+                        color: kardexModal.tab === t.value ? 'white' : 'var(--text-secondary)',
+                      }}
+                    >
+                      {t.label}
+                    </button>
+                  ))}
+                </div>
+
                 {/* Filtros */}
-                {!kardexModal.loading && kardexModal.rows.length > 0 && (
+                {kardexModal.tab === 'movimientos' && !kardexModal.loading && kardexModal.rows.length > 0 && (
                   <div style={{ display: 'flex', gap: '8px', marginBottom: '10px', flexWrap: 'wrap' }}>
                     <input
                       type="text"
@@ -2701,7 +2809,7 @@ export function GarantiasTab() {
                 )}
 
                 {/* Tabla */}
-                {kardexModal.loading ? (
+                {kardexModal.tab === 'movimientos' && (kardexModal.loading ? (
                   <div style={{ padding: '30px 0', textAlign: 'center', color: 'var(--text-secondary)', fontSize: '12px' }}>Cargando...</div>
                 ) : kardexModal.rows.length === 0 ? (
                   <div style={{ padding: '30px 0', textAlign: 'center', color: 'var(--text-secondary)', fontSize: '12px' }}>Sin movimientos en el kardex</div>
@@ -2854,7 +2962,123 @@ export function GarantiasTab() {
                       )}
                     </div>
                   </>
+                ))}
+
+                {/* ===== Pestana Devoluciones ===== */}
+                {kardexModal.tab === 'devoluciones' && (
+                  kardexModal.devoluciones.length === 0 ? (
+                    <div style={{ padding: '30px 0', textAlign: 'center', color: 'var(--text-secondary)', fontSize: '12px' }}>
+                      Esta garantia no tiene devoluciones registradas
+                    </div>
+                  ) : (
+                    <>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', marginBottom: '6px' }}>
+                        <span style={{ fontSize: '11px', fontWeight: 700, color: '#2563eb', fontFamily: 'monospace' }}>
+                          Total devuelto: {formatCurrency(kardexModal.devoluciones.reduce((sum, d) => sum + (Number(d.monto) || 0), 0))}
+                        </span>
+                      </div>
+                      <div style={{ maxHeight: '400px', overflowY: 'auto', border: '1px solid var(--border-primary)', borderRadius: '6px' }}>
+                        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '11px' }}>
+                          <thead>
+                            <tr style={{ background: 'var(--bg-secondary)', position: 'sticky', top: 0, zIndex: 1 }}>
+                              <th style={{ padding: '8px 12px', textAlign: 'left', fontSize: '10px', textTransform: 'uppercase', letterSpacing: '0.3px', color: 'var(--text-secondary)', fontWeight: 600, borderBottom: '1px solid var(--border-primary)' }}>Fecha</th>
+                              <th style={{ padding: '8px 12px', textAlign: 'right', fontSize: '10px', textTransform: 'uppercase', letterSpacing: '0.3px', color: 'var(--text-secondary)', fontWeight: 600, borderBottom: '1px solid var(--border-primary)' }}>Monto</th>
+                              <th style={{ padding: '8px 12px', textAlign: 'left', fontSize: '10px', textTransform: 'uppercase', letterSpacing: '0.3px', color: 'var(--text-secondary)', fontWeight: 600, borderBottom: '1px solid var(--border-primary)' }}>Referencia</th>
+                              <th style={{ padding: '8px 12px', textAlign: 'left', fontSize: '10px', textTransform: 'uppercase', letterSpacing: '0.3px', color: 'var(--text-secondary)', fontWeight: 600, borderBottom: '1px solid var(--border-primary)' }}>Registrado por</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {kardexModal.devoluciones.map(d => (
+                              <tr key={d.id} style={{ borderBottom: '1px solid var(--border-primary)' }}>
+                                <td style={{ padding: '10px 12px', fontFamily: 'monospace', fontSize: '11px', whiteSpace: 'nowrap' }}>
+                                  {formatDate(d.created_at)}
+                                </td>
+                                <td style={{ padding: '10px 12px', textAlign: 'right', fontFamily: 'monospace', fontWeight: 700, color: '#2563eb' }}>
+                                  {formatCurrency(Number(d.monto) || 0)}
+                                </td>
+                                <td style={{ padding: '10px 12px', color: 'var(--text-secondary)' }}>
+                                  {d.referencia || '-'}
+                                </td>
+                                <td style={{ padding: '10px 12px', color: 'var(--text-secondary)' }}>
+                                  {d.created_by_name || 'Sin registrar'}
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                      <div style={{ marginTop: '8px', fontSize: '10px', color: 'var(--text-tertiary)' }}>
+                        {kardexModal.devoluciones.length} devolucion{kardexModal.devoluciones.length === 1 ? '' : 'es'} registrada{kardexModal.devoluciones.length === 1 ? '' : 's'}
+                      </div>
+                    </>
+                  )
                 )}
+
+                {/* Historial de ediciones: mismos datos que mostraba el boton de la fila. */}
+                {kardexModal.tab === 'ediciones' && (
+                  kardexModal.ediciones.length === 0 ? (
+                    <div style={{ padding: '30px 0', textAlign: 'center', color: 'var(--text-secondary)', fontSize: '12px' }}>
+                      Sin ediciones registradas
+                    </div>
+                  ) : (
+                    <>
+                      <div style={{ maxHeight: '400px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                        {kardexModal.ediciones.map(h => {
+                          const cambioPagado = h.monto_pagado_anterior !== h.monto_pagado_nuevo
+                          const cambioTotal = h.monto_total_anterior !== h.monto_total_nuevo
+                          const cambioEstado = h.estado_anterior !== h.estado_nuevo
+                          return (
+                            <div key={h.id} style={{ border: '1px solid var(--border-primary)', borderRadius: '8px', padding: '10px 12px' }}>
+                              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                                <span style={{ fontSize: '11px', color: 'var(--text-secondary)', fontFamily: 'monospace' }}>{formatDate(h.created_at)}</span>
+                                <span style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-primary)' }}>{h.created_by_name || 'Sistema'}</span>
+                              </div>
+                              {cambioPagado && (
+                                <div style={{ fontSize: '12px', marginBottom: '6px' }}>
+                                  <div style={{ fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '2px' }}>Monto Pagado</div>
+                                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                                    <span style={{ color: 'var(--text-secondary)' }}>Monto Antes:</span>
+                                    <span style={{ fontFamily: 'monospace' }}>{formatCurrency(h.monto_pagado_anterior)}</span>
+                                  </div>
+                                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                                    <span style={{ color: 'var(--text-secondary)' }}>Monto Modificado:</span>
+                                    <span style={{ fontFamily: 'monospace', fontWeight: 600 }}>{formatCurrency(h.monto_pagado_nuevo)}</span>
+                                  </div>
+                                </div>
+                              )}
+                              {cambioTotal && (
+                                <div style={{ fontSize: '12px', marginBottom: '6px', paddingTop: cambioPagado ? '6px' : 0, borderTop: cambioPagado ? '1px solid var(--border-primary)' : 'none' }}>
+                                  <div style={{ fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '2px' }}>Campo Total</div>
+                                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                                    <span style={{ color: 'var(--text-secondary)' }}>Monto Antes:</span>
+                                    <span style={{ fontFamily: 'monospace' }}>{formatCurrency(h.monto_total_anterior)}</span>
+                                  </div>
+                                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                                    <span style={{ color: 'var(--text-secondary)' }}>Monto Modificado:</span>
+                                    <span style={{ fontFamily: 'monospace', fontWeight: 600 }}>{formatCurrency(h.monto_total_nuevo)}</span>
+                                  </div>
+                                </div>
+                              )}
+                              {cambioEstado && (
+                                <div style={{ fontSize: '12px', marginBottom: '6px', display: 'flex', justifyContent: 'space-between', paddingTop: (cambioPagado || cambioTotal) ? '6px' : 0, borderTop: (cambioPagado || cambioTotal) ? '1px solid var(--border-primary)' : 'none' }}>
+                                  <span style={{ color: 'var(--text-secondary)' }}>Estado:</span>
+                                  <span>{h.estado_anterior} &rarr; <strong>{h.estado_nuevo}</strong></span>
+                                </div>
+                              )}
+                              <div style={{ fontSize: '12px', background: '#FEF9C3', padding: '6px 8px', borderRadius: '4px', color: '#854D0E' }}>
+                                <strong>Motivo:</strong> {h.motivo}
+                              </div>
+                            </div>
+                          )
+                        })}
+                      </div>
+                      <div style={{ marginTop: '8px', fontSize: '10px', color: 'var(--text-tertiary)' }}>
+                        {kardexModal.ediciones.length} edici{kardexModal.ediciones.length === 1 ? 'on' : 'ones'} registrada{kardexModal.ediciones.length === 1 ? '' : 's'}
+                      </div>
+                    </>
+                  )
+                )}
+
               </div>
             </div>
             {alertTip && (

@@ -370,7 +370,7 @@ export function VehicleManagement() {
         aplicarFiltroSede(supabase
           .from('vehiculos')
           .select(`
-            id, patente, marca, modelo, anio, color, kilometraje_actual, kilometraje_geotab, kilometraje_geotab_updated_at, estado_id, created_at,
+            id, patente, provisoria, marca, modelo, anio, color, kilometraje_actual, kilometraje_geotab, kilometraje_geotab_updated_at, estado_id, created_at,
             drive_folder_id, drive_folder_url, url_documentacion, gnc, telepase, titular, grupo_flota, categoria,
             cantidad_llaves, lugar_radicacion, vencimiento_seguro,
             vto_vtv_aplica, vto_vtv_fecha, vto_gnc_aplica, vto_gnc_fecha, vto_matafuego_aplica, vto_matafuego_fecha,
@@ -1900,6 +1900,16 @@ export function VehicleManagement() {
         cell: ({ getValue }) => (
           <span className="patente-badge">{getValue() as string}</span>
         ),
+        enableSorting: true,
+      },
+      {
+        accessorKey: 'provisoria',
+        header: 'Provisoria',
+        cell: ({ row }) => {
+          const prov = (row.original as any).provisoria
+          if (!prov) return <span style={{ color: 'var(--text-tertiary)' }}>-</span>
+          return <span style={{ fontSize: '12px' }}>{prov}</span>
+        },
         enableSorting: true,
       },
       {

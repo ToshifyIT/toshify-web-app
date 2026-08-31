@@ -78,6 +78,14 @@ export async function fetchCobroData(
     })
   })
 
+  // Tarifa dual: codigos de alquiler equivalentes en Tarifa Nueva.
+  // Una asignacion con tipo_tarifa='nueva' cobra P021-P026 en lugar de P001-P016.
+  const CODIGO_TARIFA_NUEVA: Record<string, string> = {
+    P001: 'P021', P002: 'P022', P013: 'P023', P014: 'P024', P015: 'P025', P016: 'P026'
+  }
+  const aplicarTarifa = (codigo: string, tipoTarifa?: string | null): string =>
+    tipoTarifa === 'nueva' ? (CODIGO_TARIFA_NUEVA[codigo] || codigo) : codigo
+
   // Nombres de días de la semana
   const diasNombres = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado']
 
@@ -88,14 +96,14 @@ export async function fetchCobroData(
   const [historialResult, nominaResult] = await Promise.all([
     (supabase.from('conceptos_facturacion_historial') as any)
       .select('codigo, precio_base, precio_final, fecha_vigencia_desde, fecha_vigencia_hasta')
-      .in('codigo', ['P001', 'P002', 'P003', 'P013', 'P014', 'P015', 'P016'])
+      .in('codigo', ['P001', 'P002', 'P003', 'P013', 'P014', 'P015', 'P016', 'P021', 'P022', 'P023', 'P024', 'P025', 'P026'])
       .lte('fecha_vigencia_desde', fechaFinStr)
       .gte('fecha_vigencia_hasta', fechaInicioStr),
     supabase
       .from('conceptos_nomina')
       .select('codigo, precio_base, precio_final')
       .eq('activo', true)
-      .in('codigo', ['P001', 'P002', 'P003', 'P013', 'P014', 'P015', 'P016']),
+      .in('codigo', ['P001', 'P002', 'P003', 'P013', 'P014', 'P015', 'P016', 'P021', 'P022', 'P023', 'P024', 'P025', 'P026']),
   ])
   const historialPrecios = historialResult.data
   const conceptosNomina = nominaResult.data
@@ -191,8 +199,8 @@ export async function fetchCobroData(
   const { data: asignacionesDetalle } = await (supabase
     .from('asignaciones_conductores') as any)
     .select(`
-      id, conductor_id, horario, fecha_inicio, fecha_fin, estado,
-      asignaciones!inner(id, horario, estado, fecha_inicio, fecha_fin)
+      id, conductor_id, horario, fecha_inicio, fecha_fin, estado, tipo_tarifa,
+      asignaciones!inner(id, horario, estado, fecha_inicio, fecha_fin, tipo_tarifa)
     `)
     .in('conductor_id', conductorIds)
     .in('estado', ['asignado', 'activo', 'activa', 'finalizado', 'finalizada', 'completado', 'cancelado', 'cancelada'])
@@ -261,23 +269,21 @@ export async function fetchCobroData(
 
     let modalidad: 'CARGO' | 'TURNO_DIURNO' | 'TURNO_NOCTURNO' = 'CARGO'
     let codigoConcepto = 'P002'
-    let horarioLabel = 'CARGO'
 
     if (modalidadAsignacion === 'todo_dia' || horarioLower === 'todo_dia') {
       modalidad = 'CARGO'
       codigoConcepto = 'P002'
-      horarioLabel = 'CARGO'
     } else if (modalidadAsignacion === 'turno') {
       if (horarioLower === 'nocturno' || horarioLower === 'n') {
         modalidad = 'TURNO_NOCTURNO'
         codigoConcepto = 'P013'
-        horarioLabel = 'NOCTURNO'
-      } else {
+        } else {
         modalidad = 'TURNO_DIURNO'
         codigoConcepto = 'P001'
-        horarioLabel = 'DIURNO'
-      }
+        }
     }
+    // Tarifa dual: la asignacion define si cobra codigos antiguos o nuevos
+    codigoConcepto = aplicarTarifa(codigoConcepto, ac.tipo_tarifa || asignacion.tipo_tarifa)
 
     const diasMap2 = diasTrabajadosPorConductor.get(ac.conductor_id)!
     const prorrateo = prorrateoMap.get(ac.conductor_id)!
@@ -287,7 +293,7 @@ export async function fetchCobroData(
     while (current <= efFin) {
       const diaStr = format(current, 'yyyy-MM-dd')
       if (!diasMap2.has(diaStr)) {
-        diasMap2.set(diaStr, horarioLabel)
+        diasMap2.set(diaStr, codigoConcepto)
         if (modalidad === 'CARGO') prorrateo.CARGO++
         else if (modalidad === 'TURNO_NOCTURNO') prorrateo.TURNO_NOCTURNO++
         else prorrateo.TURNO_DIURNO++
@@ -318,7 +324,8 @@ export async function fetchCobroData(
     if (!prorrateo) continue
 
     for (const asig of asignaciones) {
-      const codigo = codigosPorModalidad[asig.modalidad]
+      // Tarifa dual: el codigo guardado por asignacion ya incluye la tarifa
+      const codigo = asig.codigoConcepto || codigosPorModalidad[asig.modalidad]
       const montoKey = `monto_${asig.modalidad}` as keyof Prorrateo
 
       const currentDate = new Date(asig.fechaInicio)
@@ -341,9 +348,9 @@ export async function fetchCobroData(
   conductorIds.forEach(id => {
     const dias = diasTrabajadosPorConductor.get(id)
     if (!dias || dias.size === 0) return
-    for (const [diaStr, horarioLabel] of dias.entries()) {
-      const codigo = horarioLabel === 'CARGO' ? 'P002'
-        : horarioLabel === 'NOCTURNO' ? 'P013' : 'P001'
+    for (const [diaStr, codigoDia] of dias.entries()) {
+      // El valor guardado ya es el codigo de concepto con la tarifa aplicada
+      const codigo = codigoDia
       const precioDia = getPrecioEnFecha(codigo, parseISO(diaStr))
       if (diasMap.has(diaStr)) {
         diasMap.get(diaStr)!.alquiler += precioDia
