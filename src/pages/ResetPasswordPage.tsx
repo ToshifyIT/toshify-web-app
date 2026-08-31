@@ -81,8 +81,14 @@ export function ResetPasswordPage() {
           confirmButtonColor: '#FF0033'
         })
 
-        // Cerrar sesión y redirigir al login
-        await supabase.auth.signOut()
+        // Cerrar sesión y redirigir al login. El scope 'local' evita invalidar
+        // otras sesiones del usuario; el error se ignora porque la redirección
+        // al login no debe depender del éxito de la request.
+        try {
+          await supabase.auth.signOut({ scope: 'local' })
+        } catch {
+          // sesión ya inválida en el servidor: se continúa con la redirección
+        }
         navigate('/login')
       }
     } catch {

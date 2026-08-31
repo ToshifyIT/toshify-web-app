@@ -24,7 +24,6 @@ import { hellosignService } from '../hellosignService';
 
 interface ReemplazarDocumentoModalProps {
   template: HelloSignTemplate;
-  clientId: string | null;
   onClose: () => void;
   /** Se dispara cuando el listado debe refrescarse. */
   onReemplazada: () => void;
@@ -43,7 +42,6 @@ const espera = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
 
 export function ReemplazarDocumentoModal({
   template,
-  clientId,
   onClose,
   onReemplazada,
 }: ReemplazarDocumentoModalProps) {
@@ -86,7 +84,6 @@ export function ReemplazarDocumentoModal({
 
     try {
       const form = new FormData();
-      if (clientId) form.append('client_id', clientId);
       form.append('files[0]', archivo, archivo.name);
       form.append('test_mode', JSON.stringify(testMode));
       if (asunto.trim()) form.append('subject', asunto.trim());

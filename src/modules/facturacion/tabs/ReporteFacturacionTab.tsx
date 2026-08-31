@@ -995,7 +995,7 @@ export function ReporteFacturacionTab() {
         .from('conceptos_nomina')
         .select('codigo, precio_final')
         .eq('activo', true)
-        .in('codigo', ['P001', 'P002', 'P013', 'P014', 'P015', 'P016'])
+        .in('codigo', ['P001', 'P002', 'P013', 'P014', 'P015', 'P016', 'P021', 'P022', 'P023', 'P024', 'P025', 'P026'])
       const preciosPorCodigoDias: Record<string, number> = {}
       ;(conceptosPreciosDias || []).forEach((c: any) => {
         preciosPorCodigoDias[c.codigo] = c.precio_final || 0
@@ -1643,7 +1643,7 @@ export function ReporteFacturacionTab() {
         (supabase.from('facturacion_detalle') as any)
           .select('facturacion_id, precio_unitario')
           .in('facturacion_id', facIds)
-          .in('concepto_codigo', ['P001', 'P002', 'P013', 'P014', 'P015', 'P016']),
+          .in('concepto_codigo', ['P001', 'P002', 'P013', 'P014', 'P015', 'P016', 'P021', 'P022', 'P023', 'P024', 'P025', 'P026']),
       ])
 
       // Agrupar pagos por referencia_id (puede haber pagos parciales)
@@ -2016,7 +2016,8 @@ export function ReporteFacturacionTab() {
           fecha_fin,
           estado,
           asignacion_id,
-          asignaciones!inner(id, horario, estado, fecha_inicio, fecha_fin, vehiculo_id, vehiculos(gnc, updated_at))
+          tipo_tarifa,
+          asignaciones!inner(id, horario, estado, fecha_inicio, fecha_fin, vehiculo_id, tipo_tarifa, vehiculos(gnc, updated_at))
         `)
         .in('conductor_id', conductorIds)
         .in('estado', ['asignado', 'activo', 'activa', 'finalizado', 'finalizada', 'completado', 'cancelado', 'cancelada'])
@@ -2109,6 +2110,7 @@ export function ReporteFacturacionTab() {
         fechaFin: Date;
         tieneGnc: boolean;
         vehiculoId: string;
+        tipoTarifa: 'antigua' | 'nueva';
       }>>()
       conductorIds.forEach((id: string) => asignacionesPorConductorVP.set(id, []))
 
@@ -2285,7 +2287,7 @@ export function ReporteFacturacionTab() {
         // Guardar asignación para cálculo de montos
         const asigs = asignacionesPorConductorVP.get(ac.conductor_id)
         if (asigs) {
-          asigs.push({ modalidad, fechaInicio: efectivoInicio, fechaFin: efectivoFin, tieneGnc: asignacion.vehiculos?.gnc === true, vehiculoId: asignacion.vehiculo_id })
+          asigs.push({ modalidad, fechaInicio: efectivoInicio, fechaFin: efectivoFin, tieneGnc: asignacion.vehiculos?.gnc === true, vehiculoId: asignacion.vehiculo_id, tipoTarifa: (((ac.tipo_tarifa || asignacion.tipo_tarifa) === 'nueva') ? 'nueva' : 'antigua') })
         }
 
         // Rastrear la fecha_fin más tardía de la asignación (no la efectiva, la real del registro)
@@ -2315,14 +2317,14 @@ export function ReporteFacturacionTab() {
       const [{ data: historialPreciosVP }, { data: conceptosNominaVP }] = await Promise.all([
         (supabase.from('conceptos_facturacion_historial') as any)
           .select('codigo, precio_base, precio_final, fecha_vigencia_desde, fecha_vigencia_hasta')
-          .in('codigo', ['P001', 'P002', 'P003', 'P013', 'P014', 'P015', 'P016'])
+          .in('codigo', ['P001', 'P002', 'P003', 'P013', 'P014', 'P015', 'P016', 'P021', 'P022', 'P023', 'P024', 'P025', 'P026'])
           .lte('fecha_vigencia_desde', fechaFin)
           .gte('fecha_vigencia_hasta', fechaInicio),
         supabase
           .from('conceptos_nomina')
           .select('codigo, precio_base, precio_final')
           .eq('activo', true)
-          .in('codigo', ['P001', 'P002', 'P003', 'P013', 'P014', 'P015', 'P016']),
+          .in('codigo', ['P001', 'P002', 'P003', 'P013', 'P014', 'P015', 'P016', 'P021', 'P022', 'P023', 'P024', 'P025', 'P026']),
       ])
       const preciosBaseVP = new Map<string, number>()
       ;(conceptosNominaVP || []).forEach((c: any) => {
@@ -2366,10 +2368,17 @@ export function ReporteFacturacionTab() {
       const getCodigoPorModalidadVP = (
         modalidad: 'CARGO' | 'TURNO_DIURNO' | 'TURNO_NOCTURNO',
         tieneGnc: boolean,
+        tipoTarifa: 'antigua' | 'nueva' = 'antigua',
       ): string => {
-        if (modalidad === 'CARGO') return tieneGnc ? 'P002' : 'P016'
-        if (modalidad === 'TURNO_NOCTURNO') return tieneGnc ? 'P013' : 'P015'
-        return tieneGnc ? 'P001' : 'P014'
+        // Tarifa dual: las asignaciones con tarifa nueva cobran P021-P026
+        const codigosTarifaNuevaVP: Record<string, string> = {
+          P001: 'P021', P002: 'P022', P013: 'P023', P014: 'P024', P015: 'P025', P016: 'P026'
+        }
+        let codigo: string
+        if (modalidad === 'CARGO') codigo = tieneGnc ? 'P002' : 'P016'
+        else if (modalidad === 'TURNO_NOCTURNO') codigo = tieneGnc ? 'P013' : 'P015'
+        else codigo = tieneGnc ? 'P001' : 'P014'
+        return tipoTarifa === 'nueva' ? codigosTarifaNuevaVP[codigo] : codigo
       }
 
       // Calcular montos por día usando precios históricos
@@ -2399,7 +2408,7 @@ export function ReporteFacturacionTab() {
               montosContados.add(dateKey)
               // Evaluar GNC por fecha usando historial (regla: CARGO/DIURNO día siguiente, NOCTURNO mismo día)
               const gncEsteDia = tieneGncEnFecha(asig.vehiculoId, dateKey, asig.modalidad, gncHistorialMapVP, asig.tieneGnc)
-              const codigo = getCodigoPorModalidadVP(asig.modalidad, gncEsteDia)
+              const codigo = getCodigoPorModalidadVP(asig.modalidad, gncEsteDia, asig.tipoTarifa)
               const precioDiario = getPrecioEnFechaVP(codigo, currentDate)
               ;(prorrateo as any)[montoKey] += precioDiario
             }
@@ -3528,8 +3537,8 @@ export function ReporteFacturacionTab() {
       const { data: asignacionesConductoresRecalc } = await (supabase
         .from('asignaciones_conductores') as any)
         .select(`
-          id, conductor_id, horario, fecha_inicio, fecha_fin, estado,
-          asignaciones!inner(id, horario, estado, fecha_inicio, fecha_fin, vehiculo_id, vehiculos(gnc, updated_at))
+          id, conductor_id, horario, fecha_inicio, fecha_fin, estado, tipo_tarifa,
+          asignaciones!inner(id, horario, estado, fecha_inicio, fecha_fin, vehiculo_id, tipo_tarifa, vehiculos(gnc, updated_at))
         `)
         .in('conductor_id', conductorIdsTemp)
         .in('estado', ['asignado', 'activo', 'activa', 'finalizado', 'finalizada', 'completado', 'cancelado', 'cancelada'])
@@ -3564,8 +3573,12 @@ export function ReporteFacturacionTab() {
         CARGO_SIN_GNC: number; TURNO_DIURNO_SIN_GNC: number; TURNO_NOCTURNO_SIN_GNC: number;
       }
       const prorrateoRecalcMap = new Map<string, ProrrateoRecalc>()
+      // Tarifa dual: contador paralelo con los dias que pertenecen a asignaciones
+      // con tipo_tarifa='nueva' (subconjunto de los contadores principales).
+      const diasTarifaNuevaRecalcMap = new Map<string, ProrrateoRecalc>()
       conductorIdsTemp.forEach((id: string) => {
         prorrateoRecalcMap.set(id, { CARGO: 0, TURNO_DIURNO: 0, TURNO_NOCTURNO: 0, CARGO_SIN_GNC: 0, TURNO_DIURNO_SIN_GNC: 0, TURNO_NOCTURNO_SIN_GNC: 0 })
+        diasTarifaNuevaRecalcMap.set(id, { CARGO: 0, TURNO_DIURNO: 0, TURNO_NOCTURNO: 0, CARGO_SIN_GNC: 0, TURNO_DIURNO_SIN_GNC: 0, TURNO_NOCTURNO_SIN_GNC: 0 })
       })
 
       // Set de fechas ya contadas por conductor para deduplicar registros duplicados
@@ -3738,12 +3751,14 @@ export function ReporteFacturacionTab() {
               fechasContadasR.add(key)
               // Evaluar GNC por fecha usando historial
               const gncEsteDia = tieneGncEnFecha(vehiculoIdR, key, modalidadGnc, gncHistorialMapRecalc, vehiculoGncActual)
+              // Tarifa dual: si la asignacion es tarifa nueva, contar tambien en el mapa paralelo
+              const bucketNuevaR = ((ac.tipo_tarifa || asignacion.tipo_tarifa) === 'nueva') ? diasTarifaNuevaRecalcMap.get(ac.conductor_id) : undefined
               if (modalidadGnc === 'CARGO') {
-                if (gncEsteDia) prorrateo.CARGO++; else prorrateo.CARGO_SIN_GNC++
+                if (gncEsteDia) { prorrateo.CARGO++; if (bucketNuevaR) bucketNuevaR.CARGO++ } else { prorrateo.CARGO_SIN_GNC++; if (bucketNuevaR) bucketNuevaR.CARGO_SIN_GNC++ }
               } else if (modalidadGnc === 'TURNO_NOCTURNO') {
-                if (gncEsteDia) prorrateo.TURNO_NOCTURNO++; else prorrateo.TURNO_NOCTURNO_SIN_GNC++
+                if (gncEsteDia) { prorrateo.TURNO_NOCTURNO++; if (bucketNuevaR) bucketNuevaR.TURNO_NOCTURNO++ } else { prorrateo.TURNO_NOCTURNO_SIN_GNC++; if (bucketNuevaR) bucketNuevaR.TURNO_NOCTURNO_SIN_GNC++ }
               } else {
-                if (gncEsteDia) prorrateo.TURNO_DIURNO++; else prorrateo.TURNO_DIURNO_SIN_GNC++
+                if (gncEsteDia) { prorrateo.TURNO_DIURNO++; if (bucketNuevaR) bucketNuevaR.TURNO_DIURNO++ } else { prorrateo.TURNO_DIURNO_SIN_GNC++; if (bucketNuevaR) bucketNuevaR.TURNO_DIURNO_SIN_GNC++ }
               }
             }
             cursorR.setDate(cursorR.getDate() + 1)
@@ -3805,6 +3820,7 @@ export function ReporteFacturacionTab() {
         dias_turno_diurno: number; dias_turno_diurno_sin_gnc: number;
         dias_turno_nocturno: number; dias_turno_nocturno_sin_gnc: number;
         dias_cargo: number; dias_cargo_sin_gnc: number;
+        tarifa_nueva_dias: { CARGO: number; TURNO_DIURNO: number; TURNO_NOCTURNO: number; CARGO_SIN_GNC: number; TURNO_DIURNO_SIN_GNC: number; TURNO_NOCTURNO_SIN_GNC: number };
         total_dias: number;
         estado_billing: 'Activo' | 'Pausa' | 'De baja';
         fecha_baja_no_coincide?: boolean;
@@ -3881,6 +3897,7 @@ export function ReporteFacturacionTab() {
           dias_turno_nocturno_sin_gnc: diasNocturnoSinGncAjustados,
           dias_cargo: diasCargoAjustados,
           dias_cargo_sin_gnc: diasCargoSinGncAjustados,
+          tarifa_nueva_dias: diasTarifaNuevaRecalcMap.get(conductorData.id) || { CARGO: 0, TURNO_DIURNO: 0, TURNO_NOCTURNO: 0, CARGO_SIN_GNC: 0, TURNO_DIURNO_SIN_GNC: 0, TURNO_NOCTURNO_SIN_GNC: 0 },
           total_dias: totalDias,
           estado_billing: estadoBilling,
           fecha_baja_no_coincide: fechaBajaNoCoincide,
@@ -3905,6 +3922,14 @@ export function ReporteFacturacionTab() {
         'P014': conceptosPorCodigo.get('P014')?.precio_final || 35571,
         'P015': conceptosPorCodigo.get('P015')?.precio_final || 27000,
         'P016': conceptosPorCodigo.get('P016')?.precio_final || 62571,
+        // Tarifa dual: espejos de tarifa nueva. Fallback = precio del codigo antiguo
+        // equivalente para nunca facturar $0 si el concepto nuevo aun no esta cargado.
+        'P021': conceptosPorCodigo.get('P021')?.precio_final || conceptosPorCodigo.get('P001')?.precio_final || 42714,
+        'P022': conceptosPorCodigo.get('P022')?.precio_final || conceptosPorCodigo.get('P002')?.precio_final || 75429,
+        'P023': conceptosPorCodigo.get('P023')?.precio_final || conceptosPorCodigo.get('P013')?.precio_final || 32714,
+        'P024': conceptosPorCodigo.get('P024')?.precio_final || conceptosPorCodigo.get('P014')?.precio_final || 35571,
+        'P025': conceptosPorCodigo.get('P025')?.precio_final || conceptosPorCodigo.get('P015')?.precio_final || 27000,
+        'P026': conceptosPorCodigo.get('P026')?.precio_final || conceptosPorCodigo.get('P016')?.precio_final || 62571,
       }
 
       // Flags de vehículo por patente (snapshot al momento de recalcular)
@@ -3921,10 +3946,15 @@ export function ReporteFacturacionTab() {
       }
 
       // Precios diarios para alquiler por modalidad + GNC
-      const getCodigoAlquiler = (modalidad: 'DIURNO' | 'NOCTURNO' | 'CARGO', tieneGnc: boolean): string => {
-        if (modalidad === 'CARGO') return tieneGnc ? 'P002' : 'P016'
-        if (modalidad === 'NOCTURNO') return tieneGnc ? 'P013' : 'P015'
-        return tieneGnc ? 'P001' : 'P014'
+      const getCodigoAlquiler = (modalidad: 'DIURNO' | 'NOCTURNO' | 'CARGO', tieneGnc: boolean, tipoTarifa: 'antigua' | 'nueva' = 'antigua'): string => {
+        const codigosTarifaNueva: Record<string, string> = {
+          P001: 'P021', P002: 'P022', P013: 'P023', P014: 'P024', P015: 'P025', P016: 'P026'
+        }
+        let codigo: string
+        if (modalidad === 'CARGO') codigo = tieneGnc ? 'P002' : 'P016'
+        else if (modalidad === 'NOCTURNO') codigo = tieneGnc ? 'P013' : 'P015'
+        else codigo = tieneGnc ? 'P001' : 'P014'
+        return tipoTarifa === 'nueva' ? codigosTarifaNueva[codigo] : codigo
       }
       // Garantía: precio en conceptos_nomina es DIARIO, multiplicar por 7 para obtener cuota semanal
       const cuotaGarantia = Math.round(preciosActuales['P003'] * 7)
@@ -4187,16 +4217,29 @@ export function ReporteFacturacionTab() {
         }
         for (const linea of lineasAlquiler) {
           if (linea.dias <= 0) continue
-          const codigo = getCodigoAlquiler(linea.modalidad, linea.gnc)
-          const precio = preciosActuales[codigo] || 0
-          // FIX 2026-05-19: preservar 2 decimales (ej: 5.5 * 62571.43 = 344142.865 → 344142.87)
-          const monto = Math.round(precio * linea.dias * 100) / 100
-          alquilerTotal += monto
-          detallesAlquiler.push({
-            codigo,
-            descripcion: linea.gnc ? labelModalidad[linea.modalidad] : `${labelModalidad[linea.modalidad]} Sin GNC`,
-            dias: linea.dias, monto
-          })
+          // Tarifa dual: separar los dias de esta linea entre tarifa antigua y nueva.
+          // Los descuentos por hora de entrega consumen primero los dias de tarifa antigua.
+          const keyTarifaN = linea.modalidad === 'CARGO' ? (linea.gnc ? 'CARGO' : 'CARGO_SIN_GNC')
+            : linea.modalidad === 'NOCTURNO' ? (linea.gnc ? 'TURNO_NOCTURNO' : 'TURNO_NOCTURNO_SIN_GNC')
+            : (linea.gnc ? 'TURNO_DIURNO' : 'TURNO_DIURNO_SIN_GNC')
+          const diasNuevaRaw = (conductor.tarifa_nueva_dias as any)?.[keyTarifaN] || 0
+          const diasNueva = Math.min(linea.dias, diasNuevaRaw)
+          const diasAntigua = linea.dias - diasNueva
+          const partesTarifa: { dias: number; tarifa: 'antigua' | 'nueva' }[] = []
+          if (diasAntigua > 0) partesTarifa.push({ dias: diasAntigua, tarifa: 'antigua' })
+          if (diasNueva > 0) partesTarifa.push({ dias: diasNueva, tarifa: 'nueva' })
+          for (const parte of partesTarifa) {
+            const codigo = getCodigoAlquiler(linea.modalidad, linea.gnc, parte.tarifa)
+            const precio = preciosActuales[codigo] || 0
+            // FIX 2026-05-19: preservar 2 decimales (ej: 5.5 * 62571.43 = 344142.865 → 344142.87)
+            const monto = Math.round(precio * parte.dias * 100) / 100
+            alquilerTotal += monto
+            detallesAlquiler.push({
+              codigo,
+              descripcion: (linea.gnc ? labelModalidad[linea.modalidad] : `${labelModalidad[linea.modalidad]} Sin GNC`) + (parte.tarifa === 'nueva' ? ' (Tarifa Nueva)' : ''),
+              dias: parte.dias, monto
+            })
+          }
         }
 
         // precio_final ya incluye IVA - no se agrega de nuevo
@@ -5579,7 +5622,7 @@ export function ReporteFacturacionTab() {
       }
 
       // P001/P002/P013 - Alquiler: mostrar desglose por días
-      if (['P001', 'P002', 'P013', 'P014', 'P015', 'P016'].includes(codigo) && detalleFacturacion) {
+      if (['P001', 'P002', 'P013', 'P014', 'P015', 'P016', 'P021', 'P022', 'P023', 'P024', 'P025', 'P026'].includes(codigo) && detalleFacturacion) {
         titleExtra = 'Detalle de Alquiler'
         const tipoLabel = codigo === 'P001' ? 'Turno Diurno' : codigo === 'P013' ? 'Turno Nocturno' : 'A Cargo'
         htmlExtra = `
@@ -9051,7 +9094,7 @@ export function ReporteFacturacionTab() {
             .from('facturacion_detalle')
             .select('facturacion_id, precio_unitario')
             .in('facturacion_id', dbIds)
-            .in('concepto_codigo', ['P001', 'P002', 'P013', 'P014', 'P015', 'P016'])
+            .in('concepto_codigo', ['P001', 'P002', 'P013', 'P014', 'P015', 'P016', 'P021', 'P022', 'P023', 'P024', 'P025', 'P026'])
           ;(detallesAlquiler || []).forEach((d: { facturacion_id: string; precio_unitario: number }) => {
             const conductorId = dbIdToConId.get(d.facturacion_id)
             const pu = Number(d.precio_unitario) || 0

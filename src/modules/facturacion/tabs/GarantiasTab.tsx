@@ -25,7 +25,6 @@ import {
   RotateCcw,
   Download,
   Upload,
-  History,
 } from 'lucide-react'
 import { type ColumnDef } from '@tanstack/react-table'
 import { format, startOfWeek, endOfWeek, parseISO } from 'date-fns'
@@ -51,6 +50,19 @@ interface DevolucionGarantiaRow {
   referencia: string | null
   created_at: string
   created_by_name: string | null
+}
+
+interface EdicionGarantiaRow {
+  id: string
+  created_at: string
+  created_by_name: string | null
+  motivo: string
+  monto_pagado_anterior: number
+  monto_pagado_nuevo: number
+  monto_total_anterior: number
+  monto_total_nuevo: number
+  estado_anterior: string | null
+  estado_nuevo: string | null
 }
 
 interface PagoGarantiaRow {
@@ -180,11 +192,24 @@ export function GarantiasTab() {
     tipoFilter: string
     semanasFacturacion: { semana: number; anio: number; subtotalGarantia: number; fecha: string; estado: string; fechaCierre: string | null }[]
     devoluciones: DevolucionGarantiaRow[]
-    tab: 'movimientos' | 'devoluciones'
-  }>({ open: false, garantia: null, rows: [], loading: false, search: '', semanaFilter: '', tipoFilter: '', semanasFacturacion: [], devoluciones: [], tab: 'movimientos' })
+    ediciones: EdicionGarantiaRow[]
+    tab: 'movimientos' | 'devoluciones' | 'ediciones'
+  }>({ open: false, garantia: null, rows: [], loading: false, search: '', semanaFilter: '', tipoFilter: '', semanasFacturacion: [], devoluciones: [], ediciones: [], tab: 'movimientos' })
   // Tooltip flotante (posición fixed) para el aviso de semana no cerrada en el kardex.
   // Se usa fixed para que no lo recorte el contenedor con scroll de la tabla.
   const [alertTip, setAlertTip] = useState<{ x: number; y: number } | null>(null)
+
+  async function cargarEdiciones(garantiaId: string): Promise<EdicionGarantiaRow[]> {
+    const { data, error } = await (supabase.from('garantias_ediciones_historial') as any)
+      .select('*')
+      .eq('garantia_id', garantiaId)
+      .order('created_at', { ascending: false })
+    if (error) {
+      console.error('Error cargando historial de ediciones:', error.message)
+      return []
+    }
+    return (data || []) as EdicionGarantiaRow[]
+  }
 
   async function cargarDevoluciones(garantiaId: string): Promise<DevolucionGarantiaRow[]> {
     const { data, error } = await (supabase.from('garantias_devoluciones') as any)
@@ -199,13 +224,14 @@ export function GarantiasTab() {
   }
 
   async function abrirKardex(garantia: GarantiaConductor) {
-    setKardexModal({ open: true, garantia, rows: [], loading: true, search: '', semanaFilter: '', tipoFilter: '', semanasFacturacion: [], devoluciones: [], tab: 'movimientos' })
-    const [rows, facturacion, devoluciones] = await Promise.all([
+    setKardexModal({ open: true, garantia, rows: [], loading: true, search: '', semanaFilter: '', tipoFilter: '', semanasFacturacion: [], devoluciones: [], ediciones: [], tab: 'movimientos' })
+    const [rows, facturacion, devoluciones, ediciones] = await Promise.all([
       getKardexGarantia(garantia.id),
       getFacturacionGarantiaConductor(garantia.conductor_dni || ''),
       cargarDevoluciones(garantia.id),
+      cargarEdiciones(garantia.id),
     ])
-    setKardexModal(prev => ({ ...prev, rows, loading: false, semanasFacturacion: facturacion, devoluciones }))
+    setKardexModal(prev => ({ ...prev, rows, loading: false, semanasFacturacion: facturacion, devoluciones, ediciones }))
   }
 
   useEffect(() => {
@@ -750,8 +776,14 @@ export function GarantiasTab() {
   }
 
   async function editarGarantia(garantia: GarantiaConductor) {
-    const montoPagadoActual = Math.round(garantia.monto_realmente_pagado || garantia.monto_pagado)
-    const montoTotalActual = Math.round(garantia.monto_total)
+    // Se trabaja con 2 decimales: antes se redondeaba a entero y una garantia de
+    // $144.285,71 se guardaba como $144.286 al editarla.
+    const dosDecimales = (n: number) => Math.round((Number(n) || 0) * 100) / 100
+    const montoPagadoHistorico = dosDecimales(montoPagadoGarantia(garantia, garantiasOverrides.get(garantia.id)))
+    const estaDevuelta = esGarantiaDevuelta(garantia, garantiasOverrides.get(garantia.id))
+    // Devuelta: el saldo vigente es 0, igual que en la columna Pagado de la tabla.
+    const montoPagadoActual = estaDevuelta ? 0 : montoPagadoHistorico
+    const montoTotalActual = dosDecimales(garantia.monto_total)
 
     const { value: formValues } = await Swal.fire({
       title: `<span style="font-size: 16px; font-weight: 600;">Editar Garantia</span>`,
@@ -760,17 +792,22 @@ export function GarantiasTab() {
           <div style="background: #F3F4F6; padding: 10px 12px; border-radius: 6px; margin-bottom: 12px;">
             <div style="font-weight: 600; color: #111827;">${garantia.conductor_nombre}</div>
           </div>
+          ${estaDevuelta ? `
+          <div style="background: #EFF6FF; border: 1px solid #BFDBFE; padding: 8px 10px; border-radius: 6px; margin-bottom: 12px; font-size: 11px; color: #1e40af;">
+            Garantia devuelta: el saldo vigente es $ 0,00 porque ya se reintegro.
+            Lo cobrado en su momento (${formatCurrency(montoPagadoHistorico)}) queda en el kardex.
+          </div>` : ''}
           <div style="margin-bottom: 12px;">
             <label style="display: block; font-size: 12px; color: #374151; margin-bottom: 4px;">Monto Pagado:</label>
-            <input id="swal-monto-pagado" type="number" class="swal2-input" style="font-size: 14px; margin: 0; width: 100%; background: #F3F4F6; color: #374151;" value="${montoPagadoActual}" readonly>
+            <input id="swal-monto-pagado" type="number" class="swal2-input" style="font-size: 14px; margin: 0; width: 100%; background: #F3F4F6; color: #374151;" value="${montoPagadoActual.toFixed(2)}" step="0.01" readonly>
           </div>
           <div style="margin-bottom: 12px;">
             <label style="display: block; font-size: 12px; color: #374151; margin-bottom: 4px;">Monto Total:</label>
-            <input id="swal-monto-total" type="number" class="swal2-input" style="font-size: 14px; margin: 0; width: 100%; background: #F3F4F6; color: #374151;" value="${montoTotalActual}" readonly>
+            <input id="swal-monto-total" type="number" class="swal2-input" style="font-size: 14px; margin: 0; width: 100%; background: #F3F4F6; color: #374151;" value="${montoTotalActual.toFixed(2)}" step="0.01" readonly>
           </div>
           <div style="margin-bottom: 12px;">
             <label style="display: block; font-size: 12px; color: #374151; margin-bottom: 4px;">Ajuste:</label>
-            <input id="swal-ajuste" type="number" class="swal2-input" style="font-size: 14px; margin: 0; width: 100%;" value="0" placeholder="0">
+            <input id="swal-ajuste" type="number" step="0.01" class="swal2-input" style="font-size: 14px; margin: 0; width: 100%;" value="0" placeholder="0">
             <span style="display: block; font-size: 10px; color: #9ca3af; margin-top: 3px;">Si ingresas numero negativo se restara del Monto Pagado</span>
           </div>
           <div>
@@ -790,13 +827,17 @@ export function GarantiasTab() {
         const pagadoInput = document.getElementById('swal-monto-pagado') as HTMLInputElement
         const base = montoPagadoActual
         ajusteInput.addEventListener('input', () => {
-          const ajuste = parseFloat(ajusteInput.value) || 0
-          pagadoInput.value = String(Math.round(base + ajuste))
+          const ajuste = parseFloat(String(ajusteInput.value).replace(',', '.')) || 0
+          pagadoInput.value = (Math.round((base + ajuste) * 100) / 100).toFixed(2)
         })
       },
       preConfirm: () => {
-        const montoPagado = Math.round(parseFloat((document.getElementById('swal-monto-pagado') as HTMLInputElement).value))
-        const montoTotal = Math.round(parseFloat((document.getElementById('swal-monto-total') as HTMLInputElement).value))
+        const leerMonto = (id: string) => {
+          const raw = String((document.getElementById(id) as HTMLInputElement).value).replace(',', '.')
+          return Math.round(parseFloat(raw) * 100) / 100
+        }
+        const montoPagado = leerMonto('swal-monto-pagado')
+        const montoTotal = leerMonto('swal-monto-total')
         const motivo = (document.getElementById('swal-motivo') as HTMLTextAreaElement).value.trim()
 
         if (isNaN(montoPagado) || montoPagado < 0) {
@@ -850,6 +891,12 @@ export function GarantiasTab() {
         .eq('id', garantia.id)
 
       if (error) throw error
+
+      // Si el modal de esta garantia esta abierto, refrescar su historial de ediciones.
+      if (kardexModal.open && kardexModal.garantia?.id === garantia.id) {
+        const ediciones = await cargarEdiciones(garantia.id)
+        setKardexModal(prev => ({ ...prev, ediciones }))
+      }
 
       showSuccess('Actualizado')
 
@@ -1121,89 +1168,6 @@ export function GarantiasTab() {
       Swal.fire('Error', error.message || 'No se pudo registrar la devolución', 'error')
     }
   }
-
-  async function verHistorialEdiciones(garantia: GarantiaConductor) {
-    try {
-      const { data, error } = await (supabase.from('garantias_ediciones_historial') as any)
-        .select('*')
-        .eq('garantia_id', garantia.id)
-        .order('created_at', { ascending: false })
-
-      if (error) throw error
-
-      if (!data || data.length === 0) {
-        Swal.fire({
-          title: '<span style="font-size: 16px; font-weight: 600;">Historial de Ediciones</span>',
-          html: `
-            <div style="text-align: left; font-size: 13px;">
-              <div style="background: #F3F4F6; padding: 10px 12px; border-radius: 6px; margin-bottom: 12px;">
-                <div style="font-weight: 600;">${garantia.conductor_nombre}</div>
-              </div>
-              <div style="text-align: center; color: #9ca3af; padding: 20px 0;">Sin ediciones registradas</div>
-            </div>
-          `,
-          confirmButtonText: 'Cerrar',
-          confirmButtonColor: '#6b7280',
-          width: 420,
-        })
-        return
-      }
-
-      const rows = data.map((h: any) => {
-        const fecha = new Date(h.created_at).toLocaleString('es-AR', {
-          day: '2-digit', month: '2-digit', year: 'numeric',
-          hour: '2-digit', minute: '2-digit',
-          timeZone: 'America/Argentina/Buenos_Aires'
-        })
-        const cambios: string[] = []
-        if (h.monto_pagado_anterior !== h.monto_pagado_nuevo) {
-          cambios.push(`<div style="margin-bottom:4px;"><strong style="color:#6B7280;">Monto Pagado</strong></div><div style="display:flex;justify-content:space-between;"><span>Monto Antes:</span><span>${formatCurrency(h.monto_pagado_anterior)}</span></div><div style="display:flex;justify-content:space-between;"><span>Monto Modificado:</span><span style="font-weight:600;">${formatCurrency(h.monto_pagado_nuevo)}</span></div>`)
-        }
-        if (h.monto_total_anterior !== h.monto_total_nuevo) {
-          cambios.push(`<div style="margin-bottom:4px;${h.monto_pagado_anterior !== h.monto_pagado_nuevo ? 'margin-top:8px;padding-top:8px;border-top:1px solid #E5E7EB;' : ''}"><strong style="color:#6B7280;">Campo Total</strong></div><div style="display:flex;justify-content:space-between;"><span>Monto Antes:</span><span>${formatCurrency(h.monto_total_anterior)}</span></div><div style="display:flex;justify-content:space-between;"><span>Monto Modificado:</span><span style="font-weight:600;">${formatCurrency(h.monto_total_nuevo)}</span></div>`)
-        }
-        if (h.estado_anterior !== h.estado_nuevo) {
-          cambios.push(`<div style="margin-top:8px;padding-top:8px;border-top:1px solid #E5E7EB;display:flex;justify-content:space-between;"><span style="color:#6B7280;">Estado:</span><span>${h.estado_anterior} → <strong>${h.estado_nuevo}</strong></span></div>`)
-        }
-        return `
-          <div style="border: 1px solid #E5E7EB; border-radius: 8px; padding: 10px 12px; margin-bottom: 8px;">
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
-              <span style="font-size: 11px; color: #6B7280;">${fecha}</span>
-              <span style="font-size: 11px; color: #374151; font-weight: 600;">${h.created_by_name || 'Sistema'}</span>
-            </div>
-            <div style="font-size: 12px; color: #374151; margin-bottom: 6px;">
-              ${cambios.join('')}
-            </div>
-            <div style="font-size: 12px; background: #FEF9C3; padding: 6px 8px; border-radius: 4px; color: #854D0E;">
-              <strong>Motivo:</strong> ${h.motivo}
-            </div>
-          </div>
-        `
-      }).join('')
-
-      Swal.fire({
-        title: '<span style="font-size: 16px; font-weight: 600;">Historial de Ediciones</span>',
-        html: `
-          <div style="text-align: left; font-size: 13px;">
-            <div style="background: #F3F4F6; padding: 10px 12px; border-radius: 6px; margin-bottom: 12px;">
-              <div style="font-weight: 600;">${garantia.conductor_nombre}</div>
-              <div style="font-size: 11px; color: #6B7280;">${data.length} edicion(es) registrada(s)</div>
-            </div>
-            <div style="max-height: 350px; overflow-y: auto;">
-              ${rows}
-            </div>
-          </div>
-        `,
-        confirmButtonText: 'Cerrar',
-        confirmButtonColor: '#6b7280',
-        width: 460,
-      })
-    } catch (err: any) {
-      Swal.fire('Error', err.message || 'No se pudo cargar el historial', 'error')
-    }
-  }
-
-  // ========== FUNCIONES PARA MOVIMIENTOS ==========
 
   async function editarMovimiento(pago: PagoGarantiaRow) {
     // Generar opciones de semana
@@ -1980,6 +1944,10 @@ export function GarantiasTab() {
       ),
       cell: ({ row }) => {
         const estado = row.original.estado
+        // Devuelta: prevalece sobre "no aplica" (su saldo es 0 justamente porque se devolvio).
+        if (esGarantiaDevuelta(row.original, garantiasOverrides.get(row.original.id))) {
+          return <span className="fact-badge fact-badge-green">Devuelto</span>
+        }
         // Baja sin nada pagado: la garantia no aplica.
         if (garantiaNoAplica(row.original, garantiasOverrides.get(row.original.id))) {
           return <span className="fact-badge fact-badge-gray" title="Conductor de baja sin pagos: la garantia no aplica">N/A</span>
@@ -1992,12 +1960,9 @@ export function GarantiasTab() {
         }
         const { class: badgeClass, label } = config[estado] || { class: 'fact-badge-gray', label: estado }
         if (estado === 'en_devolucion') {
+          // Las devueltas ya salieron arriba: aca solo quedan las que tienen saldo.
           const devuelto = (row.original as any).monto_devuelto || 0
           const porDev = montoPagadoGarantia(row.original, garantiasOverrides.get(row.original.id)) - devuelto
-          // Ya devuelta por completo: un solo estado "Devuelto".
-          if (esGarantiaDevuelta(row.original, garantiasOverrides.get(row.original.id))) {
-            return <span className="fact-badge fact-badge-green">Devuelto</span>
-          }
           return (
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: '2px' }}>
               <span className={`fact-badge ${badgeClass}`}>{label}</span>
@@ -2030,11 +1995,6 @@ export function GarantiasTab() {
             {(isAdmin() || isAdministrativo()) && (
               <button className="fact-table-btn fact-table-btn-edit" onClick={() => editarGarantia(row.original)} data-tooltip="Editar">
                 <Edit3 size={14} />
-              </button>
-            )}
-            {(isAdmin() || isAdministrativo()) && (
-              <button className="fact-table-btn" onClick={() => verHistorialEdiciones(row.original)} data-tooltip="Historial de ediciones" style={{ color: '#8b5cf6' }}>
-                <History size={14} />
               </button>
             )}
             {isAdmin() && (
@@ -2211,7 +2171,7 @@ export function GarantiasTab() {
       if (conductorFilter.length > 0 && !conductorFilter.includes(g.conductor_nombre || '')) return false
       // 'devuelto' es un estado derivado: en devolucion con todo el monto ya devuelto.
       if (estadoFilter.length > 0) {
-        const estadoEfectivo = garantiaNoAplica(g) ? 'no_aplica' : (esGarantiaDevuelta(g) ? 'devuelto' : g.estado)
+        const estadoEfectivo = esGarantiaDevuelta(g) ? 'devuelto' : (garantiaNoAplica(g) ? 'no_aplica' : g.estado)
         if (!estadoFilter.includes(estadoEfectivo)) return false
       }
       // Filtro estado conductor
@@ -2803,6 +2763,7 @@ export function GarantiasTab() {
                   {([
                     { value: 'movimientos' as const, label: `Movimientos (${kardexModal.rows.length})` },
                     { value: 'devoluciones' as const, label: `Devoluciones (${kardexModal.devoluciones.length})` },
+                    { value: 'ediciones' as const, label: `Historial de Ediciones (${kardexModal.ediciones.length})` },
                   ]).map(t => (
                     <button
                       key={t.value}
@@ -3048,6 +3009,71 @@ export function GarantiasTab() {
                       </div>
                       <div style={{ marginTop: '8px', fontSize: '10px', color: 'var(--text-tertiary)' }}>
                         {kardexModal.devoluciones.length} devolucion{kardexModal.devoluciones.length === 1 ? '' : 'es'} registrada{kardexModal.devoluciones.length === 1 ? '' : 's'}
+                      </div>
+                    </>
+                  )
+                )}
+
+                {/* Historial de ediciones: mismos datos que mostraba el boton de la fila. */}
+                {kardexModal.tab === 'ediciones' && (
+                  kardexModal.ediciones.length === 0 ? (
+                    <div style={{ padding: '30px 0', textAlign: 'center', color: 'var(--text-secondary)', fontSize: '12px' }}>
+                      Sin ediciones registradas
+                    </div>
+                  ) : (
+                    <>
+                      <div style={{ maxHeight: '400px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                        {kardexModal.ediciones.map(h => {
+                          const cambioPagado = h.monto_pagado_anterior !== h.monto_pagado_nuevo
+                          const cambioTotal = h.monto_total_anterior !== h.monto_total_nuevo
+                          const cambioEstado = h.estado_anterior !== h.estado_nuevo
+                          return (
+                            <div key={h.id} style={{ border: '1px solid var(--border-primary)', borderRadius: '8px', padding: '10px 12px' }}>
+                              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                                <span style={{ fontSize: '11px', color: 'var(--text-secondary)', fontFamily: 'monospace' }}>{formatDate(h.created_at)}</span>
+                                <span style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-primary)' }}>{h.created_by_name || 'Sistema'}</span>
+                              </div>
+                              {cambioPagado && (
+                                <div style={{ fontSize: '12px', marginBottom: '6px' }}>
+                                  <div style={{ fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '2px' }}>Monto Pagado</div>
+                                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                                    <span style={{ color: 'var(--text-secondary)' }}>Monto Antes:</span>
+                                    <span style={{ fontFamily: 'monospace' }}>{formatCurrency(h.monto_pagado_anterior)}</span>
+                                  </div>
+                                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                                    <span style={{ color: 'var(--text-secondary)' }}>Monto Modificado:</span>
+                                    <span style={{ fontFamily: 'monospace', fontWeight: 600 }}>{formatCurrency(h.monto_pagado_nuevo)}</span>
+                                  </div>
+                                </div>
+                              )}
+                              {cambioTotal && (
+                                <div style={{ fontSize: '12px', marginBottom: '6px', paddingTop: cambioPagado ? '6px' : 0, borderTop: cambioPagado ? '1px solid var(--border-primary)' : 'none' }}>
+                                  <div style={{ fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '2px' }}>Campo Total</div>
+                                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                                    <span style={{ color: 'var(--text-secondary)' }}>Monto Antes:</span>
+                                    <span style={{ fontFamily: 'monospace' }}>{formatCurrency(h.monto_total_anterior)}</span>
+                                  </div>
+                                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                                    <span style={{ color: 'var(--text-secondary)' }}>Monto Modificado:</span>
+                                    <span style={{ fontFamily: 'monospace', fontWeight: 600 }}>{formatCurrency(h.monto_total_nuevo)}</span>
+                                  </div>
+                                </div>
+                              )}
+                              {cambioEstado && (
+                                <div style={{ fontSize: '12px', marginBottom: '6px', display: 'flex', justifyContent: 'space-between', paddingTop: (cambioPagado || cambioTotal) ? '6px' : 0, borderTop: (cambioPagado || cambioTotal) ? '1px solid var(--border-primary)' : 'none' }}>
+                                  <span style={{ color: 'var(--text-secondary)' }}>Estado:</span>
+                                  <span>{h.estado_anterior} &rarr; <strong>{h.estado_nuevo}</strong></span>
+                                </div>
+                              )}
+                              <div style={{ fontSize: '12px', background: '#FEF9C3', padding: '6px 8px', borderRadius: '4px', color: '#854D0E' }}>
+                                <strong>Motivo:</strong> {h.motivo}
+                              </div>
+                            </div>
+                          )
+                        })}
+                      </div>
+                      <div style={{ marginTop: '8px', fontSize: '10px', color: 'var(--text-tertiary)' }}>
+                        {kardexModal.ediciones.length} edici{kardexModal.ediciones.length === 1 ? 'on' : 'ones'} registrada{kardexModal.ediciones.length === 1 ? '' : 's'}
                       </div>
                     </>
                   )

@@ -928,7 +928,7 @@ export function ProgramacionModule() {
             citador_nombre: profile?.full_name || 'Sistema',
           })
         }
-      } catch (_visitaErr) {
+      } catch {
         // No bloquear el flujo principal si falla la creación de visita
       }
 
@@ -953,6 +953,17 @@ export function ProgramacionModule() {
     if (prog.tipo_asignacion === 'devolucion_vehiculo') {
       return handleEnviarDevolucion(prog)
     }
+
+    // Tarifa de cobro: leer SIEMPRE de la tabla base (la vista
+    // v_programaciones_onboarding no expone las columnas nuevas).
+    let tarifaProg: { tipo_tarifa?: string | null; tipo_tarifa_diurno?: string | null; tipo_tarifa_nocturno?: string | null } = {}
+    try {
+      const { data: tarifaRow } = await (supabase.from('programaciones_onboarding') as any)
+        .select('tipo_tarifa, tipo_tarifa_diurno, tipo_tarifa_nocturno')
+        .eq('id', prog.id)
+        .single()
+      if (tarifaRow) tarifaProg = tarifaRow
+    } catch { /* fallback: todo queda en antigua */ }
 
     // Verificar qué conductores son "asignacion_companero" (informativo, no bloquea)
     const diurnoEsCompanero = prog.tipo_asignacion_diurno === 'asignacion_companero'
@@ -1230,6 +1241,8 @@ export function ProgramacionModule() {
           fecha_programada: fechaProgramada,
           estado: 'programado',
           notas: notasBase,
+          // Tarifa de cobro heredada de la programacion (default 'antigua')
+          tipo_tarifa: tarifaProg.tipo_tarifa_diurno || tarifaProg.tipo_tarifa || 'antigua',
           zona: prog.zona || prog.zona_diurno || prog.zona_nocturno || null,
           created_by: user?.id || null,
           created_by_name: profile?.full_name || 'Sistema',
@@ -1254,7 +1267,8 @@ export function ProgramacionModule() {
             conductor_id: prog.conductor_diurno_id,
             horario: 'diurno',
             estado: 'asignado',
-            documento: mapDocumento(prog.documento_diurno)
+            documento: mapDocumento(prog.documento_diurno),
+            tipo_tarifa: tarifaProg.tipo_tarifa_diurno || tarifaProg.tipo_tarifa || 'antigua'
           })
         if (diurnoError) throw diurnoError
         conductoresInsertados++
@@ -1269,7 +1283,8 @@ export function ProgramacionModule() {
             conductor_id: prog.conductor_nocturno_id,
             horario: 'nocturno',
             estado: 'asignado',
-            documento: mapDocumento(prog.documento_nocturno)
+            documento: mapDocumento(prog.documento_nocturno),
+            tipo_tarifa: tarifaProg.tipo_tarifa_nocturno || tarifaProg.tipo_tarifa || 'antigua'
           })
         if (nocturnoError) throw nocturnoError
         conductoresInsertados++
@@ -1285,7 +1300,8 @@ export function ProgramacionModule() {
             conductor_id: prog.conductor_id,
             horario: 'todo_dia',
             estado: 'asignado',
-            documento: mapDocumento(prog.tipo_documento)
+            documento: mapDocumento(prog.tipo_documento),
+            tipo_tarifa: tarifaProg.tipo_tarifa || 'antigua'
           })
         if (conductorError) throw conductorError
         conductoresInsertados++
@@ -1347,7 +1363,7 @@ export function ProgramacionModule() {
             citador_nombre: profile?.full_name || 'Sistema',
           })
         }
-      } catch (_visitaErr) {
+      } catch {
         // No bloquear el flujo principal si falla la creación de visita
       }
 

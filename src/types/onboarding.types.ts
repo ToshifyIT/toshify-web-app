@@ -16,6 +16,10 @@ export type TipoAsignacion =
 // Tipos de candidato
 export type TipoCandidato = 'nuevo' | 'antiguo' | 'reingreso'
 
+// Tarifa de cobro del alquiler: decision comercial por programacion,
+// independiente del tipo de candidato. Default 'antigua' en toda la BD.
+export type TipoTarifa = 'antigua' | 'nueva'
+
 // Turnos
 export type TurnoOnboarding = 'diurno' | 'nocturno'
 
@@ -47,6 +51,7 @@ export interface ProgramacionOnboarding {
   conductor_nombre?: string
   conductor_dni?: string
   tipo_candidato?: TipoCandidato
+  tipo_tarifa?: TipoTarifa
   turno?: TurnoOnboarding
   
   // Conductor Diurno (nuevo - dual conductor)
@@ -54,6 +59,7 @@ export interface ProgramacionOnboarding {
   conductor_diurno_nombre?: string
   conductor_diurno_dni?: string
   tipo_candidato_diurno?: TipoCandidato
+  tipo_tarifa_diurno?: TipoTarifa
   tipo_asignacion_diurno?: TipoAsignacion
   documento_diurno?: TipoDocumento
   zona_diurno?: string
@@ -64,6 +70,7 @@ export interface ProgramacionOnboarding {
   conductor_nocturno_nombre?: string
   conductor_nocturno_dni?: string
   tipo_candidato_nocturno?: TipoCandidato
+  tipo_tarifa_nocturno?: TipoTarifa
   tipo_asignacion_nocturno?: TipoAsignacion
   documento_nocturno?: TipoDocumento
   zona_nocturno?: string
@@ -163,6 +170,7 @@ export interface ProgramacionOnboardingFormData {
   conductor_nombre?: string
   conductor_dni?: string
   tipo_candidato?: TipoCandidato
+  tipo_tarifa?: TipoTarifa
   turno?: TurnoOnboarding
   
   // Conductor Diurno (nuevo - dual conductor)
@@ -170,6 +178,7 @@ export interface ProgramacionOnboardingFormData {
   conductor_diurno_nombre?: string
   conductor_diurno_dni?: string
   tipo_candidato_diurno?: TipoCandidato
+  tipo_tarifa_diurno?: TipoTarifa
   tipo_asignacion_diurno?: TipoAsignacion
   documento_diurno?: TipoDocumento
   zona_diurno?: string
@@ -180,6 +189,7 @@ export interface ProgramacionOnboardingFormData {
   conductor_nocturno_nombre?: string
   conductor_nocturno_dni?: string
   tipo_candidato_nocturno?: TipoCandidato
+  tipo_tarifa_nocturno?: TipoTarifa
   tipo_asignacion_nocturno?: TipoAsignacion
   documento_nocturno?: TipoDocumento
   zona_nocturno?: string
@@ -257,6 +267,11 @@ export const TIPO_ASIGNACION_LABELS: Record<TipoAsignacion, string> = {
   entrega_auto_cargo: 'Entrega auto a cargo',
   cambio_turno: 'Cambio de turno',
   devolucion_vehiculo: 'Devolución de Vehículo'
+}
+
+export const TIPO_TARIFA_LABELS: Record<TipoTarifa, string> = {
+  antigua: 'Tarifa Antigua',
+  nueva: 'Tarifa Nueva'
 }
 
 export const TIPO_CANDIDATO_LABELS: Record<TipoCandidato, string> = {

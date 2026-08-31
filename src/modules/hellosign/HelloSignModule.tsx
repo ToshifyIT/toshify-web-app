@@ -10,7 +10,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   AlertTriangle,
   CheckCircle2,
-  ChevronDown,
   ExternalLink,
   Eye,
   FileSignature,
@@ -24,7 +23,6 @@ import {
   RefreshCw,
   Replace,
   Send,
-  Upload,
   Users,
 } from 'lucide-react';
 import type { ColumnDef } from '@tanstack/react-table';
@@ -42,7 +40,6 @@ import {
 import { TemplateDetalleModal } from './components/TemplateDetalleModal';
 import { UsarPlantillaModal } from './components/UsarPlantillaModal';
 import { TemplateVisorModal } from './components/TemplateVisorModal';
-import { CrearPlantillaModal } from './components/CrearPlantillaModal';
 import { ReemplazarDocumentoModal } from './components/ReemplazarDocumentoModal';
 import { EnviarConDocumentoModal } from './components/EnviarConDocumentoModal';
 import { DocumentosTab } from './components/DocumentosTab';
@@ -76,15 +73,11 @@ export function HelloSignModule() {
   const [detalleTemplate, setDetalleTemplate] = useState<HelloSignTemplate | null>(null);
   const [usarTemplate, setUsarTemplate] = useState<HelloSignTemplate | null>(null);
   const [visorTemplate, setVisorTemplate] = useState<HelloSignTemplate | null>(null);
-  const [crearAbierto, setCrearAbierto] = useState(false);
   const [reemplazarTemplate, setReemplazarTemplate] = useState<HelloSignTemplate | null>(
     null,
   );
   const [enviarConDocTemplate, setEnviarConDocTemplate] =
     useState<HelloSignTemplate | null>(null);
-  const [menuCrearAbierto, setMenuCrearAbierto] = useState(false);
-
-  const menuCrearRef = useRef<HTMLDivElement | null>(null);
   const esperandoDropboxSign = useRef(false);
 
   const cargar = useCallback(async () => {
@@ -111,18 +104,6 @@ export function HelloSignModule() {
     void cargar();
   }, [cargar]);
 
-  // Cierra el menú de "Crear Plantilla" al hacer click afuera.
-  useEffect(() => {
-    if (!menuCrearAbierto) return;
-    const alClickear = (e: MouseEvent) => {
-      if (menuCrearRef.current && !menuCrearRef.current.contains(e.target as Node)) {
-        setMenuCrearAbierto(false);
-      }
-    };
-    document.addEventListener('mousedown', alClickear);
-    return () => document.removeEventListener('mousedown', alClickear);
-  }, [menuCrearAbierto]);
-
   // Si el usuario se fue a crear la plantilla a Dropbox Sign, al volver el foco
   // a esta pestaña se refresca el listado solo.
   useEffect(() => {
@@ -136,7 +117,6 @@ export function HelloSignModule() {
   }, [cargar]);
 
   const abrirDropboxSign = useCallback(() => {
-    setMenuCrearAbierto(false);
     esperandoDropboxSign.current = true;
     window.open(URL_CREAR_EN_DROPBOX_SIGN, '_blank', 'noopener,noreferrer');
   }, []);
@@ -440,47 +420,15 @@ export function HelloSignModule() {
               Sincronizar
             </button>
 
-            <div className="hs-crear-wrap" ref={menuCrearRef}>
-              <button
-                className="btn-primary"
-                onClick={() => setMenuCrearAbierto((v) => !v)}
-                title="Crear una plantilla nueva"
-              >
-                <Plus size={15} />
-                Crear Plantilla
-                <ChevronDown
-                  size={14}
-                  style={{
-                    transform: menuCrearAbierto ? 'rotate(180deg)' : 'rotate(0deg)',
-                    transition: 'transform 0.15s',
-                  }}
-                />
-              </button>
-
-              {menuCrearAbierto && (
-                <div className="hs-crear-menu">
-                  <button
-                    onClick={() => {
-                      setMenuCrearAbierto(false);
-                      setCrearAbierto(true);
-                    }}
-                  >
-                    <Upload size={15} />
-                    <span>
-                      Subir documento y editar acá
-                      <small>Editor de Dropbox Sign embebido en Toshify</small>
-                    </span>
-                  </button>
-                  <button onClick={abrirDropboxSign}>
-                    <ExternalLink size={15} />
-                    <span>
-                      Crear en Dropbox Sign
-                      <small>Abre app.hellosign.com y refresca al volver</small>
-                    </span>
-                  </button>
-                </div>
-              )}
-            </div>
+            <button
+              className="btn-primary"
+              onClick={abrirDropboxSign}
+              title="Crear una plantilla nueva en Dropbox Sign (el listado se refresca al volver)"
+            >
+              <Plus size={15} />
+              Crear Plantilla
+              <ExternalLink size={14} />
+            </button>
           </>
         }
       />
@@ -513,14 +461,6 @@ export function HelloSignModule() {
         />
       )}
 
-      {crearAbierto && (
-        <CrearPlantillaModal
-          clientId={status?.clientId ?? null}
-          onClose={() => setCrearAbierto(false)}
-          onCreada={() => void cargar()}
-        />
-      )}
-
       {enviarConDocTemplate && (
         <EnviarConDocumentoModal
           template={enviarConDocTemplate}
@@ -532,7 +472,6 @@ export function HelloSignModule() {
       {reemplazarTemplate && (
         <ReemplazarDocumentoModal
           template={reemplazarTemplate}
-          clientId={status?.clientId ?? null}
           onClose={() => setReemplazarTemplate(null)}
           onReemplazada={() => void cargar()}
         />
