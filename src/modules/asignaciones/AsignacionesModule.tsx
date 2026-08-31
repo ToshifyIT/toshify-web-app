@@ -30,6 +30,7 @@ interface Asignacion {
   horario: string
   estado: string
   notas: string | null
+  tipo_tarifa?: 'antigua' | 'nueva' | null
   control_completado?: boolean
   created_at: string
   created_by?: string | null
@@ -53,6 +54,7 @@ interface Asignacion {
     confirmado: boolean
     fecha_confirmacion?: string | null
     documento?: string
+    tipo_tarifa?: 'antigua' | 'nueva' | null
     conductores: {
       nombres: string
       apellidos: string
@@ -663,10 +665,10 @@ export function AsignacionesModule() {
         aplicarFiltroSede(supabase
           .from('asignaciones')
           .select(`
-            id, codigo, vehiculo_id, horario, fecha_programada, fecha_inicio, fecha_fin, estado, control_completado, created_at, sede_id, notas,
+            id, codigo, vehiculo_id, horario, fecha_programada, fecha_inicio, fecha_fin, estado, control_completado, created_at, sede_id, notas, tipo_tarifa,
             vehiculos (patente, marca, modelo),
             asignaciones_conductores (
-              id, conductor_id, estado, horario, confirmado, fecha_confirmacion, documento, fecha_inicio, fecha_fin,
+              id, conductor_id, estado, horario, confirmado, fecha_confirmacion, documento, tipo_tarifa, fecha_inicio, fecha_fin,
               conductores (nombres, apellidos, numero_licencia, estado_id, cochera_propia, contacto_emergencia, telefono_emergencia, parentesco_emergencia, conductores_estados(codigo))
             )
           `))
@@ -825,7 +827,7 @@ export function AsignacionesModule() {
         aplicarFiltroSede(supabase
           .from('asignaciones')
           .select(`
-            id, codigo, vehiculo_id, horario, fecha_programada, fecha_inicio, fecha_fin, estado, control_completado, created_at, sede_id, notas,
+            id, codigo, vehiculo_id, horario, fecha_programada, fecha_inicio, fecha_fin, estado, control_completado, created_at, sede_id, notas, tipo_tarifa,
             vehiculos (patente, marca, modelo),
             asignaciones_conductores (
               id, conductor_id, estado, horario, confirmado, fecha_confirmacion, documento, fecha_inicio, fecha_fin,
@@ -1268,6 +1270,117 @@ export function AsignacionesModule() {
   }, [asignaciones, calculatedStats])
 
   // Manejar click en stat cards para filtrar
+  // Cambia la tarifa de cobro (antigua/nueva) de UN conductor de la asignacion.
+  // Afecta solo el calculo de semanas de facturacion NO cerradas.
+  const handleCambiarTarifaConductor = async (acId: string, nombre: string, actualRaw?: string | null, fallback?: string | null) => {
+    const actual = (actualRaw || fallback || 'antigua') as 'antigua' | 'nueva'
+    const nueva = actual === 'antigua' ? 'nueva' : 'antigua'
+    const confirmacion = await Swal.fire({
+      title: 'Cambiar tarifa de cobro',
+      html: `<b>${nombre}</b> esta en <b>Tarifa ${actual === 'antigua' ? 'Antigua' : 'Nueva'}</b>.<br/>` +
+        `Se cambiara a <b>Tarifa ${nueva === 'antigua' ? 'Antigua' : 'Nueva'}</b> solo para este conductor.<br/><br/>` +
+        'El cambio impacta el calculo de las semanas de facturacion aun no cerradas. Las semanas cerradas no se modifican.',
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonText: 'Cambiar tarifa',
+      cancelButtonText: 'Cancelar',
+      confirmButtonColor: 'var(--color-primary)'
+    })
+    if (!confirmacion.isConfirmed) return
+    try {
+      const { error } = await (supabase.from('asignaciones_conductores') as any)
+        .update({ tipo_tarifa: nueva })
+        .eq('id', acId)
+      if (error) throw error
+      // No se registra nada a mano en audit_log: la tabla asignaciones_conductores
+      // ya tiene trigger de auditoria y hacerlo duplicaba cada cambio.
+      setViewAsignacion(prev => prev ? {
+        ...prev,
+        asignaciones_conductores: prev.asignaciones_conductores?.map(a =>
+          a.id === acId ? { ...a, tipo_tarifa: nueva } : a
+        )
+      } : prev)
+      showSuccess('Tarifa actualizada', `${nombre}: Tarifa ${nueva === 'antigua' ? 'Antigua' : 'Nueva'}`)
+      loadAllData()
+    } catch (err: any) {
+      Swal.fire('Error', err?.message || 'No se pudo cambiar la tarifa', 'error')
+    }
+  }
+
+  // Historial de cambios de tarifa de un conductor dentro de la asignacion.
+  const verHistorialTarifa = async (acId: string, nombre: string) => {
+    const etiqueta = (v: unknown) => v === 'nueva' ? 'Tarifa Nueva' : v === 'antigua' ? 'Tarifa Antigua' : '—'
+    try {
+      const { data, error } = await (supabase.from('audit_log') as any)
+        .select('created_at, usuario_nombre, usuario_email, datos_anteriores, datos_nuevos, campos_modificados')
+        .eq('tabla', 'asignaciones_conductores')
+        .eq('registro_id', acId)
+        .order('created_at', { ascending: false })
+        .limit(50)
+      if (error) throw error
+
+      // El trigger de auditoria guarda la fila completa en cada UPDATE (y tambien
+      // el INSERT inicial), asi que hay que quedarse solo con los registros donde
+      // la tarifa realmente cambio de valor.
+      const vistos = new Set<string>()
+      const cambios = (data || [])
+        .map((r: any) => ({
+          created_at: r.created_at,
+          usuario: r.usuario_nombre || r.usuario_email || 'Sistema',
+          antes: r.datos_anteriores?.tipo_tarifa,
+          despues: r.datos_nuevos?.tipo_tarifa,
+        }))
+        .filter((r: any) => {
+          if (r.antes === undefined || r.antes === null) return false   // INSERT de creacion
+          if (r.despues === undefined || r.despues === null) return false
+          if (r.antes === r.despues) return false                        // cambio de otro campo
+          // Defensa contra duplicados historicos (mismo cambio, mismo segundo)
+          const clave = `${String(r.created_at).slice(0, 19)}|${r.antes}|${r.despues}`
+          if (vistos.has(clave)) return false
+          vistos.add(clave)
+          return true
+        })
+
+      const cuerpo = cambios.length === 0
+        ? '<div style="padding:18px 0;text-align:center;color:#9ca3af;font-size:13px;">' +
+          'Sin cambios registrados.<br/>La tarifa sigue como se eligio en la programacion.' +
+          '</div>'
+        : '<table style="width:100%;border-collapse:collapse;font-size:12px;">' +
+            '<thead><tr style="background:#f9fafb;">' +
+              '<th style="padding:8px 10px;text-align:left;font-size:10px;text-transform:uppercase;color:#6b7280;">Fecha</th>' +
+              '<th style="padding:8px 10px;text-align:left;font-size:10px;text-transform:uppercase;color:#6b7280;">Usuario</th>' +
+              '<th style="padding:8px 10px;text-align:left;font-size:10px;text-transform:uppercase;color:#6b7280;">Cambio</th>' +
+            '</tr></thead><tbody>' +
+            cambios.map((r: any) => {
+              const fecha = new Date(r.created_at).toLocaleString('es-AR', {
+                day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit'
+              })
+              return '<tr style="border-top:1px solid #e5e7eb;">' +
+                `<td style="padding:8px 10px;white-space:nowrap;font-family:monospace;">${fecha}</td>` +
+                `<td style="padding:8px 10px;color:#374151;">${r.usuario}</td>` +
+                `<td style="padding:8px 10px;">${etiqueta(r.antes)} &rarr; <strong>${etiqueta(r.despues)}</strong></td>` +
+              '</tr>'
+            }).join('') +
+          '</tbody></table>'
+
+      Swal.fire({
+        title: '<span style="font-size:16px;font-weight:600;">Historial de tarifa</span>',
+        html: `<div style="text-align:left;"><div style="font-weight:600;margin-bottom:10px;">${nombre}</div>${cuerpo}</div>`,
+        width: 540,
+        confirmButtonText: 'Cerrar',
+        confirmButtonColor: 'var(--color-primary)'
+      })
+    } catch (err: any) {
+      Swal.fire('Error', err?.message || 'No se pudo cargar el historial de tarifa', 'error')
+    }
+  }
+
+  // Acciones de tarifa hoy OCULTAS en la interfaz (ver el bloque de la tarjeta de
+  // conductor). Se conservan para reactivarlas; estas dos lineas solo evitan el
+  // error de "declarado y no usado" y no ejecutan nada.
+  void handleCambiarTarifaConductor
+  void verHistorialTarifa
+
   const handleStatCardClick = (cardType: string) => {
     // Toggle: si hace click en el mismo, desactivar; si no, activar el nuevo
     setActiveStatCard(prev => prev === cardType ? null : cardType)
@@ -3716,6 +3829,27 @@ export function AsignacionesModule() {
                                   </strong>
                                 </p>
                               )}
+                              {(() => {
+                                const tarifaAc = ((ac as any).tipo_tarifa || viewAsignacion.tipo_tarifa || 'antigua') as 'antigua' | 'nueva'
+                                return (
+                                  <p className="asig-conductor-card-info" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                    <span>Tarifa:</span>
+                                    <span
+                                      title="Esquema de precios del alquiler para este conductor"
+                                      style={{
+                                        padding: '1px 9px', borderRadius: '10px', fontSize: '11px', fontWeight: 600,
+                                        background: tarifaAc === 'nueva' ? '#DCFCE7' : '#EEF2F7',
+                                        color: tarifaAc === 'nueva' ? '#15803D' : '#475569'
+                                      }}
+                                    >
+                                      {tarifaAc === 'nueva' ? 'Tarifa Nueva' : 'Tarifa Antigua'}
+                                    </span>
+                                    {/* Botones "Cambiar" e historial de tarifa ocultos a pedido:
+                                        la tarifa se muestra solo como informacion. Para reactivarlos,
+                                        volver a renderizar handleCambiarTarifaConductor / verHistorialTarifa. */}
+                                  </p>
+                                )
+                              })()}
                               <p className="asig-conductor-status">
                                 {ac.confirmado ? (
                                   <>

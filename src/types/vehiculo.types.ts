@@ -33,6 +33,8 @@ export interface Vehicle {
   modelo: string;
   anio: number;
   color?: string;
+  /** Vehiculo equipado con GNC. Define el concepto de alquiler aplicable. */
+  gnc?: boolean;
   estado_id: string;
   vehiculos_estados?: VehiculoEstado;
   asignacionActiva?: AsignacionActiva;

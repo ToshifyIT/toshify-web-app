@@ -3,7 +3,7 @@ import { useState, useEffect, useMemo, useCallback, useRef, useLayoutEffect } fr
 import { inferirSedeDeLead, normalizarTexto } from '../../utils/sedeMatch'
 import { createPortal } from 'react-dom'
 import {
-  Eye, Edit2, Trash2, Users, UserPlus, Clock, RefreshCw, MessageCircle,
+  Eye, Edit2, Trash2, Users, UserPlus, Clock, RefreshCw, MessageCircle, Layers, Link2,
   CheckCircle, AlertTriangle, X, Download, Upload, FolderOpen, Car, Bell,
 } from 'lucide-react'
 import { ActionsMenu } from '../../components/ui/ActionsMenu'
@@ -21,6 +21,7 @@ import { ExcelColumnFilter } from '../../components/ui/DataTable/ExcelColumnFilt
 import './LeadsModule.css'
 import { LeadWizard } from './components/LeadWizard'
 import { LeadDetailView } from './components/LeadDetailView'
+import { LeadsConductoresModal } from './components/LeadsConductoresModal'
 import { inferZona, inferZonaFromCoords } from '../../utils/zonaUtils'
 import { createLeadDriveFolder } from '../../services/driveService'
 import { GOOGLE_MAPS_SCRIPT_URL } from '../../lib/googleMaps'
@@ -459,6 +460,9 @@ export function LeadsModule() {
 
   // Stat card filter
   const [activeStatCard, setActiveStatCard] = useState<string | null>(null)
+
+  // Modal de conciliación Lead ↔ Conductor (solo lectura)
+  const [verLeadsConductores, setVerLeadsConductores] = useState(false)
 
   // Inline estado dropdown
   const [estadoDropdownId, setEstadoDropdownId] = useState<string | null>(null)
@@ -1036,8 +1040,10 @@ export function LeadsModule() {
     const damaro = leads.filter(l => (l.fuente_de_lead || '').toLowerCase() === 'damaro').length
     const autoPueblo = leads.filter(l => l.estado_de_lead === 'Auto del pueblo').length
     const descartados = leads.filter(l => l.estado_de_lead === 'Descartado').length
+    // Total visible en la tabla: todo menos los que ya son Conductor.
+    const todos = leads.filter(l => l.estado_de_lead !== 'Conductor').length
     const recontacto = leads.filter(l => l.estado_de_lead !== 'Conductor' && tieneAlertaRecontacto(l.observaciones)).length
-    return { total, inicio, aptos, noAptos, convocatoria, enZonaRestringida, enZonaSegura, intercom, damaro, autoPueblo, descartados, recontacto }
+    return { total, inicio, aptos, noAptos, convocatoria, enZonaRestringida, enZonaSegura, intercom, damaro, autoPueblo, descartados, recontacto, todos }
   }, [leads, leadsEnZona])
 
   // ---------- UNIQUE VALUES PARA FILTROS ----------
@@ -1074,6 +1080,9 @@ export function LeadsModule() {
     else if (activeStatCard === 'autoPueblo') result = result.filter(l => l.estado_de_lead === 'Auto del pueblo')
     else if (activeStatCard === 'recontacto') result = result.filter(l => tieneAlertaRecontacto(l.observaciones))
     else if (activeStatCard === 'descartados') result = result.filter(l => l.estado_de_lead === 'Descartado')
+    // 'todos': vista general para busquedas. No filtra por estado, por lo que
+    // incluye los descartados junto al resto.
+    else if (activeStatCard === 'todos') { /* sin filtro de estado */ }
     else {
       // Por defecto: excluir descartados de la tabla
       result = result.filter(l => l.estado_de_lead !== 'Descartado')
@@ -2717,6 +2726,7 @@ export function LeadsModule() {
         zonaRestringida: 'Zona Restringida',
         autoPueblo: 'Auto del pueblo',
         descartados: 'Descartados',
+        todos: 'Todos (incluye descartados)',
       }
       filters.push({
         id: `stat-${activeStatCard}`,
@@ -2753,26 +2763,6 @@ export function LeadsModule() {
             <div className="stat-content">
               <span className="stat-value">{stats.aptos}</span>
               <span className="stat-label">Aptos</span>
-            </div>
-          </div>
-          <div
-            className={`stat-card stat-card-clickable ${activeStatCard === 'intercom' ? 'stat-card-active' : ''}`}
-            onClick={() => handleStatClick('intercom')}
-          >
-            <MessageCircle size={18} className="stat-icon" style={{ color: '#6366f1' }} />
-            <div className="stat-content">
-              <span className="stat-value">{stats.intercom}</span>
-              <span className="stat-label">Intercom</span>
-            </div>
-          </div>
-          <div
-            className={`stat-card stat-card-clickable ${activeStatCard === 'damaro' ? 'stat-card-active' : ''}`}
-            onClick={() => handleStatClick('damaro')}
-          >
-            <Users size={18} className="stat-icon" style={{ color: '#f59e0b' }} />
-            <div className="stat-content">
-              <span className="stat-value">{stats.damaro}</span>
-              <span className="stat-label">Damaro</span>
             </div>
           </div>
           <div
@@ -2868,6 +2858,20 @@ export function LeadsModule() {
                 <UserPlus size={14} /> <span className="leads-btn-label">Nuevo Lead</span>
               </button>
             )}
+            <button
+              className="btn-secondary btn-sm"
+              onClick={() => setVerLeadsConductores(true)}
+              title="Ver los leads que ya son conductores y los que tienen un conductor con el mismo documento pero siguen sin convertir"
+            >
+              <Link2 size={14} /> <span className="leads-btn-label">Ver Lead/Conductores</span>
+            </button>
+            <button
+              className={`btn-sm ${activeStatCard === 'todos' ? 'btn-primary' : 'btn-secondary'}`}
+              onClick={() => handleStatClick('todos')}
+              title="Muestra todos los leads, incluidos los descartados, para hacer una busqueda general"
+            >
+              <Layers size={14} /> <span className="leads-btn-label">Ver todos ({stats.todos})</span>
+            </button>
             <button
               className={`btn-sm ${activeStatCard === 'descartados' ? 'btn-primary' : 'btn-secondary'}`}
               onClick={() => handleStatClick('descartados')}
@@ -2991,6 +2995,13 @@ export function LeadsModule() {
             </div>
           </div>
         </div>
+      )}
+
+      {verLeadsConductores && (
+        <LeadsConductoresModal
+          onClose={() => setVerLeadsConductores(false)}
+          onActualizado={loadLeads}
+        />
       )}
     </div>
   )

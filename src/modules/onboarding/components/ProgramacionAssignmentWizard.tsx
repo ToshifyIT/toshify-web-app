@@ -16,12 +16,13 @@ import { useSede } from '../../../contexts/SedeContext'
 import { TimeInput24h } from '../../../components/ui/TimeInput24h'
 import Swal from 'sweetalert2'
 import { showSuccess } from '../../../utils/toast'
-import type { TipoCandidato, TipoDocumento, TipoAsignacion } from '../../../types/onboarding.types'
+import type { TipoCandidato, TipoDocumento, TipoAsignacion, TipoTarifa } from '../../../types/onboarding.types'
 import type { Vehicle } from '../../../types/vehiculo.types'
 import type { Conductor } from '../../../types/conductor.types'
 import { formatPreferencia, getPreferenciaBadge, PROGRAMACION_ESTADO_LABELS } from '../../../utils/conductorUtils'
 import { GOOGLE_MAPS_API_KEY, GOOGLE_MAPS_SCRIPT_URL } from '../../../lib/googleMaps'
 import { useGruposFlota } from '../../../hooks/useGruposFlota'
+import { cargarConceptosTarifa, getEtiquetaTarifa, type MapaConceptosTarifa } from '../tarifaConceptos'
 
 interface ProgramacionData {
   sede_id: string
@@ -74,6 +75,10 @@ interface ProgramacionData {
   cambio_vehiculo: boolean
   // Propietario (razon_social del grupo de flota)
   propietario: string
+  // Tarifa de cobro del alquiler POR CONDUCTOR (independiente del tipo de candidato)
+  tipo_tarifa: TipoTarifa
+  tipo_tarifa_diurno: TipoTarifa
+  tipo_tarifa_nocturno: TipoTarifa
   // Otros
   observaciones: string
 }
@@ -95,8 +100,34 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
   const { sedeActualId, aplicarFiltroSede, sedeUsuario, sedes } = useSede()
   const { grupos: gruposFlota } = useGruposFlota()
   const isEditMode = !!editData
+
+  // La programacion en edicion llega desde v_programaciones_onboarding, que no
+  // expone las columnas de tarifa: se leen de la tabla base para no perderlas.
+  useEffect(() => {
+    if (!editData?.id) return
+    let cancelado = false
+    ;(async () => {
+      try {
+        const { data } = await (supabase.from('programaciones_onboarding') as any)
+          .select('tipo_tarifa, tipo_tarifa_diurno, tipo_tarifa_nocturno')
+          .eq('id', editData.id)
+          .single()
+        if (cancelado || !data) return
+        setFormData(prev => ({
+          ...prev,
+          tipo_tarifa: (data.tipo_tarifa || 'antigua') as TipoTarifa,
+          tipo_tarifa_diurno: (data.tipo_tarifa_diurno || data.tipo_tarifa || 'antigua') as TipoTarifa,
+          tipo_tarifa_nocturno: (data.tipo_tarifa_nocturno || data.tipo_tarifa || 'antigua') as TipoTarifa,
+        }))
+      } catch { /* se mantienen los defaults */ }
+    })()
+    return () => { cancelado = true }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editData?.id])
   const [step, setStep] = useState(0)
   const [vehicles, setVehicles] = useState<Vehicle[]>([])
+  // Conceptos de alquiler: alimentan las etiquetas del selector de Tarifa.
+  const [conceptosTarifa, setConceptosTarifa] = useState<MapaConceptosTarifa>({})
   const [conductores, setConductores] = useState<Conductor[]>([])
   const [loading, setLoading] = useState(false)
   const isSubmittingRef = useRef(false)
@@ -191,6 +222,9 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
         ultimo_dia_cobro: editData.ultimo_dia_cobro || '',
         cambio_vehiculo: editData.cambio_vehiculo ?? false,
         propietario: editData.propietario || '',
+        tipo_tarifa: (editData.tipo_tarifa || 'antigua') as TipoTarifa,
+        tipo_tarifa_diurno: (editData.tipo_tarifa_diurno || editData.tipo_tarifa || 'antigua') as TipoTarifa,
+        tipo_tarifa_nocturno: (editData.tipo_tarifa_nocturno || editData.tipo_tarifa || 'antigua') as TipoTarifa,
         observaciones: editData.observaciones || ''
       }
     }
@@ -238,9 +272,19 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
     ultimo_dia_cobro: '',
     cambio_vehiculo: false,
     propietario: '',
+    tipo_tarifa: 'antigua' as TipoTarifa,
+    tipo_tarifa_diurno: 'antigua' as TipoTarifa,
+    tipo_tarifa_nocturno: 'antigua' as TipoTarifa,
     observaciones: ''
     }
   })
+
+  // Conceptos de alquiler para las etiquetas del selector de Tarifa (una sola vez).
+  useEffect(() => {
+    let cancelado = false
+    cargarConceptosTarifa().then((m) => { if (!cancelado) setConceptosTarifa(m) })
+    return () => { cancelado = true }
+  }, [])
 
   // Cargar vehiculos con informacion de disponibilidad (filtrado por sede del wizard)
   useEffect(() => {
@@ -259,7 +303,7 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
         const [vehiculosRes, asignacionesRes, programacionesRes] = await Promise.all([
           filtrarPorSede(supabase
             .from('vehiculos')
-            .select('id, patente, marca, modelo, anio, color, grupo_flota, vehiculos_estados!inner(codigo)')
+            .select('id, patente, marca, modelo, anio, color, gnc, grupo_flota, vehiculos_estados!inner(codigo)')
             .in('vehiculos_estados.codigo', ['PKG_ON_BASE', 'EN_USO', 'DISPONIBLE'])
             .is('deleted_at', null))
             .order('patente'),
@@ -870,6 +914,14 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
     })
   }
 
+  // GNC del vehiculo que efectivamente se entrega. En un cambio de vehiculo el
+  // que manda es el vehiculo destino (mismo criterio que vehiculo_entregar_id).
+  const tieneGncVehiculoEntregado = useMemo(() => {
+    const id = formData.cambio_vehiculo ? formData.vehiculo_cambio_id : formData.vehiculo_id
+    if (!id) return false
+    return vehicles.find((v) => v.id === id)?.gnc === true
+  }, [vehicles, formData.vehiculo_id, formData.vehiculo_cambio_id, formData.cambio_vehiculo])
+
   const handleSelectVehicle = (vehicle: Vehicle) => {
     // Propietario: se autocompleta con el grupo de flota del vehiculo.
     // vehiculos.grupo_flota guarda la razon_social de grupos_flota, que es el
@@ -1369,7 +1421,8 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
         devolucion_vehiculo: formData.devolucion_vehiculo || false,
         cambio_vehiculo: formData.cambio_vehiculo || false,
         ultimo_dia_cobro: formData.devolucion_vehiculo ? (formData.ultimo_dia_cobro || null) : null,
-        propietario: formData.propietario || ''
+        propietario: formData.propietario || '',
+        tipo_tarifa: formData.tipo_tarifa || 'antigua'
       }
 
       if (formData.modalidad === 'a_cargo') {
@@ -1391,6 +1444,8 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
         saveData.conductor_nocturno_dni = null
         saveData.tipo_candidato_diurno = null
         saveData.tipo_candidato_nocturno = null
+        saveData.tipo_tarifa_diurno = null
+        saveData.tipo_tarifa_nocturno = null
         saveData.tipo_asignacion_diurno = null
         saveData.tipo_asignacion_nocturno = null
         saveData.documento_diurno = null
@@ -1405,6 +1460,7 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
         saveData.conductor_diurno_nombre = formData.conductor_diurno_nombre || null
         saveData.conductor_diurno_dni = formData.conductor_diurno_dni || null
         saveData.tipo_candidato_diurno = formData.tipo_candidato_diurno || null
+        saveData.tipo_tarifa_diurno = formData.tipo_tarifa_diurno || 'antigua'
         saveData.tipo_asignacion_diurno = formData.tipo_asignacion_diurno || null
         saveData.documento_diurno = formData.documento_diurno || null
         saveData.zona_diurno = formData.zona_diurno || null
@@ -1414,6 +1470,7 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
         saveData.conductor_nocturno_nombre = formData.conductor_nocturno_nombre || null
         saveData.conductor_nocturno_dni = formData.conductor_nocturno_dni || null
         saveData.tipo_candidato_nocturno = formData.tipo_candidato_nocturno || null
+        saveData.tipo_tarifa_nocturno = formData.tipo_tarifa_nocturno || 'antigua'
         saveData.tipo_asignacion_nocturno = formData.tipo_asignacion_nocturno || null
         saveData.documento_nocturno = formData.documento_nocturno || null
         saveData.zona_nocturno = formData.zona_nocturno || null
@@ -1423,6 +1480,8 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
         saveData.zona = formData.zona_diurno || formData.zona_nocturno
         // Tipo candidato general = primero disponible
         saveData.tipo_candidato = formData.tipo_candidato_diurno || formData.tipo_candidato_nocturno || null
+        // Espejo legacy de tarifa (respaldo): primera disponible
+        saveData.tipo_tarifa = formData.tipo_tarifa_diurno || formData.tipo_tarifa_nocturno || 'antigua'
         // Tipo asignacion general = usar el primero seleccionado (para compatibilidad)
         saveData.tipo_asignacion = formData.tipo_asignacion_diurno || formData.tipo_asignacion_nocturno || 'entrega_auto'
         // Distancia general = primera disponible
@@ -3821,6 +3880,19 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
                               </select>
                             </>
                           )}
+                          <div
+                            style={{ marginTop: formData.tipo_asignacion_cargo === 'devolucion_vehiculo' ? '16px' : 0 }}
+                          >
+                            <label>Tarifa *</label>
+                            <select
+                              value={formData.tipo_tarifa}
+                              onChange={(e) => setFormData({ ...formData, tipo_tarifa: e.target.value as TipoTarifa })}
+                              title="Esquema de precios del alquiler para este conductor. Independiente del tipo de candidato."
+                            >
+                              <option value="antigua">{getEtiquetaTarifa(conceptosTarifa, 'cargo', tieneGncVehiculoEntregado, 'antigua')}</option>
+                              <option value="nueva">{getEtiquetaTarifa(conceptosTarifa, 'cargo', tieneGncVehiculoEntregado, 'nueva')}</option>
+                            </select>
+                          </div>
                         </div>
                       </div>
                       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
@@ -3916,6 +3988,19 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
                               </select>
                             </>
                           )}
+                          <div
+                            style={{ marginTop: formData.tipo_asignacion_diurno === 'devolucion_vehiculo' ? '16px' : 0 }}
+                          >
+                            <label>Tarifa *</label>
+                            <select
+                              value={formData.tipo_tarifa_diurno}
+                              onChange={(e) => setFormData({ ...formData, tipo_tarifa_diurno: e.target.value as TipoTarifa })}
+                              title="Esquema de precios del alquiler para este conductor. Independiente del tipo de candidato."
+                            >
+                              <option value="antigua">{getEtiquetaTarifa(conceptosTarifa, 'diurno', tieneGncVehiculoEntregado, 'antigua')}</option>
+                              <option value="nueva">{getEtiquetaTarifa(conceptosTarifa, 'diurno', tieneGncVehiculoEntregado, 'nueva')}</option>
+                            </select>
+                          </div>
                         </div>
                       </div>
                       <div style={{ display: 'grid', gridTemplateColumns: conductorNocturno ? '1fr 1fr' : '1fr', gap: '16px' }}>
@@ -4016,6 +4101,19 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
                               </select>
                             </>
                           )}
+                          <div
+                            style={{ marginTop: formData.tipo_asignacion_nocturno === 'devolucion_vehiculo' ? '16px' : 0 }}
+                          >
+                            <label>Tarifa *</label>
+                            <select
+                              value={formData.tipo_tarifa_nocturno}
+                              onChange={(e) => setFormData({ ...formData, tipo_tarifa_nocturno: e.target.value as TipoTarifa })}
+                              title="Esquema de precios del alquiler para este conductor. Independiente del tipo de candidato."
+                            >
+                              <option value="antigua">{getEtiquetaTarifa(conceptosTarifa, 'nocturno', tieneGncVehiculoEntregado, 'antigua')}</option>
+                              <option value="nueva">{getEtiquetaTarifa(conceptosTarifa, 'nocturno', tieneGncVehiculoEntregado, 'nueva')}</option>
+                            </select>
+                          </div>
                         </div>
                       </div>
                       <div style={{ display: 'grid', gridTemplateColumns: conductorDiurno ? '1fr 1fr' : '1fr', gap: '16px' }}>

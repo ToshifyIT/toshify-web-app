@@ -18,6 +18,7 @@ import type { Lead } from '../../../types/leads.types'
 import { ConductorDetalleModal } from '../../conductores/panel/ConductorDetalleModal'
 import { cargarPanelConductores, type ConductorPanelRow } from '../../conductores/panel/conductoresPanelService'
 import { LeadDetailView } from '../../leads/components/LeadDetailView'
+import { getLeadEstadoColor } from '../../leads/leadEstadoColors'
 import {
   GOOGLE_MAPS_API_KEY,
   GOOGLE_MAPS_LIBRARIES,
@@ -49,8 +50,9 @@ async function cargarPanelConductoresCache(sedeId: string | null): Promise<Condu
 
 const MAP_CENTER = { lat: -34.6037, lng: -58.3816 }
 
-// Color por entidad + turno (conductor) / entidad (lead).
-const COLOR_LEAD = '#8B5CF6' // violeta: leads (distinto a cualquier color de conductor)
+// Color por entidad + turno (conductor) / estado (lead).
+// Los leads se colorean segun su estado (ver leadEstadoColors). COLOR_LEAD_FALLBACK
+// se usa cuando el lead no tiene estado o el estado no esta mapeado.
 const COLOR_TURNO_DIURNO = '#F59E0B'
 const COLOR_TURNO_NOCTURNO = '#3B82F6'
 const COLOR_TURNO_SINPREF = '#10B981'
@@ -63,9 +65,12 @@ const TURNOS = [
 
 const ZONAS = ['CABA', 'Norte', 'Sur', 'Oeste', 'GBA']
 
+// Etiqueta usada cuando un lead no tiene estado cargado.
+const SIN_ESTADO_LEAD = 'Sin estado'
+
 // Color según turno efectivo del conductor (última asignación → preferencia).
 function getMarkerColor(e: EntidadMapa): string {
-  if (e.tipo === 'lead') return COLOR_LEAD
+  if (e.tipo === 'lead') return getLeadEstadoColor(e.estadoLead)
   switch (e.turnoEfectivo) {
     case 'DIURNO':
       return COLOR_TURNO_DIURNO
@@ -118,6 +123,7 @@ export function DistribucionMapaModule() {
   const [turnosSel, setTurnosSel] = useState<Set<string>>(new Set()) // vacío = todos
   const [asignacionSel, setAsignacionSel] = useState<Set<string>>(new Set()) // vacío = todos ('con' / 'sin')
   const [zonasSel, setZonasSel] = useState<Set<string>>(new Set(['CABA'])) // CABA por defecto
+  const [estadosLeadSel, setEstadosLeadSel] = useState<Set<string>>(new Set()) // vacío = todos los estados de lead
   const [search, setSearch] = useState('')
 
   const [activeMarker, setActiveMarker] = useState<string | null>(null)
@@ -248,7 +254,9 @@ export function DistribucionMapaModule() {
 
     if (verLeads) {
       for (const l of conUbicacion.lds) {
-        // Los filtros de estado/turno de conductor no aplican a leads.
+        // Los filtros de turno/asignación de conductor no aplican a leads.
+        // El filtro de estado de lead sí: vacío = todos.
+        if (estadosLeadSel.size > 0 && !estadosLeadSel.has(l.estadoLead || SIN_ESTADO_LEAD)) continue
         if (!matchZona(l)) continue
         if (!matchSearch(l)) continue
         result.push(l)
@@ -256,12 +264,39 @@ export function DistribucionMapaModule() {
     }
 
     return result
-  }, [conUbicacion, verConductores, verBaja, verLeads, turnosSel, asignacionSel, zonasSel, search])
+  }, [conUbicacion, verConductores, verBaja, verLeads, turnosSel, asignacionSel, zonasSel, estadosLeadSel, search])
 
   const conteos = useMemo(() => {
     const c = filtradas.filter((e) => e.tipo === 'conductor').length
     const l = filtradas.filter((e) => e.tipo === 'lead').length
     return { c, l }
+  }, [filtradas])
+
+  // Opciones del filtro de estado de lead: derivadas de los datos cargados, no
+  // de una lista fija. Si el servicio incluye mas estados, aparecen solos.
+  const opcionesEstadoLead = useMemo(() => {
+    const vistos = new Set<string>()
+    for (const l of leads) vistos.add(l.estadoLead || SIN_ESTADO_LEAD)
+    return [...vistos]
+      .sort((a, b) => a.localeCompare(b))
+      .map((estado) => ({
+        estado,
+        color: getLeadEstadoColor(estado === SIN_ESTADO_LEAD ? null : estado),
+      }))
+  }, [leads])
+
+  // Leyenda de leads: solo los estados efectivamente presentes en la vista actual.
+  // Si mas adelante el servicio incluye mas estados, la leyenda crece sola.
+  const leyendaLeads = useMemo(() => {
+    const vistos = new Map<string, string>()
+    for (const e of filtradas) {
+      if (e.tipo !== 'lead') continue
+      const estado = e.estadoLead || SIN_ESTADO_LEAD
+      if (!vistos.has(estado)) vistos.set(estado, getLeadEstadoColor(e.estadoLead))
+    }
+    return [...vistos.entries()]
+      .map(([estado, color]) => ({ estado, color }))
+      .sort((a, b) => a.estado.localeCompare(b.estado))
   }, [filtradas])
 
   const onMapLoad = useCallback((map: google.maps.Map) => {
@@ -330,7 +365,9 @@ export function DistribucionMapaModule() {
           <LegendDot color={COLOR_TURNO_DIURNO} label="Cond. Diurno" />
           <LegendDot color={COLOR_TURNO_NOCTURNO} label="Cond. Nocturno" />
           <LegendDot color={COLOR_TURNO_SINPREF} label="Cond. Sin pref." />
-          <LegendDot color={COLOR_LEAD} label="Lead (para inducción)" square />
+          {leyendaLeads.map((l) => (
+            <LegendDot key={`leg-${l.estado}`} color={l.color} label={`Lead · ${l.estado}`} square />
+          ))}
         </div>
       </div>
 
@@ -429,6 +466,24 @@ export function DistribucionMapaModule() {
                 ))}
                 <div style={{ fontSize: 10, color: 'var(--text-tertiary)', marginTop: 2 }}>
                   Con asignación = tiene asignación activa vigente. Sin selección = todos.
+                </div>
+              </FilterGroup>
+            )}
+
+            {/* Estado de lead — opciones dinámicas segun los datos cargados */}
+            {verLeads && opcionesEstadoLead.length > 0 && (
+              <FilterGroup title="Estado de lead">
+                {opcionesEstadoLead.map((o) => (
+                  <CheckRow
+                    key={o.estado}
+                    icon={<EstadoDot color={o.color} />}
+                    label={o.estado}
+                    checked={estadosLeadSel.has(o.estado)}
+                    onChange={() => toggleSet(estadosLeadSel, o.estado, setEstadosLeadSel)}
+                  />
+                ))}
+                <div style={{ fontSize: 10, color: 'var(--text-tertiary)', marginTop: 2 }}>
+                  Sin selección = todos los estados.
                 </div>
               </FilterGroup>
             )}
@@ -728,6 +783,23 @@ function LegendDot({ color, label, square }: { color: string; label: string; squ
   )
 }
 
+// Rombo de color del estado de lead (misma forma que el marcador en el mapa).
+function EstadoDot({ color }: { color: string }) {
+  return (
+    <span
+      style={{
+        width: 9,
+        height: 9,
+        borderRadius: 2,
+        transform: 'rotate(45deg)',
+        background: color,
+        display: 'inline-block',
+        flexShrink: 0,
+      }}
+    />
+  )
+}
+
 function FilterGroup({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <div>
@@ -773,7 +845,7 @@ function InfoContent({ entidad: e, onVerFicha }: { entidad: EntidadMapa; onVerFi
   const badge =
     e.tipo === 'conductor'
       ? getEstadoConductorBadgeStyle({ codigo: e.estadoCodigo || undefined })
-      : { bg: COLOR_LEAD, color: 'white' }
+      : { bg: getLeadEstadoColor(e.estadoLead), color: 'white' }
   return (
     <div style={{ padding: '4px 2px', minWidth: 180 }}>
       <p style={{ margin: 0, fontWeight: 700, fontSize: 13 }}>{e.nombre}</p>

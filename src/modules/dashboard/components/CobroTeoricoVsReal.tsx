@@ -168,13 +168,13 @@ async function calcularPipelineMesIndependiente(
   const [histRes, nomRes] = await Promise.all([
     (supabase.from('conceptos_facturacion_historial') as any)
       .select('codigo, precio_base, precio_final, fecha_vigencia_desde, fecha_vigencia_hasta')
-      .in('codigo', ['P001', 'P002', 'P003', 'P013', 'P014', 'P015', 'P016'])
+      .in('codigo', ['P001', 'P002', 'P003', 'P013', 'P014', 'P015', 'P016', 'P021', 'P022', 'P023', 'P024', 'P025', 'P026'])
       .lte('fecha_vigencia_desde', fFinStr)
       .gte('fecha_vigencia_hasta', fIniStr),
     supabase.from('conceptos_nomina')
       .select('codigo, precio_base, precio_final')
       .eq('activo', true)
-      .in('codigo', ['P001', 'P002', 'P003', 'P013', 'P014', 'P015', 'P016']),
+      .in('codigo', ['P001', 'P002', 'P003', 'P013', 'P014', 'P015', 'P016', 'P021', 'P022', 'P023', 'P024', 'P025', 'P026']),
   ])
   const pMap = new Map<string, number>()
   ;(nomRes.data || []).forEach((c: any) => pMap.set(c.codigo, c.precio_final ?? c.precio_base ?? 0))
@@ -228,7 +228,7 @@ async function calcularPipelineMesIndependiente(
 
   // 4. Asignaciones detalladas
   const { data: asigDet } = await (supabase.from('asignaciones_conductores') as any)
-    .select('id, conductor_id, horario, fecha_inicio, fecha_fin, estado, asignaciones!inner(id, horario, estado, fecha_inicio, fecha_fin)')
+    .select('id, conductor_id, horario, fecha_inicio, fecha_fin, estado, tipo_tarifa, asignaciones!inner(id, horario, estado, fecha_inicio, fecha_fin, tipo_tarifa)')
     .in('conductor_id', cIds)
     .in('estado', ['asignado', 'activo', 'activa', 'finalizado', 'finalizada', 'completado', 'cancelado', 'cancelada'])
 
@@ -271,6 +271,10 @@ async function calcularPipelineMesIndependiente(
       if (hL === 'nocturno' || hL === 'n') { modalidad = 'TURNO_NOCTURNO'; codConc = 'P013'; horLabel = 'NOCTURNO' }
       else { modalidad = 'TURNO_DIURNO'; codConc = 'P001'; horLabel = 'DIURNO' }
     }
+    // Tarifa dual: la tarifa del conductor manda; respaldo: la de la asignacion
+    if ((ac.tipo_tarifa || asignacion.tipo_tarifa) === 'nueva') {
+      codConc = ({ P001: 'P021', P002: 'P022', P013: 'P023' } as Record<string, string>)[codConc] || codConc
+    }
     const dm = diasTrabMap.get(ac.conductor_id)!
     const pr = prMap.get(ac.conductor_id)!
     let diasR = 0
@@ -296,7 +300,8 @@ async function calcularPipelineMesIndependiente(
     const pr = prMap.get(cId)
     if (!pr) continue
     for (const a of asigs) {
-      const cod = codPorMod[a.modalidad]
+      // Tarifa dual: el codigo por asignacion ya incluye la tarifa
+      const cod = a.codigoConcepto || codPorMod[a.modalidad]
       const mk = `monto_${a.modalidad}` as keyof PrAdj
       const cd = new Date(a.fechaInicio)
       while (cd <= a.fechaFin) { (pr as any)[mk] += getPrecio(cod, cd); cd.setDate(cd.getDate() + 1) }
@@ -488,14 +493,14 @@ export function CobroTeoricoVsReal() {
         const [historialResult, nominaResult] = await Promise.all([
           (supabase.from('conceptos_facturacion_historial') as any)
             .select('codigo, precio_base, precio_final, fecha_vigencia_desde, fecha_vigencia_hasta')
-            .in('codigo', ['P001', 'P002', 'P003', 'P013', 'P014', 'P015', 'P016'])
+            .in('codigo', ['P001', 'P002', 'P003', 'P013', 'P014', 'P015', 'P016', 'P021', 'P022', 'P023', 'P024', 'P025', 'P026'])
             .lte('fecha_vigencia_desde', fechaFinStr)
             .gte('fecha_vigencia_hasta', fechaInicioStr),
           supabase
             .from('conceptos_nomina')
             .select('codigo, precio_base, precio_final')
             .eq('activo', true)
-            .in('codigo', ['P001', 'P002', 'P003', 'P013', 'P014', 'P015', 'P016']),
+            .in('codigo', ['P001', 'P002', 'P003', 'P013', 'P014', 'P015', 'P016', 'P021', 'P022', 'P023', 'P024', 'P025', 'P026']),
         ])
         const historialPrecios = historialResult.data
         const conceptosNomina = nominaResult.data
@@ -607,8 +612,8 @@ export function CobroTeoricoVsReal() {
         const { data: asignacionesDetalle } = await (supabase
           .from('asignaciones_conductores') as any)
           .select(`
-            id, conductor_id, horario, fecha_inicio, fecha_fin, estado,
-            asignaciones!inner(id, horario, estado, fecha_inicio, fecha_fin)
+            id, conductor_id, horario, fecha_inicio, fecha_fin, estado, tipo_tarifa,
+            asignaciones!inner(id, horario, estado, fecha_inicio, fecha_fin, tipo_tarifa)
           `)
           .in('conductor_id', conductorIds)
           .in('estado', ['asignado', 'activo', 'activa', 'finalizado', 'finalizada', 'completado', 'cancelado', 'cancelada'])
@@ -689,22 +694,22 @@ export function CobroTeoricoVsReal() {
 
           let modalidad: 'CARGO' | 'TURNO_DIURNO' | 'TURNO_NOCTURNO' = 'CARGO'
           let codigoConcepto = 'P002'
-          let horarioLabel = 'CARGO'
 
           if (modalidadAsignacion === 'todo_dia' || horarioLower === 'todo_dia') {
             modalidad = 'CARGO'
             codigoConcepto = 'P002'
-            horarioLabel = 'CARGO'
           } else if (modalidadAsignacion === 'turno') {
             if (horarioLower === 'nocturno' || horarioLower === 'n') {
               modalidad = 'TURNO_NOCTURNO'
               codigoConcepto = 'P013'
-              horarioLabel = 'NOCTURNO'
-            } else {
+              } else {
               modalidad = 'TURNO_DIURNO'
               codigoConcepto = 'P001'
-              horarioLabel = 'DIURNO'
-            }
+              }
+          }
+          // Tarifa dual: la tarifa del conductor manda; respaldo: la de la asignacion
+          if ((ac.tipo_tarifa || asignacion.tipo_tarifa) === 'nueva') {
+            codigoConcepto = ({ P001: 'P021', P002: 'P022', P013: 'P023' } as Record<string, string>)[codigoConcepto] || codigoConcepto
           }
 
           // Contar días DEDUPLICANDO (para diasTotal y horarioLabel)
@@ -716,7 +721,7 @@ export function CobroTeoricoVsReal() {
           while (current <= efFin) {
             const diaStr = format(current, 'yyyy-MM-dd')
             if (!diasMap2.has(diaStr)) {
-              diasMap2.set(diaStr, horarioLabel)
+              diasMap2.set(diaStr, codigoConcepto)
               if (modalidad === 'CARGO') prorrateo.CARGO++
               else if (modalidad === 'TURNO_NOCTURNO') prorrateo.TURNO_NOCTURNO++
               else prorrateo.TURNO_DIURNO++
@@ -751,7 +756,8 @@ export function CobroTeoricoVsReal() {
           if (!prorrateo) continue
 
           for (const asig of asignaciones) {
-            const codigo = codigosPorModalidad[asig.modalidad]
+            // Tarifa dual: el codigo por asignacion ya incluye la tarifa
+            const codigo = asig.codigoConcepto || codigosPorModalidad[asig.modalidad]
             const montoKey = `monto_${asig.modalidad}` as keyof Prorrateo
 
             const currentDate = new Date(asig.fechaInicio)
@@ -818,9 +824,9 @@ export function CobroTeoricoVsReal() {
         conductorIds.forEach(id => {
           const dias = diasTrabajadosPorConductor.get(id)
           if (!dias || dias.size === 0) return
-          for (const [diaStr, horarioLabel] of dias.entries()) {
-            const codigo = horarioLabel === 'CARGO' ? 'P002'
-              : horarioLabel === 'NOCTURNO' ? 'P013' : 'P001'
+          for (const [diaStr, codigoDia] of dias.entries()) {
+            // El valor guardado ya es el codigo de concepto con la tarifa aplicada
+            const codigo = codigoDia
             const precioDia = getPrecioEnFecha(codigo, parseISO(diaStr))
             if (diasMap.has(diaStr)) {
               diasMap.get(diaStr)!.alquiler += precioDia
