@@ -8,6 +8,123 @@ import { DataTable } from '../../../components/ui/DataTable'
 import type { ConceptoFacturacion } from '../../../types/facturacion.types'
 import { formatCurrency, TIPOS_CONCEPTO, TIPOS_PARAMETRO } from '../../../types/facturacion.types'
 
+const HTML_CAMPO_PRECIO_BASE = `
+          <div class="fact-form-row" id="swal-base-group">
+            <div class="fact-form-group">
+              <label class="fact-form-label">Precio Base Diario (Sin IVA)</label>
+              <input id="swal-precio-base" type="number" class="fact-form-input" value="0" step="0.01">
+            </div>
+            <div class="fact-form-group">
+              <label class="fact-form-label">Precio Base Diario (Con IVA)</label>
+              <input id="swal-base-con-iva" type="number" class="fact-form-input" value="0" step="0.01">
+            </div>
+          </div>`
+
+/**
+ * Mantiene sincronizados los cuatro importes del modal de concepto.
+ *
+ * Todo se deriva de UN solo numero: N = total por semana NETO (precio_semanal),
+ * y del IVA. Con f = 1 + IVA/100:
+ *
+ *   Total por semana (Sin IVA) = N
+ *   Total por semana (Con IVA) = N x f
+ *   Precio Base Diario (Sin IVA) = N / 7
+ *   Precio Base Diario (Con IVA) = N x f / 7
+ *
+ * Editar cualquiera de los cuatro despeja N y repinta los otros tres. Al tocar
+ * el IVA manda N: se mantiene y se recalculan los dos campos "con IVA".
+ *
+ * OJO con el guardado: en BD precio_final es DIARIO con IVA y precio_base es
+ * DIARIO neto (asi los consume la facturacion, ver ReporteFacturacionTab:
+ * "precio_unitario = precio DIARIO"). El campo #swal-precio muestra el SEMANAL
+ * con IVA, por eso el preConfirm de cada modal lo divide por 7.
+ *
+ * Notas de implementacion:
+ * - Al abrir el modal solo se pintan los dos campos base; nunca se tocan los
+ *   semanales, para no "corregir" conceptos historicos fuera de esta relacion.
+ * - No aplica a Porcentaje ni Valor (el campo no es un importe) ni a los
+ *   conceptos variables: ahi los campos base se ocultan.
+ * - onPrecioChange se invoca tras cada recalculo porque asignar .value por JS no
+ *   dispara el evento 'input': sin eso el selector de vigencia no aparece y el
+ *   precio se guardaria sin escribir el historial.
+ */
+function instalarCalculoTarifa(onPrecioChange: () => void) {
+  const byId = (id: string) => document.getElementById(id) as HTMLInputElement | null
+  const semanaConIva = byId('swal-precio')
+  const semanaSinIva = byId('swal-precio-semanal')
+  const baseSinIva = byId('swal-precio-base')
+  const baseConIva = byId('swal-base-con-iva')
+  const iva = byId('swal-iva')
+  const baseGroup = document.getElementById('swal-base-group') as HTMLDivElement | null
+  const tipoParam = document.getElementById('swal-tipo-param') as HTMLSelectElement | null
+  const variable = byId('swal-variable')
+  if (!semanaConIva || !semanaSinIva || !iva) return
+
+  const num = (el: HTMLInputElement | null) => (el ? parseFloat(el.value) || 0 : 0)
+  const r2 = (n: number) => Number(n.toFixed(2))
+  const factorIva = () => 1 + num(iva) / 100
+  // Porcentaje y Valor no representan importes: mismo criterio que la etiqueta.
+  const esImporte = () => tipoParam?.value !== 'porcentaje' && tipoParam?.value !== 'valor'
+  const aplica = () => esImporte() && !variable?.checked
+
+  const mostrarBases = () => {
+    if (baseGroup) baseGroup.style.display = aplica() ? '' : 'none'
+  }
+
+  // Neto semanal actual. Si el concepto no tiene semanal cargado se despeja del
+  // campo con IVA, para que los base no queden en cero.
+  const netoSemanal = () => {
+    const n = num(semanaSinIva)
+    return n > 0 ? n : num(semanaConIva) / factorIva()
+  }
+
+  const pintarBases = () => {
+    const f = factorIva()
+    if (aplica()) {
+      const n = netoSemanal()
+      if (baseSinIva) baseSinIva.value = r2(n / 7).toString()
+      if (baseConIva) baseConIva.value = r2((n * f) / 7).toString()
+    } else if (baseSinIva) {
+      baseSinIva.value = r2(num(semanaConIva) / f).toString()
+    }
+  }
+
+  type Origen = 'baseSin' | 'baseCon' | 'semanaCon' | 'semanaSin' | 'iva'
+
+  const sincronizar = (origen: Origen) => {
+    mostrarBases()
+    if (aplica()) {
+      const f = factorIva()
+      // N = total semanal neto, redondeado al peso (es el "monto redondo").
+      let n: number
+      if (origen === 'baseSin') n = Math.round(num(baseSinIva) * 7)
+      else if (origen === 'baseCon') n = Math.round((num(baseConIva) * 7) / f)
+      else if (origen === 'semanaCon') n = Math.round(num(semanaConIva) / f)
+      else n = num(semanaSinIva)
+
+      // El campo que el usuario esta escribiendo no se toca.
+      if (origen !== 'semanaSin') semanaSinIva.value = n.toString()
+      if (origen !== 'semanaCon') semanaConIva.value = r2(n * f).toString()
+      if (baseSinIva && origen !== 'baseSin') baseSinIva.value = r2(n / 7).toString()
+      if (baseConIva && origen !== 'baseCon') baseConIva.value = r2((n * f) / 7).toString()
+    } else {
+      pintarBases()
+    }
+    onPrecioChange()
+  }
+
+  baseSinIva?.addEventListener('input', () => sincronizar('baseSin'))
+  baseConIva?.addEventListener('input', () => sincronizar('baseCon'))
+  semanaConIva.addEventListener('input', () => sincronizar('semanaCon'))
+  semanaSinIva.addEventListener('input', () => sincronizar('semanaSin'))
+  iva.addEventListener('input', () => sincronizar('iva'))
+  tipoParam?.addEventListener('change', mostrarBases)
+  variable?.addEventListener('change', mostrarBases)
+
+  mostrarBases()
+  pintarBases()
+}
+
 export function ConceptosFacturacionTab() {
   const [conceptos, setConceptos] = useState<ConceptoFacturacion[]>([])
   const [loading, setLoading] = useState(true)
@@ -105,9 +222,10 @@ export function ConceptosFacturacionTab() {
               </select>
             </div>
           </div>
+          ${HTML_CAMPO_PRECIO_BASE}
           <div class="fact-form-row">
             <div class="fact-form-group">
-              <label id="swal-precio-label" class="fact-form-label">Precio</label>
+              <label id="swal-precio-label" class="fact-form-label">Total por semana (Con IVA)</label>
               <input id="swal-precio" type="number" class="fact-form-input" placeholder="0" step="0.01">
             </div>
             <div class="fact-form-group">
@@ -116,7 +234,7 @@ export function ConceptosFacturacionTab() {
             </div>
           </div>
           <div class="fact-form-group" id="swal-semanal-group">
-            <label class="fact-form-label">Precio Semanal (monto redondo)</label>
+            <label class="fact-form-label">Total por semana (Sin IVA)</label>
             <input id="swal-precio-semanal" type="number" class="fact-form-input" placeholder="Ej: 299000" step="0.01">
             <small style="color: var(--text-tertiary); font-size: 11px; margin-top: 4px; display: block;">Monto que se factura por semana completa (7 días). Si queda en 0 se usa Precio × 7.</small>
           </div>
@@ -152,7 +270,11 @@ export function ConceptosFacturacionTab() {
         const precioLabel = document.getElementById('swal-precio-label') as HTMLLabelElement
         const updatePrecioLabel = () => {
           const val = tipoParamSelect.value
-          precioLabel.textContent = val === 'porcentaje' ? 'Valor (%)' : val === 'valor' ? 'Valor' : 'Precio'
+          const esVar = (document.getElementById('swal-variable') as HTMLInputElement | null)?.checked
+          precioLabel.textContent = val === 'porcentaje' ? 'Valor (%)'
+            : val === 'valor' ? 'Valor'
+            : esVar ? 'Precio Final (Con IVA)'
+            : 'Total por semana (Con IVA)'
         }
         updatePrecioLabel()
         tipoParamSelect.addEventListener('change', updatePrecioLabel)
@@ -162,16 +284,20 @@ export function ConceptosFacturacionTab() {
         const semanalGroup = document.getElementById('swal-semanal-group') as HTMLDivElement
         const toggleSemanal = () => {
           semanalGroup.style.display = variableCheck.checked ? 'none' : 'block'
+          updatePrecioLabel()
         }
         toggleSemanal()
         variableCheck.addEventListener('change', toggleSemanal)
+
+        // Precio <-> Precio Semanal <-> Precio base
+        instalarCalculoTarifa(() => { /* el alta no tiene selector de vigencia */ })
       },
       preConfirm: () => {
         const codigo = (document.getElementById('swal-codigo') as HTMLInputElement).value
         const descripcion = (document.getElementById('swal-desc') as HTMLInputElement).value
         const tipo = (document.getElementById('swal-tipo') as HTMLSelectElement).value
         const tipoParametro = (document.getElementById('swal-tipo-param') as HTMLSelectElement).value
-        const precioBase = parseFloat((document.getElementById('swal-precio') as HTMLInputElement).value) || 0
+        const valorCampoPrecio = parseFloat((document.getElementById('swal-precio') as HTMLInputElement).value) || 0
         const ivaPorcentaje = parseFloat((document.getElementById('swal-iva') as HTMLInputElement).value) || 0
         const precioSemanal = parseFloat((document.getElementById('swal-precio-semanal') as HTMLInputElement).value) || 0
         const esVariable = (document.getElementById('swal-variable') as HTMLInputElement).checked
@@ -186,14 +312,19 @@ export function ConceptosFacturacionTab() {
         // es_semanal (oculto): true cuando no es variable y tiene precio semanal > 0
         const esSemanal = !esVariable && precioSemanal > 0
 
+        // El campo muestra el TOTAL POR SEMANA con IVA; precio_final se guarda DIARIO.
+        const usaSemanal = tipoParametro !== 'porcentaje' && tipoParametro !== 'valor' && !esVariable
+        const newFinal = usaSemanal ? Number((valorCampoPrecio / 7).toFixed(2)) : valorCampoPrecio
+        const newBase = ivaPorcentaje === 0 ? newFinal : Number((newFinal / (1 + ivaPorcentaje / 100)).toFixed(2))
+
         return {
           codigo: codigo.toUpperCase(),
           descripcion,
           tipo,
           tipo_parametro: tipoParametro,
-          precio_base: ivaPorcentaje === 0 ? precioBase : Number((precioBase / (1 + ivaPorcentaje / 100)).toFixed(2)),
+          precio_base: newBase,
           iva_porcentaje: ivaPorcentaje,
-          precio_final: precioBase,
+          precio_final: newFinal,
           precio_semanal: esVariable ? 0 : precioSemanal,
           es_semanal: esSemanal,
           es_variable: esVariable,
@@ -221,6 +352,18 @@ export function ConceptosFacturacionTab() {
     const tiposOptions = TIPOS_CONCEPTO.map(t =>
       `<option value="${t.value}" ${concepto.tipo === t.value ? 'selected' : ''}>${t.label}</option>`
     ).join('')
+    // El campo de precio muestra el TOTAL POR SEMANA con IVA. Se prefiere
+    // precio_semanal x (1+IVA) sobre precio_final x 7 para no arrastrar el
+    // redondeo del diario. Los variables / porcentaje / valor siguen mostrando
+    // precio_final tal cual.
+    const ivaConcepto = concepto.iva_porcentaje || 0
+    const esImporteConcepto = concepto.tipo_parametro !== 'porcentaje' && concepto.tipo_parametro !== 'valor'
+    const valorInicialCampoPrecio = (esImporteConcepto && !concepto.es_variable)
+      ? Number((((concepto.precio_semanal || 0) > 0
+          ? (concepto.precio_semanal || 0) * (1 + ivaConcepto / 100)
+          : (concepto.precio_final || 0) * 7)).toFixed(2))
+      : (concepto.precio_final || 0)
+
     const tiposParamOptions = TIPOS_PARAMETRO.map(t =>
       `<option value="${t.value}" ${concepto.tipo_parametro === t.value ? 'selected' : ''}>${t.label}</option>`
     ).join('')
@@ -254,10 +397,11 @@ export function ConceptosFacturacionTab() {
               </select>
             </div>
           </div>
+          ${HTML_CAMPO_PRECIO_BASE}
           <div class="fact-form-row">
             <div class="fact-form-group">
-              <label id="swal-precio-label" class="fact-form-label">Precio</label>
-              <input id="swal-precio" type="number" class="fact-form-input" value="${concepto.precio_final || 0}" step="0.01">
+              <label id="swal-precio-label" class="fact-form-label">Total por semana (Con IVA)</label>
+              <input id="swal-precio" type="number" class="fact-form-input" value="${valorInicialCampoPrecio}" step="0.01">
             </div>
             <div class="fact-form-group">
               <label class="fact-form-label">IVA (%)</label>
@@ -265,7 +409,7 @@ export function ConceptosFacturacionTab() {
             </div>
           </div>
           <div class="fact-form-group" id="swal-semanal-group" style="${concepto.es_variable ? 'display:none;' : ''}">
-            <label class="fact-form-label">Precio Semanal (monto redondo)</label>
+            <label class="fact-form-label">Total por semana (Sin IVA)</label>
             <input id="swal-precio-semanal" type="number" class="fact-form-input" value="${concepto.precio_semanal || 0}" step="0.01" placeholder="Ej: 299000">
             <small style="color: var(--text-tertiary); font-size: 11px; margin-top: 4px; display: block;">Monto que se factura por semana completa (7 días). Si queda en 0 se usa Precio × 7.</small>
           </div>
@@ -310,9 +454,10 @@ export function ConceptosFacturacionTab() {
         const ivaInput = document.getElementById('swal-iva') as HTMLInputElement
         const vigenciaGroup = document.getElementById('swal-vigencia-group') as HTMLDivElement
         const checkPriceChange = () => {
+          // Se compara contra el valor con el que abrio el modal: asi el chequeo
+          // es correcto sin importar si el campo esta en semanal o en diario.
           const newPrice = parseFloat(precioInput.value) || 0
-          const oldFinal = concepto.precio_final || 0
-          vigenciaGroup.style.display = Math.abs(newPrice - oldFinal) > 0.01 ? 'block' : 'none'
+          vigenciaGroup.style.display = Math.abs(newPrice - valorInicialCampoPrecio) > 0.01 ? 'block' : 'none'
         }
         precioInput.addEventListener('input', checkPriceChange)
         ivaInput.addEventListener('input', checkPriceChange)
@@ -322,7 +467,11 @@ export function ConceptosFacturacionTab() {
         const precioLabel = document.getElementById('swal-precio-label') as HTMLLabelElement
         const updatePrecioLabel = () => {
           const val = tipoParamSelect.value
-          precioLabel.textContent = val === 'porcentaje' ? 'Valor (%)' : val === 'valor' ? 'Valor' : 'Precio'
+          const esVar = (document.getElementById('swal-variable') as HTMLInputElement | null)?.checked
+          precioLabel.textContent = val === 'porcentaje' ? 'Valor (%)'
+            : val === 'valor' ? 'Valor'
+            : esVar ? 'Precio Final (Con IVA)'
+            : 'Total por semana (Con IVA)'
         }
         updatePrecioLabel()
         tipoParamSelect.addEventListener('change', updatePrecioLabel)
@@ -332,15 +481,21 @@ export function ConceptosFacturacionTab() {
         const semanalGroup = document.getElementById('swal-semanal-group') as HTMLDivElement
         const toggleSemanal = () => {
           semanalGroup.style.display = variableCheck.checked ? 'none' : 'block'
+          updatePrecioLabel()
         }
         toggleSemanal()
         variableCheck.addEventListener('change', toggleSemanal)
+
+        // Precio <-> Precio Semanal <-> Precio base. checkPriceChange se pasa
+        // adrede: sin el, un precio recalculado no mostraria el selector de
+        // vigencia y se guardaria sin escribir el historial de precios.
+        instalarCalculoTarifa(checkPriceChange)
       },
       preConfirm: () => {
         const descripcion = (document.getElementById('swal-desc') as HTMLInputElement).value
         const tipo = (document.getElementById('swal-tipo') as HTMLSelectElement).value
         const tipoParametro = (document.getElementById('swal-tipo-param') as HTMLSelectElement).value
-        const precioBase = parseFloat((document.getElementById('swal-precio') as HTMLInputElement).value) || 0
+        const valorCampoPrecio = parseFloat((document.getElementById('swal-precio') as HTMLInputElement).value) || 0
         const ivaPorcentaje = parseFloat((document.getElementById('swal-iva') as HTMLInputElement).value) || 0
         const precioSemanal = parseFloat((document.getElementById('swal-precio-semanal') as HTMLInputElement).value) || 0
         const esVariable = (document.getElementById('swal-variable') as HTMLInputElement).checked
@@ -355,8 +510,12 @@ export function ConceptosFacturacionTab() {
           return false
         }
 
-        const newFinal = precioBase
-        const newBase = ivaPorcentaje === 0 ? precioBase : Number((precioBase / (1 + ivaPorcentaje / 100)).toFixed(2))
+        // El campo muestra el TOTAL POR SEMANA con IVA, pero precio_final se
+        // persiste DIARIO: es asi como lo consume el motor de facturacion.
+        // Porcentaje, Valor y los conceptos variables se guardan tal cual.
+        const usaSemanal = tipoParametro !== 'porcentaje' && tipoParametro !== 'valor' && !esVariable
+        const newFinal = usaSemanal ? Number((valorCampoPrecio / 7).toFixed(2)) : valorCampoPrecio
+        const newBase = ivaPorcentaje === 0 ? newFinal : Number((newFinal / (1 + ivaPorcentaje / 100)).toFixed(2))
         const priceChanged = Math.abs(newFinal - (concepto.precio_final || 0)) > 0.01
 
         if (priceChanged && !vigenciaValue) {
@@ -548,21 +707,42 @@ export function ConceptosFacturacionTab() {
     },
     {
       accessorKey: 'precio_base',
-      header: 'Precio Base (sin IVA)',
+      header: 'Precio Base Diario (Sin IVA)',
       cell: ({ row }) => row.original.es_variable
         ? <span style={{ color: '#6B7280', fontStyle: 'italic' }}>Variable</span>
         : <span style={{ fontFamily: 'monospace' }}>{formatCurrency(row.original.precio_base || 0)}</span>
     },
     {
+      // precio_final en BD ya es el diario con IVA: se muestra tal cual.
       accessorKey: 'precio_final',
-      header: 'Precio Final (con IVA)',
+      id: 'precio_base_con_iva',
+      header: 'Precio Base Diario (Con IVA)',
       cell: ({ row }) => row.original.es_variable
         ? <span style={{ color: '#6B7280', fontStyle: 'italic' }}>Variable</span>
         : <span style={{ fontFamily: 'monospace' }}>{formatCurrency(row.original.precio_final || 0)}</span>
     },
     {
+      id: 'precio_final',
+      header: 'Total por semana (Con IVA)',
+      // Misma unidad que el modal: semanal con IVA. En BD precio_final sigue
+      // siendo DIARIO (asi lo consume la facturacion), por eso se recompone.
+      // Porcentaje / Valor no son importes semanales: se muestran tal cual.
+      accessorFn: (row) => {
+        if (row.es_variable) return null
+        const esImporte = row.tipo_parametro !== 'porcentaje' && row.tipo_parametro !== 'valor'
+        if (!esImporte) return row.precio_final || 0
+        const factor = 1 + (row.iva_porcentaje || 0) / 100
+        return (row.precio_semanal || 0) > 0
+          ? Number(((row.precio_semanal || 0) * factor).toFixed(2))
+          : Number(((row.precio_final || 0) * 7).toFixed(2))
+      },
+      cell: ({ row, getValue }) => row.original.es_variable
+        ? <span style={{ color: '#6B7280', fontStyle: 'italic' }}>Variable</span>
+        : <span style={{ fontFamily: 'monospace' }}>{formatCurrency((getValue() as number) || 0)}</span>
+    },
+    {
       id: 'total_semana',
-      header: 'Total x Semana (.00)',
+      header: 'Total por semana (Sin IVA)',
       // Lee precio_semanal de la BD (monto redondo). Respaldo: precio_final×7 si está vacío.
       accessorFn: (row) => row.es_variable ? null : (row.precio_semanal || Math.round((row.precio_final || 0) * 7)),
       cell: ({ row }) => row.original.es_variable
