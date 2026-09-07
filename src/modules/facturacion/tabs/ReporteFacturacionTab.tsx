@@ -1,10 +1,11 @@
 
 /* eslint-disable @typescript-eslint/no-unused-vars */
-import { useState, useEffect, useMemo, useRef } from 'react'
+import { useState, useEffect, useMemo, useRef, Fragment } from 'react'
 import { supabase } from '../../../lib/supabase'
 import Swal from 'sweetalert2'
 import { formatNombreCompleto } from '../../../utils/conductorUtils'
 import { showSuccess } from '../../../utils/toast'
+import { tieneGncEnFecha, type GncHistorialEntry } from '../../../utils/gncHistorial'
 import jsPDF from 'jspdf'
 import * as XLSX from 'xlsx'
 import {
@@ -129,43 +130,8 @@ function displayArgDate(d: string | null | undefined): string {
   return `${parts[2]}/${parts[1]}/${parts[0]}`
 }
 
-// Helper: evaluar si un vehículo tiene GNC en una fecha dada, según historial
-// Regla: CARGO/DIURNO → GNC aplica desde el día siguiente a instalacion
-//        NOCTURNO → GNC aplica desde el mismo día de instalacion
-// Sin historial → usar vehiculos.gnc tal cual (feat nuevo: hasta que se regularicen
-// historiales retroactivos, el boolean actual es la fuente de verdad)
-type GncHistorialEntry = { vehiculo_id: string; accion: string; fecha: string }
-function tieneGncEnFecha(
-  vehiculoId: string,
-  fechaStr: string,
-  modalidad: 'CARGO' | 'TURNO_DIURNO' | 'TURNO_NOCTURNO',
-  historialMap: Map<string, GncHistorialEntry[]>,
-  gncActual: boolean,
-): boolean {
-  const historial = historialMap.get(vehiculoId)
-  if (!historial || historial.length === 0) {
-    // Sin historial: usar boolean actual del vehículo (fuente de verdad mientras
-    // no se cargue historial retroactivo)
-    return gncActual
-  }
-  // Buscar último evento con fecha <= fechaStr (ya viene ordenado desc)
-  let ultimoEvento: GncHistorialEntry | null = null
-  for (const h of historial) {
-    if (h.fecha <= fechaStr) { ultimoEvento = h; break }
-  }
-  if (!ultimoEvento) {
-    // fecha es ANTES del primer evento del historial.
-    // historial viene ordenado DESC por fecha → último elemento es el más antiguo.
-    const primerEvento = historial[historial.length - 1]
-    // Si el primer evento fue una instalación, antes de esa fecha el GNC no existía.
-    // Si fue una desinstalación, significa que antes tenía GNC.
-    return primerEvento.accion !== 'instalacion'
-  }
-  if (ultimoEvento.accion === 'desinstalacion') return false
-  // accion = 'instalacion': aplicar regla según modalidad
-  if (modalidad === 'TURNO_NOCTURNO') return fechaStr >= ultimoEvento.fecha // mismo día
-  return fechaStr > ultimoEvento.fecha // día siguiente para CARGO/DIURNO
-}
+// tieneGncEnFecha / GncHistorialEntry se movieron sin cambios a
+// src/utils/gncHistorial.ts para poder reusarlos desde Asignaciones.
 
 // Helper: tabla de cabify según sede (Bariloche usa tabla separada)
 const SEDE_BARILOCHE_ID = 'f37193f7-5805-4d87-820d-c4521824860e'
@@ -573,6 +539,12 @@ export function ReporteFacturacionTab() {
 
   const [conceptosPendientes, setConceptosPendientes] = useState<ConceptoPendiente[]>([])
   const [conceptosNomina, setConceptosNomina] = useState<ConceptoNomina[]>([])
+  // % de IVA por codigo de concepto. NO todos son 21% (P003 Garantia esta al 0%),
+  // por eso el desglose de cada linea usa la tasa de su propio concepto.
+  const ivaPorCodigo = useMemo(
+    () => new Map((conceptosNomina || []).map((c: any) => [c.codigo, Number(c.iva_porcentaje) || 0])),
+    [conceptosNomina]
+  )
 
   // Parámetros de descuento por hora de entrega
   const [horasCorteTurno, setHorasCorteTurno] = useState({
@@ -12258,7 +12230,51 @@ export function ReporteFacturacionTab() {
                       Cargos
                     </div>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
-                      {detalleCargos.map(item => {
+                      {(() => {
+                      // El renglon de IVA se inserta JUSTO DEBAJO del ultimo concepto de
+                      // alquiler. Si la semana no tiene alquiler, va al final de la lista.
+                      const CODIGOS_ALQUILER = ['P001','P002','P013','P014','P015','P016','P021','P022','P023','P024','P025','P026']
+                      const idxUltimoAlquiler = detalleCargos.reduce(
+                        (idx, d, i) => (CODIGOS_ALQUILER.includes(d.concepto_codigo || '') ? i : idx), -1
+                      )
+                      // IVA separado en dos: el del alquiler (que va pegado a sus
+                      // lineas) y el del resto de los conceptos. Cada uno aporta segun
+                      // su propio iva_porcentaje (P003 Garantia esta al 0%), NO es un
+                      // 21% plano sobre el subtotal. Hoy solo el alquiler tiene IVA,
+                      // pero si manana otro concepto lo lleva, se muestra en su propia
+                      // fila en vez de quedar escondido dentro de "IVA de alquiler".
+                      let ivaAlquiler = 0
+                      let ivaOtros = 0
+                      for (const d of detalleCargos) {
+                        const cod = d.concepto_codigo || ''
+                        const esAlq = ['P001','P002','P013','P014','P015','P016'].includes(cod)
+                        const bruto = Number(d.cantidad || 0) * Number(d.precio_unitario || 0) || Number(d.total || 0)
+                        const monto = esAlq ? Math.round(bruto) : Math.round(bruto * 100) / 100
+                        const pct = ivaPorCodigo.get(d.concepto_codigo) ?? 0
+                        const neto = pct > 0 ? Math.round((monto / (1 + pct / 100)) * 100) / 100 : monto
+                        if (CODIGOS_ALQUILER.includes(cod)) ivaAlquiler += monto - neto
+                        else ivaOtros += monto - neto
+                      }
+                      ivaAlquiler = Math.round(ivaAlquiler * 100) / 100
+                      ivaOtros = Math.round(ivaOtros * 100) / 100
+                      const filaIvaDe = (etiqueta: string, valor: number) => (
+                        <div style={{
+                          display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                          padding: '7px 12px', borderRadius: '6px',
+                          background: 'var(--bg-secondary)', border: '1px solid var(--border-primary)',
+                        }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flex: 1, minWidth: 0 }}>
+                            <div style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#ff0033', flexShrink: 0 }} />
+                            <span style={{ fontSize: '12px', color: 'var(--text-primary)' }}>{etiqueta}</span>
+                          </div>
+                          <span style={{ fontSize: '12px', fontWeight: 600, fontFamily: 'monospace', color: 'var(--text-primary)', flexShrink: 0, marginLeft: '8px' }}>
+                            {formatCurrency(valor)}
+                          </span>
+                        </div>
+                      )
+                      const filaIva = ivaAlquiler > 0 ? filaIvaDe('IVA de alquiler', ivaAlquiler) : null
+                      return (<>
+                      {detalleCargos.map((item, idxItem) => {
                         let desc = item.concepto_descripcion;
                         // Prefijo con código de producto
                         const codigo = item.concepto_codigo
@@ -12270,8 +12286,19 @@ export function ReporteFacturacionTab() {
                         const fechaStr = item.fecha_referencia
                           ? format(parseISO(item.fecha_referencia), 'dd/MM/yy')
                           : null
+                        // Redondear SOLO conceptos de alquiler (P001/P002/P013/P014/P015/P016):
+                        // el precio diario x cantidad arrastra centavos (7 x 42714,29 = 299000,03).
+                        // Los demas conceptos se muestran con sus decimales exactos. Solo visual.
+                        const esAlquilerItem = ['P001','P002','P013','P014','P015','P016'].includes(item.concepto_codigo || '')
+                        const montoBrutoItem = Number(item.cantidad || 0) * Number(item.precio_unitario || 0) || Number(item.total || 0)
+                        const montoItem = esAlquilerItem ? Math.round(montoBrutoItem) : Math.round(montoBrutoItem * 100) / 100
+                        // Desglose: el monto ya viene con IVA incluido, se descompone hacia atras
+                        // sobre el mismo numero que se muestra, para que Neto + IVA cierre exacto.
+                        const pctIvaItem = ivaPorCodigo.get(item.concepto_codigo) ?? 0
+                        const netoItem = pctIvaItem > 0 ? Math.round((montoItem / (1 + pctIvaItem / 100)) * 100) / 100 : montoItem
                         return (
-                          <div key={item.id} style={{
+                          <Fragment key={item.id}>
+                          <div style={{
                             display: 'flex', justifyContent: 'space-between', alignItems: 'center',
                             padding: '7px 12px', borderRadius: '6px',
                             background: 'var(--bg-secondary)', border: '1px solid var(--border-primary)',
@@ -12307,19 +12334,19 @@ export function ReporteFacturacionTab() {
                               </button>
                             </div>
                             <span style={{ fontSize: '12px', fontWeight: 600, fontFamily: 'monospace', color: 'var(--text-primary)', flexShrink: 0, marginLeft: '8px' }}>
-                              {/* Redondear SOLO conceptos de alquiler (P001/P002/P013/P014/P015/P016):
-                                  el precio diario x cantidad arrastra centavos (7 x 42714,29 = 299000,03).
-                                  Los demás conceptos (P003 Garantía, P004 Descuentos, P005 Peajes, etc.)
-                                  se muestran con sus decimales exactos. Solo visual, no toca la BD. */}
-                              {(() => {
-                                const esAlquiler = ['P001','P002','P013','P014','P015','P016'].includes(item.concepto_codigo || '')
-                                const monto = Number(item.cantidad || 0) * Number(item.precio_unitario || 0) || Number(item.total || 0)
-                                return formatCurrency(esAlquiler ? Math.round(monto) : Math.round(monto * 100) / 100)
-                              })()}
+                              {/* Importe NETO del concepto. El IVA de todos los cargos
+                                  va agrupado en su propio renglon, mas abajo. */}
+                              {formatCurrency(netoItem)}
                             </span>
                           </div>
+                          {idxItem === idxUltimoAlquiler && filaIva}
+                          </Fragment>
                         );
                       })}
+                      {idxUltimoAlquiler === -1 && filaIva}
+                      {ivaOtros > 0 && filaIvaDe('IVA', ivaOtros)}
+                      </>)
+                      })()}
 
                       {/* Saldo anterior y mora: se manejan en tab Saldos, no en facturación */}
 

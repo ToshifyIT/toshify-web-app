@@ -13,6 +13,10 @@ import { AssignmentWizard } from '../../components/AssignmentWizard'
 // KanbanBoard y ProgramacionWizard movidos a /onboarding/programacion
 import Swal from 'sweetalert2'
 import { showSuccess } from '../../utils/toast'
+import { getTodayDateString } from '../../utils/dateUtils'
+import { fechaISOART } from '../../utils/fechaArgentina'
+import { tieneGncEnFecha, armarMapaGncHistorial, type GncHistorialEntry } from '../../utils/gncHistorial'
+import { cargarConceptosTarifa, getEtiquetaTarifa, type MapaConceptosTarifa, type ModalidadTarifa } from '../onboarding/tarifaConceptos'
 import { registrarHistorialVehiculo, registrarHistorialConductor } from '../../services/historialService'
 import { EnviarPlantillaFirmarModal, type ConductorParaFirma } from '../hellosign/components/EnviarPlantillaFirmarModal'
 import { completeControl } from '../../services/controlService'
@@ -40,6 +44,8 @@ interface Asignacion {
     patente: string
     marca: string
     modelo: string
+    /** Flag actual del vehiculo. Para fechas pasadas se corrige con vehiculos_gnc_historial. */
+    gnc?: boolean | null
   }
   conductores?: {
     nombres: string
@@ -162,6 +168,11 @@ export function AsignacionesModule() {
   const [cancelMotivo, setCancelMotivo] = useState('')
   const [showViewModal, setShowViewModal] = useState(false)
   const [viewAsignacion, setViewAsignacion] = useState<Asignacion | null>(null)
+  // Conceptos de alquiler (periodo + monto semanal) para el chip de Tarifa del
+  // modal de detalle. Se cargan una sola vez, al abrir el primer modal.
+  const [conceptosTarifa, setConceptosTarifa] = useState<MapaConceptosTarifa>({})
+  // Historial de GNC del vehiculo de la asignacion abierta.
+  const [gncHistorialView, setGncHistorialView] = useState<Map<string, GncHistorialEntry[]>>(new Map())
   const [viewDriveUrls, setViewDriveUrls] = useState<Record<string, string>>({})
   // Emails de los conductores del detalle (para prellenar el envío de plantilla)
   const [viewCondEmails, setViewCondEmails] = useState<Record<string, string>>({})
@@ -666,7 +677,7 @@ export function AsignacionesModule() {
           .from('asignaciones')
           .select(`
             id, codigo, vehiculo_id, horario, fecha_programada, fecha_inicio, fecha_fin, estado, control_completado, created_at, sede_id, notas, tipo_tarifa,
-            vehiculos (patente, marca, modelo),
+            vehiculos (patente, marca, modelo, gnc),
             asignaciones_conductores (
               id, conductor_id, estado, horario, confirmado, fecha_confirmacion, documento, tipo_tarifa, fecha_inicio, fecha_fin,
               conductores (nombres, apellidos, numero_licencia, estado_id, cochera_propia, contacto_emergencia, telefono_emergencia, parentesco_emergencia, conductores_estados(codigo))
@@ -828,9 +839,9 @@ export function AsignacionesModule() {
           .from('asignaciones')
           .select(`
             id, codigo, vehiculo_id, horario, fecha_programada, fecha_inicio, fecha_fin, estado, control_completado, created_at, sede_id, notas, tipo_tarifa,
-            vehiculos (patente, marca, modelo),
+            vehiculos (patente, marca, modelo, gnc),
             asignaciones_conductores (
-              id, conductor_id, estado, horario, confirmado, fecha_confirmacion, documento, fecha_inicio, fecha_fin,
+              id, conductor_id, estado, horario, confirmado, fecha_confirmacion, documento, tipo_tarifa, fecha_inicio, fecha_fin,
               conductores (nombres, apellidos, numero_licencia, estado_id, drive_contract_folder_url, cochera_propia, contacto_emergencia, telefono_emergencia, parentesco_emergencia, conductores_estados(codigo))
             )
           `))
@@ -985,6 +996,67 @@ export function AsignacionesModule() {
         setViewEnvios(envios)
       })
   }, [showViewModal, viewAsignacion])
+
+  // Datos para el chip de Tarifa del modal de detalle: conceptos de alquiler e
+  // historial de GNC del vehiculo. Se piden al abrir el modal (no en el listado,
+  // que trae hasta 1000 filas). Ante cualquier error el chip cae a su etiqueta
+  // generica, sin romper el modal.
+  useEffect(() => {
+    if (!showViewModal || !viewAsignacion) return
+    let cancelado = false
+
+    if (Object.keys(conceptosTarifa).length === 0) {
+      cargarConceptosTarifa().then((m) => { if (!cancelado) setConceptosTarifa(m) })
+    }
+
+    const vehiculoId = viewAsignacion.vehiculo_id
+    if (!vehiculoId) {
+      setGncHistorialView(new Map())
+    } else {
+      ;(supabase.from('vehiculos_gnc_historial') as any)
+        .select('vehiculo_id, accion, fecha')
+        .eq('vehiculo_id', vehiculoId)
+        .order('fecha', { ascending: false })
+        .then(({ data }: { data: GncHistorialEntry[] | null }) => {
+          if (!cancelado) setGncHistorialView(armarMapaGncHistorial(data))
+        })
+    }
+
+    return () => { cancelado = true }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [showViewModal, viewAsignacion?.id])
+
+  // Etiqueta del chip de Tarifa de un conductor dentro de la asignacion abierta.
+  // Devuelve el periodo y el monto semanal del concepto que le corresponde
+  // ("AGO-26 ($ 349.000)"), o la etiqueta generica si el concepto no esta cargado.
+  const getTarifaConductor = (ac: any) => {
+    const tarifa = (ac?.tipo_tarifa || viewAsignacion?.tipo_tarifa || 'antigua') as 'antigua' | 'nueva'
+    const modalidad: ModalidadTarifa =
+      ac?.horario === 'todo_dia' ? 'cargo' : ac?.horario === 'nocturno' ? 'nocturno' : 'diurno'
+    const modalidadGnc =
+      modalidad === 'cargo' ? 'CARGO' : modalidad === 'nocturno' ? 'TURNO_NOCTURNO' : 'TURNO_DIURNO'
+
+    // Fecha de referencia: si el conductor (o la asignacion) ya termino, se evalua
+    // el GNC a esa fecha; si sigue activa, a hoy.
+    const fechaCruda = ac?.fecha_fin || viewAsignacion?.fecha_fin || null
+    const fechaRef = fechaCruda
+      ? (fechaISOART(fechaCruda) || String(fechaCruda).slice(0, 10))
+      : getTodayDateString()
+
+    const tieneGnc = tieneGncEnFecha(
+      viewAsignacion?.vehiculo_id || '',
+      fechaRef,
+      modalidadGnc,
+      gncHistorialView,
+      viewAsignacion?.vehiculos?.gnc === true,
+    )
+
+    return {
+      tarifa,
+      texto: getEtiquetaTarifa(conceptosTarifa, modalidad, tieneGnc, tarifa),
+      titulo: `${tarifa === 'nueva' ? 'Tarifa Nueva' : 'Tarifa Antigua'} · ${tieneGnc ? 'con GNC' : 'sin GNC'} · precio vigente`,
+    }
+  }
 
   // Programacion de entregas movida a /onboarding/programacion
 
@@ -3830,19 +3902,19 @@ export function AsignacionesModule() {
                                 </p>
                               )}
                               {(() => {
-                                const tarifaAc = ((ac as any).tipo_tarifa || viewAsignacion.tipo_tarifa || 'antigua') as 'antigua' | 'nueva'
+                                const { tarifa: tarifaAc, texto: tarifaTexto, titulo: tarifaTitulo } = getTarifaConductor(ac)
                                 return (
                                   <p className="asig-conductor-card-info" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                                     <span>Tarifa:</span>
                                     <span
-                                      title="Esquema de precios del alquiler para este conductor"
+                                      title={tarifaTitulo}
                                       style={{
                                         padding: '1px 9px', borderRadius: '10px', fontSize: '11px', fontWeight: 600,
                                         background: tarifaAc === 'nueva' ? '#DCFCE7' : '#EEF2F7',
                                         color: tarifaAc === 'nueva' ? '#15803D' : '#475569'
                                       }}
                                     >
-                                      {tarifaAc === 'nueva' ? 'Tarifa Nueva' : 'Tarifa Antigua'}
+                                      {tarifaTexto}
                                     </span>
                                     {/* Botones "Cambiar" e historial de tarifa ocultos a pedido:
                                         la tarifa se muestra solo como informacion. Para reactivarlos,

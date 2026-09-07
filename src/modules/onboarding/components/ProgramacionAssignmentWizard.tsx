@@ -135,6 +135,8 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
   const [loadingConductores, setLoadingConductores] = useState(true)
   const [vehicleSearch, setVehicleSearch] = useState('')
   const [vehicleAvailabilityFilter, setVehicleAvailabilityFilter] = useState<string>('')
+  // Filtro por GNC del vehiculo: '' = todos, 'con' = con GNC, 'sin' = sin GNC.
+  const [vehicleGncFilter, setVehicleGncFilter] = useState<'' | 'con' | 'sin'>('')
   const [conductorSearch, setConductorSearch] = useState('')
   const [conductorStatusFilter, setConductorStatusFilter] = useState<string>('')
   const [conductorTurnoFilter, setConductorTurnoFilter] = useState<string>('')
@@ -1562,7 +1564,12 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
           (vehicleAvailabilityFilter === 'en_uso' &&
             (v.disponibilidad === 'ocupado' || v.disponibilidad === 'turno_diurno_libre' || v.disponibilidad === 'turno_nocturno_libre'))
 
-        return matchesSearch && matchesAvailability
+        // GNC: la columna es boolean nullable, por eso "sin GNC" es todo lo que
+        // no sea true (false o null) - mismo criterio que el resto del sistema.
+        const matchesGnc = vehicleGncFilter === '' ||
+          (vehicleGncFilter === 'con' ? v.gnc === true : v.gnc !== true)
+
+        return matchesSearch && matchesAvailability && matchesGnc
       })
       .sort((a, b) => {
         // En modo edicion, poner el vehiculo actual primero
@@ -1577,7 +1584,7 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
         const prioB = prioridad[b.disponibilidad] ?? 99
         return prioA - prioB
       })
-  }, [vehicles, vehicleSearch, vehicleAvailabilityFilter, isEditMode, formData.vehiculo_id, formData.devolucion_vehiculo])
+  }, [vehicles, vehicleSearch, vehicleAvailabilityFilter, vehicleGncFilter, isEditMode, formData.vehiculo_id, formData.devolucion_vehiculo])
 
   // Obtener conductores seleccionados (buscar en lista o crear objeto temporal con datos del form)
   // Helper para badge de disponibilidad de vehículo (usado en Step 2 normal y cambio)
@@ -1598,6 +1605,14 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
     }
     return { badgeText, badgeBg, badgeColor, detalleText }
   }
+
+  // Chip de GNC del vehiculo. Se muestra en las tres listas de seleccion porque
+  // el GNC define que concepto de alquiler (y por lo tanto que tarifa) aplica.
+  const getGncBadge = (vehicle: Vehicle) => (
+    vehicle.gnc === true
+      ? { text: 'GNC', bg: '#DCFCE7', color: '#15803D' }
+      : { text: 'Sin GNC', bg: '#F1F5F9', color: '#64748B' }
+  )
 
   // Vehículos filtrados para cambio de vehículo (memoizados)
   const vehiculosEnUso = useMemo(() =>
@@ -2973,7 +2988,7 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
                 </div>
 
                 {/* Buscador y Filtro */}
-                <div style={{ marginBottom: '20px', maxWidth: '700px', margin: '0 auto 20px auto', display: 'flex', gap: '12px' }}>
+                <div style={{ marginBottom: '20px', maxWidth: '700px', margin: '0 auto 20px auto', display: 'flex', flexWrap: 'wrap', gap: '12px' }}>
                   <input
                     type="text"
                     placeholder="Buscar por patente, marca o modelo..."
@@ -3007,6 +3022,24 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
                     <option value="con_turno_libre">Con turno libre</option>
                     <option value="en_uso">En Uso</option>
                   </select>
+                  <select
+                    value={vehicleGncFilter}
+                    onChange={(e) => setVehicleGncFilter(e.target.value as '' | 'con' | 'sin')}
+                    style={{
+                      padding: '12px 16px',
+                      border: '2px solid var(--border-primary)',
+                      borderRadius: '8px',
+                      fontSize: 'clamp(12px, 1vw, 14px)',
+                      fontFamily: 'inherit',
+                      background: 'var(--modal-bg)',
+                      cursor: 'pointer',
+                      minWidth: '150px'
+                    }}
+                  >
+                    <option value="">GNC: Todos</option>
+                    <option value="con">Con GNC</option>
+                    <option value="sin">Sin GNC</option>
+                  </select>
                 </div>
 
                 <div className="vehicle-grid">
@@ -3024,11 +3057,12 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
                     </div>
                   ) : filteredVehicles.length === 0 ? (
                     <div className="empty-state">
-                      {vehicleSearch || vehicleAvailabilityFilter ? 'No se encontraron vehiculos con ese criterio' : 'No hay vehiculos disponibles'}
+                      {vehicleSearch || vehicleAvailabilityFilter || vehicleGncFilter ? 'No se encontraron vehiculos con ese criterio' : 'No hay vehiculos disponibles'}
                     </div>
                   ) : (
                     filteredVehicles.map((vehicle) => {
                       const { badgeText, badgeBg, badgeColor, detalleText } = getVehicleBadge(vehicle)
+                      const gncBadge = getGncBadge(vehicle)
                       const isProgramado = vehicle.disponibilidad === 'programado'
 
                       return (
@@ -3050,6 +3084,16 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
                                 fontWeight: '600'
                               }}>
                                 {badgeText}
+                              </span>
+                              <span style={{
+                                background: gncBadge.bg,
+                                color: gncBadge.color,
+                                padding: '3px 10px',
+                                borderRadius: '6px',
+                                fontSize: 'clamp(9px, 0.8vw, 11px)',
+                                fontWeight: '600'
+                              }}>
+                                {gncBadge.text}
                               </span>
                               {detalleText && (
                                 <span style={{
@@ -3119,6 +3163,25 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
                     <option value="con_turno_libre">Con turno libre</option>
                     <option value="en_uso">En Uso</option>
                   </select>
+                  <select
+                    value={vehicleGncFilter}
+                    onChange={(e) => setVehicleGncFilter(e.target.value as '' | 'con' | 'sin')}
+                    style={{
+                      padding: '10px 12px',
+                      border: '2px solid var(--border-primary)',
+                      borderRadius: '8px',
+                      fontSize: 'clamp(12px, 1vw, 14px)',
+                      fontFamily: 'inherit',
+                      background: 'var(--modal-bg)',
+                      cursor: 'pointer',
+                      flex: '0 1 auto',
+                      minWidth: '120px'
+                    }}
+                  >
+                    <option value="">GNC: Todos</option>
+                    <option value="con">Con GNC</option>
+                    <option value="sin">Sin GNC</option>
+                  </select>
                 </div>
 
                 <div style={{ display: 'grid', gridTemplateColumns: window.innerWidth < 768 ? '1fr' : '1fr auto 1fr', gap: window.innerWidth < 768 ? '8px' : '16px', maxWidth: '900px', margin: '0 auto', alignItems: 'start' }}>
@@ -3145,6 +3208,7 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
                       ) : (
                         vehiculosEnUso.map(vehicle => {
                           const { badgeText, badgeBg, badgeColor, detalleText } = getVehicleBadge(vehicle)
+                          const gncBadge = getGncBadge(vehicle)
                           const isSelected = formData.vehiculo_id === vehicle.id
                           return (
                             <div
@@ -3178,6 +3242,11 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
                                     padding: '1px 6px', borderRadius: '4px',
                                     fontSize: '9px', fontWeight: '600', lineHeight: '16px'
                                   }}>{badgeText}</span>
+                                  <span style={{
+                                    background: gncBadge.bg, color: gncBadge.color,
+                                    padding: '1px 6px', borderRadius: '4px',
+                                    fontSize: '9px', fontWeight: '600', lineHeight: '16px'
+                                  }}>{gncBadge.text}</span>
                                   {detalleText && (
                                     <span style={{ color: 'var(--text-tertiary)', fontSize: '9px', fontWeight: '500' }}>({detalleText})</span>
                                   )}
@@ -3222,6 +3291,7 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
                       ) : (
                         vehiculosDestino.map(vehicle => {
                           const { badgeText, badgeBg, badgeColor, detalleText } = getVehicleBadge(vehicle)
+                          const gncBadge = getGncBadge(vehicle)
                           const isSelected = formData.vehiculo_cambio_id === vehicle.id
                           return (
                             <div
@@ -3254,6 +3324,11 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
                                     padding: '1px 6px', borderRadius: '4px',
                                     fontSize: '9px', fontWeight: '600', lineHeight: '16px'
                                   }}>{badgeText}</span>
+                                  <span style={{
+                                    background: gncBadge.bg, color: gncBadge.color,
+                                    padding: '1px 6px', borderRadius: '4px',
+                                    fontSize: '9px', fontWeight: '600', lineHeight: '16px'
+                                  }}>{gncBadge.text}</span>
                                   {detalleText && (
                                     <span style={{ color: 'var(--text-tertiary)', fontSize: '9px', fontWeight: '500' }}>({detalleText})</span>
                                   )}
