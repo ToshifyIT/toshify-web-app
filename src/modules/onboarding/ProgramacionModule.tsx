@@ -17,7 +17,8 @@ import { useAuth } from '../../contexts/AuthContext'
 import { useSede } from '../../contexts/SedeContext'
 
 import { ProgramacionAssignmentWizard } from './components/ProgramacionAssignmentWizard'
-import type { ProgramacionOnboardingCompleta } from '../../types/onboarding.types'
+import type { ProgramacionOnboardingCompleta, TipoTarifa } from '../../types/onboarding.types'
+import { cargarConceptosTarifa, getEtiquetaTarifa, type MapaConceptosTarifa } from './tarifaConceptos'
 import Swal from 'sweetalert2'
 import { showSuccess } from '../../utils/toast'
 import { generateContracts } from '../../services/contractService'
@@ -178,7 +179,9 @@ export function ProgramacionModule() {
   const [showQuickEdit, setShowQuickEdit] = useState(false)
   const [quickEditData, setQuickEditData] = useState<Partial<ProgramacionOnboardingCompleta> & { vehiculo_id?: string }>({})
   const [savingQuickEdit, setSavingQuickEdit] = useState(false)
-  const [vehiculosDisponibles, setVehiculosDisponibles] = useState<Array<{ id: string; patente: string; marca: string; modelo: string }>>([])
+  const [vehiculosDisponibles, setVehiculosDisponibles] = useState<Array<{ id: string; patente: string; marca: string; modelo: string; gnc?: boolean }>>([])
+  // Conceptos de alquiler: alimentan las etiquetas del selector de Tarifa.
+  const [conceptosTarifa, setConceptosTarifa] = useState<MapaConceptosTarifa>({})
   const [loadingVehiculos, setLoadingVehiculos] = useState(false)
   const [vehiculoSearch, setVehiculoSearch] = useState('')
   const [showVehiculoDropdown, setShowVehiculoDropdown] = useState(false)
@@ -208,6 +211,10 @@ export function ProgramacionModule() {
   const selectedVehiculo = useMemo(() => {
     return vehiculosDisponibles.find(v => v.id === quickEditData.vehiculo_id)
   }, [vehiculosDisponibles, quickEditData.vehiculo_id])
+
+  // GNC del vehiculo seleccionado: define que concepto de alquiler (y por lo
+  // tanto que precio) se muestra en el selector de Tarifa.
+  const gncVehiculoEdicion = useMemo(() => selectedVehiculo?.gnc === true, [selectedVehiculo])
 
   // Conductores filtrados por búsqueda (diurno) - excluir el nocturno ya seleccionado
   const filteredConductoresDiurno = useMemo(() => {
@@ -399,6 +406,37 @@ export function ProgramacionModule() {
     }
   }, [activeTab, sedeActualId, aplicarFiltroSede])
 
+  // Conceptos de alquiler para las etiquetas del selector de Tarifa (una sola vez).
+  useEffect(() => {
+    let cancelado = false
+    cargarConceptosTarifa().then((m) => { if (!cancelado) setConceptosTarifa(m) })
+    return () => { cancelado = true }
+  }, [])
+
+  // La vista v_programaciones_onboarding no expone las columnas de tarifa: se
+  // leen de la tabla base al abrir la edicion rapida para no perderlas al guardar.
+  useEffect(() => {
+    const id = editingProgramacion?.id
+    if (!showQuickEdit || !id) return
+    let cancelado = false
+    ;(async () => {
+      try {
+        const { data } = await (supabase.from('programaciones_onboarding') as any)
+          .select('tipo_tarifa, tipo_tarifa_diurno, tipo_tarifa_nocturno')
+          .eq('id', id)
+          .single()
+        if (cancelado || !data) return
+        setQuickEditData(prev => ({
+          ...prev,
+          tipo_tarifa: (data.tipo_tarifa || 'antigua') as TipoTarifa,
+          tipo_tarifa_diurno: (data.tipo_tarifa_diurno || data.tipo_tarifa || 'antigua') as TipoTarifa,
+          tipo_tarifa_nocturno: (data.tipo_tarifa_nocturno || data.tipo_tarifa || 'antigua') as TipoTarifa,
+        }))
+      } catch { /* se mantienen los defaults de handleEdit */ }
+    })()
+    return () => { cancelado = true }
+  }, [showQuickEdit, editingProgramacion?.id])
+
   // Handlers
   const handleCreate = () => {
     setShowCreateWizard(true)
@@ -445,6 +483,10 @@ export function ProgramacionModule() {
       tipo_documento: prog.tipo_documento,
       zona: prog.zona,
       distancia_minutos: prog.distancia_minutos,
+      // Tarifa (se refinan con la lectura de la tabla base, ver useEffect)
+      tipo_tarifa: (prog.tipo_tarifa || 'antigua') as TipoTarifa,
+      tipo_tarifa_diurno: (prog.tipo_tarifa_diurno || prog.tipo_tarifa || 'antigua') as TipoTarifa,
+      tipo_tarifa_nocturno: (prog.tipo_tarifa_nocturno || prog.tipo_tarifa || 'antigua') as TipoTarifa,
       // Otros
       observaciones: prog.observaciones || ''
     })
@@ -459,7 +501,7 @@ export function ProgramacionModule() {
       const estadosNoDisponibles = ['REPARACION', 'MANTENIMIENTO', 'TALLER_AXIS', 'TALLER_CHAPA_PINTURA', 'TALLER_ALLIANCE', 'TALLER_KALZALO']
       const { data: vehiculosData } = await aplicarFiltroSede(supabase
         .from('vehiculos')
-        .select('id, patente, marca, modelo, vehiculos_estados(codigo)')
+        .select('id, patente, marca, modelo, gnc, vehiculos_estados(codigo)')
         .is('deleted_at', null))
         .order('patente')
 
@@ -481,16 +523,17 @@ export function ProgramacionModule() {
         id: v.id,
         patente: v.patente,
         marca: v.marca,
-        modelo: v.modelo
+        modelo: v.modelo,
+        gnc: v.gnc === true
       }))
 
       // Inyectar el vehículo actual si no está en la lista filtrada (ej. en reparación/taller)
       if (prog.vehiculo_entregar_id && !listaVehiculos.find((v: any) => v.id === prog.vehiculo_entregar_id)) {
         const vehiculoActual = (vehiculosData || []).find((v: any) => v.id === prog.vehiculo_entregar_id)
         if (vehiculoActual) {
-          listaVehiculos.unshift({ id: vehiculoActual.id, patente: vehiculoActual.patente, marca: vehiculoActual.marca, modelo: vehiculoActual.modelo })
+          listaVehiculos.unshift({ id: vehiculoActual.id, patente: vehiculoActual.patente, marca: vehiculoActual.marca, modelo: vehiculoActual.modelo, gnc: vehiculoActual.gnc === true })
         } else if (prog.vehiculo_entregar_patente) {
-          listaVehiculos.unshift({ id: prog.vehiculo_entregar_id, patente: prog.vehiculo_entregar_patente, marca: prog.vehiculo_entregar_marca || '', modelo: prog.vehiculo_entregar_modelo || prog.vehiculo_entregar_modelo_sistema || '' })
+          listaVehiculos.unshift({ id: prog.vehiculo_entregar_id, patente: prog.vehiculo_entregar_patente, marca: prog.vehiculo_entregar_marca || '', modelo: prog.vehiculo_entregar_modelo || prog.vehiculo_entregar_modelo_sistema || '', gnc: false })
         }
       }
 
@@ -581,6 +624,7 @@ export function ProgramacionModule() {
         updateData.documento_diurno = quickEditData.documento_diurno
         updateData.zona_diurno = quickEditData.zona_diurno
         updateData.distancia_diurno = quickEditData.distancia_diurno || null
+        updateData.tipo_tarifa_diurno = quickEditData.tipo_tarifa_diurno || 'antigua'
 
         // Conductor nocturno
         updateData.conductor_nocturno_id = quickEditData.conductor_nocturno_id || null
@@ -590,9 +634,12 @@ export function ProgramacionModule() {
         updateData.documento_nocturno = quickEditData.documento_nocturno
         updateData.zona_nocturno = quickEditData.zona_nocturno
         updateData.distancia_nocturno = quickEditData.distancia_nocturno || null
+        updateData.tipo_tarifa_nocturno = quickEditData.tipo_tarifa_nocturno || 'antigua'
 
         // Usar tipo_asignacion general (columnas individuales no existen aún en BD)
         updateData.tipo_asignacion = quickEditData.tipo_asignacion_diurno || quickEditData.tipo_asignacion_nocturno || 'entrega_auto'
+        // Espejo legacy de tarifa (respaldo), mismo criterio que el wizard
+        updateData.tipo_tarifa = quickEditData.tipo_tarifa_diurno || quickEditData.tipo_tarifa_nocturno || 'antigua'
 
         // Limpiar campos legacy de A CARGO para evitar datos stale
         updateData.conductor_id = null
@@ -607,6 +654,7 @@ export function ProgramacionModule() {
         updateData.tipo_documento = quickEditData.tipo_documento
         updateData.zona = quickEditData.zona
         updateData.distancia_minutos = quickEditData.distancia_minutos || null
+        updateData.tipo_tarifa = quickEditData.tipo_tarifa || 'antigua'
 
         // Limpiar campos de TURNO para evitar datos stale
         updateData.conductor_diurno_id = null
@@ -2497,6 +2545,18 @@ export function ProgramacionModule() {
                           placeholder="Minutos"
                         />
                       </div>
+                      <div>
+                        <label>Tarifa *</label>
+                        <select
+                          value={quickEditData.tipo_tarifa_diurno || 'antigua'}
+                          onChange={e => setQuickEditData(prev => ({ ...prev, tipo_tarifa_diurno: e.target.value as TipoTarifa }))}
+                          className="prog-input"
+                          title="Esquema de precios del alquiler para este conductor"
+                        >
+                          <option value="antigua">{getEtiquetaTarifa(conceptosTarifa, 'diurno', gncVehiculoEdicion, 'antigua')}</option>
+                          <option value="nueva">{getEtiquetaTarifa(conceptosTarifa, 'diurno', gncVehiculoEdicion, 'nueva')}</option>
+                        </select>
+                      </div>
                     </div>
                   </div>
 
@@ -2610,6 +2670,18 @@ export function ProgramacionModule() {
                           placeholder="Minutos"
                           />
                         </div>
+                      <div>
+                        <label>Tarifa *</label>
+                        <select
+                          value={quickEditData.tipo_tarifa_nocturno || 'antigua'}
+                          onChange={e => setQuickEditData(prev => ({ ...prev, tipo_tarifa_nocturno: e.target.value as TipoTarifa }))}
+                          className="prog-input"
+                          title="Esquema de precios del alquiler para este conductor"
+                        >
+                          <option value="antigua">{getEtiquetaTarifa(conceptosTarifa, 'nocturno', gncVehiculoEdicion, 'antigua')}</option>
+                          <option value="nueva">{getEtiquetaTarifa(conceptosTarifa, 'nocturno', gncVehiculoEdicion, 'nueva')}</option>
+                        </select>
+                      </div>
                       </div>
                     </div>
                 </>
@@ -2706,6 +2778,18 @@ export function ProgramacionModule() {
                         className="prog-input"
                         placeholder="Minutos"
                       />
+                    </div>
+                    <div>
+                      <label>Tarifa *</label>
+                      <select
+                        value={quickEditData.tipo_tarifa || 'antigua'}
+                        onChange={e => setQuickEditData(prev => ({ ...prev, tipo_tarifa: e.target.value as TipoTarifa }))}
+                        className="prog-input"
+                        title="Esquema de precios del alquiler para este conductor"
+                      >
+                        <option value="antigua">{getEtiquetaTarifa(conceptosTarifa, 'cargo', gncVehiculoEdicion, 'antigua')}</option>
+                        <option value="nueva">{getEtiquetaTarifa(conceptosTarifa, 'cargo', gncVehiculoEdicion, 'nueva')}</option>
+                      </select>
                     </div>
                   </div>
                 </div>
