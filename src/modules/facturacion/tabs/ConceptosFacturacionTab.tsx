@@ -861,7 +861,8 @@ export function ConceptosFacturacionTab() {
       searchPlaceholder="Buscar concepto..."
       emptyTitle="Sin conceptos"
       emptyDescription="No hay conceptos registrados"
-pageSize={100}
+      stickyLeftColumns={2}
+      pageSize={100}
       pageSizeOptions={[10, 20, 50, 100]}
       headerAction={
         <button

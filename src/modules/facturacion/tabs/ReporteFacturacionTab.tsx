@@ -133,6 +133,40 @@ function displayArgDate(d: string | null | undefined): string {
 // tieneGncEnFecha / GncHistorialEntry se movieron sin cambios a
 // src/utils/gncHistorial.ts para poder reusarlos desde Asignaciones.
 
+// Modalidad de cada codigo de alquiler. Antes esto era un ternario que solo
+// contemplaba P001 y P013: TODO el resto caia en 'A Cargo', asi que P021
+// (Turno Diurno tarifa nueva) se mostraba como "A Cargo".
+const MODALIDAD_POR_CODIGO_ALQUILER: Record<string, string> = {
+  P001: 'Turno Diurno',           P021: 'Turno Diurno',
+  P013: 'Turno Nocturno',         P023: 'Turno Nocturno',
+  P002: 'A Cargo',                P022: 'A Cargo',
+  P014: 'Turno Diurno Sin GNC',   P024: 'Turno Diurno Sin GNC',
+  P015: 'Turno Nocturno Sin GNC', P025: 'Turno Nocturno Sin GNC',
+  P016: 'A Cargo Sin GNC',        P026: 'A Cargo Sin GNC',
+}
+
+/** Sufijo "(Tarifa Nueva)" / "(Tarifa Antigua)" -> "(Tarifa AGO-26)".
+ *  El periodo sale de la descripcion del concepto en conceptos_nomina, no del
+ *  texto guardado en facturacion_detalle: asi las semanas ya calculadas tambien
+ *  muestran el periodo, sin necesidad de recalcular. Si el concepto no tiene
+ *  periodo parseable, se deja la descripcion tal cual. */
+function descripcionConPeriodo(desc: string, codigo: string, periodos: Map<string, string>): string {
+  const periodo = periodos.get(codigo || '')
+  if (!periodo) return desc || ''
+  const base = (desc || '').replace(/\s*\((?:Tarifa\s+)?(?:Nueva|Antigua)\)\s*$/i, '').trim()
+  return `${base} (Tarifa ${periodo})`
+}
+
+// P003 (Garantia): la descripcion almacenada arrastra el numero de cuota
+// ("Cuota de Garantia 2", "Cuota de Garantia 2 de 4"). En Reportes/Facturacion se
+// muestra solo el label base, igual que en el Portal del conductor (PortalPage.tsx).
+// El numero de cuota sigue disponible en facturacion_conductores.cuota_garantia_numero.
+// "Garantia completada" no termina en numero, por lo que se preserva intacto.
+function descripcionSinNumeroCuota(desc: string, codigo: string | null | undefined): string {
+  if (codigo !== 'P003') return desc || ''
+  return (desc || '').replace(/\s+\d+(?:\s+de\s+\d+)?\s*$/i, '').trim()
+}
+
 // Helper: tabla de cabify según sede (Bariloche usa tabla separada)
 const SEDE_BARILOCHE_ID = 'f37193f7-5805-4d87-820d-c4521824860e'
 function getCabifyTable(sedeId: string | null | undefined): string {
@@ -545,6 +579,17 @@ export function ReporteFacturacionTab() {
     () => new Map((conceptosNomina || []).map((c: any) => [c.codigo, Number(c.iva_porcentaje) || 0])),
     [conceptosNomina]
   )
+  // Periodo de cada concepto, tomado del sufijo de su descripcion
+  // ("ALQUILER DE VEHICULO DIURNO ENE-26" -> "ENE-26"). Mismo criterio que
+  // tarifaConceptos.extraerPeriodo en el modulo de onboarding.
+  const periodoPorCodigo = useMemo(() => {
+    const mapa = new Map<string, string>()
+    for (const c of (conceptosNomina || []) as any[]) {
+      const ultima = String(c.descripcion || '').trim().split(/\s+/).pop() || ''
+      if (/^[A-Za-zÁÉÍÓÚÑ]{3}-\d{2}$/.test(ultima)) mapa.set(c.codigo, ultima.toUpperCase())
+    }
+    return mapa
+  }, [conceptosNomina])
 
   // Parámetros de descuento por hora de entrega
   const [horasCorteTurno, setHorasCorteTurno] = useState({
@@ -5522,7 +5567,7 @@ export function ReporteFacturacionTab() {
   // ==========================================
   async function verDetalleItem(item: FacturacionDetalle) {
     const codigo = item.concepto_codigo
-    const desc = item.concepto_descripcion
+    const desc = descripcionSinNumeroCuota(descripcionConPeriodo(item.concepto_descripcion, codigo, periodoPorCodigo), codigo)
     const qty = item.cantidad
     const unitario = item.precio_unitario
     const total = item.total
@@ -5596,11 +5641,13 @@ export function ReporteFacturacionTab() {
       // P001/P002/P013 - Alquiler: mostrar desglose por días
       if (['P001', 'P002', 'P013', 'P014', 'P015', 'P016', 'P021', 'P022', 'P023', 'P024', 'P025', 'P026'].includes(codigo) && detalleFacturacion) {
         titleExtra = 'Detalle de Alquiler'
-        const tipoLabel = codigo === 'P001' ? 'Turno Diurno' : codigo === 'P013' ? 'Turno Nocturno' : 'A Cargo'
+        const tipoLabel = MODALIDAD_POR_CODIGO_ALQUILER[codigo] || 'A Cargo'
+        const periodoTarifa = periodoPorCodigo.get(codigo)
         htmlExtra = `
           <hr style="margin:10px 0; border:none; border-top:1px solid #e5e7eb">
           <div style="display:grid; grid-template-columns:120px 1fr; gap:4px 12px; font-size:13px; line-height:1.8">
             <strong>Modalidad:</strong> <span>${tipoLabel}</span>
+            ${periodoTarifa ? `<strong>Tarifa:</strong> <span>${periodoTarifa}</span>` : ''}
             <strong>Días cobrados:</strong> <span>${qty} de 7</span>
             <strong>Valor por día:</strong> <span>${formatCurrency(unitario)}</span>
             <strong>Subtotal:</strong> <span style="font-weight:600">${formatCurrency(total)}</span>
@@ -6755,7 +6802,7 @@ export function ReporteFacturacionTab() {
 
       const cargos = detalleItems.filter(d => !d.es_descuento && d.total !== 0)
       cargos.forEach(cargo => {
-        pdf.text(cargo.concepto_descripcion, margin, y)
+        pdf.text(descripcionSinNumeroCuota(descripcionConPeriodo(cargo.concepto_descripcion, cargo.concepto_codigo, periodoPorCodigo), cargo.concepto_codigo), margin, y)
         pdf.text(formatCurrency(cargo.total), pageWidth - margin, y, { align: 'right' })
         y += 5
       })
@@ -12275,7 +12322,7 @@ export function ReporteFacturacionTab() {
                       const filaIva = ivaAlquiler > 0 ? filaIvaDe('IVA de alquiler', ivaAlquiler) : null
                       return (<>
                       {detalleCargos.map((item, idxItem) => {
-                        let desc = item.concepto_descripcion;
+                        let desc = descripcionSinNumeroCuota(descripcionConPeriodo(item.concepto_descripcion, item.concepto_codigo, periodoPorCodigo), item.concepto_codigo);
                         // Prefijo con código de producto
                         const codigo = item.concepto_codigo
                         if (codigo && codigo !== 'PEND') {

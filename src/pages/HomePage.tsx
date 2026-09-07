@@ -62,6 +62,7 @@ const menuIcons: Record<string, LucideIcon> = {
   'inventario-pedidos': ClipboardList,
   'zonas-peligrosas': MapPin,
   'distribucion-mapa': Globe,
+  'distribucion-mapa-v2': Globe,
   'escuela': GraduationCap,
   'conceptos-facturacion': Receipt,
   'sedes': Building2,
@@ -241,6 +242,7 @@ const FacturacionPage = lazy(() => import('./facturacion/FacturacionPage').then(
 const IncidenciasPage = lazy(() => import('./incidencias/IncidenciasPage').then(m => ({ default: m.IncidenciasPage })))
 const ProgramacionPage = lazy(() => import('./onboarding/ProgramacionPage'))
 const DistribucionMapaPage = lazy(() => import('./onboarding/DistribucionMapaPage'))
+const DistribucionMapaV2Page = lazy(() => import('./onboarding/DistribucionMapaV2Page'))
 const MovimientosPage = lazy(() => import('./inventario/MovimientosPage').then(m => ({ default: m.MovimientosPage })))
 const ControlMovimientosPage = lazy(() => import('./inventario/ControlMovimientosPage').then(m => ({ default: m.ControlMovimientosPage })))
 const AsignacionesPage = lazy(() => import('./asignaciones/AsignacionesPage').then(m => ({ default: m.AsignacionesPage })))
@@ -2073,6 +2075,11 @@ export function HomePage() {
               <Route path="/onboarding/distribucion-mapa" element={
                 <ProtectedRoute submenuName="distribucion-mapa" action="view">
                   <LazyPage><DistribucionMapaPage /></LazyPage>
+                </ProtectedRoute>
+              } />
+              <Route path="/onboarding/distribucion-mapa-v2" element={
+                <ProtectedRoute submenuName="distribucion-mapa-v2" action="view">
+                  <LazyPage><DistribucionMapaV2Page /></LazyPage>
                 </ProtectedRoute>
               } />
 
