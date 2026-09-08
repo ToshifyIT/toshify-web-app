@@ -14,7 +14,7 @@ import { AssignmentWizard } from '../../components/AssignmentWizard'
 import Swal from 'sweetalert2'
 import { showSuccess } from '../../utils/toast'
 import { getTodayDateString } from '../../utils/dateUtils'
-import { fechaISOART } from '../../utils/fechaArgentina'
+import { fechaISOART, partesART } from '../../utils/fechaArgentina'
 import { tieneGncEnFecha, armarMapaGncHistorial, type GncHistorialEntry } from '../../utils/gncHistorial'
 import { cargarConceptosTarifa, getEtiquetaTarifa, type MapaConceptosTarifa, type ModalidadTarifa } from '../onboarding/tarifaConceptos'
 import { registrarHistorialVehiculo, registrarHistorialConductor } from '../../services/historialService'
@@ -83,6 +83,37 @@ interface ExpandedAsignacion extends Asignacion {
 
 // Helper: Convierte fecha ISO UTC a string YYYY-MM-DD en zona horaria LOCAL
 // Esto es necesario porque las fechas se guardan en UTC pero queremos filtrar por día local
+/**
+ * Valor para un <input type="datetime-local">: "YYYY-MM-DDTHH:mm" en hora
+ * Argentina. El input no maneja zonas horarias, asi que lo que se le pasa tiene
+ * que estar YA convertido a ART; si no, el operador veria la hora UTC.
+ */
+function inputDateTimeART(valor: string | null | undefined): string {
+  const p = partesART(valor)
+  return p ? `${p.anio}-${p.mes}-${p.dia}T${p.hora}:${p.minuto}` : ''
+}
+
+/**
+ * Inverso del anterior: toma lo que escribio el usuario (ART, sin zona) y arma el
+ * timestamp con offset -03:00 EXPLICITO.
+ *
+ * Es importante no usar `new Date(valor).toISOString()`: eso interpretaria el
+ * string en la zona DEL NAVEGADOR, y el instante guardado terminaria dependiendo
+ * de la maquina del operador. Argentina no aplica horario de verano desde 2009,
+ * asi que el offset fijo es correcto.
+ */
+function timestampDesdeInputART(valor: string): string {
+  // El input entrega "YYYY-MM-DDTHH:mm" (16 chars); algunos navegadores agregan segundos.
+  const conSegundos = valor.length === 16 ? `${valor}:00` : valor
+  return `${conSegundos}-03:00`
+}
+
+/** "DD/MM/YYYY HH:mm" en ART, para la traza de cambios. */
+function etiquetaFechaHoraART(valor: string | null | undefined): string {
+  const p = partesART(valor)
+  return p ? `${p.dia}/${p.mes}/${p.anio} ${p.hora}:${p.minuto}` : 'sin definir'
+}
+
 function getLocalDateStr(isoString: string): string {
   const date = new Date(isoString)
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
@@ -949,6 +980,38 @@ export function AsignacionesModule() {
   useEffect(() => {
     loadAllData()
   }, [sedeActualId])
+
+  // Escape cierra el modal que esta al frente, uno por vez (LIFO).
+  //
+  // El handler global de App.tsx no alcanza para este modulo: busca el overlay
+  // mas alto del DOM y le hace click(), pero los overlays de aca no tienen
+  // onClick (a proposito: son formularios, no queremos que un click afuera
+  // descarte lo cargado). Ademas el historial de conductores usa la clase
+  // `asig-hist-overlay`, que ni siquiera entra en el filtro de App.
+  //
+  // El orden de la lista es el orden de apilado real: el historial de
+  // conductores se abre DESDE el modal de detalle, asi que tiene que cerrarse
+  // primero y dejar el detalle abierto.
+  useEffect(() => {
+    const onEscape = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return
+      // Si hay un SweetAlert2 abierto, es el que esta al frente: lo maneja Swal.
+      if (document.querySelector('.swal2-container')) return
+
+      const pila: Array<[boolean, () => void]> = [
+        [showHistorialCond, () => setShowHistorialCond(false)],
+        [showControlModal && !controlSaving, () => setShowControlModal(false)],
+        [showConfirmModal, () => setShowConfirmModal(false)],
+        [showCancelModal, () => setShowCancelModal(false)],
+        [showRegularizarModal, () => setShowRegularizarModal(false)],
+        [showViewModal, () => setShowViewModal(false)],
+      ]
+      const alFrente = pila.find(([abierto]) => abierto)
+      if (alFrente) alFrente[1]()
+    }
+    document.addEventListener('keydown', onEscape)
+    return () => document.removeEventListener('keydown', onEscape)
+  }, [showHistorialCond, showControlModal, controlSaving, showConfirmModal, showCancelModal, showRegularizarModal, showViewModal])
 
   // Cargar drive_contract_folder_url (carpeta de contratos) directo de conductores
   // cuando se abre el modal de detalle de la asignación
@@ -2313,8 +2376,10 @@ export function AsignacionesModule() {
     }
 
     setRegularizarData({
-      fecha_inicio: asignacion.fecha_inicio ? asignacion.fecha_inicio.split('T')[0] : '',
-      fecha_fin: asignacion.fecha_fin ? asignacion.fecha_fin.split('T')[0] : '',
+      // Fecha + hora en ART. El string crudo viene en UTC: usarlo tal cual hacia
+      // que una entrega despues de las 21:00 ART se mostrara con el dia siguiente.
+      fecha_inicio: inputDateTimeART(asignacion.fecha_inicio),
+      fecha_fin: inputDateTimeART(asignacion.fecha_fin),
       notas: asignacion.notas || '',
       vehiculo_id: asignacion.vehiculo_id || '',
       horario: asignacion.horario || 'turno',
@@ -2365,8 +2430,8 @@ export function AsignacionesModule() {
           conductor_nombre: conductorNombre,
           estado: regularizarData.estado === 'finalizada' || regularizarData.estado === 'completada' ? 'completado' : regularizarData.estado === 'cancelada' ? 'cancelado' : 'pendiente',
           observaciones: regularizarData.notas || null,
-          fecha_programada: regularizarData.fecha_inicio ? new Date(regularizarData.fecha_inicio + 'T12:00:00').toISOString() : undefined,
-          fecha_devolucion: regularizarData.fecha_fin ? new Date(regularizarData.fecha_fin + 'T12:00:00').toISOString() : null,
+          fecha_programada: regularizarData.fecha_inicio ? timestampDesdeInputART(regularizarData.fecha_inicio) : undefined,
+          fecha_devolucion: regularizarData.fecha_fin ? timestampDesdeInputART(regularizarData.fecha_fin) : null,
           sede_id: regularizarData.sede_id || undefined,
         }
         // Remover campos undefined
@@ -2471,16 +2536,22 @@ export function AsignacionesModule() {
         updated_by: usuario
       }
 
-      if (regularizarData.fecha_inicio) {
-        // Solo actualizar fecha_inicio si cambió (comparar solo la parte de fecha, no la hora)
-        const fechaOriginal = regularizarAsignacion.fecha_inicio ? regularizarAsignacion.fecha_inicio.split('T')[0] : ''
-        if (regularizarData.fecha_inicio !== fechaOriginal) {
-          updateData.fecha_inicio = new Date(regularizarData.fecha_inicio + 'T12:00:00').toISOString()
-        }
+      // Solo se escribe si el usuario realmente lo cambio, comparando contra el
+      // mismo formato ART que se cargo en el form. Si no cambio, no se toca: el
+      // instante guardado (segundos y milisegundos incluidos) queda intacto.
+      const inicioOriginal = inputDateTimeART(regularizarAsignacion.fecha_inicio)
+      if (regularizarData.fecha_inicio && regularizarData.fecha_inicio !== inicioOriginal) {
+        updateData.fecha_inicio = timestampDesdeInputART(regularizarData.fecha_inicio)
+        cambios.push(`Entrega: ${etiquetaFechaHoraART(regularizarAsignacion.fecha_inicio)} → ${etiquetaFechaHoraART(timestampDesdeInputART(regularizarData.fecha_inicio))}`)
       }
-      updateData.fecha_fin = regularizarData.fecha_fin 
-        ? new Date(regularizarData.fecha_fin + 'T12:00:00').toISOString() 
-        : null
+      // A fecha_fin le faltaba el "si cambio": se reescribia en CADA guardado,
+      // aunque el usuario solo hubiera tocado una nota, y perdia la hora real.
+      const finOriginal = inputDateTimeART(regularizarAsignacion.fecha_fin)
+      if (regularizarData.fecha_fin !== finOriginal) {
+        const nuevoFin = regularizarData.fecha_fin ? timestampDesdeInputART(regularizarData.fecha_fin) : null
+        updateData.fecha_fin = nuevoFin
+        cambios.push(`Fin: ${etiquetaFechaHoraART(regularizarAsignacion.fecha_fin)} → ${etiquetaFechaHoraART(nuevoFin)}`)
+      }
       if (regularizarData.vehiculo_id && regularizarData.vehiculo_id !== regularizarAsignacion.vehiculo_id) {
         updateData.vehiculo_id = regularizarData.vehiculo_id
       }
@@ -4368,17 +4439,17 @@ export function AsignacionesModule() {
                 {/* Fechas - 2 columnas */}
                 <div className="asig-edit-row">
                   <div className="asig-edit-field">
-                    <label>Fecha Entrega Real</label>
+                    <label>Fecha y Hora Entrega Real</label>
                     <input
-                      type="date"
+                      type="datetime-local"
                       value={regularizarData.fecha_inicio}
                       onChange={(e) => setRegularizarData(prev => ({ ...prev, fecha_inicio: e.target.value }))}
                     />
                   </div>
                   <div className="asig-edit-field">
-                    <label>Fecha Fin</label>
+                    <label>Fecha y Hora Fin</label>
                     <input
-                      type="date"
+                      type="datetime-local"
                       value={regularizarData.fecha_fin}
                       onChange={(e) => setRegularizarData(prev => ({ ...prev, fecha_fin: e.target.value }))}
                     />

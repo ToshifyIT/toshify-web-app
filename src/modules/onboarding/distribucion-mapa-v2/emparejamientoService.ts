@@ -20,14 +20,19 @@
 
 import type {
   CombinacionesPar,
+  ConexionRadar,
   EntidadMapa,
   MotivoPar,
   OpcionesRuta,
   ParSugerido,
+  Radar,
   ResultadoSugerencias,
 } from './types'
 import {
+  clavePersona,
+  dedupPorPersona,
   haversineKm,
+  mismaPersona,
   turnoDeEntidad,
   turnosComplementarios,
   LABEL_LICENCIA,
@@ -49,6 +54,12 @@ export const MAX_BASES_SUGERENCIA = 12
 
 /** Tope de pares devueltos. */
 const MAX_PARES_RESULTADO = 60
+
+/**
+ * Cuántas líneas dibuja como máximo el modo "Ver todos en mapa". Más que esto
+ * el mapa se vuelve ilegible y el consumo de API deja de justificarse.
+ */
+export const MAX_CONEXIONES_RADAR = 12
 
 /** Estados de lead que se consideran listos para inducción. */
 const ESTADOS_LEAD_INDUCCION = new Set(['apto inducción', 'apto induccion', 'convocatoria inducción', 'convocatoria induccion'])
@@ -287,9 +298,13 @@ function combinacionHabilitada(
   return combinaciones.conductorLead
 }
 
+/**
+ * Clave del par por PERSONA, no por fila: así el mismo par no se propone dos
+ * veces cuando alguno de los dos extremos existe duplicado en la base.
+ */
 function clavePar(a: EntidadMapa, b: EntidadMapa): string {
-  const x = `${a.tipo}:${a.id}`
-  const y = `${b.tipo}:${b.id}`
+  const x = clavePersona(a)
+  const y = clavePersona(b)
   return x < y ? `${x}|${y}` : `${y}|${x}`
 }
 
@@ -311,8 +326,14 @@ export async function sugerirPares(
   const { salida, desplazada } = resolverSalida(opciones)
   const radio = radioPrefiltroKm(umbralMinutos)
 
-  const basesLimitadas = bases.slice(0, MAX_BASES_SUGERENCIA)
-  const truncado = bases.length > basesLimitadas.length
+  // Una misma persona puede venir en varias filas (lead ya convertido en
+  // conductor, o lead cargado dos veces). Se deja un solo representante antes
+  // de emparejar: si no, el sistema las trata como personas distintas y llega a
+  // proponer a alguien consigo mismo.
+  const candidatosUnicos = dedupPorPersona(candidatos)
+
+  const basesLimitadas = dedupPorPersona(bases).slice(0, MAX_BASES_SUGERENCIA)
+  const truncado = dedupPorPersona(bases).length > basesLimitadas.length
 
   const vistos = new Set<string>()
   const pares: ParSugerido[] = []
@@ -320,8 +341,9 @@ export async function sugerirPares(
   for (const base of basesLimitadas) {
     // 1. Prefiltro local: mismo par no repetido, combinación habilitada y
     //    dentro del radio plausible. Gratis, evita llamadas innecesarias.
-    const preseleccion = candidatos
-      .filter((c) => !(c.tipo === base.tipo && c.id === base.id))
+    const preseleccion = candidatosUnicos
+      // Excluye a la propia base Y a cualquier otra fila de la MISMA persona.
+      .filter((c) => !mismaPersona(c, base))
       .filter((c) => combinacionHabilitada(base, c, combinaciones))
       .filter((c) => !vistos.has(clavePar(base, c)))
       .map((c) => ({ candidato: c, km: haversineKm(base.lat, base.lng, c.lat, c.lng) }))
@@ -389,4 +411,71 @@ export async function sugerirPares(
     truncado,
     aviso: avisos.length > 0 ? avisos.join(' ') : null,
   }
+}
+
+// =====================================================
+// Modo "Ver todos en mapa"
+// =====================================================
+
+/**
+ * Mide la distancia real desde una persona hacia las demás y devuelve las más
+ * cercanas, para dibujarlas como líneas en el mapa.
+ *
+ * A diferencia de `sugerirPares`, acá NO se descarta nada por umbral ni por
+ * complementariedad de turnos: el objetivo es que el operador VEA quién tiene
+ * cerca. El umbral sólo se usa para colorear la línea (dentro / fuera).
+ */
+export async function conexionesDesde(
+  base: EntidadMapa,
+  candidatos: EntidadMapa[],
+  opciones: OpcionesRuta,
+  umbralMinutos: number = UMBRAL_MINUTOS_DEFAULT,
+  maxConexiones: number = MAX_CONEXIONES_RADAR
+): Promise<Radar> {
+  const { salida, desplazada } = resolverSalida(opciones)
+
+  // Prefiltro por cercanía en línea recta: sólo medimos las más prometedoras.
+  // Se colapsan los duplicados de persona por el mismo motivo que en
+  // `sugerirPares`: sin eso, la misma persona aparecería como su propio vecino.
+  const preseleccion = dedupPorPersona(candidatos)
+    .filter((c) => !mismaPersona(c, base))
+    .map((c) => ({ candidato: c, km: haversineKm(base.lat, base.lng, c.lat, c.lng) }))
+    .sort((a, b) => a.km - b.km)
+    .slice(0, Math.min(maxConexiones, MAX_DESTINOS_POR_REQUEST))
+
+  if (preseleccion.length === 0) {
+    return { base, conexiones: [], aviso: 'No hay otras personas visibles con los filtros actuales.' }
+  }
+
+  const mediciones = await medirDesdeOrigen(
+    { lat: base.lat, lng: base.lng },
+    preseleccion.map((x) => ({ lat: x.candidato.lat, lng: x.candidato.lng })),
+    opciones,
+    salida
+  )
+
+  const conexiones: ConexionRadar[] = preseleccion.map((x, i) => {
+    const medicion = mediciones[i] || estimarPorHaversine(x.km)
+    return {
+      entidad: x.candidato,
+      distanciaKm: medicion.distanciaKm,
+      tiempoMinutos: medicion.tiempoMinutos,
+      fuenteTiempo: medicion.fuente,
+      dentroDelUmbral: medicion.tiempoMinutos <= umbralMinutos,
+    }
+  })
+
+  conexiones.sort((a, b) => a.tiempoMinutos - b.tiempoMinutos)
+
+  const avisos: string[] = []
+  if (desplazada) {
+    avisos.push(
+      `La hora de salida elegida ya pasó: se calculó con la próxima ocurrencia (${salida.toLocaleDateString('es-AR')} ${salida.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' })}).`
+    )
+  }
+  if (!mapsDisponible()) {
+    avisos.push('Google Maps no está disponible: los tiempos son estimados en línea recta.')
+  }
+
+  return { base, conexiones, aviso: avisos.length > 0 ? avisos.join(' ') : null }
 }

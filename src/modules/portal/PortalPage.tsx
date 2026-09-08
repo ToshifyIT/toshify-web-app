@@ -8,6 +8,7 @@ import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianG
 import { supabase } from '../../lib/supabase'
 import { formatCurrency } from '../../types/facturacion.types'
 import { normalizeDni, normalizeCuit } from '../../utils/normalizeDocuments'
+import { getConceptoLabel } from '../../utils/conceptoLabels'
 import { calcularKmSemanasConductor } from './kmRecorridos'
 import logoToshifyUrl from '../../assets/logo-toshify.png'
 import logoToshifyWordmarkUrl from '../../assets/logo-toshify-wordmark.png'
@@ -151,63 +152,6 @@ interface PortalFraccionamiento {
 
 type View = 'login' | 'changePassword' | 'forgotPassword' | 'resetPassword' | 'dashboard' | 'detail'
 
-// Mapeo de códigos de concepto a descripciones legibles
-const CONCEPTO_LABELS: Record<string, string> = {
-  P001: 'Alquiler Turno Diurno',
-  P002: 'Alquiler a Cargo',
-  P003: 'Cuota de Garantía',
-  P004: 'Descuento a Favor',
-  P005: 'Peajes',
-  P006: 'Exceso de KM',
-  P007: 'Penalidades',
-  P008: 'Multas de Tránsito',
-  P009: 'Mora',
-  P010: 'Repuestos/Daños',
-  P011: 'Publicidad Cabify',
-  P012: 'Publicidad Tablet',
-  P013: 'Alquiler Turno Nocturno',
-  P014: 'Alquiler Turno Diurno Sin GNC',
-  P015: 'Alquiler Turno Nocturno Sin GNC',
-  P016: 'Alquiler a Cargo Sin GNC',
-}
-
-/** Siempre mostrar el label del concepto para códigos conocidos.
- *  Si la descripción aporta info adicional (cuota, plan de pagos), se agrega. */
-function getConceptoLabel(item: PortalDetalle): string {
-  const desc = item.concepto_descripcion?.trim()
-  const baseLabel = CONCEPTO_LABELS[item.concepto_codigo]
-
-  // Si no tenemos label para este código, usar la descripción tal cual
-  if (!baseLabel) return desc || item.concepto_codigo
-
-  // P003 = Cuota de Garantía: mostrar solo el label base
-  if (item.concepto_codigo === 'P003') {
-    return baseLabel
-  }
-
-  // P010 = Plan de Pagos: agregar descripción si es informativa (ej: "valor de multas 678.733,50")
-  if (item.concepto_codigo === 'P010' && desc && !/^\d+([,.]\d+)?$/.test(desc)) {
-    return `${baseLabel} - ${desc}`
-  }
-
-  // P004 = Tickets: mostrar detalle descriptivo, eliminando prefijo redundante "Ticket:"
-  if (item.concepto_codigo === 'P004') {
-    if (desc) {
-      // Quitar prefijo "Ticket:" o "Ticket: " para no repetir
-      const cleanDesc = desc.replace(/^Ticket:\s*/i, '').trim()
-      if (cleanDesc && cleanDesc !== baseLabel) return `${baseLabel} (${cleanDesc})`
-    }
-    return baseLabel
-  }
-
-  // Para códigos con descripción informativa (fechas, detalles), agregar entre paréntesis
-  // Ej: P005 "29/01/2026 al 01/02/2026" → "Peajes (29/01/2026 al 01/02/2026)"
-  if (desc && desc !== baseLabel && !/^\d+([,.]\d+)?$/.test(desc)) {
-    return `${baseLabel} (${desc})`
-  }
-
-  return baseLabel
-}
 
 /** Convierte un link de Google Drive ("/file/d/<ID>/view" o "open?id=<ID>")
  *  en su URL de descarga directa (uc?export=download&id=<ID>), que dispara

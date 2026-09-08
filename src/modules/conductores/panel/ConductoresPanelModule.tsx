@@ -9,7 +9,8 @@
 
 import { useState, useEffect, useMemo } from 'react'
 import { type ColumnDef } from '@tanstack/react-table'
-import { Eye, Car, UserX, AlertTriangle, Clock, Users } from 'lucide-react'
+import { Eye, Car, UserX, AlertTriangle, Clock, Users, Download } from 'lucide-react'
+import * as XLSX from 'xlsx'
 import { useSede } from '../../../contexts/SedeContext'
 import { formatCurrency } from '../../../types/facturacion.types'
 import { DataTable } from '../../../components/ui/DataTable'
@@ -48,6 +49,10 @@ export function ConductoresPanelModule() {
   const [activeCard, setActiveCard] = useState<CardKey | null>('conAuto')
   const [reloadKey, setReloadKey] = useState(0)
   const [detalle, setDetalle] = useState<ConductorPanelRow | null>(null)
+  // Filas realmente visibles en la tabla: el DataTable las reporta ya pasadas por
+  // TODOS sus filtros internos (columna, rangos numéricos, búsqueda global).
+  // Es null hasta el primer aviso de la tabla; ahí se cae a filteredRows.
+  const [visibles, setVisibles] = useState<ConductorPanelRow[] | null>(null)
 
   useEffect(() => {
     let activo = true
@@ -78,6 +83,77 @@ export function ConductoresPanelModule() {
   }, [rows, activeCard])
 
   const handleCard = (card: CardKey) => setActiveCard(prev => prev === card ? null : card)
+
+  // Lo que se exporta = exactamente lo que el usuario está viendo: el filtro de
+  // stat-card (filteredRows) más los filtros internos del DataTable (que llegan
+  // por onFilteredDataChange). No es la página actual: son todas las filas que
+  // pasan los filtros.
+  const filasAExportar = visibles ?? filteredRows
+
+  const handleExportar = () => {
+    if (filasAExportar.length === 0) return
+
+    // Los importes van como NÚMERO (no con formatCurrency) para que Excel pueda
+    // sumarlos y filtrarlos; el formato de moneda lo pone la planilla.
+    const dataExport = filasAExportar.map(c => ({
+      'Conductor': c.nombre || '',
+      'DNI': c.dni || '',
+      'CUIT': c.ruc || '',
+      'Estado': c.activo ? 'Activo' : (c.estadoCodigo || 'Inactivo'),
+      'Patente Asignada': c.vehiculoAsignado || 'Sin asignación',
+      'Turno': turnoLabel(c.turno),
+      'Multas': c.cantidadMultas,
+      'Pendientes': c.pendientes,
+      'En Proceso': c.enProceso,
+      'Pagadas': c.pagadas,
+      'Vehículos (cant.)': c.vehiculos.length,
+      'Vehículos (patentes)': c.vehiculos.join(', '),
+      'Monto Pendiente': c.montoPendiente,
+      'Monto En Proceso': c.montoEnProceso,
+      'Monto Pagado': c.montoPagado,
+      'Monto Total Multas': c.montoTotalMultas,
+      'Saldo Pendiente': c.saldoPendiente,
+      'Saldo A Favor': c.saldoAFavor,
+      'Tiene Garantía': c.tieneGarantia ? 'Sí' : 'No',
+      'Garantía Pagada': c.garantiaPagada,
+      'Garantía Total': c.garantiaTotal,
+      'Saldo − Garantía': c.saldoMenosGarantia,
+    }))
+
+    const ws = XLSX.utils.json_to_sheet(dataExport)
+    ws['!cols'] = [
+      { wch: 30 }, // Conductor
+      { wch: 12 }, // DNI
+      { wch: 14 }, // CUIT
+      { wch: 12 }, // Estado
+      { wch: 16 }, // Patente Asignada
+      { wch: 10 }, // Turno
+      { wch: 8 },  // Multas
+      { wch: 11 }, // Pendientes
+      { wch: 11 }, // En Proceso
+      { wch: 10 }, // Pagadas
+      { wch: 15 }, // Vehículos (cant.)
+      { wch: 28 }, // Vehículos (patentes)
+      { wch: 16 }, // Monto Pendiente
+      { wch: 16 }, // Monto En Proceso
+      { wch: 15 }, // Monto Pagado
+      { wch: 17 }, // Monto Total Multas
+      { wch: 16 }, // Saldo Pendiente
+      { wch: 14 }, // Saldo A Favor
+      { wch: 13 }, // Tiene Garantía
+      { wch: 16 }, // Garantía Pagada
+      { wch: 15 }, // Garantía Total
+      { wch: 17 }, // Saldo − Garantía
+    ]
+
+    const wb = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(wb, ws, 'Conductores')
+
+    // El nombre del archivo deja constancia del filtro de stat-card usado.
+    const sufijoFiltro = activeCard ? `_${CARD_LABELS[activeCard].replace(/\s+/g, '')}` : ''
+    const fecha = new Date().toISOString().split('T')[0]
+    XLSX.writeFile(wb, `Panel_Conductores${sufijoFiltro}_${fecha}.xlsx`)
+  }
 
   const externalFilters = useMemo(() => {
     if (!activeCard) return []
@@ -334,11 +410,28 @@ export function ConductoresPanelModule() {
         emptyDescription="Probá quitar el filtro activo o cambiar la sede."
         externalFilters={externalFilters}
         onClearAllFilters={() => setActiveCard(null)}
+        onFilteredDataChange={setVisibles}
         headerAction={
-          <button className="btn-secondary" onClick={() => setReloadKey(k => k + 1)} disabled={loading}
-            style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-            Recargar
-          </button>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <button
+              className="btn-secondary"
+              onClick={handleExportar}
+              disabled={loading || filasAExportar.length === 0}
+              title={
+                filasAExportar.length === 0
+                  ? 'No hay filas para exportar'
+                  : `Exporta las ${filasAExportar.length} filas que pasan los filtros actuales`
+              }
+              style={{ display: 'flex', alignItems: 'center', gap: 6 }}
+            >
+              <Download size={16} />
+              Exportar Excel{filasAExportar.length > 0 ? ` (${filasAExportar.length})` : ''}
+            </button>
+            <button className="btn-secondary" onClick={() => setReloadKey(k => k + 1)} disabled={loading}
+              style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              Recargar
+            </button>
+          </div>
         }
       />
 

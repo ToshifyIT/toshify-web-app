@@ -25,17 +25,28 @@ function horarioLabel(h: string | null): string {
   if (h === 'todo_dia') return 'A cargo'
   return h || '—'
 }
+// Parseo tolerante: un string 'yyyy-MM-dd' (sin hora) se interpreta como fecha
+// LOCAL, no como UTC. Con `new Date('2026-08-31')` el navegador asume UTC y en
+// Argentina (UTC-3) se mostraba 30/08 — de ahi que el panel listara las semanas
+// corridas un dia respecto del portal. Los timestamps completos siguen su curso
+// normal (se convierten a hora local, que es lo correcto para ellos).
+function parseFechaFlexible(s: string): Date | null {
+  const soloFecha = parseFechaDia(s)
+  if (soloFecha) return soloFecha
+  const d = new Date(s)
+  return isNaN(d.getTime()) ? null : d
+}
+
 function fmtFechaCorta(s: string | null): string {
   if (!s) return '—'
-  const d = new Date(s)
-  return isNaN(d.getTime()) ? '—' : d.toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric' })
+  const d = parseFechaFlexible(s)
+  return d ? d.toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric' }) : '—'
 }
 
 function fmtFecha(s: string | null): string {
   if (!s) return '—'
-  const d = new Date(s)
-  if (isNaN(d.getTime())) return '—'
-  return d.toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric' })
+  const d = parseFechaFlexible(s)
+  return d ? d.toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric' }) : '—'
 }
 
 // Fechas 'yyyy-MM-dd' del desglose diario de km: se parsean como fecha LOCAL.

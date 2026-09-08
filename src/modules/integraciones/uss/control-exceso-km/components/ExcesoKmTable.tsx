@@ -314,7 +314,10 @@ export function ExcesoKmTable({
         const excede = r.excedido > 0
         return (
           <span style={{ fontFamily: 'monospace', fontSize: 12, fontWeight: 600, color: excede ? '#dc2626' : 'var(--text-primary)' }}>
-            {r.kmRecorridos.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} km
+            {/* Total semanal en entero, igual que el portal del conductor. El valor
+                sigue guardado con 2 decimales: esto es solo formato, los calculos de
+                excedido, porcentaje y monto usan r.kmRecorridos sin redondear. */}
+            {r.kmRecorridos.toLocaleString('es-AR', { maximumFractionDigits: 0 })} km
           </span>
         )
       },

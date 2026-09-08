@@ -58,10 +58,14 @@ export function SemanaDetalleModal({
   const totalAportado = pagos.reduce((s, p) => s + p.monto, 0)
   const saldoAnterior = semana.saldoAnterior
 
-  // Monto Total Referencial y Pendiente se toman del total_a_pagar de la factura
-  // (semana.proforma), que conserva los centavos reales. El desglose de conceptos
-  // puede sumar redondeado y quedar unos centavos por debajo del total.
-  const montoReferencial = semana.proforma
+  // Monto Total Referencial y Pendiente: misma formula que el portal Mi Espacio
+  // (PortalPage: `totalAPagar = subtotalCargos - subtotalDescuentos + saldoAnterior`,
+  // `saldoPendiente = totalAPagar - totalPagadoSemana`).
+  // Antes se usaba `semana.proforma` (facturacion_conductores.total_a_pagar), pero ese
+  // total fue calculado con cantidad x precio_unitario, criterio que ya no se usa para
+  // mostrar los conceptos: el panel terminaba mostrando un referencial que no coincidia
+  // con la suma de sus propias lineas ni con el portal.
+  const montoReferencial = subtotalCargos - subtotalDescuentos + saldoAnterior
   const pendiente = montoReferencial - totalAportado
   const pendienteMostrado = Math.abs(pendiente) < 0.01 ? 0 : Math.abs(pendiente)
   const estadoTxt = pendiente > 0.01 ? 'Pendiente de pago' : pendiente < -0.01 ? 'Saldo a favor' : 'Sin saldo'
@@ -96,16 +100,20 @@ export function SemanaDetalleModal({
           ) : (
             <>
               <div className="csem-sect-title">Conceptos</div>
-              {cargos.map((c, i) => (
-                <div key={`c${i}`} className="csem-row"><span className="csem-dot" />{c.nombre}<span className="csem-amt">{formatCurrency(c.total)}</span></div>
-              ))}
+              <div className="csem-items">
+                {cargos.map((c, i) => (
+                  <div key={`c${i}`} className="csem-row"><span className="csem-dot" />{c.nombre}{c.cantidad > 1 ? ` x${c.cantidad}` : ''}<span className="csem-amt">{formatCurrency(c.total)}</span></div>
+                ))}
+              </div>
               <div className="csem-subtotal"><span>Subtotal Cargos</span><span>{formatCurrency(subtotalCargos)}</span></div>
 
               {descuentos.length > 0 && (
                 <>
-                  {descuentos.map((c, i) => (
-                    <div key={`d${i}`} className="csem-row desc"><span className="csem-dot desc" />{c.nombre}<span className="csem-amt">-{formatCurrency(c.total)}</span></div>
-                  ))}
+                  <div className="csem-items">
+                    {descuentos.map((c, i) => (
+                      <div key={`d${i}`} className="csem-row desc"><span className="csem-dot desc" />{c.nombre}{c.cantidad > 1 ? ` x${c.cantidad}` : ''}<span className="csem-amt">-{formatCurrency(c.total)}</span></div>
+                    ))}
+                  </div>
                   <div className="csem-subtotal"><span>Subtotal Descuentos</span><span>-{formatCurrency(subtotalDescuentos)}</span></div>
                 </>
               )}
@@ -122,6 +130,7 @@ export function SemanaDetalleModal({
               {pagos.length > 0 && (
                 <>
                   <div className="csem-sect-title aportes">Aportes</div>
+                  <div className="csem-items">
                   {pagos.map(p => (
                     <div key={p.id} className="csem-row aporte">
                       <span className="csem-dot aporte" />
@@ -132,6 +141,7 @@ export function SemanaDetalleModal({
                       <span className="csem-amt credit">-{formatCurrency(p.monto)}</span>
                     </div>
                   ))}
+                  </div>
                   <div className="csem-subtotal"><span>Total aportado</span><span className="credit">-{formatCurrency(totalAportado)}</span></div>
                 </>
               )}
