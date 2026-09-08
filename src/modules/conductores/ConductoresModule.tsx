@@ -1,7 +1,8 @@
 // src/modules/conductores/ConductoresModule.tsx
  
 import { useState, useEffect, useMemo, useRef } from "react";
-import { Eye, Edit2, Trash2, AlertTriangle, Users, UserCheck, UserX, Clock, Filter, FolderOpen, FolderPlus, Loader2, History, RefreshCw, ShieldX, MessageSquare, User, FileText, ChevronDown } from "lucide-react";
+import { Eye, Edit2, Trash2, AlertTriangle, Users, UserCheck, UserX, Clock, Filter, FolderOpen, FolderPlus, Loader2, History, RefreshCw, ShieldX, MessageSquare, User, FileText, ChevronDown, Download } from "lucide-react";
+import * as XLSX from "xlsx";
 import { ActionsMenu } from "../../components/ui/ActionsMenu";
 import { VerLogsButton } from "../../components/ui/VerLogsButton";
 
@@ -39,6 +40,44 @@ import { normalizeDni } from "../../utils/normalizeDocuments";
 
 // Umbral configurable: días para considerar una licencia "por vencer"
 const DIAS_LICENCIA_POR_VENCER = 10;
+
+// ─── Exportación a Excel ──────────────────────────────────────────────────────
+// La grilla mantiene en memoria solo un subconjunto de columnas (ver loadAllData),
+// así que los campos del modal de detalle se traen al exportar con una consulta
+// por IDs (`?id=in.(...)`, que viaja en la URL con ~37 chars por UUID).
+//
+// El proxy delante de Supabase corta la request cuando la URL supera ~8 KB, y lo
+// hace sin cabeceras CORS, por lo que el navegador solo reporta un opaco
+// "TypeError: Failed to fetch". Medido contra el entorno real: 200 IDs (7.833
+// chars) responde 200 OK y 250 IDs (9.683 chars) ya falla. Se usa 100 (~4.1 KB)
+// para quedar con margen ante cambios en el select o en la config del proxy.
+const EXPORT_CHUNK_IDS = 100;
+
+// Fecha 'YYYY-MM-DD' (o timestamp) de la DB al formato que muestra la UI.
+// El mediodía evita el corrimiento de un día por zona horaria.
+function formatFechaExport(valor?: string | null): string {
+  if (!valor) return "";
+  const soloFecha = String(valor).substring(0, 10);
+  const d = new Date(soloFecha + "T12:00:00");
+  return isNaN(d.getTime()) ? "" : d.toLocaleDateString("es-AR");
+}
+
+// Mismas etiquetas que muestra el badge de la columna Turno: si hay asignación
+// activa manda el turno de la asignación; si no, la preferencia del conductor.
+function formatTurnoExport(preferencia?: string | null, turnoAsignacion?: string | null): string {
+  if (turnoAsignacion) {
+    const t = turnoAsignacion.toLowerCase();
+    if (t === "diurno") return "Diurno";
+    if (t === "nocturno") return "Nocturno";
+    if (t === "todo_dia") return "A Cargo";
+    return turnoAsignacion;
+  }
+  if (!preferencia || preferencia === "SIN_PREFERENCIA") return "Sin Pref.";
+  if (preferencia === "DIURNO") return "Diurno";
+  if (preferencia === "NOCTURNO") return "Nocturno";
+  if (preferencia === "A_CARGO") return "A Cargo";
+  return preferencia;
+}
 
 // Calcula semana ISO 8601 a partir de un Date.
 function getISOWeekParts(date: Date): { semana: number; anio: number } {
@@ -267,6 +306,12 @@ export function ConductoresModule() {
   const [statCardAsignacionFilter, setStatCardAsignacionFilter] = useState<string[]>([]);
   const [statCardLicenciaFilter, setStatCardLicenciaFilter] = useState(false);
   const [statCardLicenciaVencidaFilter, setStatCardLicenciaVencidaFilter] = useState(false);
+
+  // Filas que el DataTable reporta después de aplicar SUS filtros internos
+  // (buscador global). Es null hasta el primer aviso; ahí el export cae a
+  // filteredConductores, que ya tiene los filtros de columna y de stat card.
+  const [conductoresVisibles, setConductoresVisibles] = useState<ConductorWithRelations[] | null>(null);
+  const [exportando, setExportando] = useState(false);
 
   // Estados para modal de confirmación de baja
   const [showBajaConfirmModal, setShowBajaConfirmModal] = useState(false);
@@ -2652,6 +2697,167 @@ export function ConductoresModule() {
     return Array.from(tels).sort()
   }, [conductores])
 
+  // ─── Descargar Excel ───────────────────────────────────────────────────────
+  // Se exporta TODO lo que pasa los filtros activos, no la página visible:
+  //   - filtros de columna + stat cards  →  filteredConductores
+  //   - buscador global del DataTable    →  conductoresVisibles (onFilteredDataChange)
+  // conductoresVisibles ya es un subconjunto de filteredConductores, por eso
+  // manda cuando existe.
+  const filasAExportar = conductoresVisibles ?? filteredConductores;
+
+  const handleDescargarExcel = async () => {
+    if (exportando) return;
+    if (filasAExportar.length === 0) {
+      Swal.fire("Sin datos", "No hay conductores para exportar con los filtros actuales", "info");
+      return;
+    }
+
+    setExportando(true);
+    try {
+      // Los campos del modal de detalle no están en la grilla: se traen acá por
+      // IDs, en lotes, solo para las filas que se van a exportar.
+      const ids = filasAExportar.map((c) => c.id);
+      const detallesMap = new Map<string, any>();
+
+      for (let i = 0; i < ids.length; i += EXPORT_CHUNK_IDS) {
+        const lote = ids.slice(i, i + EXPORT_CHUNK_IDS);
+        const { data, error: detalleError } = await supabase
+          .from("conductores")
+          .select(`
+            id,
+            numero_ibutton,
+            monotributo,
+            fecha_nacimiento,
+            cbu,
+            numero_licencia,
+            email,
+            direccion,
+            contacto_emergencia,
+            telefono_emergencia,
+            antecedentes_penales,
+            cochera_propia,
+            fecha_reincorpoaracion,
+            url_documentacion,
+            estados_civiles (descripcion),
+            nacionalidades (descripcion),
+            licencias_estados (descripcion),
+            licencias_tipos (descripcion),
+            sedes (nombre)
+          `)
+          .in("id", lote);
+
+        if (detalleError) throw detalleError;
+        for (const row of (data || []) as any[]) detallesMap.set(row.id, row);
+      }
+
+      const dataExport = filasAExportar.map((c: any) => {
+        const d = detallesMap.get(c.id) || {};
+        const estadoCodigo = (c.conductores_estados?.codigo || "").toLowerCase();
+        const esBaja = estadoCodigo === "baja" || estadoCodigo.includes("baja");
+        // Un conductor de baja no muestra asignación en la grilla aunque queden
+        // datos viejos: el export replica ese criterio.
+        const vehiculo = esBaja ? null : c.vehiculo_asignado;
+
+        let asignacion = "-";
+        if (vehiculo) asignacion = "Asignado";
+        else if (estadoCodigo === "activo") asignacion = "Disponible";
+
+        const categorias = Array.isArray(c.licencias_categorias)
+          ? c.licencias_categorias.map((cat: any) => cat?.codigo).filter(Boolean).join(", ")
+          : "";
+
+        return {
+          "Nombres": c.nombres || "",
+          "Apellidos": c.apellidos || "",
+          "DNI": c.numero_dni || "",
+          "CUIT": c.numero_cuit || "",
+          "Nro. iButton": d.numero_ibutton || "",
+          "Monotributo": d.monotributo ? "Sí" : "No",
+          "Fecha Nacimiento": formatFechaExport(d.fecha_nacimiento),
+          "Nacionalidad": d.nacionalidades?.descripcion || "",
+          "Estado Civil": d.estados_civiles?.descripcion || "",
+          "Zona": vehiculo?.zona_asignacion || c.zona || "",
+          "Sede": d.sedes?.nombre || "",
+          "CBU": d.cbu || "",
+          "Nro. Licencia": d.numero_licencia || "",
+          "Categorías": categorias,
+          "Vencimiento Licencia": formatFechaExport(c.licencia_vencimiento),
+          "Estado Licencia": d.licencias_estados?.descripcion || "",
+          "Tipo Licencia": d.licencias_tipos?.descripcion || "",
+          "Teléfono": c.telefono_contacto || "",
+          "Email": d.email || "",
+          "Dirección": d.direccion || "",
+          "Contacto Emergencia": d.contacto_emergencia || "",
+          "Teléfono Emergencia": d.telefono_emergencia || "",
+          "Estado": getEstadoConductorDisplay(c.conductores_estados),
+          "Turno": formatTurnoExport(c.preferencia_turno, vehiculo?.turno_asignacion),
+          "Asignación": asignacion,
+          "Patente": vehiculo?.patente || "",
+          "Vehículo": vehiculo ? `${vehiculo.marca || ""} ${vehiculo.modelo || ""}`.trim() : "",
+          "Fecha Incorporación": formatFechaExport(c.fecha_contratacion),
+          "Fecha Reincorporación": formatFechaExport(d.fecha_reincorpoaracion),
+          "Fecha Terminación": formatFechaExport(c.fecha_terminacion),
+          "Motivo Baja": c.motivo_baja || "",
+          "Antecedentes Penales": d.antecedentes_penales ? "Sí" : "No",
+          "Cochera Propia": d.cochera_propia ? "Sí" : "No",
+          "Fecha Creación": formatFechaExport(c.created_at),
+          "Link Documentación": d.url_documentacion || "",
+        };
+      });
+
+      const ws = XLSX.utils.json_to_sheet(dataExport);
+      ws["!cols"] = [
+        { wch: 20 }, // Nombres
+        { wch: 20 }, // Apellidos
+        { wch: 12 }, // DNI
+        { wch: 14 }, // CUIT
+        { wch: 14 }, // Nro. iButton
+        { wch: 12 }, // Monotributo
+        { wch: 16 }, // Fecha Nacimiento
+        { wch: 14 }, // Nacionalidad
+        { wch: 14 }, // Estado Civil
+        { wch: 12 }, // Zona
+        { wch: 16 }, // Sede
+        { wch: 24 }, // CBU
+        { wch: 14 }, // Nro. Licencia
+        { wch: 18 }, // Categorías
+        { wch: 20 }, // Vencimiento Licencia
+        { wch: 16 }, // Estado Licencia
+        { wch: 16 }, // Tipo Licencia
+        { wch: 16 }, // Teléfono
+        { wch: 28 }, // Email
+        { wch: 34 }, // Dirección
+        { wch: 22 }, // Contacto Emergencia
+        { wch: 18 }, // Teléfono Emergencia
+        { wch: 14 }, // Estado
+        { wch: 12 }, // Turno
+        { wch: 12 }, // Asignación
+        { wch: 10 }, // Patente
+        { wch: 22 }, // Vehículo
+        { wch: 18 }, // Fecha Incorporación
+        { wch: 20 }, // Fecha Reincorporación
+        { wch: 18 }, // Fecha Terminación
+        { wch: 28 }, // Motivo Baja
+        { wch: 18 }, // Antecedentes Penales
+        { wch: 14 }, // Cochera Propia
+        { wch: 14 }, // Fecha Creación
+        { wch: 40 }, // Link Documentación
+      ];
+
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, "Conductores");
+
+      const fecha = new Date().toISOString().split("T")[0];
+      XLSX.writeFile(wb, `Conductores_${fecha}.xlsx`);
+
+      showSuccess(`${dataExport.length} conductores exportados`);
+    } catch (err: any) {
+      Swal.fire("Error", err?.message || "No se pudo generar el archivo", "error");
+    } finally {
+      setExportando(false);
+    }
+  };
+
   // Handler para abrir detalles de un conductor (usado en tabla y acciones)
   const handleOpenDetails = async (conductorId: string) => {
     const fullDetails = await loadConductorDetails(conductorId);
@@ -3221,8 +3427,25 @@ export function ConductoresModule() {
             ? 'Crea el primero usando el boton "+ Crear Conductor".'
             : ""
         }
+        onFilteredDataChange={setConductoresVisibles}
         headerAction={
           <>
+            {/* inline-flex (no flex): en nivel bloque el botón ocuparía toda la
+                línea y empujaría al resto de las acciones a una fila aparte. */}
+            <button
+              className="btn-secondary"
+              onClick={handleDescargarExcel}
+              disabled={loading || exportando || filasAExportar.length === 0}
+              style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', verticalAlign: 'middle' }}
+              title={
+                filasAExportar.length === 0
+                  ? 'No hay conductores para exportar'
+                  : `Descarga en Excel los ${filasAExportar.length} conductores que pasan los filtros actuales (no solo la página visible)`
+              }
+            >
+              {exportando ? <Loader2 size={15} className="spin-animation" /> : <Download size={15} />}
+              {exportando ? 'Generando...' : `Descargar${filasAExportar.length > 0 ? ` (${filasAExportar.length})` : ''}`}
+            </button>
             {/* "Ver Logs" y "Sincronizar" solo visibles para admin */}
             {isAdmin() && (
               <VerLogsButton tablas={['conductores', 'asignaciones', 'asignaciones_conductores']} label="Conductores" />

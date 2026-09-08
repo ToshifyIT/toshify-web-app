@@ -21,6 +21,7 @@ import { ExcelColumnFilter } from '../../components/ui/DataTable/ExcelColumnFilt
 import './LeadsModule.css'
 import { LeadWizard } from './components/LeadWizard'
 import { LeadDetailView } from './components/LeadDetailView'
+import { clasificarMotivoDesinteres } from './leadMotivos'
 import { LeadsConductoresModal } from './components/LeadsConductoresModal'
 import { inferZona, inferZonaFromCoords } from '../../utils/zonaUtils'
 import { createLeadDriveFolder } from '../../services/driveService'
@@ -371,6 +372,23 @@ function formatDate(dateStr: string | undefined | null): string {
     const time = d.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'America/Argentina/Buenos_Aires' })
     return `${day} ${time}`
   } catch { return '-' }
+}
+
+// Fecha sin hora, para columnas date-only (fecha_de_nacimiento, vencimiento_licencia).
+// No usa timeZone: un valor "YYYY-MM-DD" parseado con new Date() se interpreta como
+// UTC y al convertirlo a AR (UTC-3) mostraria el dia anterior.
+function formatDateOnly(dateStr: string | undefined | null): string {
+  if (!dateStr) return ''
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(dateStr))
+  if (m) return `${m[3]}/${m[2]}/${m[1]}`
+  const d = new Date(dateStr)
+  if (isNaN(d.getTime())) return ''
+  return d.toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric', timeZone: 'America/Argentina/Buenos_Aires' })
+}
+
+// Booleano nullable -> etiqueta para Excel ('' cuando no hay dato).
+function siNoLabel(v: boolean | null | undefined): string {
+  return v === true ? 'Sí' : v === false ? 'No' : ''
 }
 
 function formatDateParts(dateStr: string | undefined | null): { date: string; time: string } {
@@ -1576,29 +1594,90 @@ export function LeadsModule() {
   }
 
   // ---------- EXPORT EXCEL ----------
+  // Exporta los leads filtrados (mismo alcance que la tabla: stat card + filtros
+  // de columna, no solo la pagina visible) con todos los campos que muestra el
+  // modal de detalle (LeadDetailView).
+  // Las 14 columnas historicas se mantienen al inicio y en el mismo orden para no
+  // romper planillas que las consumen por posicion; los campos del detalle se
+  // agregan a continuacion, agrupados como en el modal.
   async function handleExportExcel() {
     try {
+      Swal.fire({
+        title: 'Generando Excel...',
+        html: `<p>${filteredLeads.length} leads</p>`,
+        allowOutsideClick: false,
+        didOpen: () => Swal.showLoading(),
+      })
       const XLSX = await import('xlsx')
-      const data = filteredLeads.map(l => ({
-        'Fecha': formatDate(l.created_at),
-        'Nombre': l.nombre_completo || '',
-        'DNI': l.dni || '',
-        'Teléfono': l.phone || '',
-        'Email': l.email || '',
-        'Proceso': l.proceso || '',
-        'Entrevista IA': l.entrevista_ia || '',
-        'Disponibilidad': l.disponibilidad || '',
-        'Zona': l.zona || '',
-        'Turno': l.turno || '',
-        'Licencia': l.licencia || '',
-        'Venc. Licencia': l.vencimiento_licencia || '',
-        'Fuente': l.fuente_de_lead || '',
-        'Observaciones': l.observaciones || '',
-      }))
+      const data = filteredLeads.map(l => {
+        const zonaRestringida = leadsEnZona.get(l.id) || ''
+        const tieneCoordenadas = l.direccion_latitud != null && l.direccion_longitud != null
+        return {
+          // --- Columnas historicas (orden original, no mover) ---
+          'Fecha': formatDate(l.created_at),
+          'Nombre': l.nombre_completo || '',
+          'DNI': l.dni || '',
+          'Teléfono': l.phone || '',
+          'Email': l.email || '',
+          'Proceso': l.proceso || '',
+          'Entrevista IA': l.entrevista_ia || '',
+          'Disponibilidad': l.disponibilidad || '',
+          'Zona': l.zona || '',
+          'Turno': l.turno || '',
+          'Licencia': l.licencia || '',
+          'Venc. Licencia': formatDateOnly(l.vencimiento_licencia),
+          'Fuente': l.fuente_de_lead || '',
+          'Observaciones': l.observaciones || '',
+
+          // --- Datos personales (detalle) ---
+          'ID': l.id,
+          'CUIT': l.cuit || '',
+          'Edad': l.edad ?? '',
+          'Fecha Nacimiento': formatDateOnly(l.fecha_de_nacimiento),
+          'Nacionalidad': l.nacionalidad || '',
+          'Estado Civil': l.estado_civil || '',
+          'Antecedentes Penales': siNoLabel(l.antecedentes_penales),
+          'Experiencia Previa': l.experiencia_previa || '',
+          'Experiencia Manejo': l.experiencia_manejo || '',
+          'BCRA': l.bcra || '',
+
+          // --- Contacto y direccion (detalle) ---
+          'WhatsApp': l.whatsapp_number || '',
+          'Dirección': l.direccion || '',
+          'Zona Restringida': tieneCoordenadas ? (zonaRestringida ? 'Sí' : 'No') : '',
+          'Nombre Zona Restringida': zonaRestringida,
+
+          // --- Proceso y evaluacion (detalle) ---
+          'Estado de Lead': l.estado_de_lead ? displayEstadoLead(l.estado_de_lead) : '',
+          'Motivo Desinterés': l.estado_de_lead === 'No le interesa' ? clasificarMotivoDesinteres(l.causal_de_cierre) : '',
+          'Detalle Motivo Desinterés': l.motivo_desinteres || '',
+          'Causal de Cierre': l.causal_de_cierre || '',
+          'Guia': l.entrevistador_asignado || '',
+          'Detalle Hireflix': l.resumen_hireflix || '',
+
+          // --- Documentacion (detalle) ---
+          'Nro. Licencia': l.numero_licencia || '',
+          'Categorías Licencia': l.categorias_licencia?.length ? l.categorias_licencia.join(', ') : '',
+          'Estado Licencia': l.estado_licencia || '',
+          'Tipo Licencia': l.tipo_licencia || '',
+          'RNR': l.rnr || '',
+          'Monotributo': l.monotributo || '',
+          'CBU': l.cbu || '',
+          'Cta. Cabify': l.cuenta_cabify || '',
+
+          // --- Contacto de emergencia (detalle) ---
+          'Contacto Emergencia': l.datos_de_emergencia || l.contacto_de_emergencia || '',
+          'Teléfono Emergencia': l.telefono_emergencia || '',
+          'Parentesco Emergencia': l.parentesco_emergencia || '',
+          'Dirección Emergencia': l.direccion_emergencia || '',
+          'Verificación Emergencia': siNoLabel(l.verificacion_emergencia),
+        }
+      })
       const ws = XLSX.utils.json_to_sheet(data)
       const wb = XLSX.utils.book_new()
       XLSX.utils.book_append_sheet(wb, ws, 'Leads')
       XLSX.writeFile(wb, `leads_export_${new Date().toISOString().split('T')[0]}.xlsx`)
+      Swal.close()
     } catch {
       Swal.fire('Error', 'No se pudo exportar', 'error')
     }
