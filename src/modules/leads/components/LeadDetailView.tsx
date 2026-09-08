@@ -4,6 +4,7 @@ import { MessageCircle, Video, UserPlus, Edit2, MapPin, AlertTriangle, ExternalL
 import { GoogleMap, Marker, Polygon } from '@react-google-maps/api'
 import type { Lead } from '../../../types/leads.types'
 import { GOOGLE_MAPS_SCRIPT_URL } from '../../../lib/googleMaps'
+import { clasificarMotivoDesinteres } from '../leadMotivos'
 import '../LeadsModule.css'
 
 const detailMapStyle = {
@@ -93,15 +94,6 @@ function getProcesoClass(proceso: string | undefined | null): string {
 function displayEstadoLead(estado: string | undefined | null): string {
   if (estado === 'No cumple edad') return 'Descartado'
   return estado || '-'
-}
-
-/** Clasifica causal_de_cierre en motivo legible (solo para "No le interesa") */
-function clasificarMotivoDesinteres(causal: string | null | undefined): string {
-  if (!causal) return 'Otro'
-  const t = causal.toLowerCase()
-  if (/price|precio|caro|costoso|plata|alcanza|expensive|cost|dinero|pagar|cobr|tarifa|alquiler/.test(t)) return 'Precio de alquiler'
-  if (/disagreement|condicion|turno|conviene|oferta|acuerdo|horario|regla|requisito|policy|condition|schedule/.test(t)) return 'Desacuerdo con oferta'
-  return 'Otro'
 }
 
 interface LeadDetailViewProps {
