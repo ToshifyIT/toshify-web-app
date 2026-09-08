@@ -18,7 +18,7 @@ import { useSede } from '../../contexts/SedeContext'
 
 import { ProgramacionAssignmentWizard } from './components/ProgramacionAssignmentWizard'
 import type { ProgramacionOnboardingCompleta, TipoTarifa } from '../../types/onboarding.types'
-import { cargarConceptosTarifa, getEtiquetaTarifa, type MapaConceptosTarifa } from './tarifaConceptos'
+import { cargarConceptosTarifa, getEtiquetaTarifa, validarPreciosSemanales, type MapaConceptosTarifa, type TarifaRequerida } from './tarifaConceptos'
 import Swal from 'sweetalert2'
 import { showSuccess } from '../../utils/toast'
 import { generateContracts } from '../../services/contractService'
@@ -1038,6 +1038,10 @@ export function ProgramacionModule() {
       return
     }
 
+    // GNC del vehículo: define qué concepto de alquiler aplica (P001/P014, etc.).
+    // Se resuelve junto con la validación de campos y se reusa más abajo.
+    let vehiculoTieneGnc = false
+
     // ─── Validar campos obligatorios de vehículo y conductor(es) ───
     // Antes de crear la asignación, verificar que los datos necesarios para
     // las plantillas de contrato estén completos en la base de datos.
@@ -1048,11 +1052,12 @@ export function ProgramacionModule() {
       if (prog.vehiculo_entregar_id) {
         const { data: veh } = await supabase
           .from('vehiculos')
-          .select('numero_motor, numero_chasis, marca, modelo, anio, color, titular, cobertura')
+          .select('numero_motor, numero_chasis, marca, modelo, anio, color, titular, cobertura, gnc')
           .eq('id', prog.vehiculo_entregar_id)
-          .single() as { data: { numero_motor: string | null; numero_chasis: string | null; marca: string | null; modelo: string | null; anio: number | null; color: string | null; titular: string | null; cobertura: string | null } | null }
+          .single() as { data: { numero_motor: string | null; numero_chasis: string | null; marca: string | null; modelo: string | null; anio: number | null; color: string | null; titular: string | null; cobertura: string | null; gnc: boolean | null } | null }
 
         if (veh) {
+          vehiculoTieneGnc = veh.gnc === true
           if (!veh.numero_motor?.trim()) camposFaltantes.push('Vehículo → Número de Motor')
           if (!veh.numero_chasis?.trim()) camposFaltantes.push('Vehículo → Número de Chasis')
           if (!veh.marca?.trim()) camposFaltantes.push('Vehículo → Marca')
@@ -1186,6 +1191,82 @@ export function ProgramacionModule() {
         // Si eligió "Enviar ambos" (confirm button) - ambos quedan en true
       }
       // Si ambos confirmaron, continuar normal
+    }
+
+    // ─── Determinar si corresponde generar documentos ───
+    // Bariloche no tiene plantillas para turnos, se excluye de la generación.
+    // Se resuelve acá (y no al momento de generar) porque la validación de
+    // tarifas de más abajo depende de esto.
+    const SEDE_BARILOCHE_ID = 'f37193f7-5805-4d87-820d-c4521824860e'
+    const sedeDelProg = prog.sede_id || sedeActualId || sedeUsuario?.id || null
+    const esBarilocheTurno = sedeDelProg === SEDE_BARILOCHE_ID && prog.modalidad === 'turno'
+
+    const needsDocGeneration = esBarilocheTurno ? false : (
+      prog.modalidad === 'a_cargo'
+        ? (prog.tipo_documento && prog.tipo_documento !== 'na')
+        : ((prog.documento_diurno && prog.documento_diurno !== 'na') ||
+           (prog.documento_nocturno && prog.documento_nocturno !== 'na'))
+    )
+
+    // ─── Validar tarifas antes de crear nada ───
+    // La generación del documento aborta si el concepto de alquiler del período
+    // vigente no tiene cargado "Total por semana (Sin IVA)". Se verifica ACÁ,
+    // antes de crear la asignación, para que un precio sin cargar no deje una
+    // asignación creada y sin Carta Oferta (la programación pasa a 'completado'
+    // y desaparece de Pendientes, sin forma de reintentar).
+    if (needsDocGeneration) {
+      const tarifasRequeridas: TarifaRequerida[] = []
+
+      if (prog.modalidad === 'a_cargo') {
+        if (prog.conductor_id && prog.tipo_documento && prog.tipo_documento !== 'na') {
+          tarifasRequeridas.push({
+            modalidad: 'cargo',
+            tarifa: (tarifaProg.tipo_tarifa as TipoTarifa) || 'antigua',
+            label: 'Conductor',
+          })
+        }
+      } else {
+        if (enviarDiurno && prog.conductor_diurno_id && prog.documento_diurno && prog.documento_diurno !== 'na') {
+          tarifasRequeridas.push({
+            modalidad: 'diurno',
+            tarifa: (tarifaProg.tipo_tarifa_diurno as TipoTarifa) || (tarifaProg.tipo_tarifa as TipoTarifa) || 'antigua',
+            label: 'Conductor Diurno',
+          })
+        }
+        if (enviarNocturno && prog.conductor_nocturno_id && prog.documento_nocturno && prog.documento_nocturno !== 'na') {
+          tarifasRequeridas.push({
+            modalidad: 'nocturno',
+            tarifa: (tarifaProg.tipo_tarifa_nocturno as TipoTarifa) || (tarifaProg.tipo_tarifa as TipoTarifa) || 'antigua',
+            label: 'Conductor Nocturno',
+          })
+        }
+      }
+
+      const tarifasFaltantes = await validarPreciosSemanales(tarifasRequeridas, vehiculoTieneGnc)
+
+      if (tarifasFaltantes.length > 0) {
+        await Swal.fire({
+          title: 'Tarifa sin precio cargado',
+          html: `
+            <div style="text-align: left; font-size: 13px; max-height: 300px; overflow-y: auto;">
+              <p style="margin-bottom: 10px; color: #6B7280;">
+                No se puede enviar la programación porque el documento no podría expresar el importe:
+              </p>
+              <ul style="list-style: none; padding: 0; margin: 0;">
+                ${tarifasFaltantes.map(c => `<li style="padding: 4px 0; border-bottom: 1px solid #f3f4f6;">&#x2022; <strong>${c}</strong></li>`).join('')}
+              </ul>
+              <p style="margin-top: 12px; color: #9CA3AF; font-size: 12px;">
+                Cargue el importe en Facturación → Conceptos antes de enviar.
+              </p>
+            </div>
+          `,
+          icon: 'warning',
+          confirmButtonText: 'Entendido',
+          confirmButtonColor: '#F59E0B',
+          width: 480,
+        })
+        return
+      }
     }
 
     // Formatear hora para mostrar
@@ -1415,19 +1496,8 @@ export function ProgramacionModule() {
         // No bloquear el flujo principal si falla la creación de visita
       }
 
-      // Generar documentos si corresponde
-      // Bariloche no tiene plantillas para turnos, se excluye de la generación
-      const SEDE_BARILOCHE_ID = 'f37193f7-5805-4d87-820d-c4521824860e'
-      const sedeDelProg = prog.sede_id || sedeActualId || sedeUsuario?.id || null
-      const esBarilocheTurno = sedeDelProg === SEDE_BARILOCHE_ID && prog.modalidad === 'turno'
-
-      const needsDocGeneration = esBarilocheTurno ? false : (
-        prog.modalidad === 'a_cargo'
-          ? (prog.tipo_documento && prog.tipo_documento !== 'na')
-          : ((prog.documento_diurno && prog.documento_diurno !== 'na') ||
-             (prog.documento_nocturno && prog.documento_nocturno !== 'na'))
-      )
-
+      // Generar documentos si corresponde (needsDocGeneration se resolvió antes
+      // de crear la asignación, junto con la validación de tarifas)
       if (needsDocGeneration) {
         // Si la vista no trae propietario, consultar la tabla base
         let propietarioValue = prog.propietario
@@ -1447,6 +1517,18 @@ export function ProgramacionModule() {
           tipo_documento: prog.modalidad === 'a_cargo' ? prog.tipo_documento : null,
           documento_diurno: (prog.modalidad === 'turno' && enviarDiurno) ? prog.documento_diurno : null,
           documento_nocturno: (prog.modalidad === 'turno' && enviarNocturno) ? prog.documento_nocturno : null,
+          // Tarifa: define el concepto de alquiler del que sale el importe del
+          // documento. En turno va por conductor, con respaldo en la de la
+          // programación (mismo criterio que el insert de asignaciones).
+          tipo_tarifa: prog.modalidad === 'a_cargo'
+            ? (tarifaProg.tipo_tarifa || 'antigua')
+            : null,
+          tipo_tarifa_diurno: (prog.modalidad === 'turno' && enviarDiurno)
+            ? (tarifaProg.tipo_tarifa_diurno || tarifaProg.tipo_tarifa || 'antigua')
+            : null,
+          tipo_tarifa_nocturno: (prog.modalidad === 'turno' && enviarNocturno)
+            ? (tarifaProg.tipo_tarifa_nocturno || tarifaProg.tipo_tarifa || 'antigua')
+            : null,
           modalidad: (prog.modalidad || 'turno') as 'turno' | 'a_cargo',
           sede_id: prog.sede_id || sedeActualId || sedeUsuario?.id || null,
           programacion_id: prog.id,
