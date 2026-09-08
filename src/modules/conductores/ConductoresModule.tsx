@@ -79,6 +79,87 @@ function formatTurnoExport(preferencia?: string | null, turnoAsignacion?: string
   return preferencia;
 }
 
+// ===== Compañero de turno =====
+// Un vehículo POR TURNO lo comparten dos conductores (diurno + nocturno): el
+// compañero es el que cubre el turno complementario de la MISMA asignación.
+// Un vehículo A CARGO (horario 'todo_dia') lo cubre un solo conductor por
+// diseño, así que ahí la pregunta no aplica.
+//
+// Misma regla que derivarCompanero() en distribucionMapaV2Service.ts, que
+// alimenta el filtro "Sin compañero" del mapa v2. Si cambia una, cambia la otra.
+type EstadoCompanero = 'si' | 'no' | 'na';
+
+const AC_ESTADOS_ACTIVOS = ['asignado', 'activo'];
+const ASIG_ESTADOS_ACTIVOS = ['activo', 'activa'];
+
+/**
+ * Mapa conductor_id -> estado de compañero, a partir de las filas de
+ * asignaciones_conductores ya traídas para la grilla.
+ *
+ * Requiere que la query incluya `asignacion_id`: la ocupación del turno
+ * complementario se resuelve agrupando por asignación, no por conductor.
+ */
+function construirMapaCompanero(
+  filas: any[] | null | undefined,
+  sedeActualId?: string | null,
+): Map<string, EstadoCompanero> {
+  const resultado = new Map<string, EstadoCompanero>();
+  if (!filas || filas.length === 0) return resultado;
+
+  // asignacion_id -> qué turnos están cubiertos por un conductor activo
+  const ocupacion = new Map<string, { diurno: boolean; nocturno: boolean }>();
+  const validas: Array<{
+    conductorId: string;
+    asignacionId: string;
+    horarioAsignacion: string | null;
+    horarioConductor: string | null;
+  }> = [];
+
+  for (const fila of filas) {
+    const a = fila?.asignaciones;
+    if (!a || !ASIG_ESTADOS_ACTIVOS.includes(a.estado)) continue;
+    if (!AC_ESTADOS_ACTIVOS.includes(fila.estado)) continue;
+    if (sedeActualId && a.sede_id !== sedeActualId) continue;
+    if (!a.vehiculos) continue; // sin vehículo no hay turno que compartir
+
+    const asignacionId = (a.id || fila.asignacion_id) as string | undefined;
+    if (!asignacionId) continue;
+
+    const horarioConductor = (fila.horario || '').toLowerCase() || null;
+
+    const slot = ocupacion.get(asignacionId) || { diurno: false, nocturno: false };
+    if (horarioConductor === 'diurno') slot.diurno = true;
+    if (horarioConductor === 'nocturno') slot.nocturno = true;
+    ocupacion.set(asignacionId, slot);
+
+    validas.push({
+      conductorId: fila.conductor_id,
+      asignacionId,
+      horarioAsignacion: (a.horario_asignacion || '').toLowerCase() || null,
+      horarioConductor,
+    });
+  }
+
+  for (const v of validas) {
+    // A cargo: un solo conductor cubre el vehículo entero.
+    if (v.horarioAsignacion === 'todo_dia') {
+      resultado.set(v.conductorId, 'na');
+      continue;
+    }
+    // Turno indefinido: no se puede saber cuál es el complementario.
+    if (v.horarioConductor !== 'diurno' && v.horarioConductor !== 'nocturno') {
+      resultado.set(v.conductorId, 'na');
+      continue;
+    }
+    const slot = ocupacion.get(v.asignacionId);
+    const complementarioOcupado =
+      v.horarioConductor === 'diurno' ? !!slot?.nocturno : !!slot?.diurno;
+    resultado.set(v.conductorId, complementarioOcupado ? 'si' : 'no');
+  }
+
+  return resultado;
+}
+
 // Calcula semana ISO 8601 a partir de un Date.
 function getISOWeekParts(date: Date): { semana: number; anio: number } {
   const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
@@ -295,6 +376,7 @@ export function ConductoresModule() {
   const [turnoFilter, setTurnoFilter] = useState<string[]>([]);
   const [categoriaFilter, setCategoriaFilter] = useState<string[]>([]);
   const [asignacionFilter, setAsignacionFilter] = useState<string[]>([]);
+  const [companeroFilter, setCompaneroFilter] = useState<string[]>([]);
   const [vencimientoFilter, setVencimientoFilter] = useState<string[]>([]);
   const [telefonoFilter, setTelefonoFilter] = useState<string[]>([]);
   const [licenciaVencerFilter] = useState(false);
@@ -714,6 +796,14 @@ export function ConductoresModule() {
         onClear: () => setAsignacionFilter([])
       });
     }
+    if (companeroFilter.length > 0) {
+      const etiquetas: Record<string, string> = { si: 'Sí', no: 'No', na: 'N/A' };
+      filters.push({
+        id: 'companero',
+        label: `Compañero: ${companeroFilter.map(v => etiquetas[v] || v).join(', ')}`,
+        onClear: () => setCompaneroFilter([])
+      });
+    }
     if (vencimientoFilter.length > 0) {
       filters.push({
         id: 'vencimiento',
@@ -730,7 +820,7 @@ export function ConductoresModule() {
     }
 
     return filters;
-  }, [activeStatCard, nombreFilter, dniFilter, cbuFilter, turnoFilter, estadoFilter, categoriaFilter, asignacionFilter, vencimientoFilter, telefonoFilter]);
+  }, [activeStatCard, nombreFilter, dniFilter, cbuFilter, turnoFilter, estadoFilter, categoriaFilter, asignacionFilter, companeroFilter, vencimientoFilter, telefonoFilter]);
 
   const handleClearAllFilters = () => {
     setActiveStatCard(null);
@@ -744,6 +834,7 @@ export function ConductoresModule() {
     setTurnoFilter([]);
     setCategoriaFilter([]);
     setAsignacionFilter([]);
+    setCompaneroFilter([]);
     setVencimientoFilter([]);
     setTelefonoFilter([]);
   };
@@ -800,7 +891,9 @@ export function ConductoresModule() {
               conductor_id,
               horario,
               estado,
+              asignacion_id,
               asignaciones (
+                id,
                 estado,
                 sede_id,
                 horario_asignacion:horario,
@@ -831,6 +924,8 @@ export function ConductoresModule() {
 
       // Crear mapa de asignaciones (filtrado en JS)
       const asignacionesMap = new Map();
+      // Estado de compañero por conductor (turno complementario de la asignación)
+      const companeroMap = construirMapaCompanero(asignacionesRes.data as any[], sedeActualId);
       if (asignacionesRes.data) {
         for (const asig of asignacionesRes.data as any[]) {
           const a = asig?.asignaciones
@@ -867,6 +962,9 @@ export function ConductoresModule() {
           if (asignacionesMap.has(conductor.id)) {
             relaciones.vehiculo_asignado = asignacionesMap.get(conductor.id);
           }
+
+          // Sin asignación activa no hay turno que compartir: 'na'.
+          relaciones.companero_estado = companeroMap.get(conductor.id) || 'na';
 
           // Agregar metadatos para búsqueda global
           const estadoCodigo = relaciones.conductores_estados?.codigo?.toLowerCase();
@@ -969,7 +1067,9 @@ export function ConductoresModule() {
               conductor_id,
               horario,
               estado,
+              asignacion_id,
               asignaciones (
+                id,
                 estado,
                 sede_id,
                 horario_asignacion:horario,
@@ -985,6 +1085,8 @@ export function ConductoresModule() {
 
       // Crear mapa de asignaciones (filtrado en JS)
       const asignacionesMap = new Map();
+      // Estado de compañero por conductor (turno complementario de la asignación)
+      const companeroMap = construirMapaCompanero(asignacionesRes.data as any[], sedeActualId);
       if (asignacionesRes.data) {
         for (const asig of asignacionesRes.data as any[]) {
           const a = asig?.asignaciones
@@ -1019,6 +1121,9 @@ export function ConductoresModule() {
           if (asignacionesMap.has(conductor.id)) {
             relaciones.vehiculo_asignado = asignacionesMap.get(conductor.id);
           }
+
+          // Sin asignación activa no hay turno que compartir: 'na'.
+          relaciones.companero_estado = companeroMap.get(conductor.id) || 'na';
 
           return relaciones;
         });
@@ -2562,6 +2667,12 @@ export function ConductoresModule() {
     );
   };
 
+  const toggleCompaneroFilter = (valor: string) => {
+    setCompaneroFilter(prev =>
+      prev.includes(valor) ? prev.filter(v => v !== valor) : [...prev, valor]
+    );
+  };
+
   // Filtrar conductores según filtros de columna Y stat cards (ambos se aplican)
   const filteredConductores = useMemo(() => {
     // ─── Sets para O(1) lookup — antes: .includes() O(k) por cada conductor ────
@@ -2572,6 +2683,7 @@ export function ConductoresModule() {
     const turnoSet = new Set(turnoFilter)
     const categoriaSet = new Set(categoriaFilter)
     const asignacionSet = new Set(asignacionFilter)
+    const companeroSet = new Set(companeroFilter)
     const statCardEstadoSet = new Set(statCardEstadoFilter)
     const statCardAsigSet = new Set(statCardAsignacionFilter)
 
@@ -2606,6 +2718,10 @@ export function ConductoresModule() {
         const okAsignado = asignacionSet.has('asignado') && tieneAsignacion && esActivo
         const okDisponible = asignacionSet.has('disponible') && !tieneAsignacion && esActivo
         if (!okAsignado && !okDisponible) return false
+      }
+      if (companeroSet.size > 0) {
+        // 'na' cubre tanto vehículo a cargo como conductor sin asignación activa.
+        if (!companeroSet.has((c as any).companero_estado || 'na')) return false
       }
       if (telefonoFilter.length > 0) {
         if (!telefonoFilter.includes((c as any).telefono_contacto || '')) return false
@@ -2658,7 +2774,7 @@ export function ConductoresModule() {
       const prioridadB = estadoB === 'activo' ? 0 : estadoB === 'baja' ? 1 : 2;
       return prioridadA - prioridadB;
     });
-  }, [conductores, nombreFilter, dniFilter, cbuFilter, estadoFilter, turnoFilter, categoriaFilter, asignacionFilter, telefonoFilter, vencimientoFilter, licenciaVencerFilter, statCardEstadoFilter, statCardAsignacionFilter, statCardLicenciaFilter, statCardLicenciaVencidaFilter]);
+  }, [conductores, nombreFilter, dniFilter, cbuFilter, estadoFilter, turnoFilter, categoriaFilter, asignacionFilter, companeroFilter, telefonoFilter, vencimientoFilter, licenciaVencerFilter, statCardEstadoFilter, statCardAsignacionFilter, statCardLicenciaFilter, statCardLicenciaVencidaFilter]);
 
   // Obtener lista única de estados para el filtro
   const uniqueEstados = useMemo(() => {
@@ -3280,6 +3396,78 @@ export function ConductoresModule() {
         },
         enableSorting: false,
       },
+
+      {
+        id: "companero",
+        header: () => (
+          <div className="dt-column-filter">
+            <span>Compañero {companeroFilter.length > 0 && `(${companeroFilter.length})`}</span>
+            <button
+              className={`dt-column-filter-btn ${companeroFilter.length > 0 ? 'active' : ''}`}
+              onClick={(e) => {
+                e.stopPropagation();
+                setOpenColumnFilter(openColumnFilter === 'companero' ? null : 'companero');
+              }}
+              title="Filtrar por compañero"
+            >
+              <Filter size={12} />
+            </button>
+            {openColumnFilter === 'companero' && (
+              <div className="dt-column-filter-dropdown dt-excel-filter" onClick={(e) => e.stopPropagation()}>
+                <div className="dt-excel-filter-list">
+                  <label className={`dt-column-filter-checkbox ${companeroFilter.includes('si') ? 'selected' : ''}`}>
+                    <input
+                      type="checkbox"
+                      checked={companeroFilter.includes('si')}
+                      onChange={() => toggleCompaneroFilter('si')}
+                    />
+                    <span>Con compañero</span>
+                  </label>
+                  <label className={`dt-column-filter-checkbox ${companeroFilter.includes('no') ? 'selected' : ''}`}>
+                    <input
+                      type="checkbox"
+                      checked={companeroFilter.includes('no')}
+                      onChange={() => toggleCompaneroFilter('no')}
+                    />
+                    <span>Sin compañero</span>
+                  </label>
+                  <label className={`dt-column-filter-checkbox ${companeroFilter.includes('na') ? 'selected' : ''}`}>
+                    <input
+                      type="checkbox"
+                      checked={companeroFilter.includes('na')}
+                      onChange={() => toggleCompaneroFilter('na')}
+                    />
+                    <span>No aplica</span>
+                  </label>
+                </div>
+                {companeroFilter.length > 0 && (
+                  <button
+                    className="dt-column-filter-clear"
+                    onClick={() => setCompaneroFilter([])}
+                  >
+                    Limpiar ({companeroFilter.length})
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
+        ),
+        // "Sí" / "No" sólo tiene sentido en un vehículo POR TURNO, donde el
+        // compañero es quien cubre el turno complementario. En A Cargo lo maneja
+        // un solo conductor, y sin asignación activa no hay nada que compartir:
+        // ambos casos son "N/A".
+        cell: ({ row }) => {
+          const estado = (row.original as any).companero_estado as EstadoCompanero | undefined;
+          if (estado === 'si') {
+            return <span className="dt-badge dt-badge-green" title="El turno complementario está cubierto">Sí</span>;
+          }
+          if (estado === 'no') {
+            return <span className="dt-badge dt-badge-red" title="Vehículo por turno con el turno complementario vacío">No</span>;
+          }
+          return <span className="dt-badge dt-badge-gray" title="Vehículo a cargo o sin asignación activa: no aplica">N/A</span>;
+        },
+        enableSorting: false,
+      },
       {
         id: "acciones",
         header: 'Acciones',
@@ -3343,7 +3531,7 @@ export function ConductoresModule() {
         enableSorting: false,
       },
     ],
-    [canUpdate, canDelete, nombreFilter, nombreSearch, nombresFiltrados, dniFilter, cbuFilter, estadoFilter, turnoFilter, categoriaFilter, uniqueCategorias, asignacionFilter, telefonoFilter, uniqueTelefonos, vencimientoFilter, openColumnFilter, uniqueEstados, activeStatCard],
+    [canUpdate, canDelete, nombreFilter, nombreSearch, nombresFiltrados, dniFilter, cbuFilter, estadoFilter, turnoFilter, categoriaFilter, uniqueCategorias, asignacionFilter, companeroFilter, telefonoFilter, uniqueTelefonos, vencimientoFilter, openColumnFilter, uniqueEstados, activeStatCard],
   );
 
   return (
