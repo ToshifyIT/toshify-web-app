@@ -7,7 +7,7 @@
 }
 .csem-modal {
   position: relative;
-  width: 100%; max-width: 560px; max-height: 88vh;
+  width: 100%; max-width: 720px; max-height: 88vh;
   display: flex; flex-direction: column;
   background: var(--card-bg, #fff);
   border-radius: 16px;
@@ -46,28 +46,46 @@
 .csem-body { overflow-y: auto; padding: 16px 22px 22px; }
 .csem-empty { text-align: center; color: #9ca3af; padding: 30px; }
 
-.csem-sect-title { font-size: 12px; font-weight: 700; color: #dc2626; text-transform: uppercase; letter-spacing: .5px; margin-bottom: 8px; }
+.csem-sect-title {
+  font-size: 12px; font-weight: 700; color: #dc2626;
+  text-transform: uppercase; letter-spacing: .5px;
+  margin: 0 0 6px; padding-bottom: 5px;
+  border-bottom: 1px solid var(--border-primary, #e5e7eb);
+}
 .csem-sect-title.aportes { color: #059669; margin-top: 14px; }
 .csem-row {
-  display: flex; align-items: center; gap: 8px;
-  padding: 10px 12px; margin-bottom: 4px;
-  background: #f9fafb; border-radius: 8px;
-  font-size: 14px; color: #374151;
+  display: flex; align-items: flex-start; gap: 8px;
+  padding: 6px 12px;   /* la separacion entre filas la da el gap de .csem-items */
+  background: transparent; border-radius: 6px;
+  font-size: 13px; color: var(--text-primary, #374151);
 }
-.csem-dot { width: 7px; height: 7px; border-radius: 50%; background: #dc2626; flex-shrink: 0; }
+/* Contenedor de filas: el rayado alterno cuenta solo las filas, igual que
+   .portal-detail-items > .portal-detail-item:nth-child(odd) en el portal. */
+.csem-items { display: flex; flex-direction: column; gap: 3px; }
+.csem-items .csem-row:nth-child(odd) { background: #f9fafb; }
+.csem-dot {
+  width: 6px; height: 6px; border-radius: 50%; background: #dc2626;
+  flex-shrink: 0; margin-top: 6px;
+}
 .csem-dot.desc { background: #059669; }
 .csem-dot.aporte { background: #059669; }
 .csem-row.desc { color: #059669; }
 .csem-row.aporte { color: #065f46; }
 .csem-ref { color: #9ca3af; font-size: 11px; font-weight: 400; }
-.csem-amt { margin-left: auto; font-weight: 700; color: var(--text-primary, #111827); }
+.csem-amt {
+  margin-left: auto; font-weight: 600; white-space: nowrap;
+  font-family: 'SF Mono', 'Consolas', monospace;
+  color: var(--text-primary, #111827);
+}
 .csem-amt.credit { color: #059669; }
 
 .csem-subtotal {
   display: flex; justify-content: space-between;
-  padding: 10px 12px; margin: 6px 0;
-  font-size: 14px; font-weight: 700; color: var(--text-primary, #111827);
-  background: #f3f4f6; border-radius: 8px;
+  padding: 10px 12px; margin: 6px 0 0;
+  font-size: 13px; font-weight: 700; letter-spacing: .3px;
+  text-transform: uppercase; color: var(--text-primary, #111827);
+  background: transparent; border-radius: 0;
+  border-top: 1px dashed var(--border-primary, #e5e7eb);
 }
 .csem-subtotal .debit { color: #dc2626; }
 .csem-subtotal .credit { color: #059669; }

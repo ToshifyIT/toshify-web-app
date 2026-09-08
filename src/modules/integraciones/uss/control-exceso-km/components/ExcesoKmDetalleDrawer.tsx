@@ -85,11 +85,11 @@ export function ExcesoKmDetalleDrawer({ row, onClose }: Props) {
               {row.conductorNombre}
             </span>
             <span style={{ fontSize: 12, color: row.excedido > 0 ? '#dc2626' : 'var(--text-secondary)', fontWeight: 600 }}>
-              {row.kmRecorridos.toLocaleString('es-AR')} / {row.limite.toLocaleString('es-AR')} km · {row.modalidad === 'a_cargo' ? 'a cargo' : 'turno'}
+              {row.kmRecorridos.toLocaleString('es-AR', { maximumFractionDigits: 0 })} / {row.limite.toLocaleString('es-AR')} km · {row.modalidad === 'a_cargo' ? 'a cargo' : 'turno'}
             </span>
             <span style={{ fontSize: 11, color: 'var(--text-secondary)' }}>
               {row.excedido > 0
-                ? `Excedido: +${row.excedido.toLocaleString('es-AR')} km (${row.porcentaje}%)`
+                ? `Excedido: +${row.excedido.toLocaleString('es-AR', { maximumFractionDigits: 0 })} km (${row.porcentaje}%)`
                 : 'Dentro del límite semanal'}
             </span>
           </div>
@@ -146,7 +146,11 @@ export function ExcesoKmDetalleDrawer({ row, onClose }: Props) {
                       </span>
                     </div>
                     <span style={{ fontFamily: 'monospace', fontSize: 13, fontWeight: 700, color: 'var(--text-primary)', whiteSpace: 'nowrap' }}>
-                      {km.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} km
+                      {/* Km del dia en entero, igual que el total y que el portal.
+                          Ojo: con varios dias la suma de los redondeados puede diferir
+                          del acumulado en +-1 km. El valor real (con decimales) sigue
+                          intacto en el dato y en el export a Excel. */}
+                      {km.toLocaleString('es-AR', { maximumFractionDigits: 0 })} km
                     </span>
                   </div>
                   {/* Linea 2: barra de acumulado vs limite */}

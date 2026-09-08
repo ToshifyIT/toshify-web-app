@@ -3,6 +3,7 @@
 // pero devuelve datos crudos para renderizar en tablas densas.
 
 import { supabase } from '../../../lib/supabase'
+import { getConceptoLabel } from '../../../utils/conceptoLabels'
 import { patronIlikeSinAcentos } from '../../../utils/nombreMatch'
 import { parseImporte } from './conductoresPanelService'
 import { getKardexGarantia, getFacturacionGarantiaConductor, type ControlGarantiaRow } from '../../../services/controlGarantiasService'
@@ -219,6 +220,7 @@ export async function cargarMultasConductor(cond: { id: string; nombres: string 
 
 export interface ConceptoDetalle {
   nombre: string
+  cantidad: number
   total: number
   esDescuento: boolean
 }
@@ -253,7 +255,11 @@ export async function cargarDetalleSemana(
       .from('facturacion_detalle')
       .select('concepto_codigo, concepto_descripcion, cantidad, precio_unitario, total, es_descuento')
       .eq('facturacion_id', facturaId)
-      .order('es_descuento'),
+      // Mismo orden que el portal: primero cargos y despues descuentos, y dentro
+      // de cada grupo por codigo de concepto (P003, P007, P013...). Sin el segundo
+      // .order() el orden lo definia Postgres y los conceptos salian distintos.
+      .order('es_descuento')
+      .order('concepto_codigo'),
     patente
       ? supabase.from('vehiculos').select('grupo_flota, gnc').eq('patente', patente).limit(1)
       : Promise.resolve({ data: [] as any[] }),
@@ -268,21 +274,21 @@ export async function cargarDetalleSemana(
 
   const conceptos: ConceptoDetalle[] = ((det || []) as Array<any>)
     .filter(d => d.concepto_codigo !== 'SALDO' && Number(d.total || 0) !== 0)
-    .map(d => {
-      // Se prioriza precio_unitario × cantidad (el valor con centavos que usa la
-      // factura para el total_a_pagar). Si no hay unitario/cantidad, se usa el total
-      // guardado (que puede venir redondeado a entero).
-      const cant = Number(d.cantidad)
-      const pu = Number(d.precio_unitario)
-      const total = (Number.isFinite(cant) && cant !== 0 && Number.isFinite(pu) && pu !== 0)
-        ? cant * pu
-        : Number(d.total || 0)
-      return {
-        nombre: d.concepto_descripcion || d.concepto_codigo || 'Concepto',
-        total,
-        esDescuento: d.es_descuento === true,
-      }
-    })
+    .map(d => ({
+      // Misma etiqueta que ve el conductor en el portal (Mi Espacio).
+      nombre: getConceptoLabel({
+        concepto_codigo: d.concepto_codigo,
+        concepto_descripcion: d.concepto_descripcion,
+      }),
+      cantidad: Number(d.cantidad) || 0,
+      // Importe: se usa `total` tal cual lo guarda la factura, igual que el portal.
+      // Antes se recalculaba cantidad x precio_unitario, pero esos dos campos no
+      // estan en la misma unidad que `total` (uno arrastra IVA y el otro no), y el
+      // panel terminaba mostrando un importe distinto al del portal para la misma
+      // semana. `total` es la fuente de verdad.
+      total: Number(d.total || 0),
+      esDescuento: d.es_descuento === true,
+    }))
 
   const pagos: PagoAporte[] = ((pagosRes.data || []) as Array<any>).map(p => ({
     id: String(p.id),

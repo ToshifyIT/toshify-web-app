@@ -118,6 +118,55 @@ export function coincideBusqueda(entidad: EntidadMapa, termino: string): boolean
 }
 
 // =====================================================
+// Identidad de una persona
+// =====================================================
+
+/**
+ * Clave que identifica a la PERSONA, no a la fila.
+ *
+ * La misma persona puede existir en más de un registro: un lead que ya se
+ * convirtió en conductor sigue en la tabla `leads`, y también hay leads
+ * cargados dos veces. Como el v2 trae los 14 estados de lead, esos duplicados
+ * entran al mapa y, comparando sólo por (tipo, id), el emparejador los toma
+ * como dos personas distintas y llega a proponer a alguien consigo mismo.
+ *
+ * Por eso la identidad es el DNI normalizado cuando existe, y sólo cae a
+ * (tipo, id) cuando no hay documento cargado.
+ */
+export function clavePersona(e: EntidadMapa): string {
+  const dni = soloDigitos(e.documento)
+  return dni ? `dni:${dni}` : `${e.tipo}:${e.id}`
+}
+
+/** true si las dos entidades son la misma persona (aunque sean filas distintas). */
+export function mismaPersona(a: EntidadMapa, b: EntidadMapa): boolean {
+  return clavePersona(a) === clavePersona(b)
+}
+
+/**
+ * Colapsa las entidades que son la misma persona, dejando un solo representante.
+ *
+ * Prioridad: conductor sobre lead (el registro de conductor es el dato vigente);
+ * a igualdad de tipo, gana el primero, que llega ordenado por nombre desde el
+ * servicio. Se preserva el orden original de la lista.
+ */
+export function dedupPorPersona(entidades: EntidadMapa[]): EntidadMapa[] {
+  const elegido = new Map<string, EntidadMapa>()
+  for (const e of entidades) {
+    const clave = clavePersona(e)
+    const actual = elegido.get(clave)
+    if (!actual) {
+      elegido.set(clave, e)
+      continue
+    }
+    // Sólo se reemplaza si el nuevo es conductor y el guardado es lead.
+    if (actual.tipo === 'lead' && e.tipo === 'conductor') elegido.set(clave, e)
+  }
+  const vistos = new Set<EntidadMapa>(elegido.values())
+  return entidades.filter((e) => vistos.has(e))
+}
+
+// =====================================================
 // Datos de ficha
 // =====================================================
 

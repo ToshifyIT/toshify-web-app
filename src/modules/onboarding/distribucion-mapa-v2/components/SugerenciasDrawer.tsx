@@ -8,12 +8,12 @@
 // datos y saltar a Programación. Cualquier alta sigue haciéndose en el wizard
 // de programación, que es donde vive esa lógica.
 
-import { Loader2, Sparkles, X } from 'lucide-react'
+import { AlertTriangle, Loader2, Sparkles, Waypoints, X } from 'lucide-react'
 import { Badge, BotonPrimario, BotonSecundario, Chip, GrupoTitulo, Hint } from './ui'
 import { IconoEntidad } from './iconos'
 import { colorEntidad } from './colores'
 import type { CombinacionesPar, EntidadMapa, ParSugerido } from '../types'
-import { formatKm, formatMin } from '../utils'
+import { clavePersona, formatKm, formatMin, mismaPersona } from '../utils'
 import { UMBRAL_MINUTOS_MAX, UMBRAL_MINUTOS_MIN } from '../emparejamientoService'
 
 interface Props {
@@ -27,6 +27,12 @@ interface Props {
   onCombinacionesChange: (c: CombinacionesPar) => void
   parSeleccionado: ParSugerido | null
   onSeleccionarPar: (p: ParSugerido) => void
+  /** true si están dibujadas TODAS las sugerencias sobre el mapa. */
+  mostrarTodos: boolean
+  onToggleMostrarTodos: () => void
+  /** true si cambiaron los filtros y los pares en pantalla quedaron viejos. */
+  desactualizado: boolean
+  maxLineasMapa: number
   onCopiarPar: (p: ParSugerido) => void
   onProgramar: (p: ParSugerido) => void
   onCerrar: () => void
@@ -44,6 +50,10 @@ export function SugerenciasDrawer({
   onCombinacionesChange,
   parSeleccionado,
   onSeleccionarPar,
+  mostrarTodos,
+  onToggleMostrarTodos,
+  desactualizado,
+  maxLineasMapa,
   onCopiarPar,
   onProgramar,
   onCerrar,
@@ -108,6 +118,10 @@ export function SugerenciasDrawer({
           {base
             ? `Base: ${base.nombre}${base.zona ? ` · ${base.zona}` : ''}`
             : 'Base: todos los conductores sin compañero visibles'}
+        </Hint>
+        <Hint>
+          Sólo se proponen personas que están visibles en el mapa. Elegir otra en
+          el mapa o en la lista recalcula automáticamente.
         </Hint>
 
         {/* Umbral de tiempo */}
@@ -175,17 +189,77 @@ export function SugerenciasDrawer({
           </div>
         </div>
 
-        <div style={{ marginTop: 10 }}>
+        <div style={{ display: 'flex', gap: 6, marginTop: 10 }}>
           <BotonPrimario onClick={onRecalcular} disabled={cargando} full>
             {cargando ? (
               <>
                 <Loader2 size={13} style={{ animation: 'spin 1s linear infinite' }} /> Calculando...
               </>
             ) : (
-              <>Recalcular sugerencias</>
+              <>Recalcular</>
             )}
           </BotonPrimario>
+          <button
+            type="button"
+            onClick={onToggleMostrarTodos}
+            disabled={pares.length === 0}
+            title="Dibuja sobre el mapa las líneas de todas las sugerencias de esta lista"
+            style={{
+              flex: 1,
+              display: 'inline-flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: 6,
+              padding: '7px 12px',
+              borderRadius: 8,
+              border: `1px solid ${mostrarTodos ? 'var(--color-primary, #ff0033)' : 'var(--border-primary)'}`,
+              background: mostrarTodos ? '#fff1f3' : 'var(--bg-primary)',
+              color:
+                pares.length === 0
+                  ? 'var(--text-tertiary)'
+                  : mostrarTodos
+                    ? 'var(--color-primary, #ff0033)'
+                    : 'var(--text-secondary)',
+              fontSize: 12,
+              fontWeight: 650,
+              cursor: pares.length === 0 ? 'not-allowed' : 'pointer',
+              whiteSpace: 'nowrap',
+            }}
+          >
+            <Waypoints size={13} />
+            {mostrarTodos ? 'Ocultar líneas' : 'Mostrar todos'}
+          </button>
         </div>
+
+        {mostrarTodos && pares.length > maxLineasMapa && (
+          <Hint>
+            Se dibujan las primeras {maxLineasMapa} de {pares.length} sugerencias para que el mapa
+            siga siendo legible.
+          </Hint>
+        )}
+
+        {desactualizado && (
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'flex-start',
+              gap: 6,
+              marginTop: 9,
+              background: '#fef3e2',
+              color: '#b45309',
+              borderRadius: 8,
+              padding: '7px 9px',
+              fontSize: 10.5,
+              lineHeight: 1.4,
+            }}
+          >
+            <AlertTriangle size={13} style={{ flexShrink: 0, marginTop: 1 }} />
+            <span>
+              Cambiaron los filtros: estos pares son de la vista anterior. Tocá
+              <b> Recalcular</b> para ajustarlos a lo que estás viendo ahora.
+            </span>
+          </div>
+        )}
 
         {aviso && (
           <div
@@ -239,16 +313,30 @@ export function SugerenciasDrawer({
           </div>
         )}
 
-        {pares.map((par) => (
-          <TarjetaPar
-            key={par.id}
-            par={par}
-            seleccionado={parSeleccionado?.id === par.id}
-            onSeleccionar={() => onSeleccionarPar(par)}
-            onCopiar={() => onCopiarPar(par)}
-            onProgramar={() => onProgramar(par)}
-          />
-        ))}
+        {pares.map((par) => {
+          const seleccionado = parSeleccionado?.id === par.id
+          // Una persona sólo puede tener un compañero: si ya hay un par elegido,
+          // los demás pares que usan a alguno de esos dos quedan atenuados con
+          // el nombre de quien ya está comprometido.
+          const ocupadaPor = !seleccionado && parSeleccionado
+            ? [par.a, par.b].find(
+                (e) => mismaPersona(e, parSeleccionado.a) || mismaPersona(e, parSeleccionado.b)
+              )
+            : undefined
+
+          return (
+            <TarjetaPar
+              key={par.id}
+              par={par}
+              base={base}
+              seleccionado={seleccionado}
+              ocupadaPor={ocupadaPor?.nombre}
+              onSeleccionar={() => onSeleccionarPar(par)}
+              onCopiar={() => onCopiarPar(par)}
+              onProgramar={() => onProgramar(par)}
+            />
+          )
+        })}
       </div>
     </div>
   )
@@ -256,17 +344,28 @@ export function SugerenciasDrawer({
 
 function TarjetaPar({
   par,
+  base,
   seleccionado,
+  ocupadaPor,
   onSeleccionar,
   onCopiar,
   onProgramar,
 }: {
   par: ParSugerido
+  base: EntidadMapa | null
   seleccionado: boolean
+  ocupadaPor?: string
   onSeleccionar: () => void
   onCopiar: () => void
   onProgramar: () => void
 }) {
+  // Con una base fija, su nombre ya está en la cabecera del panel: repetirlo en
+  // cada tarjeta hacía parecer que la misma persona estaba duplicada. En ese
+  // caso la tarjeta muestra sólo al candidato propuesto.
+  const soloCandidato = base
+    ? [par.a, par.b].find((e) => clavePersona(e) !== clavePersona(base)) || null
+    : null
+
   return (
     <div
       style={{
@@ -276,9 +375,20 @@ function TarjetaPar({
         borderRadius: 11,
         padding: '11px 12px',
         marginBottom: 10,
+        opacity: ocupadaPor ? 0.55 : 1,
       }}
     >
-      <ExtremoTarjeta entidad={par.a} />
+      {ocupadaPor && (
+        <div style={{ marginBottom: 7 }}>
+          <Badge tono="warn">Ya elegiste a {ocupadaPor} en otro par</Badge>
+        </div>
+      )}
+
+      {soloCandidato ? (
+        <ExtremoTarjeta entidad={soloCandidato} />
+      ) : (
+        <ExtremoTarjeta entidad={par.a} />
+      )}
 
       <div style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '6px 0 6px 22px' }}>
         <span style={{ display: 'inline-flex', alignItems: 'baseline', gap: 7 }}>
@@ -295,7 +405,7 @@ function TarjetaPar({
         </Badge>
       </div>
 
-      <ExtremoTarjeta entidad={par.b} />
+      {!soloCandidato && <ExtremoTarjeta entidad={par.b} />}
 
       <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', marginTop: 8 }}>
         {par.fuenteTiempo === 'estimado' && <Badge tono="warn">Tiempo estimado</Badge>}

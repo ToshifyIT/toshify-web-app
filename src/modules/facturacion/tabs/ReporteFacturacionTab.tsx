@@ -413,6 +413,11 @@ export function ReporteFacturacionTab() {
     conductorId: string
     conductorNombre: string
     conductorDni: string
+    /** true si el conductor ya venia con un vehiculo al empezar la semana: entonces
+     *  no hubo entrega, solo un cambio de asignacion, y no corresponde el descuento
+     *  por hora de entrega. Lo calcula cargarDesgloseDias con el MISMO criterio que
+     *  Vista Previa y Recalculo, para que la pantalla no contradiga a la factura. */
+    veniaConVehiculo: boolean
     totalDias: number
     dias: {
       fecha: string
@@ -421,6 +426,7 @@ export function ReporteFacturacionTab() {
       trabajado: boolean
       postBaja?: boolean
       gnc?: boolean
+      tipoTarifa?: 'antigua' | 'nueva'
     }[]
     historial: {
       fechaInicio: string
@@ -782,8 +788,8 @@ export function ReporteFacturacionTab() {
         (supabase
           .from('asignaciones_conductores') as any)
           .select(`
-            id, conductor_id, horario, fecha_inicio, fecha_fin, estado,
-            asignaciones!inner(id, horario, estado, fecha_inicio, fecha_fin, vehiculo_id, vehiculos(patente, gnc, grupo_flota, updated_at))
+            id, conductor_id, horario, fecha_inicio, fecha_fin, estado, tipo_tarifa,
+            asignaciones!inner(id, horario, estado, fecha_inicio, fecha_fin, vehiculo_id, tipo_tarifa, vehiculos(patente, gnc, grupo_flota, updated_at))
           `)
           .eq('conductor_id', realConductorId)
           .in('estado', ['asignado', 'activo', 'activa', 'finalizado', 'finalizada', 'completado', 'cancelado', 'cancelada']),
@@ -830,8 +836,45 @@ export function ReporteFacturacionTab() {
 
       // Construir un Set de fechas cubiertas con su horario
       const diasNombres = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado']
-      const diasCubiertos = new Map<string, { horario: string; gnc: boolean }>() // fecha -> horario + gnc del vehículo
+      // fecha -> horario + gnc del vehiculo + tarifa vigente ese dia (antigua/nueva).
+      // La tarifa se guarda por dia porque un conductor puede tener, dentro de la misma
+      // semana, dias con tarifa antigua y dias con tarifa nueva (cambio de asignacion).
+      const diasCubiertos = new Map<string, { horario: string; gnc: boolean; tipoTarifa: 'antigua' | 'nueva' }>()
       const historial: { fechaInicio: string; fechaFin: string; padreEstado: string; conductorEstado?: string; horario: string; dias: number; nota: string; horaEntrega?: string; nuevaEnSemana?: boolean; patente?: string; tieneGnc?: boolean; grupoFlota?: string | null }[] = []
+
+      // Pre-scan: fechas de inicio efectivo de las asignaciones de este conductor.
+      // Sirve para aplicar la misma regla de empalme que usan Vista Previa y Recalculo:
+      // si otra asignacion EMPIEZA el dia en que esta TERMINA, ese dia cuenta para la nueva.
+      // Sin esto el desglose repartia los dias distinto que la factura (el dia del empalme
+      // se lo quedaba la asignacion que llegara primero, y la consulta no tiene ORDER BY).
+      const fechasInicioAsigDesglose = new Set<string>()
+      // Ademas: el conductor ya venia con un vehiculo al empezar la semana. Es el
+      // MISMO criterio que usan Vista Previa y Recalculo para eximir del descuento
+      // por hora de entrega: un tramo que empezo ANTES de la semana y llega hasta el
+      // primer dia o mas alla significa que no hubo entrega, solo un cambio de
+      // asignacion. El desglose antes derivaba esto de `dias > 0` del historial, y
+      // como la regla de empalme deja al tramo saliente en 0 dias, no lo veia y
+      // mostraba un descuento que la factura no cobraba.
+      let veniaConVehiculoDesglose = false
+      for (const ac of (asignacionesCond || []) as any[]) {
+        const asignacion = ac.asignaciones
+        if (!asignacion) continue
+        const estadoPadrePre = (asignacion.estado || '').toLowerCase()
+        if (['programado', 'programada'].includes(estadoPadrePre)) continue
+        if (['finalizada', 'cancelada', 'finalizado', 'cancelado'].includes(estadoPadrePre) && !asignacion.fecha_fin) continue
+        if (!ac.fecha_inicio && !asignacion.fecha_inicio) continue
+        const cIniPre = ac.fecha_inicio ? parseISO(toArgDate(ac.fecha_inicio)) : null
+        const pIniPre = asignacion.fecha_inicio ? parseISO(toArgDate(asignacion.fecha_inicio)) : null
+        const inicioEfectivoPre = cIniPre && pIniPre ? (cIniPre > pIniPre ? cIniPre : pIniPre) : (cIniPre || pIniPre)
+        if (inicioEfectivoPre) fechasInicioAsigDesglose.add(format(inicioEfectivoPre, 'yyyy-MM-dd'))
+
+        const cFinPre = ac.fecha_fin ? parseISO(toArgDate(ac.fecha_fin)) : null
+        const pFinPre = asignacion.fecha_fin ? parseISO(toArgDate(asignacion.fecha_fin)) : null
+        const finEfectivoPre = cFinPre && pFinPre ? (cFinPre < pFinPre ? cFinPre : pFinPre) : (cFinPre || pFinPre)
+        if (inicioEfectivoPre && inicioEfectivoPre < semanaInicio && (!finEfectivoPre || finEfectivoPre >= semanaInicio)) {
+          veniaConVehiculoDesglose = true
+        }
+      }
 
       for (const ac of (asignacionesCond || []) as any[]) {
         const asignacion = ac.asignaciones
@@ -928,12 +971,30 @@ export function ReporteFacturacionTab() {
         const vehiculoIdDesglose = asignacion.vehiculo_id
         const modalidadGncDesglose: 'CARGO' | 'TURNO_DIURNO' | 'TURNO_NOCTURNO' =
           horario === 'CARGO' ? 'CARGO' : horario === 'NOCTURNO' ? 'TURNO_NOCTURNO' : 'TURNO_DIURNO'
+        // Regla de empalme (igual que Vista Previa y Recalculo): si otra asignacion del
+        // mismo conductor empieza el dia en que esta termina, ese dia cuenta para la nueva.
+        // La guarda compara contra el inicio REAL (acInicio), no contra efectivoInicio, que
+        // viene recortado al inicio de semana; asi una asignacion que empezo antes de la
+        // semana no se confunde con una que realmente dura un solo dia.
+        if (fechasInicioAsigDesglose.size > 0) {
+          const finKeyDes = format(efectivoFin, 'yyyy-MM-dd')
+          const inicioKeyDes = format(acInicio, 'yyyy-MM-dd')
+          if (fechasInicioAsigDesglose.has(finKeyDes) && finKeyDes !== inicioKeyDes) {
+            const nuevoFinDes = new Date(efectivoFin)
+            nuevoFinDes.setDate(nuevoFinDes.getDate() - 1)
+            efectivoFin = nuevoFinDes
+          }
+        }
+
+        // Misma precedencia que el motor de facturacion: primero el conductor, luego el padre.
+        const tipoTarifaDesglose: 'antigua' | 'nueva' =
+          ((ac.tipo_tarifa || asignacion.tipo_tarifa) === 'nueva') ? 'nueva' : 'antigua'
         const cursorAc = new Date(efectivoInicio)
         while (cursorAc <= efectivoFin) {
           const key = format(cursorAc, 'yyyy-MM-dd')
           if (!diasCubiertos.has(key)) {
             const gncEsteDiaDesglose = tieneGncEnFecha(vehiculoIdDesglose, key, modalidadGncDesglose, gncHistorialMapDesglose, vehiculoGncActualDesglose)
-            diasCubiertos.set(key, { horario, gnc: gncEsteDiaDesglose })
+            diasCubiertos.set(key, { horario, gnc: gncEsteDiaDesglose, tipoTarifa: tipoTarifaDesglose })
             diasContados++
           }
           cursorAc.setDate(cursorAc.getDate() + 1)
@@ -949,7 +1010,7 @@ export function ReporteFacturacionTab() {
       // Generar los 7 días de la semana con su estado
       // Solo días hasta hoy se marcan como trabajados, futuros quedan como pendientes
       // Días excluidos por fecha de baja se marcan como postBaja (rojo)
-      const diasSemana: { fecha: string; diaSemana: string; horario: string; trabajado: boolean; postBaja?: boolean; gnc?: boolean }[] = []
+      const diasSemana: { fecha: string; diaSemana: string; horario: string; trabajado: boolean; postBaja?: boolean; gnc?: boolean; tipoTarifa?: 'antigua' | 'nueva' }[] = []
       const cursor = new Date(semanaInicio)
       while (cursor <= semanaFin) {
         const key = format(cursor, 'yyyy-MM-dd')
@@ -962,6 +1023,7 @@ export function ReporteFacturacionTab() {
           trabajado: !!cubierto,
           postBaja: esPostBaja,
           gnc: cubierto?.gnc,
+          tipoTarifa: cubierto?.tipoTarifa,
         })
         cursor.setDate(cursor.getDate() + 1)
       }
@@ -1023,13 +1085,15 @@ export function ReporteFacturacionTab() {
         conductorNombre,
         conductorDni,
         preciosPorCodigo: preciosPorCodigoDias,
+        veniaConVehiculo: veniaConVehiculoDesglose,
         totalDias: Math.max(0, Math.min(7, diasCubiertos.size) - (() => {
-          // Calcular descuento por hora de entrega directamente desde el historial
-          // Solo aplica si la asignación es NUEVA en esta semana (misma lógica que tabla/recalcular)
-          // Si el conductor ya tenía asignación activa antes de esta semana, no aplicar descuento (cambio de vehículo)
-          const asignacionesConDias = historialFiltrado.filter(h => h.dias > 0)
-          const tieneAsignacionPrevia = asignacionesConDias.some(h => !h.nuevaEnSemana)
-          if (tieneAsignacionPrevia) return 0
+          // Calcular descuento por hora de entrega directamente desde el historial.
+          // El descuento castiga una ENTREGA tardia; si el conductor ya venia con un
+          // vehiculo al empezar la semana no hubo entrega, solo un cambio de asignacion,
+          // y no corresponde descontar. Se usa el mismo criterio que Vista Previa y
+          // Recalculo (`veniaConVehiculoDesglose`) para que la pantalla y la factura
+          // digan siempre lo mismo.
+          if (veniaConVehiculoDesglose) return 0
           const primeraConEntrega = [...historialFiltrado].sort((a, b) => a.fechaInicio.localeCompare(b.fechaInicio)).find(h => h.horaEntrega && h.dias > 0 && h.nuevaEnSemana)
           if (!primeraConEntrega || !primeraConEntrega.horaEntrega) return 0
           const hora = parseInt(primeraConEntrega.horaEntrega.split(':')[0])
@@ -1658,7 +1722,7 @@ export function ReporteFacturacionTab() {
           .select('id, conductor_id, km_exceso, monto_total, aplicado')
           .eq('periodo_id', (periodoData as any).id),
         (supabase.from('facturacion_detalle') as any)
-          .select('facturacion_id, precio_unitario')
+          .select('facturacion_id, precio_unitario, concepto_codigo')
           .in('facturacion_id', facIds)
           .in('concepto_codigo', ['P001', 'P002', 'P013', 'P014', 'P015', 'P016', 'P021', 'P022', 'P023', 'P024', 'P025', 'P026']),
       ])
@@ -1676,6 +1740,17 @@ export function ReporteFacturacionTab() {
             fecha_pago: p.fecha_pago || null,
           })
         }
+      })
+
+      // Codigos de alquiler efectivamente cobrados en la semana, por facturacion.
+      // De ahi sale la tarifa que se muestra en la grilla: si en la semana hubo
+      // cambio de tarifa, la factura tiene dos lineas y se listan las dos.
+      const codigosAlquilerMap = new Map<string, string[]>()
+      ;(alquilerDetalleData || []).forEach((d: any) => {
+        if (!d.concepto_codigo) return
+        const actuales = codigosAlquilerMap.get(d.facturacion_id) || []
+        if (!actuales.includes(d.concepto_codigo)) actuales.push(d.concepto_codigo)
+        codigosAlquilerMap.set(d.facturacion_id, actuales)
       })
 
       // Agrupar detalles raw por facturacion_id (para popup de stats)
@@ -1736,6 +1811,7 @@ export function ReporteFacturacionTab() {
           monto_tickets_favor: detalle?.monto_tickets || 0,
           tickets_detalle: detalle?.tickets_detalle || [],
           _detalles: detallesRawMap.get(f.id) || [],
+          _codigosAlquiler: codigosAlquilerMap.get(f.id) || [],
         }
       })
 
@@ -2158,12 +2234,16 @@ export function ReporteFacturacionTab() {
         const cIni = ac.fecha_inicio ? parseISO(toArgDate(ac.fecha_inicio)) : null
         const pIni = asignacion.fecha_inicio ? parseISO(toArgDate(asignacion.fecha_inicio)) : null
         const inicioEfectivo = cIni && pIni ? (cIni > pIni ? cIni : pIni) : (cIni || pIni)
-        // Un tramo cuenta como "asignación previa" solo si se extiende más allá del primer día
-        // de la semana. Si terminó en el handoff del primer día, no aporta días -> no exime.
+        // Un tramo cuenta como "asignación previa" (y exime del descuento por hora de entrega)
+        // si empezo antes de la semana y llega HASTA el primer dia o mas alla. El caso limite
+        // es el turno seguido: entrega el auto viejo y recibe el nuevo el mismo dia, el lunes.
+        // Ahi el conductor no perdio medio turno, solo cambio de vehiculo -> no corresponde
+        // descontar. Por eso la comparacion es >= y no > (antes el empalme del primer dia de
+        // semana quedaba fuera y se le cobraba el descuento igual).
         const cFinPrevVP = ac.fecha_fin ? parseISO(toArgDate(ac.fecha_fin)) : null
         const pFinPrevVP = asignacion.fecha_fin ? parseISO(toArgDate(asignacion.fecha_fin)) : null
         const finEfectivoPrevVP = cFinPrevVP && pFinPrevVP ? (cFinPrevVP < pFinPrevVP ? cFinPrevVP : pFinPrevVP) : (cFinPrevVP || pFinPrevVP)
-        if (inicioEfectivo && inicioEfectivo < fechaInicioSemana && (!finEfectivoPrevVP || finEfectivoPrevVP > fechaInicioSemana)) {
+        if (inicioEfectivo && inicioEfectivo < fechaInicioSemana && (!finEfectivoPrevVP || finEfectivoPrevVP >= fechaInicioSemana)) {
           conductoresConAsignacionPreviaVP.add(ac.conductor_id)
         }
         if (inicioEfectivo) {
@@ -2213,7 +2293,13 @@ export function ReporteFacturacionTab() {
         const fechasInicioSet = fechasInicioAsigPorConductor.get(ac.conductor_id)
         if (fechasInicioSet) {
           const finKey = format(efectivoFin, 'yyyy-MM-dd')
-          const inicioKey = format(efectivoInicio, 'yyyy-MM-dd')
+          // FIX: comparar contra el inicio REAL (acInicio), no contra efectivoInicio.
+          // efectivoInicio viene recortado al inicio de semana, asi que una asignacion
+          // que empezo dias antes y termina el lunes se veia como "de un solo dia" y la
+          // guarda cancelaba el recorte: el dia del empalme quedaba en disputa y lo ganaba
+          // la fila que Postgres devolviera primero (orden no definido). La guarda debe
+          // proteger solo a las asignaciones que REALMENTE duran un dia.
+          const inicioKey = format(acInicio, 'yyyy-MM-dd')
           // Solo recortar si finKey es inicio de otra asig Y no es el inicio de esta misma asig
           if (fechasInicioSet.has(finKey) && finKey !== inicioKey) {
             const nuevoFin = new Date(efectivoFin)
@@ -3669,14 +3755,14 @@ export function ReporteFacturacionTab() {
         const cIni = ac.fecha_inicio ? parseISO(toArgDate(ac.fecha_inicio)) : null
         const pIni = asignacion.fecha_inicio ? parseISO(toArgDate(asignacion.fecha_inicio)) : null
         const inicioEfectivo = cIni && pIni ? (cIni > pIni ? cIni : pIni) : (cIni || pIni)
-        // Un tramo cuenta como "asignación previa" (para eximir del descuento por entrega)
-        // solo si se extiende MÁS ALLÁ del primer día de la semana. Si terminó el mismo día
-        // en que arranca la semana (handoff), ese día lo toma la nueva asignación y este tramo
-        // no aporta días, así que no debe eximir del descuento (misma lógica que el desglose).
+        // Un tramo cuenta como "asignación previa" (y exime del descuento por hora de entrega)
+        // si empezo antes de la semana y llega HASTA el primer dia o mas alla. Mismo criterio
+        // que en Vista Previa: en el turno seguido (entrega y recibe el mismo lunes) el
+        // conductor no perdio medio turno, solo cambio de vehiculo -> no corresponde descontar.
         const cFinPrev = ac.fecha_fin ? parseISO(toArgDate(ac.fecha_fin)) : null
         const pFinPrev = asignacion.fecha_fin ? parseISO(toArgDate(asignacion.fecha_fin)) : null
         const finEfectivoPrev = cFinPrev && pFinPrev ? (cFinPrev < pFinPrev ? cFinPrev : pFinPrev) : (cFinPrev || pFinPrev)
-        if (inicioEfectivo && inicioEfectivo < fechaInicioSemanaRecalc && (!finEfectivoPrev || finEfectivoPrev > fechaInicioSemanaRecalc)) {
+        if (inicioEfectivo && inicioEfectivo < fechaInicioSemanaRecalc && (!finEfectivoPrev || finEfectivoPrev >= fechaInicioSemanaRecalc)) {
           conductoresConAsignacionPreviaRecalc.add(ac.conductor_id)
         }
         if (inicioEfectivo) {
@@ -3728,7 +3814,9 @@ export function ReporteFacturacionTab() {
         const fechasInicioSetR = fechasInicioAsigRecalc.get(ac.conductor_id)
         if (fechasInicioSetR) {
           const finKeyR = format(efectivoFin, 'yyyy-MM-dd')
-          const inicioKeyR = format(efectivoInicio, 'yyyy-MM-dd')
+          // FIX: mismo criterio que en Vista Previa — comparar contra el inicio REAL
+          // (acInicio), no contra efectivoInicio (recortado al inicio de semana).
+          const inicioKeyR = format(acInicio, 'yyyy-MM-dd')
           if (fechasInicioSetR.has(finKeyR) && finKeyR !== inicioKeyR) {
             const nuevoFinR = new Date(efectivoFin)
             nuevoFinR.setDate(nuevoFinR.getDate() - 1)
@@ -9963,6 +10051,19 @@ export function ReporteFacturacionTab() {
             {row.original.grupo_flota && (
               <span style={{ fontSize: '8px', padding: '1px 4px', lineHeight: '12px', borderRadius: '3px', fontWeight: 600, background: '#dbeafe', color: '#1e40af' }}>{row.original.grupo_flota}</span>
             )}
+            {/* Tarifa con la que se le cobro el alquiler esta semana (ENE-26 / AGO-26).
+                Sale de los codigos de alquiler de su propia factura, asi que no puede
+                contradecir al detalle. Si en la semana hubo cambio de tarifa aparecen
+                las dos, en el mismo orden en que salen las lineas de la factura. */}
+            {(() => {
+              const codigos: string[] = (row.original as any)._codigosAlquiler || []
+              const periodos = [...new Set(
+                codigos.map(c => periodoPorCodigo.get(c)).filter(Boolean) as string[]
+              )]
+              return periodos.map(p => (
+                <span key={p} style={{ fontSize: '8px', padding: '1px 4px', lineHeight: '12px', borderRadius: '3px', fontWeight: 600, background: 'rgba(59, 130, 246, 0.12)', color: '#2563eb' }}>{p}</span>
+              ))
+            })()}
           </div>
         </div>
       ),
@@ -11665,7 +11766,7 @@ export function ReporteFacturacionTab() {
       {/* Modal de desglose de días */}
       {showDiasModal && (
         <div className="fact-modal-overlay" onClick={() => setShowDiasModal(false)}>
-          <div className="fact-modal-content" style={{ maxWidth: '820px' }} onClick={(e) => e.stopPropagation()}>
+          <div className="fact-modal-content" style={{ maxWidth: '980px' }} onClick={(e) => e.stopPropagation()}>
             <div className="fact-modal-header">
               <h2>Desglose de Días</h2>
               <button className="fact-modal-close" onClick={() => setShowDiasModal(false)}>
@@ -11738,10 +11839,13 @@ export function ReporteFacturacionTab() {
                           // Solo aplica si la asignación es nueva en esta semana (no re-aplicar descuentos de semanas anteriores)
                           let alertaLocal = (() => {
                             if (alerta) return alerta;
-                            // Si el conductor ya tenía asignación activa antes de esta semana, no aplicar descuento (cambio de vehículo)
-                            const asignacionesConDiasModal = diasModalData.historial.filter(h => h.dias > 0);
-                            const tieneAsignacionPreviaModal = asignacionesConDiasModal.some(h => !h.nuevaEnSemana);
-                            if (tieneAsignacionPreviaModal) return null;
+                            // Si el conductor ya venia con un vehiculo al empezar la semana no hubo
+                            // entrega, solo un cambio de asignacion: no corresponde descontar. Se usa
+                            // el valor ya calculado en cargarDesgloseDias en vez de derivarlo otra vez
+                            // de `dias > 0`, que fallaba cuando la regla de empalme dejaba al tramo
+                            // saliente en 0 dias (el guard no lo veia y pintaba un descuento que la
+                            // factura no cobraba).
+                            if (diasModalData.veniaConVehiculo) return null;
                             // Buscar primera asignación NUEVA EN LA SEMANA con hora de entrega
                             const primeraConHora = [...diasModalData.historial].sort((a, b) => a.fechaInicio.localeCompare(b.fechaInicio)).find(h => h.horaEntrega && h.dias > 0 && h.nuevaEnSemana);
                             if (!primeraConHora?.horaEntrega) return null;
@@ -11774,13 +11878,25 @@ export function ReporteFacturacionTab() {
                           // Usa prorrateo por modalidad (Vista Previa) o subtotal/días como fallback
                           // Precio diario real según modalidad+GNC del vehículo de cada día
                           const precios = diasModalData.preciosPorCodigo || {}
-                          const getPrecioDia = (horario: string, gnc?: boolean): number => {
+                          // Tarifa dual: los dias con tarifa nueva cobran P021-P026, no P001-P016.
+                          // Sin esto el desglose mostraba el precio de la tarifa antigua para
+                          // todos los dias, aunque la factura los cobrara con la nueva.
+                          const CODIGOS_TARIFA_NUEVA_DIA: Record<string, string> = {
+                            P001: 'P021', P002: 'P022', P013: 'P023', P014: 'P024', P015: 'P025', P016: 'P026',
+                          }
+                          // Codigo de concepto que le corresponde a ese dia: modalidad x GNC x tarifa.
+                          const getCodigoDia = (horario: string, gnc?: boolean, tipoTarifa?: 'antigua' | 'nueva'): string => {
                             const h = horario?.toUpperCase()
                             const conGnc = gnc === true
                             let codigo = ''
                             if (h === 'CARGO') codigo = conGnc ? 'P002' : 'P016'
                             else if (h === 'NOCTURNO' || h === 'TURNO_NOCTURNO') codigo = conGnc ? 'P013' : 'P015'
                             else codigo = conGnc ? 'P001' : 'P014' // DIURNO default
+                            if (tipoTarifa === 'nueva') codigo = CODIGOS_TARIFA_NUEVA_DIA[codigo] || codigo
+                            return codigo
+                          }
+                          const getPrecioDia = (horario: string, gnc?: boolean, tipoTarifa?: 'antigua' | 'nueva'): number => {
+                            const codigo = getCodigoDia(horario, gnc, tipoTarifa)
                             if (precios[codigo]) return precios[codigo]
                             // Fallback: subtotal_alquiler / turnos_cobrados
                             if (!conductorData) return 0
@@ -11849,9 +11965,30 @@ export function ReporteFacturacionTab() {
                                     }}>
                                       {d.gnc ? 'CON GNC' : 'SIN GNC'}
                                     </span>
-                                    {getPrecioDia(d.horario, d.gnc) > 0 && (
+                                    {/* Periodo de la tarifa con la que se cobra ese dia (ENE-26 / AGO-26).
+                                        Sale del sufijo de la descripcion del concepto en conceptos_nomina,
+                                        el mismo criterio que usa el detalle de facturacion. */}
+                                    {(() => {
+                                      const periodoDia = periodoPorCodigo.get(getCodigoDia(d.horario, d.gnc, d.tipoTarifa))
+                                      if (!periodoDia) return null
+                                      return (
+                                        <span style={{
+                                          fontSize: '9px',
+                                          fontWeight: 700,
+                                          padding: '1px 6px',
+                                          borderRadius: '999px',
+                                          background: 'rgba(59, 130, 246, 0.12)',
+                                          color: '#2563eb',
+                                          border: '1px solid rgba(59, 130, 246, 0.3)',
+                                          letterSpacing: '0.2px',
+                                        }}>
+                                          {periodoDia}
+                                        </span>
+                                      )
+                                    })()}
+                                    {getPrecioDia(d.horario, d.gnc, d.tipoTarifa) > 0 && (
                                       <span style={{ fontSize: '10px', color: 'var(--text-secondary)', fontWeight: 500 }}>
-                                        {formatCurrency(getPrecioDia(d.horario, d.gnc))}
+                                        {formatCurrency(getPrecioDia(d.horario, d.gnc, d.tipoTarifa))}
                                       </span>
                                     )}
                                   </span>
