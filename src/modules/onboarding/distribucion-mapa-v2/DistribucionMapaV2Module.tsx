@@ -23,7 +23,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useJsApiLoader } from '@react-google-maps/api'
-import { Loader2, Map as MapIcon, Sparkles } from 'lucide-react'
+import { EyeOff, ListFilter, Loader2, Map as MapIcon, Route, ShieldAlert, Sparkles } from 'lucide-react'
 import { useSede } from '../../../contexts/SedeContext'
 import { supabase } from '../../../lib/supabase'
 import type { Lead } from '../../../types/leads.types'
@@ -48,8 +48,10 @@ import {
   ESTADOS_LEAD_DEFAULT,
   ESTADOS_LEAD_TODOS,
   SIN_ESTADO_LEAD,
+  type ZonaPeligrosa,
 } from './distribucionMapaV2Service'
 import {
+  conexionesDesde,
   sugerirPares,
   UMBRAL_MINUTOS_DEFAULT,
 } from './emparejamientoService'
@@ -59,6 +61,7 @@ import type {
   EntidadMapa,
   OpcionesRuta,
   ParSugerido,
+  Radar,
 } from './types'
 import { FiltrosSidebar } from './components/FiltrosSidebar'
 import type { FiltrosV2 } from './components/filtrosOpciones'
@@ -87,6 +90,12 @@ function hoyISO(): string {
   const d = new Date()
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 }
+
+/**
+ * Tope de líneas simultáneas sobre el mapa en el modo "Mostrar todos". Más que
+ * esto el mapa deja de leerse y las etiquetas se pisan entre sí.
+ */
+const MAX_LINEAS_MAPA = 25
 
 const FILTROS_INICIALES: FiltrosV2 = {
   segmento: 'conductores',
@@ -119,6 +128,7 @@ export function DistribucionMapaV2Module() {
 
   const [conductores, setConductores] = useState<EntidadMapa[]>([])
   const [leads, setLeads] = useState<EntidadMapa[]>([])
+  const [zonasPeligrosas, setZonasPeligrosas] = useState<ZonaPeligrosa[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
 
@@ -148,6 +158,19 @@ export function DistribucionMapaV2Module() {
     leadLead: true,
   })
   const [parSeleccionado, setParSeleccionado] = useState<ParSugerido | null>(null)
+  // "Mostrar todos": dibuja de una todas las sugerencias sobre el mapa.
+  const [mostrarTodosPares, setMostrarTodosPares] = useState(false)
+  // Los pares en pantalla dejaron de corresponder a los filtros actuales.
+  const [paresDesactualizados, setParesDesactualizados] = useState(false)
+
+  // Modo "Ver todos en mapa": líneas desde una persona a las más cercanas.
+  const [radar, setRadar] = useState<Radar | null>(null)
+  const [calculandoRadar, setCalculandoRadar] = useState(false)
+
+  // La lista de resultados tapa parte del mapa: se puede plegar.
+  const [mostrarLista, setMostrarLista] = useState(true)
+  // Los polígonos de zonas peligrosas se dibujan sobre el mapa (toggle).
+  const [mostrarZonas, setMostrarZonas] = useState(true)
 
   const [activo, setActivo] = useState<string | null>(null)
   const geocodDoneRef = useRef(false)
@@ -173,6 +196,7 @@ export function DistribucionMapaV2Module() {
       // Las zonas peligrosas se resuelven una vez por carga y se inyectan a los
       // fetch, que marcan si el domicilio de cada persona cae dentro de alguna.
       const zonas = await fetchZonasPeligrosas()
+      setZonasPeligrosas(zonas)
 
       const [cond, lds] = await Promise.all([
         fetchConductoresMapa(aplicarFiltroSede, sedeActualId, zonas),
@@ -313,26 +337,20 @@ export function DistribucionMapaV2Module() {
     return out
   }, [conUbicacion, filtros.segmento, pasaFiltrosConductor, pasaFiltrosLead])
 
-  /**
-   * Universo del emparejamiento: mismos filtros PERO ignorando el segmento, para
-   * que un par conductor ↔ lead siga siendo posible aunque el mapa esté
-   * mostrando sólo conductores.
-   */
-  const universoPares = useMemo(() => {
-    const out: EntidadMapa[] = []
-    for (const c of conUbicacion.conds) if (pasaFiltrosConductor(c)) out.push(c)
-    for (const l of conUbicacion.lds) if (pasaFiltrosLead(l)) out.push(l)
-    return out
-  }, [conUbicacion, pasaFiltrosConductor, pasaFiltrosLead])
+  // El emparejamiento trabaja EXACTAMENTE sobre lo que se está viendo en el
+  // mapa (`visibles`). Antes ignoraba el segmento activo, y eso hacía que el
+  // panel propusiera leads que no estaban en pantalla: confuso e imposible de
+  // verificar a ojo. Para emparejar con leads hay que mostrarlos (segmento
+  // Leads o Ambos).
 
   const conteos = useMemo(() => {
     const c = visibles.filter((e) => e.tipo === 'conductor').length
     const l = visibles.filter((e) => e.tipo === 'lead').length
-    const sinCompanero = conUbicacion.conds.filter(
-      (x) => x.estadoCompanero === 'sin_companero' && !x.esBaja
+    const sinCompanero = visibles.filter(
+      (x) => x.tipo === 'conductor' && x.estadoCompanero === 'sin_companero' && !x.esBaja
     ).length
     return { c, l, sinCompanero }
-  }, [visibles, conUbicacion])
+  }, [visibles])
 
   /** Estados de lead ofrecidos en el filtro: catálogo completo + los que existan. */
   const estadosLeadDisponibles = useMemo(() => {
@@ -356,6 +374,13 @@ export function DistribucionMapaV2Module() {
     [visibles, activo]
   )
 
+  // Espejo de `visibles` para leerlo desde efectos sin agregarlo a sus
+  // dependencias (ver el efecto de auto-recálculo más abajo).
+  const visiblesRef = useRef(visibles)
+  useEffect(() => {
+    visiblesRef.current = visibles
+  }, [visibles])
+
   // ---------- Emparejamiento ----------
 
   const correrSugerencias = useCallback(
@@ -365,7 +390,7 @@ export function DistribucionMapaV2Module() {
       try {
         const bases = base
           ? [base]
-          : universoPares.filter(
+          : visibles.filter(
               (e) => e.tipo === 'conductor' && e.estadoCompanero === 'sin_companero' && !e.esBaja
             )
 
@@ -377,9 +402,10 @@ export function DistribucionMapaV2Module() {
           return
         }
 
-        const resultado = await sugerirPares(bases, universoPares, opcionesRuta, combinaciones, umbral)
+        const resultado = await sugerirPares(bases, visibles, opcionesRuta, combinaciones, umbral)
         setPares(resultado.pares)
         setAvisoPares(resultado.aviso)
+        setParesDesactualizados(false)
       } catch (err) {
         console.error('[DistribucionMapaV2] Error calculando pares:', err)
         setPares([])
@@ -388,7 +414,7 @@ export function DistribucionMapaV2Module() {
         setCalculando(false)
       }
     },
-    [universoPares, opcionesRuta, combinaciones, umbral]
+    [visibles, opcionesRuta, combinaciones, umbral]
   )
 
   const abrirSugerencias = useCallback(
@@ -396,9 +422,89 @@ export function DistribucionMapaV2Module() {
       setBaseSugerencias(base)
       setDrawerAbierto(true)
       setActivo(null)
+      setRadar(null)
+      setMostrarTodosPares(false)
       correrSugerencias(base)
     },
     [correrSugerencias]
+  )
+
+  // `correrSugerencias` cambia de identidad cada vez que cambian los filtros
+  // (porque depende de `visibles`). Se guarda en un ref para poder dispararla
+  // desde efectos sin que esos efectos se re-ejecuten con cada tecleo del
+  // buscador, que dispararía llamadas a Distance Matrix de más.
+  const correrSugerenciasRef = useRef(correrSugerencias)
+  useEffect(() => {
+    correrSugerenciasRef.current = correrSugerencias
+  }, [correrSugerencias])
+
+  // Con el panel abierto, elegir otra persona en el mapa o en la lista cambia
+  // la base y recalcula solo. Pequeño retardo para no disparar dos veces cuando
+  // el clic viene acompañado de un pan/zoom.
+  useEffect(() => {
+    if (!drawerAbierto || !activo) return
+    const base = visiblesRef.current.find((e) => e.id === activo)
+    if (!base) return
+    if (baseSugerencias && baseSugerencias.id === base.id) return
+
+    const t = setTimeout(() => {
+      setBaseSugerencias(base)
+      setParSeleccionado(null)
+      setMostrarTodosPares(false)
+      correrSugerenciasRef.current(base)
+    }, 250)
+    return () => clearTimeout(t)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activo, drawerAbierto])
+
+  // Las líneas dibujadas sobre el mapa (par elegido y modo "Ver todos") quedan
+  // obsoletas si cambian los filtros o las condiciones de ruta: se limpian para
+  // no mostrar distancias que ya no corresponden a lo que se está viendo.
+  //
+  // Los pares del panel NO se recalculan solos acá: cada recálculo cuesta
+  // llamadas a Distance Matrix y el usuario puede estar tipeando. Se marcan
+  // como desactualizados y el panel ofrece recalcular.
+  useEffect(() => {
+    setRadar(null)
+    setParSeleccionado(null)
+    setMostrarTodosPares(false)
+    setParesDesactualizados((prev) => prev || pares.length > 0)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filtros, opcionesRuta])
+
+  /**
+   * Pares dibujados sobre el mapa: todos cuando está activo "Mostrar todos", o
+   * sólo el elegido. Se recorta para que el mapa siga siendo legible.
+   */
+  const paresDibujados = useMemo(() => {
+    if (mostrarTodosPares) return pares.slice(0, MAX_LINEAS_MAPA)
+    return parSeleccionado ? [parSeleccionado] : []
+  }, [mostrarTodosPares, pares, parSeleccionado])
+
+  /**
+   * "Ver todos en mapa": mide la distancia real desde la persona elegida hacia
+   * las más cercanas y las dibuja como líneas, para ver de un vistazo quién
+   * tiene cerca sin tener que abrir el panel de sugerencias.
+   */
+  const verTodosDesde = useCallback(
+    async (base: EntidadMapa) => {
+      setActivo(null)
+      setParSeleccionado(null)
+      setCalculandoRadar(true)
+      try {
+        const resultado = await conexionesDesde(base, visibles, opcionesRuta, umbral)
+        setRadar(resultado)
+        if (resultado.conexiones.length === 0) {
+          setToast('No hay otras personas cerca con los filtros actuales')
+        }
+      } catch (err) {
+        console.error('[DistribucionMapaV2] Error calculando cercanos:', err)
+        setToast('No se pudieron calcular los cercanos')
+      } finally {
+        setCalculandoRadar(false)
+      }
+    },
+    [visibles, opcionesRuta, umbral]
   )
 
   const copiarPar = useCallback((p: ParSugerido) => {
@@ -507,6 +613,20 @@ export function DistribucionMapaV2Module() {
           >
             Evitar peajes
           </Chip>
+          <Chip
+            activo={mostrarZonas}
+            onClick={() => setMostrarZonas((v) => !v)}
+            title="Dibuja sobre el mapa los polígonos de las zonas restringidas activas."
+          >
+            <ShieldAlert size={12} /> Zonas peligrosas ({zonasPeligrosas.length})
+          </Chip>
+          <Chip
+            activo={mostrarLista}
+            onClick={() => setMostrarLista((v) => !v)}
+            title="Muestra u oculta la lista de resultados sobre el mapa."
+          >
+            <ListFilter size={12} /> Lista
+          </Chip>
 
           {/* Leyenda */}
           <div
@@ -587,18 +707,81 @@ export function DistribucionMapaV2Module() {
                 activo={activo}
                 onSeleccionar={setActivo}
                 entidadActiva={entidadActiva}
-                parSeleccionado={parSeleccionado}
-                onLimpiarPar={() => setParSeleccionado(null)}
+                paresDibujados={paresDibujados}
+                parDestacado={parSeleccionado}
+                onLimpiarPar={() => {
+                  setParSeleccionado(null)
+                  setMostrarTodosPares(false)
+                }}
                 onVerFicha={abrirFicha}
                 onSugerirDesde={abrirSugerencias}
+                onVerTodosDesde={verTodosDesde}
+                zonasPeligrosas={zonasPeligrosas}
+                mostrarZonas={mostrarZonas}
+                radar={radar}
+                onLimpiarRadar={() => setRadar(null)}
               />
 
-              {/* Lista flotante de resultados */}
-              <ListaResultados
-                entidades={visibles}
-                activo={activo}
-                onSeleccionar={setActivo}
-              />
+              {/* Lista flotante de resultados (plegable, para liberar el mapa) */}
+              {mostrarLista ? (
+                <ListaResultados
+                  entidades={visibles}
+                  activo={activo}
+                  onSeleccionar={setActivo}
+                  onVerTodosDesde={verTodosDesde}
+                  onOcultar={() => setMostrarLista(false)}
+                />
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => setMostrarLista(true)}
+                  style={{
+                    position: 'absolute',
+                    top: 12,
+                    left: 12,
+                    zIndex: 3,
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 6,
+                    padding: '7px 12px',
+                    background: 'var(--bg-primary)',
+                    border: '1px solid var(--border-primary)',
+                    borderRadius: 9,
+                    boxShadow: '0 4px 14px rgba(0,0,0,0.14)',
+                    fontSize: 12,
+                    fontWeight: 650,
+                    color: 'var(--text-secondary)',
+                    cursor: 'pointer',
+                  }}
+                >
+                  <ListFilter size={13} /> Ver lista ({visibles.length})
+                </button>
+              )}
+
+              {calculandoRadar && (
+                <div
+                  style={{
+                    position: 'absolute',
+                    bottom: 16,
+                    left: '50%',
+                    transform: 'translateX(-50%)',
+                    zIndex: 4,
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 7,
+                    background: 'var(--bg-primary)',
+                    border: '1px solid var(--border-primary)',
+                    borderRadius: 9,
+                    padding: '7px 13px',
+                    boxShadow: '0 4px 14px rgba(0,0,0,.16)',
+                    fontSize: 12,
+                    color: 'var(--text-secondary)',
+                  }}
+                >
+                  <Loader2 size={14} style={{ animation: 'spin 1s linear infinite' }} />
+                  Midiendo distancias reales...
+                </div>
+              )}
             </>
           )}
         </div>
@@ -614,12 +797,23 @@ export function DistribucionMapaV2Module() {
             combinaciones={combinaciones}
             onCombinacionesChange={setCombinaciones}
             parSeleccionado={parSeleccionado}
-            onSeleccionarPar={setParSeleccionado}
+            onSeleccionarPar={(par) => {
+              setMostrarTodosPares(false)
+              setParSeleccionado(par)
+            }}
+            mostrarTodos={mostrarTodosPares}
+            onToggleMostrarTodos={() => {
+              setParSeleccionado(null)
+              setMostrarTodosPares((v) => !v)
+            }}
+            desactualizado={paresDesactualizados}
+            maxLineasMapa={MAX_LINEAS_MAPA}
             onCopiarPar={copiarPar}
             onProgramar={programarPar}
             onCerrar={() => {
               setDrawerAbierto(false)
               setParSeleccionado(null)
+              setMostrarTodosPares(false)
             }}
             onRecalcular={() => correrSugerencias(baseSugerencias)}
           />
@@ -731,18 +925,24 @@ function ListaResultados({
   entidades,
   activo,
   onSeleccionar,
+  onVerTodosDesde,
+  onOcultar,
 }: {
   entidades: EntidadMapa[]
   activo: string | null
   onSeleccionar: (id: string) => void
+  onVerTodosDesde: (e: EntidadMapa) => void
+  onOcultar: () => void
 }) {
+  const seleccionada = entidades.find((e) => e.id === activo) || null
+
   return (
     <div
       style={{
         position: 'absolute',
         top: 12,
         left: 12,
-        width: 244,
+        width: 252,
         maxHeight: 'calc(100% - 24px)',
         display: 'flex',
         flexDirection: 'column',
@@ -756,16 +956,69 @@ function ListaResultados({
     >
       <div
         style={{
-          padding: '8px 12px',
-          fontSize: 11,
-          fontWeight: 600,
-          color: 'var(--text-secondary)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: 6,
+          padding: '7px 8px 7px 12px',
           borderBottom: '1px solid var(--border-primary)',
           background: 'var(--bg-secondary)',
         }}
       >
-        {entidades.length} resultado{entidades.length === 1 ? '' : 's'}
+        <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-secondary)' }}>
+          {entidades.length} resultado{entidades.length === 1 ? '' : 's'}
+        </span>
+        <button
+          type="button"
+          onClick={onOcultar}
+          title="Ocultar la lista para ver mejor el mapa"
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: 4,
+            border: '1px solid var(--border-primary)',
+            background: 'var(--bg-primary)',
+            borderRadius: 7,
+            cursor: 'pointer',
+            padding: '3px 7px',
+            fontSize: 10.5,
+            fontWeight: 650,
+            color: 'var(--text-secondary)',
+          }}
+        >
+          <EyeOff size={12} /> Ocultar
+        </button>
       </div>
+
+      {seleccionada && (
+        <div style={{ padding: '8px 10px', borderBottom: '1px solid var(--border-primary)' }}>
+          <button
+            type="button"
+            onClick={() => onVerTodosDesde(seleccionada)}
+            style={{
+              width: '100%',
+              display: 'inline-flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: 6,
+              padding: '6px 10px',
+              border: 'none',
+              borderRadius: 8,
+              background: 'var(--color-primary, #ff0033)',
+              color: '#fff',
+              fontSize: 11.5,
+              fontWeight: 700,
+              cursor: 'pointer',
+            }}
+          >
+            <Route size={13} /> Ver todos en mapa
+          </button>
+          <div style={{ fontSize: 10, color: 'var(--text-tertiary)', marginTop: 4, lineHeight: 1.35 }}>
+            Dibuja las líneas desde {seleccionada.nombre.split(',')[0]} hacia los más cercanos.
+          </div>
+        </div>
+      )}
+
       <div style={{ overflowY: 'auto' }}>
         {entidades.map((e) => (
           <div
@@ -780,7 +1033,7 @@ function ListaResultados({
             }}
           >
             <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-              <IconoEntidad tipo={e.tipo} color={colorEntidad(e)} size={13} />
+              <IconoEntidad tipo={e.tipo} color={colorEntidad(e)} size={15} />
               <span
                 style={{
                   fontSize: 12,
@@ -792,7 +1045,7 @@ function ListaResultados({
                 {e.nombre}
               </span>
             </div>
-            <div style={{ display: 'flex', gap: 6, marginTop: 2, marginLeft: 19, flexWrap: 'wrap' }}>
+            <div style={{ display: 'flex', gap: 6, marginTop: 2, marginLeft: 21, flexWrap: 'wrap' }}>
               <span style={{ fontSize: 10, color: 'var(--text-tertiary)' }}>
                 {e.tipo === 'lead' ? 'Lead' : e.esBaja ? 'Conductor · Baja' : 'Conductor'}
               </span>

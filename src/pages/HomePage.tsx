@@ -16,6 +16,8 @@ import { useEffectivePermissions } from '../hooks/useEffectivePermissions'
 import { useTheme } from '../contexts/ThemeContext'
 import logoToshify from '../assets/logo-toshify.png'
 import { ProtectedRoute } from '../components/ProtectedRoute'
+import { LandingRedirect } from '../components/LandingRedirect'
+import { SinModulosPage } from './SinModulosPage'
 import { ThemeToggle } from '../components/ui/ThemeToggle'
 import { Spinner } from '../components/ui/LoadingOverlay'
 // Mapeo de iconos por nombre de menú
@@ -2051,7 +2053,13 @@ export function HomePage() {
                   <LazyPage><InformesPage /></LazyPage>
                 </ProtectedRoute>
               } />
-              <Route path="/estado-de-flota" element={<LazyPage><AsignacionesActivasPage /></LazyPage>} />
+              <Route path="/estado-de-flota" element={
+                <ProtectedRoute menuName="estado-de-flota" action="view">
+                  <LazyPage><AsignacionesActivasPage /></LazyPage>
+                </ProtectedRoute>
+              } />
+              {/* Usuario autenticado sin ningun modulo habilitado. */}
+              <Route path="/sin-modulos" element={<SinModulosPage />} />
               {/* Onboarding */}
               <Route path="/onboarding/asignaciones" element={
                 <ProtectedRoute submenuName="asignaciones" action="view">
@@ -2249,7 +2257,8 @@ export function HomePage() {
               <Route path="/perfil" element={<LazyPage><ProfilePage /></LazyPage>} />
 
               {/* Ruta por defecto - redirige a Estado de Flota */}
-              <Route path="/" element={<Navigate to="/estado-de-flota" replace />} />
+              {/* Aterrizaje: Estado de Flota si lo tiene; si no, su primer modulo. */}
+              <Route path="/" element={<LandingRedirect />} />
             </Routes>
           </div>
         </main>

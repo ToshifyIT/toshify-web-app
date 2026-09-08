@@ -127,3 +127,23 @@ export interface ResultadoSugerencias {
   /** Aviso a mostrar en la UI (p. ej. hora de salida desplazada al futuro). */
   aviso: string | null
 }
+
+/**
+ * Conexión del modo "Ver todos en mapa": una línea desde la persona
+ * seleccionada hacia otra entidad, con su distancia y tiempo reales.
+ */
+export interface ConexionRadar {
+  entidad: EntidadMapa
+  distanciaKm: number
+  tiempoMinutos: number
+  fuenteTiempo: 'matrix' | 'estimado'
+  /** true si el tiempo entra dentro del umbral configurado. */
+  dentroDelUmbral: boolean
+}
+
+/** Resultado del modo "Ver todos en mapa". */
+export interface Radar {
+  base: EntidadMapa
+  conexiones: ConexionRadar[]
+  aviso: string | null
+}

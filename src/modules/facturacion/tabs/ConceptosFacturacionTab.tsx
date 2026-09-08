@@ -34,10 +34,17 @@ const HTML_CAMPO_PRECIO_BASE = `
  * Editar cualquiera de los cuatro despeja N y repinta los otros tres. Al tocar
  * el IVA manda N: se mantiene y se recalculan los dos campos "con IVA".
  *
+ * N se despeja SIN redondear (solo se redondea a 2 decimales al pintar cada
+ * campo). Es lo que hace que el valor tipeado sobreviva el ida y vuelta: si N
+ * se redondeara al peso, escribir 299000 en el semanal con IVA volveria como
+ * 298999.47 al releerlo desde precio_semanal.
+ *
  * OJO con el guardado: en BD precio_final es DIARIO con IVA y precio_base es
  * DIARIO neto (asi los consume la facturacion, ver ReporteFacturacionTab:
- * "precio_unitario = precio DIARIO"). El campo #swal-precio muestra el SEMANAL
- * con IVA, por eso el preConfirm de cada modal lo divide por 7.
+ * "precio_unitario = precio DIARIO"). Cada preConfirm persiste esos dos campos
+ * leyendo directamente sus inputs (#swal-base-con-iva y #swal-precio-base), no
+ * recalculandolos desde #swal-precio: asi lo que se guarda es exactamente lo
+ * que el usuario ve en pantalla.
  *
  * Notas de implementacion:
  * - Al abrir el modal solo se pintan los dos campos base; nunca se tocan los
@@ -95,15 +102,17 @@ function instalarCalculoTarifa(onPrecioChange: () => void) {
     mostrarBases()
     if (aplica()) {
       const f = factorIva()
-      // N = total semanal neto, redondeado al peso (es el "monto redondo").
+      // N = total semanal neto, SIN redondear: se conserva toda la precision
+      // para que al re-derivar los otros campos no se pierdan centavos.
       let n: number
-      if (origen === 'baseSin') n = Math.round(num(baseSinIva) * 7)
-      else if (origen === 'baseCon') n = Math.round((num(baseConIva) * 7) / f)
-      else if (origen === 'semanaCon') n = Math.round(num(semanaConIva) / f)
+      if (origen === 'baseSin') n = num(baseSinIva) * 7
+      else if (origen === 'baseCon') n = (num(baseConIva) * 7) / f
+      else if (origen === 'semanaCon') n = num(semanaConIva) / f
       else n = num(semanaSinIva)
 
-      // El campo que el usuario esta escribiendo no se toca.
-      if (origen !== 'semanaSin') semanaSinIva.value = n.toString()
+      // El campo que el usuario esta escribiendo no se toca. Los otros tres se
+      // pintan a 2 decimales, que es la precision con la que se persisten.
+      if (origen !== 'semanaSin') semanaSinIva.value = r2(n).toString()
       if (origen !== 'semanaCon') semanaConIva.value = r2(n * f).toString()
       if (baseSinIva && origen !== 'baseSin') baseSinIva.value = r2(n / 7).toString()
       if (baseConIva && origen !== 'baseCon') baseConIva.value = r2((n * f) / 7).toString()
@@ -312,10 +321,18 @@ export function ConceptosFacturacionTab() {
         // es_semanal (oculto): true cuando no es variable y tiene precio semanal > 0
         const esSemanal = !esVariable && precioSemanal > 0
 
-        // El campo muestra el TOTAL POR SEMANA con IVA; precio_final se guarda DIARIO.
+        // Los campos diarios se persisten TAL CUAL estan en pantalla: el que el
+        // usuario edito quedo literal y los otros ya los derivo (sin redondeo)
+        // instalarCalculoTarifa. Porcentaje / Valor / variables no usan los
+        // campos base: ahi precio_final es el valor tal cual y precio_base se
+        // despeja del IVA, igual que antes.
         const usaSemanal = tipoParametro !== 'porcentaje' && tipoParametro !== 'valor' && !esVariable
-        const newFinal = usaSemanal ? Number((valorCampoPrecio / 7).toFixed(2)) : valorCampoPrecio
-        const newBase = ivaPorcentaje === 0 ? newFinal : Number((newFinal / (1 + ivaPorcentaje / 100)).toFixed(2))
+        const baseSinIvaInput = parseFloat((document.getElementById('swal-precio-base') as HTMLInputElement).value) || 0
+        const baseConIvaInput = parseFloat((document.getElementById('swal-base-con-iva') as HTMLInputElement).value) || 0
+        const newFinal = usaSemanal ? baseConIvaInput : valorCampoPrecio
+        const newBase = usaSemanal
+          ? baseSinIvaInput
+          : (ivaPorcentaje === 0 ? newFinal : Number((newFinal / (1 + ivaPorcentaje / 100)).toFixed(2)))
 
         return {
           codigo: codigo.toUpperCase(),
@@ -510,12 +527,19 @@ export function ConceptosFacturacionTab() {
           return false
         }
 
-        // El campo muestra el TOTAL POR SEMANA con IVA, pero precio_final se
-        // persiste DIARIO: es asi como lo consume el motor de facturacion.
-        // Porcentaje, Valor y los conceptos variables se guardan tal cual.
+        // Los campos diarios se persisten TAL CUAL estan en pantalla: el que el
+        // usuario edito quedo literal y los otros ya los derivo (sin redondeo)
+        // instalarCalculoTarifa. precio_final sigue siendo el DIARIO con IVA que
+        // consume el motor de facturacion. Porcentaje / Valor / variables no
+        // usan los campos base: ahi precio_final es el valor tal cual y
+        // precio_base se despeja del IVA, igual que antes.
         const usaSemanal = tipoParametro !== 'porcentaje' && tipoParametro !== 'valor' && !esVariable
-        const newFinal = usaSemanal ? Number((valorCampoPrecio / 7).toFixed(2)) : valorCampoPrecio
-        const newBase = ivaPorcentaje === 0 ? newFinal : Number((newFinal / (1 + ivaPorcentaje / 100)).toFixed(2))
+        const baseSinIvaInput = parseFloat((document.getElementById('swal-precio-base') as HTMLInputElement).value) || 0
+        const baseConIvaInput = parseFloat((document.getElementById('swal-base-con-iva') as HTMLInputElement).value) || 0
+        const newFinal = usaSemanal ? baseConIvaInput : valorCampoPrecio
+        const newBase = usaSemanal
+          ? baseSinIvaInput
+          : (ivaPorcentaje === 0 ? newFinal : Number((newFinal / (1 + ivaPorcentaje / 100)).toFixed(2)))
         const priceChanged = Math.abs(newFinal - (concepto.precio_final || 0)) > 0.01
 
         if (priceChanged && !vigenciaValue) {

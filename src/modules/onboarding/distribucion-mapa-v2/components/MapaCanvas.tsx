@@ -1,11 +1,15 @@
 // src/modules/onboarding/distribucion-mapa-v2/components/MapaCanvas.tsx
 //
-// Capa de mapa del v2: marcadores con pictograma propio por tipo de entidad,
-// InfoWindow compacto con las señales de decisión, y la línea que une el par
-// seleccionado en el modo emparejamiento (propuesta B).
+// Capa de mapa del v2:
+//   - marcadores con pictograma propio por tipo de entidad
+//   - polígonos de las zonas peligrosas activas (toggle desde el header)
+//   - InfoWindow compacto con las señales de decisión
+//   - línea del par seleccionado (modo emparejamiento, propuesta B)
+//   - modo "Ver todos en mapa": líneas desde la persona seleccionada hacia las
+//     más cercanas, con su tiempo real, para ver de un vistazo quién tiene cerca
 
 import { useCallback, useEffect, useRef } from 'react'
-import { GoogleMap, InfoWindowF, MarkerF, PolylineF } from '@react-google-maps/api'
+import { GoogleMap, InfoWindowF, MarkerF, PolygonF, PolylineF } from '@react-google-maps/api'
 import { X } from 'lucide-react'
 import { getLeadEstadoColor } from '../../../leads/leadEstadoColors'
 import {
@@ -13,13 +17,18 @@ import {
   getEstadoConductorBadgeStyle,
 } from '../../../../utils/conductorUtils'
 import { IconoEntidad } from './iconos'
-import { urlIconoMarcador } from './marcadores'
+import { urlEtiquetaPill, urlIconoMarcador } from './marcadores'
 import { colorEntidad } from './colores'
 import { Badge, BotonPrimario, BotonSecundario } from './ui'
-import type { EntidadMapa, ParSugerido } from '../types'
+import type { EntidadMapa, ParSugerido, Radar } from '../types'
+import type { ZonaPeligrosa } from '../distribucionMapaV2Service'
 import { formatKm, formatMin, LABEL_TURNO } from '../utils'
 
 const MAP_CENTER = { lat: -34.6037, lng: -58.3816 }
+
+const COLOR_ZONA_PELIGROSA = '#DC2626'
+const COLOR_CONEXION_CERCA = '#059669'
+const COLOR_CONEXION_LEJOS = '#9CA3AF'
 
 const ORIGEN_TURNO_LABEL: Record<string, string> = {
   asignacion: 'última asignación',
@@ -33,10 +42,18 @@ interface Props {
   activo: string | null
   onSeleccionar: (id: string | null) => void
   entidadActiva: EntidadMapa | null
-  parSeleccionado: ParSugerido | null
+  /** Pares a dibujar como líneas rojas: uno solo, o todos con "Mostrar todos". */
+  paresDibujados: ParSugerido[]
+  /** El par elegido individualmente, que además se anuncia en la barra superior. */
+  parDestacado: ParSugerido | null
   onLimpiarPar: () => void
   onVerFicha: (e: EntidadMapa) => void
   onSugerirDesde: (e: EntidadMapa) => void
+  onVerTodosDesde: (e: EntidadMapa) => void
+  zonasPeligrosas: ZonaPeligrosa[]
+  mostrarZonas: boolean
+  radar: Radar | null
+  onLimpiarRadar: () => void
 }
 
 export function MapaCanvas({
@@ -44,10 +61,16 @@ export function MapaCanvas({
   activo,
   onSeleccionar,
   entidadActiva,
-  parSeleccionado,
+  paresDibujados,
+  parDestacado,
   onLimpiarPar,
   onVerFicha,
   onSugerirDesde,
+  onVerTodosDesde,
+  zonasPeligrosas,
+  mostrarZonas,
+  radar,
+  onLimpiarRadar,
 }: Props) {
   const mapRef = useRef<google.maps.Map | null>(null)
 
@@ -71,18 +94,36 @@ export function MapaCanvas({
     if ((mapRef.current.getZoom() || 0) < 13) mapRef.current.setZoom(14)
   }, [entidadActiva])
 
-  // Al elegir un par, encuadrar sobre sus dos extremos.
+  // Al dibujar pares, encuadrar sobre todos sus extremos.
   useEffect(() => {
-    if (!mapRef.current || !parSeleccionado) return
+    if (!mapRef.current || paresDibujados.length === 0) return
     const bounds = new google.maps.LatLngBounds()
-    bounds.extend({ lat: parSeleccionado.a.lat, lng: parSeleccionado.a.lng })
-    bounds.extend({ lat: parSeleccionado.b.lat, lng: parSeleccionado.b.lng })
-    mapRef.current.fitBounds(bounds, 140)
-  }, [parSeleccionado])
+    paresDibujados.forEach((p) => {
+      bounds.extend({ lat: p.a.lat, lng: p.a.lng })
+      bounds.extend({ lat: p.b.lat, lng: p.b.lng })
+    })
+    mapRef.current.fitBounds(bounds, paresDibujados.length === 1 ? 140 : 80)
+  }, [paresDibujados])
 
-  const idsDelPar = new Set(
-    parSeleccionado ? [parSeleccionado.a.id, parSeleccionado.b.id] : []
-  )
+  // Al activar "Ver todos en mapa", encuadrar sobre la base y sus conexiones.
+  useEffect(() => {
+    if (!mapRef.current || !radar || radar.conexiones.length === 0) return
+    const bounds = new google.maps.LatLngBounds()
+    bounds.extend({ lat: radar.base.lat, lng: radar.base.lng })
+    radar.conexiones.forEach((c) => bounds.extend({ lat: c.entidad.lat, lng: c.entidad.lng }))
+    mapRef.current.fitBounds(bounds, 90)
+  }, [radar])
+
+  const destacados = new Set<string>()
+  for (const p of paresDibujados) {
+    destacados.add(p.a.id)
+    destacados.add(p.b.id)
+  }
+  if (radar) destacados.add(radar.base.id)
+
+  // Con muchas líneas a la vez las etiquetas se pisan: sólo se rotulan cuando
+  // son pocas, o la del par elegido.
+  const rotularPares = paresDibujados.length <= 8
 
   return (
     <div style={{ flex: 1, position: 'relative' }}>
@@ -99,15 +140,120 @@ export function MapaCanvas({
           zoomControlOptions: { position: google.maps.ControlPosition.RIGHT_TOP },
         }}
       >
+        {/* Zonas peligrosas activas */}
+        {mostrarZonas &&
+          zonasPeligrosas.map((z) => (
+            <PolygonF
+              key={`zona-${z.id}`}
+              paths={z.poligono}
+              options={{
+                fillColor: COLOR_ZONA_PELIGROSA,
+                fillOpacity: 0.14,
+                strokeColor: COLOR_ZONA_PELIGROSA,
+                strokeOpacity: 0.6,
+                strokeWeight: 1.6,
+                clickable: false,
+                zIndex: 1,
+              }}
+            />
+          ))}
+
+        {/* Líneas del modo "Ver todos en mapa" */}
+        {radar?.conexiones.map((c) => (
+          <PolylineF
+            key={`rad-${c.entidad.tipo}-${c.entidad.id}`}
+            path={[
+              { lat: radar.base.lat, lng: radar.base.lng },
+              { lat: c.entidad.lat, lng: c.entidad.lng },
+            ]}
+            options={{
+              strokeColor: c.dentroDelUmbral ? COLOR_CONEXION_CERCA : COLOR_CONEXION_LEJOS,
+              strokeOpacity: c.dentroDelUmbral ? 0.85 : 0.45,
+              strokeWeight: c.dentroDelUmbral ? 2.6 : 1.6,
+              zIndex: 2,
+            }}
+          />
+        ))}
+
+        {/* Etiquetas de tiempo sobre cada línea del radar */}
+        {radar?.conexiones.map((c) => (
+          <MarkerF
+            key={`radlbl-${c.entidad.tipo}-${c.entidad.id}`}
+            position={{
+              lat: (radar.base.lat + c.entidad.lat) / 2,
+              lng: (radar.base.lng + c.entidad.lng) / 2,
+            }}
+            clickable={false}
+            zIndex={3}
+            icon={{
+              url: urlEtiquetaPill(
+                `${formatKm(c.distanciaKm)} · ${formatMin(c.tiempoMinutos)}`,
+                c.dentroDelUmbral ? COLOR_CONEXION_CERCA : '#6B7280'
+              ),
+              anchor: new google.maps.Point(0, 10),
+            }}
+          />
+        ))}
+
+        {/* Líneas de los pares sugeridos (una, o todas con "Mostrar todos") */}
+        {paresDibujados.map((p) => {
+          const unico = paresDibujados.length === 1
+          return (
+            <PolylineF
+              key={`par-${p.id}`}
+              path={[
+                { lat: p.a.lat, lng: p.a.lng },
+                { lat: p.b.lat, lng: p.b.lng },
+              ]}
+              options={{
+                strokeColor: '#ff0033',
+                strokeOpacity: 0,
+                zIndex: 4,
+                icons: [
+                  {
+                    icon: {
+                      path: 'M 0,-1 0,1',
+                      strokeOpacity: unico ? 0.95 : 0.75,
+                      strokeColor: '#ff0033',
+                      strokeWeight: unico ? 3 : 2.2,
+                      scale: unico ? 3 : 2.4,
+                    },
+                    offset: '0',
+                    repeat: '14px',
+                  },
+                ],
+              }}
+            />
+          )
+        })}
+
+        {/* Etiquetas de los pares dibujados */}
+        {rotularPares &&
+          paresDibujados.map((p) => (
+            <MarkerF
+              key={`parlbl-${p.id}`}
+              position={{ lat: (p.a.lat + p.b.lat) / 2, lng: (p.a.lng + p.b.lng) / 2 }}
+              clickable={false}
+              zIndex={5}
+              icon={{
+                url: urlEtiquetaPill(
+                  `${formatKm(p.distanciaKm)} · ${formatMin(p.tiempoMinutos)}`,
+                  '#ff0033'
+                ),
+                anchor: new google.maps.Point(0, 10),
+              }}
+            />
+          ))}
+
         {entidades.map((e) => {
-          const destacado = activo === e.id || idsDelPar.has(e.id)
+          const destacado = activo === e.id || destacados.has(e.id)
           const atenuado = e.tipo === 'conductor' && e.esBaja
           return (
             <MarkerF
               key={`${e.tipo}-${e.id}`}
               position={{ lat: e.lat, lng: e.lng }}
               onClick={() => onSeleccionar(e.id)}
-              zIndex={destacado ? 999 : undefined}
+              zIndex={destacado ? 999 : 10}
               icon={{
                 url: urlIconoMarcador(e.tipo, colorEntidad(e), destacado, atenuado),
                 scaledSize: new google.maps.Size(destacado ? 34 : 28, destacado ? 44 : 36),
@@ -116,33 +262,6 @@ export function MapaCanvas({
             />
           )
         })}
-
-        {/* Línea del par seleccionado (modo emparejamiento) */}
-        {parSeleccionado && (
-          <PolylineF
-            path={[
-              { lat: parSeleccionado.a.lat, lng: parSeleccionado.a.lng },
-              { lat: parSeleccionado.b.lat, lng: parSeleccionado.b.lng },
-            ]}
-            options={{
-              strokeColor: '#ff0033',
-              strokeOpacity: 0,
-              icons: [
-                {
-                  icon: {
-                    path: 'M 0,-1 0,1',
-                    strokeOpacity: 0.95,
-                    strokeColor: '#ff0033',
-                    strokeWeight: 3,
-                    scale: 3,
-                  },
-                  offset: '0',
-                  repeat: '14px',
-                },
-              ],
-            }}
-          />
-        )}
 
         {entidadActiva && (
           <InfoWindowF
@@ -153,83 +272,142 @@ export function MapaCanvas({
               entidad={entidadActiva}
               onVerFicha={onVerFicha}
               onSugerirDesde={onSugerirDesde}
+              onVerTodosDesde={onVerTodosDesde}
             />
           </InfoWindowF>
         )}
       </GoogleMap>
 
       {/* Barra del par en curso */}
-      {parSeleccionado && (
-        <div
-          style={{
-            position: 'absolute',
-            top: 14,
-            left: '50%',
-            transform: 'translateX(-50%)',
-            background: 'var(--bg-primary)',
-            border: '1px solid var(--border-primary)',
-            borderRadius: 11,
-            boxShadow: '0 6px 22px rgba(15,23,42,.18)',
-            padding: '7px 12px',
-            display: 'flex',
-            alignItems: 'center',
-            gap: 11,
-            maxWidth: '90%',
-          }}
-        >
+      {parDestacado && (
+        <BarraFlotante onCerrar={onLimpiarPar}>
           <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-primary)' }}>
             Emparejando:
           </span>
-          <ExtremoPar entidad={parSeleccionado.a} />
+          <ExtremoPar entidad={parDestacado.a} />
           <span style={{ color: 'var(--text-tertiary)', fontSize: 12 }}>↔</span>
-          <ExtremoPar entidad={parSeleccionado.b} />
-          <span
-            style={{
-              fontSize: 11.5,
-              fontWeight: 750,
-              background: 'var(--color-primary, #ff0033)',
-              color: '#fff',
-              borderRadius: 999,
-              padding: '3px 9px',
-              whiteSpace: 'nowrap',
-            }}
-          >
-            {formatKm(parSeleccionado.distanciaKm)} · {formatMin(parSeleccionado.tiempoMinutos)}
+          <ExtremoPar entidad={parDestacado.b} />
+          <Pildora>
+            {formatKm(parDestacado.distanciaKm)} · {formatMin(parDestacado.tiempoMinutos)}
+          </Pildora>
+        </BarraFlotante>
+      )}
+
+      {/* Barra del modo "Mostrar todos" */}
+      {!parDestacado && paresDibujados.length > 1 && (
+        <BarraFlotante onCerrar={onLimpiarPar}>
+          <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-primary)' }}>
+            Mostrando todas las sugerencias:
           </span>
-          <button
-            type="button"
-            onClick={onLimpiarPar}
-            aria-label="Limpiar par"
-            style={{
-              border: '1px solid var(--border-primary)',
-              background: 'var(--bg-secondary)',
-              borderRadius: 7,
-              cursor: 'pointer',
-              padding: '3px 6px',
-              display: 'flex',
-              alignItems: 'center',
-              color: 'var(--text-secondary)',
-            }}
-          >
-            <X size={13} />
-          </button>
-        </div>
+          <Pildora>{paresDibujados.length} pares</Pildora>
+          {!rotularPares && (
+            <span style={{ fontSize: 11, color: 'var(--text-tertiary)' }}>
+              sin etiquetas por cantidad
+            </span>
+          )}
+        </BarraFlotante>
+      )}
+
+      {/* Barra del modo "Ver todos en mapa" */}
+      {radar && paresDibujados.length === 0 && (
+        <BarraFlotante onCerrar={onLimpiarRadar}>
+          <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-primary)' }}>
+            Cercanos a:
+          </span>
+          <ExtremoPar entidad={radar.base} />
+          <Pildora fondo={COLOR_CONEXION_CERCA}>
+            {radar.conexiones.filter((c) => c.dentroDelUmbral).length} dentro del umbral
+          </Pildora>
+          <span style={{ fontSize: 11, color: 'var(--text-tertiary)' }}>
+            {radar.conexiones.length} medidos
+          </span>
+        </BarraFlotante>
       )}
     </div>
+  )
+}
+
+// =====================================================
+// Subcomponentes
+// =====================================================
+
+function BarraFlotante({
+  children,
+  onCerrar,
+}: {
+  children: React.ReactNode
+  onCerrar: () => void
+}) {
+  return (
+    <div
+      style={{
+        position: 'absolute',
+        top: 14,
+        left: '50%',
+        transform: 'translateX(-50%)',
+        background: 'var(--bg-primary)',
+        border: '1px solid var(--border-primary)',
+        borderRadius: 11,
+        boxShadow: '0 6px 22px rgba(15,23,42,.18)',
+        padding: '7px 12px',
+        display: 'flex',
+        alignItems: 'center',
+        gap: 11,
+        maxWidth: '90%',
+        zIndex: 4,
+      }}
+    >
+      {children}
+      <button
+        type="button"
+        onClick={onCerrar}
+        aria-label="Limpiar"
+        style={{
+          border: '1px solid var(--border-primary)',
+          background: 'var(--bg-secondary)',
+          borderRadius: 7,
+          cursor: 'pointer',
+          padding: '3px 6px',
+          display: 'flex',
+          alignItems: 'center',
+          color: 'var(--text-secondary)',
+        }}
+      >
+        <X size={13} />
+      </button>
+    </div>
+  )
+}
+
+function Pildora({ children, fondo }: { children: React.ReactNode; fondo?: string }) {
+  return (
+    <span
+      style={{
+        fontSize: 11.5,
+        fontWeight: 750,
+        background: fondo || 'var(--color-primary, #ff0033)',
+        color: '#fff',
+        borderRadius: 999,
+        padding: '3px 9px',
+        whiteSpace: 'nowrap',
+      }}
+    >
+      {children}
+    </span>
   )
 }
 
 function ExtremoPar({ entidad }: { entidad: EntidadMapa }) {
   return (
     <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, whiteSpace: 'nowrap' }}>
-      <IconoEntidad tipo={entidad.tipo} color={colorEntidad(entidad)} size={14} />
+      <IconoEntidad tipo={entidad.tipo} color={colorEntidad(entidad)} size={15} />
       <span style={{ fontSize: 12, color: 'var(--text-primary)' }}>{entidad.nombre}</span>
     </span>
   )
 }
 
 /**
- * InfoWindow compacto: identidad + las 3 señales que definen la decisión
+ * InfoWindow compacto: identidad + las señales que definen la decisión
  * (licencia, zona peligrosa, compañero). El resto de los datos vive en la
  * ficha completa, que se abre desde acá.
  */
@@ -237,10 +415,12 @@ function InfoEntidad({
   entidad: e,
   onVerFicha,
   onSugerirDesde,
+  onVerTodosDesde,
 }: {
   entidad: EntidadMapa
   onVerFicha: (e: EntidadMapa) => void
   onSugerirDesde: (e: EntidadMapa) => void
+  onVerTodosDesde: (e: EntidadMapa) => void
 }) {
   const badge =
     e.tipo === 'conductor'
@@ -250,9 +430,9 @@ function InfoEntidad({
   const d = e.datos
 
   return (
-    <div style={{ padding: '4px 2px', minWidth: 214, maxWidth: 274 }}>
+    <div style={{ padding: '4px 2px', minWidth: 214, maxWidth: 278 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-        <IconoEntidad tipo={e.tipo} color={colorEntidad(e)} size={15} />
+        <IconoEntidad tipo={e.tipo} color={colorEntidad(e)} size={17} />
         <p style={{ margin: 0, fontWeight: 700, fontSize: 13 }}>{e.nombre}</p>
       </div>
 
@@ -281,7 +461,9 @@ function InfoEntidad({
         )}
         {e.tipo === 'lead' && e.turnoLead && <Badge tono="info">{e.turnoLead}</Badge>}
         {e.estadoCompanero === 'sin_companero' && (
-          <Badge tono="bad">Sin compañero{e.turnoLibreAsignacion ? ` · falta ${e.turnoLibreAsignacion}` : ''}</Badge>
+          <Badge tono="bad">
+            Sin compañero{e.turnoLibreAsignacion ? ` · falta ${e.turnoLibreAsignacion}` : ''}
+          </Badge>
         )}
         {e.estadoCompanero === 'con_companero' && <Badge tono="ok">Con compañero</Badge>}
       </div>
@@ -316,8 +498,9 @@ function InfoEntidad({
         <p style={{ margin: '6px 0 0', fontSize: 10, color: '#9CA3AF' }}>{e.direccion}</p>
       )}
 
-      <div style={{ display: 'flex', gap: 6, marginTop: 9 }}>
+      <div style={{ display: 'flex', gap: 6, marginTop: 9, flexWrap: 'wrap' }}>
         <BotonPrimario onClick={() => onSugerirDesde(e)}>Sugerir compañero</BotonPrimario>
+        <BotonSecundario onClick={() => onVerTodosDesde(e)}>Ver todos en mapa</BotonSecundario>
         <BotonSecundario onClick={() => onVerFicha(e)}>Ver ficha →</BotonSecundario>
       </div>
     </div>

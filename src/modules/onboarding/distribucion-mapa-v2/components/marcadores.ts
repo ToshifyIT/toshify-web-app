@@ -3,22 +3,15 @@
 // Construcción del SVG de los pines del mapa. Separado de iconos.tsx para no
 // mezclar exports de componentes con exports de utilidades (fast refresh).
 //
-// En el v1 conductor y lead se distinguían sólo por la forma del punto
-// (círculo vs rombo). Acá cada uno lleva además su propio pictograma: gorra de
-// conductor y silueta de persona.
+// Pictogramas (definidos en glifos.ts):
+//   - conductor: chofer con gorra y volante
+//   - lead:      silueta de persona de pie
+//
+// La forma del pin refuerza la distinción: gota para conductores, rombo para
+// leads (que ya era la forma del lead en el v1).
 
+import { glifoConductor, glifoLead } from './glifos'
 import type { TipoEntidadMapa } from '../types'
-
-/** Pictograma de gorra (conductor), en blanco, para pintar dentro del pin. */
-const GLIFO_CONDUCTOR = `
-  <path d="M9.6 12.9h14.8v2.1H9.6z"/>
-  <path d="M11.6 12.4c0-3 2.4-5 5.4-5s5.4 2 5.4 5z"/>
-  <path d="M17 17.6c2 0 3.6 1.1 4.6 2.6.7 1 1.1 2.2 1.2 3.3H11.2c.1-1.1.5-2.3 1.2-3.3 1-1.5 2.6-2.6 4.6-2.6z"/>`
-
-/** Pictograma de persona (lead). */
-const GLIFO_LEAD = `
-  <circle cx="17" cy="14.4" r="4.1"/>
-  <path d="M17 19.6c3.1 0 5.7 2 6.5 4.8H10.5c.8-2.8 3.4-4.8 6.5-4.8z"/>`
 
 function svgPin(
   tipo: TipoEntidadMapa,
@@ -30,17 +23,21 @@ function svgPin(
   const grosor = activo ? 3 : 2
   const opacidad = atenuado ? 0.55 : 1
 
-  // conductor: gota clásica. lead: rombo (mantiene la lectura del v1).
   const silueta =
     tipo === 'conductor'
       ? '<path d="M17 43C17 43 32 26.5 32 16.6 32 7.9 25.3 1 17 1S2 7.9 2 16.6C2 26.5 17 43 17 43Z"/>'
       : '<path d="M17 43 31.5 22.5 17 2 2.5 22.5Z"/>'
 
-  const glifo = tipo === 'conductor' ? GLIFO_CONDUCTOR : GLIFO_LEAD
+  // El glifo del conductor necesita el color del pin para "recortar" el hueco
+  // del volante sobre los hombros (no se puede lograr sólo con blanco).
+  const glifo =
+    tipo === 'conductor'
+      ? glifoConductor({ color, escala: 0.9, cx: 17, cy: 17 })
+      : glifoLead({ escala: 0.92, cx: 17, cy: 20 })
 
   return `<svg xmlns="http://www.w3.org/2000/svg" width="34" height="44" viewBox="0 0 34 44">
   <g fill="${color}" stroke="${borde}" stroke-width="${grosor}" opacity="${opacidad}">${silueta}</g>
-  <g fill="#ffffff" opacity="${opacidad}">${glifo}</g>
+  <g opacity="${opacidad}">${glifo}</g>
 </svg>`
 }
 
@@ -52,4 +49,18 @@ export function urlIconoMarcador(
   atenuado: boolean
 ): string {
   return `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(svgPin(tipo, color, activo, atenuado))}`
+}
+
+/**
+ * Etiqueta flotante (píldora) para el punto medio de una línea del mapa.
+ * Se usa como icono de un MarkerF, que es la forma más simple de poner texto
+ * arbitrario sobre el mapa sin montar un OverlayView propio.
+ */
+export function urlEtiquetaPill(texto: string, fondo = '#ff0033', color = '#ffffff'): string {
+  const ancho = Math.max(38, texto.length * 6.6 + 14)
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${ancho}" height="20" viewBox="0 0 ${ancho} 20">
+  <rect x="0.5" y="0.5" width="${ancho - 1}" height="19" rx="9.5" fill="${fondo}" stroke="#ffffff" stroke-width="1"/>
+  <text x="${ancho / 2}" y="13.6" text-anchor="middle" font-family="system-ui, -apple-system, Segoe UI, Roboto, sans-serif" font-size="10.5" font-weight="700" fill="${color}">${texto}</text>
+</svg>`
+  return `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(svg)}`
 }
