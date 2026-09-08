@@ -5,11 +5,17 @@ export interface ContractGenerationRequest {
   // Modo A CARGO
   conductor_id?: string | null
   tipo_documento?: string | null
+  /** 'antigua' | 'nueva'. Define el concepto de alquiler y, con él, el importe
+   *  que se imprime en el documento. */
+  tipo_tarifa?: string | null
   // Modo TURNO
   conductor_diurno_id?: string | null
   conductor_nocturno_id?: string | null
   documento_diurno?: string | null
   documento_nocturno?: string | null
+  /** Tarifa por turno: en modalidad turno cada conductor puede tener la suya. */
+  tipo_tarifa_diurno?: string | null
+  tipo_tarifa_nocturno?: string | null
   // Común
   vehiculo_id: string
   modalidad: 'turno' | 'a_cargo'

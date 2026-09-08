@@ -797,6 +797,13 @@ const CONTRACT_CONFIG = {
   },
   nameToshify: 'MARCIAL JOSUE CARIDE GUZMAN',
   amounts: { diurno: '299.000', nocturno: '229.000' },
+  // Periodo de la tarifa historica. Sus conceptos tienen el monto redondo del
+  // lado CON IVA, asi que el documento lo arma con precio_final x 7 y sin
+  // leyenda. Cualquier otro periodo tiene el redondo del lado SIN IVA y se
+  // imprime como precio_semanal + " + IVA".
+  // Mantener en sincronia con PERIODO_TARIFA_LEGACY en
+  // src/modules/onboarding/tarifaConceptos.ts.
+  periodoLegacy: 'ENE-26',
   propietarios: {
     'GRUPO CG S.A.S.': {
       owner: 'GRUPO CG S.A.S.',
@@ -1085,36 +1092,62 @@ function formatDate(dateStr) {
   return `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`
 }
 
-/**
- * Determina el código del concepto de facturación según turno, modalidad y GNC del vehículo.
- * Mapeo:
- *   Diurno  + GNC → P001 | Diurno  sin GNC → P014
- *   Nocturno + GNC → P013 | Nocturno sin GNC → P015
- *   A Cargo + GNC → P002 | A Cargo sin GNC → P016
- */
-function resolveConceptoCodigo(turno, modalidad, gnc) {
-  const tieneGnc = !!gnc
-  if (modalidad === 'a_cargo' || !turno) {
-    return tieneGnc ? 'P002' : 'P016'
-  }
-  if (turno === 'nocturno') {
-    return tieneGnc ? 'P013' : 'P015'
-  }
-  // diurno (default)
-  return tieneGnc ? 'P001' : 'P014'
+// Equivalencia de codigos de alquiler en Tarifa Nueva. Replica del mapa de
+// src/modules/onboarding/tarifaConceptos.ts, useCobroTeoricoData y
+// ReporteFacturacionTab.
+const CODIGO_TARIFA_NUEVA = {
+  P001: 'P021', P002: 'P022', P013: 'P023', P014: 'P024', P015: 'P025', P016: 'P026'
 }
 
 /**
- * Consulta la tabla conceptos_nomina y devuelve el precio_final formateado en pesos argentinos.
- * Ej: 42714.29 → "42.714,29"
+ * Determina el código del concepto de facturación según turno, modalidad, GNC
+ * del vehículo y tipo de tarifa.
+ * Mapeo (tarifa antigua):
+ *   Diurno  + GNC → P001 | Diurno  sin GNC → P014
+ *   Nocturno + GNC → P013 | Nocturno sin GNC → P015
+ *   A Cargo + GNC → P002 | A Cargo sin GNC → P016
+ * Con tipoTarifa === 'nueva' se traduce al equivalente P021-P026.
  */
-async function fetchAmountFromConceptos(turno, modalidad, gnc) {
-  const codigo = resolveConceptoCodigo(turno, modalidad, gnc)
+function resolveConceptoCodigo(turno, modalidad, gnc, tipoTarifa) {
+  const tieneGnc = !!gnc
+  let codigo
+  if (modalidad === 'a_cargo' || !turno) {
+    codigo = tieneGnc ? 'P002' : 'P016'
+  } else if (turno === 'nocturno') {
+    codigo = tieneGnc ? 'P013' : 'P015'
+  } else {
+    // diurno (default)
+    codigo = tieneGnc ? 'P001' : 'P014'
+  }
+  return tipoTarifa === 'nueva' ? (CODIGO_TARIFA_NUEVA[codigo] || codigo) : codigo
+}
+
+/** Periodo del final de la descripcion: "... DIURNO ENE-26" -> "ENE-26".
+ *  Replica de extraerPeriodo() en src/modules/onboarding/tarifaConceptos.ts. */
+function extraerPeriodoConcepto(descripcion) {
+  const ultimo = (descripcion || '').trim().split(/\s+/).pop() || ''
+  return /^[A-Za-zÁÉÍÓÚÑ]{3}-\d{2}$/i.test(ultimo) ? ultimo.toUpperCase() : ''
+}
+
+/** Formatea en pesos argentinos: 299000 -> "$299.000,00". */
+function formatearImporteSemanal(valor) {
+  return '$' + valor.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+}
+
+/**
+ * Consulta conceptos_nomina y devuelve el importe ya formateado que va en el
+ * documento, según el período del concepto:
+ *   - periodoLegacy (ENE-26): precio_final (diario c/IVA) × 7 → "$299.000,00"
+ *   - cualquier otro: precio_semanal (semanal s/IVA) → "$548.000,00 + IVA"
+ * Lanza si un período no legacy no tiene precio_semanal cargado.
+ */
+async function fetchAmountFromConceptos(turno, modalidad, gnc, tipoTarifa) {
+  const codigo = resolveConceptoCodigo(turno, modalidad, gnc, tipoTarifa)
   const supabaseUrl = process.env.VITE_SUPABASE_URL
   const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
 
   const res = await fetch(
-    `${supabaseUrl}/rest/v1/conceptos_nomina?codigo=eq.${codigo}&select=precio_final`,
+    `${supabaseUrl}/rest/v1/conceptos_nomina?codigo=eq.${codigo}&select=descripcion,precio_semanal,precio_final`,
     {
       headers: {
         'apikey': serviceKey,
@@ -1129,18 +1162,43 @@ async function fetchAmountFromConceptos(turno, modalidad, gnc) {
   }
 
   const data = await res.json()
-  if (!data || data.length === 0 || data[0].precio_final == null) {
-    console.error(`[Contract] Concepto ${codigo} no encontrado o sin precio_final`)
+  if (!data || data.length === 0) {
+    console.error(`[Contract] Concepto ${codigo} no encontrado`)
     return null
   }
 
-  const precioSemanal = data[0].precio_final
-  // Multiplicar x 7 (valor semanal → valor que va en el documento)
-  // Redondear a entero para evitar decimales por aritmética de punto flotante
-  const precioFinal = Math.round(precioSemanal * 7)
-  // Formatear como pesos argentinos: 299000 → "$299.000,00"
-  const formatted = '$' + precioFinal.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-  console.log(`[Contract] AMOUNT: concepto ${codigo} → semanal $${precioSemanal} x 7 = ${formatted}`)
+  const concepto = data[0]
+  const periodo = extraerPeriodoConcepto(concepto.descripcion)
+
+  // Tarifa historica (periodoLegacy): el monto redondo esta del lado CON IVA,
+  // se recompone desde el precio diario. Comportamiento original, sin cambios.
+  if (periodo === CONTRACT_CONFIG.periodoLegacy) {
+    if (concepto.precio_final == null) {
+      console.error(`[Contract] Concepto ${codigo} (${periodo}) sin precio_final`)
+      return null
+    }
+    // Multiplicar x 7 (valor diario → total semanal que va en el documento)
+    // Redondear a entero para evitar decimales por aritmética de punto flotante
+    const precioFinal = Math.round(concepto.precio_final * 7)
+    const formatted = formatearImporteSemanal(precioFinal)
+    console.log(`[Contract] AMOUNT: concepto ${codigo} (${periodo}) → diario $${concepto.precio_final} x 7 = ${formatted} (con IVA)`)
+    return formatted
+  }
+
+  // Periodos posteriores: el monto redondo esta del lado SIN IVA y el documento
+  // lo expresa como neto + leyenda. Sin precio_semanal no hay neto confiable
+  // (precio_final incluye IVA), asi que se aborta en vez de imprimir un importe
+  // con IVA rotulado "+ IVA".
+  const precioSemanal = Number(concepto.precio_semanal)
+  if (!precioSemanal || precioSemanal <= 0) {
+    throw new Error(
+      `El concepto ${codigo} (${periodo || 'sin periodo'}) no tiene cargado "Total por semana (Sin IVA)". ` +
+      'Cargalo en Facturacion → Conceptos antes de generar el documento.'
+    )
+  }
+
+  const formatted = `${formatearImporteSemanal(precioSemanal)} + IVA`
+  console.log(`[Contract] AMOUNT: concepto ${codigo} (${periodo}) → semanal sin IVA = ${formatted}`)
   return formatted
 }
 
@@ -1149,7 +1207,7 @@ async function fetchAmountFromConceptos(turno, modalidad, gnc) {
  * Retorna { googleDocUrl, pdfUrl, folderUrl, folderId }
  */
 async function generateContractForConductor({
-  drive, conductor, vehiculo, templateKey, turno, sedeCode, modalidad, propietario
+  drive, conductor, vehiculo, templateKey, turno, sedeCode, modalidad, propietario, tipoTarifa
 }) {
   const templateId = getTemplateId(templateKey)
   if (!templateId) throw new Error(`Template no encontrada para key: ${templateKey}`)
@@ -1176,7 +1234,7 @@ async function generateContractForConductor({
   })
 
   const fullName = `${conductor.nombres || ''} ${conductor.apellidos || ''}`.trim().toUpperCase()
-  const amount = await fetchAmountFromConceptos(turno, modalidad, vehiculo.gnc)
+  const amount = await fetchAmountFromConceptos(turno, modalidad, vehiculo.gnc, tipoTarifa)
 
   // Solo incluir variables que tengan dato real, las vacías las maneja nullGetter
   const renderData = {}
@@ -1304,6 +1362,9 @@ app.post('/api/generate-contract', async (req, res) => {
       tipo_documento,      // 'carta_oferta' | 'anexo' (modo a_cargo)
       documento_diurno,    // 'carta_oferta' | 'anexo' | 'na' (modo turno)
       documento_nocturno,  // 'carta_oferta' | 'anexo' | 'na' (modo turno)
+      tipo_tarifa,           // 'antigua' | 'nueva' (modo a_cargo)
+      tipo_tarifa_diurno,    // 'antigua' | 'nueva' (modo turno)
+      tipo_tarifa_nocturno,  // 'antigua' | 'nueva' (modo turno)
       modalidad,           // 'turno' | 'a_cargo'
       sede_id,
       programacion_id,     // UUID de la programación creada
@@ -1329,7 +1390,8 @@ app.post('/api/generate-contract', async (req, res) => {
         if (templateKey) {
           const conductor = await fetchConductorData(conductor_id)
           const result = await generateContractForConductor({
-            drive, conductor, vehiculo, templateKey, turno: null, sedeCode, modalidad: 'a_cargo', propietario
+            drive, conductor, vehiculo, templateKey, turno: null, sedeCode, modalidad: 'a_cargo', propietario,
+            tipoTarifa: tipo_tarifa || 'antigua'
           })
 
           await saveDocumentoGenerado({
@@ -1360,8 +1422,8 @@ app.post('/api/generate-contract', async (req, res) => {
     } else if (modalidad === 'turno') {
       // Modo TURNO: hasta 2 conductores
       const turnoConfigs = [
-        { id: conductor_diurno_id, doc: documento_diurno, turno: 'diurno' },
-        { id: conductor_nocturno_id, doc: documento_nocturno, turno: 'nocturno' }
+        { id: conductor_diurno_id, doc: documento_diurno, turno: 'diurno', tarifa: tipo_tarifa_diurno || tipo_tarifa || 'antigua' },
+        { id: conductor_nocturno_id, doc: documento_nocturno, turno: 'nocturno', tarifa: tipo_tarifa_nocturno || tipo_tarifa || 'antigua' }
       ]
 
       for (const cfg of turnoConfigs) {
@@ -1370,7 +1432,8 @@ app.post('/api/generate-contract', async (req, res) => {
           if (templateKey) {
             const conductor = await fetchConductorData(cfg.id)
             const result = await generateContractForConductor({
-              drive, conductor, vehiculo, templateKey, turno: cfg.turno, sedeCode, modalidad: 'turno', propietario
+              drive, conductor, vehiculo, templateKey, turno: cfg.turno, sedeCode, modalidad: 'turno', propietario,
+              tipoTarifa: cfg.tarifa
             })
 
             await saveDocumentoGenerado({
