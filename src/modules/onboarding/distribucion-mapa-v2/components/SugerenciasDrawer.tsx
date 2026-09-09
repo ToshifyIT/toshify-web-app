@@ -58,7 +58,9 @@ export function SugerenciasDrawer({
   return (
     <div
       style={{
-        width: 384,
+        width: '100%',
+        height: '100%',
+        boxSizing: 'border-box',
         flexShrink: 0,
         borderLeft: '1px solid var(--border-primary)',
         background: 'var(--bg-secondary)',
@@ -189,7 +191,7 @@ export function SugerenciasDrawer({
             }}
           >
             <Waypoints size={13} />
-            {mostrarTodos ? 'Ocultar líneas' : 'Mostrar todos'}
+            {mostrarTodos ? 'Ocultar líneas' : 'Dibujar todos los pares'}
           </button>
         </div>
 

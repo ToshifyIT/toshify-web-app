@@ -44,7 +44,7 @@ interface Props {
   entidadActiva: EntidadMapa | null
   /** Se incrementa con cada selección explícita: fuerza el re-centrado aunque sea la misma persona. */
   enfoqueTick: number
-  /** Pares a dibujar como líneas rojas: uno solo, o todos con "Mostrar todos". */
+  /** Pares a dibujar como líneas rojas: uno solo, o todos con "Dibujar todos los pares". */
   paresDibujados: ParSugerido[]
   /** El par elegido individualmente, que además se anuncia en la barra superior. */
   parDestacado: ParSugerido | null
@@ -224,7 +224,7 @@ export function MapaCanvas({
           />
         ))}
 
-        {/* Líneas de los pares sugeridos (una, o todas con "Mostrar todos") */}
+        {/* Líneas de los pares sugeridos (una, o todas con "Dibujar todos los pares") */}
         {paresDibujados.map((p) => {
           const unico = paresDibujados.length === 1
           return (
@@ -340,31 +340,10 @@ export function MapaCanvas({
         )}
       </GoogleMap>
 
-      {/* Barra del par en curso */}
+      {/* Barra del par en curso. Va ABAJO para no pisar la barra de base: con
+          una base fijada las dos conviven, y la base tiene que verse siempre. */}
       {parDestacado && (
-        <BarraFlotante onCerrar={onLimpiarPar}>
-          {baseManual && (
-            <button
-              type="button"
-              onClick={onSoltarBase}
-              title="Soltar la base fijada"
-              style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: 4,
-                border: '1px solid #ff0033',
-                background: 'rgba(255,0,51,.08)',
-                color: '#ff0033',
-                borderRadius: 999,
-                padding: '2px 8px',
-                fontSize: 10.5,
-                fontWeight: 800,
-                cursor: 'pointer',
-              }}
-            >
-              <Pin size={11} /> Base
-            </button>
-          )}
+        <BarraFlotante onCerrar={onLimpiarPar} posicion="abajo">
           <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-primary)' }}>
             Emparejando:
           </span>
@@ -377,7 +356,7 @@ export function MapaCanvas({
         </BarraFlotante>
       )}
 
-      {/* Barra del modo "Mostrar todos" */}
+      {/* Barra del modo "Dibujar todos los pares" */}
       {!parDestacado && paresDibujados.length > 1 && (
         <BarraFlotante onCerrar={onLimpiarPar}>
           <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-primary)' }}>
@@ -392,21 +371,22 @@ export function MapaCanvas({
         </BarraFlotante>
       )}
 
-      {/* Barra de base fijada (emparejamiento manual) */}
-      {baseManual && !parDestacado && !(radar && paresDibujados.length === 0) && (
+      {/* Barra de base fijada (emparejamiento manual). Arriba y siempre
+          visible mientras haya base: es la referencia de todo lo que se mide. */}
+      {baseManual && (
         <BarraFlotante onCerrar={onSoltarBase} etiquetaCerrar="Soltar base">
           <Pin size={13} color="#ff0033" />
           <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-primary)' }}>Base:</span>
           <ExtremoPar entidad={baseManual} />
           <span style={{ fontSize: 11, color: 'var(--text-tertiary)' }}>
-            {midiendoManual ? 'Midiendo…' : 'tocá a otra persona para medir'}
+            {midiendoManual ? 'Midiendo…' : parDestacado ? 'tocá a otra persona para comparar' : 'tocá a otra persona para medir'}
           </span>
         </BarraFlotante>
       )}
 
       {/* Barra del modo "Ver todos en mapa" */}
       {radar && paresDibujados.length === 0 && (
-        <BarraFlotante onCerrar={onLimpiarRadar}>
+        <BarraFlotante onCerrar={onLimpiarRadar} posicion="abajo">
           <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-primary)' }}>
             Cercanos a:
           </span>
@@ -431,16 +411,20 @@ function BarraFlotante({
   children,
   onCerrar,
   etiquetaCerrar = 'Limpiar',
+  posicion = 'arriba',
 }: {
   children: React.ReactNode
   onCerrar: () => void
   etiquetaCerrar?: string
+  /** 'abajo' deja libre el borde superior (donde vive la barra de base). */
+  posicion?: 'arriba' | 'abajo'
 }) {
   return (
     <div
       style={{
         position: 'absolute',
-        top: 14,
+        // Abajo se deja lugar para la atribución de Google.
+        ...(posicion === 'arriba' ? { top: 14 } : { bottom: 30 }),
         left: '50%',
         transform: 'translateX(-50%)',
         background: 'var(--bg-primary)',
@@ -576,11 +560,11 @@ function InfoEntidad({
         )}
         {e.tipo === 'lead' && e.turnoLead && <Badge tono="info">{e.turnoLead}</Badge>}
         {e.estadoCompanero === 'sin_companero' && (
-          <Badge tono="bad">
+          <Badge tono="info">
             Sin compañero{e.turnoLibreAsignacion ? ` · falta ${e.turnoLibreAsignacion}` : ''}
           </Badge>
         )}
-        {e.estadoCompanero === 'con_companero' && <Badge tono="ok">Con compañero</Badge>}
+        {e.estadoCompanero === 'con_companero' && <Badge tono="info">Con compañero</Badge>}
       </div>
 
       <p style={{ margin: '6px 0 0', fontSize: 11, color: '#6B7280' }}>
@@ -590,23 +574,26 @@ function InfoEntidad({
         {e.patenteAsignacion && ` · ${e.patenteAsignacion}`}
       </p>
 
+      {/* Los badges descriptivos de la ficha van todos en azul (info): describen
+          la situación de la persona, no la califican. El juicio bueno/malo lo
+          hacen los motivos del score en las tarjetas de pares, no la ficha. */}
       <div style={{ display: 'flex', gap: 4, marginTop: 6, flexWrap: 'wrap' }}>
-        {d.licenciaEstado === 'vigente' && <Badge tono="ok">Licencia vigente</Badge>}
+        {d.licenciaEstado === 'vigente' && <Badge tono="info">Licencia vigente</Badge>}
         {d.licenciaEstado === 'por_vencer' && (
-          <Badge tono="warn">Licencia vence en {d.licenciaDiasRestantes} d</Badge>
+          <Badge tono="info">Licencia vence en {d.licenciaDiasRestantes} d</Badge>
         )}
-        {d.licenciaEstado === 'vencida' && <Badge tono="bad">Licencia vencida</Badge>}
-        {d.licenciaEstado === 'sin_dato' && <Badge tono="neutro">Licencia sin dato</Badge>}
+        {d.licenciaEstado === 'vencida' && <Badge tono="info">Licencia vencida</Badge>}
+        {d.licenciaEstado === 'sin_dato' && <Badge tono="info">Licencia sin dato</Badge>}
 
         {d.zonaPeligrosa ? (
-          <Badge tono="bad">{d.zonaPeligrosa}</Badge>
+          <Badge tono="info">{d.zonaPeligrosa}</Badge>
         ) : (
-          <Badge tono="ok">Zona segura</Badge>
+          <Badge tono="info">Zona segura</Badge>
         )}
 
-        {d.antecedentesPenales === true && <Badge tono="bad">Con antecedentes</Badge>}
-        {d.antecedentesPenales === false && <Badge tono="ok">Sin antecedentes</Badge>}
-        {d.experiencia && <Badge tono="neutro">Exp: {d.experiencia}</Badge>}
+        {d.antecedentesPenales === true && <Badge tono="info">Con antecedentes</Badge>}
+        {d.antecedentesPenales === false && <Badge tono="info">Sin antecedentes</Badge>}
+        {d.experiencia && <Badge tono="info">Exp: {d.experiencia}</Badge>}
       </div>
 
       {e.direccion && (
