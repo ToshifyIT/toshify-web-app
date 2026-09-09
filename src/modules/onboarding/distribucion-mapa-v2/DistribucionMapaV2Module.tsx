@@ -5,13 +5,16 @@
 // Copia evolucionada del submódulo `distribucion-mapa`, que queda intacto.
 // Novedades respecto del v1:
 //   1. Iconografía propia por tipo de entidad (gorra de conductor / persona).
-//   2. Distancia y tiempo REALES en vehículo (Distance Matrix), con hora de
-//      salida, tráfico y peajes configurables. Se muestra km y después tiempo.
+//   2. Distancia y tiempo REALES en vehículo (Distance Matrix). El tiempo es el
+//      HABITUAL del recorrido, no el de un instante elegido: sin hora de salida
+//      ni tráfico puntual, así el número es estable entre corridas. Se muestra
+//      km y después tiempo.
 //   3. Filtros segmentados: cada segmento muestra sólo sus filtros. Zona es
 //      global; Turno aplica a ambos con semántica distinta.
 //   4. Filtro nuevo "Conductor sin compañero".
 //   5. Botón "Sugerir compañero" con panel derecho de pares (≤ 25 min por
-//      defecto, regulable), en todas las combinaciones conductor/lead.
+//      defecto, regulable). Qué se cruza con qué lo decide el segmento activo:
+//      Conductores cruza conductores, Leads cruza leads, Ambos cruza todo.
 //   6. Búsqueda por tokens (arregla "Matias Albarado" -> "ALBARADO, MATIAS").
 //   7. Los 14 estados de lead disponibles en filtros, con los dos de inducción
 //      preseleccionados.
@@ -23,7 +26,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useJsApiLoader } from '@react-google-maps/api'
-import { EyeOff, ListFilter, Loader2, Map as MapIcon, Route, ShieldAlert, Sparkles } from 'lucide-react'
+import { EyeOff, ListFilter, Loader2, Map as MapIcon, Pin, Route, ShieldAlert, Sparkles } from 'lucide-react'
 import { useSede } from '../../../contexts/SedeContext'
 import { supabase } from '../../../lib/supabase'
 import type { Lead } from '../../../types/leads.types'
@@ -45,26 +48,25 @@ import {
   fetchLeadsMapa,
   fetchZonasPeligrosas,
   geocodificarFaltantes,
-  ESTADOS_LEAD_DEFAULT,
   ESTADOS_LEAD_TODOS,
   SIN_ESTADO_LEAD,
   type ZonaPeligrosa,
 } from './distribucionMapaV2Service'
 import {
+  clavePar,
   conexionesDesde,
+  medirPar,
   sugerirPares,
   UMBRAL_MINUTOS_DEFAULT,
 } from './emparejamientoService'
-import { coincideBusqueda, coordsValidas, turnoLeadATurno } from './utils'
+import { coincideBusqueda, coordsValidas, mismaPersona, turnoLeadATurno } from './utils'
 import type {
-  CombinacionesPar,
   EntidadMapa,
-  OpcionesRuta,
   ParSugerido,
   Radar,
 } from './types'
 import { FiltrosSidebar } from './components/FiltrosSidebar'
-import type { FiltrosV2 } from './components/filtrosOpciones'
+import { contarFiltrosActivos, filtrosIniciales, type FiltrosV2 } from './components/filtrosOpciones'
 import { MapaCanvas } from './components/MapaCanvas'
 import {
   colorEntidad,
@@ -86,33 +88,11 @@ async function cargarPanelConductoresCache(sedeId: string | null): Promise<Condu
   return rows
 }
 
-function hoyISO(): string {
-  const d = new Date()
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
-}
-
 /**
  * Tope de líneas simultáneas sobre el mapa en el modo "Mostrar todos". Más que
  * esto el mapa deja de leerse y las etiquetas se pisan entre sí.
  */
 const MAX_LINEAS_MAPA = 25
-
-const FILTROS_INICIALES: FiltrosV2 = {
-  segmento: 'conductores',
-  busqueda: '',
-  verBaja: false,
-  turnosConductor: new Set(),
-  asignacion: new Set(),
-  companero: new Set(),
-  requisitosConductor: new Set(),
-  // Los 14 estados están disponibles; arrancan marcados los dos de inducción.
-  estadosLead: new Set<string>(ESTADOS_LEAD_DEFAULT as unknown as string[]),
-  turnosLead: new Set(),
-  requisitosLead: new Set(),
-  // A diferencia del v1 (que arrancaba fijado en CABA), acá zona arranca vacío
-  // = todas, porque el default de leads ya acota el volumen.
-  zonas: new Set(),
-}
 
 export function DistribucionMapaV2Module() {
   const { sedeActualId, aplicarFiltroSede } = useSede()
@@ -132,18 +112,14 @@ export function DistribucionMapaV2Module() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
 
-  const [filtros, setFiltros] = useState<FiltrosV2>(FILTROS_INICIALES)
+  const [filtros, setFiltros] = useState<FiltrosV2>(filtrosIniciales)
   const aplicarPatch = useCallback((patch: Partial<FiltrosV2>) => {
     setFiltros((prev) => ({ ...prev, ...patch }))
   }, [])
-
-  // Opciones de ruta (hora de salida, tráfico, peajes).
-  const [opcionesRuta, setOpcionesRuta] = useState<OpcionesRuta>({
-    fecha: hoyISO(),
-    hora: '06:00',
-    conTrafico: true,
-    evitarPeajes: false,
-  })
+  const limpiarFiltros = useCallback(() => {
+    setFiltros((prev) => ({ ...filtrosIniciales(), segmento: prev.segmento }))
+  }, [])
+  const filtrosActivos = useMemo(() => contarFiltrosActivos(filtros), [filtros])
 
   // Emparejamiento
   const [drawerAbierto, setDrawerAbierto] = useState(false)
@@ -152,11 +128,6 @@ export function DistribucionMapaV2Module() {
   const [avisoPares, setAvisoPares] = useState<string | null>(null)
   const [calculando, setCalculando] = useState(false)
   const [umbral, setUmbral] = useState(UMBRAL_MINUTOS_DEFAULT)
-  const [combinaciones, setCombinaciones] = useState<CombinacionesPar>({
-    conductorConductor: true,
-    conductorLead: true,
-    leadLead: true,
-  })
   const [parSeleccionado, setParSeleccionado] = useState<ParSugerido | null>(null)
   // "Mostrar todos": dibuja de una todas las sugerencias sobre el mapa.
   const [mostrarTodosPares, setMostrarTodosPares] = useState(false)
@@ -173,6 +144,21 @@ export function DistribucionMapaV2Module() {
   const [mostrarZonas, setMostrarZonas] = useState(true)
 
   const [activo, setActivo] = useState<string | null>(null)
+  // Contador de "intenciones de enfoque". Cambiar sólo `activo` no alcanza para
+  // volver a centrar el mapa cuando se vuelve a elegir a la MISMA persona (el
+  // estado no cambia, React no re-dispara el efecto). Cada selección explícita
+  // incrementa este tick, y el mapa se centra con cada cambio del tick.
+  const [enfoqueTick, setEnfoqueTick] = useState(0)
+
+  // ---------- Emparejamiento manual (base fijada) ----------
+  // Con una base fijada, cada persona que se toca se mide contra ella: la
+  // línea anterior se reemplaza por la nueva. La base se suelta a mano (✕) o
+  // sola si deja de estar visible.
+  const [baseManual, setBaseManual] = useState<EntidadMapa | null>(null)
+  const [midiendoManual, setMidiendoManual] = useState(false)
+  // Caché de pares ya medidos: el tiempo es determinístico, así que volver a
+  // tocar a la misma persona no vuelve a pagar Distance Matrix.
+  const cacheParesRef = useRef(new Map<string, ParSugerido>())
   const geocodDoneRef = useRef(false)
 
   // Fichas completas
@@ -369,9 +355,28 @@ export function DistribucionMapaV2Module() {
     return [...vistos.entries()].map(([estado, color]) => ({ estado, color })).slice(0, 4)
   }, [visibles])
 
+  /**
+   * Lo que se dibuja en el mapa y en la lista: lo visible, más la base fijada
+   * si un filtro la dejó afuera. La base es INMUNE a los filtros a propósito:
+   * el flujo típico es fijar a quien querés ubicar y después cambiar los
+   * filtros para ver candidatos (leads, conductores con turno vacío). Si la
+   * base desapareciera con el filtro, ese flujo sería imposible.
+   *
+   * Los candidatos del emparejamiento siguen saliendo de `visibles`: la base
+   * nunca es candidata de sí misma.
+   */
+  const baseFueraDelFiltro = useMemo(
+    () => !!baseManual && !visibles.some((e) => e.id === baseManual.id),
+    [visibles, baseManual]
+  )
+  const entidadesMapa = useMemo(
+    () => (baseManual && baseFueraDelFiltro ? [baseManual, ...visibles] : visibles),
+    [visibles, baseManual, baseFueraDelFiltro]
+  )
+
   const entidadActiva = useMemo(
-    () => visibles.find((e) => e.id === activo) || null,
-    [visibles, activo]
+    () => entidadesMapa.find((e) => e.id === activo) || null,
+    [entidadesMapa, activo]
   )
 
   // Espejo de `visibles` para leerlo desde efectos sin agregarlo a sus
@@ -381,10 +386,80 @@ export function DistribucionMapaV2Module() {
     visiblesRef.current = visibles
   }, [visibles])
 
+  // ---------- Emparejamiento manual ----------
+
+  /** Mide base ↔ b y lo deja como par dibujado. Reemplaza la línea anterior. */
+  const medirManual = useCallback(
+    async (base: EntidadMapa, b: EntidadMapa) => {
+      if (mismaPersona(base, b)) {
+        setToast('Es la misma persona que la base')
+        return
+      }
+      const clave = clavePar(base, b)
+      const cacheado = cacheParesRef.current.get(clave)
+      // Toda medición manual reemplaza lo dibujado: una línea a la vez.
+      setRadar(null)
+      setMostrarTodosPares(false)
+      if (cacheado) {
+        setParSeleccionado(cacheado)
+        return
+      }
+      setMidiendoManual(true)
+      try {
+        const par = await medirPar(base, b)
+        cacheParesRef.current.set(clave, par)
+        setParSeleccionado(par)
+      } catch (err) {
+        console.error('[DistribucionMapaV2] Error midiendo par manual:', err)
+        setToast('No se pudo medir la distancia')
+      } finally {
+        setMidiendoManual(false)
+      }
+    },
+    []
+  )
+
+  const fijarBase = useCallback((e: EntidadMapa) => {
+    setBaseManual(e)
+    setParSeleccionado(null)
+    setRadar(null)
+    setMostrarTodosPares(false)
+    setActivo(e.id)
+    setEnfoqueTick((t) => t + 1)
+    setToast(`Base fijada: ${e.nombre}. Cambiá filtros si hace falta: la base se mantiene.`)
+  }, [])
+
+  const soltarBase = useCallback(() => {
+    setBaseManual(null)
+    setParSeleccionado(null)
+  }, [])
+
+  /**
+   * Selección desde el mapa o la lista. Con una base fijada, tocar a otra
+   * persona además la mide contra la base.
+   */
+  const seleccionar = useCallback(
+    (id: string | null) => {
+      setActivo(id)
+      if (!id) return
+      setEnfoqueTick((t) => t + 1)
+      if (baseManual && id !== baseManual.id) {
+        const b = visiblesRef.current.find((e) => e.id === id)
+        if (b) void medirManual(baseManual, b)
+      }
+    },
+    [baseManual, medirManual]
+  )
+
   // ---------- Emparejamiento ----------
 
   const correrSugerencias = useCallback(
     async (base: EntidadMapa | null) => {
+      // El mapa arranca limpio: las líneas que hubiera son del cálculo anterior
+      // y no tienen por qué coincidir con los pares que vienen.
+      setRadar(null)
+      setParSeleccionado(null)
+      setMostrarTodosPares(false)
       setCalculando(true)
       setAvisoPares(null)
       try {
@@ -402,7 +477,7 @@ export function DistribucionMapaV2Module() {
           return
         }
 
-        const resultado = await sugerirPares(bases, visibles, opcionesRuta, combinaciones, umbral)
+        const resultado = await sugerirPares(bases, visibles, umbral)
         setPares(resultado.pares)
         setAvisoPares(resultado.aviso)
         setParesDesactualizados(false)
@@ -414,7 +489,7 @@ export function DistribucionMapaV2Module() {
         setCalculando(false)
       }
     },
-    [visibles, opcionesRuta, combinaciones, umbral]
+    [visibles, umbral]
   )
 
   const abrirSugerencias = useCallback(
@@ -458,19 +533,19 @@ export function DistribucionMapaV2Module() {
   }, [activo, drawerAbierto])
 
   // Las líneas dibujadas sobre el mapa (par elegido y modo "Ver todos") quedan
-  // obsoletas si cambian los filtros o las condiciones de ruta: se limpian para
-  // no mostrar distancias que ya no corresponden a lo que se está viendo.
+  // obsoletas si cambian los filtros o el tiempo máximo de viaje: se limpian
+  // para no mostrar distancias que ya no corresponden a lo que se está viendo.
   //
   // Los pares del panel NO se recalculan solos acá: cada recálculo cuesta
-  // llamadas a Distance Matrix y el usuario puede estar tipeando. Se marcan
-  // como desactualizados y el panel ofrece recalcular.
+  // llamadas a Distance Matrix y el usuario puede estar tipeando o arrastrando
+  // el slider. Se marcan como desactualizados y el panel ofrece recalcular.
   useEffect(() => {
     setRadar(null)
     setParSeleccionado(null)
     setMostrarTodosPares(false)
     setParesDesactualizados((prev) => prev || pares.length > 0)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filtros, opcionesRuta])
+  }, [filtros, umbral])
 
   /**
    * Pares dibujados sobre el mapa: todos cuando está activo "Mostrar todos", o
@@ -492,7 +567,7 @@ export function DistribucionMapaV2Module() {
       setParSeleccionado(null)
       setCalculandoRadar(true)
       try {
-        const resultado = await conexionesDesde(base, visibles, opcionesRuta, umbral)
+        const resultado = await conexionesDesde(base, visibles, umbral)
         setRadar(resultado)
         if (resultado.conexiones.length === 0) {
           setToast('No hay otras personas cerca con los filtros actuales')
@@ -504,7 +579,7 @@ export function DistribucionMapaV2Module() {
         setCalculandoRadar(false)
       }
     },
-    [visibles, opcionesRuta, umbral]
+    [visibles, umbral]
   )
 
   const copiarPar = useCallback((p: ParSugerido) => {
@@ -584,35 +659,6 @@ export function DistribucionMapaV2Module() {
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-          {/* Hora de salida */}
-          <input
-            type="date"
-            value={opcionesRuta.fecha}
-            onChange={(e) => setOpcionesRuta((o) => ({ ...o, fecha: e.target.value }))}
-            style={inputChipStyle}
-            title="Fecha de salida"
-          />
-          <input
-            type="time"
-            value={opcionesRuta.hora}
-            onChange={(e) => setOpcionesRuta((o) => ({ ...o, hora: e.target.value }))}
-            style={inputChipStyle}
-            title="Hora de salida"
-          />
-          <Chip
-            activo={opcionesRuta.conTrafico}
-            onClick={() => setOpcionesRuta((o) => ({ ...o, conTrafico: !o.conTrafico }))}
-            title="Calcula el tiempo con el tráfico previsto para la hora de salida. Los semáforos ya están incluidos en la estimación de Google."
-          >
-            Con tráfico
-          </Chip>
-          <Chip
-            activo={opcionesRuta.evitarPeajes}
-            onClick={() => setOpcionesRuta((o) => ({ ...o, evitarPeajes: !o.evitarPeajes }))}
-            title="Evita rutas con peaje. Distance Matrix no devuelve el costo del peaje."
-          >
-            Evitar peajes
-          </Chip>
           <Chip
             activo={mostrarZonas}
             onClick={() => setMostrarZonas((v) => !v)}
@@ -680,6 +726,8 @@ export function DistribucionMapaV2Module() {
           conteoConductores={conteos.c}
           conteoLeads={conteos.l}
           conteoSinCompanero={conteos.sinCompanero}
+          filtrosActivos={filtrosActivos}
+          onLimpiar={limpiarFiltros}
         />
 
         <div style={{ flex: 1, position: 'relative', display: 'flex' }}>
@@ -703,10 +751,11 @@ export function DistribucionMapaV2Module() {
           ) : (
             <>
               <MapaCanvas
-                entidades={visibles}
+                entidades={entidadesMapa}
                 activo={activo}
-                onSeleccionar={setActivo}
+                onSeleccionar={seleccionar}
                 entidadActiva={entidadActiva}
+                enfoqueTick={enfoqueTick}
                 paresDibujados={paresDibujados}
                 parDestacado={parSeleccionado}
                 onLimpiarPar={() => {
@@ -720,16 +769,26 @@ export function DistribucionMapaV2Module() {
                 mostrarZonas={mostrarZonas}
                 radar={radar}
                 onLimpiarRadar={() => setRadar(null)}
+                baseManual={baseManual}
+                midiendoManual={midiendoManual}
+                onFijarBase={fijarBase}
+                onSoltarBase={soltarBase}
+                onCopiarPar={copiarPar}
+                onProgramarPar={programarPar}
               />
 
               {/* Lista flotante de resultados (plegable, para liberar el mapa) */}
               {mostrarLista ? (
                 <ListaResultados
-                  entidades={visibles}
+                  entidades={entidadesMapa}
                   activo={activo}
-                  onSeleccionar={setActivo}
+                  onSeleccionar={seleccionar}
                   onVerTodosDesde={verTodosDesde}
                   onOcultar={() => setMostrarLista(false)}
+                  baseManual={baseManual}
+                  baseFueraDelFiltro={baseFueraDelFiltro}
+                  onFijarBase={fijarBase}
+                  onSoltarBase={soltarBase}
                 />
               ) : (
                 <button
@@ -794,8 +853,6 @@ export function DistribucionMapaV2Module() {
             aviso={avisoPares}
             umbral={umbral}
             onUmbralChange={setUmbral}
-            combinaciones={combinaciones}
-            onCombinacionesChange={setCombinaciones}
             parSeleccionado={parSeleccionado}
             onSeleccionarPar={(par) => {
               setMostrarTodosPares(false)
@@ -884,17 +941,6 @@ export function DistribucionMapaV2Module() {
 // Subcomponentes locales
 // =====================================================
 
-const inputChipStyle: React.CSSProperties = {
-  border: '1px solid var(--border-primary)',
-  background: 'var(--bg-primary)',
-  color: 'var(--text-secondary)',
-  borderRadius: 999,
-  padding: '4px 10px',
-  fontSize: 11.5,
-  fontWeight: 600,
-  outline: 'none',
-}
-
 function LegendItem({
   tipo,
   color,
@@ -927,14 +973,34 @@ function ListaResultados({
   onSeleccionar,
   onVerTodosDesde,
   onOcultar,
+  baseManual,
+  baseFueraDelFiltro,
+  onFijarBase,
+  onSoltarBase,
 }: {
   entidades: EntidadMapa[]
   activo: string | null
   onSeleccionar: (id: string) => void
   onVerTodosDesde: (e: EntidadMapa) => void
   onOcultar: () => void
+  baseManual: EntidadMapa | null
+  /** true cuando la base está en `entidades` sólo por ser base (el filtro la excluye). */
+  baseFueraDelFiltro: boolean
+  onFijarBase: (e: EntidadMapa) => void
+  onSoltarBase: () => void
 }) {
   const seleccionada = entidades.find((e) => e.id === activo) || null
+  const seleccionadaEsBase = !!seleccionada && !!baseManual && seleccionada.id === baseManual.id
+  // `entidades` ya trae la base aunque el filtro la excluya. Para el contador
+  // se muestra aparte, así el número sigue siendo el de la búsqueda.
+  const resultados = baseFueraDelFiltro ? entidades.length - 1 : entidades.length
+
+  // La fila elegida se trae a la vista: con 180 resultados puede estar muy
+  // abajo, y si se seleccionó desde el mapa el operador no sabe dónde buscarla.
+  const filaActivaRef = useRef<HTMLDivElement | null>(null)
+  useEffect(() => {
+    filaActivaRef.current?.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
+  }, [activo])
 
   return (
     <div
@@ -966,7 +1032,10 @@ function ListaResultados({
         }}
       >
         <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-secondary)' }}>
-          {entidades.length} resultado{entidades.length === 1 ? '' : 's'}
+          {resultados} resultado{resultados === 1 ? '' : 's'}
+          {baseFueraDelFiltro && (
+            <span style={{ color: 'var(--text-tertiary)', fontWeight: 500 }}> · + base fijada</span>
+          )}
         </span>
         <button
           type="button"
@@ -1013,22 +1082,53 @@ function ListaResultados({
           >
             <Route size={13} /> Ver todos en mapa
           </button>
+          <button
+            type="button"
+            onClick={() => (seleccionadaEsBase ? onSoltarBase() : onFijarBase(seleccionada))}
+            style={{
+              width: '100%',
+              marginTop: 6,
+              display: 'inline-flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: 6,
+              padding: '6px 10px',
+              border: '1px solid var(--color-primary, #ff0033)',
+              borderRadius: 8,
+              background: seleccionadaEsBase ? 'var(--color-primary, #ff0033)' : 'transparent',
+              color: seleccionadaEsBase ? '#fff' : 'var(--color-primary, #ff0033)',
+              fontSize: 11.5,
+              fontWeight: 700,
+              cursor: 'pointer',
+            }}
+          >
+            <Pin size={13} /> {seleccionadaEsBase ? 'Soltar base' : 'Fijar como base'}
+          </button>
           <div style={{ fontSize: 10, color: 'var(--text-tertiary)', marginTop: 4, lineHeight: 1.35 }}>
-            Dibuja las líneas desde {seleccionada.nombre.split(',')[0]} hacia los más cercanos.
+            {seleccionadaEsBase
+              ? 'Tocá a cualquier otra persona y se mide contra la base.'
+              : `Dibuja las líneas desde ${seleccionada.nombre.split(',')[0]} hacia los más cercanos.`}
           </div>
         </div>
       )}
 
       <div style={{ overflowY: 'auto' }}>
-        {entidades.map((e) => (
+        {entidades.map((e) => {
+          const esActiva = activo === e.id
+          const esBase = !!baseManual && baseManual.id === e.id
+          return (
           <div
             key={`li-${e.tipo}-${e.id}`}
+            ref={esActiva ? filaActivaRef : undefined}
             onClick={() => onSeleccionar(e.id)}
             style={{
-              padding: '7px 12px',
+              padding: '7px 12px 7px 9px',
               cursor: 'pointer',
               borderBottom: '1px solid var(--border-primary)',
-              background: activo === e.id ? 'var(--bg-secondary)' : 'transparent',
+              // La fila activa se marca igual que la persona en el mapa: barra y
+              // fondo rojos. Con sólo un gris de fondo no se distinguía.
+              borderLeft: esActiva ? '4px solid #ff0033' : '4px solid transparent',
+              background: esActiva ? 'rgba(255, 0, 51, 0.09)' : 'transparent',
               opacity: e.tipo === 'conductor' && e.esBaja ? 0.55 : 1,
             }}
           >
@@ -1037,13 +1137,32 @@ function ListaResultados({
               <span
                 style={{
                   fontSize: 12,
-                  fontWeight: 600,
-                  color: 'var(--text-primary)',
+                  fontWeight: esActiva ? 800 : 600,
+                  color: esActiva ? '#ff0033' : 'var(--text-primary)',
                   lineHeight: 1.2,
                 }}
               >
                 {e.nombre}
               </span>
+              {(esActiva || esBase) && (
+                <span
+                  style={{
+                    marginLeft: 'auto',
+                    fontSize: 9.5,
+                    fontWeight: 800,
+                    letterSpacing: '.4px',
+                    textTransform: 'uppercase',
+                    color: esBase ? '#ff0033' : '#fff',
+                    background: esBase ? 'rgba(255,0,51,.12)' : '#ff0033',
+                    border: esBase ? '1px solid #ff0033' : 'none',
+                    borderRadius: 999,
+                    padding: '2px 7px',
+                    flexShrink: 0,
+                  }}
+                >
+                  {esBase ? (baseFueraDelFiltro ? 'Base · fuera del filtro' : 'Base') : 'Seleccionado'}
+                </span>
+              )}
             </div>
             <div style={{ display: 'flex', gap: 6, marginTop: 2, marginLeft: 21, flexWrap: 'wrap' }}>
               <span style={{ fontSize: 10, color: 'var(--text-tertiary)' }}>
@@ -1058,7 +1177,8 @@ function ListaResultados({
               )}
             </div>
           </div>
-        ))}
+          )
+        })}
         {entidades.length === 0 && (
           <div style={{ padding: 16, textAlign: 'center', color: 'var(--text-tertiary)', fontSize: 12 }}>
             Sin resultados

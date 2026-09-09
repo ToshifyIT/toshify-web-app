@@ -100,23 +100,6 @@ export interface ParSugerido {
   motivos: MotivoPar[]
 }
 
-/** Combinaciones habilitadas para sugerir pares. */
-export interface CombinacionesPar {
-  conductorConductor: boolean
-  conductorLead: boolean
-  leadLead: boolean
-}
-
-/** Opciones de cálculo de ruta (hora de salida, tráfico, peajes). */
-export interface OpcionesRuta {
-  /** 'YYYY-MM-DD' */
-  fecha: string
-  /** 'HH:mm' */
-  hora: string
-  conTrafico: boolean
-  evitarPeajes: boolean
-}
-
 /** Resultado de una corrida de sugerencias. */
 export interface ResultadoSugerencias {
   pares: ParSugerido[]
@@ -124,7 +107,7 @@ export interface ResultadoSugerencias {
   basesEvaluadas: number
   /** true si se recortó por el tope de seguridad de llamadas a la API. */
   truncado: boolean
-  /** Aviso a mostrar en la UI (p. ej. hora de salida desplazada al futuro). */
+  /** Aviso a mostrar en la UI (p. ej. tope de bases alcanzado). */
   aviso: string | null
 }
 

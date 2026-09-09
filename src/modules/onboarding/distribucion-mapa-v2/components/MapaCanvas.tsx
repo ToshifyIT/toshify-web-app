@@ -8,16 +8,16 @@
 //   - modo "Ver todos en mapa": líneas desde la persona seleccionada hacia las
 //     más cercanas, con su tiempo real, para ver de un vistazo quién tiene cerca
 
-import { useCallback, useEffect, useRef } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { GoogleMap, InfoWindowF, MarkerF, PolygonF, PolylineF } from '@react-google-maps/api'
-import { X } from 'lucide-react'
+import { Pin, X } from 'lucide-react'
 import { getLeadEstadoColor } from '../../../leads/leadEstadoColors'
 import {
   getEstadoConductorDisplay,
   getEstadoConductorBadgeStyle,
 } from '../../../../utils/conductorUtils'
 import { IconoEntidad } from './iconos'
-import { urlEtiquetaPill, urlIconoMarcador } from './marcadores'
+import { TAMANO_HALO, URL_HALO_ACTIVO, urlEtiquetaPill, urlIconoMarcador } from './marcadores'
 import { colorEntidad } from './colores'
 import { Badge, BotonPrimario, BotonSecundario } from './ui'
 import type { EntidadMapa, ParSugerido, Radar } from '../types'
@@ -42,6 +42,8 @@ interface Props {
   activo: string | null
   onSeleccionar: (id: string | null) => void
   entidadActiva: EntidadMapa | null
+  /** Se incrementa con cada selección explícita: fuerza el re-centrado aunque sea la misma persona. */
+  enfoqueTick: number
   /** Pares a dibujar como líneas rojas: uno solo, o todos con "Mostrar todos". */
   paresDibujados: ParSugerido[]
   /** El par elegido individualmente, que además se anuncia en la barra superior. */
@@ -54,6 +56,13 @@ interface Props {
   mostrarZonas: boolean
   radar: Radar | null
   onLimpiarRadar: () => void
+  /** Emparejamiento manual: persona fijada como base (null = sin base). */
+  baseManual: EntidadMapa | null
+  midiendoManual: boolean
+  onFijarBase: (e: EntidadMapa) => void
+  onSoltarBase: () => void
+  onCopiarPar: (p: ParSugerido) => void
+  onProgramarPar: (p: ParSugerido) => void
 }
 
 export function MapaCanvas({
@@ -61,6 +70,7 @@ export function MapaCanvas({
   activo,
   onSeleccionar,
   entidadActiva,
+  enfoqueTick,
   paresDibujados,
   parDestacado,
   onLimpiarPar,
@@ -71,8 +81,22 @@ export function MapaCanvas({
   mostrarZonas,
   radar,
   onLimpiarRadar,
+  baseManual,
+  midiendoManual,
+  onFijarBase,
+  onSoltarBase,
+  onCopiarPar,
+  onProgramarPar,
 }: Props) {
   const mapRef = useRef<google.maps.Map | null>(null)
+
+  // La ficha flotante (InfoWindow) se puede cerrar SIN perder la selección: la
+  // X sólo la oculta; el halo, la fila resaltada y el par en curso siguen. Cada
+  // nueva intención de enfoque (clic en pin o en la lista) la vuelve a abrir.
+  const [fichaVisible, setFichaVisible] = useState(true)
+  useEffect(() => {
+    setFichaVisible(true)
+  }, [entidadActiva, enfoqueTick])
 
   const onMapLoad = useCallback((map: google.maps.Map) => {
     mapRef.current = map
@@ -88,11 +112,16 @@ export function MapaCanvas({
 
   // Al seleccionar una entidad (desde el mapa o desde la lista lateral),
   // centrar el mapa en ella sin perder el nivel de detalle.
+  //
+  // Depende de `enfoqueTick` y no sólo de `entidadActiva`: si el operador se
+  // fue paneando lejos y vuelve a tocar a la misma persona en la lista, la
+  // entidad no cambió pero igual hay que traerla al centro. Con el tick cada
+  // clic cuenta como una intención de enfoque.
   useEffect(() => {
     if (!mapRef.current || !entidadActiva) return
     mapRef.current.panTo({ lat: entidadActiva.lat, lng: entidadActiva.lng })
     if ((mapRef.current.getZoom() || 0) < 13) mapRef.current.setZoom(14)
-  }, [entidadActiva])
+  }, [entidadActiva, enfoqueTick])
 
   // Al dibujar pares, encuadrar sobre todos sus extremos.
   useEffect(() => {
@@ -245,8 +274,26 @@ export function MapaCanvas({
             />
           ))}
 
+        {/* Halo bajo la persona seleccionada: el borde rojo del pin no alcanza
+            para encontrarla entre 180 marcadores; el disco grande sí. */}
+        {entidadActiva && (
+          <MarkerF
+            position={{ lat: entidadActiva.lat, lng: entidadActiva.lng }}
+            clickable={false}
+            zIndex={998}
+            icon={{
+              url: URL_HALO_ACTIVO,
+              scaledSize: new google.maps.Size(TAMANO_HALO, TAMANO_HALO),
+              // Centrado sobre la base del pin (donde apunta la punta del rombo).
+              anchor: new google.maps.Point(TAMANO_HALO / 2, TAMANO_HALO / 2),
+            }}
+          />
+        )}
+
         {entidades.map((e) => {
-          const destacado = activo === e.id || destacados.has(e.id)
+          // La base fijada queda siempre destacada (pin grande, borde rojo),
+          // aunque el halo se mueva a la persona que se está midiendo.
+          const destacado = activo === e.id || destacados.has(e.id) || baseManual?.id === e.id
           const atenuado = e.tipo === 'conductor' && e.esBaja
           return (
             <MarkerF
@@ -263,16 +310,31 @@ export function MapaCanvas({
           )
         })}
 
-        {entidadActiva && (
+        {entidadActiva && fichaVisible && (
           <InfoWindowF
             position={{ lat: entidadActiva.lat, lng: entidadActiva.lng }}
-            onCloseClick={() => onSeleccionar(null)}
+            onCloseClick={() => setFichaVisible(false)}
           >
             <InfoEntidad
               entidad={entidadActiva}
               onVerFicha={onVerFicha}
               onSugerirDesde={onSugerirDesde}
               onVerTodosDesde={onVerTodosDesde}
+              baseManual={baseManual}
+              onFijarBase={onFijarBase}
+              onSoltarBase={onSoltarBase}
+              // Resultado contra la base, sólo si el par dibujado toca a esta persona.
+              parConBase={
+                baseManual &&
+                parDestacado &&
+                (parDestacado.a.id === entidadActiva.id || parDestacado.b.id === entidadActiva.id) &&
+                entidadActiva.id !== baseManual.id
+                  ? parDestacado
+                  : null
+              }
+              midiendo={midiendoManual && entidadActiva.id !== baseManual?.id}
+              onCopiarPar={onCopiarPar}
+              onProgramarPar={onProgramarPar}
             />
           </InfoWindowF>
         )}
@@ -281,6 +343,28 @@ export function MapaCanvas({
       {/* Barra del par en curso */}
       {parDestacado && (
         <BarraFlotante onCerrar={onLimpiarPar}>
+          {baseManual && (
+            <button
+              type="button"
+              onClick={onSoltarBase}
+              title="Soltar la base fijada"
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 4,
+                border: '1px solid #ff0033',
+                background: 'rgba(255,0,51,.08)',
+                color: '#ff0033',
+                borderRadius: 999,
+                padding: '2px 8px',
+                fontSize: 10.5,
+                fontWeight: 800,
+                cursor: 'pointer',
+              }}
+            >
+              <Pin size={11} /> Base
+            </button>
+          )}
           <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-primary)' }}>
             Emparejando:
           </span>
@@ -305,6 +389,18 @@ export function MapaCanvas({
               sin etiquetas por cantidad
             </span>
           )}
+        </BarraFlotante>
+      )}
+
+      {/* Barra de base fijada (emparejamiento manual) */}
+      {baseManual && !parDestacado && !(radar && paresDibujados.length === 0) && (
+        <BarraFlotante onCerrar={onSoltarBase} etiquetaCerrar="Soltar base">
+          <Pin size={13} color="#ff0033" />
+          <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-primary)' }}>Base:</span>
+          <ExtremoPar entidad={baseManual} />
+          <span style={{ fontSize: 11, color: 'var(--text-tertiary)' }}>
+            {midiendoManual ? 'Midiendo…' : 'tocá a otra persona para medir'}
+          </span>
         </BarraFlotante>
       )}
 
@@ -334,9 +430,11 @@ export function MapaCanvas({
 function BarraFlotante({
   children,
   onCerrar,
+  etiquetaCerrar = 'Limpiar',
 }: {
   children: React.ReactNode
   onCerrar: () => void
+  etiquetaCerrar?: string
 }) {
   return (
     <div
@@ -361,7 +459,8 @@ function BarraFlotante({
       <button
         type="button"
         onClick={onCerrar}
-        aria-label="Limpiar"
+        aria-label={etiquetaCerrar}
+        title={etiquetaCerrar}
         style={{
           border: '1px solid var(--border-primary)',
           background: 'var(--bg-secondary)',
@@ -416,12 +515,28 @@ function InfoEntidad({
   onVerFicha,
   onSugerirDesde,
   onVerTodosDesde,
+  baseManual,
+  onFijarBase,
+  onSoltarBase,
+  parConBase,
+  midiendo,
+  onCopiarPar,
+  onProgramarPar,
 }: {
   entidad: EntidadMapa
   onVerFicha: (e: EntidadMapa) => void
   onSugerirDesde: (e: EntidadMapa) => void
   onVerTodosDesde: (e: EntidadMapa) => void
+  baseManual: EntidadMapa | null
+  onFijarBase: (e: EntidadMapa) => void
+  onSoltarBase: () => void
+  /** Par medido entre la base fijada y esta persona (si lo hay). */
+  parConBase: ParSugerido | null
+  midiendo: boolean
+  onCopiarPar: (p: ParSugerido) => void
+  onProgramarPar: (p: ParSugerido) => void
 }) {
+  const esBase = !!baseManual && baseManual.id === e.id
   const badge =
     e.tipo === 'conductor'
       ? getEstadoConductorBadgeStyle({ codigo: e.estadoCodigo || undefined })
@@ -498,7 +613,64 @@ function InfoEntidad({
         <p style={{ margin: '6px 0 0', fontSize: 10, color: '#9CA3AF' }}>{e.direccion}</p>
       )}
 
+      {/* Resultado contra la base fijada (emparejamiento manual) */}
+      {baseManual && !esBase && (midiendo || parConBase) && (
+        <div
+          style={{
+            marginTop: 9,
+            padding: '8px 10px',
+            border: '1px solid #ff0033',
+            borderRadius: 9,
+            background: 'rgba(255,0,51,.05)',
+          }}
+        >
+          <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: '.4px', textTransform: 'uppercase', color: '#ff0033' }}>
+            Desde {baseManual.nombre.split(',')[0]}
+          </div>
+          {midiendo && !parConBase ? (
+            <div style={{ fontSize: 11.5, color: '#6B7280', marginTop: 4 }}>Midiendo…</div>
+          ) : parConBase ? (
+            <>
+              <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginTop: 3 }}>
+                <span style={{ fontSize: 17, fontWeight: 800, letterSpacing: '-.3px' }}>
+                  {formatKm(parConBase.distanciaKm)}
+                </span>
+                <span style={{ fontSize: 12.5, fontWeight: 700, color: '#6B7280' }}>
+                  {formatMin(parConBase.tiempoMinutos)}
+                </span>
+                <span style={{ marginLeft: 'auto' }}>
+                  <Badge tono={parConBase.score >= 70 ? 'ok' : parConBase.score >= 45 ? 'warn' : 'bad'}>
+                    score {parConBase.score}
+                  </Badge>
+                </span>
+              </div>
+              <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', marginTop: 6 }}>
+                {parConBase.fuenteTiempo === 'estimado' && <Badge tono="warn">Tiempo estimado</Badge>}
+                {parConBase.motivos.map((m, i) => (
+                  <Badge key={`pm-${i}`} tono={m.tipo === 'ok' ? 'ok' : m.tipo === 'warn' ? 'warn' : 'bad'}>
+                    {m.texto}
+                  </Badge>
+                ))}
+              </div>
+              <div style={{ display: 'flex', gap: 6, marginTop: 8 }}>
+                <BotonSecundario onClick={() => onCopiarPar(parConBase)}>Copiar</BotonSecundario>
+                <BotonPrimario onClick={() => onProgramarPar(parConBase)}>Programar entrega</BotonPrimario>
+              </div>
+            </>
+          ) : null}
+        </div>
+      )}
+
       <div style={{ display: 'flex', gap: 6, marginTop: 9, flexWrap: 'wrap' }}>
+        {esBase ? (
+          <BotonPrimario onClick={onSoltarBase}>
+            <Pin size={12} /> Soltar base
+          </BotonPrimario>
+        ) : (
+          <BotonSecundario onClick={() => onFijarBase(e)}>
+            <Pin size={12} /> Fijar como base
+          </BotonSecundario>
+        )}
         <BotonPrimario onClick={() => onSugerirDesde(e)}>Sugerir compañero</BotonPrimario>
         <BotonSecundario onClick={() => onVerTodosDesde(e)}>Ver todos en mapa</BotonSecundario>
         <BotonSecundario onClick={() => onVerFicha(e)}>Ver ficha →</BotonSecundario>
