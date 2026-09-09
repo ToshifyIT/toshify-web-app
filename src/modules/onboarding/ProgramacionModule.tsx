@@ -3,6 +3,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
 import { useState, useEffect, useMemo } from 'react'
+import { useLocation, useNavigate } from 'react-router-dom'
 import {
   Car, User, Calendar, FileText, Plus,
   Eye, Trash2, CheckCircle, XCircle, Send,
@@ -441,6 +442,19 @@ export function ProgramacionModule() {
   const handleCreate = () => {
     setShowCreateWizard(true)
   }
+
+  // Llegada desde otra pantalla con la intención de crear (p. ej. "Programar
+  // entrega" en Distribución en mapa v2): abrir el wizard directamente. El
+  // state se limpia enseguida para que un refresh o un "atrás" no lo reabra.
+  const location = useLocation()
+  const navigate = useNavigate()
+  useEffect(() => {
+    const state = location.state as { abrirNueva?: boolean } | null
+    if (state?.abrirNueva) {
+      setShowCreateWizard(true)
+      navigate(location.pathname, { replace: true, state: null })
+    }
+  }, [location.state, location.pathname, navigate])
 
   const handleEdit = async (prog: ProgramacionOnboardingCompleta) => {
     setEditingProgramacion(prog)

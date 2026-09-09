@@ -2085,8 +2085,11 @@ export function HomePage() {
                   <LazyPage><DistribucionMapaPage /></LazyPage>
                 </ProtectedRoute>
               } />
+              {/* El v2 es el destino del ítem de menú "Distribución en mapa"
+                  (submenú `distribucion-mapa`, ver sql/distribucion_mapa_menu_apunta_a_v2.sql),
+                  así que comparte su permiso. No necesita un submenú propio. */}
               <Route path="/onboarding/distribucion-mapa-v2" element={
-                <ProtectedRoute submenuName="distribucion-mapa-v2" action="view">
+                <ProtectedRoute submenuName="distribucion-mapa" action="view">
                   <LazyPage><DistribucionMapaV2Page /></LazyPage>
                 </ProtectedRoute>
               } />
