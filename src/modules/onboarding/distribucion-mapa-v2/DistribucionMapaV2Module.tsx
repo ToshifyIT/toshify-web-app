@@ -26,7 +26,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useJsApiLoader } from '@react-google-maps/api'
-import { EyeOff, ListFilter, Loader2, Map as MapIcon, Pin, Route, ShieldAlert, Sparkles } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Loader2, Map as MapIcon, ShieldAlert, Sparkles } from 'lucide-react'
 import { useSede } from '../../../contexts/SedeContext'
 import { supabase } from '../../../lib/supabase'
 import type { Lead } from '../../../types/leads.types'
@@ -88,6 +88,13 @@ async function cargarPanelConductoresCache(sedeId: string | null): Promise<Condu
   return rows
 }
 
+/** Ancho del panel de filtros (el contenedor anima entre este valor y 0). */
+const ANCHO_SIDEBAR = 250
+/** Ancho de la lista flotante de resultados. */
+const ANCHO_LISTA = 252
+/** Ancho del panel de sugerencias (derecha). */
+const ANCHO_DRAWER = 384
+
 /**
  * Tope de líneas simultáneas sobre el mapa en el modo "Mostrar todos". Más que
  * esto el mapa deja de leerse y las etiquetas se pisan entre sí.
@@ -138,8 +145,14 @@ export function DistribucionMapaV2Module() {
   const [radar, setRadar] = useState<Radar | null>(null)
   const [calculandoRadar, setCalculandoRadar] = useState(false)
 
-  // La lista de resultados tapa parte del mapa: se puede plegar.
+  // Los dos paneles de la izquierda (filtros y lista) se pliegan deslizándose
+  // hacia el borde, para dejarle todo el ancho al mapa cuando hace falta.
+  const [mostrarFiltros, setMostrarFiltros] = useState(true)
   const [mostrarLista, setMostrarLista] = useState(true)
+  const anchoFiltros = mostrarFiltros ? ANCHO_SIDEBAR : 0
+  const anchoLista = mostrarLista ? ANCHO_LISTA : 0
+  // El panel de sugerencias (derecha) también se pliega, hacia su borde.
+  const [drawerPlegado, setDrawerPlegado] = useState(false)
   // Los polígonos de zonas peligrosas se dibujan sobre el mapa (toggle).
   const [mostrarZonas, setMostrarZonas] = useState(true)
 
@@ -496,6 +509,7 @@ export function DistribucionMapaV2Module() {
     (base: EntidadMapa | null) => {
       setBaseSugerencias(base)
       setDrawerAbierto(true)
+      setDrawerPlegado(false)
       setActivo(null)
       setRadar(null)
       setMostrarTodosPares(false)
@@ -513,11 +527,24 @@ export function DistribucionMapaV2Module() {
     correrSugerenciasRef.current = correrSugerencias
   }, [correrSugerencias])
 
+  // Espejo de la base manual para leerla desde el efecto de abajo sin que un
+  // "Soltar base" dispare un recálculo por sí solo.
+  const baseManualRef = useRef(baseManual)
+  useEffect(() => {
+    baseManualRef.current = baseManual
+  }, [baseManual])
+
   // Con el panel abierto, elegir otra persona en el mapa o en la lista cambia
   // la base y recalcula solo. Pequeño retardo para no disparar dos veces cuando
   // el clic viene acompañado de un pan/zoom.
+  //
+  // EXCEPTO con una base manual fijada: ahí el clic significa "medí a esta
+  // persona contra la base", no "cambiá la base de las sugerencias". Si este
+  // efecto corriera igual, pisaría la línea recién medida (setParSeleccionado
+  // null) y recalcularía sugerencias desde la persona equivocada.
   useEffect(() => {
     if (!drawerAbierto || !activo) return
+    if (baseManualRef.current) return
     const base = visiblesRef.current.find((e) => e.id === activo)
     if (!base) return
     if (baseSugerencias && baseSugerencias.id === base.id) return
@@ -597,7 +624,9 @@ export function DistribucionMapaV2Module() {
   const programarPar = useCallback(
     (p: ParSugerido) => {
       copiarPar(p)
-      navigate('/onboarding/programacion')
+      // `abrirNueva` le pide a Programación que abra el wizard de alta apenas
+      // monta, así no hay que buscar el botón después de saltar de pantalla.
+      navigate('/onboarding/programacion', { state: { abrirNueva: true } })
     },
     [copiarPar, navigate]
   )
@@ -664,16 +693,8 @@ export function DistribucionMapaV2Module() {
             onClick={() => setMostrarZonas((v) => !v)}
             title="Dibuja sobre el mapa los polígonos de las zonas restringidas activas."
           >
-            <ShieldAlert size={12} /> Zonas peligrosas ({zonasPeligrosas.length})
+            <ShieldAlert size={12} /> Zonas restringidas ({zonasPeligrosas.length})
           </Chip>
-          <Chip
-            activo={mostrarLista}
-            onClick={() => setMostrarLista((v) => !v)}
-            title="Muestra u oculta la lista de resultados sobre el mapa."
-          >
-            <ListFilter size={12} /> Lista
-          </Chip>
-
           {/* Leyenda */}
           <div
             style={{
@@ -717,17 +738,73 @@ export function DistribucionMapaV2Module() {
         </div>
       </div>
 
-      {/* Body */}
-      <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
-        <FiltrosSidebar
-          filtros={filtros}
-          onChange={aplicarPatch}
-          estadosLeadDisponibles={estadosLeadDisponibles}
-          conteoConductores={conteos.c}
-          conteoLeads={conteos.l}
-          conteoSinCompanero={conteos.sinCompanero}
-          filtrosActivos={filtrosActivos}
-          onLimpiar={limpiarFiltros}
+      {/* Body. Es `position: relative` porque las manijas de los paneles
+          laterales viven acá, como hermanas de los paneles: si estuvieran
+          adentro, el `overflow: hidden` que recorta el panel al plegarse las
+          recortaría también. */}
+      <div style={{ flex: 1, display: 'flex', overflow: 'hidden', position: 'relative' }}>
+        {/* Panel de filtros: el contenedor anima el ancho y RECORTA; el sidebar
+            adentro conserva sus 250px para que el contenido no se reacomode
+            mientras se desliza. */}
+        <div
+          style={{
+            width: mostrarFiltros ? ANCHO_SIDEBAR : 0,
+            flexShrink: 0,
+            overflow: 'hidden',
+            transition: 'width .25s ease',
+          }}
+        >
+          <div style={{ width: ANCHO_SIDEBAR, height: '100%' }}>
+            <FiltrosSidebar
+              filtros={filtros}
+              onChange={aplicarPatch}
+              estadosLeadDisponibles={estadosLeadDisponibles}
+              conteoConductores={conteos.c}
+              conteoLeads={conteos.l}
+              conteoSinCompanero={conteos.sinCompanero}
+              filtrosActivos={filtrosActivos}
+              onLimpiar={limpiarFiltros}
+            />
+          </div>
+        </div>
+        {/* Lista de resultados: segunda columna, misma mecánica que filtros.
+            Queda montada al plegarse, así conserva scroll y selección. */}
+        <div
+          style={{
+            width: mostrarLista ? ANCHO_LISTA : 0,
+            flexShrink: 0,
+            overflow: 'hidden',
+            transition: 'width .25s ease',
+          }}
+        >
+          <div style={{ width: ANCHO_LISTA, height: '100%' }}>
+            <ListaResultados
+              entidades={entidadesMapa}
+              activo={activo}
+              onSeleccionar={seleccionar}
+              baseManual={baseManual}
+              baseFueraDelFiltro={baseFueraDelFiltro}
+            />
+          </div>
+        </div>
+
+        {/* Manijas de los dos paneles izquierdos. Se posicionan sobre el borde
+            derecho de su panel; a distinta altura para no pisarse cuando los
+            dos están plegados y comparten borde. */}
+        <ManijaPanel
+          abierto={mostrarFiltros}
+          onClick={() => setMostrarFiltros((v) => !v)}
+          titulo={mostrarFiltros ? 'Ocultar filtros' : 'Mostrar filtros'}
+          badge={!mostrarFiltros && filtrosActivos > 0 ? filtrosActivos : undefined}
+          left={Math.max(0, anchoFiltros - 12)}
+        />
+        <ManijaPanel
+          abierto={mostrarLista}
+          onClick={() => setMostrarLista((v) => !v)}
+          titulo={mostrarLista ? 'Ocultar lista' : `Mostrar lista (${visibles.length})`}
+          top={40}
+          left={Math.max(0, anchoFiltros + anchoLista - 12)}
+          badge={!mostrarLista ? visibles.length : undefined}
         />
 
         <div style={{ flex: 1, position: 'relative', display: 'flex' }}>
@@ -777,45 +854,6 @@ export function DistribucionMapaV2Module() {
                 onProgramarPar={programarPar}
               />
 
-              {/* Lista flotante de resultados (plegable, para liberar el mapa) */}
-              {mostrarLista ? (
-                <ListaResultados
-                  entidades={entidadesMapa}
-                  activo={activo}
-                  onSeleccionar={seleccionar}
-                  onVerTodosDesde={verTodosDesde}
-                  onOcultar={() => setMostrarLista(false)}
-                  baseManual={baseManual}
-                  baseFueraDelFiltro={baseFueraDelFiltro}
-                  onFijarBase={fijarBase}
-                  onSoltarBase={soltarBase}
-                />
-              ) : (
-                <button
-                  type="button"
-                  onClick={() => setMostrarLista(true)}
-                  style={{
-                    position: 'absolute',
-                    top: 12,
-                    left: 12,
-                    zIndex: 3,
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: 6,
-                    padding: '7px 12px',
-                    background: 'var(--bg-primary)',
-                    border: '1px solid var(--border-primary)',
-                    borderRadius: 9,
-                    boxShadow: '0 4px 14px rgba(0,0,0,0.14)',
-                    fontSize: 12,
-                    fontWeight: 650,
-                    color: 'var(--text-secondary)',
-                    cursor: 'pointer',
-                  }}
-                >
-                  <ListFilter size={13} /> Ver lista ({visibles.length})
-                </button>
-              )}
 
               {calculandoRadar && (
                 <div
@@ -846,6 +884,26 @@ export function DistribucionMapaV2Module() {
         </div>
 
         {drawerAbierto && (
+          <div
+            style={{
+              position: 'relative',
+              width: drawerPlegado ? 0 : ANCHO_DRAWER,
+              flexShrink: 0,
+              overflow: 'hidden',
+              transition: 'width .25s ease',
+            }}
+          >
+            {/* Anclado al borde derecho: al achicarse el contenedor, el
+                contenido queda recortado por la izquierda = se "va" a la derecha. */}
+            <div
+              style={{
+                position: 'absolute',
+                top: 0,
+                bottom: 0,
+                right: 0,
+                width: ANCHO_DRAWER,
+              }}
+            >
           <SugerenciasDrawer
             base={baseSugerencias}
             pares={pares}
@@ -873,6 +931,18 @@ export function DistribucionMapaV2Module() {
               setMostrarTodosPares(false)
             }}
             onRecalcular={() => correrSugerencias(baseSugerencias)}
+          />
+            </div>
+          </div>
+        )}
+        {drawerAbierto && (
+          <ManijaPanel
+            lado="derecha"
+            abierto={!drawerPlegado}
+            onClick={() => setDrawerPlegado((v) => !v)}
+            titulo={drawerPlegado ? `Mostrar sugerencias (${pares.length})` : 'Ocultar sugerencias'}
+            badge={drawerPlegado && pares.length > 0 ? pares.length : undefined}
+            right={drawerPlegado ? 0 : ANCHO_DRAWER - 12}
           />
         )}
       </div>
@@ -967,30 +1037,26 @@ function LegendItem({
   )
 }
 
+/**
+ * Lista de resultados: sirve para ENCONTRAR y SELECCIONAR. Las acciones sobre
+ * una persona (fijar base, ver cercanos, sugerir, ficha) viven en su ficha
+ * flotante, que se abre sola al seleccionar una fila; tenerlas también acá
+ * era duplicar botones a 200px de distancia.
+ */
 function ListaResultados({
   entidades,
   activo,
   onSeleccionar,
-  onVerTodosDesde,
-  onOcultar,
   baseManual,
   baseFueraDelFiltro,
-  onFijarBase,
-  onSoltarBase,
 }: {
   entidades: EntidadMapa[]
   activo: string | null
   onSeleccionar: (id: string) => void
-  onVerTodosDesde: (e: EntidadMapa) => void
-  onOcultar: () => void
   baseManual: EntidadMapa | null
   /** true cuando la base está en `entidades` sólo por ser base (el filtro la excluye). */
   baseFueraDelFiltro: boolean
-  onFijarBase: (e: EntidadMapa) => void
-  onSoltarBase: () => void
 }) {
-  const seleccionada = entidades.find((e) => e.id === activo) || null
-  const seleccionadaEsBase = !!seleccionada && !!baseManual && seleccionada.id === baseManual.id
   // `entidades` ya trae la base aunque el filtro la excluya. Para el contador
   // se muestra aparte, así el número sigue siendo el de la búsqueda.
   const resultados = baseFueraDelFiltro ? entidades.length - 1 : entidades.length
@@ -1005,19 +1071,16 @@ function ListaResultados({
   return (
     <div
       style={{
-        position: 'absolute',
-        top: 12,
-        left: 12,
-        width: 252,
-        maxHeight: 'calc(100% - 24px)',
+        // Columna anclada al layout (no flota sobre el mapa): el ancho lo fija
+        // el contenedor plegable del módulo, acá se llena el 100%.
+        width: '100%',
+        height: '100%',
+        boxSizing: 'border-box',
         display: 'flex',
         flexDirection: 'column',
         background: 'var(--bg-primary)',
-        border: '1px solid var(--border-primary)',
-        borderRadius: 10,
-        boxShadow: '0 6px 20px rgba(0,0,0,0.12)',
+        borderRight: '1px solid var(--border-primary)',
         overflow: 'hidden',
-        zIndex: 3,
       }}
     >
       <div
@@ -1037,82 +1100,10 @@ function ListaResultados({
             <span style={{ color: 'var(--text-tertiary)', fontWeight: 500 }}> · + base fijada</span>
           )}
         </span>
-        <button
-          type="button"
-          onClick={onOcultar}
-          title="Ocultar la lista para ver mejor el mapa"
-          style={{
-            display: 'inline-flex',
-            alignItems: 'center',
-            gap: 4,
-            border: '1px solid var(--border-primary)',
-            background: 'var(--bg-primary)',
-            borderRadius: 7,
-            cursor: 'pointer',
-            padding: '3px 7px',
-            fontSize: 10.5,
-            fontWeight: 650,
-            color: 'var(--text-secondary)',
-          }}
-        >
-          <EyeOff size={12} /> Ocultar
-        </button>
       </div>
 
-      {seleccionada && (
-        <div style={{ padding: '8px 10px', borderBottom: '1px solid var(--border-primary)' }}>
-          <button
-            type="button"
-            onClick={() => onVerTodosDesde(seleccionada)}
-            style={{
-              width: '100%',
-              display: 'inline-flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              gap: 6,
-              padding: '6px 10px',
-              border: 'none',
-              borderRadius: 8,
-              background: 'var(--color-primary, #ff0033)',
-              color: '#fff',
-              fontSize: 11.5,
-              fontWeight: 700,
-              cursor: 'pointer',
-            }}
-          >
-            <Route size={13} /> Ver todos en mapa
-          </button>
-          <button
-            type="button"
-            onClick={() => (seleccionadaEsBase ? onSoltarBase() : onFijarBase(seleccionada))}
-            style={{
-              width: '100%',
-              marginTop: 6,
-              display: 'inline-flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              gap: 6,
-              padding: '6px 10px',
-              border: '1px solid var(--color-primary, #ff0033)',
-              borderRadius: 8,
-              background: seleccionadaEsBase ? 'var(--color-primary, #ff0033)' : 'transparent',
-              color: seleccionadaEsBase ? '#fff' : 'var(--color-primary, #ff0033)',
-              fontSize: 11.5,
-              fontWeight: 700,
-              cursor: 'pointer',
-            }}
-          >
-            <Pin size={13} /> {seleccionadaEsBase ? 'Soltar base' : 'Fijar como base'}
-          </button>
-          <div style={{ fontSize: 10, color: 'var(--text-tertiary)', marginTop: 4, lineHeight: 1.35 }}>
-            {seleccionadaEsBase
-              ? 'Tocá a cualquier otra persona y se mide contra la base.'
-              : `Dibuja las líneas desde ${seleccionada.nombre.split(',')[0]} hacia los más cercanos.`}
-          </div>
-        </div>
-      )}
-
-      <div style={{ overflowY: 'auto' }}>
+      {/* flex:1 + minHeight:0: sin eso la lista no scrollea dentro de la columna */}
+      <div style={{ flex: 1, minHeight: 0, overflowY: 'auto' }}>
         {entidades.map((e) => {
           const esActiva = activo === e.id
           const esBase = !!baseManual && baseManual.id === e.id
@@ -1186,6 +1177,92 @@ function ListaResultados({
         )}
       </div>
     </div>
+  )
+}
+
+/**
+ * Manija vertical pegada al borde derecho de un panel lateral. Queda mitad
+ * sobre el panel y mitad sobre el mapa, así sigue visible (y clickeable) con
+ * el panel cerrado. `badge` muestra un número cuando hay algo que recordar
+ * (p. ej. filtros activos con el panel oculto).
+ */
+function ManijaPanel({
+  abierto,
+  onClick,
+  titulo,
+  badge,
+  lado = 'izquierda',
+  top = '50%',
+  left,
+  right,
+}: {
+  abierto: boolean
+  onClick: () => void
+  titulo: string
+  badge?: number
+  /** De qué lado de la pantalla vive el panel: define hacia dónde apunta el chevron. */
+  lado?: 'izquierda' | 'derecha'
+  /** Posición vertical (default: centrada). */
+  top?: number | string
+  /** Posición horizontal, relativa al contenedor `position: relative` más cercano. */
+  left?: number | string
+  right?: number | string
+}) {
+  // Panel izquierdo: abierto → chevron a la izquierda (se va hacia allá).
+  // Panel derecho: abierto → chevron a la derecha.
+  const apuntaIzquierda = lado === 'izquierda' ? abierto : !abierto
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      title={titulo}
+      aria-label={titulo}
+      style={{
+        position: 'absolute',
+        top,
+        left,
+        right,
+        transform: top === '50%' ? 'translateY(-50%)' : undefined,
+        transition: 'left .25s ease, right .25s ease',
+        width: 24,
+        height: 56,
+        display: 'inline-flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        border: '1px solid var(--border-primary)',
+        borderRadius: 8,
+        background: 'var(--bg-primary)',
+        color: 'var(--text-secondary)',
+        boxShadow: '0 3px 10px rgba(0,0,0,0.12)',
+        cursor: 'pointer',
+        zIndex: 6,
+        padding: 0,
+      }}
+    >
+      {apuntaIzquierda ? <ChevronLeft size={15} /> : <ChevronRight size={15} />}
+      {badge !== undefined && (
+        <span
+          style={{
+            position: 'absolute',
+            top: -7,
+            right: -7,
+            minWidth: 16,
+            height: 16,
+            padding: '0 4px',
+            borderRadius: 999,
+            background: 'var(--color-primary, #ff0033)',
+            color: '#fff',
+            fontSize: 9.5,
+            fontWeight: 800,
+            display: 'inline-flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+          }}
+        >
+          {badge}
+        </span>
+      )}
+    </button>
   )
 }
 

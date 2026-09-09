@@ -13,7 +13,7 @@ export type SegmentoV2 = 'conductores' | 'leads' | 'ambos'
 export const REQUISITOS = [
   { value: 'licencia_vigente', label: 'Licencia vigente' },
   { value: 'sin_antecedentes', label: 'Sin antecedentes penales' },
-  { value: 'fuera_zona_peligrosa', label: 'Fuera de zona peligrosa' },
+  { value: 'fuera_zona_peligrosa', label: 'Fuera de zona restringida' },
 ] as const
 
 export const TURNOS: Array<{ value: TurnoEfectivo; label: string }> = [

@@ -13,7 +13,7 @@
 //   - Estado      -> "estado del conductor" vs "estado de lead" (los 14).
 //   - Zona        -> GLOBAL: se aplica a conductores y leads por igual.
 
-import { Search, Users, UserPlus, X } from 'lucide-react'
+import { CheckSquare, Search, Square, Users, UserPlus, X } from 'lucide-react'
 import { Acordeon, CheckRow, Chip, GrupoTitulo, Hint } from './ui'
 import { IconoEntidad } from './iconos'
 import { getLeadEstadoColor } from '../../../leads/leadEstadoColors'
@@ -73,8 +73,11 @@ export function FiltrosSidebar({
   return (
     <div
       style={{
-        width: 250,
-        flexShrink: 0,
+        // El ancho lo fija el contenedor deslizable del módulo (ANCHO_SIDEBAR);
+        // acá se llena el 100% para no tener dos números que mantener iguales.
+        width: '100%',
+        height: '100%',
+        boxSizing: 'border-box',
         borderRight: '1px solid var(--border-primary)',
         background: 'var(--bg-primary)',
         display: 'flex',
@@ -280,6 +283,37 @@ export function FiltrosSidebar({
               resumen={resumen(filtros.estadosLead)}
               defaultAbierto
             >
+              {/* Marcar / desmarcar los 14 de una: con 14 casillas, tildar una
+                  por una para "quiero ver todo el pipeline" es un castigo. */}
+              {(() => {
+                const todos = estadosLeadDisponibles.length > 0 &&
+                  estadosLeadDisponibles.every((e) => filtros.estadosLead.has(e))
+                return (
+                  <button
+                    type="button"
+                    onClick={() =>
+                      onChange({ estadosLead: todos ? new Set() : new Set(estadosLeadDisponibles) })
+                    }
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: 5,
+                      marginBottom: 6,
+                      padding: '4px 9px',
+                      border: '1px solid var(--border-primary)',
+                      borderRadius: 7,
+                      background: 'var(--bg-secondary)',
+                      color: 'var(--text-secondary)',
+                      fontSize: 11,
+                      fontWeight: 700,
+                      cursor: 'pointer',
+                    }}
+                  >
+                    {todos ? <Square size={12} /> : <CheckSquare size={12} />}
+                    {todos ? 'Quitar todos' : `Seleccionar todos (${estadosLeadDisponibles.length})`}
+                  </button>
+                )
+              })()}
               {estadosLeadDisponibles.map((estado) => (
                 <CheckRow
                   key={estado}
