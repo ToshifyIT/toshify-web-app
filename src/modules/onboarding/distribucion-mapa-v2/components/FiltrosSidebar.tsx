@@ -13,7 +13,7 @@
 //   - Estado      -> "estado del conductor" vs "estado de lead" (los 14).
 //   - Zona        -> GLOBAL: se aplica a conductores y leads por igual.
 
-import { Search, Users, UserPlus } from 'lucide-react'
+import { Search, Users, UserPlus, X } from 'lucide-react'
 import { Acordeon, CheckRow, Chip, GrupoTitulo, Hint } from './ui'
 import { IconoEntidad } from './iconos'
 import { getLeadEstadoColor } from '../../../leads/leadEstadoColors'
@@ -35,6 +35,9 @@ interface Props {
   conteoConductores: number
   conteoLeads: number
   conteoSinCompanero: number
+  /** Cantidad de filtros apartados de su valor inicial (0 = nada que limpiar). */
+  filtrosActivos: number
+  onLimpiar: () => void
 }
 
 function alternar(set: Set<string>, valor: string): Set<string> {
@@ -55,6 +58,8 @@ export function FiltrosSidebar({
   conteoConductores,
   conteoLeads,
   conteoSinCompanero,
+  filtrosActivos,
+  onLimpiar,
 }: Props) {
   const verConductores = filtros.segmento !== 'leads'
   const verLeads = filtros.segmento !== 'conductores'
@@ -152,6 +157,33 @@ export function FiltrosSidebar({
             )
           })}
         </div>
+
+        {/* Limpiar filtros: aparece sólo cuando hay algo apartado del inicial. */}
+        {filtrosActivos > 0 && (
+          <button
+            type="button"
+            onClick={onLimpiar}
+            title="Vuelve todos los filtros a su valor inicial. Mantiene el segmento elegido."
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: 6,
+              width: '100%',
+              padding: '7px 10px',
+              border: '1px solid var(--color-primary, #ff0033)',
+              borderRadius: 8,
+              background: 'transparent',
+              color: 'var(--color-primary, #ff0033)',
+              fontSize: 12,
+              fontWeight: 700,
+              cursor: 'pointer',
+            }}
+          >
+            <X size={13} />
+            Limpiar filtros ({filtrosActivos})
+          </button>
+        )}
 
         {/* ---------- Bloque CONDUCTORES ---------- */}
         {verConductores && (

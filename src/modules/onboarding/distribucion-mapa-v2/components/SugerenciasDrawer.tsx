@@ -9,11 +9,11 @@
 // de programación, que es donde vive esa lógica.
 
 import { AlertTriangle, Loader2, Sparkles, Waypoints, X } from 'lucide-react'
-import { Badge, BotonPrimario, BotonSecundario, Chip, GrupoTitulo, Hint } from './ui'
+import { Badge, BotonPrimario, BotonSecundario, Hint } from './ui'
 import { IconoEntidad } from './iconos'
 import { colorEntidad } from './colores'
-import type { CombinacionesPar, EntidadMapa, ParSugerido } from '../types'
-import { clavePersona, formatKm, formatMin, mismaPersona } from '../utils'
+import type { EntidadMapa, ParSugerido } from '../types'
+import { clavePersona, formatKm, formatMin } from '../utils'
 import { UMBRAL_MINUTOS_MAX, UMBRAL_MINUTOS_MIN } from '../emparejamientoService'
 
 interface Props {
@@ -23,8 +23,6 @@ interface Props {
   aviso: string | null
   umbral: number
   onUmbralChange: (v: number) => void
-  combinaciones: CombinacionesPar
-  onCombinacionesChange: (c: CombinacionesPar) => void
   parSeleccionado: ParSugerido | null
   onSeleccionarPar: (p: ParSugerido) => void
   /** true si están dibujadas TODAS las sugerencias sobre el mapa. */
@@ -46,8 +44,6 @@ export function SugerenciasDrawer({
   aviso,
   umbral,
   onUmbralChange,
-  combinaciones,
-  onCombinacionesChange,
   parSeleccionado,
   onSeleccionarPar,
   mostrarTodos,
@@ -155,40 +151,6 @@ export function SugerenciasDrawer({
           </div>
         </div>
 
-        {/* Combinaciones habilitadas */}
-        <div style={{ marginTop: 10 }}>
-          <GrupoTitulo>Combinaciones</GrupoTitulo>
-          <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap' }}>
-            <Chip
-              activo={combinaciones.conductorConductor}
-              onClick={() =>
-                onCombinacionesChange({
-                  ...combinaciones,
-                  conductorConductor: !combinaciones.conductorConductor,
-                })
-              }
-            >
-              Conductor ↔ Conductor
-            </Chip>
-            <Chip
-              activo={combinaciones.conductorLead}
-              onClick={() =>
-                onCombinacionesChange({ ...combinaciones, conductorLead: !combinaciones.conductorLead })
-              }
-            >
-              Conductor ↔ Lead
-            </Chip>
-            <Chip
-              activo={combinaciones.leadLead}
-              onClick={() =>
-                onCombinacionesChange({ ...combinaciones, leadLead: !combinaciones.leadLead })
-              }
-            >
-              Lead ↔ Lead
-            </Chip>
-          </div>
-        </div>
-
         <div style={{ display: 'flex', gap: 6, marginTop: 10 }}>
           <BotonPrimario onClick={onRecalcular} disabled={cargando} full>
             {cargando ? (
@@ -255,7 +217,7 @@ export function SugerenciasDrawer({
           >
             <AlertTriangle size={13} style={{ flexShrink: 0, marginTop: 1 }} />
             <span>
-              Cambiaron los filtros: estos pares son de la vista anterior. Tocá
+              Cambiaron los filtros o el tiempo máximo: estos pares son de la vista anterior. Tocá
               <b> Recalcular</b> para ajustarlos a lo que estás viendo ahora.
             </span>
           </div>
@@ -309,20 +271,15 @@ export function SugerenciasDrawer({
           >
             No hay pares dentro de {umbral} minutos con los filtros actuales.
             <br />
-            Probá subir el umbral o habilitar más combinaciones.
+            Probá subir el umbral, ampliar los filtros o cambiar el segmento.
           </div>
         )}
 
         {pares.map((par) => {
+          // Elegir un par no bloquea a los demás: "Ver en mapa" en otra tarjeta
+          // reemplaza la línea dibujada. El operador compara alternativas antes
+          // de decidir; la exclusividad real se resuelve al programar la entrega.
           const seleccionado = parSeleccionado?.id === par.id
-          // Una persona sólo puede tener un compañero: si ya hay un par elegido,
-          // los demás pares que usan a alguno de esos dos quedan atenuados con
-          // el nombre de quien ya está comprometido.
-          const ocupadaPor = !seleccionado && parSeleccionado
-            ? [par.a, par.b].find(
-                (e) => mismaPersona(e, parSeleccionado.a) || mismaPersona(e, parSeleccionado.b)
-              )
-            : undefined
 
           return (
             <TarjetaPar
@@ -330,7 +287,6 @@ export function SugerenciasDrawer({
               par={par}
               base={base}
               seleccionado={seleccionado}
-              ocupadaPor={ocupadaPor?.nombre}
               onSeleccionar={() => onSeleccionarPar(par)}
               onCopiar={() => onCopiarPar(par)}
               onProgramar={() => onProgramar(par)}
@@ -346,7 +302,6 @@ function TarjetaPar({
   par,
   base,
   seleccionado,
-  ocupadaPor,
   onSeleccionar,
   onCopiar,
   onProgramar,
@@ -354,7 +309,6 @@ function TarjetaPar({
   par: ParSugerido
   base: EntidadMapa | null
   seleccionado: boolean
-  ocupadaPor?: string
   onSeleccionar: () => void
   onCopiar: () => void
   onProgramar: () => void
@@ -375,15 +329,8 @@ function TarjetaPar({
         borderRadius: 11,
         padding: '11px 12px',
         marginBottom: 10,
-        opacity: ocupadaPor ? 0.55 : 1,
       }}
     >
-      {ocupadaPor && (
-        <div style={{ marginBottom: 7 }}>
-          <Badge tono="warn">Ya elegiste a {ocupadaPor} en otro par</Badge>
-        </div>
-      )}
-
       {soloCandidato ? (
         <ExtremoTarjeta entidad={soloCandidato} />
       ) : (
@@ -395,7 +342,10 @@ function TarjetaPar({
           <span style={{ fontSize: 16, fontWeight: 800, letterSpacing: '-.3px', color: 'var(--text-primary)' }}>
             {formatKm(par.distanciaKm)}
           </span>
-          <span style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--text-secondary)' }}>
+          <span
+            style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--text-secondary)' }}
+            title="Tiempo habitual del recorrido en auto, sin depender del tráfico de un momento puntual"
+          >
             {formatMin(par.tiempoMinutos)}
           </span>
         </span>

@@ -482,22 +482,43 @@ export async function fetchConductoresMapa(
 }
 
 /** Map<conductor_id, horario> con el horario de la ÚLTIMA asignación. */
+/**
+ * Tamaño de lote para los filtros `.in(...)`. PostgREST manda el filtro en la
+ * URL del GET: con cientos de UUIDs se pasa del largo máximo y el servidor
+ * corta la conexión antes de responder (el browser lo muestra como error CORS
+ * / net::ERR_FAILED). 100 UUIDs ≈ 4 KB, holgado para cualquier proxy.
+ */
+const LOTE_IN = 100
+
+function enLotes<T>(items: T[], tamano = LOTE_IN): T[][] {
+  const out: T[][] = []
+  for (let i = 0; i < items.length; i += tamano) out.push(items.slice(i, i + tamano))
+  return out
+}
+
 async function fetchUltimoHorarioPorConductor(
   conductorIds: string[]
 ): Promise<Map<string, string | null>> {
   const map = new Map<string, string | null>()
   if (conductorIds.length === 0) return map
 
-  const { data, error } = await supabase
-    .from('asignaciones_conductores')
-    .select('conductor_id, horario, fecha_asignacion')
-    .in('conductor_id', conductorIds)
-    .order('fecha_asignacion', { ascending: false })
+  // Cada lote viene ordenado por fecha desc; como los lotes no comparten
+  // conductores, quedarse con la primera fila por conductor sigue siendo válido.
+  const respuestas = await Promise.all(
+    enLotes(conductorIds).map((lote) =>
+      supabase
+        .from('asignaciones_conductores')
+        .select('conductor_id, horario, fecha_asignacion')
+        .in('conductor_id', lote)
+        .order('fecha_asignacion', { ascending: false })
+    )
+  )
 
-  if (error || !data) return map
-
-  for (const row of data as { conductor_id: string; horario: string | null }[]) {
-    if (!map.has(row.conductor_id)) map.set(row.conductor_id, row.horario || null)
+  for (const { data, error } of respuestas) {
+    if (error || !data) continue
+    for (const row of data as { conductor_id: string; horario: string | null }[]) {
+      if (!map.has(row.conductor_id)) map.set(row.conductor_id, row.horario || null)
+    }
   }
   return map
 }
@@ -508,12 +529,16 @@ async function fetchTurnoLeadPorDni(dnis: string[]): Promise<Map<string, string 
   const limpios = [...new Set(dnis.filter(Boolean))]
   if (limpios.length === 0) return map
 
-  const { data, error } = await supabase.from('leads').select('dni, turno').in('dni', limpios)
-  if (error || !data) return map
+  const respuestas = await Promise.all(
+    enLotes(limpios).map((lote) => supabase.from('leads').select('dni, turno').in('dni', lote))
+  )
 
-  for (const row of data as Array<{ dni: string | null; turno: string | null }>) {
-    const key = soloDigitos(row.dni)
-    if (key && row.turno && !map.has(key)) map.set(key, row.turno)
+  for (const { data, error } of respuestas) {
+    if (error || !data) continue
+    for (const row of data as Array<{ dni: string | null; turno: string | null }>) {
+      const key = soloDigitos(row.dni)
+      if (key && row.turno && !map.has(key)) map.set(key, row.turno)
+    }
   }
   return map
 }
