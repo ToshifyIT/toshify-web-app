@@ -9,21 +9,27 @@
 // corrida. Es el mismo patrón que ya usa ProgramacionAssignmentWizard.
 //
 // Sobre los parámetros de ruta:
-//  - Tráfico: se pide con drivingOptions + trafficModel y se lee
-//    duration_in_traffic. Los semáforos ya están incorporados en el modelo de
-//    Google; no son un parámetro aparte.
-//  - Hora de salida: la API sólo acepta departureTime presente o futuro. Si el
-//    usuario elige una hora ya pasada, se desplaza al siguiente día con esa
-//    misma hora y se avisa en la UI.
-//  - Peajes: se soporta evitar/permitir (avoidTolls). Distance Matrix NO
-//    devuelve el costo del peaje; para eso haría falta migrar a Routes API.
+// Sobre el tiempo que se muestra (TIEMPO HABITUAL, no de un instante):
+//  - Se pide `duration` SIN drivingOptions. Ese valor es la duración en
+//    condiciones normales que Google deriva de su histórico de velocidades para
+//    ese recorrido: es lo que el viaje "normalmente tarda", no el tráfico de un
+//    momento puntual. Los semáforos ya están incorporados.
+//  - NO se usa duration_in_traffic: eso exige un departureTime concreto y
+//    devuelve la predicción de ESE instante, que cambia según cuándo se abra la
+//    pantalla. Para decidir un emparejamiento (que es una decisión estable sobre
+//    quién vive cerca de quién) un número reproducible vale más que uno preciso
+//    para un solo horario.
+//  - Distance Matrix no expone un promedio histórico consultable: no acepta
+//    departureTime pasado. La única forma de un promedio literal sería muestrear
+//    N instantes futuros y promediarlos, lo que multiplica por N el costo de una
+//    matriz que ya es cuadrática. Por eso se usa la duración típica.
+//  - Sin hora de salida el resultado es determinístico para un par dado, lo que
+//    abre la puerta a cachear cada medición y dejar de pagar por repetirla.
 
 import type {
-  CombinacionesPar,
   ConexionRadar,
   EntidadMapa,
   MotivoPar,
-  OpcionesRuta,
   ParSugerido,
   Radar,
   ResultadoSugerencias,
@@ -73,37 +79,6 @@ function radioPrefiltroKm(umbralMinutos: number): number {
 }
 
 // =====================================================
-// Hora de salida
-// =====================================================
-
-/**
- * Convierte fecha + hora del formulario en un Date válido para la API.
- * Si el instante ya pasó, lo desplaza al día siguiente con la misma hora
- * (la API rechaza departureTime en el pasado).
- */
-export function resolverSalida(opciones: OpcionesRuta): {
-  salida: Date
-  desplazada: boolean
-} {
-  const [anio, mes, dia] = (opciones.fecha || '').split('-').map(Number)
-  const [hora, minuto] = (opciones.hora || '').split(':').map(Number)
-
-  const base =
-    Number.isFinite(anio) && Number.isFinite(mes) && Number.isFinite(dia)
-      ? new Date(anio, (mes || 1) - 1, dia || 1, hora || 0, minuto || 0, 0, 0)
-      : new Date()
-
-  const ahora = new Date()
-  if (base.getTime() > ahora.getTime() + 60_000) return { salida: base, desplazada: false }
-
-  const desplazada = new Date(base)
-  while (desplazada.getTime() <= ahora.getTime() + 60_000) {
-    desplazada.setDate(desplazada.getDate() + 1)
-  }
-  return { salida: desplazada, desplazada: true }
-}
-
-// =====================================================
 // Distance Matrix
 // =====================================================
 
@@ -132,9 +107,7 @@ function mapsDisponible(): boolean {
  */
 async function medirDesdeOrigen(
   origen: { lat: number; lng: number },
-  destinos: Array<{ lat: number; lng: number }>,
-  opciones: OpcionesRuta,
-  salida: Date
+  destinos: Array<{ lat: number; lng: number }>
 ): Promise<Array<MedicionRuta | null>> {
   if (destinos.length === 0) return []
   if (!mapsDisponible()) return destinos.map(() => null)
@@ -150,16 +123,11 @@ async function medirDesdeOrigen(
       destinations: lote.map((d) => new google.maps.LatLng(d.lat, d.lng)),
       travelMode: google.maps.TravelMode.DRIVING,
       unitSystem: google.maps.UnitSystem.METRIC,
-      avoidTolls: opciones.evitarPeajes,
     }
 
-    // drivingOptions sólo es válido con departureTime presente/futuro.
-    if (opciones.conTrafico) {
-      request.drivingOptions = {
-        departureTime: salida,
-        trafficModel: google.maps.TrafficModel.BEST_GUESS,
-      }
-    }
+    // Sin drivingOptions a propósito: así la respuesta trae `duration`
+    // (duración habitual) en lugar de `duration_in_traffic` (predicción para un
+    // instante puntual). Ver el encabezado del archivo.
 
     const respuesta = await new Promise<any>((resolve) => {
       try {
@@ -178,7 +146,7 @@ async function medirDesdeOrigen(
     for (let i = 0; i < lote.length; i++) {
       const el = fila[i]
       if (!el || el.status !== 'OK') continue
-      const segundos = el.duration_in_traffic?.value ?? el.duration?.value
+      const segundos = el.duration?.value
       if (!Number.isFinite(el.distance?.value) || !Number.isFinite(segundos)) continue
       resultados[inicio + i] = {
         distanciaKm: Math.round((el.distance.value / 1000) * 10) / 10,
@@ -191,15 +159,35 @@ async function medirDesdeOrigen(
   return resultados
 }
 
-/** Medición puntual entre dos entidades (usada al seleccionar un par a mano). */
-export async function medirEntre(
-  a: EntidadMapa,
-  b: EntidadMapa,
-  opciones: OpcionesRuta
-): Promise<MedicionRuta> {
-  const { salida } = resolverSalida(opciones)
-  const [medicion] = await medirDesdeOrigen({ lat: a.lat, lng: a.lng }, [{ lat: b.lat, lng: b.lng }], opciones, salida)
+/** Medición puntual entre dos entidades. */
+async function medirEntre(a: EntidadMapa, b: EntidadMapa): Promise<MedicionRuta> {
+  const [medicion] = await medirDesdeOrigen({ lat: a.lat, lng: a.lng }, [{ lat: b.lat, lng: b.lng }])
   return medicion || estimarPorHaversine(haversineKm(a.lat, a.lng, b.lat, b.lng))
+}
+
+/**
+ * Par armado a mano: mide A↔B y lo evalúa con el MISMO scoring que las
+ * sugerencias, así la tarjeta, "Copiar" y "Programar entrega" son idénticos y
+ * no hay un segundo camino de código para el emparejamiento manual.
+ *
+ * Cuesta 1 elemento de Distance Matrix (1 origen × 1 destino). Como el tiempo
+ * es determinístico, el caller puede cachear el resultado por `id`.
+ */
+export async function medirPar(a: EntidadMapa, b: EntidadMapa): Promise<ParSugerido> {
+  const medicion = await medirEntre(a, b)
+  const complementarios = turnosComplementarios(turnoDeEntidad(a), turnoDeEntidad(b))
+  const { score, motivos } = evaluarPar(a, b, medicion.tiempoMinutos, complementarios)
+  return {
+    id: clavePar(a, b),
+    a,
+    b,
+    distanciaKm: medicion.distanciaKm,
+    tiempoMinutos: medicion.tiempoMinutos,
+    fuenteTiempo: medicion.fuente,
+    turnosComplementarios: complementarios,
+    score,
+    motivos,
+  }
 }
 
 // =====================================================
@@ -288,21 +276,12 @@ function evaluarPar(
 // Sugerencia de pares
 // =====================================================
 
-function combinacionHabilitada(
-  a: EntidadMapa,
-  b: EntidadMapa,
-  combinaciones: CombinacionesPar
-): boolean {
-  if (a.tipo === 'conductor' && b.tipo === 'conductor') return combinaciones.conductorConductor
-  if (a.tipo === 'lead' && b.tipo === 'lead') return combinaciones.leadLead
-  return combinaciones.conductorLead
-}
-
 /**
  * Clave del par por PERSONA, no por fila: así el mismo par no se propone dos
  * veces cuando alguno de los dos extremos existe duplicado en la base.
  */
-function clavePar(a: EntidadMapa, b: EntidadMapa): string {
+/** Clave estable e independiente del orden para identificar un par. */
+export function clavePar(a: EntidadMapa, b: EntidadMapa): string {
   const x = clavePersona(a)
   const y = clavePersona(b)
   return x < y ? `${x}|${y}` : `${y}|${x}`
@@ -314,16 +293,19 @@ function clavePar(a: EntidadMapa, b: EntidadMapa): string {
  * @param bases       entidades que se usan como origen (p. ej. los conductores
  *                    sin compañero, o una única entidad seleccionada).
  * @param candidatos  universo de posibles compañeros (ya filtrado por la UI).
+ *
+ * Qué se puede emparejar con qué NO es un parámetro: sale del segmento activo,
+ * porque `candidatos` es exactamente lo que está visible en el mapa. Con el
+ * segmento en Conductores sólo hay conductores para cruzar, con Leads sólo
+ * leads, y con Ambos se cruzan las dos poblaciones. Un filtro de combinaciones
+ * aparte sólo podía contradecir lo que el operador ve en pantalla.
  * @param umbralMinutos  tiempo máximo de viaje aceptado.
  */
 export async function sugerirPares(
   bases: EntidadMapa[],
   candidatos: EntidadMapa[],
-  opciones: OpcionesRuta,
-  combinaciones: CombinacionesPar,
   umbralMinutos: number = UMBRAL_MINUTOS_DEFAULT
 ): Promise<ResultadoSugerencias> {
-  const { salida, desplazada } = resolverSalida(opciones)
   const radio = radioPrefiltroKm(umbralMinutos)
 
   // Una misma persona puede venir en varias filas (lead ya convertido en
@@ -339,12 +321,11 @@ export async function sugerirPares(
   const pares: ParSugerido[] = []
 
   for (const base of basesLimitadas) {
-    // 1. Prefiltro local: mismo par no repetido, combinación habilitada y
-    //    dentro del radio plausible. Gratis, evita llamadas innecesarias.
+    // 1. Prefiltro local: mismo par no repetido y dentro del radio plausible.
+    //    Gratis, evita llamadas innecesarias.
     const preseleccion = candidatosUnicos
       // Excluye a la propia base Y a cualquier otra fila de la MISMA persona.
       .filter((c) => !mismaPersona(c, base))
-      .filter((c) => combinacionHabilitada(base, c, combinaciones))
       .filter((c) => !vistos.has(clavePar(base, c)))
       .map((c) => ({ candidato: c, km: haversineKm(base.lat, base.lng, c.lat, c.lng) }))
       .filter((x) => x.km <= radio)
@@ -356,9 +337,7 @@ export async function sugerirPares(
     // 2. Medición real sólo sobre la preselección.
     const mediciones = await medirDesdeOrigen(
       { lat: base.lat, lng: base.lng },
-      preseleccion.map((x) => ({ lat: x.candidato.lat, lng: x.candidato.lng })),
-      opciones,
-      salida
+      preseleccion.map((x) => ({ lat: x.candidato.lat, lng: x.candidato.lng }))
     )
 
     for (let i = 0; i < preseleccion.length; i++) {
@@ -393,11 +372,6 @@ export async function sugerirPares(
   pares.sort((x, y) => y.score - x.score || x.tiempoMinutos - y.tiempoMinutos)
 
   const avisos: string[] = []
-  if (desplazada) {
-    avisos.push(
-      `La hora de salida elegida ya pasó: se calculó con la próxima ocurrencia (${salida.toLocaleDateString('es-AR')} ${salida.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' })}).`
-    )
-  }
   if (truncado) {
     avisos.push(`Se evaluaron las primeras ${MAX_BASES_SUGERENCIA} bases para acotar el consumo de la API.`)
   }
@@ -428,12 +402,9 @@ export async function sugerirPares(
 export async function conexionesDesde(
   base: EntidadMapa,
   candidatos: EntidadMapa[],
-  opciones: OpcionesRuta,
   umbralMinutos: number = UMBRAL_MINUTOS_DEFAULT,
   maxConexiones: number = MAX_CONEXIONES_RADAR
 ): Promise<Radar> {
-  const { salida, desplazada } = resolverSalida(opciones)
-
   // Prefiltro por cercanía en línea recta: sólo medimos las más prometedoras.
   // Se colapsan los duplicados de persona por el mismo motivo que en
   // `sugerirPares`: sin eso, la misma persona aparecería como su propio vecino.
@@ -449,9 +420,7 @@ export async function conexionesDesde(
 
   const mediciones = await medirDesdeOrigen(
     { lat: base.lat, lng: base.lng },
-    preseleccion.map((x) => ({ lat: x.candidato.lat, lng: x.candidato.lng })),
-    opciones,
-    salida
+    preseleccion.map((x) => ({ lat: x.candidato.lat, lng: x.candidato.lng }))
   )
 
   const conexiones: ConexionRadar[] = preseleccion.map((x, i) => {
@@ -468,11 +437,6 @@ export async function conexionesDesde(
   conexiones.sort((a, b) => a.tiempoMinutos - b.tiempoMinutos)
 
   const avisos: string[] = []
-  if (desplazada) {
-    avisos.push(
-      `La hora de salida elegida ya pasó: se calculó con la próxima ocurrencia (${salida.toLocaleDateString('es-AR')} ${salida.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' })}).`
-    )
-  }
   if (!mapsDisponible()) {
     avisos.push('Google Maps no está disponible: los tiempos son estimados en línea recta.')
   }

@@ -7,8 +7,9 @@
 //   - conductor: chofer con gorra y volante
 //   - lead:      silueta de persona de pie
 //
-// La forma del pin refuerza la distinción: gota para conductores, rombo para
-// leads (que ya era la forma del lead en el v1).
+// Ambos usan rombo: la distinción la hace el pictograma (y el color), no la
+// silueta. El conductor usaba gota; se unificó a pedido para que el mapa lea
+// como una sola familia de marcadores.
 
 import { glifoConductor, glifoLead } from './glifos'
 import type { TipoEntidadMapa } from '../types'
@@ -23,16 +24,17 @@ function svgPin(
   const grosor = activo ? 3 : 2
   const opacidad = atenuado ? 0.55 : 1
 
-  const silueta =
-    tipo === 'conductor'
-      ? '<path d="M17 43C17 43 32 26.5 32 16.6 32 7.9 25.3 1 17 1S2 7.9 2 16.6C2 26.5 17 43 17 43Z"/>'
-      : '<path d="M17 43 31.5 22.5 17 2 2.5 22.5Z"/>'
+  const silueta = '<path d="M17 43 31.5 22.5 17 2 2.5 22.5Z"/>'
 
   // El glifo del conductor necesita el color del pin para "recortar" el hueco
   // del volante sobre los hombros (no se puede lograr sólo con blanco).
+  //
+  // Va más chico que el del lead y algo por encima del centro: la gorra es la
+  // parte más ancha del dibujo y el rombo se angosta hacia arriba, así que con
+  // una escala mayor la visera se sale por los lados.
   const glifo =
     tipo === 'conductor'
-      ? glifoConductor({ color, escala: 0.9, cx: 17, cy: 17 })
+      ? glifoConductor({ color, escala: 0.7, cx: 17, cy: 19 })
       : glifoLead({ escala: 0.92, cx: 17, cy: 20 })
 
   return `<svg xmlns="http://www.w3.org/2000/svg" width="34" height="44" viewBox="0 0 34 44">
@@ -64,3 +66,21 @@ export function urlEtiquetaPill(texto: string, fondo = '#ff0033', color = '#ffff
 </svg>`
   return `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(svg)}`
 }
+
+/** Diámetro en px del halo que se dibuja bajo la persona seleccionada. */
+export const TAMANO_HALO = 76
+
+/**
+ * Halo de selección: disco rojo translúcido con un anillo más marcado. Va como
+ * marcador propio debajo del pin (zIndex menor) para que se vea a cualquier
+ * zoom sin depender del tamaño del pin.
+ */
+export const URL_HALO_ACTIVO: string = (() => {
+  const r = TAMANO_HALO / 2
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${TAMANO_HALO}" height="${TAMANO_HALO}" viewBox="0 0 ${TAMANO_HALO} ${TAMANO_HALO}">
+  <circle cx="${r}" cy="${r}" r="${r - 1}" fill="#ff0033" fill-opacity="0.16"/>
+  <circle cx="${r}" cy="${r}" r="${r - 2}" fill="none" stroke="#ff0033" stroke-opacity="0.85" stroke-width="2.5"/>
+  <circle cx="${r}" cy="${r}" r="${r * 0.42}" fill="none" stroke="#ff0033" stroke-opacity="0.55" stroke-width="1.5"/>
+</svg>`
+  return `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(svg)}`
+})()
