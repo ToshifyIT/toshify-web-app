@@ -12431,9 +12431,8 @@ export function ReporteFacturacionTab() {
                       let ivaOtros = 0
                       for (const d of detalleCargos) {
                         const cod = d.concepto_codigo || ''
-                        const esAlq = ['P001','P002','P013','P014','P015','P016'].includes(cod)
                         const bruto = Number(d.cantidad || 0) * Number(d.precio_unitario || 0) || Number(d.total || 0)
-                        const monto = esAlq ? Math.round(bruto) : Math.round(bruto * 100) / 100
+                        const monto = Math.round(bruto * 100) / 100
                         const pct = ivaPorCodigo.get(d.concepto_codigo) ?? 0
                         const neto = pct > 0 ? Math.round((monto / (1 + pct / 100)) * 100) / 100 : monto
                         if (CODIGOS_ALQUILER.includes(cod)) ivaAlquiler += monto - neto
@@ -12470,12 +12469,12 @@ export function ReporteFacturacionTab() {
                         const fechaStr = item.fecha_referencia
                           ? format(parseISO(item.fecha_referencia), 'dd/MM/yy')
                           : null
-                        // Redondear SOLO conceptos de alquiler (P001/P002/P013/P014/P015/P016):
-                        // el precio diario x cantidad arrastra centavos (7 x 42714,29 = 299000,03).
-                        // Los demas conceptos se muestran con sus decimales exactos. Solo visual.
-                        const esAlquilerItem = ['P001','P002','P013','P014','P015','P016'].includes(item.concepto_codigo || '')
+                        // TODOS los conceptos se muestran con 2 decimales, sin excepcion.
+                        // El alquiler arrastra centavos (7 x 42714,29 = 299000,03) y antes se
+                        // redondeaba a peso entero: eso hacia que Subtotal + Saldo anterior no
+                        // cerrara contra total_a_pagar (que la BD guarda sin redondear).
                         const montoBrutoItem = Number(item.cantidad || 0) * Number(item.precio_unitario || 0) || Number(item.total || 0)
-                        const montoItem = esAlquilerItem ? Math.round(montoBrutoItem) : Math.round(montoBrutoItem * 100) / 100
+                        const montoItem = Math.round(montoBrutoItem * 100) / 100
                         // Desglose: el monto ya viene con IVA incluido, se descompone hacia atras
                         // sobre el mismo numero que se muestra, para que Neto + IVA cierre exacto.
                         const pctIvaItem = ivaPorCodigo.get(item.concepto_codigo) ?? 0
@@ -12544,13 +12543,12 @@ export function ReporteFacturacionTab() {
                           Subtotal Cargos
                         </span>
                         <span style={{ fontSize: '13px', fontWeight: 700, fontFamily: 'monospace', color: 'var(--text-primary)' }}>
-                          {/* Subtotal: alquiler redondeado a entero, resto con 2 decimales (igual que cada ítem) */}
-                          {formatCurrency(detalleCargos.reduce((sum, d) => {
-                            const esAlquiler = ['P001','P002','P013','P014','P015','P016'].includes(d.concepto_codigo || '')
+                          {/* Subtotal: 2 decimales para todos los conceptos (igual que cada ítem),
+                              para que Subtotal + Saldo anterior cierre contra Total a Pagar. */}
+                          {formatCurrency(Math.round(detalleCargos.reduce((sum, d) => {
                             const monto = Number(d.cantidad || 0) * Number(d.precio_unitario || 0) || Number(d.total || 0)
-                            const calc = esAlquiler ? Math.round(monto) : Math.round(monto * 100) / 100
-                            return sum + calc
-                          }, 0))}
+                            return sum + Math.round(monto * 100) / 100
+                          }, 0) * 100) / 100)}
                         </span>
                       </div>
                     </div>
