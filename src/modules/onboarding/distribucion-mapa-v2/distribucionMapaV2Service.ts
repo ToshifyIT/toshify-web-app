@@ -611,6 +611,11 @@ export async function fetchLeadsMapa(
       datos,
     }
   })
+    // REGLA DE NEGOCIO: un lead cuyo domicilio cae en una zona restringida no se
+    // muestra en el mapa, ni se empareja, ni cuenta. No es un filtro opcional
+    // como en conductores (que ya son parte de la flota): a un lead en zona
+    // restringida directamente no se lo convoca.
+    .filter((lead) => !lead.datos.zonaPeligrosa)
 }
 
 // =====================================================
