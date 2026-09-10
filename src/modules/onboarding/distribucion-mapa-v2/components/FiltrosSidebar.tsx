@@ -342,7 +342,10 @@ export function FiltrosSidebar({
             </Acordeon>
 
             <Acordeon titulo="Requisitos" resumen={resumen(filtros.requisitosLead, 'Ninguno')}>
-              {REQUISITOS.map((r) => (
+              {/* "Fuera de zona restringida" no se ofrece para leads: los que
+                  están en zona restringida ya no entran al módulo (ver
+                  fetchLeadsMapa). Ofrecerlo sería un filtro que nunca cambia nada. */}
+              {REQUISITOS.filter((r) => r.value !== 'fuera_zona_peligrosa').map((r) => (
                 <CheckRow
                   key={r.value}
                   label={r.label}
@@ -352,6 +355,7 @@ export function FiltrosSidebar({
                   }
                 />
               ))}
+              <Hint>Los leads ubicados en zona restringida no se muestran en el mapa.</Hint>
             </Acordeon>
           </div>
         )}
