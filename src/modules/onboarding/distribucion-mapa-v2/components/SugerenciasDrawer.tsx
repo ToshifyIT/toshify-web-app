@@ -13,12 +13,16 @@ import { Badge, BotonPrimario, BotonSecundario, Hint } from './ui'
 import { IconoEntidad } from './iconos'
 import { colorEntidad } from './colores'
 import type { EntidadMapa, ParSugerido } from '../types'
-import { clavePersona, formatKm, formatMin } from '../utils'
+import { clavePersona, formatKm, formatMin, LABEL_TURNO, turnoDeEntidad } from '../utils'
 import { UMBRAL_MINUTOS_MAX, UMBRAL_MINUTOS_MIN } from '../emparejamientoService'
 
 interface Props {
   base: EntidadMapa | null
   pares: ParSugerido[]
+  /** Modo lead↔lead: leads que no consiguieron pareja dentro del umbral. */
+  sinPareja: EntidadMapa[]
+  /** true cuando la corrida fue entre leads (asignación única), no desde una base. */
+  modoLeads: boolean
   cargando: boolean
   aviso: string | null
   umbral: number
@@ -40,6 +44,8 @@ interface Props {
 export function SugerenciasDrawer({
   base,
   pares,
+  sinPareja,
+  modoLeads,
   cargando,
   aviso,
   umbral,
@@ -115,7 +121,9 @@ export function SugerenciasDrawer({
         <Hint>
           {base
             ? `Base: ${base.nombre}${base.zona ? ` · ${base.zona}` : ''}`
-            : 'Base: todos los conductores sin compañero visibles'}
+            : modoLeads
+              ? 'Parejas entre leads: misma zona, turnos compatibles, cada lead en un solo par.'
+              : 'Base: todos los conductores sin compañero visibles'}
         </Hint>
         <Hint>
           Sólo se proponen personas que están visibles en el mapa. Elegir otra en
@@ -295,6 +303,32 @@ export function SugerenciasDrawer({
             />
           )
         })}
+
+        {/* Modo lead↔lead: quiénes quedaron afuera, para que se vea y se decida. */}
+        {modoLeads && !cargando && sinPareja.length > 0 && (
+          <div
+            style={{
+              marginTop: 12,
+              padding: '10px 12px',
+              border: '1px dashed var(--border-primary)',
+              borderRadius: 10,
+              background: 'var(--bg-primary)',
+            }}
+          >
+            <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: '.4px', textTransform: 'uppercase', color: 'var(--text-secondary)' }}>
+              Sin pareja dentro de {umbral} min ({sinPareja.length})
+            </div>
+            <Hint>
+              No hay otro lead de su misma zona y turno compatible a menos de {umbral} min.
+              Probá subir el umbral o emparejarlos a mano con “Fijar como base”.
+            </Hint>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 8 }}>
+              {sinPareja.map((e) => (
+                <ExtremoTarjeta key={`sp-${e.id}`} entidad={e} />
+              ))}
+            </div>
+          </div>
+        )}
       </div>
     </div>
   )
@@ -324,6 +358,17 @@ function TarjetaPar({
 
   return (
     <div
+      // Tocar la tarjeta en cualquier parte dibuja el par en el mapa (lo mismo
+      // que "Ver en mapa"). Los botones de acción frenan la propagación.
+      onClick={onSeleccionar}
+      role="button"
+      tabIndex={0}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault()
+          onSeleccionar()
+        }
+      }}
       style={{
         background: 'var(--bg-primary)',
         border: `1px solid ${seleccionado ? 'var(--color-primary, #ff0033)' : 'var(--border-primary)'}`,
@@ -331,6 +376,7 @@ function TarjetaPar({
         borderRadius: 11,
         padding: '11px 12px',
         marginBottom: 10,
+        cursor: 'pointer',
       }}
     >
       {soloCandidato ? (
@@ -368,7 +414,7 @@ function TarjetaPar({
         ))}
       </div>
 
-      <div style={{ display: 'flex', gap: 6, marginTop: 10 }}>
+      <div style={{ display: 'flex', gap: 6, marginTop: 10 }} onClick={(e) => e.stopPropagation()}>
         <BotonSecundario onClick={onSeleccionar}>Ver en mapa</BotonSecundario>
         <BotonSecundario onClick={onCopiar}>Copiar</BotonSecundario>
         <BotonPrimario onClick={onProgramar}>Programar entrega</BotonPrimario>
@@ -387,14 +433,31 @@ function ExtremoTarjeta({ entidad }: { entidad: EntidadMapa }) {
     .filter(Boolean)
     .join(' · ')
 
+  // Turno: para el lead es la preferencia declarada (tal cual la cargó); para
+  // el conductor, el turno efectivo (asignación o preferencia).
+  const turno = turnoDeEntidad(entidad)
+  const turnoLabel =
+    entidad.tipo === 'lead'
+      ? entidad.turnoLead || (turno ? LABEL_TURNO[turno] : null)
+      : turno
+        ? LABEL_TURNO[turno]
+        : null
+
   return (
     <div style={{ display: 'flex', alignItems: 'flex-start', gap: 7 }}>
       <span style={{ marginTop: 2 }}>
         <IconoEntidad tipo={entidad.tipo} color={colorEntidad(entidad)} size={15} />
       </span>
-      <div style={{ minWidth: 0 }}>
-        <div style={{ fontSize: 12, fontWeight: 750, letterSpacing: '-.1px', color: 'var(--text-primary)' }}>
-          {entidad.nombre}
+      <div style={{ minWidth: 0, flex: 1 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          <span style={{ fontSize: 12, fontWeight: 750, letterSpacing: '-.1px', color: 'var(--text-primary)' }}>
+            {entidad.nombre}
+          </span>
+          {turnoLabel && (
+            <span style={{ marginLeft: 'auto', flexShrink: 0 }}>
+              <Badge tono="info">{turnoLabel}</Badge>
+            </span>
+          )}
         </div>
         <div style={{ fontSize: 10, color: 'var(--text-tertiary)', marginTop: 1 }}>{meta}</div>
       </div>

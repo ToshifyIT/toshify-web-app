@@ -109,6 +109,11 @@ export interface ResultadoSugerencias {
   truncado: boolean
   /** Aviso a mostrar en la UI (p. ej. tope de bases alcanzado). */
   aviso: string | null
+  /**
+   * Sólo en el emparejamiento lead↔lead (asignación única): quiénes quedaron
+   * sin pareja dentro del umbral, para que el operador los vea y decida.
+   */
+  sinPareja?: EntidadMapa[]
 }
 
 /**

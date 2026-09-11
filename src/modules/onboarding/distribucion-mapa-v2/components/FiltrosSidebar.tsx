@@ -324,8 +324,9 @@ export function FiltrosSidebar({
                 />
               ))}
               <Hint>
-                Están los 14 estados del pipeline. Al abrir vienen marcados los dos
-                de inducción; sin selección se muestran todos.
+                Al abrir vienen marcados los dos estados de inducción; sin selección se
+                muestran todos. Los leads descartados y los ubicados en zona restringida
+                no entran al mapa.
               </Hint>
             </Acordeon>
 
@@ -355,7 +356,6 @@ export function FiltrosSidebar({
                   }
                 />
               ))}
-              <Hint>Los leads ubicados en zona restringida no se muestran en el mapa.</Hint>
             </Acordeon>
           </div>
         )}

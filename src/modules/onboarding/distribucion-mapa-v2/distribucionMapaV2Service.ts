@@ -65,6 +65,14 @@ export const ESTADOS_LEAD_TODOS = [
 /** Estados preseleccionados al abrir el módulo (los aptos para inducción). */
 export const ESTADOS_LEAD_DEFAULT = ['Apto Inducción', 'Convocatoria Inducción'] as const
 
+/**
+ * Estados que NO entran al mapa bajo ningún filtro. Un lead descartado ya
+ * salió del pipeline: no se lo ubica, no se lo empareja, no se lo cuenta.
+ * Misma definición que usa el módulo de Leads para su contador "Descartados"
+ * (estado_de_lead = 'Descartado', literal).
+ */
+export const ESTADOS_LEAD_EXCLUIDOS: ReadonlySet<string> = new Set(['Descartado'])
+
 /** Etiqueta usada cuando un lead no tiene estado cargado. */
 export const SIN_ESTADO_LEAD = 'Sin estado'
 
@@ -611,11 +619,13 @@ export async function fetchLeadsMapa(
       datos,
     }
   })
-    // REGLA DE NEGOCIO: un lead cuyo domicilio cae en una zona restringida no se
-    // muestra en el mapa, ni se empareja, ni cuenta. No es un filtro opcional
-    // como en conductores (que ya son parte de la flota): a un lead en zona
-    // restringida directamente no se lo convoca.
+    // REGLAS DE NEGOCIO (no son filtros opcionales, no se pueden destildar):
+    //  - Un lead cuyo domicilio cae en una zona restringida no se muestra, ni
+    //    se empareja, ni cuenta: a ese lead directamente no se lo convoca.
+    //  - Un lead descartado ya salió del pipeline: tampoco entra.
+    // Para conductores no aplica lo de zona (ya son parte de la flota).
     .filter((lead) => !lead.datos.zonaPeligrosa)
+    .filter((lead) => !ESTADOS_LEAD_EXCLUIDOS.has(lead.estadoLead || ''))
 }
 
 // =====================================================
