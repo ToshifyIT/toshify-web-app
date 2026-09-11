@@ -58,6 +58,13 @@ const MAX_DESTINOS_POR_REQUEST = 25
 /** Tope de bases evaluadas por corrida, para acotar el gasto de API. */
 export const MAX_BASES_SUGERENCIA = 12
 
+/**
+ * Tope de leads evaluados en el emparejamiento lead↔lead. Más alto que el de
+ * sugerencias porque ahí cada lead es base Y candidato a la vez, y el corte
+ * por zona reduce mucho los candidatos por lead (3–6 en vez de 15–25).
+ */
+export const MAX_LEADS_EMPAREJAMIENTO = 60
+
 /** Tope de pares devueltos. */
 const MAX_PARES_RESULTADO = 60
 
@@ -87,6 +94,13 @@ interface MedicionRuta {
   tiempoMinutos: number
   fuente: 'matrix' | 'estimado'
 }
+
+/**
+ * Caché de mediciones por par. El tiempo es determinístico (sin hora de
+ * salida), así que una medición hecha vale para toda la sesión. Vive en el
+ * módulo para sobrevivir a re-renders y a corridas sucesivas.
+ */
+const cacheMediciones = new Map<string, MedicionRuta>()
 
 function estimarPorHaversine(km: number): MedicionRuta {
   return {
@@ -442,4 +456,132 @@ export async function conexionesDesde(
   }
 
   return { base, conexiones, aviso: avisos.length > 0 ? avisos.join(' ') : null }
+}
+
+// =====================================================
+// Emparejamiento lead ↔ lead (asignación única)
+// =====================================================
+
+/**
+ * Arma las mejores parejas ENTRE LEADS. A diferencia de `sugerirPares` (que
+ * lista candidatos y una persona puede aparecer en varios pares), acá cada
+ * lead termina en UN solo par, el mejor que le tocó, o en `sinPareja`.
+ *
+ * Reglas duras (no puntúan, excluyen):
+ *  - misma zona (un lead sin zona no se puede cruzar con nadie);
+ *  - turnos compatibles (Diurno↔Nocturno; "Indiferente" va con cualquiera);
+ *  - tiempo de viaje ≤ umbral.
+ * El resto (licencia, antecedentes, estado del lead) entra en el score, que es
+ * el mismo `evaluarPar` de las sugerencias.
+ *
+ * Costo: se mide una sola vez cada par candidato (i<j), por lotes de hasta 25
+ * destinos por origen, y con caché de sesión. Con zona dura y umbral de 25
+ * min, ~60 leads son del orden de 300–700 mediciones.
+ */
+export async function emparejarLeads(
+  leads: EntidadMapa[],
+  umbralMinutos: number = UMBRAL_MINUTOS_DEFAULT
+): Promise<ResultadoSugerencias> {
+  const radio = radioPrefiltroKm(umbralMinutos)
+
+  const unicos = dedupPorPersona(leads.filter((e) => e.tipo === 'lead'))
+  const evaluados = unicos.slice(0, MAX_LEADS_EMPAREJAMIENTO)
+  const truncado = unicos.length > evaluados.length
+
+  // Agrupar por zona: sólo se cruzan dentro del mismo grupo.
+  const porZona = new Map<string, EntidadMapa[]>()
+  const sinZona: EntidadMapa[] = []
+  for (const l of evaluados) {
+    if (!l.zona) {
+      sinZona.push(l)
+      continue
+    }
+    const grupo = porZona.get(l.zona) || []
+    grupo.push(l)
+    porZona.set(l.zona, grupo)
+  }
+
+  // Candidatos: para cada lead i, los j>i de su zona con turno compatible y
+  // dentro del radio plausible. Cada par se mide UNA vez (i como origen).
+  const candidatos: ParSugerido[] = []
+  for (const grupo of porZona.values()) {
+    for (let i = 0; i < grupo.length; i++) {
+      const base = grupo[i]
+      const destinos = grupo
+        .slice(i + 1)
+        .filter((c) => turnosComplementarios(turnoDeEntidad(base), turnoDeEntidad(c)))
+        .map((c) => ({ candidato: c, km: haversineKm(base.lat, base.lng, c.lat, c.lng) }))
+        .filter((x) => x.km <= radio)
+        .sort((x, y) => x.km - y.km)
+
+      if (destinos.length === 0) continue
+
+      // Consultar caché; medir sólo lo que falta, en lotes de 25.
+      const faltantes = destinos.filter((x) => !cacheMediciones.has(clavePar(base, x.candidato)))
+      for (let inicio = 0; inicio < faltantes.length; inicio += MAX_DESTINOS_POR_REQUEST) {
+        const lote = faltantes.slice(inicio, inicio + MAX_DESTINOS_POR_REQUEST)
+        const mediciones = await medirDesdeOrigen(
+          { lat: base.lat, lng: base.lng },
+          lote.map((x) => ({ lat: x.candidato.lat, lng: x.candidato.lng }))
+        )
+        lote.forEach((x, k) => {
+          cacheMediciones.set(clavePar(base, x.candidato), mediciones[k] || estimarPorHaversine(x.km))
+        })
+      }
+
+      for (const { candidato } of destinos) {
+        const medicion = cacheMediciones.get(clavePar(base, candidato))
+        if (!medicion || medicion.tiempoMinutos > umbralMinutos) continue
+        // Turno ya validado arriba: siempre complementarios acá.
+        const { score, motivos } = evaluarPar(base, candidato, medicion.tiempoMinutos, true)
+        candidatos.push({
+          id: clavePar(base, candidato),
+          a: base,
+          b: candidato,
+          distanciaKm: medicion.distanciaKm,
+          tiempoMinutos: medicion.tiempoMinutos,
+          fuenteTiempo: medicion.fuente,
+          turnosComplementarios: true,
+          score,
+          motivos,
+        })
+      }
+    }
+  }
+
+  // Asignación única, greedy por score: el mejor par disponible primero.
+  candidatos.sort((x, y) => y.score - x.score || x.tiempoMinutos - y.tiempoMinutos)
+  const usados = new Set<string>()
+  const pares: ParSugerido[] = []
+  for (const par of candidatos) {
+    const ka = clavePersona(par.a)
+    const kb = clavePersona(par.b)
+    if (usados.has(ka) || usados.has(kb)) continue
+    usados.add(ka)
+    usados.add(kb)
+    pares.push(par)
+  }
+
+  const sinPareja = evaluados.filter((l) => !usados.has(clavePersona(l)))
+
+  const avisos: string[] = []
+  if (truncado) {
+    avisos.push(
+      `Se evaluaron los primeros ${MAX_LEADS_EMPAREJAMIENTO} leads de ${unicos.length} para acotar el consumo de la API. Acotá con filtros para cubrir el resto.`
+    )
+  }
+  if (sinZona.length > 0) {
+    avisos.push(`${sinZona.length} sin zona cargada: no se pueden cruzar por zona.`)
+  }
+  if (!mapsDisponible()) {
+    avisos.push('Google Maps no está disponible: los tiempos son estimados en línea recta.')
+  }
+
+  return {
+    pares,
+    basesEvaluadas: evaluados.length,
+    truncado,
+    aviso: avisos.length > 0 ? avisos.join(' ') : null,
+    sinPareja,
+  }
 }

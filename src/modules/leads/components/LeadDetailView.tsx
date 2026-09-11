@@ -1,6 +1,6 @@
 // src/modules/leads/components/LeadDetailView.tsx
 import { useState, useEffect, useRef } from 'react'
-import { MessageCircle, Video, UserPlus, Edit2, MapPin, AlertTriangle, ExternalLink, RefreshCw } from 'lucide-react'
+import { MessageCircle, MessageSquare, Video, UserPlus, Edit2, MapPin, AlertTriangle, ExternalLink, RefreshCw } from 'lucide-react'
 import { GoogleMap, Marker, Polygon } from '@react-google-maps/api'
 import type { Lead } from '../../../types/leads.types'
 import { GOOGLE_MAPS_SCRIPT_URL } from '../../../lib/googleMaps'
@@ -139,6 +139,21 @@ export function LeadDetailView({ lead, onEdit, onConvert, zonasRestringidas = []
           )}
         </div>
         <div style={{ display: 'flex', gap: '8px' }}>
+          {/* Misma acción que "Abrir conversación" en la grilla de Leads: la
+              conversación de Intercom del lead, si la tiene. */}
+          {(() => {
+            const tieneConversacion = !!lead.id_conversation?.trim()
+            return (
+              <button
+                className={`btn-sm ${tieneConversacion ? 'btn-primary' : 'btn-secondary'}`}
+                disabled={!tieneConversacion}
+                onClick={() => { if (tieneConversacion) window.open(`https://app.intercom.com/a/inbox/ogv74k5c/inbox/conversation/${lead.id_conversation}`, '_blank') }}
+                title={tieneConversacion ? 'Abrir la conversación en Intercom' : 'Sin conversación de Intercom'}
+              >
+                <MessageSquare size={14} /> Abrir conversación
+              </button>
+            )
+          })()}
           <button
             className={`btn-sm ${lead.id_lead?.trim() ? 'btn-primary' : 'btn-secondary'}`}
             disabled={!lead.id_lead?.trim()}
