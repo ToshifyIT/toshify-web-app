@@ -113,6 +113,10 @@ export function PermissionsProvider({ children }: { children: React.ReactNode })
   const { user, profile, loading: authLoading } = useAuth()
   const [userPermissions, setUserPermissions] = useState<UserPermissionsResponse | null>(null)
   const [loading, setLoading] = useState(true)
+  // user.id para el que ya terminó un intento de carga de permisos (éxito o error).
+  // Permite derivar `loading` en el MISMO render en que cambia el usuario, sin
+  // depender de que el efecto de carga corra antes que los <Navigate> hijos.
+  const [loadedForUserId, setLoadedForUserId] = useState<string | null>(null)
   const hasLoadedOnce = useRef(false)
 
   useEffect(() => {
@@ -120,6 +124,11 @@ export function PermissionsProvider({ children }: { children: React.ReactNode })
 
     if (!user) {
       setUserPermissions(null)
+      setLoadedForUserId(null)
+      // El provider no se desmonta al cerrar sesión: sin este reset, el siguiente
+      // login saltea el spinner y ProtectedRoute evalúa permisos aún en null
+      // (-> /unauthorized hasta recargar la página).
+      hasLoadedOnce.current = false
       setLoading(false)
       return
     }
@@ -171,6 +180,7 @@ export function PermissionsProvider({ children }: { children: React.ReactNode })
     } catch {
       await loadPermissionsFallback()
     } finally {
+      setLoadedForUserId(user.id)
       setLoading(false)
     }
   }
@@ -627,9 +637,14 @@ export function PermissionsProvider({ children }: { children: React.ReactNode })
     return globalPermissions.canDelete
   }, [globalPermissions.canDelete])
 
+  // Hay usuario pero sus permisos todavía no terminaron de cargarse (p. ej. el
+  // primer render tras el login): se reporta como cargando para que ningún guard
+  // decida con permisos vacíos.
+  const effectiveLoading = loading || (!!user && loadedForUserId !== user.id)
+
   const value = useMemo(() => ({
     userPermissions,
-    loading,
+    loading: effectiveLoading,
     canViewMenu,
     canCreateInMenu,
     canEditInMenu,
@@ -654,7 +669,7 @@ export function PermissionsProvider({ children }: { children: React.ReactNode })
     canDelete,
   }), [
     userPermissions,
-    loading,
+    effectiveLoading,
     canViewMenu,
     canCreateInMenu,
     canEditInMenu,
