@@ -48,6 +48,7 @@ import {
   fetchLeadsMapa,
   fetchZonasPeligrosas,
   geocodificarFaltantes,
+  ESTADOS_LEAD_EXCLUIDOS,
   ESTADOS_LEAD_TODOS,
   SIN_ESTADO_LEAD,
   type ZonaPeligrosa,
@@ -55,6 +56,7 @@ import {
 import {
   clavePar,
   conexionesDesde,
+  emparejarLeads,
   medirPar,
   sugerirPares,
   UMBRAL_MINUTOS_DEFAULT,
@@ -133,6 +135,8 @@ export function DistribucionMapaV2Module() {
   const [baseSugerencias, setBaseSugerencias] = useState<EntidadMapa | null>(null)
   const [pares, setPares] = useState<ParSugerido[]>([])
   const [avisoPares, setAvisoPares] = useState<string | null>(null)
+  // Sólo en modo lead↔lead: quiénes quedaron sin pareja dentro del umbral.
+  const [sinPareja, setSinPareja] = useState<EntidadMapa[]>([])
   const [calculando, setCalculando] = useState(false)
   const [umbral, setUmbral] = useState(UMBRAL_MINUTOS_DEFAULT)
   const [parSeleccionado, setParSeleccionado] = useState<ParSugerido | null>(null)
@@ -355,6 +359,9 @@ export function DistribucionMapaV2Module() {
   const estadosLeadDisponibles = useMemo(() => {
     const vistos = new Set<string>(ESTADOS_LEAD_TODOS as unknown as string[])
     for (const l of leads) vistos.add(l.estadoLead || SIN_ESTADO_LEAD)
+    // Los estados excluidos del mapa no se ofrecen como filtro: tildarlos no
+    // mostraría nada y confundiría.
+    for (const e of ESTADOS_LEAD_EXCLUIDOS) vistos.delete(e)
     return [...vistos].sort((a, b) => a.localeCompare(b))
   }, [leads])
 
@@ -382,10 +389,13 @@ export function DistribucionMapaV2Module() {
     () => !!baseManual && !visibles.some((e) => e.id === baseManual.id),
     [visibles, baseManual]
   )
-  const entidadesMapa = useMemo(
-    () => (baseManual && baseFueraDelFiltro ? [baseManual, ...visibles] : visibles),
-    [visibles, baseManual, baseFueraDelFiltro]
-  )
+  const entidadesMapa = useMemo(() => {
+    if (!baseManual) return visibles
+    // La base va SIEMPRE primera en la lista (esté o no dentro del filtro):
+    // es la referencia de todo lo que se mide y no tiene que buscarse entre
+    // 200 filas. Para el mapa el orden es indistinto.
+    return [baseManual, ...visibles.filter((e) => e.id !== baseManual.id)]
+  }, [visibles, baseManual])
 
   const entidadActiva = useMemo(
     () => entidadesMapa.find((e) => e.id === activo) || null,
@@ -464,6 +474,33 @@ export function DistribucionMapaV2Module() {
     [baseManual, medirManual]
   )
 
+  /**
+   * Selección desde la LISTA: tocar la fila ya seleccionada la deselecciona
+   * (deja el mapa sin persona activa, p. ej. para correr "Sugerir compañero"
+   * en modo global). Desde el pin del mapa el segundo clic sigue re-centrando.
+   */
+  const alternarSeleccion = useCallback(
+    (id: string) => {
+      if (activo === id) {
+        // Sin persona activa no tiene sentido conservar ni las líneas del mapa
+        // ni las tarjetas de sugerencias: todo se calculó respecto a ella.
+        setActivo(null)
+        setParSeleccionado(null)
+        setRadar(null)
+        setMostrarTodosPares(false)
+        setPares([])
+        setSinPareja([])
+        setAvisoPares(null)
+        setParesDesactualizados(false)
+        setBaseSugerencias(null)
+        setDrawerAbierto(false)
+        return
+      }
+      seleccionar(id)
+    },
+    [activo, seleccionar]
+  )
+
   // ---------- Emparejamiento ----------
 
   const correrSugerencias = useCallback(
@@ -475,7 +512,25 @@ export function DistribucionMapaV2Module() {
       setMostrarTodosPares(false)
       setCalculando(true)
       setAvisoPares(null)
+      setSinPareja([])
       try {
+        // Segmento Leads sin nadie elegido: parejas ENTRE leads (asignación
+        // única, zona dura, turnos compatibles). Los conductores no entran.
+        if (!base && filtros.segmento === 'leads') {
+          const leadsVisibles = visibles.filter((e) => e.tipo === 'lead')
+          if (leadsVisibles.length < 2) {
+            setPares([])
+            setAvisoPares('Hacen falta al menos dos leads visibles para armar parejas.')
+            return
+          }
+          const resultado = await emparejarLeads(leadsVisibles, umbral)
+          setPares(resultado.pares)
+          setSinPareja(resultado.sinPareja || [])
+          setAvisoPares(resultado.aviso)
+          setParesDesactualizados(false)
+          return
+        }
+
         const bases = base
           ? [base]
           : visibles.filter(
@@ -502,7 +557,7 @@ export function DistribucionMapaV2Module() {
         setCalculando(false)
       }
     },
-    [visibles, umbral]
+    [visibles, umbral, filtros.segmento]
   )
 
   const abrirSugerencias = useCallback(
@@ -510,7 +565,9 @@ export function DistribucionMapaV2Module() {
       setBaseSugerencias(base)
       setDrawerAbierto(true)
       setDrawerPlegado(false)
-      setActivo(null)
+      // La base queda como persona activa (halo + fila resaltada); sin base
+      // (modo global) no hay nadie seleccionado.
+      setActivo(base ? base.id : null)
       setRadar(null)
       setMostrarTodosPares(false)
       correrSugerencias(base)
@@ -717,7 +774,9 @@ export function DistribucionMapaV2Module() {
 
           <button
             type="button"
-            onClick={() => abrirSugerencias(null)}
+            // Con alguien seleccionado (o una base fijada) se sugiere PARA esa
+            // persona; sin nadie, modo global (con segmento Leads: leads entre sí).
+            onClick={() => abrirSugerencias(entidadActiva ?? baseManual ?? null)}
             style={{
               display: 'inline-flex',
               alignItems: 'center',
@@ -781,7 +840,7 @@ export function DistribucionMapaV2Module() {
             <ListaResultados
               entidades={entidadesMapa}
               activo={activo}
-              onSeleccionar={seleccionar}
+              onSeleccionar={alternarSeleccion}
               baseManual={baseManual}
               baseFueraDelFiltro={baseFueraDelFiltro}
             />
@@ -907,6 +966,8 @@ export function DistribucionMapaV2Module() {
           <SugerenciasDrawer
             base={baseSugerencias}
             pares={pares}
+            sinPareja={sinPareja}
+            modoLeads={filtros.segmento === 'leads' && !baseSugerencias}
             cargando={calculando}
             aviso={avisoPares}
             umbral={umbral}
@@ -1102,74 +1163,38 @@ function ListaResultados({
         </span>
       </div>
 
+      {/* La base fijada va FUERA del scroll: siempre visible arriba, aunque
+          la lista tenga 200 filas y estés en la 180. */}
+      {baseManual && (
+        <div style={{ borderBottom: '2px solid #ff0033', flexShrink: 0 }}>
+          <FilaLista
+            entidad={baseManual}
+            esActiva={activo === baseManual.id}
+            esBase
+            baseFueraDelFiltro={baseFueraDelFiltro}
+            onClick={() => onSeleccionar(baseManual.id)}
+          />
+        </div>
+      )}
+
       {/* flex:1 + minHeight:0: sin eso la lista no scrollea dentro de la columna */}
       <div style={{ flex: 1, minHeight: 0, overflowY: 'auto' }}>
-        {entidades.map((e) => {
-          const esActiva = activo === e.id
-          const esBase = !!baseManual && baseManual.id === e.id
-          return (
-          <div
-            key={`li-${e.tipo}-${e.id}`}
-            ref={esActiva ? filaActivaRef : undefined}
-            onClick={() => onSeleccionar(e.id)}
-            style={{
-              padding: '7px 12px 7px 9px',
-              cursor: 'pointer',
-              borderBottom: '1px solid var(--border-primary)',
-              // La fila activa se marca igual que la persona en el mapa: barra y
-              // fondo rojos. Con sólo un gris de fondo no se distinguía.
-              borderLeft: esActiva ? '4px solid #ff0033' : '4px solid transparent',
-              background: esActiva ? 'rgba(255, 0, 51, 0.09)' : 'transparent',
-              opacity: e.tipo === 'conductor' && e.esBaja ? 0.55 : 1,
-            }}
-          >
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-              <IconoEntidad tipo={e.tipo} color={colorEntidad(e)} size={15} />
-              <span
-                style={{
-                  fontSize: 12,
-                  fontWeight: esActiva ? 800 : 600,
-                  color: esActiva ? '#ff0033' : 'var(--text-primary)',
-                  lineHeight: 1.2,
-                }}
-              >
-                {e.nombre}
-              </span>
-              {(esActiva || esBase) && (
-                <span
-                  style={{
-                    marginLeft: 'auto',
-                    fontSize: 9.5,
-                    fontWeight: 800,
-                    letterSpacing: '.4px',
-                    textTransform: 'uppercase',
-                    color: esBase ? '#ff0033' : '#fff',
-                    background: esBase ? 'rgba(255,0,51,.12)' : '#ff0033',
-                    border: esBase ? '1px solid #ff0033' : 'none',
-                    borderRadius: 999,
-                    padding: '2px 7px',
-                    flexShrink: 0,
-                  }}
-                >
-                  {esBase ? (baseFueraDelFiltro ? 'Base · fuera del filtro' : 'Base') : 'Seleccionado'}
-                </span>
-              )}
-            </div>
-            <div style={{ display: 'flex', gap: 6, marginTop: 2, marginLeft: 21, flexWrap: 'wrap' }}>
-              <span style={{ fontSize: 10, color: 'var(--text-tertiary)' }}>
-                {e.tipo === 'lead' ? 'Lead' : e.esBaja ? 'Conductor · Baja' : 'Conductor'}
-              </span>
-              {e.documento && (
-                <span style={{ fontSize: 10, color: 'var(--text-tertiary)' }}>{e.documento}</span>
-              )}
-              {e.zona && <span style={{ fontSize: 10, color: 'var(--text-tertiary)' }}>{e.zona}</span>}
-              {e.estadoCompanero === 'sin_companero' && (
-                <span style={{ fontSize: 10, fontWeight: 700, color: '#b91c1c' }}>Sin compañero</span>
-              )}
-            </div>
-          </div>
-          )
-        })}
+        {entidades
+          .filter((e) => !baseManual || e.id !== baseManual.id)
+          .map((e) => {
+            const esActiva = activo === e.id
+            return (
+              <FilaLista
+                key={`li-${e.tipo}-${e.id}`}
+                entidad={e}
+                esActiva={esActiva}
+                esBase={false}
+                baseFueraDelFiltro={false}
+                filaRef={esActiva ? filaActivaRef : undefined}
+                onClick={() => onSeleccionar(e.id)}
+              />
+            )
+          })}
         {entidades.length === 0 && (
           <div style={{ padding: 16, textAlign: 'center', color: 'var(--text-tertiary)', fontSize: 12 }}>
             Sin resultados
@@ -1263,6 +1288,85 @@ function ManijaPanel({
         </span>
       )}
     </button>
+  )
+}
+
+/** Una fila de la lista de resultados. La misma pieza para la base fijada y para el resto. */
+function FilaLista({
+  entidad: e,
+  esActiva,
+  esBase,
+  baseFueraDelFiltro,
+  filaRef,
+  onClick,
+}: {
+  entidad: EntidadMapa
+  esActiva: boolean
+  esBase: boolean
+  baseFueraDelFiltro: boolean
+  filaRef?: React.Ref<HTMLDivElement>
+  onClick: () => void
+}) {
+  return (
+    <div
+      ref={filaRef}
+      onClick={onClick}
+      style={{
+        padding: '7px 12px 7px 9px',
+        cursor: 'pointer',
+        borderBottom: '1px solid var(--border-primary)',
+        // La fila activa se marca igual que la persona en el mapa: barra y
+        // fondo rojos. Con sólo un gris de fondo no se distinguía.
+        borderLeft: esActiva ? '4px solid #ff0033' : '4px solid transparent',
+        background: esActiva ? 'rgba(255, 0, 51, 0.09)' : esBase ? 'rgba(255, 0, 51, 0.04)' : 'transparent',
+        opacity: e.tipo === 'conductor' && e.esBaja ? 0.55 : 1,
+      }}
+    >
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+        <IconoEntidad tipo={e.tipo} color={colorEntidad(e)} size={15} />
+        <span
+          style={{
+            fontSize: 12,
+            fontWeight: esActiva ? 800 : 600,
+            color: esActiva ? '#ff0033' : 'var(--text-primary)',
+            lineHeight: 1.2,
+          }}
+        >
+          {e.nombre}
+        </span>
+        {(esActiva || esBase) && (
+          <span
+            style={{
+              marginLeft: 'auto',
+              fontSize: 9.5,
+              fontWeight: 800,
+              letterSpacing: '.4px',
+              textTransform: 'uppercase',
+              color: esBase ? '#ff0033' : '#fff',
+              background: esBase ? 'rgba(255,0,51,.12)' : '#ff0033',
+              border: esBase ? '1px solid #ff0033' : 'none',
+              borderRadius: 999,
+              padding: '2px 7px',
+              flexShrink: 0,
+            }}
+          >
+            {esBase ? (baseFueraDelFiltro ? 'Base · fuera del filtro' : 'Base') : 'Seleccionado'}
+          </span>
+        )}
+      </div>
+      <div style={{ display: 'flex', gap: 6, marginTop: 2, marginLeft: 21, flexWrap: 'wrap' }}>
+        <span style={{ fontSize: 10, color: 'var(--text-tertiary)' }}>
+          {e.tipo === 'lead' ? 'Lead' : e.esBaja ? 'Conductor · Baja' : 'Conductor'}
+        </span>
+        {e.documento && (
+          <span style={{ fontSize: 10, color: 'var(--text-tertiary)' }}>{e.documento}</span>
+        )}
+        {e.zona && <span style={{ fontSize: 10, color: 'var(--text-tertiary)' }}>{e.zona}</span>}
+        {e.estadoCompanero === 'sin_companero' && (
+          <span style={{ fontSize: 10, fontWeight: 700, color: '#b91c1c' }}>Sin compañero</span>
+        )}
+      </div>
+    </div>
   )
 }
 
