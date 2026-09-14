@@ -113,6 +113,61 @@ agregarse sin una decision explicita: `cbu`, `bcra`, `antecedentes_penales`,
 coordenadas del domicilio, contacto de emergencia, evaluaciones de Hireflix y
 `observaciones` (texto libre).
 
+### `GET /api/v1/vehiculos` y `/vehiculos/:id`
+
+Permiso `vehiculos:api`. Filtros: `patente`, `marca`, `grupo_flota`, `gnc` (true/false), `search` (patente/marca/modelo).
+
+Campos: id, patente, provisoria, marca, modelo, anio, color, categoria, tipo_vehiculo,
+tipo_combustible, gnc, telepase, cobertura, grupo_flota, lugar_radicacion,
+kilometraje_actual, vencimiento_seguro, vto_vtv_*, vto_gnc_*, vto_matafuego_*,
+fecha_ulti_inspeccion, fecha_prox_inspeccion, `vehiculos_estados{codigo,descripcion}`, `sedes{nombre}`.
+
+Los vehiculos dados de baja (`deleted_at`) no se devuelven nunca.
+
+### `GET /api/v1/conductores` y `/conductores/:id`
+
+Permiso `conductores:api`. Filtros: `dni`, `zona`, `turno`, `search` (nombre/apellido/DNI/email).
+
+Campos: id, nombres, apellidos, numero_dni, numero_cuit, numero_licencia,
+licencia_vencimiento, email, telefono_contacto, direccion, zona, preferencia_turno,
+fecha_contratacion, `conductores_estados{codigo,descripcion}`, `sedes{nombre}`.
+
+### `GET /api/v1/asignaciones` y `/asignaciones/:id`
+
+Permiso `asignaciones:api`. Filtros: `estado`, `horario`, `modalidad`, `vehiculo_id`,
+`conductor_id`, `desde`, `hasta` (sobre `fecha_inicio`).
+
+Campos: id, codigo, vehiculo_id, conductor_id, estado, horario, modalidad, tipo_tarifa,
+zona, fecha_inicio, fecha_fin, fecha_inicio_real, fecha_fin_real, fecha_programada,
+control_completado, mas los embeds `vehiculos{patente,marca,modelo}`,
+`conductores{nombres,apellidos,numero_dni}` y `sedes{nombre}`.
+
+### `GET /api/v1/estado-flota`
+
+Permiso `flota:api`. Toda la flota con su estado y, si la tiene, su asignacion activa.
+Filtros: `sede`, `grupo_flota`, `search`, `asignado=true` (solo vehiculos con conductor).
+
+Cada item trae los datos del vehiculo mas `asignacion_activa`, que es `null` o un objeto
+con `{id, estado, horario, modalidad, tipo_tarifa, fecha_inicio, conductor}`.
+
+## Que NO devuelve ninguna de estas APIs
+
+Las whitelists son fijas en el servidor (constante `CAMPOS` de cada archivo en
+`mcp/routes/`). El cliente no puede pedir otras columnas. Quedan explicitamente afuera:
+
+- **conductores:** `portal_password_hash` y `portal_must_change_password` (credenciales
+  del Portal Conductor), `cbu`, `antecedentes_penales`, `antecedentes_transito`,
+  `fecha_nacimiento`, los cuatro campos de contacto de emergencia, `direccion_lat`/`lng`,
+  `observaciones`, `experiencia_previa`, `motivo_baja`, `monotributo`,
+  `estado_facturacion` y todas las URLs de documentacion.
+- **vehiculos:** `numero_motor`, `numero_chasis`, `seguro_numero`, `titular`,
+  `gps_uss`/`tipo_gps`/`traccar`, `notas` y las URLs de Drive.
+- **asignaciones:** `notas`, `observaciones`, `motivo_cancelacion` y los campos
+  `created_by`/`created_by_name`/`updated_by`.
+- **leads:** ver la lista en la seccion de leads.
+
+Agregar un campo a cualquiera de esas listas es una decision deliberada, no un ajuste.
+
 ## Limites y errores
 
 Rate limit: **60 requests por minuto** por API key.
