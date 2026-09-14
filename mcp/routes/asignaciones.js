@@ -18,7 +18,7 @@
 import express from 'express';
 import { requireApiKey } from '../lib/auth.js';
 import { registrarRequest } from '../lib/audit.js';
-import { RE_UUID, parsearPaginacion, listar, obtener, eq, fecha } from '../lib/query.js';
+import { RE_UUID, parsearPaginacion, listar, obtener, eq, fecha, pidioTodo, exportarTodo } from '../lib/query.js';
 
 const router = express.Router();
 
@@ -74,6 +74,22 @@ router.get('/asignaciones', requireApiKey('asignaciones:api'), async (req, res) 
   if (errores.length) {
     registrarRequest({ apiKeyData: req.apiKeyData, req, status: 400, filas: 0 });
     return res.status(400).json({ error: 'bad_request', message: errores.join('; ') });
+  }
+
+  if (pidioTodo(req.query)) {
+    try {
+      const r = await exportarTodo({ res, tabla: TABLA, select: SELECT, orden: 'fecha_inicio.desc', filtros });
+      registrarRequest({ apiKeyData: req.apiKeyData, req, status: 200, filas: r.enviados });
+    } catch (error) {
+      const esTope = error.codigo === 'too_many_rows';
+      registrarRequest({ apiKeyData: req.apiKeyData, req, status: esTope ? 400 : 500, filas: 0 });
+      if (res.headersSent) return;
+      return res.status(esTope ? 400 : 500).json({
+        error: esTope ? 'too_many_rows' : 'internal_error',
+        message: esTope ? error.message : 'Error exportando asignaciones',
+      });
+    }
+    return;
   }
 
   try {

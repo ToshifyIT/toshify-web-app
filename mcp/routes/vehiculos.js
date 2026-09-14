@@ -24,7 +24,7 @@
 import express from 'express';
 import { requireApiKey } from '../lib/auth.js';
 import { registrarRequest } from '../lib/audit.js';
-import { RE_UUID, parsearPaginacion, listar, obtener, eq, buscarEn } from '../lib/query.js';
+import { RE_UUID, parsearPaginacion, listar, obtener, eq, buscarEn, pidioTodo, exportarTodo } from '../lib/query.js';
 
 const router = express.Router();
 
@@ -73,6 +73,22 @@ router.get('/vehiculos', requireApiKey('vehiculos:api'), async (req, res) => {
   if (req.query.search) {
     const f = buscarEn(['patente', 'marca', 'modelo'], req.query.search);
     if (f) filtros.push(f);
+  }
+
+  if (pidioTodo(req.query)) {
+    try {
+      const r = await exportarTodo({ res, tabla: TABLA, select: SELECT, orden: 'patente.asc', filtros });
+      registrarRequest({ apiKeyData: req.apiKeyData, req, status: 200, filas: r.enviados });
+    } catch (error) {
+      const esTope = error.codigo === 'too_many_rows';
+      registrarRequest({ apiKeyData: req.apiKeyData, req, status: esTope ? 400 : 500, filas: 0 });
+      if (res.headersSent) return;
+      return res.status(esTope ? 400 : 500).json({
+        error: esTope ? 'too_many_rows' : 'internal_error',
+        message: esTope ? error.message : 'Error exportando vehiculos',
+      });
+    }
+    return;
   }
 
   try {

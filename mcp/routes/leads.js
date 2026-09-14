@@ -19,6 +19,7 @@ import express from 'express';
 import { supabaseRequest } from '../lib/supabase.js';
 import { requireApiKey } from '../lib/auth.js';
 import { registrarRequest } from '../lib/audit.js';
+import { pidioTodo, exportarTodo } from '../lib/query.js';
 
 const router = express.Router();
 
@@ -103,6 +104,24 @@ router.get('/leads', requireApiKey('leads:api'), async (req, res) => {
   if (errores.length) {
     registrarRequest({ apiKeyData: req.apiKeyData, req, status: 400, filas: 0 });
     return res.status(400).json({ error: 'bad_request', message: errores.join('; ') });
+  }
+
+  if (pidioTodo(req.query)) {
+    try {
+      const r = await exportarTodo({
+        res, tabla: 'leads', select: SELECT, orden: 'fecha_creacion.desc', filtros,
+      });
+      registrarRequest({ apiKeyData: req.apiKeyData, req, status: 200, filas: r.enviados });
+    } catch (error) {
+      const esTope = error.codigo === 'too_many_rows';
+      registrarRequest({ apiKeyData: req.apiKeyData, req, status: esTope ? 400 : 500, filas: 0 });
+      if (res.headersSent) return;
+      return res.status(esTope ? 400 : 500).json({
+        error: esTope ? 'too_many_rows' : 'internal_error',
+        message: esTope ? error.message : 'Error exportando leads',
+      });
+    }
+    return;
   }
 
   const qs = [
