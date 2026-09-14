@@ -76,6 +76,7 @@ function colIndex(letra) {
 }
 
 // Columnas de control
+
 var COL_STATUS = 'A';  // Crear Oferta Locación
 var COL_ERROR  = 'B';  // Detalle Error
 var COL_TENANT = 'BB'; // Etiqueta de tenant (Grupo CG / 44 DREAMS)

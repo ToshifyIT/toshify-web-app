@@ -23,7 +23,7 @@
 import express from 'express';
 import { requireApiKey } from '../lib/auth.js';
 import { registrarRequest } from '../lib/audit.js';
-import { parsearPaginacion, listar, eq, buscarEn } from '../lib/query.js';
+import { parsearPaginacion, listar, eq, buscarEn, pidioTodo, exportarTodo } from '../lib/query.js';
 
 const router = express.Router();
 
@@ -95,6 +95,22 @@ router.get('/estado-flota', requireApiKey('flota:api'), async (req, res) => {
   // Se resuelve en la base y no despues de paginar: filtrar en memoria dejaria
   // pagination.total mintiendo y paginas de tamano irregular.
   const soloAsignados = req.query.asignado === 'true';
+
+  if (pidioTodo(req.query)) {
+    try {
+      const r = await exportarTodo({ res, tabla: 'vehiculos', select: armarSelect({ soloAsignados }), orden: 'patente.asc', filtros, transform: aplanar });
+      registrarRequest({ apiKeyData: req.apiKeyData, req, status: 200, filas: r.enviados });
+    } catch (error) {
+      const esTope = error.codigo === 'too_many_rows';
+      registrarRequest({ apiKeyData: req.apiKeyData, req, status: esTope ? 400 : 500, filas: 0 });
+      if (res.headersSent) return;
+      return res.status(esTope ? 400 : 500).json({
+        error: esTope ? 'too_many_rows' : 'internal_error',
+        message: esTope ? error.message : 'Error exportando el estado de flota',
+      });
+    }
+    return;
+  }
 
   try {
     const out = await listar({
