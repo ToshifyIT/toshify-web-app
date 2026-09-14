@@ -5,6 +5,7 @@
 import { supabase } from '../../../lib/supabase'
 import { getConceptoLabel } from '../../../utils/conceptoLabels'
 import { patronIlikeSinAcentos } from '../../../utils/nombreMatch'
+import { normalizeDni, normalizeLicencia, normalizeNombre } from '../../../utils/normalizeDocuments'
 import { parseImporte } from './conductoresPanelService'
 import { getKardexGarantia, getFacturacionGarantiaConductor, type ControlGarantiaRow } from '../../../services/controlGarantiasService'
 import type { GarantiaConductor } from '../../../types/facturacion.types'
@@ -903,4 +904,237 @@ export const ESTADO_GARANTIA_UI: Record<string, { label: string; color: string; 
   pendiente: { label: 'Pendiente', color: '#6b7280', bg: '#f3f4f6' },
   cancelada: { label: 'Cancelada', color: '#dc2626', bg: '#fee2e2' },
   suspendida: { label: 'Suspendida', color: '#6b7280', bg: '#f3f4f6' },
+}
+
+// =====================================================
+// RENDIMIENTO CABIFY (pestaña del modal de detalle)
+// =====================================================
+// Historial semanal de lo que el conductor genero en Cabify, semana a semana,
+// incluida la semana EN CURSO. Se lee de las mismas tablas que alimentan el
+// modulo Integraciones > Cabify (cabify_historico / cabify_historico_bariloche),
+// y se replica su criterio de deduplicacion por (conductor, dia) para no doblar
+// montos cuando hubo varias sincronizaciones el mismo dia.
+//
+// CRUCE CONDUCTOR <-> CABIFY: no hay FK. Se usa la MISMA cascada que la columna
+// "Ingresos Cabify" del panel (DNI -> licencia -> nombre completo normalizado),
+// para que el total de esta pestaña cierre con el numero de la tabla. La consulta
+// SQL es un prefiltro amplio (superconjunto); quien decide que fila es de este
+// conductor es el filtro fino del cliente.
+
+export interface CabifyDiaRend {
+  fecha: string                 // yyyy-MM-dd
+  gananciaTotal: number
+  cobroEfectivo: number
+  cobroApp: number
+  peajes: number
+  promociones: number
+  deducciones: number
+}
+
+export interface CabifySemanaRend {
+  key: string                   // `${anio}-${semana}`
+  anio: number
+  semana: number                // semana ISO del lunes
+  inicio: string                // yyyy-MM-dd (lunes)
+  fin: string                   // yyyy-MM-dd (domingo)
+  enCurso: boolean              // la semana que corre hoy: el acumulado es parcial
+  gananciaTotal: number
+  cobroEfectivo: number
+  cobroApp: number
+  peajes: number
+  promociones: number
+  deducciones: number
+  dias: CabifyDiaRend[]         // dias con datos, del mas viejo al mas nuevo
+}
+
+const CABIFY_TABLAS = ['cabify_historico', 'cabify_historico_bariloche'] as const
+
+// Fila cruda de cabify_historico / cabify_historico_bariloche, con los campos que
+// necesita esta pestaña. Los importes vienen como number o string segun la tabla.
+interface CabifyHistRow {
+  cabify_driver_id: string | null
+  dni: string | null
+  licencia: string | null
+  nombre: string | null
+  apellido: string | null
+  fecha_inicio: string | null
+  fecha_guardado: string | null
+  ganancia_total: number | string | null
+  cobro_efectivo: number | string | null
+  cobro_app: number | string | null
+  peajes: number | string | null
+  promociones: number | string | null
+  deducciones: number | string | null
+}
+
+// La misma fila, anotada con la tabla de la que salio (hace falta para deduplicar
+// por cuenta: un conductor puede existir en BA y en Bariloche a la vez).
+type CabifyHistRowFuente = CabifyHistRow & { _tabla: string }
+
+const numCabify = (v: unknown): number => {
+  const n = Number(v)
+  return Number.isFinite(n) ? n : 0
+}
+
+// Lunes (en UTC) de la semana a la que pertenece un dia 'yyyy-MM-dd'.
+function lunesDe(dia: string): Date {
+  const [a, m, d] = dia.split('-').map(Number)
+  const fecha = new Date(Date.UTC(a, (m || 1) - 1, d || 1))
+  const dow = fecha.getUTCDay()            // 0 = domingo
+  fecha.setUTCDate(fecha.getUTCDate() - (dow === 0 ? 6 : dow - 1))
+  return fecha
+}
+
+// Semana ISO de una fecha (mismo calculo que cabifyService.getWeekRange).
+function semanaISO(fecha: Date): number {
+  const d = new Date(Date.UTC(fecha.getUTCFullYear(), fecha.getUTCMonth(), fecha.getUTCDate()))
+  const dayNum = d.getUTCDay() || 7
+  d.setUTCDate(d.getUTCDate() + 4 - dayNum)
+  const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1))
+  return Math.ceil((((d.getTime() - yearStart.getTime()) / 86400000) + 1) / 7)
+}
+
+const isoDia = (d: Date): string => d.toISOString().slice(0, 10)
+
+export async function cargarRendimientoCabifyConductor(
+  cond: { id: string; nombres: string | null; apellidos: string | null; dni: string | null },
+): Promise<CabifySemanaRend[]> {
+  const primerNombre = primera(cond.nombres)
+  const primerApellido = primera(cond.apellidos)
+
+  // La licencia no viaja en la fila del panel: se lee aca para poder cruzar por
+  // ella, igual que hace la columna "Ingresos Cabify".
+  const { data: condRow } = await supabase
+    .from('conductores')
+    .select('numero_licencia')
+    .eq('id', cond.id)
+    .maybeSingle()
+  const licenciaCond = (condRow as { numero_licencia?: string | null } | null)?.numero_licencia ?? null
+
+  // Claves normalizadas del conductor para el filtro fino.
+  const dniN = normalizeDni(cond.dni)
+  const licN = normalizeLicencia(licenciaCond)
+  const nomN = normalizeNombre(`${cond.nombres || ''} ${cond.apellidos || ''}`)
+
+  // Prefiltro SQL: superconjunto de lo que el filtro fino va a aceptar. Los
+  // patrones ilike son tolerantes a acentos (ñ, tildes) porque en la BD el
+  // nombre se guarda acentuado y ILIKE no ignora acentos.
+  const clausulas: string[] = []
+  if (cond.dni) clausulas.push(`dni.eq.${cond.dni}`)
+  if (licenciaCond) clausulas.push(`licencia.eq.${licenciaCond}`)
+  // Con los dos tokens se exige nombre Y apellido; si uno no da un patron util
+  // (nombres muy cortos), se prefiltra por el otro solo. Traer de mas no molesta:
+  // el filtro fino decide. Traer de menos si: perderia semanas del conductor.
+  const patNombre = patronIlikeSinAcentos(primerNombre)
+  const patApellido = patronIlikeSinAcentos(primerApellido)
+  if (patNombre && patApellido) {
+    clausulas.push(`and(nombre.ilike.%${patNombre}%,apellido.ilike.%${patApellido}%)`)
+  } else if (patApellido) {
+    clausulas.push(`apellido.ilike.%${patApellido}%`)
+  } else if (patNombre) {
+    clausulas.push(`nombre.ilike.%${patNombre}%`)
+  }
+  // Sin ninguna clave utilizable no se consulta nada (traer la tabla entera para
+  // filtrarla en el cliente no es una opcion).
+  if (clausulas.length === 0) return []
+
+  const campos = 'cabify_driver_id, dni, licencia, nombre, apellido, fecha_inicio, fecha_guardado, ganancia_total, cobro_efectivo, cobro_app, peajes, promociones, deducciones'
+
+  const resultados = await Promise.all(
+    CABIFY_TABLAS.map(async tabla => {
+      const { data, error } = await supabase
+        .from(tabla)
+        .select(campos)
+        .or(clausulas.join(','))
+        .order('fecha_inicio', { ascending: false })
+        .limit(5000)
+      // Una tabla caida o inexistente no debe tumbar la pestaña entera.
+      if (error) return [] as CabifyHistRowFuente[]
+      return ((data || []) as unknown as CabifyHistRow[]).map(r => ({ ...r, _tabla: tabla as string }))
+    }),
+  )
+
+  // Filtro fino: misma cascada que el panel. Evita los falsos positivos que deja
+  // el ilike (p.ej. "JUAN PEREZ" matcheando a "JUAN CARLOS PEREZ GOMEZ").
+  const filas = resultados.flat().filter(r => {
+    if (dniN && normalizeDni(r.dni) === dniN) return true
+    if (licN && normalizeLicencia(r.licencia) === licN) return true
+    if (nomN && normalizeNombre(`${r.nombre || ''} ${r.apellido || ''}`) === nomN) return true
+    return false
+  })
+  if (filas.length === 0) return []
+
+  // Dedupe por (tabla, conductor, dia): mismo criterio que cabifyHistoricalService.
+  // Gana la fila con datos financieros; a igualdad, la sincronizada mas tarde.
+  const unicas = new Map<string, CabifyHistRowFuente>()
+  for (const r of filas) {
+    const dia = String(r.fecha_inicio || '').slice(0, 10)
+    if (!dia) continue
+    const key = `${r._tabla}_${r.dni || r.cabify_driver_id}_${dia}`
+    const prev = unicas.get(key)
+    if (!prev) { unicas.set(key, r); continue }
+    const finPrev = numCabify(prev.peajes) > 0 || numCabify(prev.promociones) > 0 || numCabify(prev.deducciones) > 0
+    const finAct = numCabify(r.peajes) > 0 || numCabify(r.promociones) > 0 || numCabify(r.deducciones) > 0
+    if (finAct && !finPrev) unicas.set(key, r)
+    else if (!finAct && finPrev) { /* se mantiene la anterior */ }
+    else if (new Date(r.fecha_guardado || 0) > new Date(prev.fecha_guardado || 0)) unicas.set(key, r)
+  }
+
+  // Suma por dia (un conductor puede tener mas de una cuenta Cabify: se suman,
+  // igual que en la columna del panel).
+  const porDia = new Map<string, CabifyDiaRend>()
+  for (const r of unicas.values()) {
+    const fecha = String(r.fecha_inicio || '').slice(0, 10)
+    const acc = porDia.get(fecha) || { fecha, gananciaTotal: 0, cobroEfectivo: 0, cobroApp: 0, peajes: 0, promociones: 0, deducciones: 0 }
+    acc.gananciaTotal += numCabify(r.ganancia_total)
+    acc.cobroEfectivo += numCabify(r.cobro_efectivo)
+    acc.cobroApp += numCabify(r.cobro_app)
+    acc.peajes += numCabify(r.peajes)
+    acc.promociones += numCabify(r.promociones)
+    acc.deducciones += numCabify(r.deducciones)
+    porDia.set(fecha, acc)
+  }
+
+  // Agrupa por semana lunes-domingo.
+  // "Hoy" se arma con los componentes LOCALES, no con toISOString(): en zonas con
+  // offset negativo (Lima, Buenos Aires) el UTC ya es el dia siguiente al caer la
+  // tarde, y un domingo a la noche la semana en curso saltaria a la siguiente.
+  // Ademas asi coincide con cabifyService.getWeekRange, que tambien usa hora local.
+  const ahora = new Date()
+  const dosDig = (n: number) => String(n).padStart(2, '0')
+  const hoyLunes = isoDia(lunesDe(`${ahora.getFullYear()}-${dosDig(ahora.getMonth() + 1)}-${dosDig(ahora.getDate())}`))
+  const porSemana = new Map<string, CabifySemanaRend>()
+  for (const dia of porDia.values()) {
+    const lunes = lunesDe(dia.fecha)
+    const domingo = new Date(lunes); domingo.setUTCDate(domingo.getUTCDate() + 6)
+    const inicio = isoDia(lunes)
+    const semana = semanaISO(lunes)
+    // El año de la semana ISO es el del jueves, no siempre el del lunes.
+    const jueves = new Date(lunes); jueves.setUTCDate(jueves.getUTCDate() + 3)
+    const anio = jueves.getUTCFullYear()
+    const key = `${anio}-${semana}`
+    let s = porSemana.get(key)
+    if (!s) {
+      s = {
+        key, anio, semana, inicio, fin: isoDia(domingo),
+        enCurso: inicio === hoyLunes,
+        gananciaTotal: 0, cobroEfectivo: 0, cobroApp: 0, peajes: 0, promociones: 0, deducciones: 0,
+        dias: [],
+      }
+      porSemana.set(key, s)
+    }
+    s.gananciaTotal += dia.gananciaTotal
+    s.cobroEfectivo += dia.cobroEfectivo
+    s.cobroApp += dia.cobroApp
+    s.peajes += dia.peajes
+    s.promociones += dia.promociones
+    s.deducciones += dia.deducciones
+    s.dias.push(dia)
+  }
+
+  const semanas = Array.from(porSemana.values())
+  for (const s of semanas) s.dias.sort((a, b) => a.fecha.localeCompare(b.fecha))
+  // Mas reciente primero, igual que el resto de los historiales del modal.
+  semanas.sort((a, b) => b.inicio.localeCompare(a.inicio))
+  return semanas
 }

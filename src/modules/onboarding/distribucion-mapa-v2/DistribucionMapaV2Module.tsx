@@ -68,7 +68,7 @@ import type {
   Radar,
 } from './types'
 import { FiltrosSidebar } from './components/FiltrosSidebar'
-import { contarFiltrosActivos, filtrosIniciales, type FiltrosV2 } from './components/filtrosOpciones'
+import { contarFiltrosActivos, creadoEnRango, filtrosIniciales, type FiltrosV2 } from './components/filtrosOpciones'
 import { MapaCanvas } from './components/MapaCanvas'
 import {
   colorEntidad,
@@ -322,6 +322,7 @@ export function DistribucionMapaV2Module() {
         return false
       }
       if (!matchRequisitos(l, filtros.requisitosLead)) return false
+      if (!creadoEnRango(l.creadoEn, filtros.creadoDesde, filtros.creadoHasta)) return false
       if (!matchZona(l)) return false
       return coincideBusqueda(l, filtros.busqueda)
     },
@@ -1061,7 +1062,7 @@ export function DistribucionMapaV2Module() {
       )}
 
       {fichaConductor && (
-        <ConductorDetalleModal conductor={fichaConductor} onClose={() => setFichaConductor(null)} />
+        <ConductorDetalleModal conductor={fichaConductor} onClose={() => setFichaConductor(null)} mostrarIntercom />
       )}
       {fichaLead && <LeadDetalleModal lead={fichaLead} onClose={() => setFichaLead(null)} />}
     </div>

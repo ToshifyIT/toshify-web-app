@@ -131,6 +131,7 @@ interface LeadRow {
   antecedentes_penales: boolean | null
   phone: string | null
   tiempo_de_antiguedad: string | null
+  created_at: string | null
 }
 
 /** Zona peligrosa activa, con su polígono. */
@@ -484,6 +485,7 @@ export async function fetchConductoresMapa(
       turnoLibreAsignacion: companero.turnoLibre,
       estadoLead: null,
       turnoLead: null,
+      creadoEn: null,
       datos,
     }
   })
@@ -564,7 +566,7 @@ export async function fetchLeadsMapa(
   let query = supabase
     .from('leads')
     .select(
-      'id, nombre_completo, primer_nombre, apellido, dni, estado_de_lead, turno, zona, direccion, latitud, longitud, edad, licencia, vencimiento_licencia, experiencia_previa, experiencia_manejo, antecedentes_penales, phone, tiempo_de_antiguedad'
+      'id, nombre_completo, primer_nombre, apellido, dni, estado_de_lead, turno, zona, direccion, latitud, longitud, edad, licencia, vencimiento_licencia, experiencia_previa, experiencia_manejo, antecedentes_penales, phone, tiempo_de_antiguedad, created_at'
     )
     .order('nombre_completo', { ascending: true }) as any
 
@@ -616,6 +618,7 @@ export async function fetchLeadsMapa(
       turnoLibreAsignacion: null,
       estadoLead: r.estado_de_lead || null,
       turnoLead: r.turno || null,
+      creadoEn: r.created_at || null,
       datos,
     }
   })

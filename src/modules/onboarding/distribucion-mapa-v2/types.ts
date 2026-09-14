@@ -75,6 +75,8 @@ export interface EntidadMapa {
   // --- Lead ---
   estadoLead: string | null
   turnoLead: string | null
+  /** `leads.created_at` (ISO). Es la columna "Creación" del módulo Leads. */
+  creadoEn: string | null
 
   // --- Común ---
   datos: DatosPersona

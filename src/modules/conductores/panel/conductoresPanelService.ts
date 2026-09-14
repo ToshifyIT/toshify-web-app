@@ -15,6 +15,18 @@
 // El resto de las multas atribuidas se consideran pendientes con su importe original.
 
 import { supabase } from '../../../lib/supabase'
+import { cabifyHistoricalService } from '../../../services/cabifyHistoricalService'
+import { normalizeDni, normalizeLicencia, normalizeNombre } from '../../../utils/normalizeDocuments'
+
+// Ingresos de Cabify del periodo consultado. MISMA fuente que el modulo
+// Integraciones > Cabify (cabifyHistoricalService), para que los numeros coincidan.
+export interface CabifyIngresos {
+  gananciaTotal: number      // ganancia_total (columna "Total" del modulo Cabify)
+  viajesFinalizados: number
+  cobroEfectivo: number
+  cobroApp: number
+  peajes: number
+}
 
 export interface ConductorPanelRow {
   id: string
@@ -56,6 +68,10 @@ export interface ConductorPanelRow {
   // Cuanto de la deuda queda SIN cubrir si se aplica el fondo de garantia.
   // Positivo = todavia debe; <= 0 = la garantia alcanza.
   saldoMenosGarantia: number
+  // --- Ingresos Cabify (opcional) ---
+  // undefined = no se pidieron (el llamador no paso opciones.cabify).
+  // null      = se pidieron, pero el conductor no cruzo con ningun registro Cabify.
+  cabify?: CabifyIngresos | null
 }
 
 // Parsea importes que en la BD vienen en DOS formatos mezclados:
@@ -117,6 +133,7 @@ interface RawConductor {
   apellidos: string | null
   numero_dni: string | null
   numero_cuit: string | null
+  numero_licencia: string | null
   conductores_estados: { codigo: string | null } | null
 }
 
@@ -140,20 +157,31 @@ interface RawPenalidad {
   incidencias: { multa_id: number | null } | null
 }
 
+export interface PanelOpciones {
+  // Rango de fechas (YYYY-MM-DD) de Cabify a incluir. Si NO se pasa, Cabify no se
+  // consulta y las filas quedan con `cabify: undefined` (los modulos de mapa, que
+  // tambien usan este servicio, no pagan esa consulta).
+  cabify?: { startDate: string; endDate: string }
+}
+
 /**
  * Carga y agrega el panel de conductores.
- * @param sedeId  si se pasa, filtra conductores por sede.
+ * @param sedeId    si se pasa, filtra conductores por sede.
+ * @param opciones  bloques opcionales de datos extra (ver PanelOpciones).
  */
-export async function cargarPanelConductores(sedeId?: string | null): Promise<ConductorPanelRow[]> {
+export async function cargarPanelConductores(
+  sedeId?: string | null,
+  opciones?: PanelOpciones,
+): Promise<ConductorPanelRow[]> {
   // Las 5 consultas son independientes entre si: se lanzan EN PARALELO para no
   // sumar la latencia de cada una (antes iban en serie). Los datos traidos y el
   // procesamiento posterior son identicos; solo cambia el "cuando" se piden.
-  const [conductores, asignacionesCond, multas, penalidades, periodos, kardexSaldos, saldosResumen, garantias] = await Promise.all([
+  const [conductores, asignacionesCond, multas, penalidades, periodos, kardexSaldos, saldosResumen, garantias, cabifyDrivers] = await Promise.all([
     // 1. Conductores (con estado y dni).
     fetchAll<RawConductor>((from, to) => {
       let q = supabase
         .from('conductores')
-        .select('id, nombres, apellidos, numero_dni, numero_cuit, conductores_estados(codigo)')
+        .select('id, nombres, apellidos, numero_dni, numero_cuit, numero_licencia, conductores_estados(codigo)')
         .range(from, to)
       if (sedeId) q = q.eq('sede_id', sedeId)
       return q
@@ -219,6 +247,16 @@ export async function cargarPanelConductores(sedeId?: string | null): Promise<Co
         .select('conductor_id, monto_total, monto_pagado, monto_realmente_pagado')
         .range(from, to)
     ),
+    // 9. Ingresos Cabify del rango pedido (solo si el llamador los pide). Se reusa
+    // el servicio del modulo Integraciones > Cabify: ya deduplica por (dni, dia),
+    // excluye de BA las companias que llegan por Bariloche y filtra por identidad
+    // de sede. Si falla, el panel sigue cargando y las columnas quedan en blanco.
+    opciones?.cabify
+      ? cabifyHistoricalService
+          .getDriversData(opciones.cabify.startDate, opciones.cabify.endDate, { sedeId })
+          .then(r => r.drivers)
+          .catch(() => [])
+      : Promise.resolve(null),
   ])
 
   // Ultimo saldo por conductor: primera aparicion en el kardex ya ordenado desc.
@@ -241,6 +279,49 @@ export async function cargarPanelConductores(sedeId?: string | null): Promise<Co
     const total = Number(gr.monto_total) || 0
     const prev = garantiaPorConductor.get(gr.conductor_id)
     if (!prev || pagada > prev.pagada) garantiaPorConductor.set(gr.conductor_id, { pagada, total })
+  }
+
+  // Ingresos Cabify por conductor. NO hay FK entre Cabify y conductores: el cruce
+  // se resuelve por identidad normalizada en cascada DNI -> licencia -> nombre
+  // completo, el MISMO criterio que asignacionesService.getAllAsignacionesActivasIndex
+  // usa en el modulo de Cabify. Un conductor puede cruzar con mas de una cuenta
+  // Cabify (la agregacion devuelve una fila por cuenta+DNI): en ese caso se SUMAN.
+  const cabifyPorConductor = new Map<string, CabifyIngresos>()
+  if (cabifyDrivers) {
+    const porDni = new Map<string, string>()       // dni normalizado -> conductorId
+    const porLicencia = new Map<string, string>()
+    const porNombre = new Map<string, string>()
+    for (const c of conductores) {
+      const d = normalizeDni(c.numero_dni)
+      if (d && !porDni.has(d)) porDni.set(d, c.id)
+      const l = normalizeLicencia(c.numero_licencia)
+      if (l && !porLicencia.has(l)) porLicencia.set(l, c.id)
+      const n = normalizeNombre(`${c.nombres || ''} ${c.apellidos || ''}`)
+      if (n && !porNombre.has(n)) porNombre.set(n, c.id)
+    }
+    for (const d of cabifyDrivers) {
+      const cid =
+        porDni.get(normalizeDni(d.nationalIdNumber)) ||
+        porLicencia.get(normalizeLicencia(d.driverLicense)) ||
+        porNombre.get(normalizeNombre(`${d.name || ''} ${d.surname || ''}`))
+      if (!cid) continue
+      const prev = cabifyPorConductor.get(cid)
+      if (prev) {
+        prev.gananciaTotal += Number(d.gananciaTotal) || 0
+        prev.viajesFinalizados += Number(d.viajesFinalizados) || 0
+        prev.cobroEfectivo += Number(d.cobroEfectivo) || 0
+        prev.cobroApp += Number(d.cobroApp) || 0
+        prev.peajes += Number(d.peajes) || 0
+      } else {
+        cabifyPorConductor.set(cid, {
+          gananciaTotal: Number(d.gananciaTotal) || 0,
+          viajesFinalizados: Number(d.viajesFinalizados) || 0,
+          cobroEfectivo: Number(d.cobroEfectivo) || 0,
+          cobroApp: Number(d.cobroApp) || 0,
+          peajes: Number(d.peajes) || 0,
+        })
+      }
+    }
   }
 
   // Asignacion actual -> vehiculo + turno por conductor (mismo criterio que antes).
@@ -380,6 +461,8 @@ export async function cargarPanelConductores(sedeId?: string | null): Promise<Co
       garantiaTotal,
       tieneGarantia: !!gar,
       saldoMenosGarantia: saldoPendiente - garantiaPagada,
+      // undefined si no se pidio Cabify; null si se pidio y no hubo cruce.
+      cabify: cabifyDrivers ? (cabifyPorConductor.get(c.id) ?? null) : undefined,
     }
   })
 

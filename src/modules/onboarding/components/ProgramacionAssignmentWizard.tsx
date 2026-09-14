@@ -122,7 +122,6 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
       } catch { /* se mantienen los defaults */ }
     })()
     return () => { cancelado = true }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [editData?.id])
   const [step, setStep] = useState(0)
   const [vehicles, setVehicles] = useState<Vehicle[]>([])
@@ -346,21 +345,25 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
           const tieneProgramacionPendiente = vehiculosProgramadosSet.has(vehiculo.id)
           const asignacion = asignacionesPorVehiculo.get(vehiculo.id)
 
-          // Si no tiene asignacion activa
+          // Sin asignacion activa.
+          // 'programado' significa que el vehiculo YA fue enviado al modulo de
+          // Asignaciones (existe la asignacion en estado 'programado'). Una
+          // programacion todavia sin enviar es un estado distinto: avisa, pero no
+          // bloquea. Mismo criterio que AssignmentWizard.tsx.
           if (!asignacion || asignacion.estado === 'programado') {
-            // Si tiene programacion pendiente O asignacion en estado 'programado', marcar como programado
-            if (tieneProgramacionPendiente || asignacion) {
+            if (asignacion) {
               return { ...vehiculo, disponibilidad: 'programado' as const, asignacionActiva: undefined }
+            }
+            if (tieneProgramacionPendiente) {
+              return { ...vehiculo, disponibilidad: 'programacion_pendiente' as const, asignacionActiva: undefined }
             }
             return { ...vehiculo, disponibilidad: 'disponible' as const, asignacionActiva: undefined }
           }
 
           // Es asignacion activa
           if (asignacion.horario === 'todo_dia') {
-            // todo_dia siempre ocupado - si tiene programacion pendiente, marcar como programado
-            if (tieneProgramacionPendiente) {
-              return { ...vehiculo, disponibilidad: 'programado' as const, asignacionActiva: undefined }
-            }
+            // La ocupacion real manda: se conserva asignacionActiva aunque exista
+            // una programacion pendiente sobre el mismo vehiculo.
             return {
               ...vehiculo,
               disponibilidad: 'ocupado' as const,
@@ -383,12 +386,8 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
             disponibilidad = 'turno_nocturno_libre'
           }
 
-          // Si tiene programacion pendiente Y esta completamente ocupado, marcar como programado
-          // Pero si tiene slot libre, permitir seleccion (mostrar el slot disponible)
-          if (tieneProgramacionPendiente && disponibilidad === 'ocupado') {
-            return { ...vehiculo, disponibilidad: 'programado' as const, asignacionActiva: undefined }
-          }
-
+          // La ocupacion real manda tambien en turnos: una programacion pendiente
+          // no oculta el detalle de slots libres/ocupados.
           return {
             ...vehiculo,
             disponibilidad,
@@ -403,7 +402,7 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
 
         // Si estamos editando, marcar el vehículo actual como disponible (no programado)
         const vehiculosFinales = vehiculosConDisponibilidad.map((v: any) => {
-          if (editData && v.id === editData.vehiculo_entregar_id && v.disponibilidad === 'programado') {
+          if (editData && v.id === editData.vehiculo_entregar_id && (v.disponibilidad === 'programado' || v.disponibilidad === 'programacion_pendiente')) {
             return { ...v, disponibilidad: 'disponible' }
           }
           return v
@@ -925,6 +924,11 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
   }, [vehicles, formData.vehiculo_id, formData.vehiculo_cambio_id, formData.cambio_vehiculo])
 
   const handleSelectVehicle = (vehicle: Vehicle) => {
+    // Un vehiculo ya enviado a Asignaciones no se puede volver a programar.
+    // El card lo bloquea visualmente; este guard cubre cualquier otro punto de
+    // entrada. Se exceptua el que ya esta seleccionado (modo edicion).
+    if (vehicle.disponibilidad === 'programado' && vehicle.id !== formData.vehiculo_id) return
+
     // Propietario: se autocompleta con el grupo de flota del vehiculo.
     // vehiculos.grupo_flota guarda la razon_social de grupos_flota, que es el
     // mismo valor que usan las opciones del select. Solo se aplica si matchea
@@ -1578,8 +1582,8 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
           if (b.id === formData.vehiculo_id) return 1
         }
         const prioridad: Record<string, number> = (formData.devolucion_vehiculo || formData.cambio_vehiculo)
-          ? { 'ocupado': 0, 'turno_diurno_libre': 0, 'turno_nocturno_libre': 0, 'programado': 1, 'disponible': 2 }
-          : { 'disponible': 0, 'turno_diurno_libre': 1, 'turno_nocturno_libre': 1, 'ocupado': 2 }
+          ? { 'ocupado': 0, 'turno_diurno_libre': 0, 'turno_nocturno_libre': 0, 'programacion_pendiente': 1, 'programado': 2, 'disponible': 3 }
+          : { 'disponible': 0, 'turno_diurno_libre': 1, 'turno_nocturno_libre': 1, 'ocupado': 2, 'programacion_pendiente': 3, 'programado': 4 }
         const prioA = prioridad[a.disponibilidad] ?? 99
         const prioB = prioridad[b.disponibilidad] ?? 99
         return prioA - prioB
@@ -1600,8 +1604,10 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
         badgeText = 'En Uso'; badgeBg = '#F59E0B'; badgeColor = 'white'; detalleText = 'Nocturno Libre'; break
       case 'ocupado':
         badgeText = 'En Uso'; badgeBg = '#F59E0B'; badgeColor = 'white'; detalleText = asig?.horario === 'todo_dia' ? 'A Cargo' : 'Turnos completos'; break
+      case 'programacion_pendiente':
+        badgeText = 'Con Programacion'; badgeBg = '#8B5CF6'; badgeColor = 'white'; detalleText = 'Programacion sin enviar'; break
       case 'programado':
-        badgeText = 'Programado'; badgeBg = '#EF4444'; badgeColor = 'white'; detalleText = 'Tiene entrega pendiente'; break
+        badgeText = 'Programado'; badgeBg = '#EF4444'; badgeColor = 'white'; detalleText = 'Ya enviado a Asignaciones'; break
     }
     return { badgeText, badgeBg, badgeColor, detalleText }
   }
@@ -3021,6 +3027,8 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
                     <option value="disponible">Disponible</option>
                     <option value="con_turno_libre">Con turno libre</option>
                     <option value="en_uso">En Uso</option>
+                    <option value="programacion_pendiente">Con programacion</option>
+                    <option value="programado">Programado</option>
                   </select>
                   <select
                     value={vehicleGncFilter}
@@ -3064,13 +3072,19 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
                       const { badgeText, badgeBg, badgeColor, detalleText } = getVehicleBadge(vehicle)
                       const gncBadge = getGncBadge(vehicle)
                       const isProgramado = vehicle.disponibilidad === 'programado'
+                      const isProgramacionPendiente = vehicle.disponibilidad === 'programacion_pendiente'
+                      // Solo se bloquea lo ya enviado a Asignaciones. Una programacion
+                      // pendiente avisa (badge violeta) pero deja seguir.
+                      const bloqueado = isProgramado && vehicle.id !== formData.vehiculo_id
 
                       return (
                         <div
                           key={vehicle.id}
                           className={`vehicle-card ${formData.vehiculo_id === vehicle.id ? 'selected' : ''}`}
-                          onClick={() => handleSelectVehicle(vehicle)}
-                          style={undefined}
+                          onClick={() => { if (!bloqueado) handleSelectVehicle(vehicle) }}
+                          title={bloqueado ? 'Este vehiculo ya fue enviado al modulo de Asignaciones' : undefined}
+                          aria-disabled={bloqueado || undefined}
+                          style={bloqueado ? { cursor: 'not-allowed', opacity: 0.55 } : undefined}
                         >
                           <div className="vehicle-info">
                             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px', flexWrap: 'wrap' }}>
@@ -3097,7 +3111,7 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
                               </span>
                               {detalleText && (
                                 <span style={{
-                                  color: isProgramado ? '#EF4444' : '#6B7280',
+                                  color: isProgramado ? '#EF4444' : isProgramacionPendiente ? '#8B5CF6' : '#6B7280',
                                   fontSize: 'clamp(9px, 0.8vw, 11px)',
                                   fontWeight: '500'
                                 }}>
