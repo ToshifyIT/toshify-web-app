@@ -12,68 +12,15 @@ import express from 'express';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { SSEServerTransport } from '@modelcontextprotocol/sdk/server/sse.js';
 import { z } from 'zod';
+import { rateLimit } from 'express-rate-limit';
+import { supabaseRequest } from './lib/supabase.js';
+import { validateApiKey, hasPermission } from './lib/auth.js';
+import leadsRouter from './routes/leads.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
 const PORT = process.env.MCP_PORT || 3002;
-const SUPABASE_URL = process.env.VITE_SUPABASE_URL;
-const SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
-
-// =====================================================
-// Supabase helper
-// =====================================================
-
-async function supabaseRequest(path, options = {}) {
-  const url = `${SUPABASE_URL}/rest/v1/${path}`;
-  const res = await fetch(url, {
-    ...options,
-    headers: {
-      'apikey': SERVICE_KEY,
-      'Authorization': `Bearer ${SERVICE_KEY}`,
-      'Content-Type': 'application/json',
-      ...options.headers,
-    },
-  });
-
-  if (!res.ok) {
-    const body = await res.text();
-    throw new Error(`Supabase error (${res.status}): ${body}`);
-  }
-
-  return res;
-}
-
-// =====================================================
-// API Key validation
-// =====================================================
-
-async function validateApiKey(apiKey) {
-  if (!apiKey) return null;
-
-  try {
-    const res = await supabaseRequest(
-      `api_keys?api_key=eq.${encodeURIComponent(apiKey)}&is_active=eq.true&select=id,name,permissions`
-    );
-    const data = await res.json();
-    if (!data.length) return null;
-
-    // Update last_used_at
-    supabaseRequest(`api_keys?id=eq.${data[0].id}`, {
-      method: 'PATCH',
-      body: JSON.stringify({ last_used_at: new Date().toISOString() }),
-    }).catch(() => {}); // fire and forget
-
-    return data[0];
-  } catch {
-    return null;
-  }
-}
-
-function hasPermission(apiKeyData, permission) {
-  if (!apiKeyData?.permissions) return false;
-  return apiKeyData.permissions.includes(permission);
-}
 
 // =====================================================
 // Campos de la tabla leads (nombres reales en BD, snake_case)
@@ -729,6 +676,26 @@ app.get('/docs', (req, res) => {
 app.get('/health', (req, res) => {
   res.json({ status: 'ok', service: 'toshify-mcp', version: '1.0.0' });
 });
+
+// =====================================================
+// API REST publica (solo lectura) para terceros
+// =====================================================
+// Montada en el mismo servicio que el MCP porque aca ya viven la validacion de
+// API keys y el acceso con service_role. Las herramientas MCP no se tocan.
+
+// El rate limit va ANTES de autenticar a proposito: asi una key invalida
+// tampoco puede martillar el endpoint probando valores.
+const apiLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  limit: 60,
+  standardHeaders: 'draft-7',
+  legacyHeaders: false,
+  keyGenerator: (req) => String(req.headers['x-api-key'] || 'sin-key'),
+  validate: { keyGeneratorIpFallback: false },
+  message: { error: 'rate_limited', message: 'Demasiadas requests. Limite: 60 por minuto.' },
+});
+
+app.use('/api/v1', apiLimiter, leadsRouter);
 
 // Store active transports
 const transports = {};

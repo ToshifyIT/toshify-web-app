@@ -340,8 +340,8 @@ export function MapaCanvas({
         )}
       </GoogleMap>
 
-      {/* Barra del par en curso. Va ABAJO para no pisar la barra de base: con
-          una base fijada las dos conviven, y la base tiene que verse siempre. */}
+      {/* Barra del par en curso. Va ABAJO para dejar despejada la parte alta del
+          mapa (controles de zoom y ficha de la persona activa). */}
       {parDestacado && (
         <BarraFlotante onCerrar={onLimpiarPar} posicion="abajo">
           <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-primary)' }}>
@@ -371,18 +371,9 @@ export function MapaCanvas({
         </BarraFlotante>
       )}
 
-      {/* Barra de base fijada (emparejamiento manual). Arriba y siempre
-          visible mientras haya base: es la referencia de todo lo que se mide. */}
-      {baseManual && (
-        <BarraFlotante onCerrar={onSoltarBase} etiquetaCerrar="Soltar base">
-          <Pin size={13} color="#ff0033" />
-          <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-primary)' }}>Base:</span>
-          <ExtremoPar entidad={baseManual} />
-          <span style={{ fontSize: 11, color: 'var(--text-tertiary)' }}>
-            {midiendoManual ? 'Midiendo…' : parDestacado ? 'tocá a otra persona para comparar' : 'tocá a otra persona para medir'}
-          </span>
-        </BarraFlotante>
-      )}
+      {/* La base fijada NO se anuncia con una barra sobre el mapa: ya se ve en
+          la lista (fijada arriba con el chip BASE) y en su propia ficha, que es
+          además desde donde se suelta. */}
 
       {/* Barra del modo "Ver todos en mapa" */}
       {radar && paresDibujados.length === 0 && (
