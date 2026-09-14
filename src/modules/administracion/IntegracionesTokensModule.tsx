@@ -1313,6 +1313,7 @@ const AVAILABLE_PERMISSIONS = [
   { value: 'hireflix:create', label: 'Hireflix: Crear', desc: 'Crear registros de Hireflix' },
   { value: 'hireflix:update', label: 'Hireflix: Escritura', desc: 'Actualizar registros de Hireflix' },
   { value: 'hireflix:delete', label: 'Hireflix: Eliminar', desc: 'Eliminar registros de Hireflix' },
+  { value: 'leads:api', label: 'Leads: API REST (externos)', desc: 'Acceso de solo lectura a GET /api/v1/leads. Para terceros fuera de Toshify.' },
 ];
 
 function McpTab() {
