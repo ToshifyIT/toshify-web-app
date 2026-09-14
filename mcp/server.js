@@ -5,7 +5,6 @@
  * Autenticacion: API key estatica via header x-api-key
  */
 
-import { randomUUID } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import express from 'express';
@@ -16,6 +15,10 @@ import { rateLimit } from 'express-rate-limit';
 import { supabaseRequest } from './lib/supabase.js';
 import { validateApiKey, hasPermission } from './lib/auth.js';
 import leadsRouter from './routes/leads.js';
+import vehiculosRouter from './routes/vehiculos.js';
+import conductoresRouter from './routes/conductores.js';
+import asignacionesRouter from './routes/asignaciones.js';
+import flotaRouter from './routes/flota.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -696,6 +699,10 @@ const apiLimiter = rateLimit({
 });
 
 app.use('/api/v1', apiLimiter, leadsRouter);
+app.use('/api/v1', apiLimiter, vehiculosRouter);
+app.use('/api/v1', apiLimiter, conductoresRouter);
+app.use('/api/v1', apiLimiter, asignacionesRouter);
+app.use('/api/v1', apiLimiter, flotaRouter);
 
 // Store active transports
 const transports = {};
