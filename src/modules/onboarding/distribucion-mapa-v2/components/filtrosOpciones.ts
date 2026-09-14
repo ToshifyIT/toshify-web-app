@@ -54,6 +54,9 @@ export interface FiltrosV2 {
   estadosLead: Set<string>
   turnosLead: Set<string>
   requisitosLead: Set<string>
+  /** Rango de fecha de creación del lead ('YYYY-MM-DD' o '' = sin límite). Inclusivo por día. */
+  creadoDesde: string
+  creadoHasta: string
   // Global
   zonas: Set<string>
 }
@@ -72,6 +75,8 @@ export function filtrosIniciales(): FiltrosV2 {
     estadosLead: new Set<string>(ESTADOS_LEAD_DEFAULT as unknown as string[]),
     turnosLead: new Set(),
     requisitosLead: new Set(),
+    creadoDesde: '',
+    creadoHasta: '',
     // A diferencia del v1 (que arrancaba fijado en CABA), acá zona arranca vacío
     // = todas, porque el default de leads ya acota el volumen.
     zonas: new Set(),
@@ -104,6 +109,39 @@ export function contarFiltrosActivos(f: FiltrosV2): number {
   if (!mismoSet(f.estadosLead, base.estadosLead)) n++
   if (f.turnosLead.size > 0) n++
   if (f.requisitosLead.size > 0) n++
+  if (f.creadoDesde !== '' || f.creadoHasta !== '') n++
   if (f.zonas.size > 0) n++
   return n
+}
+
+/**
+ * ¿La fecha ISO `creadoEn` cae dentro del rango [desde, hasta]? Se compara por
+ * día calendario en hora local (00:00 del "desde" a 23:59:59 del "hasta"), no
+ * por instante exacto. Sin rango → pasa todo; con rango y sin fecha → no pasa.
+ */
+export function creadoEnRango(creadoEn: string | null, desde: string, hasta: string): boolean {
+  if (desde === '' && hasta === '') return true
+  if (!creadoEn) return false
+  const t = new Date(creadoEn).getTime()
+  if (Number.isNaN(t)) return false
+  if (desde !== '') {
+    const d = new Date(`${desde}T00:00:00`).getTime()
+    if (!Number.isNaN(d) && t < d) return false
+  }
+  if (hasta !== '') {
+    const h = new Date(`${hasta}T23:59:59.999`).getTime()
+    if (!Number.isNaN(h) && t > h) return false
+  }
+  return true
+}
+
+/** Resumen corto del rango para el acordeón: 'Todas', 'desde 01/09', '01/09 – 11/09'. */
+export function resumenRangoCreacion(desde: string, hasta: string): string {
+  const corto = (iso: string) => {
+    const [, m, d] = iso.split('-')
+    return `${d}/${m}`
+  }
+  if (desde === '' && hasta === '') return 'Todas'
+  if (desde !== '' && hasta !== '') return `${corto(desde)} – ${corto(hasta)}`
+  return desde !== '' ? `desde ${corto(desde)}` : `hasta ${corto(hasta)}`
 }

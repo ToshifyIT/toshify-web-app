@@ -56,6 +56,21 @@
 .cdet-chip { background: #dbeafe; color: #1d4ed8; padding: 1px 7px; border-radius: 999px; font-weight: 600; letter-spacing: .03em; }
 .cdet-ok { color: #15803d; font-weight: 600; }
 .cdet-off { color: #6b7280; font-weight: 600; text-transform: capitalize; }
+/* Botón "Abrir conversación" de Intercom (opt-in vía prop mostrarIntercom).
+   margin-right deja libre la X de cerrar, que está en posición absoluta. */
+.cdet-intercom {
+  display: inline-flex; align-items: center; gap: 6px;
+  margin-left: auto; margin-right: 20px; flex-shrink: 0;
+  border: 1px solid transparent;
+  background: var(--color-primary, #ff0033); color: #fff;
+  border-radius: 8px; padding: 7px 12px;
+  font-size: 12px; font-weight: 600; cursor: pointer;
+}
+.cdet-intercom:hover:not(:disabled) { filter: brightness(0.92); }
+.cdet-intercom:disabled {
+  background: #f3f4f6; color: #9ca3af;
+  border-color: var(--border-primary, #e5e7eb); cursor: not-allowed;
+}
 
 .cdet-kpis {
   flex-shrink: 0;

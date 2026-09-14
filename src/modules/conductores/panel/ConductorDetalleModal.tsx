@@ -4,19 +4,20 @@
 // Reusa la misma logica de datos que el portal Mi Espacio.
 
 import { useState, useEffect, useMemo, Fragment } from 'react'
-import { X, AlertTriangle, Wallet, Gauge, Receipt, Info, ShieldCheck, BadgeCheck, CalendarDays, Hash, Scale, PiggyBank, ChevronDown } from 'lucide-react'
+import { X, AlertTriangle, Wallet, Gauge, Receipt, Info, ShieldCheck, BadgeCheck, CalendarDays, Hash, Scale, PiggyBank, ChevronDown, MessageSquare } from 'lucide-react'
 import { supabase } from '../../../lib/supabase'
 import { formatCurrency } from '../../../types/facturacion.types'
 import { calcularKmSemanasConductor, type KmSemanaConductor } from '../../portal/kmRecorridos'
-import { cargarMultasConductor, cargarFacturacionConductor, cargarResumenExtra, cargarExcesoKmConductor, cargarAsignacionesConductor, cargarHistorialBajasConductor, cargarGarantiaConductor, cargarKardexSaldoConductor, calcularResumenGarantia, saldoActualKardex, ESTADO_GARANTIA_UI, type MultaDetalle, type FacturacionSemana, type ResumenExtra, type ExcesoKmConductor, type AsignacionHist, type BajaHist, type GarantiaKardex, type SaldoKardex } from './conductorDetalleService'
+import { cargarMultasConductor, cargarFacturacionConductor, cargarResumenExtra, cargarExcesoKmConductor, cargarAsignacionesConductor, cargarHistorialBajasConductor, cargarGarantiaConductor, cargarKardexSaldoConductor, cargarRendimientoCabifyConductor, calcularResumenGarantia, saldoActualKardex, ESTADO_GARANTIA_UI, type MultaDetalle, type FacturacionSemana, type ResumenExtra, type ExcesoKmConductor, type AsignacionHist, type BajaHist, type GarantiaKardex, type SaldoKardex, type CabifySemanaRend } from './conductorDetalleService'
 import type { ConductorPanelRow } from './conductoresPanelService'
 import { SemanaDetalleModal } from './SemanaDetalleModal'
 import { SaldoHistorialTab } from './SaldoHistorialTab'
 import { GarantiaHistorialTab } from './GarantiaHistorialTab'
+import { RendimientoCabifyTab } from './RendimientoCabifyTab'
 import './ConductorDetalleModal.css'
 
 // Orden de las pestañas tal como se muestran en la barra (izq -> der).
-type Tab = 'facturacion' | 'saldo' | 'garantia' | 'multas' | 'km' | 'asignaciones' | 'bajas'
+type Tab = 'facturacion' | 'saldo' | 'garantia' | 'multas' | 'km' | 'cabify' | 'asignaciones' | 'bajas'
 
 // Etiqueta legible de turno/horario y estados para los historiales.
 function horarioLabel(h: string | null): string {
@@ -77,7 +78,17 @@ function turnoKmLabel(modalidad: string | null, horario: string | null): string 
   return '—'
 }
 
-export function ConductorDetalleModal({ conductor, onClose }: { conductor: ConductorPanelRow; onClose: () => void }) {
+export function ConductorDetalleModal({
+  conductor,
+  onClose,
+  mostrarIntercom = false,
+}: {
+  conductor: ConductorPanelRow
+  onClose: () => void
+  // Opt-in: muestra el botón "Abrir conversación" de Intercom. Hoy solo lo activa
+  // Distribución en mapa v2; el resto de los usos del modal no cambia.
+  mostrarIntercom?: boolean
+}) {
   const [tab, setTab] = useState<Tab>('multas')
   const [multas, setMultas] = useState<MultaDetalle[]>([])
   const [facturacion, setFacturacion] = useState<FacturacionSemana[]>([])
@@ -94,12 +105,37 @@ export function ConductorDetalleModal({ conductor, onClose }: { conductor: Condu
   const [saldoKardex, setSaldoKardex] = useState<SaldoKardex | null>(null)
   const [saldoLoading, setSaldoLoading] = useState(true)
   const [resumen, setResumen] = useState<ResumenExtra>({ gananciaCabify: 0 })
+  // Rendimiento Cabify semana a semana (pestaña propia). Carga en paralelo:
+  // no bloquea al resto del modal ni a los KPIs.
+  const [cabifySemanas, setCabifySemanas] = useState<CabifySemanaRend[]>([])
+  const [cabifyLoading, setCabifyLoading] = useState(true)
   const [loading, setLoading] = useState(true)
   const [kmLoading, setKmLoading] = useState(true)
   const [semanaSel, setSemanaSel] = useState<FacturacionSemana | null>(null)
   // Semanas con el desglose diario de km desplegado (clave `${semana}-${anio}`).
   const [kmAbiertas, setKmAbiertas] = useState<Set<string>>(new Set())
   const [deudaOpen, setDeudaOpen] = useState(false)
+  // Conversación de Intercom del conductor: undefined = buscando, null = no tiene.
+  // Se consulta aparte porque la fila del panel (ConductorPanelRow) no la trae.
+  const [idConversation, setIdConversation] = useState<string | null | undefined>(undefined)
+
+  useEffect(() => {
+    if (!mostrarIntercom) return
+    let vivo = true
+    setIdConversation(undefined)
+    supabase
+      .from('conductores')
+      .select('id_conversation')
+      .eq('id', conductor.id)
+      .maybeSingle()
+      .then(({ data, error }) => {
+        if (!vivo) return
+        if (error) console.warn('[ConductorDetalleModal] No se pudo leer id_conversation:', error.message)
+        const id = typeof data?.id_conversation === 'string' ? data.id_conversation.trim() : ''
+        setIdConversation(id || null)
+      })
+    return () => { vivo = false }
+  }, [mostrarIntercom, conductor.id])
 
   useEffect(() => {
     // Escape cierra el modal de arriba: primero el detalle de deuda, luego el de
@@ -162,6 +198,14 @@ export function ConductorDetalleModal({ conductor, onClose }: { conductor: Condu
       .then(sk => { if (vivo) setSaldoKardex(sk) })
       .catch(() => { if (vivo) setSaldoKardex(null) })
       .finally(() => { if (vivo) setSaldoLoading(false) })
+
+    // Rendimiento Cabify (histórico semanal), también en paralelo. Si falla, la
+    // pestaña muestra el vacío en vez de tumbar el modal.
+    setCabifyLoading(true)
+    cargarRendimientoCabifyConductor({ id: conductor.id, nombres: conductor.nombres, apellidos: conductor.apellidos, dni: conductor.dni })
+      .then(sem => { if (vivo) setCabifySemanas(sem) })
+      .catch(() => { if (vivo) setCabifySemanas([]) })
+      .finally(() => { if (vivo) setCabifyLoading(false) })
 
     // KM en paralelo y sin bloquear: es el cálculo más pesado (recorre viajes GPS).
     // Alimenta solo la pestaña Km y el KPI "Km última semana".
@@ -246,6 +290,18 @@ export function ConductorDetalleModal({ conductor, onClose }: { conductor: Condu
               {' · '}<span className={conductor.activo ? 'cdet-ok' : 'cdet-off'}>{conductor.activo ? 'Activo' : (conductor.estadoCodigo || 'Inactivo')}</span>
             </div>
           </div>
+          {mostrarIntercom && (
+            <button
+              className="cdet-intercom"
+              disabled={!idConversation}
+              onClick={() => {
+                if (idConversation) window.open(`https://app.intercom.com/a/inbox/ogv74k5c/inbox/conversation/${encodeURIComponent(idConversation)}`, '_blank', 'noopener,noreferrer')
+              }}
+              title={idConversation === undefined ? 'Buscando conversación…' : idConversation ? 'Abrir la conversación en Intercom' : 'Sin conversación de Intercom'}
+            >
+              <MessageSquare size={14} /> Abrir conversación
+            </button>
+          )}
         </div>
 
         {/* KPIs */}
@@ -352,6 +408,7 @@ export function ConductorDetalleModal({ conductor, onClose }: { conductor: Condu
           <button className={tab === 'garantia' ? 'active' : ''} onClick={() => setTab('garantia')}>Historial de garantía</button>
           <button className={tab === 'multas' ? 'active' : ''} onClick={() => setTab('multas')}>Multas</button>
           <button className={tab === 'km' ? 'active' : ''} onClick={() => setTab('km')}>Km recorridos</button>
+          <button className={tab === 'cabify' ? 'active' : ''} onClick={() => setTab('cabify')}>Rendimiento Cabify</button>
           <button className={tab === 'asignaciones' ? 'active' : ''} onClick={() => setTab('asignaciones')}>Historial de asignaciones</button>
           <button className={tab === 'bajas' ? 'active' : ''} onClick={() => setTab('bajas')}>Historial de bajas</button>
         </div>
@@ -373,6 +430,10 @@ export function ConductorDetalleModal({ conductor, onClose }: { conductor: Condu
               resumen={garantiaResumen}
               loading={garantiaLoading}
             />
+          ) : tab === 'cabify' ? (
+            /* Rendimiento Cabify: histórico semanal + semana en curso (misma fuente
+               que Integraciones > Cabify y que la columna del panel). */
+            <RendimientoCabifyTab data={cabifySemanas} loading={cabifyLoading} />
           ) : loading ? (
             <div className="cdet-empty">Cargando…</div>
           ) : tab === 'multas' ? (

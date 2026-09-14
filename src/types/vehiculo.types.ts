@@ -20,6 +20,9 @@ export type VehiculoDisponibilidad =
   | 'turno_diurno_libre'
   | 'turno_nocturno_libre'
   | 'ocupado'
+  /** Tiene una programacion creada pero todavia NO enviada a Asignaciones. */
+  | 'programacion_pendiente'
+  /** Ya fue enviado a Asignaciones: existe la asignacion en estado 'programado'. */
   | 'programado';
 
 /**

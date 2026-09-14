@@ -23,6 +23,7 @@ import {
   REQUISITOS,
   TURNOS,
   ZONAS,
+  resumenRangoCreacion,
   type FiltrosV2,
   type SegmentoV2,
 } from './filtrosOpciones'
@@ -45,6 +46,44 @@ function alternar(set: Set<string>, valor: string): Set<string> {
   if (next.has(valor)) next.delete(valor)
   else next.add(valor)
   return next
+}
+
+function CampoFecha({
+  label,
+  value,
+  min,
+  max,
+  onChange,
+}: {
+  label: string
+  value: string
+  min?: string
+  max?: string
+  onChange: (v: string) => void
+}) {
+  return (
+    <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12 }}>
+      <span style={{ width: 42, color: 'var(--text-secondary)', fontWeight: 600 }}>{label}</span>
+      <input
+        type="date"
+        value={value}
+        min={min}
+        max={max}
+        onChange={(e) => onChange(e.target.value)}
+        style={{
+          flex: 1,
+          minWidth: 0,
+          padding: '5px 7px',
+          border: '1px solid var(--border-primary)',
+          borderRadius: 7,
+          fontSize: 12,
+          background: 'var(--bg-secondary)',
+          color: 'var(--text-primary)',
+          boxSizing: 'border-box',
+        }}
+      />
+    </label>
+  )
 }
 
 function resumen(set: Set<string>, vacio = 'Todos'): string {
@@ -340,6 +379,30 @@ export function FiltrosSidebar({
                 />
               ))}
               <Hint>Turno que el lead declaró como preferencia.</Hint>
+            </Acordeon>
+
+            <Acordeon
+              titulo="Fecha de creación"
+              resumen={resumenRangoCreacion(filtros.creadoDesde, filtros.creadoHasta)}
+            >
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                <CampoFecha
+                  label="Desde"
+                  value={filtros.creadoDesde}
+                  max={filtros.creadoHasta || undefined}
+                  onChange={(v) => onChange({ creadoDesde: v })}
+                />
+                <CampoFecha
+                  label="Hasta"
+                  value={filtros.creadoHasta}
+                  min={filtros.creadoDesde || undefined}
+                  onChange={(v) => onChange({ creadoHasta: v })}
+                />
+              </div>
+              <Hint>
+                Fecha en que se creó el lead (columna “Creación” del módulo Leads). Ambos
+                extremos son inclusivos; se puede dejar uno vacío.
+              </Hint>
             </Acordeon>
 
             <Acordeon titulo="Requisitos" resumen={resumen(filtros.requisitosLead, 'Ninguno')}>
