@@ -1314,6 +1314,10 @@ const AVAILABLE_PERMISSIONS = [
   { value: 'hireflix:update', label: 'Hireflix: Escritura', desc: 'Actualizar registros de Hireflix' },
   { value: 'hireflix:delete', label: 'Hireflix: Eliminar', desc: 'Eliminar registros de Hireflix' },
   { value: 'leads:api', label: 'Leads: API REST (externos)', desc: 'Acceso de solo lectura a GET /api/v1/leads. Para terceros fuera de Toshify.' },
+  { value: 'vehiculos:api', label: 'Vehiculos: API REST (externos)', desc: 'Solo lectura de GET /api/v1/vehiculos. Sin chasis, motor, titular ni poliza.' },
+  { value: 'conductores:api', label: 'Conductores: API REST (externos)', desc: 'Solo lectura de GET /api/v1/conductores. Sin CBU, antecedentes ni datos de emergencia.' },
+  { value: 'asignaciones:api', label: 'Asignaciones: API REST (externos)', desc: 'Solo lectura de GET /api/v1/asignaciones. Vinculo conductor-vehiculo.' },
+  { value: 'flota:api', label: 'Estado de Flota: API REST (externos)', desc: 'Solo lectura de GET /api/v1/estado-flota. Toda la flota con su asignacion activa.' },
 ];
 
 function McpTab() {
