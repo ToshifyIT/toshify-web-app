@@ -18,6 +18,7 @@ import { type ColumnDef } from '@tanstack/react-table'
 import { DataTable } from '../../components/ui/DataTable'
 import { LoadingOverlay } from '../../components/ui/LoadingOverlay'
 import { ExcelColumnFilter } from '../../components/ui/DataTable/ExcelColumnFilter'
+import { ExcelDateRangeFilter } from '../../components/ui/DataTable/ExcelDateRangeFilter'
 import './LeadsModule.css'
 import { LeadWizard } from './components/LeadWizard'
 import { LeadDetailView } from './components/LeadDetailView'
@@ -404,6 +405,31 @@ function formatDateParts(dateStr: string | undefined | null): { date: string; ti
   }
 }
 
+// Día calendario (YYYY-MM-DD) de un timestamp, en hora Argentina.
+//
+// La columna "Creación" se muestra SIEMPRE en America/Argentina/Buenos_Aires
+// (ver formatDateParts), así que el filtro de fechas tiene que comparar contra
+// ese mismo día y no contra el día de la zona horaria de la PC: si no, una
+// máquina en otro huso filtra un rango corrido respecto de lo que se ve.
+const FORMATO_DIA_ARG = new Intl.DateTimeFormat('en-CA', {
+  timeZone: 'America/Argentina/Buenos_Aires',
+  year: 'numeric',
+  month: '2-digit',
+  day: '2-digit',
+})
+
+function diaArgentina(dateStr: string | undefined | null): string | null {
+  if (!dateStr) return null
+  const d = new Date(dateStr)
+  if (isNaN(d.getTime())) return null
+  const partes = FORMATO_DIA_ARG.formatToParts(d)
+  const buscar = (tipo: string) => partes.find(p => p.type === tipo)?.value || ''
+  const anio = buscar('year')
+  const mes = buscar('month')
+  const dia = buscar('day')
+  return anio && mes && dia ? `${anio}-${mes}-${dia}` : null
+}
+
 function getDateTime(dateStr: string | undefined | null): number {
   if (!dateStr) return 0
   const time = new Date(dateStr).getTime()
@@ -475,6 +501,9 @@ export function LeadsModule() {
   const [fuenteFilter, setFuenteFilter] = useState<string[]>([])
   const [estadoFilter, setEstadoFilter] = useState<string[]>([])
   const [openFilterId, setOpenFilterId] = useState<string | null>(null)
+  // Rango de fecha de creación (YYYY-MM-DD, inclusivo en ambos extremos).
+  const [creacionDesde, setCreacionDesde] = useState<string | null>(null)
+  const [creacionHasta, setCreacionHasta] = useState<string | null>(null)
 
   // Stat card filter
   const [activeStatCard, setActiveStatCard] = useState<string | null>(null)
@@ -1132,8 +1161,20 @@ export function LeadsModule() {
       result = result.filter(l => set.has(l.estado_de_lead || ''))
     }
 
+    // Fecha de creación: rango inclusivo por día calendario argentino, el mismo
+    // que muestra la columna. Un lead sin created_at queda fuera si hay rango.
+    if (creacionDesde || creacionHasta) {
+      result = result.filter(l => {
+        const dia = diaArgentina(l.created_at)
+        if (!dia) return false
+        if (creacionDesde && dia < creacionDesde) return false
+        if (creacionHasta && dia > creacionHasta) return false
+        return true
+      })
+    }
+
     return result.sort((a, b) => getDateTime(b.created_at) - getDateTime(a.created_at))
-  }, [leads, activeStatCard, nombreFilter, zonaFilter, turnoFilter, disponibilidadFilter, fuenteFilter, estadoFilter, leadsEnZona])
+  }, [leads, activeStatCard, nombreFilter, zonaFilter, turnoFilter, disponibilidadFilter, fuenteFilter, estadoFilter, creacionDesde, creacionHasta, leadsEnZona])
 
   // ---------- HANDLERS ----------
   function handleOpenDetails(lead: Lead) {
@@ -2326,7 +2367,23 @@ export function LeadsModule() {
     {
       id: 'fecha_creacion',
       accessorFn: (row) => row.created_at,
-      header: 'Creación',
+      // Header propio: el DataTable NO envuelve las columnas cuyo header es una
+      // función, así que el filtro de fechas lo maneja el módulo y se compara
+      // por día argentino (ver diaArgentina / filteredLeads).
+      header: () => (
+        <ExcelDateRangeFilter
+          label="Creación"
+          startDate={creacionDesde}
+          endDate={creacionHasta}
+          onRangeChange={(desde, hasta) => {
+            setCreacionDesde(desde)
+            setCreacionHasta(hasta)
+          }}
+          filterId="lead_creacion"
+          openFilterId={openFilterId}
+          onOpenChange={setOpenFilterId}
+        />
+      ),
       cell: ({ row }) => {
         const { date, time } = formatDateParts(row.original.created_at)
         return (
@@ -2762,11 +2819,12 @@ export function LeadsModule() {
       },
     }))
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [uniqueNombres, nombreFilter, estadoFilter, uniqueDisponibilidades, disponibilidadFilter, uniqueZonas, zonaFilter, uniqueTurnos, turnoFilter, openFilterId, canEdit, canDelete, leadsEnZona, estadoDropdownId, sinoDropdownKey])
+  }, [uniqueNombres, nombreFilter, estadoFilter, uniqueDisponibilidades, disponibilidadFilter, uniqueZonas, zonaFilter, uniqueTurnos, turnoFilter, creacionDesde, creacionHasta, openFilterId, canEdit, canDelete, leadsEnZona, estadoDropdownId, sinoDropdownKey])
 
   // ---------- EXTERNAL FILTERS (chips) ----------
   const hasActiveFilters = nombreFilter.length > 0 || estadoFilter.length > 0 ||
-    zonaFilter.length > 0 || turnoFilter.length > 0 || disponibilidadFilter.length > 0 || fuenteFilter.length > 0 || activeStatCard !== null
+    zonaFilter.length > 0 || turnoFilter.length > 0 || disponibilidadFilter.length > 0 || fuenteFilter.length > 0 ||
+    creacionDesde !== null || creacionHasta !== null || activeStatCard !== null
 
   function clearAllFilters() {
     setNombreFilter([])
@@ -2775,6 +2833,8 @@ export function LeadsModule() {
     setTurnoFilter([])
     setDisponibilidadFilter([])
     setFuenteFilter([])
+    setCreacionDesde(null)
+    setCreacionHasta(null)
     setActiveStatCard(null)
   }
 
@@ -2796,6 +2856,16 @@ export function LeadsModule() {
     addFilters(disponibilidadFilter, 'Disponibilidad', setDisponibilidadFilter)
     addFilters(fuenteFilter, 'Fuente', setFuenteFilter)
     addFilters(estadoFilter, 'Estado', setEstadoFilter)
+    if (creacionDesde || creacionHasta) {
+      filters.push({
+        id: 'creacion-rango',
+        label: `Creación: ${creacionDesde || '...'} - ${creacionHasta || '...'}`,
+        onClear: () => {
+          setCreacionDesde(null)
+          setCreacionHasta(null)
+        },
+      })
+    }
     if (activeStatCard) {
       const labelMap: Record<string, string> = {
         inicio: 'Inicio conversación',
@@ -2814,7 +2884,7 @@ export function LeadsModule() {
       })
     }
     return filters
-  }, [hasActiveFilters, nombreFilter, zonaFilter, turnoFilter, disponibilidadFilter, fuenteFilter, estadoFilter, activeStatCard])
+  }, [hasActiveFilters, nombreFilter, zonaFilter, turnoFilter, disponibilidadFilter, fuenteFilter, estadoFilter, creacionDesde, creacionHasta, activeStatCard])
 
   // ---------- RENDER ----------
   return (

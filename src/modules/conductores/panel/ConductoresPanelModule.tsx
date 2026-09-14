@@ -14,6 +14,7 @@ import * as XLSX from 'xlsx'
 import { useSede } from '../../../contexts/SedeContext'
 import { formatCurrency } from '../../../types/facturacion.types'
 import { DataTable } from '../../../components/ui/DataTable'
+import { cabifyService } from '../../../services/cabifyService'
 import { cargarPanelConductores, type ConductorPanelRow } from './conductoresPanelService'
 import { ConductorDetalleModal } from './ConductorDetalleModal'
 import '../ConductoresModule.css'
@@ -39,6 +40,13 @@ function turnoLabel(t: string | null): string {
   return TURNO_LABELS[t] || t
 }
 
+// dd/MM de una fecha ISO. El rango de semana de Cabify se construye en UTC
+// (cabifyService.getWeekRange), asi que se lee en UTC para no correrse un dia.
+function diaCorto(iso: string): string {
+  const d = new Date(iso)
+  return `${String(d.getUTCDate()).padStart(2, '0')}/${String(d.getUTCMonth() + 1).padStart(2, '0')}`
+}
+
 export function ConductoresPanelModule() {
   const { sedeActualId } = useSede()
 
@@ -54,16 +62,32 @@ export function ConductoresPanelModule() {
   // Es null hasta el primer aviso de la tabla; ahí se cae a filteredRows.
   const [visibles, setVisibles] = useState<ConductorPanelRow[] | null>(null)
 
+  // Semana EN CURSO de Cabify (lunes-domingo, mismo calculo que el modulo
+  // Integraciones > Cabify). Se recalcula al recargar para que, si la pestaña
+  // quedo abierta al cruzar el lunes, pase sola a la semana nueva.
+  // El rango incluye hoy, asi que cabifyHistoricalService saltea su cache y
+  // siempre trae lo ultimo sincronizado (acumulado lunes -> hoy).
+  const semanaCabify = useMemo(() => {
+    void reloadKey // recalcular tambien al pulsar "Recargar"
+    return cabifyService.getWeekRange(0)
+  }, [reloadKey])
+  const rangoCabifyLabel = useMemo(
+    () => `${diaCorto(semanaCabify.startDate)} – ${diaCorto(semanaCabify.endDate)}`,
+    [semanaCabify],
+  )
+
   useEffect(() => {
     let activo = true
     setLoading(true)
     setError('')
-    cargarPanelConductores(sedeActualId)
+    cargarPanelConductores(sedeActualId, {
+      cabify: { startDate: semanaCabify.startDate, endDate: semanaCabify.endDate },
+    })
       .then(data => { if (activo) setRows(data) })
       .catch(e => { if (activo) setError(e?.message || 'Error al cargar el panel') })
       .finally(() => { if (activo) setLoading(false) })
     return () => { activo = false }
-  }, [sedeActualId, reloadKey])
+  }, [sedeActualId, reloadKey, semanaCabify])
 
   const stats = useMemo(() => ({
     conAuto: rows.filter(c => c.tieneAsignacion).length,
@@ -118,6 +142,11 @@ export function ConductoresPanelModule() {
       'Garantía Pagada': c.garantiaPagada,
       'Garantía Total': c.garantiaTotal,
       'Saldo − Garantía': c.saldoMenosGarantia,
+      [`Ingresos Cabify (${rangoCabifyLabel})`]: c.cabify ? c.cabify.gananciaTotal : '',
+      [`Viajes Cabify (${rangoCabifyLabel})`]: c.cabify ? c.cabify.viajesFinalizados : '',
+      [`Efectivo Cabify (${rangoCabifyLabel})`]: c.cabify ? c.cabify.cobroEfectivo : '',
+      [`App Cabify (${rangoCabifyLabel})`]: c.cabify ? c.cabify.cobroApp : '',
+      [`Peajes Cabify (${rangoCabifyLabel})`]: c.cabify ? c.cabify.peajes : '',
     }))
 
     const ws = XLSX.utils.json_to_sheet(dataExport)
@@ -144,6 +173,11 @@ export function ConductoresPanelModule() {
       { wch: 16 }, // Garantía Pagada
       { wch: 15 }, // Garantía Total
       { wch: 17 }, // Saldo − Garantía
+      { wch: 24 }, // Ingresos Cabify
+      { wch: 22 }, // Viajes Cabify
+      { wch: 24 }, // Efectivo Cabify
+      { wch: 22 }, // App Cabify
+      { wch: 22 }, // Peajes Cabify
     ]
 
     const wb = XLSX.utils.book_new()
@@ -346,6 +380,66 @@ export function ConductoresPanelModule() {
         )
       },
     },
+    // --- Ingresos Cabify de la semana en curso ---
+    // Fuente: cabifyHistoricalService, el MISMO servicio que alimenta el modulo
+    // Integraciones > Cabify, para que los importes coincidan entre pantallas.
+    // Sin cruce por DNI/licencia/nombre -> '—' (distinto de $ 0,00 real) y el
+    // filtro Desde/Hasta los excluye, porque el accessor devuelve null.
+    {
+      id: 'monto_cabify_ingresos',
+      accessorFn: (r) => r.cabify?.gananciaTotal ?? null,
+      header: 'Ingresos Cabify',
+      sortingFn: (a, b) => (a.original.cabify?.gananciaTotal ?? -1) - (b.original.cabify?.gananciaTotal ?? -1),
+      cell: ({ row }) => {
+        const c = row.original.cabify
+        if (!c) return <span className="cpanel-num cpanel-nulo" title="Sin registros de Cabify vinculados a este conductor">—</span>
+        return <span className="cpanel-num" title={`Acumulado de la semana en curso (${rangoCabifyLabel})`}>{formatCurrency(c.gananciaTotal)}</span>
+      },
+    },
+    {
+      id: 'cantidad_viajes_cabify',
+      accessorFn: (r) => r.cabify?.viajesFinalizados ?? null,
+      header: 'Viajes Cabify',
+      sortingFn: (a, b) => (a.original.cabify?.viajesFinalizados ?? -1) - (b.original.cabify?.viajesFinalizados ?? -1),
+      cell: ({ row }) => {
+        const c = row.original.cabify
+        if (!c) return <span className="cpanel-num cpanel-nulo">—</span>
+        return <span className="cpanel-num">{c.viajesFinalizados}</span>
+      },
+    },
+    {
+      id: 'monto_cabify_efectivo',
+      accessorFn: (r) => r.cabify?.cobroEfectivo ?? null,
+      header: 'Efectivo Cabify',
+      sortingFn: (a, b) => (a.original.cabify?.cobroEfectivo ?? -1) - (b.original.cabify?.cobroEfectivo ?? -1),
+      cell: ({ row }) => {
+        const c = row.original.cabify
+        if (!c) return <span className="cpanel-num cpanel-nulo">—</span>
+        return <span className="cpanel-num">{formatCurrency(c.cobroEfectivo)}</span>
+      },
+    },
+    {
+      id: 'monto_cabify_app',
+      accessorFn: (r) => r.cabify?.cobroApp ?? null,
+      header: 'App Cabify',
+      sortingFn: (a, b) => (a.original.cabify?.cobroApp ?? -1) - (b.original.cabify?.cobroApp ?? -1),
+      cell: ({ row }) => {
+        const c = row.original.cabify
+        if (!c) return <span className="cpanel-num cpanel-nulo">—</span>
+        return <span className="cpanel-num">{formatCurrency(c.cobroApp)}</span>
+      },
+    },
+    {
+      id: 'monto_cabify_peajes',
+      accessorFn: (r) => r.cabify?.peajes ?? null,
+      header: 'Peajes Cabify',
+      sortingFn: (a, b) => (a.original.cabify?.peajes ?? -1) - (b.original.cabify?.peajes ?? -1),
+      cell: ({ row }) => {
+        const c = row.original.cabify
+        if (!c) return <span className="cpanel-num cpanel-nulo">—</span>
+        return <span className="cpanel-num">{formatCurrency(c.peajes)}</span>
+      },
+    },
     {
       id: 'acciones',
       header: 'Acciones',
@@ -356,7 +450,7 @@ export function ConductoresPanelModule() {
         </button>
       ),
     },
-  ], [])
+  ], [rangoCabifyLabel])
 
   return (
     <div className="cond-module">
@@ -413,6 +507,12 @@ export function ConductoresPanelModule() {
         onFilteredDataChange={setVisibles}
         headerAction={
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <span
+              style={{ fontSize: 12, color: 'var(--text-tertiary, #9ca3af)', whiteSpace: 'nowrap' }}
+              title="Las columnas de Cabify muestran el acumulado de la semana en curso (lunes a hoy) y se actualizan con cada sincronización"
+            >
+              Cabify: {rangoCabifyLabel}
+            </span>
             <button
               className="btn-secondary"
               onClick={handleExportar}
