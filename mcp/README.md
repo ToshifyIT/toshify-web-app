@@ -82,7 +82,7 @@ curl -H "x-api-key: TU_API_KEY" \
 | `hasta` | fecha ISO | `fecha_creacion` <= |
 | `search` | string | Busca en nombre, email y DNI |
 | `page` | int | Pagina, default 1 |
-| `limit` | int | Por pagina, default 20, **max 100** |
+| `limit` | int | Por pagina, default 20, **max 100**. Ver `limit=all` mas abajo |
 
 Respuesta:
 
@@ -168,13 +168,50 @@ Las whitelists son fijas en el servidor (constante `CAMPOS` de cada archivo en
 
 Agregar un campo a cualquiera de esas listas es una decision deliberada, no un ajuste.
 
+## Traer el dataset completo: `limit=all`
+
+Cualquier listado acepta `?limit=all` y devuelve **todos** los registros que
+matchean, sin paginar:
+
+```bash
+curl -H "x-api-key: TU_KEY" "https://mcp.toshify.com.ar/api/v1/vehiculos?limit=all"
+```
+
+El servidor los trae de a 1000 contra la base y los va escribiendo en la
+respuesta a medida que llegan, en vez de armar el array entero en memoria. El
+consumo de RAM es constante sin importar el tamano del resultado.
+
+El envelope es el mismo, con `limit: "all"` y un campo extra `devueltos`:
+
+```json
+{
+  "data": [ ... ],
+  "pagination": { "page": 1, "limit": "all", "total": 854, "total_pages": 1, "devueltos": 854 }
+}
+```
+
+Tambien viaja el header `X-Total-Count`.
+
+**Techo:** 50.000 registros por export. Si el resultado lo supera, devuelve 400
+`too_many_rows` y hay que acotar con filtros (`desde`/`hasta`) o paginar. No es
+una restriccion de negocio: es lo que evita que una sola request deje sin
+memoria al contenedor, que tambien sirve el MCP.
+
+**Si falla un lote intermedio:** como la respuesta ya empezo a escribirse, el
+status HTTP no se puede cambiar. En ese caso el JSON cierra igual pero
+`pagination` trae un campo `error` y `devueltos` es menor que `total`.
+**Comparar siempre `devueltos` contra `total` antes de dar por buena la carga.**
+
+Para sincronizaciones periodicas sigue siendo preferible `desde`/`hasta`:
+mueve menos datos y no depende del techo.
+
 ## Limites y errores
 
 Rate limit: **60 requests por minuto** por API key.
 
 | Codigo | Significado |
 |--------|-------------|
-| 400 | Parametros invalidos (fecha mal formada, id no UUID) |
+| 400 | Parametros invalidos (fecha mal formada, id no UUID) o `too_many_rows` en un export |
 | 401 | Falta el header `x-api-key`, o la key es invalida / esta desactivada |
 | 403 | La key existe pero no tiene el permiso `leads:api` |
 | 404 | El lead no existe |

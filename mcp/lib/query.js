@@ -17,6 +17,21 @@ export const RE_FECHA = /^\d{4}-\d{2}-\d{2}([T ][\d:.]+Z?)?$/;
 export const LIMIT_DEFAULT = 20;
 export const LIMIT_MAX = 100;
 
+/** Tamano de cada lote interno al exportar con limit=all. */
+export const LOTE_EXPORT = 1000;
+
+/**
+ * Techo duro del export completo. No es una restriccion de negocio: es lo que
+ * evita que una sola request deje sin memoria al contenedor, que ademas sirve
+ * el MCP del chatbot. Si un recurso lo supera, el consumidor tiene que filtrar.
+ */
+export const MAX_EXPORT = 50000;
+
+/** true si el consumidor pidio el dataset completo (?limit=all). */
+export function pidioTodo(query) {
+  return String(query.limit ?? '').toLowerCase() === 'all';
+}
+
 export function parsearPaginacion(query) {
   const page = Math.max(1, parseInt(query.page, 10) || 1);
   const limit = Math.min(LIMIT_MAX, Math.max(1, parseInt(query.limit, 10) || LIMIT_DEFAULT));
@@ -89,4 +104,84 @@ export async function obtener({ tabla, select, id, filtros = [] }) {
   const res = await supabaseRequest(`${tabla}?${qs}`);
   const data = await res.json();
   return data.length ? data[0] : null;
+}
+
+
+/**
+ * Cuenta las filas que matchean sin traerlas (limit=1 + count=exact).
+ * Se usa para validar el techo ANTES de empezar a escribir la respuesta.
+ */
+async function contar({ tabla, filtros = [] }) {
+  const qs = ['select=id', ...filtros, 'limit=1'].filter(Boolean).join('&');
+  const res = await supabaseRequest(`${tabla}?${qs}`, { headers: { Prefer: 'count=exact' } });
+  return parseInt(res.headers.get('content-range')?.split('/')[1], 10) || 0;
+}
+
+/**
+ * Export completo (?limit=all).
+ *
+ * Trae de a LOTE_EXPORT registros y los va escribiendo en el response a medida
+ * que llegan, en vez de armar el array entero en memoria. Asi el consumo de RAM
+ * es constante sin importar si son 800 o 50.000 filas: es lo que permite servir
+ * el dataset completo sin poner en riesgo al contenedor.
+ *
+ * Devuelve el mismo envelope que el listado paginado, con limit: "all".
+ *
+ * OJO: una vez que empezo a escribir ya no se puede cambiar el status HTTP. Por
+ * eso el techo se valida ANTES (con contar()), y un error de un lote intermedio
+ * se reporta como campo "error" dentro del JSON, no como 500.
+ */
+export async function exportarTodo({ res, tabla, select, orden, filtros = [], transform }) {
+  const total = await contar({ tabla, filtros });
+
+  if (total > MAX_EXPORT) {
+    const err = new Error(`El resultado tiene ${total} registros y el maximo por export es ${MAX_EXPORT}. Acotá con filtros (por ejemplo desde/hasta) o paginá con page y limit.`);
+    err.codigo = 'too_many_rows';
+    throw err;
+  }
+
+  res.setHeader('Content-Type', 'application/json; charset=utf-8');
+  res.setHeader('X-Total-Count', String(total));
+  res.write('{"data":[');
+
+  let enviados = 0;
+  let fallo = null;
+
+  try {
+    for (let offset = 0; offset < total; offset += LOTE_EXPORT) {
+      const qs = [
+        `select=${select}`,
+        orden ? `order=${orden}` : null,
+        `offset=${offset}`,
+        `limit=${LOTE_EXPORT}`,
+        ...filtros,
+      ].filter(Boolean).join('&');
+
+      const r = await supabaseRequest(`${tabla}?${qs}`);
+      const lote = await r.json();
+      if (!lote.length) break;
+
+      for (const fila of lote) {
+        const salida = transform ? transform(fila) : fila;
+        res.write((enviados ? ',' : '') + JSON.stringify(salida));
+        enviados += 1;
+      }
+    }
+  } catch (error) {
+    fallo = error.message;
+  }
+
+  const cola = {
+    page: 1,
+    limit: 'all',
+    total,
+    total_pages: 1,
+    devueltos: enviados,
+  };
+  if (fallo) cola.error = 'El export se interrumpió: la respuesta está incompleta';
+
+  res.write(`],"pagination":${JSON.stringify(cola)}}`);
+  res.end();
+
+  return { total, enviados, fallo };
 }
