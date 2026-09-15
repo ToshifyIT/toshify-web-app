@@ -19,6 +19,7 @@ import vehiculosRouter from './routes/vehiculos.js';
 import conductoresRouter from './routes/conductores.js';
 import asignacionesRouter from './routes/asignaciones.js';
 import flotaRouter from './routes/flota.js';
+import keysRouter from './routes/keys.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -697,6 +698,11 @@ const apiLimiter = rateLimit({
   validate: { keyGeneratorIpFallback: false },
   message: { error: 'rate_limited', message: 'Demasiadas requests. Limite: 60 por minuto.' },
 });
+
+// Self-service de API keys. Va SIN apiLimiter a proposito: se autentica con
+// usuario y contrasena (no con x-api-key), asi que el limiter de lectura no
+// puede distinguir quien llama. Trae su propio rate limit, mas estricto.
+app.use('/api/v1', keysRouter);
 
 app.use('/api/v1', apiLimiter, leadsRouter);
 app.use('/api/v1', apiLimiter, vehiculosRouter);
