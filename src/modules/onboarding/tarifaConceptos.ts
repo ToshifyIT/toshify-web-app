@@ -42,8 +42,11 @@ interface ConceptoTarifa {
   codigo: string
   /** Período tomado del sufijo de la descripción, ej. "ENE-26". Vacío si no se pudo parsear. */
   periodo: string
-  /** Monto semanal redondo. */
+  /** Monto semanal redondo (Total por semana SIN IVA). */
   precioSemanal: number
+  /** Total por semana CON IVA: precio_semanal x (1 + IVA). Mismo criterio que la
+   *  columna "Total por semana (Con IVA)" de Facturacion -> Conceptos. */
+  precioSemanalConIva: number
 }
 
 export type MapaConceptosTarifa = Record<string, ConceptoTarifa>
@@ -59,17 +62,21 @@ function extraerPeriodo(descripcion: string): string {
 export async function cargarConceptosTarifa(): Promise<MapaConceptosTarifa> {
   try {
     const { data, error } = await (supabase.from('conceptos_nomina') as any)
-      .select('codigo, descripcion, precio_final, precio_semanal')
+      .select('codigo, descripcion, precio_final, precio_semanal, iva_porcentaje')
       .eq('activo', true)
       .in('codigo', CODIGOS_TARIFA_ALQUILER)
     if (error || !data) return {}
     const mapa: MapaConceptosTarifa = {}
-    for (const c of data as Array<{ codigo: string; descripcion: string; precio_final: number | null; precio_semanal: number | null }>) {
+    for (const c of data as Array<{ codigo: string; descripcion: string; precio_final: number | null; precio_semanal: number | null; iva_porcentaje: number | null }>) {
+      const neto = c.precio_semanal || 0
+      const factorIva = 1 + (c.iva_porcentaje || 0) / 100
       mapa[c.codigo] = {
         codigo: c.codigo,
         periodo: extraerPeriodo(c.descripcion),
         // Mismo criterio que ConceptosFacturacionTab: precio_semanal de BD, respaldo precio_final × 7.
         precioSemanal: c.precio_semanal ?? Math.round((c.precio_final || 0) * 7),
+        // Idem columna "Total por semana (Con IVA)": neto × (1 + IVA), respaldo precio_final × 7.
+        precioSemanalConIva: neto > 0 ? neto * factorIva : Math.round((c.precio_final || 0) * 7),
       }
     }
     return mapa
@@ -145,7 +152,10 @@ const FALLBACK: Record<TipoTarifa, string> = { antigua: 'Tarifa Antigua', nueva:
 
 const fmt = new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', minimumFractionDigits: 0, maximumFractionDigits: 0 })
 
-/** Etiqueta de una opción del selector: "ENE-26 ($ 299.000)".
+/** Etiqueta de una opción del selector: "ENE-26 ($ 290.000)".
+ *  El período legacy (ENE-26) muestra el Total por semana CON IVA, que es el
+ *  importe que imprime el documento para ese período. Cualquier otro período
+ *  sigue mostrando el Total por semana SIN IVA, sin cambios.
  *  Si el concepto no está cargado o no tiene período, usa la etiqueta genérica. */
 export function getEtiquetaTarifa(
   conceptos: MapaConceptosTarifa,
@@ -155,5 +165,6 @@ export function getEtiquetaTarifa(
 ): string {
   const c = conceptos[getCodigoTarifa(modalidad, tieneGnc, tarifa)]
   if (!c || !c.periodo) return FALLBACK[tarifa]
-  return `${c.periodo} (${fmt.format(c.precioSemanal)})`
+  const importe = c.periodo === PERIODO_TARIFA_LEGACY ? c.precioSemanalConIva : c.precioSemanal
+  return `${c.periodo} (${fmt.format(importe)})`
 }
