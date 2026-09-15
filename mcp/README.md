@@ -51,6 +51,80 @@ Cada API key tiene permisos granulares:
 
 ---
 
+# Obtener la API key
+
+El consumidor externo recibe UNA vez un **usuario y contrasena**. Con eso pide
+su API key, y de ahi en mas la usa para consultar los datos.
+
+```bash
+curl -u "TU_USUARIO:TU_CONTRASENA" https://mcp.toshify.com.ar/api/v1/keys
+```
+
+```json
+{
+  "data": {
+    "usuario": "softech",
+    "api_key": "3f7a9c...",
+    "permisos": ["leads:api","vehiculos:api","conductores:api","asignaciones:api","flota:api"],
+    "solo_lectura": true,
+    "generada_ahora": true,
+    "uso": "Enviá esta key en el header x-api-key en cada request a /api/v1/*"
+  }
+}
+```
+
+Es un **GET**: la primera llamada genera la key, y todas las siguientes
+devuelven exactamente la misma. Llamarlo dos veces no crea dos keys ni invalida
+la que ya este en uso (`generada_ahora` indica si fue la primera vez). Se puede
+reintentar sin riesgo.
+
+Las credenciales van en el header `Authorization` (HTTP Basic), nunca en la URL.
+En Postman: pestana **Authorization** → tipo **Basic Auth**.
+
+La key generada es **siempre de solo lectura**, con los cinco permisos GET. El
+consumidor no elige su alcance.
+
+## Y despues
+
+```bash
+curl -H "x-api-key: 3f7a9c..." https://mcp.toshify.com.ar/api/v1/vehiculos
+```
+
+## Limites
+
+- **10 requests por minuto** en este endpoint. Es el unico que pide contrasena,
+  y el limite existe para que probar contrasenas no sea viable
+- Un usuario inexistente y una contrasena incorrecta devuelven el mismo error,
+  para que no se puedan enumerar usuarios validos
+
+## Del lado de Toshify
+
+Alta de un consumidor (ver `sql/api_users_auth.sql`):
+
+```sql
+SELECT api_user_crear('nombre-del-tercero', 'contrasena-larga-y-aleatoria');
+```
+
+Su key la genera el mismo, en su primer GET.
+
+Rotarle la key (desactiva la anterior y emite una nueva):
+
+```sql
+SELECT api_user_rotar_key('nombre-del-tercero');
+```
+
+Cortarle todo el acceso, incluidas sus keys:
+
+```sql
+UPDATE api_users SET is_active = false WHERE username = 'nombre-del-tercero';
+```
+
+Las contrasenas se hashean con bcrypt dentro de Postgres (pgcrypto) y se
+verifican con una funcion `SECURITY DEFINER`: el hash nunca sale de la base.
+Es el mismo patron que usa el Portal Conductor.
+
+---
+
 # API REST de Leads (para terceros)
 
 Ademas del MCP, el servicio expone una API REST de **solo lectura** pensada para
