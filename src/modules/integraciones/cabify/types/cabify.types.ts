@@ -32,6 +32,7 @@ export interface CabifyDriver {
   readonly viajesRechazados?: number
   readonly viajesPerdidos?: number
   readonly tasaAceptacion?: number
+  readonly horasConectadas?: number
   readonly horasConectadasFormato?: string
   readonly tasaOcupacion?: number
   readonly cobroEfectivo?: number | string

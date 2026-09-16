@@ -175,17 +175,30 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
     // Si hay datos de edición, pre-cargar
     if (editData) {
       const isCargo = editData.modalidad === 'a_cargo'
+      // En cambio de vehículo la BD guarda vehiculo_entregar = NUEVO y
+      // vehiculo_cambio = VIEJO, pero el form usa vehiculo_id = VIEJO y
+      // vehiculo_cambio_id = NUEVO (el guardado vuelve a cruzarlos). Se deshace
+      // el cruce al pre-cargar para que editar y guardar no invierta los autos.
+      const esCambio = editData.cambio_vehiculo === true
       return {
         sede_id: editData.sede_id || '',
         modalidad: editData.modalidad || '',
-        vehiculo_id: editData.vehiculo_entregar_id || '',
-        vehiculo_patente: editData.vehiculo_entregar_patente || editData.vehiculo_entregar_patente_sistema || '',
-        vehiculo_modelo: editData.vehiculo_entregar_modelo || editData.vehiculo_entregar_modelo_sistema || '',
-        vehiculo_color: editData.vehiculo_entregar_color || '',
-        // Vehículo de cambio
-        vehiculo_cambio_id: editData.vehiculo_cambio_id || '',
-        vehiculo_cambio_patente: editData.vehiculo_cambio_patente || '',
-        vehiculo_cambio_modelo: editData.vehiculo_cambio_modelo || '',
+        vehiculo_id: (esCambio ? editData.vehiculo_cambio_id : editData.vehiculo_entregar_id) || '',
+        vehiculo_patente: esCambio
+          ? (editData.vehiculo_cambio_patente || '')
+          : (editData.vehiculo_entregar_patente || editData.vehiculo_entregar_patente_sistema || ''),
+        vehiculo_modelo: esCambio
+          ? (editData.vehiculo_cambio_modelo || '')
+          : (editData.vehiculo_entregar_modelo || editData.vehiculo_entregar_modelo_sistema || ''),
+        vehiculo_color: esCambio ? '' : (editData.vehiculo_entregar_color || ''),
+        // Vehículo de cambio (en el form: el vehículo NUEVO)
+        vehiculo_cambio_id: (esCambio ? editData.vehiculo_entregar_id : editData.vehiculo_cambio_id) || '',
+        vehiculo_cambio_patente: esCambio
+          ? (editData.vehiculo_entregar_patente || editData.vehiculo_entregar_patente_sistema || '')
+          : (editData.vehiculo_cambio_patente || ''),
+        vehiculo_cambio_modelo: esCambio
+          ? (editData.vehiculo_entregar_modelo || editData.vehiculo_entregar_modelo_sistema || '')
+          : (editData.vehiculo_cambio_modelo || ''),
         // Conductor legacy (A CARGO)
         conductor_id: editData.conductor_id || '',
         conductor_nombre: editData.conductor_nombre || editData.conductor_display || '',
@@ -923,21 +936,25 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
     return vehicles.find((v) => v.id === id)?.gnc === true
   }, [vehicles, formData.vehiculo_id, formData.vehiculo_cambio_id, formData.cambio_vehiculo])
 
+  // Propietario: se autocompleta con el grupo de flota del vehiculo que se
+  // entrega. vehiculos.grupo_flota guarda la razon_social de grupos_flota, que
+  // es el mismo valor que usan las opciones del select. Solo se aplica si
+  // matchea una opcion valida; si el vehiculo no tiene grupo (o no coincide),
+  // se respeta lo que el usuario ya haya elegido.
+  const resolverPropietario = (vehicle: Vehicle, propietarioActual: string) => {
+    const grupoVehiculo = ((vehicle as any).grupo_flota || '').trim()
+    return gruposFlota.some(g => g.razon_social === grupoVehiculo)
+      ? grupoVehiculo
+      : propietarioActual
+  }
+
   const handleSelectVehicle = (vehicle: Vehicle) => {
     // Un vehiculo ya enviado a Asignaciones no se puede volver a programar.
     // El card lo bloquea visualmente; este guard cubre cualquier otro punto de
     // entrada. Se exceptua el que ya esta seleccionado (modo edicion).
     if (vehicle.disponibilidad === 'programado' && vehicle.id !== formData.vehiculo_id) return
 
-    // Propietario: se autocompleta con el grupo de flota del vehiculo.
-    // vehiculos.grupo_flota guarda la razon_social de grupos_flota, que es el
-    // mismo valor que usan las opciones del select. Solo se aplica si matchea
-    // una opcion valida; si el vehiculo no tiene grupo (o no coincide), se
-    // respeta lo que el usuario ya haya elegido.
-    const grupoVehiculo = ((vehicle as any).grupo_flota || '').trim()
-    const propietarioAuto = gruposFlota.some(g => g.razon_social === grupoVehiculo)
-      ? grupoVehiculo
-      : formData.propietario
+    const propietarioAuto = resolverPropietario(vehicle, formData.propietario)
 
     setFormData({
       ...formData,
@@ -1041,6 +1058,23 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
       } else {
         // No hay asignación activa, limpiar lista de conductores del vehículo
         setConductoresDelVehiculoActual([])
+
+        // Cambio de vehículo sobre un vehículo que solo tiene una programación
+        // borrador: la modalidad no se puede deducir de una asignación, así que
+        // se toma de esa programación pendiente (si no hay, TURNO). Los
+        // conductores se eligen a mano en el paso 3.
+        if (formData.cambio_vehiculo && !formData.modalidad) {
+          const { data: progPendiente } = await (supabase.from('programaciones_onboarding') as any)
+            .select('modalidad')
+            .eq('vehiculo_entregar_id', vehiculoId)
+            .in('estado', ['por_agendar', 'agendado', 'en_curso'])
+            .or('eliminado.is.null,eliminado.eq.false')
+            .order('created_at', { ascending: false })
+            .limit(1)
+            .maybeSingle()
+          const modalidadBorrador: 'turno' | 'a_cargo' = progPendiente?.modalidad === 'a_cargo' ? 'a_cargo' : 'turno'
+          setFormData(prev => ({ ...prev, modalidad: prev.modalidad || modalidadBorrador }))
+        }
       }
     } catch {
       // Si no hay asignacion activa, limpiar lista
@@ -1621,16 +1655,19 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
   )
 
   // Vehículos filtrados para cambio de vehículo (memoizados)
+  // Regla: una programación es un borrador. Un vehículo con programación
+  // pendiente ('programacion_pendiente') sigue visible y seleccionable en ambas
+  // listas; solo se oculta cuando ya fue enviado a Asignaciones ('programado').
   const vehiculosEnUso = useMemo(() =>
     filteredVehicles.filter(v =>
-      v.disponibilidad === 'ocupado' || v.disponibilidad === 'turno_diurno_libre' || v.disponibilidad === 'turno_nocturno_libre' || (isEditMode && v.id === formData.vehiculo_id)
+      v.disponibilidad === 'ocupado' || v.disponibilidad === 'turno_diurno_libre' || v.disponibilidad === 'turno_nocturno_libre' || v.disponibilidad === 'programacion_pendiente' || (isEditMode && v.id === formData.vehiculo_id)
     ),
     [filteredVehicles, isEditMode, formData.vehiculo_id]
   )
 
   const vehiculosDestino = useMemo(() =>
     filteredVehicles.filter(v =>
-      (v.disponibilidad === 'disponible' || v.disponibilidad === 'ocupado' || v.disponibilidad === 'turno_diurno_libre' || v.disponibilidad === 'turno_nocturno_libre' || (isEditMode && v.id === formData.vehiculo_cambio_id))
+      (v.disponibilidad === 'disponible' || v.disponibilidad === 'ocupado' || v.disponibilidad === 'turno_diurno_libre' || v.disponibilidad === 'turno_nocturno_libre' || v.disponibilidad === 'programacion_pendiente' || (isEditMode && v.id === formData.vehiculo_cambio_id))
       && v.id !== formData.vehiculo_id
     ),
     [filteredVehicles, isEditMode, formData.vehiculo_cambio_id, formData.vehiculo_id]
@@ -3311,11 +3348,14 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
                             <div
                               key={vehicle.id}
                               onClick={() => {
+                                // El documento (Anexo) se arma con el vehículo nuevo,
+                                // así que el propietario sale de su grupo de flota.
                                 setFormData(prev => ({
                                   ...prev,
                                   vehiculo_cambio_id: vehicle.id,
                                   vehiculo_cambio_patente: vehicle.patente,
-                                  vehiculo_cambio_modelo: `${vehicle.marca} ${vehicle.modelo}`
+                                  vehiculo_cambio_modelo: `${vehicle.marca} ${vehicle.modelo}`,
+                                  propietario: resolverPropietario(vehicle, prev.propietario)
                                 }))
                               }}
                               style={{
