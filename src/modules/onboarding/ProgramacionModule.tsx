@@ -519,18 +519,20 @@ export function ProgramacionModule() {
         .is('deleted_at', null))
         .order('patente')
 
-      // Obtener vehiculos ya programados (excepto el actual)
-      const { data: programacionesData } = await aplicarFiltroSede(supabase
-        .from('programaciones_onboarding')
-        .select('vehiculo_entregar_id')
-        .in('estado', ['por_agendar', 'agendado', 'en_curso'])
-        .neq('id', prog.id))
+      // Una programación es un borrador: un vehículo con otra programación
+      // pendiente sigue disponible. Solo se excluyen los vehículos ya enviados
+      // a Asignaciones (asignación en estado 'programado'), salvo el actual.
+      // Mismo criterio que ProgramacionAssignmentWizard.
+      const { data: asignacionesProgramadasData } = await aplicarFiltroSede(supabase
+        .from('asignaciones')
+        .select('vehiculo_id')
+        .eq('estado', 'programado'))
 
-      const vehiculosProgramados = new Set((programacionesData || []).map((p: any) => p.vehiculo_entregar_id))
+      const vehiculosEnviados = new Set((asignacionesProgramadasData || []).map((a: any) => a.vehiculo_id))
 
       const vehiculosFiltrados = (vehiculosData || []).filter((v: any) =>
         !estadosNoDisponibles.includes(v.vehiculos_estados?.codigo) &&
-        (!vehiculosProgramados.has(v.id) || v.id === prog.vehiculo_entregar_id)
+        (!vehiculosEnviados.has(v.id) || v.id === prog.vehiculo_entregar_id)
       )
 
       const listaVehiculos = vehiculosFiltrados.map((v: any) => ({
