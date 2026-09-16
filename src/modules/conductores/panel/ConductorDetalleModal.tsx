@@ -433,7 +433,7 @@ export function ConductorDetalleModal({
           ) : tab === 'cabify' ? (
             /* Rendimiento Cabify: histórico semanal + semana en curso (misma fuente
                que Integraciones > Cabify y que la columna del panel). */
-            <RendimientoCabifyTab data={cabifySemanas} loading={cabifyLoading} />
+            <RendimientoCabifyTab data={cabifySemanas} loading={cabifyLoading} kmSemanas={km} />
           ) : loading ? (
             <div className="cdet-empty">Cargando…</div>
           ) : tab === 'multas' ? (

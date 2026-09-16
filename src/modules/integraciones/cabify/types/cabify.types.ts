@@ -34,6 +34,9 @@ export interface CabifyDriver {
   readonly tasaAceptacion?: number
   readonly horasConectadas?: number
   readonly horasConectadasFormato?: string
+  readonly kmConViaje?: number | null
+  readonly kmSinViaje?: number | null
+  readonly kmConectado?: number | null
   readonly tasaOcupacion?: number
   readonly cobroEfectivo?: number | string
   readonly cobroApp?: number | string

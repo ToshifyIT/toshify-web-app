@@ -607,6 +607,18 @@
   font-weight: 600;
 }
 
+.cabify-km {
+  font-weight: 600;
+}
+
+.cabify-km-asignado {
+  color: var(--color-success);
+}
+
+.cabify-km-empty {
+  color: var(--color-warning);
+}
+
 .cabify-money.total {
   font-weight: 700;
   color: var(--text-primary);

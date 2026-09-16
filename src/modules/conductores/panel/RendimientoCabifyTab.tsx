@@ -13,10 +13,15 @@ import { useMemo, useState, Fragment, type CSSProperties } from 'react'
 import { ChevronDown } from 'lucide-react'
 import { formatCurrency } from '../../../types/facturacion.types'
 import type { CabifySemanaRend } from './conductorDetalleService'
+import type { KmSemanaConductor } from '../../portal/kmRecorridos'
 
 interface Props {
   data: CabifySemanaRend[]
   loading: boolean
+  // Km de GPS (uss_historico + geotab_historico): los MISMOS que muestra la
+  // pestaña "Km recorridos". Se cruzan por semana y por dia contra los km de
+  // Cabify; la diferencia es lo que se recorrio con la app apagada.
+  kmSemanas: KmSemanaConductor[]
 }
 
 // 'yyyy-MM-dd' -> 'dd/MM/yy'. Se parsea a mano para no caer en la trampa de
@@ -36,6 +41,23 @@ function nombreDia(s: string): string {
   return txt.charAt(0).toUpperCase() + txt.slice(1)
 }
 
+// Kilometros recorridos con la app de Cabify encendida. "—" = sin dato: los dias
+// anteriores al 16/09/2026 no tienen kilometros sincronizados, y eso no es 0 km.
+function fmtKm(v: number | null | undefined): string {
+  if (v === null || v === undefined) return '—'
+  return `${v.toLocaleString('es-AR', { minimumFractionDigits: 1, maximumFractionDigits: 1 })} km`
+}
+
+// Suma que conserva el null: si ninguna fila tiene dato, el total queda en null.
+function totalKm<T>(filas: T[], pick: (f: T) => number | null | undefined): number | null {
+  let acc: number | null = null
+  for (const f of filas) {
+    const v = pick(f)
+    if (v !== null && v !== undefined) acc = (acc ?? 0) + v
+  }
+  return acc
+}
+
 const LBL_MINI: CSSProperties = {
   fontSize: '10px', textTransform: 'uppercase', fontWeight: 600,
   letterSpacing: '0.3px', color: 'var(--text-secondary, #6b7280)',
@@ -45,8 +67,20 @@ const VAL_MINI: CSSProperties = {
   color: 'var(--text-primary, #111827)', marginTop: '2px',
 }
 
-export function RendimientoCabifyTab({ data, loading }: Props) {
+export function RendimientoCabifyTab({ data, loading, kmSemanas }: Props) {
   const [abiertas, setAbiertas] = useState<Set<string>>(new Set())
+
+  // Indices de km de GPS: por lunes de la semana y por dia.
+  const kmGeoPorSemana = useMemo(() => {
+    const m = new Map<string, number>()
+    for (const s of kmSemanas) m.set(s.fecha_inicio, s.km)
+    return m
+  }, [kmSemanas])
+  const kmGeoPorDia = useMemo(() => {
+    const m = new Map<string, number>()
+    for (const s of kmSemanas) for (const d of s.dias) m.set(d.fecha, d.km)
+    return m
+  }, [kmSemanas])
 
   // Resumen. El promedio y la mejor semana EXCLUYEN la semana en curso: es un
   // acumulado parcial y mezclarla hundiria el promedio los lunes.
@@ -134,7 +168,9 @@ export function RendimientoCabifyTab({ data, loading }: Props) {
         <thead><tr>
           <th>Semana</th><th>Período</th>
           <th className="r">Total</th><th className="r">Efectivo</th><th className="r">App</th>
-          <th className="r">Peajes</th><th className="r">Promociones</th><th className="r">Deducciones</th>
+          <th className="r">Peajes</th>
+          <th className="r">KM total</th><th className="r">KM-viaje asig</th><th className="r">KM-viaje sin asig</th>
+          <th className="r">KM Geo</th>
           <th className="c">Días</th>
         </tr></thead>
         <tbody>
@@ -152,10 +188,10 @@ export function RendimientoCabifyTab({ data, loading }: Props) {
                   <td className="r">{formatCurrency(s.cobroEfectivo)}</td>
                   <td className="r">{formatCurrency(s.cobroApp)}</td>
                   <td className="r">{formatCurrency(s.peajes)}</td>
-                  <td className="r">{formatCurrency(s.promociones)}</td>
-                  <td className={`r ${s.deducciones > 0 ? 'danger' : ''}`}>
-                    {s.deducciones > 0 ? `-${formatCurrency(s.deducciones)}` : formatCurrency(0)}
-                  </td>
+                  <td className="r">{fmtKm(s.kmTotal)}</td>
+                  <td className="r">{fmtKm(s.kmAsignado)}</td>
+                  <td className="r">{fmtKm(s.kmSinAsignar)}</td>
+                  <td className="r">{fmtKm(kmGeoPorSemana.get(s.inicio))}</td>
                   <td className="c">
                     <button
                       className={`cdet-km-toggle ${abierta ? 'open' : ''}`}
@@ -170,7 +206,7 @@ export function RendimientoCabifyTab({ data, loading }: Props) {
                 </tr>
                 {abierta && (
                   <tr className="cdet-km-dias-row">
-                    <td colSpan={9}>
+                    <td colSpan={11}>
                       <div className="cdet-km-dias">
                         <div className="cdet-km-dias-head">
                           Ingresos por día · {fmtDia(s.inicio)} al {fmtDia(s.fin)}
@@ -180,7 +216,9 @@ export function RendimientoCabifyTab({ data, loading }: Props) {
                           <thead><tr>
                             <th>Día</th><th>Fecha</th>
                             <th className="r">Total</th><th className="r">Efectivo</th><th className="r">App</th>
-                            <th className="r">Peajes</th><th className="r">Promociones</th><th className="r">Deducciones</th>
+                            <th className="r">Peajes</th>
+                            <th className="r">KM total</th><th className="r">KM-viaje asig</th><th className="r">KM-viaje sin asig</th>
+                            <th className="r">KM Geo</th>
                             <th className="r">% semana</th>
                           </tr></thead>
                           <tbody>
@@ -194,8 +232,10 @@ export function RendimientoCabifyTab({ data, loading }: Props) {
                                   <td className="r">{formatCurrency(d.cobroEfectivo)}</td>
                                   <td className="r">{formatCurrency(d.cobroApp)}</td>
                                   <td className="r">{formatCurrency(d.peajes)}</td>
-                                  <td className="r">{formatCurrency(d.promociones)}</td>
-                                  <td className="r">{d.deducciones > 0 ? `-${formatCurrency(d.deducciones)}` : formatCurrency(0)}</td>
+                                  <td className="r">{fmtKm(d.kmTotal)}</td>
+                                  <td className="r">{fmtKm(d.kmAsignado)}</td>
+                                  <td className="r">{fmtKm(d.kmSinAsignar)}</td>
+                                  <td className="r">{fmtKm(kmGeoPorDia.get(d.fecha))}</td>
                                   <td className="r">{d.gananciaTotal > 0 ? `${pct.toFixed(1)}%` : '—'}</td>
                                 </tr>
                               )
@@ -207,8 +247,10 @@ export function RendimientoCabifyTab({ data, loading }: Props) {
                             <td className="r">{formatCurrency(s.cobroEfectivo)}</td>
                             <td className="r">{formatCurrency(s.cobroApp)}</td>
                             <td className="r">{formatCurrency(s.peajes)}</td>
-                            <td className="r">{formatCurrency(s.promociones)}</td>
-                            <td className="r">{s.deducciones > 0 ? `-${formatCurrency(s.deducciones)}` : formatCurrency(0)}</td>
+                            <td className="r">{fmtKm(s.kmTotal)}</td>
+                            <td className="r">{fmtKm(s.kmAsignado)}</td>
+                            <td className="r">{fmtKm(s.kmSinAsignar)}</td>
+                            <td className="r">{fmtKm(kmGeoPorSemana.get(s.inicio))}</td>
                             <td className="r">100%</td>
                           </tr></tfoot>
                         </table>
@@ -226,8 +268,10 @@ export function RendimientoCabifyTab({ data, loading }: Props) {
           <td className="r">{formatCurrency(data.reduce((a, s) => a + s.cobroEfectivo, 0))}</td>
           <td className="r">{formatCurrency(data.reduce((a, s) => a + s.cobroApp, 0))}</td>
           <td className="r">{formatCurrency(data.reduce((a, s) => a + s.peajes, 0))}</td>
-          <td className="r">{formatCurrency(data.reduce((a, s) => a + s.promociones, 0))}</td>
-          <td className="r">{formatCurrency(data.reduce((a, s) => a + s.deducciones, 0))}</td>
+          <td className="r">{fmtKm(totalKm(data, s => s.kmTotal))}</td>
+          <td className="r">{fmtKm(totalKm(data, s => s.kmAsignado))}</td>
+          <td className="r">{fmtKm(totalKm(data, s => s.kmSinAsignar))}</td>
+          <td className="r">{fmtKm(totalKm(data, s => kmGeoPorSemana.get(s.inicio) ?? null))}</td>
           <td />
         </tr></tfoot>
       </table>
