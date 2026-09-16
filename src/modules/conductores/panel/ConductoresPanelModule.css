@@ -40,3 +40,9 @@
   white-space: nowrap;
 }
 .cpanel-ver:hover { background: #fef2f2; border-color: #fecaca; }
+
+/* Km de GPS de un conductor marcado por la alerta de uso ocioso del vehiculo. */
+.cpanel-num.cpanel-alerta-km {
+  color: var(--color-danger);
+  font-weight: 700;
+}

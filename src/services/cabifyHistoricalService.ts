@@ -51,6 +51,9 @@ interface HistoricalRecord {
   viajes_rechazados: number | null
   tasa_aceptacion: number | string | null
   horas_conectadas: number | string | null
+  km_con_viaje: number | string | null
+  km_sin_viaje: number | string | null
+  km_conectado: number | string | null
   tasa_ocupacion: number | string | null
   cobro_efectivo: number | string | null
   cobro_app: number | string | null
@@ -92,6 +95,17 @@ const SOURCE_BARILOCHE: HistoricalSourceConfig = {
 // TIPOS
 // =====================================================
 
+/**
+ * Convierte un valor de kilometros de la BD a numero.
+ * Devuelve null cuando no hay dato, para poder distinguir
+ * "no se midio" de "recorrio 0 km".
+ */
+function toKmValue(value: number | string | null | undefined): number | null {
+  if (value === null || value === undefined || value === '') return null
+  const parsed = Number(value)
+  return Number.isFinite(parsed) ? parsed : null
+}
+
 export interface DriverHistoricalData {
   id: string
   companyId: string
@@ -122,6 +136,9 @@ export interface DriverHistoricalData {
   tasaAceptacion: number
   horasConectadas: number
   horasConectadasFormato: string
+  kmConViaje: number | null
+  kmSinViaje: number | null
+  kmConectado: number | null
   tasaOcupacion: number
   cobroEfectivo: number
   cobroApp: number
@@ -436,7 +453,7 @@ class CabifyHistoricalService {
     endDate: string,
     sedeId?: string | null
   ): Promise<DriverHistoricalData[]> {
-    const selectFields = 'cabify_driver_id, cabify_company_id, nombre, apellido, email, dni, telefono_numero, telefono_codigo, licencia, vehiculo_id, vehiculo_marca, vehiculo_modelo, vehiculo_patente, vehiculo_completo, score, viajes_aceptados, viajes_perdidos, viajes_ofrecidos, viajes_finalizados, viajes_rechazados, tasa_aceptacion, horas_conectadas, tasa_ocupacion, cobro_efectivo, cobro_app, ganancia_total, peajes, promociones, deducciones, permiso_efectivo, estado_conductor, fecha_inicio, fecha_guardado'
+    const selectFields = 'cabify_driver_id, cabify_company_id, nombre, apellido, email, dni, telefono_numero, telefono_codigo, licencia, vehiculo_id, vehiculo_marca, vehiculo_modelo, vehiculo_patente, vehiculo_completo, score, viajes_aceptados, viajes_perdidos, viajes_ofrecidos, viajes_finalizados, viajes_rechazados, tasa_aceptacion, horas_conectadas, km_con_viaje, km_sin_viaje, km_conectado, tasa_ocupacion, cobro_efectivo, cobro_app, ganancia_total, peajes, promociones, deducciones, permiso_efectivo, estado_conductor, fecha_inicio, fecha_guardado'
 
     const sourceConfigs = this.getQuerySources(sedeId)
     const sedeIdentityPromise = this.getSedeIdentityIndex(sedeId)
@@ -589,6 +606,10 @@ class CabifyHistoricalService {
           tasaAceptacionSum: Number(record.tasa_aceptacion || 0),
           tasaAceptacionCount: record.tasa_aceptacion ? 1 : 0,
           horasConectadas: Number(record.horas_conectadas || 0),
+          kmConViajeSum: toKmValue(record.km_con_viaje) ?? 0,
+          kmSinViajeSum: toKmValue(record.km_sin_viaje) ?? 0,
+          kmConectadoSum: toKmValue(record.km_conectado) ?? 0,
+          kmDiasConDato: toKmValue(record.km_conectado) === null ? 0 : 1,
           tasaOcupacionSum: Number(record.tasa_ocupacion || 0),
           tasaOcupacionCount: record.tasa_ocupacion ? 1 : 0,
           cobroEfectivo: Number(record.cobro_efectivo || 0),
@@ -621,6 +642,10 @@ class CabifyHistoricalService {
         existing.viajesFinalizados += record.viajes_finalizados || 0
         existing.viajesRechazados += record.viajes_rechazados || 0
         existing.horasConectadas += Number(record.horas_conectadas || 0)
+        existing.kmConViajeSum += toKmValue(record.km_con_viaje) ?? 0
+        existing.kmSinViajeSum += toKmValue(record.km_sin_viaje) ?? 0
+        existing.kmConectadoSum += toKmValue(record.km_conectado) ?? 0
+        if (toKmValue(record.km_conectado) !== null) existing.kmDiasConDato++
         existing.cobroEfectivo += Number(record.cobro_efectivo || 0)
         existing.cobroApp += Number(record.cobro_app || 0)
         existing.gananciaTotal += Number(record.ganancia_total || 0)
@@ -694,6 +719,9 @@ class CabifyHistoricalService {
         tasaAceptacion: Number(avgTasaAceptacion.toFixed(2)),
         horasConectadas: Number(d.horasConectadas.toFixed(1)),
         horasConectadasFormato,
+        kmConViaje: d.kmDiasConDato > 0 ? Number(d.kmConViajeSum.toFixed(1)) : null,
+        kmSinViaje: d.kmDiasConDato > 0 ? Number(d.kmSinViajeSum.toFixed(1)) : null,
+        kmConectado: d.kmDiasConDato > 0 ? Number(d.kmConectadoSum.toFixed(1)) : null,
         tasaOcupacion: Number(avgTasaOcupacion.toFixed(2)),
         cobroEfectivo: Number(d.cobroEfectivo.toFixed(2)),
         cobroApp: Number(d.cobroApp.toFixed(2)),

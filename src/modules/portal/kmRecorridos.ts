@@ -153,6 +153,163 @@ export interface KmConductorResult {
   modalidadActual: string
 }
 
+
+// Trae y normaliza los viajes (ambas fuentes GPS) de un conjunto de patentes.
+// Lo usan TANTO el calculo por conductor (modal / portal) COMO el calculo masivo
+// del panel, para que los numeros no puedan separarse entre pantallas.
+// El filtro server-side por patente es tolerante al formato (ilike) y se agrupa
+// de a LOTE_PATENTES por consulta; el filtro autoritativo es client-side por
+// patente normalizada, igual que el modulo interno.
+const LOTE_PATENTES = 20
+
+async function fetchTripsDePatentes(
+  supabase: typeof SupabaseClientType,
+  patentes: Set<string>,
+  desdeISO: string,
+  hastaISO?: string,
+): Promise<TripEnriched[]> {
+  const lista = [...patentes].filter(Boolean)
+  if (lista.length === 0) return []
+
+  const PAGE = 1000
+  const trips: TripEnriched[] = []
+
+  const fetchTabla = async (
+    tabla: 'uss_historico' | 'geotab_historico',
+    cols: string,
+    patrones: string[],
+    origen: GpsOrigen,
+  ): Promise<void> => {
+    const orFiltro = patrones.map(pt => `patente.ilike.${pt}`).join(',')
+    const byId = new Map<number, TripRow>()
+    for (let offset = 0; ; offset += PAGE) {
+      let q = supabase.from(tabla).select(cols).or(orFiltro).gte('fecha_hora_inicio_gmt3', desdeISO)
+      if (hastaISO) q = q.lte('fecha_hora_inicio_gmt3', hastaISO)
+      const { data: page, error } = await q
+        .order('fecha_hora_inicio_gmt3', { ascending: true })
+        .order('id', { ascending: true })
+        .range(offset, offset + PAGE - 1)
+      if (error) throw error
+      const batch = (page || []) as unknown as TripRow[]
+      for (const r of batch) byId.set(r.id, { ...r, conductor_raw: r.conductor_raw ?? null })
+      if (batch.length < PAGE) break
+    }
+    for (const r of byId.values()) {
+      const pn = normalizarPatente(r.patente)
+      if (!patentes.has(pn)) continue // filtro autoritativo client-side
+      const km = parseFloat(String(r.kilometraje || '0').replace(/[^\d.]/g, '')) || 0
+      const inicioMs = new Date(`${r.fecha_hora_inicio_gmt3.replace(' ', 'T')}-03:00`).getTime()
+      const finMs = r.fecha_hora_fin_gmt3
+        ? new Date(`${r.fecha_hora_fin_gmt3.replace(' ', 'T')}-03:00`).getTime()
+        : inicioMs
+      trips.push({ ...r, patenteNorm: pn, condEf: null, inicioMs, finMs, kmNum: Math.round(km * 100) / 100, gpsOrigen: origen })
+    }
+  }
+
+  for (let i = 0; i < lista.length; i += LOTE_PATENTES) {
+    const patrones = lista.slice(i, i + LOTE_PATENTES).map(patronPatente)
+    await Promise.all([
+      fetchTabla('uss_historico', 'id, patente, conductor, conductor_raw, fecha_hora_inicio_gmt3, fecha_hora_fin_gmt3, kilometraje', patrones, 'USS'),
+      fetchTabla('geotab_historico', 'id, patente, conductor, fecha_hora_inicio_gmt3, fecha_hora_fin_gmt3, kilometraje', patrones, 'GEOTAB'),
+    ])
+  }
+
+  // Orden (origen, patente, inicio): requisito de la resolucion de vecinos.
+  trips.sort((a, b) => {
+    if (a.gpsOrigen !== b.gpsOrigen) return a.gpsOrigen < b.gpsOrigen ? -1 : 1
+    if (a.patenteNorm !== b.patenteNorm) return a.patenteNorm.localeCompare(b.patenteNorm)
+    return a.inicioMs - b.inicioMs
+  })
+  return trips
+}
+
+// Conductor efectivo de cada trip. Extraido tal cual estaba para poder usarlo
+// tambien en el calculo masivo: es EL MISMO codigo, no una copia.
+function asignarConductorEfectivo(tripsArr: TripEnriched[]): void {
+
+  // 5) Conductor efectivo (huérfano hereda, multi al vecino más cercano) —
+  //    idéntico al módulo, acotado a misma patente y mismo origen GPS.
+  for (let i = 0; i < tripsArr.length; i++) {
+    const t = tripsArr[i]
+    const cs = parseRawConductores(t.conductor_raw)
+    const titular = (t.conductor || '').trim().toUpperCase() || null
+
+    if (!titular && cs.length === 0) {
+      let prev: TripEnriched | null = null
+      let next: TripEnriched | null = null
+      for (let j = i - 1; j >= 0; j--) {
+        if (tripsArr[j].gpsOrigen !== t.gpsOrigen || tripsArr[j].patenteNorm !== t.patenteNorm) break
+        if ((tripsArr[j].conductor || '').trim()) { prev = tripsArr[j]; break }
+      }
+      for (let j = i + 1; j < tripsArr.length; j++) {
+        if (tripsArr[j].gpsOrigen !== t.gpsOrigen || tripsArr[j].patenteNorm !== t.patenteNorm) break
+        if ((tripsArr[j].conductor || '').trim()) { next = tripsArr[j]; break }
+      }
+      let chosen: TripEnriched | null = null
+      if (prev && next) {
+        const gp = t.inicioMs - prev.finMs
+        const gn = next.inicioMs - t.finMs
+        chosen = gp <= gn ? prev : next
+      } else chosen = prev || next
+      t.condEf = (chosen?.conductor || '').trim().toUpperCase() || null
+      continue
+    }
+
+    if (cs.length >= 2) {
+      const bestGap = new Map<string, number>()
+      for (let j = i - 1; j >= 0; j--) {
+        if (tripsArr[j].gpsOrigen !== t.gpsOrigen || tripsArr[j].patenteNorm !== t.patenteNorm) break
+        const vr = parseRawConductores(tripsArr[j].conductor_raw)
+        if (vr.length !== 1) continue
+        if (!cs.includes(vr[0])) continue
+        const g = t.inicioMs - tripsArr[j].finMs
+        const p = bestGap.get(vr[0])
+        if (p === undefined || g < p) bestGap.set(vr[0], g)
+        break
+      }
+      for (let j = i + 1; j < tripsArr.length; j++) {
+        if (tripsArr[j].gpsOrigen !== t.gpsOrigen || tripsArr[j].patenteNorm !== t.patenteNorm) break
+        const vr = parseRawConductores(tripsArr[j].conductor_raw)
+        if (vr.length !== 1) continue
+        if (!cs.includes(vr[0])) continue
+        const g = tripsArr[j].inicioMs - t.finMs
+        const p = bestGap.get(vr[0])
+        if (p === undefined || g < p) bestGap.set(vr[0], g)
+        break
+      }
+      let receptor: string | null = null
+      if (bestGap.size === 0) {
+        receptor = titular
+      } else if (bestGap.size === cs.length) {
+        let m = Infinity
+        for (const [n, g] of bestGap.entries()) if (g < m) { m = g; receptor = n }
+      } else {
+        const huer = cs.filter(c => !bestGap.has(c))
+        receptor = huer.length === 1 ? huer[0] : titular
+      }
+      t.condEf = receptor
+      continue
+    }
+
+    t.condEf = titular
+  }
+
+}
+
+// Predicado "este trip es de este conductor", con el mismo fallback por
+// inclusion que usa el modulo interno (USS suele truncar o cambiar el formato).
+function matcherConductor(nombres: string | null, apellidos: string | null): (condEf: string | null) => boolean {
+  const full = normName(`${nombres || ''} ${apellidos || ''}`)
+  const fullRev = normName(`${apellidos || ''} ${nombres || ''}`)
+  return (condEf: string | null): boolean => {
+    if (!condEf) return false
+    const n = normName(condEf)
+    if (!n) return false
+    if (n === full || n === fullRev) return true
+    return n.includes(full) || full.includes(n) || n.includes(fullRev) || fullRev.includes(n)
+  }
+}
+
 export async function calcularKmSemanasConductor(
   supabase: typeof SupabaseClientType,
   cond: { id: string; nombres: string; apellidos: string },
@@ -237,144 +394,18 @@ export async function calcularKmSemanasConductor(
 
   // 4) Trips de las patentes del conductor desde 1 día ANTES del corte
   //    (contexto para la lógica de vecino más cercano), ambas fuentes.
-  //    Paginación con orden único + dedup por id, igual que el módulo.
   const desdeExt = (() => {
     const d = new Date(`${DESDE}T00:00:00-03:00`)
     d.setDate(d.getDate() - 1)
     return d.toISOString().slice(0, 10) + 'T00:00:00'
   })()
-  const PAGE = 1000
-  const fetchTabla = async (
-    tabla: 'uss_historico' | 'geotab_historico',
-    cols: string,
-    patron: string,
-  ): Promise<TripRow[]> => {
-    const byId = new Map<number, TripRow>()
-    for (let offset = 0; ; offset += PAGE) {
-      const { data: page, error } = await supabase
-        .from(tabla)
-        .select(cols)
-        .ilike('patente', patron)
-        .gte('fecha_hora_inicio_gmt3', desdeExt)
-        .order('fecha_hora_inicio_gmt3', { ascending: true })
-        .order('id', { ascending: true })
-        .range(offset, offset + PAGE - 1)
-      if (error) throw error
-      const batch = (page || []) as unknown as TripRow[]
-      for (const r of batch) byId.set(r.id, { ...r, conductor_raw: r.conductor_raw ?? null })
-      if (batch.length < PAGE) break
-    }
-    return [...byId.values()]
-  }
+  const tripsArr = await fetchTripsDePatentes(supabase, patentes, desdeExt)
 
-  const tripsArr: TripEnriched[] = []
-  for (const patNorm of patentes) {
-    const patron = patronPatente(patNorm)
-    const [ussRows, geotabRows] = await Promise.all([
-      fetchTabla('uss_historico', 'id, patente, conductor, conductor_raw, fecha_hora_inicio_gmt3, fecha_hora_fin_gmt3, kilometraje', patron),
-      fetchTabla('geotab_historico', 'id, patente, conductor, fecha_hora_inicio_gmt3, fecha_hora_fin_gmt3, kilometraje', patron),
-    ])
-    const enrich = (rows: TripRow[], origen: GpsOrigen) => {
-      for (const r of rows) {
-        const pn = normalizarPatente(r.patente)
-        if (pn !== patNorm) continue // filtro autoritativo client-side
-        const km = parseFloat(String(r.kilometraje || '0').replace(/[^\d.]/g, '')) || 0
-        const inicioMs = new Date(`${r.fecha_hora_inicio_gmt3.replace(' ', 'T')}-03:00`).getTime()
-        const finMs = r.fecha_hora_fin_gmt3
-          ? new Date(`${r.fecha_hora_fin_gmt3.replace(' ', 'T')}-03:00`).getTime()
-          : inicioMs
-        tripsArr.push({ ...r, patenteNorm: pn, condEf: null, inicioMs, finMs, kmNum: Math.round(km * 100) / 100, gpsOrigen: origen })
-      }
-    }
-    enrich(ussRows, 'USS')
-    enrich(geotabRows, 'GEOTAB')
-  }
+  // 5) Conductor efectivo (huérfano hereda, multi al vecino más cercano).
+  asignarConductorEfectivo(tripsArr)
 
-  // Orden (origen, patente, inicio): requisito de la resolución de vecinos.
-  tripsArr.sort((a, b) => {
-    if (a.gpsOrigen !== b.gpsOrigen) return a.gpsOrigen < b.gpsOrigen ? -1 : 1
-    if (a.patenteNorm !== b.patenteNorm) return a.patenteNorm.localeCompare(b.patenteNorm)
-    return a.inicioMs - b.inicioMs
-  })
-
-  // 5) Conductor efectivo (huérfano hereda, multi al vecino más cercano) —
-  //    idéntico al módulo, acotado a misma patente y mismo origen GPS.
-  for (let i = 0; i < tripsArr.length; i++) {
-    const t = tripsArr[i]
-    const cs = parseRawConductores(t.conductor_raw)
-    const titular = (t.conductor || '').trim().toUpperCase() || null
-
-    if (!titular && cs.length === 0) {
-      let prev: TripEnriched | null = null
-      let next: TripEnriched | null = null
-      for (let j = i - 1; j >= 0; j--) {
-        if (tripsArr[j].gpsOrigen !== t.gpsOrigen || tripsArr[j].patenteNorm !== t.patenteNorm) break
-        if ((tripsArr[j].conductor || '').trim()) { prev = tripsArr[j]; break }
-      }
-      for (let j = i + 1; j < tripsArr.length; j++) {
-        if (tripsArr[j].gpsOrigen !== t.gpsOrigen || tripsArr[j].patenteNorm !== t.patenteNorm) break
-        if ((tripsArr[j].conductor || '').trim()) { next = tripsArr[j]; break }
-      }
-      let chosen: TripEnriched | null = null
-      if (prev && next) {
-        const gp = t.inicioMs - prev.finMs
-        const gn = next.inicioMs - t.finMs
-        chosen = gp <= gn ? prev : next
-      } else chosen = prev || next
-      t.condEf = (chosen?.conductor || '').trim().toUpperCase() || null
-      continue
-    }
-
-    if (cs.length >= 2) {
-      const bestGap = new Map<string, number>()
-      for (let j = i - 1; j >= 0; j--) {
-        if (tripsArr[j].gpsOrigen !== t.gpsOrigen || tripsArr[j].patenteNorm !== t.patenteNorm) break
-        const vr = parseRawConductores(tripsArr[j].conductor_raw)
-        if (vr.length !== 1) continue
-        if (!cs.includes(vr[0])) continue
-        const g = t.inicioMs - tripsArr[j].finMs
-        const p = bestGap.get(vr[0])
-        if (p === undefined || g < p) bestGap.set(vr[0], g)
-        break
-      }
-      for (let j = i + 1; j < tripsArr.length; j++) {
-        if (tripsArr[j].gpsOrigen !== t.gpsOrigen || tripsArr[j].patenteNorm !== t.patenteNorm) break
-        const vr = parseRawConductores(tripsArr[j].conductor_raw)
-        if (vr.length !== 1) continue
-        if (!cs.includes(vr[0])) continue
-        const g = tripsArr[j].inicioMs - t.finMs
-        const p = bestGap.get(vr[0])
-        if (p === undefined || g < p) bestGap.set(vr[0], g)
-        break
-      }
-      let receptor: string | null = null
-      if (bestGap.size === 0) {
-        receptor = titular
-      } else if (bestGap.size === cs.length) {
-        let m = Infinity
-        for (const [n, g] of bestGap.entries()) if (g < m) { m = g; receptor = n }
-      } else {
-        const huer = cs.filter(c => !bestGap.has(c))
-        receptor = huer.length === 1 ? huer[0] : titular
-      }
-      t.condEf = receptor
-      continue
-    }
-
-    t.condEf = titular
-  }
-
-  // 6) Filtrar trips del conductor (condEf vs nombre, con fallback por inclusión
-  //    como hace el módulo: USS suele truncar/diferir formato).
-  const full = normName(`${cond.nombres} ${cond.apellidos}`)
-  const fullRev = normName(`${cond.apellidos} ${cond.nombres}`)
-  const esDelConductor = (condEf: string | null): boolean => {
-    if (!condEf) return false
-    const n = normName(condEf)
-    if (!n) return false
-    if (n === full || n === fullRev) return true
-    return n.includes(full) || full.includes(n) || n.includes(fullRev) || fullRev.includes(n)
-  }
+  // 6) Filtrar trips del conductor (condEf vs nombre, con fallback por inclusión).
+  const esDelConductor = matcherConductor(cond.nombres, cond.apellidos)
 
   // 7) Acumular km por semana ISO (ART), solo patente propia de esa semana.
   //    En la misma pasada se acumula el desglose por DIA con los mismos trips,
@@ -433,4 +464,103 @@ export async function calcularKmSemanasConductor(
     .sort((a, b) => (b.anio - a.anio) || (b.semana - a.semana))
 
   return { semanas, modalidadActual }
+}
+
+
+// =====================================================
+// CALCULO MASIVO: km de UNA semana para MUCHOS conductores
+// =====================================================
+// Lo usa la tabla del Panel de Conductores (columna "KM Geo"). Comparte con
+// calcularKmSemanasConductor el fetch de trips, la atribucion de conductor y el
+// matcher de nombre, asi que el numero que muestra la tabla es el mismo que el
+// de la pestaña "Km recorridos" del modal.
+//
+// Diferencia deliberada: aca la ventana de trips es la semana +/- MARGEN_DIAS en
+// lugar de "desde junio". La atribucion de un trip huerfano mira a su vecino mas
+// cercano de la misma patente, que en la practica esta a horas, no a dias; el
+// margen cubre ese caso sin traer meses de viajes en cada carga del panel.
+const MARGEN_DIAS = 3
+
+export async function calcularKmSemanaConductores(
+  supabase: typeof SupabaseClientType,
+  conductores: readonly { id: string; nombres: string | null; apellidos: string | null }[],
+  semana: { inicio: string; fin: string },   // lunes y domingo 'yyyy-MM-dd'
+): Promise<Map<string, number>> {
+  const out = new Map<string, number>()
+  if (conductores.length === 0) return out
+
+  const lunesMs = new Date(`${semana.inicio}T00:00:00-03:00`).getTime()
+  const domingoMs = new Date(`${semana.fin}T23:59:59-03:00`).getTime()
+
+  // 1) Asignaciones vigentes en la semana. Se pide con margen y se filtra en JS
+  //    con la MISMA comparacion que el calculo por conductor.
+  const desdeFiltro = new Date(lunesMs - MARGEN_DIAS * 86400000).toISOString().slice(0, 10)
+  const hastaFiltro = new Date(domingoMs + MARGEN_DIAS * 86400000).toISOString().slice(0, 10)
+  const { data: acRows } = await (supabase
+    .from('asignaciones_conductores')
+    .select('conductor_id, horario, estado, fecha_inicio, fecha_fin, asignaciones(modalidad, estado, vehiculos(patente))')
+    .lte('fecha_inicio', `${hastaFiltro}T23:59:59`)
+    .or(`fecha_fin.is.null,fecha_fin.gte.${desdeFiltro}`) as any)
+
+  type VehJoin = { patente: string | null }
+  type AsigJoin = { modalidad: string | null; estado: string | null; vehiculos: VehJoin | VehJoin[] | null }
+  const asigDe = (r: any): AsigJoin | null =>
+    Array.isArray(r.asignaciones) ? (r.asignaciones[0] ?? null) : (r.asignaciones ?? null)
+  const patenteDe = (a: AsigJoin | null): string | null => {
+    if (!a) return null
+    const v = Array.isArray(a.vehiculos) ? (a.vehiculos[0] ?? null) : (a.vehiculos ?? null)
+    return v?.patente ?? null
+  }
+  const acEstadoOk = (e: string | null) => e == null || ['asignado', 'completado', 'activo', 'activa'].includes(e)
+  const asigEstadoOk = (e: string | null) => e == null || ['activa', 'activo', 'finalizada', 'finalizado'].includes(e)
+
+  const patentesPorConductor = new Map<string, Set<string>>()
+  const todasLasPatentes = new Set<string>()
+  for (const r of ((acRows || []) as any[])) {
+    if (!r.conductor_id || !r.fecha_inicio) continue
+    if (!acEstadoOk(r.estado) || !asigEstadoOk(asigDe(r)?.estado ?? null)) continue
+    const iniMs = new Date(r.fecha_inicio as string).getTime()
+    const finMs = r.fecha_fin ? new Date(r.fecha_fin).getTime() : Number.POSITIVE_INFINITY
+    if (!(iniMs <= domingoMs && finMs >= lunesMs)) continue   // misma regla que el modal
+    const pn = normalizarPatente(patenteDe(asigDe(r)))
+    if (!pn) continue
+    const set = patentesPorConductor.get(r.conductor_id) || new Set<string>()
+    set.add(pn)
+    patentesPorConductor.set(r.conductor_id, set)
+    todasLasPatentes.add(pn)
+  }
+  if (todasLasPatentes.size === 0) return out
+
+  // 2) Trips de TODAS esas patentes en una sola pasada, y atribucion compartida.
+  const desdeISO = new Date(lunesMs - MARGEN_DIAS * 86400000).toISOString().slice(0, 10) + 'T00:00:00'
+  const hastaISO = new Date(domingoMs + MARGEN_DIAS * 86400000).toISOString().slice(0, 10) + 'T23:59:59'
+  const trips = await fetchTripsDePatentes(supabase, todasLasPatentes, desdeISO, hastaISO)
+  asignarConductorEfectivo(trips)
+
+  // 3) Acumulado por conductor, con el mismo redondeo que el calculo por semana.
+  const porPatente = new Map<string, TripEnriched[]>()
+  for (const t of trips) {
+    const arr = porPatente.get(t.patenteNorm) || []
+    arr.push(t)
+    porPatente.set(t.patenteNorm, arr)
+  }
+  for (const c of conductores) {
+    const pats = patentesPorConductor.get(c.id)
+    if (!pats || pats.size === 0) continue
+    const esDelConductor = matcherConductor(c.nombres, c.apellidos)
+    let km = 0
+    let hubo = false
+    for (const pn of pats) {
+      for (const t of (porPatente.get(pn) || [])) {
+        const dia = fechaART(t.inicioMs)
+        if (dia < semana.inicio || dia > semana.fin) continue
+        if (!esDelConductor(t.condEf)) continue
+        km = Math.round((km + t.kmNum) * 100) / 100
+        hubo = true
+      }
+    }
+    if (hubo) out.set(c.id, Math.round(km))
+  }
+
+  return out
 }

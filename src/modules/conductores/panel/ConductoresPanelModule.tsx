@@ -9,7 +9,7 @@
 
 import { useState, useEffect, useMemo } from 'react'
 import { type ColumnDef } from '@tanstack/react-table'
-import { Eye, Car, UserX, AlertTriangle, Clock, Users, Download } from 'lucide-react'
+import { Eye, Car, UserX, AlertTriangle, Clock, Users, Download, Gauge } from 'lucide-react'
 import * as XLSX from 'xlsx'
 import { useSede } from '../../../contexts/SedeContext'
 import { formatCurrency } from '../../../types/facturacion.types'
@@ -20,13 +20,49 @@ import { ConductorDetalleModal } from './ConductorDetalleModal'
 import '../ConductoresModule.css'
 import './ConductoresPanelModule.css'
 
-type CardKey = 'conAuto' | 'sinAuto' | 'conMultas' | 'pendientes'
+// Kilometros de Cabify. La tabla muestra "—" cuando no hay dato: los dias
+// anteriores al 16/09/2026 no tienen kilometros sincronizados, y eso no es 0 km.
+function fmtKm(v: number): string {
+  return `${v.toLocaleString('es-AR', { minimumFractionDigits: 1, maximumFractionDigits: 1 })} km`
+}
+
+type CardKey = 'conAuto' | 'sinAuto' | 'conMultas' | 'pendientes' | 'alertaKm'
 
 const CARD_LABELS: Record<CardKey, string> = {
   conAuto: 'Con Auto Asignado',
   sinAuto: 'Sin Auto',
   conMultas: 'Con Multas',
   pendientes: 'Con Multas Pendientes',
+  alertaKm: 'Alerta KM',
+}
+
+// ALERTA DE USO OCIOSO DEL VEHICULO
+// Regla: se toma el UMBRAL% de los km recorridos segun GPS (columna KM Geo) y,
+// si ese valor es MAYOR que los km con viaje asignado (columna KM-viaje asig),
+// el conductor queda marcado. Dicho al reves: alerta cuando el aprovechamiento
+// (KM-viaje asig / KM Geo) queda por DEBAJO del umbral.
+//
+// El pedido original fue 70%, pero con datos reales ningun conductor de la
+// flota llega a ese nivel (el mejor ronda 47%): a 70% la alerta marcaba al
+// 100% de la gente y no distinguia nada. Se fijo en 35%, que es donde empieza
+// a separar los casos reales. Cambiar este numero es una linea.
+const UMBRAL_KM_PRODUCTIVO = 0.35
+
+// Aprovechamiento del vehiculo: que parte de los km recorridos (GPS) se hizo
+// con un viaje asignado. null cuando falta alguna de las dos mediciones.
+function aprovechamientoKm(r: ConductorPanelRow): number | null {
+  const geo = r.kmGeo
+  const asig = r.cabify?.kmAsignado
+  if (geo === null || geo === undefined || geo <= 0) return null
+  if (asig === null || asig === undefined) return null
+  return (asig / geo) * 100
+}
+
+// Sin GPS o sin cruce con Cabify no se marca: no hay con que comparar, y
+// marcar por falta de dato seria peor que no marcar.
+function tieneAlertaKm(r: ConductorPanelRow): boolean {
+  const pct = aprovechamientoKm(r)
+  return pct !== null && pct < UMBRAL_KM_PRODUCTIVO * 100
 }
 
 // Etiqueta legible del turno de la asignacion actual.
@@ -94,6 +130,7 @@ export function ConductoresPanelModule() {
     sinAuto: rows.filter(c => !c.tieneAsignacion).length,
     conMultas: rows.filter(c => c.cantidadMultas > 0).length,
     pendientes: rows.filter(c => c.pendientes + c.enProceso > 0).length,
+    alertaKm: rows.filter(tieneAlertaKm).length,
   }), [rows])
 
   const filteredRows = useMemo(() => {
@@ -102,6 +139,7 @@ export function ConductoresPanelModule() {
       case 'sinAuto': return rows.filter(c => !c.tieneAsignacion)
       case 'conMultas': return rows.filter(c => c.cantidadMultas > 0)
       case 'pendientes': return rows.filter(c => c.pendientes + c.enProceso > 0)
+      case 'alertaKm': return rows.filter(tieneAlertaKm)
       default: return rows
     }
   }, [rows, activeCard])
@@ -147,6 +185,12 @@ export function ConductoresPanelModule() {
       [`Efectivo Cabify (${rangoCabifyLabel})`]: c.cabify ? c.cabify.cobroEfectivo : '',
       [`App Cabify (${rangoCabifyLabel})`]: c.cabify ? c.cabify.cobroApp : '',
       [`Peajes Cabify (${rangoCabifyLabel})`]: c.cabify ? c.cabify.peajes : '',
+      [`KM total Cabify (${rangoCabifyLabel})`]: c.cabify && c.cabify.kmTotal !== null ? c.cabify.kmTotal : '',
+      [`KM-viaje asig Cabify (${rangoCabifyLabel})`]: c.cabify && c.cabify.kmAsignado !== null ? c.cabify.kmAsignado : '',
+      [`KM-viaje sin asig Cabify (${rangoCabifyLabel})`]: c.cabify && c.cabify.kmSinAsignar !== null ? c.cabify.kmSinAsignar : '',
+      [`KM Geo (${rangoCabifyLabel})`]: c.kmGeo ?? '',
+      '% Aprovechamiento': aprovechamientoKm(c) !== null ? Number(aprovechamientoKm(c)!.toFixed(1)) : '',
+      'Alerta KM': tieneAlertaKm(c) ? 'Sí' : 'No',
     }))
 
     const ws = XLSX.utils.json_to_sheet(dataExport)
@@ -178,6 +222,12 @@ export function ConductoresPanelModule() {
       { wch: 24 }, // Efectivo Cabify
       { wch: 22 }, // App Cabify
       { wch: 22 }, // Peajes Cabify
+      { wch: 22 }, // KM total Cabify
+      { wch: 24 }, // KM-viaje asig Cabify
+      { wch: 26 }, // KM-viaje sin asig Cabify
+      { wch: 20 }, // KM Geo
+      { wch: 18 }, // % Aprovechamiento
+      { wch: 11 }, // Alerta KM
     ]
 
     const wb = XLSX.utils.book_new()
@@ -441,6 +491,81 @@ export function ConductoresPanelModule() {
       },
     },
     {
+      id: 'km_cabify_total',
+      accessorFn: (r) => r.cabify?.kmTotal ?? null,
+      header: 'KM total',
+      sortingFn: (a, b) => (a.original.cabify?.kmTotal ?? -1) - (b.original.cabify?.kmTotal ?? -1),
+      cell: ({ row }) => {
+        const c = row.original.cabify
+        if (!c || c.kmTotal === null) return <span className="cpanel-num cpanel-nulo">—</span>
+        return <span className="cpanel-num">{fmtKm(c.kmTotal)}</span>
+      },
+    },
+    {
+      id: 'km_cabify_asignado',
+      accessorFn: (r) => r.cabify?.kmAsignado ?? null,
+      header: 'KM-viaje asig',
+      sortingFn: (a, b) => (a.original.cabify?.kmAsignado ?? -1) - (b.original.cabify?.kmAsignado ?? -1),
+      cell: ({ row }) => {
+        const c = row.original.cabify
+        if (!c || c.kmAsignado === null) return <span className="cpanel-num cpanel-nulo">—</span>
+        return <span className="cpanel-num">{fmtKm(c.kmAsignado)}</span>
+      },
+    },
+    {
+      id: 'km_cabify_sin_asignar',
+      accessorFn: (r) => r.cabify?.kmSinAsignar ?? null,
+      header: 'KM-viaje sin asig',
+      sortingFn: (a, b) => (a.original.cabify?.kmSinAsignar ?? -1) - (b.original.cabify?.kmSinAsignar ?? -1),
+      cell: ({ row }) => {
+        const c = row.original.cabify
+        if (!c || c.kmSinAsignar === null) return <span className="cpanel-num cpanel-nulo">—</span>
+        return <span className="cpanel-num">{fmtKm(c.kmSinAsignar)}</span>
+      },
+    },
+    {
+      id: 'km_geo',
+      accessorFn: (r) => r.kmGeo ?? null,
+      header: 'KM Geo',
+      sortingFn: (a, b) => (a.original.kmGeo ?? -1) - (b.original.kmGeo ?? -1),
+      cell: ({ row }) => {
+        const v = row.original.kmGeo
+        if (v === null || v === undefined) {
+          return <span className="cpanel-num cpanel-nulo" title="Sin viajes de GPS en la semana">—</span>
+        }
+        const alerta = tieneAlertaKm(row.original)
+        return (
+          <span
+            className={`cpanel-num${alerta ? ' cpanel-alerta-km' : ''}`}
+            title={alerta
+              ? `Alerta: el ${Math.round(UMBRAL_KM_PRODUCTIVO * 100)}% de estos km (${Math.round(v * UMBRAL_KM_PRODUCTIVO)} km) supera los km con viaje asignado`
+              : `Km recorridos segun GPS (${rangoCabifyLabel}) - mismo dato que la pestaña Km recorridos del modal`}>
+            {v.toLocaleString('es-AR')} km
+          </span>
+        )
+      },
+    },
+    {
+      id: 'aprovechamiento_km',
+      accessorFn: (r) => aprovechamientoKm(r),
+      header: '% Aprovech.',
+      sortingFn: (a, b) => (aprovechamientoKm(a.original) ?? -1) - (aprovechamientoKm(b.original) ?? -1),
+      cell: ({ row }) => {
+        const pct = aprovechamientoKm(row.original)
+        if (pct === null) {
+          return <span className="cpanel-num cpanel-nulo" title="Falta el dato de GPS o el cruce con Cabify">—</span>
+        }
+        const alerta = pct < UMBRAL_KM_PRODUCTIVO * 100
+        return (
+          <span
+            className={`cpanel-num${alerta ? ' cpanel-alerta-km' : ''}`}
+            title={`${Math.round(pct)}% de los km recorridos fue con viaje asignado (umbral de alerta: ${Math.round(UMBRAL_KM_PRODUCTIVO * 100)}%)`}>
+            {pct.toFixed(1)}%
+          </span>
+        )
+      },
+    },
+    {
       id: 'acciones',
       header: 'Acciones',
       enableSorting: false,
@@ -487,6 +612,15 @@ export function ConductoresPanelModule() {
             <div className="stat-content">
               <span className="stat-value">{stats.pendientes}</span>
               <span className="stat-label">Con Multas Pendientes</span>
+            </div>
+          </div>
+          <div className={`stat-card stat-card-clickable ${activeCard === 'alertaKm' ? 'stat-card-active' : ''}`}
+            onClick={() => handleCard('alertaKm')}
+            title={`Conductores donde el ${Math.round(UMBRAL_KM_PRODUCTIVO * 100)}% de los km recorridos (GPS) supera a los km con viaje asignado`}>
+            <Gauge size={18} className="stat-icon" />
+            <div className="stat-content">
+              <span className="stat-value">{stats.alertaKm}</span>
+              <span className="stat-label">Alerta KM</span>
             </div>
           </div>
         </div>

@@ -929,6 +929,9 @@ export interface CabifyDiaRend {
   peajes: number
   promociones: number
   deducciones: number
+  kmTotal: number | null
+  kmAsignado: number | null
+  kmSinAsignar: number | null
 }
 
 export interface CabifySemanaRend {
@@ -944,6 +947,9 @@ export interface CabifySemanaRend {
   peajes: number
   promociones: number
   deducciones: number
+  kmTotal: number | null
+  kmAsignado: number | null
+  kmSinAsignar: number | null
   dias: CabifyDiaRend[]         // dias con datos, del mas viejo al mas nuevo
 }
 
@@ -965,6 +971,9 @@ interface CabifyHistRow {
   peajes: number | string | null
   promociones: number | string | null
   deducciones: number | string | null
+  km_con_viaje: number | string | null
+  km_sin_viaje: number | string | null
+  km_conectado: number | string | null
 }
 
 // La misma fila, anotada con la tabla de la que salio (hace falta para deduplicar
@@ -975,6 +984,18 @@ const numCabify = (v: unknown): number => {
   const n = Number(v)
   return Number.isFinite(n) ? n : 0
 }
+
+// Kilometros: null significa "sin dato" (dias anteriores al 16/09/2026, o una
+// consulta de stats que fallo), que NO es lo mismo que "recorrio 0 km".
+const kmCabify = (v: unknown): number | null => {
+  if (v === null || v === undefined || v === '') return null
+  const n = Number(v)
+  return Number.isFinite(n) ? n : null
+}
+
+// Suma conservando el null: si ningun sumando tiene dato, el total sigue en null.
+const sumKm = (acc: number | null, v: number | null): number | null =>
+  v === null ? acc : (acc ?? 0) + v
 
 // Lunes (en UTC) de la semana a la que pertenece un dia 'yyyy-MM-dd'.
 function lunesDe(dia: string): Date {
@@ -1038,7 +1059,7 @@ export async function cargarRendimientoCabifyConductor(
   // filtrarla en el cliente no es una opcion).
   if (clausulas.length === 0) return []
 
-  const campos = 'cabify_driver_id, dni, licencia, nombre, apellido, fecha_inicio, fecha_guardado, ganancia_total, cobro_efectivo, cobro_app, peajes, promociones, deducciones'
+  const campos = 'cabify_driver_id, dni, licencia, nombre, apellido, fecha_inicio, fecha_guardado, ganancia_total, cobro_efectivo, cobro_app, peajes, promociones, deducciones, km_con_viaje, km_sin_viaje, km_conectado'
 
   const resultados = await Promise.all(
     CABIFY_TABLAS.map(async tabla => {
@@ -1085,13 +1106,16 @@ export async function cargarRendimientoCabifyConductor(
   const porDia = new Map<string, CabifyDiaRend>()
   for (const r of unicas.values()) {
     const fecha = String(r.fecha_inicio || '').slice(0, 10)
-    const acc = porDia.get(fecha) || { fecha, gananciaTotal: 0, cobroEfectivo: 0, cobroApp: 0, peajes: 0, promociones: 0, deducciones: 0 }
+    const acc = porDia.get(fecha) || { fecha, gananciaTotal: 0, cobroEfectivo: 0, cobroApp: 0, peajes: 0, promociones: 0, deducciones: 0, kmTotal: null, kmAsignado: null, kmSinAsignar: null }
     acc.gananciaTotal += numCabify(r.ganancia_total)
     acc.cobroEfectivo += numCabify(r.cobro_efectivo)
     acc.cobroApp += numCabify(r.cobro_app)
     acc.peajes += numCabify(r.peajes)
     acc.promociones += numCabify(r.promociones)
     acc.deducciones += numCabify(r.deducciones)
+    acc.kmTotal = sumKm(acc.kmTotal, kmCabify(r.km_conectado))
+    acc.kmAsignado = sumKm(acc.kmAsignado, kmCabify(r.km_con_viaje))
+    acc.kmSinAsignar = sumKm(acc.kmSinAsignar, kmCabify(r.km_sin_viaje))
     porDia.set(fecha, acc)
   }
 
@@ -1119,6 +1143,7 @@ export async function cargarRendimientoCabifyConductor(
         key, anio, semana, inicio, fin: isoDia(domingo),
         enCurso: inicio === hoyLunes,
         gananciaTotal: 0, cobroEfectivo: 0, cobroApp: 0, peajes: 0, promociones: 0, deducciones: 0,
+        kmTotal: null, kmAsignado: null, kmSinAsignar: null,
         dias: [],
       }
       porSemana.set(key, s)
@@ -1129,6 +1154,9 @@ export async function cargarRendimientoCabifyConductor(
     s.peajes += dia.peajes
     s.promociones += dia.promociones
     s.deducciones += dia.deducciones
+    s.kmTotal = sumKm(s.kmTotal, dia.kmTotal)
+    s.kmAsignado = sumKm(s.kmAsignado, dia.kmAsignado)
+    s.kmSinAsignar = sumKm(s.kmSinAsignar, dia.kmSinAsignar)
     s.dias.push(dia)
   }
 
