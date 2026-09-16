@@ -17,15 +17,27 @@
 import { supabase } from '../../../lib/supabase'
 import { cabifyHistoricalService } from '../../../services/cabifyHistoricalService'
 import { normalizeDni, normalizeLicencia, normalizeNombre } from '../../../utils/normalizeDocuments'
+import { calcularKmSemanaConductores } from '../../portal/kmRecorridos'
 
 // Ingresos de Cabify del periodo consultado. MISMA fuente que el modulo
 // Integraciones > Cabify (cabifyHistoricalService), para que los numeros coincidan.
+// Kilometros de Cabify: null significa "sin dato", que NO es lo mismo que 0 km.
+// La suma conserva el null: si ninguna cuenta del conductor tiene kilometros,
+// el total sigue siendo null y la tabla muestra "—".
+const kmPanel = (v: number | null | undefined): number | null =>
+  v === null || v === undefined ? null : Number(v)
+const sumKmPanel = (acc: number | null, v: number | null | undefined): number | null =>
+  v === null || v === undefined ? acc : (acc ?? 0) + Number(v)
+
 export interface CabifyIngresos {
   gananciaTotal: number      // ganancia_total (columna "Total" del modulo Cabify)
   viajesFinalizados: number
   cobroEfectivo: number
   cobroApp: number
   peajes: number
+  kmTotal: number | null       // km_conectado: todo lo recorrido con la app encendida
+  kmAsignado: number | null    // km_con_viaje: con un viaje asignado
+  kmSinAsignar: number | null  // km_sin_viaje: conectado pero sin viaje asignado
 }
 
 export interface ConductorPanelRow {
@@ -72,6 +84,9 @@ export interface ConductorPanelRow {
   // undefined = no se pidieron (el llamador no paso opciones.cabify).
   // null      = se pidieron, pero el conductor no cruzo con ningun registro Cabify.
   cabify?: CabifyIngresos | null
+  // Km de GPS de la semana de Cabify. undefined si no se pidio Cabify;
+  // null si se pidio y ese conductor no tuvo viajes con GPS esa semana.
+  kmGeo?: number | null
 }
 
 // Parsea importes que en la BD vienen en DOS formatos mezclados:
@@ -312,6 +327,9 @@ export async function cargarPanelConductores(
         prev.cobroEfectivo += Number(d.cobroEfectivo) || 0
         prev.cobroApp += Number(d.cobroApp) || 0
         prev.peajes += Number(d.peajes) || 0
+        prev.kmTotal = sumKmPanel(prev.kmTotal, d.kmConectado)
+        prev.kmAsignado = sumKmPanel(prev.kmAsignado, d.kmConViaje)
+        prev.kmSinAsignar = sumKmPanel(prev.kmSinAsignar, d.kmSinViaje)
       } else {
         cabifyPorConductor.set(cid, {
           gananciaTotal: Number(d.gananciaTotal) || 0,
@@ -319,6 +337,9 @@ export async function cargarPanelConductores(
           cobroEfectivo: Number(d.cobroEfectivo) || 0,
           cobroApp: Number(d.cobroApp) || 0,
           peajes: Number(d.peajes) || 0,
+          kmTotal: kmPanel(d.kmConectado),
+          kmAsignado: kmPanel(d.kmConViaje),
+          kmSinAsignar: kmPanel(d.kmSinViaje),
         })
       }
     }
@@ -368,6 +389,25 @@ export async function cargarPanelConductores(
     const desc = parseImporte(m.importe_descuento)
     const vencStr = m.fecha_vencimiento_descuento ? String(m.fecha_vencimiento_descuento).slice(0, 10) : ''
     return (desc > 0 && vencStr > hoyStr) ? desc : parseImporte(m.importe)
+  }
+
+  // KM GEO: kilometros recorridos segun GPS en la semana de Cabify. Se calcula
+  // con la MISMA funcion que la pestaña "Km recorridos" del modal (comparten
+  // fetch, atribucion de conductor y matcher de nombre), asi que el numero de la
+  // tabla y el del modal no pueden separarse. Solo se calcula si el llamador
+  // pidio Cabify, que es lo que define la semana. Si falla, la columna queda
+  // vacia y el panel sigue cargando.
+  let kmGeoPorConductor = new Map<string, number>()
+  if (opciones?.cabify) {
+    try {
+      kmGeoPorConductor = await calcularKmSemanaConductores(
+        supabase,
+        conductores.map(c => ({ id: c.id, nombres: c.nombres, apellidos: c.apellidos })),
+        { inicio: opciones.cabify.startDate.slice(0, 10), fin: opciones.cabify.endDate.slice(0, 10) },
+      )
+    } catch {
+      kmGeoPorConductor = new Map()
+    }
   }
 
   // Pre-normaliza conductores para el match de nombre.
@@ -463,6 +503,7 @@ export async function cargarPanelConductores(
       saldoMenosGarantia: saldoPendiente - garantiaPagada,
       // undefined si no se pidio Cabify; null si se pidio y no hubo cruce.
       cabify: cabifyDrivers ? (cabifyPorConductor.get(c.id) ?? null) : undefined,
+      kmGeo: opciones?.cabify ? (kmGeoPorConductor.get(c.id) ?? null) : undefined,
     }
   })
 

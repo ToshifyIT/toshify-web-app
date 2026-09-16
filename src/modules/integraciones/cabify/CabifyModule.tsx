@@ -114,6 +114,17 @@ function mergeDriversByConductor(
     const sum = (pick: (d: CabifyDriver) => number | string | undefined) =>
       Number(accounts.reduce((acc, d) => acc + toNumber(pick(d)), 0).toFixed(2))
 
+    // Km: se suman solo las cuentas que tienen dato. Si ninguna lo tiene queda null,
+    // para no mostrar "0 km" cuando en realidad no se midio.
+    const sumKm = (pick: (d: CabifyDriver) => number | null | undefined): number | null => {
+      const valores = accounts
+        .map(pick)
+        .filter((v): v is number => v !== null && v !== undefined)
+      return valores.length > 0
+        ? Number(valores.reduce((acc, v) => acc + v, 0).toFixed(1))
+        : null
+    }
+
     const horas = sum((d) => d.horasConectadas)
     const gananciaTotal = sum((d) => d.gananciaTotal)
     const companyIds = Array.from(new Set(accounts.flatMap((d) => d.sourceCompanyIds ?? [])))
@@ -131,6 +142,9 @@ function mergeDriversByConductor(
       viajesPerdidos: sum((d) => d.viajesPerdidos),
       horasConectadas: horas,
       horasConectadasFormato: formatHoras(horas),
+      kmConViaje: sumKm((d) => d.kmConViaje),
+      kmSinViaje: sumKm((d) => d.kmSinViaje),
+      kmConectado: sumKm((d) => d.kmConectado),
       cobroEfectivo: sum((d) => d.cobroEfectivo),
       cobroApp: sum((d) => d.cobroApp),
       peajes: sum((d) => d.peajes),
@@ -516,6 +530,9 @@ function useTableColumns(
       { ...createNumericColumn('viajesPerdidos', 'V. Perdidos', 'cabify-trips-lost'), size: 100, minSize: 85 },
       { ...createTasaAceptacionColumn(), size: 100, minSize: 85 },
       { ...createTextColumn('horasConectadasFormato', 'Horas', 'cabify-hours'), size: 75, minSize: 65 },
+      { ...createKmColumn('kmConectado', 'KM total', 'cabify-km'), size: 100, minSize: 85 },
+      { ...createKmColumn('kmConViaje', 'KM-viaje asig', 'cabify-km-asignado'), size: 120, minSize: 100 },
+      { ...createKmColumn('kmSinViaje', 'KM-viaje sin asig', 'cabify-km-empty'), size: 130, minSize: 110 },
       { ...createTasaOcupacionColumn(), size: 100, minSize: 85 },
       { ...createMoneyColumn('cobroEfectivo', 'Efectivo'), size: 110, minSize: 95 },
       { ...createMoneyColumn('cobroApp', 'App'), size: 110, minSize: 95 },
@@ -573,6 +590,32 @@ function createNumericColumn(
     cell: ({ getValue }) => (
       <span className={className}>{(getValue() as number) || 0}</span>
     ),
+  }
+}
+
+/**
+ * Columna de kilometros. Muestra "-" cuando no hay dato (null), que no es lo mismo
+ * que 0 km: los dias anteriores al 16/09/2026 no tienen kilometros sincronizados.
+ */
+function createKmColumn(
+  key: keyof CabifyDriver,
+  header: string,
+  className?: string
+): ColumnDef<CabifyDriver, unknown> {
+  return {
+    accessorKey: key,
+    header,
+    cell: ({ getValue }) => {
+      const rawValue = getValue() as number | null | undefined
+      if (rawValue === null || rawValue === undefined) {
+        return <span className={className}>-</span>
+      }
+      const formatted = `${Number(rawValue).toLocaleString('es-AR', {
+        minimumFractionDigits: 1,
+        maximumFractionDigits: 1,
+      })} km`
+      return <span className={className}>{formatted}</span>
+    },
   }
 }
 
