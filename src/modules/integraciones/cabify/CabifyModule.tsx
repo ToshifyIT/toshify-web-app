@@ -27,6 +27,7 @@ import { CabifyHeader, type DateRange, StatsAccordion, TopDriversSection } from 
 import { getScoreLevel, getRateLevel, buildLoadingMessage, getDriverPatente } from './utils/cabify.utils'
 import { findAsignacionEnIndex } from '../../../services/asignacionesService'
 import type { AsignacionActiva } from '../../../services/asignacionesService'
+import { normalizeDni, normalizeNombre } from '../../../utils/normalizeDocuments'
 
 // Helper: busca la asignación de un driver de Cabify por DNI, licencia o nombre.
 function findAsignacionForCabifyDriver(
@@ -38,6 +39,109 @@ function findAsignacionForCabifyDriver(
     dni: driver.nationalIdNumber,
     licencia: driver.driverLicense,
     nombre,
+  })
+}
+
+// Clave del conductor de Toshify al que cruza un driver de Cabify (vía su asignación).
+function getConductorKey(asig: AsignacionActiva): string {
+  const dni = normalizeDni(asig.dni)
+  if (dni) return `dni:${dni}`
+  return `nom:${normalizeNombre(asig.nombreConductor)}`
+}
+
+function toNumber(value: number | string | undefined | null): number {
+  return Number(value) || 0
+}
+
+function formatHoras(horas: number): string {
+  const h = Math.floor(horas)
+  const m = Math.floor((horas - h) * 60)
+  return `${h}h ${m}m`
+}
+
+/**
+ * Promedio de una tasa entre cuentas, ponderado por horas conectadas.
+ * Solo considera cuentas con actividad: una cuenta vacía (tasa 0, 0 h) no debe
+ * arrastrar hacia abajo la tasa de la cuenta que sí trabajó.
+ */
+function mergeRate(
+  accounts: readonly CabifyDriver[],
+  pick: (d: CabifyDriver) => number | undefined,
+): number {
+  const withRate = accounts.filter((d) => toNumber(pick(d)) > 0)
+  if (withRate.length === 0) return 0
+  const totalHoras = withRate.reduce((sum, d) => sum + toNumber(d.horasConectadas), 0)
+  const value = totalHoras > 0
+    ? withRate.reduce((sum, d) => sum + toNumber(pick(d)) * toNumber(d.horasConectadas), 0) / totalHoras
+    : withRate.reduce((sum, d) => sum + toNumber(pick(d)), 0) / withRate.length
+  return Number(value.toFixed(2))
+}
+
+/**
+ * Un conductor puede tener más de una cuenta de Cabify (ej. una con DNI y otra
+ * de CG sin DNI, cargada como "CABIFY_xxx"). Si varias cuentas cruzan con el
+ * mismo conductor de Toshify, se muestran como UNA fila con los montos sumados.
+ * La identidad (nombre, email, DNI, score, permiso) sale de la cuenta con mayor
+ * ganancia. Mismo criterio que el Panel de Conductores (las cuentas se suman).
+ */
+function mergeDriversByConductor(
+  drivers: readonly CabifyDriver[],
+  asignaciones: Map<string, AsignacionActiva>,
+): CabifyDriver[] {
+  const groups = new Map<string, CabifyDriver[]>()
+  const order: string[] = []
+
+  for (const driver of drivers) {
+    const asig = findAsignacionForCabifyDriver(driver, asignaciones)
+    // Sin asignación no hay conductor al cual agrupar: queda como su propia fila.
+    const key = asig ? getConductorKey(asig) : `cabify:${driver.id}`
+    const group = groups.get(key)
+    if (group) {
+      group.push(driver)
+    } else {
+      groups.set(key, [driver])
+      order.push(key)
+    }
+  }
+
+  return order.map((key) => {
+    const accounts = groups.get(key) as CabifyDriver[]
+    if (accounts.length === 1) return accounts[0]
+
+    const primary = accounts.reduce((best, d) =>
+      toNumber(d.gananciaTotal) > toNumber(best.gananciaTotal) ? d : best
+    )
+    const sum = (pick: (d: CabifyDriver) => number | string | undefined) =>
+      Number(accounts.reduce((acc, d) => acc + toNumber(pick(d)), 0).toFixed(2))
+
+    const horas = sum((d) => d.horasConectadas)
+    const gananciaTotal = sum((d) => d.gananciaTotal)
+    const companyIds = Array.from(new Set(accounts.flatMap((d) => d.sourceCompanyIds ?? [])))
+    const lastSyncedAt = accounts
+      .map((d) => d.lastSyncedAt)
+      .filter((v): v is string => Boolean(v))
+      .sort()
+      .pop() ?? primary.lastSyncedAt ?? null
+
+    return {
+      ...primary,
+      sourceCompanyIds: companyIds,
+      viajesFinalizados: sum((d) => d.viajesFinalizados),
+      viajesRechazados: sum((d) => d.viajesRechazados),
+      viajesPerdidos: sum((d) => d.viajesPerdidos),
+      horasConectadas: horas,
+      horasConectadasFormato: formatHoras(horas),
+      cobroEfectivo: sum((d) => d.cobroEfectivo),
+      cobroApp: sum((d) => d.cobroApp),
+      peajes: sum((d) => d.peajes),
+      promociones: sum((d) => d.promociones),
+      deducciones: sum((d) => d.deducciones),
+      gananciaTotal,
+      gananciaPorHora: horas > 0 ? Number((gananciaTotal / horas).toFixed(2)) : 0,
+      tasaAceptacion: mergeRate(accounts, (d) => d.tasaAceptacion),
+      tasaOcupacion: mergeRate(accounts, (d) => d.tasaOcupacion),
+      lastSyncedAt,
+    }
   })
 }
 
@@ -118,8 +222,12 @@ export function CabifyModule() {
     refreshData,
   } = useCabifyData()
 
+  // Una fila por conductor de Toshify: si tiene varias cuentas Cabify, se suman.
   const activeAssignedDrivers = useMemo(
-    () => drivers.filter((driver) => hasActiveAssignmentWithVehicle(driver, asignaciones)),
+    () => mergeDriversByConductor(
+      drivers.filter((driver) => hasActiveAssignmentWithVehicle(driver, asignaciones)),
+      asignaciones,
+    ),
     [drivers, asignaciones]
   )
 
