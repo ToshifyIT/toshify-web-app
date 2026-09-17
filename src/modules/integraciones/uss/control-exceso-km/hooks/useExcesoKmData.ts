@@ -273,32 +273,24 @@ export function useExcesoKmData(sedeId?: string | null) {
         return a.inicioMs - b.inicioMs
       })
 
-      // 2) Resolver conductor efectivo (huerfano hereda, multi se asigna al vecino mas cercano).
-      //    La búsqueda de vecinos se acota a la MISMA patente y el MISMO origen GPS.
+      // 2) Resolver conductor efectivo. La búsqueda de vecinos se acota a la MISMA
+      //    patente y el MISMO origen GPS.
+      //
+      //    CAMBIO DE REGLA (2026-09-16, pedido de operaciones): un viaje SIN
+      //    conductor identificado ya NO hereda el conductor del vecino mas
+      //    cercano. Sus km no se le suman a nadie y por lo tanto no cuentan para
+      //    el exceso ni para el cobro. Motivo: en autos de turno la herencia
+      //    cargaba al ultimo conductor conocido viajes que no eran suyos.
+      //    La misma regla rige en portal/kmRecorridos.ts (panel, modal y portal).
+      //    El caso multi-conductor SI se sigue repartiendo: ahi hay nombres.
       for (let i = 0; i < tripsArr.length; i++) {
         const t = tripsArr[i]
         const cs = parseRawConductores(t.conductor_raw)
         const titular = (t.conductor || '').trim().toUpperCase() || null
 
-        // Huerfano: sin titular y sin conductores en raw
+        // Huerfano: sin titular y sin conductores en raw. No se atribuye a nadie.
         if (!titular && cs.length === 0) {
-          let prev: TripEnriched | null = null
-          let next: TripEnriched | null = null
-          for (let j = i - 1; j >= 0; j--) {
-            if (tripsArr[j].gpsOrigen !== t.gpsOrigen || tripsArr[j].patenteNorm !== t.patenteNorm) break
-            if ((tripsArr[j].conductor || '').trim()) { prev = tripsArr[j]; break }
-          }
-          for (let j = i + 1; j < tripsArr.length; j++) {
-            if (tripsArr[j].gpsOrigen !== t.gpsOrigen || tripsArr[j].patenteNorm !== t.patenteNorm) break
-            if ((tripsArr[j].conductor || '').trim()) { next = tripsArr[j]; break }
-          }
-          let chosen: TripEnriched | null = null
-          if (prev && next) {
-            const gp = t.inicioMs - prev.finMs
-            const gn = next.inicioMs - t.finMs
-            chosen = gp <= gn ? prev : next
-          } else chosen = prev || next
-          t.condEf = (chosen?.conductor || '').trim().toUpperCase() || null
+          t.condEf = null
           continue
         }
 

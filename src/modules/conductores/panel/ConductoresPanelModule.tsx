@@ -71,6 +71,16 @@ const TURNO_LABELS: Record<string, string> = {
   nocturno: 'Nocturno',
   a_cargo: 'A cargo',
 }
+// Etiqueta corta del grupo de flota (vehiculos.grupo_flota guarda la razon
+// social). Los grupos conocidos se abrevian; cualquier otro se muestra tal cual.
+function grupoFlotaLabel(grupo: string | null): string {
+  if (!grupo) return ''
+  const upper = grupo.toUpperCase()
+  if (upper.includes('44 DREAM')) return '44 Dreams'
+  if (upper.includes('GRUPO CG')) return 'Grupo CG'
+  return grupo
+}
+
 function turnoLabel(t: string | null): string {
   if (!t) return '—'
   return TURNO_LABELS[t] || t
@@ -163,6 +173,7 @@ export function ConductoresPanelModule() {
       'CUIT': c.ruc || '',
       'Estado': c.activo ? 'Activo' : (c.estadoCodigo || 'Inactivo'),
       'Patente Asignada': c.vehiculoAsignado || 'Sin asignación',
+      'Grupo de Flota': grupoFlotaLabel(c.grupoFlotaAsignado),
       'Turno': turnoLabel(c.turno),
       'Multas': c.cantidadMultas,
       'Pendientes': c.pendientes,
@@ -200,6 +211,7 @@ export function ConductoresPanelModule() {
       { wch: 14 }, // CUIT
       { wch: 12 }, // Estado
       { wch: 16 }, // Patente Asignada
+      { wch: 14 }, // Grupo de Flota
       { wch: 10 }, // Turno
       { wch: 8 },  // Multas
       { wch: 11 }, // Pendientes
@@ -273,7 +285,16 @@ export function ConductoresPanelModule() {
       accessorFn: (r) => r.vehiculoAsignado || 'Sin asignación',
       header: 'Patente',
       cell: ({ row }) => row.original.vehiculoAsignado
-        ? <span className="cpanel-badge asig">{row.original.vehiculoAsignado}</span>
+        ? (
+          <div>
+            <span className="cpanel-badge asig">{row.original.vehiculoAsignado}</span>
+            {row.original.grupoFlotaAsignado && (
+              <div style={{ fontSize: 11, marginTop: 4, color: 'var(--text-tertiary, #9ca3af)' }}>
+                {grupoFlotaLabel(row.original.grupoFlotaAsignado)}
+              </div>
+            )}
+          </div>
+        )
         : <span className="cpanel-badge noasig">Sin asignación</span>,
     },
     {
