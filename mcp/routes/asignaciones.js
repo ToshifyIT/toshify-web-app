@@ -39,16 +39,48 @@ const CAMPOS = [
   'fecha_programada',
   'control_completado',
   'vehiculos(patente,marca,modelo)',
-  'conductores(nombres,apellidos,numero_dni)',
+  // Una fila por turno: un vehiculo con diurno y nocturno trae dos conductores.
+  'asignaciones_conductores(horario,estado,confirmado,conductores(id,nombres,apellidos,numero_dni,numero_licencia))',
   'sedes(nombre)',
 ];
 
 const SELECT = CAMPOS.join(',');
 const TABLA = 'asignaciones';
 
+const ESTADOS_CONDUCTOR_INACTIVO = ['cancelado', 'completado', 'finalizado'];
+
+/** En la base conviven 'diurno', 'DIURNO' y 'D' (idem nocturno). Se unifica. */
+function normalizarTurno(h) {
+  const v = String(h || '').trim().toLowerCase();
+  if (v === 'd' || v === 'diurno') return 'diurno';
+  if (v === 'n' || v === 'nocturno') return 'nocturno';
+  return v || null;
+}
+
+/** Aplana asignaciones_conductores a una lista simple de conductores. */
+function aplanar({ asignaciones_conductores: acs, ...resto }) {
+  const conductores = (acs || [])
+    .filter((ac) => ac.conductores
+      && !ESTADOS_CONDUCTOR_INACTIVO.includes(String(ac.estado || '').toLowerCase()))
+    .map((ac) => ({
+      turno: normalizarTurno(ac.horario),
+      confirmado: ac.confirmado ?? null,
+      id: ac.conductores.id,
+      nombres: ac.conductores.nombres,
+      apellidos: ac.conductores.apellidos,
+      numero_dni: ac.conductores.numero_dni,
+      numero_licencia: ac.conductores.numero_licencia,
+    }))
+    .sort((x, y) => (x.turno === 'diurno' ? -1 : y.turno === 'diurno' ? 1 : 0));
+
+  return { ...resto, conductores, cantidad_conductores: conductores.length };
+}
+
 router.get('/asignaciones', requireApiKey('asignaciones:api'), async (req, res) => {
   const { page, limit, offset } = parsearPaginacion(req.query);
-  const filtros = [];
+  const filtros = [
+    `asignaciones_conductores.estado=not.in.(${ESTADOS_CONDUCTOR_INACTIVO.join(',')})`,
+  ];
   const errores = [];
 
   if (req.query.estado) filtros.push(eq('estado', req.query.estado));
@@ -78,7 +110,7 @@ router.get('/asignaciones', requireApiKey('asignaciones:api'), async (req, res) 
 
   if (pidioTodo(req.query)) {
     try {
-      const r = await exportarTodo({ res, tabla: TABLA, select: SELECT, orden: 'fecha_inicio.desc', filtros });
+      const r = await exportarTodo({ res, tabla: TABLA, select: SELECT, orden: 'fecha_inicio.desc', filtros, transform: aplanar });
       registrarRequest({ apiKeyData: req.apiKeyData, req, status: 200, filas: r.enviados });
     } catch (error) {
       const esTope = error.codigo === 'too_many_rows';
@@ -97,6 +129,7 @@ router.get('/asignaciones', requireApiKey('asignaciones:api'), async (req, res) 
       tabla: TABLA, select: SELECT, orden: 'fecha_inicio.desc',
       filtros, page, limit, offset,
     });
+    out.data = out.data.map(aplanar);
     registrarRequest({ apiKeyData: req.apiKeyData, req, status: 200, filas: out.data.length });
     return res.json(out);
   } catch (error) {
@@ -119,7 +152,7 @@ router.get('/asignaciones/:id', requireApiKey('asignaciones:api'), async (req, r
       return res.status(404).json({ error: 'not_found', message: 'Asignacion no encontrada' });
     }
     registrarRequest({ apiKeyData: req.apiKeyData, req, status: 200, filas: 1 });
-    return res.json({ data: row });
+    return res.json({ data: aplanar(row) });
   } catch (error) {
     console.error('[API/asignaciones/:id] Error:', error.message);
     registrarRequest({ apiKeyData: req.apiKeyData, req, status: 500, filas: 0 });
