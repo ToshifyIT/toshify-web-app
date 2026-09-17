@@ -382,12 +382,21 @@ export const wialonBitacoraService = {
     }
 
     // Combinar filas de ambas fuentes.
-    // GEOTAB: mostrar SOLO las filas cuyo conductor existe como conductor real del sistema.
-    //   Asi se descartan nombres de Geotab que no son conductores (ej. "Karen Torres") y las
-    //   filas sin conductor (DESC). USS NO se filtra (se muestra tal cual).
+    // GEOTAB: se muestran las filas cuyo conductor existe como conductor real del
+    //   sistema Y TAMBIEN las que no tienen conductor identificado (2026-09-16):
+    //   esas son las marcaciones "Sin conductor", necesarias para ver la traza de
+    //   la patente sin huecos. Se sigue descartando el nombre que Geotab reporta y
+    //   que NO es conductor del sistema (ej. "Karen Torres"): eso es ruido, no un
+    //   hueco. USS NO se filtra (se muestra tal cual).
+    //   Nota: el conductor vacio o puramente numerico ('123 -') es el mismo caso
+    //   "Sin conductor" que ya normaliza la tabla de Marcaciones.
+    const sinConductorIdentificado = (n: string | null): boolean => {
+      const c = (n || '').trim()
+      return !c || /^\d+\s*-?\s*$/.test(c)
+    }
     const registrosWialon = ((wialonRes.data || []) as WialonBitacoraRow[]).map(r => mapRow(r, 'USS'))
     const registrosGeotab = ((geotabRes.data || []) as WialonBitacoraRow[])
-      .filter(r => esConductorReal(r.conductor_wialon || ''))
+      .filter(r => sinConductorIdentificado(r.conductor_wialon) || esConductorReal(r.conductor_wialon || ''))
       .map(r => mapRow(r, 'GEOTAB'))
     const registros: BitacoraRegistroTransformado[] = [...registrosWialon, ...registrosGeotab]
 

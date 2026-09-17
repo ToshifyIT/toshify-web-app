@@ -51,6 +51,7 @@ export interface ConductorPanelRow {
   activo: boolean
   tieneAsignacion: boolean
   vehiculoAsignado: string | null   // patente del auto asignado ahora mismo
+  grupoFlotaAsignado: string | null // grupo de flota (razon social) de ese auto
   turno: string | null              // horario de la asignacion actual (diurno/nocturno/todo_dia)
   cantidadMultas: number
   vehiculos: string[]        // patentes distintas de sus multas
@@ -208,11 +209,11 @@ export async function cargarPanelConductores(
       conductor_id: string | null
       estado: string | null
       horario: string | null
-      asignaciones: { estado: string | null; sede_id: string | null; modalidad: string | null; vehiculos: { patente: string | null } | null } | null
+      asignaciones: { estado: string | null; sede_id: string | null; modalidad: string | null; vehiculos: { patente: string | null; grupo_flota: string | null } | null } | null
     }>((from, to) =>
       supabase
         .from('asignaciones_conductores')
-        .select('conductor_id, estado, horario, asignaciones(estado, sede_id, modalidad, vehiculos(patente))')
+        .select('conductor_id, estado, horario, asignaciones(estado, sede_id, modalidad, vehiculos(patente, grupo_flota))')
         .not('conductor_id', 'is', null)
         .range(from, to)
     ),
@@ -347,6 +348,7 @@ export async function cargarPanelConductores(
 
   // Asignacion actual -> vehiculo + turno por conductor (mismo criterio que antes).
   const vehiculoPorConductor = new Map<string, string>()
+  const grupoFlotaPorConductor = new Map<string, string>()
   const turnoPorConductor = new Map<string, string>()
   for (const ac of asignacionesCond) {
     const a = ac.asignaciones
@@ -356,6 +358,8 @@ export async function cargarPanelConductores(
     if (!ac.conductor_id || !a.vehiculos?.patente) continue
     if (!vehiculoPorConductor.has(ac.conductor_id)) {
       vehiculoPorConductor.set(ac.conductor_id, a.vehiculos.patente)
+      const grupoFlota = a.vehiculos.grupo_flota?.trim()
+      if (grupoFlota) grupoFlotaPorConductor.set(ac.conductor_id, grupoFlota)
       // Turno = modalidad "a cargo" -> 'a_cargo'; si no, el horario (diurno/nocturno).
       // (El horario 'todo_dia' corresponde a la modalidad a_cargo.)
       const turno = (a.modalidad === 'a_cargo' || ac.horario === 'todo_dia') ? 'a_cargo' : ac.horario
@@ -484,6 +488,7 @@ export async function cargarPanelConductores(
       activo: estadoCodigo === 'activo',
       tieneAsignacion: !!vehiculoAsignado,
       vehiculoAsignado,
+      grupoFlotaAsignado: grupoFlotaPorConductor.get(c.id) || null,
       turno: turnoPorConductor.get(c.id) || null,
       cantidadMultas: ms.length,
       vehiculos: patentes,
