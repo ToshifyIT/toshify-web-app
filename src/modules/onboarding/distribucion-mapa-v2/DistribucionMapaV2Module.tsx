@@ -103,6 +103,17 @@ const ANCHO_DRAWER = 384
  */
 const MAX_LINEAS_MAPA = 25
 
+/**
+ * Espera antes de recalcular las sugerencias al elegir otra persona con el
+ * panel abierto.
+ *
+ * No es un antirrebote de UI: es un control de gasto. Cada recálculo mide hasta
+ * 25 candidatos contra Distance Matrix, que se cobra por elemento, así que ir
+ * recorriendo la lista para mirar gente no debe disparar un cálculo por cada
+ * fila. Con ~1,2 s sólo calcula cuando el operador se detiene en alguien.
+ */
+const RETARDO_RECALCULO_MS = 1200
+
 export function DistribucionMapaV2Module() {
   const { sedeActualId, aplicarFiltroSede } = useSede()
   const navigate = useNavigate()
@@ -593,8 +604,14 @@ export function DistribucionMapaV2Module() {
   }, [baseManual])
 
   // Con el panel abierto, elegir otra persona en el mapa o en la lista cambia
-  // la base y recalcula solo. Pequeño retardo para no disparar dos veces cuando
-  // el clic viene acompañado de un pan/zoom.
+  // la base y recalcula solo.
+  //
+  // El retardo es deliberadamente largo (ver RETARDO_RECALCULO_MS): cada
+  // recálculo cuesta llamadas a Distance Matrix, así que recorrer la lista
+  // mirando gente no tiene que disparar uno por cada persona por la que se
+  // pasa. Sólo calcula cuando el operador se queda en alguien, que es la señal
+  // de que esa persona le interesa. El botón "Recalcular" del panel sigue
+  // estando para forzarlo al instante.
   //
   // EXCEPTO con una base manual fijada: ahí el clic significa "medí a esta
   // persona contra la base", no "cambiá la base de las sugerencias". Si este
@@ -612,7 +629,7 @@ export function DistribucionMapaV2Module() {
       setParSeleccionado(null)
       setMostrarTodosPares(false)
       correrSugerenciasRef.current(base)
-    }, 250)
+    }, RETARDO_RECALCULO_MS)
     return () => clearTimeout(t)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activo, drawerAbierto])

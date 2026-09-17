@@ -96,11 +96,35 @@ interface MedicionRuta {
 }
 
 /**
- * Caché de mediciones por par. El tiempo es determinístico (sin hora de
- * salida), así que una medición hecha vale para toda la sesión. Vive en el
- * módulo para sobrevivir a re-renders y a corridas sucesivas.
+ * Caché de mediciones, compartido por TODOS los caminos que miden
+ * (sugerencias, radar, emparejamiento de leads y medición manual): la consulta
+ * está dentro de `medirDesdeOrigen`, que es el único punto por donde salen las
+ * llamadas a Distance Matrix. Así un tramo ya medido no se vuelve a pagar,
+ * venga de donde venga.
+ *
+ * El tiempo es determinístico (se pide sin hora de salida), así que una
+ * medición hecha vale para toda la sesión. Vive a nivel de módulo para
+ * sobrevivir a re-renders y a corridas sucesivas.
+ *
+ * La clave son las COORDENADAS, no las personas: la ruta depende del punto en
+ * el mapa, no de quién viva ahí. Dos leads en la misma dirección comparten la
+ * medición, y si una persona cambia de domicilio su clave cambia sola.
+ *
+ * Sólo se guardan mediciones reales (`fuente: 'matrix'`). Las estimaciones por
+ * Haversine NO se cachean: son un reemplazo de emergencia cuando la API falla y
+ * cachearlas dejaría congelado un número inventado.
  */
 const cacheMediciones = new Map<string, MedicionRuta>()
+
+/**
+ * Clave de caché de un tramo. Se ordena para que A→B y B→A compartan entrada:
+ * el módulo ya trata la distancia como simétrica (ver `clavePar`).
+ */
+function claveTramo(a: { lat: number; lng: number }, b: { lat: number; lng: number }): string {
+  const pa = `${a.lat.toFixed(6)},${a.lng.toFixed(6)}`
+  const pb = `${b.lat.toFixed(6)},${b.lng.toFixed(6)}`
+  return pa <= pb ? `${pa}|${pb}` : `${pb}|${pa}`
+}
 
 function estimarPorHaversine(km: number): MedicionRuta {
   return {
@@ -124,17 +148,31 @@ async function medirDesdeOrigen(
   destinos: Array<{ lat: number; lng: number }>
 ): Promise<Array<MedicionRuta | null>> {
   if (destinos.length === 0) return []
-  if (!mapsDisponible()) return destinos.map(() => null)
 
-  const google = (window as any).google
   const resultados: Array<MedicionRuta | null> = new Array(destinos.length).fill(null)
 
-  for (let inicio = 0; inicio < destinos.length; inicio += MAX_DESTINOS_POR_REQUEST) {
-    const lote = destinos.slice(inicio, inicio + MAX_DESTINOS_POR_REQUEST)
+  // 1. Lo ya medido antes sale del caché: no se le pide a Google ni se paga.
+  //    `pendientes` guarda la posición original para reinsertar cada respuesta
+  //    en su lugar del array de salida.
+  const pendientes: Array<{ indice: number; destino: { lat: number; lng: number } }> = []
+  for (let i = 0; i < destinos.length; i++) {
+    const cacheado = cacheMediciones.get(claveTramo(origen, destinos[i]))
+    if (cacheado) resultados[i] = cacheado
+    else pendientes.push({ indice: i, destino: destinos[i] })
+  }
+
+  if (pendientes.length === 0) return resultados
+  if (!mapsDisponible()) return resultados
+
+  const google = (window as any).google
+
+  // 2. Sólo lo que falta va a la API, en lotes del máximo que admite.
+  for (let inicio = 0; inicio < pendientes.length; inicio += MAX_DESTINOS_POR_REQUEST) {
+    const lote = pendientes.slice(inicio, inicio + MAX_DESTINOS_POR_REQUEST)
 
     const request: any = {
       origins: [new google.maps.LatLng(origen.lat, origen.lng)],
-      destinations: lote.map((d) => new google.maps.LatLng(d.lat, d.lng)),
+      destinations: lote.map((d) => new google.maps.LatLng(d.destino.lat, d.destino.lng)),
       travelMode: google.maps.TravelMode.DRIVING,
       unitSystem: google.maps.UnitSystem.METRIC,
     }
@@ -162,11 +200,15 @@ async function medirDesdeOrigen(
       if (!el || el.status !== 'OK') continue
       const segundos = el.duration?.value
       if (!Number.isFinite(el.distance?.value) || !Number.isFinite(segundos)) continue
-      resultados[inicio + i] = {
+      const medicion: MedicionRuta = {
         distanciaKm: Math.round((el.distance.value / 1000) * 10) / 10,
         tiempoMinutos: Math.round(segundos / 60),
         fuente: 'matrix',
       }
+      resultados[lote[i].indice] = medicion
+      // 3. Se cachea sólo la medición real; el tramo que la API no resolvió
+      //    queda sin entrada para poder reintentarlo más adelante.
+      cacheMediciones.set(claveTramo(origen, lote[i].destino), medicion)
     }
   }
 
@@ -516,22 +558,17 @@ export async function emparejarLeads(
 
       if (destinos.length === 0) continue
 
-      // Consultar caché; medir sólo lo que falta, en lotes de 25.
-      const faltantes = destinos.filter((x) => !cacheMediciones.has(clavePar(base, x.candidato)))
-      for (let inicio = 0; inicio < faltantes.length; inicio += MAX_DESTINOS_POR_REQUEST) {
-        const lote = faltantes.slice(inicio, inicio + MAX_DESTINOS_POR_REQUEST)
-        const mediciones = await medirDesdeOrigen(
-          { lat: base.lat, lng: base.lng },
-          lote.map((x) => ({ lat: x.candidato.lat, lng: x.candidato.lng }))
-        )
-        lote.forEach((x, k) => {
-          cacheMediciones.set(clavePar(base, x.candidato), mediciones[k] || estimarPorHaversine(x.km))
-        })
-      }
+      // Una sola llamada: `medirDesdeOrigen` ya resuelve por caché lo medido
+      // antes, pide a la API sólo lo que falta y lotea por su cuenta.
+      const mediciones = await medirDesdeOrigen(
+        { lat: base.lat, lng: base.lng },
+        destinos.map((x) => ({ lat: x.candidato.lat, lng: x.candidato.lng }))
+      )
 
-      for (const { candidato } of destinos) {
-        const medicion = cacheMediciones.get(clavePar(base, candidato))
-        if (!medicion || medicion.tiempoMinutos > umbralMinutos) continue
+      for (let j = 0; j < destinos.length; j++) {
+        const { candidato, km } = destinos[j]
+        const medicion = mediciones[j] || estimarPorHaversine(km)
+        if (medicion.tiempoMinutos > umbralMinutos) continue
         // Turno ya validado arriba: siempre complementarios acá.
         const { score, motivos } = evaluarPar(base, candidato, medicion.tiempoMinutos, true)
         candidatos.push({
