@@ -29,12 +29,34 @@ const router = express.Router();
 
 const ESTADOS_ACTIVOS = ['activa', 'activo'];
 
+/**
+ * Estados de asignaciones_conductores que NO cuentan como conductor vigente.
+ * Mismo criterio que usa la pantalla /estado-de-flota de la app.
+ */
+const ESTADOS_CONDUCTOR_INACTIVO = ['cancelado', 'completado', 'finalizado'];
+
+/**
+ * Normaliza el turno. En la base conviven 'diurno', 'DIURNO' y 'D' (idem
+ * nocturno), asi que se unifica antes de exponerlo.
+ */
+function normalizarTurno(h) {
+  const v = String(h || '').trim().toLowerCase();
+  if (v === 'd' || v === 'diurno') return 'diurno';
+  if (v === 'n' || v === 'nocturno') return 'nocturno';
+  return v || null;
+}
+
 function armarSelect({ soloAsignados }) {
   // `!inner` convierte el embed en inner join: PostgREST descarta el vehiculo si
   // no tiene asignacion activa, y el conteo exacto sale bien del mismo query.
   const embed = soloAsignados ? 'asignaciones!inner' : 'asignaciones';
+  // Los conductores NO cuelgan de asignaciones.conductor_id (campo viejo, de
+  // cuando habia uno solo) sino de asignaciones_conductores, con una fila por
+  // turno. Un vehiculo en turno diurno y nocturno tiene DOS filas ahi.
   return CAMPOS.concat(
-    `${embed}(id,estado,horario,modalidad,tipo_tarifa,fecha_inicio,conductores(nombres,apellidos,numero_dni))`
+    `${embed}(id,codigo,estado,modalidad,tipo_tarifa,fecha_inicio,fecha_programada,` +
+    'asignaciones_conductores(horario,estado,confirmado,' +
+    'conductores(id,nombres,apellidos,numero_dni,numero_licencia)))'
   ).join(',');
 }
 
@@ -59,20 +81,39 @@ const CAMPOS = [
  * un unico objeto (o null), asi que se aplana.
  */
 function aplanar({ asignaciones, ...vehiculo }) {
-  const a = Array.isArray(asignaciones) ? asignaciones[0] || null : null;
+  const activas = Array.isArray(asignaciones) ? asignaciones : [];
+  const a = activas[0] || null;
+
+  const conductores = (a?.asignaciones_conductores || [])
+    .filter((ac) => ac.conductores
+      && !ESTADOS_CONDUCTOR_INACTIVO.includes(String(ac.estado || '').toLowerCase()))
+    .map((ac) => ({
+      turno: normalizarTurno(ac.horario),
+      confirmado: ac.confirmado ?? null,
+      id: ac.conductores.id,
+      nombres: ac.conductores.nombres,
+      apellidos: ac.conductores.apellidos,
+      numero_dni: ac.conductores.numero_dni,
+      numero_licencia: ac.conductores.numero_licencia,
+    }))
+    // diurno primero, igual que en la pantalla
+    .sort((x, y) => (x.turno === 'diurno' ? -1 : y.turno === 'diurno' ? 1 : 0));
+
   return {
     ...vehiculo,
     asignacion_activa: a
       ? {
           id: a.id,
+          codigo: a.codigo,
           estado: a.estado,
-          horario: a.horario,
           modalidad: a.modalidad,
           tipo_tarifa: a.tipo_tarifa,
           fecha_inicio: a.fecha_inicio,
-          conductor: a.conductores || null,
+          fecha_programada: a.fecha_programada,
+          conductores,
         }
       : null,
+    cantidad_conductores: conductores.length,
   };
 }
 
@@ -82,6 +123,7 @@ router.get('/estado-flota', requireApiKey('flota:api'), async (req, res) => {
   const filtros = [
     'deleted_at=is.null',
     `asignaciones.estado=in.(${ESTADOS_ACTIVOS.join(',')})`,
+    `asignaciones.asignaciones_conductores.estado=not.in.(${ESTADOS_CONDUCTOR_INACTIVO.join(',')})`,
   ];
 
   if (req.query.sede) filtros.push(eq('sedes.nombre', req.query.sede));
