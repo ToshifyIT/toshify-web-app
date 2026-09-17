@@ -173,6 +173,9 @@ async function fetchTripsDePatentes(
 
   const PAGE = 1000
   const trips: TripEnriched[] = []
+  // Dedupe GLOBAL por (tabla, id): una patente puede matchear el patrón ilike
+  // de otra en un lote distinto, y sin esto el mismo viaje se contaria dos veces.
+  const vistos = new Set<string>()
 
   const fetchTabla = async (
     tabla: 'uss_historico' | 'geotab_historico',
@@ -195,8 +198,11 @@ async function fetchTripsDePatentes(
       if (batch.length < PAGE) break
     }
     for (const r of byId.values()) {
+      const clave = `${tabla}:${r.id}`
+      if (vistos.has(clave)) continue
       const pn = normalizarPatente(r.patente)
       if (!patentes.has(pn)) continue // filtro autoritativo client-side
+      vistos.add(clave)
       const km = parseFloat(String(r.kilometraje || '0').replace(/[^\d.]/g, '')) || 0
       const inicioMs = new Date(`${r.fecha_hora_inicio_gmt3.replace(' ', 'T')}-03:00`).getTime()
       const finMs = r.fecha_hora_fin_gmt3
@@ -223,35 +229,30 @@ async function fetchTripsDePatentes(
   return trips
 }
 
-// Conductor efectivo de cada trip. Extraido tal cual estaba para poder usarlo
-// tambien en el calculo masivo: es EL MISMO codigo, no una copia.
+// Conductor efectivo de cada trip. Compartido por el calculo por conductor
+// (modal y portal) y por el calculo masivo del panel: es EL MISMO codigo.
+//
+// CAMBIO DE REGLA (2026-09-16, pedido de operaciones):
+// Un viaje SIN conductor identificado ya NO hereda el conductor del viaje
+// vecino mas cercano: queda sin dueño y sus km no se le suman a nadie.
+// Motivo: en autos de turno la herencia cargaba al ultimo conductor conocido
+// viajes que no eran suyos (caso AH168GJ: 7 viajes de la mañana colgados del
+// turno nocturno). Si el GPS no sabe quien manejaba, el sistema tampoco lo
+// inventa. El caso multi-conductor SI se sigue repartiendo: ahi hay nombres.
+//
+// OJO: el modulo Control de Exceso de KM tiene su propia copia de esta logica
+// y conserva la herencia. Sus km pueden ser mayores que los de estas pantallas.
 function asignarConductorEfectivo(tripsArr: TripEnriched[]): void {
 
-  // 5) Conductor efectivo (huérfano hereda, multi al vecino más cercano) —
-  //    idéntico al módulo, acotado a misma patente y mismo origen GPS.
+  // Conductor efectivo, acotado a misma patente y mismo origen GPS.
   for (let i = 0; i < tripsArr.length; i++) {
     const t = tripsArr[i]
     const cs = parseRawConductores(t.conductor_raw)
     const titular = (t.conductor || '').trim().toUpperCase() || null
 
+    // Viaje sin ningun nombre: no se le atribuye a nadie.
     if (!titular && cs.length === 0) {
-      let prev: TripEnriched | null = null
-      let next: TripEnriched | null = null
-      for (let j = i - 1; j >= 0; j--) {
-        if (tripsArr[j].gpsOrigen !== t.gpsOrigen || tripsArr[j].patenteNorm !== t.patenteNorm) break
-        if ((tripsArr[j].conductor || '').trim()) { prev = tripsArr[j]; break }
-      }
-      for (let j = i + 1; j < tripsArr.length; j++) {
-        if (tripsArr[j].gpsOrigen !== t.gpsOrigen || tripsArr[j].patenteNorm !== t.patenteNorm) break
-        if ((tripsArr[j].conductor || '').trim()) { next = tripsArr[j]; break }
-      }
-      let chosen: TripEnriched | null = null
-      if (prev && next) {
-        const gp = t.inicioMs - prev.finMs
-        const gn = next.inicioMs - t.finMs
-        chosen = gp <= gn ? prev : next
-      } else chosen = prev || next
-      t.condEf = (chosen?.conductor || '').trim().toUpperCase() || null
+      t.condEf = null
       continue
     }
 
