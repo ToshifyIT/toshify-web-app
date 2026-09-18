@@ -34,6 +34,21 @@ interface Props {
 
 const DIAS = ['DOM', 'LUN', 'MAR', 'MIE', 'JUE', 'VIE', 'SAB']
 
+// Distancia minima para que un trip se muestre. Los trips por debajo de 0,01 km
+// (10 metros) son "viajes fantasma" del GPS -llave pasada sin manejar, deriva-
+// que la tabla dibuja como "0,00". Mismo corte que usa el Historico
+// (KM_MINIMO_VISIBLE en ussHistoricoService / get_historico_combinado).
+const KM_MINIMO_VISIBLE = 0.01
+
+function superaKmMinimo(kilometraje: string | null): boolean {
+  const crudo = (kilometraje ?? '').trim()
+  if (crudo === '') return false
+  const valor = parseFloat(crudo.replace(',', '.'))
+  // Un valor no interpretable se muestra: no se esconde un dato que no se puede evaluar.
+  if (isNaN(valor)) return true
+  return valor >= KM_MINIMO_VISIBLE
+}
+
 function fmtFechaCorta(iso: string): string {
   const d = new Date(iso)
   const dia = DIAS[d.getDay()]
@@ -101,6 +116,7 @@ export function PatenteDetalleDrawer({ marcacion, semanaInicio, semanaFin, onClo
       if (e) throw e
       return ((data || []) as any[])
         .filter(r => normalizarPatente(r.patente) === patenteNorm)
+        .filter(r => superaKmMinimo(r.kilometraje))
         .map(r => ({ ...r, conductor_raw: r.conductor_raw ?? null, gps_origen: origen } as Trip))
     }
 
