@@ -30,6 +30,20 @@ export interface USSHistoricoQueryOptions {
   sedeId?: string | null;
 }
 
+// Distancia minima para que un viaje se muestre en el Historico. Los registros de
+// 0 km son "viajes fantasma" (llave pasada sin manejar, deriva del GPS) y la tabla
+// los renderiza como "0,00". El mismo corte esta aplicado server-side en la RPC
+// get_historico_combinado; esto solo cubre el fallback.
+const KM_MINIMO_VISIBLE = 0.01;
+
+function superaKmMinimo(registro: USSHistoricoRegistro): boolean {
+  const crudo = (registro.kilometraje || '').trim();
+  if (crudo === '') return false;                 // sin distancia -> se oculta
+  const valor = Number(crudo.replace(',', '.'));
+  if (!Number.isFinite(valor)) return true;       // no parseable -> no se esconde
+  return valor >= KM_MINIMO_VISIBLE;
+}
+
 function buildHistoricoQuery(
   table: 'uss_historico' | 'geotab_historico',
   startDate: string,
@@ -145,13 +159,15 @@ async function getRegistrosFallback(
   const ussRows: USSHistoricoRegistro[] = (ussRes.data || []).map((r: any) => ({ ...r, conductor_raw: r.conductor_raw ?? null, gps_origen: 'USS' as GpsOrigen }));
   const geotabRows: USSHistoricoRegistro[] = (geotabRes.data || []).map((r: any) => ({ ...r, conductor_raw: null, gps_origen: 'GEOTAB' as GpsOrigen }));
 
-  const combined = [...ussRows, ...geotabRows].sort((a, b) => {
+  const combined = [...ussRows, ...geotabRows].filter(superaKmMinimo).sort((a, b) => {
     const av = a.fecha_hora_inicio || '';
     const bv = b.fecha_hora_inicio || '';
     return bv.localeCompare(av);
   });
 
-  const totalCount = (ussRes.count || 0) + (geotabRes.count || 0);
+  // El count del servidor no contempla el filtro de km, asi que se recalcula sobre
+  // el set ya filtrado (el fallback trae hasta 10.000 filas y pagina en memoria).
+  const totalCount = combined.length;
 
   let paginated = combined;
   if (options?.offset !== undefined && options?.limit !== undefined) {
