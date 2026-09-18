@@ -86,6 +86,9 @@ export interface USSHistoricoDateRange {
   label: string;
 }
 
+// Distancia minima para que una marcacion se muestre (ver uso mas abajo).
+const KM_MINIMO_VISIBLE = 0.01;
+
 function transformarMarcacion(reg: BitacoraRegistroTransformado): Marcacion {
   return {
     id: reg.id,
@@ -219,7 +222,16 @@ export function useUSSHistoricoData(
 
       setRegistros(paginatedResult.data);
       setTotalCount(paginatedResult.count);
-      const marcacionesTransformadas = bitacoraResult.data.map(transformarMarcacion).filter(m => m.estado !== 'Sin Actividad');
+      // Se ocultan las marcaciones sin distancia (menos de 0,01 km = 10 metros, todo
+      // lo que la tabla dibuja como "0,00"): son turnos fantasma del GPS -llave pasada
+      // sin manejar, deriva- que ensucian la grilla. Mismo corte que el Historico
+      // (KM_MINIMO_VISIBLE en ussHistoricoService / get_historico_combinado) y que el
+      // drawer de trips. No afecta el acumulado semanal de km, que se calcula aparte
+      // sobre la base y al que estos turnos aportan 0.
+      const marcacionesTransformadas = bitacoraResult.data
+        .map(transformarMarcacion)
+        .filter(m => m.estado !== 'Sin Actividad')
+        .filter(m => (Number(m.kmTotal) || 0) >= KM_MINIMO_VISIBLE);
 
       // ===== ALERTA LIMITE KM SEMANAL =====
       // 1) Límites configurables (ya traídos en paralelo arriba)
