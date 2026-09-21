@@ -13,6 +13,33 @@
 // `libraries` usa el superset de todo lo que la app necesita en cualquier
 // pantalla, así no importa quién monte primero.
 
+/**
+ * ===========================================================================
+ * INTERRUPTOR DE DISTANCE MATRIX  —  poner en `true` para volver a activarlo
+ * ===========================================================================
+ *
+ * `false` = la app NO llama a la API de Distance Matrix. Ni una sola vez, ni
+ * en producción ni en desarrollo. Se apagó el 21/09/2026 porque el consumo
+ * disparó la facturación (ver el módulo distribucion-mapa-v2).
+ *
+ * Qué pasa mientras está apagado — nada se rompe, los dos módulos que la usan
+ * ya tenían su camino alternativo:
+ *
+ *  - distribucion-mapa-v2: los tiempos se estiman por distancia en línea recta
+ *    (28 km/h) y cada par se muestra con el badge "Tiempo estimado".
+ *  - ProgramacionAssignmentWizard: el campo de distancia deja de autocompletarse
+ *    (se carga a mano) y los pares cercanos se ordenan por distancia en línea
+ *    recta en vez de por tiempo en auto.
+ *
+ * OJO: esto apaga el consumo desde el código, pero sólo para quien tenga esta
+ * versión cargada. El freno de verdad es la cuota en Google Cloud Console
+ * (Distance Matrix API → Cuotas → Requests per day = 0).
+ *
+ * El tipo es `boolean` a propósito y no el literal `false`: así TypeScript no
+ * marca como inalcanzable el código que viene después de los guards.
+ */
+export const DISTANCE_MATRIX_HABILITADO: boolean = false
+
 export const GOOGLE_MAPS_API_KEY =
   (import.meta as any).env?.VITE_GOOGLE_MAPS_API_KEY ||
   'AIzaSyCCiqk9jWZghUq5rBtSyo6ZjLuMORblY-w'
