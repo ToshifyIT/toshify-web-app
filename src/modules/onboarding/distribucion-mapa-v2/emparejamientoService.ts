@@ -35,6 +35,7 @@ import type {
   ResultadoSugerencias,
 } from './types'
 import { DISTANCE_MATRIX_HABILITADO } from '../../../lib/googleMaps'
+import { guardarMediciones, leerMediciones } from './medicionesCacheService'
 import {
   clavePersona,
   dedupPorPersona,
@@ -58,6 +59,19 @@ const MAX_DESTINOS_POR_REQUEST = 25
 
 /** Tope de bases evaluadas por corrida, para acotar el gasto de API. */
 export const MAX_BASES_SUGERENCIA = 12
+
+/**
+ * Medición por tandas. En vez de medir de una los 25 candidatos más cercanos
+ * de una base y después descartar los que pasan el umbral, se mide de a
+ * `TAMANO_TANDA` y se corta apenas hay `PARES_SUFICIENTES_POR_BASE` dentro del
+ * umbral.
+ *
+ * Funciona porque los candidatos vienen ordenados por cercanía en línea recta:
+ * los buenos están casi siempre en la primera tanda. Cada candidato que no se
+ * llega a medir es un elemento de Distance Matrix que no se paga.
+ */
+const TAMANO_TANDA = 8
+const PARES_SUFICIENTES_POR_BASE = 3
 
 /**
  * Tope de leads evaluados en el emparejamiento lead↔lead. Más alto que el de
@@ -122,9 +136,48 @@ const cacheMediciones = new Map<string, MedicionRuta>()
  * el módulo ya trata la distancia como simétrica (ver `clavePar`).
  */
 function claveTramo(a: { lat: number; lng: number }, b: { lat: number; lng: number }): string {
-  const pa = `${a.lat.toFixed(6)},${a.lng.toFixed(6)}`
-  const pb = `${b.lat.toFixed(6)},${b.lng.toFixed(6)}`
+  const pa = `${a.lat.toFixed(3)},${a.lng.toFixed(3)}`
+  const pb = `${b.lat.toFixed(3)},${b.lng.toFixed(3)}`
   return pa <= pb ? `${pa}|${pb}` : `${pb}|${pa}`
+}
+
+/**
+ * Trae del caché persistente (Supabase) los tramos que todavía no están en
+ * memoria y los vuelca al Map. Se llama UNA vez por corrida, antes de medir:
+ * si se consultara por lote, una corrida de leads haría decenas de viajes a la
+ * base en vez de uno.
+ *
+ * Es best-effort: si el caché no está disponible no pasa nada, se mide como
+ * siempre.
+ */
+async function precargarDesdeBD(
+  tramos: Array<{ a: { lat: number; lng: number }; b: { lat: number; lng: number } }>
+): Promise<void> {
+  const faltantes = [
+    ...new Set(
+      tramos
+        .map((t) => claveTramo(t.a, t.b))
+        .filter((clave) => !cacheMediciones.has(clave))
+    ),
+  ]
+  if (faltantes.length === 0) return
+
+  const traidas = await leerMediciones(faltantes)
+  for (const [clave, medicion] of traidas) {
+    cacheMediciones.set(clave, { ...medicion, fuente: 'matrix' })
+  }
+}
+
+/** Cuántos de esos tramos habría que medir (no están en ningún nivel de caché). */
+function contarTramosNuevos(
+  tramos: Array<{ a: { lat: number; lng: number }; b: { lat: number; lng: number } }>
+): number {
+  const claves = new Set<string>()
+  for (const t of tramos) {
+    const clave = claveTramo(t.a, t.b)
+    if (!cacheMediciones.has(clave)) claves.add(clave)
+  }
+  return claves.size
 }
 
 function estimarPorHaversine(km: number): MedicionRuta {
@@ -154,6 +207,7 @@ async function medirDesdeOrigen(
   if (destinos.length === 0) return []
 
   const resultados: Array<MedicionRuta | null> = new Array(destinos.length).fill(null)
+  const nuevas: Array<{ clave: string; distanciaKm: number; tiempoMinutos: number }> = []
 
   // 1. Lo ya medido antes sale del caché: no se le pide a Google ni se paga.
   //    `pendientes` guarda la posición original para reinsertar cada respuesta
@@ -212,8 +266,56 @@ async function medirDesdeOrigen(
       resultados[lote[i].indice] = medicion
       // 3. Se cachea sólo la medición real; el tramo que la API no resolvió
       //    queda sin entrada para poder reintentarlo más adelante.
-      cacheMediciones.set(claveTramo(origen, lote[i].destino), medicion)
+      const clave = claveTramo(origen, lote[i].destino)
+      cacheMediciones.set(clave, medicion)
+      nuevas.push({
+        clave,
+        distanciaKm: medicion.distanciaKm,
+        tiempoMinutos: medicion.tiempoMinutos,
+      })
     }
+  }
+
+  // 4. Lo recién medido se persiste para que no se vuelva a pagar nunca más,
+  //    ni después de un refresh ni para otro operador. No se espera la
+  //    escritura: el resultado ya está en memoria.
+  guardarMediciones(nuevas)
+
+  return resultados
+}
+
+/**
+ * Mide una preselección ORDENADA POR CERCANÍA, de a tandas, cortando apenas
+ * hay suficientes candidatos dentro del umbral.
+ *
+ * Devuelve un array alineado con `preseleccion`. Una posición en `null`
+ * significa "no se midió" (se cortó antes de llegar), no "falló": el caller la
+ * saltea. Si la API falla sobre un candidato que SÍ se midió, ese cae en la
+ * estimación por Haversine, como siempre.
+ */
+async function medirEnTandas(
+  base: { lat: number; lng: number },
+  preseleccion: Array<{ candidato: EntidadMapa; km: number }>,
+  umbralMinutos: number
+): Promise<Array<MedicionRuta | null>> {
+  const resultados: Array<MedicionRuta | null> = new Array(preseleccion.length).fill(null)
+  let dentroDelUmbral = 0
+
+  for (let inicio = 0; inicio < preseleccion.length; inicio += TAMANO_TANDA) {
+    const tanda = preseleccion.slice(inicio, inicio + TAMANO_TANDA)
+
+    const mediciones = await medirDesdeOrigen(
+      base,
+      tanda.map((x) => ({ lat: x.candidato.lat, lng: x.candidato.lng }))
+    )
+
+    for (let i = 0; i < tanda.length; i++) {
+      const medicion = mediciones[i] || estimarPorHaversine(tanda[i].km)
+      resultados[inicio + i] = medicion
+      if (medicion.tiempoMinutos <= umbralMinutos) dentroDelUmbral++
+    }
+
+    if (dentroDelUmbral >= PARES_SUFICIENTES_POR_BASE) break
   }
 
   return resultados
@@ -361,11 +463,21 @@ export function clavePar(a: EntidadMapa, b: EntidadMapa): string {
  * aparte sólo podía contradecir lo que el operador ve en pantalla.
  * @param umbralMinutos  tiempo máximo de viaje aceptado.
  */
-export async function sugerirPares(
+interface PlanBase {
+  base: EntidadMapa
+  preseleccion: Array<{ candidato: EntidadMapa; km: number }>
+}
+
+/**
+ * Prefiltro local (gratis) de qué se va a medir. Se separó de `sugerirPares`
+ * para que la estimación previa que ve el usuario y la corrida real usen
+ * EXACTAMENTE el mismo criterio: si divergieran, el número del cartel mentiría.
+ */
+function planificarConductores(
   bases: EntidadMapa[],
   candidatos: EntidadMapa[],
-  umbralMinutos: number = UMBRAL_MINUTOS_DEFAULT
-): Promise<ResultadoSugerencias> {
+  umbralMinutos: number
+): { planes: PlanBase[]; truncado: boolean } {
   const radio = radioPrefiltroKm(umbralMinutos)
 
   // Una misma persona puede venir en varias filas (lead ya convertido en
@@ -373,36 +485,89 @@ export async function sugerirPares(
   // de emparejar: si no, el sistema las trata como personas distintas y llega a
   // proponer a alguien consigo mismo.
   const candidatosUnicos = dedupPorPersona(candidatos)
+  const basesDedup = dedupPorPersona(bases)
+  const basesLimitadas = basesDedup.slice(0, MAX_BASES_SUGERENCIA)
 
-  const basesLimitadas = dedupPorPersona(bases).slice(0, MAX_BASES_SUGERENCIA)
-  const truncado = dedupPorPersona(bases).length > basesLimitadas.length
-
-  const vistos = new Set<string>()
-  const pares: ParSugerido[] = []
+  const planificados = new Set<string>()
+  const planes: PlanBase[] = []
 
   for (const base of basesLimitadas) {
-    // 1. Prefiltro local: mismo par no repetido y dentro del radio plausible.
-    //    Gratis, evita llamadas innecesarias.
     const preseleccion = candidatosUnicos
       // Excluye a la propia base Y a cualquier otra fila de la MISMA persona.
       .filter((c) => !mismaPersona(c, base))
-      .filter((c) => !vistos.has(clavePar(base, c)))
+      .filter((c) => !planificados.has(clavePar(base, c)))
       .map((c) => ({ candidato: c, km: haversineKm(base.lat, base.lng, c.lat, c.lng) }))
       .filter((x) => x.km <= radio)
       .sort((x, y) => x.km - y.km)
       .slice(0, MAX_DESTINOS_POR_REQUEST)
 
     if (preseleccion.length === 0) continue
+    for (const x of preseleccion) planificados.add(clavePar(base, x.candidato))
+    planes.push({ base, preseleccion })
+  }
 
-    // 2. Medición real sólo sobre la preselección.
-    const mediciones = await medirDesdeOrigen(
+  return { planes, truncado: basesDedup.length > basesLimitadas.length }
+}
+
+/** Tramos (origen→destino) que implica un plan, para consultar el caché. */
+function tramosDePlanes(planes: PlanBase[]) {
+  return planes.flatMap((p) =>
+    p.preseleccion.map((x) => ({
+      a: { lat: p.base.lat, lng: p.base.lng },
+      b: { lat: x.candidato.lat, lng: x.candidato.lng },
+    }))
+  )
+}
+
+export interface PlanEstimado {
+  /** Pares que el prefiltro considera candidatos. */
+  paresCandidatos: number
+  /** De esos, cuántos habría que MEDIR (el resto sale de caché). Es el costo. */
+  tramosNuevos: number
+}
+
+/**
+ * Cuánto costaría una corrida de sugerencias ANTES de lanzarla. Consulta el
+ * caché persistente, así que el número ya descuenta todo lo medido alguna vez.
+ *
+ * `tramosNuevos` es un techo: con la medición por tandas lo real suele ser
+ * bastante menos.
+ */
+export async function estimarPlanConductores(
+  bases: EntidadMapa[],
+  candidatos: EntidadMapa[],
+  umbralMinutos: number = UMBRAL_MINUTOS_DEFAULT
+): Promise<PlanEstimado> {
+  const { planes } = planificarConductores(bases, candidatos, umbralMinutos)
+  const tramos = tramosDePlanes(planes)
+  await precargarDesdeBD(tramos)
+  return { paresCandidatos: tramos.length, tramosNuevos: contarTramosNuevos(tramos) }
+}
+
+export async function sugerirPares(
+  bases: EntidadMapa[],
+  candidatos: EntidadMapa[],
+  umbralMinutos: number = UMBRAL_MINUTOS_DEFAULT
+): Promise<ResultadoSugerencias> {
+  const { planes, truncado } = planificarConductores(bases, candidatos, umbralMinutos)
+  await precargarDesdeBD(tramosDePlanes(planes))
+
+  const vistos = new Set<string>()
+  const pares: ParSugerido[] = []
+
+  for (const { base, preseleccion } of planes) {
+    // Medición por tandas: corta apenas hay suficientes dentro del umbral.
+    const mediciones = await medirEnTandas(
       { lat: base.lat, lng: base.lng },
-      preseleccion.map((x) => ({ lat: x.candidato.lat, lng: x.candidato.lng }))
+      preseleccion,
+      umbralMinutos
     )
 
     for (let i = 0; i < preseleccion.length; i++) {
-      const { candidato, km } = preseleccion[i]
-      const medicion = mediciones[i] || estimarPorHaversine(km)
+      const { candidato } = preseleccion[i]
+      const medicion = mediciones[i]
+      // null = no se llegó a medir (se cortó la tanda): no se propone.
+      if (!medicion) continue
       if (medicion.tiempoMinutos > umbralMinutos) continue
 
       const clave = clavePar(base, candidato)
@@ -441,7 +606,7 @@ export async function sugerirPares(
 
   return {
     pares: pares.slice(0, MAX_PARES_RESULTADO),
-    basesEvaluadas: basesLimitadas.length,
+    basesEvaluadas: planes.length,
     truncado,
     aviso: avisos.length > 0 ? avisos.join(' ') : null,
   }
@@ -524,15 +689,24 @@ export async function conexionesDesde(
  * destinos por origen, y con caché de sesión. Con zona dura y umbral de 25
  * min, ~60 leads son del orden de 300–700 mediciones.
  */
-export async function emparejarLeads(
+/**
+ * Prefiltro local del emparejamiento de leads. Mismo criterio que usa la
+ * estimación previa, por el mismo motivo que en conductores.
+ */
+function planificarLeads(
   leads: EntidadMapa[],
-  umbralMinutos: number = UMBRAL_MINUTOS_DEFAULT
-): Promise<ResultadoSugerencias> {
+  umbralMinutos: number
+): {
+  planes: PlanBase[]
+  sinZona: EntidadMapa[]
+  evaluados: EntidadMapa[]
+  totalUnicos: number
+  truncado: boolean
+} {
   const radio = radioPrefiltroKm(umbralMinutos)
 
   const unicos = dedupPorPersona(leads.filter((e) => e.tipo === 'lead'))
   const evaluados = unicos.slice(0, MAX_LEADS_EMPAREJAMIENTO)
-  const truncado = unicos.length > evaluados.length
 
   // Agrupar por zona: sólo se cruzan dentro del mismo grupo.
   const porZona = new Map<string, EntidadMapa[]>()
@@ -547,31 +721,63 @@ export async function emparejarLeads(
     porZona.set(l.zona, grupo)
   }
 
-  // Candidatos: para cada lead i, los j>i de su zona con turno compatible y
-  // dentro del radio plausible. Cada par se mide UNA vez (i como origen).
-  const candidatos: ParSugerido[] = []
+  // Para cada lead i, los j>i de su zona con turno compatible y dentro del
+  // radio plausible. Cada par se planifica UNA vez (i como origen).
+  const planes: PlanBase[] = []
   for (const grupo of porZona.values()) {
     for (let i = 0; i < grupo.length; i++) {
       const base = grupo[i]
-      const destinos = grupo
+      const preseleccion = grupo
         .slice(i + 1)
         .filter((c) => turnosComplementarios(turnoDeEntidad(base), turnoDeEntidad(c)))
         .map((c) => ({ candidato: c, km: haversineKm(base.lat, base.lng, c.lat, c.lng) }))
         .filter((x) => x.km <= radio)
         .sort((x, y) => x.km - y.km)
 
-      if (destinos.length === 0) continue
+      if (preseleccion.length === 0) continue
+      planes.push({ base, preseleccion })
+    }
+  }
 
-      // Una sola llamada: `medirDesdeOrigen` ya resuelve por caché lo medido
-      // antes, pide a la API sólo lo que falta y lotea por su cuenta.
-      const mediciones = await medirDesdeOrigen(
+  return { planes, sinZona, evaluados, totalUnicos: unicos.length, truncado: unicos.length > evaluados.length }
+}
+
+/** Cuánto costaría emparejar leads ANTES de lanzarlo. Ver `estimarPlanConductores`. */
+export async function estimarPlanLeads(
+  leads: EntidadMapa[],
+  umbralMinutos: number = UMBRAL_MINUTOS_DEFAULT
+): Promise<PlanEstimado> {
+  const { planes } = planificarLeads(leads, umbralMinutos)
+  const tramos = tramosDePlanes(planes)
+  await precargarDesdeBD(tramos)
+  return { paresCandidatos: tramos.length, tramosNuevos: contarTramosNuevos(tramos) }
+}
+
+export async function emparejarLeads(
+  leads: EntidadMapa[],
+  umbralMinutos: number = UMBRAL_MINUTOS_DEFAULT
+): Promise<ResultadoSugerencias> {
+  const { planes, sinZona, evaluados, totalUnicos, truncado } = planificarLeads(
+    leads,
+    umbralMinutos
+  )
+  await precargarDesdeBD(tramosDePlanes(planes))
+
+  const candidatos: ParSugerido[] = []
+
+  for (const { base, preseleccion: destinos } of planes) {
+      // Por tandas: como cada lead termina en UN solo par, con unos pocos
+      // candidatos dentro del umbral ya alcanza para que el greedy elija bien.
+      const mediciones = await medirEnTandas(
         { lat: base.lat, lng: base.lng },
-        destinos.map((x) => ({ lat: x.candidato.lat, lng: x.candidato.lng }))
+        destinos,
+        umbralMinutos
       )
 
       for (let j = 0; j < destinos.length; j++) {
-        const { candidato, km } = destinos[j]
-        const medicion = mediciones[j] || estimarPorHaversine(km)
+        const { candidato } = destinos[j]
+        const medicion = mediciones[j]
+        if (!medicion) continue
         if (medicion.tiempoMinutos > umbralMinutos) continue
         // Turno ya validado arriba: siempre complementarios acá.
         const { score, motivos } = evaluarPar(base, candidato, medicion.tiempoMinutos, true)
@@ -588,7 +794,6 @@ export async function emparejarLeads(
         })
       }
     }
-  }
 
   // Asignación única, greedy por score: el mejor par disponible primero.
   candidatos.sort((x, y) => y.score - x.score || x.tiempoMinutos - y.tiempoMinutos)
@@ -608,7 +813,7 @@ export async function emparejarLeads(
   const avisos: string[] = []
   if (truncado) {
     avisos.push(
-      `Se evaluaron los primeros ${MAX_LEADS_EMPAREJAMIENTO} leads de ${unicos.length} para acotar el consumo de la API. Acotá con filtros para cubrir el resto.`
+      `Se evaluaron los primeros ${MAX_LEADS_EMPAREJAMIENTO} leads de ${totalUnicos} para acotar el consumo de la API. Acotá con filtros para cubrir el resto.`
     )
   }
   if (sinZona.length > 0) {
