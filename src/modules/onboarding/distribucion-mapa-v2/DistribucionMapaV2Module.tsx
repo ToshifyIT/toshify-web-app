@@ -26,6 +26,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useJsApiLoader } from '@react-google-maps/api'
+import Swal from 'sweetalert2'
 import { ChevronLeft, ChevronRight, Loader2, Map as MapIcon, ShieldAlert, Sparkles } from 'lucide-react'
 import { useSede } from '../../../contexts/SedeContext'
 import { supabase } from '../../../lib/supabase'
@@ -57,6 +58,8 @@ import {
   clavePar,
   conexionesDesde,
   emparejarLeads,
+  estimarPlanConductores,
+  estimarPlanLeads,
   medirPar,
   sugerirPares,
   UMBRAL_MINUTOS_DEFAULT,
@@ -113,6 +116,16 @@ const MAX_LINEAS_MAPA = 25
  * fila. Con ~1,2 s sólo calcula cuando el operador se detiene en alguien.
  */
 const RETARDO_RECALCULO_MS = 1200
+
+/**
+ * A partir de cuántos tramos NUEVOS se pide confirmación antes de calcular.
+ *
+ * Distance Matrix se cobra por elemento, así que una corrida global puede
+ * costar bastante de un solo clic. Debajo de este número el gasto es marginal
+ * y preguntar sólo molestaría; por encima, el operador decide con el dato a la
+ * vista. Lo ya medido antes no cuenta: sale del caché y no se paga.
+ */
+const TRAMOS_PARA_CONFIRMAR = 50
 
 export function DistribucionMapaV2Module() {
   const { sedeActualId, aplicarFiltroSede } = useSede()
@@ -515,6 +528,31 @@ export function DistribucionMapaV2Module() {
 
   // ---------- Emparejamiento ----------
 
+  /**
+   * Pide confirmación cuando la corrida implica medir muchos tramos nuevos.
+   *
+   * El prefiltro y el caché ya saben cuántos son ANTES de gastar un peso, así
+   * que se muestra el número real. Devuelve true si hay que seguir.
+   */
+  const confirmarCosto = useCallback(async (tramosNuevos: number): Promise<boolean> => {
+    if (tramosNuevos < TRAMOS_PARA_CONFIRMAR) return true
+
+    const { isConfirmed } = await Swal.fire({
+      icon: 'question',
+      title: 'Calcular sugerencias',
+      html:
+        `Hay que medir <b>${tramosNuevos} tramos nuevos</b> contra Google Maps.<br><br>` +
+        'Los tramos ya medidos antes no se vuelven a consultar. ' +
+        'Si acotás con los filtros (zona, estado, turno) el cálculo es más chico y más rápido.',
+      showCancelButton: true,
+      confirmButtonText: 'Calcular',
+      cancelButtonText: 'Cancelar',
+      confirmButtonColor: '#ff0033',
+      reverseButtons: true,
+    })
+    return isConfirmed
+  }, [])
+
   const correrSugerencias = useCallback(
     async (base: EntidadMapa | null) => {
       // El mapa arranca limpio: las líneas que hubiera son del cálculo anterior
@@ -533,6 +571,11 @@ export function DistribucionMapaV2Module() {
           if (leadsVisibles.length < 2) {
             setPares([])
             setAvisoPares('Hacen falta al menos dos leads visibles para armar parejas.')
+            return
+          }
+          const plan = await estimarPlanLeads(leadsVisibles, umbral)
+          if (!(await confirmarCosto(plan.tramosNuevos))) {
+            setAvisoPares('Cálculo cancelado.')
             return
           }
           const resultado = await emparejarLeads(leadsVisibles, umbral)
@@ -557,6 +600,12 @@ export function DistribucionMapaV2Module() {
           return
         }
 
+        const plan = await estimarPlanConductores(bases, visibles, umbral)
+        if (!(await confirmarCosto(plan.tramosNuevos))) {
+          setAvisoPares('Cálculo cancelado.')
+          return
+        }
+
         const resultado = await sugerirPares(bases, visibles, umbral)
         setPares(resultado.pares)
         setAvisoPares(resultado.aviso)
@@ -569,7 +618,7 @@ export function DistribucionMapaV2Module() {
         setCalculando(false)
       }
     },
-    [visibles, umbral, filtros.segmento]
+    [visibles, umbral, filtros.segmento, confirmarCosto]
   )
 
   const abrirSugerencias = useCallback(
