@@ -20,7 +20,7 @@ import type { TipoCandidato, TipoDocumento, TipoAsignacion, TipoTarifa } from '.
 import type { Vehicle } from '../../../types/vehiculo.types'
 import type { Conductor } from '../../../types/conductor.types'
 import { formatPreferencia, getPreferenciaBadge, PROGRAMACION_ESTADO_LABELS } from '../../../utils/conductorUtils'
-import { GOOGLE_MAPS_API_KEY, GOOGLE_MAPS_SCRIPT_URL } from '../../../lib/googleMaps'
+import { DISTANCE_MATRIX_HABILITADO, GOOGLE_MAPS_API_KEY, GOOGLE_MAPS_SCRIPT_URL } from '../../../lib/googleMaps'
 import { useGruposFlota } from '../../../hooks/useGruposFlota'
 import { cargarConceptosTarifa, getEtiquetaTarifa, type MapaConceptosTarifa } from '../tarifaConceptos'
 
@@ -635,6 +635,9 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
     origen: { lat: number; lng: number },
     destino: { lat: number; lng: number }
   ): Promise<{ distanciaKm: number; tiempoMinutos: number } | null> => {
+    // Interruptor global: apagado, se devuelve null y el wizard sigue su camino
+    // alternativo (distancia en línea recta, campo cargado a mano).
+    if (!DISTANCE_MATRIX_HABILITADO) return null
     try {
       await loadGoogleMapsAPI()
 

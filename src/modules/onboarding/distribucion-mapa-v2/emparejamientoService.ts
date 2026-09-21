@@ -34,6 +34,7 @@ import type {
   Radar,
   ResultadoSugerencias,
 } from './types'
+import { DISTANCE_MATRIX_HABILITADO } from '../../../lib/googleMaps'
 import {
   clavePersona,
   dedupPorPersona,
@@ -135,6 +136,9 @@ function estimarPorHaversine(km: number): MedicionRuta {
 }
 
 function mapsDisponible(): boolean {
+  // Interruptor global: con Distance Matrix apagado el módulo nunca llama a la
+  // API y todo cae en la estimación por Haversine (badge "Tiempo estimado").
+  if (!DISTANCE_MATRIX_HABILITADO) return false
   return !!(window as any).google?.maps?.DistanceMatrixService
 }
 
