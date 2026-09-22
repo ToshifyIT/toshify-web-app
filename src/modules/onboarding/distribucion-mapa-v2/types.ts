@@ -55,6 +55,9 @@ export interface EntidadMapa {
   lng: number
   zona: string | null
   direccion: string | null
+  /** País y ciudad derivados del texto de `direccion` (ver ubicacion.ts). */
+  pais: string | null
+  ciudad: string | null
 
   // --- Conductor ---
   preferenciaTurno: string | null

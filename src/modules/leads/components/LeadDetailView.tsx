@@ -67,15 +67,34 @@ interface ZonaRestringida {
   poligono: { lat: number; lng: number }[]
 }
 
-function formatDate(dateStr: string | undefined | null): string {
-  if (!dateStr) return '-'
-  try {
-    const d = new Date(dateStr)
-    if (isNaN(d.getTime())) return '-'
-    const day = d.toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric', timeZone: 'America/Argentina/Buenos_Aires' })
-    const time = d.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'America/Argentina/Buenos_Aires' })
-    return `${day} ${time}`
-  } catch { return '-' }
+// `fecha_de_nacimiento` y `vencimiento_licencia` son columnas date-only ("YYYY-MM-DD").
+// Antes se formateaban con new Date(...) + timeZone de AR: eso interpreta el valor como
+// medianoche UTC y al pasarlo a UTC-3 cae el DIA ANTERIOR a las 21:00 (por eso se veia
+// "11/01/1994 21:00" para un nacimiento del 12/01/1994). Se leen los componentes del
+// texto, sin construir un Date, que es el mismo criterio que usa formatDateOnly en
+// LeadsModule.
+function parseDateOnly(dateStr: string | undefined | null): { y: number; m: number; d: number } | null {
+  if (!dateStr) return null
+  const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(dateStr))
+  if (!match) return null
+  return { y: Number(match[1]), m: Number(match[2]), d: Number(match[3]) }
+}
+
+function formatDateOnly(dateStr: string | undefined | null): string {
+  const p = parseDateOnly(dateStr)
+  if (!p) return '-'
+  return `${String(p.d).padStart(2, '0')}/${String(p.m).padStart(2, '0')}/${p.y}`
+}
+
+/** Edad en años cumplidos a partir de la fecha de nacimiento. null si no se puede calcular. */
+function calcularEdad(dateStr: string | undefined | null): number | null {
+  const p = parseDateOnly(dateStr)
+  if (!p) return null
+  const hoy = new Date()
+  let edad = hoy.getFullYear() - p.y
+  const difMes = hoy.getMonth() + 1 - p.m
+  if (difMes < 0 || (difMes === 0 && hoy.getDate() < p.d)) edad--
+  return edad >= 0 && edad < 120 ? edad : null
 }
 
 function getProcesoClass(proceso: string | undefined | null): string {
@@ -216,11 +235,11 @@ export function LeadDetailView({ lead, onEdit, onConvert, zonasRestringidas = []
           </div>
           <div className="lead-detail-item">
             <span className="lead-detail-item-label">Edad</span>
-            <span className="lead-detail-item-value">{lead.edad ?? '-'}</span>
+            <span className="lead-detail-item-value">{calcularEdad(lead.fecha_de_nacimiento) ?? lead.edad ?? '-'}</span>
           </div>
           <div className="lead-detail-item">
             <span className="lead-detail-item-label">Fecha Nacimiento</span>
-            <span className="lead-detail-item-value">{formatDate(lead.fecha_de_nacimiento)}</span>
+            <span className="lead-detail-item-value">{formatDateOnly(lead.fecha_de_nacimiento)}</span>
           </div>
           <div className="lead-detail-item">
             <span className="lead-detail-item-label">Nacionalidad</span>
@@ -399,7 +418,7 @@ export function LeadDetailView({ lead, onEdit, onConvert, zonasRestringidas = []
           </div>
           <div className="lead-detail-item">
             <span className="lead-detail-item-label">Venc. Licencia</span>
-            <span className="lead-detail-item-value">{formatDate(lead.vencimiento_licencia)}</span>
+            <span className="lead-detail-item-value">{formatDateOnly(lead.vencimiento_licencia)}</span>
           </div>
           <div className="lead-detail-item">
             <span className="lead-detail-item-label">RNR</span>

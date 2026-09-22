@@ -58,6 +58,19 @@ export interface FiltrosV2 {
   creadoDesde: string
   creadoHasta: string
   // Global
+  /**
+   * Ubicación real de la persona, derivada de su dirección. `ciudades` está
+   * subordinado a `paises`: al cambiar el país se limpian las ciudades que ya
+   * no corresponden. Vacío = todos.
+   */
+  paises: Set<string>
+  ciudades: Set<string>
+  /**
+   * Zona OPERATIVA (CABA/Norte/Sur/Oeste/GBA). No es geografía: es cómo se
+   * reparte el trabajo internamente, y además es regla dura del emparejamiento
+   * de leads (sólo se cruzan dentro de la misma zona). Convive con país/ciudad
+   * a propósito: responden preguntas distintas.
+   */
   zonas: Set<string>
 }
 
@@ -77,6 +90,8 @@ export function filtrosIniciales(): FiltrosV2 {
     requisitosLead: new Set(),
     creadoDesde: '',
     creadoHasta: '',
+    paises: new Set(),
+    ciudades: new Set(),
     // A diferencia del v1 (que arrancaba fijado en CABA), acá zona arranca vacío
     // = todas, porque el default de leads ya acota el volumen.
     zonas: new Set(),
@@ -110,6 +125,8 @@ export function contarFiltrosActivos(f: FiltrosV2): number {
   if (f.turnosLead.size > 0) n++
   if (f.requisitosLead.size > 0) n++
   if (f.creadoDesde !== '' || f.creadoHasta !== '') n++
+  if (f.paises.size > 0) n++
+  if (f.ciudades.size > 0) n++
   if (f.zonas.size > 0) n++
   return n
 }

@@ -263,7 +263,9 @@ export function VehicleManagement() {
     // Estados a EXCLUIR del total
     const estadosExcluidos = ['ROBO', 'DESTRUCCION_TOTAL', 'JUBILADO', 'DEVUELTO_PROVEEDOR']
     // Estados de taller mecánico
-    const estadosTallerMecanico = ['TALLER_AXIS', 'TALLER_ALLIANCE', 'TALLER_KALZALO', 'TALLER_BASE_VALIENTE', 'INSTALACION_GNC']
+    const estadosTallerMecanico = ['TALLER_AXIS', 'TALLER_ALLIANCE', 'TALLER_KALZALO', 'TALLER_BASE_VALIENTE', 'TALLER_MJ', 'TALLER_AUTODOC', 'INSTALACION_GNC']
+    // Estados de taller de chapa y pintura
+    const estadosChapaPintura = ['TALLER_CHAPA_PINTURA', 'TALLER_CHAPA_PINTURA_PAINT_CARS', 'TALLER_CHAPA_PINTURA_ANDRADA']
 
     let totalVehiculos = 0
     let vehiculosDisponibles = 0
@@ -322,7 +324,7 @@ export function VehicleManagement() {
         vehiculosEnUso++
       } else if (estadosTallerMecanico.includes(estadoCodigo)) {
         vehiculosTallerMecanico++
-      } else if (estadoCodigo === 'TALLER_CHAPA_PINTURA') {
+      } else if (estadosChapaPintura.includes(estadoCodigo)) {
         vehiculosChapaPintura++
       } else if (estadoCodigo === 'CORPORATIVO') {
         vehiculosCorporativos++
@@ -1488,8 +1490,8 @@ export function VehicleManagement() {
     // Definir estados para cada categoría (usando labels formateados)
     const estadosEnCochera = ['PKG ON'] // Solo disponibles (listos para usar)
     const estadosEnUso = ['En Uso']
-    const estadosTallerMecanico = ['Taller Axis', 'Taller Alliance', 'Taller Kalzalo', 'Base Valiente', 'Inst. GNC']
-    const estadosChapaPintura = ['Chapa&Pintura']
+    const estadosTallerMecanico = ['Taller Axis', 'Taller Alliance', 'Taller Kalzalo', 'Base Valiente', 'Taller MJ', 'Taller Autodoc', 'Inst. GNC']
+    const estadosChapaPintura = ['Chapa&Pintura', 'C&P Paint Cars', 'C&P Andrada']
     const estadosCorporativos = ['Corporativo']
     const estadosDevueltos = ['Dev. Proveedor']
 
@@ -1868,6 +1870,8 @@ export function VehicleManagement() {
       'PKG_ON_BASE': 2,
       'PKG_OFF_BASE': 3,
       'TALLER_CHAPA_PINTURA': 4,
+      'TALLER_CHAPA_PINTURA_PAINT_CARS': 4,
+      'TALLER_CHAPA_PINTURA_ANDRADA': 4,
     }
     result = [...result].sort((a, b) => {
       const ordenA = estadoOrden[a.vehiculos_estados?.codigo || ''] || 99
@@ -2154,6 +2158,11 @@ export function VehicleManagement() {
             'TALLER_ALLIANCE': 'Taller Alliance',
             'TALLER_KALZALO': 'Taller Kalzalo',
             'TALLER_BASE_VALIENTE': 'Base Valiente',
+            'TALLER_MJ': 'Taller MJ',
+            'TALLER_AUTODOC': 'Taller Autodoc',
+            'TALLER_CHAPA_PINTURA_PAINT_CARS': 'C&P Paint Cars',
+            'TALLER_CHAPA_PINTURA_ANDRADA': 'C&P Andrada',
+            'DEPOSITO_RDA': 'Depósito RDA',
             'INSTALACION_GNC': 'Inst. GNC',
             'RETENIDO_COMISARIA': 'Retenido',
             'ROBO': 'Robo',
@@ -2182,12 +2191,16 @@ export function VehicleManagement() {
               badgeClass = 'dt-badge dt-badge-solid-gray'
               break
             case 'TALLER_CHAPA_PINTURA':
+            case 'TALLER_CHAPA_PINTURA_PAINT_CARS':
+            case 'TALLER_CHAPA_PINTURA_ANDRADA':
               badgeClass = 'dt-badge dt-badge-solid-purple'
               break
             case 'TALLER_AXIS':
             case 'TALLER_ALLIANCE':
             case 'TALLER_KALZALO':
             case 'TALLER_BASE_VALIENTE':
+            case 'TALLER_MJ':
+            case 'TALLER_AUTODOC':
             case 'INSTALACION_GNC':
               badgeClass = 'dt-badge dt-badge-solid-orange'
               break

@@ -72,6 +72,7 @@ import type {
 } from './types'
 import { FiltrosSidebar } from './components/FiltrosSidebar'
 import { contarFiltrosActivos, creadoEnRango, filtrosIniciales, type FiltrosV2 } from './components/filtrosOpciones'
+import { SIN_UBICACION } from './ubicacion'
 import { MapaCanvas } from './components/MapaCanvas'
 import {
   colorEntidad,
@@ -292,6 +293,20 @@ export function DistribucionMapaV2Module() {
     [filtros.zonas]
   )
 
+  /**
+   * País y ciudad. Quien no tenga el dato cae en la etiqueta "Sin dato", que es
+   * seleccionable: así el operador puede aislarlos y ver cuántos son, en vez de
+   * que desaparezcan sin explicación.
+   */
+  const matchUbicacion = useCallback(
+    (e: EntidadMapa) => {
+      if (filtros.paises.size > 0 && !filtros.paises.has(e.pais || SIN_UBICACION)) return false
+      if (filtros.ciudades.size > 0 && !filtros.ciudades.has(e.ciudad || SIN_UBICACION)) return false
+      return true
+    },
+    [filtros.paises, filtros.ciudades]
+  )
+
   const matchRequisitos = useCallback((e: EntidadMapa, reqs: Set<string>) => {
     if (reqs.size === 0) return true
     if (reqs.has('licencia_vigente') && e.datos.licenciaEstado !== 'vigente') return false
@@ -325,10 +340,11 @@ export function DistribucionMapaV2Module() {
         if (!filtros.companero.has(clave)) return false
       }
       if (!matchRequisitos(c, filtros.requisitosConductor)) return false
+      if (!matchUbicacion(c)) return false
       if (!matchZona(c)) return false
       return coincideBusqueda(c, filtros.busqueda)
     },
-    [filtros, matchZona, matchRequisitos]
+    [filtros, matchZona, matchUbicacion, matchRequisitos]
   )
 
   const pasaFiltrosLead = useCallback(
@@ -347,10 +363,11 @@ export function DistribucionMapaV2Module() {
       }
       if (!matchRequisitos(l, filtros.requisitosLead)) return false
       if (!creadoEnRango(l.creadoEn, filtros.creadoDesde, filtros.creadoHasta)) return false
+      if (!matchUbicacion(l)) return false
       if (!matchZona(l)) return false
       return coincideBusqueda(l, filtros.busqueda)
     },
-    [filtros, matchZona, matchRequisitos]
+    [filtros, matchZona, matchUbicacion, matchRequisitos]
   )
 
   /** Lo que se pinta en el mapa: respeta el segmento activo. */
@@ -389,6 +406,42 @@ export function DistribucionMapaV2Module() {
     for (const e of ESTADOS_LEAD_EXCLUIDOS) vistos.delete(e)
     return [...vistos].sort((a, b) => a.localeCompare(b))
   }, [leads])
+
+  /**
+   * Países y ciudades que REALMENTE aparecen en los datos cargados, con su
+   * cantidad. No hay catálogo fijo: si mañana entra gente de otro país, la
+   * opción aparece sola.
+   *
+   * Las ciudades se acotan a los países tildados, para que la lista no mezcle
+   * ciudades de lugares que el operador ya descartó.
+   */
+  const ubicacionesDisponibles = useMemo(() => {
+    const universo = [...conductores, ...leads]
+    const porPais = new Map<string, number>()
+    const porCiudad = new Map<string, number>()
+
+    for (const e of universo) {
+      const pais = e.pais || SIN_UBICACION
+      porPais.set(pais, (porPais.get(pais) || 0) + 1)
+      if (filtros.paises.size > 0 && !filtros.paises.has(pais)) continue
+      const ciudad = e.ciudad || SIN_UBICACION
+      porCiudad.set(ciudad, (porCiudad.get(ciudad) || 0) + 1)
+    }
+
+    // "Sin dato" siempre al final; el resto por cantidad y después alfabético,
+    // porque con decenas de ciudades lo primero que busca el operador es la
+    // que más gente tiene.
+    const ordenar = (m: Map<string, number>) =>
+      [...m.entries()]
+        .sort((a, b) => {
+          if (a[0] === SIN_UBICACION) return 1
+          if (b[0] === SIN_UBICACION) return -1
+          return b[1] - a[1] || a[0].localeCompare(b[0])
+        })
+        .map(([valor, cantidad]) => ({ valor, cantidad }))
+
+    return { paises: ordenar(porPais), ciudades: ordenar(porCiudad) }
+  }, [conductores, leads, filtros.paises])
 
   const leyendaLeads = useMemo(() => {
     const vistos = new Map<string, string>()
@@ -885,6 +938,7 @@ export function DistribucionMapaV2Module() {
               filtros={filtros}
               onChange={aplicarPatch}
               estadosLeadDisponibles={estadosLeadDisponibles}
+              ubicacionesDisponibles={ubicacionesDisponibles}
               conteoConductores={conteos.c}
               conteoLeads={conteos.l}
               conteoSinCompanero={conteos.sinCompanero}
