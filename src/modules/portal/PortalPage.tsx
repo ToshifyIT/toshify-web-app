@@ -1,6 +1,6 @@
 // src/modules/portal/PortalPage.tsx
 // Portal público para conductores - Mi Espacio
-import { useState, useEffect, useCallback, useMemo } from 'react'
+import { Fragment, useState, useEffect, useCallback, useMemo } from 'react'
 import { patronIlikeSinAcentos } from '../../utils/nombreMatch'
 import { jsPDF } from 'jspdf'
 import { format, parseISO, differenceInCalendarDays, subDays } from 'date-fns'
@@ -9,6 +9,10 @@ import { supabase } from '../../lib/supabase'
 import { formatCurrency } from '../../types/facturacion.types'
 import { normalizeDni, normalizeCuit } from '../../utils/normalizeDocuments'
 import { getConceptoLabel } from '../../utils/conceptoLabels'
+import {
+  cargarIvaPorCodigo, desglosarIvaCargos, indiceUltimoAlquiler, montoBruto, montoNeto,
+  type IvaPorCodigo,
+} from '../../utils/facturacionIva'
 import { calcularKmSemanasConductor } from './kmRecorridos'
 import logoToshifyUrl from '../../assets/logo-toshify.png'
 import logoToshifyWordmarkUrl from '../../assets/logo-toshify-wordmark.png'
@@ -294,6 +298,9 @@ export function PortalPage({ embeddedConductorId }: { embeddedConductorId?: stri
   const [pagosEfectivosPorFactura, setPagosEfectivosPorFactura] = useState<Record<string, number>>({})
   const [selectedFactura, setSelectedFactura] = useState<PortalFacturacion | null>(null)
   const [detalleItems, setDetalleItems] = useState<PortalDetalle[]>([])
+  // % de IVA por concepto (conceptos_nomina). Se usa para mostrar cada cargo en NETO y
+  // el IVA en su propio renglon, igual que el modulo de Facturacion. Ver utils/facturacionIva.
+  const [ivaPorCodigo, setIvaPorCodigo] = useState<IvaPorCodigo>(() => new Map())
   const [detallePagos, setDetallePagos] = useState<Array<{ id: string; tipo: string; monto: number; referencia: string | null; fecha: string }>>([])
   // Desglose del saldo anterior: saldo previo + pago manual/efectivo = resultado.
   // Solo display; se lee del kardex (control_saldos). No afecta cálculos.
@@ -403,6 +410,17 @@ export function PortalPage({ embeddedConductorId }: { embeddedConductorId?: stri
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [showDetalleModal, selectedMulta])
+
+  // % de IVA por concepto: se carga una sola vez al montar. Si falla, el mapa queda
+  // vacío y el desglose degrada a neto = bruto (sin renglón de IVA), pero los
+  // subtotales siguen siendo los importes brutos correctos.
+  useEffect(() => {
+    let vivo = true
+    cargarIvaPorCodigo()
+      .then(m => { if (vivo) setIvaPorCodigo(m) })
+      .catch(() => { /* sin desglose de IVA: los totales siguen en bruto */ })
+    return () => { vivo = false }
+  }, [])
 
   // Persistir la pestaña activa para conservarla al refrescar (no en modo embebido).
   useEffect(() => {
@@ -905,16 +923,24 @@ export function PortalPage({ embeddedConductorId }: { embeddedConductorId?: stri
       // Una sola query batch para todas las facturas visibles; el card lo usa para mostrar
       // exactamente el mismo monto que el modal (el detalle se guarda redondeado, por eso
       // difiere de total_a_pagar de la cabecera por unos centavos).
+      // Los cargos suman su importe BRUTO (con IVA): `total` quedó guardado sin IVA para
+      // el alquiler. Ver utils/facturacionIva.
       const facturaIds = facturasData.map(f => f.id)
       const refMap: Record<string, number> = {}
       if (facturaIds.length > 0) {
         const { data: detalleData } = await supabase
           .from('facturacion_detalle')
-          .select('facturacion_id, total, es_descuento')
+          .select('facturacion_id, concepto_codigo, cantidad, precio_unitario, total, es_descuento')
           .in('facturacion_id', facturaIds)
-        ;(detalleData || []).forEach((d: { facturacion_id: string; total: number; es_descuento: boolean }) => {
-          const t = Number(d.total) || 0
-          if (t === 0) return
+        ;(detalleData || []).forEach((d: {
+          facturacion_id: string; concepto_codigo: string; cantidad: number
+          precio_unitario: number; total: number; es_descuento: boolean
+        }) => {
+          if ((Number(d.total) || 0) === 0) return
+          // Descuentos y la fila SALDO se toman tal cual (no llevan desglose de IVA).
+          const t = (d.es_descuento || d.concepto_codigo === 'SALDO')
+            ? Number(d.total) || 0
+            : montoBruto(d)
           refMap[d.facturacion_id] = (refMap[d.facturacion_id] || 0) + (d.es_descuento ? -t : t)
         })
       }
@@ -1638,7 +1664,17 @@ export function PortalPage({ embeddedConductorId }: { embeddedConductorId?: stri
 
       pdf.setFontSize(10)
       pdf.setFont('helvetica', 'normal')
-      cargos.forEach(cargo => {
+      // Mismo desglose que el modal: cada cargo en NETO y el IVA en su propio renglón.
+      const { ivaAlquiler: ivaAlqPdf, ivaOtros: ivaOtrosPdf } = desglosarIvaCargos(cargos, ivaPorCodigo)
+      const idxUltimoAlquilerPdf = indiceUltimoAlquiler(cargos)
+      const filaIvaPdf = (etiqueta: string, valor: number) => {
+        checkPage(10)
+        pdf.setTextColor(negro)
+        pdf.text(etiqueta, margin, y)
+        pdf.text(formatCurrency(valor), pageWidth - margin, y, { align: 'right' })
+        y += 5
+      }
+      cargos.forEach((cargo, idxCargoPdf) => {
         checkPage(10)
         pdf.setTextColor(negro)
         const cargoDesc = getConceptoLabel(cargo)
@@ -1646,9 +1682,12 @@ export function PortalPage({ embeddedConductorId }: { embeddedConductorId?: stri
           ? `${cargoDesc} x${cargo.cantidad}`
           : cargoDesc
         pdf.text(cargoLabel, margin, y)
-        pdf.text(formatCurrency(cargo.total), pageWidth - margin, y, { align: 'right' })
+        pdf.text(formatCurrency(montoNeto(cargo, ivaPorCodigo)), pageWidth - margin, y, { align: 'right' })
         y += 5
+        if (idxCargoPdf === idxUltimoAlquilerPdf && ivaAlqPdf > 0) filaIvaPdf('IVA de alquiler', ivaAlqPdf)
       })
+      if (idxUltimoAlquilerPdf === -1 && ivaAlqPdf > 0) filaIvaPdf('IVA de alquiler', ivaAlqPdf)
+      if (ivaOtrosPdf > 0) filaIvaPdf('IVA', ivaOtrosPdf)
       descuentos.forEach(desc => {
         checkPage(10)
         pdf.setTextColor(negro)
@@ -1662,7 +1701,7 @@ export function PortalPage({ embeddedConductorId }: { embeddedConductorId?: stri
         y += 5
       })
 
-      const subtotalCargos = cargos.reduce((sum, c) => sum + c.total, 0)
+      const subtotalCargos = Math.round(cargos.reduce((sum, c) => sum + montoBruto(c), 0) * 100) / 100
       const subtotalDescPdf = descuentos.reduce((sum, d) => sum + d.total, 0)
 
       // Subtotal Cargos (y Descuentos si aplica)
@@ -2279,9 +2318,25 @@ export function PortalPage({ embeddedConductorId }: { embeddedConductorId?: stri
     const descuentos = detalleItems.filter(d => d.es_descuento && d.total !== 0 && d.concepto_codigo !== 'SALDO')
     const saldoAnteriorItem = detalleItems.find(d => d.concepto_codigo === 'SALDO')
     const saldoAnterior = saldoAnteriorItem ? (saldoAnteriorItem.es_descuento ? -saldoAnteriorItem.total : saldoAnteriorItem.total) : 0
-    const subtotalCargos = cargos.reduce((sum, d) => sum + d.total, 0)
+    // Los cargos se muestran en NETO y el IVA va en su propio renglón (igual que el
+    // módulo de Facturación). El subtotal suma los BRUTOS, así
+    // Subtotal - Descuentos + Saldo anterior cierra contra total_a_pagar.
+    const subtotalCargos = Math.round(cargos.reduce((sum, d) => sum + montoBruto(d), 0) * 100) / 100
     const subtotalDescuentos = descuentos.reduce((sum, d) => sum + d.total, 0)
     const totalAPagar = subtotalCargos - subtotalDescuentos + saldoAnterior
+    const { ivaAlquiler, ivaOtros } = desglosarIvaCargos(cargos, ivaPorCodigo)
+    // El renglón de IVA de alquiler va justo debajo de la última línea de alquiler.
+    // Si la semana no tiene alquiler, va al final de la lista.
+    const idxUltimoAlquiler = indiceUltimoAlquiler(cargos)
+    const filaIva = (etiqueta: string, valor: number) => (
+      <div className="portal-detail-item">
+        <span className="portal-detail-item-name">
+          <span className="portal-detail-item-dot cargo" />
+          <span className="portal-detail-item-text">{etiqueta}</span>
+        </span>
+        <span className="portal-detail-item-amount">{formatCurrency(valor)}</span>
+      </div>
+    )
     // El pago que ya quedó aplicado dentro del "Saldo Anterior" no debe volver a
     // descontarse acá (si no, se resta dos veces). Lo excluimos de los aportes por su ID.
     const pagoYaAplicadoId = detalleSaldoBreakdown?.pagoId || null
@@ -2362,8 +2417,9 @@ export function PortalPage({ embeddedConductorId }: { embeddedConductorId?: stri
                 <div className="portal-detail-section">
                   <div className="portal-detail-section-title cargos">Conceptos</div>
                   <div className="portal-detail-items">
-                    {cargos.map((item) => (
-                      <div key={item.id} className="portal-detail-item">
+                    {cargos.map((item, idxCargo) => (
+                      <Fragment key={item.id}>
+                      <div className="portal-detail-item">
                         <span className="portal-detail-item-name">
                           <span className="portal-detail-item-dot cargo" />
                           <span className="portal-detail-item-text">
@@ -2382,9 +2438,13 @@ export function PortalPage({ embeddedConductorId }: { embeddedConductorId?: stri
                             )}
                           </span>
                         </span>
-                        <span className="portal-detail-item-amount">{formatCurrency(item.total)}</span>
+                        <span className="portal-detail-item-amount">{formatCurrency(montoNeto(item, ivaPorCodigo))}</span>
                       </div>
+                      {idxCargo === idxUltimoAlquiler && ivaAlquiler > 0 && filaIva('IVA de alquiler', ivaAlquiler)}
+                      </Fragment>
                     ))}
+                    {idxUltimoAlquiler === -1 && ivaAlquiler > 0 && filaIva('IVA de alquiler', ivaAlquiler)}
+                    {ivaOtros > 0 && filaIva('IVA', ivaOtros)}
                     {descuentos.map((item) => (
                       <div key={item.id} className="portal-detail-item">
                         <span className="portal-detail-item-name">
