@@ -2,10 +2,11 @@
 // historial en el modal del conductor). Replica el detalle del portal Mi Espacio:
 // datos del vehículo, conceptos, subtotales, monto referencial y pendiente de pago.
 
-import { useState, useEffect } from 'react'
+import { Fragment, useState, useEffect } from 'react'
 import { X } from 'lucide-react'
 import { formatCurrency } from '../../../types/facturacion.types'
 import { cargarDetalleSemana, type SemanaDetalle, type FacturacionSemana } from './conductorDetalleService'
+import { CODIGOS_ALQUILER } from '../../../utils/facturacionIva'
 import './SemanaDetalleModal.css'
 
 function fmt(s: string | null): string {
@@ -52,7 +53,18 @@ export function SemanaDetalleModal({
 
   const cargos = (detalle?.conceptos || []).filter(c => !c.esDescuento)
   const descuentos = (detalle?.conceptos || []).filter(c => c.esDescuento)
-  const subtotalCargos = cargos.reduce((s, c) => s + c.total, 0)
+  // Los cargos se muestran en NETO y el IVA va en su propio renglon, igual que en el
+  // modulo de Facturacion. El subtotal suma los BRUTOS (`total`), asi
+  // Subtotal - Descuentos + Saldo anterior cierra contra total_a_pagar.
+  const subtotalCargos = Math.round(cargos.reduce((s, c) => s + c.total, 0) * 100) / 100
+  const ivaAlquiler = detalle?.ivaAlquiler || 0
+  const ivaOtros = detalle?.ivaOtros || 0
+  // El renglon de IVA de alquiler va justo debajo de la ultima linea de alquiler.
+  // Si la semana no tiene alquiler, va al final de la lista.
+  const idxUltimoAlquiler = cargos.reduce((idx, c, i) => (CODIGOS_ALQUILER.includes(c.codigo) ? i : idx), -1)
+  const filaIva = (etiqueta: string, valor: number) => (
+    <div className="csem-row"><span className="csem-dot" />{etiqueta}<span className="csem-amt">{formatCurrency(valor)}</span></div>
+  )
   const subtotalDescuentos = descuentos.reduce((s, c) => s + c.total, 0)
   const pagos = detalle?.pagos || []
   const totalAportado = pagos.reduce((s, p) => s + p.monto, 0)
@@ -61,10 +73,10 @@ export function SemanaDetalleModal({
   // Monto Total Referencial y Pendiente: misma formula que el portal Mi Espacio
   // (PortalPage: `totalAPagar = subtotalCargos - subtotalDescuentos + saldoAnterior`,
   // `saldoPendiente = totalAPagar - totalPagadoSemana`).
-  // Antes se usaba `semana.proforma` (facturacion_conductores.total_a_pagar), pero ese
-  // total fue calculado con cantidad x precio_unitario, criterio que ya no se usa para
-  // mostrar los conceptos: el panel terminaba mostrando un referencial que no coincidia
-  // con la suma de sus propias lineas ni con el portal.
+  // Se calcula desde las lineas y NO desde `semana.proforma`
+  // (facturacion_conductores.total_a_pagar) para que el referencial sea siempre la suma
+  // de lo que se muestra. Como los cargos ahora suman su importe bruto (con IVA, mismo
+  // criterio que Facturacion), ambos valores coinciden salvo centavos de redondeo.
   const montoReferencial = subtotalCargos - subtotalDescuentos + saldoAnterior
   const pendiente = montoReferencial - totalAportado
   const pendienteMostrado = Math.abs(pendiente) < 0.01 ? 0 : Math.abs(pendiente)
@@ -102,8 +114,13 @@ export function SemanaDetalleModal({
               <div className="csem-sect-title">Conceptos</div>
               <div className="csem-items">
                 {cargos.map((c, i) => (
-                  <div key={`c${i}`} className="csem-row"><span className="csem-dot" />{c.nombre}{c.cantidad > 1 ? ` x${c.cantidad}` : ''}<span className="csem-amt">{formatCurrency(c.total)}</span></div>
+                  <Fragment key={`c${i}`}>
+                    <div className="csem-row"><span className="csem-dot" />{c.nombre}{c.cantidad > 1 ? ` x${c.cantidad}` : ''}<span className="csem-amt">{formatCurrency(c.neto)}</span></div>
+                    {i === idxUltimoAlquiler && ivaAlquiler > 0 && filaIva('IVA de alquiler', ivaAlquiler)}
+                  </Fragment>
                 ))}
+                {idxUltimoAlquiler === -1 && ivaAlquiler > 0 && filaIva('IVA de alquiler', ivaAlquiler)}
+                {ivaOtros > 0 && filaIva('IVA', ivaOtros)}
               </div>
               <div className="csem-subtotal"><span>Subtotal Cargos</span><span>{formatCurrency(subtotalCargos)}</span></div>
 
