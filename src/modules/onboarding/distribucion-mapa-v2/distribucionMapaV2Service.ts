@@ -16,6 +16,7 @@
 // best-effort de direcciones sin coordenadas, igual que el v1.
 
 import { supabase } from '../../../lib/supabase'
+import { derivarUbicacion } from './ubicacion'
 import {
   GOOGLE_MAPS_API_KEY,
   GOOGLE_MAPS_LIBRARIES,
@@ -486,6 +487,7 @@ export async function fetchConductoresMapa(
       estadoLead: null,
       turnoLead: null,
       creadoEn: null,
+      ...derivarUbicacion(r.direccion),
       datos,
     }
   })
@@ -619,6 +621,7 @@ export async function fetchLeadsMapa(
       estadoLead: r.estado_de_lead || null,
       turnoLead: r.turno || null,
       creadoEn: r.created_at || null,
+      ...derivarUbicacion(r.direccion),
       datos,
     }
   })

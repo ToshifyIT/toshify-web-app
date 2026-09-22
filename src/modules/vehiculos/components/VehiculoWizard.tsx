@@ -507,7 +507,12 @@ export function VehiculoWizard({
                       'TALLER_BASE_VALIENTE',
                       'TALLER_AXIS',
                       'RETENIDO_COMISARIA',
-                      'TALLER_CHAPA_PINTURA'
+                      'TALLER_CHAPA_PINTURA',
+                      'TALLER_MJ',
+                      'TALLER_AUTODOC',
+                      'TALLER_CHAPA_PINTURA_PAINT_CARS',
+                      'TALLER_CHAPA_PINTURA_ANDRADA',
+                      'DEPOSITO_RDA'
                     ].includes(estado.codigo))
                     .map((estado) => (
                       <option key={estado.id} value={estado.id}>

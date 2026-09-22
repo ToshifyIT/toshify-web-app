@@ -375,6 +375,15 @@ function formatDate(dateStr: string | undefined | null): string {
   } catch { return '-' }
 }
 
+// `monotributo` en la tabla `leads` es texto libre. Los valores reales son "Sí", "No" y
+// unos pocos "Si" sin tilde que entraron por importación. Antes se resolvía con
+// .includes('tiene'), que daba false para todos ellos: ningún lead se convertía con
+// monotributo en true. Se compara contra el valor normalizado, sin tildes.
+const parseMonotributo = (valor?: string | null): boolean => {
+  const v = (valor || '').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+  return v === 'si' || v === 'tiene monotributo'
+}
+
 // Fecha sin hora, para columnas date-only (fecha_de_nacimiento, vencimiento_licencia).
 // No usa timeZone: un valor "YYYY-MM-DD" parseado con new Date() se interpreta como
 // UTC y al convertirlo a AR (UTC-3) mostraria el dia anterior.
@@ -1488,7 +1497,7 @@ export function LeadsModule() {
         nacionalidad_id: nacionalidadId,
         estado_civil_id: estadoCivilId,
         cbu: lead.cbu || '',
-        monotributo: lead.monotributo?.toLowerCase().includes('tiene') || false,
+        monotributo: parseMonotributo(lead.monotributo),
         fecha_nacimiento: lead.fecha_de_nacimiento || null,
         direccion_lat: latFinal,
         direccion_lng: lngFinal,

@@ -512,7 +512,7 @@ export function ProgramacionModule() {
 
     try {
       // Obtener vehiculos que no estan en reparacion/mantenimiento
-      const estadosNoDisponibles = ['REPARACION', 'MANTENIMIENTO', 'TALLER_AXIS', 'TALLER_CHAPA_PINTURA', 'TALLER_ALLIANCE', 'TALLER_KALZALO']
+      const estadosNoDisponibles = ['REPARACION', 'MANTENIMIENTO', 'TALLER_AXIS', 'TALLER_CHAPA_PINTURA', 'TALLER_ALLIANCE', 'TALLER_KALZALO', 'TALLER_MJ', 'TALLER_AUTODOC', 'TALLER_CHAPA_PINTURA_PAINT_CARS', 'TALLER_CHAPA_PINTURA_ANDRADA']
       const { data: vehiculosData } = await aplicarFiltroSede(supabase
         .from('vehiculos')
         .select('id, patente, marca, modelo, gnc, vehiculos_estados(codigo)')
