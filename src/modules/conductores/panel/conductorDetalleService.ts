@@ -4,6 +4,7 @@
 
 import { supabase } from '../../../lib/supabase'
 import { getConceptoLabel } from '../../../utils/conceptoLabels'
+import { cargarIvaPorCodigo, desglosarIvaCargos, montoBruto, montoNeto } from '../../../utils/facturacionIva'
 import { patronIlikeSinAcentos } from '../../../utils/nombreMatch'
 import { normalizeDni, normalizeLicencia, normalizeNombre } from '../../../utils/normalizeDocuments'
 import { parseImporte } from './conductoresPanelService'
@@ -220,9 +221,13 @@ export async function cargarMultasConductor(cond: { id: string; nombres: string 
 }
 
 export interface ConceptoDetalle {
+  codigo: string
   nombre: string
   cantidad: number
+  /** Importe BRUTO (con IVA) del concepto. Es el que suma en los subtotales. */
   total: number
+  /** Importe NETO: el que se muestra en la linea. El IVA va en su propio renglon. */
+  neto: number
   esDescuento: boolean
 }
 export interface PagoAporte {
@@ -237,6 +242,8 @@ export interface SemanaDetalle {
   grupoFlota: string | null
   gnc: boolean | null
   pagos: PagoAporte[]     // aportes de la semana (Cabify, manuales, etc.)
+  ivaAlquiler: number     // IVA de los conceptos de alquiler (renglon propio)
+  ivaOtros: number        // IVA del resto de los cargos (0 hoy, renglon propio si aparece)
 }
 
 // Tipos de movimiento que cuentan como aporte del conductor (mismo criterio que el portal).
@@ -251,7 +258,7 @@ export async function cargarDetalleSemana(
   semana: number,
   anio: number,
 ): Promise<SemanaDetalle> {
-  const [{ data: det }, vehRes, pagosRes] = await Promise.all([
+  const [{ data: det }, vehRes, pagosRes, ivaPorCodigo] = await Promise.all([
     supabase
       .from('facturacion_detalle')
       .select('concepto_codigo, concepto_descripcion, cantidad, precio_unitario, total, es_descuento')
@@ -271,25 +278,40 @@ export async function cargarDetalleSemana(
       .eq('anio', anio)
       .in('tipo_movimiento', TIPOS_APORTE)
       .order('created_at', { ascending: true }),
+    // % de IVA por concepto: misma fuente que el modulo de Facturacion.
+    cargarIvaPorCodigo(),
   ])
 
-  const conceptos: ConceptoDetalle[] = ((det || []) as Array<any>)
+  const filas = ((det || []) as Array<any>)
     .filter(d => d.concepto_codigo !== 'SALDO' && Number(d.total || 0) !== 0)
-    .map(d => ({
+
+  const conceptos: ConceptoDetalle[] = filas.map(d => {
+    const esDescuento = d.es_descuento === true
+    // Importe BRUTO (con IVA) con el mismo criterio que el modulo de Facturacion:
+    // `cantidad x precio_unitario`, con fallback a `total`. En facturacion_detalle
+    // `total` quedo guardado sin IVA para el alquiler, por eso sumarlo directo hacia
+    // que el panel mostrara la semana sin IVA. Ver utils/facturacionIva.
+    // Los descuentos se dejan como estaban (`total` crudo): no llevan desglose de IVA.
+    const bruto = esDescuento ? Number(d.total || 0) : montoBruto(d)
+    return {
+      codigo: d.concepto_codigo,
       // Misma etiqueta que ve el conductor en el portal (Mi Espacio).
       nombre: getConceptoLabel({
         concepto_codigo: d.concepto_codigo,
         concepto_descripcion: d.concepto_descripcion,
       }),
       cantidad: Number(d.cantidad) || 0,
-      // Importe: se usa `total` tal cual lo guarda la factura, igual que el portal.
-      // Antes se recalculaba cantidad x precio_unitario, pero esos dos campos no
-      // estan en la misma unidad que `total` (uno arrastra IVA y el otro no), y el
-      // panel terminaba mostrando un importe distinto al del portal para la misma
-      // semana. `total` es la fuente de verdad.
-      total: Number(d.total || 0),
-      esDescuento: d.es_descuento === true,
-    }))
+      total: bruto,
+      neto: esDescuento ? bruto : montoNeto(d, ivaPorCodigo),
+      esDescuento,
+    }
+  })
+
+  // IVA de los cargos, para mostrarlo en su propio renglon (igual que Facturacion).
+  const { ivaAlquiler, ivaOtros } = desglosarIvaCargos(
+    filas.filter(d => d.es_descuento !== true),
+    ivaPorCodigo,
+  )
 
   const pagos: PagoAporte[] = ((pagosRes.data || []) as Array<any>).map(p => ({
     id: String(p.id),
@@ -300,7 +322,7 @@ export async function cargarDetalleSemana(
   }))
 
   const veh = (vehRes.data && vehRes.data.length > 0) ? (vehRes.data[0] as any) : null
-  return { conceptos, grupoFlota: veh?.grupo_flota ?? null, gnc: veh?.gnc ?? null, pagos }
+  return { conceptos, grupoFlota: veh?.grupo_flota ?? null, gnc: veh?.gnc ?? null, pagos, ivaAlquiler, ivaOtros }
 }
 
 export interface ExcesoKmSemana {
