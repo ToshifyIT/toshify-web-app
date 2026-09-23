@@ -114,6 +114,29 @@ function esGarantiaDevuelta(g: any, override?: number): boolean {
   return pagado <= 0 || devuelto > 0
 }
 
+// Neto entre la cuenta corriente del conductor (saldos_conductores.saldo_actual,
+// negativo cuando nos debe) y la garantia que todavia le retenemos (lo pagado
+// menos lo ya devuelto).
+//   neto < 0  -> aun descontando la garantia, el conductor nos sigue debiendo
+//   neto >= 0 -> la garantia cubre la deuda y le quedamos debiendo a el
+// Devuelve null si el conductor no tiene registro en saldos_conductores.
+function netoDevolucion(g: any, saldos: Map<string, number>, override?: number): number | null {
+  const saldo = saldos.get(g?.conductor_id)
+  if (saldo === undefined) return null
+  const devuelto = g?.monto_devuelto || 0
+  return saldo + (montoPagadoGarantia(g, override) - devuelto)
+}
+
+// Sub-estado de una garantia en devolucion, para el badge y el filtro de Estado.
+// null si la garantia no esta en devolucion o ya salio por Devuelto / N/A.
+function subEstadoDevolucion(g: any, saldos: Map<string, number>, override?: number): 'debe' | 'debemos' | 'sin_saldo' | null {
+  if (!g || g.estado !== 'en_devolucion') return null
+  if (esGarantiaDevuelta(g, override) || garantiaNoAplica(g, override)) return null
+  const neto = netoDevolucion(g, saldos, override)
+  if (neto === null) return 'sin_saldo'
+  return neto < 0 ? 'debe' : 'debemos'
+}
+
 // Dias habiles transcurridos desde la baja del conductor (0 si esta activo).
 function calcularDiasBaja(g: any): number {
   if (!g || g.estado_conductor === 'ACTIVO') return 0
@@ -150,6 +173,9 @@ export function GarantiasTab() {
   
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [garantias, setGarantias] = useState<GarantiaConductor[]>([])
+  // Saldo de cuenta corriente por conductor_id, tal como lo muestra la pestaña
+  // Saldos (saldos_conductores.saldo_actual). Negativo = deuda.
+  const [saldosPorConductor, setSaldosPorConductor] = useState<Map<string, number>>(new Map())
   const [todosLosPagos, setTodosLosPagos] = useState<PagoGarantiaRow[]>([])
   const [loading, setLoading] = useState(true)
 
@@ -456,6 +482,22 @@ export function GarantiasTab() {
       setConductoresAsignados(idsAsignados)
 
       setGarantias(garantiasConEstado)
+
+      // Saldo de cuenta corriente. Misma tabla y mismo filtro de sede que la
+      // pestaña Saldos; hay una sola fila por conductor.
+      const { data: saldosData, error: errorSaldos } = await aplicarFiltroSede(supabase
+        .from('saldos_conductores')
+        .select('conductor_id, saldo_actual'))
+      if (errorSaldos) {
+        console.warn('[garantias] No se pudieron cargar los saldos:', errorSaldos.message)
+        setSaldosPorConductor(new Map())
+      } else {
+        const mapaSaldos = new Map<string, number>()
+        for (const fila of (saldosData || []) as any[]) {
+          if (fila.conductor_id) mapaSaldos.set(fila.conductor_id, Number(fila.saldo_actual) || 0)
+        }
+        setSaldosPorConductor(mapaSaldos)
+      }
 
       // Calcular cuotas reales y última semana — bloque aislado con su propio try/catch
       // para que un fallo aquí no afecte la carga principal ni viceversa.
@@ -1262,6 +1304,8 @@ export function GarantiasTab() {
       'Monto Pagado': g.monto_realmente_pagado || g.monto_pagado,
       'Cuotas Totales': g.cuotas_totales,
       'Cuotas Pagadas': g.cuotas_pagadas,
+      // Vacio (no 0) cuando el conductor no tiene registro en saldos_conductores.
+      'Saldo Actual': saldosPorConductor.get(g.conductor_id) ?? '',
     }))
 
     const ws = XLSX.utils.json_to_sheet(data)
@@ -1273,6 +1317,7 @@ export function GarantiasTab() {
       { wch: 14 }, // Monto Pagado
       { wch: 14 }, // Cuotas Totales
       { wch: 14 }, // Cuotas Pagadas
+      { wch: 16 }, // Saldo Actual
     ]
 
     const wb = XLSX.utils.book_new()
@@ -1312,6 +1357,8 @@ export function GarantiasTab() {
       'Monto Pendiente': (Number(g.monto_total) || 0) - (Number(g.monto_realmente_pagado || g.monto_pagado) || 0),
       'Cuotas Totales': g.cuotas_totales,
       'Cuotas Pagadas': g.cuotas_pagadas,
+      // Vacio (no 0) cuando el conductor no tiene registro en saldos_conductores.
+      'Saldo Actual': saldosPorConductor.get(g.conductor_id) ?? '',
     }))
 
     const ws = XLSX.utils.json_to_sheet(data)
@@ -1326,6 +1373,7 @@ export function GarantiasTab() {
       { wch: 16 }, // Monto Pendiente
       { wch: 14 }, // Cuotas Totales
       { wch: 14 }, // Cuotas Pagadas
+      { wch: 16 }, // Saldo Actual
     ]
 
     const wb = XLSX.utils.book_new()
@@ -1884,6 +1932,28 @@ export function GarantiasTab() {
       }
     },
     {
+      // Cuenta corriente del conductor, NO el pendiente de la garantia. El dato
+      // sale de saldos_conductores y es el mismo que muestra la pestaña Saldos.
+      id: 'saldo_actual',
+      header: 'Saldo Actual',
+      // Sin registro en saldos_conductores no es lo mismo que saldo cero, pero
+      // para ordenar necesitamos un numero: se manda 0 y la celda muestra "-".
+      accessorFn: (row) => saldosPorConductor.get(row.conductor_id) ?? 0,
+      cell: ({ row }) => {
+        const saldo = saldosPorConductor.get(row.original.conductor_id)
+        if (saldo === undefined) {
+          return <span style={{ color: 'var(--text-tertiary)', fontSize: '11px' }}>-</span>
+        }
+        // Mismo semaforo que la pestaña Saldos: rojo debe, verde a favor, gris en cero.
+        const color = saldo < 0 ? '#dc2626' : saldo > 0 ? '#16a34a' : 'var(--text-secondary)'
+        return (
+          <span className="fact-precio" style={{ color, fontWeight: saldo === 0 ? 400 : 600 }}>
+            {formatCurrency(saldo)}
+          </span>
+        )
+      }
+    },
+    {
       id: 'progreso',
       header: 'Progreso',
       accessorFn: (row) => (esGarantiaDevuelta(row, garantiasOverrides.get(row.id)) || row.monto_total <= 0)
@@ -1922,6 +1992,8 @@ export function GarantiasTab() {
                   { value: 'completada', label: 'Completada' },
                   { value: 'en_curso', label: 'En Curso' },
                   { value: 'en_devolucion', label: 'En Devolución' },
+                  { value: 'debe', label: 'En Devolución · Debe' },
+                  { value: 'debemos', label: 'En Devolución · Debemos' },
                   { value: 'devuelto', label: 'Devuelto' },
                   { value: 'pendiente', label: 'Pendiente' },
                   { value: 'no_aplica', label: 'N/A (no aplica)' }
@@ -1961,13 +2033,38 @@ export function GarantiasTab() {
         const { class: badgeClass, label } = config[estado] || { class: 'fact-badge-gray', label: estado }
         if (estado === 'en_devolucion') {
           // Las devueltas ya salieron arriba: aca solo quedan las que tienen saldo.
+          const override = garantiasOverrides.get(row.original.id)
           const devuelto = (row.original as any).monto_devuelto || 0
-          const porDev = montoPagadoGarantia(row.original, garantiasOverrides.get(row.original.id)) - devuelto
+          // Garantia que todavia esta en nuestro poder: lo pagado menos lo ya
+          // devuelto. Usar el pagado crudo contaria plata que ya se le reintegro.
+          const garantiaRetenida = montoPagadoGarantia(row.original, override) - devuelto
+          const saldo = saldosPorConductor.get(row.original.conductor_id)
+          const neto = netoDevolucion(row.original, saldosPorConductor, override)
+
+          if (neto === null || saldo === undefined) {
+            return (
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: '2px' }}>
+                <span className={`fact-badge ${badgeClass}`}>{label}</span>
+                <span
+                  style={{ fontSize: '10px', color: 'var(--text-tertiary)', fontWeight: 600 }}
+                  title="El conductor no tiene registro en saldos_conductores: no se puede netear"
+                >
+                  Sin saldo
+                </span>
+              </div>
+            )
+          }
+
+          const debeElConductor = neto < 0
+
           return (
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: '2px' }}>
               <span className={`fact-badge ${badgeClass}`}>{label}</span>
-              <span style={{ fontSize: '10px', color: '#2563eb', fontWeight: 600 }}>
-                {`Pend: ${formatCurrency(porDev)}`}
+              <span
+                style={{ fontSize: '10px', color: debeElConductor ? '#dc2626' : '#d97706', fontWeight: 600 }}
+                title={`Saldo actual ${formatCurrency(saldo)} + garantia retenida ${formatCurrency(garantiaRetenida)} = ${formatCurrency(neto)}`}
+              >
+                {`${debeElConductor ? 'Debe' : 'Debemos'}: ${formatCurrency(Math.abs(neto))}`}
               </span>
             </div>
           )
@@ -2009,7 +2106,7 @@ export function GarantiasTab() {
     // Los handlers (editar/eliminar/registrar devolucion) se recrean en cada render:
     // incluirlos rearmaria las columnas siempre y romperia el memo.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  ], [conductorFilter, conductorSearch, conductoresFiltrados, estadoFilter, openColumnFilter, ultimaSemanaMap, cuotasRealesMap, garantiasOverrides])
+  ], [conductorFilter, conductorSearch, conductoresFiltrados, estadoFilter, openColumnFilter, ultimaSemanaMap, cuotasRealesMap, garantiasOverrides, saldosPorConductor])
 
   // ========== COLUMNAS TABLA MOVIMIENTOS ==========
 
@@ -2126,6 +2223,8 @@ export function GarantiasTab() {
         completada: 'Completada',
         en_curso: 'En Curso',
         en_devolucion: 'En Devolución',
+        debe: 'En Devolución · Debe',
+        debemos: 'En Devolución · Debemos',
         devuelto: 'Devuelto',
         pendiente: 'Pendiente',
         no_aplica: 'N/A (no aplica)'
@@ -2172,7 +2271,11 @@ export function GarantiasTab() {
       // 'devuelto' es un estado derivado: en devolucion con todo el monto ya devuelto.
       if (estadoFilter.length > 0) {
         const estadoEfectivo = esGarantiaDevuelta(g) ? 'devuelto' : (garantiaNoAplica(g) ? 'no_aplica' : g.estado)
-        if (!estadoFilter.includes(estadoEfectivo)) return false
+        // 'debe' y 'debemos' refinan a 'en_devolucion': una fila puede coincidir
+        // por su estado o por su sub-estado, asi que se evaluan las dos.
+        const subEstado = subEstadoDevolucion(g, saldosPorConductor)
+        const coincide = estadoFilter.includes(estadoEfectivo) || (subEstado !== null && estadoFilter.includes(subEstado))
+        if (!coincide) return false
       }
       // Filtro estado conductor
       if (estadoCondFilter !== 'todos') {
@@ -2196,7 +2299,7 @@ export function GarantiasTab() {
       }
       return true
     })
-  }, [garantias, conductorFilter, estadoFilter, estadoCondFilter, asignadoFilter, conductoresAsignados, filtroKpi])
+  }, [garantias, conductorFilter, estadoFilter, estadoCondFilter, asignadoFilter, conductoresAsignados, filtroKpi, saldosPorConductor])
 
   const movimientosFiltrados = useMemo(() => {
     return todosLosPagos.filter(p => {
