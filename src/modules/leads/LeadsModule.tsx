@@ -4,7 +4,7 @@ import { inferirSedeDeLead, normalizarTexto } from '../../utils/sedeMatch'
 import { createPortal } from 'react-dom'
 import {
   Eye, Edit2, Trash2, Users, UserPlus, Clock, RefreshCw, MessageCircle, Layers, Link2,
-  CheckCircle, AlertTriangle, X, Download, Upload, FolderOpen, Car, Bell,
+  CheckCircle, AlertTriangle, X, Download, Upload, FolderOpen, Car, Bell, PhoneCall,
 } from 'lucide-react'
 import { ActionsMenu } from '../../components/ui/ActionsMenu'
 import { supabase } from '../../lib/supabase'
@@ -533,7 +533,7 @@ export function LeadsModule() {
 
   // Estados visibles para cambio manual (Conductor se asigna solo automáticamente)
   const ESTADOS_LEAD = [
-    'Inicio conversación', 'Acepta oferta', 'Pendiente - Hireflix', 'Apto - Hireflix', 'No Apto - Hireflix', 'Ayuda - Hireflix',
+    'Inicio conversación', 'Contactado Sellium', 'Acepta oferta', 'Pendiente - Hireflix', 'Apto - Hireflix', 'No Apto - Hireflix', 'Ayuda - Hireflix',
     'Documentos enviados', 'Documentos pendientes', 'Auto del pueblo', 'No le interesa', 'No cumple edad',
     'Convocatoria Inducción', 'Apto Inducción', 'Descartado',
   ] as const
@@ -542,6 +542,7 @@ export function LeadsModule() {
    *  calcularEstadoLead solo puede AVANZAR, nunca retroceder. */
   const ESTADO_ORDEN: Record<string, number> = {
     'Inicio conversación': 0,
+    'Contactado Sellium': 1,
     'Acepta oferta': 1,
     'Pendiente - Hireflix': 2,
     'Ayuda - Hireflix': 3,
@@ -1086,6 +1087,7 @@ export function LeadsModule() {
   const stats = useMemo(() => {
     const total = leads.length
     const inicio = leads.filter(l => l.estado_de_lead === 'Inicio conversación').length
+    const contactadoSellium = leads.filter(l => l.estado_de_lead === 'Contactado Sellium').length
     const aptos = leads.filter(l => l.estado_de_lead === 'Apto - Hireflix').length
     const noAptos = leads.filter(l => l.estado_de_lead === 'No Apto - Hireflix').length
     const conCoordenadas = leads.filter(l => l.direccion_latitud != null && l.direccion_longitud != null)
@@ -1099,7 +1101,7 @@ export function LeadsModule() {
     // Total visible en la tabla: todo menos los que ya son Conductor.
     const todos = leads.filter(l => l.estado_de_lead !== 'Conductor').length
     const recontacto = leads.filter(l => l.estado_de_lead !== 'Conductor' && tieneAlertaRecontacto(l.observaciones)).length
-    return { total, inicio, aptos, noAptos, convocatoria, enZonaRestringida, enZonaSegura, intercom, damaro, autoPueblo, descartados, recontacto, todos }
+    return { total, inicio, contactadoSellium, aptos, noAptos, convocatoria, enZonaRestringida, enZonaSegura, intercom, damaro, autoPueblo, descartados, recontacto, todos }
   }, [leads, leadsEnZona])
 
   // ---------- UNIQUE VALUES PARA FILTROS ----------
@@ -1126,6 +1128,7 @@ export function LeadsModule() {
 
     // Stat card filter (todos basados en estado_de_lead)
     if (activeStatCard === 'inicio') result = result.filter(l => l.estado_de_lead === 'Inicio conversación')
+    else if (activeStatCard === 'contactadoSellium') result = result.filter(l => l.estado_de_lead === 'Contactado Sellium')
     else if (activeStatCard === 'aptos') result = result.filter(l => l.estado_de_lead === 'Apto - Hireflix')
     else if (activeStatCard === 'noAptos') result = result.filter(l => l.estado_de_lead === 'No Apto - Hireflix')
     else if (activeStatCard === 'convocatoria') result = result.filter(l => l.estado_de_lead === 'Convocatoria Inducción' || l.estado_de_lead === 'Convocatoria Induccion')
@@ -2878,6 +2881,7 @@ export function LeadsModule() {
     if (activeStatCard) {
       const labelMap: Record<string, string> = {
         inicio: 'Inicio conversación',
+        contactadoSellium: 'Contactado Sellium',
         aptos: 'Aptos',
         noAptos: 'No aptos',
         zonaSegura: 'Zona Aprobada',
@@ -2911,6 +2915,16 @@ export function LeadsModule() {
             <div className="stat-content">
               <span className="stat-value">{stats.inicio}</span>
               <span className="stat-label">Inicio conversación</span>
+            </div>
+          </div>
+          <div
+            className={`stat-card stat-card-clickable ${activeStatCard === 'contactadoSellium' ? 'stat-card-active' : ''}`}
+            onClick={() => handleStatClick('contactadoSellium')}
+          >
+            <PhoneCall size={18} className="stat-icon" style={{ color: '#DB2777' }} />
+            <div className="stat-content">
+              <span className="stat-value">{stats.contactadoSellium}</span>
+              <span className="stat-label">Contactado Sellium</span>
             </div>
           </div>
           <div

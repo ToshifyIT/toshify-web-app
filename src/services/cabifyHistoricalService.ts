@@ -226,6 +226,11 @@ class SimpleCache<T> {
 // SERVICIO PRINCIPAL
 // =====================================================
 
+/** Filas por pagina al traer el historico de Cabify. */
+const HISTORICAL_PAGE_SIZE = 1000
+/** Tope de seguridad del paginado: 100 paginas = 100.000 filas por fuente. */
+const HISTORICAL_MAX_PAGES = 100
+
 class CabifyHistoricalService {
   private cache = new SimpleCache<DriverHistoricalData[]>(5) // 5 minutos TTL
   private statsCache = new SimpleCache<QueryStats>(10) // 10 minutos TTL
@@ -448,6 +453,49 @@ class CabifyHistoricalService {
     return Boolean(patente && index.patentes.has(patente))
   }
 
+  /**
+   * Traer TODAS las filas de una tabla historica para el rango pedido.
+   *
+   * La consulta se pagina porque cabify_historico guarda una fila por conductor
+   * y por dia: con rangos largos un unico .limit() truncaria el resultado en
+   * silencio y los totales quedarian incompletos.
+   *
+   * El orden principal sigue siendo ganancia_total DESC porque la agregacion
+   * toma los datos de identidad (nombre, vehiculo, patente) del primer registro
+   * de cada conductor. Los demas criterios solo desempatan para que el paginado
+   * sea estable y no repita ni saltee filas entre paginas.
+   */
+  private async queryHistoricalSource(
+    source: HistoricalSourceConfig,
+    selectFields: string,
+    startDate: string,
+    endDate: string
+  ): Promise<any[]> {
+    const rows: any[] = []
+
+    for (let page = 0; page < HISTORICAL_MAX_PAGES; page++) {
+      const from = page * HISTORICAL_PAGE_SIZE
+      const { data, error } = await supabase
+        .from(source.tableName)
+        .select(selectFields)
+        .gte('fecha_inicio', startDate)
+        .lte('fecha_inicio', endDate)
+        .order('ganancia_total', { ascending: false })
+        .order('cabify_driver_id', { ascending: true })
+        .order('fecha_inicio', { ascending: true })
+        .order('fecha_guardado', { ascending: true })
+        .range(from, from + HISTORICAL_PAGE_SIZE - 1)
+
+      if (error || !data) break
+
+      rows.push(...(data as any[]))
+
+      if (data.length < HISTORICAL_PAGE_SIZE) break
+    }
+
+    return rows
+  }
+
   private async queryHistorical(
     startDate: string,
     endDate: string,
@@ -460,21 +508,15 @@ class CabifyHistoricalService {
 
     // Consultar todas las tablas necesarias en paralelo
     const queryPromises = sourceConfigs.map(source =>
-      supabase
-        .from(source.tableName)
-        .select(selectFields)
-        .gte('fecha_inicio', startDate)
-        .lte('fecha_inicio', endDate)
-        .order('ganancia_total', { ascending: false })
-        .limit(5000)
+      this.queryHistoricalSource(source, selectFields, startDate, endDate)
     )
 
     const results = await Promise.all(queryPromises)
     const sedeIdentityIndex = await sedeIdentityPromise
 
-    const dataBySource = results.map((result, index) => ({
+    const dataBySource = results.map((rows, index) => ({
       source: sourceConfigs[index],
-      rows: !result.error && result.data ? (result.data as any[]) : [],
+      rows,
     }))
 
     const barilocheCompanyIds = new Set(

@@ -808,8 +808,8 @@ function Step5Gestion({ formData, setFormData, vehiculosEstados }: Step5Props) {
     'RETENIDO_COMISARIA',
     'ROBO',
     'TALLER_CHAPA_PINTURA',
-    'TALLER_CHAPA_PINTURA_PAINT_CARS',
-    'TALLER_CHAPA_PINTURA_ANDRADA',
+    'TALLER_CP_PAINT_CARS',
+    'TALLER_CP_ANDRADA',
     'TALLER_MECANICO'
   ]
   const estadosNoHabilitados = vehiculosEstados.filter(e => ESTADOS_SINIESTRO.includes(e.codigo))
