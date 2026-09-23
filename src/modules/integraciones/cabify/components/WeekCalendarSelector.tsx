@@ -37,7 +37,24 @@ const parseISODate = (isoString: string): { year: number; month: number; day: nu
   }
 }
 
-type SelectionMode = 'day' | 'week'
+type SelectionMode = 'day' | 'week' | 'range'
+
+type DayRef = { year: number; month: number; day: number }
+
+/** weeksAgo sentinel para una seleccion de un dia puntual. */
+const WEEKS_AGO_DAY = -1
+/** weeksAgo sentinel para un rango libre de fechas. */
+const WEEKS_AGO_RANGE = -2
+
+const formatDayLabel = (d: DayRef): string => `${d.day}/${d.month + 1}/${d.year}`
+
+/** Inicio del dia en UTC: los scripts de sync guardan fecha_inicio a medianoche UTC. */
+const toUtcDayStart = (d: DayRef): string =>
+  new Date(Date.UTC(d.year, d.month, d.day, 0, 0, 0, 0)).toISOString()
+
+/** Fin del dia en UTC. */
+const toUtcDayEnd = (d: DayRef): string =>
+  new Date(Date.UTC(d.year, d.month, d.day, 23, 59, 59, 999)).toISOString()
 
 export function WeekCalendarSelector({
   selectedWeek,
@@ -49,6 +66,10 @@ export function WeekCalendarSelector({
   const [viewDate, setViewDate] = useState(new Date())
   const [selectionMode, setSelectionMode] = useState<SelectionMode>('week')
   const [selectedDay, setSelectedDay] = useState<{ year: number; month: number; day: number } | null>(null)
+  // Modo rango: primer y segundo clic. rangeEnd null = esperando la fecha de fin.
+  const [rangeStart, setRangeStart] = useState<DayRef | null>(null)
+  const [rangeEnd, setRangeEnd] = useState<DayRef | null>(null)
+  const [hoverDay, setHoverDay] = useState<DayRef | null>(null)
   const dropdownRef = useRef<HTMLDivElement>(null)
   const btnRef = useRef<HTMLButtonElement>(null)
   const [dropdownPos, setDropdownPos] = useState<{ top: number; left: number } | null>(null)
@@ -59,6 +80,16 @@ export function WeekCalendarSelector({
     const start = parseISODate(selectedWeek.startDate)
     const end = parseISODate(selectedWeek.endDate)
     return { start, end }
+  }, [selectedWeek])
+
+  // Si el periodo activo es un rango, reconstruirlo al abrir el selector para
+  // que el calendario muestre la seleccion vigente en vez de arrancar vacio.
+  useEffect(() => {
+    if (selectedWeek?.weeksAgo !== WEEKS_AGO_RANGE) return
+    const start = parseISODate(selectedWeek.startDate)
+    const end = parseISODate(selectedWeek.endDate)
+    setRangeStart({ year: start.year, month: start.month, day: start.day })
+    setRangeEnd({ year: end.year, month: end.month, day: end.day })
   }, [selectedWeek])
 
   // Cerrar al hacer clic fuera
@@ -165,6 +196,36 @@ export function WeekCalendarSelector({
     e.preventDefault()
     e.stopPropagation()
 
+    if (selectionMode === 'range') {
+      const clicked: DayRef = { year: dayInfo.year, month: dayInfo.month, day: dayInfo.day }
+      const clickedTs = dayInfo.timestamp
+
+      // Primer clic, o reinicio tras un rango ya cerrado, o clic anterior al
+      // inicio vigente: ese dia pasa a ser el nuevo inicio.
+      const startTs = rangeStart
+        ? getDayTimestamp(rangeStart.year, rangeStart.month, rangeStart.day)
+        : null
+
+      if (!rangeStart || rangeEnd || startTs === null || clickedTs < startTs) {
+        setRangeStart(clicked)
+        setRangeEnd(null)
+        return
+      }
+
+      // Segundo clic: cierra el rango y aplica el filtro.
+      setRangeEnd(clicked)
+      setHoverDay(null)
+
+      onWeekChange({
+        weeksAgo: WEEKS_AGO_RANGE,
+        label: `${formatDayLabel(rangeStart)} - ${formatDayLabel(clicked)}`,
+        startDate: toUtcDayStart(rangeStart),
+        endDate: toUtcDayEnd(clicked),
+      })
+      setIsOpen(false)
+      return
+    }
+
     if (selectionMode === 'day') {
       // Modo día: seleccionar ese día exacto (cabify_historico almacena registros DIARIOS)
       setSelectedDay({ year: dayInfo.year, month: dayInfo.month, day: dayInfo.day })
@@ -207,8 +268,13 @@ export function WeekCalendarSelector({
 
   // Label del botón
   const getButtonLabel = (): string => {
+    // Rango libre: el label ya viene armado desde la seleccion
+    if (selectedWeek?.weeksAgo === WEEKS_AGO_RANGE) {
+      return selectedWeek.label
+    }
+
     // Si hay un día seleccionado en modo día
-    if (selectedDay && selectedWeek?.weeksAgo === -1) {
+    if (selectedDay && selectedWeek?.weeksAgo === WEEKS_AGO_DAY) {
       return `${selectedDay.day}/${selectedDay.month + 1}/${selectedDay.year}`
     }
 
@@ -219,6 +285,23 @@ export function WeekCalendarSelector({
     }
     return `Semana ${weekNum} (S${weekNum})`
   }
+
+  /**
+   * Extremos del rango a pintar. Mientras falta la fecha de fin se usa el dia
+   * bajo el mouse como preview, pero solo si es posterior al inicio (un clic
+   * anterior reinicia la seleccion, no la invierte).
+   */
+  const rangeTimestamps = useMemo(() => {
+    if (selectionMode !== 'range' || !rangeStart) return null
+    const startTs = getDayTimestamp(rangeStart.year, rangeStart.month, rangeStart.day)
+    const endRef = rangeEnd ?? hoverDay
+    if (!endRef) return { start: startTs, end: startTs }
+    const endTs = getDayTimestamp(endRef.year, endRef.month, endRef.day)
+    return endTs < startTs ? { start: startTs, end: startTs } : { start: startTs, end: endTs }
+  }, [selectionMode, rangeStart, rangeEnd, hoverDay])
+
+  const isDayInRange = (ts: number): boolean =>
+    rangeTimestamps !== null && ts >= rangeTimestamps.start && ts <= rangeTimestamps.end
 
   const todayTimestamp = useMemo(() => {
     const now = new Date()
@@ -276,6 +359,13 @@ export function WeekCalendarSelector({
             >
               Semana
             </button>
+            <button
+              type="button"
+              className={`week-calendar-tab ${selectionMode === 'range' ? 'active' : ''}`}
+              onClick={() => setSelectionMode('range')}
+            >
+              Rangos
+            </button>
           </div>
 
           {/* Header con navegación */}
@@ -311,13 +401,22 @@ export function WeekCalendarSelector({
                 selectedDay.month === dayInfo.month &&
                 selectedDay.day === dayInfo.day
 
-              const isWeekSelected = selectionMode === 'week' && isDayInSelectedWeek(dayInfo.timestamp)
-              const isStart = selectionMode === 'week' && isWeekStart(dayInfo.timestamp)
-              const isEnd = selectionMode === 'week' && isWeekEnd(dayInfo.timestamp)
+              // La franja continua y sus extremos se comparten entre modo semana
+              // y modo rango: misma presentacion, distinto origen del rango.
+              const isWeekSelected =
+                (selectionMode === 'week' && isDayInSelectedWeek(dayInfo.timestamp)) ||
+                isDayInRange(dayInfo.timestamp)
+              const isStart =
+                (selectionMode === 'week' && isWeekStart(dayInfo.timestamp)) ||
+                (rangeTimestamps !== null && dayInfo.timestamp === rangeTimestamps.start)
+              const isEnd =
+                (selectionMode === 'week' && isWeekEnd(dayInfo.timestamp)) ||
+                (rangeTimestamps !== null && dayInfo.timestamp === rangeTimestamps.end)
 
-              // En modo día todos los días son clickeables
+              // En modo día y en modo rango todos los días son clickeables
               // En modo semana solo las semanas disponibles
-              const isAvailable = selectionMode === 'day' || isDayInAvailableWeek(dayInfo)
+              const isAvailable =
+                selectionMode === 'day' || selectionMode === 'range' || isDayInAvailableWeek(dayInfo)
 
               // Clases para estilo Cabify
               const classes = [
@@ -338,6 +437,11 @@ export function WeekCalendarSelector({
                   key={index}
                   className={classes}
                   onClick={(e) => isAvailable && handleDayClick(dayInfo, e)}
+                  onMouseEnter={() => {
+                    if (selectionMode === 'range' && rangeStart && !rangeEnd) {
+                      setHoverDay({ year: dayInfo.year, month: dayInfo.month, day: dayInfo.day })
+                    }
+                  }}
                   role="button"
                   tabIndex={isAvailable ? 0 : -1}
                 >
@@ -347,7 +451,17 @@ export function WeekCalendarSelector({
             })}
           </div>
 
+          {/* Modo rango: indicacion del paso actual (no usa atajos) */}
+          {selectionMode === 'range' && (
+            <div className="week-calendar-hint">
+              {!rangeStart || rangeEnd
+                ? 'Elegí la fecha de inicio'
+                : `Inicio ${formatDayLabel(rangeStart)} — elegí la fecha de fin`}
+            </div>
+          )}
+
           {/* Atajos rápidos */}
+          {selectionMode !== 'range' && (
           <div className="week-calendar-shortcuts">
             {availableWeeks.slice(0, 2).map(week => {
               const start = parseISODate(week.startDate)
@@ -370,6 +484,7 @@ export function WeekCalendarSelector({
               )
             })}
           </div>
+          )}
         </div>
       )}
     </div>
