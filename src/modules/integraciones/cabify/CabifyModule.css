@@ -406,6 +406,90 @@
   font-weight: 500;
 }
 
+/* Celda sin dato (ej. conductor sin desactivaciones registradas) */
+.cabify-sin-dato {
+  color: var(--text-tertiary);
+}
+
+/* Icono de ayuda del header: explica cuando se activa/desactiva el efectivo.
+   Tooltip propio porque el de DataTable es de una sola linea (white-space: nowrap). */
+.cabify-help-icon {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 6px 10px;
+  border: 1px solid var(--border-primary);
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  white-space: nowrap;
+  color: var(--text-secondary);
+  cursor: help;
+  transition: color 0.15s, border-color 0.15s;
+}
+
+.cabify-help-icon:hover,
+.cabify-help-icon:focus-visible {
+  color: var(--color-primary);
+  border-color: var(--color-primary);
+  outline: none;
+}
+
+.cabify-help-icon[data-tooltip]::after {
+  content: attr(data-tooltip);
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 0;
+  width: max-content;
+  max-width: 320px;
+  padding: 10px 12px;
+  background: #1F2937;
+  color: #fff;
+  font-size: 12px;
+  line-height: 1.5;
+  white-space: pre-line;
+  text-align: left;
+  border-radius: 6px;
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.18);
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.15s ease;
+  z-index: 9999;
+  pointer-events: none;
+}
+
+.cabify-help-icon[data-tooltip]::before {
+  content: '';
+  position: absolute;
+  top: calc(100% + 3px);
+  left: 4px;
+  border: 5px solid transparent;
+  border-bottom-color: #1F2937;
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.15s ease;
+  z-index: 9999;
+}
+
+.cabify-help-icon:hover::after,
+.cabify-help-icon:hover::before,
+.cabify-help-icon:focus-visible::after,
+.cabify-help-icon:focus-visible::before {
+  opacity: 1;
+  visibility: visible;
+}
+
+/* Ayuda del modo rango (reemplaza a los atajos en esa pestaña) */
+.week-calendar-hint {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border-primary);
+  font-size: 13px;
+  color: var(--text-secondary);
+  text-align: center;
+}
+
 .week-calendar-shortcuts {
   display: flex;
   flex-direction: column;

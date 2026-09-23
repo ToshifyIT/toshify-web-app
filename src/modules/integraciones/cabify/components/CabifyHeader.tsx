@@ -4,9 +4,28 @@
  * Principio: Single Responsibility - Solo UI de encabezado
  */
 
+import { HelpCircle } from 'lucide-react'
 import type { WeekOption } from '../types/cabify.types'
 import { formatDateTimeAR } from '../../../../utils/dateUtils'
 import { WeekCalendarSelector } from './WeekCalendarSelector'
+
+// =====================================================
+// TEXTOS
+// =====================================================
+
+/**
+ * Resumen de la regla que aplica el RPA py-cabify-efectivo, que corre dos veces
+ * por semana y compara lo cobrado por app contra alquiler + garantia del periodo.
+ */
+const AYUDA_EFECTIVO = [
+  'Desactivación automática — sábados 06:00',
+  'Si de lunes a sábado lo cobrado por app no cubre el alquiler + garantía de la semana, se desactiva el efectivo.',
+  '',
+  'Activación automática — lunes 06:00',
+  'Si en la semana anterior lo cobrado por app cubrió el alquiler + garantía, se reactiva.',
+  '',
+  'También puede activarse o desactivarse manualmente desde Facturación.',
+].join('\n')
 
 // =====================================================
 // TIPOS
@@ -47,6 +66,16 @@ export function CabifyHeader({
           isDisabled={isDisabled}
           onWeekChange={onWeekChange}
         />
+        <span
+          className="cabify-help-icon"
+          data-tooltip={AYUDA_EFECTIVO}
+          role="img"
+          aria-label={AYUDA_EFECTIVO}
+          tabIndex={0}
+        >
+          <HelpCircle size={14} />
+          <span>Desactivación Efectivo</span>
+        </span>
         {isLoading && (
           <div className="cabify-loading-indicator">
             <div className="dt-loading-spinner" style={{ width: 16, height: 16 }} />

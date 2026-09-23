@@ -599,6 +599,7 @@ export function LeadWizard({ formData, setFormData, onSave, onCancel, saving = f
                 <select value={formData.estado_de_lead || ''} onChange={e => updateField('estado_de_lead', e.target.value)}>
                   <option value="">Seleccionar</option>
                   <option value="Inicio conversación">Inicio conversación</option>
+                  <option value="Contactado Sellium">Contactado Sellium</option>
                   <option value="Acepta oferta">Acepta oferta</option>
                   <option value="Apto - Hireflix">Apto - Hireflix</option>
                   <option value="No Apto - Hireflix">No Apto - Hireflix</option>

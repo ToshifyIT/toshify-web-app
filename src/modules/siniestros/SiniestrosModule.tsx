@@ -778,8 +778,8 @@ export function SiniestrosModule() {
           const estadosFinalizanAsignacion = [
             'SINIESTRADO',
             'TALLER_CHAPA_PINTURA',
-            'TALLER_CHAPA_PINTURA_PAINT_CARS',
-            'TALLER_CHAPA_PINTURA_ANDRADA',
+            'TALLER_CP_PAINT_CARS',
+            'TALLER_CP_ANDRADA',
             'CORPORATIVO', 
             'PKG_OFF_BASE',
             'PKG_OFF_FRANCIA',
@@ -886,8 +886,8 @@ export function SiniestrosModule() {
           const estadosFinalizanAsignacion = [
             'SINIESTRADO',
             'TALLER_CHAPA_PINTURA',
-            'TALLER_CHAPA_PINTURA_PAINT_CARS',
-            'TALLER_CHAPA_PINTURA_ANDRADA',
+            'TALLER_CP_PAINT_CARS',
+            'TALLER_CP_ANDRADA',
             'CORPORATIVO',
             'PKG_OFF_BASE',
             'PKG_OFF_FRANCIA',

@@ -548,7 +548,7 @@ export function AsignacionesModule() {
     const finSemanaStr = `${finSemana.getFullYear()}-${String(finSemana.getMonth() + 1).padStart(2, '0')}-${String(finSemana.getDate()).padStart(2, '0')}`
 
     // Estados a excluir/agrupar
-    const estadosTaller = ['TALLER_AXIS', 'TALLER_CHAPA_PINTURA', 'TALLER_ALLIANCE', 'TALLER_KALZALO', 'TALLER_MJ', 'TALLER_AUTODOC', 'TALLER_CHAPA_PINTURA_PAINT_CARS', 'TALLER_CHAPA_PINTURA_ANDRADA']
+    const estadosTaller = ['TALLER_AXIS', 'TALLER_CHAPA_PINTURA', 'TALLER_ALLIANCE', 'TALLER_KALZALO', 'TALLER_MJ', 'TALLER_AUTODOC', 'TALLER_CP_PAINT_CARS', 'TALLER_CP_ANDRADA']
     const estadosFueraServicio = ['ROBO', 'DESTRUCCION_TOTAL', 'PKG_OFF_BASE']
     const estadosNoDisponibles = ['ROBO', 'DESTRUCCION_TOTAL', 'JUBILADO', 'CORPORATIVO', 'RETENIDO_COMISARIA', 'PKG_OFF_BASE', 'PKG_OFF_FRANCIA']
 

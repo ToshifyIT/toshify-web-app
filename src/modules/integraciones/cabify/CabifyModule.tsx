@@ -18,7 +18,7 @@ import { DataTable } from '../../../components/ui/DataTable/DataTable'
 import type { CabifyDriver, AccordionKey, WeekOption } from './types/cabify.types'
 
 // Hooks
-import { useCabifyData, useCabifyStats } from './hooks'
+import { useCabifyData, useCabifyStats, useUltimaDesactivacion } from './hooks'
 
 // Componentes
 import { CabifyHeader, type DateRange, StatsAccordion, TopDriversSection } from './components'
@@ -166,9 +166,34 @@ function getDniDisplay(raw: string | undefined | null, fallback = '-'): string {
   return raw
 }
 
+/**
+ * Etiqueta de flota del conductor.
+ *
+ * El grupo de flota del vehiculo (vehiculos.grupo_flota) manda siempre que este
+ * cargado: es el dato de Toshify y es inequivoco. La cuenta Cabify solo se usa
+ * como ultimo recurso, porque la cuenta de Buenos Aires agrupa CG + 44Dreams
+ * sobre la misma tabla y su etiqueta ('BA/44D') no distingue entre las dos.
+ *
+ * Antes solo se contemplaba 44 Dreams, asi que un vehiculo de Grupo CG — con su
+ * grupo_flota perfectamente cargado — caia al 'BA/44D' de la cuenta y quedaba
+ * insinuando 44 Dreams.
+ *
+ * Los criterios de abreviacion siguen a grupoFlotaLabel() del Panel de
+ * Conductores para que ambas pantallas coincidan.
+ */
 function getSourceBadgeLabel(driver: CabifyDriver, asignacion?: AsignacionActiva | null): string {
-  const grupoFlota = asignacion?.grupoFlota?.toUpperCase() || ''
-  if (grupoFlota.includes('44 DREAMS')) return '44D'
+  const grupoFlota = asignacion?.grupoFlota?.trim() || ''
+  const upper = grupoFlota.toUpperCase()
+
+  if (upper.includes('44 DREAM')) return '44D'
+  if (upper.includes('GRUPO CG')) return 'CG'
+  // Grupo cargado pero desconocido: se muestra tal cual, sin abreviar.
+  if (grupoFlota) return grupoFlota
+
+  // Sin grupo de flota cargado en el vehiculo. Se marca explicitamente en vez de
+  // mostrar la cuenta Cabify, que se leeria como una flota que no esta confirmada.
+  if (asignacion) return 'Sin flota'
+
   if (driver.sourceAccount === 'bariloche') return 'Bariloche'
   if (driver.sourceAccount === 'buenos_aires_44dreams') return 'BA/44D'
   return driver.sourceLabel || driver.companyName || 'Cabify'
@@ -260,8 +285,15 @@ export function CabifyModule() {
     setAccordionState((prev) => ({ ...prev, [key]: !prev[key] }))
   }, [])
 
+  // Ultima desactivacion de efectivo por conductor (tabla cabify_efectivo_log)
+  const dnisVisibles = useMemo(
+    () => activeAssignedDrivers.map((d) => d.nationalIdNumber || '').filter(Boolean),
+    [activeAssignedDrivers]
+  )
+  const ultimasDesactivaciones = useUltimaDesactivacion(dnisVisibles)
+
   // Columnas de la tabla
-  const columns = useTableColumns(asignaciones)
+  const columns = useTableColumns(asignaciones, ultimasDesactivaciones)
 
   // Mensaje de carga
   const loadingMessage = buildLoadingMessage(
@@ -288,6 +320,28 @@ export function CabifyModule() {
     }
     return `${formatISODate(effectiveDateRange.startDate)} - ${formatISODate(effectiveDateRange.endDate)}`
   }, [effectiveDateRange])
+
+  // Volver al período por defecto del módulo (semana actual). Si esa semana no
+  // tiene datos, useCabifyData ya cae solo a la anterior, igual que en la carga
+  // inicial.
+  const handleClearPeriodo = useCallback(() => {
+    if (availableWeeks.length > 0) {
+      setSelectedWeek(availableWeeks[0])
+    }
+  }, [availableWeeks, setSelectedWeek])
+
+  // El período se expone como filtro externo del DataTable para que aparezca en
+  // la barra de "Filtros activos" junto al botón de limpiar. Solo cuenta como
+  // filtro si NO es la semana actual: ese es el estado por defecto y no hay nada
+  // que limpiar.
+  const externalFilters = useMemo(() => {
+    if (!selectedWeek || selectedWeek.weeksAgo === 0) return []
+    return [{
+      id: 'periodo',
+      label: `Período: ${periodLabel}`,
+      onClear: handleClearPeriodo,
+    }]
+  }, [selectedWeek, periodLabel, handleClearPeriodo])
 
   // Separar históricos de la sede que no cuentan como activos Cabify.
   const driversWithoutAssignment = useMemo(() => {
@@ -350,6 +404,7 @@ export function CabifyModule() {
           pageSize={DEFAULT_PAGE_SIZE}
           pageSizeOptions={[...PAGE_SIZE_OPTIONS]}
           stickyLeftColumns={2}
+          externalFilters={externalFilters}
         />
       </div>
 
@@ -517,6 +572,7 @@ function DriversWithoutAssignmentSection({
 
 function useTableColumns(
   asignaciones: Map<string, AsignacionActiva>,
+  ultimasDesactivaciones: Map<string, string>,
 ): ColumnDef<CabifyDriver, unknown>[] {
   return useMemo<ColumnDef<CabifyDriver, unknown>[]>(
     () => [
@@ -540,8 +596,9 @@ function useTableColumns(
       { ...createMoneyColumn('promociones', 'Promociones', 'cabify-money promos'), size: 115, minSize: 95 },
       { ...createDeduccionesColumn(), size: 115, minSize: 95 },
       { ...createPermisoEfectivoColumn(), size: 110, minSize: 95 },
+      { ...createUltimaDesactivacionColumn(ultimasDesactivaciones), size: 165, minSize: 140 },
     ],
-    [asignaciones]
+    [asignaciones, ultimasDesactivaciones]
   )
 }
 
@@ -757,6 +814,34 @@ function createDeduccionesColumn(): ColumnDef<CabifyDriver, unknown> {
         ? `-${numValue.toLocaleString('es-AR', { style: 'currency', currency: 'ARS', minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
         : numValue.toLocaleString('es-AR', { style: 'currency', currency: 'ARS', minimumFractionDigits: 2, maximumFractionDigits: 2 })
       return <span className="cabify-money deductions" style={{ color: numValue > 0 ? '#dc2626' : undefined }}>{formatted}</span>
+    },
+  }
+}
+
+/**
+ * Fecha del ultimo corte de efectivo del conductor, venga del RPA semanal o del
+ * boton manual de Facturacion. Se muestra aunque el efectivo este activado hoy:
+ * responde "cuando fue la ultima vez", no "esta desactivado".
+ */
+function createUltimaDesactivacionColumn(
+  ultimasDesactivaciones: Map<string, string>
+): ColumnDef<CabifyDriver, unknown> {
+  return {
+    id: 'ultimaDesactivacion',
+    header: 'Ultima fecha desactivado',
+    accessorFn: (row) => ultimasDesactivaciones.get(normalizeDni(row.nationalIdNumber || '')) || '',
+    cell: ({ getValue }) => {
+      const iso = getValue() as string
+      if (!iso) return <span className="cabify-sin-dato">-</span>
+
+      const fecha = new Date(iso)
+      if (Number.isNaN(fecha.getTime())) return <span className="cabify-sin-dato">-</span>
+
+      return (
+        <span title={fecha.toLocaleString('es-AR')}>
+          {fecha.toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric' })}
+        </span>
+      )
     },
   }
 }

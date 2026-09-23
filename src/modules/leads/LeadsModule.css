@@ -73,7 +73,7 @@
 
 .leads-stats-grid {
   display: grid;
-  grid-template-columns: repeat(6, 1fr);
+  grid-template-columns: repeat(7, 1fr);
   gap: 8px;
 }
 
@@ -152,7 +152,7 @@
 /* Laptop / pantalla mediana */
 @media (max-width: 1200px) {
   .leads-stats-grid {
-    grid-template-columns: repeat(3, 1fr);
+    grid-template-columns: repeat(4, 1fr);
   }
 }
 
@@ -372,6 +372,11 @@
   color: #3B82F6;
 }
 
+.lead-estado-contactado-sellium {
+  background: #FCE7F3;
+  color: #DB2777;
+}
+
 .lead-estado-acepta-oferta {
   background: #FEF9C3;
   color: #CA8A04;
@@ -502,6 +507,7 @@
 }
 
 .lead-estado-dot-inicio-conversacion { background: #3B82F6; }
+.lead-estado-dot-contactado-sellium { background: #DB2777; }
 .lead-estado-dot-acepta-oferta { background: #CA8A04; }
 .lead-estado-dot-pendiente---hireflix { background: #F59E0B; }
 .lead-estado-dot-apto---hireflix { background: #22C55E; }

@@ -45,9 +45,10 @@ import {
 /** Estado de conductor que se muestra atenuado (nunca se oculta del dataset). */
 export const ESTADO_CONDUCTOR_BAJA = 'baja'
 
-/** Los 14 estados del pipeline de leads (espeja ESTADOS_LEAD de LeadsModule). */
+/** Los 15 estados del pipeline de leads (espeja ESTADOS_LEAD de LeadsModule). */
 export const ESTADOS_LEAD_TODOS = [
   'Inicio conversación',
+  'Contactado Sellium',
   'Acepta oferta',
   'Pendiente - Hireflix',
   'Apto - Hireflix',
