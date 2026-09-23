@@ -37,7 +37,6 @@ import {
   type ConductorPanelRow,
 } from '../../conductores/panel/conductoresPanelService'
 import { LeadDetalleModal } from './components/LeadDetalleModal'
-import { getLeadEstadoColor } from '../../leads/leadEstadoColors'
 import {
   GOOGLE_MAPS_API_KEY,
   GOOGLE_MAPS_LIBRARIES,
@@ -74,12 +73,7 @@ import { FiltrosSidebar } from './components/FiltrosSidebar'
 import { contarFiltrosActivos, creadoEnRango, filtrosIniciales, type FiltrosV2 } from './components/filtrosOpciones'
 import { SIN_UBICACION } from './ubicacion'
 import { MapaCanvas } from './components/MapaCanvas'
-import {
-  colorEntidad,
-  COLOR_TURNO_DIURNO,
-  COLOR_TURNO_NOCTURNO,
-  COLOR_TURNO_SINPREF,
-} from './components/colores'
+import { colorEntidad } from './components/colores'
 import { SugerenciasDrawer } from './components/SugerenciasDrawer'
 import { IconoEntidad } from './components/iconos'
 import { Chip } from './components/ui'
@@ -442,16 +436,6 @@ export function DistribucionMapaV2Module() {
 
     return { paises: ordenar(porPais), ciudades: ordenar(porCiudad) }
   }, [conductores, leads, filtros.paises])
-
-  const leyendaLeads = useMemo(() => {
-    const vistos = new Map<string, string>()
-    for (const e of visibles) {
-      if (e.tipo !== 'lead') continue
-      const estado = e.estadoLead || SIN_ESTADO_LEAD
-      if (!vistos.has(estado)) vistos.set(estado, getLeadEstadoColor(e.estadoLead))
-    }
-    return [...vistos.entries()].map(([estado, color]) => ({ estado, color })).slice(0, 4)
-  }, [visibles])
 
   /**
    * Lo que se dibuja en el mapa y en la lista: lo visible, más la base fijada
@@ -872,26 +856,6 @@ export function DistribucionMapaV2Module() {
           >
             <ShieldAlert size={12} /> Zonas restringidas ({zonasPeligrosas.length})
           </Chip>
-          {/* Leyenda */}
-          <div
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 10,
-              padding: '5px 10px',
-              background: 'var(--bg-secondary)',
-              borderRadius: 8,
-              flexWrap: 'wrap',
-            }}
-          >
-            <LegendItem tipo="conductor" color={COLOR_TURNO_DIURNO} label="Diurno" />
-            <LegendItem tipo="conductor" color={COLOR_TURNO_NOCTURNO} label="Nocturno" />
-            <LegendItem tipo="conductor" color={COLOR_TURNO_SINPREF} label="Sin pref." />
-            {leyendaLeads.map((l) => (
-              <LegendItem key={`lg-${l.estado}`} tipo="lead" color={l.color} label={l.estado} />
-            ))}
-          </div>
-
           <button
             type="button"
             // Con alguien seleccionado (o una base fijada) se sugiere PARA esa
@@ -1192,32 +1156,6 @@ export function DistribucionMapaV2Module() {
 // =====================================================
 // Subcomponentes locales
 // =====================================================
-
-function LegendItem({
-  tipo,
-  color,
-  label,
-}: {
-  tipo: 'conductor' | 'lead'
-  color: string
-  label: string
-}) {
-  return (
-    <span
-      style={{
-        display: 'flex',
-        alignItems: 'center',
-        gap: 5,
-        fontSize: 11,
-        color: 'var(--text-secondary)',
-        whiteSpace: 'nowrap',
-      }}
-    >
-      <IconoEntidad tipo={tipo} color={color} size={13} />
-      {label}
-    </span>
-  )
-}
 
 /**
  * Lista de resultados: sirve para ENCONTRAR y SELECCIONAR. Las acciones sobre

@@ -14,6 +14,7 @@ import Swal from 'sweetalert2'
 import { showSuccess, showError } from '../../utils/toast'
 import { useSede } from '../../contexts/SedeContext'
 import { useAuth } from '../../contexts/AuthContext'
+import { usePermissions } from '../../contexts/PermissionsContext'
 import { crearCobroDesdeMulta, sincronizarCobroPorAplicar } from './services/crearCobroDesdeMulta'
 import { desestimarMulta as svcDesestimarMulta, reactivarMulta as svcReactivarMulta } from './services/desestimarMulta'
 import { withAudit, logMultaAudit } from './services/auditMulta'
@@ -195,7 +196,10 @@ export default function MultasModule() {
     userRole === 'admin' ||
     userRole === 'fullstack.senior' ||
     GOD_MODE_EMAILS.has(userEmail)
-  const canReactivar = isGodMode
+  // Reactivar: god mode o cualquier rol con permiso de edición en el submenú 'multas'.
+  // Borrar sigue restringido a god mode.
+  const { canEditInSubmenu } = usePermissions()
+  const canReactivar = isGodMode || canEditInSubmenu('multas')
   const canBorrar = isGodMode
 
   // Filtros

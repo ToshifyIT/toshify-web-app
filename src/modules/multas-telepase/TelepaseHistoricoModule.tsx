@@ -10,6 +10,7 @@ import Swal from 'sweetalert2'
 import { showSuccess, showError } from '../../utils/toast'
 import { useSede } from '../../contexts/SedeContext'
 import { useAuth } from '../../contexts/AuthContext'
+import { usePermissions } from '../../contexts/PermissionsContext'
 import { desestimarTelepase, reactivarTelepase, eliminarTelepase } from './services/desestimarTelepase'
 import { type ColumnDef } from '@tanstack/react-table'
 import * as XLSX from 'xlsx'
@@ -89,7 +90,10 @@ export default function TelepaseHistoricoModule() {
     'fullstack@toshify.com.ar',
   ])
   const isGodMode = userRole === 'admin' || userRole === 'fullstack.senior' || GOD_MODE_EMAILS.has(userEmail)
-  const canReactivar = isGodMode
+  // Reactivar: god mode o cualquier rol con permiso de edición en el submenú 'telepase-historico'.
+  // Borrar sigue restringido a god mode.
+  const { canEditInSubmenu } = usePermissions()
+  const canReactivar = isGodMode || canEditInSubmenu('telepase-historico')
   const canBorrar = isGodMode
   const [loading, setLoading] = useState(true)
   const [registros, setRegistros] = useState<TelepaseRegistro[]>([])
