@@ -88,12 +88,15 @@ export function CheckRow({
   onChange,
   icon,
   hint,
+  deshabilitado,
 }: {
   label: string
   checked: boolean
   onChange: () => void
   icon?: React.ReactNode
   hint?: string
+  /** Para opciones que no aplican al contexto actual: se ven, pero no se tocan. */
+  deshabilitado?: boolean
 }) {
   return (
     <label
@@ -104,11 +107,18 @@ export function CheckRow({
         gap: 8,
         fontSize: 13,
         color: 'var(--text-primary)',
-        cursor: 'pointer',
+        cursor: deshabilitado ? 'not-allowed' : 'pointer',
         padding: '2px 0',
+        opacity: deshabilitado ? 0.45 : 1,
       }}
     >
-      <input type="checkbox" checked={checked} onChange={onChange} style={{ cursor: 'pointer' }} />
+      <input
+        type="checkbox"
+        checked={checked}
+        onChange={onChange}
+        disabled={deshabilitado}
+        style={{ cursor: deshabilitado ? 'not-allowed' : 'pointer' }}
+      />
       {icon}
       {label}
     </label>

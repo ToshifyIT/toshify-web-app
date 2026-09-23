@@ -106,6 +106,17 @@ export function FiltrosSidebar({
   filtrosActivos,
   onLimpiar,
 }: Props) {
+  /**
+   * "Sin compañero" y "Con compañero" se derivan de la asignación activa por
+   * turno: un conductor sin asignación no puede tener ni no tener compañero,
+   * queda en 'no_aplica' y el filtro lo excluye. Entonces acotar a "Sin
+   * asignación" y además pedir algo de Compañero da SIEMPRE cero resultados.
+   *
+   * En vez de dejar que el operador llegue solo a esa combinación vacía, el
+   * bloque Compañero se deshabilita y explica por qué.
+   */
+  const companeroAplica = !(filtros.asignacion.has('sin') && !filtros.asignacion.has('con'))
+
   // La zona operativa (CABA/Norte/Sur/Oeste/GBA) es del AMBA: sólo tiene
   // sentido mientras no se haya acotado a países distintos de Argentina.
   const mostrarZonaOperativa =
@@ -276,7 +287,18 @@ export function FiltrosSidebar({
                   key={a.value}
                   label={a.label}
                   checked={filtros.asignacion.has(a.value)}
-                  onChange={() => onChange({ asignacion: alternar(filtros.asignacion, a.value) })}
+                  onChange={() => {
+                    const asignacion = alternar(filtros.asignacion, a.value)
+                    // Si la selección queda en "sin asignación" sola, Compañero
+                    // deja de aplicar: se limpia para que no siga filtrando
+                    // desde un control que el operador ya no puede ver ni tocar.
+                    const quedaSinAsignacion = asignacion.has('sin') && !asignacion.has('con')
+                    onChange(
+                      quedaSinAsignacion
+                        ? { asignacion, companero: new Set<string>() }
+                        : { asignacion }
+                    )
+                  }}
                 />
               ))}
               <Hint>Con asignación = asignación activa vigente con vehículo.</Hint>
@@ -284,8 +306,8 @@ export function FiltrosSidebar({
 
             <Acordeon
               titulo="Compañero"
-              resumen={resumen(filtros.companero)}
-              destacado
+              resumen={companeroAplica ? resumen(filtros.companero) : 'No aplica'}
+              destacado={companeroAplica}
               defaultAbierto
             >
               {COMPANERO_OPCIONES.map((c) => (
@@ -295,12 +317,14 @@ export function FiltrosSidebar({
                     c.value === 'sin' ? `${c.label} (${conteoSinCompanero})` : c.label
                   }
                   checked={filtros.companero.has(c.value)}
+                  deshabilitado={!companeroAplica}
                   onChange={() => onChange({ companero: alternar(filtros.companero, c.value) })}
                 />
               ))}
               <Hint>
-                Sin compañero = tiene asignación activa por turno y el turno
-                complementario de ese vehículo está vacío.
+                {companeroAplica
+                  ? 'Sin compañero = tiene asignación activa por turno y el turno complementario de ese vehículo está vacío.'
+                  : 'No aplica con “Sin asignación”: el compañero sale de la asignación activa, así que un conductor sin asignación no tiene compañero ni le falta.'}
               </Hint>
             </Acordeon>
 
