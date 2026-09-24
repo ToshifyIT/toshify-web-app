@@ -1011,6 +1011,138 @@
   line-height: 1.3;
 }
 
+/* -----------------------------------------------------
+   Columnas fijas de la tabla de Garantias: Conductor, Estado Cond. y Dias Baja.
+
+   Se hace por CSS y no con la prop stickyLeftColumns del DataTable: esa prop
+   depende de que un efecto mida los anchos y recien ahi agregue las clases
+   .dt-sticky-col-left, y en esta tabla esas clases no terminan aplicandose. La
+   columna Acciones si queda fija porque su regla usa !important; las de la
+   izquierda no lo usan y algo del CSS base las pisa.
+
+   Va con !important y anchos fijos para no depender de ninguna medicion, y
+   scoped al wrapper .garantias-tabla-sticky para no afectar a ninguna otra
+   tabla del sistema. DataTable.tsx y DataTable.css quedan sin tocar.
+   ----------------------------------------------------- */
+
+.garantias-tabla-sticky .dt-table th:nth-child(1),
+.garantias-tabla-sticky .dt-table td:nth-child(1),
+.garantias-tabla-sticky .dt-table th:nth-child(2),
+.garantias-tabla-sticky .dt-table td:nth-child(2),
+.garantias-tabla-sticky .dt-table th:nth-child(3),
+.garantias-tabla-sticky .dt-table td:nth-child(3) {
+  position: sticky !important;
+  background-color: var(--card-bg) !important;
+}
+
+/* Anchos fijos: son los que determinan el desplazamiento de cada columna. */
+.garantias-tabla-sticky .dt-table th:nth-child(1),
+.garantias-tabla-sticky .dt-table td:nth-child(1) {
+  left: 0 !important;
+  width: 240px !important;
+  min-width: 240px !important;
+  max-width: 240px !important;
+  z-index: 3;
+}
+
+.garantias-tabla-sticky .dt-table th:nth-child(2),
+.garantias-tabla-sticky .dt-table td:nth-child(2) {
+  left: 240px !important;
+  width: 120px !important;
+  min-width: 120px !important;
+  max-width: 120px !important;
+  z-index: 3;
+}
+
+.garantias-tabla-sticky .dt-table th:nth-child(3),
+.garantias-tabla-sticky .dt-table td:nth-child(3) {
+  left: 360px !important;
+  width: 100px !important;
+  min-width: 100px !important;
+  max-width: 100px !important;
+  z-index: 3;
+  /* Sombra que marca el corte con la parte que scrollea. */
+  box-shadow: 4px 0 6px -2px rgba(0, 0, 0, 0.12);
+}
+
+/* Header: sticky arriba y a la izquierda a la vez. Por encima del cuerpo. */
+.garantias-tabla-sticky .dt-table thead th:nth-child(1),
+.garantias-tabla-sticky .dt-table thead th:nth-child(2),
+.garantias-tabla-sticky .dt-table thead th:nth-child(3) {
+  top: 0 !important;
+  z-index: 7 !important;
+  background-color: var(--table-header-bg) !important;
+}
+
+/* Sin esto la fila de abajo se transparenta a traves de las celdas fijas. */
+.garantias-tabla-sticky .dt-table tbody tr:hover > td:nth-child(1),
+.garantias-tabla-sticky .dt-table tbody tr:hover > td:nth-child(2),
+.garantias-tabla-sticky .dt-table tbody tr:hover > td:nth-child(3) {
+  background:
+    linear-gradient(var(--table-row-hover), var(--table-row-hover)),
+    var(--card-bg) !important;
+}
+
+/* Signo de ayuda dentro de la etiqueta de una tarjeta de metrica. */
+.fact-stats-grid-garantias .fact-stat-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.fact-stats-grid-garantias .fact-stat-help {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  color: var(--text-tertiary);
+  cursor: help;
+}
+
+.fact-stats-grid-garantias .fact-stat-help[data-tooltip]::after {
+  content: attr(data-tooltip);
+  position: absolute;
+  bottom: calc(100% + 8px);
+  left: 50%;
+  transform: translateX(-50%);
+  width: max-content;
+  max-width: 240px;
+  padding: 8px 10px;
+  background: #1f2937;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1.4;
+  text-align: left;
+  white-space: normal;
+  border-radius: 6px;
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.18);
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.15s ease;
+  z-index: 9999;
+  pointer-events: none;
+}
+
+.fact-stats-grid-garantias .fact-stat-help[data-tooltip]::before {
+  content: '';
+  position: absolute;
+  bottom: calc(100% + 3px);
+  left: 50%;
+  transform: translateX(-50%);
+  border: 5px solid transparent;
+  border-top-color: #1f2937;
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.15s ease;
+  z-index: 9999;
+}
+
+.fact-stats-grid-garantias .fact-stat-help:hover::after,
+.fact-stats-grid-garantias .fact-stat-help:hover::before {
+  opacity: 1;
+  visibility: visible;
+}
+
 /* =====================================================
    PROGRESS BAR
    ===================================================== */

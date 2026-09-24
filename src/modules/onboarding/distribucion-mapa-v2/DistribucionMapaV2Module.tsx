@@ -27,7 +27,15 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useJsApiLoader } from '@react-google-maps/api'
 import Swal from 'sweetalert2'
-import { ChevronLeft, ChevronRight, Loader2, Map as MapIcon, ShieldAlert, Sparkles } from 'lucide-react'
+import {
+  ChevronLeft,
+  ChevronRight,
+  Loader2,
+  Map as MapIcon,
+  MapPin,
+  ShieldAlert,
+  Sparkles,
+} from 'lucide-react'
 import { useSede } from '../../../contexts/SedeContext'
 import { supabase } from '../../../lib/supabase'
 import type { Lead } from '../../../types/leads.types'
@@ -72,8 +80,16 @@ import type {
 import { FiltrosSidebar } from './components/FiltrosSidebar'
 import { contarFiltrosActivos, creadoEnRango, filtrosIniciales, type FiltrosV2 } from './components/filtrosOpciones'
 import { SIN_UBICACION } from './ubicacion'
+import { API_GEOCODING, API_MAPA } from './apisGoogle'
+import {
+  claveCelda,
+  leerCeldas,
+  resolverCeldas,
+  type UbicacionCelda,
+} from './celdasGeograficasService'
 import { MapaCanvas } from './components/MapaCanvas'
 import { colorEntidad } from './components/colores'
+import { MenuFiltro } from './components/MenuFiltro'
 import { SugerenciasDrawer } from './components/SugerenciasDrawer'
 import { IconoEntidad } from './components/iconos'
 import { Chip } from './components/ui'
@@ -134,8 +150,24 @@ export function DistribucionMapaV2Module() {
   })
   const [mapTimeout, setMapTimeout] = useState(false)
 
-  const [conductores, setConductores] = useState<EntidadMapa[]>([])
-  const [leads, setLeads] = useState<EntidadMapa[]>([])
+  const [conductoresCrudos, setConductores] = useState<EntidadMapa[]>([])
+  const [leadsCrudos, setLeads] = useState<EntidadMapa[]>([])
+
+  /**
+   * País / provincia / ciudad por celda de ~1,1 km, resueltas con reverse
+   * geocoding y cacheadas en Supabase.
+   *
+   * Por qué no sale del texto de la dirección: en los leads ese campo es lo que
+   * escribió la persona ("Napoles 3833 san miguel bs as"), sin estructura ni
+   * ortografía confiable. Las coordenadas sí son buenas, así que el nombre se
+   * deduce de ahí. El parser de texto queda sólo como respaldo.
+   */
+  const [ubicacionPorCelda, setUbicacionPorCelda] = useState<Map<string, UbicacionCelda>>(
+    new Map()
+  )
+  const [resolviendoCeldas, setResolviendoCeldas] = useState<{ hechas: number; total: number } | null>(
+    null
+  )
   const [zonasPeligrosas, setZonasPeligrosas] = useState<ZonaPeligrosa[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -274,6 +306,90 @@ export function DistribucionMapaV2Module() {
 
   // ---------- Filtrado ----------
 
+  /**
+   * Aplica la ubicación de la celda sobre cada persona. Lo que salió del texto
+   * de la dirección queda de respaldo para los casos que la celda no resolvió.
+   */
+  const enriquecer = useCallback(
+    (lista: EntidadMapa[]) => {
+      if (ubicacionPorCelda.size === 0) return lista
+      return lista.map((e) => {
+        if (!coordsValidas(e.lat, e.lng)) return e
+        const u = ubicacionPorCelda.get(claveCelda(e.lat, e.lng))
+        if (!u) return e
+        return { ...e, pais: u.pais ?? e.pais, ciudad: u.ciudad ?? e.ciudad }
+      })
+    },
+    [ubicacionPorCelda]
+  )
+
+  const conductores = useMemo(
+    () => enriquecer(conductoresCrudos),
+    [conductoresCrudos, enriquecer]
+  )
+  const leads = useMemo(() => enriquecer(leadsCrudos), [leadsCrudos, enriquecer])
+
+  /** Celdas que hacen falta para la gente cargada. */
+  const celdasNecesarias = useMemo(() => {
+    const claves = new Set<string>()
+    for (const e of [...conductoresCrudos, ...leadsCrudos]) {
+      if (coordsValidas(e.lat, e.lng)) claves.add(claveCelda(e.lat, e.lng))
+    }
+    return [...claves]
+  }, [conductoresCrudos, leadsCrudos])
+
+  /** De ésas, las que todavía no están resueltas: lo que costaría completar. */
+  const celdasPendientes = useMemo(
+    () => celdasNecesarias.filter((c) => !ubicacionPorCelda.has(c)),
+    [celdasNecesarias, ubicacionPorCelda]
+  )
+
+  // Lectura del caché: es sólo una consulta a Supabase, no cuesta nada y no
+  // llama a Google. Por eso sí corre sola al cargar.
+  useEffect(() => {
+    if (celdasNecesarias.length === 0) return
+    let cancelado = false
+    void (async () => {
+      const cacheadas = await leerCeldas(celdasNecesarias)
+      if (cancelado || cacheadas.size === 0) return
+      setUbicacionPorCelda((prev) => {
+        const next = new Map(prev)
+        for (const [k, v] of cacheadas) next.set(k, v)
+        return next
+      })
+    })()
+    return () => {
+      cancelado = true
+    }
+    // Sólo cuando cambia el universo cargado. `ubicacionPorCelda` NO va en las
+    // deps: se escribe dentro del efecto y volvería a consultar en bucle.
+  }, [celdasNecesarias])
+
+  /**
+   * Completar las que faltan contra Google. Explícito, nunca automático: cada
+   * celda es una llamada a Geocoding y el operador tiene que verlo venir.
+   */
+  const completarUbicaciones = useCallback(async () => {
+    if (celdasPendientes.length === 0 || resolviendoCeldas) return
+    setResolviendoCeldas({ hechas: 0, total: celdasPendientes.length })
+    try {
+      const nuevas = await resolverCeldas(celdasPendientes, (hechas, total) =>
+        setResolviendoCeldas({ hechas, total })
+      )
+      setUbicacionPorCelda((prev) => {
+        const next = new Map(prev)
+        for (const [k, v] of nuevas) next.set(k, v)
+        return next
+      })
+      setToast(`Ubicaciones completadas: ${nuevas.size} zonas resueltas.`)
+    } catch (err) {
+      console.error('[DistribucionMapaV2] Error resolviendo celdas:', err)
+      setToast('No se pudieron completar las ubicaciones')
+    } finally {
+      setResolviendoCeldas(null)
+    }
+  }, [celdasPendientes, resolviendoCeldas])
+
   const conUbicacion = useMemo(
     () => ({
       conds: conductores.filter((c) => coordsValidas(c.lat, c.lng)),
@@ -309,7 +425,7 @@ export function DistribucionMapaV2Module() {
     return true
   }, [])
 
-  const pasaFiltrosConductor = useCallback(
+  const pasaFiltrosConductorSinUbicacion = useCallback(
     (c: EntidadMapa) => {
       if (c.esBaja && !filtros.verBaja) return false
       if (
@@ -334,14 +450,13 @@ export function DistribucionMapaV2Module() {
         if (!filtros.companero.has(clave)) return false
       }
       if (!matchRequisitos(c, filtros.requisitosConductor)) return false
-      if (!matchUbicacion(c)) return false
       if (!matchZona(c)) return false
       return coincideBusqueda(c, filtros.busqueda)
     },
-    [filtros, matchZona, matchUbicacion, matchRequisitos]
+    [filtros, matchZona, matchRequisitos]
   )
 
-  const pasaFiltrosLead = useCallback(
+  const pasaFiltrosLeadSinUbicacion = useCallback(
     (l: EntidadMapa) => {
       if (
         filtros.estadosLead.size > 0 &&
@@ -357,11 +472,25 @@ export function DistribucionMapaV2Module() {
       }
       if (!matchRequisitos(l, filtros.requisitosLead)) return false
       if (!creadoEnRango(l.creadoEn, filtros.creadoDesde, filtros.creadoHasta)) return false
-      if (!matchUbicacion(l)) return false
       if (!matchZona(l)) return false
       return coincideBusqueda(l, filtros.busqueda)
     },
-    [filtros, matchZona, matchUbicacion, matchRequisitos]
+    [filtros, matchZona, matchRequisitos]
+  )
+
+  /**
+   * Predicados completos = base + ubicación. Se separan porque los contadores
+   * de País y Ciudad necesitan contar SIN aplicar el filtro de ubicación que
+   * están mostrando: si no, al tildar una ciudad todas las demás quedarían
+   * en cero y el desplegable dejaría de servir para comparar.
+   */
+  const pasaFiltrosConductor = useCallback(
+    (c: EntidadMapa) => pasaFiltrosConductorSinUbicacion(c) && matchUbicacion(c),
+    [pasaFiltrosConductorSinUbicacion, matchUbicacion]
+  )
+  const pasaFiltrosLead = useCallback(
+    (l: EntidadMapa) => pasaFiltrosLeadSinUbicacion(l) && matchUbicacion(l),
+    [pasaFiltrosLeadSinUbicacion, matchUbicacion]
   )
 
   /** Lo que se pinta en el mapa: respeta el segmento activo. */
@@ -402,21 +531,31 @@ export function DistribucionMapaV2Module() {
   }, [leads])
 
   /**
-   * Países y ciudades que REALMENTE aparecen en los datos cargados, con su
-   * cantidad. No hay catálogo fijo: si mañana entra gente de otro país, la
-   * opción aparece sola.
-   *
-   * Las ciudades se acotan a los países tildados, para que la lista no mezcle
-   * ciudades de lugares que el operador ya descartó.
+   * Países y ciudades que REALMENTE aparecen entre lo que se está viendo, con
+   * su cantidad. No hay catálogo fijo: si mañana entra gente de otro país, la
+   * opción aparece sola y si deja de haberla, desaparece.
    */
   const ubicacionesDisponibles = useMemo(() => {
-    const universo = [...conductores, ...leads]
+    // El universo es EXACTAMENTE el mismo que alimenta al mapa: sólo gente con
+    // coordenadas, del segmento elegido (Conductores / Leads / Ambos) y que ya
+    // pasó el resto de los filtros. Así el número del desplegable es una
+    // previsualización fiel de lo que se va a ver al tildarlo, y no un total
+    // suelto que no coincide con nada.
+    const universo: EntidadMapa[] = []
+    if (filtros.segmento !== 'leads') {
+      for (const c of conUbicacion.conds) if (pasaFiltrosConductorSinUbicacion(c)) universo.push(c)
+    }
+    if (filtros.segmento !== 'conductores') {
+      for (const l of conUbicacion.lds) if (pasaFiltrosLeadSinUbicacion(l)) universo.push(l)
+    }
+
     const porPais = new Map<string, number>()
     const porCiudad = new Map<string, number>()
 
     for (const e of universo) {
       const pais = e.pais || SIN_UBICACION
       porPais.set(pais, (porPais.get(pais) || 0) + 1)
+      // Ciudad cuelga de País: se cuentan sólo las de los países tildados.
       if (filtros.paises.size > 0 && !filtros.paises.has(pais)) continue
       const ciudad = e.ciudad || SIN_UBICACION
       porCiudad.set(ciudad, (porCiudad.get(ciudad) || 0) + 1)
@@ -435,7 +574,13 @@ export function DistribucionMapaV2Module() {
         .map(([valor, cantidad]) => ({ valor, cantidad }))
 
     return { paises: ordenar(porPais), ciudades: ordenar(porCiudad) }
-  }, [conductores, leads, filtros.paises])
+  }, [
+    conUbicacion,
+    filtros.segmento,
+    filtros.paises,
+    pasaFiltrosConductorSinUbicacion,
+    pasaFiltrosLeadSinUbicacion,
+  ])
 
   /**
    * Lo que se dibuja en el mapa y en la lista: lo visible, más la base fijada
@@ -849,6 +994,62 @@ export function DistribucionMapaV2Module() {
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+          {/* Ubicación: vive en la barra y no en el sidebar porque acota TODO
+              lo que se ve —conductores y leads por igual— y es lo primero que
+              el operador toca al abrir el módulo. */}
+          <MenuFiltro
+            titulo="País"
+            opciones={ubicacionesDisponibles.paises}
+            seleccion={filtros.paises}
+            onChange={(paises) =>
+              // Las ciudades cuelgan del país: al cambiarlo se limpian, porque
+              // las tildadas podrían ya no existir en la lista nueva.
+              setFiltros((f) => ({ ...f, paises, ciudades: new Set<string>() }))
+            }
+          />
+          <MenuFiltro
+            titulo="Ciudad"
+            opciones={ubicacionesDisponibles.ciudades}
+            seleccion={filtros.ciudades}
+            onChange={(ciudades) => setFiltros((f) => ({ ...f, ciudades }))}
+            anchoPanel={260}
+          />
+          {/* Sólo aparece si falta resolver alguna zona. Cada una es una
+              llamada a Geocoding, así que el gasto se dispara con un clic
+              consciente y con el número a la vista, nunca solo. */}
+          {API_GEOCODING && (celdasPendientes.length > 0 || resolviendoCeldas) && (
+            <button
+              type="button"
+              onClick={completarUbicaciones}
+              disabled={!!resolviendoCeldas}
+              title="Resuelve país y ciudad de las zonas que faltan y las guarda para siempre. Se hace una sola vez por zona."
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 6,
+                padding: '7px 11px',
+                border: '1px dashed var(--border-primary)',
+                borderRadius: 8,
+                background: 'var(--bg-secondary)',
+                color: 'var(--text-secondary)',
+                fontSize: 12,
+                fontWeight: 700,
+                cursor: resolviendoCeldas ? 'wait' : 'pointer',
+                whiteSpace: 'nowrap',
+              }}
+            >
+              {resolviendoCeldas ? (
+                <>
+                  <Loader2 size={13} style={{ animation: 'spin 1s linear infinite' }} /> Resolviendo{' '}
+                  {resolviendoCeldas.hechas}/{resolviendoCeldas.total}
+                </>
+              ) : (
+                <>
+                  <MapPin size={13} /> Completar ubicaciones ({celdasPendientes.length})
+                </>
+              )}
+            </button>
+          )}
           <Chip
             activo={mostrarZonas}
             onClick={() => setMostrarZonas((v) => !v)}
@@ -902,7 +1103,6 @@ export function DistribucionMapaV2Module() {
               filtros={filtros}
               onChange={aplicarPatch}
               estadosLeadDisponibles={estadosLeadDisponibles}
-              ubicacionesDisponibles={ubicacionesDisponibles}
               conteoConductores={conteos.c}
               conteoLeads={conteos.l}
               conteoSinCompanero={conteos.sinCompanero}
@@ -967,6 +1167,14 @@ export function DistribucionMapaV2Module() {
               <span style={{ display: 'flex', alignItems: 'center', color: 'var(--text-tertiary)' }}>
                 <Loader2 size={20} style={{ animation: 'spin 1s linear infinite', marginRight: 8 }} />
                 {!isLoaded ? 'Cargando mapa...' : 'Cargando datos...'}
+              </span>
+            </CenterMsg>
+          ) : !API_MAPA ? (
+            <CenterMsg>
+              <span style={{ textAlign: 'center', lineHeight: 1.5 }}>
+                Mapa desactivado para no consumir la API de Google.
+                <br />
+                Los filtros, la lista y las fichas siguen disponibles.
               </span>
             </CenterMsg>
           ) : (

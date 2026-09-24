@@ -17,6 +17,7 @@
 
 import { supabase } from '../../../lib/supabase'
 import { derivarUbicacion } from './ubicacion'
+import { API_GEOCODING } from './apisGoogle'
 import {
   GOOGLE_MAPS_API_KEY,
   GOOGLE_MAPS_LIBRARIES,
@@ -660,6 +661,10 @@ interface FilaSinCoords {
  * Devuelve true si actualizó al menos una fila, para que el caller recargue.
  */
 export async function geocodificarFaltantes(filas: FilaSinCoords[]): Promise<boolean> {
+  // Interruptor del módulo: apagado, no se toca Google. Se corta acá y no en
+  // el caller para que ningún camino futuro se saltee el control.
+  if (!API_GEOCODING) return false
+
   const sinCoords = filas
     .filter((f) => f.direccion && f.direccion.trim() && (f.lat == null || f.lng == null))
     .slice(0, MAX_GEOCODIFICAR_POR_CARGA)
