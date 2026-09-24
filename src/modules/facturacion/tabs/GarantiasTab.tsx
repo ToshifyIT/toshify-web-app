@@ -25,6 +25,7 @@ import {
   RotateCcw,
   Download,
   Upload,
+  HelpCircle,
 } from 'lucide-react'
 import { type ColumnDef } from '@tanstack/react-table'
 import { format, startOfWeek, endOfWeek, parseISO } from 'date-fns'
@@ -130,11 +131,15 @@ function netoDevolucion(g: any, saldos: Map<string, number>, override?: number):
 
 // Sub-estado de una garantia en devolucion, para el badge y el filtro de Estado.
 // null si la garantia no esta en devolucion o ya salio por Devuelto / N/A.
-function subEstadoDevolucion(g: any, saldos: Map<string, number>, override?: number): 'debe' | 'debemos' | 'sin_saldo' | null {
+function subEstadoDevolucion(g: any, saldos: Map<string, number>, override?: number): 'debe' | 'debemos' | 'neto_saldado' | 'sin_saldo' | null {
   if (!g || g.estado !== 'en_devolucion') return null
   if (esGarantiaDevuelta(g, override) || garantiaNoAplica(g, override)) return null
   const neto = netoDevolucion(g, saldos, override)
   if (neto === null) return 'sin_saldo'
+  // Neto saldado: la garantia retenida cancela la deuda y no queda nada por
+  // cobrar ni por devolver. Misma tolerancia que el resto del modulo, para
+  // absorber solo el ruido de redondeo.
+  if (Math.abs(neto) < TOLERANCIA_DEVOLUCION) return 'neto_saldado'
   return neto < 0 ? 'debe' : 'debemos'
 }
 
@@ -2069,16 +2074,31 @@ export function GarantiasTab() {
             )
           }
 
+          // El badge muestra el resultado del neteo, con el monto debajo:
+          //   neto < 0  -> "DEBE": el conductor nos debe aun descontando la garantia
+          //   neto >= 0 -> "EN DEVOLUCIÓN": la garantia cubre la deuda y hay que
+          //                devolverle la diferencia
+          const detalle = `Saldo actual ${formatCurrency(saldo)} + garantia retenida ${formatCurrency(garantiaRetenida)} = ${formatCurrency(neto)}`
+
+          // Neto en cero: la garantia cancela exactamente la deuda, no queda
+          // nada por cobrar ni por devolver.
+          if (Math.abs(neto) < TOLERANCIA_DEVOLUCION) {
+            return (
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: '2px' }} title={detalle}>
+                <span className="fact-badge fact-badge-green">DEVUELTO</span>
+              </div>
+            )
+          }
+
           const debeElConductor = neto < 0
 
           return (
-            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: '2px' }}>
-              <span className={`fact-badge ${badgeClass}`}>{label}</span>
-              <span
-                style={{ fontSize: '10px', color: debeElConductor ? '#dc2626' : '#d97706', fontWeight: 600 }}
-                title={`Saldo actual ${formatCurrency(saldo)} + garantia retenida ${formatCurrency(garantiaRetenida)} = ${formatCurrency(neto)}`}
-              >
-                {`${debeElConductor ? 'Debe' : 'Debemos'}: ${formatCurrency(Math.abs(neto))}`}
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: '2px' }} title={detalle}>
+              <span className={`fact-badge ${debeElConductor ? 'fact-badge-red' : 'fact-badge-blue'}`}>
+                {debeElConductor ? 'DEBE' : 'EN DEVOLUCIÓN'}
+              </span>
+              <span style={{ fontSize: '10px', color: debeElConductor ? '#dc2626' : '#2563eb', fontWeight: 600 }}>
+                {formatCurrency(Math.abs(neto))}
               </span>
             </div>
           )
@@ -2511,45 +2531,51 @@ export function GarantiasTab() {
                   <span className="fact-stat-label">Por Recaudar</span>
                 </div>
               </div>
-              {stats.enDevolucion > 0 && (
-                <div {...kpiCard('en_devolucion')} title="Filtrar garantias en devolucion con saldo pendiente">
-                  <RotateCcw size={18} className="fact-stat-icon" />
-                  <div className="fact-stat-content">
-                    <span className="fact-stat-value">{stats.enDevolucion}</span>
-                    <span className="fact-stat-label">En Devolución</span>
-                  </div>
-                </div>
-              )}
               {stats.cantPorDevolver > 0 && (
-                <div
-                  {...kpiCard('mas120')}
-                  title={`Garantias con ${DIAS_BAJA_PARA_DEVOLVER} dias o mas de baja donde le debemos al conductor (estado "Debemos")`}
-                >
-                  <AlertTriangle size={18} className="fact-stat-icon" style={{ color: '#ef4444' }} />
+                <div {...kpiCard('mas120')}>
+                  <RotateCcw size={18} className="fact-stat-icon" style={{ color: '#2563eb' }} />
                   <div className="fact-stat-content">
-                    <span className="fact-stat-value" style={{ color: '#ef4444' }}>{stats.cantPorDevolver}</span>
-                    <span className="fact-stat-amount" style={{ color: '#ef4444' }}>{formatCurrency(stats.montoPorDevolver)}</span>
-                    <span className="fact-stat-label">Por Devolver ({DIAS_BAJA_PARA_DEVOLVER}d o mas)</span>
+                    <span className="fact-stat-value" style={{ color: '#2563eb' }}>{stats.cantPorDevolver}</span>
+                    <span className="fact-stat-amount" style={{ color: '#2563eb' }}>{formatCurrency(stats.montoPorDevolver)}</span>
+                    <span className="fact-stat-label">
+                      En Devolución
+                      <span
+                        className="fact-stat-help"
+                        data-tooltip="Este es el monto que tenemos que devolver a los conductores"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <HelpCircle size={11} />
+                      </span>
+                    </span>
                   </div>
                 </div>
               )}
               {stats.cantPorCobrar > 0 && (
-                <div
-                  {...kpiCard('por_cobrar')}
-                  title={'Garantias donde el conductor nos sigue debiendo (estado "Debe")'}
-                >
-                  <AlertTriangle size={18} className="fact-stat-icon" style={{ color: '#d97706' }} />
+                <div {...kpiCard('por_cobrar')}>
+                  <AlertTriangle size={18} className="fact-stat-icon" style={{ color: '#dc2626' }} />
                   <div className="fact-stat-content">
-                    <span className="fact-stat-value" style={{ color: '#d97706' }}>{stats.cantPorCobrar}</span>
-                    <span className="fact-stat-amount" style={{ color: '#d97706' }}>{formatCurrency(stats.montoPorCobrar)}</span>
-                    <span className="fact-stat-label">Por Cobrar</span>
+                    <span className="fact-stat-value" style={{ color: '#dc2626' }}>{stats.cantPorCobrar}</span>
+                    <span className="fact-stat-amount" style={{ color: '#dc2626' }}>{formatCurrency(stats.montoPorCobrar)}</span>
+                    <span className="fact-stat-label">
+                      Debe
+                      <span
+                        className="fact-stat-help"
+                        data-tooltip="Este es el monto que nos deben los conductores"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <HelpCircle size={11} />
+                      </span>
+                    </span>
                   </div>
                 </div>
               )}
             </div>
           </div>
 
-          {/* Tabla Garantías */}
+          {/* Tabla Garantías.
+              El wrapper aplica el sticky de las 3 primeras columnas por CSS
+              (ver .garantias-tabla-sticky en FacturacionModule.css). */}
+          <div className="garantias-tabla-sticky">
           <DataTable
             data={garantiasFiltradas}
             columns={columnsGarantias}
@@ -2565,8 +2591,8 @@ export function GarantiasTab() {
             emptyDescription="No hay garantías registradas"
             pageSize={100}
             pageSizeOptions={[10, 20, 50, 100]}
-            stickyLeftColumns={3}
           />
+          </div>
         </>
       )}
 
