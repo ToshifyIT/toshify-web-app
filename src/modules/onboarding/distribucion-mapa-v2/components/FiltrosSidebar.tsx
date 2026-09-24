@@ -33,11 +33,6 @@ interface Props {
   onChange: (patch: Partial<FiltrosV2>) => void
   /** Estados de lead disponibles (derivados de los datos cargados). */
   estadosLeadDisponibles: string[]
-  /** Países y ciudades presentes en los datos, con su cantidad. */
-  ubicacionesDisponibles: {
-    paises: Array<{ valor: string; cantidad: number }>
-    ciudades: Array<{ valor: string; cantidad: number }>
-  }
   conteoConductores: number
   conteoLeads: number
   conteoSinCompanero: number
@@ -99,7 +94,6 @@ export function FiltrosSidebar({
   filtros,
   onChange,
   estadosLeadDisponibles,
-  ubicacionesDisponibles,
   conteoConductores,
   conteoLeads,
   conteoSinCompanero,
@@ -457,54 +451,6 @@ export function FiltrosSidebar({
             </Acordeon>
           </div>
         )}
-
-        {/* ---------- UBICACIÓN (global) ---------- */}
-        <div
-          style={{
-            borderTop: '2px solid var(--border-primary)',
-            paddingTop: 11,
-            marginTop: 2,
-          }}
-        >
-          <GrupoTitulo>Ubicación · aplica a conductores y leads</GrupoTitulo>
-
-          <Acordeon titulo="País" resumen={resumen(filtros.paises)}>
-            {ubicacionesDisponibles.paises.map(({ valor, cantidad }) => (
-              <CheckRow
-                key={valor}
-                label={`${valor} (${cantidad})`}
-                checked={filtros.paises.has(valor)}
-                onChange={() => {
-                  const paises = alternar(filtros.paises, valor)
-                  // Las ciudades cuelgan del país: si cambia la selección de
-                  // países, las ciudades tildadas pueden dejar de existir en la
-                  // lista. Se limpian para no filtrar por algo invisible.
-                  onChange({ paises, ciudades: new Set<string>() })
-                }}
-              />
-            ))}
-            {ubicacionesDisponibles.paises.length === 0 && (
-              <Hint>No hay datos de país cargados.</Hint>
-            )}
-          </Acordeon>
-
-          <Acordeon titulo="Ciudad" resumen={resumen(filtros.ciudades)}>
-            <div style={{ maxHeight: 220, overflowY: 'auto' }}>
-              {ubicacionesDisponibles.ciudades.map(({ valor, cantidad }) => (
-                <CheckRow
-                  key={valor}
-                  label={`${valor} (${cantidad})`}
-                  checked={filtros.ciudades.has(valor)}
-                  onChange={() => onChange({ ciudades: alternar(filtros.ciudades, valor) })}
-                />
-              ))}
-            </div>
-            <Hint>
-              Se deduce de la dirección. “Sin dato” son las direcciones de las que no se
-              pudo determinar la ciudad.
-            </Hint>
-          </Acordeon>
-        </div>
 
         {/* ---------- ZONA OPERATIVA (global) ---------- */}
         {/* Se oculta si el operador acotó a países que no son Argentina: estas
