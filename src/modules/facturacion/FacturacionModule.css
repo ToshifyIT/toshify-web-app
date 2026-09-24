@@ -984,6 +984,33 @@
   white-space: nowrap;
 }
 
+/* -----------------------------------------------------
+   Fila de metricas de Garantias.
+   Tiene mas tarjetas y montos mas largos que el resto de los tabs, asi que
+   necesita su propio ancho minimo. Va scoped a proposito: las clases base
+   .fact-stats-grid / .fact-stat-* las comparten Reporte, Saldos y Cobros
+   Fraccionados, y tocarlas les moveria el layout.
+   ----------------------------------------------------- */
+
+.fact-stats-grid.fact-stats-grid-garantias {
+  /* 190px entra "$ 202,575,000.59" (~120px) + icono + gaps + padding. */
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+}
+
+/* Sin esto el monto se parte y el simbolo $ cae a la linea de abajo, donde se
+   lee como un segundo icono de la tarjeta. */
+.fact-stats-grid-garantias .fact-stat-value,
+.fact-stats-grid-garantias .fact-stat-amount {
+  white-space: nowrap;
+}
+
+/* Segunda linea de las tarjetas que combinan cantidad + monto. */
+.fact-stats-grid-garantias .fact-stat-amount {
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.3;
+}
+
 /* =====================================================
    PROGRESS BAR
    ===================================================== */

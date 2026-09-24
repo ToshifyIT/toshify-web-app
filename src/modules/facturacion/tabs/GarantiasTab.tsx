@@ -85,7 +85,7 @@ function montoPagadoGarantia(g: any, override?: number): number {
   return (g?.monto_realmente_pagado || g?.monto_pagado || 0)
 }
 
-type FiltroKpi = 'en_curso' | 'devuelto' | 'en_devolucion' | 'con_pagos' | 'por_recaudar' | 'mas120' | null
+type FiltroKpi = 'en_curso' | 'devuelto' | 'en_devolucion' | 'con_pagos' | 'por_recaudar' | 'mas120' | 'por_cobrar' | null
 
 // Etiqueta del chip "Filtros activos" para cada tarjeta de KPI.
 const LABELS_FILTRO_KPI: Record<string, string> = {
@@ -94,7 +94,8 @@ const LABELS_FILTRO_KPI: Record<string, string> = {
   en_devolucion: 'En Devolución (pendientes)',
   con_pagos: 'Con pagos (recaudado)',
   por_recaudar: 'Activos con asignación',
-  mas120: 'Baja de 120 días o más'
+  mas120: 'Baja de 120 días o más',
+  por_cobrar: 'Por Cobrar (Debe)'
 }
 
 // Diferencia maxima que se considera "ya devuelto": solo absorbe el ruido de
@@ -156,6 +157,20 @@ const DIAS_BAJA_PARA_DEVOLVER = 120
 // (Desde 120 => >= 120), para que el KPI y la tabla den siempre el mismo numero.
 function garantiaPorDevolver(g: any): boolean {
   return calcularDiasBaja(g) >= DIAS_BAJA_PARA_DEVOLVER
+}
+
+// Garantia que cuenta para el KPI "Por Devolver": ademas de los 120 dias de
+// baja, tiene que ser una donde NOSOTROS le debemos al conductor (sub-estado
+// "Debemos"). Eso deja afuera N/A, Devueltas, y las que siguen en deuda ("Debe"),
+// que no son plata a devolver.
+function garantiaPorDevolverDebemos(g: any, saldos: Map<string, number>): boolean {
+  return garantiaPorDevolver(g) && subEstadoDevolucion(g, saldos) === 'debemos'
+}
+
+// Garantia que cuenta para el KPI "Por Cobrar": el conductor, aun descontando la
+// garantia que le retenemos, nos sigue debiendo (sub-estado "Debe").
+function garantiaPorCobrar(g: any, saldos: Map<string, number>): boolean {
+  return subEstadoDevolucion(g, saldos) === 'debe'
 }
 
 // Conductor de baja que nunca pago nada: la garantia NO APLICA (se muestra N/A).
@@ -1992,8 +2007,7 @@ export function GarantiasTab() {
                   { value: 'completada', label: 'Completada' },
                   { value: 'en_curso', label: 'En Curso' },
                   { value: 'en_devolucion', label: 'En Devolución' },
-                  { value: 'debe', label: 'En Devolución · Debe' },
-                  { value: 'debemos', label: 'En Devolución · Debemos' },
+                  { value: 'debe', label: 'Debe' },
                   { value: 'devuelto', label: 'Devuelto' },
                   { value: 'pendiente', label: 'Pendiente' },
                   { value: 'no_aplica', label: 'N/A (no aplica)' }
@@ -2223,8 +2237,7 @@ export function GarantiasTab() {
         completada: 'Completada',
         en_curso: 'En Curso',
         en_devolucion: 'En Devolución',
-        debe: 'En Devolución · Debe',
-        debemos: 'En Devolución · Debemos',
+        debe: 'Debe',
         devuelto: 'Devuelto',
         pendiente: 'Pendiente',
         no_aplica: 'N/A (no aplica)'
@@ -2295,7 +2308,8 @@ export function GarantiasTab() {
         if (filtroKpi === 'en_devolucion' && !(g.estado === 'en_devolucion' && !devuelta)) return false
         if (filtroKpi === 'con_pagos' && (devuelta || montoPagadoGarantia(g) <= 0)) return false
         if (filtroKpi === 'por_recaudar' && !(estadoCond !== 'BAJA' && conductoresAsignados.has(g.conductor_id))) return false
-        if (filtroKpi === 'mas120' && !garantiaPorDevolver(g)) return false
+        if (filtroKpi === 'mas120' && !garantiaPorDevolverDebemos(g, saldosPorConductor)) return false
+        if (filtroKpi === 'por_cobrar' && !garantiaPorCobrar(g, saldosPorConductor)) return false
       }
       return true
     })
@@ -2322,16 +2336,20 @@ export function GarantiasTab() {
     const totalPorRecaudar = garantias
       .filter(g => ((g as any).estado_conductor || 'ACTIVO') !== 'BAJA' && conductoresAsignados.has(g.conductor_id))
       .reduce((sum, g) => sum + (g.monto_total - montoPagadoGarantia(g)), 0)
-    // Vencidas: 120 dias o mas de baja (mismo criterio que el filtro de la tabla).
-    const porDevolver = garantias.filter(g => garantiaPorDevolver(g))
+    // Por Devolver: 120 dias o mas de baja Y con sub-estado "Debemos". El monto
+    // es la suma de esos netos, o sea la plata que efectivamente hay que devolver.
+    const porDevolver = garantias.filter(g => garantiaPorDevolverDebemos(g, saldosPorConductor))
     const cantPorDevolver = porDevolver.length
-    // Suma de la columna Pagado para ese mismo grupo (120 dias o mas de baja).
-    const pagadoPorDevolver = porDevolver.reduce((sum, g) => sum + (esGarantiaDevuelta(g) ? 0 : montoPagadoGarantia(g)), 0)
     const montoPorDevolver = porDevolver
-      .filter(g => !garantiaNoAplica(g) && !esGarantiaDevuelta(g))
-      .reduce((sum, g) => sum + (montoPagadoGarantia(g) - ((g as any).monto_devuelto || 0)), 0)
-    return { total, enCurso, devueltas, enDevolucion, cantPorDevolver, montoPorDevolver, pagadoPorDevolver, totalRecaudado, totalPorRecaudar }
-  }, [garantias, conductoresAsignados])
+      .reduce((sum, g) => sum + (netoDevolucion(g, saldosPorConductor) ?? 0), 0)
+    // Por Cobrar: garantias en devolucion donde el neto sigue en contra del
+    // conductor. El monto es la suma de esos netos, en positivo.
+    const porCobrar = garantias.filter(g => garantiaPorCobrar(g, saldosPorConductor))
+    const cantPorCobrar = porCobrar.length
+    const montoPorCobrar = porCobrar
+      .reduce((sum, g) => sum + Math.abs(netoDevolucion(g, saldosPorConductor) ?? 0), 0)
+    return { total, enCurso, devueltas, enDevolucion, cantPorDevolver, montoPorDevolver, cantPorCobrar, montoPorCobrar, totalRecaudado, totalPorRecaudar }
+  }, [garantias, conductoresAsignados, saldosPorConductor])
 
   // Props comunes de una tarjeta de KPI: al hacer click aplica (o quita) el
   // filtro que corresponde a ese numero.
@@ -2457,7 +2475,7 @@ export function GarantiasTab() {
 
           {/* Stats */}
           <div className="fact-stats">
-            <div className="fact-stats-grid">
+            <div className="fact-stats-grid fact-stats-grid-garantias">
               <div className="fact-stat-card" style={{ cursor: 'pointer' }} onClick={limpiarFiltrosGarantias} title="Ver todas las garantias (limpia los filtros)">
                 <Users size={18} className="fact-stat-icon" />
                 <div className="fact-stat-content">
@@ -2505,24 +2523,26 @@ export function GarantiasTab() {
               {stats.cantPorDevolver > 0 && (
                 <div
                   {...kpiCard('mas120')}
-                  title={`Filtrar conductores con ${DIAS_BAJA_PARA_DEVOLVER} dias o mas de baja. Saldo pendiente de devolucion: ${formatCurrency(stats.montoPorDevolver)}`}
+                  title={`Garantias con ${DIAS_BAJA_PARA_DEVOLVER} dias o mas de baja donde le debemos al conductor (estado "Debemos")`}
                 >
                   <AlertTriangle size={18} className="fact-stat-icon" style={{ color: '#ef4444' }} />
                   <div className="fact-stat-content">
                     <span className="fact-stat-value" style={{ color: '#ef4444' }}>{stats.cantPorDevolver}</span>
+                    <span className="fact-stat-amount" style={{ color: '#ef4444' }}>{formatCurrency(stats.montoPorDevolver)}</span>
                     <span className="fact-stat-label">Por Devolver ({DIAS_BAJA_PARA_DEVOLVER}d o mas)</span>
                   </div>
                 </div>
               )}
-              {stats.cantPorDevolver > 0 && (
+              {stats.cantPorCobrar > 0 && (
                 <div
-                  {...kpiCard('mas120')}
-                  title={`Monto a devolver de los ${stats.cantPorDevolver} conductores con ${DIAS_BAJA_PARA_DEVOLVER} dias o mas de baja`}
+                  {...kpiCard('por_cobrar')}
+                  title={'Garantias donde el conductor nos sigue debiendo (estado "Debe")'}
                 >
-                  <DollarSign size={18} className="fact-stat-icon" style={{ color: '#ef4444' }} />
+                  <AlertTriangle size={18} className="fact-stat-icon" style={{ color: '#d97706' }} />
                   <div className="fact-stat-content">
-                    <span className="fact-stat-value" style={{ color: '#ef4444' }}>{formatCurrency(stats.pagadoPorDevolver)}</span>
-                    <span className="fact-stat-label">Por Devolver ($)</span>
+                    <span className="fact-stat-value" style={{ color: '#d97706' }}>{stats.cantPorCobrar}</span>
+                    <span className="fact-stat-amount" style={{ color: '#d97706' }}>{formatCurrency(stats.montoPorCobrar)}</span>
+                    <span className="fact-stat-label">Por Cobrar</span>
                   </div>
                 </div>
               )}
@@ -2545,6 +2565,7 @@ export function GarantiasTab() {
             emptyDescription="No hay garantías registradas"
             pageSize={100}
             pageSizeOptions={[10, 20, 50, 100]}
+            stickyLeftColumns={3}
           />
         </>
       )}
