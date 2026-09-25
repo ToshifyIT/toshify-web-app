@@ -12,9 +12,20 @@ export type SegmentoV2 = 'conductores' | 'leads' | 'ambos'
 /** Requisitos duros que puede exigir el operador. Aplican a ambos segmentos. */
 export const REQUISITOS = [
   { value: 'licencia_vigente', label: 'Licencia vigente' },
-  { value: 'sin_antecedentes', label: 'Sin antecedentes penales' },
   { value: 'fuera_zona_peligrosa', label: 'Fuera de zona restringida' },
 ] as const
+
+/**
+ * Antecedentes penales. Salió de "Requisitos" y pasó a ser su propio filtro
+ * porque el dato tiene TRES estados, no dos: sí, no, y sin cargar. Con un solo
+ * checkbox ("Sin antecedentes") no se podía pedir lo contrario, ni distinguir
+ * a quien no tiene antecedentes de quien todavía no fue verificado.
+ */
+export const ANTECEDENTES_OPCIONES = [
+  { value: 'no', label: 'No tiene antecedentes' },
+  { value: 'si', label: 'Sí tiene antecedentes' },
+  { value: 'sin_dato', label: 'Sin dato' },
+]
 
 export const TURNOS: Array<{ value: TurnoEfectivo; label: string }> = [
   { value: 'DIURNO', label: LABEL_TURNO.DIURNO },
@@ -65,6 +76,8 @@ export interface FiltrosV2 {
    */
   paises: Set<string>
   ciudades: Set<string>
+  /** Antecedentes penales: 'no' | 'si' | 'sin_dato'. Vacío = no filtra. */
+  antecedentes: Set<string>
   /**
    * Zona OPERATIVA (CABA/Norte/Sur/Oeste/GBA). No es geografía: es cómo se
    * reparte el trabajo internamente, y además es regla dura del emparejamiento
@@ -92,6 +105,7 @@ export function filtrosIniciales(): FiltrosV2 {
     creadoHasta: '',
     paises: new Set(),
     ciudades: new Set(),
+    antecedentes: new Set(),
     // A diferencia del v1 (que arrancaba fijado en CABA), acá zona arranca vacío
     // = todas, porque el default de leads ya acota el volumen.
     zonas: new Set(),
@@ -127,6 +141,7 @@ export function contarFiltrosActivos(f: FiltrosV2): number {
   if (f.creadoDesde !== '' || f.creadoHasta !== '') n++
   if (f.paises.size > 0) n++
   if (f.ciudades.size > 0) n++
+  if (f.antecedentes.size > 0) n++
   if (f.zonas.size > 0) n++
   return n
 }

@@ -420,10 +420,27 @@ export function DistribucionMapaV2Module() {
   const matchRequisitos = useCallback((e: EntidadMapa, reqs: Set<string>) => {
     if (reqs.size === 0) return true
     if (reqs.has('licencia_vigente') && e.datos.licenciaEstado !== 'vigente') return false
-    if (reqs.has('sin_antecedentes') && e.datos.antecedentesPenales === true) return false
     if (reqs.has('fuera_zona_peligrosa') && e.datos.zonaPeligrosa) return false
     return true
   }, [])
+
+  /**
+   * Antecedentes penales. SÓLO aplica a leads: en conductores el dato se
+   * verifica antes de darlos de alta, así que filtrar por ahí no aporta nada.
+   *
+   * El valor es `true | false | null`, así que cada lead cae en exactamente una
+   * de las tres opciones y el filtro es una pertenencia simple: sin nada
+   * tildado no filtra, y lo tildado manda.
+   */
+  const matchAntecedentes = useCallback(
+    (e: EntidadMapa) => {
+      if (filtros.antecedentes.size === 0) return true
+      const v = e.datos.antecedentesPenales
+      const clave = v === true ? 'si' : v === false ? 'no' : 'sin_dato'
+      return filtros.antecedentes.has(clave)
+    },
+    [filtros.antecedentes]
+  )
 
   const pasaFiltrosConductorSinUbicacion = useCallback(
     (c: EntidadMapa) => {
@@ -471,11 +488,12 @@ export function DistribucionMapaV2Module() {
         return false
       }
       if (!matchRequisitos(l, filtros.requisitosLead)) return false
+      if (!matchAntecedentes(l)) return false
       if (!creadoEnRango(l.creadoEn, filtros.creadoDesde, filtros.creadoHasta)) return false
       if (!matchZona(l)) return false
       return coincideBusqueda(l, filtros.busqueda)
     },
-    [filtros, matchZona, matchRequisitos]
+    [filtros, matchZona, matchAntecedentes, matchRequisitos]
   )
 
   /**

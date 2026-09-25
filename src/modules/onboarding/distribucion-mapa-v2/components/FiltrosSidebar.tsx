@@ -18,6 +18,7 @@ import { Acordeon, CheckRow, Chip, GrupoTitulo, Hint } from './ui'
 import { IconoEntidad } from './iconos'
 import { getLeadEstadoColor } from '../../../leads/leadEstadoColors'
 import {
+  ANTECEDENTES_OPCIONES,
   ASIGNACION_OPCIONES,
   COMPANERO_OPCIONES,
   REQUISITOS,
@@ -448,6 +449,26 @@ export function FiltrosSidebar({
                   }
                 />
               ))}
+            </Acordeon>
+
+            <Acordeon
+              titulo="Antecedentes penales"
+              resumen={resumen(filtros.antecedentes, 'Todos')}
+            >
+              {ANTECEDENTES_OPCIONES.map((a) => (
+                <CheckRow
+                  key={a.value}
+                  label={a.label}
+                  checked={filtros.antecedentes.has(a.value)}
+                  onChange={() =>
+                    onChange({ antecedentes: alternar(filtros.antecedentes, a.value) })
+                  }
+                />
+              ))}
+              <Hint>
+                Sin selección = todos. “Sin dato” son los leads a los que todavía no se
+                les cargó el resultado.
+              </Hint>
             </Acordeon>
           </div>
         )}
