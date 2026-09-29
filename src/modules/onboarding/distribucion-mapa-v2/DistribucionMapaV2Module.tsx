@@ -442,6 +442,24 @@ export function DistribucionMapaV2Module() {
     [filtros.antecedentes]
   )
 
+  /**
+   * "¿Tiene licencia?". SÓLO aplica a leads: es la columna `licencia`, que se
+   * carga a mano durante el onboarding. En conductores el valor es null y el
+   * filtro ni se ofrece.
+   *
+   * A diferencia de antecedentes, "sin cargar" no es una opción elegible: como
+   * sólo hay dos checkboxes, tildar cualquiera de los dos deja fuera a los
+   * leads sin dato, que es lo que se espera al pedir "los que tienen licencia".
+   */
+  const matchTieneLicencia = useCallback(
+    (e: EntidadMapa) => {
+      if (filtros.tieneLicencia.size === 0) return true
+      const v = e.datos.tieneLicencia
+      return v !== null && filtros.tieneLicencia.has(v)
+    },
+    [filtros.tieneLicencia]
+  )
+
   const pasaFiltrosConductorSinUbicacion = useCallback(
     (c: EntidadMapa) => {
       if (c.esBaja && !filtros.verBaja) return false
@@ -487,13 +505,13 @@ export function DistribucionMapaV2Module() {
       ) {
         return false
       }
-      if (!matchRequisitos(l, filtros.requisitosLead)) return false
+      if (!matchTieneLicencia(l)) return false
       if (!matchAntecedentes(l)) return false
       if (!creadoEnRango(l.creadoEn, filtros.creadoDesde, filtros.creadoHasta)) return false
       if (!matchZona(l)) return false
       return coincideBusqueda(l, filtros.busqueda)
     },
-    [filtros, matchZona, matchAntecedentes, matchRequisitos]
+    [filtros, matchZona, matchAntecedentes, matchTieneLicencia]
   )
 
   /**

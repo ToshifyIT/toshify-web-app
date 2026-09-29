@@ -22,6 +22,7 @@ import {
   ASIGNACION_OPCIONES,
   COMPANERO_OPCIONES,
   REQUISITOS,
+  TIENE_LICENCIA_OPCIONES,
   TURNOS,
   ZONAS,
   resumenRangoCreacion,
@@ -435,20 +436,30 @@ export function FiltrosSidebar({
               </Hint>
             </Acordeon>
 
-            <Acordeon titulo="Requisitos" resumen={resumen(filtros.requisitosLead, 'Ninguno')}>
-              {/* "Fuera de zona restringida" no se ofrece para leads: los que
-                  están en zona restringida ya no entran al módulo (ver
-                  fetchLeadsMapa). Ofrecerlo sería un filtro que nunca cambia nada. */}
-              {REQUISITOS.filter((r) => r.value !== 'fuera_zona_peligrosa').map((r) => (
+            {/* Reemplaza al viejo bloque "Requisitos" de leads, que tenía un
+                único checkbox ("Licencia vigente") calculado desde la fecha de
+                vencimiento. Acá se pregunta por el dato que el operador
+                realmente carga: la columna `licencia`, Sí/No. El otro requisito
+                ("Fuera de zona restringida") nunca aplicó a leads, porque los
+                de zona restringida no entran al módulo (ver fetchLeadsMapa). */}
+            <Acordeon
+              titulo="Tiene licencia"
+              resumen={resumen(filtros.tieneLicencia, 'Todos')}
+            >
+              {TIENE_LICENCIA_OPCIONES.map((o) => (
                 <CheckRow
-                  key={r.value}
-                  label={r.label}
-                  checked={filtros.requisitosLead.has(r.value)}
+                  key={o.value}
+                  label={o.label}
+                  checked={filtros.tieneLicencia.has(o.value)}
                   onChange={() =>
-                    onChange({ requisitosLead: alternar(filtros.requisitosLead, r.value) })
+                    onChange({ tieneLicencia: alternar(filtros.tieneLicencia, o.value) })
                   }
                 />
               ))}
+              <Hint>
+                Sin selección = todos. Los leads a los que todavía no se les cargó el
+                dato sólo aparecen así.
+              </Hint>
             </Acordeon>
 
             <Acordeon

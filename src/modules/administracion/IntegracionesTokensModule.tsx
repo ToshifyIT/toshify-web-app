@@ -1318,6 +1318,7 @@ const AVAILABLE_PERMISSIONS = [
   { value: 'conductores:api', label: 'Conductores: API REST (externos)', desc: 'Solo lectura de GET /api/v1/conductores. Sin CBU, antecedentes ni datos de emergencia.' },
   { value: 'asignaciones:api', label: 'Asignaciones: API REST (externos)', desc: 'Solo lectura de GET /api/v1/asignaciones. Vinculo conductor-vehiculo.' },
   { value: 'flota:api', label: 'Estado de Flota: API REST (externos)', desc: 'Solo lectura de GET /api/v1/estado-flota. Toda la flota con su asignacion activa.' },
+  { value: 'leads:create:api', label: 'Leads: Alta por API REST (externos)', desc: 'ESCRITURA. Habilita POST /api/v1/leads para dar de alta leads. Unico permiso de la API REST que modifica la base.' },
 ];
 
 function McpTab() {
