@@ -243,6 +243,7 @@ const LeadsPage = lazy(() => import('./leads/LeadsPage').then(m => ({ default: m
 const FacturacionPage = lazy(() => import('./facturacion/FacturacionPage').then(m => ({ default: m.FacturacionPage })))
 const IncidenciasPage = lazy(() => import('./incidencias/IncidenciasPage').then(m => ({ default: m.IncidenciasPage })))
 const ProgramacionPage = lazy(() => import('./onboarding/ProgramacionPage'))
+const ProgramacionV2Page = lazy(() => import('./onboarding/ProgramacionV2Page'))
 const DistribucionMapaPage = lazy(() => import('./onboarding/DistribucionMapaPage'))
 const DistribucionMapaV2Page = lazy(() => import('./onboarding/DistribucionMapaV2Page'))
 const MovimientosPage = lazy(() => import('./inventario/MovimientosPage').then(m => ({ default: m.MovimientosPage })))
@@ -2072,6 +2073,17 @@ export function HomePage() {
                 <ProtectedRoute submenuName="programacion-entregas" action="view">
                   <LazyPage>
                     <ProgramacionPage />
+                  </LazyPage>
+                </ProtectedRoute>
+              } />
+              {/* Programaciones v2: mismo tablero con el flujo de LEADS.
+                  Convive con el v1 sin tocarlo (ver programacion-v2/). Comparte
+                  el permiso del submenu `programacion-entregas`: quien ve el v1
+                  ve el v2, sin tener que dar permisos nuevos. */}
+              <Route path="/onboarding/programacion-v2" element={
+                <ProtectedRoute submenuName="programacion-entregas" action="view">
+                  <LazyPage>
+                    <ProgramacionV2Page />
                   </LazyPage>
                 </ProtectedRoute>
               } />

@@ -1,0 +1,1474 @@
+/* src/modules/onboarding/ProgramacionModule.css */
+/* Estilos para el módulo de Programación - Consistente con AsignacionesModule */
+/* Con soporte para Dark Mode mediante CSS Variables */
+
+/* =====================================================
+   MODULE CONTAINER
+   ===================================================== */
+
+.prog-module {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+/* =====================================================
+   STATS - Estilo Bitácora (igual que Asignaciones)
+   ===================================================== */
+
+.prog-stats {
+  background: var(--bg-primary);
+  border-radius: 8px;
+  padding: 16px 20px;
+  border: 1px solid var(--border-primary);
+}
+
+.prog-stats-grid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 16px;
+}
+
+.prog-stats .stat-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 16px 20px;
+  background: var(--bg-secondary);
+  border-radius: 8px;
+  min-width: 0;
+}
+
+.prog-stats .stat-card .stat-icon {
+  color: var(--color-primary);
+  flex-shrink: 0;
+}
+
+.prog-stats .stat-content {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.prog-stats .stat-value {
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.prog-stats .stat-label {
+  font-size: 11px;
+  color: var(--text-tertiary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-transform: uppercase;
+}
+
+/* Stat Cards Clickables */
+.prog-stats .stat-card-clickable {
+  cursor: pointer;
+  transition: all 0.2s ease;
+  border: 2px solid transparent;
+}
+
+.prog-stats .stat-card-clickable:hover {
+  background: var(--bg-primary);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+.prog-stats .stat-card-active {
+  border-color: var(--color-primary);
+  background: var(--bg-primary);
+  box-shadow: 0 0 0 1px var(--color-primary);
+}
+
+/* Responsive Stats */
+@media (max-width: 1200px) {
+  .prog-stats-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+@media (max-width: 768px) {
+  .prog-stats {
+    padding: 10px;
+  }
+
+  .prog-stats-grid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 8px;
+  }
+
+  .prog-stats .stat-card {
+    padding: 10px 12px;
+    gap: 8px;
+    min-width: 0;
+  }
+
+  .prog-stats .stat-value {
+    font-size: 16px;
+  }
+
+  .prog-stats .stat-label {
+    font-size: 10px;
+  }
+}
+
+@media (max-width: 480px) {
+  .prog-stats {
+    padding: 8px;
+  }
+
+  .prog-stats-grid {
+    gap: 6px;
+  }
+
+  .prog-stats .stat-card {
+    padding: 8px;
+    gap: 6px;
+  }
+
+  .prog-stats .stat-value {
+    font-size: 14px;
+  }
+
+  .prog-stats .stat-label {
+    font-size: 9px;
+  }
+}
+
+/* iPhone SE: 1 columna */
+@media (max-width: 380px) {
+  .prog-stats-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .prog-stats .stat-card {
+    padding: 10px 12px;
+  }
+
+  .prog-stats .stat-value {
+    font-size: 16px;
+  }
+
+  .prog-stats .stat-label {
+    font-size: 11px;
+  }
+}
+
+/* =====================================================
+   CELDAS DE TABLA - Estilo limpio sin iconos
+   ===================================================== */
+
+/* Celda de Vehículo - Patente arriba, modelo abajo */
+.prog-vehiculo-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  max-width: 90px;
+}
+
+.prog-patente {
+  font-weight: 600;
+  font-size: 12px;
+  color: var(--text-primary);
+}
+
+.prog-modelo {
+  font-size: 10px;
+  color: var(--text-tertiary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Celda de Conductor - Solo texto */
+.prog-conductor-cell {
+  font-size: 13px;
+  color: var(--text-primary);
+}
+
+/* Sin asignar */
+.prog-sin-conductor {
+  font-size: 12px;
+  color: var(--text-tertiary);
+  font-style: italic;
+}
+
+/* =====================================================
+   COLUMNA ASIGNADOS - Estilo igual que Asignaciones
+   ===================================================== */
+
+/* Container compacto para conductores */
+.prog-conductores-compact {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 100px;
+  max-width: 120px;
+}
+
+/* Conductor con turno asignado */
+.prog-conductor-turno {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Turno vacante */
+.prog-turno-vacante {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--text-tertiary);
+  font-style: italic;
+}
+
+/* Label de turno (D/N) */
+.prog-turno-label {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  border-radius: 3px;
+  font-size: 9px;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+/* Label Diurno */
+.prog-label-diurno {
+  background: linear-gradient(135deg, #FEF3C7 0%, #FDE68A 100%);
+  color: #92400E;
+}
+
+/* Label Nocturno */
+.prog-label-nocturno {
+  background: linear-gradient(135deg, #DBEAFE 0%, #BFDBFE 100%);
+  color: #1E40AF;
+}
+
+/* Turno Diurno - fondo sutil */
+.prog-turno-diurno {
+  padding: 2px 4px;
+  border-radius: 4px;
+  background: rgba(254, 243, 199, 0.3);
+}
+
+/* Turno Nocturno - fondo sutil */
+.prog-turno-nocturno {
+  padding: 2px 4px;
+  border-radius: 4px;
+  background: rgba(219, 234, 254, 0.3);
+}
+
+/* Celda de Fecha y Hora combinada */
+.prog-fecha-hora {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  font-size: 12px;
+}
+
+.prog-fecha {
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.prog-hora {
+  color: var(--text-tertiary);
+  font-size: 11px;
+}
+
+/* =====================================================
+   BADGES - Consistentes con Asignaciones
+   ===================================================== */
+
+/* Badge de Tipo (texto simple) */
+.prog-tipo-badge {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+/* Badge de Modalidad - Igual que Asignaciones */
+.prog-modalidad-badge {
+  display: inline-block;
+  font-size: 10px;
+  padding: 3px 6px;
+  border-radius: 4px;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+.prog-modalidad-badge.turno {
+  background: var(--badge-blue-bg, #DBEAFE);
+  color: var(--badge-blue-text, #1E40AF);
+}
+
+.prog-modalidad-badge.cargo {
+  background: linear-gradient(135deg, #FEF3C7 0%, #FDE68A 100%);
+  color: #92400E;
+}
+
+/* Badge de Turno */
+.prog-turno-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  padding: 3px 8px;
+  border-radius: 4px;
+  font-weight: 500;
+}
+
+.prog-turno-badge.diurno {
+  background: linear-gradient(135deg, #FEF3C7 0%, #FDE68A 100%);
+  color: #92400E;
+}
+
+.prog-turno-badge.nocturno {
+  background: var(--badge-blue-bg, #DBEAFE);
+  color: var(--badge-blue-text, #1E40AF);
+}
+
+/* Badge de Zona */
+.prog-zona-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  padding: 3px 8px;
+  background: var(--badge-purple-bg, #EDE9FE);
+  color: var(--badge-purple-text, #5B21B6);
+  border-radius: 4px;
+  font-weight: 500;
+}
+
+/* Badge de Estado - Igual que Asignaciones */
+.prog-estado-badge {
+  display: inline-block;
+  padding: 3px 6px;
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: capitalize;
+  white-space: nowrap;
+}
+
+.prog-estado-badge.por_agendar {
+  background: var(--badge-gray-bg, #F3F4F6);
+  color: var(--badge-gray-text, #6B7280);
+}
+
+.prog-estado-badge.agendado {
+  background: var(--badge-blue-bg, #DBEAFE);
+  color: var(--badge-blue-text, #1E40AF);
+}
+
+.prog-estado-badge.en_curso {
+  background: var(--badge-yellow-bg, #FEF3C7);
+  color: var(--badge-yellow-text, #92400E);
+}
+
+.prog-estado-badge.completado {
+  background: var(--badge-green-bg, #D1FAE5);
+  color: var(--badge-green-text, #065F46);
+}
+
+/* Badge de Documento */
+.prog-documento-badge {
+  display: inline-block;
+  padding: 3px 6px;
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.prog-documento-badge.contrato {
+  background: var(--badge-green-bg, #D1FAE5);
+  color: var(--badge-green-text, #065F46);
+}
+
+.prog-documento-badge.carta_oferta {
+  background: var(--badge-blue-bg, #DBEAFE);
+  color: var(--badge-blue-text, #1E40AF);
+}
+
+.prog-documento-badge.anexo {
+  background: var(--badge-purple-bg, #EDE9FE);
+  color: var(--badge-purple-text, #5B21B6);
+}
+
+.prog-documento-badge.na {
+  background: var(--badge-gray-bg, #F3F4F6);
+  color: var(--badge-gray-text, #6B7280);
+}
+
+.prog-documento-badge.sin_definir {
+  background: var(--badge-yellow-bg, #FEF3C7);
+  color: var(--badge-yellow-text, #92400E);
+}
+
+/* Documentos compactos para TURNO (D/N) */
+.prog-documentos-compact {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.prog-documento-mini {
+  font-size: 9px;
+  font-weight: 500;
+  padding: 1px 4px;
+  border-radius: 3px;
+  white-space: nowrap;
+}
+
+.prog-documento-mini.contrato {
+  background: var(--badge-green-bg, #D1FAE5);
+  color: var(--badge-green-text, #065F46);
+}
+
+.prog-documento-mini.carta_oferta {
+  background: var(--badge-blue-bg, #DBEAFE);
+  color: var(--badge-blue-text, #1E40AF);
+}
+
+.prog-documento-mini.anexo {
+  background: var(--badge-purple-bg, #EDE9FE);
+  color: var(--badge-purple-text, #5B21B6);
+}
+
+.prog-documento-mini.na,
+.prog-documento-mini.sin_definir {
+  background: var(--badge-gray-bg, #F3F4F6);
+  color: var(--badge-gray-text, #6B7280);
+}
+
+/* Estado Select - Minimalista */
+.prog-estado-select {
+  padding: 4px 8px;
+  border: 1px solid var(--border-primary);
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 500;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  cursor: pointer;
+  min-width: 100px;
+}
+
+.prog-estado-select:focus {
+  outline: none;
+  border-color: var(--color-primary);
+}
+
+.prog-estado-select:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* =====================================================
+   CHECKLIST - Compacto
+   ===================================================== */
+
+.prog-checklist {
+  display: flex;
+  gap: 4px;
+}
+
+.prog-check-item {
+  width: 20px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  background: var(--bg-tertiary);
+  color: var(--text-tertiary);
+  font-size: 10px;
+}
+
+.prog-check-item.checked {
+  background: var(--badge-green-bg, #D1FAE5);
+  color: var(--badge-green-text, #059669);
+}
+
+/* =====================================================
+   ACCIONES - Igual que Asignaciones
+   ===================================================== */
+
+.prog-actions {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  justify-content: center;
+}
+
+.prog-btn {
+  padding: 6px;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.15s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  color: var(--text-tertiary);
+}
+
+.prog-btn:hover:not(:disabled) {
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+}
+
+.prog-btn:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
+/* Botón Enviar a Entrega */
+.prog-btn-send {
+  color: #059669;
+}
+
+.prog-btn-send:hover:not(:disabled) {
+  background: var(--badge-green-bg, #D1FAE5);
+  color: #059669;
+}
+
+/* Botón Ver */
+.prog-btn-view {
+  color: var(--text-tertiary);
+}
+
+.prog-btn-view:hover:not(:disabled) {
+  color: var(--text-primary);
+}
+
+/* Botón Editar */
+.prog-btn-edit {
+  color: var(--text-tertiary);
+}
+
+.prog-btn-edit:hover:not(:disabled) {
+  color: #3B82F6;
+}
+
+/* Botón Eliminar */
+.prog-btn-delete {
+  color: var(--text-tertiary);
+}
+
+.prog-btn-delete:hover:not(:disabled) {
+  color: var(--color-primary);
+}
+
+/* Link a asignación */
+.prog-asignacion-link {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #059669;
+  padding: 6px;
+}
+
+/* =====================================================
+   MODAL DE DETALLE
+   ===================================================== */
+
+.prog-modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.prog-modal {
+  background: var(--modal-bg);
+  border-radius: 12px;
+  width: 90%;
+  max-width: 500px;
+  max-height: 85vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.2);
+}
+
+.prog-modal-header {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 20px 20px 0;
+  position: relative;
+}
+
+.prog-modal-header h2 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--text-primary);
+  text-align: center;
+}
+
+.prog-modal-header button {
+  position: absolute;
+  right: 16px;
+  top: 16px;
+  background: none;
+  border: none;
+  padding: 4px;
+  cursor: pointer;
+  color: var(--text-tertiary);
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.prog-modal-header button:hover {
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+}
+
+.prog-modal-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 20px;
+}
+
+.prog-modal-section {
+  margin-bottom: 20px;
+}
+
+.prog-modal-section:last-of-type {
+  margin-bottom: 0;
+}
+
+.prog-modal-section h3 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 12px 0;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-tertiary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.prog-modal-section h3 svg {
+  color: var(--color-primary);
+}
+
+.prog-modal-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 16px;
+}
+
+.prog-modal-grid label {
+  display: block;
+  font-size: 11px;
+  color: var(--text-tertiary);
+  margin-bottom: 4px;
+  text-transform: uppercase;
+}
+
+.prog-modal-grid p {
+  margin: 0;
+  font-size: 14px;
+  color: var(--text-primary);
+  font-weight: 500;
+}
+
+.prog-asignacion-info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 12px;
+  padding: 10px 14px;
+  background: var(--badge-green-bg, #D1FAE5);
+  border-radius: 6px;
+  font-size: 13px;
+  color: var(--badge-green-text, #065F46);
+}
+
+.prog-observaciones {
+  margin: 0;
+  padding: 12px;
+  background: var(--bg-secondary);
+  border-radius: 6px;
+  font-size: 13px;
+  color: var(--text-secondary);
+  white-space: pre-wrap;
+  line-height: 1.5;
+}
+
+.prog-modal-footer {
+  display: flex;
+  justify-content: center;
+  gap: 12px;
+  padding: 20px;
+  background: var(--modal-bg);
+}
+
+/* =====================================================
+   HELPERS
+   ===================================================== */
+
+.text-muted {
+  color: var(--text-tertiary);
+}
+
+/* =====================================================
+   RESPONSIVE
+   ===================================================== */
+
+@media (max-width: 768px) {
+  .prog-modal {
+    width: 95%;
+    max-height: 90vh;
+  }
+
+  .prog-modal-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .prog-modal-footer {
+    flex-direction: column;
+  }
+
+  .prog-modal-footer button {
+    width: 100%;
+    justify-content: center;
+  }
+}
+
+/* =====================================================
+   BOTONES ADICIONALES
+   ===================================================== */
+
+/* Botón Cambiar Estado */
+.prog-btn-estado {
+  color: var(--text-tertiary);
+}
+
+.prog-btn-estado:hover:not(:disabled) {
+  color: #F59E0B;
+  background: #FEF3C7;
+}
+
+/* Botón Copiar */
+.prog-btn-copy {
+  color: var(--text-tertiary);
+}
+
+.prog-btn-copy:hover:not(:disabled) {
+  color: #8B5CF6;
+  background: #EDE9FE;
+}
+
+/* =====================================================
+   MODAL PEQUEÑO (para cambiar estado)
+   ===================================================== */
+
+.prog-modal-sm {
+  max-width: 400px;
+}
+
+.prog-modal-info {
+  background: var(--bg-secondary);
+  border-radius: 8px;
+  padding: 12px 16px;
+  margin-bottom: 16px;
+}
+
+.prog-modal-info p {
+  margin: 0 0 8px 0;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.prog-modal-info p:last-child {
+  margin-bottom: 0;
+}
+
+.prog-modal-info strong {
+  color: var(--text-primary);
+}
+
+/* Form Select dentro del modal */
+.prog-modal .form-group {
+  margin-bottom: 0;
+}
+
+.prog-modal .form-group label {
+  display: block;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  margin-bottom: 8px;
+}
+
+.prog-modal .form-select {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--border-primary);
+  border-radius: 6px;
+  font-size: 14px;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  cursor: pointer;
+}
+
+.prog-modal .form-select:focus {
+  outline: none;
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 3px var(--color-primary-light);
+}
+
+/* =====================================================
+   PREVIEW MENSAJE (para copiar mensaje)
+   ===================================================== */
+
+.prog-mensaje-preview {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-primary);
+  border-radius: 8px;
+  padding: 16px;
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+.prog-mensaje-preview pre {
+  margin: 0;
+  font-family: inherit;
+  font-size: 13px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+  color: var(--text-primary);
+}
+
+/* =====================================================
+   MODAL EDICION RAPIDA
+   ===================================================== */
+
+.prog-modal-wide {
+  max-width: 600px;
+}
+
+.prog-input {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--border-primary);
+  border-radius: 6px;
+  font-size: 14px;
+  font-family: inherit;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.prog-input:focus {
+  outline: none;
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 3px var(--color-primary-light);
+}
+
+.prog-input:disabled {
+  background: var(--bg-secondary);
+  cursor: not-allowed;
+  opacity: 0.7;
+}
+
+.prog-input::placeholder {
+  color: var(--text-tertiary);
+}
+
+/* Botones del modal */
+.prog-btn-primary {
+  padding: 8px 18px;
+  background: var(--color-primary);
+  color: white;
+  border: none;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.prog-btn-primary:hover:not(:disabled) {
+  background: var(--color-primary-hover);
+}
+
+.prog-btn-primary:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.prog-btn-secondary {
+  padding: 8px 18px;
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+  border: 1px solid var(--border-primary);
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.prog-btn-secondary:hover:not(:disabled) {
+  background: var(--bg-hover);
+}
+
+/* =====================================================
+   SEARCHABLE SELECT PARA VEHICULOS
+   ===================================================== */
+
+.prog-searchable-select {
+  position: relative;
+}
+
+.prog-searchable-select input {
+  width: 100%;
+  padding-right: 36px;
+}
+
+.prog-searchable-dropdown {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  max-height: 250px;
+  overflow-y: auto;
+  background: var(--bg-primary);
+  border: 1px solid var(--border-primary);
+  border-radius: 6px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  z-index: 1000;
+  margin-top: 4px;
+}
+
+.prog-searchable-option {
+  padding: 10px 12px;
+  cursor: pointer;
+  font-size: 13px;
+  border-bottom: 1px solid var(--border-primary);
+}
+
+.prog-searchable-option:last-child {
+  border-bottom: none;
+}
+
+.prog-searchable-option:hover {
+  background: var(--bg-tertiary);
+}
+
+.prog-searchable-option strong {
+  color: var(--color-primary);
+}
+
+.prog-searchable-option.selected {
+  background: #FEF2F2;
+  border-left: 3px solid var(--color-primary);
+}
+
+.prog-searchable-no-results {
+  padding: 12px;
+  text-align: center;
+  color: var(--text-tertiary);
+  font-size: 13px;
+}
+
+/* =====================================================
+   ANIMACIÓN SPIN (para botón de recargar)
+   ===================================================== */
+
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.spin {
+  animation: spin 1s linear infinite;
+}
+
+/* =====================================================
+   COLUMNAS DE GESTIÓN DIARIA
+   ===================================================== */
+
+/* Botón de check inline */
+.prog-check-btn {
+  width: 24px;
+  height: 24px;
+  border-radius: 4px;
+  border: 1px solid var(--border-primary);
+  background: var(--bg-secondary);
+  color: var(--text-tertiary);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s ease;
+}
+
+.prog-check-btn:hover {
+  border-color: var(--color-primary);
+  color: var(--color-primary);
+}
+
+.prog-check-btn.checked {
+  background: #D1FAE5;
+  border-color: #059669;
+  color: #059669;
+}
+
+.prog-check-btn.checked:hover {
+  background: #A7F3D0;
+  border-color: #047857;
+}
+
+/* Select inline para confirmación y estado cabify */
+.prog-inline-select {
+  padding: 3px 6px;
+  border-radius: 4px;
+  border: 1px solid transparent;
+  font-size: 10px;
+  font-weight: 500;
+  cursor: pointer;
+  background: var(--bg-secondary);
+  color: var(--text-secondary);
+  min-width: 70px;
+  transition: all 0.15s ease;
+}
+
+.prog-inline-select:hover {
+  border-color: var(--border-primary);
+}
+
+.prog-inline-select:focus {
+  outline: none;
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 2px var(--color-primary-light);
+}
+
+/* Estados de confirmación */
+.prog-inline-select.confirmacion.sin_confirmar {
+  background: var(--badge-gray-bg, #F3F4F6);
+  color: var(--badge-gray-text, #6B7280);
+}
+
+.prog-inline-select.confirmacion.confirmo {
+  background: var(--badge-green-bg, #D1FAE5);
+  color: var(--badge-green-text, #059669);
+}
+
+.prog-inline-select.confirmacion.no_confirmo {
+  background: var(--badge-red-bg, #FEE2E2);
+  color: var(--badge-red-text, var(--color-primary));
+}
+
+.prog-inline-select.confirmacion.reprogramar {
+  background: var(--badge-yellow-bg, #FEF3C7);
+  color: var(--badge-yellow-text, #D97706);
+}
+
+/* Estados de Cabify */
+.prog-inline-select.cabify.pendiente {
+  background: var(--badge-gray-bg, #F3F4F6);
+  color: var(--badge-gray-text, #6B7280);
+}
+
+.prog-inline-select.cabify.listo_cabify {
+  background: var(--badge-green-bg, #D1FAE5);
+  color: var(--badge-green-text, #059669);
+}
+
+.prog-inline-select.cabify.asignar_auto {
+  background: var(--badge-blue-bg, #DBEAFE);
+  color: var(--badge-blue-text, #1E40AF);
+}
+
+.prog-inline-select.cabify.crear_cuenta {
+  background: var(--badge-purple-bg, #EDE9FE);
+  color: var(--badge-purple-text, #7C3AED);
+}
+
+/* Input inline para dirección */
+.prog-inline-input {
+  width: 100%;
+  min-width: 120px;
+  padding: 4px 8px;
+  border: 1px solid var(--color-primary);
+  border-radius: 4px;
+  font-size: 12px;
+  font-family: inherit;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+}
+
+.prog-inline-input:focus {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--color-primary-shadow);
+}
+
+/* Celda de dirección clickable */
+.prog-direccion-cell {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  padding: 2px 4px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 11px;
+  color: var(--text-secondary);
+  transition: background 0.15s ease;
+  max-width: 100px;
+}
+
+.prog-direccion-cell:hover {
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+}
+
+.prog-direccion-cell span {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.prog-direccion-cell svg {
+  flex-shrink: 0;
+  color: var(--text-tertiary);
+}
+
+/* Celda de especialista clickable */
+.prog-especialista-cell {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  padding: 2px 4px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 11px;
+  color: var(--text-secondary);
+  transition: background 0.15s ease;
+  max-width: 90px;
+}
+
+.prog-especialista-cell:hover {
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+}
+
+.prog-especialista-cell span {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.prog-especialista-cell svg {
+  flex-shrink: 0;
+  color: var(--text-tertiary);
+}
+
+/* Tipo de asignación */
+.prog-inline-select.tipo-asignacion {
+  min-width: 95px;
+  max-width: 110px;
+}
+
+.prog-inline-select.tipo-asignacion.entrega_auto {
+  background: var(--badge-green-bg, #D1FAE5);
+  color: var(--badge-green-text, #059669);
+}
+
+.prog-inline-select.tipo-asignacion.asignacion_companero {
+  background: var(--badge-purple-bg, #EDE9FE);
+  color: var(--badge-purple-text, #7C3AED);
+}
+
+.prog-inline-select.tipo-asignacion.cambio_auto {
+  background: var(--badge-blue-bg, #DBEAFE);
+  color: var(--badge-blue-text, #1E40AF);
+}
+
+.prog-inline-select.tipo-asignacion.asignacion_auto_cargo {
+  background: var(--badge-yellow-bg, #FEF3C7);
+  color: var(--badge-yellow-text, #92400E);
+}
+
+.prog-inline-select.tipo-asignacion.entrega_auto_cargo {
+  background: #ECFDF5;
+  color: #047857;
+}
+
+.prog-inline-select.tipo-asignacion.cambio_turno {
+  background: #FDF4FF;
+  color: #A21CAF;
+}
+
+.prog-inline-select.tipo-asignacion.devolucion_vehiculo {
+  background: var(--badge-gray-bg, #F3F4F6);
+  color: var(--badge-gray-text, #4B5563);
+}
+
+/* Layout para tipo asignación dual (TURNO) */
+.prog-tipo-asig-turno {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.prog-tipo-asig-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.prog-tipo-asig-label {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--text-muted);
+  width: 14px;
+}
+
+/* Select mini para tipo asignación en TURNO */
+.prog-inline-select-mini {
+  padding: 2px 4px;
+  border-radius: 4px;
+  border: 1px solid transparent;
+  font-size: 9px;
+  font-weight: 500;
+  cursor: pointer;
+  background: var(--bg-secondary);
+  color: var(--text-secondary);
+  min-width: 65px;
+  max-width: 80px;
+  transition: all 0.15s ease;
+}
+
+.prog-inline-select-mini:hover {
+  border-color: var(--border-primary);
+}
+
+.prog-inline-select-mini:focus {
+  outline: none;
+  border-color: var(--color-primary);
+}
+
+.prog-inline-select-mini.tipo-asignacion.entrega_auto {
+  background: var(--badge-green-bg, #D1FAE5);
+  color: var(--badge-green-text, #059669);
+}
+
+.prog-inline-select-mini.tipo-asignacion.asignacion_companero {
+  background: var(--badge-purple-bg, #EDE9FE);
+  color: var(--badge-purple-text, #7C3AED);
+}
+
+.prog-inline-select-mini.tipo-asignacion.cambio_auto {
+  background: var(--badge-blue-bg, #DBEAFE);
+  color: var(--badge-blue-text, #1E40AF);
+}
+
+.prog-inline-select-mini.tipo-asignacion.cambio_turno {
+  background: #FDF4FF;
+  color: #A21CAF;
+}
+
+.prog-inline-select-mini.tipo-asignacion.devolucion_vehiculo {
+  background: var(--badge-gray-bg, #F3F4F6);
+  color: var(--badge-gray-text, #4B5563);
+}
+
+/* Layout para Cabify dual (TURNO) */
+.prog-cabify-turno {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.prog-cabify-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.prog-cabify-label {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--text-muted);
+  width: 14px;
+}
+
+/* Estilos de estado Cabify para select-mini */
+.prog-inline-select-mini.cabify.pendiente {
+  background: var(--badge-gray-bg, #F3F4F6);
+  color: var(--badge-gray-text, #6B7280);
+}
+
+.prog-inline-select-mini.cabify.listo_cabify {
+  background: var(--badge-green-bg, #D1FAE5);
+  color: var(--badge-green-text, #059669);
+}
+
+.prog-inline-select-mini.cabify.asignar_auto {
+  background: var(--badge-blue-bg, #DBEAFE);
+  color: var(--badge-blue-text, #1E40AF);
+}
+
+.prog-inline-select-mini.cabify.crear_cuenta {
+  background: var(--badge-purple-bg, #EDE9FE);
+  color: var(--badge-purple-text, #7C3AED);
+}
+
+/* Layout para Documento dual (TURNO) */
+.prog-documento-turno {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.prog-documento-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.prog-documento-label {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--text-muted);
+  width: 14px;
+}
+
+/* Estilos de documento para select inline */
+.prog-inline-select.documento.sin_definir,
+.prog-inline-select-mini.documento.sin_definir {
+  background: var(--badge-gray-bg, #F3F4F6);
+  color: var(--badge-gray-text, #6B7280);
+}
+
+.prog-inline-select.documento.carta_oferta,
+.prog-inline-select-mini.documento.carta_oferta {
+  background: var(--badge-blue-bg, #DBEAFE);
+  color: var(--badge-blue-text, #1E40AF);
+}
+
+.prog-inline-select.documento.anexo,
+.prog-inline-select-mini.documento.anexo {
+  background: var(--badge-purple-bg, #EDE9FE);
+  color: var(--badge-purple-text, #7C3AED);
+}
+
+.prog-inline-select.documento.na,
+.prog-inline-select-mini.documento.na {
+  background: var(--badge-yellow-bg, #FEF3C7);
+  color: var(--badge-yellow-text, #D97706);
+}
+
+/* Layout para Confirmación dual (TURNO) */
+.prog-confirmacion-turno {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.prog-confirmacion-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.prog-confirmacion-label {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--text-muted);
+  width: 14px;
+}
+
+/* Estilos de confirmación para select-mini */
+.prog-inline-select-mini.confirmacion.sin_confirmar {
+  background: var(--badge-gray-bg, #F3F4F6);
+  color: var(--badge-gray-text, #6B7280);
+}
+
+.prog-inline-select-mini.confirmacion.confirmo {
+  background: var(--badge-green-bg, #D1FAE5);
+  color: var(--badge-green-text, #059669);
+}
+
+.prog-inline-select-mini.confirmacion.no_confirmo {
+  background: var(--badge-red-bg, #FEE2E2);
+  color: var(--badge-red-text, var(--color-primary));
+}
+
+.prog-inline-select-mini.confirmacion.reprogramar {
+  background: var(--badge-yellow-bg, #FEF3C7);
+  color: var(--badge-yellow-text, #D97706);
+}
+
+/* Dark mode: ajustes para modales de programacion */
+[data-theme="dark"] .prog-modal .form-select,
+[data-theme="dark"] .prog-modal input,
+[data-theme="dark"] .prog-modal textarea {
+  background: var(--input-bg);
+  border-color: var(--input-border);
+  color: var(--text-primary);
+}
+
+[data-theme="dark"] .prog-modal .prog-observaciones {
+  background: var(--bg-tertiary);
+}
+
+/* Mobile: padding para que no se corte en los bordes */
+@media (max-width: 768px) {
+  .prog-module {
+    padding: 0 4px;
+  }
+}
+
+/* Mobile cards: elementos necesitan mas espacio */
+.dt-card-value .prog-inline-select-mini {
+  max-width: none;
+  min-width: 100px;
+  font-size: 11px;
+  padding: 4px 6px;
+}
+
+.dt-card-value .prog-conductores-compact {
+  max-width: none;
+}
+
+.dt-card-value .prog-conductor-turno,
+.dt-card-value .prog-turno-vacante {
+  white-space: nowrap;
+}

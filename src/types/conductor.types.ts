@@ -27,6 +27,8 @@ export interface Conductor {
   direccion_lat?: number | null;
   direccion_lng?: number | null;
   conductores_estados?: ConductorEstado;
+  /** Alta del conductor. Lo trae el select del wizard de programacion. */
+  created_at?: string | null;
   // Campos de estado de asignación (calculados en runtime)
   tieneAsignacionActiva?: boolean;
   tieneAsignacionProgramada?: boolean;

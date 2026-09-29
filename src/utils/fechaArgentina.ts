@@ -124,3 +124,24 @@ export function fechaISOART(valor: string | null | undefined): string | null {
   const p = partesART(valor)
   return p ? `${p.anio}-${p.mes}-${p.dia}` : null
 }
+
+/**
+ * Ambos extremos inclusivos y opcionales ('' = sin limite). Se compara por dia
+ * calendario ART y no por el dia de la zona horaria de la PC: si no, una
+ * maquina en otro huso filtra un rango corrido respecto de lo que se ve.
+ *
+ * Una fecha ausente o no parseable nunca entra en un rango acotado, pero si
+ * pasa cuando no hay rango (sin filtro no se esconde nada).
+ */
+export function enRangoDiasART(
+  valor: string | null | undefined,
+  desde: string,
+  hasta: string
+): boolean {
+  if (!desde && !hasta) return true
+  const dia = fechaISOART(valor)
+  if (!dia) return false
+  if (desde && dia < desde) return false
+  if (hasta && dia > hasta) return false
+  return true
+}
