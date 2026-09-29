@@ -16,6 +16,16 @@ export type TipoAsignacion =
 // Tipos de candidato
 export type TipoCandidato = 'nuevo' | 'antiguo' | 'reingreso'
 
+/**
+ * Tipos de candidato del modulo de programaciones v2, que agrega 'lead'.
+ *
+ * Se deja aparte de `TipoCandidato` A PROPOSITO: el wizard v1 tiene funciones
+ * con switch exhaustivo sobre los tres valores historicos, y ampliar el tipo
+ * compartido lo romperia. El v1 nunca ofrece 'lead' en sus selects, asi que
+ * ninguna programacion suya puede tener ese valor.
+ */
+export type TipoCandidatoV2 = TipoCandidato | 'lead'
+
 // Tarifa de cobro del alquiler: decision comercial por programacion,
 // independiente del tipo de candidato. Default 'antigua' en toda la BD.
 export type TipoTarifa = 'antigua' | 'nueva'
@@ -54,6 +64,14 @@ export interface ProgramacionOnboarding {
   tipo_tarifa?: TipoTarifa
   turno?: TurnoOnboarding
   
+  // Leads programados: el slot lo ocupa alguien que TODAVIA no es conductor.
+  // Cuando esto tiene valor, el `conductor_<turno>_id` del mismo turno queda
+  // null y solo estan cargados el nombre y el DNI.
+  // Ver sql/programaciones_leads_columns.sql
+  lead_diurno_id?: string | null
+  lead_nocturno_id?: string | null
+  lead_cargo_id?: string | null
+
   // Conductor Diurno (nuevo - dual conductor)
   conductor_diurno_id?: string
   conductor_diurno_nombre?: string
@@ -274,10 +292,12 @@ export const TIPO_TARIFA_LABELS: Record<TipoTarifa, string> = {
   nueva: 'Tarifa Nueva'
 }
 
-export const TIPO_CANDIDATO_LABELS: Record<TipoCandidato, string> = {
+// Incluye 'lead' (v2). Indexar con un `TipoCandidato` sigue siendo valido.
+export const TIPO_CANDIDATO_LABELS: Record<TipoCandidatoV2, string> = {
   nuevo: 'Nuevo',
   antiguo: 'Antiguo',
-  reingreso: 'Reingreso'
+  reingreso: 'Reingreso',
+  lead: 'Lead'
 }
 
 export const ZONA_LABELS: Record<ZonaOnboarding, string> = {
