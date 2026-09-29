@@ -28,6 +28,15 @@ export type EstadoCompanero = 'sin_companero' | 'con_companero' | 'no_aplica'
 /** Vigencia de la licencia calculada a partir de la fecha de vencimiento. */
 export type EstadoLicencia = 'vigente' | 'por_vencer' | 'vencida' | 'sin_dato'
 
+/**
+ * Respuesta a "¿tiene licencia?" (columna `licencia` del lead).
+ *
+ * Es un dato distinto de `EstadoLicencia`: esto dice si la persona declara
+ * tener licencia, y aquello si la fecha de vencimiento todavía está vigente.
+ * `null` es "todavía no se cargó".
+ */
+export type TieneLicencia = 'si' | 'no' | null
+
 /** Datos adicionales de ficha, comunes a conductor y lead. */
 export interface DatosPersona {
   edad: number | null
@@ -36,6 +45,11 @@ export interface DatosPersona {
   licenciaEstado: EstadoLicencia
   /** Días hasta el vencimiento (negativo si ya venció). null si no hay fecha. */
   licenciaDiasRestantes: number | null
+  /**
+   * Sólo leads: la columna `licencia` es un Sí/No cargado a mano. En
+   * conductores es siempre null (la licencia se verifica antes del alta).
+   */
+  tieneLicencia: TieneLicencia
   experiencia: string | null
   antecedentesPenales: boolean | null
   telefono: string | null

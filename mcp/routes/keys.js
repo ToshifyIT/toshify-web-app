@@ -16,8 +16,10 @@
  * Las credenciales viajan en el header Authorization, nunca en la URL: un query
  * string queda escrito en los logs del proxy y en el historial del navegador.
  *
- * La key generada es SIEMPRE de solo lectura, con los permisos fijos de
- * PERMISOS_SELF_SERVICE. El consumidor no elige su alcance.
+ * Los permisos de la key salen del ROL del usuario en api_users (ver
+ * PERMISOS_POR_ROL en lib/apiUsers.js): `reader` recibe solo lectura y
+ * `writer` ademas el alta de leads. El consumidor no elige su alcance: no
+ * puede pedir mas de lo que su credencial tiene.
  *
  * Es el unico endpoint de la API publica que pide contrasena: tiene su propio
  * rate limit, mucho mas estricto que el de lectura de datos.
@@ -27,7 +29,7 @@ import express from 'express';
 import { randomBytes } from 'node:crypto';
 import { rateLimit } from 'express-rate-limit';
 import { supabaseRequest } from '../lib/supabase.js';
-import { requireApiUser, PERMISOS_SELF_SERVICE, MINUTOS_VIGENCIA } from '../lib/apiUsers.js';
+import { requireApiUser, permisosDeRol, MINUTOS_VIGENCIA } from '../lib/apiUsers.js';
 import { registrarRequest } from '../lib/audit.js';
 
 const router = express.Router();
@@ -49,6 +51,9 @@ router.get('/keys', limiteAuth, requireApiUser(), async (req, res) => {
     apiKeyData: { id: null, name: `self-service:${req.apiUser.username}` },
     req, status, filas,
   });
+
+  // El alcance sale del rol guardado en la base, nunca del request.
+  const permisos = permisosDeRol(req.apiUser.role);
 
   try {
     // 1) Si ya tiene una key activa, se devuelve esa. Es lo que hace que
@@ -84,7 +89,7 @@ router.get('/keys', limiteAuth, requireApiUser(), async (req, res) => {
       body: JSON.stringify({
         name: req.apiUser.username,
         api_key: apiKey,
-        permissions: PERMISOS_SELF_SERVICE,
+        permissions: permisos,
         api_user_id: req.apiUser.id,
         is_active: true,
         expires_at: vence,
@@ -95,7 +100,7 @@ router.get('/keys', limiteAuth, requireApiUser(), async (req, res) => {
     return res.json({
       data: armarRespuesta(req.apiUser.username, {
         api_key: apiKey,
-        permissions: PERMISOS_SELF_SERVICE,
+        permissions: permisos,
         created_at: creada[0]?.created_at,
         expires_at: vence,
         last_used_at: null,
@@ -114,7 +119,9 @@ function armarRespuesta(usuario, k, recienGenerada) {
     usuario,
     api_key: k.api_key,
     permisos: k.permissions,
-    solo_lectura: true,
+    // Se calcula de los permisos reales: desde que la key incluye
+    // leads:create:api, decir "solo lectura" seria mentir.
+    solo_lectura: !(k.permissions || []).some((p) => p.endsWith(':create:api')),
     generada_ahora: recienGenerada,
     creada: k.created_at,
     vence: k.expires_at,

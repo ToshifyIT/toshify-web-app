@@ -616,6 +616,7 @@ export function LeadWizard({ formData, setFormData, onSave, onCancel, saving = f
                 <label>Fuente del Lead</label>
                 <select value={formData.fuente_de_lead || 'Intercom'} onChange={e => updateField('fuente_de_lead', e.target.value)}>
                   <option value="Intercom">Intercom</option>
+                  <option value="Sellium">Sellium</option>
                   <option value="Damaro">Damaro</option>
                   <option value="Facebook">Facebook</option>
                   <option value="Instagram">Instagram</option>
