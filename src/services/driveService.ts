@@ -1,6 +1,23 @@
 // src/services/driveService.ts
 // Servicio para integración con Google Drive
 
+/**
+ * Tope de espera de /api/*. Esas rutas las sirve server.js en el puerto 3001
+ * (script `dev:api`), que es un proceso APARTE del dev server de Vite. Si no
+ * esta levantado, el proxy puede dejar el fetch esperando indefinidamente y la
+ * pantalla que lo llamo queda colgada. Con el tope, falla rapido y avisa.
+ */
+const TIMEOUT_DRIVE_MS = 15000
+
+function signalConTimeout(): AbortSignal | undefined {
+  try {
+    return AbortSignal.timeout(TIMEOUT_DRIVE_MS)
+  } catch {
+    // Navegadores sin AbortSignal.timeout: se pierde el tope, no la funcion.
+    return undefined
+  }
+}
+
 interface CreateFolderResponse {
   success: boolean
   folderId?: string
@@ -32,7 +49,8 @@ export async function createConductorDriveFolder(
         conductorId,
         conductorNombre,
         conductorDni: conductorDni || undefined
-      })
+      }),
+      signal: signalConTimeout()
     })
 
     const data = await response.json()
@@ -75,7 +93,8 @@ export async function createLeadDriveFolder(
       headers: {
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({ leadId, leadNombre })
+      body: JSON.stringify({ leadId, leadNombre }),
+      signal: signalConTimeout()
     })
 
     const data = await response.json()

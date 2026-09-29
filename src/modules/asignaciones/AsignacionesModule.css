@@ -1785,6 +1785,11 @@ input[type="date"].asig-status-select {
   color: #991B1B;
 }
 
+.kanban-tag.candidato-lead {
+  background: #EDE9FE;
+  color: #5B21B6;
+}
+
 .kanban-tag.zona {
   background: #EDE9FE;
   color: #5B21B6;

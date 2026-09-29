@@ -1,0 +1,4785 @@
+// src/modules/onboarding/programacion-v2/components/ProgramacionAssignmentWizardV2.tsx
+//
+// Wizard de programacion v2: el del v1 mas la columna de LEADS del paso 3.
+// El v1 (src/modules/onboarding/components/ProgramacionAssignmentWizard.tsx)
+// queda intacto. Ver la cabecera de ProgramacionV2Module.tsx.
+
+// src/modules/onboarding/components/ProgramacionAssignmentWizard.tsx
+// Wizard visual para crear nuevas programaciones de entregas
+// Basado en AssignmentWizard con drag & drop dual conductor
+ 
+/* eslint-disable react-hooks/exhaustive-deps */
+
+import { useState, useEffect, useMemo, useRef, lazy, Suspense } from 'react'
+import { X, Calendar, User, ChevronRight, Check, Sun, Moon, Route, Loader2, MapPin, Building2, Map as MapIcon, RotateCcw, ArrowLeftRight } from 'lucide-react'
+import { supabase } from '../../../../lib/supabase'
+import { useAuth } from '../../../../contexts/AuthContext'
+// Lazy import para que un fallo de Google Maps no tumbe todo el wizard
+const ConductoresMapModal = lazy(() => import('../../components/ConductoresMapModal'))
+// Precargar el chunk inmediatamente (no esperar al click del usuario)
+import('../../components/ConductoresMapModal').catch(() => { /* ignorar si falla, se reintentará al abrir */ })
+import { useSede } from '../../../../contexts/SedeContext'
+import { TimeInput24h } from '../../../../components/ui/TimeInput24h'
+import Swal from 'sweetalert2'
+import { showSuccess } from '../../../../utils/toast'
+import type { TipoCandidatoV2, TipoDocumento, TipoAsignacion, TipoTarifa } from '../../../../types/onboarding.types'
+import type { Vehicle } from '../../../../types/vehiculo.types'
+import type { Conductor } from '../../../../types/conductor.types'
+import { formatPreferencia, getPreferenciaBadge, PROGRAMACION_ESTADO_LABELS } from '../../../../utils/conductorUtils'
+import { DISTANCE_MATRIX_HABILITADO, GOOGLE_MAPS_API_KEY, GOOGLE_MAPS_SCRIPT_URL } from '../../../../lib/googleMaps'
+import { useGruposFlota } from '../../../../hooks/useGruposFlota'
+import { cargarConceptosTarifa, getEtiquetaTarifa, type MapaConceptosTarifa } from '../../tarifaConceptos'
+import { enRangoDiasART } from '../../../../utils/fechaArgentina'
+
+/**
+ * Lead mostrado en la columna informativa del paso 3. Es un subconjunto
+ * deliberadamente chico de `leads`: solo lo que la tarjeta y sus filtros
+ * necesitan. No se trae la ficha completa porque acá no se edita el lead.
+ */
+interface LeadProgramacion {
+  id: string
+  nombre_completo: string | null
+  primer_nombre: string | null
+  apellido: string | null
+  dni: string | null
+  estado_de_lead: string | null
+  turno: string | null
+  zona: string | null
+  created_at: string | null
+}
+
+/**
+ * Estados de lead que NUNCA se listan acá, con el mismo criterio que el mapa
+ * de distribución v2:
+ *  - 'Descartado': ya salió del pipeline, no se programa.
+ *  - 'Conductor': ya fue convertido, así que aparece en la columna de
+ *    conductores. Listarlo en ambas sería el mismo candidato duplicado.
+ */
+const ESTADOS_LEAD_FUERA_DE_PROGRAMACION = new Set(['Descartado', 'Conductor'])
+
+interface ProgramacionData {
+  sede_id: string
+  modalidad: 'turno' | 'a_cargo' | ''
+  vehiculo_id: string
+  vehiculo_patente: string
+  vehiculo_modelo: string
+  vehiculo_color: string
+  // Vehículo de cambio (nuevo vehículo destino para CAMBIO_VEHICULO)
+  vehiculo_cambio_id: string
+  vehiculo_cambio_patente: string
+  vehiculo_cambio_modelo: string
+  // Conductor legacy (para A CARGO)
+  conductor_id: string
+  conductor_nombre: string
+  conductor_dni: string
+  // Conductor Diurno (para TURNO)
+  conductor_diurno_id: string
+  conductor_diurno_nombre: string
+  conductor_diurno_dni: string
+  // Conductor Nocturno (para TURNO)
+  conductor_nocturno_id: string
+  conductor_nocturno_nombre: string
+  conductor_nocturno_dni: string
+  // Leads programados (todavia NO son conductores).
+  //
+  // Cuando un slot lo ocupa un lead, `conductor_<turno>_id` queda VACIO y solo
+  // se llenan el nombre, el DNI y este id. Esa combinacion ya era un estado
+  // valido del sistema: el envio a entrega valida `id OR nombre`, y el insert
+  // en asignaciones_conductores esta condicionado a que exista el id, asi que
+  // no se rompe ninguna FK. La conversion a conductor se hace mas adelante,
+  // fuera de este wizard.
+  lead_diurno_id: string
+  lead_nocturno_id: string
+  lead_cargo_id: string
+  // Cita (compartida)
+  fecha_cita: string
+  hora_cita: string
+  // Campos para modo A CARGO (un solo set)
+  tipo_candidato_cargo: TipoCandidatoV2 | ''
+  tipo_asignacion_cargo: TipoAsignacion | ''
+  documento_cargo: TipoDocumento | ''
+  zona_cargo: string
+  distancia_cargo: number | ''
+  // Campos para conductor DIURNO
+  tipo_candidato_diurno: TipoCandidatoV2 | ''
+  tipo_asignacion_diurno: TipoAsignacion | ''
+  documento_diurno: TipoDocumento | ''
+  zona_diurno: string
+  distancia_diurno: number | ''
+  // Campos para conductor NOCTURNO
+  tipo_candidato_nocturno: TipoCandidatoV2 | ''
+  tipo_asignacion_nocturno: TipoAsignacion | ''
+  documento_nocturno: TipoDocumento | ''
+  zona_nocturno: string
+  distancia_nocturno: number | ''
+  // Devolución de vehículo
+  devolucion_vehiculo: boolean
+  ultimo_dia_cobro: 'dia_entrega' | 'fecha_baja' | 'sin_cobro' | ''
+  // Cambio de vehículo
+  cambio_vehiculo: boolean
+  // Propietario (razon_social del grupo de flota)
+  propietario: string
+  // Tarifa de cobro del alquiler POR CONDUCTOR (independiente del tipo de candidato)
+  tipo_tarifa: TipoTarifa
+  tipo_tarifa_diurno: TipoTarifa
+  tipo_tarifa_nocturno: TipoTarifa
+  // Otros
+  observaciones: string
+}
+
+// Tipo para datos de edición - usa any para flexibilidad con los campos de la vista
+type EditData = {
+  id: string
+  [key: string]: any
+}
+
+interface Props {
+  onClose: () => void
+  onSuccess: () => void
+  editData?: EditData | null
+}
+
+export function ProgramacionAssignmentWizardV2({ onClose, onSuccess, editData }: Props) {
+  const { user, profile } = useAuth()
+  const { sedeActualId, aplicarFiltroSede, sedeUsuario, sedes } = useSede()
+  const { grupos: gruposFlota } = useGruposFlota()
+  const isEditMode = !!editData
+
+  // La programacion en edicion llega desde v_programaciones_onboarding, que no
+  // expone las columnas de tarifa: se leen de la tabla base para no perderlas.
+  useEffect(() => {
+    if (!editData?.id) return
+    let cancelado = false
+    ;(async () => {
+      try {
+        const { data } = await (supabase.from('programaciones_onboarding') as any)
+          .select('tipo_tarifa, tipo_tarifa_diurno, tipo_tarifa_nocturno')
+          .eq('id', editData.id)
+          .single()
+        if (cancelado || !data) return
+        setFormData(prev => ({
+          ...prev,
+          tipo_tarifa: (data.tipo_tarifa || 'antigua') as TipoTarifa,
+          tipo_tarifa_diurno: (data.tipo_tarifa_diurno || data.tipo_tarifa || 'antigua') as TipoTarifa,
+          tipo_tarifa_nocturno: (data.tipo_tarifa_nocturno || data.tipo_tarifa || 'antigua') as TipoTarifa,
+        }))
+      } catch { /* se mantienen los defaults */ }
+    })()
+    return () => { cancelado = true }
+  }, [editData?.id])
+  const [step, setStep] = useState(0)
+  const [vehicles, setVehicles] = useState<Vehicle[]>([])
+  // Conceptos de alquiler: alimentan las etiquetas del selector de Tarifa.
+  const [conceptosTarifa, setConceptosTarifa] = useState<MapaConceptosTarifa>({})
+  const [conductores, setConductores] = useState<Conductor[]>([])
+  const [loading, setLoading] = useState(false)
+  const isSubmittingRef = useRef(false)
+  const [loadingVehicles, setLoadingVehicles] = useState(true)
+  const [loadingConductores, setLoadingConductores] = useState(true)
+  const [vehicleSearch, setVehicleSearch] = useState('')
+  const [vehicleAvailabilityFilter, setVehicleAvailabilityFilter] = useState<string>('')
+  // Filtro por GNC del vehiculo: '' = todos, 'con' = con GNC, 'sin' = sin GNC.
+  const [vehicleGncFilter, setVehicleGncFilter] = useState<'' | 'con' | 'sin'>('')
+  const [conductorSearch, setConductorSearch] = useState('')
+  const [conductorStatusFilter, setConductorStatusFilter] = useState<string>('')
+  const [conductorTurnoFilter, setConductorTurnoFilter] = useState<string>('')
+  // Rango de alta del conductor ('YYYY-MM-DD' o '' = sin limite). Inclusivo por dia.
+  const [conductorCreadoDesde, setConductorCreadoDesde] = useState('')
+  const [conductorCreadoHasta, setConductorCreadoHasta] = useState('')
+  const [conductoresDelVehiculoActual, setConductoresDelVehiculoActual] = useState<string[]>([])
+
+  // ── Leads: columna informativa del paso 3 ───────────────────────────────────
+  // Por ahora es SOLO LECTURA (no se arrastra). Arrastrar un lead implica
+  // convertirlo en conductor, porque programaciones_onboarding.conductor_*_id
+  // termina en asignaciones_conductores.conductor_id, que es FK a conductores.
+  const [leads, setLeads] = useState<LeadProgramacion[]>([])
+  const [loadingLeads, setLoadingLeads] = useState(true)
+  const [leadSearch, setLeadSearch] = useState('')
+  const [leadEstadoFilter, setLeadEstadoFilter] = useState<string>('')
+  const [leadTurnoFilter, setLeadTurnoFilter] = useState<string>('')
+  const [leadCreadoDesde, setLeadCreadoDesde] = useState('')
+  const [leadCreadoHasta, setLeadCreadoHasta] = useState('')
+
+  // Estado para modo de vista por pares cercanos
+  const [mostrarParesCercanos, setMostrarParesCercanos] = useState(false)
+  const [paresCercanos, setParesCercanos] = useState<Array<{
+    diurno: Conductor
+    nocturno: Conductor
+    distanciaKm: number
+    tiempoMinutos?: number
+  }>>([])
+  const [loadingPares, setLoadingPares] = useState(false)
+
+  // Estado para submodal de mapa
+  const [showMapModal, setShowMapModal] = useState(false)
+
+  // Zonas peligrosas activas (para alertar si conductor vive en una)
+  const [zonasRestringidas, setZonasPeligrosas] = useState<Array<{
+    id: string
+    nombre: string
+    poligono: { lat: number; lng: number }[]
+  }>>([])
+
+  useEffect(() => {
+    supabase
+      .from('zonas_peligrosas')
+      .select('id, nombre, poligono')
+      .eq('activo', true)
+      .then(({ data }) => {
+        setZonasPeligrosas((data || []) as Array<{ id: string; nombre: string; poligono: { lat: number; lng: number }[] }>)
+      })
+  }, [])
+
+  const [formData, setFormData] = useState<ProgramacionData>(() => {
+    // Si hay datos de edición, pre-cargar
+    if (editData) {
+      const isCargo = editData.modalidad === 'a_cargo'
+      // En cambio de vehículo la BD guarda vehiculo_entregar = NUEVO y
+      // vehiculo_cambio = VIEJO, pero el form usa vehiculo_id = VIEJO y
+      // vehiculo_cambio_id = NUEVO (el guardado vuelve a cruzarlos). Se deshace
+      // el cruce al pre-cargar para que editar y guardar no invierta los autos.
+      const esCambio = editData.cambio_vehiculo === true
+      return {
+        sede_id: editData.sede_id || '',
+        modalidad: editData.modalidad || '',
+        vehiculo_id: (esCambio ? editData.vehiculo_cambio_id : editData.vehiculo_entregar_id) || '',
+        vehiculo_patente: esCambio
+          ? (editData.vehiculo_cambio_patente || '')
+          : (editData.vehiculo_entregar_patente || editData.vehiculo_entregar_patente_sistema || ''),
+        vehiculo_modelo: esCambio
+          ? (editData.vehiculo_cambio_modelo || '')
+          : (editData.vehiculo_entregar_modelo || editData.vehiculo_entregar_modelo_sistema || ''),
+        vehiculo_color: esCambio ? '' : (editData.vehiculo_entregar_color || ''),
+        // Vehículo de cambio (en el form: el vehículo NUEVO)
+        vehiculo_cambio_id: (esCambio ? editData.vehiculo_entregar_id : editData.vehiculo_cambio_id) || '',
+        vehiculo_cambio_patente: esCambio
+          ? (editData.vehiculo_entregar_patente || editData.vehiculo_entregar_patente_sistema || '')
+          : (editData.vehiculo_cambio_patente || ''),
+        vehiculo_cambio_modelo: esCambio
+          ? (editData.vehiculo_entregar_modelo || editData.vehiculo_entregar_modelo_sistema || '')
+          : (editData.vehiculo_cambio_modelo || ''),
+        // Conductor legacy (A CARGO)
+        conductor_id: editData.conductor_id || '',
+        conductor_nombre: editData.conductor_nombre || editData.conductor_display || '',
+        conductor_dni: editData.conductor_dni || '',
+        // Conductor Diurno
+        conductor_diurno_id: editData.conductor_diurno_id || '',
+        conductor_diurno_nombre: editData.conductor_diurno_nombre || '',
+        conductor_diurno_dni: editData.conductor_diurno_dni || '',
+        // Conductor Nocturno
+        conductor_nocturno_id: editData.conductor_nocturno_id || '',
+        conductor_nocturno_nombre: editData.conductor_nocturno_nombre || '',
+        conductor_nocturno_dni: editData.conductor_nocturno_dni || '',
+        // Leads programados
+        lead_diurno_id: editData.lead_diurno_id || '',
+        lead_nocturno_id: editData.lead_nocturno_id || '',
+        lead_cargo_id: editData.lead_cargo_id || '',
+        // Fecha y hora
+        fecha_cita: editData.fecha_cita || new Date().toISOString().split('T')[0],
+        hora_cita: editData.hora_cita?.substring(0, 5) || '10:00',
+        // A CARGO - campos
+        tipo_candidato_cargo: (isCargo ? (editData.tipo_candidato || '') : '') as TipoCandidatoV2,
+        tipo_asignacion_cargo: (isCargo ? (editData.tipo_asignacion || '') : '') as TipoAsignacion,
+        documento_cargo: (isCargo ? (editData.tipo_documento || '') : '') as TipoDocumento,
+        zona_cargo: isCargo ? (editData.zona || '') : '',
+        distancia_cargo: isCargo ? (editData.distancia_minutos || '') : '',
+        // DIURNO - campos
+        tipo_candidato_diurno: (editData.tipo_candidato_diurno || '') as TipoCandidatoV2,
+        tipo_asignacion_diurno: (editData.tipo_asignacion_diurno || editData.tipo_asignacion || '') as TipoAsignacion,
+        documento_diurno: (editData.documento_diurno || '') as TipoDocumento,
+        zona_diurno: editData.zona_diurno || '',
+        distancia_diurno: editData.distancia_diurno || '',
+        // NOCTURNO - campos
+        tipo_candidato_nocturno: (editData.tipo_candidato_nocturno || '') as TipoCandidatoV2,
+        tipo_asignacion_nocturno: (editData.tipo_asignacion_nocturno || editData.tipo_asignacion || '') as TipoAsignacion,
+        documento_nocturno: (editData.documento_nocturno || '') as TipoDocumento,
+        zona_nocturno: editData.zona_nocturno || '',
+        distancia_nocturno: editData.distancia_nocturno || '',
+        devolucion_vehiculo: editData.devolucion_vehiculo ?? false,
+        ultimo_dia_cobro: editData.ultimo_dia_cobro || '',
+        cambio_vehiculo: editData.cambio_vehiculo ?? false,
+        propietario: editData.propietario || '',
+        tipo_tarifa: (editData.tipo_tarifa || 'antigua') as TipoTarifa,
+        tipo_tarifa_diurno: (editData.tipo_tarifa_diurno || editData.tipo_tarifa || 'antigua') as TipoTarifa,
+        tipo_tarifa_nocturno: (editData.tipo_tarifa_nocturno || editData.tipo_tarifa || 'antigua') as TipoTarifa,
+        observaciones: editData.observaciones || ''
+      }
+    }
+    // Valores por defecto para crear - preseleccionar sede si hay una activa
+    return {
+      sede_id: sedeActualId || sedeUsuario?.id || '',
+      modalidad: '',
+      vehiculo_id: '',
+      vehiculo_patente: '',
+      vehiculo_modelo: '',
+      vehiculo_color: '',
+      vehiculo_cambio_id: '',
+      vehiculo_cambio_patente: '',
+      vehiculo_cambio_modelo: '',
+      conductor_id: '',
+      conductor_nombre: '',
+      conductor_dni: '',
+      conductor_diurno_id: '',
+    conductor_diurno_nombre: '',
+    conductor_diurno_dni: '',
+    conductor_nocturno_id: '',
+    conductor_nocturno_nombre: '',
+    conductor_nocturno_dni: '',
+    lead_diurno_id: '',
+    lead_nocturno_id: '',
+    lead_cargo_id: '',
+    fecha_cita: new Date().toISOString().split('T')[0],
+    hora_cita: '10:00',
+    // Campos A CARGO
+    tipo_candidato_cargo: '',
+    tipo_asignacion_cargo: '',
+    documento_cargo: '',
+    zona_cargo: '',
+    distancia_cargo: '',
+    // Campos DIURNO
+    tipo_candidato_diurno: '',
+    tipo_asignacion_diurno: '',
+    documento_diurno: '',
+    zona_diurno: '',
+    distancia_diurno: '',
+    // Campos NOCTURNO
+    tipo_candidato_nocturno: '',
+    tipo_asignacion_nocturno: '',
+    documento_nocturno: '',
+    zona_nocturno: '',
+    distancia_nocturno: '',
+    devolucion_vehiculo: false,
+    ultimo_dia_cobro: '',
+    cambio_vehiculo: false,
+    propietario: '',
+    tipo_tarifa: 'antigua' as TipoTarifa,
+    tipo_tarifa_diurno: 'antigua' as TipoTarifa,
+    tipo_tarifa_nocturno: 'antigua' as TipoTarifa,
+    observaciones: ''
+    }
+  })
+
+  // Conceptos de alquiler para las etiquetas del selector de Tarifa (una sola vez).
+  useEffect(() => {
+    let cancelado = false
+    cargarConceptosTarifa().then((m) => { if (!cancelado) setConceptosTarifa(m) })
+    return () => { cancelado = true }
+  }, [])
+
+  // Cargar vehiculos con informacion de disponibilidad (filtrado por sede del wizard)
+  useEffect(() => {
+    const sedeId = formData.sede_id
+    if (!sedeId && !editData) return // No cargar si no hay sede seleccionada
+
+    const filtrarPorSede = <T,>(query: T): T => {
+      if (!sedeId) return query
+      return (query as any).eq('sede_id', sedeId)
+    }
+
+    const loadVehicles = async () => {
+      setLoadingVehicles(true)
+      try {
+        // Hacer los 3 queries en PARALELO - solo campos minimos necesarios
+        const [vehiculosRes, asignacionesRes, programacionesRes] = await Promise.all([
+          filtrarPorSede(supabase
+            .from('vehiculos')
+            .select('id, patente, marca, modelo, anio, color, gnc, grupo_flota, vehiculos_estados!inner(codigo)')
+            .in('vehiculos_estados.codigo', ['PKG_ON_BASE', 'EN_USO', 'DISPONIBLE'])
+            .is('deleted_at', null))
+            .order('patente'),
+          filtrarPorSede(supabase
+            .from('asignaciones')
+            .select('vehiculo_id, horario, estado, asignaciones_conductores(horario, estado)')
+            .in('estado', ['activa', 'programado'])),
+          filtrarPorSede(supabase
+            .from('programaciones_onboarding')
+            .select('vehiculo_entregar_id, id')
+            .in('estado', ['por_agendar', 'agendado', 'en_curso'])
+            .or('eliminado.is.null,eliminado.eq.false'))
+        ])
+
+        if (vehiculosRes.error) throw vehiculosRes.error
+        const vehiculosData = vehiculosRes.data || []
+        const asignacionesData = asignacionesRes.data || []
+        const programacionesData = programacionesRes.data || []
+
+        // Crear Maps para busqueda O(1) en vez de O(n)
+        const vehiculosProgramadosSet = new Set(
+          programacionesData
+            .filter((p: any) => !editData || p.id !== editData.id)
+            .map((p: any) => p.vehiculo_entregar_id)
+        )
+
+        const asignacionesPorVehiculo = new Map<string, any>()
+        for (const a of asignacionesData as any[]) {
+          const existing = asignacionesPorVehiculo.get(a.vehiculo_id)
+          // Priorizar 'activa' sobre 'programado'
+          if (!existing || (a.estado === 'activa' && existing.estado !== 'activa')) {
+            asignacionesPorVehiculo.set(a.vehiculo_id, a)
+          }
+        }
+
+        // Calcular disponibilidad de cada vehiculo
+        const vehiculosConDisponibilidad: Vehicle[] = vehiculosData.map((vehiculo: any) => {
+          const tieneProgramacionPendiente = vehiculosProgramadosSet.has(vehiculo.id)
+          const asignacion = asignacionesPorVehiculo.get(vehiculo.id)
+
+          // Sin asignacion activa.
+          // 'programado' significa que el vehiculo YA fue enviado al modulo de
+          // Asignaciones (existe la asignacion en estado 'programado'). Una
+          // programacion todavia sin enviar es un estado distinto: avisa, pero no
+          // bloquea. Mismo criterio que AssignmentWizard.tsx.
+          if (!asignacion || asignacion.estado === 'programado') {
+            if (asignacion) {
+              return { ...vehiculo, disponibilidad: 'programado' as const, asignacionActiva: undefined }
+            }
+            if (tieneProgramacionPendiente) {
+              return { ...vehiculo, disponibilidad: 'programacion_pendiente' as const, asignacionActiva: undefined }
+            }
+            return { ...vehiculo, disponibilidad: 'disponible' as const, asignacionActiva: undefined }
+          }
+
+          // Es asignacion activa
+          if (asignacion.horario === 'todo_dia') {
+            // La ocupacion real manda: se conserva asignacionActiva aunque exista
+            // una programacion pendiente sobre el mismo vehiculo.
+            return {
+              ...vehiculo,
+              disponibilidad: 'ocupado' as const,
+              asignacionActiva: { id: asignacion.id, horario: 'todo_dia' as const, turnoDiurnoOcupado: true, turnoNocturnoOcupado: true }
+            }
+          }
+
+          // Es TURNO - verificar slots libres (solo conductores activos/asignados)
+          const conductores = (asignacion.asignaciones_conductores || [])
+            .filter((c: any) => c.estado === 'asignado' || c.estado === 'activo')
+          const turnoDiurnoOcupado = conductores.some((c: any) => c.horario === 'diurno')
+          const turnoNocturnoOcupado = conductores.some((c: any) => c.horario === 'nocturno')
+
+          let disponibilidad: Vehicle['disponibilidad'] = 'ocupado'
+          if (!turnoDiurnoOcupado && !turnoNocturnoOcupado) {
+            disponibilidad = 'disponible'
+          } else if (!turnoDiurnoOcupado) {
+            disponibilidad = 'turno_diurno_libre'
+          } else if (!turnoNocturnoOcupado) {
+            disponibilidad = 'turno_nocturno_libre'
+          }
+
+          // La ocupacion real manda tambien en turnos: una programacion pendiente
+          // no oculta el detalle de slots libres/ocupados.
+          return {
+            ...vehiculo,
+            disponibilidad,
+            asignacionActiva: {
+              id: asignacion.id,
+              horario: 'turno' as const,
+              turnoDiurnoOcupado,
+              turnoNocturnoOcupado
+            }
+          }
+        })
+
+        // Si estamos editando, marcar el vehículo actual como disponible (no programado)
+        const vehiculosFinales = vehiculosConDisponibilidad.map((v: any) => {
+          if (editData && v.id === editData.vehiculo_entregar_id && (v.disponibilidad === 'programado' || v.disponibilidad === 'programacion_pendiente')) {
+            return { ...v, disponibilidad: 'disponible' }
+          }
+          return v
+        })
+
+        setVehicles(vehiculosFinales)
+      } catch {
+        // silently ignored
+      } finally {
+        setLoadingVehicles(false)
+      }
+    }
+
+    loadVehicles()
+  }, [editData?.id, formData.sede_id])
+
+  // Cargar conductores disponibles (filtrado por sede del wizard)
+  useEffect(() => {
+    const sedeId = formData.sede_id
+    if (!sedeId && !editData) return // No cargar si no hay sede seleccionada
+
+    const loadConductores = async () => {
+      setLoadingConductores(true)
+      try {
+        let query = supabase
+          .from('conductores')
+          .select(`
+            id,
+            numero_licencia,
+            numero_dni,
+            nombres,
+            apellidos,
+            licencia_vencimiento,
+            estado_id,
+            preferencia_turno,
+            zona,
+            direccion,
+            direccion_lat,
+            direccion_lng,
+            created_at,
+            motivo_baja,
+            conductores_estados (
+              codigo,
+              descripcion
+            )
+          `)
+        if (sedeId) {
+          query = query.eq('sede_id', sedeId)
+        }
+        const { data, error } = await query.order('apellidos')
+
+        if (error) throw error
+
+        // Filtrar conductores activos
+        const conductoresActivos = (data || []).filter((c: any) =>
+          c.conductores_estados?.codigo?.toLowerCase().includes('activo')
+        ) as unknown as Conductor[]
+
+        // Verificar asignaciones activas o programadas
+        const [asignacionesActivasRes, asignacionesProgramadasRes] = await Promise.all([
+          supabase
+            .from('asignaciones_conductores')
+            .select('conductor_id, horario, asignaciones!inner(estado)')
+            .eq('asignaciones.estado', 'activa'),
+          supabase
+            .from('asignaciones_conductores')
+            .select('conductor_id, horario, asignaciones!inner(estado)')
+            .eq('asignaciones.estado', 'programado')
+        ])
+
+        const asignacionesActivas = asignacionesActivasRes.data as { conductor_id: string; horario: string }[] | null
+        const asignacionesProgramadas = asignacionesProgramadasRes.data as { conductor_id: string; horario: string }[] | null
+
+        const todasAsignaciones = [...(asignacionesActivas || []), ...(asignacionesProgramadas || [])]
+
+        // ─── O(1) lookup structures — construidas una vez antes del .map() ──────
+        const asignacionesPorConductor = new Map<string, typeof todasAsignaciones>()
+        todasAsignaciones.forEach(a => {
+          const arr = asignacionesPorConductor.get(a.conductor_id) || []
+          arr.push(a)
+          asignacionesPorConductor.set(a.conductor_id, arr)
+        })
+        const conductoresActivosSet = new Set((asignacionesActivas || []).map(a => a.conductor_id))
+        const conductoresProgramadosSet = new Set((asignacionesProgramadas || []).map(a => a.conductor_id))
+        // ─────────────────────────────────────────────────────────────────────────
+
+        const conductoresConEstado = conductoresActivos.map(conductor => {
+          const asignacionesConductor = asignacionesPorConductor.get(conductor.id) || []
+          const tieneAsignacionActiva = conductoresActivosSet.has(conductor.id)
+          const tieneAsignacionProgramada = conductoresProgramadosSet.has(conductor.id)
+          const tieneAsignacionDiurna = asignacionesConductor.some(a => a.horario === 'diurno')
+          const tieneAsignacionNocturna = asignacionesConductor.some(a => a.horario === 'nocturno')
+          const tieneAsignacionCargo = asignacionesConductor.some(a => a.horario !== 'diurno' && a.horario !== 'nocturno')
+          
+          return {
+            ...conductor,
+            tieneAsignacionActiva,
+            tieneAsignacionProgramada,
+            tieneAsignacionDiurna: tieneAsignacionDiurna || tieneAsignacionCargo,
+            tieneAsignacionNocturna: tieneAsignacionNocturna || tieneAsignacionCargo
+          }
+        })
+
+        setConductores(conductoresConEstado)
+      } catch {
+        // silently ignored
+      } finally {
+        setLoadingConductores(false)
+      }
+    }
+
+    loadConductores()
+  }, [formData.sede_id])
+
+  // Cargar leads de la sede (columna informativa del paso 3).
+  // Consulta independiente de la de conductores: si falla, el wizard sigue
+  // funcionando exactamente como antes, solo que sin esa columna.
+  useEffect(() => {
+    const sedeId = formData.sede_id
+    if (!sedeId && !editData) {
+      setLoadingLeads(false)
+      return
+    }
+
+    let cancelado = false
+
+    const loadLeads = async () => {
+      setLoadingLeads(true)
+      try {
+        let query = supabase
+          .from('leads')
+          .select('id, nombre_completo, primer_nombre, apellido, dni, estado_de_lead, turno, zona, created_at')
+        if (sedeId) {
+          query = query.eq('sede_id', sedeId)
+        }
+        const { data, error } = await query.order('created_at', { ascending: false })
+        if (error) throw error
+        if (cancelado) return
+
+        const vivos = ((data || []) as unknown as LeadProgramacion[]).filter(
+          (l) => !ESTADOS_LEAD_FUERA_DE_PROGRAMACION.has((l.estado_de_lead || '').trim())
+        )
+        setLeads(vivos)
+      } catch {
+        if (!cancelado) setLeads([])
+      } finally {
+        if (!cancelado) setLoadingLeads(false)
+      }
+    }
+
+    loadLeads()
+    return () => {
+      cancelado = true
+    }
+  }, [formData.sede_id, editData])
+
+  // Función para cargar Google Maps API si no está disponible
+  const loadGoogleMapsAPI = (): Promise<void> => {
+    return new Promise((resolve, reject) => {
+      if (window.google?.maps) {
+        resolve()
+        return
+      }
+
+      // Verificar si ya existe el script
+      const existingScript = document.querySelector('script[src*="maps.googleapis.com"]')
+      if (existingScript) {
+        existingScript.addEventListener('load', () => resolve())
+        return
+      }
+
+      const script = document.createElement('script')
+      script.src = GOOGLE_MAPS_SCRIPT_URL
+      script.async = true
+      script.onload = () => resolve()
+      script.onerror = () => reject(new Error('Error cargando Google Maps'))
+      document.head.appendChild(script)
+    })
+  }
+
+  // Función para geocodificar una dirección usando Google Maps Geocoder
+  const geocodificarDireccion = (direccion: string): Promise<{ lat: number; lng: number } | null> => {
+    return new Promise((resolve) => {
+      const geocoder = new google.maps.Geocoder()
+      geocoder.geocode(
+        { address: direccion, region: 'ar' },
+        (results, status) => {
+          if (status === 'OK' && results && results[0]) {
+            const location = results[0].geometry.location
+            resolve({ lat: location.lat(), lng: location.lng() })
+          } else {
+            resolve(null)
+          }
+        }
+      )
+    })
+  }
+
+  // Función para geocodificar conductores que tienen dirección pero no coordenadas
+  const geocodificarConductoresSinCoordenadas = async (conductoresLista: Conductor[]): Promise<Conductor[]> => {
+    const conductoresActualizados = [...conductoresLista]
+    const conductoresSinCoords = conductoresLista.filter(
+      c => c.direccion && (!c.direccion_lat || !c.direccion_lng)
+    )
+
+    if (conductoresSinCoords.length === 0) return conductoresActualizados
+
+    // Asegurar que Google Maps esté cargado
+    await loadGoogleMapsAPI()
+
+    // Geocodificar cada conductor sin coordenadas
+    for (const conductor of conductoresSinCoords) {
+      try {
+        const coords = await geocodificarDireccion(conductor.direccion || '')
+
+        if (coords) {
+          // Actualizar en la base de datos (campos custom no tipados)
+          await (supabase
+            .from('conductores') as any)
+            .update({ direccion_lat: coords.lat, direccion_lng: coords.lng })
+            .eq('id', conductor.id)
+
+          // Actualizar en el array local
+          const index = conductoresActualizados.findIndex(c => c.id === conductor.id)
+          if (index !== -1) {
+            conductoresActualizados[index] = {
+              ...conductoresActualizados[index],
+              direccion_lat: coords.lat,
+              direccion_lng: coords.lng
+            }
+          }
+        }
+      } catch {
+        // silently ignored
+      }
+    }
+
+    return conductoresActualizados
+  }
+
+  // Fórmula de Haversine para calcular distancia en km (muy rápido, sin API)
+  const calcularDistanciaHaversine = (
+    lat1: number, lng1: number,
+    lat2: number, lng2: number
+  ): number => {
+    const R = 6371 // Radio de la Tierra en km
+    const dLat = (lat2 - lat1) * Math.PI / 180
+    const dLng = (lng2 - lng1) * Math.PI / 180
+    const a =
+      Math.sin(dLat/2) * Math.sin(dLat/2) +
+      Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+      Math.sin(dLng/2) * Math.sin(dLng/2)
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a))
+    return R * c
+  }
+
+  // Función para obtener distancia y tiempo en auto usando Distance Matrix API
+  const obtenerDistanciaEnAuto = async (
+    origen: { lat: number; lng: number },
+    destino: { lat: number; lng: number }
+  ): Promise<{ distanciaKm: number; tiempoMinutos: number } | null> => {
+    // Interruptor global: apagado, se devuelve null y el wizard sigue su camino
+    // alternativo (distancia en línea recta, campo cargado a mano).
+    if (!DISTANCE_MATRIX_HABILITADO) return null
+    try {
+      await loadGoogleMapsAPI()
+
+      return new Promise((resolve) => {
+        const service = new google.maps.DistanceMatrixService()
+        service.getDistanceMatrix(
+          {
+            origins: [new google.maps.LatLng(origen.lat, origen.lng)],
+            destinations: [new google.maps.LatLng(destino.lat, destino.lng)],
+            travelMode: google.maps.TravelMode.DRIVING,
+            unitSystem: google.maps.UnitSystem.METRIC,
+          },
+          (response, status) => {
+            if (status === 'OK' && response?.rows[0]?.elements[0]?.status === 'OK') {
+              const element = response.rows[0].elements[0]
+              resolve({
+                distanciaKm: Math.round((element.distance.value / 1000) * 10) / 10,
+                tiempoMinutos: Math.round(element.duration.value / 60)
+              })
+            } else {
+              resolve(null)
+            }
+          }
+        )
+      })
+    } catch {
+      return null
+    }
+  }
+
+  // Función para calcular y ordenar pares cercanos
+  const calcularParesCercanos = async () => {
+    setLoadingPares(true)
+
+    try {
+      // 1. Primero intentar cargar desde la base de datos (datos pre-calculados)
+      const { data: emparajamientosDB, error: errorDB } = await supabase
+        .from('conductor_emparajamientos')
+        .select(`
+          *,
+          conductor_a:conductor_a_id(id, nombres, apellidos, numero_dni, preferencia_turno),
+          conductor_b:conductor_b_id(id, nombres, apellidos, numero_dni, preferencia_turno)
+        `)
+        .gte('score', 20)
+        .lte('tiempo_minutos', 30)
+        .order('score', { ascending: false })
+        .limit(500)
+
+      if (!errorDB && emparajamientosDB && emparajamientosDB.length > 0) {
+        const paresDB: any[] = []
+
+        for (const emp of emparajamientosDB) {
+          const conductorA = emp.conductor_a
+          const conductorB = emp.conductor_b
+
+          if (!conductorA || !conductorB) continue
+
+          const esDiurnoA = conductorA.preferencia_turno === 'DIURNO' || conductorA.preferencia_turno === 'SIN_PREFERENCIA' || !conductorA.preferencia_turno
+          const esNocturnoA = conductorA.preferencia_turno === 'NOCTURNO' || conductorA.preferencia_turno === 'SIN_PREFERENCIA' || !conductorA.preferencia_turno
+          const esDiurnoB = conductorB.preferencia_turno === 'DIURNO' || conductorB.preferencia_turno === 'SIN_PREFERENCIA' || !conductorB.preferencia_turno
+          const esNocturnoB = conductorB.preferencia_turno === 'NOCTURNO' || conductorB.preferencia_turno === 'SIN_PREFERENCIA' || !conductorB.preferencia_turno
+
+          let diurno: any = null, nocturno: any = null
+          if (esDiurnoA && esNocturnoB) {
+            diurno = conductorA
+            nocturno = conductorB
+          } else if (esNocturnoA && esDiurnoB) {
+            diurno = conductorB
+            nocturno = conductorA
+          }
+
+          if (diurno && nocturno) {
+            paresDB.push({
+              diurno,
+              nocturno,
+              distanciaKm: emp.distancia_km,
+              tiempoMinutos: emp.tiempo_minutos,
+              score: emp.score
+            })
+          }
+        }
+
+        if (paresDB.length > 0) {
+          setParesCercanos(paresDB)
+          setMostrarParesCercanos(true)
+          setLoadingPares(false)
+          return
+        }
+      }
+
+      // 2. Fallback: calcular en tiempo real si no hay datos en BD
+      
+      // Geocodificar conductores sin coordenadas
+      const conductoresActualizados = await geocodificarConductoresSinCoordenadas(conductores)
+      setConductores(conductoresActualizados)
+
+      // Filtrar conductores con coordenadas y disponibles
+      const conductoresConCoords = conductoresActualizados.filter((c: Conductor) =>
+        c.direccion_lat && c.direccion_lng
+      )
+
+      // Separar por preferencia de turno
+      const diurnos = conductoresConCoords.filter((c: Conductor) =>
+        c.preferencia_turno === 'DIURNO' || c.preferencia_turno === 'SIN_PREFERENCIA' || !c.preferencia_turno
+      )
+      const nocturnos = conductoresConCoords.filter((c: Conductor) =>
+        c.preferencia_turno === 'NOCTURNO' || c.preferencia_turno === 'SIN_PREFERENCIA' || !c.preferencia_turno
+      )
+
+      if (diurnos.length === 0 || nocturnos.length === 0) {
+        setParesCercanos([])
+        setMostrarParesCercanos(true)
+        setLoadingPares(false)
+        return
+      }
+
+      // Calcular todos los pares posibles con sus distancias (Haversine rápido)
+      const pares: Array<{ diurno: Conductor; nocturno: Conductor; distanciaKm: number; tiempoMinutos?: number }> = []
+
+      for (const diurno of diurnos) {
+        for (const nocturno of nocturnos) {
+          if (diurno.id === nocturno.id) continue
+          // Evitar emparejar conductores con exactamente la misma ubicación (duplicados de datos)
+          if (diurno.direccion_lat === nocturno.direccion_lat && diurno.direccion_lng === nocturno.direccion_lng) continue
+
+          const distanciaKm = calcularDistanciaHaversine(
+            diurno.direccion_lat!,
+            diurno.direccion_lng!,
+            nocturno.direccion_lat!,
+            nocturno.direccion_lng!
+          )
+
+          pares.push({ diurno, nocturno, distanciaKm })
+        }
+      }
+
+      // Ordenar por distancia (más cercanos primero)
+      pares.sort((a, b) => a.distanciaKm - b.distanciaKm)
+
+      // Tomar los mejores pares únicos (cada conductor solo una vez)
+      const usados = new Set<string>()
+      const paresUnicos: typeof pares = []
+
+      for (const par of pares) {
+        if (!usados.has(par.diurno.id) && !usados.has(par.nocturno.id)) {
+          paresUnicos.push(par)
+          usados.add(par.diurno.id)
+          usados.add(par.nocturno.id)
+        }
+      }
+
+      // Top pares (todos los unicos)
+      const topPares = paresUnicos.slice(0, 50)
+
+      // Obtener distancia y tiempo en auto via Distance Matrix API
+      const paresConTiempo = await Promise.all(
+        topPares.map(async (par) => {
+          const resultado = await obtenerDistanciaEnAuto(
+            { lat: par.diurno.direccion_lat!, lng: par.diurno.direccion_lng! },
+            { lat: par.nocturno.direccion_lat!, lng: par.nocturno.direccion_lng! }
+          )
+          return {
+            ...par,
+            distanciaKm: resultado?.distanciaKm || par.distanciaKm,
+            tiempoMinutos: resultado?.tiempoMinutos
+          }
+        })
+      )
+
+      // Reordenar por tiempo en auto si está disponible
+      paresConTiempo.sort((a, b) => {
+        if (a.tiempoMinutos && b.tiempoMinutos) return a.tiempoMinutos - b.tiempoMinutos
+        return a.distanciaKm - b.distanciaKm
+      })
+
+      setParesCercanos(paresConTiempo)
+      setMostrarParesCercanos(true)
+    } catch {
+      // silently ignored
+    } finally {
+      setLoadingPares(false)
+    }
+  }
+
+  // Toggle para activar/desactivar vista de pares
+  const toggleVistaPares = () => {
+    if (!mostrarParesCercanos) {
+      calcularParesCercanos()
+    } else {
+      setMostrarParesCercanos(false)
+    }
+  }
+
+  const handleNext = async () => {
+    // Step 1: Validate modalidad (devolución y cambio_vehiculo no requieren modalidad previa, se detecta del vehículo)
+    if (step === 1 && !formData.modalidad && !formData.devolucion_vehiculo && !formData.cambio_vehiculo) {
+      Swal.fire('Error', 'Debes seleccionar una modalidad', 'error')
+      return
+    }
+
+    // Step 2: Validate vehiculo & preload conductores
+    if (step === 2) {
+      if (!formData.vehiculo_id) {
+        Swal.fire('Error', 'Debes seleccionar un vehiculo', 'error')
+        return
+      }
+      // Cambio de vehículo requiere ambos vehículos
+      if (formData.cambio_vehiculo && !formData.vehiculo_cambio_id) {
+        Swal.fire('Error', 'Debes seleccionar el vehículo nuevo (destino)', 'error')
+        return
+      }
+      if (formData.cambio_vehiculo && formData.vehiculo_id === formData.vehiculo_cambio_id) {
+        Swal.fire('Error', 'El vehículo origen y destino no pueden ser el mismo', 'error')
+        return
+      }
+      // Cargar conductores del vehiculo antes de pasar al paso 3
+      setLoading(true)
+      await loadConductoresDelVehiculo(formData.vehiculo_id)
+
+      // Si es devolución, auto-setear tipo de asignación y documento N/A (no genera documentos)
+      if (formData.devolucion_vehiculo) {
+        setFormData(prev => ({
+          ...prev,
+          tipo_asignacion_cargo: 'devolucion_vehiculo' as TipoAsignacion,
+          documento_cargo: 'na' as TipoDocumento,
+          tipo_asignacion_diurno: prev.conductor_diurno_id ? 'devolucion_vehiculo' as TipoAsignacion : prev.tipo_asignacion_diurno,
+          documento_diurno: prev.conductor_diurno_id ? 'na' as TipoDocumento : prev.documento_diurno,
+          tipo_asignacion_nocturno: prev.conductor_nocturno_id ? 'devolucion_vehiculo' as TipoAsignacion : prev.tipo_asignacion_nocturno,
+          documento_nocturno: prev.conductor_nocturno_id ? 'na' as TipoDocumento : prev.documento_nocturno,
+        }))
+      }
+
+      // Si es cambio de vehículo, auto-setear tipo de asignación a cambio_auto y documento a anexo
+      if (formData.cambio_vehiculo) {
+        setFormData(prev => ({
+          ...prev,
+          tipo_asignacion_cargo: 'cambio_auto' as TipoAsignacion,
+          documento_cargo: 'anexo' as TipoDocumento,
+          tipo_asignacion_diurno: prev.conductor_diurno_id ? 'cambio_auto' as TipoAsignacion : prev.tipo_asignacion_diurno,
+          documento_diurno: prev.conductor_diurno_id ? 'anexo' as TipoDocumento : prev.documento_diurno,
+          tipo_asignacion_nocturno: prev.conductor_nocturno_id ? 'cambio_auto' as TipoAsignacion : prev.tipo_asignacion_nocturno,
+          documento_nocturno: prev.conductor_nocturno_id ? 'anexo' as TipoDocumento : prev.documento_nocturno,
+        }))
+      }
+
+      setLoading(false)
+    }
+
+    // Step 3: Validate conductores segun modalidad
+    if (step === 3) {
+      if (formData.modalidad === 'a_cargo' && !formData.conductor_id) {
+        Swal.fire('Error', 'Debes asignar un conductor', 'error')
+        return
+      }
+      if (formData.modalidad !== 'a_cargo') {
+        // Modo TURNO - al menos 1 conductor
+        if (!formData.conductor_diurno_id && !formData.conductor_nocturno_id) {
+          Swal.fire('Error', 'Debes asignar al menos un conductor (Diurno o Nocturno)', 'error')
+          return
+        }
+        // Validar que no sea el mismo conductor en ambos turnos
+        if (formData.conductor_diurno_id && formData.conductor_nocturno_id &&
+            formData.conductor_diurno_id === formData.conductor_nocturno_id) {
+          Swal.fire('Error', 'No se puede asignar el mismo conductor en ambos turnos', 'error')
+          return
+        }
+      }
+    }
+
+    setStep(step + 1)
+  }
+
+  const handleBack = () => {
+    setStep(step - 1)
+  }
+
+  const handleSelectModality = (modalidad: 'turno' | 'a_cargo') => {
+    setFormData({
+      ...formData,
+      modalidad,
+      // Reset conductores al cambiar modalidad
+      conductor_id: '',
+      conductor_nombre: '',
+      conductor_dni: '',
+      conductor_diurno_id: '',
+      conductor_diurno_nombre: '',
+      conductor_diurno_dni: '',
+      conductor_nocturno_id: '',
+      conductor_nocturno_nombre: '',
+      conductor_nocturno_dni: '',
+      lead_diurno_id: '',
+      lead_nocturno_id: '',
+      lead_cargo_id: ''
+    })
+  }
+
+  // GNC del vehiculo que efectivamente se entrega. En un cambio de vehiculo el
+  // que manda es el vehiculo destino (mismo criterio que vehiculo_entregar_id).
+  const tieneGncVehiculoEntregado = useMemo(() => {
+    const id = formData.cambio_vehiculo ? formData.vehiculo_cambio_id : formData.vehiculo_id
+    if (!id) return false
+    return vehicles.find((v) => v.id === id)?.gnc === true
+  }, [vehicles, formData.vehiculo_id, formData.vehiculo_cambio_id, formData.cambio_vehiculo])
+
+  // Propietario: se autocompleta con el grupo de flota del vehiculo que se
+  // entrega. vehiculos.grupo_flota guarda la razon_social de grupos_flota, que
+  // es el mismo valor que usan las opciones del select. Solo se aplica si
+  // matchea una opcion valida; si el vehiculo no tiene grupo (o no coincide),
+  // se respeta lo que el usuario ya haya elegido.
+  const resolverPropietario = (vehicle: Vehicle, propietarioActual: string) => {
+    const grupoVehiculo = ((vehicle as any).grupo_flota || '').trim()
+    return gruposFlota.some(g => g.razon_social === grupoVehiculo)
+      ? grupoVehiculo
+      : propietarioActual
+  }
+
+  const handleSelectVehicle = (vehicle: Vehicle) => {
+    // Un vehiculo ya enviado a Asignaciones no se puede volver a programar.
+    // El card lo bloquea visualmente; este guard cubre cualquier otro punto de
+    // entrada. Se exceptua el que ya esta seleccionado (modo edicion).
+    if (vehicle.disponibilidad === 'programado' && vehicle.id !== formData.vehiculo_id) return
+
+    const propietarioAuto = resolverPropietario(vehicle, formData.propietario)
+
+    setFormData({
+      ...formData,
+      vehiculo_id: vehicle.id,
+      vehiculo_patente: vehicle.patente,
+      vehiculo_modelo: `${vehicle.marca} ${vehicle.modelo}`,
+      vehiculo_color: vehicle.color || '',
+      propietario: propietarioAuto
+    })
+  }
+
+  // Cargar conductores asignados al vehiculo seleccionado (llamado en handleNext del paso 2)
+  const loadConductoresDelVehiculo = async (vehiculoId: string) => {
+    try {
+      const { data: asignacionData } = await supabase
+        .from('asignaciones')
+        .select(`
+          id,
+          horario,
+          asignaciones_conductores (
+            horario,
+            estado,
+            conductor_id,
+            conductores (
+              id,
+              nombres,
+              apellidos,
+              numero_dni
+            )
+          )
+        `)
+        .eq('vehiculo_id', vehiculoId)
+        .eq('estado', 'activa')
+        .single()
+
+      if (asignacionData) {
+        const asigData = asignacionData as any
+        // Si es devolución o cambio de vehículo, solo traer conductores activos (no los dados de baja/completados)
+        const conductoresAsigRaw = asigData.asignaciones_conductores || []
+        const conductoresAsig = (formData.devolucion_vehiculo || formData.cambio_vehiculo)
+          ? conductoresAsigRaw.filter((c: any) => c.estado === 'asignado' || c.estado === 'activo')
+          : conductoresAsigRaw
+
+        // Guardar los IDs de conductores que ya están asignados a este vehículo
+        // para que aparezcan disponibles en la lista aunque tengan asignación activa
+        const conductorIds = conductoresAsig
+          .map((c: any) => c.conductor_id)
+          .filter((id: string) => id)
+        setConductoresDelVehiculoActual(conductorIds)
+
+        // Si es devolución o cambio de vehículo y la modalidad aún no fue seteada, usar la modalidad real del vehículo
+        const modalidadVehiculo: 'turno' | 'a_cargo' = asigData.horario === 'todo_dia' ? 'a_cargo' : 'turno'
+        if ((formData.devolucion_vehiculo || formData.cambio_vehiculo) && !formData.modalidad && modalidadVehiculo) {
+          setFormData(prev => ({ ...prev, modalidad: modalidadVehiculo }))
+        }
+
+        // Determinar la modalidad efectiva para la comparación
+        const modalidadSeleccionada = ((formData.devolucion_vehiculo || formData.cambio_vehiculo) && !formData.modalidad)
+          ? modalidadVehiculo
+          : formData.modalidad
+
+        // Si la modalidad coincide, pre-llenar los campos del conductor
+        if (modalidadSeleccionada === modalidadVehiculo) {
+          let updates: Partial<ProgramacionData> = {}
+
+          if (asigData.horario === 'todo_dia') {
+            const conductorCargo = conductoresAsig[0]?.conductores
+            if (conductorCargo) {
+              updates = {
+                conductor_id: conductorCargo.id,
+                conductor_nombre: `${conductorCargo.nombres} ${conductorCargo.apellidos}`,
+                conductor_dni: conductorCargo.numero_dni || ''
+              }
+            }
+          } else {
+            // Filtrar solo conductores activos/asignados para pre-llenar (ignorar completados/cancelados)
+            const conductoresActivos = conductoresAsig.filter((c: any) =>
+              c.estado === 'asignado' || c.estado === 'activo' || c.estado === 'activa'
+            )
+            const diurnoData = conductoresActivos.find((c: any) => c.horario === 'diurno')
+            const nocturnoData = conductoresActivos.find((c: any) => c.horario === 'nocturno')
+
+            if (diurnoData?.conductores) {
+              updates.conductor_diurno_id = diurnoData.conductores.id
+              updates.conductor_diurno_nombre = `${diurnoData.conductores.nombres} ${diurnoData.conductores.apellidos}`
+              updates.conductor_diurno_dni = diurnoData.conductores.numero_dni || ''
+            }
+            if (nocturnoData?.conductores) {
+              updates.conductor_nocturno_id = nocturnoData.conductores.id
+              updates.conductor_nocturno_nombre = `${nocturnoData.conductores.nombres} ${nocturnoData.conductores.apellidos}`
+              updates.conductor_nocturno_dni = nocturnoData.conductores.numero_dni || ''
+            }
+          }
+
+          if (Object.keys(updates).length > 0) {
+            setFormData(prev => ({ ...prev, ...updates }))
+          }
+        }
+        // Si la modalidad NO coincide, los conductores del vehículo ya están en conductoresDelVehiculoActual
+        // y aparecerán en la lista para que el usuario los seleccione manualmente
+      } else {
+        // No hay asignación activa, limpiar lista de conductores del vehículo
+        setConductoresDelVehiculoActual([])
+
+        // Cambio de vehículo sobre un vehículo que solo tiene una programación
+        // borrador: la modalidad no se puede deducir de una asignación, así que
+        // se toma de esa programación pendiente (si no hay, TURNO). Los
+        // conductores se eligen a mano en el paso 3.
+        if (formData.cambio_vehiculo && !formData.modalidad) {
+          const { data: progPendiente } = await (supabase.from('programaciones_onboarding') as any)
+            .select('modalidad')
+            .eq('vehiculo_entregar_id', vehiculoId)
+            .in('estado', ['por_agendar', 'agendado', 'en_curso'])
+            .or('eliminado.is.null,eliminado.eq.false')
+            .order('created_at', { ascending: false })
+            .limit(1)
+            .maybeSingle()
+          const modalidadBorrador: 'turno' | 'a_cargo' = progPendiente?.modalidad === 'a_cargo' ? 'a_cargo' : 'turno'
+          setFormData(prev => ({ ...prev, modalidad: prev.modalidad || modalidadBorrador }))
+        }
+      }
+    } catch {
+      // Si no hay asignacion activa, limpiar lista
+      setConductoresDelVehiculoActual([])
+    }
+  }
+
+  // Para modo A CARGO
+  const handleSelectConductorCargo = (conductorId: string) => {
+    const conductor = conductores.find(c => c.id === conductorId)
+    if (conductor) {
+      setFormData({
+        ...formData,
+        conductor_id: conductorId,
+        conductor_nombre: `${conductor.nombres} ${conductor.apellidos}`,
+        conductor_dni: conductor.numero_dni || '',
+        lead_cargo_id: '',
+        zona_cargo: conductor.zona || '',
+        distancia_cargo: 0,
+      })
+    }
+  }
+
+  // Para modo TURNO - Diurno
+  const handleSelectConductorDiurno = (conductorId: string, pairTiempo?: number, pairPartnerId?: string) => {
+    const conductor = conductores.find(c => c.id === conductorId)
+    if (conductor) {
+      setFormData(prev => {
+        const updates: any = {
+          ...prev,
+          conductor_diurno_id: conductorId,
+          conductor_diurno_nombre: `${conductor.nombres} ${conductor.apellidos}`,
+          conductor_diurno_dni: conductor.numero_dni || '',
+          // Un conductor pisa al lead que hubiera en el slot: nunca pueden
+          // convivir los dos ids en el mismo turno.
+          lead_diurno_id: '',
+          zona_diurno: conductor.zona || '',
+        }
+        // Si viene de un par y el compañero ya está asignado como nocturno, auto-rellenar distancia
+        if (pairTiempo && pairPartnerId && prev.conductor_nocturno_id === pairPartnerId) {
+          updates.distancia_diurno = pairTiempo
+          updates.distancia_nocturno = pairTiempo
+        }
+        // Si ya está marcada devolución o cambio de vehículo, auto-setear tipo_asignacion y documento
+        if (prev.devolucion_vehiculo) {
+          updates.tipo_asignacion_diurno = 'devolucion_vehiculo'
+          updates.documento_diurno = 'na'
+        } else if (prev.cambio_vehiculo) {
+          updates.tipo_asignacion_diurno = 'cambio_auto'
+          updates.documento_diurno = 'anexo'
+        }
+        return updates
+      })
+    }
+  }
+
+  // Para modo TURNO - Nocturno
+  const handleSelectConductorNocturno = (conductorId: string, pairTiempo?: number, pairPartnerId?: string) => {
+    const conductor = conductores.find(c => c.id === conductorId)
+    if (conductor) {
+      setFormData(prev => {
+        const updates: any = {
+          ...prev,
+          conductor_nocturno_id: conductorId,
+          conductor_nocturno_nombre: `${conductor.nombres} ${conductor.apellidos}`,
+          conductor_nocturno_dni: conductor.numero_dni || '',
+          lead_nocturno_id: '',
+          zona_nocturno: conductor.zona || '',
+        }
+        // Si viene de un par y el compañero ya está asignado como diurno, auto-rellenar distancia
+        if (pairTiempo && pairPartnerId && prev.conductor_diurno_id === pairPartnerId) {
+          updates.distancia_diurno = pairTiempo
+          updates.distancia_nocturno = pairTiempo
+        }
+        // Si ya está marcada devolución o cambio de vehículo, auto-setear tipo_asignacion y documento
+        if (prev.devolucion_vehiculo) {
+          updates.tipo_asignacion_nocturno = 'devolucion_vehiculo'
+          updates.documento_nocturno = 'na'
+        } else if (prev.cambio_vehiculo) {
+          updates.tipo_asignacion_nocturno = 'cambio_auto'
+          updates.documento_nocturno = 'anexo'
+        }
+        return updates
+      })
+    }
+  }
+
+  // Remover conductor de turno
+  const handleRemoveConductorTurno = (tipo: 'diurno' | 'nocturno' | 'cargo') => {
+    if (tipo === 'diurno') {
+      setFormData({
+        ...formData,
+        conductor_diurno_id: '',
+        conductor_diurno_nombre: '',
+        conductor_diurno_dni: '',
+        lead_diurno_id: '',
+        zona_diurno: '',
+        distancia_diurno: '',
+      })
+    } else if (tipo === 'nocturno') {
+      setFormData({
+        ...formData,
+        conductor_nocturno_id: '',
+        conductor_nocturno_nombre: '',
+        conductor_nocturno_dni: '',
+        lead_nocturno_id: '',
+        zona_nocturno: '',
+        distancia_nocturno: '',
+      })
+    } else {
+      setFormData({
+        ...formData,
+        conductor_id: '',
+        conductor_nombre: '',
+        conductor_dni: '',
+        lead_cargo_id: '',
+        zona_cargo: '',
+        distancia_cargo: '',
+      })
+    }
+  }
+
+  // Auto-detectar tipo de candidato basándose en datos del conductor
+  // Nuevo: nunca tuvo asignación (o estuvo de baja sin asignaciones previas)
+  // Antiguo: ya ha tenido asignaciones y no está de baja
+  // Reingreso: estuvo de baja Y tuvo asignaciones anteriores
+  async function detectarTipoCandidato(conductorId: string): Promise<'nuevo' | 'antiguo' | 'reingreso'> {
+    const conductor = conductores.find(c => c.id === conductorId) as any
+    if (!conductor) return 'nuevo'
+
+    // Verificar si tuvo asignaciones previas (cualquier estado)
+    const { count } = await supabase
+      .from('asignaciones_conductores')
+      .select('id', { count: 'exact', head: true })
+      .eq('conductor_id', conductorId)
+    const tuvoAsignaciones = (count || 0) > 0
+
+    // Si estuvo de baja (tiene motivo_baja)
+    if (conductor.motivo_baja) {
+      // Reingreso: estuvo de baja Y tuvo asignaciones anteriores
+      if (tuvoAsignaciones) return 'reingreso'
+      // Nuevo: estuvo de baja pero nunca tuvo asignación
+      return 'nuevo'
+    }
+
+    // Sin baja: si tuvo asignaciones → antiguo, si no → nuevo
+    if (tuvoAsignaciones) return 'antiguo'
+    return 'nuevo'
+  }
+
+  // Obtener defaults de tipo_asignacion y documento según tipo de candidato
+  function getDefaultsPorCandidato(tipo: TipoCandidatoV2): { asignacion: TipoAsignacion; documento: TipoDocumento } {
+    switch (tipo) {
+      case 'nuevo':
+        return { asignacion: 'entrega_auto', documento: 'carta_oferta' }
+      case 'antiguo':
+        return { asignacion: 'asignacion_companero', documento: 'anexo' }
+      case 'reingreso':
+        return { asignacion: 'entrega_auto', documento: 'carta_oferta' }
+      case 'lead':
+        // El lead entra como companero de un conductor ya asignado, pero firma
+        // carta oferta: es su primer documento con la empresa.
+        return { asignacion: 'asignacion_companero', documento: 'carta_oferta' }
+    }
+  }
+
+  // Auto-rellenar zona y tipo de candidato al entrar al paso 4
+  useEffect(() => {
+    if (step !== 4) return
+
+    // Auto-detectar tipo de candidato siempre (incluso en devolución/cambio)
+    // Solo setear defaults de asignación/documento si NO es devolución ni cambio (esos ya tienen sus defaults del paso 2)
+    async function autoDetectarTipos() {
+      const isDevolucionOCambio = formData.devolucion_vehiculo || formData.cambio_vehiculo
+      const updates: any = {}
+      let changed = false
+
+      if (formData.modalidad === 'a_cargo' && formData.conductor_id && !formData.tipo_candidato_cargo) {
+        const tipo = await detectarTipoCandidato(formData.conductor_id)
+        updates.tipo_candidato_cargo = tipo
+        if (!isDevolucionOCambio) {
+          const defaults = getDefaultsPorCandidato(tipo)
+          // En modalidad A Cargo "asignacion_companero" no aplica → caer a "entrega_auto".
+          updates.tipo_asignacion_cargo = defaults.asignacion === 'asignacion_companero' ? 'entrega_auto' : defaults.asignacion
+          updates.documento_cargo = defaults.documento
+        }
+        changed = true
+      }
+      if (formData.modalidad === 'turno') {
+        if (formData.conductor_diurno_id && !formData.tipo_candidato_diurno) {
+          const tipo = await detectarTipoCandidato(formData.conductor_diurno_id)
+          updates.tipo_candidato_diurno = tipo
+          if (!isDevolucionOCambio) {
+            const defaults = getDefaultsPorCandidato(tipo)
+            updates.tipo_asignacion_diurno = defaults.asignacion
+            updates.documento_diurno = defaults.documento
+          }
+          changed = true
+        }
+        if (formData.conductor_nocturno_id && !formData.tipo_candidato_nocturno) {
+          const tipo = await detectarTipoCandidato(formData.conductor_nocturno_id)
+          updates.tipo_candidato_nocturno = tipo
+          if (!isDevolucionOCambio) {
+            const defaults = getDefaultsPorCandidato(tipo)
+            updates.tipo_asignacion_nocturno = defaults.asignacion
+            updates.documento_nocturno = defaults.documento
+          }
+          changed = true
+        }
+      }
+
+      if (changed) {
+        setFormData(prev => ({ ...prev, ...updates }))
+      }
+    }
+
+    autoDetectarTipos()
+
+    setFormData(prev => {
+      const updates: any = { ...prev }
+      let changed = false
+
+      if (prev.modalidad === 'a_cargo' && prev.conductor_id) {
+        const c = conductores.find(x => x.id === prev.conductor_id)
+        if (c?.zona && !prev.zona_cargo) {
+          updates.zona_cargo = c.zona
+          changed = true
+        }
+        if (prev.distancia_cargo === '' || prev.distancia_cargo === undefined) {
+          updates.distancia_cargo = 0
+          changed = true
+        }
+      }
+
+      if (prev.modalidad === 'turno') {
+        if (prev.conductor_diurno_id) {
+          const c = conductores.find(x => x.id === prev.conductor_diurno_id)
+          if (c?.zona && !prev.zona_diurno) {
+            updates.zona_diurno = c.zona
+            changed = true
+          }
+        }
+        if (prev.conductor_nocturno_id) {
+          const c = conductores.find(x => x.id === prev.conductor_nocturno_id)
+          if (c?.zona && !prev.zona_nocturno) {
+            updates.zona_nocturno = c.zona
+            changed = true
+          }
+        }
+      }
+
+      return changed ? updates : prev
+    })
+  }, [step])
+
+  // Auto-calcular distancia en auto cuando ambos conductores están asignados
+  // (solo si no se auto-rellenó desde un par arrastrado)
+  useEffect(() => {
+    if (!formData.conductor_diurno_id || !formData.conductor_nocturno_id) return
+    // No sobreescribir valores ya presentes (de par o manuales)
+    if (formData.distancia_diurno && formData.distancia_nocturno) return
+
+    const diurno = conductores.find(c => c.id === formData.conductor_diurno_id)
+    const nocturno = conductores.find(c => c.id === formData.conductor_nocturno_id)
+
+    if (!diurno?.direccion_lat || !diurno?.direccion_lng || !nocturno?.direccion_lat || !nocturno?.direccion_lng) return
+
+    // Calcular distancia en auto entre los conductores
+    obtenerDistanciaEnAuto(
+      { lat: diurno.direccion_lat, lng: diurno.direccion_lng },
+      { lat: nocturno.direccion_lat, lng: nocturno.direccion_lng }
+    ).then(resultado => {
+      if (resultado?.tiempoMinutos) {
+        setFormData(prev => {
+          // Re-verificar que no se hayan llenado mientras esperábamos
+          if (prev.distancia_diurno && prev.distancia_nocturno) return prev
+          return {
+            ...prev,
+            distancia_diurno: resultado.tiempoMinutos,
+            distancia_nocturno: resultado.tiempoMinutos
+          }
+        })
+      }
+    })
+  }, [formData.conductor_diurno_id, formData.conductor_nocturno_id])
+
+  const validateSubmitFields = (): string | null => {
+    if (!formData.fecha_cita) return 'Debes seleccionar una fecha de cita'
+
+    if (formData.modalidad === 'a_cargo') {
+      if (!formData.conductor_id && !formData.lead_cargo_id) return null
+      if (!formData.tipo_candidato_cargo) return 'Debes seleccionar el tipo de candidato'
+      if (!formData.documento_cargo) return 'Debes seleccionar el tipo de documento'
+      if (!formData.zona_cargo) return 'Debes ingresar la zona'
+      return null
+    }
+
+    // Modo TURNO - validar campos para conductores Y leads asignados
+    if (formData.conductor_diurno_id || formData.lead_diurno_id) {
+      if (!formData.tipo_candidato_diurno) return 'Debes seleccionar el tipo de candidato para el conductor diurno'
+      if (!formData.documento_diurno) return 'Debes seleccionar el documento para el conductor diurno'
+      if (!formData.zona_diurno) return 'Debes ingresar la zona para el conductor diurno'
+    }
+    if (formData.conductor_nocturno_id || formData.lead_nocturno_id) {
+      if (!formData.tipo_candidato_nocturno) return 'Debes seleccionar el tipo de candidato para el conductor nocturno'
+      if (!formData.documento_nocturno) return 'Debes seleccionar el documento para el conductor nocturno'
+      if (!formData.zona_nocturno) return 'Debes ingresar la zona para el conductor nocturno'
+    }
+    return null
+  }
+
+  const checkDuplicateProgramacion = async (): Promise<boolean> => {
+    if (isEditMode) return false
+
+    try {
+      // Estados activos (no cancelados ni completados)
+      const estadosActivos = ['por_agendar', 'agendado', 'en_curso']
+
+      // Verificar si ya existe una programación con el mismo vehículo Y mismos conductores
+      const { data: progExistentes } = await aplicarFiltroSede(supabase
+        .from('programaciones_onboarding')
+        .select('id, vehiculo_entregar_patente, estado, conductor_id, conductor_diurno_id, conductor_nocturno_id, modalidad')
+        .eq('vehiculo_entregar_id', formData.vehiculo_id)
+        .in('estado', estadosActivos)) as { data: Array<any> | null }
+
+      if (!progExistentes || progExistentes.length === 0) return false
+
+      // Verificar si alguna programación existente tiene exactamente los mismos conductores
+      for (const prog of progExistentes) {
+        let mismosonductores = false
+
+        if (formData.modalidad === 'a_cargo') {
+          mismosonductores = prog.conductor_id === formData.conductor_id
+        } else {
+          // TURNO: verificar diurno y nocturno
+          const mismoDiurno = (!formData.conductor_diurno_id && !prog.conductor_diurno_id) || 
+            prog.conductor_diurno_id === formData.conductor_diurno_id
+          const mismoNocturno = (!formData.conductor_nocturno_id && !prog.conductor_nocturno_id) ||
+            prog.conductor_nocturno_id === formData.conductor_nocturno_id
+          mismosonductores = mismoDiurno && mismoNocturno
+        }
+
+        if (mismosonductores) {
+          Swal.fire({
+            icon: 'warning',
+            title: 'Programación duplicada',
+            html: `Ya existe una programación activa para el vehículo <strong>${formData.vehiculo_patente}</strong> con los mismos conductores (${PROGRAMACION_ESTADO_LABELS[prog.estado] || prog.estado}).<br><br>No se puede crear una programación con los mismos datos.`,
+            confirmButtonColor: '#FF0033'
+          })
+          return true
+        }
+      }
+    } catch (checkError: any) {
+      // Si es error de "no rows" es OK, significa que no hay duplicados
+      if (checkError.code !== 'PGRST116') {
+        // error handled silently
+      }
+    }
+
+    return false
+  }
+
+  const handleSubmit = async () => {
+    if (loading || isSubmittingRef.current) return
+
+    // Validaciones (antes de marcar isSubmitting para no bloquear reintentos)
+    const validationError = validateSubmitFields()
+    if (validationError) {
+      Swal.fire('Error', validationError, 'error')
+      return
+    }
+
+    // Validar duplicados solo al crear (no en edición)
+    const isDuplicate = await checkDuplicateProgramacion()
+    if (isDuplicate) return
+
+    isSubmittingRef.current = true
+    setLoading(true)
+
+    try {
+      // Preparar datos para insertar/actualizar
+      // En cambio de vehículo: vehiculo_entregar = vehículo NUEVO (destino, el que se entrega al conductor)
+      //                        vehiculo_cambio = vehículo VIEJO (origen, el que se devuelve)
+      const saveData: any = {
+        modalidad: formData.modalidad,
+        vehiculo_entregar_id: formData.cambio_vehiculo ? formData.vehiculo_cambio_id : formData.vehiculo_id,
+        vehiculo_entregar_patente: formData.cambio_vehiculo ? formData.vehiculo_cambio_patente : formData.vehiculo_patente,
+        vehiculo_entregar_modelo: formData.cambio_vehiculo ? formData.vehiculo_cambio_modelo : formData.vehiculo_modelo,
+        vehiculo_entregar_color: formData.cambio_vehiculo ? '' : formData.vehiculo_color,
+        // Vehículo de cambio: en cambio_vehiculo guarda el vehículo VIEJO (origen)
+        vehiculo_cambio_id: formData.cambio_vehiculo ? (formData.vehiculo_id || null) : null,
+        vehiculo_cambio_patente: formData.cambio_vehiculo ? (formData.vehiculo_patente || null) : null,
+        vehiculo_cambio_modelo: formData.cambio_vehiculo ? (formData.vehiculo_modelo || null) : null,
+        fecha_cita: formData.fecha_cita,
+        hora_cita: formData.hora_cita,
+        observaciones: formData.observaciones || null,
+        devolucion_vehiculo: formData.devolucion_vehiculo || false,
+        cambio_vehiculo: formData.cambio_vehiculo || false,
+        ultimo_dia_cobro: formData.devolucion_vehiculo ? (formData.ultimo_dia_cobro || null) : null,
+        propietario: formData.propietario || '',
+        tipo_tarifa: formData.tipo_tarifa || 'antigua'
+      }
+
+      if (formData.modalidad === 'a_cargo') {
+        // A CARGO - usar campos legacy con un solo set de datos
+        saveData.conductor_id = formData.conductor_id
+        saveData.conductor_nombre = formData.conductor_nombre
+        saveData.conductor_dni = formData.conductor_dni
+        saveData.tipo_candidato = formData.tipo_candidato_cargo || null
+        saveData.tipo_asignacion = formData.tipo_asignacion_cargo || 'entrega_auto'
+        saveData.tipo_documento = formData.documento_cargo
+        saveData.zona = formData.zona_cargo
+        saveData.distancia_minutos = formData.distancia_cargo || null
+        // Limpiar campos de turno
+        saveData.conductor_diurno_id = null
+        saveData.conductor_diurno_nombre = null
+        saveData.conductor_diurno_dni = null
+        saveData.conductor_nocturno_id = null
+        saveData.conductor_nocturno_nombre = null
+        saveData.conductor_nocturno_dni = null
+        saveData.tipo_candidato_diurno = null
+        saveData.tipo_candidato_nocturno = null
+        saveData.lead_cargo_id = formData.lead_cargo_id || null
+        saveData.lead_diurno_id = null
+        saveData.lead_nocturno_id = null
+        saveData.tipo_tarifa_diurno = null
+        saveData.tipo_tarifa_nocturno = null
+        saveData.tipo_asignacion_diurno = null
+        saveData.tipo_asignacion_nocturno = null
+        saveData.documento_diurno = null
+        saveData.documento_nocturno = null
+        saveData.zona_diurno = null
+        saveData.zona_nocturno = null
+        saveData.distancia_diurno = null
+        saveData.distancia_nocturno = null
+      } else {
+        // TURNO - usar campos duales con datos por conductor
+        // Un slot ocupado por un lead deja el id de conductor en null a
+        // proposito: no existe esa fila en `conductores` todavia.
+        saveData.lead_diurno_id = formData.lead_diurno_id || null
+        saveData.lead_nocturno_id = formData.lead_nocturno_id || null
+        saveData.lead_cargo_id = null
+        saveData.conductor_diurno_id = formData.conductor_diurno_id || null
+        saveData.conductor_diurno_nombre = formData.conductor_diurno_nombre || null
+        saveData.conductor_diurno_dni = formData.conductor_diurno_dni || null
+        saveData.tipo_candidato_diurno = formData.tipo_candidato_diurno || null
+        saveData.tipo_tarifa_diurno = formData.tipo_tarifa_diurno || 'antigua'
+        saveData.tipo_asignacion_diurno = formData.tipo_asignacion_diurno || null
+        saveData.documento_diurno = formData.documento_diurno || null
+        saveData.zona_diurno = formData.zona_diurno || null
+        saveData.distancia_diurno = formData.distancia_diurno || null
+
+        saveData.conductor_nocturno_id = formData.conductor_nocturno_id || null
+        saveData.conductor_nocturno_nombre = formData.conductor_nocturno_nombre || null
+        saveData.conductor_nocturno_dni = formData.conductor_nocturno_dni || null
+        saveData.tipo_candidato_nocturno = formData.tipo_candidato_nocturno || null
+        saveData.tipo_tarifa_nocturno = formData.tipo_tarifa_nocturno || 'antigua'
+        saveData.tipo_asignacion_nocturno = formData.tipo_asignacion_nocturno || null
+        saveData.documento_nocturno = formData.documento_nocturno || null
+        saveData.zona_nocturno = formData.zona_nocturno || null
+        saveData.distancia_nocturno = formData.distancia_nocturno || null
+
+        // Zona general = primera zona disponible
+        saveData.zona = formData.zona_diurno || formData.zona_nocturno
+        // Tipo candidato general = primero disponible
+        saveData.tipo_candidato = formData.tipo_candidato_diurno || formData.tipo_candidato_nocturno || null
+        // Espejo legacy de tarifa (respaldo): primera disponible
+        saveData.tipo_tarifa = formData.tipo_tarifa_diurno || formData.tipo_tarifa_nocturno || 'antigua'
+        // Tipo asignacion general = usar el primero seleccionado (para compatibilidad)
+        saveData.tipo_asignacion = formData.tipo_asignacion_diurno || formData.tipo_asignacion_nocturno || 'entrega_auto'
+        // Distancia general = primera disponible
+        saveData.distancia_minutos = formData.distancia_diurno || formData.distancia_nocturno || null
+        // Limpiar campos legacy
+        saveData.conductor_id = null
+        saveData.conductor_nombre = null
+        saveData.conductor_dni = null
+        saveData.tipo_documento = null
+      }
+
+      let error
+
+      if (isEditMode && editData) {
+        // ACTUALIZAR
+        const result = await (supabase
+          .from('programaciones_onboarding') as any)
+          .update(saveData)
+          .eq('id', editData.id)
+        error = result.error
+      } else {
+        // CREAR
+        saveData.estado = 'por_agendar'
+        // tipo_asignacion ya se setea arriba según modalidad
+        saveData.documento_listo = false
+        saveData.grupo_whatsapp = false
+        saveData.citado_ypf = false
+        saveData.created_by = user?.id
+        saveData.created_by_name = profile?.full_name || 'Sistema'
+        saveData.sede_id = sedeActualId || sedeUsuario?.id
+
+        const result = await (supabase
+          .from('programaciones_onboarding') as any)
+          .insert(saveData)
+        error = result.error
+      }
+
+      if (error) throw error
+
+      // Documentos se generan al ENVIAR la programación (handleEnviarAEntrega en ProgramacionModule.tsx)
+
+      showSuccess(isEditMode ? 'Programación actualizada' : 'Programación creada', isEditMode ? 'Los cambios se guardaron correctamente' : 'La programación se agregó al tablero')
+
+      onSuccess()
+      onClose()
+    } catch (error: any) {
+      Swal.fire('Error', error.message || 'No se pudo guardar la programacion', 'error')
+    } finally {
+      setLoading(false)
+      isSubmittingRef.current = false
+    }
+  }
+
+  // Filtrar vehiculos con useMemo
+  const filteredVehicles = useMemo(() => {
+    const searchLower = vehicleSearch.toLowerCase()
+    return vehicles
+      .filter(v => {
+        // En modo edicion, siempre incluir el vehiculo actual
+        if (isEditMode && v.id === formData.vehiculo_id) {
+          return true
+        }
+
+        // Si es devolucion, no mostrar vehiculos disponibles (solo los que estan en uso)
+        if (formData.devolucion_vehiculo && v.disponibilidad === 'disponible') {
+          return false
+        }
+
+        const matchesSearch = !searchLower ||
+          v.patente.toLowerCase().includes(searchLower) ||
+          v.marca.toLowerCase().includes(searchLower) ||
+          v.modelo.toLowerCase().includes(searchLower)
+
+        const matchesAvailability = vehicleAvailabilityFilter === '' ||
+          vehicleAvailabilityFilter === v.disponibilidad ||
+          (vehicleAvailabilityFilter === 'con_turno_libre' &&
+            (v.disponibilidad === 'turno_diurno_libre' || v.disponibilidad === 'turno_nocturno_libre')) ||
+          (vehicleAvailabilityFilter === 'en_uso' &&
+            (v.disponibilidad === 'ocupado' || v.disponibilidad === 'turno_diurno_libre' || v.disponibilidad === 'turno_nocturno_libre'))
+
+        // GNC: la columna es boolean nullable, por eso "sin GNC" es todo lo que
+        // no sea true (false o null) - mismo criterio que el resto del sistema.
+        const matchesGnc = vehicleGncFilter === '' ||
+          (vehicleGncFilter === 'con' ? v.gnc === true : v.gnc !== true)
+
+        return matchesSearch && matchesAvailability && matchesGnc
+      })
+      .sort((a, b) => {
+        // En modo edicion, poner el vehiculo actual primero
+        if (isEditMode && formData.vehiculo_id) {
+          if (a.id === formData.vehiculo_id) return -1
+          if (b.id === formData.vehiculo_id) return 1
+        }
+        const prioridad: Record<string, number> = (formData.devolucion_vehiculo || formData.cambio_vehiculo)
+          ? { 'ocupado': 0, 'turno_diurno_libre': 0, 'turno_nocturno_libre': 0, 'programacion_pendiente': 1, 'programado': 2, 'disponible': 3 }
+          : { 'disponible': 0, 'turno_diurno_libre': 1, 'turno_nocturno_libre': 1, 'ocupado': 2, 'programacion_pendiente': 3, 'programado': 4 }
+        const prioA = prioridad[a.disponibilidad] ?? 99
+        const prioB = prioridad[b.disponibilidad] ?? 99
+        return prioA - prioB
+      })
+  }, [vehicles, vehicleSearch, vehicleAvailabilityFilter, vehicleGncFilter, isEditMode, formData.vehiculo_id, formData.devolucion_vehiculo])
+
+  // Obtener conductores seleccionados (buscar en lista o crear objeto temporal con datos del form)
+  // Helper para badge de disponibilidad de vehículo (usado en Step 2 normal y cambio)
+  const getVehicleBadge = (vehicle: Vehicle) => {
+    let badgeText = '', badgeBg = '', badgeColor = '', detalleText = ''
+    const asig = vehicle.asignacionActiva
+    switch (vehicle.disponibilidad) {
+      case 'disponible':
+        badgeText = 'Disponible'; badgeBg = '#10B981'; badgeColor = 'white'; detalleText = 'Libre para asignacion'; break
+      case 'turno_diurno_libre':
+        badgeText = 'En Uso'; badgeBg = '#F59E0B'; badgeColor = 'white'; detalleText = 'Diurno Libre'; break
+      case 'turno_nocturno_libre':
+        badgeText = 'En Uso'; badgeBg = '#F59E0B'; badgeColor = 'white'; detalleText = 'Nocturno Libre'; break
+      case 'ocupado':
+        badgeText = 'En Uso'; badgeBg = '#F59E0B'; badgeColor = 'white'; detalleText = asig?.horario === 'todo_dia' ? 'A Cargo' : 'Turnos completos'; break
+      case 'programacion_pendiente':
+        badgeText = 'Con Programacion'; badgeBg = '#8B5CF6'; badgeColor = 'white'; detalleText = 'Programacion sin enviar'; break
+      case 'programado':
+        badgeText = 'Programado'; badgeBg = '#EF4444'; badgeColor = 'white'; detalleText = 'Ya enviado a Asignaciones'; break
+    }
+    return { badgeText, badgeBg, badgeColor, detalleText }
+  }
+
+  // Chip de GNC del vehiculo. Se muestra en las tres listas de seleccion porque
+  // el GNC define que concepto de alquiler (y por lo tanto que tarifa) aplica.
+  const getGncBadge = (vehicle: Vehicle) => (
+    vehicle.gnc === true
+      ? { text: 'GNC', bg: '#DCFCE7', color: '#15803D' }
+      : { text: 'Sin GNC', bg: '#F1F5F9', color: '#64748B' }
+  )
+
+  // Vehículos filtrados para cambio de vehículo (memoizados)
+  // Regla: una programación es un borrador. Un vehículo con programación
+  // pendiente ('programacion_pendiente') sigue visible y seleccionable en ambas
+  // listas; solo se oculta cuando ya fue enviado a Asignaciones ('programado').
+  const vehiculosEnUso = useMemo(() =>
+    filteredVehicles.filter(v =>
+      v.disponibilidad === 'ocupado' || v.disponibilidad === 'turno_diurno_libre' || v.disponibilidad === 'turno_nocturno_libre' || v.disponibilidad === 'programacion_pendiente' || (isEditMode && v.id === formData.vehiculo_id)
+    ),
+    [filteredVehicles, isEditMode, formData.vehiculo_id]
+  )
+
+  const vehiculosDestino = useMemo(() =>
+    filteredVehicles.filter(v =>
+      (v.disponibilidad === 'disponible' || v.disponibilidad === 'ocupado' || v.disponibilidad === 'turno_diurno_libre' || v.disponibilidad === 'turno_nocturno_libre' || v.disponibilidad === 'programacion_pendiente' || (isEditMode && v.id === formData.vehiculo_cambio_id))
+      && v.id !== formData.vehiculo_id
+    ),
+    [filteredVehicles, isEditMode, formData.vehiculo_cambio_id, formData.vehiculo_id]
+  )
+
+  const conductorDiurno = conductores.find(c => c.id === formData.conductor_diurno_id) ||
+    ((formData.conductor_diurno_id || formData.lead_diurno_id) && formData.conductor_diurno_nombre ? {
+      id: formData.conductor_diurno_id || formData.lead_diurno_id,
+      nombres: formData.conductor_diurno_nombre.split(' ')[0] || '',
+      apellidos: formData.conductor_diurno_nombre.split(' ').slice(1).join(' ') || '',
+      numero_dni: formData.conductor_diurno_dni || ''
+    } as Conductor : undefined)
+  
+  const conductorNocturno = conductores.find(c => c.id === formData.conductor_nocturno_id) ||
+    ((formData.conductor_nocturno_id || formData.lead_nocturno_id) && formData.conductor_nocturno_nombre ? {
+      id: formData.conductor_nocturno_id || formData.lead_nocturno_id,
+      nombres: formData.conductor_nocturno_nombre.split(' ')[0] || '',
+      apellidos: formData.conductor_nocturno_nombre.split(' ').slice(1).join(' ') || '',
+      numero_dni: formData.conductor_nocturno_dni || ''
+    } as Conductor : undefined)
+  
+  const conductorCargo = conductores.find(c => c.id === formData.conductor_id) ||
+    ((formData.conductor_id || formData.lead_cargo_id) && formData.conductor_nombre ? {
+      id: formData.conductor_id || formData.lead_cargo_id,
+      nombres: formData.conductor_nombre.split(' ')[0] || '',
+      apellidos: formData.conductor_nombre.split(' ').slice(1).join(' ') || '',
+      numero_dni: formData.conductor_dni || ''
+    } as Conductor : undefined)
+
+  // Modo TURNO o CARGO
+  const isTurnoMode = formData.modalidad === 'turno'
+
+  // --- Extracted drag & drop handlers ---
+  const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault()
+    e.currentTarget.classList.add('drag-over')
+  }
+
+  const handleDragLeave = (e: React.DragEvent<HTMLDivElement>) => {
+    e.currentTarget.classList.remove('drag-over')
+  }
+
+  /**
+   * Coloca un LEAD en un slot de turno.
+   *
+   * No convierte nada: deja `conductor_<turno>_id` vacio y llena solo el
+   * nombre, el DNI y `lead_<turno>_id`. Ese estado ya era valido (el envio a
+   * entrega valida `id OR nombre` y el insert en asignaciones_conductores
+   * exige el id), asi que no se toca ninguna FK ni se escribe en `conductores`.
+   *
+   * Consecuencia aceptada: al enviar a entrega NO se crea la fila de
+   * asignaciones_conductores de ese turno. El vinculo persona-vehiculo queda
+   * pendiente hasta que el lead se convierta, mas adelante y fuera de aca.
+   */
+  const asignarLeadASlot = (lead: LeadProgramacion, slot: 'diurno' | 'nocturno' | 'cargo') => {
+    const nombre = nombreLead(lead)
+    const dni = lead.dni || ''
+    // 'lead' no sale de detectarTipoCandidato (esa funcion mira historial en
+    // `conductores`, que el lead no tiene), asi que se fija explicitamente.
+    const defaults = getDefaultsPorCandidato('lead')
+
+    setFormData((prev) => {
+      if (slot === 'diurno') {
+        return {
+          ...prev,
+          conductor_diurno_id: '',
+          conductor_diurno_nombre: nombre,
+          conductor_diurno_dni: dni,
+          lead_diurno_id: lead.id,
+          tipo_candidato_diurno: 'lead',
+          tipo_asignacion_diurno: prev.tipo_asignacion_diurno || defaults.asignacion,
+          documento_diurno: prev.documento_diurno || defaults.documento,
+          zona_diurno: prev.zona_diurno || lead.zona || '',
+        }
+      }
+      if (slot === 'nocturno') {
+        return {
+          ...prev,
+          conductor_nocturno_id: '',
+          conductor_nocturno_nombre: nombre,
+          conductor_nocturno_dni: dni,
+          lead_nocturno_id: lead.id,
+          tipo_candidato_nocturno: 'lead',
+          tipo_asignacion_nocturno: prev.tipo_asignacion_nocturno || defaults.asignacion,
+          documento_nocturno: prev.documento_nocturno || defaults.documento,
+          zona_nocturno: prev.zona_nocturno || lead.zona || '',
+        }
+      }
+      return {
+        ...prev,
+        conductor_id: '',
+        conductor_nombre: nombre,
+        conductor_dni: dni,
+        lead_cargo_id: lead.id,
+        tipo_candidato_cargo: 'lead',
+        // En modalidad A Cargo "asignacion_companero" no aplica.
+        tipo_asignacion_cargo: prev.tipo_asignacion_cargo || 'entrega_auto',
+        documento_cargo: prev.documento_cargo || defaults.documento,
+        zona_cargo: prev.zona_cargo || lead.zona || '',
+      }
+    })
+  }
+
+  /** Toma el lead del dataTransfer, si lo que se solto fue un lead. */
+  const leadSoltado = (e: React.DragEvent<HTMLDivElement>): LeadProgramacion | null => {
+    const leadId = e.dataTransfer.getData('leadId')
+    if (!leadId) return null
+    return leads.find((l) => l.id === leadId) || null
+  }
+
+  const handleDropDiurno = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault()
+    e.currentTarget.classList.remove('drag-over')
+    const lead = leadSoltado(e)
+    if (lead) {
+      asignarLeadASlot(lead, 'diurno')
+      return
+    }
+    const conductorId = e.dataTransfer.getData('conductorId')
+    if (!conductorId) return
+    const conductor = conductores.find(c => c.id === conductorId)
+    if (conductor?.tieneAsignacionDiurna) {
+      Swal.fire({
+        icon: 'info',
+        title: 'Conductor con asignacion activa',
+        html: `<b>${conductor.nombres} ${conductor.apellidos}</b> tiene una asignacion activa en turno diurno.`,
+        confirmButtonText: 'Entendido',
+        confirmButtonColor: '#3085d6'
+      })
+    }
+    const pairTiempo = e.dataTransfer.getData('pairTiempo')
+    const pairPartnerId = e.dataTransfer.getData('pairPartnerId')
+    handleSelectConductorDiurno(conductorId, pairTiempo ? parseInt(pairTiempo) : undefined, pairPartnerId || undefined)
+  }
+
+  const handleDropNocturno = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault()
+    e.currentTarget.classList.remove('drag-over')
+    const lead = leadSoltado(e)
+    if (lead) {
+      asignarLeadASlot(lead, 'nocturno')
+      return
+    }
+    const conductorId = e.dataTransfer.getData('conductorId')
+    if (!conductorId) return
+    const conductor = conductores.find(c => c.id === conductorId)
+    if (conductor?.tieneAsignacionNocturna) {
+      Swal.fire({
+        icon: 'info',
+        title: 'Conductor con asignacion activa',
+        html: `<b>${conductor.nombres} ${conductor.apellidos}</b> tiene una asignacion activa en turno nocturno.`,
+        confirmButtonText: 'Entendido',
+        confirmButtonColor: '#3085d6'
+      })
+    }
+    const pairTiempo = e.dataTransfer.getData('pairTiempo')
+    const pairPartnerId = e.dataTransfer.getData('pairPartnerId')
+    handleSelectConductorNocturno(conductorId, pairTiempo ? parseInt(pairTiempo) : undefined, pairPartnerId || undefined)
+  }
+
+  const handleDropCargo = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault()
+    e.currentTarget.classList.remove('drag-over')
+    const lead = leadSoltado(e)
+    if (lead) {
+      asignarLeadASlot(lead, 'cargo')
+      return
+    }
+    const conductorId = e.dataTransfer.getData('conductorId')
+    if (!conductorId) return
+    const conductor = conductores.find(c => c.id === conductorId)
+    if (conductor?.tieneAsignacionDiurna || conductor?.tieneAsignacionNocturna) {
+      Swal.fire({
+        icon: 'info',
+        title: 'Conductor con asignacion activa',
+        html: `<b>${conductor.nombres} ${conductor.apellidos}</b> tiene una asignacion activa.`,
+        confirmButtonText: 'Entendido',
+        confirmButtonColor: '#3085d6'
+      })
+    }
+    handleSelectConductorCargo(conductorId)
+  }
+
+  const handleConductorDragStart = (e: React.DragEvent<HTMLDivElement>, conductorId: string, pairPartnerId?: string, pairTiempo?: number) => {
+    e.dataTransfer.setData('conductorId', conductorId)
+    if (pairPartnerId) e.dataTransfer.setData('pairPartnerId', pairPartnerId)
+    if (pairTiempo) e.dataTransfer.setData('pairTiempo', String(pairTiempo))
+    e.currentTarget.classList.add('dragging')
+  }
+
+  const handleConductorDragEnd = (e: React.DragEvent<HTMLDivElement>) => {
+    e.currentTarget.classList.remove('dragging')
+  }
+
+  /** Clave distinta de 'conductorId' a proposito: el drop tiene que poder
+   *  distinguir un lead de un conductor sin adivinar por el formato del id. */
+  const handleLeadDragStart = (e: React.DragEvent<HTMLDivElement>, leadId: string) => {
+    e.dataTransfer.setData('leadId', leadId)
+    e.currentTarget.classList.add('dragging')
+  }
+
+  const handleConfirmMapPair = (diurno: Conductor, nocturno: Conductor) => {
+    setShowMapModal(false)
+    handleSelectConductorDiurno(diurno.id, undefined, nocturno.id)
+    handleSelectConductorNocturno(nocturno.id, undefined, diurno.id)
+  }
+
+  const handleTipoAsignacionChange = (field: 'tipo_asignacion_cargo' | 'tipo_asignacion_diurno' | 'tipo_asignacion_nocturno', docField: 'documento_cargo' | 'documento_diurno' | 'documento_nocturno') => (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const val = e.target.value as TipoAsignacion
+    setFormData({ ...formData, [field]: val, ...(val === 'devolucion_vehiculo' ? { [docField]: 'na' as TipoDocumento } : {}) })
+  }
+
+  // Ray casting - verifica si un punto está dentro de un polígono
+  const isPointInPolygon = (lat: number, lng: number, polygon: { lat: number; lng: number }[]): boolean => {
+    let inside = false
+    for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
+      const xi = polygon[i].lng, yi = polygon[i].lat
+      const xj = polygon[j].lng, yj = polygon[j].lat
+      const intersect = ((yi > lat) !== (yj > lat)) && (lng < (xj - xi) * (lat - yi) / (yj - yi) + xi)
+      if (intersect) inside = !inside
+    }
+    return inside
+  }
+
+  // Mapa de conductor.id -> nombre de zona restringida (null si no está en ninguna)
+  const conductoresEnZona = useMemo(() => {
+    const map = new Map<string, string>()
+    if (zonasRestringidas.length === 0) return map
+    for (const conductor of conductores) {
+      if (!conductor.direccion_lat || !conductor.direccion_lng) continue
+      for (const zona of zonasRestringidas) {
+        if (zona.poligono && zona.poligono.length >= 3 &&
+          isPointInPolygon(conductor.direccion_lat, conductor.direccion_lng, zona.poligono)) {
+          map.set(conductor.id, zona.nombre)
+          break
+        }
+      }
+    }
+    return map
+  }, [conductores, zonasRestringidas])
+
+  // Filtrar conductores disponibles con useMemo
+  const filteredConductores = useMemo(() => {
+    const searchLower = conductorSearch.toLowerCase()
+    // Set para O(1) en .filter() y .sort() — evita O(k) .includes() por cada comparación
+    const conductoresDelVehiculoSet = new Set(conductoresDelVehiculoActual)
+
+    return conductores
+      .filter(c => {
+        // Excluir conductores ya seleccionados en los slots
+        if (c.id === formData.conductor_diurno_id || c.id === formData.conductor_nocturno_id || c.id === formData.conductor_id) return false
+
+        const matchesSearch = !searchLower ||
+          c.nombres.toLowerCase().includes(searchLower) ||
+          c.apellidos.toLowerCase().includes(searchLower) ||
+          (c.numero_dni || '').includes(searchLower)
+
+        // Si el conductor ya está asignado al vehículo seleccionado, SIEMPRE mostrarlo
+        const esDelVehiculoActual = conductoresDelVehiculoSet.has(c.id)
+        if (esDelVehiculoActual && matchesSearch) {
+          return true
+        }
+
+        // Filtro por estado (solo para conductores que NO son del vehículo actual)
+        let matchesStatus = true
+        if (conductorStatusFilter === 'disponible') {
+          matchesStatus = !c.tieneAsignacionActiva && !c.tieneAsignacionProgramada
+        } else if (conductorStatusFilter === 'activo') {
+          matchesStatus = c.tieneAsignacionActiva || false
+        } else if (conductorStatusFilter === 'con_asignacion') {
+          matchesStatus = c.tieneAsignacionActiva || c.tieneAsignacionProgramada || false
+        }
+
+        // Filtro por preferencia de turno
+        let matchesTurno = true
+        if (conductorTurnoFilter === 'diurno') {
+          matchesTurno = c.preferencia_turno === 'DIURNO' || c.preferencia_turno === 'SIN_PREFERENCIA'
+        } else if (conductorTurnoFilter === 'nocturno') {
+          matchesTurno = c.preferencia_turno === 'NOCTURNO' || c.preferencia_turno === 'SIN_PREFERENCIA'
+        } else if (conductorTurnoFilter === 'cargo') {
+          matchesTurno = c.preferencia_turno === 'A_CARGO'
+        }
+
+        // Rango de alta del conductor. Se compara por dia argentino, igual que
+        // la columna "Creacion" del modulo Leads.
+        const matchesCreado = enRangoDiasART(
+          c.created_at,
+          conductorCreadoDesde,
+          conductorCreadoHasta
+        )
+
+        return matchesSearch && matchesStatus && matchesTurno && matchesCreado
+      })
+      .sort((a, b) => {
+        // O(1) con Set — antes O(k) con .includes() en cada comparación del sort
+        const aEsDelVehiculo = conductoresDelVehiculoSet.has(a.id)
+        const bEsDelVehiculo = conductoresDelVehiculoSet.has(b.id)
+        if (aEsDelVehiculo && !bEsDelVehiculo) return -1
+        if (!aEsDelVehiculo && bEsDelVehiculo) return 1
+        // Disponibles segundo
+        if (!a.tieneAsignacionActiva && b.tieneAsignacionActiva) return -1
+        if (a.tieneAsignacionActiva && !b.tieneAsignacionActiva) return 1
+        return a.apellidos.localeCompare(b.apellidos)
+      })
+  }, [conductores, conductorSearch, conductorStatusFilter, conductorTurnoFilter, conductorCreadoDesde, conductorCreadoHasta, formData.conductor_diurno_id, formData.conductor_nocturno_id, formData.conductor_id, conductoresDelVehiculoActual])
+
+  /** Nombre mostrable del lead, con los mismos fallbacks que el modulo Leads. */
+  const nombreLead = (l: LeadProgramacion) =>
+    (l.nombre_completo && l.nombre_completo.trim()) ||
+    `${l.primer_nombre || ''} ${l.apellido || ''}`.trim() ||
+    'Sin nombre'
+
+  /** Estados de lead presentes en los datos, para llenar el selector. */
+  const estadosLeadDisponibles = useMemo(() => {
+    const set = new Set<string>()
+    for (const l of leads) {
+      const e = (l.estado_de_lead || '').trim()
+      if (e) set.add(e)
+    }
+    return Array.from(set).sort((a, b) => a.localeCompare(b))
+  }, [leads])
+
+  // Filtros de la columna de leads. Son propios: no comparten estado con los
+  // de conductores, porque las dos listas se recortan por criterios distintos.
+  const filteredLeads = useMemo(() => {
+    const searchLower = leadSearch.trim().toLowerCase()
+    const turnoFiltro = leadTurnoFilter.toLowerCase()
+
+    return leads.filter((l) => {
+      // Ya ocupa un slot: se saca de la lista, igual que con los conductores.
+      if (
+        l.id === formData.lead_diurno_id ||
+        l.id === formData.lead_nocturno_id ||
+        l.id === formData.lead_cargo_id
+      ) {
+        return false
+      }
+
+      if (searchLower) {
+        const coincide =
+          nombreLead(l).toLowerCase().includes(searchLower) ||
+          (l.dni || '').includes(searchLower)
+        if (!coincide) return false
+      }
+
+      if (leadEstadoFilter && (l.estado_de_lead || '').trim() !== leadEstadoFilter) return false
+
+      // `leads.turno` es texto libre cargado a mano ("Diurno", "NOCTURNO",
+      // "A cargo"...), asi que se compara por inclusion y no por igualdad.
+      if (turnoFiltro && !(l.turno || '').toLowerCase().includes(turnoFiltro)) return false
+
+      return enRangoDiasART(l.created_at, leadCreadoDesde, leadCreadoHasta)
+    })
+  }, [leads, leadSearch, leadEstadoFilter, leadTurnoFilter, leadCreadoDesde, leadCreadoHasta, formData.lead_diurno_id, formData.lead_nocturno_id, formData.lead_cargo_id])
+
+  return (
+    <>
+      <style>{`
+        @keyframes spin {
+          to { transform: rotate(360deg); }
+        }
+
+        .wizard-overlay {
+          position: fixed;
+          top: 0;
+          left: 0;
+          right: 0;
+          bottom: 0;
+          background: rgba(0, 0, 0, 0.6);
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          z-index: 1000;
+          padding: 20px;
+          backdrop-filter: blur(4px);
+        }
+
+        .wizard-container {
+          background: var(--modal-bg);
+          border-radius: 20px;
+          width: 100%;
+          max-width: 1100px;
+          height: 92vh;
+          max-height: 800px;
+          overflow: hidden;
+          display: flex;
+          flex-direction: column;
+          box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+          border: 1px solid var(--border-primary);
+        }
+
+        .wizard-header {
+          padding: 16px 28px;
+          border-bottom: 1px solid var(--border-primary);
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          flex-shrink: 0;
+        }
+
+        .wizard-title {
+          margin: 0;
+          font-size: clamp(16px, 1.5vw, 20px);
+          font-weight: 700;
+          color: var(--text-primary);
+          letter-spacing: -0.5px;
+        }
+
+        .wizard-subtitle {
+          margin: 4px 0 0 0;
+          font-size: clamp(10px, 1vw, 12px);
+          color: var(--text-secondary);
+          font-weight: 400;
+        }
+
+        .btn-close {
+          background: none;
+          border: none;
+          color: var(--text-secondary);
+          cursor: pointer;
+          padding: 8px;
+          border-radius: 6px;
+          transition: all 0.2s;
+        }
+
+        .btn-close:hover {
+          background: #E5E7EB;
+          color: var(--text-primary);
+        }
+
+        .wizard-stepper {
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          padding: 20px 24px;
+          border-bottom: 1px solid var(--border-primary);
+          flex-shrink: 0;
+        }
+
+        .step-item {
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          gap: 6px;
+          position: relative;
+        }
+
+        .step-circle {
+          width: clamp(32px, 3vw, 40px);
+          height: clamp(32px, 3vw, 40px);
+          border-radius: 50%;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          font-weight: 700;
+          font-size: clamp(11px, 1vw, 14px);
+          border: 2px solid var(--border-primary);
+          background: var(--modal-bg);
+          color: var(--text-tertiary);
+          transition: all 0.25s ease;
+          box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+        }
+
+        .step-circle.active {
+          background: #ff0033;
+          border-color: #ff0033;
+          color: white;
+          box-shadow: 0 4px 12px rgba(230, 57, 70, 0.3);
+          transform: scale(1.05);
+        }
+
+        .step-circle.completed {
+          background: #10B981;
+          border-color: #10B981;
+          color: white;
+          box-shadow: 0 2px 8px rgba(16, 185, 129, 0.2);
+        }
+
+        .step-label {
+          font-size: clamp(9px, 0.8vw, 11px);
+          font-weight: 600;
+          color: var(--text-tertiary);
+          white-space: nowrap;
+          text-transform: uppercase;
+          letter-spacing: 0.3px;
+        }
+
+        .step-label.active {
+          color: var(--color-primary);
+        }
+
+        .step-label.completed {
+          color: #10B981;
+        }
+
+        .step-connector {
+          width: 80px;
+          height: 2px;
+          background: var(--border-primary);
+          margin: 0 12px;
+          margin-bottom: 28px;
+          border-radius: 2px;
+          transition: all 0.3s ease;
+        }
+
+        .step-connector.completed {
+          background: #10B981;
+        }
+
+        .wizard-content {
+          flex: 1;
+          overflow-y: auto;
+          overflow-x: hidden;
+          padding: 20px 24px;
+          background: var(--bg-secondary);
+          box-sizing: border-box;
+        }
+
+        .wizard-content::-webkit-scrollbar {
+          width: 0px;
+          background: transparent;
+        }
+
+        .wizard-footer {
+          padding: 20px 40px;
+          border-top: 1px solid var(--border-primary);
+          display: flex;
+          justify-content: space-between;
+          background: var(--modal-bg);
+        }
+
+        .btn {
+          padding: 14px 28px;
+          border-radius: 10px;
+          font-size: 15px;
+          font-weight: 600;
+          cursor: pointer;
+          transition: all 0.2s ease;
+          display: inline-flex;
+          align-items: center;
+          gap: 8px;
+          border: none;
+          box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+        }
+
+        .btn-secondary {
+          background: var(--bg-secondary);
+          color: var(--text-secondary);
+          border: 2px solid var(--border-primary);
+          box-shadow: none;
+        }
+
+        .btn-secondary:hover {
+          background: var(--bg-tertiary);
+          border-color: var(--text-tertiary);
+          color: var(--text-primary);
+        }
+
+        .btn-primary {
+          background: var(--color-primary);
+          color: white;
+          border: 2px solid var(--color-primary);
+        }
+
+        .btn-primary:hover {
+          background: var(--color-primary-hover);
+          box-shadow: 0 4px 12px var(--color-primary-shadow);
+          transform: translateY(-1px);
+        }
+
+        .btn-primary:disabled {
+          background: var(--bg-tertiary);
+          border-color: var(--bg-tertiary);
+          color: var(--text-tertiary);
+          cursor: not-allowed;
+          box-shadow: none;
+          transform: none;
+        }
+
+        .modality-grid {
+          display: grid;
+          grid-template-columns: repeat(2, 1fr);
+          gap: 20px;
+          max-width: 700px;
+          margin: 0 auto;
+        }
+
+        .modality-card {
+          border: 2px solid var(--border-primary);
+          border-radius: 16px;
+          padding: 40px 24px;
+          text-align: center;
+          cursor: pointer;
+          transition: all 0.2s ease;
+          background: var(--bg-secondary);
+          position: relative;
+          overflow: hidden;
+        }
+
+        .modality-card::before {
+          content: '';
+          position: absolute;
+          top: 0;
+          left: 0;
+          right: 0;
+          height: 4px;
+          background: transparent;
+          transition: all 0.2s ease;
+        }
+
+        .modality-card:hover {
+          border-color: #ff0033;
+          box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+        }
+
+        .modality-card:hover::before {
+          background: #ff0033;
+        }
+
+        .modality-card.selected {
+          border-color: #ff0033;
+          background: var(--modal-bg);
+          box-shadow: 0 4px 16px rgba(230, 57, 70, 0.15);
+        }
+
+        .modality-card.selected::before {
+          background: #ff0033;
+        }
+
+        .modality-icon {
+          margin-bottom: 20px;
+          color: var(--text-secondary);
+          transition: all 0.2s ease;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+        }
+
+        .modality-card:hover .modality-icon,
+        .modality-card.selected .modality-icon {
+          color: #ff0033;
+          transform: scale(1.1);
+        }
+
+        .modality-title {
+          font-size: clamp(16px, 1.5vw, 20px);
+          font-weight: 700;
+          color: var(--text-primary);
+          margin: 0 0 8px 0;
+        }
+
+        .modality-description {
+          font-size: clamp(11px, 1vw, 13px);
+          color: var(--text-secondary);
+          margin: 0;
+          line-height: 1.5;
+        }
+
+        .vehicle-grid {
+          display: grid;
+          gap: 12px;
+          max-height: 400px;
+          overflow-y: auto;
+          padding-right: 8px;
+        }
+
+        .vehicle-grid::-webkit-scrollbar {
+          width: 6px;
+        }
+
+        .vehicle-grid::-webkit-scrollbar-track {
+          background: #F3F4F6;
+          border-radius: 3px;
+        }
+
+        .vehicle-grid::-webkit-scrollbar-thumb {
+          background: #D1D5DB;
+          border-radius: 3px;
+        }
+
+        [data-theme="dark"] .vehicle-grid::-webkit-scrollbar-track {
+          background: var(--bg-tertiary);
+        }
+        [data-theme="dark"] .vehicle-grid::-webkit-scrollbar-thumb {
+          background: var(--border-primary);
+        }
+
+        .vehicle-card {
+          border: 2px solid var(--border-primary);
+          border-radius: 14px;
+          padding: 20px;
+          display: grid;
+          grid-template-columns: auto 1fr auto;
+          gap: 16px;
+          align-items: center;
+          cursor: pointer;
+          transition: all 0.2s ease;
+          background: var(--modal-bg);
+        }
+
+        .vehicle-card:hover {
+          border-color: #ff0033;
+          background: var(--modal-bg);
+          box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+          transform: translateY(-1px);
+        }
+
+        .vehicle-card.selected {
+          border-color: #ff0033;
+          background: linear-gradient(to right, #FEF2F2 0%, #FFF 100%);
+          box-shadow: 0 4px 16px rgba(230, 57, 70, 0.15);
+        }
+
+        .vehicle-info {
+          flex: 1;
+        }
+
+        .vehicle-patente {
+          font-size: clamp(14px, 1.3vw, 17px);
+          font-weight: 700;
+          color: var(--text-primary);
+          margin: 0 0 6px 0;
+          letter-spacing: 0.5px;
+        }
+
+        .vehicle-details {
+          font-size: clamp(11px, 1vw, 13px);
+          color: var(--text-secondary);
+          margin: 0;
+        }
+
+        .radio-circle {
+          width: 26px;
+          height: 26px;
+          border: 3px solid #D1D5DB;
+          border-radius: 50%;
+          position: relative;
+          transition: all 0.2s ease;
+          flex-shrink: 0;
+        }
+
+        .radio-circle.selected {
+          border-color: #ff0033;
+          background: #FEF2F2;
+        }
+
+        .radio-circle.selected::after {
+          content: '';
+          position: absolute;
+          top: 50%;
+          left: 50%;
+          transform: translate(-50%, -50%);
+          width: 12px;
+          height: 12px;
+          background: #ff0033;
+          border-radius: 50%;
+        }
+
+        /* Tres columnas en ambas modalidades: Leads | Conductores | Turnos.
+           En "A Cargo" la tercera columna tiene una sola zona en vez de dos,
+           por eso ya no hace falta un grid distinto para ese modo. */
+        .conductores-layout {
+          display: grid;
+          grid-template-columns: 1fr 1fr 1fr;
+          gap: 16px;
+          width: 100%;
+          align-items: stretch;
+        }
+
+        .conductores-column {
+          border: 2px solid var(--border-primary);
+          border-radius: 12px;
+          padding: 16px;
+          display: flex;
+          flex-direction: column;
+          background: var(--modal-bg);
+          box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+          min-height: 300px;
+          max-height: 420px;
+          overflow: hidden;
+          min-width: 0;
+        }
+
+        /* Tercera columna: las zonas de turno apiladas comparten el alto de
+           las listas, en vez de ocupar una columna cada una. */
+        .turnos-stack {
+          display: flex;
+          flex-direction: column;
+          gap: 12px;
+          min-width: 0;
+          max-height: 420px;
+        }
+
+        .turnos-stack .conductores-column {
+          flex: 1 1 0;
+          min-height: 0;
+          max-height: none;
+        }
+
+        .conductores-column.turno-diurno {
+          border-color: #FCD34D;
+          background: linear-gradient(135deg, #FFFBEB 0%, #FEF3C7 100%);
+        }
+
+        .conductores-column.turno-nocturno {
+          border-color: #93C5FD;
+          background: linear-gradient(135deg, #EFF6FF 0%, #DBEAFE 100%);
+        }
+
+        .conductores-column.a-cargo {
+          border-color: #6EE7B7;
+          background: linear-gradient(135deg, #F0FDF4 0%, #D1FAE5 100%);
+        }
+
+        .turno-badge {
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          padding: 4px 12px;
+          border-radius: 6px;
+          font-size: 11px;
+          font-weight: 700;
+          text-transform: uppercase;
+        }
+
+        .turno-badge.diurno {
+          background: linear-gradient(135deg, #FEF3C7 0%, #FDE68A 100%);
+          color: #92400E;
+        }
+
+        .turno-badge.nocturno {
+          background: linear-gradient(135deg, #DBEAFE 0%, #BFDBFE 100%);
+          color: #1E40AF;
+        }
+
+        .turno-badge.cargo {
+          background: linear-gradient(135deg, #D1FAE5 0%, #A7F3D0 100%);
+          color: #065F46;
+        }
+
+        .conductores-list {
+          flex: 1;
+          overflow-y: auto;
+          padding-right: 6px;
+        }
+
+        .conductores-list::-webkit-scrollbar {
+          width: 6px;
+        }
+
+        .conductores-list::-webkit-scrollbar-track {
+          background: #F3F4F6;
+          border-radius: 3px;
+        }
+
+        .conductores-list::-webkit-scrollbar-thumb {
+          background: #D1D5DB;
+          border-radius: 3px;
+        }
+
+        .conductores-column h4 {
+          margin: 0 0 12px 0;
+          font-size: clamp(12px, 1vw, 14px);
+          font-weight: 700;
+          color: var(--text-primary);
+          padding-bottom: 10px;
+          border-bottom: 2px solid rgba(0, 0, 0, 0.1);
+          flex-shrink: 0;
+        }
+
+        .conductor-item {
+          border: 1px solid #E5E7EB;
+          border-radius: 8px;
+          padding: 10px;
+          margin-bottom: 8px;
+          display: flex;
+          align-items: center;
+          gap: 10px;
+          cursor: grab;
+          transition: all 0.2s ease;
+          background: var(--modal-bg);
+        }
+
+        .conductor-item:hover {
+          border-color: #ff0033;
+          background: var(--modal-bg);
+          box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
+        }
+
+        .conductor-item.dragging {
+          opacity: 0.5;
+          transform: scale(0.95);
+        }
+
+        .conductor-avatar {
+          width: 36px;
+          height: 36px;
+          border-radius: 50%;
+          background: linear-gradient(135deg, #E5E7EB 0%, #D1D5DB 100%);
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          font-weight: 700;
+          font-size: 12px;
+          color: var(--text-secondary);
+          flex-shrink: 0;
+        }
+
+        .conductor-info {
+          flex: 1;
+          min-width: 0;
+        }
+
+        .conductor-name {
+          font-size: clamp(10px, 0.9vw, 12px);
+          font-weight: 600;
+          color: var(--text-primary);
+          margin: 0 0 2px 0;
+          word-break: break-word;
+        }
+
+        .conductor-license {
+          font-size: clamp(9px, 0.8vw, 11px);
+          color: var(--text-tertiary);
+          margin: 0;
+          font-weight: 500;
+        }
+
+        .drop-zone {
+          min-height: 80px;
+          border: 2px dashed #D1D5DB;
+          border-radius: 8px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          padding: 12px;
+          transition: all 0.2s ease;
+        }
+
+        .drop-zone.drag-over {
+          border-color: #ff0033;
+          background: rgba(230, 57, 70, 0.05);
+        }
+
+        .drop-zone.has-conductor {
+          border-style: solid;
+          border-color: #10B981;
+          background: var(--modal-bg);
+        }
+
+        .drop-zone-empty {
+          color: var(--text-tertiary);
+          font-size: 12px;
+          text-align: center;
+        }
+
+        .assigned-conductor-card {
+          width: 100%;
+          border: 2px solid #10B981;
+          border-radius: 10px;
+          padding: 12px;
+          background: var(--modal-bg);
+          display: flex;
+          align-items: center;
+          gap: 12px;
+        }
+
+        /* El slot lo ocupa un LEAD: violeta en vez de verde, para que se
+           distinga de un conductor real de un vistazo. */
+        .assigned-conductor-card.es-lead {
+          border-color: #8B5CF6;
+        }
+
+        .badge-lead {
+          font-size: 9px;
+          padding: 2px 6px;
+          border-radius: 4px;
+          font-weight: 700;
+          background: rgba(139, 92, 246, 0.18);
+          color: #7C3AED;
+          margin-left: 6px;
+        }
+
+        .remove-btn {
+          background: none;
+          border: none;
+          color: #EF4444;
+          cursor: pointer;
+          padding: 4px;
+          border-radius: 4px;
+          transition: all 0.2s;
+        }
+
+        .remove-btn:hover {
+          background: #FEE2E2;
+        }
+
+        .step-description {
+          text-align: center;
+          margin-bottom: clamp(12px, 1.5vw, 20px);
+        }
+
+        .step-description h3 {
+          font-size: clamp(14px, 1.3vw, 18px);
+          font-weight: 700;
+          color: var(--text-primary);
+          margin: 0 0 6px 0;
+        }
+
+        .step-description p {
+          font-size: clamp(10px, 0.9vw, 13px);
+          color: var(--text-secondary);
+          margin: 0;
+          line-height: 1.5;
+        }
+
+        .empty-state {
+          text-align: center;
+          padding: 32px;
+          color: var(--text-tertiary);
+          font-size: 14px;
+        }
+
+        @media (max-width: 900px) {
+          .conductores-layout {
+            grid-template-columns: 1fr;
+          }
+          /* Apiladas en una sola columna, las zonas de turno recuperan alto
+             propio: si no, quedarian partiendo un alto que ya no comparten. */
+          .turnos-stack {
+            max-height: none;
+          }
+          .turnos-stack .conductores-column {
+            min-height: 160px;
+          }
+        }
+
+        @media (max-width: 768px) {
+          .wizard-container {
+            max-width: 100%;
+            max-height: 100vh;
+            border-radius: 0;
+          }
+
+          .modality-grid {
+            grid-template-columns: 1fr;
+          }
+
+          .step-connector {
+            width: 60px;
+          }
+        }
+
+        /* Dark Mode */
+        [data-theme="dark"] .wizard-header {
+          border-color: var(--border-primary);
+        }
+        [data-theme="dark"] .wizard-header h2 {
+          color: var(--text-primary);
+        }
+        [data-theme="dark"] .wizard-header p {
+          color: var(--text-secondary);
+        }
+        [data-theme="dark"] .wizard-progress {
+          border-color: var(--border-primary);
+        }
+        [data-theme="dark"] .wizard-footer {
+          border-color: var(--border-primary);
+        }
+        [data-theme="dark"] .step-description {
+          background: var(--bg-secondary);
+          border-color: var(--border-primary);
+        }
+        [data-theme="dark"] .step-description h3 {
+          color: var(--text-primary);
+        }
+        [data-theme="dark"] .step-description p {
+          color: var(--text-secondary);
+        }
+        [data-theme="dark"] .modality-card {
+          background: var(--bg-secondary);
+          border-color: var(--border-primary);
+        }
+        [data-theme="dark"] .modality-card:hover {
+          border-color: var(--color-primary);
+          box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+        }
+        [data-theme="dark"] .modality-card.selected {
+          border-color: var(--color-primary);
+          background: var(--bg-secondary);
+        }
+        [data-theme="dark"] .modality-icon {
+          color: var(--text-secondary);
+        }
+        [data-theme="dark"] .modality-title {
+          color: var(--text-primary);
+        }
+        [data-theme="dark"] .modality-description {
+          color: var(--text-secondary);
+        }
+        [data-theme="dark"] .vehicle-card {
+          background: var(--bg-secondary);
+          border-color: var(--border-primary);
+        }
+        [data-theme="dark"] .vehicle-card:hover {
+          border-color: var(--color-primary);
+          background: var(--bg-secondary);
+        }
+        [data-theme="dark"] .vehicle-card.selected {
+          border-color: var(--color-primary);
+          background: var(--bg-tertiary);
+        }
+        [data-theme="dark"] .vehicle-patente {
+          color: var(--text-primary);
+        }
+        [data-theme="dark"] .vehicle-details {
+          color: var(--text-secondary);
+        }
+        [data-theme="dark"] .vehicle-grid::-webkit-scrollbar-track {
+          background: var(--bg-tertiary);
+        }
+        [data-theme="dark"] .vehicle-grid::-webkit-scrollbar-thumb {
+          background: var(--text-tertiary);
+        }
+        [data-theme="dark"] .conductor-card {
+          background: var(--bg-secondary);
+          border-color: var(--border-primary);
+        }
+        [data-theme="dark"] .conductor-card:hover {
+          border-color: var(--color-primary);
+        }
+        [data-theme="dark"] .conductor-card.selected {
+          border-color: var(--color-primary);
+          background: var(--bg-tertiary);
+        }
+        [data-theme="dark"] .conductor-name {
+          color: var(--text-primary);
+        }
+        [data-theme="dark"] .conductor-dni {
+          color: var(--text-secondary);
+        }
+        [data-theme="dark"] .wizard-footer {
+          border-color: var(--border-primary);
+        }
+        [data-theme="dark"] .btn-secondary {
+          background: var(--bg-secondary);
+          border-color: var(--border-primary);
+          color: var(--text-primary);
+        }
+        [data-theme="dark"] .btn-secondary:hover {
+          background: var(--bg-tertiary);
+        }
+        [data-theme="dark"] .btn-primary:disabled {
+          background: var(--bg-tertiary);
+          border-color: var(--bg-tertiary);
+          color: var(--text-tertiary);
+        }
+        [data-theme="dark"] .step-number {
+          background: var(--bg-tertiary);
+          color: var(--text-secondary);
+        }
+        [data-theme="dark"] .step-label {
+          color: var(--text-tertiary);
+        }
+        [data-theme="dark"] .step-connector {
+          background: var(--border-primary);
+        }
+        [data-theme="dark"] .empty-state {
+          color: var(--text-secondary);
+        }
+        [data-theme="dark"] .turno-column h4 {
+          color: var(--text-primary);
+        }
+        [data-theme="dark"] .turno-column p {
+          color: var(--text-secondary);
+        }
+        [data-theme="dark"] .detail-group label {
+          color: var(--text-secondary);
+        }
+        [data-theme="dark"] .detail-group input,
+        [data-theme="dark"] .detail-group select,
+        [data-theme="dark"] .detail-group textarea {
+          background: var(--bg-secondary);
+          border-color: var(--border-primary);
+          color: var(--text-primary);
+        }
+        [data-theme="dark"] .detail-value {
+          color: var(--text-primary);
+        }
+
+        /* Conductor form cards */
+        .conductor-form-card {
+          margin-bottom: 24px;
+          padding: 20px;
+          border-radius: 12px;
+          border: 2px solid;
+        }
+        .conductor-form-card.diurno {
+          background: linear-gradient(135deg, #FFFBEB 0%, #FEF3C7 100%);
+          border-color: #FCD34D;
+        }
+        .conductor-form-card.nocturno {
+          background: linear-gradient(135deg, #EFF6FF 0%, #DBEAFE 100%);
+          border-color: #93C5FD;
+        }
+        .conductor-form-card.cargo {
+          background: linear-gradient(135deg, #F0FDF4 0%, #D1FAE5 100%);
+          border-color: #6EE7B7;
+        }
+        .conductor-form-card h4 {
+          margin: 0 0 16px 0;
+          font-size: 14px;
+          font-weight: 700;
+          display: flex;
+          align-items: center;
+          gap: 8px;
+        }
+        .conductor-form-card.diurno h4 { color: #92400E; }
+        .conductor-form-card.nocturno h4 { color: #1E40AF; }
+        .conductor-form-card.cargo h4 { color: #065F46; }
+        
+        .conductor-form-card label {
+          display: block;
+          font-size: 12px;
+          font-weight: 600;
+          color: var(--text-secondary);
+          margin-bottom: 6px;
+        }
+        .conductor-form-card input,
+        .conductor-form-card select {
+          width: 100%;
+          padding: 10px;
+          border: 2px solid var(--border-primary);
+          border-radius: 8px;
+          font-size: 12px;
+          background: var(--modal-bg);
+          color: var(--text-primary);
+        }
+        .conductor-form-card input::placeholder {
+          color: var(--text-tertiary);
+        }
+
+        /* Dark mode for conductor form cards */
+        [data-theme="dark"] .conductor-form-card.diurno {
+          background: rgba(251, 191, 36, 0.1);
+          border-color: rgba(251, 191, 36, 0.4);
+        }
+        [data-theme="dark"] .conductor-form-card.nocturno {
+          background: rgba(59, 130, 246, 0.1);
+          border-color: rgba(59, 130, 246, 0.4);
+        }
+        [data-theme="dark"] .conductor-form-card.cargo {
+          background: rgba(16, 185, 129, 0.1);
+          border-color: rgba(16, 185, 129, 0.4);
+        }
+        [data-theme="dark"] .conductor-form-card.diurno h4 { color: #FCD34D; }
+        [data-theme="dark"] .conductor-form-card.nocturno h4 { color: #93C5FD; }
+        [data-theme="dark"] .conductor-form-card.cargo h4 { color: #6EE7B7; }
+
+        /* Step 4 general form styles */
+        .step4-form label {
+          display: block;
+          font-size: 13px;
+          font-weight: 600;
+          color: var(--text-secondary);
+          margin-bottom: 6px;
+        }
+        .step4-form input,
+        .step4-form select,
+        .step4-form textarea {
+          width: 100%;
+          padding: 10px;
+          border: 2px solid var(--border-primary);
+          border-radius: 8px;
+          font-size: 13px;
+          font-family: inherit;
+          background: var(--modal-bg);
+          color: var(--text-primary);
+        }
+        .step4-form input::placeholder,
+        .step4-form textarea::placeholder {
+          color: var(--text-tertiary);
+        }
+        .step4-form textarea {
+          resize: vertical;
+        }
+
+        /* Dark mode: zonas de drop diurno/nocturno/cargo */
+        [data-theme="dark"] .conductores-column.turno-diurno {
+          border-color: rgba(252, 211, 77, 0.4);
+          background: linear-gradient(135deg, rgba(251, 191, 36, 0.1) 0%, rgba(251, 191, 36, 0.18) 100%);
+        }
+        [data-theme="dark"] .conductores-column.turno-nocturno {
+          border-color: rgba(147, 197, 253, 0.4);
+          background: linear-gradient(135deg, rgba(59, 130, 246, 0.1) 0%, rgba(59, 130, 246, 0.18) 100%);
+        }
+        [data-theme="dark"] .conductores-column.a-cargo {
+          border-color: rgba(110, 231, 183, 0.4);
+          background: linear-gradient(135deg, rgba(16, 185, 129, 0.1) 0%, rgba(16, 185, 129, 0.18) 100%);
+        }
+
+        /* Dark mode: turno badges */
+        [data-theme="dark"] .turno-badge.diurno {
+          background: rgba(251, 191, 36, 0.2);
+          color: #FBBF24;
+        }
+        [data-theme="dark"] .turno-badge.nocturno {
+          background: rgba(59, 130, 246, 0.2);
+          color: #60A5FA;
+        }
+        [data-theme="dark"] .turno-badge.cargo {
+          background: rgba(16, 185, 129, 0.2);
+          color: #34D399;
+        }
+
+        /* Dark mode: conductor form cards (paso 4) */
+        [data-theme="dark"] .conductor-form-card.diurno {
+          background: linear-gradient(135deg, rgba(251, 191, 36, 0.08) 0%, rgba(251, 191, 36, 0.15) 100%);
+          border-color: rgba(252, 211, 77, 0.35);
+        }
+        [data-theme="dark"] .conductor-form-card.nocturno {
+          background: linear-gradient(135deg, rgba(59, 130, 246, 0.08) 0%, rgba(59, 130, 246, 0.15) 100%);
+          border-color: rgba(147, 197, 253, 0.35);
+        }
+        [data-theme="dark"] .conductor-form-card.cargo {
+          background: linear-gradient(135deg, rgba(16, 185, 129, 0.08) 0%, rgba(16, 185, 129, 0.15) 100%);
+          border-color: rgba(110, 231, 183, 0.35);
+        }
+
+        /* Dark mode: drop zone dashed border */
+        [data-theme="dark"] .drop-zone {
+          border-color: rgba(255, 255, 255, 0.15) !important;
+          color: var(--text-tertiary);
+        }
+      `}</style>
+
+      <div className="wizard-overlay" onClick={onClose}>
+        <div className="wizard-container" onClick={(e) => e.stopPropagation()}>
+          {/* Header */}
+          <div className="wizard-header">
+            <div>
+              <h2 className="wizard-title">{isEditMode ? 'Editar Programacion' : 'Nueva Programacion'}</h2>
+              <p className="wizard-subtitle">{isEditMode ? 'Modifica los datos de la programacion' : 'Programa una entrega de vehiculo paso a paso'}</p>
+            </div>
+            <button className="btn-close" onClick={onClose}>
+              <X size={24} />
+            </button>
+          </div>
+
+          {/* Stepper */}
+          <div className="wizard-stepper">
+            <div className="step-item">
+              <div className={`step-circle ${step >= 0 ? 'active' : ''} ${step > 0 ? 'completed' : ''}`}>
+                {step > 0 ? <Check size={16} /> : '1'}
+              </div>
+              <span className={`step-label ${step >= 0 ? 'active' : ''} ${step > 0 ? 'completed' : ''}`}>
+                Sede
+              </span>
+            </div>
+
+            <div className={`step-connector ${step > 0 ? 'completed' : ''}`} />
+
+            <div className="step-item">
+              <div className={`step-circle ${step >= 1 ? 'active' : ''} ${step > 1 ? 'completed' : ''}`}>
+                {step > 1 ? <Check size={16} /> : '2'}
+              </div>
+              <span className={`step-label ${step >= 1 ? 'active' : ''} ${step > 1 ? 'completed' : ''}`}>
+                Tipo
+              </span>
+            </div>
+
+            <div className={`step-connector ${step > 1 ? 'completed' : ''}`} />
+
+            <div className="step-item">
+              <div className={`step-circle ${step >= 2 ? 'active' : ''} ${step > 2 ? 'completed' : ''}`}>
+                {step > 2 ? <Check size={16} /> : '3'}
+              </div>
+              <span className={`step-label ${step >= 2 ? 'active' : ''} ${step > 2 ? 'completed' : ''}`}>
+                Vehiculo
+              </span>
+            </div>
+
+            <div className={`step-connector ${step > 2 ? 'completed' : ''}`} />
+
+            <div className="step-item">
+              <div className={`step-circle ${step >= 3 ? 'active' : ''} ${step > 3 ? 'completed' : ''}`}>
+                {step > 3 ? <Check size={16} /> : '4'}
+              </div>
+              <span className={`step-label ${step >= 3 ? 'active' : ''} ${step > 3 ? 'completed' : ''}`}>
+                Conductores / Leads
+              </span>
+            </div>
+
+            <div className={`step-connector ${step > 3 ? 'completed' : ''}`} />
+
+            <div className="step-item">
+              <div className={`step-circle ${step >= 4 ? 'active' : ''}`}>5</div>
+              <span className={`step-label ${step >= 4 ? 'active' : ''}`}>Detalles</span>
+            </div>
+          </div>
+
+          {/* Content */}
+          <div className="wizard-content">
+            {/* Step 0: Sede */}
+            {step === 0 && (
+              <div>
+                <div className="step-description">
+                  <h3>Paso 1: Selecciona la Sede</h3>
+                  <p>En qué sede se har la asignacion?</p>
+                </div>
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', maxWidth: '400px', margin: '0 auto' }}>
+                  {sedes.map(sede => (
+                    <button
+                      key={sede.id}
+                      onClick={() => {
+                        setFormData({ ...formData, sede_id: sede.id })
+                        setStep(1)
+                      }}
+                      className={`modality-card ${formData.sede_id === sede.id ? 'selected' : ''}`}
+                      style={{ padding: '20px', textAlign: 'left' }}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                        <Building2 size={32} />
+                        <div>
+                          <h4>{sede.nombre}</h4>
+                          <p style={{ fontSize: '12px', margin: 0 }}>{sede.direccion || 'Sin dirección'}</p>
+                        </div>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Step 1: Tipo */}
+            {step === 1 && (
+              <div>
+                <div className="step-description">
+                  <h3>Paso 1: Selecciona el Tipo</h3>
+                  <p>Que tipo de programacion sera?</p>
+                </div>
+
+                <div className="modality-grid">
+                  <div
+                    className={`modality-card ${formData.modalidad === 'turno' && !formData.devolucion_vehiculo ? 'selected' : ''}`}
+                    onClick={() => { handleSelectModality('turno'); setFormData(prev => ({ ...prev, modalidad: 'turno', devolucion_vehiculo: false, cambio_vehiculo: false })) }}
+                    style={{ padding: '20px 16px' }}
+                  >
+                    <div className="modality-icon">
+                      <Calendar size={36} />
+                    </div>
+                    <h4 className="modality-title">Turno</h4>
+                    <p className="modality-description">Asignacion por jornada (Diurno y/o Nocturno)</p>
+                  </div>
+
+                  <div
+                    className={`modality-card ${formData.modalidad === 'a_cargo' && !formData.devolucion_vehiculo ? 'selected' : ''}`}
+                    onClick={() => { handleSelectModality('a_cargo'); setFormData(prev => ({ ...prev, modalidad: 'a_cargo', devolucion_vehiculo: false, cambio_vehiculo: false })) }}
+                    style={{ padding: '20px 16px' }}
+                  >
+                    <div className="modality-icon">
+                      <User size={36} />
+                    </div>
+                    <h4 className="modality-title">A Cargo</h4>
+                    <p className="modality-description">Asignacion permanente a conductor</p>
+                  </div>
+                </div>
+
+                <div className="modality-grid" style={{ marginTop: '12px' }}>
+                  <div
+                    className={`modality-card ${formData.devolucion_vehiculo ? 'selected' : ''}`}
+                    onClick={() => {
+                      // No hardcodear modalidad: se determinará automáticamente en el paso 2
+                      // según la asignación activa del vehículo seleccionado
+                      setFormData(prev => ({
+                        ...prev,
+                        modalidad: '',
+                        devolucion_vehiculo: true,
+                        cambio_vehiculo: false,
+                        // Reset conductores
+                        conductor_id: '',
+                        conductor_nombre: '',
+                        conductor_dni: '',
+                        conductor_diurno_id: '',
+                        conductor_diurno_nombre: '',
+                        conductor_diurno_dni: '',
+                        conductor_nocturno_id: '',
+                        conductor_nocturno_nombre: '',
+                        conductor_nocturno_dni: '',
+                      }))
+                    }}
+                    style={{ padding: '16px 16px' }}
+                  >
+                    <div className="modality-icon">
+                      <RotateCcw size={32} />
+                    </div>
+                    <h4 className="modality-title">Devolución Vehículo</h4>
+                    <p className="modality-description">Programar devolución de un vehículo asignado</p>
+                  </div>
+
+                  <div
+                    className={`modality-card ${formData.cambio_vehiculo ? 'selected' : ''}`}
+                    onClick={() => {
+                      // No hardcodear modalidad: se determinará automáticamente en el paso 2
+                      // según la asignación activa del vehículo origen
+                      setFormData(prev => ({
+                        ...prev,
+                        modalidad: '',
+                        devolucion_vehiculo: false,
+                        cambio_vehiculo: true,
+                        // Reset vehículo cambio
+                        vehiculo_cambio_id: '',
+                        vehiculo_cambio_patente: '',
+                        vehiculo_cambio_modelo: '',
+                        // Reset conductores
+                        conductor_id: '',
+                        conductor_nombre: '',
+                        conductor_dni: '',
+                        conductor_diurno_id: '',
+                        conductor_diurno_nombre: '',
+                        conductor_diurno_dni: '',
+                        conductor_nocturno_id: '',
+                        conductor_nocturno_nombre: '',
+                        conductor_nocturno_dni: '',
+                      }))
+                    }}
+                    style={{ padding: '16px 16px' }}
+                  >
+                    <div className="modality-icon">
+                      <ArrowLeftRight size={32} />
+                    </div>
+                    <h4 className="modality-title">Cambio de Vehículo</h4>
+                    <p className="modality-description">Cambiar el vehículo asignado a un conductor</p>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Step 2: Vehiculo */}
+            {step === 2 && !formData.cambio_vehiculo && (
+              <div>
+                <div className="step-description">
+                  <h3>Paso 2: Selecciona el Vehiculo</h3>
+                  <p>Selecciona el vehiculo que se va a entregar</p>
+                </div>
+
+                {/* Buscador y Filtro */}
+                <div style={{ marginBottom: '20px', maxWidth: '700px', margin: '0 auto 20px auto', display: 'flex', flexWrap: 'wrap', gap: '12px' }}>
+                  <input
+                    type="text"
+                    placeholder="Buscar por patente, marca o modelo..."
+                    value={vehicleSearch}
+                    onChange={(e) => setVehicleSearch(e.target.value)}
+                    style={{
+                      flex: 1,
+                      padding: '12px 16px',
+                      border: '2px solid var(--border-primary)',
+                      borderRadius: '8px',
+                      fontSize: 'clamp(12px, 1vw, 14px)',
+                      fontFamily: 'inherit'
+                    }}
+                  />
+                  <select
+                    value={vehicleAvailabilityFilter}
+                    onChange={(e) => setVehicleAvailabilityFilter(e.target.value)}
+                    style={{
+                      padding: '12px 16px',
+                      border: '2px solid var(--border-primary)',
+                      borderRadius: '8px',
+                      fontSize: 'clamp(12px, 1vw, 14px)',
+                      fontFamily: 'inherit',
+                      background: 'var(--modal-bg)',
+                      cursor: 'pointer',
+                      minWidth: '180px'
+                    }}
+                  >
+                    <option value="">Todos</option>
+                    <option value="disponible">Disponible</option>
+                    <option value="con_turno_libre">Con turno libre</option>
+                    <option value="en_uso">En Uso</option>
+                    <option value="programacion_pendiente">Con programacion</option>
+                    <option value="programado">Programado</option>
+                  </select>
+                  <select
+                    value={vehicleGncFilter}
+                    onChange={(e) => setVehicleGncFilter(e.target.value as '' | 'con' | 'sin')}
+                    style={{
+                      padding: '12px 16px',
+                      border: '2px solid var(--border-primary)',
+                      borderRadius: '8px',
+                      fontSize: 'clamp(12px, 1vw, 14px)',
+                      fontFamily: 'inherit',
+                      background: 'var(--modal-bg)',
+                      cursor: 'pointer',
+                      minWidth: '150px'
+                    }}
+                  >
+                    <option value="">GNC: Todos</option>
+                    <option value="con">Con GNC</option>
+                    <option value="sin">Sin GNC</option>
+                  </select>
+                </div>
+
+                <div className="vehicle-grid">
+                  {loadingVehicles ? (
+                    <div className="empty-state" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '12px' }}>
+                      <div style={{
+                        width: '32px',
+                        height: '32px',
+                        border: '3px solid var(--border-primary)',
+                        borderTopColor: 'var(--color-primary)',
+                        borderRadius: '50%',
+                        animation: 'spin 1s linear infinite'
+                      }} />
+                      <span>Cargando vehiculos...</span>
+                    </div>
+                  ) : filteredVehicles.length === 0 ? (
+                    <div className="empty-state">
+                      {vehicleSearch || vehicleAvailabilityFilter || vehicleGncFilter ? 'No se encontraron vehiculos con ese criterio' : 'No hay vehiculos disponibles'}
+                    </div>
+                  ) : (
+                    filteredVehicles.map((vehicle) => {
+                      const { badgeText, badgeBg, badgeColor, detalleText } = getVehicleBadge(vehicle)
+                      const gncBadge = getGncBadge(vehicle)
+                      const isProgramado = vehicle.disponibilidad === 'programado'
+                      const isProgramacionPendiente = vehicle.disponibilidad === 'programacion_pendiente'
+                      // Solo se bloquea lo ya enviado a Asignaciones. Una programacion
+                      // pendiente avisa (badge violeta) pero deja seguir.
+                      const bloqueado = isProgramado && vehicle.id !== formData.vehiculo_id
+
+                      return (
+                        <div
+                          key={vehicle.id}
+                          className={`vehicle-card ${formData.vehiculo_id === vehicle.id ? 'selected' : ''}`}
+                          onClick={() => { if (!bloqueado) handleSelectVehicle(vehicle) }}
+                          title={bloqueado ? 'Este vehiculo ya fue enviado al modulo de Asignaciones' : undefined}
+                          aria-disabled={bloqueado || undefined}
+                          style={bloqueado ? { cursor: 'not-allowed', opacity: 0.55 } : undefined}
+                        >
+                          <div className="vehicle-info">
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px', flexWrap: 'wrap' }}>
+                              <h4 className="vehicle-patente" style={{ margin: 0 }}>{vehicle.patente}</h4>
+                              <span style={{
+                                background: badgeBg,
+                                color: badgeColor,
+                                padding: '3px 10px',
+                                borderRadius: '6px',
+                                fontSize: 'clamp(9px, 0.8vw, 11px)',
+                                fontWeight: '600'
+                              }}>
+                                {badgeText}
+                              </span>
+                              <span style={{
+                                background: gncBadge.bg,
+                                color: gncBadge.color,
+                                padding: '3px 10px',
+                                borderRadius: '6px',
+                                fontSize: 'clamp(9px, 0.8vw, 11px)',
+                                fontWeight: '600'
+                              }}>
+                                {gncBadge.text}
+                              </span>
+                              {detalleText && (
+                                <span style={{
+                                  color: isProgramado ? '#EF4444' : isProgramacionPendiente ? '#8B5CF6' : '#6B7280',
+                                  fontSize: 'clamp(9px, 0.8vw, 11px)',
+                                  fontWeight: '500'
+                                }}>
+                                  ({detalleText})
+                                </span>
+                              )}
+                            </div>
+                            <p className="vehicle-details">
+                              {vehicle.marca} {vehicle.modelo} - {vehicle.anio}
+                            </p>
+                          </div>
+                          <div className={`radio-circle ${formData.vehiculo_id === vehicle.id ? 'selected' : ''}`} />
+                        </div>
+                      )
+                    })
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Step 2: Cambio de Vehículo - Selección dual */}
+            {step === 2 && formData.cambio_vehiculo && (
+              <div>
+                <div className="step-description">
+                  <h3>Paso 2: Selecciona los Vehículos</h3>
+                  <p>Selecciona el vehículo actual y el vehículo por el que se va a cambiar</p>
+                </div>
+
+                {/* Buscador y Filtro */}
+                <div style={{ marginBottom: '20px', maxWidth: '900px', margin: '0 auto 20px auto', display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+                  <input
+                    type="text"
+                    placeholder="Buscar por patente, marca o modelo..."
+                    value={vehicleSearch}
+                    onChange={(e) => setVehicleSearch(e.target.value)}
+                    style={{
+                      flex: '1 1 200px',
+                      minWidth: 0,
+                      padding: '10px 12px',
+                      border: '2px solid var(--border-primary)',
+                      borderRadius: '8px',
+                      fontSize: 'clamp(12px, 1vw, 14px)',
+                      fontFamily: 'inherit'
+                    }}
+                  />
+                  <select
+                    value={vehicleAvailabilityFilter}
+                    onChange={(e) => setVehicleAvailabilityFilter(e.target.value)}
+                    style={{
+                      padding: '10px 12px',
+                      border: '2px solid var(--border-primary)',
+                      borderRadius: '8px',
+                      fontSize: 'clamp(12px, 1vw, 14px)',
+                      fontFamily: 'inherit',
+                      background: 'var(--modal-bg)',
+                      cursor: 'pointer',
+                      flex: '0 1 auto',
+                      minWidth: '120px'
+                    }}
+                  >
+                    <option value="">Todos</option>
+                    <option value="disponible">Disponible</option>
+                    <option value="con_turno_libre">Con turno libre</option>
+                    <option value="en_uso">En Uso</option>
+                  </select>
+                  <select
+                    value={vehicleGncFilter}
+                    onChange={(e) => setVehicleGncFilter(e.target.value as '' | 'con' | 'sin')}
+                    style={{
+                      padding: '10px 12px',
+                      border: '2px solid var(--border-primary)',
+                      borderRadius: '8px',
+                      fontSize: 'clamp(12px, 1vw, 14px)',
+                      fontFamily: 'inherit',
+                      background: 'var(--modal-bg)',
+                      cursor: 'pointer',
+                      flex: '0 1 auto',
+                      minWidth: '120px'
+                    }}
+                  >
+                    <option value="">GNC: Todos</option>
+                    <option value="con">Con GNC</option>
+                    <option value="sin">Sin GNC</option>
+                  </select>
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: window.innerWidth < 768 ? '1fr' : '1fr auto 1fr', gap: window.innerWidth < 768 ? '8px' : '16px', maxWidth: '900px', margin: '0 auto', alignItems: 'start' }}>
+                  {/* Columna izquierda: Vehículo a cambiar (origen) - solo En Uso */}
+                  <div>
+                    <div style={{
+                      padding: '8px 12px',
+                      background: 'rgba(251, 191, 36, 0.15)',
+                      borderRadius: '8px 8px 0 0',
+                      borderBottom: '2px solid #F59E0B',
+                      textAlign: 'center'
+                    }}>
+                      <h4 style={{ margin: 0, fontSize: '12px', color: 'var(--text-primary)', fontWeight: '700' }}>Vehículo a cambiar</h4>
+                      <p style={{ margin: '1px 0 0', fontSize: '10px', color: 'var(--text-secondary)' }}>El vehículo que tiene actualmente</p>
+                    </div>
+                    <div style={{ maxHeight: '350px', overflowY: 'auto', border: '1px solid var(--border-primary)', borderTop: 'none', borderRadius: '0 0 8px 8px' }}>
+                      {loadingVehicles ? (
+                        <div style={{ padding: '20px', textAlign: 'center' }}>
+                          <div style={{ width: '20px', height: '20px', border: '2px solid var(--border-primary)', borderTopColor: 'var(--color-primary)', borderRadius: '50%', animation: 'spin 1s linear infinite', margin: '0 auto 6px' }} />
+                          <span style={{ fontSize: '11px' }}>Cargando...</span>
+                        </div>
+                      ) : vehiculosEnUso.length === 0 ? (
+                        <div style={{ padding: '20px', textAlign: 'center', fontSize: '11px', color: 'var(--text-tertiary)' }}>No hay vehículos en uso</div>
+                      ) : (
+                        vehiculosEnUso.map(vehicle => {
+                          const { badgeText, badgeBg, badgeColor, detalleText } = getVehicleBadge(vehicle)
+                          const gncBadge = getGncBadge(vehicle)
+                          const isSelected = formData.vehiculo_id === vehicle.id
+                          return (
+                            <div
+                              key={vehicle.id}
+                              onClick={() => {
+                                setFormData(prev => ({
+                                  ...prev,
+                                  vehiculo_id: vehicle.id,
+                                  vehiculo_patente: vehicle.patente,
+                                  vehiculo_modelo: `${vehicle.marca} ${vehicle.modelo}`,
+                                  vehiculo_color: vehicle.color || ''
+                                }))
+                              }}
+                              style={{
+                                padding: '8px 12px',
+                                cursor: 'pointer',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'space-between',
+                                gap: '8px',
+                                borderBottom: '1px solid var(--border-primary)',
+                                background: isSelected ? 'rgba(251, 191, 36, 0.15)' : 'var(--modal-bg)',
+                                transition: 'background 0.15s'
+                              }}
+                            >
+                              <div style={{ minWidth: 0 }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                                  <span style={{ fontWeight: '700', fontSize: '12px' }}>{vehicle.patente}</span>
+                                  <span style={{
+                                    background: badgeBg, color: badgeColor,
+                                    padding: '1px 6px', borderRadius: '4px',
+                                    fontSize: '9px', fontWeight: '600', lineHeight: '16px'
+                                  }}>{badgeText}</span>
+                                  <span style={{
+                                    background: gncBadge.bg, color: gncBadge.color,
+                                    padding: '1px 6px', borderRadius: '4px',
+                                    fontSize: '9px', fontWeight: '600', lineHeight: '16px'
+                                  }}>{gncBadge.text}</span>
+                                  {detalleText && (
+                                    <span style={{ color: 'var(--text-tertiary)', fontSize: '9px', fontWeight: '500' }}>({detalleText})</span>
+                                  )}
+                                </div>
+                                <div style={{ fontSize: '10px', color: 'var(--text-tertiary)', marginTop: '1px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                  {vehicle.marca} {vehicle.modelo} - {vehicle.anio}
+                                </div>
+                              </div>
+                              <div className={`radio-circle ${isSelected ? 'selected' : ''}`} style={{ width: '18px', height: '18px', minWidth: '18px' }} />
+                            </div>
+                          )
+                        })
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Icono de flecha central */}
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: window.innerWidth < 768 ? '4px 0' : '60px 0 0 0' }}>
+                    <ArrowLeftRight size={24} style={{ color: 'var(--text-tertiary)', transform: window.innerWidth < 768 ? 'rotate(90deg)' : 'none' }} />
+                  </div>
+
+                  {/* Columna derecha: Vehículo nuevo (destino) - Disponibles + En Uso */}
+                  <div>
+                    <div style={{
+                      padding: '8px 12px',
+                      background: 'rgba(16, 185, 129, 0.15)',
+                      borderRadius: '8px 8px 0 0',
+                      borderBottom: '2px solid #10B981',
+                      textAlign: 'center'
+                    }}>
+                      <h4 style={{ margin: 0, fontSize: '12px', color: 'var(--text-primary)', fontWeight: '700' }}>Vehículo nuevo</h4>
+                      <p style={{ margin: '1px 0 0', fontSize: '10px', color: 'var(--text-secondary)' }}>El vehículo por el que se va a cambiar</p>
+                    </div>
+                    <div style={{ maxHeight: '350px', overflowY: 'auto', border: '1px solid var(--border-primary)', borderTop: 'none', borderRadius: '0 0 8px 8px' }}>
+                      {loadingVehicles ? (
+                        <div style={{ padding: '20px', textAlign: 'center' }}>
+                          <div style={{ width: '20px', height: '20px', border: '2px solid var(--border-primary)', borderTopColor: 'var(--color-primary)', borderRadius: '50%', animation: 'spin 1s linear infinite', margin: '0 auto 6px' }} />
+                          <span style={{ fontSize: '11px' }}>Cargando...</span>
+                        </div>
+                      ) : vehiculosDestino.length === 0 ? (
+                        <div style={{ padding: '20px', textAlign: 'center', fontSize: '11px', color: 'var(--text-tertiary)' }}>No hay vehículos disponibles</div>
+                      ) : (
+                        vehiculosDestino.map(vehicle => {
+                          const { badgeText, badgeBg, badgeColor, detalleText } = getVehicleBadge(vehicle)
+                          const gncBadge = getGncBadge(vehicle)
+                          const isSelected = formData.vehiculo_cambio_id === vehicle.id
+                          return (
+                            <div
+                              key={vehicle.id}
+                              onClick={() => {
+                                // El documento (Anexo) se arma con el vehículo nuevo,
+                                // así que el propietario sale de su grupo de flota.
+                                setFormData(prev => ({
+                                  ...prev,
+                                  vehiculo_cambio_id: vehicle.id,
+                                  vehiculo_cambio_patente: vehicle.patente,
+                                  vehiculo_cambio_modelo: `${vehicle.marca} ${vehicle.modelo}`,
+                                  propietario: resolverPropietario(vehicle, prev.propietario)
+                                }))
+                              }}
+                              style={{
+                                padding: '8px 12px',
+                                cursor: 'pointer',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'space-between',
+                                gap: '8px',
+                                borderBottom: '1px solid var(--border-primary)',
+                                background: isSelected ? 'rgba(16, 185, 129, 0.15)' : 'var(--modal-bg)',
+                                transition: 'background 0.15s'
+                              }}
+                            >
+                              <div style={{ minWidth: 0 }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                                  <span style={{ fontWeight: '700', fontSize: '12px' }}>{vehicle.patente}</span>
+                                  <span style={{
+                                    background: badgeBg, color: badgeColor,
+                                    padding: '1px 6px', borderRadius: '4px',
+                                    fontSize: '9px', fontWeight: '600', lineHeight: '16px'
+                                  }}>{badgeText}</span>
+                                  <span style={{
+                                    background: gncBadge.bg, color: gncBadge.color,
+                                    padding: '1px 6px', borderRadius: '4px',
+                                    fontSize: '9px', fontWeight: '600', lineHeight: '16px'
+                                  }}>{gncBadge.text}</span>
+                                  {detalleText && (
+                                    <span style={{ color: 'var(--text-tertiary)', fontSize: '9px', fontWeight: '500' }}>({detalleText})</span>
+                                  )}
+                                </div>
+                                <div style={{ fontSize: '10px', color: 'var(--text-tertiary)', marginTop: '1px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                  {vehicle.marca} {vehicle.modelo} - {vehicle.anio}
+                                </div>
+                              </div>
+                              <div className={`radio-circle ${isSelected ? 'selected' : ''}`} style={{ width: '18px', height: '18px', minWidth: '18px' }} />
+                            </div>
+                          )
+                        })
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Resumen de selección */}
+                {(formData.vehiculo_id || formData.vehiculo_cambio_id) && (
+                  <div style={{ maxWidth: '900px', margin: '16px auto 0', padding: '12px 16px', background: 'var(--bg-secondary)', borderRadius: '8px', border: '1px solid var(--border-primary)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '16px' }}>
+                    <div style={{ textAlign: 'center' }}>
+                      <span style={{ fontSize: '10px', color: 'var(--text-tertiary)', display: 'block' }}>ORIGEN</span>
+                      <span style={{ fontSize: '13px', fontWeight: '600', color: formData.vehiculo_id ? '#F59E0B' : 'var(--text-tertiary)' }}>
+                        {formData.vehiculo_patente || 'Sin seleccionar'}
+                      </span>
+                    </div>
+                    <ArrowLeftRight size={18} style={{ color: 'var(--text-tertiary)', flexShrink: 0 }} />
+                    <div style={{ textAlign: 'center' }}>
+                      <span style={{ fontSize: '10px', color: 'var(--text-tertiary)', display: 'block' }}>DESTINO</span>
+                      <span style={{ fontSize: '13px', fontWeight: '600', color: formData.vehiculo_cambio_id ? '#10B981' : 'var(--text-tertiary)' }}>
+                        {formData.vehiculo_cambio_patente || 'Sin seleccionar'}
+                      </span>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Step 3: Conductores */}
+            {step === 3 && (
+              <div>
+                <div className="step-description">
+                  <h3>Paso 3: {formData.cambio_vehiculo ? 'Conductores del Vehículo' : 'Asigna los Conductores / Leads'}</h3>
+                  <p>{formData.cambio_vehiculo
+                    ? `Estos son los conductores asignados al vehículo ${formData.vehiculo_patente}. Puedes modificarlos si es necesario.`
+                    : (isTurnoMode ? 'Arrastra conductores a los turnos Diurno y/o Nocturno' : 'Arrastra un conductor a la zona de A Cargo')
+                  }</p>
+                </div>
+
+                <div className="conductores-layout">
+                  {/* ── Columna 1: LEADS ─────────────────────────────────────
+                      Informativa. Todavia NO se arrastra: un lead no tiene fila
+                      en `conductores`, y conductor_*_id termina en
+                      asignaciones_conductores.conductor_id, que es FK a esa
+                      tabla. Habilitar el arrastre implica convertir el lead
+                      primero (fase siguiente). */}
+                  <div className="conductores-column">
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px', paddingBottom: '8px', borderBottom: '2px solid var(--border-primary)' }}>
+                      <h4 style={{ margin: 0, border: 'none', paddingBottom: 0 }}>Leads</h4>
+                      <span style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>
+                        {loadingLeads ? '' : `${filteredLeads.length} de ${leads.length}`}
+                      </span>
+                    </div>
+
+                    {/* Filtros propios de leads */}
+                    <div style={{ marginBottom: '10px', flexShrink: 0, display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                      <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+                        <input
+                          type="text"
+                          placeholder="Buscar..."
+                          value={leadSearch}
+                          onChange={(e) => setLeadSearch(e.target.value)}
+                          style={{ flex: 1, minWidth: '60px', padding: '7px 10px', border: '1px solid var(--border-primary)', borderRadius: '6px', fontSize: '12px', fontFamily: 'inherit' }}
+                        />
+                        <select
+                          value={leadTurnoFilter}
+                          onChange={(e) => setLeadTurnoFilter(e.target.value)}
+                          style={{ padding: '7px 6px', border: '1px solid var(--border-primary)', borderRadius: '6px', fontSize: '11px', fontFamily: 'inherit', background: 'var(--modal-bg)', cursor: 'pointer' }}
+                        >
+                          <option value="">Turno</option>
+                          <option value="diurno">Diurno</option>
+                          <option value="nocturno">Nocturno</option>
+                          <option value="cargo">A Cargo</option>
+                        </select>
+                      </div>
+                      <select
+                        value={leadEstadoFilter}
+                        onChange={(e) => setLeadEstadoFilter(e.target.value)}
+                        style={{ padding: '7px 6px', border: '1px solid var(--border-primary)', borderRadius: '6px', fontSize: '11px', fontFamily: 'inherit', background: 'var(--modal-bg)', cursor: 'pointer' }}
+                      >
+                        <option value="">Estado de lead</option>
+                        {estadosLeadDisponibles.map((e) => (
+                          <option key={e} value={e}>{e}</option>
+                        ))}
+                      </select>
+                      <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+                        <input
+                          type="date"
+                          value={leadCreadoDesde}
+                          max={leadCreadoHasta || undefined}
+                          onChange={(e) => setLeadCreadoDesde(e.target.value)}
+                          title="Creado desde"
+                          style={{ flex: 1, minWidth: 0, padding: '6px', border: '1px solid var(--border-primary)', borderRadius: '6px', fontSize: '11px', fontFamily: 'inherit', background: 'var(--modal-bg)' }}
+                        />
+                        <input
+                          type="date"
+                          value={leadCreadoHasta}
+                          min={leadCreadoDesde || undefined}
+                          onChange={(e) => setLeadCreadoHasta(e.target.value)}
+                          title="Creado hasta"
+                          style={{ flex: 1, minWidth: 0, padding: '6px', border: '1px solid var(--border-primary)', borderRadius: '6px', fontSize: '11px', fontFamily: 'inherit', background: 'var(--modal-bg)' }}
+                        />
+                      </div>
+                    </div>
+
+                    <div className="conductores-list">
+                      {loadingLeads ? (
+                        <div className="empty-state" style={{ padding: '16px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
+                          <Loader2 size={20} style={{ color: '#ff0033', animation: 'spin 1s linear infinite' }} />
+                          <span style={{ fontSize: '11px' }}>Cargando...</span>
+                        </div>
+                      ) : filteredLeads.length === 0 ? (
+                        <div className="empty-state" style={{ padding: '16px' }}>
+                          {leads.length === 0 ? 'Sin leads' : 'Sin resultados'}
+                        </div>
+                      ) : (
+                        filteredLeads.map((lead) => {
+                          const nombre = nombreLead(lead)
+                          const iniciales = nombre.split(' ').filter(Boolean).slice(0, 2).map((t) => t.charAt(0)).join('')
+                          return (
+                            <div
+                              key={lead.id}
+                              className="conductor-item"
+                              draggable
+                              onDragStart={(e) => handleLeadDragStart(e, lead.id)}
+                              onDragEnd={handleConductorDragEnd}
+                              title="Arrastralo a un turno. Se programa como lead: no se convierte en conductor."
+                            >
+                              <div className="conductor-avatar" style={{ background: 'rgba(139, 92, 246, 0.18)', color: '#7C3AED' }}>
+                                {iniciales || '?'}
+                              </div>
+                              <div className="conductor-info">
+                                <p className="conductor-name">{nombre}</p>
+                                <p className="conductor-license" style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                                  <span>DNI: {lead.dni || '-'}</span>
+                                  {lead.turno && (
+                                    <span style={{ fontSize: '9px', padding: '2px 6px', borderRadius: '4px', fontWeight: '600', background: 'rgba(139, 92, 246, 0.15)', color: '#8B5CF6' }}>
+                                      {lead.turno}
+                                    </span>
+                                  )}
+                                </p>
+                                {lead.estado_de_lead && (
+                                  <span style={{ fontSize: '9px', padding: '2px 6px', borderRadius: '4px', fontWeight: '600', marginTop: '2px', display: 'inline-block', background: 'var(--bg-secondary)', color: 'var(--text-secondary)' }}>
+                                    {lead.estado_de_lead}
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                          )
+                        })
+                      )}
+                    </div>
+                  </div>
+
+                  {/* ── Columna 2: CONDUCTORES ──────────────────────────────── */}
+                  <div className="conductores-column">
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px', paddingBottom: '8px', borderBottom: '2px solid var(--border-primary)' }}>
+                      <h4 style={{ margin: 0, border: 'none', paddingBottom: 0 }}>Conductores Disponibles</h4>
+                       {isTurnoMode && (
+                        <div style={{ display: 'flex', gap: '4px' }}>
+                          <button
+                            type="button"
+                            onClick={toggleVistaPares}
+                            disabled={loadingPares}
+                            title={mostrarParesCercanos ? 'Ver lista normal' : 'Ver pares cercanos'}
+                            style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '4px',
+                              padding: '4px 8px',
+                              fontSize: '10px',
+                              fontWeight: '600',
+                              background: mostrarParesCercanos ? '#10B981' : 'var(--bg-secondary)',
+                              color: mostrarParesCercanos ? 'white' : 'var(--text-secondary)',
+                              border: mostrarParesCercanos ? 'none' : '1px solid var(--border-primary)',
+                              borderRadius: '6px',
+                              cursor: loadingPares ? 'wait' : 'pointer',
+                              transition: 'all 0.2s'
+                            }}
+                          >
+                            {loadingPares ? (
+                              <Loader2 size={10} style={{ animation: 'spin 1s linear infinite' }} />
+                            ) : (
+                              <MapPin size={10} />
+                            )}
+                            Pares
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setShowMapModal(true)}
+                            title="Ver conductores en mapa"
+                            style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '4px',
+                              padding: '4px 8px',
+                              fontSize: '10px',
+                              fontWeight: '600',
+                              background: 'var(--bg-secondary)',
+                              color: 'var(--text-secondary)',
+                              border: '1px solid var(--border-primary)',
+                              borderRadius: '6px',
+                              cursor: 'pointer',
+                              transition: 'all 0.2s'
+                            }}
+                          >
+                            <MapIcon size={10} />
+                            Mapa
+                          </button>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Filtros */}
+                    <div style={{ marginBottom: '10px', flexShrink: 0, display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                      <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+                      <input
+                        type="text"
+                        placeholder="Buscar..."
+                        value={conductorSearch}
+                        onChange={(e) => setConductorSearch(e.target.value)}
+                        style={{
+                          flex: 1,
+                          minWidth: '60px',
+                          padding: '7px 10px',
+                          border: '1px solid var(--border-primary)',
+                          borderRadius: '6px',
+                          fontSize: '12px',
+                          fontFamily: 'inherit'
+                        }}
+                      />
+                      <select
+                        value={conductorStatusFilter}
+                        onChange={(e) => setConductorStatusFilter(e.target.value)}
+                        style={{
+                          padding: '7px 6px',
+                          border: '1px solid var(--border-primary)',
+                          borderRadius: '6px',
+                          fontSize: '11px',
+                          fontFamily: 'inherit',
+                          background: 'var(--modal-bg)',
+                          cursor: 'pointer'
+                        }}
+                      >
+                        <option value="">Estado</option>
+                        <option value="disponible">Disponible</option>
+                        <option value="activo">Activo</option>
+                      </select>
+                      <select
+                        value={conductorTurnoFilter}
+                        onChange={(e) => setConductorTurnoFilter(e.target.value)}
+                        style={{
+                          padding: '7px 6px',
+                          border: '1px solid var(--border-primary)',
+                          borderRadius: '6px',
+                          fontSize: '11px',
+                          fontFamily: 'inherit',
+                          background: 'var(--modal-bg)',
+                          cursor: 'pointer'
+                        }}
+                      >
+                        <option value="">Turno</option>
+                        <option value="diurno">Diurno</option>
+                        <option value="nocturno">Nocturno</option>
+                        <option value="cargo">A Cargo</option>
+                      </select>
+                      </div>
+                      {/* Rango de alta del conductor. Filtro propio de esta
+                          columna: no se comparte con el de leads. */}
+                      <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+                        <input
+                          type="date"
+                          value={conductorCreadoDesde}
+                          max={conductorCreadoHasta || undefined}
+                          onChange={(e) => setConductorCreadoDesde(e.target.value)}
+                          title="Creado desde"
+                          style={{ flex: 1, minWidth: 0, padding: '6px', border: '1px solid var(--border-primary)', borderRadius: '6px', fontSize: '11px', fontFamily: 'inherit', background: 'var(--modal-bg)' }}
+                        />
+                        <input
+                          type="date"
+                          value={conductorCreadoHasta}
+                          min={conductorCreadoDesde || undefined}
+                          onChange={(e) => setConductorCreadoHasta(e.target.value)}
+                          title="Creado hasta"
+                          style={{ flex: 1, minWidth: 0, padding: '6px', border: '1px solid var(--border-primary)', borderRadius: '6px', fontSize: '11px', fontFamily: 'inherit', background: 'var(--modal-bg)' }}
+                        />
+                      </div>
+                    </div>
+
+                    <div className="conductores-list">
+                      {loadingConductores || loadingPares ? (
+                        <div className="empty-state" style={{ padding: '16px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
+                          <div style={{
+                            width: '24px',
+                            height: '24px',
+                            border: '2px solid var(--border-primary)',
+                            borderTopColor: 'var(--color-primary)',
+                            borderRadius: '50%',
+                            animation: 'spin 1s linear infinite'
+                          }} />
+                          <span style={{ fontSize: '11px' }}>{loadingPares ? 'Calculando pares...' : 'Cargando...'}</span>
+                        </div>
+                      ) : mostrarParesCercanos ? (
+                        // Vista de pares cercanos
+                        paresCercanos.length === 0 ? (
+                          <div className="empty-state" style={{ padding: '16px', textAlign: 'center' }}>
+                            <MapPin size={24} style={{ marginBottom: '8px', opacity: 0.5 }} />
+                            <p style={{ margin: 0, fontSize: '11px' }}>No se encontraron pares con coordenadas</p>
+                          </div>
+                        ) : (
+                          paresCercanos.map((par, idx) => (
+                            <div
+                              key={idx}
+                              style={{
+                                padding: '10px',
+                                background: 'rgba(16, 185, 129, 0.08)',
+                                border: '1px solid rgba(16, 185, 129, 0.3)',
+                                borderRadius: '8px',
+                                marginBottom: '8px'
+                              }}
+                            >
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px', flexWrap: 'wrap' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                  <MapPin size={12} style={{ color: '#10B981' }} />
+                                  <span style={{ fontSize: '10px', fontWeight: '600', color: '#059669' }}>
+                                    {par.distanciaKm.toFixed(1)} km
+                                  </span>
+                                </div>
+                                {par.tiempoMinutos !== undefined && par.tiempoMinutos > 0 && (
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                    <Route size={12} style={{ color: '#3B82F6' }} />
+                                    <span style={{ fontSize: '10px', fontWeight: '600', color: '#2563EB' }}>
+                                      ~{par.tiempoMinutos} min
+                                    </span>
+                                  </div>
+                                )}
+                              </div>
+                              {/* Conductor Diurno */}
+                              {(() => {
+                                const zonaDiurno = conductoresEnZona.get(par.diurno.id)
+                                return (
+                                  <div
+                                    className="conductor-item"
+                                    draggable
+                                    onDragStart={(e) => handleConductorDragStart(e, par.diurno.id, par.nocturno.id, par.tiempoMinutos)}
+                                    onDragEnd={handleConductorDragEnd}
+                                    title={zonaDiurno ? `⚠ Zona restringida: ${zonaDiurno}` : undefined}
+                                    style={{ marginBottom: '6px', background: zonaDiurno ? 'rgba(255, 0, 51, 0.08)' : 'rgba(251, 191, 36, 0.1)', borderColor: zonaDiurno ? '#FF0033' : '#FCD34D' }}
+                                  >
+                                    <div className="conductor-avatar" style={{ background: zonaDiurno ? '#FF0033' : '#F59E0B' }}>
+                                      {par.diurno.nombres.charAt(0)}{par.diurno.apellidos.charAt(0)}
+                                    </div>
+                                    <div className="conductor-info">
+                                      <p className="conductor-name" style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                        <Sun size={10} style={{ color: zonaDiurno ? '#FF0033' : '#F59E0B' }} />
+                                        {par.diurno.nombres} {par.diurno.apellidos}
+                                      </p>
+                                      <p className="conductor-license">DNI: {par.diurno.numero_dni || '-'}</p>
+                                      {zonaDiurno && (
+                                        <span style={{ fontSize: '9px', padding: '2px 6px', borderRadius: '4px', fontWeight: '600', display: 'inline-block', background: 'rgba(255, 0, 51, 0.12)', color: '#FF4D6A' }}>
+                                          ⚠ Zona restringida
+                                        </span>
+                                      )}
+                                    </div>
+                                  </div>
+                                )
+                              })()}
+                              {/* Conductor Nocturno */}
+                              {(() => {
+                                const zonanocturno = conductoresEnZona.get(par.nocturno.id)
+                                return (
+                                  <div
+                                    className="conductor-item"
+                                    draggable
+                                    onDragStart={(e) => handleConductorDragStart(e, par.nocturno.id, par.diurno.id, par.tiempoMinutos)}
+                                    onDragEnd={handleConductorDragEnd}
+                                    title={zonanocturno ? `⚠ Zona restringida: ${zonanocturno}` : undefined}
+                                    style={{ background: zonanocturno ? 'rgba(255, 0, 51, 0.08)' : 'rgba(59, 130, 246, 0.1)', borderColor: zonanocturno ? '#FF0033' : '#93C5FD' }}
+                                  >
+                                    <div className="conductor-avatar" style={{ background: zonanocturno ? '#FF0033' : '#3B82F6' }}>
+                                      {par.nocturno.nombres.charAt(0)}{par.nocturno.apellidos.charAt(0)}
+                                    </div>
+                                    <div className="conductor-info">
+                                      <p className="conductor-name" style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                        <Moon size={10} style={{ color: zonanocturno ? '#FF0033' : '#3B82F6' }} />
+                                        {par.nocturno.nombres} {par.nocturno.apellidos}
+                                      </p>
+                                      <p className="conductor-license">DNI: {par.nocturno.numero_dni || '-'}</p>
+                                      {zonanocturno && (
+                                        <span style={{ fontSize: '9px', padding: '2px 6px', borderRadius: '4px', fontWeight: '600', display: 'inline-block', background: 'rgba(255, 0, 51, 0.12)', color: '#FF4D6A' }}>
+                                          ⚠ Zona restringida
+                                        </span>
+                                      )}
+                                    </div>
+                                  </div>
+                                )
+                              })()}
+                            </div>
+                          ))
+                        )
+                      ) : filteredConductores.length === 0 ? (
+                        <div className="empty-state" style={{ padding: '16px' }}>
+                          {conductorSearch ? 'Sin resultados' : 'Sin conductores'}
+                        </div>
+                      ) : (
+                        filteredConductores.map((conductor) => {
+                          const algunoOcupado = conductor.tieneAsignacionDiurna || conductor.tieneAsignacionNocturna
+                          const zonaRestringida = conductoresEnZona.get(conductor.id)
+                          let infoMsg = ''
+                          if (conductor.tieneAsignacionDiurna && !conductor.tieneAsignacionNocturna) {
+                            infoMsg = 'Diurno ocupado'
+                          } else if (!conductor.tieneAsignacionDiurna && conductor.tieneAsignacionNocturna) {
+                            infoMsg = 'Nocturno ocupado'
+                          } else if (algunoOcupado) {
+                            infoMsg = 'Ambos ocupados'
+                          }
+
+                          return (
+                            <div
+                              key={conductor.id}
+                              className="conductor-item"
+                              draggable
+                              onDragStart={(e) => handleConductorDragStart(e, conductor.id)}
+                              onDragEnd={handleConductorDragEnd}
+                              title={zonaRestringida ? `⚠ Zona restringida: ${zonaRestringida}` : undefined}
+                              style={{
+                                background: zonaRestringida ? 'rgba(255, 0, 51, 0.08)' : algunoOcupado ? 'rgba(251, 191, 36, 0.1)' : undefined,
+                                borderColor: zonaRestringida ? '#FF0033' : algunoOcupado ? '#FCD34D' : undefined
+                              }}
+                            >
+                              <div className="conductor-avatar" style={zonaRestringida ? { background: '#FF0033' } : undefined}>
+                                {conductor.nombres.charAt(0)}{conductor.apellidos.charAt(0)}
+                              </div>
+                              <div className="conductor-info">
+                                <p className="conductor-name">
+                                  {conductor.nombres} {conductor.apellidos}
+                                </p>
+                                <p className="conductor-license" style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                                  <span>DNI: {conductor.numero_dni || '-'}</span>
+                                  <span style={{
+                                    fontSize: '9px',
+                                    padding: '2px 6px',
+                                    borderRadius: '4px',
+                                    fontWeight: '600',
+                                    background: getPreferenciaBadge(conductor.preferencia_turno).bg,
+                                    color: getPreferenciaBadge(conductor.preferencia_turno).color
+                                  }}>
+                                    {formatPreferencia(conductor.preferencia_turno)}
+                                  </span>
+                                </p>
+                                {zonaRestringida && (
+                                  <span style={{
+                                    fontSize: '9px',
+                                    padding: '2px 6px',
+                                    borderRadius: '4px',
+                                    fontWeight: '600',
+                                    marginTop: '2px',
+                                    display: 'inline-block',
+                                    background: 'rgba(255, 0, 51, 0.12)',
+                                    color: '#FF4D6A'
+                                  }}>
+                                    ⚠ Zona restringida
+                                  </span>
+                                )}
+                                {infoMsg && (
+                                  <span style={{
+                                    fontSize: '9px',
+                                    padding: '2px 6px',
+                                    borderRadius: '4px',
+                                    fontWeight: '600',
+                                    marginTop: '2px',
+                                    display: 'inline-block',
+                                    background: 'rgba(251, 191, 36, 0.15)',
+                                    color: '#FBBF24'
+                                  }}>
+                                    {infoMsg}
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                          )
+                        })
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Modo TURNO: las dos zonas comparten la tercera columna,
+                      apiladas (Diurno arriba, Nocturno abajo). */}
+                  {isTurnoMode && (
+                    <div className="turnos-stack">
+                      {/* Turno Diurno */}
+                      <div className="conductores-column turno-diurno">
+                        <h4>
+                          <span className="turno-badge diurno"><Sun size={12} style={{ marginRight: 4 }} />DIURNO</span>
+                        </h4>
+                        <div
+                          className={`drop-zone ${conductorDiurno ? 'has-conductor' : ''}`}
+                          onDragOver={handleDragOver}
+                          onDragLeave={handleDragLeave}
+                          onDrop={handleDropDiurno}
+                        >
+                          {conductorDiurno ? (
+                            <div className={`assigned-conductor-card ${formData.lead_diurno_id ? 'es-lead' : ''}`}>
+                              <div className="conductor-avatar">
+                                {conductorDiurno.nombres.charAt(0)}{conductorDiurno.apellidos.charAt(0)}
+                              </div>
+                              <div className="conductor-info" style={{ flex: 1 }}>
+                                <p className="conductor-name">
+                                  {conductorDiurno.nombres} {conductorDiurno.apellidos}
+                                  {formData.lead_diurno_id && <span className="badge-lead">LEAD</span>}
+                                </p>
+                                <p className="conductor-license">
+                                  DNI: {conductorDiurno.numero_dni || '-'}
+                                </p>
+                              </div>
+                              <button
+                                className="remove-btn"
+                                onClick={() => handleRemoveConductorTurno('diurno')}
+                                title="Remover"
+                              >
+                                <X size={18} />
+                              </button>
+                            </div>
+                          ) : (
+                            <div className="drop-zone-empty">
+                              Arrastra un conductor aqui
+                            </div>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Turno Nocturno */}
+                      <div className="conductores-column turno-nocturno">
+                        <h4>
+                          <span className="turno-badge nocturno"><Moon size={12} style={{ marginRight: 4 }} />NOCTURNO</span>
+                        </h4>
+                        <div
+                          className={`drop-zone ${conductorNocturno ? 'has-conductor' : ''}`}
+                          onDragOver={handleDragOver}
+                          onDragLeave={handleDragLeave}
+                          onDrop={handleDropNocturno}
+                        >
+                          {conductorNocturno ? (
+                            <div className={`assigned-conductor-card ${formData.lead_nocturno_id ? 'es-lead' : ''}`}>
+                              <div className="conductor-avatar">
+                                {conductorNocturno.nombres.charAt(0)}{conductorNocturno.apellidos.charAt(0)}
+                              </div>
+                              <div className="conductor-info" style={{ flex: 1 }}>
+                                <p className="conductor-name">
+                                  {conductorNocturno.nombres} {conductorNocturno.apellidos}
+                                  {formData.lead_nocturno_id && <span className="badge-lead">LEAD</span>}
+                                </p>
+                                <p className="conductor-license">
+                                  DNI: {conductorNocturno.numero_dni || '-'}
+                                </p>
+                              </div>
+                              <button
+                                className="remove-btn"
+                                onClick={() => handleRemoveConductorTurno('nocturno')}
+                                title="Remover"
+                              >
+                                <X size={18} />
+                              </button>
+                            </div>
+                          ) : (
+                            <div className="drop-zone-empty">
+                              Arrastra un conductor aqui
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Modo A CARGO: una sola zona, en la misma tercera columna.
+                      La mitad de abajo no se renderiza: no hay turno nocturno. */}
+                  {!isTurnoMode && (
+                    <div className="turnos-stack">
+                      <div className="conductores-column a-cargo">
+                      <h4>
+                        <span className="turno-badge cargo">A CARGO</span>
+                      </h4>
+                      <div
+                        className={`drop-zone ${conductorCargo ? 'has-conductor' : ''}`}
+                        onDragOver={handleDragOver}
+                        onDragLeave={handleDragLeave}
+                        onDrop={handleDropCargo}
+                      >
+                        {conductorCargo ? (
+                          <div className={`assigned-conductor-card ${formData.lead_cargo_id ? 'es-lead' : ''}`}>
+                            <div className="conductor-avatar">
+                              {conductorCargo.nombres.charAt(0)}{conductorCargo.apellidos.charAt(0)}
+                            </div>
+                            <div className="conductor-info" style={{ flex: 1 }}>
+                              <p className="conductor-name">
+                                {conductorCargo.nombres} {conductorCargo.apellidos}
+                                {formData.lead_cargo_id && <span className="badge-lead">LEAD</span>}
+                              </p>
+                              <p className="conductor-license">
+                                DNI: {conductorCargo.numero_dni || '-'}
+                              </p>
+                            </div>
+                            <button
+                              className="remove-btn"
+                              onClick={() => handleRemoveConductorTurno('cargo')}
+                              title="Remover"
+                            >
+                              <X size={18} />
+                            </button>
+                          </div>
+                        ) : (
+                          <div className="drop-zone-empty">
+                            Arrastra un conductor aqui
+                          </div>
+                        )}
+                      </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Submodal Mapa de Pares - lazy para que un fallo del mapa no tumbe el wizard */}
+            {showMapModal && (
+              <Suspense fallback={
+                <div style={{
+                  position: 'fixed', inset: 0, zIndex: 10000,
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  background: 'rgba(0,0,0,0.5)',
+                }}>
+                  <div style={{
+                    background: 'var(--bg-primary)', borderRadius: 16, padding: '40px 60px',
+                    display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16,
+                  }}>
+                    <Loader2 size={32} style={{ color: '#ff0033', animation: 'spin 1s linear infinite' }} />
+                    <span style={{ color: 'var(--text-secondary)', fontSize: 14 }}>Cargando mapa...</span>
+                  </div>
+                </div>
+              }>
+                <ConductoresMapModal
+                  conductores={conductores}
+                  onConfirmPair={handleConfirmMapPair}
+                  onClose={() => setShowMapModal(false)}
+                  apiKey={GOOGLE_MAPS_API_KEY}
+                />
+              </Suspense>
+            )}
+
+            {/* Step 4: Detalles */}
+            {step === 4 && (
+              <div>
+                <div className="step-description">
+                  <h3>Paso 4: Detalles de la Programacion</h3>
+                  <p>Completa la informacion de la cita y documentacion</p>
+                </div>
+
+                <div className="step4-form" style={{ maxWidth: '700px', margin: '0 auto' }}>
+                  {/* Fecha y Hora (compartidos) */}
+                  <div style={{ display: 'grid', gridTemplateColumns: window.innerWidth < 640 ? '1fr' : window.innerWidth < 768 ? '1fr 1fr' : '1fr 1fr 1fr', gap: '16px', marginBottom: '24px' }}>
+                    <div>
+                      <label>Fecha de Cita *</label>
+                      <input
+                        type="date"
+                        value={formData.fecha_cita}
+                        onChange={(e) => setFormData({ ...formData, fecha_cita: e.target.value })}
+                      />
+                    </div>
+                    <div>
+                      <label>Hora de Cita *</label>
+                      <TimeInput24h
+                        value={formData.hora_cita}
+                        onChange={(value) => setFormData({ ...formData, hora_cita: value })}
+                      />
+                    </div>
+                    <div>
+                      <label>Propietario</label>
+                      <select
+                        value={formData.propietario}
+                        onChange={(e) => setFormData({ ...formData, propietario: e.target.value })}
+                      >
+                        <option value="" disabled>Seleccionar...</option>
+                        {gruposFlota.map(g => (
+                          <option key={g.codigo} value={g.razon_social}>{g.razon_social}</option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+
+                  {/* Campos por conductor - Modo A CARGO (un solo set) */}
+                  {!isTurnoMode && conductorCargo && (
+                    <div className="conductor-form-card cargo">
+                      <h4>{conductorCargo.nombres} {conductorCargo.apellidos}</h4>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '16px' }}>
+                        <div>
+                          <label>Tipo de Candidato *</label>
+                          <select
+                            value={formData.tipo_candidato_cargo}
+                            onChange={(e) => {
+                              const tipo = e.target.value as TipoCandidatoV2
+                              if (tipo && !formData.devolucion_vehiculo && !formData.cambio_vehiculo) {
+                                const defaults = getDefaultsPorCandidato(tipo)
+                                setFormData({ ...formData, tipo_candidato_cargo: tipo, tipo_asignacion_cargo: defaults.asignacion, documento_cargo: defaults.documento })
+                              } else {
+                                setFormData({ ...formData, tipo_candidato_cargo: tipo })
+                              }
+                            }}
+                          >
+                            <option value="">Seleccionar...</option>
+                            <option value="nuevo">Nuevo</option>
+                            <option value="antiguo">Antiguo</option>
+                            <option value="reingreso">Reingreso</option>
+                            <option value="lead">Lead</option>
+                          </select>
+                        </div>
+                        <div>
+                          <label>Tipo de Asignacion *</label>
+                          <select
+                            value={formData.tipo_asignacion_cargo}
+                            onChange={handleTipoAsignacionChange('tipo_asignacion_cargo', 'documento_cargo')}
+                            disabled={formData.devolucion_vehiculo || formData.cambio_vehiculo}
+                          >
+                            <option value="">Seleccionar...</option>
+                            <option value="entrega_auto">Entrega de auto</option>
+                            {/* "Asignacion companero" no aplica en modalidad A Cargo (asignación permanente sin compañero) */}
+                            {formData.cambio_vehiculo && <option value="cambio_auto">Cambio de auto</option>}
+                            <option value="cambio_turno">Cambio de turno</option>
+                            {formData.devolucion_vehiculo && <option value="devolucion_vehiculo">Devolucion vehiculo</option>}
+                          </select>
+                        </div>
+                      </div>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '16px' }}>
+                        <div>
+                          <label>Documento *</label>
+                          <select
+                            value={formData.documento_cargo}
+                            onChange={(e) => setFormData({ ...formData, documento_cargo: e.target.value as TipoDocumento })}
+                            disabled={formData.tipo_asignacion_cargo === 'devolucion_vehiculo'}
+                          >
+                            <option value="">Seleccionar...</option>
+                            <option value="anexo">Anexo</option>
+                            <option value="carta_oferta">Carta Oferta</option>
+                            <option value="na">N/A</option>
+                          </select>
+                        </div>
+                        <div>
+                          {formData.tipo_asignacion_cargo === 'devolucion_vehiculo' && (
+                            <>
+                              <label>Último Día de Cobro *</label>
+                              <select
+                                value={formData.ultimo_dia_cobro}
+                                onChange={(e) => setFormData({ ...formData, ultimo_dia_cobro: e.target.value as 'dia_entrega' | 'fecha_baja' | 'sin_cobro' | '' })}
+                              >
+                                <option value="">Seleccionar...</option>
+                                <option value="dia_entrega">Día de entrega de vehículo</option>
+                                <option value="fecha_baja">Fecha de Baja</option>
+                                <option value="sin_cobro">Sin cobro (0 días)</option>
+                              </select>
+                            </>
+                          )}
+                          <div
+                            style={{ marginTop: formData.tipo_asignacion_cargo === 'devolucion_vehiculo' ? '16px' : 0 }}
+                          >
+                            <label>Tarifa *</label>
+                            <select
+                              value={formData.tipo_tarifa}
+                              onChange={(e) => setFormData({ ...formData, tipo_tarifa: e.target.value as TipoTarifa })}
+                              title="Esquema de precios del alquiler para este conductor. Independiente del tipo de candidato."
+                            >
+                              <option value="antigua">{getEtiquetaTarifa(conceptosTarifa, 'cargo', tieneGncVehiculoEntregado, 'antigua')}</option>
+                              <option value="nueva">{getEtiquetaTarifa(conceptosTarifa, 'cargo', tieneGncVehiculoEntregado, 'nueva')}</option>
+                            </select>
+                          </div>
+                        </div>
+                      </div>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                        <div>
+                          <label>Zona *</label>
+                          <input
+                            type="text"
+                            value={formData.zona_cargo}
+                            onChange={(e) => setFormData({ ...formData, zona_cargo: e.target.value })}
+                            placeholder="Ej: Norte, CABA..."
+                          />
+                        </div>
+                        <div>
+                          <label>Distancia (minutos)</label>
+                          <input
+                            type="number"
+                            value={formData.distancia_cargo}
+                            onChange={(e) => setFormData({ ...formData, distancia_cargo: e.target.value ? parseInt(e.target.value) : '' })}
+                            placeholder="Tiempo estimado"
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Campos por conductor - Modo TURNO - Diurno */}
+                  {isTurnoMode && conductorDiurno && (
+                    <div className="conductor-form-card diurno">
+                      <h4><Sun size={16} /> Conductor Diurno: {conductorDiurno.nombres} {conductorDiurno.apellidos}</h4>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '16px' }}>
+                        <div>
+                          <label>Tipo de Candidato *</label>
+                          <select
+                            value={formData.tipo_candidato_diurno}
+                            onChange={(e) => {
+                              const tipo = e.target.value as TipoCandidatoV2
+                              if (tipo && !formData.devolucion_vehiculo && !formData.cambio_vehiculo) {
+                                const defaults = getDefaultsPorCandidato(tipo)
+                                setFormData({ ...formData, tipo_candidato_diurno: tipo, tipo_asignacion_diurno: defaults.asignacion, documento_diurno: defaults.documento })
+                              } else {
+                                setFormData({ ...formData, tipo_candidato_diurno: tipo })
+                              }
+                            }}
+                          >
+                            <option value="">Seleccionar...</option>
+                            <option value="nuevo">Nuevo</option>
+                            <option value="antiguo">Antiguo</option>
+                            <option value="reingreso">Reingreso</option>
+                            <option value="lead">Lead</option>
+                          </select>
+                        </div>
+                        <div>
+                          <label>Tipo de Asignacion *</label>
+                          <select
+                            value={formData.tipo_asignacion_diurno}
+                            onChange={handleTipoAsignacionChange('tipo_asignacion_diurno', 'documento_diurno')}
+                            disabled={formData.devolucion_vehiculo || formData.cambio_vehiculo}
+                          >
+                            <option value="">Seleccionar...</option>
+                            <option value="entrega_auto">Entrega de auto</option>
+                            <option value="asignacion_companero">Asignacion companero</option>
+                            {formData.cambio_vehiculo && <option value="cambio_auto">Cambio de auto</option>}
+                            <option value="cambio_turno">Cambio de turno</option>
+                            {formData.devolucion_vehiculo && <option value="devolucion_vehiculo">Devolucion vehiculo</option>}
+                          </select>
+                        </div>
+                      </div>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '16px' }}>
+                        <div>
+                          <label>Documento *</label>
+                          <select
+                            value={formData.documento_diurno}
+                            onChange={(e) => setFormData({ ...formData, documento_diurno: e.target.value as TipoDocumento })}
+                            disabled={formData.tipo_asignacion_diurno === 'devolucion_vehiculo'}
+                          >
+                            <option value="">Seleccionar...</option>
+                            <option value="anexo">Anexo</option>
+                            <option value="carta_oferta">Carta Oferta</option>
+                            <option value="na">N/A</option>
+                          </select>
+                        </div>
+                        <div>
+                          {formData.tipo_asignacion_diurno === 'devolucion_vehiculo' && (
+                            <>
+                              <label>Último Día de Cobro *</label>
+                              <select
+                                value={formData.ultimo_dia_cobro}
+                                onChange={(e) => setFormData({ ...formData, ultimo_dia_cobro: e.target.value as 'dia_entrega' | 'fecha_baja' | 'sin_cobro' | '' })}
+                              >
+                                <option value="">Seleccionar...</option>
+                                <option value="dia_entrega">Día de entrega de vehículo</option>
+                                <option value="fecha_baja">Fecha de Baja</option>
+                                <option value="sin_cobro">Sin cobro (0 días)</option>
+                              </select>
+                            </>
+                          )}
+                          <div
+                            style={{ marginTop: formData.tipo_asignacion_diurno === 'devolucion_vehiculo' ? '16px' : 0 }}
+                          >
+                            <label>Tarifa *</label>
+                            <select
+                              value={formData.tipo_tarifa_diurno}
+                              onChange={(e) => setFormData({ ...formData, tipo_tarifa_diurno: e.target.value as TipoTarifa })}
+                              title="Esquema de precios del alquiler para este conductor. Independiente del tipo de candidato."
+                            >
+                              <option value="antigua">{getEtiquetaTarifa(conceptosTarifa, 'diurno', tieneGncVehiculoEntregado, 'antigua')}</option>
+                              <option value="nueva">{getEtiquetaTarifa(conceptosTarifa, 'diurno', tieneGncVehiculoEntregado, 'nueva')}</option>
+                            </select>
+                          </div>
+                        </div>
+                      </div>
+                      <div style={{ display: 'grid', gridTemplateColumns: conductorNocturno ? '1fr 1fr' : '1fr', gap: '16px' }}>
+                        <div>
+                          <label>Zona *</label>
+                          <input
+                            type="text"
+                            value={formData.zona_diurno}
+                            onChange={(e) => setFormData({ ...formData, zona_diurno: e.target.value })}
+                            placeholder="Ej: Norte, CABA..."
+                          />
+                        </div>
+                        {conductorNocturno && (
+                        <div>
+                          <label>Distancia (minutos)</label>
+                          <input
+                            type="number"
+                            value={formData.distancia_diurno}
+                            onChange={(e) => setFormData({ ...formData, distancia_diurno: e.target.value ? parseInt(e.target.value) : '' })}
+                            placeholder="Tiempo estimado"
+                          />
+                        </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Campos por conductor - Modo TURNO - Nocturno */}
+                  {isTurnoMode && conductorNocturno && (
+                    <div className="conductor-form-card nocturno">
+                      <h4><Moon size={16} /> Conductor Nocturno: {conductorNocturno.nombres} {conductorNocturno.apellidos}</h4>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '16px' }}>
+                        <div>
+                          <label>Tipo de Candidato *</label>
+                          <select
+                            value={formData.tipo_candidato_nocturno}
+                            onChange={(e) => {
+                              const tipo = e.target.value as TipoCandidatoV2
+                              if (tipo && !formData.devolucion_vehiculo && !formData.cambio_vehiculo) {
+                                const defaults = getDefaultsPorCandidato(tipo)
+                                setFormData({ ...formData, tipo_candidato_nocturno: tipo, tipo_asignacion_nocturno: defaults.asignacion, documento_nocturno: defaults.documento })
+                              } else {
+                                setFormData({ ...formData, tipo_candidato_nocturno: tipo })
+                              }
+                            }}
+                          >
+                            <option value="">Seleccionar...</option>
+                            <option value="nuevo">Nuevo</option>
+                            <option value="antiguo">Antiguo</option>
+                            <option value="reingreso">Reingreso</option>
+                            <option value="lead">Lead</option>
+                          </select>
+                        </div>
+                        <div>
+                          <label>Tipo de Asignacion *</label>
+                          <select
+                            value={formData.tipo_asignacion_nocturno}
+                            onChange={(e) => {
+                              const val = e.target.value as TipoAsignacion
+                              setFormData({ ...formData, tipo_asignacion_nocturno: val, ...(val === 'devolucion_vehiculo' ? { documento_nocturno: 'na' as TipoDocumento } : {}) })
+                            }}
+                            disabled={formData.devolucion_vehiculo || formData.cambio_vehiculo}
+                          >
+                            <option value="">Seleccionar...</option>
+                            <option value="entrega_auto">Entrega de auto</option>
+                            <option value="asignacion_companero">Asignacion companero</option>
+                            {formData.cambio_vehiculo && <option value="cambio_auto">Cambio de auto</option>}
+                            <option value="cambio_turno">Cambio de turno</option>
+                            {formData.devolucion_vehiculo && <option value="devolucion_vehiculo">Devolucion vehiculo</option>}
+                          </select>
+                        </div>
+                      </div>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '16px' }}>
+                        <div>
+                          <label>Documento *</label>
+                          <select
+                            value={formData.documento_nocturno}
+                            onChange={(e) => setFormData({ ...formData, documento_nocturno: e.target.value as TipoDocumento })}
+                            disabled={formData.tipo_asignacion_nocturno === 'devolucion_vehiculo'}
+                          >
+                            <option value="">Seleccionar...</option>
+                            <option value="anexo">Anexo</option>
+                            <option value="carta_oferta">Carta Oferta</option>
+                            <option value="na">N/A</option>
+                          </select>
+                        </div>
+                        <div>
+                          {formData.tipo_asignacion_nocturno === 'devolucion_vehiculo' && (
+                            <>
+                              <label>Último Día de Cobro *</label>
+                              <select
+                                value={formData.ultimo_dia_cobro}
+                                onChange={(e) => setFormData({ ...formData, ultimo_dia_cobro: e.target.value as 'dia_entrega' | 'fecha_baja' | 'sin_cobro' | '' })}
+                              >
+                                <option value="">Seleccionar...</option>
+                                <option value="dia_entrega">Día de entrega de vehículo</option>
+                                <option value="fecha_baja">Fecha de Baja</option>
+                                <option value="sin_cobro">Sin cobro (0 días)</option>
+                              </select>
+                            </>
+                          )}
+                          <div
+                            style={{ marginTop: formData.tipo_asignacion_nocturno === 'devolucion_vehiculo' ? '16px' : 0 }}
+                          >
+                            <label>Tarifa *</label>
+                            <select
+                              value={formData.tipo_tarifa_nocturno}
+                              onChange={(e) => setFormData({ ...formData, tipo_tarifa_nocturno: e.target.value as TipoTarifa })}
+                              title="Esquema de precios del alquiler para este conductor. Independiente del tipo de candidato."
+                            >
+                              <option value="antigua">{getEtiquetaTarifa(conceptosTarifa, 'nocturno', tieneGncVehiculoEntregado, 'antigua')}</option>
+                              <option value="nueva">{getEtiquetaTarifa(conceptosTarifa, 'nocturno', tieneGncVehiculoEntregado, 'nueva')}</option>
+                            </select>
+                          </div>
+                        </div>
+                      </div>
+                      <div style={{ display: 'grid', gridTemplateColumns: conductorDiurno ? '1fr 1fr' : '1fr', gap: '16px' }}>
+                        <div>
+                          <label>Zona *</label>
+                          <input
+                            type="text"
+                            value={formData.zona_nocturno}
+                            onChange={(e) => setFormData({ ...formData, zona_nocturno: e.target.value })}
+                            placeholder="Ej: Norte, CABA..."
+                          />
+                        </div>
+                        {conductorDiurno && (
+                        <div>
+                          <label>Distancia (minutos)</label>
+                          <input
+                            type="number"
+                            value={formData.distancia_nocturno}
+                            onChange={(e) => setFormData({ ...formData, distancia_nocturno: e.target.value ? parseInt(e.target.value) : '' })}
+                            placeholder="Tiempo estimado"
+                          />
+                        </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Observaciones */}
+                  <div>
+                    <label>Observaciones</label>
+                    <textarea
+                      value={formData.observaciones}
+                      onChange={(e) => setFormData({ ...formData, observaciones: e.target.value })}
+                      placeholder="Notas adicionales..."
+                      rows={3}
+                    />
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Footer */}
+          <div className="wizard-footer">
+            <button
+              className="btn btn-secondary"
+              onClick={step === 1 ? onClose : handleBack}
+            >
+              {step === 1 ? 'Cancelar' : 'Atras'}
+            </button>
+            
+            {step < 4 ? (
+              <button
+                className="btn btn-primary"
+                onClick={handleNext}
+              >
+                Siguiente <ChevronRight size={18} />
+              </button>
+            ) : (
+              <button
+                className="btn btn-primary"
+                onClick={handleSubmit}
+                disabled={loading}
+              >
+                {loading ? 'Guardando...' : (isEditMode ? 'Guardar Cambios' : 'Crear Programacion')}
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
+    </>
+  )
+}
+
