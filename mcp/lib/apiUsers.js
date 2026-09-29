@@ -16,13 +16,6 @@
 import { supabaseRequest } from './supabase.js';
 
 /**
- * Permisos que recibe TODA key creada por self-service.
- *
- * Fijos y de solo lectura a proposito: el consumidor no elige su alcance, asi
- * que no puede autoescalarse. Si alguna vez hay que dar acceso parcial, esto
- * pasa a leerse de api_permissions, no del request.
- */
-/**
  * Cuantos minutos vive una key de self-service.
  *
  * Solo aplica a estas: las keys creadas a mano desde la app quedan con
@@ -31,13 +24,47 @@ import { supabaseRequest } from './supabase.js';
  */
 export const MINUTOS_VIGENCIA = 30;
 
-export const PERMISOS_SELF_SERVICE = [
+/**
+ * Permisos que recibe una key de self-service, segun el rol del consumidor.
+ *
+ * El alcance lo decide el ROL guardado en api_users, nunca el request: el
+ * consumidor no puede pedir mas permisos de los que su credencial tiene, asi
+ * que no hay forma de autoescalarse.
+ *
+ * - reader: solo lectura. Es el default de la tabla, asi que cualquier usuario
+ *   que ya exista o que se cree sin especificar rol queda aca.
+ * - writer: lo mismo mas `leads:create:api`, que habilita POST /api/v1/leads.
+ *
+ * Separar lectura de escritura en dos credenciales fue decision del
+ * 2026-09-27: un tercero que solo consulta no debe poder escribir aunque le
+ * roben la key, y se puede dar de alta a un consumidor de solo lectura sin
+ * entregarle nunca la credencial de escritura.
+ *
+ * OJO: esta tabla esta espejada en la funcion SQL `api_user_permisos`
+ * (sql/api_users_auth.sql), que la usa `api_user_rotar_key`. Si cambia una,
+ * cambia la otra.
+ */
+export const PERMISOS_LECTURA = [
   'leads:api',
   'vehiculos:api',
   'conductores:api',
   'asignaciones:api',
   'flota:api',
 ];
+
+export const PERMISOS_POR_ROL = {
+  reader: PERMISOS_LECTURA,
+  writer: [...PERMISOS_LECTURA, 'leads:create:api'],
+};
+
+/**
+ * Permisos de un rol. Un rol desconocido cae en `reader`: ante la duda, el
+ * minimo privilegio, nunca el maximo.
+ */
+export function permisosDeRol(rol) {
+  const clave = String(rol || '').trim().toLowerCase();
+  return PERMISOS_POR_ROL[clave] || PERMISOS_POR_ROL.reader;
+}
 
 /** Valida usuario y contrasena contra la base. Devuelve el usuario o null. */
 export async function verificarCredenciales(username, password) {

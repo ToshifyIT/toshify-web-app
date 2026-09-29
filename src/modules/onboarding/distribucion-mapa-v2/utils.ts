@@ -3,7 +3,7 @@
 // Utilidades puras del submódulo v2. Sin dependencias de React ni de Supabase,
 // para poder testearlas de forma aislada.
 
-import type { EntidadMapa, EstadoLicencia, TurnoEfectivo } from './types'
+import type { EntidadMapa, EstadoLicencia, TieneLicencia, TurnoEfectivo } from './types'
 
 // =====================================================
 // Coordenadas
@@ -203,6 +203,18 @@ export function estadoLicencia(vencimiento: string | null | undefined): EstadoLi
   if (dias < 0) return 'vencida'
   if (dias <= DIAS_LICENCIA_POR_VENCER) return 'por_vencer'
   return 'vigente'
+}
+
+/**
+ * Normaliza la columna `licencia` del lead, que se carga a mano y llega como
+ * 'Si' / 'Sí' / 'SI' / 'No' / 'NO' / vacío. Cualquier otro texto se trata como
+ * "sin cargar" en vez de inventarle un valor.
+ */
+export function normalizarTieneLicencia(valor: string | null | undefined): TieneLicencia {
+  const v = (valor || '').trim().toLowerCase()
+  if (v === 'si' || v === 'sí') return 'si'
+  if (v === 'no') return 'no'
+  return null
 }
 
 export const LABEL_LICENCIA: Record<EstadoLicencia, string> = {

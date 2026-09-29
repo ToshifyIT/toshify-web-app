@@ -9,11 +9,28 @@ import type { TurnoEfectivo } from '../types'
 
 export type SegmentoV2 = 'conductores' | 'leads' | 'ambos'
 
-/** Requisitos duros que puede exigir el operador. Aplican a ambos segmentos. */
+/**
+ * Requisitos duros que puede exigir el operador. SÓLO conductores: dependen de
+ * `licencia_vencimiento` y de la zona, datos que en el lead no existen o que
+ * ya se aplicaron antes de llegar al mapa (ver `TIENE_LICENCIA_OPCIONES`).
+ */
 export const REQUISITOS = [
   { value: 'licencia_vigente', label: 'Licencia vigente' },
   { value: 'fuera_zona_peligrosa', label: 'Fuera de zona restringida' },
 ] as const
+
+/**
+ * "¿Tiene licencia?" del lead: es la columna `licencia`, un Sí/No cargado a
+ * mano (la misma del módulo Leads), no la vigencia calculada por fecha.
+ *
+ * Sólo se ofrecen las dos respuestas reales. Los leads a los que todavía no se
+ * les cargó el dato no son una opción elegible: aparecen únicamente cuando el
+ * filtro está sin selección, que es "todos".
+ */
+export const TIENE_LICENCIA_OPCIONES = [
+  { value: 'si', label: 'Sí tiene licencia' },
+  { value: 'no', label: 'No tiene licencia' },
+]
 
 /**
  * Antecedentes penales. Salió de "Requisitos" y pasó a ser su propio filtro
@@ -64,7 +81,8 @@ export interface FiltrosV2 {
   // Leads
   estadosLead: Set<string>
   turnosLead: Set<string>
-  requisitosLead: Set<string>
+  /** ¿Tiene licencia?: 'si' | 'no'. Vacío = no filtra. */
+  tieneLicencia: Set<string>
   /** Rango de fecha de creación del lead ('YYYY-MM-DD' o '' = sin límite). Inclusivo por día. */
   creadoDesde: string
   creadoHasta: string
@@ -100,7 +118,7 @@ export function filtrosIniciales(): FiltrosV2 {
     // Los 14 estados están disponibles; arrancan marcados los dos de inducción.
     estadosLead: new Set<string>(ESTADOS_LEAD_DEFAULT as unknown as string[]),
     turnosLead: new Set(),
-    requisitosLead: new Set(),
+    tieneLicencia: new Set(),
     creadoDesde: '',
     creadoHasta: '',
     paises: new Set(),
@@ -137,7 +155,7 @@ export function contarFiltrosActivos(f: FiltrosV2): number {
   if (f.requisitosConductor.size > 0) n++
   if (!mismoSet(f.estadosLead, base.estadosLead)) n++
   if (f.turnosLead.size > 0) n++
-  if (f.requisitosLead.size > 0) n++
+  if (f.tieneLicencia.size > 0) n++
   if (f.creadoDesde !== '' || f.creadoHasta !== '') n++
   if (f.paises.size > 0) n++
   if (f.ciudades.size > 0) n++

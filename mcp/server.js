@@ -20,6 +20,7 @@ import conductoresRouter from './routes/conductores.js';
 import asignacionesRouter from './routes/asignaciones.js';
 import flotaRouter from './routes/flota.js';
 import keysRouter from './routes/keys.js';
+import leadsCrearRouter from './routes/leadsCrear.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -704,7 +705,20 @@ const apiLimiter = rateLimit({
 // puede distinguir quien llama. Trae su propio rate limit, mas estricto.
 app.use('/api/v1', keysRouter);
 
+// Alta de leads. Limite propio y mas bajo que el de lectura: es el unico
+// endpoint que escribe en la base, asi que no comparte cupo con los GET.
+const escrituraLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  limit: 20,
+  standardHeaders: 'draft-7',
+  legacyHeaders: false,
+  keyGenerator: (req) => String(req.headers['x-api-key'] || 'sin-key'),
+  validate: { keyGeneratorIpFallback: false },
+  message: { error: 'rate_limited', message: 'Demasiadas altas. Limite: 20 por minuto.' },
+});
+
 app.use('/api/v1', apiLimiter, leadsRouter);
+app.use('/api/v1', escrituraLimiter, leadsCrearRouter);
 app.use('/api/v1', apiLimiter, vehiculosRouter);
 app.use('/api/v1', apiLimiter, conductoresRouter);
 app.use('/api/v1', apiLimiter, asignacionesRouter);
