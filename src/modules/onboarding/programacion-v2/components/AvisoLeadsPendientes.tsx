@@ -11,6 +11,7 @@
 // Con un solo lead el boton lleva directo al formulario. Con varios se elige
 // por cual empezar: el orden lo decide el operador, no el codigo.
 
+import { useEffect } from 'react'
 import { AlertTriangle, ArrowRight, X } from 'lucide-react'
 
 export interface LeadPendiente {
@@ -28,6 +29,16 @@ interface Props {
 
 export function AvisoLeadsPendientes({ pendientes, onCancelar, onElegir }: Props) {
   const varios = pendientes.length > 1
+
+  // Escape cierra, como en el resto de los modales del modulo. Aca no hay nada
+  // que guardar: este modal solo elige, no edita.
+  useEffect(() => {
+    const alPresionar = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onCancelar()
+    }
+    window.addEventListener('keydown', alPresionar)
+    return () => window.removeEventListener('keydown', alPresionar)
+  }, [onCancelar])
 
   return (
     <div

@@ -10,7 +10,7 @@
  
 /* eslint-disable react-hooks/exhaustive-deps */
 
-import { useState, useEffect, useMemo, useRef, lazy, Suspense } from 'react'
+import { useState, useEffect, useMemo, useRef, lazy, Suspense, useCallback } from 'react'
 import { X, Calendar, User, ChevronRight, Check, Sun, Moon, Route, Loader2, MapPin, Building2, Map as MapIcon, RotateCcw, ArrowLeftRight } from 'lucide-react'
 import { supabase } from '../../../../lib/supabase'
 import { useAuth } from '../../../../contexts/AuthContext'
@@ -31,6 +31,7 @@ import { DISTANCE_MATRIX_HABILITADO, GOOGLE_MAPS_API_KEY, GOOGLE_MAPS_SCRIPT_URL
 import { useGruposFlota } from '../../../../hooks/useGruposFlota'
 import { cargarConceptosTarifa, getEtiquetaTarifa, type MapaConceptosTarifa } from '../../tarifaConceptos'
 import { enRangoDiasART } from '../../../../utils/fechaArgentina'
+import { calcularMinutosEntre, type Coordenada } from '../distanciaParService'
 
 /**
  * Lead mostrado en la columna informativa del paso 3. Es un subconjunto
@@ -47,6 +48,16 @@ interface LeadProgramacion {
   turno: string | null
   zona: string | null
   created_at: string | null
+  /**
+   * Dos pares independientes: `latitud/longitud` vienen de la fuente externa
+   * y `direccion_*` de geocodificar el texto de la direccion. Se prefieren las
+   * primeras porque son las que usa el modulo de distribucion en mapa, y por
+   * lo tanto las que arman las claves de `mediciones_rutas`.
+   */
+  latitud: number | null
+  longitud: number | null
+  direccion_latitud: number | null
+  direccion_longitud: number | null
 }
 
 /**
@@ -617,7 +628,7 @@ export function ProgramacionAssignmentWizardV2({ onClose, onSuccess, editData }:
       try {
         let query = supabase
           .from('leads')
-          .select('id, nombre_completo, primer_nombre, apellido, dni, estado_de_lead, turno, zona, created_at')
+          .select('id, nombre_completo, primer_nombre, apellido, dni, estado_de_lead, turno, zona, created_at, latitud, longitud, direccion_latitud, direccion_longitud')
         if (sedeId) {
           query = query.eq('sede_id', sedeId)
         }
@@ -1484,36 +1495,78 @@ export function ProgramacionAssignmentWizardV2({ onClose, onSuccess, editData }:
     })
   }, [step])
 
-  // Auto-calcular distancia en auto cuando ambos conductores están asignados
-  // (solo si no se auto-rellenó desde un par arrastrado)
-  useEffect(() => {
-    if (!formData.conductor_diurno_id || !formData.conductor_nocturno_id) return
-    // No sobreescribir valores ya presentes (de par o manuales)
-    if (formData.distancia_diurno && formData.distancia_nocturno) return
-
-    const diurno = conductores.find(c => c.id === formData.conductor_diurno_id)
-    const nocturno = conductores.find(c => c.id === formData.conductor_nocturno_id)
-
-    if (!diurno?.direccion_lat || !diurno?.direccion_lng || !nocturno?.direccion_lat || !nocturno?.direccion_lng) return
-
-    // Calcular distancia en auto entre los conductores
-    obtenerDistanciaEnAuto(
-      { lat: diurno.direccion_lat, lng: diurno.direccion_lng },
-      { lat: nocturno.direccion_lat, lng: nocturno.direccion_lng }
-    ).then(resultado => {
-      if (resultado?.tiempoMinutos) {
-        setFormData(prev => {
-          // Re-verificar que no se hayan llenado mientras esperábamos
-          if (prev.distancia_diurno && prev.distancia_nocturno) return prev
-          return {
-            ...prev,
-            distancia_diurno: resultado.tiempoMinutos,
-            distancia_nocturno: resultado.tiempoMinutos
-          }
-        })
+  /**
+   * Coordenadas de quien ocupa un turno, sea CONDUCTOR o LEAD.
+   *
+   * En leads se prefieren `latitud/longitud` (las de la fuente externa) porque
+   * son las que usa el modulo de distribucion en mapa, y por lo tanto las que
+   * arman las claves de `mediciones_rutas`: usando otras, un tramo ya medido
+   * no se encontraria en el cache y se estimaria de gusto.
+   */
+  const coordenadasDelSlot = useCallback(
+    (conductorId: string, leadId: string): Coordenada | null => {
+      if (conductorId) {
+        const c = conductores.find((x) => x.id === conductorId)
+        if (c?.direccion_lat != null && c?.direccion_lng != null) {
+          return { lat: c.direccion_lat, lng: c.direccion_lng }
+        }
+        return null
       }
+      if (leadId) {
+        const l = leads.find((x) => x.id === leadId)
+        if (!l) return null
+        const lat = l.latitud ?? l.direccion_latitud
+        const lng = l.longitud ?? l.direccion_longitud
+        if (lat != null && lng != null) return { lat, lng }
+      }
+      return null
+    },
+    [conductores, leads]
+  )
+
+  /**
+   * Auto-completar "Distancia (minutos)" entre las dos personas del turno.
+   *
+   * Antes esto solo corria con DOS CONDUCTORES y llamaba a Distance Matrix,
+   * que esta apagado: en la practica no llenaba nunca el campo. Ahora vale
+   * tambien para leads y no toca la API (ver distanciaParService: cache de
+   * mediciones reales primero, Haversine despues).
+   *
+   * No pisa un valor ya cargado, venga de un par arrastrado o escrito a mano.
+   */
+  useEffect(() => {
+    if (formData.modalidad !== 'turno') return
+    if (formData.distancia_diurno !== '' && formData.distancia_nocturno !== '') return
+
+    const a = coordenadasDelSlot(formData.conductor_diurno_id, formData.lead_diurno_id)
+    const b = coordenadasDelSlot(formData.conductor_nocturno_id, formData.lead_nocturno_id)
+    if (!a || !b) return
+
+    let cancelado = false
+    calcularMinutosEntre(a, b).then((res) => {
+      if (cancelado || !res) return
+      setFormData((prev) => {
+        // Re-verificar: pudo llenarse mientras esperabamos al cache.
+        if (prev.distancia_diurno !== '' && prev.distancia_nocturno !== '') return prev
+        return {
+          ...prev,
+          distancia_diurno: prev.distancia_diurno !== '' ? prev.distancia_diurno : res.minutos,
+          distancia_nocturno: prev.distancia_nocturno !== '' ? prev.distancia_nocturno : res.minutos,
+        }
+      })
     })
-  }, [formData.conductor_diurno_id, formData.conductor_nocturno_id])
+
+    return () => {
+      cancelado = true
+    }
+  }, [
+    formData.modalidad,
+    formData.conductor_diurno_id,
+    formData.conductor_nocturno_id,
+    formData.lead_diurno_id,
+    formData.lead_nocturno_id,
+    coordenadasDelSlot,
+  ])
 
   const validateSubmitFields = (): string | null => {
     if (!formData.fecha_cita) return 'Debes seleccionar una fecha de cita'
@@ -3939,7 +3992,7 @@ export function ProgramacionAssignmentWizardV2({ onClose, onSuccess, editData }:
                   {/* ── Columna 2: CONDUCTORES ──────────────────────────────── */}
                   <div className="conductores-column">
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px', paddingBottom: '8px', borderBottom: '2px solid var(--border-primary)' }}>
-                      <h4 style={{ margin: 0, border: 'none', paddingBottom: 0 }}>Conductores Disponibles</h4>
+                      <h4 style={{ margin: 0, border: 'none', paddingBottom: 0 }}>Conductores</h4>
                        {isTurnoMode && (
                         <div style={{ display: 'flex', gap: '4px' }}>
                           <button

@@ -2680,14 +2680,14 @@ export function ProgramacionV2Module() {
       )}
 
       {/* Aviso previo: cuantos leads hay que convertir */}
-      {avisoLeads && (
+      {avisoLeads && !conversionLead && (
         <AvisoLeadsPendientes
           pendientes={avisoLeads.pendientes}
           onCancelar={() => setAvisoLeads(null)}
           onElegir={(pendiente) => {
-            const prog = avisoLeads.prog
-            setAvisoLeads(null)
-            setConversionLead({ prog, ...pendiente })
+            // El aviso NO se limpia: queda debajo para que "Atrás" pueda
+            // volver a el sin rearmar la lista.
+            setConversionLead({ prog: avisoLeads.prog, ...pendiente })
           }}
         />
       )}
@@ -2699,23 +2699,70 @@ export function ProgramacionV2Module() {
           turnoLabel={conversionLead.label}
           usuario={profile?.full_name || 'Sistema'}
           sedeFallbackId={conversionLead.prog.sede_id || sedeActualId || sedeUsuario?.id}
-          onCancel={() => setConversionLead(null)}
+          onCancel={() => {
+            setConversionLead(null)
+            setAvisoLeads(null)
+          }}
+          onVolver={() => setConversionLead(null)}
           onConvertido={async (conductorId, nombreConductor, esFusion) => {
             const pendiente = conversionLead
-            // Se desmonta el modal ANTES de cualquier Swal: mientras esta
-            // montado (z-index 10001) tapa a SweetAlert2 (1060) y el dialogo
+            // Se desmontan los modales ANTES de cualquier Swal: mientras estan
+            // montados (z-index 10001) tapan a SweetAlert2 (1060) y el dialogo
             // queda invisible esperando un click imposible.
             setConversionLead(null)
+            setAvisoLeads(null)
             try {
+              // El nombre y el DNI se releen del CONDUCTOR, no se copian del
+              // lead. Dos razones:
+              //
+              //  1. `conductores` guarda el nombre en MAYUSCULA (ver
+              //     conversionLeadAConductor), asi que copiar el del lead
+              //     dejaria la fila escrita distinto al resto de la tabla.
+              //  2. En una FUSION el conductor ya existia: el nombre bueno es
+              //     el suyo, no el que venia cargado en el lead.
+              //
+              // Si la lectura falla se usa el del lead en mayuscula, que es lo
+              // mas parecido a lo correcto.
+              let nombreFinal = (nombreConductor || '').toUpperCase()
+              let dniFinal: string | null = null
+              try {
+                const { data: conductorDB } = await (supabase.from('conductores') as any)
+                  .select('nombres, apellidos, numero_dni')
+                  .eq('id', conductorId)
+                  .single()
+                if (conductorDB) {
+                  const real = `${conductorDB.nombres || ''} ${conductorDB.apellidos || ''}`.trim()
+                  if (real) nombreFinal = real
+                  dniFinal = conductorDB.numero_dni || null
+                }
+              } catch {
+                // se conserva el fallback
+              }
+
               // Repuntar la programacion: el turno pasa a tener un conductor
               // real y deja de tener lead. Sin esto la columna "Tip. Persona"
               // seguiria diciendo Lead y el envio volveria a frenarse.
               const campos: Record<string, unknown> =
                 pendiente.slot === 'diurno'
-                  ? { conductor_diurno_id: conductorId, conductor_diurno_nombre: nombreConductor, lead_diurno_id: null }
+                  ? {
+                      conductor_diurno_id: conductorId,
+                      conductor_diurno_nombre: nombreFinal,
+                      conductor_diurno_dni: dniFinal,
+                      lead_diurno_id: null,
+                    }
                   : pendiente.slot === 'nocturno'
-                    ? { conductor_nocturno_id: conductorId, conductor_nocturno_nombre: nombreConductor, lead_nocturno_id: null }
-                    : { conductor_id: conductorId, conductor_nombre: nombreConductor, lead_cargo_id: null }
+                    ? {
+                        conductor_nocturno_id: conductorId,
+                        conductor_nocturno_nombre: nombreFinal,
+                        conductor_nocturno_dni: dniFinal,
+                        lead_nocturno_id: null,
+                      }
+                    : {
+                        conductor_id: conductorId,
+                        conductor_nombre: nombreFinal,
+                        conductor_dni: dniFinal,
+                        lead_cargo_id: null,
+                      }
 
               const { error: errProg } = await (supabase.from('programaciones_onboarding') as any)
                 .update(campos)
@@ -2738,7 +2785,7 @@ export function ProgramacionV2Module() {
                 title: esFusion ? 'Fusionado con un conductor existente' : 'Convertido a conductor',
                 text: esFusion
                   ? `Ya existía un conductor con ese documento: se completaron sus campos vacíos y el turno ${pendiente.label} apunta a él.`
-                  : `${nombreConductor} ya es conductor y el turno ${pendiente.label} apunta a él.`,
+                  : `${nombreFinal} ya es conductor y el turno ${pendiente.label} apunta a él.`,
                 confirmButtonColor: '#16a34a',
               })
 
