@@ -30,6 +30,8 @@ import { LeadWizard } from './components/LeadWizard'
 import { LeadDetailView } from './components/LeadDetailView'
 import { clasificarMotivoDesinteres } from './leadMotivos'
 import { LeadsConductoresModal } from './components/LeadsConductoresModal'
+import { FUENTE_SELLIUM, esFormatoSellium, leerLibroExcel } from './cargaMasivaSellium'
+import { procesarCargaSellium } from './procesarCargaSellium'
 import { GOOGLE_MAPS_SCRIPT_URL } from '../../lib/googleMaps'
 
 // =====================================================
@@ -234,6 +236,21 @@ function normalizarTurno(turno: string | null | undefined): string {
 const ALERTA_RECONTACTO_TEXTO = 'intentando comunicar'
 function tieneAlertaRecontacto(observaciones?: string | null): boolean {
   return !!observaciones && observaciones.toLowerCase().includes(ALERTA_RECONTACTO_TEXTO)
+}
+
+/** Lead que llegó por un archivo de Sellium (carga masiva formato Sellium). */
+function esFuenteSellium(l: Lead): boolean {
+  return (l.fuente_de_lead || '').trim().toLowerCase() === FUENTE_SELLIUM.toLowerCase()
+}
+
+/** Tarjeta "Contactado Sellium": leads de fuente Sellium + los que tienen ese estado. */
+function esContactadoSellium(l: Lead): boolean {
+  return l.estado_de_lead === 'Contactado Sellium' || esFuenteSellium(l)
+}
+
+/** Tarjeta "Intercom": todo lo que no es Damaro ni Sellium. */
+function esFuenteIntercom(l: Lead): boolean {
+  return (l.fuente_de_lead || '').toLowerCase() !== 'damaro' && !esFuenteSellium(l)
 }
 
 function formatPhoneAR(raw: unknown): string | null {
@@ -490,6 +507,10 @@ export function LeadsModule() {
 
   // Stat card filter
   const [activeStatCard, setActiveStatCard] = useState<string | null>(null)
+  // Filas que el DataTable deja pasar (búsqueda + filtros) SIN la tarjeta activa: base de "Ver todos" / "Descartados".
+  const [leadsMetricas, setLeadsMetricas] = useState<Lead[] | null>(null)
+  // Filas visibles en la tabla (búsqueda + filtros + tarjeta activa): base de las tarjetas de métricas.
+  const [leadsVisibles, setLeadsVisibles] = useState<Lead[] | null>(null)
 
   // Modal de conciliación Lead ↔ Conductor (solo lectura)
   const [verLeadsConductores, setVerLeadsConductores] = useState(false)
@@ -507,17 +528,24 @@ export function LeadsModule() {
 
   // Estados visibles para cambio manual (Conductor se asigna solo automáticamente)
   const ESTADOS_LEAD = [
-    'Inicio conversación', 'Contactado Sellium', 'Acepta oferta', 'Pendiente - Hireflix', 'Apto - Hireflix', 'No Apto - Hireflix', 'Ayuda - Hireflix',
+    'Inicio conversación', 'Contactado Sellium', 'Edad aprobada', 'Zona aprobada', 'Propuesta enviada', 'Acepta oferta',
+    'Video recibido', 'Pendiente - Hireflix', 'Apto - Hireflix', 'No Apto - Hireflix', 'Ayuda - Hireflix',
     'Documentos enviados', 'Documentos pendientes', 'Auto del pueblo', 'No le interesa', 'No cumple edad',
     'Convocatoria Inducción', 'Apto Inducción', 'Descartado',
   ] as const
 
   /** Pipeline de progresion de estados: indice mayor = mas avanzado.
-   *  calcularEstadoLead solo puede AVANZAR, nunca retroceder. */
+   *  calcularEstadoLead y la carga masiva Sellium solo pueden AVANZAR, nunca retroceder.
+   *  Los decimales ubican los estados que vienen del embudo de Sellium
+   *  (Edad aprobada → Zona aprobada → Propuesta enviada → Acepta oferta → Video recibido). */
   const ESTADO_ORDEN: Record<string, number> = {
     'Inicio conversación': 0,
     'Contactado Sellium': 1,
-    'Acepta oferta': 1,
+    'Edad aprobada': 1.1,
+    'Zona aprobada': 1.2,
+    'Propuesta enviada': 1.3,
+    'Acepta oferta': 1.5,
+    'Video recibido': 2,
     'Pendiente - Hireflix': 2,
     'Ayuda - Hireflix': 3,
     'Apto - Hireflix': 4,
@@ -1057,27 +1085,6 @@ export function LeadsModule() {
     return map
   }, [leads, zonasRestringidas])
 
-  // ---------- STATS ----------
-  const stats = useMemo(() => {
-    const total = leads.length
-    const inicio = leads.filter(l => l.estado_de_lead === 'Inicio conversación').length
-    const contactadoSellium = leads.filter(l => l.estado_de_lead === 'Contactado Sellium').length
-    const aptos = leads.filter(l => l.estado_de_lead === 'Apto - Hireflix').length
-    const noAptos = leads.filter(l => l.estado_de_lead === 'No Apto - Hireflix').length
-    const conCoordenadas = leads.filter(l => l.direccion_latitud != null && l.direccion_longitud != null)
-    const enZonaRestringida = conCoordenadas.filter(l => leadsEnZona.has(l.id)).length
-    const enZonaSegura = conCoordenadas.filter(l => !leadsEnZona.has(l.id)).length
-    const convocatoria = leads.filter(l => l.estado_de_lead === 'Convocatoria Inducción' || l.estado_de_lead === 'Convocatoria Induccion').length
-    const intercom = leads.filter(l => (l.fuente_de_lead || '').toLowerCase() !== 'damaro').length
-    const damaro = leads.filter(l => (l.fuente_de_lead || '').toLowerCase() === 'damaro').length
-    const autoPueblo = leads.filter(l => l.estado_de_lead === 'Auto del pueblo').length
-    const descartados = leads.filter(l => l.estado_de_lead === 'Descartado').length
-    // Total visible en la tabla: todo menos los que ya son Conductor.
-    const todos = leads.filter(l => l.estado_de_lead !== 'Conductor').length
-    const recontacto = leads.filter(l => l.estado_de_lead !== 'Conductor' && tieneAlertaRecontacto(l.observaciones)).length
-    return { total, inicio, contactadoSellium, aptos, noAptos, convocatoria, enZonaRestringida, enZonaSegura, intercom, damaro, autoPueblo, descartados, recontacto, todos }
-  }, [leads, leadsEnZona])
-
   // ---------- UNIQUE VALUES PARA FILTROS ----------
   const uniqueZonas = useMemo(() =>
     [...new Set(leads.map(l => l.zona).filter(Boolean))].sort() as string[]
@@ -1096,30 +1103,34 @@ export function LeadsModule() {
   , [leads])
 
   // ---------- FILTERED DATA ----------
-  const filteredLeads = useMemo(() => {
+  /** Filtro de la tarjeta activa (stat card). Se aplica encima de leadsBase. */
+  const filtroTarjeta = useCallback((l: Lead): boolean => {
+    // Por estado_de_lead; Contactado Sellium / Intercom / Damaro también miran fuente_de_lead
+    switch (activeStatCard) {
+      case 'inicio': return l.estado_de_lead === 'Inicio conversación'
+      case 'contactadoSellium': return esContactadoSellium(l)
+      case 'aptos': return l.estado_de_lead === 'Apto - Hireflix'
+      case 'noAptos': return l.estado_de_lead === 'No Apto - Hireflix'
+      case 'convocatoria': return l.estado_de_lead === 'Convocatoria Inducción' || l.estado_de_lead === 'Convocatoria Induccion'
+      case 'zonaSegura': return l.direccion_latitud != null && l.direccion_longitud != null && !leadsEnZona.has(l.id)
+      case 'zonaRestringida': return l.direccion_latitud != null && l.direccion_longitud != null && leadsEnZona.has(l.id)
+      case 'intercom': return esFuenteIntercom(l)
+      case 'damaro': return (l.fuente_de_lead || '').toLowerCase() === 'damaro'
+      case 'autoPueblo': return l.estado_de_lead === 'Auto del pueblo'
+      case 'recontacto': return tieneAlertaRecontacto(l.observaciones)
+      case 'descartados': return l.estado_de_lead === 'Descartado'
+      // 'todos': vista general para busquedas. No filtra por estado, por lo que
+      // incluye los descartados junto al resto.
+      case 'todos': return true
+      // Por defecto: excluir descartados de la tabla
+      default: return l.estado_de_lead !== 'Descartado'
+    }
+  }, [activeStatCard, leadsEnZona])
+
+  /** Leads con los filtros propios del módulo (columnas y fechas), SIN la tarjeta activa. */
+  const leadsBase = useMemo(() => {
     // Ocultar leads "Conductor" siempre (ya no son leads)
     let result = leads.filter(l => l.estado_de_lead !== 'Conductor')
-
-    // Stat card filter (todos basados en estado_de_lead)
-    if (activeStatCard === 'inicio') result = result.filter(l => l.estado_de_lead === 'Inicio conversación')
-    else if (activeStatCard === 'contactadoSellium') result = result.filter(l => l.estado_de_lead === 'Contactado Sellium')
-    else if (activeStatCard === 'aptos') result = result.filter(l => l.estado_de_lead === 'Apto - Hireflix')
-    else if (activeStatCard === 'noAptos') result = result.filter(l => l.estado_de_lead === 'No Apto - Hireflix')
-    else if (activeStatCard === 'convocatoria') result = result.filter(l => l.estado_de_lead === 'Convocatoria Inducción' || l.estado_de_lead === 'Convocatoria Induccion')
-    else if (activeStatCard === 'zonaSegura') result = result.filter(l => l.direccion_latitud != null && l.direccion_longitud != null && !leadsEnZona.has(l.id))
-    else if (activeStatCard === 'zonaRestringida') result = result.filter(l => l.direccion_latitud != null && l.direccion_longitud != null && leadsEnZona.has(l.id))
-    else if (activeStatCard === 'intercom') result = result.filter(l => (l.fuente_de_lead || '').toLowerCase() !== 'damaro')
-    else if (activeStatCard === 'damaro') result = result.filter(l => (l.fuente_de_lead || '').toLowerCase() === 'damaro')
-    else if (activeStatCard === 'autoPueblo') result = result.filter(l => l.estado_de_lead === 'Auto del pueblo')
-    else if (activeStatCard === 'recontacto') result = result.filter(l => tieneAlertaRecontacto(l.observaciones))
-    else if (activeStatCard === 'descartados') result = result.filter(l => l.estado_de_lead === 'Descartado')
-    // 'todos': vista general para busquedas. No filtra por estado, por lo que
-    // incluye los descartados junto al resto.
-    else if (activeStatCard === 'todos') { /* sin filtro de estado */ }
-    else {
-      // Por defecto: excluir descartados de la tabla
-      result = result.filter(l => l.estado_de_lead !== 'Descartado')
-    }
 
     // Column filters
     if (nombreFilter.length > 0) {
@@ -1160,7 +1171,39 @@ export function LeadsModule() {
     }
 
     return result.sort((a, b) => getDateTime(b.created_at) - getDateTime(a.created_at))
-  }, [leads, activeStatCard, nombreFilter, zonaFilter, turnoFilter, disponibilidadFilter, fuenteFilter, estadoFilter, creacionDesde, creacionHasta, leadsEnZona])
+  }, [leads, nombreFilter, zonaFilter, turnoFilter, disponibilidadFilter, fuenteFilter, estadoFilter, creacionDesde, creacionHasta])
+
+  /** leadsBase + tarjeta activa (lo que se exporta con "Exportar"). */
+  const filteredLeads = useMemo(() => leadsBase.filter(filtroTarjeta), [leadsBase, filtroTarjeta])
+
+  // ---------- STATS ----------
+  // Las tarjetas cuentan EXACTAMENTE lo que muestra la tabla: búsqueda, filtros de
+  // columna, fechas y la tarjeta activa (ej. con "Contactado Sellium" activa,
+  // "Inicio conversación" muestra cuántos de Sellium están en inicio).
+  // "Ver todos" y "Descartados" son cambios de vista: cuentan lo filtrado SIN la
+  // tarjeta activa (si no, "Descartados" daría 0 en la vista por defecto).
+  // Ambos conjuntos los reporta el DataTable; hasta que llegan se usan los locales.
+  const stats = useMemo(() => {
+    const base = leadsVisibles ?? filteredLeads
+    const sinTarjeta = leadsMetricas ?? leadsBase
+    const total = base.length
+    const inicio = base.filter(l => l.estado_de_lead === 'Inicio conversación').length
+    const contactadoSellium = base.filter(esContactadoSellium).length
+    const aptos = base.filter(l => l.estado_de_lead === 'Apto - Hireflix').length
+    const noAptos = base.filter(l => l.estado_de_lead === 'No Apto - Hireflix').length
+    const conCoordenadas = base.filter(l => l.direccion_latitud != null && l.direccion_longitud != null)
+    const enZonaRestringida = conCoordenadas.filter(l => leadsEnZona.has(l.id)).length
+    const enZonaSegura = conCoordenadas.filter(l => !leadsEnZona.has(l.id)).length
+    const convocatoria = base.filter(l => l.estado_de_lead === 'Convocatoria Inducción' || l.estado_de_lead === 'Convocatoria Induccion').length
+    const intercom = base.filter(esFuenteIntercom).length
+    const damaro = base.filter(l => (l.fuente_de_lead || '').toLowerCase() === 'damaro').length
+    const autoPueblo = base.filter(l => l.estado_de_lead === 'Auto del pueblo').length
+    const descartados = sinTarjeta.filter(l => l.estado_de_lead === 'Descartado').length
+    // "Ver todos": todo lo filtrado sin tarjeta (ya excluye a los Conductor).
+    const todos = sinTarjeta.length
+    const recontacto = base.filter(l => tieneAlertaRecontacto(l.observaciones)).length
+    return { total, inicio, contactadoSellium, aptos, noAptos, convocatoria, enZonaRestringida, enZonaSegura, intercom, damaro, autoPueblo, descartados, recontacto, todos }
+  }, [leadsVisibles, filteredLeads, leadsMetricas, leadsBase, leadsEnZona])
 
   // ---------- HANDLERS ----------
   function handleOpenDetails(lead: Lead) {
@@ -1625,7 +1668,9 @@ export function LeadsModule() {
       })
       const XLSX = await import('xlsx')
       const buffer = await file.arrayBuffer()
-      const wb = XLSX.read(buffer, { type: 'array' })
+      // leerLibroExcel: igual que XLSX.read salvo para "xls" que son HTML (Sellium),
+      // que se decodifican con su charset para no romper las tildes.
+      const wb = leerLibroExcel(XLSX, buffer)
       const ws = wb.Sheets[wb.SheetNames[0]]
       let jsonData = XLSX.utils.sheet_to_json<Record<string, unknown>>(ws, { defval: null })
 
@@ -1667,6 +1712,19 @@ export function LeadsModule() {
         }
         return newRow
       })
+
+      // Formato Sellium (reporte del CRM): se detecta ANTES que Damaro porque también
+      // trae una columna "Nombre". Tiene su propio flujo de crear/actualizar por teléfono o correo.
+      if (esFormatoSellium(excelHeaders)) {
+        const escribio = await procesarCargaSellium({
+          filas: jsonData,
+          headers: excelHeaders,
+          sedes,
+          estadoOrden: ESTADO_ORDEN,
+        })
+        if (escribio) loadLeads()
+        return
+      }
 
       // Detectar formato usando columnas EXCLUSIVAS de cada formato
       // Damaro tiene: NOMBRE, CIUDAD, CELULAR, FEEDBACK DAMARO (no existen en Original)
@@ -2703,7 +2761,10 @@ export function LeadsModule() {
       )}
 
       <DataTable
-        data={filteredLeads}
+        data={leadsBase}
+        rowFilter={filtroTarjeta}
+        onBaseDataChange={setLeadsMetricas}
+        onFilteredDataChange={setLeadsVisibles}
         columns={columns}
         loading={loading}
         error={error}

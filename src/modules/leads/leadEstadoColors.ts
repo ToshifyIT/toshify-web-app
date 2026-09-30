@@ -12,6 +12,10 @@ export const COLOR_LEAD_FALLBACK = '#8B5CF6' // violeta: estado desconocido / si
 const COLORES_POR_ESTADO_NORMALIZADO: Record<string, string> = {
   'inicio conversacion': '#3B82F6',
   'contactado sellium': '#DB2777',
+  'edad aprobada': '#0EA5E9',
+  'zona aprobada': '#14B8A6',
+  'propuesta enviada': '#6366F1',
+  'video recibido': '#65A30D',
   'acepta oferta': '#CA8A04',
   'pendiente - hireflix': '#F59E0B',
   'apto - hireflix': '#22C55E',

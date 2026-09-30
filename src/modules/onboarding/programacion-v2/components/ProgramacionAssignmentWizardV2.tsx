@@ -20,6 +20,7 @@ const ConductoresMapModal = lazy(() => import('../../components/ConductoresMapMo
 import('../../components/ConductoresMapModal').catch(() => { /* ignorar si falla, se reintentará al abrir */ })
 import { useSede } from '../../../../contexts/SedeContext'
 import { TimeInput24h } from '../../../../components/ui/TimeInput24h'
+import { LoadingOverlay } from '../../../../components/ui/LoadingOverlay'
 import Swal from 'sweetalert2'
 import { showSuccess } from '../../../../utils/toast'
 import type { TipoCandidatoV2, TipoDocumento, TipoAsignacion, TipoTarifa } from '../../../../types/onboarding.types'
@@ -173,6 +174,9 @@ export function ProgramacionAssignmentWizardV2({ onClose, onSuccess, editData }:
   const [conceptosTarifa, setConceptosTarifa] = useState<MapaConceptosTarifa>({})
   const [conductores, setConductores] = useState<Conductor[]>([])
   const [loading, setLoading] = useState(false)
+  // Texto del overlay de carga. Acompaña siempre a `loading` para que el
+  // cartel diga que se esta haciendo y no un "Cargando..." generico.
+  const [loadingMensaje, setLoadingMensaje] = useState('Cargando...')
   const isSubmittingRef = useRef(false)
   const [loadingVehicles, setLoadingVehicles] = useState(true)
   const [loadingConductores, setLoadingConductores] = useState(true)
@@ -962,6 +966,7 @@ export function ProgramacionAssignmentWizardV2({ onClose, onSuccess, editData }:
         return
       }
       // Cargar conductores del vehiculo antes de pasar al paso 3
+      setLoadingMensaje('Cargando conductores del vehiculo...')
       setLoading(true)
       await loadConductoresDelVehiculo(formData.vehiculo_id)
 
@@ -995,21 +1000,35 @@ export function ProgramacionAssignmentWizardV2({ onClose, onSuccess, editData }:
     }
 
     // Step 3: Validate conductores segun modalidad
+    //
+    // Un turno puede estar ocupado por un CONDUCTOR o por un LEAD. Con un lead,
+    // `conductor_<turno>_id` queda vacio a proposito y el que identifica a la
+    // persona es `lead_<turno>_id`, asi que mirar solo los ids de conductor
+    // daria "no hay nadie asignado" teniendo los dos turnos ocupados.
     if (step === 3) {
-      if (formData.modalidad === 'a_cargo' && !formData.conductor_id) {
-        Swal.fire('Error', 'Debes asignar un conductor', 'error')
+      const ocupadoCargo = !!(formData.conductor_id || formData.lead_cargo_id)
+      const ocupadoDiurno = !!(formData.conductor_diurno_id || formData.lead_diurno_id)
+      const ocupadoNocturno = !!(formData.conductor_nocturno_id || formData.lead_nocturno_id)
+
+      if (formData.modalidad === 'a_cargo' && !ocupadoCargo) {
+        Swal.fire('Error', 'Debes asignar un conductor o un lead', 'error')
         return
       }
       if (formData.modalidad !== 'a_cargo') {
-        // Modo TURNO - al menos 1 conductor
-        if (!formData.conductor_diurno_id && !formData.conductor_nocturno_id) {
-          Swal.fire('Error', 'Debes asignar al menos un conductor (Diurno o Nocturno)', 'error')
+        // Modo TURNO - al menos 1 persona
+        if (!ocupadoDiurno && !ocupadoNocturno) {
+          Swal.fire('Error', 'Debes asignar al menos una persona (Diurno o Nocturno)', 'error')
           return
         }
-        // Validar que no sea el mismo conductor en ambos turnos
+        // Validar que no sea la misma persona en ambos turnos
         if (formData.conductor_diurno_id && formData.conductor_nocturno_id &&
             formData.conductor_diurno_id === formData.conductor_nocturno_id) {
           Swal.fire('Error', 'No se puede asignar el mismo conductor en ambos turnos', 'error')
+          return
+        }
+        if (formData.lead_diurno_id && formData.lead_nocturno_id &&
+            formData.lead_diurno_id === formData.lead_nocturno_id) {
+          Swal.fire('Error', 'No se puede asignar el mismo lead en ambos turnos', 'error')
           return
         }
       }
@@ -1405,7 +1424,28 @@ export function ProgramacionAssignmentWizardV2({ onClose, onSuccess, editData }:
       }
     }
 
-    autoDetectarTipos()
+    // autoDetectarTipos solo consulta la BD cuando hay un CONDUCTOR con el
+    // tipo de candidato todavia sin resolver. Con leads ya viene en 'lead'
+    // desde que se lo solto, asi que no hay nada que detectar: se calcula
+    // antes para no encender el overlay y que pegue un parpadeo de un frame.
+    //
+    // Se ejecuta DESPUES del cambio de paso (lo dispara este efecto al entrar
+    // a Detalles), por eso no se puede cubrir desde handleNext.
+    const vaAConsultar =
+      formData.modalidad === 'a_cargo'
+        ? !!(formData.conductor_id && !formData.tipo_candidato_cargo)
+        : !!(
+            (formData.conductor_diurno_id && !formData.tipo_candidato_diurno) ||
+            (formData.conductor_nocturno_id && !formData.tipo_candidato_nocturno)
+          )
+
+    if (vaAConsultar) {
+      setLoadingMensaje('Detectando tipo de candidato...')
+      setLoading(true)
+      autoDetectarTipos().finally(() => setLoading(false))
+    } else {
+      autoDetectarTipos()
+    }
 
     setFormData(prev => {
       const updates: any = { ...prev }
@@ -1510,24 +1550,33 @@ export function ProgramacionAssignmentWizardV2({ onClose, onSuccess, editData }:
       // Verificar si ya existe una programación con el mismo vehículo Y mismos conductores
       const { data: progExistentes } = await aplicarFiltroSede(supabase
         .from('programaciones_onboarding')
-        .select('id, vehiculo_entregar_patente, estado, conductor_id, conductor_diurno_id, conductor_nocturno_id, modalidad')
+        .select('id, vehiculo_entregar_patente, estado, conductor_id, conductor_diurno_id, conductor_nocturno_id, lead_cargo_id, lead_diurno_id, lead_nocturno_id, modalidad')
         .eq('vehiculo_entregar_id', formData.vehiculo_id)
         .in('estado', estadosActivos)) as { data: Array<any> | null }
 
       if (!progExistentes || progExistentes.length === 0) return false
 
-      // Verificar si alguna programación existente tiene exactamente los mismos conductores
+      // Quien ocupa un turno puede ser un conductor O un lead, asi que la
+      // comparacion se hace sobre la PERSONA efectiva. Mirando solo los ids de
+      // conductor, dos programaciones con leads distintos tendrian ambos ids en
+      // null y se detectarian como duplicadas sin serlo.
+      const ocupante = (conductorId?: string | null, leadId?: string | null) =>
+        conductorId || leadId || null
+
+      const miCargo = ocupante(formData.conductor_id, formData.lead_cargo_id)
+      const miDiurno = ocupante(formData.conductor_diurno_id, formData.lead_diurno_id)
+      const miNocturno = ocupante(formData.conductor_nocturno_id, formData.lead_nocturno_id)
+
+      // Verificar si alguna programación existente tiene exactamente las mismas personas
       for (const prog of progExistentes) {
         let mismosonductores = false
 
         if (formData.modalidad === 'a_cargo') {
-          mismosonductores = prog.conductor_id === formData.conductor_id
+          mismosonductores = ocupante(prog.conductor_id, prog.lead_cargo_id) === miCargo
         } else {
           // TURNO: verificar diurno y nocturno
-          const mismoDiurno = (!formData.conductor_diurno_id && !prog.conductor_diurno_id) || 
-            prog.conductor_diurno_id === formData.conductor_diurno_id
-          const mismoNocturno = (!formData.conductor_nocturno_id && !prog.conductor_nocturno_id) ||
-            prog.conductor_nocturno_id === formData.conductor_nocturno_id
+          const mismoDiurno = ocupante(prog.conductor_diurno_id, prog.lead_diurno_id) === miDiurno
+          const mismoNocturno = ocupante(prog.conductor_nocturno_id, prog.lead_nocturno_id) === miNocturno
           mismosonductores = mismoDiurno && mismoNocturno
         }
 
@@ -1535,7 +1584,7 @@ export function ProgramacionAssignmentWizardV2({ onClose, onSuccess, editData }:
           Swal.fire({
             icon: 'warning',
             title: 'Programación duplicada',
-            html: `Ya existe una programación activa para el vehículo <strong>${formData.vehiculo_patente}</strong> con los mismos conductores (${PROGRAMACION_ESTADO_LABELS[prog.estado] || prog.estado}).<br><br>No se puede crear una programación con los mismos datos.`,
+            html: `Ya existe una programación activa para el vehículo <strong>${formData.vehiculo_patente}</strong> con las mismas personas (${PROGRAMACION_ESTADO_LABELS[prog.estado] || prog.estado}).<br><br>No se puede crear una programación con los mismos datos.`,
             confirmButtonColor: '#FF0033'
           })
           return true
@@ -1561,11 +1610,21 @@ export function ProgramacionAssignmentWizardV2({ onClose, onSuccess, editData }:
       return
     }
 
-    // Validar duplicados solo al crear (no en edición)
+    // Validar duplicados solo al crear (no en edición).
+    // Es una consulta a la BD: va con overlay para que el click no parezca
+    // que no hizo nada.
+    setLoadingMensaje('Verificando duplicados...')
+    setLoading(true)
+    // checkDuplicateProgramacion atrapa sus propios errores y siempre devuelve
+    // un booleano, asi que no hace falta try/catch alrededor.
     const isDuplicate = await checkDuplicateProgramacion()
-    if (isDuplicate) return
+    if (isDuplicate) {
+      setLoading(false)
+      return
+    }
 
     isSubmittingRef.current = true
+    setLoadingMensaje(isEditMode ? 'Guardando cambios...' : 'Creando programacion...')
     setLoading(true)
 
     try {
@@ -2160,6 +2219,10 @@ export function ProgramacionAssignmentWizardV2({ onClose, onSuccess, editData }:
 
   return (
     <>
+      {/* Por encima del wizard: LoadingOverlay usa z-index 9999 y el wizard
+          1000, asi que tapa el modal entero mientras algo esta cargando. */}
+      <LoadingOverlay show={loading} message={loadingMensaje} size="lg" />
+
       <style>{`
         @keyframes spin {
           to { transform: rotate(360deg); }
@@ -3293,6 +3356,9 @@ export function ProgramacionAssignmentWizardV2({ onClose, onSuccess, editData }:
                         conductor_nocturno_id: '',
                         conductor_nocturno_nombre: '',
                         conductor_nocturno_dni: '',
+                        lead_diurno_id: '',
+                        lead_nocturno_id: '',
+                        lead_cargo_id: '',
                       }))
                     }}
                     style={{ padding: '16px 16px' }}
@@ -3328,6 +3394,9 @@ export function ProgramacionAssignmentWizardV2({ onClose, onSuccess, editData }:
                         conductor_nocturno_id: '',
                         conductor_nocturno_nombre: '',
                         conductor_nocturno_dni: '',
+                        lead_diurno_id: '',
+                        lead_nocturno_id: '',
+                        lead_cargo_id: '',
                       }))
                     }}
                     style={{ padding: '16px 16px' }}
@@ -4756,6 +4825,7 @@ export function ProgramacionAssignmentWizardV2({ onClose, onSuccess, editData }:
             <button
               className="btn btn-secondary"
               onClick={step === 1 ? onClose : handleBack}
+              disabled={loading}
             >
               {step === 1 ? 'Cancelar' : 'Atras'}
             </button>
@@ -4764,8 +4834,9 @@ export function ProgramacionAssignmentWizardV2({ onClose, onSuccess, editData }:
               <button
                 className="btn btn-primary"
                 onClick={handleNext}
+                disabled={loading}
               >
-                Siguiente <ChevronRight size={18} />
+                {loading ? 'Cargando...' : <>Siguiente <ChevronRight size={18} /></>}
               </button>
             ) : (
               <button
