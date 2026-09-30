@@ -199,8 +199,8 @@ const ETIQUETAS: Record<string, string> = {
   anio_de_auto: 'Año auto',
   km_de_auto: 'Km auto',
   patente: 'Patente',
-  fuente_pauta: 'Fuente pauta',
-  id_fuente: 'Id fuente',
+  fuente_pauta: 'Fuente pauta (canal)',
+  id_fuente: 'Id fuente (link)',
   observaciones: 'Observaciones',
   fuente_de_lead: 'Fuente',
   fecha_carga: 'Fecha carga',
@@ -255,13 +255,13 @@ function armarSecciones(plan: PlanCarga): Secciones {
   return {
     crear: {
       titulo: 'Leads nuevos a crear',
-      columnas: ['Fila', 'Fecha de creación', 'Nombre', 'Teléfono', 'Correo', 'Estado', 'Zona', 'Dirección', 'Id fuente', 'Observaciones'],
+      columnas: ['Fila', 'Fecha de creación', 'Nombre', 'Teléfono', 'Correo', 'Estado', 'Zona', 'Dirección', 'Fuente pauta', 'Observaciones'],
       origen: plan.crear.map(a => a.fila),
       filas: plan.crear.map(a => [
         String(a.fila.numero), a.fila.fechaCreacion ? fechaLegible(a.payload.created_at) : '(hoy)',
         String(a.payload.nombre_completo ?? ''), String(a.payload.phone ?? ''),
         String(a.payload.email ?? ''), String(a.payload.estado_de_lead ?? '(vacío)'), String(a.payload.zona ?? ''),
-        String(a.payload.direccion ?? ''), String(a.payload.id_fuente ?? ''), String(a.payload.observaciones ?? ''),
+        String(a.payload.direccion ?? ''), String(a.payload.fuente_pauta ?? ''), String(a.payload.observaciones ?? ''),
       ]),
     },
     actualizar: {

@@ -119,8 +119,8 @@ export interface Lead {
   utm_source?: string | null
   utm_term?: string | null
   fuente_de_lead?: string | null
-  fuente_pauta?: string | null   // link del anuncio (pauta) — carga Sellium
-  id_fuente?: string | null      // Facebook | Instagram | TikTok | Estado
+  fuente_pauta?: string | null   // canal de la pauta: Facebook | Instagram | TikTok | Estado — carga Sellium
+  id_fuente?: string | null      // link del anuncio (pauta) — carga Sellium
 
   // Flags
   acepta_oferta?: boolean | null
