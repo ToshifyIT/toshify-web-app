@@ -30,7 +30,7 @@ import { LeadWizard } from './components/LeadWizard'
 import { LeadDetailView } from './components/LeadDetailView'
 import { clasificarMotivoDesinteres } from './leadMotivos'
 import { LeadsConductoresModal } from './components/LeadsConductoresModal'
-import { FUENTE_SELLIUM, esFormatoSellium, leerLibroExcel } from './cargaMasivaSellium'
+import { FUENTE_SELLIUM, FUENTE_SELLIUM_ANTERIOR, esFormatoSellium, leerLibroExcel } from './cargaMasivaSellium'
 import { procesarCargaSellium } from './procesarCargaSellium'
 import { GOOGLE_MAPS_SCRIPT_URL } from '../../lib/googleMaps'
 
@@ -240,7 +240,8 @@ function tieneAlertaRecontacto(observaciones?: string | null): boolean {
 
 /** Lead que llegó por un archivo de Sellium (carga masiva formato Sellium). */
 function esFuenteSellium(l: Lead): boolean {
-  return (l.fuente_de_lead || '').trim().toLowerCase() === FUENTE_SELLIUM.toLowerCase()
+  const fuente = (l.fuente_de_lead || '').trim().toLowerCase()
+  return fuente === FUENTE_SELLIUM.toLowerCase() || fuente === FUENTE_SELLIUM_ANTERIOR.toLowerCase()
 }
 
 /** Tarjeta "Contactado Sellium": leads de fuente Sellium + los que tienen ese estado. */
@@ -1720,7 +1721,6 @@ export function LeadsModule() {
           filas: jsonData,
           headers: excelHeaders,
           sedes,
-          estadoOrden: ESTADO_ORDEN,
         })
         if (escribio) loadLeads()
         return
