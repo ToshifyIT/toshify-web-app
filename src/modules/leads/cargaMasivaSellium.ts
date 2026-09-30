@@ -17,11 +17,14 @@
  *     2. Datos de vehículo con valor     → Auto del pueblo
  *     3. Document Status                 → Completa: Documentos enviados; otro: Documentos pendientes
  *     4. Estado de la postulación        → MAPA_ESTADOS (vacío o Inactivo: no se toca el estado)
- *   El estado nunca retrocede (ESTADO_ORDEN) y los leads Conductor no se tocan.
+ *   Al CREAR se aplica ese estado. En leads EXISTENTES solo si no tienen estado.
+ *   Los leads Conductor no se tocan.
  * - Dirección: "Calle, Ciudad, Provincia", solo si viene la calle.
  * - Casillas (0/1): 1 → Sí; 0 → no se toca (el CRM pone 0 también cuando no hay dato).
- * - Al actualizar, las columnas vacías del Excel no modifican nada.
- * - Fuente (fuente_de_lead): FUENTE_SELLIUM, tanto al crear como al actualizar.
+ * - Leads EXISTENTES (2026-09-30): solo se completan campos vacíos del lead; lo que ya
+ *   tiene valor no se toca (estado, fuente y observaciones incluidos). Excepción:
+ *   created_at, que siempre toma la "Fecha de creación" del Excel.
+ * - Leads NUEVOS: fuente SELLIUM, created_at y fecha_carga = "Fecha de creación" del Excel.
  * - Se ignoran: Interés, Mayor de 21, Equipo asignado, Requires Human Intervention,
  *   Last Lead Interaction, Última modificación por, Última actividad,
  *   Anuncio de origen (pauta), Asignación, Valoración.
@@ -29,7 +32,9 @@
 import { inferirSedeDeLead, normalizarTexto, type SedeRef } from '../../utils/sedeMatch'
 
 /** Valor de fuente_de_lead para los leads creados Y actualizados por esta carga. */
-export const FUENTE_SELLIUM = 'fuente_Sellium'
+export const FUENTE_SELLIUM = 'SELLIUM'
+/** Valor que usaron las primeras cargas (2026-09-29); se sigue reconociendo como Sellium. */
+export const FUENTE_SELLIUM_ANTERIOR = 'fuente_Sellium'
 
 type Fila = Record<string, unknown>
 
@@ -109,8 +114,22 @@ function crearLector(headers: string[]) {
 
 function texto(v: unknown): string | null {
   if (v == null) return null
-  const s = String(v).trim()
+  const s = decodificarEntidades(String(v)).trim()
   return s === '' ? null : s
+}
+
+/**
+ * El reporte de Sellium es HTML en Latin-1: los emojis vienen como entidades numéricas
+ * (&#129327;) y SheetJS no las traduce. Se convierten al carácter real.
+ */
+export function decodificarEntidades(s: string): string {
+  if (!s.includes('&#')) return s
+  const aChar = (n: number, original: string) => {
+    try { return n > 0 && n <= 0x10ffff ? String.fromCodePoint(n) : original } catch { return original }
+  }
+  return s
+    .replace(/&#(\d+);/g, (m, d: string) => aChar(Number(d), m))
+    .replace(/&#x([0-9a-f]+);/gi, (m, h: string) => aChar(parseInt(h, 16), m))
 }
 
 /** Casilla del CRM: solo un 1 / true / "sí" cuenta. 0 = "sin dato" → null. */
@@ -126,16 +145,44 @@ function entero(v: unknown): number | null {
   return Number.isFinite(n) ? Math.round(n) : null
 }
 
-/** "29/9/2026" o "29/9/2026, 13:24" → "2026-09-29". */
-function fechaISO(v: unknown): string | null {
+/**
+ * Fecha del CRM → "YYYY-MM-DD". Acepta lo que puede venir según cómo se guardó el archivo:
+ *   texto "29/9/2026", "29/9/2026, 13:24", "18/09/26" (año de 2 dígitos → 20xx),
+ *   número de serie de Excel (celda con formato fecha en un .xlsx) u objeto Date.
+ */
+export function fechaISO(v: unknown): string | null {
+  const iso = (a: number, m: number, d: number) =>
+    m >= 1 && m <= 12 && d >= 1 && d <= 31 && a >= 1900 && a <= 2100
+      ? `${a}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`
+      : null
+  if (v instanceof Date) return isNaN(v.getTime()) ? null : iso(v.getFullYear(), v.getMonth() + 1, v.getDate())
+  if (typeof v === 'number') {
+    // Serie de Excel: días desde 1899-12-30 (fecha sin zona horaria → se leen partes UTC).
+    const f = new Date(Math.round((v - 25569) * 86400000))
+    return isNaN(f.getTime()) ? null : iso(f.getUTCFullYear(), f.getUTCMonth() + 1, f.getUTCDate())
+  }
   const s = texto(v)
   if (!s) return null
-  const m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/)
+  const isoTxt = s.match(/^(\d{4})-(\d{2})-(\d{2})/)
+  if (isoTxt) return iso(Number(isoTxt[1]), Number(isoTxt[2]), Number(isoTxt[3]))
+  const m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2}|\d{4})\b/)
   if (!m) return null
-  const [, d, mes, a] = m
-  const dia = Number(d), nMes = Number(mes)
-  if (nMes < 1 || nMes > 12 || dia < 1 || dia > 31) return null
-  return `${a}-${mes.padStart(2, '0')}-${d.padStart(2, '0')}`
+  const anio = m[3].length === 2 ? 2000 + Number(m[3]) : Number(m[3])
+  return iso(anio, Number(m[2]), Number(m[1]))
+}
+
+/**
+ * "YYYY-MM-DD" → created_at a las 00:00 hora Argentina (la tabla muestra en ART, así
+ * el lead aparece con el mismo día que en el CRM). El reporte no trae la hora.
+ */
+export function createdAtDesdeFecha(fecha: string): string {
+  return `${fecha}T00:00:00-03:00`
+}
+
+function mismoInstante(a: unknown, b: string): boolean {
+  if (a == null || a === '') return false
+  const ta = new Date(String(a)).getTime()
+  return !isNaN(ta) && ta === new Date(b).getTime()
 }
 
 export function escaparHtml(s: unknown): string {
@@ -442,21 +489,14 @@ export type Accion =
   | { tipo: 'conflicto'; fila: FilaSellium; motivo: string }
   | { tipo: 'invalida'; fila: FilaSellium; motivo: string }
 
-function esNo(v: unknown): boolean {
-  if (v == null || v === false) return true
-  const s = normalizarTexto(String(v))
-  return s === '' || s === 'no' || s === 'false' || s === '0'
+/** Campo sin dato: null, undefined o texto vacío. false / "No" / 0 SÍ son datos. */
+function vacio(v: unknown): boolean {
+  return v == null || (typeof v === 'string' && v.trim() === '')
 }
 
 function esConductor(l: LeadExistente): boolean {
   const proceso = (l.proceso || '').toLowerCase()
   return l.estado_de_lead === 'Conductor' || proceso === 'convertido' || proceso === 'conductor'
-}
-
-/** Igualdad "de negocio": null = vacío, sin espacios al borde, 26 = "26". */
-function mismoValor(a: unknown, b: unknown): boolean {
-  const norm = (v: unknown) => (v == null ? '' : String(v).trim())
-  return norm(a) === norm(b)
 }
 
 function lineaCausal(causal: string): string {
@@ -473,7 +513,10 @@ function payloadCreacion(f: FilaSellium, sedes: SedeRef[]): Record<string, unkno
   if (f.apellido) p.apellido = f.apellido
   if (f.email) p.email = f.email
   if (f.telefono) p.phone = telefonoParaGuardar(f.telefono)
-  if (f.fechaCreacion) p.fecha_carga = f.fechaCreacion
+  if (f.fechaCreacion) {
+    p.fecha_carga = f.fechaCreacion
+    p.created_at = createdAtDesdeFecha(f.fechaCreacion)
+  }
   if (f.estado.estado) p.estado_de_lead = f.estado.estado
   if (f.causal) p.observaciones = lineaCausal(f.causal)
   if (f.casillas.acepta_oferta) p.acepta_oferta = true
@@ -485,61 +528,63 @@ function payloadCreacion(f: FilaSellium, sedes: SedeRef[]): Record<string, unkno
   return p
 }
 
+/**
+ * Lead EXISTENTE (regla 2026-09-30): solo se completan campos VACÍOS del lead; lo que
+ * ya tiene valor no se toca (un "No" o false también es un valor). Única excepción:
+ * created_at, que siempre toma la "Fecha de creación" del Excel.
+ */
 function payloadActualizacion(
-  f: FilaSellium, l: LeadExistente, sedes: SedeRef[], orden: Record<string, number>,
+  f: FilaSellium, l: LeadExistente, sedes: SedeRef[],
 ): { payload: Record<string, unknown>; estadoBloqueado: boolean } {
-  const p: Record<string, unknown> = { ...f.campos }
-
-  // Dirección nueva: se limpian las coordenadas para que el módulo la vuelva a geocodificar.
-  if (p.direccion !== undefined) {
-    if (p.direccion === l.direccion) delete p.direccion
-    else Object.assign(p, { direccion_latitud: null, direccion_longitud: null, direccion_geocode_estado: null, direccion_geocode_fecha: null })
+  const p: Record<string, unknown> = {}
+  const completar = (campo: string, valor: unknown) => {
+    if (valor != null && valor !== '' && vacio(l[campo])) p[campo] = valor
   }
 
-  // Fuente: todo lead que llega por un archivo Sellium queda con fuente Sellium,
-  // también los existentes (el filtro de abajo la omite si ya la tiene).
-  p.fuente_de_lead = FUENTE_SELLIUM
+  // created_at: siempre (se compara por instante; la base lo devuelve en otro formato).
+  if (f.fechaCreacion) {
+    const nuevaCreacion = createdAtDesdeFecha(f.fechaCreacion)
+    if (!mismoInstante(l.created_at, nuevaCreacion)) p.created_at = nuevaCreacion
+  }
+  completar('fecha_carga', f.fechaCreacion)
 
-  // Nombre y correo del CRM (perfil de WhatsApp) solo completan datos faltantes.
-  if (!texto(l.nombre_completo) && f.nombreCompleto) p.nombre_completo = f.nombreCompleto
-  if (!texto(l.primer_nombre) && f.nombre) p.primer_nombre = f.nombre
-  if (!texto(l.apellido) && f.apellido) p.apellido = f.apellido
-  if (!texto(l.email) && f.email) p.email = f.email
+  // Columnas directas del Excel (zona, turno, edad, dirección, vehículo, pauta…).
+  for (const [campo, valor] of Object.entries(f.campos)) completar(campo, valor)
+  // Dirección cargada ahora: coordenadas en blanco para que el módulo la geocodifique.
+  if (p.direccion !== undefined) {
+    Object.assign(p, { direccion_latitud: null, direccion_longitud: null, direccion_geocode_estado: null, direccion_geocode_fecha: null })
+  }
 
-  // Casillas: solo pasan a "sí"; nunca pisan un valor que ya dice sí (o un texto).
-  if (f.casillas.acepta_oferta && l.acepta_oferta !== true) p.acepta_oferta = true
-  if (f.casillas.d1 && esNo(l.d1)) p.d1 = 'Si'
-  if (f.casillas.monotributo && esNo(l.monotributo)) p.monotributo = 'Si'
-  if (f.casillas.experiencia_previa && esNo(l.experiencia_previa)) p.experiencia_previa = 'Si'
+  completar('nombre_completo', f.nombreCompleto)
+  completar('primer_nombre', f.nombre)
+  completar('apellido', f.apellido)
+  completar('email', f.email)
 
-  // Sede: solo si el Excel trae sede.
-  if (f.ubicacion.sede) {
+  if (f.casillas.acepta_oferta) completar('acepta_oferta', true)
+  if (f.casillas.d1) completar('d1', 'Si')
+  if (f.casillas.monotributo) completar('monotributo', 'Si')
+  if (f.casillas.experiencia_previa) completar('experiencia_previa', 'Si')
+
+  // Fuente: se completa si está vacía, y el valor viejo 'fuente_Sellium' se corrige
+  // SIEMPRE a SELLIUM (pedido 2026-09-30: nunca debe quedar "fuente_Sellium").
+  const fuenteActual = (texto(l.fuente_de_lead) || '').toLowerCase()
+  if (fuenteActual === FUENTE_SELLIUM_ANTERIOR.toLowerCase()) p.fuente_de_lead = FUENTE_SELLIUM
+  else completar('fuente_de_lead', FUENTE_SELLIUM)
+
+  if (f.ubicacion.sede && vacio(l.sede_id)) {
     const sede = inferirSedeDeLead(f.ubicacion, sedes)
     if (sede) { p.sede_id = sede.id; p.sede = sede.nombre }
   }
 
-  // Estado: solo avanza.
+  // Estado: solo si el lead no tiene. Si tiene otro, se informa como "no aplicado".
   let estadoBloqueado = false
   const nuevo = f.estado.estado
-  if (nuevo && nuevo !== l.estado_de_lead) {
-    if (puedeAplicarEstado(l.estado_de_lead, nuevo, orden)) p.estado_de_lead = nuevo
-    else estadoBloqueado = true
+  if (nuevo) {
+    if (vacio(l.estado_de_lead)) p.estado_de_lead = nuevo
+    else if (l.estado_de_lead !== nuevo) estadoBloqueado = true
   }
 
-  // Causal: se agrega al final de Observaciones, sin borrar lo que haya.
-  if (f.causal) {
-    const linea = lineaCausal(f.causal)
-    const actuales = texto(l.observaciones)
-    if (!actuales) p.observaciones = linea
-    else if (!actuales.includes(linea)) p.observaciones = `${actuales}\n\n${linea}`
-  }
-
-  // Solo se escribe lo que realmente cambia: el detalle muestra diferencias reales
-  // y "sin cambios" es exacto. (Las columnas direccion_* solo están si cambió la dirección.)
-  for (const k of Object.keys(p)) {
-    if (!k.startsWith('direccion_') && mismoValor(l[k], p[k])) delete p[k]
-  }
-  if (p.sede_id === undefined) delete p.sede
+  if (f.causal) completar('observaciones', lineaCausal(f.causal))
 
   return { payload: p, estadoBloqueado }
 }
@@ -555,7 +600,7 @@ export interface PlanCarga {
 }
 
 export function planificarCarga(
-  filas: FilaSellium[], idx: IndiceLeads, sedes: SedeRef[], orden: Record<string, number>,
+  filas: FilaSellium[], idx: IndiceLeads, sedes: SedeRef[],
 ): PlanCarga {
   // 1) Cruce de cada fila.
   const cruces = filas.map(f => ({ f, c: buscarLead(f, idx) }))
@@ -583,7 +628,7 @@ export function planificarCarga(
       return { tipo: 'conflicto', fila: f, motivo: 'Varias filas del archivo apuntan al mismo lead' }
     }
     if (esConductor(lead)) return { tipo: 'conductor', fila: f, lead }
-    const { payload, estadoBloqueado } = payloadActualizacion(f, lead, sedes, orden)
+    const { payload, estadoBloqueado } = payloadActualizacion(f, lead, sedes)
     return Object.keys(payload).length === 0
       ? { tipo: 'sin_cambios', fila: f, lead, cruce: c.tipo!, estadoBloqueado }
       : { tipo: 'actualizar', fila: f, lead, cruce: c.tipo!, payload, estadoBloqueado }

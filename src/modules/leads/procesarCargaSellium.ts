@@ -26,7 +26,6 @@ interface OpcionesCargaSellium {
   filas: Record<string, unknown>[]
   headers: string[]
   sedes: SedeRef[]
-  estadoOrden: Record<string, number>
 }
 
 const PAGINA = 1000
@@ -34,7 +33,7 @@ const LOTE_INSERT = 200
 const CONCURRENCIA_UPDATE = 8
 
 /** Devuelve true si se escribió algo en la base (para recargar la grilla). */
-export async function procesarCargaSellium({ filas, headers, sedes, estadoOrden }: OpcionesCargaSellium): Promise<boolean> {
+export async function procesarCargaSellium({ filas, headers, sedes }: OpcionesCargaSellium): Promise<boolean> {
   Swal.fire({
     title: 'Analizando archivo Sellium...',
     html: '<p>Cruzando teléfonos y correos con los leads existentes</p>',
@@ -58,7 +57,7 @@ export async function procesarCargaSellium({ filas, headers, sedes, estadoOrden 
     existentes.push(...(data as unknown as LeadExistente[]))
   }
 
-  const plan = planificarCarga(filasSellium, construirIndice(existentes), sedes, estadoOrden)
+  const plan = planificarCarga(filasSellium, construirIndice(existentes), sedes)
   const secciones = armarSecciones(plan)
   const ctx: ContextoDetalle = { secciones, headers }
   Swal.close()
@@ -205,6 +204,7 @@ const ETIQUETAS: Record<string, string> = {
   observaciones: 'Observaciones',
   fuente_de_lead: 'Fuente',
   fecha_carga: 'Fecha carga',
+  created_at: 'Fecha de creación',
 }
 
 /** Columnas técnicas que no se muestran en el detalle. */
@@ -229,10 +229,22 @@ function telLead(l: LeadExistente): string {
   return l.phone || l.whatsapp_number || ''
 }
 
+/** Fecha/hora en hora Argentina, como la muestra la tabla de leads. */
+function fechaLegible(v: unknown): string {
+  if (v == null || v === '') return '(vacío)'
+  const d = new Date(String(v))
+  if (isNaN(d.getTime())) return String(v)
+  const opciones: Intl.DateTimeFormatOptions = { timeZone: 'America/Argentina/Buenos_Aires', day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false }
+  return d.toLocaleString('es-AR', opciones)
+}
+
 function cambios(payload: Record<string, unknown>, lead: LeadExistente): string {
   return Object.keys(payload)
     .filter(k => !OCULTAS.has(k))
-    .map(k => `${ETIQUETAS[k] ?? k}: ${valorLegible(lead[k])} → ${valorLegible(payload[k])}`)
+    .map(k => {
+      const fmt = k === 'created_at' ? fechaLegible : valorLegible
+      return `${ETIQUETAS[k] ?? k}: ${fmt(lead[k])} → ${fmt(payload[k])}`
+    })
     .join('\n')
 }
 
@@ -243,16 +255,17 @@ function armarSecciones(plan: PlanCarga): Secciones {
   return {
     crear: {
       titulo: 'Leads nuevos a crear',
-      columnas: ['Fila', 'Nombre', 'Teléfono', 'Correo', 'Estado', 'Zona', 'Dirección', 'Id fuente', 'Observaciones'],
+      columnas: ['Fila', 'Fecha de creación', 'Nombre', 'Teléfono', 'Correo', 'Estado', 'Zona', 'Dirección', 'Id fuente', 'Observaciones'],
       origen: plan.crear.map(a => a.fila),
       filas: plan.crear.map(a => [
-        String(a.fila.numero), String(a.payload.nombre_completo ?? ''), String(a.payload.phone ?? ''),
+        String(a.fila.numero), a.fila.fechaCreacion ? fechaLegible(a.payload.created_at) : '(hoy)',
+        String(a.payload.nombre_completo ?? ''), String(a.payload.phone ?? ''),
         String(a.payload.email ?? ''), String(a.payload.estado_de_lead ?? '(vacío)'), String(a.payload.zona ?? ''),
         String(a.payload.direccion ?? ''), String(a.payload.id_fuente ?? ''), String(a.payload.observaciones ?? ''),
       ]),
     },
     actualizar: {
-      titulo: 'Leads a actualizar — campo: valor actual → valor nuevo',
+      titulo: 'Leads a actualizar — solo campos vacíos + fecha de creación (campo: valor actual → valor nuevo)',
       columnas: ['Fila', 'Lead en Toshify', 'Teléfono en Toshify', 'Cruce', 'Cambios'],
       origen: plan.actualizar.map(a => a.fila),
       filas: plan.actualizar.map(a => [
@@ -293,7 +306,7 @@ function armarSecciones(plan: PlanCarga): Secciones {
       ]),
     },
     bloqueados: {
-      titulo: 'Estado no aplicado: el lead ya está más avanzado (el resto de los datos sí se actualiza)',
+      titulo: 'Estado no aplicado: el lead ya tiene estado (en existentes solo se completan campos vacíos)',
       columnas: ['Fila', 'Lead en Toshify', 'Teléfono en Toshify', 'Estado actual', 'Estado según Excel'],
       origen: conCruce.filter(a => a.estadoBloqueado).map(a => a.fila),
       filas: conCruce.filter(a => a.estadoBloqueado).map(a => [
@@ -442,7 +455,7 @@ function htmlResumen(plan: PlanCarga, totalFilas: number, secciones: Secciones):
         ${plan.conductores.length ? fila('Omitidos: ya son Conductor', plan.conductores.length, '#6B7280', 'conductores') : ''}
         ${plan.conflictos.length ? fila('Conflictos (no se tocan)', plan.conflictos.length, '#DC2626', 'conflictos') : ''}
         ${plan.invalidas.length ? fila('Inválidos (sin teléfono ni correo)', plan.invalidas.length, '#DC2626', 'invalidas') : ''}
-        ${secciones.bloqueados.filas.length ? fila('Estado no aplicado (el lead ya está más avanzado)', secciones.bloqueados.filas.length, '#D97706', 'bloqueados') : ''}
+        ${secciones.bloqueados.filas.length ? fila('Estado no aplicado (el lead ya tiene estado)', secciones.bloqueados.filas.length, '#D97706', 'bloqueados') : ''}
       </table>
       <div id="sellium-detalle" style="margin-bottom:12px;"></div>
       <p style="font-weight:600;margin:0 0 4px;">Estado resultante (nuevos + actualizados)</p>
