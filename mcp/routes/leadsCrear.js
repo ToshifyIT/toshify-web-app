@@ -59,9 +59,22 @@ const CAMPOS_TEXTO = {
   region: 80,
   country: 80,
   turno: 40,
-  disponibilidad: 80,
+  // `disponibilidad` NO entra aca. La columna es de tipo `date` en la base,
+  // pero la app (tipo Lead, filtros, export e import de Excel) la trata como
+  // texto libre. Aceptarla como texto hacia que Postgres rechazara el INSERT y
+  // la API devolviera un 500 opaco. Vuelve a la lista cuando se defina que es
+  // realmente ese campo: si es fecha, validada como fecha; si es texto, tras
+  // cambiar el tipo de la columna.
   experiencia_previa: 255,
   codigo_referido: 60,
+  // Atribucion de pauta (carga Sellium). Los dos van sin validar el contenido y
+  // con el mismo tope holgado A PROPOSITO: hay un rename pendiente que
+  // intercambia los nombres de estas dos columnas (sql/renombrar_fuente_pauta_
+  // id_fuente_2026-09-30.sql). Si aca se validara el canal contra una lista, o
+  // si el tope fuera corto para un link, la API se rompería el día que ese SQL
+  // corra. Asi el rename le es transparente.
+  fuente_pauta: 500,
+  id_fuente: 500,
   utm_source: 120,
   utm_medium: 120,
   utm_campaign: 120,
@@ -86,7 +99,7 @@ const CAMPOS_ACEPTADOS = new Set([
 ]);
 
 // Campos que se devuelven en el 201. Subconjunto de la whitelist de lectura.
-const CAMPOS_RESPUESTA = 'id,nombre_completo,dni,email,phone,whatsapp_number,sede,estado_de_lead,fecha_creacion';
+const CAMPOS_RESPUESTA = 'id,nombre_completo,dni,email,phone,whatsapp_number,sede,estado_de_lead,fuente_pauta,id_fuente,fecha_creacion';
 
 const RE_EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 const RE_FECHA = /^\d{4}-\d{2}-\d{2}$/;

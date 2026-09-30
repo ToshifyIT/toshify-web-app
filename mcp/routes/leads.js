@@ -35,6 +35,13 @@ const CAMPOS_PUBLICOS = [
   'edad',
   'estado_de_lead',
   'sede',
+  // Atribucion de pauta (carga Sellium). Se exponen sin interpretar el
+  // contenido: hay un rename pendiente que intercambia estas dos columnas
+  // (sql/renombrar_fuente_pauta_id_fuente_2026-09-30.sql). La API devuelve lo
+  // que haya en cada una; lo que cambia con el rename es que significa cada
+  // campo, no el codigo.
+  'fuente_pauta',
+  'id_fuente',
   'fecha_creacion',
 ];
 

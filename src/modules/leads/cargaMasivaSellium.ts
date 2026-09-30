@@ -288,7 +288,8 @@ export function puedeAplicarEstado(actual: string | null | undefined, nuevo: str
 
 // ───────────────────────── Id fuente ─────────────────────────
 
-export function derivarIdFuente(link: string | null): string | null {
+/** Canal de la pauta a partir del link del anuncio (se guarda en fuente_pauta). */
+export function derivarCanalPauta(link: string | null): string | null {
   if (!link) return null
   const l = link.toLowerCase()
   if (l.includes('tiktok')) return 'TikTok'
@@ -359,8 +360,9 @@ export function mapearFilasSellium(filas: Fila[], headers: string[]): FilaSelliu
     poner('anio_de_auto', vehAnio != null ? String(vehAnio) : null)
     poner('km_de_auto', vehKm)
     poner('patente', vehPatente)
-    poner('fuente_pauta', link)
-    poner('id_fuente', derivarIdFuente(link))
+    // fuente_pauta = canal (Facebook/Instagram/TikTok/Estado); id_fuente = link del anuncio (cambio 2026-09-30).
+    poner('fuente_pauta', derivarCanalPauta(link))
+    poner('id_fuente', link)
 
     const casillas: FilaSellium['casillas'] = {}
     if (casilla(leer(fila, COL.aceptaOferta))) casillas.acepta_oferta = true

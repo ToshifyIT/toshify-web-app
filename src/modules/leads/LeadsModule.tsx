@@ -9,7 +9,7 @@ import {
 import { inferirSedeDeLead, normalizarTexto } from '../../utils/sedeMatch'
 import { createPortal } from 'react-dom'
 import {
-  Eye, Edit2, Trash2, Users, UserPlus, Clock, RefreshCw, MessageCircle, Layers, Link2,
+  Eye, Edit2, Trash2, Users, UserPlus, RefreshCw, MessageCircle, Layers, Link2,
   CheckCircle, AlertTriangle, X, Download, Upload, FolderOpen, Car, Bell, PhoneCall,
 } from 'lucide-react'
 import { ActionsMenu } from '../../components/ui/ActionsMenu'
@@ -1188,7 +1188,6 @@ export function LeadsModule() {
     const base = leadsVisibles ?? filteredLeads
     const sinTarjeta = leadsMetricas ?? leadsBase
     const total = base.length
-    const inicio = base.filter(l => l.estado_de_lead === 'Inicio conversación').length
     const contactadoSellium = base.filter(esContactadoSellium).length
     const aptos = base.filter(l => l.estado_de_lead === 'Apto - Hireflix').length
     const noAptos = base.filter(l => l.estado_de_lead === 'No Apto - Hireflix').length
@@ -1203,7 +1202,7 @@ export function LeadsModule() {
     // "Ver todos": todo lo filtrado sin tarjeta (ya excluye a los Conductor).
     const todos = sinTarjeta.length
     const recontacto = base.filter(l => tieneAlertaRecontacto(l.observaciones)).length
-    return { total, inicio, contactadoSellium, aptos, noAptos, convocatoria, enZonaRestringida, enZonaSegura, intercom, damaro, autoPueblo, descartados, recontacto, todos }
+    return { total, contactadoSellium, aptos, noAptos, convocatoria, enZonaRestringida, enZonaSegura, intercom, damaro, autoPueblo, descartados, recontacto, todos }
   }, [leadsVisibles, filteredLeads, leadsMetricas, leadsBase, leadsEnZona])
 
   // ---------- HANDLERS ----------
@@ -1434,6 +1433,8 @@ export function LeadsModule() {
           'Licencia': l.licencia || '',
           'Venc. Licencia': formatDateOnly(l.vencimiento_licencia),
           'Fuente': l.fuente_de_lead || '',
+          'Fuente Pauta': l.fuente_pauta || '',
+          'Id Fuente': l.id_fuente || '',
           'Observaciones': l.observaciones || '',
 
           // --- Datos personales (detalle) ---
@@ -2417,6 +2418,37 @@ export function LeadsModule() {
       enableSorting: true,
     },
     {
+      id: 'fuente_pauta',
+      accessorFn: (row) => row.fuente_pauta || '-',
+      header: 'Fuente Pauta',
+      cell: ({ row }) => <span style={{ fontSize: '11px' }}>{row.original.fuente_pauta || '-'}</span>,
+      size: 100,
+      enableSorting: true,
+    },
+    {
+      id: 'id_fuente',
+      accessorFn: (row) => row.id_fuente || '-',
+      header: 'Id Fuente',
+      cell: ({ row }) => {
+        const link = row.original.id_fuente
+        if (!link) return <span style={{ fontSize: '11px' }}>-</span>
+        return (
+          <a
+            href={link}
+            target="_blank"
+            rel="noopener noreferrer"
+            onClick={e => e.stopPropagation()}
+            title={link}
+            style={{ fontSize: '11px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', display: 'block', maxWidth: '170px' }}
+          >
+            {link.replace(/^https?:\/\/(www\.)?/, '')}
+          </a>
+        )
+      },
+      size: 180,
+      enableSorting: true,
+    },
+    {
       id: 'email',
       accessorFn: (row) => row.email || '-',
       header: 'Email',
@@ -2675,16 +2707,6 @@ export function LeadsModule() {
       {/* Stats */}
       <div className="leads-stats">
         <div className="leads-stats-grid">
-          <div
-            className={`stat-card stat-card-clickable ${activeStatCard === 'inicio' ? 'stat-card-active' : ''}`}
-            onClick={() => handleStatClick('inicio')}
-          >
-            <Clock size={18} className="stat-icon" style={{ color: '#f59e0b' }} />
-            <div className="stat-content">
-              <span className="stat-value">{stats.inicio}</span>
-              <span className="stat-label">Inicio conversación</span>
-            </div>
-          </div>
           <div
             className={`stat-card stat-card-clickable ${activeStatCard === 'contactadoSellium' ? 'stat-card-active' : ''}`}
             onClick={() => handleStatClick('contactadoSellium')}
