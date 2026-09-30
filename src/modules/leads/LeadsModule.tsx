@@ -1,6 +1,7 @@
 // src/modules/leads/LeadsModule.tsx
 import { useState, useEffect, useMemo, useCallback, useRef, useLayoutEffect } from 'react'
 import { fechaISOART } from '../../utils/fechaArgentina'
+import { inferZona } from '../../utils/zonaUtils'
 import {
   buscarConductorExistente,
   convertirLeadAConductor,
@@ -805,14 +806,28 @@ export function LeadsModule() {
     const res = await geocodificarDireccion(lead.direccion)
     const now = new Date().toISOString()
     if (res.lat != null && res.lng != null) {
+      // La zona sale de las coordenadas que acabamos de obtener. Es calculo
+      // local (rangos de lat/lng del AMBA, ver inferZonaFromCoords), NO una
+      // llamada mas a Google: geocodificar y no derivarla era tirar el dato.
+      //
+      // Solo se completa si el lead NO la tiene: lo que haya cargado el
+      // chatbot o un operador manda sobre lo inferido.
+      const datos: Record<string, unknown> = {
+        direccion_latitud: res.lat,
+        direccion_longitud: res.lng,
+        direccion_geocode_estado: res.estado,
+        direccion_geocode_fecha: now,
+      }
+      if (!lead.zona?.trim()) {
+        const zonaInferida = inferZona(lead.direccion || '', res.lat, res.lng)
+        // inferZona devuelve '' fuera del AMBA: en ese caso se deja sin zona
+        // en vez de guardar un vacio que despues parece un dato cargado.
+        if (zonaInferida) datos.zona = zonaInferida
+      }
+
       await supabase
         .from('leads')
-        .update({
-          direccion_latitud: res.lat,
-          direccion_longitud: res.lng,
-          direccion_geocode_estado: res.estado,
-          direccion_geocode_fecha: now,
-        })
+        .update(datos)
         .eq('id', lead.id)
       return true
     }
