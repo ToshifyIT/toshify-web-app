@@ -52,7 +52,7 @@ export const UMBRAL_MINUTOS_MIN = 5
 export const UMBRAL_MINUTOS_MAX = 40
 
 /** Velocidad urbana promedio usada para el prefiltro y el fallback. */
-const VELOCIDAD_ESTIMADA_KMH = 28
+export const VELOCIDAD_ESTIMADA_KMH = 28
 
 /** Máximo de destinos por request de Distance Matrix (límite de la API). */
 const MAX_DESTINOS_POR_REQUEST = 25
@@ -135,7 +135,7 @@ const cacheMediciones = new Map<string, MedicionRuta>()
  * Clave de caché de un tramo. Se ordena para que A→B y B→A compartan entrada:
  * el módulo ya trata la distancia como simétrica (ver `clavePar`).
  */
-function claveTramo(a: { lat: number; lng: number }, b: { lat: number; lng: number }): string {
+export function claveTramo(a: { lat: number; lng: number }, b: { lat: number; lng: number }): string {
   const pa = `${a.lat.toFixed(3)},${a.lng.toFixed(3)}`
   const pb = `${b.lat.toFixed(3)},${b.lng.toFixed(3)}`
   return pa <= pb ? `${pa}|${pb}` : `${pb}|${pa}`
