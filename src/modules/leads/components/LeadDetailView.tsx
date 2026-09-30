@@ -380,6 +380,18 @@ export function LeadDetailView({ lead, onEdit, onConvert, zonasRestringidas = []
             <span className="lead-detail-item-value">{lead.fuente_de_lead || '-'}</span>
           </div>
           <div className="lead-detail-item">
+            <span className="lead-detail-item-label">Id Fuente</span>
+            <span className="lead-detail-item-value">{lead.id_fuente || '-'}</span>
+          </div>
+          <div className="lead-detail-item">
+            <span className="lead-detail-item-label">Fuente Pauta</span>
+            <span className="lead-detail-item-value" style={{ maxWidth: '300px', textAlign: 'right', wordBreak: 'break-all' }}>
+              {lead.fuente_pauta
+                ? <a href={lead.fuente_pauta} target="_blank" rel="noopener noreferrer">{lead.fuente_pauta}</a>
+                : '-'}
+            </span>
+          </div>
+          <div className="lead-detail-item">
             <span className="lead-detail-item-label">Guia</span>
             <span className="lead-detail-item-value">{lead.entrevistador_asignado || '-'}</span>
           </div>
