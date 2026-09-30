@@ -382,6 +382,27 @@
   color: #CA8A04;
 }
 
+/* Estados del embudo de Sellium (carga masiva formato Sellium) */
+.lead-estado-edad-aprobada {
+  background: #E0F2FE;
+  color: #0EA5E9;
+}
+
+.lead-estado-zona-aprobada {
+  background: #CCFBF1;
+  color: #0F766E;
+}
+
+.lead-estado-propuesta-enviada {
+  background: #E0E7FF;
+  color: #4F46E5;
+}
+
+.lead-estado-video-recibido {
+  background: #ECFCCB;
+  color: #4D7C0F;
+}
+
 .lead-estado-pendiente---hireflix {
   background: #FEF3C7;
   color: #F59E0B;
@@ -508,6 +529,10 @@
 
 .lead-estado-dot-inicio-conversacion { background: #3B82F6; }
 .lead-estado-dot-contactado-sellium { background: #DB2777; }
+.lead-estado-dot-edad-aprobada { background: #0EA5E9; }
+.lead-estado-dot-zona-aprobada { background: #14B8A6; }
+.lead-estado-dot-propuesta-enviada { background: #6366F1; }
+.lead-estado-dot-video-recibido { background: #65A30D; }
 .lead-estado-dot-acepta-oferta { background: #CA8A04; }
 .lead-estado-dot-pendiente---hireflix { background: #F59E0B; }
 .lead-estado-dot-apto---hireflix { background: #22C55E; }

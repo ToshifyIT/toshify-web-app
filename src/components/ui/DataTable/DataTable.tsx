@@ -598,6 +598,19 @@ export interface DataTableProps<T> {
    * útil para acciones tipo "Exportar lo visible". No tiene efecto si no se pasa.
    */
   onFilteredDataChange?: (rows: T[]) => void;
+  /**
+   * Filtro externo aplicado DESPUÉS de los filtros internos (columna Excel, fechas,
+   * números) y antes de la búsqueda global. Pensado para filtros tipo "tarjeta de
+   * métrica" cuando el padre además necesita las filas SIN ese filtro (ver
+   * `onBaseDataChange`). Pasar una función estable (useCallback). Opcional.
+   */
+  rowFilter?: (row: T) => boolean;
+  /**
+   * Callback con las filas que pasan los filtros internos y la búsqueda global, pero
+   * SIN aplicar `rowFilter`. Sirve para que métricas/desgloses del padre se adapten a
+   * lo filtrado. Usa la búsqueda por defecto (ignora `globalFilterFn` personalizado).
+   */
+  onBaseDataChange?: (rows: T[]) => void;
   /** Habilita paginación del lado del servidor */
   manualPagination?: boolean;
   /** Total de registros en el servidor (requerido si manualPagination=true) */
@@ -646,6 +659,8 @@ export function DataTable<T>({
   onGlobalFilterChange: setControlledGlobalFilter,
   initialSearch,
   onFilteredDataChange,
+  rowFilter,
+  onBaseDataChange,
   manualPagination = false,
   rowCount,
   pageIndex: controlledPageIndex,
@@ -1003,7 +1018,8 @@ export function DataTable<T>({
   getUniqueValuesRef.current = getUniqueValues;
 
   // Filter data based on column filters and date filters
-  const filteredData = useMemo(() => {
+  // Filas tras los filtros internos (columna, fecha, número), antes de `rowFilter`.
+  const baseFilteredData = useMemo(() => {
     let result = [...data];
 
     // Apply column filters (text/select) - case-insensitive matching
@@ -1074,6 +1090,11 @@ export function DataTable<T>({
 
     return result;
   }, [data, columnFilters, dateFilters, numberFilters, getNestedValueForFilter, parseNumericValue]);
+
+  const filteredData = useMemo(
+    () => (rowFilter ? baseFilteredData.filter(rowFilter) : baseFilteredData),
+    [baseFilteredData, rowFilter],
+  );
 
   // Close filter on Escape
   useEffect(() => {
@@ -1278,19 +1299,21 @@ export function DataTable<T>({
       return ''
     }
 
+    // Se indexa baseFilteredData (superconjunto de filteredData) para que la
+    // búsqueda sirva tanto a la tabla como a onBaseDataChange.
     const index = new WeakMap<object, string>()
-    for (const row of filteredData) {
+    for (const row of baseFilteredData) {
       index.set(row as object, collectStrings(row).toLowerCase())
     }
     return index
-  }, [filteredData])
+  }, [baseFilteredData])
 
-  // Función de filtro global - usa el índice pre-computado (O(1) lookup por fila)
-  const defaultGlobalFilterFn = useCallback((row: { original: T }, _columnId: string, filterValue: unknown) => {
+  // Coincidencia de búsqueda por defecto - usa el índice pre-computado (O(1) lookup por fila)
+  const coincideBusqueda = useCallback((original: T, filterValue: unknown) => {
     if (!filterValue || typeof filterValue !== 'string' || filterValue.trim() === '') return true
-    
+
     const searchLower = filterValue.toLowerCase().trim()
-    const allText = searchIndex.get(row.original as object) || ''
+    const allText = searchIndex.get(original as object) || ''
 
     if (allText.includes(searchLower)) return true
 
@@ -1301,6 +1324,12 @@ export function DataTable<T>({
 
     return false
   }, [searchIndex])
+
+  // Función de filtro global
+  const defaultGlobalFilterFn = useCallback(
+    (row: { original: T }, _columnId: string, filterValue: unknown) => coincideBusqueda(row.original, filterValue),
+    [coincideBusqueda],
+  )
 
   // Server-side pagination state
   const [internalPageIndex, setInternalPageIndex] = useState(0);
@@ -1358,6 +1387,15 @@ export function DataTable<T>({
     // visibleRows es estable mientras no cambien filtros/datos; depender directamente
     // de él es suficiente para que el callback solo dispare en cambios reales.
   }, [visibleRows, onFilteredDataChange]);
+
+  // Filas con filtros internos + búsqueda, SIN rowFilter (solo si el padre las pide).
+  const baseVisibleRows = useMemo(
+    () => (onBaseDataChange ? baseFilteredData.filter(r => coincideBusqueda(r, debouncedSearch)) : null),
+    [onBaseDataChange, baseFilteredData, coincideBusqueda, debouncedSearch],
+  );
+  useEffect(() => {
+    if (onBaseDataChange && baseVisibleRows) onBaseDataChange(baseVisibleRows);
+  }, [baseVisibleRows, onBaseDataChange]);
 
   // Map de columnas con size REAL (definido por el usuario, no el default 150 de TanStack)
   const userColumnSizes = useMemo(() => {
