@@ -1,0 +1,394 @@
+/* Dashboard Marketing: usa la base visual del Dashboard Directivo (clases ddir-*)
+   y agrega solo lo propio de esta pantalla. */
+
+.mkt-card-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+@media (min-width: 1280px) {
+  .mkt-kpis {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+  }
+}
+
+.mkt-periodo .ddir-periodo-controles {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.mkt-periodo .ddir-select {
+  min-width: 0;
+  max-width: 100%;
+}
+
+/* Filtro de origen del lead */
+.mkt-chips {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-left: 8px;
+}
+
+.mkt-chip {
+  padding: 5px 12px;
+  border: 1px solid var(--border-primary);
+  border-radius: 999px;
+  background: var(--bg-primary);
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.mkt-chip:hover {
+  color: var(--text-primary);
+}
+
+.mkt-chip--activo {
+  border-color: #2563eb;
+  background: #eff6ff;
+  color: #1d4ed8;
+}
+
+/* Calidad del lead */
+.mkt-perfil--cumple { background: #16a34a; }
+.mkt-perfil--medio { background: #f59e0b; }
+.mkt-perfil--nocumple { background: #dc2626; }
+.mkt-perfil--sindatos { background: #9ca3af; }
+
+.mkt-barra {
+  display: flex;
+  width: 100%;
+  height: 14px;
+  overflow: hidden;
+  border-radius: 7px;
+  background: var(--bg-secondary);
+}
+
+.mkt-barra-seg {
+  height: 100%;
+}
+
+.mkt-leyenda {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  font-size: 12px;
+  color: var(--text-primary);
+}
+
+.mkt-leyenda-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.mkt-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+}
+
+.mkt-perfil-canales {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border-primary);
+}
+
+.mkt-perfil-canal {
+  display: grid;
+  grid-template-columns: 90px minmax(0, 1fr) 90px;
+  align-items: center;
+  gap: 10px;
+  font-size: 12px;
+}
+
+.mkt-perfil-canal-nombre {
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+.mkt-perfil-canal-pct {
+  text-align: right;
+  color: var(--text-secondary);
+}
+
+.mkt-fill-descarte {
+  background: #dc2626;
+}
+
+.mkt-link {
+  color: #2563eb;
+  text-decoration: none;
+  word-break: break-all;
+}
+
+.mkt-link:hover {
+  text-decoration: underline;
+}
+
+.mkt-listas {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.mkt-control {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.mkt-control .ddir-mini-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.mkt-glosario {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px 24px;
+  margin: 0;
+}
+
+.mkt-glosario-item dt {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.mkt-glosario-item dd {
+  margin: 2px 0 0;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--text-secondary);
+}
+
+@media (max-width: 1023px) {
+  .mkt-listas,
+  .mkt-glosario {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .mkt-control {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .mkt-chips {
+    margin-left: 0;
+  }
+}
+
+/* ─────────────────────────────────────────────────────────────
+   Estilo Toshibase: mismas tarjetas, títulos y acento que
+   Dashboard KPI's (rojo de marca, títulos en mayúscula, compacto).
+   ───────────────────────────────────────────────────────────── */
+.mkt-module {
+  gap: 16px;
+}
+
+@media (min-width: 1024px) {
+  .mkt-module .dkpis-stats-grid.mkt-kpis {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+  }
+}
+
+.mkt-module .stat-subtitle {
+  line-height: 1.35;
+}
+
+.mkt-module .mkt-var {
+  font-weight: 600;
+}
+
+.mkt-module .mkt-var--bueno { color: #059669; }
+.mkt-module .mkt-var--malo { color: var(--color-primary); }
+.mkt-module .mkt-var--neutro { color: var(--text-tertiary); }
+
+/* Barra de período */
+.mkt-module .ddir-periodo {
+  padding: 12px 16px;
+  border-radius: 8px;
+  background: var(--bg-primary);
+}
+
+.mkt-module .ddir-select {
+  min-height: 32px;
+  border-radius: 6px;
+  background: var(--bg-primary);
+  font-size: 12px;
+}
+
+.mkt-module .ddir-semana-hoy {
+  background: var(--color-primary-light);
+  color: var(--color-primary);
+}
+
+.mkt-module .ddir-periodo-rango {
+  font-size: 12px;
+}
+
+.mkt-chip--activo {
+  border-color: var(--color-primary);
+  background: var(--color-primary-light);
+  color: var(--color-primary);
+}
+
+/* Tarjetas: igual que los gráficos del Dashboard KPI's */
+.mkt-module .ddir-card {
+  gap: 12px;
+  padding: 20px 24px;
+  border: 1px solid var(--border-primary, #f3f4f6);
+  border-radius: 12px;
+  background: var(--card-bg, #ffffff);
+  box-shadow: var(--shadow-sm, 0 1px 2px rgba(15, 23, 42, 0.06));
+}
+
+.mkt-module .ddir-card-title {
+  font-size: 14px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-primary);
+}
+
+.mkt-module .ddir-card-subtitle {
+  margin-top: 4px;
+  font-size: 12px;
+  color: var(--text-tertiary);
+}
+
+.mkt-module .ddir-note {
+  font-size: 11px;
+  color: var(--text-tertiary);
+}
+
+/* Embudo y barras */
+.mkt-module .ddir-funnel-label,
+.mkt-module .ddir-causal {
+  font-size: 12px;
+}
+
+.mkt-module .ddir-funnel-track {
+  background: var(--bg-tertiary, #f3f4f6);
+}
+
+.mkt-module .ddir-funnel-fill {
+  background: var(--color-primary);
+}
+
+.mkt-module .mkt-fill-descarte {
+  background: #f59e0b;
+}
+
+.mkt-module .ddir-causales-title {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-tertiary);
+}
+
+.mkt-module .ddir-mini-label {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-tertiary);
+}
+
+.mkt-module .ddir-mini-value {
+  font-size: 18px;
+}
+
+/* Tablas: encabezado como las tablas de Toshibase */
+.mkt-module .ddir-tabla {
+  font-size: 12px;
+}
+
+.mkt-module .ddir-tabla th {
+  padding: 8px 12px;
+  background: var(--table-header-bg, #f9fafb);
+  color: var(--text-tertiary);
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  white-space: nowrap;
+}
+
+.mkt-module .ddir-tabla td {
+  padding: 8px 12px;
+}
+
+.mkt-module .ddir-mini-bar {
+  background: var(--color-primary);
+  opacity: 0.35;
+}
+
+.mkt-module .mkt-link {
+  color: var(--color-primary);
+}
+
+/* Glosario más liviano */
+.mkt-module .mkt-glosario-item dt {
+  font-size: 12px;
+}
+
+.mkt-module .mkt-glosario-item dd {
+  font-size: 11px;
+}
+
+/* Selector de período (DateRangeSelector de Toshibase) */
+.mkt-periodo .ddir-periodo-controles {
+  gap: 12px;
+}
+
+.mkt-periodo-texto {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.mkt-periodo .ddir-periodo-info {
+  gap: 10px;
+}
+
+/* Encabezados ordenables (tablas de rendimiento) */
+.mkt-orden {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  letter-spacing: inherit;
+  text-transform: inherit;
+  cursor: pointer;
+}
+
+.mkt-orden svg {
+  opacity: 0.45;
+  flex-shrink: 0;
+}
+
+.mkt-orden:hover,
+.mkt-orden--activo {
+  color: var(--text-primary);
+}
+
+.mkt-orden--activo svg {
+  opacity: 1;
+  color: var(--color-primary);
+}
+
+.mkt-orden:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+  border-radius: 2px;
+}
