@@ -274,6 +274,7 @@ const ControlExcesoKmPage = lazy(() => import('./integraciones/uss/ControlExceso
 const CabifyPage = lazy(() => import('./integraciones/cabify/CabifyPage').then(m => ({ default: m.CabifyPage })))
 const ReportesPage = lazy(() => import('./reportes/ReportesPage').then(m => ({ default: m.ReportesPage })))
 const DashboardKpisPage = lazy(() => import('./reportes/DashboardKpisPage').then(m => ({ default: m.DashboardKpisPage })))
+const DashboardDirectivoPage = lazy(() => import('./reportes/DashboardDirectivoPage').then(m => ({ default: m.DashboardDirectivoPage })))
 const RolesPage = lazy(() => import('./administracion/RolesPage').then(m => ({ default: m.RolesPage })))
 const GestionUsuariosPage = lazy(() => import('./administracion/GestionUsuariosPage').then(m => ({ default: m.GestionUsuariosPage })))
 const MenuPorRolPage = lazy(() => import('./administracion/MenuPorRolPage').then(m => ({ default: m.MenuPorRolPage })))
@@ -2151,6 +2152,11 @@ export function HomePage() {
               <Route path="/reportes/dashboard-kpis" element={
                 <ProtectedRoute menuName="reportes" submenuName="dashboard-kpis" action="view">
                   <LazyPage><DashboardKpisPage /></LazyPage>
+                </ProtectedRoute>
+              } />
+              <Route path="/reportes/dashboard-directivo" element={
+                <ProtectedRoute menuName="reportes" submenuName="dashboard-directivo" action="view">
+                  <LazyPage><DashboardDirectivoPage /></LazyPage>
                 </ProtectedRoute>
               } />
 

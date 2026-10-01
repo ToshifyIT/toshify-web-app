@@ -56,9 +56,41 @@ function hellosignDevApi(): Plugin {
   }
 }
 
+/**
+ * Monta la API del análisis con IA del Dashboard Directivo (/api/insights-directivo)
+ * DENTRO del dev server de Vite, para que `npm run dev` funcione sin levantar
+ * server.js. Solo aplica en `serve` (dev); en producción la sirve server.js.
+ * Si algo falla, el dev server arranca igual y la pantalla usa las lecturas por reglas.
+ */
+function insightsDirectivoDevApi(): Plugin {
+  return {
+    name: 'toshify-insights-directivo-dev-api',
+    apply: 'serve',
+    async configureServer(server) {
+      try {
+        const rutaModulo = path.resolve(server.config.root, 'server-insights-directivo.js')
+        const { mtimeMs } = await stat(rutaModulo)
+        const modulo = `${pathToFileURL(rutaModulo).href}?v=${mtimeMs}`
+        const { insightsDirectivoRouter } = await import(/* @vite-ignore */ modulo)
+        server.middlewares.use('/api/insights-directivo', insightsDirectivoRouter)
+        server.watcher.add(rutaModulo)
+        server.watcher.on('change', (archivo) => {
+          if (path.resolve(archivo) !== rutaModulo) return
+          void server.restart()
+        })
+      } catch (err) {
+        server.config.logger.warn(
+          '  [insights-directivo] No se pudo montar /api/insights-directivo: ' +
+            (err instanceof Error ? err.message : String(err)),
+        )
+      }
+    },
+  }
+}
+
 // https://vite.dev/config/
 export default defineConfig({
-  plugins: [react(), hellosignDevApi()],
+  plugins: [react(), hellosignDevApi(), insightsDirectivoDevApi()],
   esbuild: {
     drop: ['console', 'debugger'],
   },
