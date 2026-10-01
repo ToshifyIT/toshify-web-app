@@ -3,8 +3,29 @@ import { supabase } from '../lib/supabase'
 import { useSede } from '../contexts/SedeContext'
 import { getCache, setCache } from './useSessionCache'
 import { fetchCobroMultasStats } from '../services/cobroMultasStatsService'
+import { calcularMetricasGarantias } from '../modules/facturacion/utils/garantiasMetricas'
 
-const ESTADOS_EXCLUIDOS = ['ROBO', 'DESTRUCCION_TOTAL', 'JUBILADO', 'DEVUELTO_PROVEEDOR']
+// ─── Mismas reglas que Estado de Flota (AsignacionesActivasModule) ───
+// Total Flota por INCLUSIÓN: solo cuentan estos estados, identificados por la
+// descripción (sin acentos ni mayúsculas) y no por el código interno.
+const normEstadoFlota = (s: string) =>
+  (s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/\s+/g, ' ').trim()
+
+const ESTADOS_TOTAL_FLOTA: { clave: 'en_uso' | 'pkg_on' | 'pkg_off' | 'taller' | 'retenido'; match: (d: string) => boolean }[] = [
+  { clave: 'en_uso', match: d => d === 'en uso' },
+  { clave: 'pkg_on', match: d => d.startsWith('pkg on') },
+  { clave: 'pkg_off', match: d => d.includes('pkg off') && d.includes('base') },
+  { clave: 'pkg_off', match: d => d.includes('pkg off') && d.includes('franc') },
+  { clave: 'taller', match: d => d.includes('taller') && d.includes('mecanic') },
+  { clave: 'taller', match: d => d.includes('taller') && (d.includes('chapa') || d.includes('pintura')) },
+  { clave: 'retenido', match: d => d.includes('retenido') || d.includes('comisar') },
+]
+
+const bucketEstadoFlota = (descripcion: string) =>
+  ESTADOS_TOTAL_FLOTA.find(e => e.match(normEstadoFlota(descripcion)))?.clave ?? null
+
+// Conductor de una asignación que ya no ocupa el turno
+const ESTADOS_CONDUCTOR_INACTIVOS = ['cancelado', 'completado', 'finalizado']
 
 interface DashboardCardValue {
   value: string
@@ -28,7 +49,7 @@ interface DashboardStats {
   diasSinRobo: DashboardCardValue
   totalSaldo: DashboardCardValue
   totalSaldoPendiente: DashboardCardValue
-  totalSaldoMora: DashboardCardValue
+  deudaNoCubierta: DashboardCardValue
   cobroMultas: DashboardCardValue
   vueltasMundo: DashboardCardValue
 }
@@ -79,7 +100,8 @@ export function useDashboardStats() {
   const [stats, setStats] = useState<DashboardStats | null>(null)
 
   useEffect(() => {
-    const cacheKey = `dashStats-cobro-multas-p007-penalidades-${sedeActualId || 'all'}`
+    // v2: flota/ocupación/operatividad como Estado de Flota, km con Geotab y fondo de garantía solo activas
+    const cacheKey = `dashStats-v4-deuda-no-cubierta-${sedeActualId || 'all'}`
     const cached = getCache<DashboardStats>(cacheKey, cacheKey)
     if (cached) {
       setStats(cached)
@@ -98,6 +120,7 @@ export function useDashboardStats() {
           saldosRes,
           conductoresRes,
           wialonRes,
+          geotabKmRes,
           cobroMultasRes,
         ] = await Promise.all([
           aplicarFiltroSede(
@@ -132,20 +155,27 @@ export function useDashboardStats() {
           aplicarFiltroSede(
             supabase
               .from('garantias_conductores')
-              .select('conductor_id, monto_pagado, monto_devuelto, estado, monto_cuota_semanal, cuotas_pagadas, cuotas_totales')
+              .select('id, conductor_id, monto_pagado, monto_realmente_pagado, monto_devuelto, estado')
           ),
           aplicarFiltroSede(
             supabase
               .from('saldos_conductores')
-              .select('saldo_actual, monto_mora_acumulada, ultima_actualizacion')
+              .select('conductor_id, saldo_actual, monto_mora_acumulada, ultima_actualizacion')
           ),
           aplicarFiltroSede(
             supabase
               .from('conductores')
-              .select('id, estado_id, fecha_terminacion')
+              .select('id, estado_id, fecha_terminacion, updated_at, conductores_estados(codigo)')
           ),
           supabase.rpc('sum_kilometraje_total', {
             p_sede_id: sedeActualId || null
+          }),
+          // Km de Geotab (bitácora). sum_kilometraje_total es el acumulado histórico de USS.
+          // Si la función todavía no está instalada (sql/dashboard_km_geotab.sql) se toma 0.
+          supabase.rpc('dashboard_km_geotab', {
+            p_start: null,
+            p_end: null,
+            p_sede_id: sedeActualId || null,
           }),
           fetchCobroMultasStats({
             sedeId: sedeActualId || null,
@@ -167,39 +197,27 @@ export function useDashboardStats() {
         const saldos = (saldosRes.data || []) as any[]
         const conductores = (conductoresRes.data || []) as any[]
         // RPC returns a single number directly
-        const totalKmHistorico = Number(wialonRes.data) || 0
+        const totalKmHistorico = (Number(wialonRes.data) || 0) + (geotabKmRes.error ? 0 : Number(geotabKmRes.data) || 0)
         const vueltasMundoVal = totalKmHistorico / 40000
 
         const vehiculosConAsignacion = new Set(asignaciones.map(a => a.vehiculo_id))
         let totalFlota = 0
-        let operativos = 0
         let enUso = 0
         let tallerCount = 0
-        let dispCount = 0
         const pkgOnSinAsignacion: any[] = []
 
         for (const v of vehiculos) {
           const estadoCodigo = v.vehiculos_estados?.codigo || ''
-          const estadoDescripcion = v.vehiculos_estados?.descripcion || ''
-          
-          if (!ESTADOS_EXCLUIDOS.includes(estadoCodigo)) totalFlota++
-          
+          const bucket = bucketEstadoFlota(v.vehiculos_estados?.descripcion || '')
+
+          // Total Flota igual que Estado de Flota: solo los estados de la lista
+          if (bucket) totalFlota++
+          if (bucket === 'taller') tallerCount++
+
           if (estadoCodigo === 'PKG_ON_BASE') {
             if (!vehiculosConAsignacion.has(v.id)) pkgOnSinAsignacion.push(v)
-            operativos++
           } else if (estadoCodigo === 'EN_USO') {
             enUso++
-            operativos++
-          }
-
-          // Lógica solicitada para Taller: descripción contiene "Taller"
-          if (estadoDescripcion.toLowerCase().includes('taller')) {
-            tallerCount++
-          }
-
-          // Lógica solicitada para Disp: ID específico
-          if (v.estado_id === 'f3dc8cca-45cd-4d46-aa28-72bde0ead8a8') {
-            dispCount++
           }
         }
 
@@ -215,12 +233,12 @@ export function useDashboardStats() {
             const conductorD = conductores.find(
               (ac: any) =>
                 (ac.horario === 'diurno' || ac.horario === 'DIURNO' || ac.horario === 'D') &&
-                ac.estado !== 'cancelado'
+                !ESTADOS_CONDUCTOR_INACTIVOS.includes(ac.estado)
             )
             const conductorN = conductores.find(
               (ac: any) =>
                 (ac.horario === 'nocturno' || ac.horario === 'NOCTURNO' || ac.horario === 'N') &&
-                ac.estado !== 'cancelado'
+                !ESTADOS_CONDUCTOR_INACTIVOS.includes(ac.estado)
             )
             if (conductorD?.conductor_id) cuposOcupados++
             else vacantesD++
@@ -228,14 +246,18 @@ export function useDashboardStats() {
             else vacantesN++
           } else {
             cargoCount++
-            const tieneConductor = conductores.some((ac: any) => ac.conductor_id && ac.estado !== 'cancelado')
+            const tieneConductor = conductores.some((ac: any) => ac.conductor_id && !ESTADOS_CONDUCTOR_INACTIVOS.includes(ac.estado))
             if (tieneConductor) cuposOcupados++
           }
         }
 
         const cuposTotales = turnoCount * 2 + cargoCount
+        // % Ocupación igual que Estado de Flota:
+        // (turnos totales - turnos disponibles) / turnos totales,
+        // turnos totales = (vehículos con asignación + PKG ON sin asignación) × 2
         const totalidadTurnos = (vehiculosConAsignacion.size + pkgOnSinAsignacion.length) * 2
         const turnosDisp = vacantesD + vacantesN + pkgOnSinAsignacion.length * 2
+        const turnosOcupados = totalidadTurnos - turnosDisp
         const cuposDisponibles = cuposTotales - cuposOcupados
         const porcentajeOcupacionGeneral =
           totalidadTurnos > 0
@@ -273,79 +295,85 @@ export function useDashboardStats() {
             minimumFractionDigits: 2,
             maximumFractionDigits: 2,
           }).format(value)
+        const formatCurrencyCompacto = (value: number) =>
+          value < 1 ? '$0' : new Intl.NumberFormat('es-AR', {
+            style: 'currency',
+            currency: 'ARS',
+            notation: 'compact',
+            maximumFractionDigits: 1,
+          }).format(value)
 
-        const totalPagadoGarantias = garantias.reduce((sum: number, g: any) => sum + (g.monto_pagado || 0), 0)
-        const conductoresGarantiaActiva = garantias.filter(
-          (g: any) => g.estado === 'en_curso'
-        ).length
+        // Garantías: mismas reglas que Facturación > Garantías (garantiasMetricas.ts)
+        const saldosPorConductor = new Map<string, number>()
+        for (const fila of saldos) {
+          if (fila.conductor_id) saldosPorConductor.set(fila.conductor_id, Number(fila.saldo_actual) || 0)
+        }
+        const metricasGarantias = calcularMetricasGarantias(
+          garantias,
+          conductores.map((c: any) => ({
+            id: c.id,
+            esActivo: String(c.conductores_estados?.codigo || '').toUpperCase() === 'ACTIVO',
+            fecha_terminacion: c.fecha_terminacion ?? null,
+            updated_at: c.updated_at ?? null,
+          })),
+          saldosPorConductor,
+        )
+        const totalPagadoGarantias = metricasGarantias.enCurso.monto
+        const conductoresGarantiaActiva = metricasGarantias.enCurso.cantidad
+        const reintegroReciente = metricasGarantias.devolucionReciente.monto
+        const countReciente = metricasGarantias.devolucionReciente.cantidad
+        const reintegroAntiguo = metricasGarantias.devolucionVencida.monto
+        const countAntiguo = metricasGarantias.devolucionVencida.cantidad
+        const totalReintegroPendiente = reintegroReciente + reintegroAntiguo
 
-        // Calcular Reintegro de Garantía (Pendiente de Devolución)
-        const conductoresMap = new Map(conductores.map((c: any) => [c.id, { estado_id: c.estado_id, fecha_terminacion: c.fecha_terminacion }]))
-        const ESTADO_ACTIVO = '57e9de5f-e6fc-4ff7-8d14-cf8e13e9dbe2'
-
-        const garantiasEnDevolucion = garantias.filter((g: any) => {
-          // Si ya está marcado como en_devolucion en BD
-          if (g.estado === 'en_devolucion') return true
-
-          // Si está cancelada, ignorar
-          if (g.estado === 'cancelada') return false
-
-          // Verificar lógica: Conductor BAJA + Saldo pagado > 0
-          const conductor = conductoresMap.get(g.conductor_id)
-          const esBaja = conductor && conductor.estado_id !== ESTADO_ACTIVO
-          const montoPagado = g.monto_pagado || 0
-
-          return esBaja && montoPagado > 0
-        })
-
-        const totalReintegroPendiente = garantiasEnDevolucion.reduce((sum: number, g: any) => {
-          const pagado = g.monto_pagado || 0
-          const devuelto = g.monto_devuelto || 0
-          const pendiente = pagado - devuelto
-          return sum + (pendiente > 0 ? pendiente : 0)
-        }, 0)
-
-        // Reintegros segmentados por antigüedad de baja (120 días)
-        const hoy = new Date()
-        const LIMITE_DIAS = 120
-
-        let reintegroReciente = 0
-        let reintegroAntiguo = 0
-        let countReciente = 0
-        let countAntiguo = 0
-
-        for (const g of garantiasEnDevolucion) {
-          const pagado = g.monto_pagado || 0
-          const devuelto = g.monto_devuelto || 0
-          const pendiente = pagado - devuelto
-          if (pendiente <= 0) continue
-
-          const conductor = conductoresMap.get(g.conductor_id)
-          const fechaTermStr = conductor?.fecha_terminacion
-
-          if (fechaTermStr) {
-            const fechaTerm = new Date(fechaTermStr)
-            const diffMs = hoy.getTime() - fechaTerm.getTime()
-            const diffDias = Math.floor(diffMs / (1000 * 60 * 60 * 24))
-
-            if (diffDias <= LIMITE_DIAS) {
-              reintegroReciente += pendiente
-              countReciente++
-            } else {
-              reintegroAntiguo += pendiente
-              countAntiguo++
-            }
-          } else {
-            // Sin fecha de terminación → se suma al acumulado antiguo
-            reintegroAntiguo += pendiente
-            countAntiguo++
+        // Saldo pendiente: deuda que realmente queda por cobrar.
+        // - Conductor activo: su deuda tal cual (la garantía sigue en curso, no se aplica).
+        // - Conductor de baja: deuda menos la garantía que todavía retenemos (pagado − devuelto).
+        //   Si la garantía la cubre, no suma (pasa a ser reintegro, no deuda).
+        // Conductor sin registro: se toma como activo, igual que en garantiasMetricas.
+        const conductorActivo = new Map<string, boolean>(
+          conductores.map((c: any) => [c.id, String(c.conductores_estados?.codigo || '').toUpperCase() === 'ACTIVO'])
+        )
+        const garantiaRetenida = new Map<string, number>()
+        for (const g of garantias) {
+          if (!g.conductor_id || g.estado === 'cancelada') continue
+          const pendiente = Number(g.monto_realmente_pagado || g.monto_pagado || 0) - Number(g.monto_devuelto || 0)
+          if (pendiente > 0) garantiaRetenida.set(g.conductor_id, (garantiaRetenida.get(g.conductor_id) || 0) + pendiente)
+        }
+        let deudaActivos = 0
+        let deudaBajas = 0
+        let conDeudaActivos = 0
+        let conDeudaBajas = 0
+        for (const fila of saldos) {
+          const saldo = Number(fila.saldo_actual) || 0
+          if (saldo >= 0) continue
+          const esBaja = conductorActivo.get(fila.conductor_id) === false
+          if (!esBaja) {
+            deudaActivos += Math.abs(saldo)
+            conDeudaActivos++
+            continue
+          }
+          const neto = saldo + (garantiaRetenida.get(fila.conductor_id) || 0)
+          if (neto < -0.01) {
+            deudaBajas += Math.abs(neto)
+            conDeudaBajas++
           }
         }
+        const totalSaldoActual = deudaActivos + deudaBajas
 
-        // Calcular Total Saldo (solo saldos negativos = deuda)
-        const totalSaldoActual = saldos
-          .filter((item: any) => (item.saldo_actual || 0) < 0)
-          .reduce((sum: number, item: any) => sum + Math.abs(item.saldo_actual), 0)
+        // Deuda no cubierta: de la deuda de los activos, lo que su garantía no alcanza a cubrir
+        // (lo que quedaría por cobrar si se dieran de baja hoy).
+        let deudaNoCubiertaMonto = 0
+        let deudaNoCubiertaCantidad = 0
+        for (const fila of saldos) {
+          const saldo = Number(fila.saldo_actual) || 0
+          if (saldo >= 0 || conductorActivo.get(fila.conductor_id) === false) continue
+          const descubierto = Math.abs(saldo) - (garantiaRetenida.get(fila.conductor_id) || 0)
+          if (descubierto > 0.01) {
+            deudaNoCubiertaMonto += descubierto
+            deudaNoCubiertaCantidad++
+          }
+        }
         const totalMora = saldos.reduce((sum, item) => sum + (item.monto_mora_acumulada || 0), 0)
         const totalSaldoFinal = totalSaldoActual + totalMora
 
@@ -377,7 +405,7 @@ export function useDashboardStats() {
         const newStats: DashboardStats = {
           totalFlota: {
             value: String(totalFlota),
-            subtitle: `${enUso} activos · ${tallerCount} taller · ${dispCount} disp.`,
+            subtitle: `${enUso} en uso · ${tallerCount} taller · ${pkgOnSinAsignacion.length} disp.`,
           },
           vehiculosActivos: {
             value: String(vehiculosConAsignacion.size),
@@ -393,27 +421,27 @@ export function useDashboardStats() {
           },
           porcentajeOcupacion: {
             value: `${porcentajeOcupacionGeneral}%`,
-            subtitle: `${cuposOcupados} de ${cuposTotales} turnos`,
+            subtitle: `${turnosOcupados} de ${totalidadTurnos} turnos`,
           },
           porcentajeOperatividad: {
             value: `${porcentajeOperatividad}%`,
-            subtitle: `${operativos} de ${totalFlota} vehículos`,
+            subtitle: `${enUso} en uso de ${totalFlota} vehículos`,
           },
           fondoGarantia: {
             value: formatCurrencyArs(totalPagadoGarantias),
-            subtitle: `${conductoresGarantiaActiva} conductores activos`,
+            subtitle: `${conductoresGarantiaActiva} garantías en curso`,
           },
           pendienteDevolucion: {
             value: formatCurrencyArs(totalReintegroPendiente),
-            subtitle: `${garantiasEnDevolucion.length} en devolución`,
+            subtitle: `${countReciente + countAntiguo} en devolución`,
           },
           reintegroReciente: {
             value: formatCurrencyArs(reintegroReciente),
-            subtitle: `${countReciente} conductores (≤ 120 días)`,
+            subtitle: `${countReciente} conductores (< 120 días hábiles)`,
           },
           reintegroAntiguo: {
             value: formatCurrencyArs(reintegroAntiguo),
-            subtitle: `${countAntiguo} conductores (> 120 días)`,
+            subtitle: `${countAntiguo} conductores (120 días hábiles o más)`,
           },
           cobroPendiente: {
             value: formatCurrencyArs(totalDeudaActual),
@@ -438,11 +466,11 @@ export function useDashboardStats() {
           },
           totalSaldoPendiente: {
             value: formatCurrencyArs(totalSaldoActual),
-            subtitle: `${saldos.filter(s => (s.saldo_actual || 0) < 0).length} conductores con deuda`
+            subtitle: `Activos ${formatCurrencyCompacto(deudaActivos)} (${conDeudaActivos}) · Bajas ${formatCurrencyCompacto(deudaBajas)} (${conDeudaBajas})`
           },
-          totalSaldoMora: {
-            value: formatCurrencyArs(totalMora),
-            subtitle: `${saldos.filter(s => (s.monto_mora_acumulada || 0) > 0).length} conductores con mora`
+          deudaNoCubierta: {
+            value: formatCurrencyArs(deudaNoCubiertaMonto),
+            subtitle: `${deudaNoCubiertaCantidad} activos con deuda mayor a su garantía`
           },
           cobroMultas: {
             value: formatCurrencyArs(cobroMultasRes.total),

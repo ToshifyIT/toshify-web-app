@@ -8,6 +8,7 @@ import { CobroTeoricoVsReal } from '../dashboard/components/CobroTeoricoVsReal'
 import { FacturadoVsCobrado } from '../dashboard/components/FacturadoVsCobrado'
 import { PermanenciaChart } from '../dashboard/components/PermanenciaChart'
 import { ZonesAssignmentsChart } from '../dashboard/components/ZonesAssignmentsChart'
+import { ZonasPendientesChart } from '../dashboard/components/ZonasPendientesChart'
 import './DashboardKpisModule.css'
 import '../dashboard/DashboardModule.css'
 
@@ -37,7 +38,7 @@ export function DashboardKpisModule() {
                 <span className="stat-value">{stats.vueltasMundo.value}</span>
                 <span className="stat-label">
                   <span className="stat-label-text">VUELTAS AL MUNDO</span>
-                  <KpiInfoIcon text="Cantidad de veces que los kilómetros totales recorridos por toda la flota equivalen a dar la vuelta al mundo (40.000 km cada una)." />
+                  <KpiInfoIcon text="Kilómetros totales recorridos por la flota (histórico de USS + bitácora de Geotab) expresados en vueltas al mundo (40.000 km cada una)." />
                 </span>
                 <span className="stat-subtitle">{stats.vueltasMundo.subtitle}</span>
               </div>
@@ -48,7 +49,7 @@ export function DashboardKpisModule() {
                 <span className="stat-value">{stats.totalFlota.value}</span>
                 <span className="stat-label">
                   <span className="stat-label-text">TOTAL FLOTA</span>
-                  <KpiInfoIcon text="Cantidad total de vehículos registrados, sin contar los dados de baja definitiva (robados, destruidos, jubilados o devueltos al proveedor)." />
+                  <KpiInfoIcon text="Vehículos en uso, PKG ON, PKG OFF (Base y Francia), en taller mecánico o de chapa y pintura y retenidos en comisaría. Disp.: PKG ON sin asignación." />
                 </span>
                 <span className="stat-subtitle">{stats.totalFlota.subtitle}</span>
               </div>
@@ -59,7 +60,7 @@ export function DashboardKpisModule() {
                 <span className="stat-value">{stats.porcentajeOcupacion.value}</span>
                 <span className="stat-label">
                   <span className="stat-label-text">% OCUPACIÓN</span>
-                  <KpiInfoIcon text="Porcentaje de turnos ocupados por conductores sobre el total de turnos disponibles. Incluye turnos diurnos y nocturnos de cada vehículo asignado." />
+                  <KpiInfoIcon text="Turnos ocupados sobre el total de turnos (vehículos con asignación y PKG ON sin asignación, 2 turnos cada uno)." />
                 </span>
                 <span className="stat-subtitle">{stats.porcentajeOcupacion.subtitle}</span>
               </div>
@@ -70,7 +71,7 @@ export function DashboardKpisModule() {
                 <span className="stat-value">{stats.porcentajeOperatividad.value}</span>
                 <span className="stat-label">
                   <span className="stat-label-text">% OPERATIVIDAD</span>
-                  <KpiInfoIcon text="Porcentaje de vehículos que están efectivamente en uso (circulando) respecto al total de la flota." />
+                  <KpiInfoIcon text="Vehículos en uso sobre el total de la flota." />
                 </span>
                 <span className="stat-subtitle">{stats.porcentajeOperatividad.subtitle}</span>
               </div>
@@ -103,7 +104,7 @@ export function DashboardKpisModule() {
                 <span className="stat-value">{stats.fondoGarantia.value}</span>
                 <span className="stat-label">
                   <span className="stat-label-text">FONDO DE GARANTÍA</span>
-                  <KpiInfoIcon text="Suma total del dinero cobrado en concepto de garantía a todos los conductores que tienen una garantía activa (en curso)." />
+                  <KpiInfoIcon text="Monto pagado de las garantías en curso de conductores activos." />
                 </span>
                 <span className="stat-subtitle">{stats.fondoGarantia.subtitle}</span>
               </div>
@@ -114,7 +115,7 @@ export function DashboardKpisModule() {
                 <span className="stat-value">{stats.reintegroReciente.value}</span>
                 <span className="stat-label">
                   <span className="stat-label-text">REINTEGRO RECIENTE</span>
-                  <KpiInfoIcon text="Monto acumulado de garantías pendientes de devolución para conductores cuya fecha de baja es de 120 días o menos desde hoy." />
+                  <KpiInfoIcon text="Garantía a devolver a conductores dados de baja hace menos de 120 días hábiles, después de descontar lo que deben en su cuenta corriente." />
                 </span>
                 <span className="stat-subtitle">{stats.reintegroReciente.subtitle}</span>
               </div>
@@ -125,7 +126,7 @@ export function DashboardKpisModule() {
                 <span className="stat-value">{stats.reintegroAntiguo.value}</span>
                 <span className="stat-label">
                   <span className="stat-label-text">REINTEGRO VENCIDO</span>
-                  <KpiInfoIcon text="Monto acumulado de garantías pendientes de devolución para conductores cuya fecha de baja supera los 120 días o no tiene fecha registrada." />
+                  <KpiInfoIcon text="Garantía a devolver a conductores dados de baja hace 120 días hábiles o más, después de descontar lo que deben en su cuenta corriente." />
                 </span>
                 <span className="stat-subtitle">{stats.reintegroAntiguo.subtitle}</span>
               </div>
@@ -136,20 +137,20 @@ export function DashboardKpisModule() {
                 <span className="stat-value">{stats.totalSaldoPendiente.value}</span>
                 <span className="stat-label">
                   <span className="stat-label-text">SALDO PENDIENTE</span>
-                  <KpiInfoIcon text="Suma de todos los saldos pendientes de los conductores, sin incluir mora. Representa la deuda actual pura." />
+                  <KpiInfoIcon text="Deuda por cobrar, sin mora. Activos: su deuda completa (la garantía sigue en curso y no se descuenta). Bajas: lo que siguen debiendo después de descontar la garantía retenida; si la garantía cubre la deuda, no suma acá. Entre paréntesis, cantidad de conductores." />
                 </span>
                 <span className="stat-subtitle">{stats.totalSaldoPendiente.subtitle}</span>
               </div>
             </div>
-            {/* 11. TOTAL MORA */}
+            {/* 11. DEUDA NO CUBIERTA */}
             <div className="stat-card">
               <div className="stat-content">
-                <span className="stat-value">{stats.totalSaldoMora.value}</span>
+                <span className="stat-value">{stats.deudaNoCubierta.value}</span>
                 <span className="stat-label">
-                  <span className="stat-label-text">TOTAL MORA</span>
-                  <KpiInfoIcon text="Suma de toda la mora acumulada por pagos atrasados de los conductores, sin incluir el saldo pendiente base." />
+                  <span className="stat-label-text">DEUDA NO CUBIERTA</span>
+                  <KpiInfoIcon text="Parte de la deuda de los conductores activos que su garantía no alcanza a cubrir. Es lo que quedaría por cobrar si se dieran de baja hoy." />
                 </span>
-                <span className="stat-subtitle">{stats.totalSaldoMora.subtitle}</span>
+                <span className="stat-subtitle">{stats.deudaNoCubierta.subtitle}</span>
               </div>
             </div>
             {/* 12. COBRO DE MULTAS */}
@@ -182,6 +183,11 @@ export function DashboardKpisModule() {
           </div>
           <div className="w-full lg:w-1/2">
             <ZonesAssignmentsChart />
+          </div>
+        </div>
+        <div className="flex flex-col lg:flex-row gap-4">
+          <div className="w-full lg:w-1/2">
+            <ZonasPendientesChart />
           </div>
         </div>
       </div>
