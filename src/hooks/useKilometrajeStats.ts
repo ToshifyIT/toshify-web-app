@@ -3,7 +3,7 @@ import { supabase } from '../lib/supabase'
 import { getPeriodRange, type Granularity } from '../utils/periodUtils'
 import { getCache, setCache } from './useSessionCache'
 
-const CACHE_NS = 'useKilometrajeStats'
+const CACHE_NS = 'useKilometrajeStats-v2-uss-geotab'
 
 export function useKilometrajeStats(granularity: Granularity, periodA: string, periodB: string, sedeId?: string) {
   const [stats, setStats] = useState({
@@ -38,24 +38,25 @@ export function useKilometrajeStats(granularity: Granularity, periodA: string, p
         const rangeA = getPeriodRange(granularity, periodA)
         const rangeB = getPeriodRange(granularity, periodB)
 
-        // Use server-side RPC for SUM — no row transfer
-        const [resA, resB] = await Promise.all([
-          supabase.rpc('sum_kilometraje_range', {
-            p_start: rangeA.start.toISOString().split('T')[0],
-            p_end: rangeA.end.toISOString().split('T')[0],
-            p_sede_id: sedeId || null
-          }),
-          supabase.rpc('sum_kilometraje_range', {
-            p_start: rangeB.start.toISOString().split('T')[0],
-            p_end: rangeB.end.toISOString().split('T')[0],
-            p_sede_id: sedeId || null
-          })
+        // Km = USS (histórico, sum_kilometraje_range) + Geotab (bitácora, dashboard_km_geotab).
+        // Si dashboard_km_geotab no está instalada (sql/dashboard_km_geotab.sql) se toma 0.
+        const params = (r: { start: Date; end: Date }) => ({
+          p_start: r.start.toISOString().split('T')[0],
+          p_end: r.end.toISOString().split('T')[0],
+          p_sede_id: sedeId || null,
+        })
+        const [ussA, ussB, geoA, geoB] = await Promise.all([
+          supabase.rpc('sum_kilometraje_range', params(rangeA)),
+          supabase.rpc('sum_kilometraje_range', params(rangeB)),
+          supabase.rpc('dashboard_km_geotab', params(rangeA)),
+          supabase.rpc('dashboard_km_geotab', params(rangeB)),
         ])
+        const km = (r: { data: unknown; error: unknown }) => (r.error ? 0 : Number(r.data) || 0)
 
         if (isMounted) {
           const result = {
-            totalA: Number(resA.data) || 0,
-            totalB: Number(resB.data) || 0,
+            totalA: km(ussA) + km(geoA),
+            totalB: km(ussB) + km(geoB),
           }
           setCache(CACHE_NS, paramsKey, result)
           setStats({ ...result, loading: false })
