@@ -46,7 +46,7 @@ export const GOOGLE_MAPS_API_KEY =
 
 // Superset de librerías usado por toda la app (Address, Zonas, Map de conductores).
 // Si algún módulo nuevo necesita otra librería, agregarla acá.
-export const GOOGLE_MAPS_LIBRARIES: ('places' | 'drawing')[] = ['places', 'drawing']
+export const GOOGLE_MAPS_LIBRARIES: 'places'[] = ['places']
 
 export const GOOGLE_MAPS_LANGUAGE = 'es'
 export const GOOGLE_MAPS_REGION = 'AR'

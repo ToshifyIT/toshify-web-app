@@ -259,6 +259,7 @@ export function CombustibleTable({ rows, loading, onRowClick, onFilteredRowsChan
       data={rows}
       loading={loading}
       onFilteredDataChange={onFilteredRowsChange}
+      stickyLeftColumns={4}
       searchPlaceholder="Buscar patente o modelo..."
       emptyTitle="Sin datos de combustible"
       emptyDescription="No hay datos sincronizados de Geotab. El sync corre cada hora."

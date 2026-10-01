@@ -303,7 +303,7 @@ export function ZonaTiposManager({ onClose, onUpdate }: Props) {
                   className="form-input"
                   value={formData.codigo}
                   onChange={(e) => setFormData({ ...formData, codigo: e.target.value })}
-                  placeholder="Ej: peligrosa, restringida"
+                  placeholder="Ej: restringida, advertencia"
                   disabled={saving}
                 />
               </div>

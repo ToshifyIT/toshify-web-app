@@ -1,9 +1,8 @@
 // src/components/admin/ZonasManagement.tsx
-/* eslint-disable @typescript-eslint/no-explicit-any */
 /* eslint-disable react-hooks/exhaustive-deps */
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import { AlertTriangle, Edit2, Trash2, Plus, MapPin, Shield, Ban, Eye, Settings } from 'lucide-react'
-import { GoogleMap, useJsApiLoader, Polygon, DrawingManager, Autocomplete, Marker } from '@react-google-maps/api'
+import { GoogleMap, useJsApiLoader, Polygon, Polyline, Autocomplete, Marker } from '@react-google-maps/api'
 import { supabase } from '../../lib/supabase'
 import { LoadingOverlay, Spinner } from '../ui/LoadingOverlay'
 import { DataTable } from '../ui/DataTable/DataTable'
@@ -85,7 +84,7 @@ const initialFormData: FormData = {
   poligono: [],
   bloquear_asignaciones: false,
   mostrar_advertencia: true,
-  mensaje_advertencia: 'Esta zona ha sido marcada como peligrosa'
+  mensaje_advertencia: 'Esta zona ha sido marcada como restringida'
 }
 
 export function ZonasManagement() {
@@ -198,19 +197,32 @@ export function ZonasManagement() {
     return { lat: totalLat / count, lng: totalLng / count }
   }, [zonas])
 
-  // Handle polygon complete
-  const onPolygonComplete = useCallback((polygon: google.maps.Polygon) => {
-    const path = polygon.getPath()
-    const coordinates: { lat: number; lng: number }[] = []
+  // Dibujo del polígono: cada clic en el mapa agrega un punto.
+  // (Reemplaza al DrawingManager: Google dio de baja la Drawing Library en mayo 2026.)
+  const [modalMapInicio, setModalMapInicio] = useState<{ center: { lat: number; lng: number }; zoom: number }>({ center: DEFAULT_CENTER, zoom: 12 })
+  const [modalPolygonRef, setModalPolygonRef] = useState<google.maps.Polygon | null>(null)
 
+  const agregarPunto = useCallback((e: google.maps.MapMouseEvent) => {
+    if (!e.latLng) return
+    const punto = { lat: e.latLng.lat(), lng: e.latLng.lng() }
+    setFormData(prev => ({ ...prev, poligono: [...prev.poligono, punto] }))
+  }, [])
+
+  const quitarUltimoPunto = () => {
+    setFormData(prev => ({ ...prev, poligono: prev.poligono.slice(0, -1) }))
+  }
+
+  // Al mover un vértice del polígono, se guarda la forma editada
+  const leerPoligonoEditado = useCallback(() => {
+    if (!modalPolygonRef) return
+    const path = modalPolygonRef.getPath()
+    const coordinates: { lat: number; lng: number }[] = []
     for (let i = 0; i < path.getLength(); i++) {
       const point = path.getAt(i)
       coordinates.push({ lat: point.lat(), lng: point.lng() })
     }
-
     setFormData(prev => ({ ...prev, poligono: coordinates }))
-    polygon.setMap(null) // Remove the drawing, we'll render our own
-  }, [])
+  }, [modalPolygonRef])
 
   // Clear polygon
   const clearPolygon = () => {
@@ -362,6 +374,7 @@ export function ZonasManagement() {
   // Open modals
   const openEditModal = (zona: ZonaRestringida) => {
     setSelectedZona(zona)
+    setModalMapInicio(zona.poligono?.length ? { center: zona.poligono[0], zoom: 14 } : { center: DEFAULT_CENTER, zoom: 12 })
     setFormData({
       nombre: zona.nombre,
       descripcion: zona.descripcion || '',
@@ -381,6 +394,7 @@ export function ZonasManagement() {
 
   const openCreateModal = () => {
     setFormData(initialFormData)
+    setModalMapInicio({ center: DEFAULT_CENTER, zoom: 12 })
     setShowCreateModal(true)
   }
 
@@ -587,37 +601,38 @@ export function ZonasManagement() {
       <div className="zona-modal-map-container">
         <GoogleMap
           mapContainerStyle={modalMapContainerStyle}
-          center={formData.poligono.length > 0 ? formData.poligono[0] : DEFAULT_CENTER}
-          zoom={formData.poligono.length > 0 ? 14 : 12}
+          center={modalMapInicio.center}
+          zoom={modalMapInicio.zoom}
+          onClick={agregarPunto}
           options={{
             streetViewControl: false,
             mapTypeControl: false,
             fullscreenControl: false,
-            zoomControl: true
+            zoomControl: true,
+            draggableCursor: 'crosshair'
           }}
         >
-          {formData.poligono.length === 0 && (
-            <DrawingManager
-              onPolygonComplete={onPolygonComplete}
-              options={{
-                drawingControl: true,
-                drawingControlOptions: {
-                  position: google.maps.ControlPosition.TOP_CENTER,
-                  drawingModes: [google.maps.drawing.OverlayType.POLYGON]
-                },
-                polygonOptions: {
-                  fillColor: polygonColor,
-                  fillOpacity: 0.35,
-                  strokeColor: polygonColor,
-                  strokeWeight: 2,
-                  editable: true
-                }
-              }}
+          {formData.poligono.length > 0 && formData.poligono.length < 3 && (
+            <Polyline
+              path={formData.poligono}
+              options={{ strokeColor: polygonColor, strokeOpacity: 0.9, strokeWeight: 2, clickable: false }}
             />
           )}
-          {formData.poligono.length > 0 && (
+          {formData.poligono.length > 0 && formData.poligono.length < 3 && formData.poligono.map((p, i) => (
+            <Marker
+              key={i}
+              position={p}
+              clickable={false}
+              icon={{ path: google.maps.SymbolPath.CIRCLE, scale: 5, fillColor: polygonColor, fillOpacity: 1, strokeColor: '#fff', strokeWeight: 2 }}
+            />
+          ))}
+          {formData.poligono.length >= 3 && (
             <Polygon
               paths={formData.poligono}
+              onLoad={setModalPolygonRef}
+              onUnmount={() => setModalPolygonRef(null)}
+              onMouseUp={leerPoligonoEditado}
+              onDragEnd={leerPoligonoEditado}
               options={{
                 fillColor: polygonColor,
                 fillOpacity: 0.35,
@@ -626,32 +641,19 @@ export function ZonasManagement() {
                 strokeWeight: 2,
                 editable: true
               }}
-              onMouseUp={(e) => {
-                // Update polygon when edited
-                if (e.latLng) {
-                  const polygon = e as any
-                  if (polygon.path) {
-                    const path = polygon.path
-                    const coordinates: { lat: number; lng: number }[] = []
-                    for (let i = 0; i < path.getLength(); i++) {
-                      const point = path.getAt(i)
-                      coordinates.push({ lat: point.lat(), lng: point.lng() })
-                    }
-                    setFormData(prev => ({ ...prev, poligono: coordinates }))
-                  }
-                }
-              }}
             />
           )}
         </GoogleMap>
 
-        {formData.poligono.length === 0 ? (
-          <p className="zona-map-hint">
-            <MapPin size={14} /> Haz clic en el mapa para agregar puntos del poligono. Minimo 3 puntos requeridos.
-          </p>
-        ) : (
+        <p className="zona-map-hint">
+          <MapPin size={14} /> Haz clic en el mapa para agregar los puntos del polígono en orden (mínimo 3). Para ajustar la forma, arrastra los vértices.
+        </p>
+        {formData.poligono.length > 0 && (
           <div className="zona-map-actions">
             <span className="zona-points-count">{formData.poligono.length} puntos</span>
+            <button type="button" className="btn-secondary btn-sm" onClick={quitarUltimoPunto}>
+              Quitar último punto
+            </button>
             <button type="button" className="btn-secondary btn-sm" onClick={clearPolygon}>
               Limpiar poligono
             </button>
@@ -789,7 +791,7 @@ export function ZonasManagement() {
                 className="form-input"
                 value={formData.nombre}
                 onChange={(e) => setFormData({ ...formData, nombre: e.target.value })}
-                placeholder="Ej: Zona Centro - Alta peligrosidad"
+                placeholder="Ej: Zona Centro - Restringida"
                 disabled={creating}
               />
             </div>
