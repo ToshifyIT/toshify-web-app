@@ -1,6 +1,6 @@
 // src/modules/asignaciones/AsignacionesModule.tsx
 import { useState, useEffect, useMemo } from 'react'
-import { Eye, Trash2, CheckCircle, XCircle, FileText, Calendar, UserPlus, UserCheck, Ban, Plus, Pencil, ArrowLeftRight, FolderOpen, ClipboardCheck, Car, History, Send, X } from 'lucide-react'
+import { Eye, Trash2, CheckCircle, XCircle, FileText, Calendar, UserPlus, UserCheck, Ban, Plus, Pencil, ArrowLeftRight, FolderOpen, ClipboardCheck, Car, History, X } from 'lucide-react'
 import { type ColumnDef } from '@tanstack/react-table'
 import { DataTable } from '../../components/ui/DataTable/DataTable'
 import { LoadingOverlay } from '../../components/ui/LoadingOverlay'
@@ -18,7 +18,6 @@ import { fechaISOART, partesART } from '../../utils/fechaArgentina'
 import { tieneGncEnFecha, armarMapaGncHistorial, type GncHistorialEntry } from '../../utils/gncHistorial'
 import { cargarConceptosTarifa, getEtiquetaTarifa, type MapaConceptosTarifa, type ModalidadTarifa } from '../onboarding/tarifaConceptos'
 import { registrarHistorialVehiculo, registrarHistorialConductor } from '../../services/historialService'
-import { EnviarPlantillaFirmarModal, type ConductorParaFirma } from '../hellosign/components/EnviarPlantillaFirmarModal'
 import { completeControl } from '../../services/controlService'
 import './AsignacionesModule.css'
 
@@ -205,11 +204,6 @@ export function AsignacionesModule() {
   // Historial de GNC del vehiculo de la asignacion abierta.
   const [gncHistorialView, setGncHistorialView] = useState<Map<string, GncHistorialEntry[]>>(new Map())
   const [viewDriveUrls, setViewDriveUrls] = useState<Record<string, string>>({})
-  // Emails de los conductores del detalle (para prellenar el envío de plantilla)
-  const [viewCondEmails, setViewCondEmails] = useState<Record<string, string>>({})
-  // Último envío de plantilla de firma por conductor (tabla hellosign_envios)
-  const [viewEnvios, setViewEnvios] = useState<Record<string, { template_title: string | null; created_at: string }>>({})
-  const [enviarPlantillaTarget, setEnviarPlantillaTarget] = useState<ConductorParaFirma | null>(null)
   // Historial de conductores anteriores de una asignación (los que ya pasaron y fueron reemplazados).
   const [showHistorialCond, setShowHistorialCond] = useState(false)
   const [historialCond, setHistorialCond] = useState<any[]>([])
@@ -1018,8 +1012,6 @@ export function AsignacionesModule() {
   useEffect(() => {
     if (!showViewModal || !viewAsignacion) {
       setViewDriveUrls({})
-      setViewCondEmails({})
-      setViewEnvios({})
       return
     }
     const conductorIds = (viewAsignacion.asignaciones_conductores || [])
@@ -1028,35 +1020,16 @@ export function AsignacionesModule() {
     if (conductorIds.length === 0) return
     supabase
       .from('conductores')
-      .select('id, drive_contract_folder_url, email')
+      .select('id, drive_contract_folder_url')
       .in('id', conductorIds)
       .then(({ data }) => {
         if (data) {
           const urls: Record<string, string> = {}
-          const emails: Record<string, string> = {}
           for (const c of data as any[]) {
             if (c.drive_contract_folder_url) urls[c.id] = c.drive_contract_folder_url
-            if (c.email) emails[c.id] = c.email
           }
           setViewDriveUrls(urls)
-          setViewCondEmails(emails)
         }
-      })
-    // Últimos envíos de plantilla de firma (Dropbox Sign) para estos conductores.
-    // Si la tabla no existe todavía, se ignora el error y no se muestra nada.
-    ;(supabase.from('hellosign_envios') as any)
-      .select('conductor_id, template_title, created_at')
-      .in('conductor_id', conductorIds)
-      .order('created_at', { ascending: false })
-      .then(({ data }: { data: any[] | null }) => {
-        if (!data) return
-        const envios: Record<string, { template_title: string | null; created_at: string }> = {}
-        for (const e of data) {
-          if (e.conductor_id && !envios[e.conductor_id]) {
-            envios[e.conductor_id] = { template_title: e.template_title, created_at: e.created_at }
-          }
-        }
-        setViewEnvios(envios)
       })
   }, [showViewModal, viewAsignacion])
 
@@ -3724,25 +3697,6 @@ export function AsignacionesModule() {
         </div>
       )}
 
-      {enviarPlantillaTarget && (
-        <EnviarPlantillaFirmarModal
-          conductor={enviarPlantillaTarget}
-          asignacionId={viewAsignacion?.id ?? null}
-          onClose={() => setEnviarPlantillaTarget(null)}
-          onEnviado={(registro) => {
-            if (registro.conductorId) {
-              setViewEnvios((prev) => ({
-                ...prev,
-                [registro.conductorId as string]: {
-                  template_title: registro.templateTitle,
-                  created_at: registro.createdAt,
-                },
-              }))
-            }
-          }}
-        />
-      )}
-
       {showViewModal && viewAsignacion && (
         <div className="asig-modal-overlay">
           <div className="asig-modal-content wide">
@@ -4046,40 +4000,6 @@ export function AsignacionesModule() {
                                     <span style={{ fontSize: '12px', color: '#9CA3AF', fontWeight: 500, textAlign: 'center' }}>Sin carpeta</span>
                                   </>
                                 )}
-                                {(() => {
-                                  const envio = viewEnvios[ac.conductor_id]
-                                  const abrirEnvio = () => setEnviarPlantillaTarget({
-                                    conductorId: ac.conductor_id,
-                                    nombre: `${ac.conductores?.nombres || ''} ${ac.conductores?.apellidos || ''}`.trim(),
-                                    email: viewCondEmails[ac.conductor_id] || null,
-                                    driveUrl: driveUrl || null,
-                                  })
-                                  return (
-                                    <div style={{ marginTop: '10px', paddingTop: '8px', borderTop: '1px solid var(--border-primary)', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '5px', width: '100%' }}>
-                                      {envio && (
-                                        <span
-                                          style={{ fontSize: '10px', color: '#16a34a', fontWeight: 600, textAlign: 'center', lineHeight: 1.35 }}
-                                          title={envio.template_title || undefined}
-                                        >
-                                          ✓ Plantilla enviada
-                                          <br />
-                                          <span style={{ fontWeight: 400, color: 'var(--text-tertiary)' }}>
-                                            {new Date(envio.created_at).toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric', timeZone: 'America/Argentina/Buenos_Aires' })}
-                                          </span>
-                                        </span>
-                                      )}
-                                      {!envio && (
-                                        <button
-                                          onClick={abrirEnvio}
-                                          style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', fontSize: '11px', fontWeight: 600, color: '#DC2626', background: 'none', border: '1px solid #DC2626', borderRadius: '6px', padding: '4px 8px', cursor: 'pointer', whiteSpace: 'nowrap' }}
-                                          title="Enviar una plantilla de Dropbox Sign a firmar"
-                                        >
-                                          <Send size={12} /> Enviar Plantilla a Firmar
-                                        </button>
-                                      )}
-                                    </div>
-                                  )
-                                })()}
                               </div>
                             )}
                           </div>

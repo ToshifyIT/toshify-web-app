@@ -65,7 +65,6 @@ COPY --from=builder /app/dist ./dist
 # local que server.js importe tiene que estar listado aca, o Node falla con
 # ERR_MODULE_NOT_FOUND al arrancar y el contenedor queda sin escuchar (502).
 COPY server.js ./
-COPY server-hellosign.js ./
 COPY server-insights-directivo.js ./
 
 # Expose port 80

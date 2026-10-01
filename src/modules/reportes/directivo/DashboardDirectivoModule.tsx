@@ -252,22 +252,49 @@ function Kpis({ d }: { d: DirectivoRaw }) {
 
 // ───────────── Insights ─────────────
 
-function Insights({ d, desde, hasta }: { d: DirectivoRaw; desde: string; hasta: string }) {
-  const { insights, isLoading } = useInsightsIA(desde, hasta)
+const fmtGenerado = (iso: string) => {
+  const f = new Date(iso)
+  if (Number.isNaN(f.getTime())) return ''
+  return f.toLocaleString('es-AR', {
+    weekday: 'short', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit',
+    timeZone: 'America/Argentina/Buenos_Aires',
+  })
+}
+
+interface InsightsProps {
+  d: DirectivoRaw
+  desde: string
+  hasta: string
+  esPeriodoPorDefecto: boolean
+}
+
+function Insights({ d, desde, hasta, esPeriodoPorDefecto }: InsightsProps) {
+  const { insights, isLoading, actualizando, aviso, actualizar } = useInsightsIA(desde, hasta, esPeriodoPorDefecto)
   const reglas = useMemo(() => generarLecturas(d), [d])
   const lecturas: Lectura[] = insights?.insights ?? reglas
   const conIA = insights !== null
+  const generado = insights ? fmtGenerado(insights.generado_en) : ''
 
   return (
     <Card
       title="Key Insights"
       subtitle={conIA
-        ? 'Análisis con IA a partir de los indicadores de esta pantalla (se genera una vez por semana)'
-        : 'Lecturas calculadas a partir de los indicadores de esta pantalla'}
-      extra={conIA
-        ? <span className="ddir-badge-ia"><Sparkles size={13} /> IA</span>
-        : isLoading ? <span className="ddir-card-subtitle">Buscando análisis…</span> : null}
+        ? `Análisis con IA de los indicadores de esta pantalla${generado ? ` · generado ${generado}` : ''}`
+        : 'Lecturas automáticas de los indicadores de esta pantalla'}
+      extra={isLoading ? <span className="ddir-card-subtitle">Buscando análisis…</span> : (
+        <button
+          type="button"
+          className="ddir-badge-ia ddir-btn-ia"
+          onClick={() => { void actualizar() }}
+          disabled={actualizando}
+          title="Genera un análisis nuevo solo si los indicadores cambiaron desde el último"
+        >
+          <Sparkles size={13} />
+          {actualizando ? 'Analizando…' : conIA ? 'IA · Actualizar' : 'Analizar con IA'}
+        </button>
+      )}
     >
+      {aviso ? <p className="ddir-note ddir-aviso-ia">{aviso}</p> : null}
       <div className="ddir-lecturas">
         {lecturas.map(lec => (
           <div className={`ddir-lectura ddir-lectura--${lec.tono}`} key={lec.titulo}>
@@ -648,7 +675,7 @@ export function DashboardDirectivoModule() {
       {data ? (
         <>
           <Kpis d={data} />
-          <Insights d={data} desde={rango.desde} hasta={rango.hasta} />
+          <Insights d={data} desde={rango.desde} hasta={rango.hasta} esPeriodoPorDefecto={preset === PRESET_DEFAULT} />
           <div className="ddir-row">
             <Crecimiento d={data} />
             <Embudo d={data} />

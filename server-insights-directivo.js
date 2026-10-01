@@ -10,9 +10,14 @@
  *   app.use('/api/insights-directivo', insightsDirectivoRouter)
  * y en desarrollo lo monta vite.config.ts (npm run dev), sin levantar dev:api.
  *
- * Consumo mínimo:
- *  - Como máximo UNA generación por semana, sede y período: queda guardada en
- *    public.dashboard_insights (sql/dashboard_insights.sql) y se reutiliza.
+ * Consumo mínimo (modo que manda el frontend):
+ *  - 'auto'  (período por defecto): se genera solo la primera vez que se abre en
+ *    la semana (la semana arranca el lunes 00:00 hora Argentina). Después se lee
+ *    de public.dashboard_insights (sql/dashboard_insights.sql).
+ *  - 'leer'  (otros períodos): solo devuelve lo guardado; nunca llama al modelo.
+ *  - 'actualizar' (botón "Actualizar"): regenera SOLO si los indicadores
+ *    cambiaron desde el último análisis (huella del resumen) y como máximo una
+ *    vez cada 10 minutos por sede y período.
  *  - Al modelo solo le llega un resumen agregado (sin nombres, DNI ni datos
  *    personales) con los porcentajes ya calculados.
  *  - gemini-2.5-flash, razonamiento desactivado y tope de salida.
@@ -27,6 +32,7 @@
  */
 
 import express from 'express'
+import { createHash } from 'node:crypto'
 import { readFileSync, existsSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { dirname, join } from 'node:path'
@@ -40,6 +46,8 @@ const MAX_OUTPUT_TOKENS = 900
 const REQUEST_TIMEOUT_MS = 20000
 const REINTENTO_FALLO_MS = 6 * 60 * 60 * 1000 // tras un fallo, reintentar recién a las 6 h
 const MAX_INSIGHTS = 4
+const ESPERA_ACTUALIZAR_MS = 10 * 60 * 1000 // botón: como máximo una regeneración cada 10 min
+const MODOS = new Set(['auto', 'leer', 'actualizar'])
 
 const FECHA_RE = /^\d{4}-\d{2}-\d{2}$/
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
@@ -382,7 +390,8 @@ function lunesDe(d) {
 
 async function leerCache(url, serviceKey, clave) {
   const params = new URLSearchParams({
-    select: 'insights,generado_en',
+    // '*' a propósito: si todavía no se agregó la columna resumen_hash, no falla
+    select: '*',
     sede_key: `eq.${clave.sede_key}`,
     desde: `eq.${clave.desde}`,
     hasta: `eq.${clave.hasta}`,
@@ -397,16 +406,28 @@ async function leerCache(url, serviceKey, clave) {
 }
 
 async function guardarCache(url, serviceKey, fila) {
-  await fetch(`${url}/rest/v1/dashboard_insights`, {
-    method: 'POST',
-    headers: {
-      apikey: serviceKey,
-      Authorization: `Bearer ${serviceKey}`,
-      'Content-Type': 'application/json',
-      Prefer: 'resolution=merge-duplicates,return=minimal',
-    },
-    body: JSON.stringify(fila),
-  })
+  const enviar = (cuerpo) =>
+    fetch(`${url}/rest/v1/dashboard_insights`, {
+      method: 'POST',
+      headers: {
+        apikey: serviceKey,
+        Authorization: `Bearer ${serviceKey}`,
+        'Content-Type': 'application/json',
+        Prefer: 'resolution=merge-duplicates,return=minimal',
+      },
+      body: JSON.stringify(cuerpo),
+    })
+  const res = await enviar(fila)
+  if (res.ok) return
+  // Tabla sin la columna resumen_hash (falta el ALTER de sql/dashboard_insights.sql)
+  const { resumen_hash: _omitida, ...sinHuella } = fila
+  const reintento = await enviar(sinHuella)
+  if (!reintento.ok) throw new Error(`HTTP ${reintento.status}`)
+}
+
+/** Huella del resumen: si no cambia, los indicadores son los mismos y no se regenera. */
+function huellaResumen(resumen) {
+  return createHash('sha256').update(JSON.stringify(resumen)).digest('hex').slice(0, 32)
 }
 
 /* -------------------------------------------------------------------------- */
@@ -428,6 +449,7 @@ insightsDirectivoRouter.post('/', async (req, res) => {
     const sedeId = req.body?.sede_id ?? null
     const desde = req.body?.desde
     const hasta = req.body?.hasta
+    const modo = MODOS.has(req.body?.modo) ? req.body.modo : 'leer'
     if ((sedeId !== null && !UUID_RE.test(sedeId)) || !FECHA_RE.test(desde ?? '') || !FECHA_RE.test(hasta ?? '')) {
       return res.status(400).json({ error: 'parametros_invalidos' })
     }
@@ -446,21 +468,26 @@ insightsDirectivoRouter.post('/', async (req, res) => {
 
     const clave = { sede_key: sedeId ?? 'todas', desde, hasta, semana: lunesDe(hoyArgentina()) }
 
-    // Caché semanal (requiere la service role key; sin ella se genera sin guardar)
-    if (serviceKey) {
-      const cache = await leerCache(url, serviceKey, clave)
-      if (cache) {
-        const guardados = Array.isArray(cache.insights) ? cache.insights : []
-        if (guardados.length > 0) {
-          return res.json({ insights: guardados, generado_en: cache.generado_en, origen: 'cache' })
-        }
-        if (Date.now() - new Date(cache.generado_en).getTime() < REINTENTO_FALLO_MS) {
-          return res.json({ insights: null, motivo: 'fallo_reciente' })
-        }
+    // Lo guardado esta semana (requiere la service role key)
+    const cache = serviceKey ? await leerCache(url, serviceKey, clave) : null
+    const guardados = cache && Array.isArray(cache.insights) && cache.insights.length > 0 ? cache.insights : null
+    const respuestaGuardada = (origen, extra = {}) =>
+      res.json({ insights: guardados, generado_en: cache?.generado_en ?? null, origen, ...extra })
+
+    if (modo === 'leer') {
+      return guardados ? respuestaGuardada('cache') : res.json({ insights: null, motivo: 'sin_generar' })
+    }
+    if (modo === 'auto') {
+      if (guardados) return respuestaGuardada('cache')
+      if (cache && Date.now() - new Date(cache.generado_en).getTime() < REINTENTO_FALLO_MS) {
+        return res.json({ insights: null, motivo: 'fallo_reciente' })
       }
     }
+    if (modo === 'actualizar' && guardados && Date.now() - new Date(cache.generado_en).getTime() < ESPERA_ACTUALIZAR_MS) {
+      return respuestaGuardada('reciente')
+    }
 
-    if (!apiKey) return res.json({ insights: null, motivo: 'sin_clave' })
+    if (!apiKey) return guardados ? respuestaGuardada('cache') : res.json({ insights: null, motivo: 'sin_clave' })
 
     // Indicadores con el token del usuario (respeta sus permisos)
     const rpcRes = await fetch(`${url}/rest/v1/rpc/get_dashboard_directivo`, {
@@ -468,10 +495,17 @@ insightsDirectivoRouter.post('/', async (req, res) => {
       headers: { apikey: anonKey, Authorization: authHeader, 'Content-Type': 'application/json' },
       body: JSON.stringify({ p_sede_id: sedeId, p_desde: desde, p_hasta: hasta }),
     })
-    if (!rpcRes.ok) return res.json({ insights: null, motivo: 'sin_indicadores' })
+    if (!rpcRes.ok) return guardados ? respuestaGuardada('cache') : res.json({ insights: null, motivo: 'sin_indicadores' })
     const indicadores = await rpcRes.json()
 
     const resumen = construirResumen(indicadores)
+    const huella = huellaResumen(resumen)
+
+    // Botón: si los indicadores no cambiaron desde el último análisis, no se gasta una llamada
+    if (modo === 'actualizar' && guardados && cache.resumen_hash === huella) {
+      return respuestaGuardada('sin_cambios')
+    }
+
     let insights = null
     let motivo = null
     try {
@@ -489,20 +523,28 @@ insightsDirectivoRouter.post('/', async (req, res) => {
       motivo = err instanceof Error ? err.message : 'error_gemini'
     }
 
+    // Si falló y había un análisis bueno, se conserva (no se pisa con uno vacío)
+    if (!insights) {
+      console.warn(`[insights-directivo] Sin análisis: ${motivo}`)
+      if (guardados) return respuestaGuardada('cache', { motivo })
+      if (serviceKey) {
+        await guardarCache(url, serviceKey, {
+          ...clave, insights: [], modelo: GEMINI_MODEL, motivo, generado_en: new Date().toISOString(),
+        }).catch((err) => console.warn('[insights-directivo] No se pudo guardar la caché:', err.message))
+      }
+      return res.json({ insights: null, motivo })
+    }
+
     const generadoEn = new Date().toISOString()
     if (serviceKey) {
       await guardarCache(url, serviceKey, {
         ...clave,
-        insights: insights ?? [],
+        insights,
         modelo: GEMINI_MODEL,
-        motivo,
+        motivo: null,
+        resumen_hash: huella,
         generado_en: generadoEn,
       }).catch((err) => console.warn('[insights-directivo] No se pudo guardar la caché:', err.message))
-    }
-
-    if (!insights) {
-      console.warn(`[insights-directivo] Sin análisis: ${motivo}`)
-      return res.json({ insights: null, motivo })
     }
     return res.json({ insights, generado_en: generadoEn, origen: 'nuevo' })
   } catch (err) {

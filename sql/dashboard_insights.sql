@@ -26,3 +26,7 @@ CREATE TABLE IF NOT EXISTS public.dashboard_insights (
 );
 
 ALTER TABLE public.dashboard_insights ENABLE ROW LEVEL SECURITY;
+
+-- v2: huella de los indicadores con los que se generó el análisis. El botón
+-- "Actualizar" solo vuelve a llamar al modelo si la huella cambió.
+ALTER TABLE public.dashboard_insights ADD COLUMN IF NOT EXISTS resumen_hash text;
