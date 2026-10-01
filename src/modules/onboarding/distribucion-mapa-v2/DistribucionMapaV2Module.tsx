@@ -78,6 +78,7 @@ import type {
   Radar,
 } from './types'
 import type { PersonaPrecargaPar, PrecargaParMapa } from '../../../types/programacionPrecarga.types'
+import { guardarPrecargaPar } from '../../../types/programacionPrecarga.types'
 import { FiltrosSidebar } from './components/FiltrosSidebar'
 import { contarFiltrosActivos, creadoEnRango, filtrosIniciales, type FiltrosV2 } from './components/filtrosOpciones'
 import { SIN_UBICACION } from './ubicacion'
@@ -988,8 +989,22 @@ export function DistribucionMapaV2Module() {
         b: aPersonaPrecarga(p.b),
         tiempoMinutos: Number.isFinite(p.tiempoMinutos) ? p.tiempoMinutos : null,
       }
-      // `abrirNueva` le pide a Programaciones v2 que abra el wizard de alta
-      // apenas monta; `precargaPar` es el par que lo entra ya cargado.
+      // Se abre en una PESTANIA NUEVA para no perder el estado del mapa
+      // (filtros, sugerencias, zoom). Como `location.state` no cruza un
+      // window.open, el par se deja en localStorage y viaja un id por la URL.
+      const idPrecarga = guardarPrecargaPar(precargaPar)
+      if (idPrecarga) {
+        const url = `${window.location.origin}/onboarding/programacion-v2?precarga=${idPrecarga}`
+        const pestania = window.open(url, '_blank')
+        if (pestania) {
+          // Same-origin: cortar el vinculo igual, no hace falta el opener.
+          pestania.opener = null
+          setToast('Programacion abierta en una pestania nueva')
+          return
+        }
+      }
+      // Sin pestania nueva (bloqueador de pop-ups o sin localStorage) se
+      // navega en la misma, que es el comportamiento anterior.
       navigate('/onboarding/programacion-v2', { state: { abrirNueva: true, precargaPar } })
     },
     [copiarPar, navigate, aPersonaPrecarga]
