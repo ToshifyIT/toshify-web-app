@@ -64,13 +64,49 @@ export interface FuelFillup {
   synced_at: string
 }
 
+/** Semana elegida en el selector ('YYYY-MM-DD', lunes a domingo, hora Argentina). */
+export interface RangoSemana {
+  desde: string
+  hasta: string
+}
+
+/**
+ * Fila de la tabla: resumen de 30 días (ralentí, nivel, telemetría) + métricas de
+ * la semana elegida + estado del vehículo y conductores a cargo hoy.
+ *
+ * Por semana:
+ *  - km_semana: geotab_bitacora (km por turno), exacto.
+ *  - llenados / litros cargados: geotab_fillups, exacto.
+ *  - consumo / rendimiento: suma de los tramos entre cargas (combustible usado y km
+ *    desde la carga anterior que Geotab guarda en cada llenado). Aproximado: el
+ *    tramo se imputa a la semana en que se hizo la carga.
+ */
+export interface FuelRow extends FuelSummary {
+  km_semana: number | null
+  llenados_semana: number
+  litros_cargados_semana: number
+  consumo_semana: number | null
+  km_tramos_semana: number            // km de los tramos con km y litros (para el rendimiento)
+  litros_tramos_semana: number        // litros de esos mismos tramos
+  rendimiento_semana: number | null
+  estado_vehiculo: string | null
+  estado_vehiculo_codigo: string | null
+  a_cargo: string[]
+}
+
 export interface CombustibleStats {
-  combustibleTotal: number      // litros consumidos por toda la flota
-  distanciaTotal: number         // km recorridos por la flota
-  rendimientoPromedio: number   // km/L promedio entre vehículos con data
-  ralentiTotal: number          // litros perdidos en ralentí
-  ralentiPct: number            // % del total
-  llenadosTotal: number         // cantidad de FillUps detectados
-  vehiculosConData: number      // cuántos autos tienen telemetría
-  vehiculosTotal: number        // total en la tabla
+  combustibleSemana: number     // litros consumidos en la semana (tramos entre cargas)
+  distanciaSemana: number       // km recorridos en la semana
+  rendimientoSemana: number     // km/L de la semana (km de tramos / litros de tramos)
+  ralentiTotal: number          // litros en ralentí, últimos 30 días
+  ralentiPct: number            // % del consumo de 30 días
+  llenadosSemana: number        // cargas detectadas en la semana
+  litrosCargadosSemana: number  // litros cargados en la semana
+  vehiculosTotal: number        // filas consideradas
+}
+
+/** Conductor que tenía el vehículo al momento de una carga. */
+export interface ConductorEnCarga {
+  nombre: string
+  fuente: 'gps' | 'asignacion' | 'compartido' | 'geotab' | 'sin_dato'
 }

@@ -53,3 +53,32 @@
   font-size: 11px;
   color: var(--text-secondary);
 }
+
+/* Selector de semana */
+.combustible-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.combustible-toolbar-nota {
+  font-size: 12px;
+  color: var(--text-tertiary);
+}
+
+/* Conductor que cargó (detalle) */
+.combustible-cargo {
+  margin-top: 8px;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+
+.combustible-cargo strong {
+  color: var(--text-primary);
+}
