@@ -36,28 +36,50 @@ export interface InsightsIA {
 }
 
 /**
+ * 'auto'       período por defecto: genera solo la primera vez de la semana.
+ * 'leer'       otros períodos: devuelve lo guardado, nunca llama al modelo.
+ * 'actualizar' botón: regenera solo si los indicadores cambiaron.
+ */
+export type ModoInsights = 'auto' | 'leer' | 'actualizar'
+
+/** 'nuevo' | 'cache' | 'sin_cambios' | 'reciente' | null (sin análisis) */
+export interface RespuestaInsights {
+  analisis: InsightsIA | null
+  origen: string | null
+  motivo: string | null
+}
+
+/**
  * Pide el análisis con IA al servidor de Toshibase (/api/insights-directivo,
  * server-insights-directivo.js). La clave de Gemini vive solo en el servidor.
- * El servidor lo genera como máximo una vez por semana por sede y período (queda
- * guardado); el resto de las veces lo lee.
- * Devuelve null si no está disponible: el frontend usa las lecturas por reglas.
+ * Si no hay análisis, el frontend muestra las lecturas por reglas.
  */
 export async function fetchInsightsIA(
   sedeId: string | null,
   desde: string,
   hasta: string,
-): Promise<InsightsIA | null> {
+  modo: ModoInsights,
+): Promise<RespuestaInsights> {
+  const vacio: RespuestaInsights = { analisis: null, origen: null, motivo: 'sin_sesion' }
   const { data: sesion } = await supabase.auth.getSession()
   const token = sesion.session?.access_token
-  if (!token) return null
+  if (!token) return vacio
 
   const res = await fetch('/api/insights-directivo', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-    body: JSON.stringify({ sede_id: sedeId, desde, hasta }),
+    body: JSON.stringify({ sede_id: sedeId, desde, hasta, modo }),
   })
-  if (!res.ok) return null
+  if (!res.ok) return { ...vacio, motivo: `http_${res.status}` }
   const data = await res.json().catch(() => null)
-  if (!data?.insights || !Array.isArray(data.insights) || data.insights.length === 0) return null
-  return { insights: data.insights as Lectura[], generado_en: String(data.generado_en ?? '') }
+  const motivo = typeof data?.motivo === 'string' ? data.motivo : null
+  const origen = typeof data?.origen === 'string' ? data.origen : null
+  if (!data?.insights || !Array.isArray(data.insights) || data.insights.length === 0) {
+    return { analisis: null, origen, motivo }
+  }
+  return {
+    analisis: { insights: data.insights as Lectura[], generado_en: String(data.generado_en ?? '') },
+    origen,
+    motivo,
+  }
 }

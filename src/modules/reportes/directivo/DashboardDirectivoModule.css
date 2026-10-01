@@ -697,3 +697,24 @@
   color: var(--text-primary);
   font-weight: 600;
 }
+
+/* Key Insights: botón de IA (genera/actualiza solo al hacer clic) */
+.ddir-btn-ia {
+  border: 1px solid #ddd6fe;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.ddir-btn-ia:hover:not(:disabled) {
+  background: #ddd6fe;
+  border-color: #c4b5fd;
+}
+
+.ddir-btn-ia:disabled {
+  cursor: progress;
+  opacity: 0.7;
+}
+
+.ddir-aviso-ia {
+  margin-bottom: 10px;
+}

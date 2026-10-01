@@ -295,7 +295,6 @@ const IntegracionesTokensPage = lazy(() => import('./administracion/Integracione
 const PromptChatbotPage = lazy(() => import('./administracion/PromptChatbotPage').then(m => ({ default: m.PromptChatbotPage })))
 const GuiasPage = lazy(() => import('./GuiasPage').then(m => ({ default: m.GuiasPage })))
 const EscuelaPage = lazy(() => import('./EscuelaPage').then(m => ({ default: m.EscuelaPage })))
-const HelloSignPage = lazy(() => import('./hellosign/HelloSignPage').then(m => ({ default: m.HelloSignPage })))
 import type { Guia } from '../modules/guias/guiasService'
 
 // Tipo para submenús con jerarquía
@@ -2270,9 +2269,6 @@ export function HomePage() {
                   <LazyPage><EscuelaPage /></LazyPage>
                 </ProtectedRoute>
               } />
-
-              {/* Dropbox Sign (HelloSign) - vista suelta, todavia no es un modulo del menu */}
-              <Route path="/hellosign" element={<LazyPage><HelloSignPage /></LazyPage>} />
 
               {/* Perfil de usuario */}
               <Route path="/perfil" element={<LazyPage><ProfilePage /></LazyPage>} />

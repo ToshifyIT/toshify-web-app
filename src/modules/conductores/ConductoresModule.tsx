@@ -642,10 +642,11 @@ export function ConductoresModule() {
         conductoresAsignados++;
       }
 
-      // Licencias (solo conductores activos o con asignación)
+      // Licencias: solo conductores ACTIVOS CON VEHÍCULO ASIGNADO. A los activos en
+      // espera (sin auto) no se les pide renovar documentos porque no están manejando.
       const vencimiento = c.licencia_vencimiento;
       const tieneAsignacion = !!(c as any).vehiculo_asignado;
-      if ((estadoCodigo === 'activo' || tieneAsignacion) && vencimiento) {
+      if (estadoCodigo === 'activo' && tieneAsignacion && vencimiento) {
         // Vencidas: fecha < hoy
         if (vencimiento < hoyStr) {
           licenciasVencidas++;
@@ -2692,6 +2693,7 @@ export function ConductoresModule() {
     const enXDias = new Date()
     enXDias.setDate(hoy.getDate() + DIAS_LICENCIA_POR_VENCER)
     const hoyStr = hoy.toISOString().split('T')[0]
+    const enXDiasStr = enXDias.toISOString().split('T')[0]
     const { inicio: inicioSemana, fin: finSemana } = (statCardEstadoSet.has('BAJA') || statCardEstadoFilter.length > 0)
       ? getWeekRange(true)
       : { inicio: new Date(0), fin: new Date(0) }
@@ -2727,6 +2729,8 @@ export function ConductoresModule() {
         if (!telefonoFilter.includes((c as any).telefono_contacto || '')) return false
       }
       if (vencimientoFilter.length > 0) {
+        // Vencimientos: solo activos con vehículo asignado (mismo criterio que las cards)
+        if (!esActivo || !tieneAsignacion) return false
         const venc = c.licencia_vencimiento
         let categoria = 'sin_fecha'
         if (venc) {
@@ -2738,9 +2742,9 @@ export function ConductoresModule() {
         if (!vencimientoFilter.includes(categoria)) return false
       }
       if (licenciaVencerFilter || statCardLicenciaFilter) {
-        if (estadoCodigoLower !== 'activo' || !c.licencia_vencimiento) return false
-        const fechaVenc = new Date(c.licencia_vencimiento)
-        if (!(fechaVenc >= hoy && fechaVenc <= enXDias)) return false
+        // Activos con vehículo asignado; fechas comparadas igual que el conteo de la card
+        if (!esActivo || !tieneAsignacion || !c.licencia_vencimiento) return false
+        if (!(c.licencia_vencimiento >= hoyStr && c.licencia_vencimiento <= enXDiasStr)) return false
       }
 
       // Filtros de stat cards
@@ -2759,7 +2763,8 @@ export function ConductoresModule() {
         if (!okAsignado && !okDisponible) return false
       }
       if (statCardLicenciaVencidaFilter) {
-        if (estadoCodigoLower === 'baja') return false
+        // Activos con vehículo asignado (mismo criterio que el conteo de la card)
+        if (!esActivo || !tieneAsignacion) return false
         if (!c.licencia_vencimiento || c.licencia_vencimiento >= hoyStr) return false
       }
 
