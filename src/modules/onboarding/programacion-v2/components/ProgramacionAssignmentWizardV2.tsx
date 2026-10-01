@@ -458,6 +458,24 @@ export function ProgramacionAssignmentWizardV2({ onClose, onSuccess, editData, p
     }
   })
 
+  /**
+   * La sede puede no estar resuelta al montar: en una PESTANIA NUEVA el
+   * SedeContext todavia esta cargando cuando el wizard aparece, asi que
+   * `sede_id` arranca vacio y el wizard se queda en el paso 0.
+   *
+   * Cuando la sede llega, se completa y se salta al paso 1, que es lo que la
+   * precarga del mapa daba por hecho. Corre UNA sola vez: si despues el
+   * operador vuelve al paso 0 y elige otra sede, no se la pisa.
+   */
+  const sedeAutocompletadaRef = useRef(false)
+  useEffect(() => {
+    if (!esPrecargaMapa || sedeAutocompletadaRef.current) return
+    if (formData.sede_id || !sedeDeContexto) return
+    sedeAutocompletadaRef.current = true
+    setFormData(prev => ({ ...prev, sede_id: sedeDeContexto }))
+    setStep(prev => (prev === 0 ? 1 : prev))
+  }, [esPrecargaMapa, sedeDeContexto])
+
   // Conceptos de alquiler para las etiquetas del selector de Tarifa (una sola vez).
   useEffect(() => {
     let cancelado = false
@@ -1705,6 +1723,43 @@ export function ProgramacionAssignmentWizardV2({ onClose, onSuccess, editData, p
     return 'nuevo'
   }
 
+  /**
+   * Ajusta tipo de asignacion y documento cuando quien ocupa el turno YA tiene
+   * una asignacion activa. Lo que pasa con el vehiculo manda sobre el default
+   * que sale del tipo de candidato.
+   *
+   *  - Viene del OTRO turno  -> "Cambio de turno". El documento no se toca:
+   *    sigue saliendo del tipo de candidato.
+   *  - Sigue en el MISMO turno -> "Asignacion de compañero" y documento N/A:
+   *    no cambia de auto ni de turno, solo se le suma un compañero, y eso no
+   *    genera documento nuevo.
+   *
+   * Dos casos en los que no se toca nada, a proposito:
+   *  - Una asignacion "a cargo" marca los dos turnos a la vez: no hay un turno
+   *    del que venga, asi que no se puede decidir.
+   *  - Un LEAD no esta en la lista de conductores, asi que nunca entra aca.
+   */
+  const ajustarDefaultsPorAsignacionActiva = (
+    personaId: string,
+    slot: 'diurno' | 'nocturno',
+    defaults: { asignacion: TipoAsignacion; documento: TipoDocumento }
+  ): { asignacion: TipoAsignacion; documento: TipoDocumento } => {
+    const c = conductores.find(x => x.id === personaId) as any
+    if (!c?.tieneAsignacionActiva) return defaults
+    const tieneDiurna = !!c.tieneAsignacionDiurna
+    const tieneNocturna = !!c.tieneAsignacionNocturna
+    if (tieneDiurna && tieneNocturna) return defaults
+    const vieneDelOtroTurno = slot === 'diurno' ? tieneNocturna : tieneDiurna
+    if (vieneDelOtroTurno) {
+      // Anexo fijo: el turno es uno de los datos que entran al anexo, asi que
+      // no depende del tipo de candidato. Antes se heredaba de ahi y salia
+      // bien de rebote (un conductor con asignacion activa se detecta
+      // "antiguo", cuyo documento es anexo), pero no estaba escrito.
+      return { asignacion: 'cambio_turno', documento: 'anexo' }
+    }
+    return { asignacion: 'asignacion_companero', documento: 'na' }
+  }
+
   // Obtener defaults de tipo_asignacion y documento según tipo de candidato
   function getDefaultsPorCandidato(tipo: TipoCandidatoV2): { asignacion: TipoAsignacion; documento: TipoDocumento } {
     switch (tipo) {
@@ -1715,9 +1770,9 @@ export function ProgramacionAssignmentWizardV2({ onClose, onSuccess, editData, p
       case 'reingreso':
         return { asignacion: 'entrega_auto', documento: 'carta_oferta' }
       case 'lead':
-        // El lead entra como companero de un conductor ya asignado, pero firma
-        // carta oferta: es su primer documento con la empresa.
-        return { asignacion: 'asignacion_companero', documento: 'carta_oferta' }
+        // Un lead nunca tuvo vehiculo: siempre es una entrega de auto. Firma
+        // carta oferta porque es su primer documento con la empresa.
+        return { asignacion: 'entrega_auto', documento: 'carta_oferta' }
     }
   }
 
@@ -1748,9 +1803,9 @@ export function ProgramacionAssignmentWizardV2({ onClose, onSuccess, editData, p
           const tipo = await detectarTipoCandidato(formData.conductor_diurno_id)
           updates.tipo_candidato_diurno = tipo
           if (!isDevolucionOCambio) {
-            const defaults = getDefaultsPorCandidato(tipo)
-            updates.tipo_asignacion_diurno = defaults.asignacion
-            updates.documento_diurno = defaults.documento
+            const ajustado = ajustarDefaultsPorAsignacionActiva(formData.conductor_diurno_id, 'diurno', getDefaultsPorCandidato(tipo))
+            updates.tipo_asignacion_diurno = ajustado.asignacion
+            updates.documento_diurno = ajustado.documento
           }
           changed = true
         }
@@ -1758,9 +1813,9 @@ export function ProgramacionAssignmentWizardV2({ onClose, onSuccess, editData, p
           const tipo = await detectarTipoCandidato(formData.conductor_nocturno_id)
           updates.tipo_candidato_nocturno = tipo
           if (!isDevolucionOCambio) {
-            const defaults = getDefaultsPorCandidato(tipo)
-            updates.tipo_asignacion_nocturno = defaults.asignacion
-            updates.documento_nocturno = defaults.documento
+            const ajustado = ajustarDefaultsPorAsignacionActiva(formData.conductor_nocturno_id, 'nocturno', getDefaultsPorCandidato(tipo))
+            updates.tipo_asignacion_nocturno = ajustado.asignacion
+            updates.documento_nocturno = ajustado.documento
           }
           changed = true
         }
@@ -2480,9 +2535,34 @@ export function ProgramacionAssignmentWizardV2({ onClose, onSuccess, editData, p
     handleSelectConductorNocturno(nocturno.id, undefined, diurno.id)
   }
 
+  /**
+   * Documento que le corresponde a cada operacion.
+   *
+   * El documento depende de LA OPERACION, no del tipo de candidato:
+   *  - Cambio de turno y cambio de auto -> Anexo: el turno y la patente son
+   *    datos que entran al anexo.
+   *  - Asignacion de compañero y devolucion -> N/A: no generan documento.
+   *  - Entrega de auto -> Carta oferta: es el primer documento de la persona.
+   *
+   * Las operaciones "a cargo" no estan en estas reglas: no se tocan.
+   */
+  const DOCUMENTO_POR_OPERACION: Partial<Record<TipoAsignacion, TipoDocumento>> = {
+    cambio_turno: 'anexo',
+    cambio_auto: 'anexo',
+    asignacion_companero: 'na',
+    devolucion_vehiculo: 'na',
+    entrega_auto: 'carta_oferta',
+  }
+
+  /**
+   * Cambiar la operacion a mano acomoda el documento, para que elegirla a mano
+   * y que la calcule el sistema den el mismo resultado. Antes solo lo hacia
+   * para devolucion: elegir "Cambio de turno" dejaba el documento anterior.
+   */
   const handleTipoAsignacionChange = (field: 'tipo_asignacion_cargo' | 'tipo_asignacion_diurno' | 'tipo_asignacion_nocturno', docField: 'documento_cargo' | 'documento_diurno' | 'documento_nocturno') => (e: React.ChangeEvent<HTMLSelectElement>) => {
     const val = e.target.value as TipoAsignacion
-    setFormData({ ...formData, [field]: val, ...(val === 'devolucion_vehiculo' ? { [docField]: 'na' as TipoDocumento } : {}) })
+    const doc = DOCUMENTO_POR_OPERACION[val]
+    setFormData({ ...formData, [field]: val, ...(doc ? { [docField]: doc } : {}) })
   }
 
   // Ray casting - verifica si un punto está dentro de un polígono
@@ -5196,8 +5276,8 @@ export function ProgramacionAssignmentWizardV2({ onClose, onSuccess, editData, p
                             onChange={(e) => {
                               const tipo = e.target.value as TipoCandidatoV2
                               if (tipo && !formData.devolucion_vehiculo && !formData.cambio_vehiculo) {
-                                const defaults = getDefaultsPorCandidato(tipo)
-                                setFormData({ ...formData, tipo_candidato_diurno: tipo, tipo_asignacion_diurno: defaults.asignacion, documento_diurno: defaults.documento })
+                                const ajustado = ajustarDefaultsPorAsignacionActiva(formData.conductor_diurno_id, 'diurno', getDefaultsPorCandidato(tipo))
+                                setFormData({ ...formData, tipo_candidato_diurno: tipo, tipo_asignacion_diurno: ajustado.asignacion, documento_diurno: ajustado.documento })
                               } else {
                                 setFormData({ ...formData, tipo_candidato_diurno: tipo })
                               }
@@ -5307,8 +5387,8 @@ export function ProgramacionAssignmentWizardV2({ onClose, onSuccess, editData, p
                             onChange={(e) => {
                               const tipo = e.target.value as TipoCandidatoV2
                               if (tipo && !formData.devolucion_vehiculo && !formData.cambio_vehiculo) {
-                                const defaults = getDefaultsPorCandidato(tipo)
-                                setFormData({ ...formData, tipo_candidato_nocturno: tipo, tipo_asignacion_nocturno: defaults.asignacion, documento_nocturno: defaults.documento })
+                                const ajustado = ajustarDefaultsPorAsignacionActiva(formData.conductor_nocturno_id, 'nocturno', getDefaultsPorCandidato(tipo))
+                                setFormData({ ...formData, tipo_candidato_nocturno: tipo, tipo_asignacion_nocturno: ajustado.asignacion, documento_nocturno: ajustado.documento })
                               } else {
                                 setFormData({ ...formData, tipo_candidato_nocturno: tipo })
                               }

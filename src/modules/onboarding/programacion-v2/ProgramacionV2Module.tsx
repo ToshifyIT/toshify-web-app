@@ -40,6 +40,7 @@ import { useSede } from '../../../contexts/SedeContext'
 
 import { ProgramacionAssignmentWizardV2 } from './components/ProgramacionAssignmentWizardV2'
 import type { PrecargaParMapa } from '../../../types/programacionPrecarga.types'
+import { tomarPrecargaPar } from '../../../types/programacionPrecarga.types'
 import type { ProgramacionOnboardingCompleta, TipoTarifa } from '../../../types/onboarding.types'
 import { cargarConceptosTarifa, getEtiquetaTarifa, validarPreciosSemanales, type MapaConceptosTarifa, type TarifaRequerida } from '../tarifaConceptos'
 import Swal from 'sweetalert2'
@@ -553,14 +554,22 @@ export function ProgramacionV2Module() {
   const [precargaPar, setPrecargaPar] = useState<PrecargaParMapa | null>(null)
   useEffect(() => {
     const state = location.state as { abrirNueva?: boolean; precargaPar?: PrecargaParMapa } | null
-    if (state?.abrirNueva) {
-      // El par viaja junto con `abrirNueva`. Puede no venir: entrar sin par
-      // sigue siendo valido (abre el wizard vacio, como antes).
-      setPrecargaPar(state.precargaPar || null)
-      setShowCreateWizard(true)
-      navigate(location.pathname, { replace: true, state: null })
-    }
-  }, [location.state, location.pathname, navigate])
+    // Dos vias de entrada:
+    //  - misma pestania: `location.state` (navigate del mapa);
+    //  - pestania nueva: `?precarga=<id>`, porque el state no cruza un
+    //    window.open y el par quedo en localStorage.
+    const params = new URLSearchParams(location.search)
+    const idPrecarga = params.get('precarga')
+    if (!state?.abrirNueva && !idPrecarga) return
+
+    // El par puede no venir: entrar sin par sigue siendo valido (abre el
+    // wizard vacio, como antes).
+    const parDeLaUrl = idPrecarga ? tomarPrecargaPar(idPrecarga) : null
+    setPrecargaPar(state?.precargaPar || parDeLaUrl || null)
+    setShowCreateWizard(true)
+    // Se limpian state Y query para que un refresh no reabra el wizard.
+    navigate(location.pathname, { replace: true, state: null })
+  }, [location.state, location.search, location.pathname, navigate])
 
   const handleEdit = async (prog: ProgramacionOnboardingCompleta) => {
     setEditingProgramacion(prog)
