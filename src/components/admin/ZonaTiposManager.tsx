@@ -1,5 +1,4 @@
 // src/components/admin/ZonaTiposManager.tsx
-/* eslint-disable @typescript-eslint/no-explicit-any */
 import { useState, useEffect } from 'react'
 import { Plus, Edit2, Trash2, AlertTriangle, X } from 'lucide-react'
 import { supabase } from '../../lib/supabase'

@@ -6,6 +6,7 @@ import Swal from 'sweetalert2'
 import { formatNombreCompleto } from '../../../utils/conductorUtils'
 import { showSuccess } from '../../../utils/toast'
 import { tieneGncEnFecha, type GncHistorialEntry } from '../../../utils/gncHistorial'
+import { evaluarCierre, timestampCierre, descuentoCierre, CIERRE_DEFAULTS, type ParamsCierre } from '../utils/cierreAsignacion'
 import jsPDF from 'jspdf'
 import * as XLSX from 'xlsx'
 import {
@@ -427,6 +428,11 @@ export function ReporteFacturacionTab() {
       postBaja?: boolean
       gnc?: boolean
       tipoTarifa?: 'antigua' | 'nueva'
+      /** Regla de cierre de asignación aplicada ese día */
+      /** Vehículo fuera de servicio ese día. `descuento` es lo que se descuenta de verdad
+       *  (tope: 1 turno por día sumando el descuento por hora de entrega); `descuentoRegla`
+       *  es lo que correspondía sin el tope. */
+      cierre?: { hora: string; tipo: 'nocturno' | 'diurno' | 'cargo'; descuento: number; descuentoRegla: number }
     }[]
     historial: {
       fechaInicio: string
@@ -597,6 +603,9 @@ export function ReporteFacturacionTab() {
     return mapa
   }, [conceptosNomina])
 
+  // Parámetros de la regla de cierre de asignación (ver utils/cierreAsignacion.ts)
+  const [paramsCierre, setParamsCierre] = useState<ParamsCierre>(CIERRE_DEFAULTS)
+
   // Parámetros de descuento por hora de entrega
   const [horasCorteTurno, setHorasCorteTurno] = useState({
     diurno: 12,        // Hora corte diurno (si entrega >= esta hora, descuento completo)
@@ -658,6 +667,7 @@ export function ReporteFacturacionTab() {
         'hora_corte_diurno', 'hora_corte_cargo',
         'descuento_diurno_antes', 'descuento_diurno_despues',
         'descuento_cargo_despues',
+        'hora_corte_cierre_diurno', 'descuento_diurno_cierre', 'descuento_cargo_cierre',
       ]
       const { data } = await supabase
         .from('parametros_sistema')
@@ -672,6 +682,9 @@ export function ReporteFacturacionTab() {
         descuento_diurno_antes: { valor: '0.5', tipo: 'number', descripcion: 'Descuento (turnos) si entrega diurna antes del corte (medio turno)' },
         descuento_diurno_despues: { valor: '1', tipo: 'number', descripcion: 'Descuento (turnos) si entrega diurna despues del corte' },
         descuento_cargo_despues: { valor: '0.5', tipo: 'number', descripcion: 'Descuento (turnos) si entrega a cargo despues del corte' },
+        hora_corte_cierre_diurno: { valor: String(CIERRE_DEFAULTS.horaCorteDiurno), tipo: 'number', descripcion: 'Vehiculo fuera de servicio: si se cierra antes de esta hora, al diurno se le descuenta (ver descuento_diurno_cierre)' },
+        descuento_diurno_cierre: { valor: String(CIERRE_DEFAULTS.descuentoDiurno), tipo: 'number', descripcion: 'Vehiculo fuera de servicio: descuento (turnos) al diurno si se cierra antes del corte' },
+        descuento_cargo_cierre: { valor: String(CIERRE_DEFAULTS.descuentoCargo), tipo: 'number', descripcion: 'Vehiculo fuera de servicio: descuento (turnos) al conductor a cargo' },
       }
       const existentes = new Set((data || []).map((p: any) => p.clave))
       const faltantes = claves.filter(c => !existentes.has(c))
@@ -700,6 +713,14 @@ export function ReporteFacturacionTab() {
         descDiurnoDespues: params.descuento_diurno_despues != null ? parseFloat(params.descuento_diurno_despues) : prev.descDiurnoDespues,
         descCargoDespues: params.descuento_cargo_despues != null ? parseFloat(params.descuento_cargo_despues) : prev.descCargoDespues,
       }))
+      const horaCorteCierreDiurno = Number.parseInt(params.hora_corte_cierre_diurno ?? '', 10)
+      const descDiurnoCierre = Number.parseFloat(params.descuento_diurno_cierre ?? '')
+      const descCargoCierre = Number.parseFloat(params.descuento_cargo_cierre ?? '')
+      setParamsCierre({
+        horaCorteDiurno: Number.isFinite(horaCorteCierreDiurno) ? horaCorteCierreDiurno : CIERRE_DEFAULTS.horaCorteDiurno,
+        descuentoDiurno: Number.isFinite(descDiurnoCierre) ? descDiurnoCierre : CIERRE_DEFAULTS.descuentoDiurno,
+        descuentoCargo: Number.isFinite(descCargoCierre) ? descCargoCierre : CIERRE_DEFAULTS.descuentoCargo,
+      })
     }
     cargarConceptos()
     cargarParametrosDescuento()
@@ -789,7 +810,7 @@ export function ReporteFacturacionTab() {
           .from('asignaciones_conductores') as any)
           .select(`
             id, conductor_id, horario, fecha_inicio, fecha_fin, estado, tipo_tarifa,
-            asignaciones!inner(id, horario, estado, fecha_inicio, fecha_fin, vehiculo_id, tipo_tarifa, vehiculos(patente, gnc, grupo_flota, updated_at))
+            asignaciones!inner(id, horario, estado, fecha_inicio, fecha_fin, vehiculo_id, tipo_tarifa, notas, vehiculos(patente, gnc, grupo_flota, updated_at))
           `)
           .eq('conductor_id', realConductorId)
           .in('estado', ['asignado', 'activo', 'activa', 'finalizado', 'finalizada', 'completado', 'cancelado', 'cancelada']),
@@ -848,6 +869,10 @@ export function ReporteFacturacionTab() {
       // Sin esto el desglose repartia los dias distinto que la factura (el dia del empalme
       // se lo quedaba la asignacion que llegara primero, y la consulta no tiene ORDER BY).
       const fechasInicioAsigDesglose = new Set<string>()
+      // Vehículo fuera de servicio (utils/cierreAsignacion.ts): fecha yyyy-MM-dd -> detalle para mostrar
+      const cierresDesglose = new Map<string, { hora: string; tipo: 'nocturno' | 'diurno' | 'cargo'; descuento: number; descuentoRegla: number }>()
+      // Descuentos de diurno / a cargo: se aplican al final, solo si ese día se cobra
+      const pendientesCierreDes = new Map<string, { fecha: string; hora: string; tipo: 'diurno' | 'cargo'; descuento: number }>()
       // Ademas: el conductor ya venia con un vehiculo al empezar la semana. Es el
       // MISMO criterio que usan Vista Previa y Recalculo para eximir del descuento
       // por hora de entrega: un tramo que empezo ANTES de la semana y llega hasta el
@@ -986,6 +1011,25 @@ export function ReporteFacturacionTab() {
           }
         }
 
+        // Vehículo fuera de servicio (utils/cierreAsignacion.ts), mismo criterio que Vista Previa y Recalculo
+        const cierreDes = evaluarCierre(timestampCierre(ac.fecha_fin, asignacion.fecha_fin), asignacion.notas)
+        if (cierreDes) {
+          if (modalidadGncDesglose === 'TURNO_NOCTURNO') {
+            // Sin auto para su turno: no se cobra ese día. Si recibió otro auto ese día, el
+            // empalme ya movió el día a la asignación nueva y efectivoFin no es el cierre.
+            if (format(efectivoFin, 'yyyy-MM-dd') === cierreDes.fecha) {
+              const finSinCierreDes = new Date(efectivoFin)
+              finSinCierreDes.setDate(finSinCierreDes.getDate() - 1)
+              efectivoFin = finSinCierreDes
+              cierresDesglose.set(cierreDes.fecha, { hora: cierreDes.hora, tipo: 'nocturno', descuento: 1, descuentoRegla: 1 })
+            }
+          } else {
+            const descDes = descuentoCierre(modalidadGncDesglose, cierreDes, paramsCierre)
+            const tipoDes = modalidadGncDesglose === 'CARGO' ? 'cargo' : 'diurno'
+            if (descDes > 0) pendientesCierreDes.set(`${cierreDes.fecha}|${tipoDes}`, { fecha: cierreDes.fecha, hora: cierreDes.hora, tipo: tipoDes, descuento: descDes })
+          }
+        }
+
         // Misma precedencia que el motor de facturacion: primero el conductor, luego el padre.
         const tipoTarifaDesglose: 'antigua' | 'nueva' =
           ((ac.tipo_tarifa || asignacion.tipo_tarifa) === 'nueva') ? 'nueva' : 'antigua'
@@ -1010,7 +1054,7 @@ export function ReporteFacturacionTab() {
       // Generar los 7 días de la semana con su estado
       // Solo días hasta hoy se marcan como trabajados, futuros quedan como pendientes
       // Días excluidos por fecha de baja se marcan como postBaja (rojo)
-      const diasSemana: { fecha: string; diaSemana: string; horario: string; trabajado: boolean; postBaja?: boolean; gnc?: boolean; tipoTarifa?: 'antigua' | 'nueva' }[] = []
+      const diasSemana: { fecha: string; diaSemana: string; horario: string; trabajado: boolean; postBaja?: boolean; gnc?: boolean; tipoTarifa?: 'antigua' | 'nueva'; cierre?: { hora: string; tipo: 'nocturno' | 'diurno' | 'cargo'; descuento: number; descuentoRegla: number } }[] = []
       const cursor = new Date(semanaInicio)
       while (cursor <= semanaFin) {
         const key = format(cursor, 'yyyy-MM-dd')
@@ -1024,6 +1068,7 @@ export function ReporteFacturacionTab() {
           postBaja: esPostBaja,
           gnc: cubierto?.gnc,
           tipoTarifa: cubierto?.tipoTarifa,
+          cierre: cierresDesglose.get(key), // nocturno; diurno / a cargo se completan más abajo
         })
         cursor.setDate(cursor.getDate() + 1)
       }
@@ -1080,31 +1125,60 @@ export function ReporteFacturacionTab() {
         preciosPorCodigoDias[c.codigo] = c.precio_final || 0
       })
 
+      // Descuento por hora de entrega (misma lógica de siempre, solo se calcula antes para
+      // poder topear el descuento por vehículo fuera de servicio del mismo día).
+      const descuentoEntregaDesglose = (() => {
+        // Calcular descuento por hora de entrega directamente desde el historial.
+        // El descuento castiga una ENTREGA tardia; si el conductor ya venia con un
+        // vehiculo al empezar la semana no hubo entrega, solo un cambio de asignacion,
+        // y no corresponde descontar. Se usa el mismo criterio que Vista Previa y
+        // Recalculo (`veniaConVehiculoDesglose`) para que la pantalla y la factura
+        // digan siempre lo mismo.
+        if (veniaConVehiculoDesglose) return 0
+        const primeraConEntrega = [...historialFiltrado].sort((a, b) => a.fechaInicio.localeCompare(b.fechaInicio)).find(h => h.horaEntrega && h.dias > 0 && h.nuevaEnSemana)
+        if (!primeraConEntrega || !primeraConEntrega.horaEntrega) return 0
+        const hora = parseInt(primeraConEntrega.horaEntrega.split(':')[0])
+        const modalidad = primeraConEntrega.horario
+        if (modalidad === 'DIURNO' || modalidad === 'TURNO_DIURNO') {
+          return hora >= horasCorteTurno.diurno ? horasCorteTurno.descDiurnoDespues : horasCorteTurno.descDiurnoAntes
+        } else if (modalidad === 'CARGO') {
+          return hora >= horasCorteTurno.cargo ? horasCorteTurno.descCargoDespues : 0
+        }
+        return 0
+      })()
+      const primeraConEntregaDes = veniaConVehiculoDesglose
+        ? undefined
+        : [...historialFiltrado].sort((a, b) => a.fechaInicio.localeCompare(b.fechaInicio)).find(h => h.horaEntrega && h.dias > 0 && h.nuevaEnSemana)
+      const fechaEntregaDes = descuentoEntregaDesglose > 0 ? primeraConEntregaDes?.fechaInicio : undefined
+
+      // Vehículo fuera de servicio (diurno / a cargo): solo si ese día se cobra, y con tope de
+      // 1 turno por día sumando el descuento por hora de entrega de ese mismo día.
+      const pendientesPorFechaDes = new Map<string, { hora: string; tipo: 'diurno' | 'cargo'; descuento: number }>()
+      for (const pend of pendientesCierreDes.values()) {
+        if (!diasCubiertos.has(pend.fecha)) continue
+        const previo = pendientesPorFechaDes.get(pend.fecha)
+        pendientesPorFechaDes.set(pend.fecha, { hora: pend.hora, tipo: previo?.tipo || pend.tipo, descuento: (previo?.descuento || 0) + pend.descuento })
+      }
+      let descuentoCierreDesglose = 0
+      for (const [fechaCierre, pend] of pendientesPorFechaDes) {
+        const yaDescontado = fechaEntregaDes === fechaCierre ? descuentoEntregaDesglose : 0
+        const aplicado = Math.min(pend.descuento, Math.max(0, 1 - yaDescontado))
+        descuentoCierreDesglose += aplicado
+        cierresDesglose.set(fechaCierre, { hora: pend.hora, tipo: pend.tipo, descuento: aplicado, descuentoRegla: pend.descuento })
+      }
+      for (const dia of diasSemana) {
+        const [dd, mm, yyyy] = dia.fecha.split('/')
+        const cierreDia = cierresDesglose.get(`${yyyy}-${mm}-${dd}`)
+        if (cierreDia) dia.cierre = cierreDia
+      }
+
       setDiasModalData({
         conductorId: realConductorId,
         conductorNombre,
         conductorDni,
         preciosPorCodigo: preciosPorCodigoDias,
         veniaConVehiculo: veniaConVehiculoDesglose,
-        totalDias: Math.max(0, Math.min(7, diasCubiertos.size) - (() => {
-          // Calcular descuento por hora de entrega directamente desde el historial.
-          // El descuento castiga una ENTREGA tardia; si el conductor ya venia con un
-          // vehiculo al empezar la semana no hubo entrega, solo un cambio de asignacion,
-          // y no corresponde descontar. Se usa el mismo criterio que Vista Previa y
-          // Recalculo (`veniaConVehiculoDesglose`) para que la pantalla y la factura
-          // digan siempre lo mismo.
-          if (veniaConVehiculoDesglose) return 0
-          const primeraConEntrega = [...historialFiltrado].sort((a, b) => a.fechaInicio.localeCompare(b.fechaInicio)).find(h => h.horaEntrega && h.dias > 0 && h.nuevaEnSemana)
-          if (!primeraConEntrega || !primeraConEntrega.horaEntrega) return 0
-          const hora = parseInt(primeraConEntrega.horaEntrega.split(':')[0])
-          const modalidad = primeraConEntrega.horario
-          if (modalidad === 'DIURNO' || modalidad === 'TURNO_DIURNO') {
-            return hora >= horasCorteTurno.diurno ? horasCorteTurno.descDiurnoDespues : horasCorteTurno.descDiurnoAntes
-          } else if (modalidad === 'CARGO') {
-            return hora >= horasCorteTurno.cargo ? horasCorteTurno.descCargoDespues : 0
-          }
-          return 0
-        })()),
+        totalDias: Math.max(0, Math.min(7, diasCubiertos.size) - descuentoCierreDesglose - descuentoEntregaDesglose),
         dias: diasSemana,
         historial: historialFiltrado,
         devolucion: devolucionInfo,
@@ -2110,7 +2184,7 @@ export function ReporteFacturacionTab() {
           estado,
           asignacion_id,
           tipo_tarifa,
-          asignaciones!inner(id, horario, estado, fecha_inicio, fecha_fin, vehiculo_id, tipo_tarifa, vehiculos(gnc, updated_at))
+          asignaciones!inner(id, horario, estado, fecha_inicio, fecha_fin, vehiculo_id, tipo_tarifa, notas, vehiculos(gnc, updated_at))
         `)
         .in('conductor_id', conductorIds)
         .in('estado', ['asignado', 'activo', 'activa', 'finalizado', 'finalizada', 'completado', 'cancelado', 'cancelada'])
@@ -2217,6 +2291,10 @@ export function ReporteFacturacionTab() {
       // Alertas de prorrateo por ingreso: conductor diurno con entrega nueva en la semana
       //const alertasProrrateoVP = new Map<string, { tipo: 'medio_turno' | 'dia_completo'; hora: string; fecha: string; descuento: number }>()
       const alertasProrrateoVP = new Map<string, { tipo: 'medio_turno' | 'dia_completo'; hora: string; fecha: string; descuento: number; modalidad: 'TURNO_DIURNO' | 'CARGO' }>()
+      // Vehículo fuera de servicio (utils/cierreAsignacion.ts): descuentos de diurno / a cargo.
+      // Se juntan durante el recorrido y se aplican al final, solo si ese día se cobra.
+      const pendientesCierreVP = new Map<string, { conductorId: string; fecha: string; modalidad: 'TURNO_DIURNO' | 'CARGO'; descuento: number }>()
+      const descuentosCierreVP = new Map<string, { TURNO_DIURNO: number; CARGO: number }>()
 
       // Pre-scan: detectar conductores que ya tenían asignación activa ANTES de esta semana
       // Si un conductor ya estaba trabajando (cambio de vehículo), NO se le aplica descuento por hora de entrega
@@ -2334,6 +2412,23 @@ export function ReporteFacturacionTab() {
           }
         }
 
+        // Vehículo fuera de servicio (utils/cierreAsignacion.ts)
+        const cierreVP = evaluarCierre(timestampCierre(ac.fecha_fin, asignacion.fecha_fin), asignacion.notas)
+        if (cierreVP) {
+          if (modalidad === 'TURNO_NOCTURNO') {
+            // Sin auto para su turno: no se cobra ese día. Si recibió otro auto ese día, el
+            // empalme ya movió el día a la asignación nueva y efectivoFin no es el cierre.
+            if (format(efectivoFin, 'yyyy-MM-dd') === cierreVP.fecha) {
+              const finSinCierre = new Date(efectivoFin)
+              finSinCierre.setDate(finSinCierre.getDate() - 1)
+              efectivoFin = finSinCierre
+            }
+          } else {
+            const descVP = descuentoCierre(modalidad, cierreVP, paramsCierre)
+            if (descVP > 0) pendientesCierreVP.set(`${ac.conductor_id}|${cierreVP.fecha}|${modalidad}`, { conductorId: ac.conductor_id, fecha: cierreVP.fecha, modalidad, descuento: descVP })
+          }
+        }
+
         // Contar días deduplicando por fecha (evita doble conteo con registros duplicados)
         // Si es sin_cobro, no contar ningún día pero dejar pasar al conductor
         const fechasContadas = diasContadosVP.get(ac.conductor_id)!
@@ -2399,6 +2494,25 @@ export function ReporteFacturacionTab() {
           maxAsigFinVP.set(ac.conductor_id, finRealStr)
         }
       })
+
+      // Vehículo fuera de servicio: descuento solo si ese día se cobra (con esta asignación o la
+      // de reemplazo), con tope de 1 turno por día sumando el descuento por hora de entrega.
+      const descontadoPorDiaVP = new Map<string, number>()
+      for (const p of pendientesCierreVP.values()) {
+        if (!diasContadosVP.get(p.conductorId)?.has(p.fecha)) continue
+        const claveDia = `${p.conductorId}|${p.fecha}`
+        let yaDescontado = descontadoPorDiaVP.get(claveDia)
+        if (yaDescontado === undefined) {
+          const entrega = alertasProrrateoVP.get(p.conductorId)
+          yaDescontado = entrega && entrega.fecha.split('/').reverse().join('-') === p.fecha ? entrega.descuento : 0
+        }
+        const aplicado = Math.min(p.descuento, Math.max(0, 1 - yaDescontado))
+        descontadoPorDiaVP.set(claveDia, yaDescontado + aplicado)
+        if (aplicado <= 0) continue
+        const acumulado = descuentosCierreVP.get(p.conductorId) || { TURNO_DIURNO: 0, CARGO: 0 }
+        acumulado[p.modalidad] += aplicado
+        descuentosCierreVP.set(p.conductorId, acumulado)
+      }
 
       // Determinar conductores con asignación activa al cierre de la semana
       // Si tiene asignación sin fecha_fin o con fecha_fin >= fin de semana → Activo
@@ -2523,7 +2637,9 @@ export function ReporteFacturacionTab() {
         // Restar descuento por hora de entrega
         const alertaVP = alertasProrrateoVP.get(conductorId)
         const descuentoVP = alertaVP?.descuento || 0
-        const diasRaw = Math.max(0, prorrateo.CARGO + prorrateo.TURNO_DIURNO + prorrateo.TURNO_NOCTURNO - descuentoVP)
+        const descCierreVP = descuentosCierreVP.get(conductorId)
+        const descuentoCierreVP = (descCierreVP?.TURNO_DIURNO || 0) + (descCierreVP?.CARGO || 0)
+        const diasRaw = Math.max(0, prorrateo.CARGO + prorrateo.TURNO_DIURNO + prorrateo.TURNO_NOCTURNO - descuentoVP - descuentoCierreVP)
         const subtotalRaw = prorrateo.monto_CARGO + prorrateo.monto_TURNO_DIURNO + prorrateo.monto_TURNO_NOCTURNO
 
         // Ajustar montos y días del prorrateo restando el descuento de la modalidad correspondiente
@@ -2537,6 +2653,19 @@ export function ReporteFacturacionTab() {
             prorrateo.monto_CARGO -= precioPorDia * descuentoVP
             prorrateo.CARGO = Math.max(0, prorrateo.CARGO - descuentoVP)
           }
+        }
+        // Vehículo fuera de servicio: medio turno al diurno (antes del corte) y al de a cargo
+        if (descCierreVP?.TURNO_DIURNO && prorrateo.TURNO_DIURNO > 0) {
+          const descAplicable = Math.min(descCierreVP.TURNO_DIURNO, prorrateo.TURNO_DIURNO)
+          const precioPorDia = prorrateo.monto_TURNO_DIURNO / prorrateo.TURNO_DIURNO
+          prorrateo.monto_TURNO_DIURNO -= precioPorDia * descAplicable
+          prorrateo.TURNO_DIURNO = Math.max(0, prorrateo.TURNO_DIURNO - descAplicable)
+        }
+        if (descCierreVP?.CARGO && prorrateo.CARGO > 0) {
+          const descAplicable = Math.min(descCierreVP.CARGO, prorrateo.CARGO)
+          const precioPorDia = prorrateo.monto_CARGO / prorrateo.CARGO
+          prorrateo.monto_CARGO -= precioPorDia * descAplicable
+          prorrateo.CARGO = Math.max(0, prorrateo.CARGO - descAplicable)
         }
 
         // Calcular días desde inicio de asignación hasta fin de semana (domingo)
@@ -3641,7 +3770,7 @@ export function ReporteFacturacionTab() {
         .from('asignaciones_conductores') as any)
         .select(`
           id, conductor_id, horario, fecha_inicio, fecha_fin, estado, tipo_tarifa,
-          asignaciones!inner(id, horario, estado, fecha_inicio, fecha_fin, vehiculo_id, tipo_tarifa, vehiculos(gnc, updated_at))
+          asignaciones!inner(id, horario, estado, fecha_inicio, fecha_fin, vehiculo_id, tipo_tarifa, notas, vehiculos(gnc, updated_at))
         `)
         .in('conductor_id', conductorIdsTemp)
         .in('estado', ['asignado', 'activo', 'activa', 'finalizado', 'finalizada', 'completado', 'cancelado', 'cancelada'])
@@ -3738,6 +3867,12 @@ export function ReporteFacturacionTab() {
 
       // Descuentos por hora de entrega (misma lógica que Vista Previa)
       const descuentosPorHoraRecalc = new Map<string, { descuento: number; modalidad: string }>()
+      // Vehículo fuera de servicio (utils/cierreAsignacion.ts): descuentos de diurno / a cargo.
+      // Se juntan durante el recorrido y se aplican al final, solo si ese día se cobra.
+      const pendientesCierreRecalc = new Map<string, { conductorId: string; fecha: string; modalidad: 'TURNO_DIURNO' | 'CARGO'; descuento: number }>()
+      const descuentosCierreRecalc = new Map<string, { TURNO_DIURNO: number; CARGO: number }>()
+      // Fecha (yyyy-MM-dd) del descuento por hora de entrega, para el tope de 1 turno por día
+      const fechaDescEntregaRecalc = new Map<string, string>()
 
       // Pre-scan: detectar conductores que ya tenían asignación activa ANTES de esta semana
       // Si un conductor ya estaba trabajando (cambio de vehículo), NO se le aplica descuento por hora de entrega
@@ -3845,6 +3980,21 @@ export function ReporteFacturacionTab() {
           : (modalidadAsignacion === 'turno' && (horarioLower === 'nocturno' || horarioLower === 'n')) ? 'TURNO_NOCTURNO'
           : 'TURNO_DIURNO'
 
+        // Vehículo fuera de servicio (utils/cierreAsignacion.ts), mismo criterio que Vista Previa
+        const cierreR = evaluarCierre(timestampCierre(ac.fecha_fin, asignacion.fecha_fin), asignacion.notas)
+        if (cierreR) {
+          if (modalidadGnc === 'TURNO_NOCTURNO') {
+            if (format(efectivoFin, 'yyyy-MM-dd') === cierreR.fecha) {
+              const finSinCierreR = new Date(efectivoFin)
+              finSinCierreR.setDate(finSinCierreR.getDate() - 1)
+              efectivoFin = finSinCierreR
+            }
+          } else {
+            const descR = descuentoCierre(modalidadGnc, cierreR, paramsCierre)
+            if (descR > 0) pendientesCierreRecalc.set(`${ac.conductor_id}|${cierreR.fecha}|${modalidadGnc}`, { conductorId: ac.conductor_id, fecha: cierreR.fecha, modalidad: modalidadGnc, descuento: descR })
+          }
+        }
+
         // Contar días deduplicando por fecha (evita doble conteo con registros duplicados)
         // Si es sin_cobro, no contar ningún día pero dejar pasar al conductor
         const fechasContadasR = diasContadosRecalc.get(ac.conductor_id)!
@@ -3870,6 +4020,8 @@ export function ReporteFacturacionTab() {
           }
         }
 
+        const teniaDescEntregaR = descuentosPorHoraRecalc.has(ac.conductor_id)
+
         // Detectar descuento por hora de entrega (mismas reglas que Vista Previa)
         const modalidadDescR = (modalidadAsignacion === 'todo_dia' || horarioLower === 'todo_dia')
           ? 'CARGO'
@@ -3893,11 +4045,33 @@ export function ReporteFacturacionTab() {
           }
         }
 
+        if (!teniaDescEntregaR && descuentosPorHoraRecalc.has(ac.conductor_id) && asignacion.fecha_inicio) {
+          fechaDescEntregaRecalc.set(ac.conductor_id, toArgDate(asignacion.fecha_inicio))
+        }
+
         // Rastrear fecha_fin más tardía de asignación
         const finRealStrR = toArgDate(ac.fecha_fin || asignacion.fecha_fin || '')
         if (finRealStrR && finRealStrR > (maxAsigFinRecalc.get(ac.conductor_id) || '')) {
           maxAsigFinRecalc.set(ac.conductor_id, finRealStrR)
         }
+      }
+
+      // Vehículo fuera de servicio: descuento solo si ese día se cobra (con esta asignación o la
+      // de reemplazo), con tope de 1 turno por día sumando el descuento por hora de entrega.
+      const descontadoPorDiaR = new Map<string, number>()
+      for (const p of pendientesCierreRecalc.values()) {
+        if (!diasContadosRecalc.get(p.conductorId)?.has(p.fecha)) continue
+        const claveDia = `${p.conductorId}|${p.fecha}`
+        let yaDescontado = descontadoPorDiaR.get(claveDia)
+        if (yaDescontado === undefined) {
+          yaDescontado = fechaDescEntregaRecalc.get(p.conductorId) === p.fecha ? (descuentosPorHoraRecalc.get(p.conductorId)?.descuento || 0) : 0
+        }
+        const aplicado = Math.min(p.descuento, Math.max(0, 1 - yaDescontado))
+        descontadoPorDiaR.set(claveDia, yaDescontado + aplicado)
+        if (aplicado <= 0) continue
+        const acumulado = descuentosCierreRecalc.get(p.conductorId) || { TURNO_DIURNO: 0, CARGO: 0 }
+        acumulado[p.modalidad] += aplicado
+        descuentosCierreRecalc.set(p.conductorId, acumulado)
       }
 
       // Determinar conductores con asignación activa al cierre de la semana
@@ -3944,7 +4118,11 @@ export function ReporteFacturacionTab() {
         // Descuento por hora de entrega: restar turnos descontados
         const descInfoRecalc = descuentosPorHoraRecalc.get(conductorData.id)
         const descuentoRecalc = descInfoRecalc?.descuento || 0
-        const totalDias = Math.max(0, totalDiasBrutos - descuentoRecalc)
+        // Vehículo fuera de servicio: medio turno al diurno / a cargo (no puede superar los días contados)
+        const descCierreInfoR = descuentosCierreRecalc.get(conductorData.id)
+        const descCierreDiurnoR = Math.min(descCierreInfoR?.TURNO_DIURNO || 0, prorrateo.TURNO_DIURNO + prorrateo.TURNO_DIURNO_SIN_GNC)
+        const descCierreCargoR = Math.min(descCierreInfoR?.CARGO || 0, prorrateo.CARGO + prorrateo.CARGO_SIN_GNC)
+        const totalDias = Math.max(0, totalDiasBrutos - descuentoRecalc - descCierreDiurnoR - descCierreCargoR)
 
         // Ajustar días por modalidad restando el descuento de la modalidad correspondiente
         // El descuento se aplica a la variante con GNC primero, luego sin GNC
@@ -3967,6 +4145,21 @@ export function ReporteFacturacionTab() {
             descRestante -= descGnc
             if (descRestante > 0) diasCargoSinGncAjustados = Math.max(0, diasCargoSinGncAjustados - descRestante)
           }
+        }
+        // Igual que el descuento por hora de entrega: primero la variante con GNC, luego sin GNC
+        if (descCierreDiurnoR > 0) {
+          let restante = descCierreDiurnoR
+          const conGnc = Math.min(restante, diasDiurnoAjustados)
+          diasDiurnoAjustados = Math.max(0, diasDiurnoAjustados - conGnc)
+          restante -= conGnc
+          if (restante > 0) diasDiurnoSinGncAjustados = Math.max(0, diasDiurnoSinGncAjustados - restante)
+        }
+        if (descCierreCargoR > 0) {
+          let restante = descCierreCargoR
+          const conGnc = Math.min(restante, diasCargoAjustados)
+          diasCargoAjustados = Math.max(0, diasCargoAjustados - conGnc)
+          restante -= conGnc
+          if (restante > 0) diasCargoSinGncAjustados = Math.max(0, diasCargoSinGncAjustados - restante)
         }
 
         // Excluir solo a los que NO tuvieron ningún día en la semana (nunca asignados).
@@ -11909,19 +12102,27 @@ export function ReporteFacturacionTab() {
                             const esDiaDescuento = alertaLocal && d.trabajado && alertaLocal.fecha_entrega === d.fecha;
                             const esCompleto = esDiaDescuento && alertaLocal?.tipo === 'dia_completo';
                             const esPostBaja = !!d.postBaja;
+                            // Regla de cierre: nocturno sin cobro ese día / a cargo con medio turno descontado
+                            const cierreDia = d.cierre && (d.cierre.tipo === 'nocturno' ? !d.trabajado : d.trabajado) ? d.cierre : null;
                             const colorDia = esPostBaja
                               ? '#ef4444'
-                              : esDiaDescuento
+                              : cierreDia
+                                ? '#d97706'
+                                : esDiaDescuento
                                 ? (esCompleto ? '#ef4444' : '#d97706')
                                 : (d.trabajado ? '#10b981' : '#d1d5db');
                             const bgDia = esPostBaja
                               ? 'rgba(239, 68, 68, 0.06)'
-                              : esDiaDescuento
+                              : cierreDia
+                                ? 'rgba(234, 179, 8, 0.06)'
+                                : esDiaDescuento
                                 ? (esCompleto ? 'rgba(239, 68, 68, 0.06)' : 'rgba(234, 179, 8, 0.06)')
                                 : (d.trabajado ? 'rgba(16, 185, 129, 0.06)' : 'transparent');
                             const borderDia = esPostBaja
                               ? '1px solid rgba(239, 68, 68, 0.2)'
-                              : esDiaDescuento
+                              : cierreDia
+                                ? '1px solid rgba(234, 179, 8, 0.25)'
+                                : esDiaDescuento
                                 ? `1px solid ${esCompleto ? 'rgba(239, 68, 68, 0.2)' : 'rgba(234, 179, 8, 0.25)'}`
                                 : `1px solid ${d.trabajado ? 'rgba(16, 185, 129, 0.15)' : 'var(--border-primary)'}`;
 
@@ -11936,7 +12137,7 @@ export function ReporteFacturacionTab() {
                                   width: '8px', height: '8px', borderRadius: '50%',
                                   background: colorDia, flexShrink: 0,
                                 }} />
-                                <span style={{ fontSize: '12px', fontWeight: 600, color: (esDiaDescuento || esPostBaja) ? colorDia : 'var(--text-primary)', width: '75px' }}>
+                                <span style={{ fontSize: '12px', fontWeight: 600, color: (esDiaDescuento || esPostBaja || cierreDia) ? colorDia : 'var(--text-primary)', width: '75px' }}>
                                   {d.diaSemana}
                                 </span>
                                 <span style={{ fontSize: '12px', color: 'var(--text-secondary)', flex: 1 }}>
@@ -11945,6 +12146,17 @@ export function ReporteFacturacionTab() {
                                 {esPostBaja ? (
                                   <span style={{ fontSize: '10px', color: '#ef4444', fontWeight: 700 }}>
                                     Desc. por día sin actividad (1)
+                                  </span>
+                                ) : cierreDia ? (
+                                  <span style={{ fontSize: '10px', color: colorDia, fontWeight: 700 }}>
+                                    {(() => {
+                                      const fr = (n: number) => (n === 1 ? '1' : n === 0.5 ? '1/2' : String(n))
+                                      if (cierreDia.tipo === 'nocturno') return `Vehículo fuera de servicio ${cierreDia.hora}: no se cobra`
+                                      const entrega = esDiaDescuento ? `Desc. entrega fuera de turno (${fr(alertaLocal?.descuento_turnos || 0)}) + ` : 'Desc. '
+                                      const topeado = cierreDia.descuento < cierreDia.descuentoRegla
+                                      if (cierreDia.descuento <= 0) return `${entrega.replace(/ \+ $/, '')} · fuera de servicio ${cierreDia.hora}: sin desc. extra (tope 1 turno por día)`
+                                      return `${entrega}vehículo fuera de servicio ${cierreDia.hora} (${fr(cierreDia.descuento)})${topeado ? ' · tope 1 turno por día' : ''}`
+                                    })()}
                                   </span>
                                 ) : esDiaDescuento ? (
                                   <span style={{ fontSize: '10px', color: colorDia, fontWeight: 700 }}>
