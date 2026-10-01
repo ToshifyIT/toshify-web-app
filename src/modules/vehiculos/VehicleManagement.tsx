@@ -107,6 +107,14 @@ async function buscarOCrearTitular(
   return creado?.id || null
 }
 
+// Fecha (yyyy-MM-dd) y hora (HH:mm) actuales en Argentina, sin depender del huso del navegador
+const fechaArgFmt = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Argentina/Buenos_Aires', year: 'numeric', month: '2-digit', day: '2-digit' })
+const horaArgFmt = new Intl.DateTimeFormat('en-GB', { timeZone: 'America/Argentina/Buenos_Aires', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' })
+function fechaHoraArgentina(): { fecha: string; hora: string } {
+  const ahora = new Date()
+  return { fecha: fechaArgFmt.format(ahora), hora: horaArgFmt.format(ahora) }
+}
+
 export function VehicleManagement() {
   const { sedeActualId, aplicarFiltroSede } = useSede()
   const { grupos: gruposFlotaDB } = useGruposFlota()
@@ -135,6 +143,8 @@ export function VehicleManagement() {
     conductores: { nombre: string; horario: string }[]
     nuevoEstadoCodigo: string
     fechaFinalizacion: string
+    /** HH:mm, hora Argentina */
+    horaFinalizacion: string
     motivo: string
   } | null>(null)
   const finalizarResolveRef = useRef<((confirmed: boolean) => void) | null>(null)
@@ -937,13 +947,14 @@ export function VehicleManagement() {
             horario: c.horario || 'N/A',
           }))
 
-          // Mostrar modal de confirmación con fecha de finalización
-          const hoy = new Date().toISOString().split('T')[0]
+          // Mostrar modal de confirmación con fecha y hora de finalización (hora Argentina)
+          const ahoraArg = fechaHoraArgentina()
           setFinalizarData({
             asignaciones: asignacionesActivas,
             conductores: conductoresList,
             nuevoEstadoCodigo,
-            fechaFinalizacion: hoy,
+            fechaFinalizacion: ahoraArg.fecha,
+            horaFinalizacion: ahoraArg.hora,
             motivo: '',
           })
           setShowFinalizarModal(true)
@@ -960,8 +971,11 @@ export function VehicleManagement() {
           }
 
           motivoFinalizacion = confirmedData.motivo || 'Sin motivo especificado'
+          // Fecha y hora del cierre: Facturación las usa para cobrar el día en que el vehículo sale de
+          // servicio (ver modules/facturacion/utils/cierreAsignacion.ts, que reconoce estos cierres por
+          // la nota "[FINALIZADA] Cambio de estado a ..."). Argentina es UTC-3 todo el año.
           const fechaFin = confirmedData.fechaFinalizacion
-            ? new Date(confirmedData.fechaFinalizacion + 'T23:59:59-03:00').toISOString()
+            ? new Date(`${confirmedData.fechaFinalizacion}T${confirmedData.horaFinalizacion || '23:59'}:${confirmedData.horaFinalizacion ? '00' : '59'}-03:00`).toISOString()
             : new Date().toISOString()
 
           // Finalizar asignaciones activas
@@ -3646,20 +3660,35 @@ export function VehicleManagement() {
                 </div>
               )}
 
-              {/* Fecha de finalización */}
+              {/* Fecha y hora de finalización (hora Argentina) */}
               <div style={{ marginBottom: '16px' }}>
-                <label style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.5px', display: 'block', marginBottom: '6px' }}>
-                  Fecha de finalización de asignación
-                </label>
-                <input
-                  type="date"
-                  className="form-input"
-                  value={finalizarData.fechaFinalizacion}
-                  onChange={(e) => setFinalizarData({ ...finalizarData, fechaFinalizacion: e.target.value })}
-                  max={new Date().toISOString().split('T')[0]}
-                />
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 140px', gap: '12px' }}>
+                  <div>
+                    <label style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.5px', display: 'block', marginBottom: '6px' }}>
+                      Fecha de finalización de asignación
+                    </label>
+                    <input
+                      type="date"
+                      className="form-input"
+                      value={finalizarData.fechaFinalizacion}
+                      onChange={(e) => setFinalizarData({ ...finalizarData, fechaFinalizacion: e.target.value })}
+                      max={fechaHoraArgentina().fecha}
+                    />
+                  </div>
+                  <div>
+                    <label style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.5px', display: 'block', marginBottom: '6px' }}>
+                      Hora
+                    </label>
+                    <input
+                      type="time"
+                      className="form-input"
+                      value={finalizarData.horaFinalizacion}
+                      onChange={(e) => setFinalizarData({ ...finalizarData, horaFinalizacion: e.target.value })}
+                    />
+                  </div>
+                </div>
                 <span style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '4px', display: 'block' }}>
-                  Esta fecha se usará como fecha de fin de la asignación. Afecta la facturación.
+                  Fecha y hora de Argentina en que el vehículo sale de servicio. Afecta la facturación de ese día: el nocturno no se cobra (salvo que reciba otro vehículo ese día), al de a cargo se le descuenta medio turno y al diurno también si es antes de las 18:00.
                 </span>
               </div>
 
@@ -3691,7 +3720,7 @@ export function VehicleManagement() {
               <button
                 className="btn-primary"
                 style={{ background: '#ef4444', borderColor: '#ef4444' }}
-                disabled={!finalizarData.motivo || finalizarData.motivo.trim().length < 5}
+                disabled={!finalizarData.motivo || finalizarData.motivo.trim().length < 5 || !finalizarData.fechaFinalizacion || !finalizarData.horaFinalizacion}
                 onClick={() => {
                   setShowFinalizarModal(false)
                   finalizarResolveRef.current?.(true)

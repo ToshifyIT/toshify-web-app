@@ -22,6 +22,9 @@ const PARAMS_DEFAULTS: Record<string, { valor: string; descripcion: string }> = 
   descuento_diurno_antes: { valor: '0.5', descripcion: 'Descuento (turnos) si entrega diurna antes del corte' },
   descuento_diurno_despues: { valor: '1', descripcion: 'Descuento (turnos) si entrega diurna despues del corte' },
   descuento_cargo_despues: { valor: '0.5', descripcion: 'Descuento (turnos) si entrega a cargo despues del corte' },
+  hora_corte_cierre_diurno: { valor: '18', descripcion: 'Vehículo fuera de servicio - Hora corte Diurno: si sale de servicio antes de esta hora, se descuenta al diurno' },
+  descuento_diurno_cierre: { valor: '0.5', descripcion: 'Vehículo fuera de servicio - Descuento (turnos) al diurno si sale de servicio antes del corte' },
+  descuento_cargo_cierre: { valor: '0.5', descripcion: 'Vehículo fuera de servicio - Descuento (turnos) al conductor a cargo' },
 }
 
 const CLAVES = Object.keys(PARAMS_DEFAULTS)
