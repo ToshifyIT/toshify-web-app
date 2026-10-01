@@ -39,6 +39,7 @@ import { useAuth } from '../../../contexts/AuthContext'
 import { useSede } from '../../../contexts/SedeContext'
 
 import { ProgramacionAssignmentWizardV2 } from './components/ProgramacionAssignmentWizardV2'
+import type { PrecargaParMapa } from '../../../types/programacionPrecarga.types'
 import type { ProgramacionOnboardingCompleta, TipoTarifa } from '../../../types/onboarding.types'
 import { cargarConceptosTarifa, getEtiquetaTarifa, validarPreciosSemanales, type MapaConceptosTarifa, type TarifaRequerida } from '../tarifaConceptos'
 import Swal from 'sweetalert2'
@@ -547,9 +548,15 @@ export function ProgramacionV2Module() {
   // state se limpia enseguida para que un refresh o un "atrás" no lo reabra.
   const location = useLocation()
   const navigate = useNavigate()
+  // Par sugerido que llego desde "Distribucion en mapa v2". Vive aca y no en
+  // el wizard porque el wizard se desmonta al cerrar y el state ya se limpio.
+  const [precargaPar, setPrecargaPar] = useState<PrecargaParMapa | null>(null)
   useEffect(() => {
-    const state = location.state as { abrirNueva?: boolean } | null
+    const state = location.state as { abrirNueva?: boolean; precargaPar?: PrecargaParMapa } | null
     if (state?.abrirNueva) {
+      // El par viaja junto con `abrirNueva`. Puede no venir: entrar sin par
+      // sigue siendo valido (abre el wizard vacio, como antes).
+      setPrecargaPar(state.precargaPar || null)
       setShowCreateWizard(true)
       navigate(location.pathname, { replace: true, state: null })
     }
@@ -2671,10 +2678,12 @@ export function ProgramacionV2Module() {
       {/* Wizard Modal para CREAR (nuevo diseño visual) */}
       {showCreateWizard && (
         <ProgramacionAssignmentWizardV2
-          onClose={() => setShowCreateWizard(false)}
+          precarga={precargaPar}
+          onClose={() => { setShowCreateWizard(false); setPrecargaPar(null) }}
           onSuccess={() => {
             loadProgramaciones()
             setShowCreateWizard(false)
+            setPrecargaPar(null)
           }}
         />
       )}

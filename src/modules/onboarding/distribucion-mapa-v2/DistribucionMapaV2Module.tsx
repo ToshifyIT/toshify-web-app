@@ -77,6 +77,7 @@ import type {
   ParSugerido,
   Radar,
 } from './types'
+import type { PersonaPrecargaPar, PrecargaParMapa } from '../../../types/programacionPrecarga.types'
 import { FiltrosSidebar } from './components/FiltrosSidebar'
 import { contarFiltrosActivos, creadoEnRango, filtrosIniciales, type FiltrosV2 } from './components/filtrosOpciones'
 import { SIN_UBICACION } from './ubicacion'
@@ -963,14 +964,35 @@ export function DistribucionMapaV2Module() {
     )
   }, [])
 
+  /**
+   * Convierte una entidad del mapa en el minimo que necesita el wizard de
+   * programaciones para llenar un slot sin volver a consultar la BD.
+   */
+  const aPersonaPrecarga = useCallback((e: EntidadMapa): PersonaPrecargaPar => ({
+    id: e.id,
+    tipo: e.tipo,
+    nombre: e.nombre,
+    dni: e.documento,
+    zona: e.zona,
+    turno: e.turnoEfectivo || 'SIN_PREFERENCIA',
+    patenteAsignacion: e.patenteAsignacion,
+  }), [])
+
   const programarPar = useCallback(
     (p: ParSugerido) => {
+      // El copiado al portapapeles se mantiene: sirve para pegar el par en
+      // WhatsApp o en una planilla, independientemente de la programacion.
       copiarPar(p)
-      // `abrirNueva` le pide a Programación que abra el wizard de alta apenas
-      // monta, así no hay que buscar el botón después de saltar de pantalla.
-      navigate('/onboarding/programacion', { state: { abrirNueva: true } })
+      const precargaPar: PrecargaParMapa = {
+        a: aPersonaPrecarga(p.a),
+        b: aPersonaPrecarga(p.b),
+        tiempoMinutos: Number.isFinite(p.tiempoMinutos) ? p.tiempoMinutos : null,
+      }
+      // `abrirNueva` le pide a Programaciones v2 que abra el wizard de alta
+      // apenas monta; `precargaPar` es el par que lo entra ya cargado.
+      navigate('/onboarding/programacion-v2', { state: { abrirNueva: true, precargaPar } })
     },
-    [copiarPar, navigate]
+    [copiarPar, navigate, aPersonaPrecarga]
   )
 
   // ---------- Fichas ----------
