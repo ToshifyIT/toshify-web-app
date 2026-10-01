@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react'
-import { X, Gauge, Fuel, Clock, TrendingUp, MapPin, Calendar, Droplet } from 'lucide-react'
+import { X, Gauge, Fuel, Clock, TrendingUp, MapPin, Calendar, Droplet, User } from 'lucide-react'
 import { GoogleMap, useJsApiLoader, MarkerF } from '@react-google-maps/api'
-import { fetchFillups } from '../../../../services/combustibleService'
-import type { FuelSummary, FuelFillup } from '../types/combustible.types'
+import { fetchFillups, fetchConductoresEnCargas, limitesSemana } from '../../../../services/combustibleService'
+import type { FuelRow, FuelFillup, RangoSemana, ConductorEnCarga } from '../types/combustible.types'
 import {
   GOOGLE_MAPS_API_KEY,
   GOOGLE_MAPS_LIBRARIES,
@@ -11,8 +11,37 @@ import {
 } from '../../../../lib/googleMaps'
 
 interface Props {
-  vehiculo: FuelSummary | null
+  vehiculo: FuelRow | null
+  /** Semana elegida en el módulo: el historial de cargas se filtra por ella. */
+  rango: RangoSemana
+  etiquetaSemana: string
   onClose: () => void
+}
+
+const FUENTE_CONDUCTOR: Record<ConductorEnCarga['fuente'], string> = {
+  gps: 'según GPS',
+  asignacion: 'según asignación',
+  compartido: 'vehículo compartido · sin confirmar',
+  geotab: 'según Geotab',
+  sin_dato: '',
+}
+
+const fechaCorta = (iso: string) => {
+  const [, m, d] = iso.split('-')
+  return `${d}/${m}`
+}
+
+function MetricaSemana({ icono, titulo, valor, nota }: { icono: React.ReactNode; titulo: string; valor: string; nota?: string }) {
+  return (
+    <div style={{ background: 'var(--bg-secondary)', border: '1px solid var(--border-secondary)', borderRadius: 8, padding: 12 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
+        {icono}
+        <span style={{ fontSize: 10, color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: 0.3 }}>{titulo}</span>
+      </div>
+      <div style={{ fontFamily: 'ui-monospace, monospace', fontSize: 18, fontWeight: 700, color: 'var(--text-primary)' }}>{valor}</div>
+      {nota && <div style={{ fontSize: 10, color: 'var(--text-tertiary)', marginTop: 2 }}>{nota}</div>}
+    </div>
+  )
 }
 
 interface MapaModalProps {
@@ -135,21 +164,36 @@ function formatFechaLarga(iso: string): string {
   })
 }
 
-export function CombustibleDetalleDrawer({ vehiculo, onClose }: Props) {
+export function CombustibleDetalleDrawer({ vehiculo, rango, etiquetaSemana, onClose }: Props) {
   const [fillups, setFillups] = useState<FuelFillup[]>([])
+  const [conductores, setConductores] = useState<Map<string, ConductorEnCarga>>(new Map())
   const [loading, setLoading] = useState(false)
   const [mapaFillup, setMapaFillup] = useState<FuelFillup | null>(null)
 
+  const vehiculoId = vehiculo?.vehiculo_id ?? null
+  const patente = vehiculo?.patente ?? ''
+
+  // Cargas de la semana elegida y quién tenía el vehículo en cada una
   useEffect(() => {
-    if (!vehiculo?.vehiculo_id) {
+    if (!vehiculoId) {
       setFillups([])
+      setConductores(new Map())
       return
     }
+    let cancelado = false
     setLoading(true)
-    fetchFillups({ vehiculoId: vehiculo.vehiculo_id })
-      .then(setFillups)
-      .finally(() => setLoading(false))
-  }, [vehiculo?.vehiculo_id])
+    const { desde, hastaExclusivo } = limitesSemana(rango)
+    fetchFillups({ vehiculoId, desde, hasta: new Date(hastaExclusivo.getTime() - 1) })
+      .then(async (lista) => {
+        if (cancelado) return
+        setFillups(lista)
+        const quien = await fetchConductoresEnCargas(vehiculoId, patente, lista)
+        if (!cancelado) setConductores(quien)
+      })
+      .catch((e) => console.error('[Combustible] Error cargando llenados', e))
+      .finally(() => { if (!cancelado) setLoading(false) })
+    return () => { cancelado = true }
+  }, [vehiculoId, patente, rango])
 
   if (!vehiculo) return null
 
@@ -183,16 +227,42 @@ export function CombustibleDetalleDrawer({ vehiculo, onClose }: Props) {
 
         <div className="alerta-drawer-body">
 
-          {/* Período */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: 'var(--text-tertiary)' }}>
-            <Calendar size={12} />
-            Últimos {vehiculo.periodo_dias} días · {formatFechaLarga(vehiculo.fecha_desde)} → {formatFechaLarga(vehiculo.fecha_hasta)}
+          {/* SEMANA ELEGIDA */}
+          <div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 10, fontWeight: 700, color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: 0.4, marginBottom: 8 }}>
+              <Calendar size={12} />
+              {etiquetaSemana} · {fechaCorta(rango.desde)} al {fechaCorta(rango.hasta)}
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+              <MetricaSemana
+                icono={<Gauge size={14} style={{ color: 'var(--text-tertiary)' }} />}
+                titulo="Distancia"
+                valor={vehiculo.km_semana ? `${vehiculo.km_semana.toLocaleString('es-AR')} km` : '—'}
+              />
+              <MetricaSemana
+                icono={<Fuel size={14} style={{ color: 'var(--text-tertiary)' }} />}
+                titulo="Consumo"
+                valor={vehiculo.consumo_semana !== null ? `${vehiculo.consumo_semana.toFixed(2)} L` : '—'}
+                nota="Tramos entre cargas (aprox.)"
+              />
+              <MetricaSemana
+                icono={<TrendingUp size={14} style={{ color: 'var(--text-tertiary)' }} />}
+                titulo="Rendimiento"
+                valor={vehiculo.rendimiento_semana !== null ? `${vehiculo.rendimiento_semana.toFixed(2)} km/L` : '—'}
+              />
+              <MetricaSemana
+                icono={<Droplet size={14} style={{ color: 'var(--text-tertiary)' }} />}
+                titulo="Llenados"
+                valor={String(vehiculo.llenados_semana)}
+                nota={vehiculo.litros_cargados_semana > 0 ? `${vehiculo.litros_cargados_semana.toFixed(0)} L cargados` : undefined}
+              />
+            </div>
           </div>
 
-          {/* MÉTRICAS DEL PERÍODO */}
+          {/* ÚLTIMOS 30 DÍAS */}
           <div>
             <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: 0.4, marginBottom: 8 }}>
-              Resumen del período
+              Últimos {vehiculo.periodo_dias} días · {formatFechaLarga(vehiculo.fecha_desde)} → {formatFechaLarga(vehiculo.fecha_hasta)}
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
               {/* Distancia */}
@@ -297,7 +367,7 @@ export function CombustibleDetalleDrawer({ vehiculo, onClose }: Props) {
           {/* LLENADOS DETECTADOS */}
           <div>
             <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: 0.4, marginBottom: 8 }}>
-              Llenados detectados ({fillups.length})
+              Llenados de la semana ({fillups.length})
             </div>
             {loading ? (
               <div style={{ padding: 20, textAlign: 'center', color: 'var(--text-tertiary)', fontSize: 12 }}>Cargando...</div>
@@ -306,13 +376,14 @@ export function CombustibleDetalleDrawer({ vehiculo, onClose }: Props) {
                 padding: 20, textAlign: 'center', color: 'var(--text-tertiary)', fontSize: 12,
                 background: 'var(--bg-secondary)', border: '1px solid var(--border-secondary)', borderRadius: 8,
               }}>
-                No se detectaron llenados en este vehículo.
+                No se detectaron llenados en esta semana.
               </div>
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                 {fillups.map(f => {
                   const subida = f.subida_pct
                   const vol = f.volume_litros || f.derived_volume_litros
+                  const quien = conductores.get(f.id)
                   return (
                     <div
                       key={f.id}
@@ -351,6 +422,16 @@ export function CombustibleDetalleDrawer({ vehiculo, onClose }: Props) {
                             <span style={{ color: 'var(--text-tertiary)' }}>Odómetro:</span>{' '}
                             <strong>{Math.round(f.odometro_metros / 1000).toLocaleString('es-AR')} km</strong>
                           </div>
+                        )}
+                      </div>
+                      <div className="combustible-cargo">
+                        <User size={11} />
+                        <span>Cargó:</span>
+                        <strong>{quien ? quien.nombre : loading ? 'Buscando…' : 'Sin dato'}</strong>
+                        {quien && FUENTE_CONDUCTOR[quien.fuente] && (
+                          <span className={`dt-badge ${quien.fuente === 'compartido' ? 'dt-badge-orange' : 'dt-badge-gray'}`} style={{ fontSize: 9 }}>
+                            {FUENTE_CONDUCTOR[quien.fuente]}
+                          </span>
                         )}
                       </div>
                       {(f.location_lat != null && f.location_lng != null) && (

@@ -2,20 +2,35 @@ import { useMemo } from 'react'
 import type { ColumnDef } from '@tanstack/react-table'
 import { Eye } from 'lucide-react'
 import { DataTable } from '../../../../components/ui/DataTable'
-import type { FuelSummary } from '../types/combustible.types'
+import type { FuelRow } from '../types/combustible.types'
 
 interface Props {
-  summary: FuelSummary[]
+  rows: FuelRow[]
   loading: boolean
-  onRowClick: (v: FuelSummary) => void
+  onRowClick: (v: FuelRow) => void
+  /** Filas visibles tras búsqueda y filtros de columna (para los indicadores). */
+  onFilteredRowsChange?: (rows: FuelRow[]) => void
+}
+
+const guion = <span style={{ fontSize: 11, color: 'var(--text-tertiary)' }}>—</span>
+
+/** Color del estado del vehículo (mismos grupos que Estado de Flota). */
+function claseEstadoVehiculo(codigo: string | null): string {
+  const c = (codigo || '').toUpperCase()
+  if (c === 'EN_USO') return 'dt-badge-green'
+  if (c.startsWith('PKG_ON')) return 'dt-badge-blue'
+  if (c.includes('TALLER') || c.includes('RETENIDO') || c.includes('COMISARIA')) return 'dt-badge-red'
+  if (c.startsWith('PKG_OFF')) return 'dt-badge-orange'
+  return 'dt-badge-gray'
 }
 
 /**
  * Tabla principal del módulo Control de Combustible.
- * 1 fila por vehículo con sus métricas agregadas de los últimos 30 días.
+ * 1 fila por vehículo: métricas de la semana elegida (distancia, consumo, rendimiento,
+ * llenados), ralentí de los últimos 30 días, nivel actual del tanque, estado y conductores.
  */
-export function CombustibleTable({ summary, loading, onRowClick }: Props) {
-  const columns = useMemo<ColumnDef<FuelSummary>[]>(() => [
+export function CombustibleTable({ rows, loading, onRowClick, onFilteredRowsChange }: Props) {
+  const columns = useMemo<ColumnDef<FuelRow>[]>(() => [
     {
       accessorKey: 'patente',
       header: 'Vehículo',
@@ -47,12 +62,37 @@ export function CombustibleTable({ summary, loading, onRowClick }: Props) {
       },
     },
     {
-      accessorKey: 'distancia_km',
+      id: 'estado_vehiculo',
+      accessorFn: (row) => row.estado_vehiculo || 'Sin dato',
+      header: 'Estado / A cargo',
+      size: 190,
+      cell: ({ row }) => {
+        const { estado_vehiculo, estado_vehiculo_codigo, a_cargo } = row.original
+        return (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 3, minWidth: 0, maxWidth: 190 }}>
+            {estado_vehiculo
+              ? <span className={`dt-badge ${claseEstadoVehiculo(estado_vehiculo_codigo)}`} style={{ alignSelf: 'flex-start' }}>{estado_vehiculo}</span>
+              : guion}
+            {a_cargo.map(nombre => (
+              <span
+                key={nombre}
+                title={nombre}
+                style={{ fontSize: 10, color: 'var(--text-secondary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+              >
+                {nombre}
+              </span>
+            ))}
+          </div>
+        )
+      },
+    },
+    {
+      accessorKey: 'km_semana',
       header: 'Distancia',
       size: 100,
       cell: ({ getValue }) => {
         const v = Number(getValue()) || 0
-        if (v <= 0) return <span style={{ fontSize: 11, color: 'var(--text-tertiary)' }}>—</span>
+        if (v <= 0) return guion
         return (
           <span style={{ fontFamily: 'ui-monospace, monospace', fontSize: 12, fontWeight: 600 }}>
             {v.toLocaleString('es-AR')} km
@@ -61,16 +101,20 @@ export function CombustibleTable({ summary, loading, onRowClick }: Props) {
       },
     },
     {
-      accessorKey: 'combustible_litros',
-      header: 'Combustible',
+      accessorKey: 'consumo_semana',
+      header: 'Consumo',
       size: 110,
       cell: ({ row }) => {
-        const v = Number(row.original.combustible_litros) || 0
+        const v = row.original.consumo_semana
         if (!row.original.tiene_telemetria) {
           return <span style={{ fontSize: 11, color: 'var(--text-tertiary)' }}>Sin OBD</span>
         }
+        if (v === null) return guion
         return (
-          <span style={{ fontFamily: 'ui-monospace, monospace', fontSize: 12, fontWeight: 600 }}>
+          <span
+            style={{ fontFamily: 'ui-monospace, monospace', fontSize: 12, fontWeight: 600 }}
+            title="Combustible usado en los tramos entre cargas de la semana (aproximado)"
+          >
             {v.toFixed(2)} L
           </span>
         )
@@ -98,7 +142,7 @@ export function CombustibleTable({ summary, loading, onRowClick }: Props) {
     },
     {
       accessorKey: 'ralenti_litros',
-      header: 'Ralentí',
+      header: 'Ralentí (30 días)',
       size: 110,
       cell: ({ row }) => {
         const litros = Number(row.original.ralenti_litros) || 0
@@ -118,12 +162,12 @@ export function CombustibleTable({ summary, loading, onRowClick }: Props) {
       },
     },
     {
-      accessorKey: 'rendimiento_km_litro',
+      accessorKey: 'rendimiento_semana',
       header: 'Rendimiento',
       size: 110,
       cell: ({ row }) => {
-        const v = Number(row.original.rendimiento_km_litro) || 0
-        if (!row.original.tiene_telemetria || v <= 0 || v > 100) {
+        const v = row.original.rendimiento_semana
+        if (!row.original.tiene_telemetria || v === null) {
           return <span style={{ fontSize: 11, color: 'var(--text-tertiary)' }}>Insuficiente</span>
         }
         const color = v >= 10 ? '#16a34a' : v >= 7 ? '#ea580c' : '#dc2626'
@@ -135,35 +179,42 @@ export function CombustibleTable({ summary, loading, onRowClick }: Props) {
       },
     },
     {
-      accessorKey: 'llenados_count',
+      accessorKey: 'llenados_semana',
       header: 'Llenados',
-      size: 80,
-      cell: ({ getValue }) => {
-        const v = Number(getValue()) || 0
-        if (v <= 0) return <span style={{ fontSize: 11, color: 'var(--text-tertiary)' }}>—</span>
-        return <span className="dt-badge dt-badge-blue">{v}</span>
+      size: 90,
+      cell: ({ row }) => {
+        const v = row.original.llenados_semana
+        if (v <= 0) return guion
+        const litros = row.original.litros_cargados_semana
+        return (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 2, alignItems: 'flex-start' }}>
+            <span className="dt-badge dt-badge-blue">{v}</span>
+            {litros > 0 && <span style={{ fontSize: 10, color: 'var(--text-tertiary)' }}>{litros.toFixed(0)} L cargados</span>}
+          </div>
+        )
       },
     },
     {
       id: 'estado',
       accessorFn: (row) => {
-        if (!row.tiene_telemetria) return 'sin_obd'
+        if (!row.tiene_telemetria) return 'Sin OBD'
         const pct = Number(row.ralenti_pct) || 0
-        const rendimiento = Number(row.rendimiento_km_litro) || 0
-        if (pct > 25) return 'idle_alto'
-        if (rendimiento > 0 && rendimiento < 7) return 'consumo_alto'
-        return 'normal'
+        const rendimiento = row.rendimiento_semana
+        if (pct > 25) return 'Ralentí alto'
+        if (rendimiento !== null && rendimiento < 7) return 'Consumo alto'
+        if (rendimiento !== null) return 'Normal'
+        return 'Sin datos en la semana'
       },
       header: 'Estado',
       size: 120,
       cell: ({ row }) => {
         if (!row.original.tiene_telemetria) return <span className="dt-badge dt-badge-gray">Sin OBD</span>
         const pct = Number(row.original.ralenti_pct) || 0
-        const rendimiento = Number(row.original.rendimiento_km_litro) || 0
+        const rendimiento = row.original.rendimiento_semana
         if (pct > 25) return <span className="dt-badge dt-badge-orange">Ralentí alto</span>
-        if (rendimiento > 0 && rendimiento < 7) return <span className="dt-badge dt-badge-red">Consumo alto</span>
-        if (rendimiento > 0 && rendimiento <= 100) return <span className="dt-badge dt-badge-green">Normal</span>
-        return <span className="dt-badge dt-badge-gray">Sin uso</span>
+        if (rendimiento !== null && rendimiento < 7) return <span className="dt-badge dt-badge-red">Consumo alto</span>
+        if (rendimiento !== null) return <span className="dt-badge dt-badge-green">Normal</span>
+        return <span className="dt-badge dt-badge-gray">Sin datos</span>
       },
     },
     {
@@ -205,8 +256,9 @@ export function CombustibleTable({ summary, loading, onRowClick }: Props) {
   return (
     <DataTable
       columns={columns}
-      data={summary}
+      data={rows}
       loading={loading}
+      onFilteredDataChange={onFilteredRowsChange}
       searchPlaceholder="Buscar patente o modelo..."
       emptyTitle="Sin datos de combustible"
       emptyDescription="No hay datos sincronizados de Geotab. El sync corre cada hora."
