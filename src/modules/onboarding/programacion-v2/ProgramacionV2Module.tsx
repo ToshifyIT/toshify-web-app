@@ -226,6 +226,14 @@ export function ProgramacionV2Module() {
   const [programacionesHistorico, setProgramacionesHistorico] = useState<ProgramacionOnboardingCompleta[]>([])
   const [loading, setLoading] = useState(true)
   const [loadingHistorico, setLoadingHistorico] = useState(false)
+  /**
+   * Envio a Asignaciones en curso.
+   *
+   * El proceso encadena varias llamadas (crear la asignacion, los conductores,
+   * la visita y el documento de cada uno). Hasta ahora no mostraba nada: el
+   * operador no sabia si habia pasado algo y podia volver a tocar el boton.
+   */
+  const [enviandoEntrega, setEnviandoEntrega] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [activeTab, setActiveTab] = useState<'pendientes' | 'historico'>('pendientes')
   
@@ -1445,6 +1453,7 @@ export function ProgramacionV2Module() {
 
     if (!result.isConfirmed) return
 
+    setEnviandoEntrega(true)
     try {
       // Buscar conductor respetando la modalidad de la programación
       // TURNO: priorizar conductor_diurno, luego nocturno, luego legacy
@@ -1593,6 +1602,8 @@ export function ProgramacionV2Module() {
       showSuccess('Devolución Creada', `${prog.vehiculo_entregar_patente}`)
     } catch (err: any) {
       Swal.fire('Error', err.message || 'Error al crear devolución', 'error')
+    } finally {
+      setEnviandoEntrega(false)
     }
   }
 
@@ -1949,6 +1960,7 @@ export function ProgramacionV2Module() {
 
     if (!result.isConfirmed) return
 
+    setEnviandoEntrega(true)
     try {
       // Helper para mapear documento de programación a asignación
       const mapDocumento = (doc: string | undefined) => {
@@ -2220,6 +2232,8 @@ export function ProgramacionV2Module() {
 
     } catch (err: any) {
       Swal.fire('Error', err.message || 'Error al crear asignacion', 'error')
+    } finally {
+      setEnviandoEntrega(false)
     }
   }
 
@@ -2989,6 +3003,15 @@ export function ProgramacionV2Module() {
     <div className="prog-module">
       {/* Loading Overlay - bloquea toda la pantalla */}
       <LoadingOverlay show={loading} message="Cargando programaciones..." size="lg" />
+      {/* Envio a Asignaciones: tapa la pantalla hasta que vuelve la respuesta,
+          para que no se toque el boton dos veces mientras se crean la
+          asignacion y los documentos. */}
+      <LoadingOverlay
+        show={enviandoEntrega}
+        message="Creando asignación y generando documentos…"
+        submessage="Espere la respuesta de confirmación"
+        size="lg"
+      />
 
       {/* Stats Cards - Ocultos temporalmente
       <div className="prog-stats">
