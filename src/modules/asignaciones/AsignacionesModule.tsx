@@ -705,7 +705,7 @@ export function AsignacionesModule() {
             vehiculos (patente, marca, modelo, gnc),
             asignaciones_conductores (
               id, conductor_id, estado, horario, confirmado, fecha_confirmacion, documento, tipo_tarifa, fecha_inicio, fecha_fin,
-              conductores (nombres, apellidos, numero_licencia, estado_id, cochera_propia, contacto_emergencia, telefono_emergencia, parentesco_emergencia, conductores_estados(codigo))
+              conductores (nombres, apellidos, numero_licencia, estado_id, drive_contract_folder_url, cochera_propia, contacto_emergencia, telefono_emergencia, parentesco_emergencia, conductores_estados(codigo))
             )
           `))
           .order('fecha_programada', { ascending: false, nullsFirst: false })
@@ -1006,6 +1006,29 @@ export function AsignacionesModule() {
     document.addEventListener('keydown', onEscape)
     return () => document.removeEventListener('keydown', onEscape)
   }, [showHistorialCond, showControlModal, controlSaving, showConfirmModal, showCancelModal, showRegularizarModal, showViewModal])
+
+  /**
+   * La asignacion tiene algun conductor SIN carpeta de contratos en Drive.
+   *
+   * Es la misma condicion que muestra "Sin carpeta" en el detalle: el conductor
+   * no tiene `drive_contract_folder_url`, o sea que el documento no llego a
+   * generarse y la programacion hay que rehacerla.
+   *
+   * Tres recortes, a proposito:
+   *  - Documento 'NA' / 'N/A': no se espera carpeta, no se marca.
+   *  - Asignaciones canceladas: ya no hay nada que regenerar.
+   *  - Alcanza con que UNO de los dos turnos no tenga carpeta: la entrega no
+   *    se puede hacer a medias.
+   */
+  const asignacionSinCarpeta = (a: any): boolean => {
+    if (!a || a.estado === 'cancelada') return false
+    const ocupantes = a.asignaciones_conductores || []
+    return ocupantes.some((ac: any) => {
+      if (!ac?.conductor_id) return false
+      if (ac.documento === 'NA' || ac.documento === 'N/A') return false
+      return !(ac.conductores as any)?.drive_contract_folder_url
+    })
+  }
 
   // Cargar drive_contract_folder_url (carpeta de contratos) directo de conductores
   // cuando se abre el modal de detalle de la asignación
@@ -3436,6 +3459,7 @@ export function AsignacionesModule() {
       {/* DataTable */}
       <DataTable
         data={expandedAsignaciones}
+        getRowClassName={(a: any) => (asignacionSinCarpeta(a) ? 'asig-row-sin-carpeta' : undefined)}
         columns={columns}
         loading={loading}
         error={error}
@@ -3996,8 +4020,21 @@ export function AsignacionesModule() {
                                   </>
                                 ) : (
                                   <>
-                                    <FolderOpen size={22} style={{ color: '#9CA3AF', marginBottom: '6px' }} />
-                                    <span style={{ fontSize: '12px', color: '#9CA3AF', fontWeight: 500, textAlign: 'center' }}>Sin carpeta</span>
+                                    <FolderOpen size={22} style={{ color: '#DC2626', marginBottom: '6px' }} />
+                                    <span style={{ fontSize: '12px', color: '#DC2626', fontWeight: 700, textAlign: 'center' }}>Sin carpeta</span>
+                                    <span
+                                      style={{
+                                        marginTop: '6px',
+                                        maxWidth: '190px',
+                                        fontSize: '11px',
+                                        lineHeight: 1.35,
+                                        color: '#B91C1C',
+                                        fontWeight: 600,
+                                        textAlign: 'center',
+                                      }}
+                                    >
+                                      No se generó el documento, por favor volver a generar la programación
+                                    </span>
                                   </>
                                 )}
                               </div>

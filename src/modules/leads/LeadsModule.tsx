@@ -11,7 +11,7 @@ import { inferirSedeDeLead, normalizarTexto } from '../../utils/sedeMatch'
 import { createPortal } from 'react-dom'
 import {
   Eye, Edit2, Trash2, Users, UserPlus, RefreshCw, MessageCircle, Layers, Link2,
-  CheckCircle, AlertTriangle, X, Download, Upload, FolderOpen, Car, Bell, PhoneCall,
+  CheckCircle, AlertTriangle, X, Download, Upload, FolderOpen, Car, Bell, PhoneCall, MapPin,
 } from 'lucide-react'
 import { ActionsMenu } from '../../components/ui/ActionsMenu'
 import { supabase } from '../../lib/supabase'
@@ -140,9 +140,57 @@ function buscarEnPlaces(query: string): Promise<{ lat: number; lng: number } | n
 //  - coords presentes -> encontrado (estado 'ok' | 'aproximado')
 //  - coords null + sinResultado true  -> Google devolvió ZERO_RESULTS (permanente)
 //  - coords null + sinResultado false -> error transitorio (cuota, red): NO marcar permanente
-type GeocodeResultado = { lat: number; lng: number; estado: string } | { lat: null; lng: null; estado: null; sinResultado: boolean }
+type GeocodeResultado =
+  | { lat: number; lng: number; estado: string; pais: string | null; ciudad: string | null }
+  | { lat: null; lng: null; estado: null; sinResultado: boolean; pais: null; ciudad: null }
 
-function geocodificarConGeocoder(direccion: string): Promise<{ status: string; lat: number | null; lng: number | null; preciso: boolean }> {
+/**
+ * Corte del backfill de pais/ciudad.
+ *
+ * Un lead ya geocodificado se vuelve a geocodificar UNA sola vez para
+ * completarle pais y ciudad: solo si su ultimo geocoding es anterior a esta
+ * fecha. Sin este corte, un lead que Google resuelve pero para el que no
+ * devuelve pais se reintentaria en cada carga para siempre.
+ *
+ * Es una marca de agua fija: no se mueve salvo que haya que forzar otra
+ * pasada sobre todos los leads.
+ */
+const CORTE_BACKFILL_UBICACION = '2026-10-02T00:00:00.000Z'
+
+/**
+ * Pais y ciudad del `address_components` que devuelve el geocoder.
+ *
+ * Google ya separa estos datos y hasta ahora se descartaban, obligando al mapa
+ * a parsear el texto de la direccion (que en leads esta escrito a mano y casi
+ * nunca trae el pais). Leerlos de aca no cuesta ninguna llamada extra.
+ *
+ * Que se toma como "ciudad":
+ *  - CABA: Google pone `administrative_area_level_1` =
+ *    "Ciudad Autonoma de Buenos Aires" y `locality` = "Buenos Aires". Se usa el
+ *    primero para que coincida con la etiqueta del mapa y la misma ciudad no
+ *    quede partida en dos nombres distintos en el filtro.
+ *  - Resto: `locality` (la localidad) y, si no vino, el partido
+ *    (`administrative_area_level_2`), que es el nivel con el que se habla en
+ *    provincia de Buenos Aires.
+ */
+function ubicacionDeComponentes(
+  componentes: any[] | undefined
+): { pais: string | null; ciudad: string | null } {
+  if (!Array.isArray(componentes)) return { pais: null, ciudad: null }
+  const porTipo = (tipo: string) =>
+    componentes.find((c: any) => Array.isArray(c?.types) && c.types.includes(tipo))?.long_name || null
+
+  const pais = porTipo('country')
+  const admin1 = porTipo('administrative_area_level_1')
+  const sinAcentos = (t: string) => t.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
+
+  if (admin1 && sinAcentos(admin1).includes('autonoma de buenos aires')) {
+    return { pais, ciudad: 'Ciudad Autónoma de Buenos Aires' }
+  }
+  return { pais, ciudad: porTipo('locality') || porTipo('administrative_area_level_2') }
+}
+
+function geocodificarConGeocoder(direccion: string): Promise<{ status: string; lat: number | null; lng: number | null; preciso: boolean; pais: string | null; ciudad: string | null }> {
   return new Promise((resolve) => {
     const geocoder = new (window as any).google.maps.Geocoder()
     geocoder.geocode(
@@ -153,9 +201,10 @@ function geocodificarConGeocoder(direccion: string): Promise<{ status: string; l
           const location = r.geometry.location
           const locType: string = r.geometry?.location_type || ''
           const preciso = (locType === 'ROOFTOP' || locType === 'RANGE_INTERPOLATED') && !r.partial_match
-          resolve({ status, lat: location.lat(), lng: location.lng(), preciso })
+          const { pais, ciudad } = ubicacionDeComponentes(r.address_components)
+          resolve({ status, lat: location.lat(), lng: location.lng(), preciso, pais, ciudad })
         } else {
-          resolve({ status, lat: null, lng: null, preciso: false })
+          resolve({ status, lat: null, lng: null, preciso: false, pais: null, ciudad: null })
         }
       }
     )
@@ -168,22 +217,24 @@ async function geocodificarDireccion(direccion: string): Promise<GeocodeResultad
   // 1) Geocoder con el texto normalizado (mejor precisión de altura)
   const geo = await geocodificarConGeocoder(normalizada)
   if (geo.lat != null && geo.lng != null && geo.preciso) {
-    return { lat: geo.lat, lng: geo.lng, estado: 'ok' }
+    return { lat: geo.lat, lng: geo.lng, estado: 'ok', pais: geo.pais, ciudad: geo.ciudad }
   }
 
   // 2) Fallback a Places cuando el geocoder no ubicó la calle (aproximado o ZERO_RESULTS)
+  //    Places se pide solo con `geometry`, asi que no trae componentes: si el
+  //    geocoder alcanzo a resolver pais/ciudad se conservan esos.
   const place = await buscarEnPlaces(normalizada)
   if (place) {
-    return { lat: place.lat, lng: place.lng, estado: 'aproximado' }
+    return { lat: place.lat, lng: place.lng, estado: 'aproximado', pais: geo.pais, ciudad: geo.ciudad }
   }
 
   // 3) Sin Places: si el geocoder al menos dio un punto aproximado, lo usamos
   if (geo.lat != null && geo.lng != null) {
-    return { lat: geo.lat, lng: geo.lng, estado: 'aproximado' }
+    return { lat: geo.lat, lng: geo.lng, estado: 'aproximado', pais: geo.pais, ciudad: geo.ciudad }
   }
 
   // 4) Nada. Solo ZERO_RESULTS es permanente; el resto se reintenta.
-  return { lat: null, lng: null, estado: null, sinResultado: geo.status === 'ZERO_RESULTS' }
+  return { lat: null, lng: null, estado: null, sinResultado: geo.status === 'ZERO_RESULTS', pais: null, ciudad: null }
 }
 
 // =====================================================
@@ -818,6 +869,12 @@ export function LeadsModule() {
         direccion_geocode_estado: res.estado,
         direccion_geocode_fecha: now,
       }
+      // Pais y ciudad salen del address_components de esta misma respuesta:
+      // no son una llamada mas. Se pisan siempre que Google los devuelva
+      // porque son datos DERIVADOS de la direccion, no cargados a mano: si la
+      // direccion cambio, el pais viejo ya no vale.
+      if (res.pais) datos.direccion_pais = res.pais
+      if (res.ciudad) datos.direccion_ciudad = res.ciudad
       if (!lead.zona?.trim()) {
         const zonaInferida = inferZona(lead.direccion || '', res.lat, res.lng)
         // inferZona devuelve '' fuera del AMBA: en ese caso se deja sin zona
@@ -845,10 +902,26 @@ export function LeadsModule() {
   // ---------- GEOCODIFICAR LEADS SIN COORDENADAS NUEVAS ----------
   const geocodificarLeadsSinCoordenadas = useCallback(async (leadsList: Lead[]) => {
     try {
-      // Solo los que tienen dirección y todavía no tienen coordenadas geocodificadas
-      const sinCoords = leadsList.filter(
-        l => l.direccion && l.direccion_latitud == null && l.direccion_geocode_estado !== 'sin_resultado'
+      // Dos grupos, en este orden de prioridad:
+      //  1. Sin coordenadas: es lo que siempre hizo este proceso.
+      //  2. Con coordenadas pero SIN pais: leads geocodificados antes de que
+      //     se guardaran pais/ciudad. Se los vuelve a geocodificar UNA sola
+      //     vez (ver CORTE_BACKFILL_UBICACION) para completarlos.
+      const pendientes = (l: Lead) =>
+        !!l.direccion && l.direccion_geocode_estado !== 'sin_resultado'
+
+      const sinCoordenadas = leadsList.filter(
+        (l) => pendientes(l) && l.direccion_latitud == null
       )
+      const sinPais = leadsList.filter(
+        (l) =>
+          pendientes(l) &&
+          l.direccion_latitud != null &&
+          !l.direccion_pais &&
+          (l.direccion_geocode_fecha || '') < CORTE_BACKFILL_UBICACION
+      )
+
+      const sinCoords = [...sinCoordenadas, ...sinPais]
       if (sinCoords.length === 0) return
 
       try {
@@ -896,6 +969,81 @@ export function LeadsModule() {
       console.error('[Leads] Error recalculando ubicación:', err)
     }
   }, [loadLeads, geocodificarYGuardarDireccion])
+
+  // ---------- BACKFILL DE PAIS / CIUDAD (boton manual) ----------
+  //
+  // El proceso automatico va de a 150 por carga del modulo: para completar
+  // ~1900 leads harian falta una docena de visitas. Este boton hace la pasada
+  // completa de una, con el total a la vista y con cancelacion, porque gasta
+  // una llamada de geocoding por lead y esa decision es del operador.
+  const [backfillUbicacion, setBackfillUbicacion] = useState<{ hechos: number; total: number } | null>(null)
+  const cancelarBackfillRef = useRef(false)
+
+  /**
+   * Leads a los que les falta el pais y todavia tiene sentido preguntarle a
+   * Google. Sale de `leads`, que ya viene filtrado por la sede activa: el
+   * boton completa la sede en la que estas parado, no toda la base.
+   */
+  const leadsSinUbicacion = useMemo(
+    () =>
+      leads.filter(
+        (l) => l.direccion && !l.direccion_pais && l.direccion_geocode_estado !== 'sin_resultado'
+      ),
+    [leads]
+  )
+
+  const completarUbicacionLeads = useCallback(async () => {
+    const pendientes = leadsSinUbicacion
+    if (pendientes.length === 0) {
+      Swal.fire('Nada que completar', 'Todos los leads de esta sede ya tienen pais y ciudad.', 'info')
+      return
+    }
+
+    const confirmacion = await Swal.fire({
+      icon: 'warning',
+      title: 'Completar ubicacion',
+      html:
+        `Se van a geocodificar <b>${pendientes.length}</b> leads contra Google para obtener ` +
+        'pais y ciudad.<br><br>Es <b>una llamada por lead</b>: revisa la cuota diaria antes de ' +
+        'seguir. Se puede cancelar en cualquier momento y lo ya procesado queda guardado.',
+      showCancelButton: true,
+      confirmButtonText: `Procesar ${pendientes.length}`,
+      cancelButtonText: 'Cancelar',
+      confirmButtonColor: '#ff0033',
+    })
+    if (!confirmacion.isConfirmed) return
+
+    try {
+      await loadGoogleMapsAPI()
+    } catch {
+      Swal.fire('Error', 'No se pudo cargar Google Maps. Reintenta en un momento.', 'error')
+      return
+    }
+
+    cancelarBackfillRef.current = false
+    setBackfillUbicacion({ hechos: 0, total: pendientes.length })
+    let completados = 0
+    for (let i = 0; i < pendientes.length; i++) {
+      if (cancelarBackfillRef.current) break
+      try {
+        if (await geocodificarYGuardarDireccion(pendientes[i])) completados++
+      } catch {
+        // Un lead que falla no corta la pasada.
+      }
+      setBackfillUbicacion({ hechos: i + 1, total: pendientes.length })
+      // Mismo respiro que el proceso automatico, por el rate limit del geocoder.
+      await new Promise((r) => setTimeout(r, 60))
+    }
+
+    const cancelado = cancelarBackfillRef.current
+    setBackfillUbicacion(null)
+    loadLeads()
+    Swal.fire(
+      cancelado ? 'Backfill cancelado' : 'Listo',
+      `Se completaron ${completados} de ${pendientes.length} leads.`,
+      cancelado ? 'info' : 'success'
+    )
+  }, [leadsSinUbicacion, geocodificarYGuardarDireccion, loadLeads])
 
   useEffect(() => {
     if (leads.length > 0) {
@@ -2797,6 +2945,61 @@ export function LeadsModule() {
         </div>
       )}
 
+      {/* Progreso del backfill de ubicacion. Es un cartel propio y no un Swal
+          con barra: el proceso dura minutos y el operador tiene que poder
+          seguir trabajando y cancelarlo cuando quiera. */}
+      {backfillUbicacion && (
+        <div
+          style={{
+            position: 'fixed',
+            right: 16,
+            bottom: 16,
+            zIndex: 10050,
+            display: 'flex',
+            alignItems: 'center',
+            gap: 12,
+            padding: '12px 16px',
+            borderRadius: 10,
+            background: 'var(--modal-bg)',
+            border: '2px solid #ff0033',
+            boxShadow: '0 6px 20px rgba(0,0,0,0.18)',
+            maxWidth: 360,
+          }}
+        >
+          <MapPin size={18} style={{ color: '#ff0033', flexShrink: 0 }} />
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)' }}>
+              Completando ubicación… {backfillUbicacion.hechos} de {backfillUbicacion.total}
+            </div>
+            <div
+              style={{
+                height: 4,
+                borderRadius: 2,
+                background: 'var(--border-primary)',
+                marginTop: 6,
+                overflow: 'hidden',
+              }}
+            >
+              <div
+                style={{
+                  height: '100%',
+                  width: `${Math.round((backfillUbicacion.hechos / Math.max(backfillUbicacion.total, 1)) * 100)}%`,
+                  background: '#ff0033',
+                  transition: 'width 0.2s',
+                }}
+              />
+            </div>
+          </div>
+          <button
+            className="btn-secondary btn-sm"
+            onClick={() => { cancelarBackfillRef.current = true }}
+            title="Detener el proceso; lo ya procesado queda guardado"
+          >
+            Cancelar
+          </button>
+        </div>
+      )}
+
       <DataTable
         data={leadsBase}
         rowFilter={filtroTarjeta}
@@ -2819,6 +3022,17 @@ export function LeadsModule() {
             <button className="btn-secondary btn-sm" onClick={handleExportExcel} title="Exportar Excel">
               <Download size={14} /> <span className="leads-btn-label">Exportar</span>
             </button>
+            {leadsSinUbicacion.length > 0 && (
+              <button
+                className="btn-secondary btn-sm"
+                onClick={completarUbicacionLeads}
+                disabled={!!backfillUbicacion}
+                title="Completar pais y ciudad de los leads que todavia no los tienen"
+              >
+                <MapPin size={14} />{' '}
+                <span className="leads-btn-label">Ubicación ({leadsSinUbicacion.length})</span>
+              </button>
+            )}
             {canCreate && (
               <>
                 <input

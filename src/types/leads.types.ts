@@ -42,6 +42,14 @@ export interface Lead {
   direccion_longitud?: number | null
   direccion_geocode_estado?: string | null
   direccion_geocode_fecha?: string | null
+  /**
+   * Pais y ciudad del `address_components` de Google, guardados al
+   * geocodificar la direccion. El mapa los prefiere sobre el parseo del texto
+   * de `direccion`, que falla en la mayoria de los leads (ver
+   * sql/leads_pais_ciudad_columns.sql).
+   */
+  direccion_pais?: string | null
+  direccion_ciudad?: string | null
   estado_direccion?: string | null
   clasificacion_domicilio?: string | null
   country?: string | null
