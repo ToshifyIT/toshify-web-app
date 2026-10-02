@@ -568,6 +568,20 @@ async function fetchTurnoLeadPorDni(dnis: string[]): Promise<Map<string, string 
 // Leads (los 14 estados)
 // =====================================================
 
+/**
+ * Pais y ciudad de un lead: manda lo que guardo el geocoding y el parseo del
+ * texto queda como respaldo. Los dos campos se resuelven por separado a
+ * proposito: un lead puede tener la ciudad guardada y el pais no.
+ */
+function ubicacionDeLead(r: any): { pais: string | null; ciudad: string | null } {
+  const derivada = derivarUbicacion(r.direccion)
+  return {
+    pais: r.direccion_pais || derivada.pais,
+    ciudad: r.direccion_ciudad || derivada.ciudad,
+  }
+}
+
+
 export async function fetchLeadsMapa(
   aplicarFiltroSede: AplicarFiltroSede,
   zonasPeligrosas: ZonaPeligrosa[] = []
@@ -577,7 +591,7 @@ export async function fetchLeadsMapa(
   let query = supabase
     .from('leads')
     .select(
-      'id, nombre_completo, primer_nombre, apellido, dni, estado_de_lead, turno, zona, direccion, latitud, longitud, edad, licencia, vencimiento_licencia, experiencia_previa, experiencia_manejo, antecedentes_penales, phone, tiempo_de_antiguedad, created_at'
+      'id, nombre_completo, primer_nombre, apellido, dni, estado_de_lead, turno, zona, direccion, direccion_pais, direccion_ciudad, latitud, longitud, edad, licencia, vencimiento_licencia, experiencia_previa, experiencia_manejo, antecedentes_penales, phone, tiempo_de_antiguedad, created_at'
     )
     .order('nombre_completo', { ascending: true }) as any
 
@@ -631,7 +645,12 @@ export async function fetchLeadsMapa(
       estadoLead: r.estado_de_lead || null,
       turnoLead: r.turno || null,
       creadoEn: r.created_at || null,
-      ...derivarUbicacion(r.direccion),
+      // Pais y ciudad: primero los que guardo el geocoding (Google ya los trae
+      // separados en address_components), y recien si faltan se cae al parseo
+      // del texto de la direccion. En leads la direccion se tipea a mano y
+      // casi nunca trae el pais, por eso el parseo quedo como respaldo y no
+      // como fuente principal (ver sql/leads_pais_ciudad_columns.sql).
+      ...ubicacionDeLead(r),
       datos,
     }
   })

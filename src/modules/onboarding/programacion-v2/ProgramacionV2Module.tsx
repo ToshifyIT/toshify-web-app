@@ -51,6 +51,7 @@ import './ProgramacionV2Module.css'
 import { PROGRAMACION_ESTADO_LABELS } from '../../../utils/conductorUtils'
 import { ConvertirLeadModal } from './components/ConvertirLeadModal'
 import { AvisoLeadsPendientes, type LeadPendiente } from './components/AvisoLeadsPendientes'
+import { calcularMinutosEntre, tieneCoordenadas, type Coordenada } from './distanciaParService'
 
 const TIPO_ASIGNACION_LABELS: Record<string, string> = {
   entrega_auto: 'Entrega de auto',
@@ -151,6 +152,43 @@ ${turnoEmoji}${turnoEmoji ? ' ' : ''}Turno: ${turnoLabel}
 }
 
 // Sede Buenos Aires: el atendedor responsable de visitas de Asignaciones es Karen (fijo).
+/** Turno del modal de edicion rapida que puede ocupar un conductor o un lead. */
+type SlotEdicion = 'diurno' | 'nocturno' | 'cargo'
+
+/** Lead tal como se ofrece en el buscador del modal de edicion rapida. */
+interface LeadOpcionEdicion {
+  id: string
+  nombre: string
+  dni: string
+  estado: string
+  zona: string
+}
+
+/**
+ * Estados de lead que no se ofrecen para programar. Mismo criterio que el
+ * wizard de creacion (ESTADOS_LEAD_FUERA_DE_PROGRAMACION en
+ * ProgramacionAssignmentWizardV2): un lead descartado o ya convertido en
+ * conductor no debe volver a ocupar un turno.
+ */
+const ESTADOS_LEAD_FUERA_DE_EDICION = new Set(['Descartado', 'Conductor'])
+
+/**
+ * Tipo de candidato a guardar para un turno. Un turno con lead siempre es
+ * 'lead'; un turno sin lead nunca puede quedar como 'lead' (pasa cuando un
+ * conductor reemplaza al lead o el turno queda vacante). Si no se pudo saber
+ * si el turno tenia lead (`leadId` undefined) se respeta el valor tal cual,
+ * que es el comportamiento previo.
+ */
+const tipoCandidatoAGuardar = (
+  valor: string | null | undefined,
+  leadId: string | null | undefined
+): string | null | undefined => {
+  if (leadId === undefined) return valor
+  if (leadId) return 'lead'
+  if (valor === 'lead') return null
+  return valor || null
+}
+
 const SEDE_BUENOS_AIRES_ID = '80587298-b799-4a98-87a9-2f74890da443'
 const KAREN_ATENDEDOR_ID = '503e3df5-5d5e-4c27-b90c-93128a670673'
 
@@ -231,6 +269,15 @@ export function ProgramacionV2Module() {
   const [showConductorNocturnoDropdown, setShowConductorNocturnoDropdown] = useState(false)
   const [showConductorDropdown, setShowConductorDropdown] = useState(false)
 
+  // Leads en el modal de edicion rapida. Cada turno tiene un selector
+  // Conductores / Leads; los leads se buscan en el servidor (son miles y no
+  // conviene traerlos todos al abrir el modal).
+  const [tipoPersonaEdicion, setTipoPersonaEdicion] = useState<Record<SlotEdicion, 'conductor' | 'lead'>>({ diurno: 'conductor', nocturno: 'conductor', cargo: 'conductor' })
+  const [leadSearchEdicion, setLeadSearchEdicion] = useState<Record<SlotEdicion, string>>({ diurno: '', nocturno: '', cargo: '' })
+  const [leadDropdownEdicion, setLeadDropdownEdicion] = useState<SlotEdicion | null>(null)
+  const [leadResultadosEdicion, setLeadResultadosEdicion] = useState<LeadOpcionEdicion[]>([])
+  const [buscandoLeadsEdicion, setBuscandoLeadsEdicion] = useState(false)
+
   // Vehiculos filtrados por busqueda
   const filteredVehiculos = useMemo(() => {
     if (!vehiculoSearch.trim()) return vehiculosDisponibles
@@ -305,6 +352,345 @@ export function ProgramacionV2Module() {
   const selectedConductor = useMemo(() => {
     return conductoresDisponibles.find(c => c.id === quickEditData.conductor_id)
   }, [conductoresDisponibles, quickEditData.conductor_id])
+
+  // Busqueda de leads del modal de edicion rapida (servidor, con debounce).
+  // Solo corre para el turno cuyo buscador de leads esta abierto.
+  useEffect(() => {
+    const slot = leadDropdownEdicion
+    if (!slot || !editingProgramacion) return
+    // Se sacan los caracteres que rompen la sintaxis del filtro `or` de
+    // PostgREST (coma, parentesis) y los comodines de ilike.
+    const termino = leadSearchEdicion[slot].replace(/[,()%*\\"']/g, ' ').replace(/\s+/g, ' ').trim()
+    if (termino.length < 2) {
+      setLeadResultadosEdicion([])
+      setBuscandoLeadsEdicion(false)
+      return
+    }
+    let cancelado = false
+    setBuscandoLeadsEdicion(true)
+    const timer = setTimeout(async () => {
+      try {
+        let query: any = supabase
+          .from('leads')
+          .select('id, nombre_completo, primer_nombre, apellido, dni, estado_de_lead, zona')
+          .or(`nombre_completo.ilike.%${termino}%,primer_nombre.ilike.%${termino}%,apellido.ilike.%${termino}%,dni.ilike.%${termino}%`)
+        // Misma sede que la programacion (igual que el wizard, que filtra los
+        // leads por la sede elegida). Sin sede en la fila: sede activa.
+        query = editingProgramacion.sede_id
+          ? query.eq('sede_id', editingProgramacion.sede_id)
+          : aplicarFiltroSede(query)
+        const { data, error } = await query.order('created_at', { ascending: false }).limit(100)
+        if (error) throw error
+        if (cancelado) return
+        const lista: LeadOpcionEdicion[] = ((data || []) as any[])
+          .filter((l) => !ESTADOS_LEAD_FUERA_DE_EDICION.has((l.estado_de_lead || '').trim()))
+          .map((l) => ({
+            id: l.id,
+            nombre:
+              (l.nombre_completo && String(l.nombre_completo).trim()) ||
+              `${l.primer_nombre || ''} ${l.apellido || ''}`.trim() ||
+              'Sin nombre',
+            dni: l.dni || '',
+            estado: (l.estado_de_lead || '').trim(),
+            zona: l.zona || '',
+          }))
+        setLeadResultadosEdicion(lista)
+      } catch {
+        if (!cancelado) setLeadResultadosEdicion([])
+      } finally {
+        if (!cancelado) setBuscandoLeadsEdicion(false)
+      }
+    }, 300)
+    return () => {
+      cancelado = true
+      clearTimeout(timer)
+    }
+  }, [leadDropdownEdicion, leadSearchEdicion, editingProgramacion, aplicarFiltroSede])
+
+  /**
+   * Auto-completar "Distancia (min)" en edicion, mismo criterio que el wizard
+   * (ProgramacionAssignmentWizardV2): con los dos turnos ocupados, minutos
+   * entre las dos personas via `calcularMinutosEntre` (medicion real cacheada
+   * primero, Haversine despues; nunca llama a Google). Solo llena un campo
+   * vacio: no pisa un valor ya cargado ni uno escrito a mano.
+   *
+   * Las coordenadas se leen por id porque las listas del modal no las traen.
+   * Conductor: direccion_lat/lng. Lead: latitud/longitud (las que usa el mapa y
+   * arman las claves del cache) y si faltan, direccion_latitud/longitud.
+   */
+  useEffect(() => {
+    if (!showQuickEdit || editingProgramacion?.modalidad !== 'turno') return
+    const diurno = { conductorId: quickEditData.conductor_diurno_id || '', leadId: quickEditData.lead_diurno_id || '' }
+    const nocturno = { conductorId: quickEditData.conductor_nocturno_id || '', leadId: quickEditData.lead_nocturno_id || '' }
+    if (!(diurno.conductorId || diurno.leadId) || !(nocturno.conductorId || nocturno.leadId)) return
+
+    const coordenadasPersona = async (persona: { conductorId: string; leadId: string }): Promise<Coordenada | null> => {
+      try {
+        if (persona.conductorId) {
+          const { data } = await (supabase.from('conductores') as any)
+            .select('direccion_lat, direccion_lng')
+            .eq('id', persona.conductorId)
+            .maybeSingle()
+          const c = { lat: data?.direccion_lat, lng: data?.direccion_lng }
+          return tieneCoordenadas(c) ? c : null
+        }
+        const { data } = await (supabase.from('leads') as any)
+          .select('latitud, longitud, direccion_latitud, direccion_longitud')
+          .eq('id', persona.leadId)
+          .maybeSingle()
+        const l = { lat: data?.latitud ?? data?.direccion_latitud, lng: data?.longitud ?? data?.direccion_longitud }
+        return tieneCoordenadas(l) ? l : null
+      } catch {
+        return null
+      }
+    }
+
+    const vacio = (v: number | null | undefined) => v == null || Number.isNaN(v)
+    let cancelado = false
+    ;(async () => {
+      const [a, b] = await Promise.all([coordenadasPersona(diurno), coordenadasPersona(nocturno)])
+      if (cancelado || !a || !b) return
+      const res = await calcularMinutosEntre(a, b)
+      if (cancelado || !res) return
+      setQuickEditData(prev => {
+        // Re-verificar: pudo cambiar la persona o llenarse el campo mientras
+        // esperabamos las coordenadas y el cache.
+        const mismaGente =
+          (prev.conductor_diurno_id || '') === diurno.conductorId &&
+          (prev.lead_diurno_id || '') === diurno.leadId &&
+          (prev.conductor_nocturno_id || '') === nocturno.conductorId &&
+          (prev.lead_nocturno_id || '') === nocturno.leadId
+        if (!mismaGente) return prev
+        const llenarDiurno = vacio(prev.distancia_diurno)
+        const llenarNocturno = vacio(prev.distancia_nocturno)
+        if (!llenarDiurno && !llenarNocturno) return prev
+        return {
+          ...prev,
+          distancia_diurno: llenarDiurno ? res.minutos : prev.distancia_diurno,
+          distancia_nocturno: llenarNocturno ? res.minutos : prev.distancia_nocturno,
+        }
+      })
+    })()
+
+    return () => {
+      cancelado = true
+    }
+  }, [
+    showQuickEdit,
+    editingProgramacion?.modalidad,
+    quickEditData.conductor_diurno_id,
+    quickEditData.lead_diurno_id,
+    quickEditData.conductor_nocturno_id,
+    quickEditData.lead_nocturno_id,
+  ])
+
+  /**
+   * La distancia es entre las DOS personas del turno: si cambia cualquiera de
+   * ellas, el valor anterior queda viejo. Se vacian ambos campos para que el
+   * efecto de arriba la recalcule con la pareja nueva (o quede vacia si el
+   * turno queda vacante). Si la persona no cambia, no se toca nada.
+   * No aplica a A Cargo (una sola persona, sin distancia entre pares).
+   */
+  const resetDistanciaSiCambiaPersona = (
+    prev: typeof quickEditData,
+    slot: SlotEdicion,
+    conductorId: string,
+    leadId: string
+  ): Partial<typeof quickEditData> => {
+    if (slot === 'cargo') return {}
+    const antes = slot === 'diurno'
+      ? { conductorId: prev.conductor_diurno_id || '', leadId: prev.lead_diurno_id || '' }
+      : { conductorId: prev.conductor_nocturno_id || '', leadId: prev.lead_nocturno_id || '' }
+    if (antes.conductorId === conductorId && antes.leadId === leadId) return {}
+    return { distancia_diurno: undefined, distancia_nocturno: undefined }
+  }
+
+  /** Deja el turno vacante (sin conductor ni lead). */
+  const limpiarSlotEdicion = (slot: SlotEdicion) => {
+    setQuickEditData(prev => {
+      if (slot === 'diurno') return { ...prev, conductor_diurno_id: undefined, conductor_diurno_nombre: '', conductor_diurno_dni: '', lead_diurno_id: null, ...resetDistanciaSiCambiaPersona(prev, 'diurno', '', '') }
+      if (slot === 'nocturno') return { ...prev, conductor_nocturno_id: undefined, conductor_nocturno_nombre: '', conductor_nocturno_dni: '', lead_nocturno_id: null, ...resetDistanciaSiCambiaPersona(prev, 'nocturno', '', '') }
+      return { ...prev, conductor_id: undefined, conductor_nombre: '', conductor_dni: '', lead_cargo_id: null }
+    })
+  }
+
+  /**
+   * Pone un lead en el turno. Mismo criterio que `asignarLeadASlot` del
+   * wizard: el id de conductor queda vacio (el lead no existe en
+   * `conductores`), tipo de candidato 'lead' y, si reemplaza a otra persona,
+   * asignacion y documento vuelven a los defaults de un lead (entrega de auto
+   * con carta oferta).
+   */
+  const seleccionarLeadEdicion = (slot: SlotEdicion, lead: LeadOpcionEdicion) => {
+    setQuickEditData(prev => {
+      if (slot === 'diurno') {
+        const reemplaza = !!prev.conductor_diurno_id || (!!prev.lead_diurno_id && prev.lead_diurno_id !== lead.id)
+        return {
+          ...prev,
+          conductor_diurno_id: undefined,
+          conductor_diurno_nombre: lead.nombre,
+          conductor_diurno_dni: lead.dni,
+          lead_diurno_id: lead.id,
+          tipo_candidato_diurno: 'lead' as any,
+          tipo_asignacion_diurno: reemplaza ? 'entrega_auto' : (prev.tipo_asignacion_diurno || 'entrega_auto'),
+          documento_diurno: reemplaza ? 'carta_oferta' as any : (prev.documento_diurno || 'carta_oferta' as any),
+          zona_diurno: prev.zona_diurno || lead.zona,
+          ...resetDistanciaSiCambiaPersona(prev, 'diurno', '', lead.id),
+        }
+      }
+      if (slot === 'nocturno') {
+        const reemplaza = !!prev.conductor_nocturno_id || (!!prev.lead_nocturno_id && prev.lead_nocturno_id !== lead.id)
+        return {
+          ...prev,
+          conductor_nocturno_id: undefined,
+          conductor_nocturno_nombre: lead.nombre,
+          conductor_nocturno_dni: lead.dni,
+          lead_nocturno_id: lead.id,
+          tipo_candidato_nocturno: 'lead' as any,
+          tipo_asignacion_nocturno: reemplaza ? 'entrega_auto' : (prev.tipo_asignacion_nocturno || 'entrega_auto'),
+          documento_nocturno: reemplaza ? 'carta_oferta' as any : (prev.documento_nocturno || 'carta_oferta' as any),
+          zona_nocturno: prev.zona_nocturno || lead.zona,
+          ...resetDistanciaSiCambiaPersona(prev, 'nocturno', '', lead.id),
+        }
+      }
+      const reemplaza = !!prev.conductor_id || (!!prev.lead_cargo_id && prev.lead_cargo_id !== lead.id)
+      return {
+        ...prev,
+        conductor_id: undefined,
+        conductor_nombre: lead.nombre,
+        conductor_dni: lead.dni,
+        lead_cargo_id: lead.id,
+        tipo_candidato: 'lead' as any,
+        tipo_documento: reemplaza ? 'carta_oferta' as any : (prev.tipo_documento || 'carta_oferta' as any),
+        // `zona` legacy esta tipada como ZonaOnboarding; el lead trae texto libre.
+        zona: prev.zona || (lead.zona as any),
+      }
+    })
+    setLeadSearchEdicion(prev => ({ ...prev, [slot]: '' }))
+    setLeadDropdownEdicion(null)
+  }
+
+  /** Cambia el selector Conductores / Leads de un turno. No toca la persona elegida. */
+  const cambiarTipoPersonaEdicion = (slot: SlotEdicion, tipo: 'conductor' | 'lead') => {
+    setTipoPersonaEdicion(prev => ({ ...prev, [slot]: tipo }))
+    setLeadSearchEdicion(prev => ({ ...prev, [slot]: '' }))
+    setLeadDropdownEdicion(null)
+    if (slot === 'diurno') { setConductorDiurnoSearch(''); setShowConductorDiurnoDropdown(false) }
+    else if (slot === 'nocturno') { setConductorNocturnoSearch(''); setShowConductorNocturnoDropdown(false) }
+    else { setConductorSearch(''); setShowConductorDropdown(false) }
+  }
+
+  /** Datos del turno en edicion: lead y nombre/DNI de quien lo ocupa. */
+  const datosSlotEdicion = (slot: SlotEdicion) => {
+    if (slot === 'diurno') return { leadId: quickEditData.lead_diurno_id, conductorId: quickEditData.conductor_diurno_id, nombre: quickEditData.conductor_diurno_nombre, otroLeadId: quickEditData.lead_nocturno_id }
+    if (slot === 'nocturno') return { leadId: quickEditData.lead_nocturno_id, conductorId: quickEditData.conductor_nocturno_id, nombre: quickEditData.conductor_nocturno_nombre, otroLeadId: quickEditData.lead_diurno_id }
+    return { leadId: quickEditData.lead_cargo_id, conductorId: quickEditData.conductor_id, nombre: quickEditData.conductor_nombre, otroLeadId: null }
+  }
+
+  /** Selector segmentado Conductores / Leads de un turno. */
+  const renderSelectorTipoPersona = (slot: SlotEdicion) => {
+    const actual = tipoPersonaEdicion[slot]
+    const boton = (tipo: 'conductor' | 'lead', texto: string) => (
+      <button
+        type="button"
+        onClick={() => cambiarTipoPersonaEdicion(slot, tipo)}
+        aria-pressed={actual === tipo}
+        style={{
+          padding: '4px 10px',
+          fontSize: '12px',
+          fontWeight: 600,
+          border: 'none',
+          cursor: 'pointer',
+          background: actual === tipo ? 'var(--color-primary)' : 'transparent',
+          color: actual === tipo ? '#fff' : 'var(--text-secondary)',
+        }}
+      >
+        {texto}
+      </button>
+    )
+    return (
+      <div style={{ display: 'inline-flex', border: '1px solid var(--border-primary)', borderRadius: '6px', overflow: 'hidden', background: 'var(--bg-secondary)' }}>
+        {boton('conductor', 'Conductores')}
+        {boton('lead', 'Leads')}
+      </div>
+    )
+  }
+
+  /** Encabezado del campo de persona: etiqueta + selector Conductores / Leads. */
+  const renderEncabezadoPersona = (slot: SlotEdicion) => (
+    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>
+      <label style={{ margin: 0 }}>{tipoPersonaEdicion[slot] === 'lead' ? 'Lead *' : 'Conductor *'}</label>
+      {renderSelectorTipoPersona(slot)}
+    </div>
+  )
+
+  /**
+   * Placeholder del buscador de conductores: si el turno lo ocupa un lead, lo
+   * muestra para que se entienda que elegir un conductor lo reemplaza.
+   */
+  const placeholderConductorEdicion = (slot: SlotEdicion) => {
+    if (loadingConductores) return 'Cargando conductores...'
+    const { leadId, nombre } = datosSlotEdicion(slot)
+    if (leadId && nombre) return `Actual (lead): ${nombre} — buscar conductor para reemplazar`
+    return 'Buscar por nombre o DNI...'
+  }
+
+  /** Buscador de leads de un turno. */
+  const renderBuscadorLead = (slot: SlotEdicion) => {
+    const { leadId, conductorId, nombre, otroLeadId } = datosSlotEdicion(slot)
+    const termino = leadSearchEdicion[slot]
+    const abierto = leadDropdownEdicion === slot
+    const resultados = leadResultadosEdicion.filter(l => l.id !== otroLeadId)
+    const placeholder = conductorId && nombre
+      ? `Actual (conductor): ${nombre} — buscar lead para reemplazar`
+      : 'Buscar lead por nombre o DNI...'
+    return (
+      <div className="prog-searchable-select">
+        <input
+          type="text"
+          value={leadId ? (nombre || '') : termino}
+          onChange={(e) => {
+            const valor = e.target.value
+            setLeadSearchEdicion(prev => ({ ...prev, [slot]: valor }))
+            // Igual que el buscador de conductores: escribir libera el turno
+            // hasta que se elija a alguien de la lista.
+            limpiarSlotEdicion(slot)
+            setLeadDropdownEdicion(slot)
+          }}
+          onFocus={() => setLeadDropdownEdicion(slot)}
+          onBlur={() => setTimeout(() => setLeadDropdownEdicion(prev => (prev === slot ? null : prev)), 200)}
+          placeholder={placeholder}
+          className="prog-input"
+        />
+        {abierto && (
+          <div className="prog-searchable-dropdown">
+            {termino.trim().length < 2 ? (
+              <div className="prog-searchable-no-results">Escribe al menos 2 caracteres para buscar leads...</div>
+            ) : buscandoLeadsEdicion ? (
+              <div className="prog-searchable-no-results">Buscando leads...</div>
+            ) : resultados.length > 0 ? (
+              resultados.slice(0, 30).map(l => (
+                <div
+                  key={l.id}
+                  className={`prog-searchable-option ${leadId === l.id ? 'selected' : ''}`}
+                  onClick={() => seleccionarLeadEdicion(slot, l)}
+                >
+                  <strong>{l.nombre}</strong> {l.dni && <span style={{ color: 'var(--text-tertiary)' }}>- DNI: {l.dni}</span>}
+                  {l.estado && (
+                    <span style={{ marginLeft: '6px', fontSize: '11px', padding: '1px 6px', borderRadius: '4px', background: 'var(--bg-tertiary)', color: 'var(--text-secondary)' }}>
+                      {l.estado}
+                    </span>
+                  )}
+                </div>
+              ))
+            ) : (
+              <div className="prog-searchable-no-results">No se encontraron leads</div>
+            )}
+          </div>
+        )}
+      </div>
+    )
+  }
 
   // Especialistas disponibles (para uso futuro)
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -572,17 +958,53 @@ export function ProgramacionV2Module() {
   }, [location.state, location.search, location.pathname, navigate])
 
   const handleEdit = async (prog: ProgramacionOnboardingCompleta) => {
+    // Leads de cada turno: se releen de la tabla base para no depender de que
+    // `adjuntarLeadIds` haya funcionado al cargar la lista. Si esta lectura
+    // falla se usan los de la fila; si tampoco estan, quedan `undefined` y el
+    // guardado no toca esas columnas (no se pierde un lead por no saberlo).
+    let leadIds: { lead_diurno_id?: string | null; lead_nocturno_id?: string | null; lead_cargo_id?: string | null } = {
+      lead_diurno_id: prog.lead_diurno_id,
+      lead_nocturno_id: prog.lead_nocturno_id,
+      lead_cargo_id: prog.lead_cargo_id,
+    }
+    try {
+      const { data: leadRow, error: leadRowError } = await (supabase.from('programaciones_onboarding') as any)
+        .select('lead_diurno_id, lead_nocturno_id, lead_cargo_id')
+        .eq('id', prog.id)
+        .single()
+      if (!leadRowError && leadRow) {
+        leadIds = {
+          lead_diurno_id: leadRow.lead_diurno_id || null,
+          lead_nocturno_id: leadRow.lead_nocturno_id || null,
+          lead_cargo_id: leadRow.lead_cargo_id || null,
+        }
+      }
+    } catch { /* se usan los de la fila */ }
+
     setEditingProgramacion(prog)
     // Inicializar búsquedas con valores actuales como fallback visual
-    // (si el ID no resuelve en la lista, el input muestra estos valores)
+    // (si el ID no resuelve en la lista, el input muestra estos valores).
+    // Un turno con lead no precarga su nombre en el buscador de conductores:
+    // ese nombre es del lead y se muestra en el buscador de leads.
     setVehiculoSearch(prog.vehiculo_entregar_patente || prog.vehiculo_entregar_patente_sistema || '')
     setShowVehiculoDropdown(false)
-    setConductorDiurnoSearch(prog.conductor_diurno_nombre || '')
-    setConductorNocturnoSearch(prog.conductor_nocturno_nombre || '')
-    setConductorSearch(prog.conductor_nombre || prog.conductor_display || '')
+    setConductorDiurnoSearch(leadIds.lead_diurno_id ? '' : (prog.conductor_diurno_nombre || ''))
+    setConductorNocturnoSearch(leadIds.lead_nocturno_id ? '' : (prog.conductor_nocturno_nombre || ''))
+    setConductorSearch(leadIds.lead_cargo_id ? '' : (prog.conductor_nombre || prog.conductor_display || ''))
     setShowConductorDiurnoDropdown(false)
     setShowConductorNocturnoDropdown(false)
     setShowConductorDropdown(false)
+    setTipoPersonaEdicion({
+      diurno: leadIds.lead_diurno_id ? 'lead' : 'conductor',
+      nocturno: leadIds.lead_nocturno_id ? 'lead' : 'conductor',
+      cargo: leadIds.lead_cargo_id ? 'lead' : 'conductor',
+    })
+    setLeadSearchEdicion({ diurno: '', nocturno: '', cargo: '' })
+    setLeadDropdownEdicion(null)
+    setLeadResultadosEdicion([])
+    // Nocturno igual al diurno = dato duplicado: se limpia el nocturno.
+    // Solo aplica a conductores (dos ids de conductor iguales).
+    const nocturnoDuplicado = !!prog.conductor_nocturno_id && prog.conductor_nocturno_id === prog.conductor_diurno_id
     setQuickEditData({
       vehiculo_id: prog.vehiculo_entregar_id || '',
       vehiculo_entregar_patente: prog.vehiculo_entregar_patente || prog.vehiculo_entregar_patente_sistema || '',
@@ -591,10 +1013,21 @@ export function ProgramacionV2Module() {
       // Conductores (IDs) - Si son iguales, limpiar nocturno para evitar duplicados
       conductor_diurno_id: prog.conductor_diurno_id || '',
       conductor_diurno_nombre: prog.conductor_diurno_nombre || '',
-      conductor_nocturno_id: (prog.conductor_nocturno_id && prog.conductor_nocturno_id !== prog.conductor_diurno_id) ? prog.conductor_nocturno_id : '',
-      conductor_nocturno_nombre: (prog.conductor_nocturno_id && prog.conductor_nocturno_id !== prog.conductor_diurno_id) ? (prog.conductor_nocturno_nombre || '') : '',
+      conductor_diurno_dni: prog.conductor_diurno_dni || '',
+      conductor_nocturno_id: (prog.conductor_nocturno_id && !nocturnoDuplicado) ? prog.conductor_nocturno_id : '',
+      // Un nocturno con lead no tiene id de conductor: antes caia en '' y al
+      // guardar se borraba el nombre del lead.
+      conductor_nocturno_nombre: leadIds.lead_nocturno_id
+        ? (prog.conductor_nocturno_nombre || '')
+        : ((prog.conductor_nocturno_id && !nocturnoDuplicado) ? (prog.conductor_nocturno_nombre || '') : ''),
+      conductor_nocturno_dni: (leadIds.lead_nocturno_id || (prog.conductor_nocturno_id && !nocturnoDuplicado)) ? (prog.conductor_nocturno_dni || '') : '',
       conductor_id: prog.conductor_id || '',
       conductor_nombre: prog.conductor_nombre || prog.conductor_display || '',
+      conductor_dni: prog.conductor_dni || '',
+      // Leads por turno (null = sin lead, undefined = no se pudo leer)
+      lead_diurno_id: leadIds.lead_diurno_id,
+      lead_nocturno_id: leadIds.lead_nocturno_id,
+      lead_cargo_id: leadIds.lead_cargo_id,
       // Diurno
       tipo_candidato_diurno: prog.tipo_candidato_diurno,
       tipo_asignacion_diurno: prog.tipo_asignacion_diurno || prog.tipo_asignacion || 'entrega_auto',
@@ -746,22 +1179,48 @@ export function ProgramacionV2Module() {
           await Swal.fire('Error', 'No se puede asignar el mismo conductor en ambos turnos', 'error')
           return
         }
+        // Mismo control para leads
+        if (quickEditData.lead_diurno_id && quickEditData.lead_nocturno_id &&
+            quickEditData.lead_diurno_id === quickEditData.lead_nocturno_id) {
+          await Swal.fire('Error', 'No se puede asignar el mismo lead en ambos turnos', 'error')
+          return
+        }
+
+        // Un turno con lead deja el id de conductor en null (el lead no existe
+        // en `conductores`) y guarda nombre/DNI del lead, igual que el wizard.
+        // Un turno con conductor limpia el lead: nunca conviven los dos.
+        const leadDiurnoId = quickEditData.lead_diurno_id
+        const leadNocturnoId = quickEditData.lead_nocturno_id
 
         // Conductor diurno
-        updateData.conductor_diurno_id = quickEditData.conductor_diurno_id || null
-        updateData.conductor_diurno_nombre = conductorDiurnoSeleccionado?.nombre || quickEditData.conductor_diurno_nombre || null
-        updateData.conductor_diurno_dni = conductorDiurnoSeleccionado?.dni || null
-        updateData.tipo_candidato_diurno = quickEditData.tipo_candidato_diurno
+        if (leadDiurnoId) {
+          updateData.conductor_diurno_id = null
+          updateData.conductor_diurno_nombre = quickEditData.conductor_diurno_nombre || null
+          updateData.conductor_diurno_dni = quickEditData.conductor_diurno_dni || null
+        } else {
+          updateData.conductor_diurno_id = quickEditData.conductor_diurno_id || null
+          updateData.conductor_diurno_nombre = conductorDiurnoSeleccionado?.nombre || quickEditData.conductor_diurno_nombre || null
+          updateData.conductor_diurno_dni = conductorDiurnoSeleccionado?.dni || null
+        }
+        if (leadDiurnoId !== undefined) updateData.lead_diurno_id = leadDiurnoId || null
+        updateData.tipo_candidato_diurno = tipoCandidatoAGuardar(quickEditData.tipo_candidato_diurno, leadDiurnoId)
         updateData.documento_diurno = quickEditData.documento_diurno
         updateData.zona_diurno = quickEditData.zona_diurno
         updateData.distancia_diurno = quickEditData.distancia_diurno || null
         updateData.tipo_tarifa_diurno = quickEditData.tipo_tarifa_diurno || 'antigua'
 
         // Conductor nocturno
-        updateData.conductor_nocturno_id = quickEditData.conductor_nocturno_id || null
-        updateData.conductor_nocturno_nombre = conductorNocturnoSeleccionado?.nombre || quickEditData.conductor_nocturno_nombre || null
-        updateData.conductor_nocturno_dni = conductorNocturnoSeleccionado?.dni || null
-        updateData.tipo_candidato_nocturno = quickEditData.tipo_candidato_nocturno
+        if (leadNocturnoId) {
+          updateData.conductor_nocturno_id = null
+          updateData.conductor_nocturno_nombre = quickEditData.conductor_nocturno_nombre || null
+          updateData.conductor_nocturno_dni = quickEditData.conductor_nocturno_dni || null
+        } else {
+          updateData.conductor_nocturno_id = quickEditData.conductor_nocturno_id || null
+          updateData.conductor_nocturno_nombre = conductorNocturnoSeleccionado?.nombre || quickEditData.conductor_nocturno_nombre || null
+          updateData.conductor_nocturno_dni = conductorNocturnoSeleccionado?.dni || null
+        }
+        if (leadNocturnoId !== undefined) updateData.lead_nocturno_id = leadNocturnoId || null
+        updateData.tipo_candidato_nocturno = tipoCandidatoAGuardar(quickEditData.tipo_candidato_nocturno, leadNocturnoId)
         updateData.documento_nocturno = quickEditData.documento_nocturno
         updateData.zona_nocturno = quickEditData.zona_nocturno
         updateData.distancia_nocturno = quickEditData.distancia_nocturno || null
@@ -776,12 +1235,21 @@ export function ProgramacionV2Module() {
         updateData.conductor_id = null
         updateData.conductor_nombre = null
         updateData.conductor_dni = null
+        updateData.lead_cargo_id = null
       } else {
         // A Cargo - campos legacy
-        updateData.conductor_id = quickEditData.conductor_id || null
-        updateData.conductor_nombre = conductorSeleccionado?.nombre || quickEditData.conductor_nombre || null
-        updateData.conductor_dni = conductorSeleccionado?.dni || null
-        updateData.tipo_candidato = quickEditData.tipo_candidato
+        const leadCargoId = quickEditData.lead_cargo_id
+        if (leadCargoId) {
+          updateData.conductor_id = null
+          updateData.conductor_nombre = quickEditData.conductor_nombre || null
+          updateData.conductor_dni = quickEditData.conductor_dni || null
+        } else {
+          updateData.conductor_id = quickEditData.conductor_id || null
+          updateData.conductor_nombre = conductorSeleccionado?.nombre || quickEditData.conductor_nombre || null
+          updateData.conductor_dni = conductorSeleccionado?.dni || null
+        }
+        if (leadCargoId !== undefined) updateData.lead_cargo_id = leadCargoId || null
+        updateData.tipo_candidato = tipoCandidatoAGuardar(quickEditData.tipo_candidato, leadCargoId)
         updateData.tipo_documento = quickEditData.tipo_documento
         updateData.zona = quickEditData.zona
         updateData.distancia_minutos = quickEditData.distancia_minutos || null
@@ -794,6 +1262,8 @@ export function ProgramacionV2Module() {
         updateData.conductor_nocturno_id = null
         updateData.conductor_nocturno_nombre = null
         updateData.conductor_nocturno_dni = null
+        updateData.lead_diurno_id = null
+        updateData.lead_nocturno_id = null
       }
 
       const { error } = await (supabase
@@ -2917,20 +3387,21 @@ export function ProgramacionV2Module() {
                   {/* Conductor Diurno */}
                   <div className="prog-modal-section" style={{ background: 'rgba(251, 191, 36, 0.1)', padding: '12px', borderRadius: '8px' }}>
                     <h3 style={{ color: '#FBBF24', margin: '0 0 12px 0', fontSize: '14px', display: 'flex', alignItems: 'center', gap: '6px' }}><Sun size={16} /> Conductor Diurno</h3>
-                    {/* Selector de conductor diurno */}
+                    {/* Selector de conductor / lead diurno */}
                     <div style={{ marginBottom: '12px' }}>
-                      <label>Conductor *</label>
+                      {renderEncabezadoPersona('diurno')}
+                      {tipoPersonaEdicion.diurno === 'lead' ? renderBuscadorLead('diurno') : (
                       <div className="prog-searchable-select">
                         <input
                           type="text"
                           value={selectedConductorDiurno ? selectedConductorDiurno.nombre : conductorDiurnoSearch}
                           onChange={(e) => {
                             setConductorDiurnoSearch(e.target.value)
-                            setQuickEditData(prev => ({ ...prev, conductor_diurno_id: undefined, conductor_diurno_nombre: '' }))
+                            limpiarSlotEdicion('diurno')
                           }}
                           onFocus={() => setShowConductorDiurnoDropdown(true)}
                           onBlur={() => setTimeout(() => setShowConductorDiurnoDropdown(false), 200)}
-                          placeholder={loadingConductores ? 'Cargando conductores...' : 'Buscar por nombre o DNI...'}
+                          placeholder={placeholderConductorEdicion('diurno')}
                           className="prog-input"
                           disabled={loadingConductores}
                         />
@@ -2942,7 +3413,17 @@ export function ProgramacionV2Module() {
                                   key={c.id}
                                   className={`prog-searchable-option ${quickEditData.conductor_diurno_id === c.id ? 'selected' : ''}`}
                                   onClick={() => {
-                                    setQuickEditData(prev => ({ ...prev, conductor_diurno_id: c.id, conductor_diurno_nombre: c.nombre }))
+                                    // Un conductor reemplaza al lead que hubiera en el turno;
+                                    // el tipo de candidato 'lead' deja de valer.
+                                    setQuickEditData(prev => ({
+                                      ...prev,
+                                      conductor_diurno_id: c.id,
+                                      conductor_diurno_nombre: c.nombre,
+                                      conductor_diurno_dni: c.dni,
+                                      lead_diurno_id: null,
+                                      ...(prev.lead_diurno_id || prev.tipo_candidato_diurno === ('lead' as any) ? { tipo_candidato_diurno: '' as any } : {}),
+                                      ...resetDistanciaSiCambiaPersona(prev, 'diurno', c.id, ''),
+                                    }))
                                     setConductorDiurnoSearch('')
                                     setShowConductorDiurnoDropdown(false)
                                   }}
@@ -2958,16 +3439,19 @@ export function ProgramacionV2Module() {
                           </div>
                         )}
                       </div>
+                      )}
                     </div>
                     <div className="prog-modal-grid">
                       <div>
                         <label>Tipo Candidato *</label>
                         <select
-                          value={quickEditData.tipo_candidato_diurno || ''}
+                          value={quickEditData.lead_diurno_id ? 'lead' : (quickEditData.tipo_candidato_diurno || '')}
                           onChange={e => setQuickEditData(prev => ({ ...prev, tipo_candidato_diurno: e.target.value as any }))}
                           className="prog-input"
+                          disabled={!!quickEditData.lead_diurno_id}
                         >
                           <option value="">Seleccionar...</option>
+                          {quickEditData.lead_diurno_id && <option value="lead">Lead</option>}
                           <option value="nuevo">Nuevo</option>
                           <option value="antiguo">Antiguo</option>
                           <option value="reingreso">Reingreso</option>
@@ -3042,20 +3526,21 @@ export function ProgramacionV2Module() {
                   {/* Conductor Nocturno */}
                   <div className="prog-modal-section" style={{ background: 'rgba(59, 130, 246, 0.1)', padding: '12px', borderRadius: '8px', marginTop: '12px' }}>
                     <h3 style={{ color: '#60A5FA', margin: '0 0 12px 0', fontSize: '14px', display: 'flex', alignItems: 'center', gap: '6px' }}><Moon size={16} /> Conductor Nocturno</h3>
-                    {/* Selector de conductor nocturno */}
+                    {/* Selector de conductor / lead nocturno */}
                     <div style={{ marginBottom: '12px' }}>
-                      <label>Conductor *</label>
+                      {renderEncabezadoPersona('nocturno')}
+                      {tipoPersonaEdicion.nocturno === 'lead' ? renderBuscadorLead('nocturno') : (
                       <div className="prog-searchable-select">
                         <input
                           type="text"
                           value={selectedConductorNocturno ? selectedConductorNocturno.nombre : conductorNocturnoSearch}
                           onChange={(e) => {
                             setConductorNocturnoSearch(e.target.value)
-                            setQuickEditData(prev => ({ ...prev, conductor_nocturno_id: undefined, conductor_nocturno_nombre: '' }))
+                            limpiarSlotEdicion('nocturno')
                           }}
                           onFocus={() => setShowConductorNocturnoDropdown(true)}
                           onBlur={() => setTimeout(() => setShowConductorNocturnoDropdown(false), 200)}
-                          placeholder={loadingConductores ? 'Cargando conductores...' : 'Buscar por nombre o DNI...'}
+                          placeholder={placeholderConductorEdicion('nocturno')}
                           className="prog-input"
                           disabled={loadingConductores}
                         />
@@ -3067,7 +3552,15 @@ export function ProgramacionV2Module() {
                                   key={c.id}
                                   className={`prog-searchable-option ${quickEditData.conductor_nocturno_id === c.id ? 'selected' : ''}`}
                                   onClick={() => {
-                                    setQuickEditData(prev => ({ ...prev, conductor_nocturno_id: c.id, conductor_nocturno_nombre: c.nombre }))
+                                    setQuickEditData(prev => ({
+                                      ...prev,
+                                      conductor_nocturno_id: c.id,
+                                      conductor_nocturno_nombre: c.nombre,
+                                      conductor_nocturno_dni: c.dni,
+                                      lead_nocturno_id: null,
+                                      ...(prev.lead_nocturno_id || prev.tipo_candidato_nocturno === ('lead' as any) ? { tipo_candidato_nocturno: '' as any } : {}),
+                                      ...resetDistanciaSiCambiaPersona(prev, 'nocturno', c.id, ''),
+                                    }))
                                     setConductorNocturnoSearch('')
                                     setShowConductorNocturnoDropdown(false)
                                   }}
@@ -3083,16 +3576,19 @@ export function ProgramacionV2Module() {
                           </div>
                         )}
                       </div>
+                      )}
                     </div>
                     <div className="prog-modal-grid">
                       <div>
                         <label>Tipo Candidato *</label>
                         <select
-                          value={quickEditData.tipo_candidato_nocturno || ''}
+                          value={quickEditData.lead_nocturno_id ? 'lead' : (quickEditData.tipo_candidato_nocturno || '')}
                           onChange={e => setQuickEditData(prev => ({ ...prev, tipo_candidato_nocturno: e.target.value as any }))}
                           className="prog-input"
+                          disabled={!!quickEditData.lead_nocturno_id}
                         >
                           <option value="">Seleccionar...</option>
+                          {quickEditData.lead_nocturno_id && <option value="lead">Lead</option>}
                           <option value="nuevo">Nuevo</option>
                           <option value="antiguo">Antiguo</option>
                           <option value="reingreso">Reingreso</option>
@@ -3168,20 +3664,21 @@ export function ProgramacionV2Module() {
                 /* A Cargo - campos legacy */
                 <div className="prog-modal-section" style={{ background: 'var(--bg-secondary)', padding: '12px', borderRadius: '8px' }}>
                   <h3 style={{ margin: '0 0 12px 0', fontSize: '14px' }}><User size={16} /> Conductor</h3>
-                  {/* Selector de conductor */}
+                  {/* Selector de conductor / lead */}
                   <div style={{ marginBottom: '12px' }}>
-                    <label>Conductor *</label>
+                    {renderEncabezadoPersona('cargo')}
+                    {tipoPersonaEdicion.cargo === 'lead' ? renderBuscadorLead('cargo') : (
                     <div className="prog-searchable-select">
                       <input
                         type="text"
                         value={selectedConductor ? selectedConductor.nombre : conductorSearch}
                         onChange={(e) => {
                           setConductorSearch(e.target.value)
-                          setQuickEditData(prev => ({ ...prev, conductor_id: undefined, conductor_nombre: '' }))
+                          limpiarSlotEdicion('cargo')
                         }}
                         onFocus={() => setShowConductorDropdown(true)}
                         onBlur={() => setTimeout(() => setShowConductorDropdown(false), 200)}
-                        placeholder={loadingConductores ? 'Cargando conductores...' : 'Buscar por nombre o DNI...'}
+                        placeholder={placeholderConductorEdicion('cargo')}
                         className="prog-input"
                         disabled={loadingConductores}
                       />
@@ -3193,7 +3690,14 @@ export function ProgramacionV2Module() {
                                 key={c.id}
                                 className={`prog-searchable-option ${quickEditData.conductor_id === c.id ? 'selected' : ''}`}
                                 onClick={() => {
-                                  setQuickEditData(prev => ({ ...prev, conductor_id: c.id, conductor_nombre: c.nombre }))
+                                  setQuickEditData(prev => ({
+                                    ...prev,
+                                    conductor_id: c.id,
+                                    conductor_nombre: c.nombre,
+                                    conductor_dni: c.dni,
+                                    lead_cargo_id: null,
+                                    ...(prev.lead_cargo_id || prev.tipo_candidato === ('lead' as any) ? { tipo_candidato: '' as any } : {}),
+                                  }))
                                   setConductorSearch('')
                                   setShowConductorDropdown(false)
                                 }}
@@ -3209,16 +3713,19 @@ export function ProgramacionV2Module() {
                         </div>
                       )}
                     </div>
+                    )}
                   </div>
                   <div className="prog-modal-grid">
                     <div>
                       <label>Tipo Candidato *</label>
                       <select
-                        value={quickEditData.tipo_candidato || ''}
+                        value={quickEditData.lead_cargo_id ? 'lead' : (quickEditData.tipo_candidato || '')}
                         onChange={e => setQuickEditData(prev => ({ ...prev, tipo_candidato: e.target.value as any }))}
                         className="prog-input"
+                        disabled={!!quickEditData.lead_cargo_id}
                       >
                         <option value="">Seleccionar...</option>
+                        {quickEditData.lead_cargo_id && <option value="lead">Lead</option>}
                         <option value="nuevo">Nuevo</option>
                         <option value="antiguo">Antiguo</option>
                         <option value="reingreso">Reingreso</option>

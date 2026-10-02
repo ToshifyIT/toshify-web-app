@@ -2405,3 +2405,40 @@ input[type="date"].asig-status-select {
 .asig-hist-fields > div { display: flex; flex-direction: column; }
 .asig-hist-flabel { font-size: 10px; text-transform: uppercase; letter-spacing: .03em; color: #9ca3af; font-weight: 600; }
 .asig-hist-fvalue { font-size: 13px; color: var(--text-primary, #374151); font-weight: 600; }
+
+/* =====================================================
+   Fila sin carpeta de documentación
+   =====================================================
+   El conductor de la asignación no tiene carpeta de contratos en Drive: el
+   documento no se generó y la programación hay que rehacerla. Se tiñe la fila
+   entera, no una celda, porque el problema es de la asignación completa.
+   Se pintan los `td` y no el `tr` para ganarle al fondo propio de las columnas
+   fijas, que tienen el suyo para poder flotar sobre el resto. */
+.dt-table tbody tr.asig-row-sin-carpeta > td,
+.dt-table tbody tr.asig-row-sin-carpeta > td.dt-sticky-col,
+.dt-table tbody tr.asig-row-sin-carpeta > td.dt-sticky-col-left {
+  background: rgba(220, 38, 38, 0.07);
+}
+
+.dt-table tbody tr.asig-row-sin-carpeta:hover > td,
+.dt-table tbody tr.asig-row-sin-carpeta:hover > td.dt-sticky-col,
+.dt-table tbody tr.asig-row-sin-carpeta:hover > td.dt-sticky-col-left {
+  background: rgba(220, 38, 38, 0.13);
+}
+
+/* Barra roja al inicio de la fila, para distinguirla de un simple hover. */
+.dt-table tbody tr.asig-row-sin-carpeta > td:first-child {
+  box-shadow: inset 3px 0 0 #DC2626;
+}
+
+[data-theme="dark"] .dt-table tbody tr.asig-row-sin-carpeta > td,
+[data-theme="dark"] .dt-table tbody tr.asig-row-sin-carpeta > td.dt-sticky-col,
+[data-theme="dark"] .dt-table tbody tr.asig-row-sin-carpeta > td.dt-sticky-col-left {
+  background: rgba(220, 38, 38, 0.16);
+}
+
+[data-theme="dark"] .dt-table tbody tr.asig-row-sin-carpeta:hover > td,
+[data-theme="dark"] .dt-table tbody tr.asig-row-sin-carpeta:hover > td.dt-sticky-col,
+[data-theme="dark"] .dt-table tbody tr.asig-row-sin-carpeta:hover > td.dt-sticky-col-left {
+  background: rgba(220, 38, 38, 0.24);
+}
