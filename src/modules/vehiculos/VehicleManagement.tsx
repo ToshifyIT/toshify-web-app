@@ -25,6 +25,7 @@ import { LoadingOverlay } from '../../components/ui/LoadingOverlay'
 import { VehiculoWizard } from './components/VehiculoWizard'
 import { SearchableSelect } from '../../components/ui/SearchableSelect/SearchableSelect'
 import { formatDateTimeAR } from '../../utils/dateUtils'
+import { formatFechaART, formatHoraART, timestampART, toDateART } from '../../utils/fechaArgentina'
 import { VEHICULO_ESTADO_LABELS } from '../../types/vehiculo.types'
 import { useGruposFlota } from '../../hooks/useGruposFlota'
 import './VehicleManagement.css'
@@ -2221,6 +2222,27 @@ export function VehicleManagement() {
             </span>
           )
         },
+        enableSorting: true,
+      },
+      {
+        // Fecha de alta del vehículo (vehiculos.created_at), en hora argentina.
+        // Header como función a propósito: así el DataTable no le agrega su
+        // filtro de fechas automático, que compara en la zona horaria del
+        // navegador. Se ordena por timestamp, no por el texto mostrado.
+        id: 'fecha_creacion',
+        accessorFn: (row) => timestampART((row as any).created_at),
+        header: () => 'Fecha Creación',
+        cell: ({ row }) => {
+          const creado = (row.original as any).created_at as string | null | undefined
+          if (!toDateART(creado)) return <span style={{ color: 'var(--text-tertiary)' }}>-</span>
+          return (
+            <div style={{ display: 'flex', flexDirection: 'column', lineHeight: 1.25, fontSize: '12px' }}>
+              <span>{formatFechaART(creado)}</span>
+              <span style={{ color: 'var(--text-tertiary)' }}>{formatHoraART(creado).slice(0, 5)}</span>
+            </div>
+          )
+        },
+        meta: { mobileLabel: 'Fecha Creación' },
         enableSorting: true,
       },
       {
