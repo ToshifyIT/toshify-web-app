@@ -1269,6 +1269,10 @@ export function LeadsModule() {
   // ---------- FILTERED DATA ----------
   /** Filtro de la tarjeta activa (stat card). Se aplica encima de leadsBase. */
   const filtroTarjeta = useCallback((l: Lead): boolean => {
+    // Los Descartados solo se ven con "Descartados" o "Ver todos". Las demás tarjetas
+    // también los excluyen, así el número de la tarjeta no cambia al clickearla
+    // (antes: 914 en la vista general → 971 al filtrar por Contactado Sellium).
+    if (activeStatCard !== 'descartados' && activeStatCard !== 'todos' && l.estado_de_lead === 'Descartado') return false
     // Por estado_de_lead; Contactado Sellium / Intercom / Damaro también miran fuente_de_lead
     switch (activeStatCard) {
       case 'inicio': return l.estado_de_lead === 'Inicio conversación'
