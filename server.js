@@ -1260,7 +1260,11 @@ async function generateContractForConductor({
   addIfPresent('AMMOUNT', amount)
   addIfPresent('COVERAGE', vehiculo.cobertura?.toUpperCase())
   addIfPresent('MODE', modalidad === 'a_cargo' ? 'A CARGO' : (turno === 'nocturno' ? 'NOCTURNO' : 'DIURNO'))
-  addIfPresent('OBSERVATIONS', vehiculo.notas)
+  // {{OBSERVATIONS}} NO se llena al generar el contrato: se completa en
+  // /api/complete-control con lo que el usuario confirma en el modal
+  // "Completar Control" (que precarga vehiculos.notas como sugerencia).
+  // Antes se llenaba aca con vehiculo.notas y eso consumia el placeholder:
+  // las observaciones del control nunca llegaban al documento.
   addIfPresent('NAMETOSHIFY', CONTRACT_CONFIG.nameToshify)
   addIfPresent('ACTUALYEAR', String(new Date().getFullYear()))
   // {{KM}} se rellena en /api/complete-control al momento de la entrega real del vehículo,
@@ -1619,41 +1623,88 @@ app.post('/api/complete-control', async (req, res) => {
       })
     }
 
-    // Para observations: buscar la posición del placeholder, eliminarlo e insertar
-    // el texto con insertText para que los \n generen párrafos reales
+    // Para observations: buscar el placeholder, eliminarlo e insertar el texto
+    // con insertText para que los \n generen párrafos reales.
+    //
+    // La búsqueda recorre el cuerpo, las tablas (también anidadas), los
+    // encabezados y los pies de página, y arma el texto de cada párrafo
+    // completo antes de buscar: así encuentra el placeholder aunque esté dentro
+    // de una celda o partido en varios fragmentos de formato. Reemplaza todas
+    // las apariciones, igual que replaceAllText con los demás campos.
+    const warnings = []
     if (observationsReplacement) {
       const docContent = await docsService.documents.get({ documentId: googleDocId })
-      const body = docContent.data.body?.content || []
-      let obsStartIndex = -1
-      let obsEndIndex = -1
+      const PLACEHOLDER_OBS = /\{\{\s*OBSERVATIONS\s*\}\}/gi
+      const matches = [] // { segmentId, start, end }
 
-      // Buscar la posición exacta de {{OBSERVATIONS}} en el documento
-      for (const element of body) {
-        if (element.paragraph?.elements) {
-          for (const el of element.paragraph.elements) {
-            const text = el.textRun?.content || ''
-            const idx = text.indexOf('{{OBSERVATIONS}}')
-            if (idx !== -1) {
-              obsStartIndex = el.startIndex + idx
-              obsEndIndex = obsStartIndex + '{{OBSERVATIONS}}'.length
-              break
+      const buscarEnContenido = (content, segmentId) => {
+        for (const element of content || []) {
+          if (element.paragraph?.elements?.length) {
+            const els = element.paragraph.elements
+            const base = els[0].startIndex ?? 0
+            // Texto del párrafo alineado 1:1 con los índices del documento:
+            // los elementos sin texto (imágenes, saltos) se rellenan con un
+            // carácter neutro del mismo largo.
+            let texto = ''
+            for (const el of els) {
+              const largo = (el.endIndex ?? 0) - (el.startIndex ?? 0)
+              const contenido = el.textRun?.content
+              texto += (typeof contenido === 'string' && contenido.length === largo)
+                ? contenido
+                : '\u0000'.repeat(Math.max(largo, 0))
+            }
+            PLACEHOLDER_OBS.lastIndex = 0
+            let m
+            while ((m = PLACEHOLDER_OBS.exec(texto)) !== null) {
+              matches.push({ segmentId, start: base + m.index, end: base + m.index + m[0].length })
             }
           }
+          if (element.table?.tableRows) {
+            for (const row of element.table.tableRows) {
+              for (const cell of row.tableCells || []) {
+                buscarEnContenido(cell.content, segmentId)
+              }
+            }
+          }
+          if (element.tableOfContents?.content) {
+            buscarEnContenido(element.tableOfContents.content, segmentId)
+          }
         }
-        if (obsStartIndex !== -1) break
       }
 
-      if (obsStartIndex !== -1) {
-        // Primero eliminar el placeholder, luego insertar el texto real
+      buscarEnContenido(docContent.data.body?.content, undefined)
+      for (const [headerId, header] of Object.entries(docContent.data.headers || {})) {
+        buscarEnContenido(header.content, headerId)
+      }
+      for (const [footerId, footer] of Object.entries(docContent.data.footers || {})) {
+        buscarEnContenido(footer.content, footerId)
+      }
+
+      if (matches.length > 0) {
+        // De atrás hacia adelante dentro de cada segmento para que borrar e
+        // insertar no corra los índices de las apariciones pendientes.
+        matches.sort((a, b) =>
+          (a.segmentId || '') === (b.segmentId || '') ? b.start - a.start : (a.segmentId || '').localeCompare(b.segmentId || '')
+        )
+        const obsRequests = []
+        for (const mt of matches) {
+          const seg = mt.segmentId ? { segmentId: mt.segmentId } : {}
+          obsRequests.push(
+            { deleteContentRange: { range: { ...seg, startIndex: mt.start, endIndex: mt.end } } },
+            { insertText: { location: { ...seg, index: mt.start }, text: observationsReplacement.replace } }
+          )
+        }
         await docsService.documents.batchUpdate({
           documentId: googleDocId,
-          requestBody: {
-            requests: [
-              { deleteContentRange: { range: { startIndex: obsStartIndex, endIndex: obsEndIndex } } },
-              { insertText: { location: { index: obsStartIndex }, text: observationsReplacement.replace } }
-            ]
-          }
+          requestBody: { requests: obsRequests }
         })
+        console.log(`[Control] {{OBSERVATIONS}} reemplazado en ${matches.length} lugar(es)`)
+      } else {
+        // No se corta el control: KM y nafta ya quedaron en el documento y el
+        // PDF se genera igual. Se avisa para que el usuario sepa que las
+        // observaciones no están en el PDF.
+        console.warn(`[Control] No se encontró {{OBSERVATIONS}} en el doc ${googleDocId}`)
+        warnings.push('observations_placeholder_not_found')
       }
     }
 
@@ -1781,7 +1832,9 @@ app.post('/api/complete-control', async (req, res) => {
         googleDocId,
         pdfUrl,
         plantillaUsada
-      }
+      },
+      // Avisos no bloqueantes (ej. el documento no tenia {{OBSERVATIONS}}).
+      warnings
     })
   } catch (error) {
     console.error('[Control] Error:', error.message)

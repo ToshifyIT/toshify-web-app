@@ -2193,36 +2193,52 @@ export function ProgramacionV2Module() {
           created_by_name: profile?.full_name || 'Sistema'
         }
 
-        generateContracts(contractParams).then((contractResult) => {
-          if (contractResult.success && contractResult.documents.length > 0) {
-            const docLinks = contractResult.documents.map((d: GeneratedDocument) => {
-              const label = d.turno ? `${d.conductor_nombre} (${d.turno})` : d.conductor_nombre
-              return `<li><strong>${label}</strong>: <a href="${d.folderUrl}" target="_blank" rel="noopener">Ver carpeta en Drive</a></li>`
-            }).join('')
-
-            Swal.fire({
-              icon: 'success',
-              title: 'Documentos generados',
-              html: `<p>Se generaron los siguientes documentos:</p><ul style="text-align:left;margin-top:8px">${docLinks}</ul>`,
-              confirmButtonText: 'Entendido'
-            })
-          } else if (!contractResult.success) {
-            Swal.fire({
-              icon: 'warning',
-              title: 'Error al generar documentos',
-              text: contractResult.error || 'No se pudieron generar los documentos.',
-              confirmButtonText: 'Entendido'
-            })
-          }
-        }).catch((err: Error) => {
+        // Se ESPERA a proposito (antes era fire-and-forget). Dos razones:
+        //  - el overlay de carga tiene que cubrir tambien la generacion, que es
+        //    la parte lenta;
+        //  - el aviso de documentos tiene que salir ANTES del "Asignacion
+        //    Creada", que es el final del flujo.
+        // `generateContracts` ya atrapa sus propios errores y devuelve
+        // success:false; el try/catch es por si falla algo fuera de eso.
+        let contractResult: { success: boolean; documents: GeneratedDocument[]; error?: string }
+        try {
+          contractResult = await generateContracts(contractParams)
+        } catch (err) {
           console.error('[Contract] Error:', err)
-          Swal.fire({
-            icon: 'warning',
-            title: 'Error al generar documentos',
-            text: 'Ocurrió un error al generar los documentos. La asignación se creó correctamente.',
+          contractResult = { success: false, documents: [], error: 'Ocurrio un error al generar los documentos.' }
+        }
+
+        // El overlay esta en z-index 9999 y SweetAlert2 en 1060: si no se baja
+        // primero, el modal queda DEBAJO y su boton no se puede tocar. El tick
+        // le da a React el respiro para desmontarlo antes de abrir el modal.
+        setEnviandoEntrega(false)
+        await new Promise((r) => setTimeout(r, 0))
+
+        if (contractResult.success && contractResult.documents.length > 0) {
+          const docLinks = contractResult.documents.map((d: GeneratedDocument) => {
+            const label = d.turno ? `${d.conductor_nombre} (${d.turno})` : d.conductor_nombre
+            return `<li><strong>${label}</strong>: <a href="${d.folderUrl}" target="_blank" rel="noopener">Ver carpeta en Drive</a></li>`
+          }).join('')
+
+          await Swal.fire({
+            icon: 'success',
+            title: 'Documentos generados',
+            html: `<p>Se generaron los siguientes documentos:</p><ul style="text-align:left;margin-top:8px">${docLinks}</ul>`,
             confirmButtonText: 'Entendido'
           })
-        })
+        } else if (!contractResult.success) {
+          // La asignacion YA quedo creada en la base: el fallo es solo del
+          // documento. Se dice las dos cosas para que nadie crea que se perdio
+          // todo, y se sigue mostrando el exito abajo.
+          await Swal.fire({
+            icon: 'warning',
+            title: 'Error al generar documentos',
+            html: `<p>${contractResult.error || 'No se pudieron generar los documentos.'}</p>`
+              + '<p style="margin-top:10px"><b>La asignación se creó igual.</b> El documento queda pendiente: '
+              + 'la asignación va a figurar sin carpeta en el módulo de Asignaciones.</p>',
+            confirmButtonText: 'Entendido'
+          })
+        }
       }
 
       // Remover de la lista local (ya no debe aparecer)
