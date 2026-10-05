@@ -380,6 +380,13 @@ export function ReporteFacturacionTab() {
   // Pagos Cabify cargados (Excel formato Cabify) — Map<conductor_id, monto_pagado>
   // Solo se popula cuando el período está cerrado y hay registros en pagos_conductores
   const [pagosCabifyMap, setPagosCabifyMap] = useState<Map<string, number>>(new Map())
+  // Pagos de facturación de la semana que NO apuntan a ninguna facturación
+  // actual del período (quedaron huérfanos, ej. Pagos Cabify procesados con la
+  // pantalla desactualizada después de un recálculo). Solo se muestran como
+  // aviso: no se suman a lo cobrado ni a ningún total.
+  const [pagosSinVincular, setPagosSinVincular] = useState<Array<{
+    id: string; conductor_id: string; conductor_nombre: string | null; monto: number; referencia: string | null
+  }>>([])
   const [excesos, setExcesos] = useState<ExcesoKm[]>([])
   const [loading, setLoading] = useState(true)
   const [loadingDetalle, setLoadingDetalle] = useState(false)
@@ -1288,6 +1295,7 @@ export function ReporteFacturacionTab() {
 
   async function cargarFacturacion() {
     setLoading(true)
+    setPagosSinVincular([])
     try {
       const semana = getWeek(semanaActual.inicio, { weekStartsOn: 1 })
       const anio = getYear(semanaActual.inicio)
@@ -1360,6 +1368,7 @@ export function ReporteFacturacionTab() {
       }
 
       setPeriodo(periodoData as PeriodoFacturacion)
+      periodoUpdatedAtCargaRef.current = (periodoData as any).updated_at ?? null
       setModoVistaPrevia(false) // Hay período generado, no mostrar vista previa
 
       // 2. Cargar facturaciones de conductores para este período
@@ -2005,6 +2014,34 @@ export function ReporteFacturacionTab() {
         setPagosCabifyMap(mapa)
       } else {
         setPagosCabifyMap(new Map())
+      }
+
+      // Pagos sin vincular (ver estado pagosSinVincular). Se identifican por la
+      // referencia, que lleva la semana del período ("Pago Cabify S40/2026"):
+      // la columna `semana` de pagos_conductores es la del día del pago, no la
+      // de la facturación, así que no sirve para esto. Se acota a los
+      // conductores de este período para no mezclar otras sedes.
+      try {
+        const conductorIdsPeriodo = [...new Set(facturacionesTransformadas.map((f: any) => f.conductor_id).filter(Boolean))]
+        if (conductorIdsPeriodo.length > 0) {
+          const idsActuales = new Set(facturacionesTransformadas.map((f: any) => String(f.id)))
+          const { data: pagosPeriodo } = await (supabase.from('pagos_conductores') as any)
+            .select('id, conductor_id, conductor_nombre, referencia_id, monto, referencia')
+            .eq('tipo_cobro', 'facturacion_semanal')
+            .in('conductor_id', conductorIdsPeriodo)
+            .ilike('referencia', `%S${(periodoData as any).semana}/${(periodoData as any).anio}%`)
+          setPagosSinVincular(((pagosPeriodo || []) as any[])
+            .filter(pg => !idsActuales.has(String(pg.referencia_id)))
+            .map(pg => ({
+              id: pg.id,
+              conductor_id: pg.conductor_id,
+              conductor_nombre: pg.conductor_nombre ?? null,
+              monto: Number(pg.monto) || 0,
+              referencia: pg.referencia ?? null,
+            })))
+        }
+      } catch {
+        // Solo es un aviso: si falla la consulta no se muestra.
       }
 
     } catch {
@@ -3357,6 +3394,10 @@ export function ReporteFacturacionTab() {
   // valores viejos si leyeran el state directamente.
   const recalculandoRef = useRef(false)
   const periodoEstadoRef = useRef<string | undefined>(undefined)
+  // `updated_at` del período con el que se cargó la facturación en pantalla.
+  // Cada recálculo lo actualiza; si al cerrar la base trae otro valor, la
+  // pantalla quedó desactualizada (alguien recalculó en otra sesión).
+  const periodoUpdatedAtCargaRef = useRef<string | null>(null)
   useEffect(() => { recalculandoRef.current = recalculando }, [recalculando])
   useEffect(() => { periodoEstadoRef.current = periodo?.estado }, [periodo?.estado])
 
@@ -3511,6 +3552,10 @@ export function ReporteFacturacionTab() {
     }
 
     setRecalculando(true)
+    // conductor_id -> id de su facturación ANTES del recálculo. El paso 2 borra
+    // la facturación y el upsert la recrea con id nuevo; con este mapa se
+    // reasignan después los pagos ya registrados (ver reasignarPagosTrasRecalculo).
+    const factViejaPorConductor = new Map<string, string>()
     try {
       const fechaInicio = periodo.fecha_inicio
       const fechaFin = periodo.fecha_fin
@@ -3617,8 +3662,12 @@ export function ReporteFacturacionTab() {
       // 2. BORRAR toda la facturación existente del período
       const { data: factExistentes } = await supabase
         .from('facturacion_conductores')
-        .select('id')
+        .select('id, conductor_id')
         .eq('periodo_id', periodoId)
+
+      for (const f of (factExistentes || []) as Array<{ id: string; conductor_id: string | null }>) {
+        if (f.conductor_id) factViejaPorConductor.set(f.conductor_id, f.id)
+      }
 
       if (factExistentes && factExistentes.length > 0) {
         const factIds = factExistentes.map((f: any) => f.id)
@@ -4485,6 +4534,9 @@ export function ReporteFacturacionTab() {
       let erroresConsecutivos = 0
       let totalErrores = 0
       let primerError = ''
+      // Conductores que quedaron con problemas en este recálculo, para nombrarlos
+      // en el aviso final (antes solo se mostraba "N fallaron" y el primer error).
+      const conductoresConProblema: Array<{ nombre: string; motivo: string }> = []
       setRecalculandoProgreso({ actual: 0, total: conductoresProcesados.length, nombre: '' })
 
       for (const conductor of conductoresProcesados) {
@@ -4699,6 +4751,10 @@ export function ReporteFacturacionTab() {
           totalErrores++
           erroresConsecutivos++
           if (!primerError) primerError = errFact.message || 'Error desconocido al insertar conductor'
+          conductoresConProblema.push({
+            nombre: conductor.conductor_nombre || 'Sin nombre',
+            motivo: `no se pudo guardar la facturación (${errFact.message || 'error desconocido'})`,
+          })
           // Si los primeros 3 inserts fallan consecutivamente, es un problema sistémico - abortar
           if (erroresConsecutivos >= 3 && conductoresProcesadosCount === 0) {
             throw new Error(`Error sistémico al insertar conductores (${erroresConsecutivos} fallos consecutivos): ${primerError}`)
@@ -4858,7 +4914,17 @@ export function ReporteFacturacionTab() {
 
         // ═══ EJECUTAR: 1 batch insert + updates en paralelo (reduce ~20 calls a 3-5) ═══
         if (todosDetalles.length > 0) {
-          await (supabase.from('facturacion_detalle') as any).insert(todosDetalles)
+          // Antes el error de este insert se ignoraba: la facturación quedaba
+          // sin conceptos y el recálculo informaba "completado".
+          const { error: errDetalle } = await (supabase.from('facturacion_detalle') as any).insert(todosDetalles)
+          if (errDetalle) {
+            totalErrores++
+            if (!primerError) primerError = errDetalle.message || 'Error al guardar el detalle'
+            conductoresConProblema.push({
+              nombre: conductor.conductor_nombre || 'Sin nombre',
+              motivo: `no se guardó el detalle de conceptos (${errDetalle.message || 'error desconocido'})`,
+            })
+          }
         }
 
         // Marcar registros como aplicados en paralelo
@@ -4918,6 +4984,40 @@ export function ReporteFacturacionTab() {
         )
       }
 
+      // 7a. Control de integridad: facturaciones del período que quedaron sin
+      // ningún concepto en el detalle. Cubre el caso de una falla de conexión
+      // en la que la facturación SÍ se guardó pero la respuesta no llegó, así
+      // que el recálculo la dio por fallida y no cargó su detalle.
+      try {
+        const { data: factsPeriodo } = await (supabase.from('facturacion_conductores') as any)
+          .select('id, conductor_nombre')
+          .eq('periodo_id', periodoId)
+        const idsPeriodo = ((factsPeriodo || []) as Array<{ id: string }>).map(f => f.id)
+        if (idsPeriodo.length > 0) {
+          const { data: conDetalle } = await (supabase.from('facturacion_detalle') as any)
+            .select('facturacion_id')
+            .in('facturacion_id', idsPeriodo)
+          const idsConDetalle = new Set(((conDetalle || []) as Array<{ facturacion_id: string }>).map(d => String(d.facturacion_id)))
+          for (const f of (factsPeriodo || []) as Array<{ id: string; conductor_nombre: string | null }>) {
+            if (idsConDetalle.has(String(f.id))) continue
+            const nombre = f.conductor_nombre || 'Sin nombre'
+            const previo = conductoresConProblema.find(c => c.nombre === nombre)
+            if (previo) previo.motivo += ' · quedó guardada sin conceptos en el detalle'
+            else conductoresConProblema.push({ nombre, motivo: 'quedó guardada sin conceptos en el detalle' })
+          }
+        }
+      } catch {
+        // El control es informativo: si falla, se informa lo que ya se sabe.
+      }
+
+      // 7b. Reasignar los pagos ya registrados a las facturaciones nuevas.
+      const reasignacion = await reasignarPagosTrasRecalculo(periodoId, factViejaPorConductor)
+      const avisoPagos = reasignacion.error
+        ? `No se pudieron reasignar los pagos ya registrados (${reasignacion.error}). Revisar el aviso de pagos sin vincular.`
+        : reasignacion.sinDestino > 0
+          ? `${reasignacion.sinDestino} pago(s) registrados quedaron sin facturación: el conductor ya no está en esta semana.`
+          : ''
+
       // 8. Actualizar totales del período y LIBERAR EL CANDADO
       //    El .eq('lock_token') es imprescindible: si nuestra ejecución quedó
       //    zombie (equipo suspendido), venció y otra persona tomó el período,
@@ -4960,12 +5060,31 @@ export function ReporteFacturacionTab() {
       // 11. Recargar datos
       await cargarFacturacion()
 
-      if (totalErrores > 0) {
-        Swal.fire('Recálculo parcial',
-          `${conductoresProcesadosCount} conductores procesados, pero ${totalErrores} fallaron. Error: ${primerError}`,
+      if (totalErrores > 0 || conductoresConProblema.length > 0) {
+        const esc = (t: string) => t.replace(/[&<>"']/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch] as string))
+        const lista = conductoresConProblema
+          .map(c => `<li style="margin-bottom:4px"><strong>${esc(c.nombre)}</strong>: ${esc(c.motivo)}</li>`)
+          .join('')
+        Swal.fire({
+          icon: 'warning',
+          title: 'Recálculo incompleto',
+          html: `<div style="text-align:left;font-size:13px">
+            <p style="margin:0 0 8px 0">Se procesaron ${conductoresProcesadosCount} conductores, pero ${conductoresConProblema.length || totalErrores} quedaron con problemas:</p>
+            ${lista ? `<ul style="margin:0 0 10px 18px;padding:0">${lista}</ul>` : `<p style="margin:0 0 10px 0">Error: ${esc(primerError || 'desconocido')}</p>`}
+            <p style="margin:0"><strong>Volvé a tocar "Recalcular" antes de cerrar el período.</strong> Suele ser una falla de conexión momentánea.</p>
+            ${avisoPagos ? `<p style="margin:10px 0 0 0;color:#6B7280">${esc(avisoPagos)}</p>` : ''}
+          </div>`,
+          confirmButtonText: 'Entendido',
+          confirmButtonColor: '#f59e0b',
+        })
+      } else if (avisoPagos) {
+        Swal.fire('Recálculo completado con pagos a revisar',
+          `${conductoresProcesadosCount} conductores regenerados. ${avisoPagos}`,
           'warning')
       } else {
-        showSuccess('Recálculo completado', `${conductoresProcesadosCount} conductores regenerados desde cero`)
+        showSuccess('Recálculo completado',
+          `${conductoresProcesadosCount} conductores regenerados desde cero` +
+          (reasignacion.reasignados > 0 ? ` · ${reasignacion.reasignados} pago(s) conservados` : ''))
       }
 
     } catch (error: any) {
@@ -4980,6 +5099,12 @@ export function ReporteFacturacionTab() {
         .eq('lock_token', lockTokenRef.current)
       setPeriodo(prev => prev ? { ...prev, estado: 'abierto' as const } : prev)
       Swal.fire('Error', error?.message || 'No se pudo recalcular el período', 'error')
+      // Si el paso 2 ya borró la facturación, reasignar los pagos a las
+      // facturaciones que alcanzaron a recrearse (best-effort; los que no
+      // tengan destino quedan visibles en el aviso de pagos sin vincular).
+      if (factViejaPorConductor.size > 0) {
+        await reasignarPagosTrasRecalculo(periodo.id, factViejaPorConductor)
+      }
       // El paso 2 ya borró la facturación previa: hay que recargar para no
       // dejar en pantalla filas que ya no existen en la base.
       await cargarFacturacion()
@@ -4988,6 +5113,134 @@ export function ReporteFacturacionTab() {
       setRecalculando(false)
       setRecalculandoProgreso({ actual: 0, total: 0, nombre: '' })
     }
+  }
+
+  /**
+   * Reasigna los pagos de facturación (pagos_conductores, tipo
+   * 'facturacion_semanal') que apuntaban a la facturación borrada por el
+   * recálculo hacia la facturación nueva del mismo conductor, y vuelve a marcar
+   * 'pagado' con la misma regla que al registrar o eliminar un pago (lo cobrado
+   * cubre el total). Hay una sola facturación por conductor y período (upsert
+   * con onConflict periodo_id,conductor_id), así que el destino es unívoco.
+   * Si el conductor ya no está en la semana, su pago queda sin destino.
+   */
+  async function reasignarPagosTrasRecalculo(
+    periodoId: string,
+    factViejaPorConductor: Map<string, string>
+  ): Promise<{ reasignados: number; sinDestino: number; error?: string }> {
+    if (factViejaPorConductor.size === 0) return { reasignados: 0, sinDestino: 0 }
+    try {
+      const conductorPorFactVieja = new Map<string, string>()
+      factViejaPorConductor.forEach((factId, conductorId) => conductorPorFactVieja.set(String(factId), conductorId))
+
+      const { data: pagos, error: errPagos } = await (supabase.from('pagos_conductores') as any)
+        .select('id, referencia_id')
+        .eq('tipo_cobro', 'facturacion_semanal')
+        .in('referencia_id', [...conductorPorFactVieja.keys()])
+      if (errPagos) throw errPagos
+      if (!pagos || pagos.length === 0) return { reasignados: 0, sinDestino: 0 }
+
+      const { data: nuevas, error: errNuevas } = await (supabase.from('facturacion_conductores') as any)
+        .select('id, conductor_id, total_a_pagar')
+        .eq('periodo_id', periodoId)
+      if (errNuevas) throw errNuevas
+      const nuevaPorConductor = new Map<string, { id: string; total_a_pagar: number }>()
+      for (const f of (nuevas || []) as Array<{ id: string; conductor_id: string; total_a_pagar: number }>) {
+        nuevaPorConductor.set(f.conductor_id, f)
+      }
+
+      const pagosPorNueva = new Map<string, string[]>()
+      let sinDestino = 0
+      for (const pg of pagos as Array<{ id: string; referencia_id: string }>) {
+        const conductorId = conductorPorFactVieja.get(String(pg.referencia_id))
+        const nueva = conductorId ? nuevaPorConductor.get(conductorId) : undefined
+        if (!nueva) { sinDestino++; continue }
+        const lista = pagosPorNueva.get(nueva.id) || []
+        lista.push(pg.id)
+        pagosPorNueva.set(nueva.id, lista)
+      }
+
+      let reasignados = 0
+      for (const [nuevaId, pagoIds] of pagosPorNueva) {
+        const { error } = await (supabase.from('pagos_conductores') as any)
+          .update({ referencia_id: nuevaId })
+          .in('id', pagoIds)
+        if (error) throw error
+        reasignados += pagoIds.length
+      }
+
+      // Estado 'pagado' si lo cobrado cubre el total (misma regla que el resto del módulo)
+      const idsNuevas = [...pagosPorNueva.keys()]
+      if (idsNuevas.length > 0) {
+        const { data: cobrados } = await (supabase.from('pagos_conductores') as any)
+          .select('referencia_id, monto')
+          .eq('tipo_cobro', 'facturacion_semanal')
+          .in('referencia_id', idsNuevas)
+        const cobradoPorFact = new Map<string, number>()
+        for (const c of (cobrados || []) as Array<{ referencia_id: string; monto: number }>) {
+          cobradoPorFact.set(String(c.referencia_id), (cobradoPorFact.get(String(c.referencia_id)) || 0) + (Number(c.monto) || 0))
+        }
+        const totalPorFact = new Map<string, number>()
+        nuevaPorConductor.forEach(f => totalPorFact.set(f.id, Math.abs(Number(f.total_a_pagar) || 0)))
+        const pagadas = idsNuevas.filter(id => (cobradoPorFact.get(id) || 0) >= (totalPorFact.get(id) ?? Infinity))
+        if (pagadas.length > 0) {
+          await (supabase.from('facturacion_conductores') as any)
+            .update({ estado: 'pagado' })
+            .in('id', pagadas)
+        }
+      }
+
+      return { reasignados, sinDestino }
+    } catch (e: any) {
+      return { reasignados: 0, sinDestino: 0, error: e?.message || 'error desconocido' }
+    }
+  }
+
+  /**
+   * Verifica contra la base que la facturación usada para registrar pagos siga
+   * siendo la vigente: que cada facturación exista, que su total no haya
+   * cambiado y que lo ya cobrado sea lo que se ve en pantalla. Si la pantalla
+   * quedó desactualizada (ej. alguien recalculó el período en otra pestaña),
+   * los ids en memoria ya no existen y los pagos quedarían huérfanos.
+   */
+  async function verificarFacturacionVigente(
+    pagos: Array<{ facturacion_id: string; total_a_pagar: number; monto_cobrado: number; conductor_nombre: string }>
+  ): Promise<{ ok: true } | { ok: false; titulo: string; conductores: string[] }> {
+    const conFact = pagos.filter(pg => pg.facturacion_id)
+    if (conFact.length === 0) return { ok: true }
+    const ids = [...new Set(conFact.map(pg => pg.facturacion_id))]
+    const [factRes, pagosRes] = await Promise.all([
+      (supabase.from('facturacion_conductores') as any)
+        .select('id, total_a_pagar')
+        .in('id', ids),
+      (supabase.from('pagos_conductores') as any)
+        .select('referencia_id, monto')
+        .eq('tipo_cobro', 'facturacion_semanal')
+        .in('referencia_id', ids),
+    ])
+    if (factRes.error || pagosRes.error) {
+      return { ok: false, titulo: 'No se pudo verificar la facturación contra la base de datos. Intentá de nuevo.', conductores: [] }
+    }
+    const totalPorId = new Map<string, number>()
+    for (const f of (factRes.data || []) as Array<{ id: string; total_a_pagar: number }>) {
+      totalPorId.set(String(f.id), Math.abs(Number(f.total_a_pagar) || 0))
+    }
+    const cobradoPorId = new Map<string, number>()
+    for (const c of (pagosRes.data || []) as Array<{ referencia_id: string; monto: number }>) {
+      cobradoPorId.set(String(c.referencia_id), (cobradoPorId.get(String(c.referencia_id)) || 0) + (Number(c.monto) || 0))
+    }
+    const cambiados = conFact
+      .filter(pg => {
+        const total = totalPorId.get(pg.facturacion_id)
+        if (total === undefined) return true // la facturación ya no existe
+        if (Math.abs(total - pg.total_a_pagar) >= 0.01) return true
+        return Math.abs((cobradoPorId.get(pg.facturacion_id) || 0) - (pg.monto_cobrado || 0)) >= 0.01
+      })
+      .map(pg => pg.conductor_nombre)
+    if (cambiados.length > 0) {
+      return { ok: false, titulo: 'La facturación cambió desde que se cargó la pantalla.', conductores: cambiados }
+    }
+    return { ok: true }
   }
 
   // Liberar manualmente un candado huérfano (botón "Desbloquear" del banner).
@@ -5070,6 +5323,39 @@ export function ReporteFacturacionTab() {
 
     setCerrando(true)
     try {
+      // Verificar que la facturación en pantalla sea la vigente: si el período
+      // se recalculó (en otra pestaña o por otro usuario) después de cargar
+      // esta pantalla, no se cierra. Se recarga y se pide revisar de nuevo.
+      const { data: periodoBD, error: errPeriodoBD } = await (supabase
+        .from('periodos_facturacion') as any)
+        .select('estado, updated_at')
+        .eq('id', periodo.id)
+        .maybeSingle()
+      if (errPeriodoBD) throw errPeriodoBD
+      if (!periodoBD) throw new Error('No se encontró el período en la base de datos')
+
+      const tsCarga = periodoUpdatedAtCargaRef.current ? new Date(periodoUpdatedAtCargaRef.current).getTime() : 0
+      const tsBD = periodoBD.updated_at ? new Date(periodoBD.updated_at).getTime() : 0
+      const recalculadoDespues = tsBD !== tsCarga
+      const yaNoAbierto = periodoBD.estado !== 'abierto'
+
+      if (recalculadoDespues || yaNoAbierto) {
+        await cargarFacturacion()
+        await Swal.fire({
+          icon: 'warning',
+          title: 'No se cerró el período',
+          html: yaNoAbierto
+            ? `<p>El período ya no está abierto (estado actual: <strong>${periodoBD.estado}</strong>). Otra persona lo modificó mientras esta pantalla estaba abierta.</p>
+               <p style="margin-top:8px;color:#6B7280;font-size:12px">Se recargó la facturación.</p>`
+            : `<p>La facturación de este período se <strong>recalculó después</strong> de que se abrió esta pantalla` +
+              (periodoBD.updated_at ? ` (último recálculo: <strong>${new Date(periodoBD.updated_at).toLocaleString('es-AR')}</strong>)` : '') +
+              `.</p><p style="margin-top:8px">Se recargó la facturación con los datos actuales: revisá los importes y volvé a cerrar el período.</p>`,
+          confirmButtonText: 'Entendido',
+          confirmButtonColor: '#f59e0b',
+        })
+        return
+      }
+
       // Cierre solo cambia estado a 'cerrado'. NO toca control_saldos ni
       // saldos_conductores: los saldos se mueven únicamente cuando se carga el
       // Pago Cabify (o pago manual). Materializar acá producía cargos
@@ -6782,6 +7068,27 @@ export function ReporteFacturacionTab() {
       (hoy.getTime() - new Date(hoy.getFullYear(), 0, 1).getTime()) / (7 * 24 * 60 * 60 * 1000)
     )
     const anioHoy = hoy.getFullYear()
+
+    // Antes de registrar nada: la facturación en memoria tiene que seguir
+    // siendo la de la base. Si se recalculó mientras la pantalla estaba
+    // abierta, se frena para no dejar pagos apuntando a facturaciones borradas.
+    const verificacion = await verificarFacturacionVigente(cabifyPagosData)
+    if (!verificacion.ok) {
+      const lista = verificacion.conductores.slice(0, 8).map(n => `<li>${n}</li>`).join('')
+      const resto = verificacion.conductores.length > 8 ? `<li>… y ${verificacion.conductores.length - 8} más</li>` : ''
+      await Swal.fire({
+        icon: 'warning',
+        title: 'No se registró ningún pago',
+        html: `<div style="text-align:left;font-size:13px;">
+          <p style="margin:0 0 8px 0"><strong>${verificacion.titulo}</strong></p>
+          ${lista ? `<p style="margin:0 0 4px 0">Conductores afectados:</p><ul style="margin:0 0 8px 18px;padding:0">${lista}${resto}</ul>` : ''}
+          <p style="margin:0;color:#6B7280;font-size:12px">Recargá la página y volvé a cargar el Excel de Pagos Cabify.</p>
+        </div>`,
+        confirmButtonText: 'Entendido',
+        confirmButtonColor: '#7C3AED',
+      })
+      return
+    }
 
     const confirm = await Swal.fire({
       title: 'Confirmar Pagos Cabify',
@@ -11642,6 +11949,29 @@ export function ReporteFacturacionTab() {
             <button onClick={() => registrarPagoFacturacion(null as any)}>Pago</button>
           </div>
 
+          {/* Aviso: pagos de la semana sin vincular a la facturación actual */}
+          {!modoVistaPrevia && pagosSinVincular.length > 0 && (() => {
+            const total = pagosSinVincular.reduce((acc, pg) => acc + pg.monto, 0)
+            const nombres = [...new Set(pagosSinVincular.map(pg => pg.conductor_nombre || 'Sin nombre'))]
+            return (
+              <div style={{
+                display: 'flex', gap: '10px', alignItems: 'flex-start',
+                padding: '10px 14px', marginBottom: '12px', borderRadius: '8px',
+                background: 'rgba(245, 158, 11, 0.10)', border: '1px solid rgba(245, 158, 11, 0.45)',
+                color: 'var(--text-primary)', fontSize: '12px', lineHeight: 1.45,
+              }}>
+                <AlertTriangle size={16} style={{ color: '#f59e0b', flexShrink: 0, marginTop: '1px' }} />
+                <div>
+                  <strong>{pagosSinVincular.length} pago(s) de esta semana no están vinculados a la facturación actual ({formatCurrency(total)}).</strong>
+                  {' '}No se reflejan en lo cobrado ni en el detalle. No volver a procesar Pagos Cabify para estos conductores hasta revisarlo.
+                  <div style={{ color: 'var(--text-secondary)', marginTop: '4px' }}>
+                    {nombres.slice(0, 6).join(', ')}{nombres.length > 6 ? ` y ${nombres.length - 6} más` : ''}
+                  </div>
+                </div>
+              </div>
+            )
+          })()}
+
           {/* DataTable */}
           <div style={{ position: 'relative' }}>
             {/* Overlay de recálculo — antes se mostraba con
@@ -12972,6 +13302,23 @@ export function ReporteFacturacionTab() {
                         )}
                       </div>
                     );
+                  })()}
+
+                  {/* Aviso: pagos de este conductor sin vincular a esta facturación */}
+                  {!modoVistaPrevia && detalleFacturacion && (() => {
+                    const sueltos = pagosSinVincular.filter(pg => pg.conductor_id === detalleFacturacion.conductor_id)
+                    if (sueltos.length === 0) return null
+                    return (
+                      <div style={{
+                        marginTop: '12px', padding: '8px 12px', borderRadius: '6px',
+                        background: 'rgba(245, 158, 11, 0.10)', border: '1px solid rgba(245, 158, 11, 0.45)',
+                        fontSize: '12px', color: 'var(--text-primary)', lineHeight: 1.45,
+                      }}>
+                        <strong>Pagos sin vincular a esta facturación:</strong>{' '}
+                        {sueltos.map(pg => `${pg.referencia || 'Pago'} ${formatCurrency(pg.monto)}`).join(' · ')}.
+                        {' '}No están incluidos en el total ni en lo cobrado.
+                      </div>
+                    )
                   })()}
 
                   {/* Pagos Registrados */}
