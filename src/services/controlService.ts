@@ -27,6 +27,13 @@ export interface ControlCompletionResponse {
     pdfUrl: string | null
     plantillaUsada: string
   }
+  /**
+   * Avisos no bloqueantes del servidor. 'observations_placeholder_not_found':
+   * el documento no tenia {{OBSERVATIONS}} y las observaciones no quedaron en
+   * el PDF (ej. contrato generado antes de que ese campo dejara de llenarse al
+   * generar, o plantilla sin el campo).
+   */
+  warnings?: string[]
   error?: string
 }
 
@@ -55,7 +62,8 @@ export async function completeControl(
 
     return {
       success: true,
-      document: data.document
+      document: data.document,
+      warnings: Array.isArray(data.warnings) ? data.warnings : []
     }
   } catch (error: unknown) {
     const msg = error instanceof Error ? error.message : 'Error desconocido'

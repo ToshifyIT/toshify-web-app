@@ -325,15 +325,23 @@ export function AsignacionesModule() {
     setControlAsignacion(asig)
     setControlVehiculoKmNotFound(false)
 
-    // Prefill del kilometraje desde la tabla vehiculos (kilometraje_actual)
+    // Prefill desde la tabla vehiculos: kilometraje (kilometraje_actual) y
+    // observaciones (notas del vehiculo, como sugerencia editable). Las
+    // observaciones ya no se llenan al generar el contrato: llegan al
+    // documento solo con lo que el usuario confirma aca.
     let kmPrefill = ''
+    let observacionesPrefill = ''
     if (asig.vehiculo_id) {
       try {
         const { data: vehData, error: vehError } = await supabase
           .from('vehiculos')
-          .select('kilometraje_actual')
+          .select('kilometraje_actual, notas')
           .eq('id', asig.vehiculo_id)
           .single()
+        const notasVehiculo = (vehData as { notas: string | null } | null)?.notas
+        if (!vehError && typeof notasVehiculo === 'string' && notasVehiculo.trim()) {
+          observacionesPrefill = notasVehiculo.trim()
+        }
         const kmActual = (vehData as { kilometraje_actual: number | null } | null)?.kilometraje_actual
         if (!vehError && typeof kmActual === 'number' && kmActual > 0) {
           kmPrefill = String(kmActual)
@@ -347,7 +355,7 @@ export function AsignacionesModule() {
       setControlVehiculoKmNotFound(true)
     }
 
-    setControlForm({ km: kmPrefill, ltnafta: '', observations: '', cristal_status: '', carter: '', tires: '', others_docs: '', other_accesory: '', make_chains: '', status_chains: '', tensioners_chains: '', others_kit: '' })
+    setControlForm({ km: kmPrefill, ltnafta: '', observations: observacionesPrefill, cristal_status: '', carter: '', tires: '', others_docs: '', other_accesory: '', make_chains: '', status_chains: '', tensioners_chains: '', others_kit: '' })
     // Obtener un conductor para consultar si la plantilla es Bariloche
     const isAutoCargo = asig.horario === 'todo_dia'
     let conductorId = ''
@@ -470,18 +478,41 @@ export function AsignacionesModule() {
       }
 
       // Enviar control para cada conductor
+      // Conductores cuyo documento no tenia {{OBSERVATIONS}}: el control se
+      // completa igual (KM y nafta quedan), pero las observaciones no estan
+      // en el PDF y hay que avisarlo.
+      const sinObservaciones: string[] = []
       for (const conductor of conductoresAsig) {
         const result = await completeControl({
           conductor_id: conductor.id,
           ...payload,
         })
         if (!result.success) throw new Error(result.error || `Error al generar control para ${conductor.nombre}`)
+        if (result.warnings?.includes('observations_placeholder_not_found')) {
+          sinObservaciones.push(conductor.nombre)
+        }
       }
 
       setShowControlModal(false)
-      showSuccess(cantConductores > 1
-        ? `Control completado y ${cantConductores} PDFs generados correctamente`
-        : 'Control completado y PDF generado correctamente')
+      if (sinObservaciones.length > 0) {
+        await Swal.fire({
+          icon: 'warning',
+          title: 'Control completado con observaciones pendientes',
+          html: `
+            <div style="text-align:left;font-size:13px">
+              <p style="margin:0 0 8px 0">El control se completó y se generó el PDF, pero las <b>observaciones no se incluyeron</b> en el documento de:</p>
+              <ul style="margin:0 0 0 18px;padding:0">${sinObservaciones.map(n => `<li><b>${n}</b></li>`).join('')}</ul>
+              <p style="margin-top:10px;color:#6b7280;font-size:12px">El documento no tiene el campo de observaciones. Puede haberse generado antes de este cambio o la plantilla no incluye el campo.</p>
+            </div>
+          `,
+          confirmButtonText: 'Entendido',
+          confirmButtonColor: 'var(--color-primary)',
+        })
+      } else {
+        showSuccess(cantConductores > 1
+          ? `Control completado y ${cantConductores} PDFs generados correctamente`
+          : 'Control completado y PDF generado correctamente')
+      }
       loadAsignaciones()
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Error desconocido'
