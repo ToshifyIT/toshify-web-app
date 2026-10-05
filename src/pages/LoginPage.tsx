@@ -3,6 +3,7 @@ import { useState, useEffect } from 'react'
 import type { FormEvent } from 'react'
 import { useAuth } from '../contexts/AuthContext'
 import { useNavigate } from 'react-router-dom'
+import { tomarErrorAuth } from '../lib/authRedirectError'
 import { supabase } from '../lib/supabase'
 import Swal from 'sweetalert2'
 import logoToshify from '../assets/logo-toshify.png'
@@ -24,6 +25,12 @@ export function LoginPage() {
   useEffect(() => {
     if (user) navigate('/estado-de-flota', { replace: true })
   }, [user, navigate])
+
+  // Error pendiente del ingreso con Google (cuenta inexistente, etc.).
+  useEffect(() => {
+    const mensaje = tomarErrorAuth()
+    if (mensaje) setError(mensaje)
+  }, [])
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault()

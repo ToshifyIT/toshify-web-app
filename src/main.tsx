@@ -1,3 +1,6 @@
+// Debe ir primero: captura el error de login con Google que viene en la URL
+// antes de cualquier redirección (ver lib/authRedirectError.ts).
+import './lib/authRedirectError'
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import './styles/theme.css'
