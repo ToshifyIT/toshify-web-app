@@ -3,6 +3,7 @@ import { createContext, useContext, useEffect, useState, useRef, useCallback, us
 import type { User, Session } from '@supabase/supabase-js'
 import { supabase } from '../lib/supabase'
 import type { UserWithRole } from '../types/database.types'
+import { guardarErrorAuth, MENSAJE_CUENTA_INEXISTENTE } from '../lib/authRedirectError'
 
 interface AuthContextType {
   user: User | null
@@ -51,7 +52,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         if (existingSession) {
           setSession(existingSession)
           setUser(existingSession.user)
-          await loadProfile(existingSession.user.id)
+          await loadProfile(existingSession.user)
 
           // Si el token está por expirar (menos de 5 min), refrescar
           const now = Math.floor(Date.now() / 1000)
@@ -82,7 +83,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           if (newSession) {
             setSession(newSession)
             setUser(newSession.user)
-            loadProfile(newSession.user.id)
+            loadProfile(newSession.user)
           }
           break
 
@@ -133,15 +134,31 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, [])
 
-  const loadProfile = async (userId: string) => {
+  const loadProfile = async (authUser: User) => {
     try {
       const { data, error } = await supabase
         .from('user_profiles')
         .select('*, roles(*)')
-        .eq('id', userId)
-        .single()
+        .eq('id', authUser.id)
+        .maybeSingle()
 
       if (error) throw error
+      if (!data) {
+        // Sin perfil en Toshify. Si entró con Google (u otro proveedor externo), es una
+        // cuenta que no fue dada de alta por Administración: se cierra la sesión y el
+        // login muestra "Esa cuenta no existe". Los usuarios de correo/contraseña sin
+        // perfil siguen como antes (perfil vacío).
+        const proveedor = authUser.app_metadata?.provider
+        if (proveedor && proveedor !== 'email') {
+          guardarErrorAuth(MENSAJE_CUENTA_INEXISTENTE)
+          // Fuera del callback de onAuthStateChange para no tomar el lock de auth desde adentro.
+          setTimeout(() => { void supabase.auth.signOut({ scope: 'local' }) }, 0)
+          setSession(null)
+          setUser(null)
+        }
+        setProfile(null)
+        return
+      }
       setProfile(data as UserWithRole)
       setMustChangePassword((data as any).must_change_password === true)
     } catch {
@@ -213,7 +230,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const refreshProfile = useCallback(async () => {
     if (user) {
-      await loadProfile(user.id)
+      await loadProfile(user)
     }
   }, [user])
 
