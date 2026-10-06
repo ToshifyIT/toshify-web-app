@@ -1,0 +1,138 @@
+/* =====================================================
+   INDICADORES COMPACTOS (todos los módulos)
+   Las tarjetas de indicadores arriba de las tablas quedan
+   bajas (número y texto en una línea) para que la tabla
+   tenga más espacio.
+
+   - #root da más peso que los estilos de cada módulo, así
+     no hace falta tocar los CSS de cada uno. También anula
+     los .stat-card / .stat-icon sin prefijo que algunos
+     módulos dejan cargados al navegar.
+   - No incluye los dashboards (Dashboard KPI's, Marketing,
+     Cabify top, detalle de conductor, preview RIT, portal):
+     ahí los indicadores son el contenido principal.
+   - En celular siguen mandando las reglas de index.css.
+   ===================================================== */
+
+/* Contenedor */
+#root :is(
+  .admin-stats, .asig-stats, .bitacora-stats, .cabify-stats, .cond-stats,
+  .escuela-stats, .fact-stats, .gf-stats, .guias-stats, .incidencias-stats,
+  .inv-stats, .leads-stats, .multas-stats, .nom-stats, .prod-stats,
+  .prog-stats, .prov-stats, .siniestros-stats, .uss-stats, .veh-stats,
+  .vencimientos-stats
+) {
+  padding: 8px;
+}
+
+/* Grilla */
+#root :is(
+  .admin-stats, .asig-stats, .bitacora-stats, .cabify-stats, .cond-stats,
+  .escuela-stats, .fact-stats, .gf-stats, .guias-stats, .incidencias-stats,
+  .inv-stats, .leads-stats, .multas-stats, .nom-stats, .prod-stats,
+  .prog-stats, .prov-stats, .siniestros-stats, .uss-stats, .veh-stats,
+  .vencimientos-stats
+) [class*="stats-grid"] {
+  gap: 8px;
+}
+
+/* Tarjeta */
+#root :is(
+  .admin-stats, .asig-stats, .bitacora-stats, .cabify-stats, .cond-stats,
+  .escuela-stats, .fact-stats, .gf-stats, .guias-stats, .incidencias-stats,
+  .inv-stats, .leads-stats, .multas-stats, .nom-stats, .prod-stats,
+  .prog-stats, .prov-stats, .siniestros-stats, .uss-stats, .veh-stats,
+  .vencimientos-stats
+) :is(.stat-card, .fact-stat-card, .uss-stat-card):not(.skeleton) {
+  gap: 8px;
+  min-height: 0;
+  height: auto;
+  padding: 6px 10px;
+  border-radius: 6px;
+}
+
+/* Ícono: siempre chico y sin fondo (algunos módulos lo dibujaban como círculo) */
+#root :is(
+  .admin-stats, .asig-stats, .bitacora-stats, .cabify-stats, .cond-stats,
+  .escuela-stats, .fact-stats, .gf-stats, .guias-stats, .incidencias-stats,
+  .inv-stats, .leads-stats, .multas-stats, .nom-stats, .prod-stats,
+  .prog-stats, .prov-stats, .siniestros-stats, .uss-stats, .veh-stats,
+  .vencimientos-stats
+) :is(.stat-icon, .fact-stat-icon, .uss-stat-icon) {
+  width: 15px;
+  height: 15px;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: none;
+  box-shadow: none;
+  flex-shrink: 0;
+}
+
+/* Ícono envuelto en un div (Zonas, Usuarios, Auditoría, Integraciones, USS) */
+#root :is(
+  .admin-stats, .bitacora-stats, .uss-stats
+) div:is(.stat-icon, .uss-stat-icon) {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+#root :is(
+  .admin-stats, .bitacora-stats, .uss-stats
+) div:is(.stat-icon, .uss-stat-icon) svg {
+  width: 15px;
+  height: 15px;
+}
+
+/* Número y texto en la misma línea; si el texto es largo baja de renglón */
+#root :is(
+  .admin-stats, .asig-stats, .bitacora-stats, .cabify-stats, .cond-stats,
+  .escuela-stats, .fact-stats, .gf-stats, .guias-stats, .incidencias-stats,
+  .inv-stats, .leads-stats, .multas-stats, .nom-stats, .prod-stats,
+  .prog-stats, .prov-stats, .siniestros-stats, .uss-stats, .veh-stats,
+  .vencimientos-stats
+) :is(.stat-content, .fact-stat-content, .uss-stat-content) {
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: baseline;
+  column-gap: 6px;
+  row-gap: 0;
+  min-width: 0;
+}
+
+#root :is(
+  .admin-stats, .asig-stats, .bitacora-stats, .cabify-stats, .cond-stats,
+  .escuela-stats, .fact-stats, .gf-stats, .guias-stats, .incidencias-stats,
+  .inv-stats, .leads-stats, .multas-stats, .nom-stats, .prod-stats,
+  .prog-stats, .prov-stats, .siniestros-stats, .uss-stats, .veh-stats,
+  .vencimientos-stats
+) :is(.stat-value, .fact-stat-value, .uss-stat-value) {
+  font-size: 15px;
+  line-height: 1.2;
+}
+
+#root :is(
+  .admin-stats, .asig-stats, .bitacora-stats, .cabify-stats, .cond-stats,
+  .escuela-stats, .fact-stats, .gf-stats, .guias-stats, .incidencias-stats,
+  .inv-stats, .leads-stats, .multas-stats, .nom-stats, .prod-stats,
+  .prog-stats, .prov-stats, .siniestros-stats, .uss-stats, .veh-stats,
+  .vencimientos-stats
+) :is(.stat-label, .fact-stat-label, .uss-stat-label) {
+  font-size: 11px;
+  line-height: 1.2;
+}
+
+/* Los .stat-label sin prefijo de otros módulos quedan cargados al navegar
+   y ponían el texto en mayúsculas en algunas pantallas: se fija acá. */
+#root :is(
+  .admin-stats, .asig-stats, .bitacora-stats, .cabify-stats, .cond-stats,
+  .escuela-stats, .fact-stats, .gf-stats, .guias-stats, .incidencias-stats,
+  .inv-stats, .leads-stats, .multas-stats, .nom-stats, .prod-stats,
+  .prog-stats, .prov-stats, .siniestros-stats, .uss-stats, .veh-stats,
+  .vencimientos-stats
+) :is(.stat-label, .fact-stat-label, .uss-stat-label) {
+  text-transform: none;
+  letter-spacing: normal;
+}

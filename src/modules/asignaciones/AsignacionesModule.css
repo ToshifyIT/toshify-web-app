@@ -278,6 +278,76 @@
 }
 
 /* =====================================================
+   STATS COMPACTOS: los 6 indicadores en una sola franja
+   baja para que la tabla gane espacio. Solo afecta a este
+   módulo (todo bajo .asig-stats). Va después del bloque STATS.
+   ===================================================== */
+
+.asig-module .asig-stats {
+  display: flex;
+  gap: 8px;
+  padding: 8px;
+}
+
+.asig-module .asig-stats-grid {
+  flex: 1;
+  min-width: 0;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  /* la segunda fila trae margin-top en línea: queda al lado, no debajo */
+  margin-top: 0 !important;
+}
+
+.asig-module .asig-stats .stat-card {
+  gap: 8px;
+  padding: 6px 10px;
+  border-radius: 6px;
+  border-width: 1px;
+}
+
+.asig-module .asig-stats .stat-card .stat-icon {
+  width: 15px;
+  height: 15px;
+}
+
+.asig-module .asig-stats .stat-content {
+  flex-direction: row;
+  align-items: baseline;
+  gap: 6px;
+}
+
+.asig-module .asig-stats .stat-value {
+  font-size: 15px;
+  line-height: 1.2;
+}
+
+.asig-module .asig-stats .stat-label {
+  font-size: 11px;
+  line-height: 1.2;
+  /* estilos de stat-label de otros módulos quedan cargados al navegar: se fijan acá */
+  text-transform: none;
+  letter-spacing: normal;
+}
+
+.asig-module .asig-stats .stat-card-clickable:hover {
+  transform: none;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
+}
+
+/* Pantallas angostas: las dos filas vuelven a apilarse.
+   En celular manda la regla global de index.css (2 columnas). */
+@media (max-width: 900px) {
+  .asig-module .asig-stats {
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .asig-module .asig-stats-grid {
+    gap: 6px;
+  }
+}
+
+/* =====================================================
    FILTROS - Barra compacta
    ===================================================== */
 
