@@ -129,8 +129,8 @@ export function LeadDetailView({ lead, onEdit, onConvert, zonasRestringidas = []
   const [recalculando, setRecalculando] = useState(false)
 
   const handleRecenter = () => {
-    if (mapRef.current && lead.direccion_latitud != null && lead.direccion_longitud != null) {
-      mapRef.current.panTo({ lat: lead.direccion_latitud, lng: lead.direccion_longitud })
+    if (mapRef.current && lead.latitud != null && lead.longitud != null) {
+      mapRef.current.panTo({ lat: lead.latitud, lng: lead.longitud })
       mapRef.current.setZoom(14)
     }
   }
@@ -293,7 +293,7 @@ export function LeadDetailView({ lead, onEdit, onConvert, zonasRestringidas = []
           <div className="lead-detail-item">
             <span className="lead-detail-item-label">Dirección</span>
             <span className="lead-detail-item-value" style={{ fontSize: '12px' }}>
-              {lead.direccion && lead.direccion_latitud != null && lead.direccion_longitud != null ? (
+              {lead.direccion && lead.latitud != null && lead.longitud != null ? (
                 <span
                   onClick={handleRecenter}
                   style={{ color: 'var(--color-primary)', cursor: 'pointer' }}
@@ -303,11 +303,11 @@ export function LeadDetailView({ lead, onEdit, onConvert, zonasRestringidas = []
               ) : (lead.direccion || '-')}
             </span>
           </div>
-          {lead.direccion_latitud != null && lead.direccion_longitud != null && (
+          {lead.latitud != null && lead.longitud != null && (
             <>
               <LeadDetailMap
-                lat={lead.direccion_latitud}
-                lng={lead.direccion_longitud}
+                lat={lead.latitud}
+                lng={lead.longitud}
                 zonasRestringidas={zonasRestringidas}
                 enZonaRestringida={!!enZonaRestringida}
                 nombreZona={enZonaRestringida || undefined}
@@ -330,12 +330,12 @@ export function LeadDetailView({ lead, onEdit, onConvert, zonasRestringidas = []
               )}
             </>
           )}
-          {lead.direccion && lead.direccion_latitud == null && lead.direccion_geocode_estado !== 'sin_resultado' && (
+          {lead.direccion && lead.latitud == null && lead.direccion_geocode_estado !== 'sin_resultado' && (
             <div style={{ marginTop: '8px', padding: '8px 12px', background: '#FEF3C7', borderRadius: '6px', fontSize: '11px', color: '#92400E', display: 'flex', alignItems: 'center', gap: '6px' }}>
               <MapPin size={12} /> Geocodificando dirección...
             </div>
           )}
-          {lead.direccion && lead.direccion_latitud == null && lead.direccion_geocode_estado === 'sin_resultado' && (
+          {lead.direccion && lead.latitud == null && lead.direccion_geocode_estado === 'sin_resultado' && (
             <div style={{ marginTop: '8px', padding: '8px 12px', background: '#FEF3C7', borderRadius: '6px', fontSize: '11px', color: '#92400E', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '6px' }}>
               <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                 <MapPin size={12} /> No se pudo ubicar la dirección

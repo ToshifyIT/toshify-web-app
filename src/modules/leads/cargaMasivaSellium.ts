@@ -552,9 +552,10 @@ function payloadActualizacion(
 
   // Columnas directas del Excel (zona, turno, edad, dirección, vehículo, pauta…).
   for (const [campo, valor] of Object.entries(f.campos)) completar(campo, valor)
-  // Dirección cargada ahora: coordenadas en blanco para que el módulo la geocodifique.
+  // Dirección cargada ahora: coordenadas en blanco para que se recalculen desde
+  // la dirección (latitud/longitud es la única ubicación oficial, regla 2026-10-05).
   if (p.direccion !== undefined) {
-    Object.assign(p, { direccion_latitud: null, direccion_longitud: null, direccion_geocode_estado: null, direccion_geocode_fecha: null })
+    Object.assign(p, { latitud: null, longitud: null, direccion_geocode_estado: null, direccion_geocode_fecha: null })
   }
 
   completar('nombre_completo', f.nombreCompleto)
