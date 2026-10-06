@@ -11,7 +11,7 @@ import { inferirSedeDeLead, normalizarTexto } from '../../utils/sedeMatch'
 import { createPortal } from 'react-dom'
 import {
   Eye, Edit2, Trash2, Users, UserPlus, RefreshCw, MessageCircle, Layers, Link2,
-  CheckCircle, AlertTriangle, X, Download, Upload, FolderOpen, Car, Bell, PhoneCall, MapPin,
+  CheckCircle, AlertTriangle, X, Download, Upload, FolderOpen, Car, Bell, PhoneCall, MapPin, LocateFixed,
 } from 'lucide-react'
 import { ActionsMenu } from '../../components/ui/ActionsMenu'
 import { supabase } from '../../lib/supabase'
@@ -416,6 +416,51 @@ function leadToFormData(lead: Lead): LeadFormData {
   }
 }
 
+/**
+ * Ubicacion al guardar el formulario (regla 2026-10-05: latitud/longitud es la
+ * unica ubicacion oficial y se resuelve en el momento del guardado).
+ *
+ * - Pin nuevo o movido en el mapa del formulario -> se guarda ese punto como
+ *   ubicacion 'manual' (lo eligio el operador; el recalculo en lote lo respeta).
+ * - Direccion cambiada sin pin nuevo (Google no la ubico en el formulario) ->
+ *   se vacia el punto viejo y se pide recalcular desde el texto al terminar.
+ * - Direccion borrada -> se vacia la ubicacion.
+ *
+ * Muta `fields` y devuelve true si hay que geocodificar despues de guardar.
+ */
+function aplicarReglaUbicacion(fields: Record<string, unknown>, original: Lead | null): boolean {
+  const norm = (v: unknown) => (typeof v === 'string' ? v.trim() : '')
+  const num = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) ? v : null)
+  const dirNueva = norm(fields.direccion)
+  const cambioDireccion = dirNueva !== norm(original?.direccion)
+  const latNueva = num(fields.latitud)
+  const lngNueva = num(fields.longitud)
+  const cambioPin = latNueva !== num(original?.latitud) || lngNueva !== num(original?.longitud)
+  const ahora = new Date().toISOString()
+  const limpiar = () => Object.assign(fields, {
+    latitud: null, longitud: null,
+    direccion_geocode_estado: null, direccion_geocode_fecha: null,
+    direccion_pais: null, direccion_ciudad: null,
+  })
+
+  if (!dirNueva) {
+    if (cambioDireccion) limpiar()
+    return false
+  }
+  if (cambioPin && latNueva != null && lngNueva != null) {
+    fields.direccion_geocode_estado = 'manual'
+    fields.direccion_geocode_fecha = ahora
+    // Pais/ciudad de la direccion anterior ya no valen.
+    if (cambioDireccion) Object.assign(fields, { direccion_pais: null, direccion_ciudad: null })
+    return false
+  }
+  if (cambioDireccion) {
+    limpiar()
+    return true
+  }
+  return false
+}
+
 // Las keys de LeadFormData ya coinciden con las columnas de la tabla.
 // Esta función normaliza valores vacíos a null para evitar guardar strings
 // vacíos en la DB.
@@ -518,7 +563,7 @@ type LeadsCache = {
 let leadsCache: LeadsCache | null = null
 
 export function LeadsModule() {
-  const { canCreateInMenu, canEditInMenu, canDeleteInMenu } = usePermissions()
+  const { canCreateInMenu, canEditInMenu, canDeleteInMenu, isAdmin } = usePermissions()
   const { profile } = useAuth()
   const { sedes, sedeActual, sedeActualId, verTodas, aplicarFiltroSede } = useSede()
   const sedeKey = verTodas ? 'all' : (sedeActualId || 'none')
@@ -526,6 +571,8 @@ export function LeadsModule() {
   const canCreate = canCreateInMenu('leads')
   const canEdit = canEditInMenu('leads')
   const canDelete = canDeleteInMenu('leads')
+  // Recalcular coordenadas en lote: solo administradores (gasta cuota de Google).
+  const esAdmin = isAdmin()
 
   // Zonas peligrosas
   const [zonasRestringidas, setZonasPeligrosas] = useState<ZonaRestringida[]>([])
@@ -848,14 +895,31 @@ export function LeadsModule() {
     return () => document.removeEventListener('click', handleClick)
   }, [estadoDropdownId])
 
-  // ---------- GEOCODIFICAR DIRECCIÓN -> COLUMNAS direccion_latitud/longitud ----------
-  // Geocodifica el texto de la dirección y guarda el resultado en las columnas
-  // direccion_latitud/direccion_longitud (independientes de latitud/longitud, que
-  // vienen de una fuente externa). Devuelve true si actualizó la fila.
-  const geocodificarYGuardarDireccion = useCallback(async (lead: Lead): Promise<boolean> => {
+  // ---------- GEOCODIFICAR DIRECCIÓN -> COLUMNAS latitud/longitud ----------
+  // Regla 2026-10-05: latitud/longitud es la UNICA ubicacion oficial del lead
+  // (antes convivia con direccion_latitud/direccion_longitud). Todo lo que
+  // ubica al lead escribe y lee de aca.
+  //
+  // Geocodifica el texto de la direccion y guarda el resultado. Con
+  // `conservarCoordenadas` y un lead que YA tiene coordenadas, solo completa
+  // pais/ciudad: lo usa el backfill de pais, que no debe mover un punto cargado
+  // por otra via (pin del formulario, Excel). Devuelve true si actualizo la fila.
+  const geocodificarYGuardarDireccion = useCallback(async (
+    lead: Lead,
+    opciones: { conservarCoordenadas?: boolean } = {}
+  ): Promise<boolean> => {
     if (!lead.direccion) return false
     const res = await geocodificarDireccion(lead.direccion)
     const now = new Date().toISOString()
+    const yaTieneCoordenadas = lead.latitud != null && lead.longitud != null
+    if (opciones.conservarCoordenadas && yaTieneCoordenadas) {
+      if (res.lat == null && !('sinResultado' in res && res.sinResultado)) return false // transitorio: reintentar
+      const datos: Record<string, unknown> = { direccion_geocode_fecha: now }
+      if (res.pais) datos.direccion_pais = res.pais
+      if (res.ciudad) datos.direccion_ciudad = res.ciudad
+      await supabase.from('leads').update(datos).eq('id', lead.id)
+      return !!(res.pais || res.ciudad)
+    }
     if (res.lat != null && res.lng != null) {
       // La zona sale de las coordenadas que acabamos de obtener. Es calculo
       // local (rangos de lat/lng del AMBA, ver inferZonaFromCoords), NO una
@@ -864,8 +928,8 @@ export function LeadsModule() {
       // Solo se completa si el lead NO la tiene: lo que haya cargado el
       // chatbot o un operador manda sobre lo inferido.
       const datos: Record<string, unknown> = {
-        direccion_latitud: res.lat,
-        direccion_longitud: res.lng,
+        latitud: res.lat,
+        longitud: res.lng,
         direccion_geocode_estado: res.estado,
         direccion_geocode_fecha: now,
       }
@@ -911,13 +975,14 @@ export function LeadsModule() {
         !!l.direccion && l.direccion_geocode_estado !== 'sin_resultado'
 
       const sinCoordenadas = leadsList.filter(
-        (l) => pendientes(l) && l.direccion_latitud == null
+        (l) => pendientes(l) && l.latitud == null
       )
       const sinPais = leadsList.filter(
         (l) =>
           pendientes(l) &&
-          l.direccion_latitud != null &&
+          l.latitud != null &&
           !l.direccion_pais &&
+          l.direccion_geocode_estado !== 'manual' &&
           (l.direccion_geocode_fecha || '') < CORTE_BACKFILL_UBICACION
       )
 
@@ -938,7 +1003,8 @@ export function LeadsModule() {
       let actualizado = false
       for (const lead of lote) {
         try {
-          const ok = await geocodificarYGuardarDireccion(lead)
+          // Los que ya tienen punto solo completan pais/ciudad: no se mueven.
+          const ok = await geocodificarYGuardarDireccion(lead, { conservarCoordenadas: true })
           if (ok) actualizado = true
         } catch {
           // silently ignored
@@ -976,7 +1042,7 @@ export function LeadsModule() {
   // ~1900 leads harian falta una docena de visitas. Este boton hace la pasada
   // completa de una, con el total a la vista y con cancelacion, porque gasta
   // una llamada de geocoding por lead y esa decision es del operador.
-  const [backfillUbicacion, setBackfillUbicacion] = useState<{ hechos: number; total: number } | null>(null)
+  const [backfillUbicacion, setBackfillUbicacion] = useState<{ hechos: number; total: number; titulo?: string } | null>(null)
   const cancelarBackfillRef = useRef(false)
 
   /**
@@ -987,7 +1053,11 @@ export function LeadsModule() {
   const leadsSinUbicacion = useMemo(
     () =>
       leads.filter(
-        (l) => l.direccion && !l.direccion_pais && l.direccion_geocode_estado !== 'sin_resultado'
+        (l) =>
+          l.direccion &&
+          !l.direccion_pais &&
+          l.direccion_geocode_estado !== 'sin_resultado' &&
+          l.direccion_geocode_estado !== 'manual'
       ),
     [leads]
   )
@@ -1026,7 +1096,7 @@ export function LeadsModule() {
     for (let i = 0; i < pendientes.length; i++) {
       if (cancelarBackfillRef.current) break
       try {
-        if (await geocodificarYGuardarDireccion(pendientes[i])) completados++
+        if (await geocodificarYGuardarDireccion(pendientes[i], { conservarCoordenadas: true })) completados++
       } catch {
         // Un lead que falla no corta la pasada.
       }
@@ -1044,6 +1114,112 @@ export function LeadsModule() {
       cancelado ? 'info' : 'success'
     )
   }, [leadsSinUbicacion, geocodificarYGuardarDireccion, loadLeads])
+
+  // ---------- ACTUALIZAR COORDENADAS DESDE LA DIRECCION (boton admin) ----------
+  //
+  // Dos alcances:
+  //  - Pendientes: leads con direccion y sin latitud/longitud (nuevos, o a los
+  //    que se les cambio la direccion y quedaron sin punto). Excluye los que
+  //    Google ya marco 'sin_resultado'.
+  //  - Seleccionados: los tildados en la tabla. Pisa el punto actual con el
+  //    resultado de Google, EXCEPTO los 'manual' (pin definido en el
+  //    formulario), que se omiten.
+  // Como el backfill de pais, sale de `leads` (sede activa) y corre en este
+  // navegador: una llamada a Google por lead, cancelable.
+  const [seleccionCoords, setSeleccionCoords] = useState<Set<string>>(() => new Set())
+
+  const leadsCoordsPendientes = useMemo(
+    () =>
+      leads.filter(
+        (l) =>
+          !!l.direccion?.trim() &&
+          (l.latitud == null || l.longitud == null) &&
+          l.direccion_geocode_estado !== 'sin_resultado'
+      ),
+    [leads]
+  )
+
+  const actualizarCoordenadasLeads = useCallback(async () => {
+    if (!esAdmin) return
+    const seleccionados = leads.filter((l) => seleccionCoords.has(l.id))
+    const seleccionadosConDireccion = seleccionados.filter((l) => !!l.direccion?.trim())
+    const seleccionadosValidos = seleccionadosConDireccion.filter((l) => l.direccion_geocode_estado !== 'manual')
+    const omitidosManual = seleccionadosConDireccion.length - seleccionadosValidos.length
+    const sinDireccion = seleccionados.length - seleccionadosConDireccion.length
+    const pendientes = leadsCoordsPendientes
+
+    if (pendientes.length === 0 && seleccionadosValidos.length === 0) {
+      Swal.fire(
+        'Nada que actualizar',
+        seleccionados.length > 0
+          ? 'Los leads seleccionados no tienen dirección o tienen ubicación manual (definida en el formulario).'
+          : 'Todos los leads de esta sede con dirección ya tienen coordenadas.',
+        'info'
+      )
+      return
+    }
+
+    const notas: string[] = []
+    if (omitidosManual > 0) notas.push(`${omitidosManual} seleccionado(s) con ubicación manual se omiten.`)
+    if (sinDireccion > 0) notas.push(`${sinDireccion} seleccionado(s) sin dirección se omiten.`)
+
+    const eleccion = await Swal.fire({
+      icon: 'warning',
+      title: 'Actualizar coordenadas',
+      html:
+        'Calcula <b>latitud y longitud</b> a partir de la dirección de cada lead.<br><br>' +
+        `<b>Pendientes:</b> ${pendientes.length} lead(s) con dirección y sin coordenadas.<br>` +
+        `<b>Seleccionados:</b> ${seleccionadosValidos.length} lead(s); su ubicación actual se reemplaza.<br>` +
+        (notas.length ? `<br><small>${notas.join('<br>')}</small><br>` : '') +
+        '<br>Es <b>una llamada a Google por lead</b>: revisa la cuota diaria antes de seguir. ' +
+        'Se puede cancelar en cualquier momento y lo ya procesado queda guardado.',
+      showConfirmButton: pendientes.length > 0,
+      confirmButtonText: `Pendientes (${pendientes.length})`,
+      showDenyButton: seleccionadosValidos.length > 0,
+      denyButtonText: `Seleccionados (${seleccionadosValidos.length})`,
+      showCancelButton: true,
+      cancelButtonText: 'Cancelar',
+      confirmButtonColor: '#ff0033',
+      denyButtonColor: '#374151',
+    })
+    if (eleccion.isDismissed) return
+    const lote = eleccion.isDenied ? seleccionadosValidos : pendientes
+    if (lote.length === 0) return
+
+    try {
+      await loadGoogleMapsAPI()
+    } catch {
+      Swal.fire('Error', 'No se pudo cargar Google Maps. Reintenta en un momento.', 'error')
+      return
+    }
+
+    cancelarBackfillRef.current = false
+    const titulo = 'Actualizando coordenadas…'
+    setBackfillUbicacion({ hechos: 0, total: lote.length, titulo })
+    let actualizados = 0
+    for (let i = 0; i < lote.length; i++) {
+      if (cancelarBackfillRef.current) break
+      try {
+        if (await geocodificarYGuardarDireccion(lote[i])) actualizados++
+      } catch {
+        // Un lead que falla no corta la pasada.
+      }
+      setBackfillUbicacion({ hechos: i + 1, total: lote.length, titulo })
+      // Mismo respiro que el resto de los procesos, por el rate limit del geocoder.
+      await new Promise((r) => setTimeout(r, 60))
+    }
+
+    const cancelado = cancelarBackfillRef.current
+    setBackfillUbicacion(null)
+    if (eleccion.isDenied) setSeleccionCoords(new Set())
+    loadLeads()
+    Swal.fire(
+      cancelado ? 'Proceso cancelado' : 'Listo',
+      `Se actualizaron ${actualizados} de ${lote.length} leads.` +
+        (actualizados < lote.length && !cancelado ? ' Los que no se pudieron ubicar quedaron sin cambios o marcados como "sin resultado".' : ''),
+      cancelado ? 'info' : 'success'
+    )
+  }, [esAdmin, leads, seleccionCoords, leadsCoordsPendientes, geocodificarYGuardarDireccion, loadLeads])
 
   useEffect(() => {
     if (leads.length > 0) {
@@ -1234,8 +1410,8 @@ export function LeadsModule() {
     try {
     if (zonasRestringidas.length === 0) return map
     for (const lead of leads) {
-      if (lead.direccion_latitud == null || lead.direccion_longitud == null) continue
-      const punto = { lat: lead.direccion_latitud, lng: lead.direccion_longitud }
+      if (lead.latitud == null || lead.longitud == null) continue
+      const punto = { lat: lead.latitud, lng: lead.longitud }
       for (const zona of zonasRestringidas) {
         if (zona.poligono && Array.isArray(zona.poligono) && isPointInPolygon(punto, zona.poligono)) {
           map.set(lead.id, zona.nombre)
@@ -1280,8 +1456,8 @@ export function LeadsModule() {
       case 'aptos': return l.estado_de_lead === 'Apto - Hireflix'
       case 'noAptos': return l.estado_de_lead === 'No Apto - Hireflix'
       case 'convocatoria': return l.estado_de_lead === 'Convocatoria Inducción' || l.estado_de_lead === 'Convocatoria Induccion'
-      case 'zonaSegura': return l.direccion_latitud != null && l.direccion_longitud != null && !leadsEnZona.has(l.id)
-      case 'zonaRestringida': return l.direccion_latitud != null && l.direccion_longitud != null && leadsEnZona.has(l.id)
+      case 'zonaSegura': return l.latitud != null && l.longitud != null && !leadsEnZona.has(l.id)
+      case 'zonaRestringida': return l.latitud != null && l.longitud != null && leadsEnZona.has(l.id)
       case 'intercom': return esFuenteIntercom(l)
       case 'damaro': return (l.fuente_de_lead || '').toLowerCase() === 'damaro'
       case 'autoPueblo': return l.estado_de_lead === 'Auto del pueblo'
@@ -1358,7 +1534,7 @@ export function LeadsModule() {
     const contactadoSellium = base.filter(esContactadoSellium).length
     const aptos = base.filter(l => l.estado_de_lead === 'Apto - Hireflix').length
     const noAptos = base.filter(l => l.estado_de_lead === 'No Apto - Hireflix').length
-    const conCoordenadas = base.filter(l => l.direccion_latitud != null && l.direccion_longitud != null)
+    const conCoordenadas = base.filter(l => l.latitud != null && l.longitud != null)
     const enZonaRestringida = conCoordenadas.filter(l => leadsEnZona.has(l.id)).length
     const enZonaSegura = conCoordenadas.filter(l => !leadsEnZona.has(l.id)).length
     const convocatoria = base.filter(l => l.estado_de_lead === 'Convocatoria Inducción' || l.estado_de_lead === 'Convocatoria Induccion').length
@@ -1397,6 +1573,18 @@ export function LeadsModule() {
   }
 
 
+  // Calcula la ubicacion desde la direccion justo despues de guardar (evento),
+  // cuando el formulario no trajo un pin. Si Google falla, el lead queda sin
+  // punto y lo retoman el proceso del modulo o el boton de administrador.
+  async function ubicarLeadGuardado(lead: Lead) {
+    try {
+      await loadGoogleMapsAPI()
+      if (await geocodificarYGuardarDireccion(lead)) loadLeads()
+    } catch (err) {
+      console.error('[Leads] Error ubicando lead guardado:', err)
+    }
+  }
+
   async function handleSaveCreate() {
     setSaving(true)
     try {
@@ -1406,11 +1594,13 @@ export function LeadsModule() {
         fields.sede_id = sedeActual.id
         fields.sede = sedeActual.nombre
       }
-      const { error: err } = await supabase.from('leads').insert(fields)
+      const recalcular = aplicarReglaUbicacion(fields, null)
+      const { data: creado, error: err } = await supabase.from('leads').insert(fields).select('id').single()
       if (err) throw err
       showSuccess('Lead creado', 'El lead se registró correctamente')
       setShowCreateModal(false)
       loadLeads()
+      if (recalcular && creado?.id) void ubicarLeadGuardado({ ...(fields as Partial<Lead>), id: creado.id } as Lead)
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'No se pudo crear el lead'
       Swal.fire('Error', msg, 'error')
@@ -1433,11 +1623,13 @@ export function LeadsModule() {
           fields.sede = sedeMatch.nombre
         }
       }
+      const recalcular = aplicarReglaUbicacion(fields, selectedLead)
       const { error: err } = await supabase.from('leads').update({ ...fields, updated_at: new Date().toISOString() }).eq('id', selectedLead.id)
       if (err) throw err
       showSuccess('Lead actualizado', 'Los cambios se guardaron correctamente')
       setShowEditModal(false)
       loadLeads()
+      if (recalcular) void ubicarLeadGuardado({ ...selectedLead, ...(fields as Partial<Lead>) } as Lead)
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'No se pudo actualizar'
       Swal.fire('Error', msg, 'error')
@@ -1584,7 +1776,7 @@ export function LeadsModule() {
       const XLSX = await import('xlsx')
       const data = filteredLeads.map(l => {
         const zonaRestringida = leadsEnZona.get(l.id) || ''
-        const tieneCoordenadas = l.direccion_latitud != null && l.direccion_longitud != null
+        const tieneCoordenadas = l.latitud != null && l.longitud != null
         return {
           // --- Columnas historicas (orden original, no mover) ---
           'Fecha': formatDate(l.created_at),
@@ -2310,6 +2502,10 @@ export function LeadsModule() {
   }
 
   // ---------- COLUMNS ----------
+  // Filas visibles (todas las paginas) para el tilde "seleccionar todos".
+  const visiblesCoordsRef = useRef<Lead[]>([])
+  visiblesCoordsRef.current = leadsVisibles ?? filteredLeads
+
   const columns = useMemo<ColumnDef<Lead>[]>(() => {
     const leadColumns: ColumnDef<Lead>[] = [
     {
@@ -2369,7 +2565,7 @@ export function LeadsModule() {
         const alertaRecontacto = tieneAlertaRecontacto(row.original.observaciones)
         const zonaRestringida = leadsEnZona.get(row.original.id)
         const enZonaRestringida = !!zonaRestringida
-        const tieneCoordenadas = row.original.direccion_latitud != null && row.original.direccion_longitud != null
+        const tieneCoordenadas = row.original.latitud != null && row.original.longitud != null
 
         return (
           <div
@@ -2790,6 +2986,57 @@ export function LeadsModule() {
     },
     ]
 
+    // Casillas para "Actualizar coordenadas" > Seleccionados. Solo admin.
+    // El tilde del encabezado alcanza a TODOS los leads visibles con los
+    // filtros actuales (todas las paginas), no solo a la pagina en pantalla.
+    if (esAdmin) {
+      leadColumns.unshift({
+        id: 'seleccion_coords',
+        header: () => {
+          // Se lee del ref al renderizar: las columnas NO dependen de las filas
+          // visibles (el DataTable las notifica via onFilteredDataChange y
+          // depender de ellas armaria un ciclo de renders).
+          const visibles = visiblesCoordsRef.current
+          const todosTildados = visibles.length > 0 && visibles.every((l) => seleccionCoords.has(l.id))
+          return (
+            <input
+              type="checkbox"
+              checked={todosTildados}
+              title="Seleccionar todos los leads visibles (para actualizar coordenadas)"
+              onChange={(e) => {
+                const marcar = e.target.checked
+                const lista = visiblesCoordsRef.current
+                setSeleccionCoords((prev) => {
+                  const next = new Set(prev)
+                  lista.forEach((l) => (marcar ? next.add(l.id) : next.delete(l.id)))
+                  return next
+                })
+              }}
+            />
+          )
+        },
+        cell: ({ row }) => (
+          <input
+            type="checkbox"
+            checked={seleccionCoords.has(row.original.id)}
+            onClick={(e) => e.stopPropagation()}
+            onChange={(e) => {
+              const marcar = e.target.checked
+              setSeleccionCoords((prev) => {
+                const next = new Set(prev)
+                if (marcar) next.add(row.original.id)
+                else next.delete(row.original.id)
+                return next
+              })
+            }}
+          />
+        ),
+        size: 36,
+        enableSorting: false,
+        meta: { cellAlign: 'center' },
+      })
+    }
+
     return leadColumns.map(column => ({
       ...column,
       meta: {
@@ -2798,7 +3045,7 @@ export function LeadsModule() {
       },
     }))
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [uniqueNombres, nombreFilter, estadoFilter, uniqueDisponibilidades, disponibilidadFilter, uniqueZonas, zonaFilter, uniqueTurnos, turnoFilter, creacionDesde, creacionHasta, openFilterId, canEdit, canDelete, leadsEnZona, estadoDropdownId, sinoDropdownKey])
+  }, [uniqueNombres, nombreFilter, estadoFilter, uniqueDisponibilidades, disponibilidadFilter, uniqueZonas, zonaFilter, uniqueTurnos, turnoFilter, creacionDesde, creacionHasta, openFilterId, canEdit, canDelete, leadsEnZona, estadoDropdownId, sinoDropdownKey, esAdmin, seleccionCoords])
 
   // ---------- EXTERNAL FILTERS (chips) ----------
   const hasActiveFilters = nombreFilter.length > 0 || estadoFilter.length > 0 ||
@@ -2973,7 +3220,7 @@ export function LeadsModule() {
           <MapPin size={18} style={{ color: '#ff0033', flexShrink: 0 }} />
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)' }}>
-              Completando ubicación… {backfillUbicacion.hechos} de {backfillUbicacion.total}
+              {backfillUbicacion.titulo || 'Completando ubicación…'} {backfillUbicacion.hechos} de {backfillUbicacion.total}
             </div>
             <div
               style={{
@@ -3012,7 +3259,7 @@ export function LeadsModule() {
         columns={columns}
         loading={loading}
         error={error}
-        stickyLeftColumns={3}
+        stickyLeftColumns={esAdmin ? 4 : 3}
         searchPlaceholder="Buscar lead por nombre, DNI, teléfono..."
         emptyIcon={<Users size={64}
       />}
@@ -3026,6 +3273,19 @@ export function LeadsModule() {
             <button className="btn-secondary btn-sm" onClick={handleExportExcel} title="Exportar Excel">
               <Download size={14} /> <span className="leads-btn-label">Exportar</span>
             </button>
+            {esAdmin && (
+              <button
+                className="btn-secondary btn-sm"
+                onClick={actualizarCoordenadasLeads}
+                disabled={!!backfillUbicacion}
+                title="Calcular latitud y longitud desde la dirección (pendientes o seleccionados)"
+              >
+                <LocateFixed size={14} />{' '}
+                <span className="leads-btn-label">
+                  Coordenadas ({leadsCoordsPendientes.length}{seleccionCoords.size > 0 ? ` · ${seleccionCoords.size} sel.` : ''})
+                </span>
+              </button>
+            )}
             {leadsSinUbicacion.length > 0 && (
               <button
                 className="btn-secondary btn-sm"

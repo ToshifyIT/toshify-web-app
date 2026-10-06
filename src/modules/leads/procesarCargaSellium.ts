@@ -208,7 +208,7 @@ const ETIQUETAS: Record<string, string> = {
 }
 
 /** Columnas técnicas que no se muestran en el detalle. */
-const OCULTAS = new Set(['sede_id', 'direccion_latitud', 'direccion_longitud', 'direccion_geocode_estado', 'direccion_geocode_fecha', 'updated_at'])
+const OCULTAS = new Set(['sede_id', 'latitud', 'longitud', 'direccion_latitud', 'direccion_longitud', 'direccion_geocode_estado', 'direccion_geocode_fecha', 'updated_at'])
 
 function valorLegible(v: unknown): string {
   if (v === true) return 'Sí'
