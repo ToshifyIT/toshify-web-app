@@ -278,6 +278,76 @@
 }
 
 /* =====================================================
+   STATS COMPACTOS: los 6 indicadores en una sola franja
+   baja para que la tabla gane espacio. Solo afecta a este
+   módulo (todo bajo .asig-stats). Va después del bloque STATS.
+   ===================================================== */
+
+.asig-module .asig-stats {
+  display: flex;
+  gap: 8px;
+  padding: 8px;
+}
+
+.asig-module .asig-stats-grid {
+  flex: 1;
+  min-width: 0;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  /* la segunda fila trae margin-top en línea: queda al lado, no debajo */
+  margin-top: 0 !important;
+}
+
+.asig-module .asig-stats .stat-card {
+  gap: 8px;
+  padding: 6px 10px;
+  border-radius: 6px;
+  border-width: 1px;
+}
+
+.asig-module .asig-stats .stat-card .stat-icon {
+  width: 15px;
+  height: 15px;
+}
+
+.asig-module .asig-stats .stat-content {
+  flex-direction: row;
+  align-items: baseline;
+  gap: 6px;
+}
+
+.asig-module .asig-stats .stat-value {
+  font-size: 15px;
+  line-height: 1.2;
+}
+
+.asig-module .asig-stats .stat-label {
+  font-size: 11px;
+  line-height: 1.2;
+  /* estilos de stat-label de otros módulos quedan cargados al navegar: se fijan acá */
+  text-transform: none;
+  letter-spacing: normal;
+}
+
+.asig-module .asig-stats .stat-card-clickable:hover {
+  transform: none;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
+}
+
+/* Pantallas angostas: las dos filas vuelven a apilarse.
+   En celular manda la regla global de index.css (2 columnas). */
+@media (max-width: 900px) {
+  .asig-module .asig-stats {
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .asig-module .asig-stats-grid {
+    gap: 6px;
+  }
+}
+
+/* =====================================================
    FILTROS - Barra compacta
    ===================================================== */
 
@@ -2407,71 +2477,38 @@ input[type="date"].asig-status-select {
 .asig-hist-fvalue { font-size: 13px; color: var(--text-primary, #374151); font-weight: 600; }
 
 /* =====================================================
-   STATS COMPACTOS: los 6 indicadores en una sola franja
-   baja para que la tabla gane espacio. Solo afecta a este
-   módulo (todo bajo .asig-stats). Ver bloque STATS arriba.
-   ===================================================== */
-
-.asig-module .asig-stats {
-  display: flex;
-  gap: 8px;
-  padding: 8px;
+   Fila sin carpeta de documentación
+   =====================================================
+   El conductor de la asignación no tiene carpeta de contratos en Drive: el
+   documento no se generó y la programación hay que rehacerla. Se tiñe la fila
+   entera, no una celda, porque el problema es de la asignación completa.
+   Se pintan los `td` y no el `tr` para ganarle al fondo propio de las columnas
+   fijas, que tienen el suyo para poder flotar sobre el resto. */
+.dt-table tbody tr.asig-row-sin-carpeta > td,
+.dt-table tbody tr.asig-row-sin-carpeta > td.dt-sticky-col,
+.dt-table tbody tr.asig-row-sin-carpeta > td.dt-sticky-col-left {
+  background: rgba(220, 38, 38, 0.07);
 }
 
-.asig-module .asig-stats-grid {
-  flex: 1;
-  min-width: 0;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 8px;
-  /* la segunda fila trae margin-top en línea: queda al lado, no debajo */
-  margin-top: 0 !important;
+.dt-table tbody tr.asig-row-sin-carpeta:hover > td,
+.dt-table tbody tr.asig-row-sin-carpeta:hover > td.dt-sticky-col,
+.dt-table tbody tr.asig-row-sin-carpeta:hover > td.dt-sticky-col-left {
+  background: rgba(220, 38, 38, 0.13);
 }
 
-.asig-module .asig-stats .stat-card {
-  gap: 8px;
-  padding: 6px 10px;
-  border-radius: 6px;
-  border-width: 1px;
+/* Barra roja al inicio de la fila, para distinguirla de un simple hover. */
+.dt-table tbody tr.asig-row-sin-carpeta > td:first-child {
+  box-shadow: inset 3px 0 0 #DC2626;
 }
 
-.asig-module .asig-stats .stat-card .stat-icon {
-  width: 15px;
-  height: 15px;
+[data-theme="dark"] .dt-table tbody tr.asig-row-sin-carpeta > td,
+[data-theme="dark"] .dt-table tbody tr.asig-row-sin-carpeta > td.dt-sticky-col,
+[data-theme="dark"] .dt-table tbody tr.asig-row-sin-carpeta > td.dt-sticky-col-left {
+  background: rgba(220, 38, 38, 0.16);
 }
 
-.asig-module .asig-stats .stat-content {
-  flex-direction: row;
-  align-items: baseline;
-  gap: 6px;
-}
-
-.asig-module .asig-stats .stat-value {
-  font-size: 15px;
-  line-height: 1.2;
-}
-
-.asig-module .asig-stats .stat-label {
-  font-size: 11px;
-  line-height: 1.2;
-  /* estilos de stat-label de otros módulos quedan cargados al navegar: se fijan acá */
-  text-transform: none;
-  letter-spacing: normal;
-}
-
-.asig-module .asig-stats .stat-card-clickable:hover {
-  transform: none;
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
-}
-
-/* Pantallas angostas: las dos filas vuelven a apilarse.
-   En celular manda la regla global de index.css (2 columnas). */
-@media (max-width: 900px) {
-  .asig-module .asig-stats {
-    flex-direction: column;
-    gap: 6px;
-  }
-
-  .asig-module .asig-stats-grid {
-    gap: 6px;
-  }
+[data-theme="dark"] .dt-table tbody tr.asig-row-sin-carpeta:hover > td,
+[data-theme="dark"] .dt-table tbody tr.asig-row-sin-carpeta:hover > td.dt-sticky-col,
+[data-theme="dark"] .dt-table tbody tr.asig-row-sin-carpeta:hover > td.dt-sticky-col-left {
+  background: rgba(220, 38, 38, 0.24);
 }
