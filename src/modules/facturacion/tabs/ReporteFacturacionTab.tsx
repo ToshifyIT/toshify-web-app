@@ -10004,7 +10004,8 @@ export function ReporteFacturacionTab() {
       const totalDescuentos = src.reduce((sum, f) => sum + (f.subtotal_descuentos || 0), 0)
       return {
         total_conductores: src.length,
-        total_proyectado: src.reduce((sum, f) => sum + (f.proyectado_alquiler || 0), 0),
+        // Mismo criterio que el modal (showStatInfo 'proyectado'): alquiler proyectado + garantía de la semana
+        total_proyectado: src.reduce((sum, f) => sum + (f.proyectado_alquiler || 0) + (f.subtotal_garantia || 0), 0),
         total_cargos: totalCargos,
         total_descuentos: totalDescuentos,
         total_neto: totalCargos - totalDescuentos,
@@ -10017,7 +10018,8 @@ export function ReporteFacturacionTab() {
     const src = applyChipFilter(facturaciones)
     return {
       total_conductores: src.length,
-      total_proyectado: src.reduce((sum, f) => sum + (f.proyectado_alquiler || 0), 0),
+      // Mismo criterio que el modal (showStatInfo 'proyectado'): alquiler proyectado + garantía de la semana
+      total_proyectado: src.reduce((sum, f) => sum + (f.proyectado_alquiler || 0) + (f.subtotal_garantia || 0), 0),
       total_cargos: src.reduce((sum, f) => sum + (f.subtotal_cargos || 0) + Math.max(0, f.saldo_anterior || 0), 0),
       total_descuentos: src.reduce((sum, f) => sum + (f.subtotal_descuentos || 0), 0),
       total_neto: src.reduce((sum, f) => sum + (f.total_a_pagar || 0), 0),

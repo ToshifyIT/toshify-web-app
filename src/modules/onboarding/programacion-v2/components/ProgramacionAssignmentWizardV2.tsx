@@ -2097,7 +2097,7 @@ export function ProgramacionAssignmentWizardV2({ onClose, onSuccess, editData, p
 
       if (formData.modalidad === 'a_cargo') {
         // A CARGO - usar campos legacy con un solo set de datos
-        saveData.conductor_id = formData.conductor_id
+        saveData.conductor_id = formData.conductor_id || null
         saveData.conductor_nombre = formData.conductor_nombre
         saveData.conductor_dni = formData.conductor_dni
         saveData.tipo_candidato = formData.tipo_candidato_cargo || null
