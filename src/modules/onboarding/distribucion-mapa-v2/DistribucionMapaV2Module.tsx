@@ -110,6 +110,23 @@ const ANCHO_SIDEBAR = 250
 const ANCHO_LISTA = 252
 /** Ancho del panel de sugerencias (derecha). */
 const ANCHO_DRAWER = 384
+/**
+ * Debajo de este ancho de ventana (tablet / celular) los paneles flotan sobre
+ * el mapa en vez de empujarlo, de a uno por vez, y arrancan plegados: si no,
+ * filtros + lista (500 px) taparían todo el mapa. Solo cambia la disposición.
+ */
+const ANCHO_PANTALLA_ANGOSTA = 900
+
+/** Ancho actual de la ventana (se actualiza al girar o achicar la pantalla). */
+function useAnchoVentana(): number {
+  const [ancho, setAncho] = useState(() => (typeof window === 'undefined' ? 1440 : window.innerWidth))
+  useEffect(() => {
+    const alCambiar = () => setAncho(window.innerWidth)
+    window.addEventListener('resize', alCambiar)
+    return () => window.removeEventListener('resize', alCambiar)
+  }, [])
+  return ancho
+}
 
 /**
  * Tope de líneas simultáneas sobre el mapa en el modo "Mostrar todos". Más que
@@ -202,10 +219,31 @@ export function DistribucionMapaV2Module() {
 
   // Los dos paneles de la izquierda (filtros y lista) se pliegan deslizándose
   // hacia el borde, para dejarle todo el ancho al mapa cuando hace falta.
-  const [mostrarFiltros, setMostrarFiltros] = useState(true)
-  const [mostrarLista, setMostrarLista] = useState(true)
+  // En pantallas angostas arrancan plegados y flotan sobre el mapa (ver ANCHO_PANTALLA_ANGOSTA).
+  const anchoVentana = useAnchoVentana()
+  const esAngosto = anchoVentana <= ANCHO_PANTALLA_ANGOSTA
+  const [mostrarFiltros, setMostrarFiltros] = useState(() => typeof window === 'undefined' || window.innerWidth > ANCHO_PANTALLA_ANGOSTA)
+  const [mostrarLista, setMostrarLista] = useState(() => typeof window === 'undefined' || window.innerWidth > ANCHO_PANTALLA_ANGOSTA)
   const anchoFiltros = mostrarFiltros ? ANCHO_SIDEBAR : 0
   const anchoLista = mostrarLista ? ANCHO_LISTA : 0
+  // Angosto: los paneles se abren de a uno y las dos manijas van en el borde del abierto.
+  const bordePanelAngosto = mostrarFiltros ? ANCHO_SIDEBAR : mostrarLista ? ANCHO_LISTA : 0
+  const anchoDrawer = Math.min(ANCHO_DRAWER, anchoVentana)
+  const alternarFiltros = () => {
+    const abrir = !mostrarFiltros
+    setMostrarFiltros(abrir)
+    if (abrir && esAngosto) setMostrarLista(false)
+  }
+  const alternarLista = () => {
+    const abrir = !mostrarLista
+    setMostrarLista(abrir)
+    if (abrir && esAngosto) setMostrarFiltros(false)
+  }
+  /** Angosto: el panel flota sobre el mapa (no le quita ancho). */
+  const estiloPanelFlotante = (abierto: boolean): React.CSSProperties =>
+    esAngosto
+      ? { position: 'absolute', top: 0, bottom: 0, left: 0, zIndex: 5, boxShadow: abierto ? '4px 0 16px rgba(0,0,0,.18)' : undefined }
+      : {}
   // El panel de sugerencias (derecha) también se pliega, hacia su borde.
   const [drawerPlegado, setDrawerPlegado] = useState(false)
   // Los polígonos de zonas peligrosas se dibujan sobre el mapa (toggle).
@@ -1132,6 +1170,7 @@ export function DistribucionMapaV2Module() {
             flexShrink: 0,
             overflow: 'hidden',
             transition: 'width .25s ease',
+            ...estiloPanelFlotante(mostrarFiltros),
           }}
         >
           <div style={{ width: ANCHO_SIDEBAR, height: '100%' }}>
@@ -1155,6 +1194,7 @@ export function DistribucionMapaV2Module() {
             flexShrink: 0,
             overflow: 'hidden',
             transition: 'width .25s ease',
+            ...estiloPanelFlotante(mostrarLista),
           }}
         >
           <div style={{ width: ANCHO_LISTA, height: '100%' }}>
@@ -1173,17 +1213,17 @@ export function DistribucionMapaV2Module() {
             dos están plegados y comparten borde. */}
         <ManijaPanel
           abierto={mostrarFiltros}
-          onClick={() => setMostrarFiltros((v) => !v)}
+          onClick={alternarFiltros}
           titulo={mostrarFiltros ? 'Ocultar filtros' : 'Mostrar filtros'}
           badge={!mostrarFiltros && filtrosActivos > 0 ? filtrosActivos : undefined}
-          left={Math.max(0, anchoFiltros - 12)}
+          left={Math.max(0, (esAngosto ? bordePanelAngosto : anchoFiltros) - 12)}
         />
         <ManijaPanel
           abierto={mostrarLista}
-          onClick={() => setMostrarLista((v) => !v)}
+          onClick={alternarLista}
           titulo={mostrarLista ? 'Ocultar lista' : `Mostrar lista (${visibles.length})`}
           top={40}
-          left={Math.max(0, anchoFiltros + anchoLista - 12)}
+          left={Math.max(0, (esAngosto ? bordePanelAngosto : anchoFiltros + anchoLista) - 12)}
           badge={!mostrarLista ? visibles.length : undefined}
         />
 
@@ -1275,10 +1315,14 @@ export function DistribucionMapaV2Module() {
           <div
             style={{
               position: 'relative',
-              width: drawerPlegado ? 0 : ANCHO_DRAWER,
+              width: drawerPlegado ? 0 : anchoDrawer,
               flexShrink: 0,
               overflow: 'hidden',
               transition: 'width .25s ease',
+              // Angosto: flota sobre el mapa desde la derecha
+              ...(esAngosto
+                ? { position: 'absolute', top: 0, bottom: 0, right: 0, zIndex: 5, boxShadow: drawerPlegado ? undefined : '-4px 0 16px rgba(0,0,0,.18)' }
+                : {}),
             }}
           >
             {/* Anclado al borde derecho: al achicarse el contenedor, el
@@ -1289,7 +1333,7 @@ export function DistribucionMapaV2Module() {
                 top: 0,
                 bottom: 0,
                 right: 0,
-                width: ANCHO_DRAWER,
+                width: anchoDrawer,
               }}
             >
           <SugerenciasDrawer
@@ -1332,7 +1376,7 @@ export function DistribucionMapaV2Module() {
             onClick={() => setDrawerPlegado((v) => !v)}
             titulo={drawerPlegado ? `Mostrar sugerencias (${pares.length})` : 'Ocultar sugerencias'}
             badge={drawerPlegado && pares.length > 0 ? pares.length : undefined}
-            right={drawerPlegado ? 0 : ANCHO_DRAWER - 12}
+            right={drawerPlegado ? 0 : anchoDrawer - 12}
           />
         )}
       </div>

@@ -11194,6 +11194,16 @@ export function ReporteFacturacionTab() {
           >
             <ChevronRight size={18} />
           </button>
+          {/* Estado del período (junto a la semana) */}
+          {periodo && (
+            <div className={`fact-periodo-estado ${periodo.estado === 'cerrado' ? 'fact-periodo-estado--cerrado' : periodo.estado === 'abierto' ? 'fact-periodo-estado--abierto' : 'fact-periodo-estado--otro'}`}>
+              <AlertCircle size={16} style={{ color: periodo.estado === 'cerrado' ? 'var(--badge-red-text)' : periodo.estado === 'abierto' ? 'var(--badge-green-text)' : 'var(--badge-yellow-text)' }} />
+              <span style={{ fontSize: '13px', color: 'var(--text-primary)' }}>
+                Estado del período: <strong style={{ textTransform: 'uppercase' }}>{periodo.estado}</strong>
+                {periodo.fecha_cierre && ` - Cerrado el ${formatDate(periodo.fecha_cierre)}`}
+              </span>
+            </div>
+          )}
         </div>
         {/* Vista Previa indicator inline */}
         {modoVistaPrevia && (
@@ -11255,7 +11265,7 @@ export function ReporteFacturacionTab() {
 
             return (
               <button
-                className="fact-btn-primary"
+                className="fact-btn-primary fact-btn--recalcular"
                 onClick={() => recalcularPeriodoAbierto()}
                 disabled={recalculando || loading || cerrando || candadoAjenoVigente}
                 title={
@@ -11277,11 +11287,10 @@ export function ReporteFacturacionTab() {
           {/* Botón Cerrar Período - SOLO cuando hay período abierto */}
           {periodo?.estado === 'abierto' && (
             <button
-              className="fact-btn-primary"
+              className="fact-btn-primary fact-btn--cerrar"
               onClick={cerrarPeriodo}
               disabled={recalculando || loading || cerrando}
               title="Cerrar período y copiar conductores a la siguiente semana"
-              style={{ background: '#dc2626', borderColor: '#dc2626' }}
             >
               <Lock size={14} className={cerrando ? 'spinning' : ''} />
               {cerrando ? 'Cerrando...' : 'Cerrar Período'}
@@ -11302,10 +11311,9 @@ export function ReporteFacturacionTab() {
            )}
           {/* Botón Discrepancias - siempre visible */}
           <button
-            className="fact-btn-primary"
+            className="fact-btn-primary fact-btn--discrepancias"
             onClick={() => setShowDiscrepancyModal(true)}
             title="Ver discrepancias de formato entre fuentes de datos"
-            style={{ background: 'var(--color-warning)', borderColor: 'var(--color-warning)' }}
           >
             <AlertTriangle size={14} />
             Discrepancias
@@ -11324,24 +11332,6 @@ export function ReporteFacturacionTab() {
         />
       )}
 
-      {/* Estado del período */}
-      {periodo && (
-        <div className="fact-periodo-estado" style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: '8px',
-          padding: '8px 12px',
-          background: periodo.estado === 'cerrado' ? 'var(--badge-red-bg)' : periodo.estado === 'abierto' ? 'var(--badge-green-bg)' : 'var(--badge-yellow-bg)',
-          borderRadius: '6px',
-          marginBottom: '16px'
-        }}>
-          <AlertCircle size={16} style={{ color: periodo.estado === 'cerrado' ? 'var(--badge-red-text)' : periodo.estado === 'abierto' ? 'var(--badge-green-text)' : 'var(--badge-yellow-text)' }} />
-          <span style={{ fontSize: '13px', color: 'var(--text-primary)' }}>
-            Estado del período: <strong style={{ textTransform: 'uppercase' }}>{periodo.estado}</strong>
-            {periodo.fecha_cierre && ` - Cerrado el ${formatDate(periodo.fecha_cierre)}`}
-          </span>
-        </div>
-      )}
 
       {/* Vista Previa Mode */}
       {modoVistaPrevia && (
@@ -11524,11 +11514,11 @@ export function ReporteFacturacionTab() {
             headerAction={
               <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
                 <VerLogsButton tablas={['facturacion_conductores', 'facturacion_detalle', 'periodos_facturacion', 'penalidades', 'saldos_conductores']} label="Facturación" />
-                <button className="fact-btn-export" onClick={prepararFacturacionPreviewVistaPrevia} disabled={loadingSiFacturaPreview || vistaPreviaData.length === 0} style={{ backgroundColor: '#059669', padding: '6px 10px', fontSize: '11px' }}>
+                <button className="fact-btn-export fact-btn--preview" onClick={prepararFacturacionPreviewVistaPrevia} disabled={loadingSiFacturaPreview || vistaPreviaData.length === 0}>
                   {loadingSiFacturaPreview ? <Loader2 size={12} className="spinning" /> : <Eye size={12} />}
                   Prev. Fact.
                 </button>
-                <button className="fact-btn-export" onClick={prepararCabifyPreview} disabled={loadingCabifyPreview || vistaPreviaData.length === 0} style={{ backgroundColor: '#7C3AED', padding: '6px 10px', fontSize: '11px' }}>
+                <button className="fact-btn-export fact-btn--preview" onClick={prepararCabifyPreview} disabled={loadingCabifyPreview || vistaPreviaData.length === 0}>
                   {loadingCabifyPreview ? <Loader2 size={12} className="spinning" /> : <Eye size={12} />}
                   Prev. Cabify
                 </button>
@@ -11845,16 +11835,16 @@ export function ReporteFacturacionTab() {
               onTableReady={setTableInstance}
               headerAction={
                 <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
-                  <button className="fact-btn-export" onClick={prepararSiFacturaPreview} disabled={loadingSiFacturaPreview || facturacionesFiltradas.length === 0} style={{ backgroundColor: '#059669', padding: '6px 10px', fontSize: '11px' }}>
+                  <button className="fact-btn-export fact-btn--preview" onClick={prepararSiFacturaPreview} disabled={loadingSiFacturaPreview || facturacionesFiltradas.length === 0}>
                     {loadingSiFacturaPreview ? <Loader2 size={12} className="spinning" /> : <Eye size={12} />} Prev. Fact.
                   </button>
-                  <button className="fact-btn-export" onClick={prepararCabifyPreviewDesdeFacturacion} disabled={loadingCabifyPreview || facturacionesFiltradas.length === 0} style={{ backgroundColor: '#7C3AED', padding: '6px 10px', fontSize: '11px' }}>
+                  <button className="fact-btn-export fact-btn--preview" onClick={prepararCabifyPreviewDesdeFacturacion} disabled={loadingCabifyPreview || facturacionesFiltradas.length === 0}>
                     {loadingCabifyPreview ? <Loader2 size={12} className="spinning" /> : <Eye size={12} />} Prev. Cabify
                   </button>
                   {periodo?.estado === 'cerrado' && (
                     <>
                       <input type="file" ref={cabifyFileInputRef} accept=".xlsx,.xls" style={{ display: 'none' }} onChange={handleCabifyFileUpload} />
-                      <button className="fact-btn-export" onClick={() => cabifyFileInputRef.current?.click()} disabled={loadingCabifyPagos || facturacionesFiltradas.length === 0} style={{ backgroundColor: '#7C3AED', padding: '6px 10px', fontSize: '11px' }}>
+                      <button className="fact-btn-export fact-btn--preview" onClick={() => cabifyFileInputRef.current?.click()} disabled={loadingCabifyPagos || facturacionesFiltradas.length === 0}>
                         {loadingCabifyPagos ? <Loader2 size={12} className="spinning" /> : <Upload size={12} />} Pagos Cabify
                       </button>
                     </>

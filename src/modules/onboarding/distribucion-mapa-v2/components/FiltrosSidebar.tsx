@@ -124,7 +124,8 @@ export function FiltrosSidebar({
   const segmentos: Array<{ value: SegmentoV2; label: string; n?: number }> = [
     { value: 'conductores', label: 'Conductores', n: conteoConductores },
     { value: 'leads', label: 'Leads', n: conteoLeads },
-    { value: 'ambos', label: 'Ambos' },
+    // Ambos muestra la suma, así los tres botones se ven iguales (nombre arriba, cantidad abajo)
+    { value: 'ambos', label: 'Ambos', n: conteoConductores + conteoLeads },
   ]
 
   return (
@@ -198,20 +199,35 @@ export function FiltrosSidebar({
                 onClick={() => onChange({ segmento: s.value })}
                 style={{
                   flex: 1,
+                  minWidth: 0,
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: 1,
                   border: 'none',
                   borderRadius: 7,
-                  padding: '6px 2px',
+                  padding: '5px 2px',
                   fontSize: 11.5,
                   fontWeight: 700,
+                  lineHeight: 1.15,
                   cursor: 'pointer',
                   background: activo ? 'var(--bg-primary)' : 'transparent',
                   color: activo ? 'var(--text-primary)' : 'var(--text-secondary)',
                   boxShadow: activo ? '0 1px 3px rgba(0,0,0,.14)' : undefined,
                 }}
               >
-                {s.label}
+                <span style={{ whiteSpace: 'nowrap' }}>{s.label}</span>
                 {s.n !== undefined && (
-                  <span style={{ fontSize: 10, color: 'var(--text-tertiary)' }}> {s.n}</span>
+                  <span
+                    style={{
+                      fontSize: 10,
+                      fontWeight: 600,
+                      color: activo ? 'var(--color-primary, #ff0033)' : 'var(--text-tertiary)',
+                    }}
+                  >
+                    {s.n}
+                  </span>
                 )}
               </button>
             )
