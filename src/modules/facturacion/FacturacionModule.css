@@ -2086,3 +2086,273 @@
 .fact-tooltip-wrap:hover .fact-tooltip {
   display: block;
 }
+
+/* =====================================================
+   ENCABEZADO LIVIANO (solo visual, sin cambios de funciones)
+   Pestañas subrayadas, selector de semana compacto, botones
+   más chicos con una sola acción destacada (Cerrar Período),
+   estado del período como etiqueta y buscador más bajo.
+   Todo bajo .fact-module: no afecta a otros módulos.
+   ===================================================== */
+
+.fact-module {
+  gap: 12px;
+}
+
+.fact-module .fact-tab-content {
+  gap: 12px;
+}
+
+/* Pestañas: repartidas en todo el ancho, con subrayado en la activa (sin bloque rojo) */
+.fact-module .fact-tabs {
+  gap: 4px;
+  border-bottom: 1px solid var(--border-primary);
+}
+
+.fact-module .fact-tab {
+  flex: 1 1 0;
+  justify-content: center;
+  padding: 8px 14px;
+  border-radius: 0;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+
+.fact-module .fact-tab:hover {
+  background: transparent;
+  color: var(--text-primary);
+}
+
+.fact-module .fact-tab.active {
+  background: transparent;
+  color: var(--color-primary);
+  border-bottom-color: var(--color-primary);
+  font-weight: 600;
+}
+
+/* Selector de semana en una línea */
+.fact-module .fact-semana-selector {
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 8px 12px;
+}
+
+.fact-module .fact-semana-nav {
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.fact-module .fact-nav-btn {
+  width: 28px;
+  height: 28px;
+  border-color: transparent;
+  background: transparent;
+}
+
+.fact-module .fact-nav-btn:hover {
+  border-color: var(--border-primary);
+  background: var(--bg-secondary);
+}
+
+.fact-module .fact-semana-info {
+  flex-direction: row;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+  padding: 4px 8px;
+  border-radius: 6px;
+}
+
+.fact-module .fact-semana-info:hover {
+  background: var(--bg-secondary);
+}
+
+.fact-module .fact-semana-titulo {
+  font-size: 15px;
+}
+
+.fact-module .fact-semana-titulo,
+.fact-module .fact-semana-fecha {
+  white-space: nowrap;
+}
+
+/* Celular: la etiqueta de estado baja a su propia línea, centrada */
+@media (max-width: 768px) {
+  .fact-module .fact-semana-nav {
+    justify-content: center;
+  }
+
+  .fact-module .fact-semana-nav .fact-periodo-estado {
+    margin-left: 0;
+  }
+}
+
+/* Acciones: más chicas, Cerrar Período es la única llena */
+.fact-module .fact-semana-actions {
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.fact-module .fact-semana-actions .fact-btn-primary {
+  min-height: 32px;
+  padding: 6px 12px;
+  border: 1px solid transparent;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.fact-module .fact-semana-actions .fact-btn--recalcular {
+  border-color: var(--border-primary);
+  background: var(--bg-primary);
+  color: var(--text-primary);
+}
+
+.fact-module .fact-semana-actions .fact-btn--recalcular:hover:not(:disabled) {
+  background: var(--bg-secondary);
+}
+
+.fact-module .fact-semana-actions .fact-btn--cerrar {
+  background: var(--color-primary);
+  color: #fff;
+}
+
+/* Discrepancias: va primero (a la izquierda) y con borde, sin relleno */
+.fact-module .fact-semana-actions .fact-btn--discrepancias {
+  order: -1;
+  border-color: var(--color-warning);
+  background: transparent;
+  color: var(--badge-yellow-text, #b45309);
+}
+
+.fact-module .fact-semana-actions .fact-btn--discrepancias:hover:not(:disabled) {
+  background: var(--badge-yellow-bg, rgba(245, 158, 11, 0.1));
+}
+
+/* Estado del período: etiqueta al lado de la semana, no franja */
+.fact-module .fact-periodo-estado {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: 8px;
+  padding: 3px 10px;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+
+.fact-module .fact-periodo-estado span {
+  font-size: 12px;
+}
+
+.fact-module .fact-periodo-estado svg {
+  width: 14px;
+  height: 14px;
+}
+
+.fact-module .fact-periodo-estado--abierto { background: var(--badge-green-bg); }
+.fact-module .fact-periodo-estado--cerrado { background: var(--badge-red-bg); }
+.fact-module .fact-periodo-estado--otro { background: var(--badge-yellow-bg); }
+
+/* Buscador de la tabla más bajo */
+.fact-module .dt-search-input {
+  padding: 8px 12px 8px 36px;
+  border-radius: 8px;
+  font-size: 13px;
+}
+
+.fact-module .dt-search-icon {
+  width: 16px;
+  height: 16px;
+}
+
+/* Prev. Fact. / Prev. Cabify / Pagos Cabify: botones neutros con ícono */
+.fact-module .fact-btn-export.fact-btn--preview {
+  padding: 6px 10px;
+  border-color: var(--border-primary);
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.fact-module .fact-btn-export.fact-btn--preview:hover:not(:disabled) {
+  border-color: var(--border-secondary, var(--border-primary));
+  background: var(--bg-secondary);
+}
+
+.fact-module .fact-btn-export.fact-btn--preview svg {
+  color: var(--color-primary);
+}
+
+/* ── Resto de pestañas (Garantías, Saldos, Cobros Fraccionados) ── */
+
+/* Barra de acciones de Garantías y Saldos */
+.fact-module .fact-header {
+  padding: 8px 12px;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.fact-module .fact-header .fact-btn {
+  min-height: 32px;
+  padding: 6px 12px;
+  border: 1px solid transparent;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+/* Exportar / Importar: con borde, sin relleno (la acción principal queda roja) */
+.fact-module .fact-header .fact-btn-secondary,
+.fact-module .fact-header-left .fact-btn-primary {
+  border-color: var(--border-primary);
+  background: var(--bg-primary);
+  color: var(--text-primary);
+}
+
+.fact-module .fact-header .fact-btn-secondary:hover:not(:disabled),
+.fact-module .fact-header-left .fact-btn-primary:hover:not(:disabled) {
+  background: var(--bg-secondary);
+}
+
+.fact-module .fact-header-left .fact-btn-primary svg {
+  color: var(--color-primary);
+}
+
+/* Cobros Fraccionados: título y espacios más compactos, buscador igual al resto */
+.fact-module .cobros-fraccionados-tab {
+  padding: 0;
+}
+
+.fact-module .cobros-fraccionados-tab .tab-header {
+  margin-bottom: 12px;
+}
+
+.fact-module .cobros-fraccionados-tab .tab-header h3 {
+  margin-bottom: 2px;
+  color: var(--text-primary);
+  font-size: 15px;
+}
+
+.fact-module .cobros-fraccionados-tab .tab-header p {
+  color: var(--text-tertiary);
+  font-size: 12px;
+}
+
+.fact-module .cobros-fraccionados-tab .dt-search-input {
+  padding: 8px 12px 8px 36px;
+  border-radius: 8px;
+  font-size: 13px;
+}
+
+.fact-module .cobros-fraccionados-tab .dt-search-icon {
+  width: 16px;
+  height: 16px;
+}
+
+.fact-module .cobros-fraccionados-tab .cf-filter-select {
+  padding: 6px 10px;
+  font-size: 12px;
+}
