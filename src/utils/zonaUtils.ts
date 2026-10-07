@@ -33,6 +33,12 @@ const SUR_KEYWORDS = [
   'berazategui', 'lomas de zamora', 'almirante brown', 'florencio varela',
 ]
 
+// Gran La Plata (La Plata, Berisso, Ensenada) se clasifica como Sur (decisión 2026-10-06).
+// Va aparte de SUR_KEYWORDS y se evalúa DESPUÉS de CABA porque "la plata" también es
+// una avenida de CABA (Av. La Plata, Caballito/Boedo): no debe marcar esas direcciones como Sur.
+const LA_PLATA_REGEX = /\b(berisso|ensenada)\b|(^|[^a-záéíóúñ])la plata\b/
+const CALLE_LA_PLATA_REGEX = /\b(av\.?|avda\.?|avenida|calle|r[ií]o de)\s+la plata\b/
+
 const OESTE_KEYWORDS = [
   'zona oeste', 'morón', 'moron', 'merlo', 'moreno', 'la matanza',
   'ituzaingó', 'ituzaingo', 'hurlingham', 'tres de febrero',
@@ -49,6 +55,13 @@ export function inferZonaFromCoords(lat: number, lng: number): string {
     lng >= -58.53 && lng <= -58.33
 
   if (inCaba) return 'CABA'
+
+  // Gran La Plata: queda al este del recuadro AMBA (lng > -58.0) → Sur
+  const inGranLaPlata =
+    lat >= -35.15 && lat <= -34.75 &&
+    lng >= -58.2 && lng <= -57.7
+
+  if (inGranLaPlata) return 'Sur'
 
   const inAmba =
     lat >= -35.0 && lat <= -34.3 &&
@@ -78,6 +91,8 @@ function inferZonaFromAddress(address: string): string {
 
   const isCaba = CABA_CP_REGEX.test(lower) || CABA_KEYWORDS.some(k => lower.includes(k))
   if (isCaba) return 'CABA'
+
+  if (LA_PLATA_REGEX.test(lower) && !CALLE_LA_PLATA_REGEX.test(lower)) return 'Sur'
 
   if (lower.includes('gba') || lower.includes('gran buenos aires')) return 'GBA'
 

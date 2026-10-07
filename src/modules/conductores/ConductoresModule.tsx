@@ -1,7 +1,7 @@
 // src/modules/conductores/ConductoresModule.tsx
  
 import { useState, useEffect, useMemo, useRef } from "react";
-import { Eye, Edit2, Trash2, AlertTriangle, Users, UserCheck, UserX, Clock, Filter, FolderOpen, FolderPlus, Loader2, History, RefreshCw, ShieldX, MessageSquare, User, FileText, ChevronDown, Download } from "lucide-react";
+import { Eye, Edit2, Trash2, AlertTriangle, Users, UserCheck, UserX, Clock, Filter, FolderOpen, FolderPlus, Loader2, History, RefreshCw, ShieldX, MessageSquare, User, FileText, ChevronDown, Download, MapPin } from "lucide-react";
 import * as XLSX from "xlsx";
 import { ActionsMenu } from "../../components/ui/ActionsMenu";
 import { VerLogsButton } from "../../components/ui/VerLogsButton";
@@ -33,6 +33,7 @@ import { ConductorWizard } from "./components/ConductorWizard";
 
 import { createConductorDriveFolder } from "../../services/driveService";
 import { AddressAutocomplete } from "../../components/ui/AddressAutocomplete";
+import { cargarGoogleMaps, ubicacionDesdeCoordenadas } from "../../utils/ubicacionGoogle";
 import { registrarHistorialConductor, registrarHistorialVehiculo, registrarHistorialBaja } from "../../services/historialService";
 import { insertControlSaldo } from "../../services/controlSaldosService";
 import { getEstadoConductorDisplay, getEstadoConductorBadgeStyle } from "../../utils/conductorUtils";
@@ -428,6 +429,8 @@ export function ConductoresModule() {
     direccion: "",
     direccion_lat: null as number | null,
     direccion_lng: null as number | null,
+    direccion_pais: null as string | null,
+    direccion_ciudad: null as string | null,
     zona: "",
     fecha_nacimiento: "",
     estado_civil_id: "",
@@ -1208,6 +1211,8 @@ export function ConductoresModule() {
             direccion: formData.direccion || null,
             direccion_lat: formData.direccion_lat,
             direccion_lng: formData.direccion_lng,
+            direccion_pais: formData.direccion_pais || null,
+            direccion_ciudad: formData.direccion_ciudad || null,
             zona: formData.zona || null,
             fecha_nacimiento: formData.fecha_nacimiento || null,
             estado_civil_id: formData.estado_civil_id || null,
@@ -1795,6 +1800,8 @@ export function ConductoresModule() {
         direccion: formData.direccion || null,
         direccion_lat: formData.direccion_lat,
         direccion_lng: formData.direccion_lng,
+        direccion_pais: formData.direccion_pais || null,
+        direccion_ciudad: formData.direccion_ciudad || null,
         zona: formData.zona || null,
         fecha_nacimiento: formData.fecha_nacimiento || null,
         estado_civil_id: formData.estado_civil_id || null,
@@ -2297,6 +2304,130 @@ export function ConductoresModule() {
     }
   };
 
+  /**
+   * Completa país y ciudad de los conductores que tienen coordenadas pero no
+   * ciudad guardada (los cargados antes de sql/conductores_pais_ciudad.sql).
+   * Usa las COORDENADAS y no el texto de la dirección: el texto suele estar
+   * escrito a mano y el punto es confiable. UNA llamada a Google por conductor;
+   * cada intento se marca en direccion_geocode_fecha para no repetirlo.
+   * Respeta la sede seleccionada.
+   */
+  const completarPaisCiudadConductores = async () => {
+    const pendientes: Array<{ id: string; direccion_lat: number; direccion_lng: number }> = [];
+    const TAM_PAGINA = 1000;
+    for (let desde = 0; ; desde += TAM_PAGINA) {
+      const { data, error } = await aplicarFiltroSede(
+        (supabase.from("conductores") as any)
+          .select("id, direccion_lat, direccion_lng")
+          .not("direccion_lat", "is", null)
+          .not("direccion_lng", "is", null)
+          .is("direccion_ciudad", null)
+          .is("direccion_geocode_fecha", null)
+          .order("id")
+          .range(desde, desde + TAM_PAGINA - 1),
+        "sede_id"
+      );
+      if (error) {
+        Swal.fire("Error", `No se pudieron leer los conductores pendientes. ¿Se corrió sql/conductores_pais_ciudad.sql? (${error.message})`, "error");
+        return;
+      }
+      pendientes.push(...((data || []) as any[]));
+      if (!data || data.length < TAM_PAGINA) break;
+    }
+
+    if (pendientes.length === 0) {
+      Swal.fire("Nada que completar", "Todos los conductores con ubicación de esta sede ya tienen país y ciudad.", "info");
+      return;
+    }
+
+    const confirmacion = await Swal.fire({
+      icon: "warning",
+      title: "Completar país y ciudad",
+      html:
+        `Se van a consultar <b>${pendientes.length}</b> conductores contra Google, a partir de sus coordenadas.<br><br>` +
+        "Es <b>una llamada a Google por conductor</b>, una sola vez. Se puede detener en cualquier momento y lo ya procesado queda guardado.",
+      showCancelButton: true,
+      confirmButtonText: `Procesar ${pendientes.length}`,
+      cancelButtonText: "Cancelar",
+      confirmButtonColor: "#ff0033",
+    });
+    if (!confirmacion.isConfirmed) return;
+
+    try {
+      await cargarGoogleMaps();
+    } catch {
+      Swal.fire("Error", "No se pudo cargar Google Maps. Reintentá en un momento.", "error");
+      return;
+    }
+
+    let detenido = false;
+    let terminado = false;
+    Swal.fire({
+      title: "Completando país y ciudad",
+      html: `<span id="pc-progreso">0 de ${pendientes.length}</span>`,
+      confirmButtonText: "Detener",
+      allowOutsideClick: false,
+      allowEscapeKey: false,
+    }).then(() => {
+      if (!terminado) detenido = true;
+    });
+
+    let completados = 0;
+    let sinCiudad = 0;
+    let fallidos = 0;
+    let errorGuardado: string | null = null;
+    for (let i = 0; i < pendientes.length; i++) {
+      if (detenido) break;
+      const c = pendientes[i];
+      let resultado = await ubicacionDesdeCoordenadas(c.direccion_lat, c.direccion_lng);
+      // Rate limit de Google: hasta 3 reintentos con espera creciente.
+      for (let intento = 0, espera = 500; !resultado.ok && resultado.reintentar && intento < 3; intento++, espera *= 2) {
+        await new Promise((r) => setTimeout(r, espera));
+        resultado = await ubicacionDesdeCoordenadas(c.direccion_lat, c.direccion_lng);
+      }
+
+      if (resultado.ok || !resultado.reintentar) {
+        // Resultado definitivo (con o sin ciudad): se guarda y se marca el intento.
+        const ubicacion = resultado.ok ? resultado.ubicacion : { pais: null, ciudad: null };
+        const { error } = await (supabase.from("conductores") as any)
+          .update({
+            direccion_pais: ubicacion.pais,
+            direccion_ciudad: ubicacion.ciudad,
+            direccion_geocode_fecha: new Date().toISOString(),
+          })
+          .eq("id", c.id);
+        if (error) {
+          errorGuardado = error.message;
+          break;
+        }
+        if (ubicacion.ciudad) completados++;
+        else sinCiudad++;
+      } else {
+        // Transitorio que no se resolvió: NO se marca, queda para la próxima pasada.
+        fallidos++;
+      }
+
+      const progreso = document.getElementById("pc-progreso");
+      if (progreso) progreso.textContent = `${i + 1} de ${pendientes.length}`;
+      await new Promise((r) => setTimeout(r, 60));
+    }
+
+    terminado = true;
+    loadConductores(true);
+    if (errorGuardado) {
+      Swal.fire("Error", `Se detuvo el proceso al guardar: ${errorGuardado}`, "error");
+      return;
+    }
+    Swal.fire({
+      icon: detenido ? "info" : "success",
+      title: detenido ? "Proceso detenido" : "Listo",
+      html:
+        `<b>${completados}</b> con país y ciudad<br>` +
+        `<b>${sinCiudad}</b> donde Google no devolvió ciudad (no se reintentan)<br>` +
+        `<b>${fallidos}</b> con error temporal (quedan pendientes para otra pasada)`,
+    });
+  };
+
   const openEditModal = async (conductor: ConductorWithRelations) => {
     // Cargar detalles completos para edición
     const fullConductor = await loadConductorDetails(conductor.id);
@@ -2327,6 +2458,8 @@ export function ConductoresModule() {
       direccion: fc.direccion || "",
       direccion_lat: fc.direccion_lat || null,
       direccion_lng: fc.direccion_lng || null,
+      direccion_pais: fc.direccion_pais || null,
+      direccion_ciudad: fc.direccion_ciudad || null,
       zona: fc.zona || "",
       fecha_nacimiento: fc.fecha_nacimiento || "",
       estado_civil_id: fc.estado_civil_id || "",
@@ -2570,6 +2703,8 @@ export function ConductoresModule() {
       direccion: "",
       direccion_lat: null,
       direccion_lng: null,
+      direccion_pais: null,
+      direccion_ciudad: null,
       zona: "",
       fecha_nacimiento: "",
       estado_civil_id: "",
@@ -3858,6 +3993,32 @@ export function ConductoresModule() {
                     <RefreshCw size={14} />
                     Sinc Documentación
                   </button>
+                  <button
+                    onClick={() => {
+                      setSyncMenuOpen(false)
+                      void completarPaisCiudadConductores()
+                    }}
+                    style={{
+                      width: '100%',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '8px',
+                      padding: '10px 14px',
+                      border: 'none',
+                      borderTop: '1px solid var(--border-primary, #e5e7eb)',
+                      background: 'transparent',
+                      color: 'var(--text-primary)',
+                      cursor: 'pointer',
+                      fontSize: '13px',
+                      textAlign: 'left',
+                    }}
+                    onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.background = 'var(--bg-tertiary, #f3f4f6)' }}
+                    onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.background = 'transparent' }}
+                    title="Completar país y ciudad desde las coordenadas (una llamada a Google por conductor, una sola vez)"
+                  >
+                    <MapPin size={14} />
+                    Completar país y ciudad
+                  </button>
                 </div>
               )}
             </div>
@@ -4609,13 +4770,17 @@ function ModalEditar({
           <div className={editErrors.direccion ? 'input-error' : ''} style={editErrors.direccion ? { borderRadius: 8 } : undefined}>
             <AddressAutocomplete
               value={formData.direccion}
-              onChange={(address, lat, lng, zona) => {
+              onChange={(address, lat, lng, zona, ubicacion) => {
+                const sinCoordenadas = lat == null || lng == null;
                 setFormData((prev: any) => ({
                   ...prev,
                   direccion: address,
                   direccion_lat: lat ?? null,
                   direccion_lng: lng ?? null,
-                  zona: zona || prev.zona
+                  zona: zona || prev.zona,
+                  // Sin coordenadas no hay país/ciudad confiable; sin componentes, se conserva lo que había.
+                  direccion_pais: sinCoordenadas ? null : (ubicacion ? ubicacion.pais : prev.direccion_pais ?? null),
+                  direccion_ciudad: sinCoordenadas ? null : (ubicacion ? ubicacion.ciudad : prev.direccion_ciudad ?? null),
                 }));
                 if (editErrors.direccion && address) setEditErrors((prev: Record<string, string>) => { const { direccion: _r, ...rest } = prev; void _r; return rest });
               }}
