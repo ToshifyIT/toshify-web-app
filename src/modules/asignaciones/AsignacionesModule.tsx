@@ -2093,14 +2093,23 @@ export function AsignacionesModule() {
         if (selectedAsignacion?.motivoDetalle?.cambioVehiculo && selectedAsignacion?.motivoDetalle?.vehiculoCambioId) {
           const vehiculoViejoId = selectedAsignacion.motivoDetalle!.vehiculoCambioId
 
-          // Consultar si el vehículo viejo todavía tiene asignaciones activas
-          const { count: asignacionesActivas } = await supabase
-            .from('asignaciones_conductores')
-            .select('id', { count: 'exact', head: true })
+          // Consultar si el vehículo viejo todavía tiene asignaciones activas con conductores activos.
+          // FIX 2026-10-06: antes consultaba asignaciones_conductores.vehiculo_id (columna que no
+          // existe) y estado 'activo' (el activo real es 'asignado'); el count siempre salía vacío
+          // y el vehículo viejo pasaba a PKG_ON_BASE aunque siguiera en uso.
+          const { data: asigViejasActivas, error: errViejo } = await (supabase as any)
+            .from('asignaciones')
+            .select('id, asignaciones_conductores(estado)')
             .eq('vehiculo_id', vehiculoViejoId)
-            .eq('estado', 'activo')
+            .in('estado', ['activa', 'activo'])
+          const viejoSigueEnUso = ((asigViejasActivas as any[]) || []).some((a: any) =>
+            (a.asignaciones_conductores || []).some((ac: any) => ac.estado === 'asignado' || ac.estado === 'activo')
+          )
+          if (errViejo) {
+            avisos.push('No se pudo verificar si el vehículo anterior sigue en uso; su estado no se modificó.')
+          }
 
-          if ((asignacionesActivas || 0) === 0) {
+          if (!errViejo && !viejoSigueEnUso) {
             // Sin asignaciones activas → ponerlo como disponible
             const { data: estadoPkgOn } = await supabase
               .from('vehiculos_estados')

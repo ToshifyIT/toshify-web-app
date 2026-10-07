@@ -306,6 +306,9 @@ function esFuenteIntercom(l: Lead): boolean {
   return (l.fuente_de_lead || '').toLowerCase() !== 'damaro' && !esFuenteSellium(l)
 }
 
+/** Columna de casillas para "Coordenadas > Seleccionados" (oculta por pedido de negocio). */
+const MOSTRAR_COLUMNA_SELECCION_COORDS = false
+
 function formatPhoneAR(raw: unknown): string | null {
   if (raw == null) return null
   let digits = String(raw).replace(/[^\d]/g, '')
@@ -2989,7 +2992,9 @@ export function LeadsModule() {
     // Casillas para "Actualizar coordenadas" > Seleccionados. Solo admin.
     // El tilde del encabezado alcanza a TODOS los leads visibles con los
     // filtros actuales (todas las paginas), no solo a la pagina en pantalla.
-    if (esAdmin) {
+    // OCULTA (2026-10-06, pedido de negocio): sin la columna, "Coordenadas" solo
+    // ofrece "Pendientes". Para volver a mostrarla, poner la constante en true.
+    if (esAdmin && MOSTRAR_COLUMNA_SELECCION_COORDS) {
       leadColumns.unshift({
         id: 'seleccion_coords',
         header: () => {

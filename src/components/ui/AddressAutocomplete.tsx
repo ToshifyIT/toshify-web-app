@@ -3,6 +3,7 @@ import { useState, useCallback, useRef, useEffect } from 'react'
 import { GoogleMap, useJsApiLoader, Marker, Autocomplete } from '@react-google-maps/api'
 import { MapPin, X, Loader2 } from 'lucide-react'
 import { inferZona } from '../../utils/zonaUtils'
+import { ubicacionDeComponentes, type UbicacionDireccion } from '../../utils/ubicacionGoogle'
 import {
   GOOGLE_MAPS_API_KEY,
   GOOGLE_MAPS_LIBRARIES,
@@ -26,8 +27,13 @@ const mapContainerStyle = {
 
 interface AddressAutocompleteProps {
   value: string
-  /** Se llama cada vez que cambia la dirección. El 4to parámetro es la zona detectada automáticamente. */
-  onChange: (address: string, lat?: number, lng?: number, zona?: string) => void
+  /**
+   * Se llama cada vez que cambia la dirección. El 4to parámetro es la zona
+   * detectada automáticamente. El 5to es país/ciudad según Google: llega solo
+   * cuando hay coordenadas y Google devolvió sus componentes; si no llega, el
+   * padre no debe pisar lo que ya tenía (salvo que tampoco haya coordenadas).
+   */
+  onChange: (address: string, lat?: number, lng?: number, zona?: string, ubicacion?: UbicacionDireccion) => void
   disabled?: boolean
   placeholder?: string
   className?: string
@@ -49,6 +55,9 @@ export function AddressAutocomplete({
   // Ref para guardar la última versión de onChange (evita problemas de closures stale en callbacks asíncronos)
   const onChangeRef = useRef(onChange)
   onChangeRef.current = onChange
+  // País/ciudad del punto que está en el marcador. Se guarda junto con el
+  // marcador porque el blur vuelve a notificar con esas coordenadas.
+  const ubicacionRef = useRef<UbicacionDireccion | undefined>(undefined)
 
   // Sincronizar inputValue con value cuando cambia externamente
   useEffect(() => {
@@ -71,6 +80,7 @@ export function AddressAutocomplete({
         if (status === 'OK' && results && results[0]) {
           const location = results[0].geometry.location
           const newPosition = { lat: location.lat(), lng: location.lng() }
+          ubicacionRef.current = ubicacionDeComponentes(results[0].address_components)
           setMarkerPosition(newPosition)
           setMapCenter(newPosition)
         }
@@ -83,9 +93,15 @@ export function AddressAutocomplete({
   }, [])
 
   /** Helper: notifica al padre con dirección, coords y zona detectada. Usa ref para evitar closures stale. */
-  const notifyChange = useCallback((address: string, lat?: number, lng?: number) => {
+  const notifyChange = useCallback((address: string, lat?: number, lng?: number, ubicacion?: UbicacionDireccion) => {
     const zona = inferZona(address, lat, lng)
-    onChangeRef.current(address, lat, lng, zona || undefined)
+    if (lat == null || lng == null) {
+      ubicacionRef.current = undefined
+      onChangeRef.current(address, lat, lng, zona || undefined)
+      return
+    }
+    if (ubicacion) ubicacionRef.current = ubicacion
+    onChangeRef.current(address, lat, lng, zona || undefined, ubicacionRef.current)
   }, [])
 
   const onPlaceChanged = useCallback(() => {
@@ -101,7 +117,7 @@ export function AddressAutocomplete({
         setMapCenter({ lat, lng })
         setShowMap(true)
         setInputValue(address)
-        notifyChange(address, lat, lng)
+        notifyChange(address, lat, lng, ubicacionDeComponentes(place.address_components))
       } else if (place.name) {
         setInputValue(place.name)
         notifyChange(place.name)
@@ -120,7 +136,7 @@ export function AddressAutocomplete({
           const address = results[0].formatted_address
           setMarkerPosition({ lat, lng })
           setInputValue(address)
-          notifyChange(address, lat, lng)
+          notifyChange(address, lat, lng, ubicacionDeComponentes(results[0].address_components))
         }
       })
     }
@@ -137,7 +153,7 @@ export function AddressAutocomplete({
           const address = results[0].formatted_address
           setMarkerPosition({ lat, lng })
           setInputValue(address)
-          notifyChange(address, lat, lng)
+          notifyChange(address, lat, lng, ubicacionDeComponentes(results[0].address_components))
         }
       })
     }
@@ -165,7 +181,7 @@ export function AddressAutocomplete({
         setShowMap(true)
         const formattedAddress = results[0].formatted_address
         setInputValue(formattedAddress)
-        notifyChange(formattedAddress, lat, lng)
+        notifyChange(formattedAddress, lat, lng, ubicacionDeComponentes(results[0].address_components))
       } else {
         // Sin coords, intentar solo por texto
         notifyChange(inputValue)
@@ -177,6 +193,7 @@ export function AddressAutocomplete({
     setInputValue('')
     setMarkerPosition(null)
     setShowMap(false)
+    ubicacionRef.current = undefined
     onChangeRef.current('', undefined, undefined, '')
   }, [])
 
@@ -252,7 +269,8 @@ export function AddressAutocomplete({
           options={{
             componentRestrictions: { country: 'ar' },
             types: ['address'],
-            fields: ['formatted_address', 'geometry', 'name']
+            // address_components: país y ciudad sin llamada extra (misma respuesta)
+            fields: ['formatted_address', 'geometry', 'name', 'address_components']
           }}
         >
           <input
