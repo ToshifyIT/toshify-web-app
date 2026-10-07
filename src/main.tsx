@@ -7,6 +7,7 @@ import './styles/theme.css'
 import './index.css'
 import './styles/modules.css'
 import './styles/stats-compactos.css'
+import './styles/botones.css'
 import { ThemeProvider } from './contexts/ThemeContext'
 import App from './App.tsx'
 
