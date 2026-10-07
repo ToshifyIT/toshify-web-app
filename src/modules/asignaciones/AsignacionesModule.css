@@ -334,6 +334,32 @@
   box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
 }
 
+/* Desglose D / N dentro de la tarjeta "Turnos Disponibles":
+   dato secundario alineado a la derecha, sin agregar altura a la tarjeta */
+.asig-module .asig-stats .asig-turnos-desglose {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-left: auto;
+  flex-shrink: 0;
+}
+
+.asig-module .asig-stats .asig-turnos-desglose-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  line-height: 1.2;
+}
+
+.asig-module .asig-stats .asig-turnos-desglose .asig-turno-label {
+  width: 16px;
+  height: 16px;
+  font-size: 9px;
+}
+
 /* Pantallas angostas: las dos filas vuelven a apilarse.
    En celular manda la regla global de index.css (2 columnas). */
 @media (max-width: 900px) {
