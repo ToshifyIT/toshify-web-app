@@ -143,6 +143,33 @@ function subEstadoDevolucion(g: any, saldos: Map<string, number>, override?: num
   return neto < 0 ? 'debe' : 'debemos'
 }
 
+// Estado tal cual lo muestra la columna "Estado" de la tabla, para los Excel:
+// mismo orden de prioridad que el badge. `monto` es el numero que aparece debajo
+// del badge (solo en DEBE / EN DEVOLUCIÓN); vacio en el resto.
+function estadoGarantiaParaExport(
+  g: any,
+  saldos: Map<string, number>,
+  override?: number
+): { estado: string; monto: number | '' } {
+  if (esGarantiaDevuelta(g, override)) return { estado: 'Devuelto', monto: '' }
+  if (garantiaNoAplica(g, override)) return { estado: 'N/A', monto: '' }
+  const etiquetas: Record<string, string> = {
+    completada: 'Completada',
+    en_curso: 'En Curso',
+    pendiente: 'Pendiente',
+  }
+  if (g?.estado !== 'en_devolucion') return { estado: etiquetas[g?.estado] || g?.estado || '', monto: '' }
+
+  const sub = subEstadoDevolucion(g, saldos, override)
+  if (sub === 'sin_saldo') return { estado: 'En Devolución (sin saldo)', monto: '' }
+  if (sub === 'neto_saldado') return { estado: 'DEVUELTO', monto: '' }
+  const neto = netoDevolucion(g, saldos, override) ?? 0
+  return {
+    estado: sub === 'debe' ? 'DEBE' : 'EN DEVOLUCIÓN',
+    monto: Math.round(Math.abs(neto) * 100) / 100,
+  }
+}
+
 // Dias habiles transcurridos desde la baja del conductor (0 si esta activo).
 function calcularDiasBaja(g: any): number {
   if (!g || g.estado_conductor === 'ACTIVO') return 0
@@ -1310,10 +1337,71 @@ export function GarantiasTab() {
     }
   }
 
+  // ====== DATOS DE CONTACTO PARA LAS DESCARGAS ======
+  // Solo van en los Excel, no en la tabla: se buscan en `conductores` al exportar
+  // y se cruzan por DNI normalizado (sin puntos, espacios ni ceros a la izquierda).
+  const normalizarDni = (dni: string | null | undefined) =>
+    String(dni || '').replace(/\D/g, '').replace(/^0+/, '')
+
+  async function cargarContactosPorDni(): Promise<Map<string, Record<string, string>>> {
+    const PAGINA = 1000
+    const filas: any[] = []
+    for (let desde = 0; ; desde += PAGINA) {
+      const { data, error } = await (supabase.from('conductores') as any)
+        .select('numero_dni, telefono_contacto, direccion, contacto_emergencia, telefono_emergencia, email, cbu, numero_cuit, estados_civiles(descripcion)')
+        .range(desde, desde + PAGINA - 1)
+      if (error) throw error
+      filas.push(...(data || []))
+      if (!data || data.length < PAGINA) break
+    }
+
+    const contactos = new Map<string, Record<string, string>>()
+    for (const c of filas) {
+      const dni = normalizarDni(c.numero_dni)
+      if (!dni || contactos.has(dni)) continue
+      contactos.set(dni, {
+        'Celular': c.telefono_contacto || '',
+        'Dirección': c.direccion || '',
+        'Contacto Emergencia': c.contacto_emergencia || '',
+        'Teléfono Emergencia': c.telefono_emergencia || '',
+        'Correo Electrónico': c.email || '',
+        'CBU': c.cbu || '',
+        'CUIT': c.numero_cuit || '',
+        'Estado Civil': c.estados_civiles?.descripcion || '',
+      })
+    }
+    return contactos
+  }
+
+  const CONTACTO_VACIO: Record<string, string> = {
+    'Celular': '', 'Dirección': '', 'Contacto Emergencia': '', 'Teléfono Emergencia': '',
+    'Correo Electrónico': '', 'CBU': '', 'CUIT': '', 'Estado Civil': '',
+  }
+
+  const COLS_CONTACTO = [
+    { wch: 16 }, // Celular
+    { wch: 40 }, // Dirección
+    { wch: 28 }, // Contacto Emergencia
+    { wch: 18 }, // Teléfono Emergencia
+    { wch: 30 }, // Correo Electrónico
+    { wch: 24 }, // CBU
+    { wch: 15 }, // CUIT
+    { wch: 14 }, // Estado Civil
+  ]
+
   // ====== EXPORTAR GARANTÍAS A EXCEL ======
-  function exportarGarantias() {
+  async function exportarGarantias() {
     if (garantias.length === 0) {
       Swal.fire('Sin datos', 'No hay garantías para exportar', 'info')
+      return
+    }
+
+    let contactos: Map<string, Record<string, string>>
+    try {
+      contactos = await cargarContactosPorDni()
+    } catch (error) {
+      console.error('Error cargando datos de contacto:', error)
+      Swal.fire('Error', 'No se pudieron cargar los datos de contacto para el reporte', 'error')
       return
     }
 
@@ -1326,6 +1414,12 @@ export function GarantiasTab() {
       'Cuotas Pagadas': g.cuotas_pagadas,
       // Vacio (no 0) cuando el conductor no tiene registro en saldos_conductores.
       'Saldo Actual': saldosPorConductor.get(g.conductor_id) ?? '',
+      // Mismo estado y monto que la columna "Estado" de la tabla
+      ...(() => {
+        const e = estadoGarantiaParaExport(g, saldosPorConductor, garantiasOverrides.get(g.id))
+        return { 'Estado': e.estado, 'Monto Estado': e.monto }
+      })(),
+      ...(contactos.get(normalizarDni(g.conductor_dni)) || CONTACTO_VACIO),
     }))
 
     const ws = XLSX.utils.json_to_sheet(data)
@@ -1338,6 +1432,9 @@ export function GarantiasTab() {
       { wch: 14 }, // Cuotas Totales
       { wch: 14 }, // Cuotas Pagadas
       { wch: 16 }, // Saldo Actual
+      { wch: 26 }, // Estado
+      { wch: 16 }, // Monto Estado
+      ...COLS_CONTACTO,
     ]
 
     const wb = XLSX.utils.book_new()
@@ -1353,11 +1450,20 @@ export function GarantiasTab() {
   // El DataTable nos avisa vía `onFilteredDataChange` y guardamos la lista en una ref.
   // Esto cubre TODOS los filtros: módulo (pills, ExcelColumnFilter) + DataTable interno
   // (filtros numéricos como "Días Baja", fechas, búsqueda global, etc).
-  function exportarRegistrosVisibles() {
+  async function exportarRegistrosVisibles() {
     const registros = (garantiasVisiblesRef.current || []) as typeof garantias
 
     if (registros.length === 0) {
       Swal.fire('Sin datos', 'No hay garantías visibles para exportar con los filtros actuales', 'info')
+      return
+    }
+
+    let contactos: Map<string, Record<string, string>>
+    try {
+      contactos = await cargarContactosPorDni()
+    } catch (error) {
+      console.error('Error cargando datos de contacto:', error)
+      Swal.fire('Error', 'No se pudieron cargar los datos de contacto para el reporte', 'error')
       return
     }
 
@@ -1379,6 +1485,12 @@ export function GarantiasTab() {
       'Cuotas Pagadas': g.cuotas_pagadas,
       // Vacio (no 0) cuando el conductor no tiene registro en saldos_conductores.
       'Saldo Actual': saldosPorConductor.get(g.conductor_id) ?? '',
+      // Mismo estado y monto que la columna "Estado" de la tabla
+      ...(() => {
+        const e = estadoGarantiaParaExport(g, saldosPorConductor, garantiasOverrides.get(g.id))
+        return { 'Estado': e.estado, 'Monto Estado': e.monto }
+      })(),
+      ...(contactos.get(normalizarDni(g.conductor_dni)) || CONTACTO_VACIO),
     }))
 
     const ws = XLSX.utils.json_to_sheet(data)
@@ -1394,6 +1506,9 @@ export function GarantiasTab() {
       { wch: 14 }, // Cuotas Totales
       { wch: 14 }, // Cuotas Pagadas
       { wch: 16 }, // Saldo Actual
+      { wch: 26 }, // Estado
+      { wch: 16 }, // Monto Estado
+      ...COLS_CONTACTO,
     ]
 
     const wb = XLSX.utils.book_new()
