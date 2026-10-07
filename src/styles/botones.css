@@ -1,0 +1,111 @@
+/* =====================================================
+   BOTONES: TAMAÑO UNIFICADO EN TODA LA PLATAFORMA
+   Mismo tamaño que en Facturación: 32 px de alto, texto
+   de 12 px e íconos de 14 px. Solo cambia el tamaño:
+   colores, textos y funciones de cada botón quedan igual.
+
+   - Aplica en escritorio (más de 768 px). En celular siguen
+     las reglas actuales, pensadas para el dedo (44 px).
+   - Incluye .btn-sm (en Leads, Conductores y Zonas): su tamaño
+     pensado era este mismo, pero su estilo solo se cargaba en
+     Administración y en el resto quedaban más grandes.
+   - No toca botones de solo ícono (.btn-icon), de tablas, de
+     login ni de paginación.
+   - `:is(#root, body)` da más peso que los estilos de cada
+     módulo y cubre también los modales que se abren fuera
+     de #root. Si un botón tiene tamaño escrito en línea
+     (style=...), ese sigue mandando.
+   ===================================================== */
+
+@media (min-width: 769px) {
+  :is(#root, body) :is(
+    .btn-primary, .btn-secondary, .btn-danger, .btn-success,
+    .fact-btn, .fact-btn-primary, .fact-btn-secondary, .fact-btn-export,
+    .visitas-btn-primary, .visitas-btn-secondary,
+    .nom-btn-primary, .nom-btn-secondary,
+    .multas-btn-primary, .multas-btn-secondary,
+    .prov-btn-primary, .prov-btn-secondary, .prov-btn-success,
+    .prog-btn-primary, .prog-btn-secondary,
+    .prod-btn-primary, .prod-btn-secondary, .prod-btn-success,
+    .btn-logout
+  ):not(.btn-icon) {
+    min-height: 32px;
+    padding: 6px 12px;
+    gap: 6px;
+    border-radius: 6px;
+    font-size: 12px;
+    line-height: 1.2;
+  }
+
+  :is(#root, body) :is(
+    .btn-primary, .btn-secondary, .btn-danger, .btn-success,
+    .fact-btn, .fact-btn-primary, .fact-btn-secondary, .fact-btn-export,
+    .visitas-btn-primary, .visitas-btn-secondary,
+    .nom-btn-primary, .nom-btn-secondary,
+    .multas-btn-primary, .multas-btn-secondary,
+    .prov-btn-primary, .prov-btn-secondary, .prov-btn-success,
+    .prog-btn-primary, .prog-btn-secondary,
+    .prod-btn-primary, .prod-btn-secondary, .prod-btn-success,
+    .btn-logout
+  ):not(.btn-icon) > svg {
+    width: 14px;
+    height: 14px;
+    flex-shrink: 0;
+  }
+}
+
+/* =====================================================
+   PESTAÑAS DE PROGRAMACIÓN (Pendientes / Enviados)
+   Mismo estilo que las pestañas de Facturación: repartidas
+   en el ancho, con subrayado rojo en la activa. Solo visual.
+   ===================================================== */
+
+.prog-tabs {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 12px;
+  border-bottom: 1px solid var(--border-primary);
+}
+
+.prog-tab {
+  display: flex;
+  flex: 1 1 0;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  margin-bottom: -1px;
+  padding: 8px 14px;
+  border: none;
+  border-bottom: 2px solid transparent;
+  border-radius: 0;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s;
+}
+
+.prog-tab:hover {
+  color: var(--text-primary);
+}
+
+.prog-tab.active {
+  border-bottom-color: var(--color-primary);
+  color: var(--color-primary);
+  font-weight: 600;
+}
+
+.prog-tab-contador {
+  padding: 1px 6px;
+  border-radius: 10px;
+  background: var(--bg-tertiary);
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.prog-tab.active .prog-tab-contador {
+  background: var(--color-primary);
+  color: #fff;
+}
