@@ -362,6 +362,10 @@ export function AsignacionesActivasModule() {
       porcentajeOcupacionOperacional,
       porcentajeOperatividad,
       autosDisponibles: vehiculosPkgOnSinAsignacion.length, // Solo PKG_ON_BASE SIN asignación
+      // Desglose de Turnos Disponibles por turno: cada PKG_ON sin asignación
+      // aporta 1 turno D y 1 turno N, así D + N = total de la tarjeta.
+      turnosDisponiblesD: vacantesD + vehiculosPkgOnSinAsignacion.length,
+      turnosDisponiblesN: vacantesN + vehiculosPkgOnSinAsignacion.length,
       pkgOnBase: vehiculosPkgOn,
       enUso: vehiculosEnUso
     }
@@ -806,13 +810,23 @@ export function AsignacionesActivasModule() {
           </div>
           <div
             className={`stat-card stat-card-clickable ${activeStatFilter === 'vacantes' ? 'stat-card-active' : ''}`}
-            title={`D: ${stats.vacantesD} | N: ${stats.vacantesN} | PKG_ON: ${stats.autosDisponibles} (x2) - Click para filtrar`}
+            title={`Diurnos: ${stats.turnosDisponiblesD} | Nocturnos: ${stats.turnosDisponiblesN} (incluye ${stats.autosDisponibles} PKG_ON sin asignación, 1 D + 1 N c/u) - Click para filtrar`}
             onClick={() => handleStatCardClick('vacantes')}
           >
             <Clock size={18} className="stat-icon" />
             <div className="stat-content">
               <span className="stat-value">{stats.vacantesD + stats.vacantesN + (stats.autosDisponibles * 2)}</span>
               <span className="stat-label">Turnos Disponibles</span>
+            </div>
+            <div className="asig-turnos-desglose">
+              <span className="asig-turnos-desglose-item">
+                <span className="asig-turno-label asig-label-diurno">D</span>
+                {stats.turnosDisponiblesD}
+              </span>
+              <span className="asig-turnos-desglose-item">
+                <span className="asig-turno-label asig-label-nocturno">N</span>
+                {stats.turnosDisponiblesN}
+              </span>
             </div>
           </div>
           <div 
