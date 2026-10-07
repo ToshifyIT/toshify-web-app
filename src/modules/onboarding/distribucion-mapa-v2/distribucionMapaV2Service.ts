@@ -108,6 +108,8 @@ interface ConductorRow {
   direccion: string | null
   direccion_lat: number | null
   direccion_lng: number | null
+  direccion_pais: string | null
+  direccion_ciudad: string | null
   estado_id: string
   fecha_nacimiento: string | null
   numero_licencia: string | null
@@ -405,7 +407,7 @@ export async function fetchConductoresMapa(
   let query = supabase
     .from('conductores')
     .select(
-      'id, nombres, apellidos, numero_dni, preferencia_turno, zona, direccion, direccion_lat, direccion_lng, estado_id, fecha_nacimiento, numero_licencia, licencia_vencimiento, experiencia_previa, antecedentes_penales, telefono_contacto, fecha_contratacion, conductores_estados(codigo, descripcion)'
+      'id, nombres, apellidos, numero_dni, preferencia_turno, zona, direccion, direccion_lat, direccion_lng, direccion_pais, direccion_ciudad, estado_id, fecha_nacimiento, numero_licencia, licencia_vencimiento, experiencia_previa, antecedentes_penales, telefono_contacto, fecha_contratacion, conductores_estados(codigo, descripcion)'
     )
     .order('apellidos', { ascending: true }) as any
 
@@ -496,7 +498,7 @@ export async function fetchConductoresMapa(
       estadoLead: null,
       turnoLead: null,
       creadoEn: null,
-      ...derivarUbicacion(r.direccion),
+      ...ubicacionDeConductor(r),
       datos,
     }
   })
@@ -573,6 +575,21 @@ async function fetchTurnoLeadPorDni(dnis: string[]): Promise<Map<string, string 
  * texto queda como respaldo. Los dos campos se resuelven por separado a
  * proposito: un lead puede tener la ciudad guardada y el pais no.
  */
+/**
+ * País y ciudad de un conductor: manda lo guardado en la fila (salió de Google
+ * al cargar la dirección, ver sql/conductores_pais_ciudad.sql). El parseo del
+ * texto queda de respaldo para quien todavía no lo tiene.
+ */
+function ubicacionDeConductor(r: ConductorRow): { pais: string | null; ciudad: string | null; ubicacionGuardada: boolean } {
+  const derivada = derivarUbicacion(r.direccion)
+  return {
+    pais: r.direccion_pais || derivada.pais,
+    ciudad: r.direccion_ciudad || derivada.ciudad,
+    // Solo la ciudad guardada cuenta: un país sin ciudad no alcanza para ignorar la celda.
+    ubicacionGuardada: !!r.direccion_ciudad,
+  }
+}
+
 function ubicacionDeLead(r: any): { pais: string | null; ciudad: string | null } {
   const derivada = derivarUbicacion(r.direccion)
   return {

@@ -319,6 +319,10 @@ export function DistribucionMapaV2Module() {
         if (!coordsValidas(e.lat, e.lng)) return e
         const u = ubicacionPorCelda.get(claveCelda(e.lat, e.lng))
         if (!u) return e
+        // Lo guardado en la fila (conductores) manda; la celda solo completa huecos.
+        if (e.ubicacionGuardada) {
+          return { ...e, pais: e.pais ?? u.pais, ciudad: e.ciudad ?? u.ciudad }
+        }
         return { ...e, pais: u.pais ?? e.pais, ciudad: u.ciudad ?? e.ciudad }
       })
     },

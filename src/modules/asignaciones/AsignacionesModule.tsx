@@ -1932,11 +1932,45 @@ export function AsignacionesModule() {
         }
       })
       const tieneCompaneros = companeroIds.size > 0
+      // Problemas no bloqueantes que se muestran al final (antes se ignoraban en silencio)
+      const avisos: string[] = []
 
-      await (supabase as any)
+      // 1. Liberar a los conductores que se confirman de sus OTRAS asignaciones activas.
+      // FIX 2026-10-06 (caso AF541GI 05/10): este paso corría DESPUÉS de marcar "confirmado"
+      // y su error se ignoraba; el UPDATE no se aplicó, la asignación nueva se activó igual
+      // y los conductores quedaron activos en dos asignaciones. Ahora corre primero, en un
+      // solo UPDATE, y si falla se aborta sin haber confirmado nada (se puede reintentar).
+      const { data: filasAConfirmar, error: errFilas } = await (supabase as any)
+        .from('asignaciones_conductores')
+        .select('id, conductor_id')
+        .in('id', conductoresToConfirm)
+      if (errFilas) {
+        throw new Error(`No se pudieron leer los conductores a confirmar. No se confirmó nada, intentá de nuevo. (${errFilas.message})`)
+      }
+      // IDs de los conductores que se confirman en esta acción (no todos)
+      const conductoresConfirmadosAhora: string[] = Array.from(new Set(
+        ((filasAConfirmar as any[]) || []).map((c: any) => c.conductor_id).filter(Boolean)
+      ))
+
+      if (conductoresConfirmadosAhora.length > 0) {
+        const { error: errLiberar } = await (supabase as any)
+          .from('asignaciones_conductores')
+          .update({ estado: 'completado', fecha_fin: ahora })
+          .in('conductor_id', conductoresConfirmadosAhora)
+          .in('estado', ['asignado', 'activo'])
+          .neq('asignacion_id', selectedAsignacion.id)
+        if (errLiberar) {
+          throw new Error(`No se pudo finalizar la asignación anterior de los conductores. No se confirmó nada, intentá de nuevo. (${errLiberar.message})`)
+        }
+      }
+
+      const { error: errConfirmar } = await (supabase as any)
         .from('asignaciones_conductores')
         .update({ confirmado: true, fecha_confirmacion: ahora, fecha_inicio: ahora })
         .in('id', conductoresToConfirm)
+      if (errConfirmar) {
+        throw new Error(`No se pudo confirmar a los conductores. Intentá de nuevo. (${errConfirmar.message})`)
+      }
 
       const { data: allConductores } = await supabase
         .from('asignaciones_conductores')
@@ -1947,23 +1981,6 @@ export function AsignacionesModule() {
       const asignacionYaActiva = selectedAsignacion.estado === 'activa' || selectedAsignacion.estado === 'activo'
       // FIX 2026-05-28: activar asignación con al menos un confirmado (no requiere todos)
       const debeActivar = !asignacionYaActiva
-
-      // IDs de los conductores que se acaban de confirmar (no todos, solo los de esta acción)
-      const conductoresConfirmadosAhora = (allConductores as any)?.filter(
-        (c: any) => conductoresToConfirm.includes(c.id)
-      ).map((c: any) => c.conductor_id) || []
-
-      // 1. Finalizar participación de los conductores CONFIRMADOS AHORA en otras asignaciones activas
-      if (conductoresConfirmadosAhora.length > 0) {
-        for (const conductorId of conductoresConfirmadosAhora) {
-          await (supabase as any)
-            .from('asignaciones_conductores')
-            .update({ estado: 'completado', fecha_fin: ahora })
-            .eq('conductor_id', conductorId)
-            .in('estado', ['asignado', 'activo'])
-            .neq('asignacion_id', selectedAsignacion.id)
-        }
-      }
 
       // Solo ejecutar lógica de activación si la asignación aún no está activa
       let asignacionesVehiculo: any[] | null = null
@@ -1990,11 +2007,14 @@ export function AsignacionesModule() {
         if (asignacionesVehiculo && asignacionesVehiculo.length > 0) {
           const idsACerrar = asignacionesVehiculo.map((a: any) => a.id)
           // Finalizar conductores de esas asignaciones
-          await (supabase as any)
+          const { error: errCerrarConductores } = await (supabase as any)
             .from('asignaciones_conductores')
             .update({ estado: 'completado', fecha_fin: ahora })
             .in('asignacion_id', idsACerrar)
             .in('estado', ['asignado', 'activo'])
+          if (errCerrarConductores) {
+            avisos.push(`No se pudieron finalizar los conductores de la asignación anterior del vehículo (${asignacionesVehiculo.map((a: any) => a.codigo).join(', ')}).`)
+          }
           // Finalizar las asignaciones con traza de conductores
           for (const asigAnterior of asignacionesVehiculo as any[]) {
             const conductoresAnteriores = (asigAnterior.asignaciones_conductores || [])
@@ -2004,7 +2024,7 @@ export function AsignacionesModule() {
               })
             const notasAnterior = asigAnterior.notas || ''
             const traza = `\n[AUTO-CERRADA ${new Date().toLocaleDateString('es-AR')}] Nuevo turno activado para el mismo vehículo.\nConductores al cierre: ${conductoresAnteriores.length > 0 ? conductoresAnteriores.join(', ') : 'ninguno'}`
-            await (supabase as any)
+            const { error: errCerrarAsig } = await (supabase as any)
               .from('asignaciones')
               .update({
                 estado: 'finalizada',
@@ -2013,6 +2033,9 @@ export function AsignacionesModule() {
                 updated_by: profile?.full_name || 'Sistema'
               })
               .eq('id', asigAnterior.id)
+            if (errCerrarAsig) {
+              avisos.push(`No se pudo finalizar la asignación anterior ${asigAnterior.codigo || asigAnterior.id} del vehículo.`)
+            }
           }
         }
 
@@ -2057,10 +2080,13 @@ export function AsignacionesModule() {
         }
 
         // 4. Activar la asignación nueva
-        await (supabase as any)
+        const { error: errActivar } = await (supabase as any)
           .from('asignaciones')
           .update({ estado: 'activa', fecha_inicio: ahora, notas: notasFinales, updated_by: profile?.full_name || 'Sistema' })
           .eq('id', selectedAsignacion.id)
+        if (errActivar) {
+          throw new Error(`Los conductores quedaron confirmados pero la asignación NO se activó. Avisá a sistemas antes de reintentar. (${errActivar.message})`)
+        }
 
         // Actualizar estado del vehículo a EN_USO
         const { data: estadoEnUso } = await supabase
@@ -2080,14 +2106,23 @@ export function AsignacionesModule() {
         if (selectedAsignacion?.motivoDetalle?.cambioVehiculo && selectedAsignacion?.motivoDetalle?.vehiculoCambioId) {
           const vehiculoViejoId = selectedAsignacion.motivoDetalle!.vehiculoCambioId
 
-          // Consultar si el vehículo viejo todavía tiene asignaciones activas
-          const { count: asignacionesActivas } = await supabase
-            .from('asignaciones_conductores')
-            .select('id', { count: 'exact', head: true })
+          // Consultar si el vehículo viejo todavía tiene asignaciones activas con conductores activos.
+          // FIX 2026-10-06: antes consultaba asignaciones_conductores.vehiculo_id (columna que no
+          // existe) y estado 'activo' (el activo real es 'asignado'); el count siempre salía vacío
+          // y el vehículo viejo pasaba a PKG_ON_BASE aunque siguiera en uso.
+          const { data: asigViejasActivas, error: errViejo } = await (supabase as any)
+            .from('asignaciones')
+            .select('id, asignaciones_conductores(estado)')
             .eq('vehiculo_id', vehiculoViejoId)
-            .eq('estado', 'activo')
+            .in('estado', ['activa', 'activo'])
+          const viejoSigueEnUso = ((asigViejasActivas as any[]) || []).some((a: any) =>
+            (a.asignaciones_conductores || []).some((ac: any) => ac.estado === 'asignado' || ac.estado === 'activo')
+          )
+          if (errViejo) {
+            avisos.push('No se pudo verificar si el vehículo anterior sigue en uso; su estado no se modificó.')
+          }
 
-          if ((asignacionesActivas || 0) === 0) {
+          if (!errViejo && !viejoSigueEnUso) {
             // Sin asignaciones activas → ponerlo como disponible
             const { data: estadoPkgOn } = await supabase
               .from('vehiculos_estados')
@@ -2181,7 +2216,13 @@ export function AsignacionesModule() {
       }
 
       // Mensaje según estado
-      if (todosConfirmados) {
+      if (avisos.length > 0) {
+        Swal.fire({
+          icon: 'warning',
+          title: 'Asignación confirmada con avisos',
+          html: `<ul style="text-align:left;margin:0;padding-left:18px">${avisos.map(a => `<li>${a}</li>`).join('')}</ul><p style="margin-top:12px">Avisá a sistemas para corregirlo.</p>`,
+        })
+      } else if (todosConfirmados) {
         showSuccess('Confirmado', 'Todos los conductores han confirmado. La asignación está ACTIVA.')
       } else {
         const cancelados = (allConductores as any)?.filter((c: any) => !c.confirmado).length || 0

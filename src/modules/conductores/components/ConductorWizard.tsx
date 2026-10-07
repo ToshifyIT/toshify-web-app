@@ -20,6 +20,9 @@ interface ConductorFormData {
   direccion: string
   direccion_lat: number | null
   direccion_lng: number | null
+  /** País y ciudad según Google (ver utils/ubicacionGoogle.ts) */
+  direccion_pais?: string | null
+  direccion_ciudad?: string | null
   zona: string
   fecha_nacimiento: string
   estado_civil_id: string
@@ -364,13 +367,17 @@ export function ConductorWizard({
               {errors.direccion && <span className="error-message">{errors.direccion}</span>}
               <AddressAutocomplete
                 value={formData.direccion}
-                onChange={(address, lat, lng, zona) => {
+                onChange={(address, lat, lng, zona, ubicacion) => {
+                  const sinCoordenadas = lat == null || lng == null
                   setFormData({
                     ...formData,
                     direccion: address,
                     direccion_lat: lat ?? null,
                     direccion_lng: lng ?? null,
                     zona: zona || formData.zona,
+                    // Sin coordenadas no hay país/ciudad confiable; sin componentes, se conserva lo que había.
+                    direccion_pais: sinCoordenadas ? null : (ubicacion ? ubicacion.pais : formData.direccion_pais ?? null),
+                    direccion_ciudad: sinCoordenadas ? null : (ubicacion ? ubicacion.ciudad : formData.direccion_ciudad ?? null),
                   })
                 }}
                 disabled={saving}

@@ -15,6 +15,7 @@
 import { supabase } from '../../lib/supabase'
 import { createLeadDriveFolder } from '../../services/driveService'
 import { inferZona, inferZonaFromCoords } from '../../utils/zonaUtils'
+import { ubicacionDeComponentes } from '../../utils/ubicacionGoogle'
 import type { Lead } from '../../types/leads.types'
 
 /**
@@ -213,6 +214,10 @@ export async function convertirLeadAConductor(
     let zonaCalculada = ''
     let latFinal = lead.latitud ?? null
     let lngFinal = lead.longitud ?? null
+    // País y ciudad: se copian del lead (salieron de Google al ubicarlo). Si
+    // acá se geocodifica de nuevo, se toman de esa misma respuesta.
+    let paisFinal: string | null = latFinal != null && lngFinal != null ? (lead.direccion_pais ?? null) : null
+    let ciudadFinal: string | null = latFinal != null && lngFinal != null ? (lead.direccion_ciudad ?? null) : null
 
     if (latFinal != null && lngFinal != null) {
       zonaCalculada = inferZona(lead.direccion || '', latFinal, lngFinal)
@@ -223,7 +228,7 @@ export async function convertirLeadAConductor(
         // cuota o con la clave restringida, el callback de geocode() puede no
         // llamarse NUNCA. Sin este tope la promesa no se resuelve jamas y toda
         // la conversion queda colgada sin error ni forma de salir.
-        const geoResult = await new Promise<{ lat: number; lng: number; address: string } | null>((resolve) => {
+        const geoResult = await new Promise<{ lat: number; lng: number; address: string; pais: string | null; ciudad: string | null } | null>((resolve) => {
           const timeout = setTimeout(() => {
             console.warn('[Lead -> Conductor] Geocoding sin respuesta: se sigue sin coordenadas.')
             resolve(null)
@@ -235,7 +240,8 @@ export async function convertirLeadAConductor(
               resolve({
                 lat: results[0].geometry.location.lat(),
                 lng: results[0].geometry.location.lng(),
-                address: results[0].formatted_address
+                address: results[0].formatted_address,
+                ...ubicacionDeComponentes(results[0].address_components),
               })
             } else {
               resolve(null)
@@ -245,6 +251,8 @@ export async function convertirLeadAConductor(
         if (geoResult) {
           latFinal = geoResult.lat
           lngFinal = geoResult.lng
+          paisFinal = geoResult.pais
+          ciudadFinal = geoResult.ciudad
           zonaCalculada = inferZonaFromCoords(geoResult.lat, geoResult.lng)
         }
       } catch {
@@ -276,6 +284,8 @@ export async function convertirLeadAConductor(
       fecha_nacimiento: lead.fecha_de_nacimiento || null,
       direccion_lat: latFinal,
       direccion_lng: lngFinal,
+      direccion_pais: paisFinal,
+      direccion_ciudad: ciudadFinal,
       sede_id: lead.sede_id || sedeFallbackId || null,
       url_documentacion: lead.url_folder || null,
       intercom_id: lead.id_lead || null,
@@ -309,6 +319,14 @@ export async function convertirLeadAConductor(
         if (isEmpty && leadHasValue) {
           updateData[key] = leadValue
         }
+      }
+
+      // País/ciudad describen el punto del LEAD: solo se copian si en esta fusión
+      // también se copian sus coordenadas. Si el conductor ya tenía su propio
+      // punto, se completan después con el botón de Conductores.
+      if (!('direccion_lat' in updateData)) {
+        delete updateData.direccion_pais
+        delete updateData.direccion_ciudad
       }
 
       if (Object.keys(updateData).length > 0) {
