@@ -5460,7 +5460,16 @@ function ModalDetalles({
     <div className="modal-overlay" onClick={() => setShowDetailsModal(false)}>
       <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '700px' }}>
         <div className="modal-header">
-          <h2>Detalles del Conductor</h2>
+          <div className="cond-detalle-header-titulo">
+            <h2>Detalles del Conductor</h2>
+            {/* Nombre fijo en la cabecera: sigue visible al hacer scroll en el detalle */}
+            <div className="cond-detalle-header-nombre">
+              {`${selectedConductor.nombres || ''} ${selectedConductor.apellidos || ''}`.trim() || 'Sin nombre'}
+              {selectedConductor.numero_dni && (
+                <span className="cond-detalle-header-dni">DNI {selectedConductor.numero_dni}</span>
+              )}
+            </div>
+          </div>
           <button
             className="modal-close"
             onClick={() => setShowDetailsModal(false)}
