@@ -636,7 +636,7 @@ export function LeadWizard({ formData, setFormData, onSave, onCancel, saving = f
                   <option value="">Seleccionar</option>
                   {/* Si el lead tiene un guía que no está en la lista, se conserva como opción */}
                   {formData.entrevistador_asignado &&
-                    !guias.some(g => g.toLowerCase() === formData.entrevistador_asignado.trim().toLowerCase()) && (
+                    !guias.some(g => g.toLowerCase() === (formData.entrevistador_asignado || '').trim().toLowerCase()) && (
                       <option value={formData.entrevistador_asignado}>{formData.entrevistador_asignado}</option>
                     )}
                   {guias.map(g => (
