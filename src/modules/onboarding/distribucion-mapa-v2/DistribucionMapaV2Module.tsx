@@ -77,6 +77,8 @@ import type {
   ParSugerido,
   Radar,
 } from './types'
+import type { PersonaPrecargaPar, PrecargaParMapa } from '../../../types/programacionPrecarga.types'
+import { guardarPrecargaPar } from '../../../types/programacionPrecarga.types'
 import { FiltrosSidebar } from './components/FiltrosSidebar'
 import { contarFiltrosActivos, creadoEnRango, filtrosIniciales, type FiltrosV2 } from './components/filtrosOpciones'
 import { SIN_UBICACION } from './ubicacion'
@@ -355,6 +357,10 @@ export function DistribucionMapaV2Module() {
         if (!coordsValidas(e.lat, e.lng)) return e
         const u = ubicacionPorCelda.get(claveCelda(e.lat, e.lng))
         if (!u) return e
+        // Lo guardado en la fila (conductores) manda; la celda solo completa huecos.
+        if (e.ubicacionGuardada) {
+          return { ...e, pais: e.pais ?? u.pais, ciudad: e.ciudad ?? u.ciudad }
+        }
         return { ...e, pais: u.pais ?? e.pais, ciudad: u.ciudad ?? e.ciudad }
       })
     },
@@ -1001,14 +1007,49 @@ export function DistribucionMapaV2Module() {
     )
   }, [])
 
+  /**
+   * Convierte una entidad del mapa en el minimo que necesita el wizard de
+   * programaciones para llenar un slot sin volver a consultar la BD.
+   */
+  const aPersonaPrecarga = useCallback((e: EntidadMapa): PersonaPrecargaPar => ({
+    id: e.id,
+    tipo: e.tipo,
+    nombre: e.nombre,
+    dni: e.documento,
+    zona: e.zona,
+    turno: e.turnoEfectivo || 'SIN_PREFERENCIA',
+    patenteAsignacion: e.patenteAsignacion,
+  }), [])
+
   const programarPar = useCallback(
     (p: ParSugerido) => {
+      // El copiado al portapapeles se mantiene: sirve para pegar el par en
+      // WhatsApp o en una planilla, independientemente de la programacion.
       copiarPar(p)
-      // `abrirNueva` le pide a Programación que abra el wizard de alta apenas
-      // monta, así no hay que buscar el botón después de saltar de pantalla.
-      navigate('/onboarding/programacion', { state: { abrirNueva: true } })
+      const precargaPar: PrecargaParMapa = {
+        a: aPersonaPrecarga(p.a),
+        b: aPersonaPrecarga(p.b),
+        tiempoMinutos: Number.isFinite(p.tiempoMinutos) ? p.tiempoMinutos : null,
+      }
+      // Se abre en una PESTANIA NUEVA para no perder el estado del mapa
+      // (filtros, sugerencias, zoom). Como `location.state` no cruza un
+      // window.open, el par se deja en localStorage y viaja un id por la URL.
+      const idPrecarga = guardarPrecargaPar(precargaPar)
+      if (idPrecarga) {
+        const url = `${window.location.origin}/onboarding/programacion-v2?precarga=${idPrecarga}`
+        const pestania = window.open(url, '_blank')
+        if (pestania) {
+          // Same-origin: cortar el vinculo igual, no hace falta el opener.
+          pestania.opener = null
+          setToast('Programacion abierta en una pestania nueva')
+          return
+        }
+      }
+      // Sin pestania nueva (bloqueador de pop-ups o sin localStorage) se
+      // navega en la misma, que es el comportamiento anterior.
+      navigate('/onboarding/programacion-v2', { state: { abrirNueva: true, precargaPar } })
     },
-    [copiarPar, navigate]
+    [copiarPar, navigate, aPersonaPrecarga]
   )
 
   // ---------- Fichas ----------

@@ -261,3 +261,14 @@
   background: linear-gradient(90deg, #1e1e1e 25%, #2a2a2a 50%, #1e1e1e 75%);
   background-size: 200% 100%;
 }
+
+/* Linea secundaria del overlay: un aviso discreto bajo el mensaje principal,
+   para procesos que tardan y en los que el usuario no debe cerrar la pantalla. */
+.loading-submessage {
+  margin: 6px 0 0;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.4;
+  text-align: center;
+  opacity: 0.75;
+}

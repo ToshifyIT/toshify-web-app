@@ -35,13 +35,33 @@ export interface Lead {
   sede?: string | null
   sede_id?: string | null
   sede_vehiculo?: string | null
+  /**
+   * Ubicacion OFICIAL del lead (regla 2026-10-05). Todo lo que ubica al lead
+   * escribe y lee de aca: mapa del modulo Leads, zona restringida,
+   * Distribucion Mapa, Programacion, dashboards.
+   * Origen del punto en `direccion_geocode_estado`: 'manual' (pin del
+   * formulario), 'ok' | 'aproximado' (calculado desde la direccion),
+   * 'sin_resultado' (Google no la ubico), null (externo, p. ej. Excel).
+   */
   latitud?: number | null
   longitud?: number | null
-  // Coordenadas geocodificadas desde el texto de la dirección (independientes de latitud/longitud, que vienen de fuente externa)
+  /**
+   * @deprecated Desde 2026-10-05 no se escriben ni se leen en el modulo Leads;
+   * se conservan como respaldo. Programacion y dashboards SQL solo las usan
+   * como fallback cuando latitud/longitud estan vacias.
+   */
   direccion_latitud?: number | null
   direccion_longitud?: number | null
   direccion_geocode_estado?: string | null
   direccion_geocode_fecha?: string | null
+  /**
+   * Pais y ciudad del `address_components` de Google, guardados al
+   * geocodificar la direccion. El mapa los prefiere sobre el parseo del texto
+   * de `direccion`, que falla en la mayoria de los leads (ver
+   * sql/leads_pais_ciudad_columns.sql).
+   */
+  direccion_pais?: string | null
+  direccion_ciudad?: string | null
   estado_direccion?: string | null
   clasificacion_domicilio?: string | null
   country?: string | null

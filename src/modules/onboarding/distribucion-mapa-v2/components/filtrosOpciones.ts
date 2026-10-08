@@ -12,7 +12,7 @@ export type SegmentoV2 = 'conductores' | 'leads' | 'ambos'
 /**
  * Requisitos duros que puede exigir el operador. SÓLO conductores: dependen de
  * `licencia_vencimiento` y de la zona, datos que en el lead no existen o que
- * ya se aplicaron antes de llegar al mapa (ver `TIENE_LICENCIA_OPCIONES`).
+ * ya se aplicaron antes de llegar al mapa (ver `REQUISITOS_LEAD`).
  */
 export const REQUISITOS = [
   { value: 'licencia_vigente', label: 'Licencia vigente' },
@@ -20,29 +20,22 @@ export const REQUISITOS = [
 ] as const
 
 /**
- * "¿Tiene licencia?" del lead: es la columna `licencia`, un Sí/No cargado a
- * mano (la misma del módulo Leads), no la vigencia calculada por fecha.
+ * Requisitos del lead, como dos checkboxes de "tiene / no tiene".
  *
- * Sólo se ofrecen las dos respuestas reales. Los leads a los que todavía no se
- * les cargó el dato no son una opción elegible: aparecen únicamente cuando el
- * filtro está sin selección, que es "todos".
+ * Tildado = sólo los que TIENEN ese dato en sí. Sin tildar = NO filtra: pasan
+ * los que lo tienen, los que no, y los que todavía no tienen el dato cargado.
+ * Es el mismo criterio que el resto del sidebar ("sin selección = todos").
+ *
+ * Por debajo siguen siendo los filtros `tieneLicencia` ('si' | 'no') y
+ * `antecedentes` ('si' | 'no' | 'sin_dato'), que admiten más valores; esta
+ * vista sólo expone el 'si' de cada uno. Los matchers del módulo no cambian.
  */
-export const TIENE_LICENCIA_OPCIONES = [
-  { value: 'si', label: 'Sí tiene licencia' },
-  { value: 'no', label: 'No tiene licencia' },
-]
+export const REQUISITOS_LEAD = [
+  { campo: 'tieneLicencia', label: 'Tiene licencia' },
+  { campo: 'antecedentes', label: 'Tiene antecedentes' },
+] as const
 
-/**
- * Antecedentes penales. Salió de "Requisitos" y pasó a ser su propio filtro
- * porque el dato tiene TRES estados, no dos: sí, no, y sin cargar. Con un solo
- * checkbox ("Sin antecedentes") no se podía pedir lo contrario, ni distinguir
- * a quien no tiene antecedentes de quien todavía no fue verificado.
- */
-export const ANTECEDENTES_OPCIONES = [
-  { value: 'no', label: 'No tiene antecedentes' },
-  { value: 'si', label: 'Sí tiene antecedentes' },
-  { value: 'sin_dato', label: 'Sin dato' },
-]
+export type CampoRequisitoLead = (typeof REQUISITOS_LEAD)[number]['campo']
 
 export const TURNOS: Array<{ value: TurnoEfectivo; label: string }> = [
   { value: 'DIURNO', label: LABEL_TURNO.DIURNO },

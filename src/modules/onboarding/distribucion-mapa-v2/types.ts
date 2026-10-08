@@ -72,6 +72,11 @@ export interface EntidadMapa {
   /** País y ciudad derivados del texto de `direccion` (ver ubicacion.ts). */
   pais: string | null
   ciudad: string | null
+  /**
+   * true si país/ciudad vienen guardados en la fila (salieron de Google al
+   * ubicar la dirección). En ese caso el caché por celda no los pisa.
+   */
+  ubicacionGuardada?: boolean
 
   // --- Conductor ---
   preferenciaTurno: string | null

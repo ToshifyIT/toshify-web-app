@@ -5,6 +5,12 @@ interface LoadingOverlayProps {
   show: boolean
   /** Texto a mostrar debajo del spinner */
   message?: string
+  /**
+   * Linea secundaria, mas chica y apagada, debajo del mensaje. Para avisos del
+   * tipo "esperar sin cerrar la pantalla" en procesos que tardan.
+   * Opcional: sin pasarla, el overlay se ve exactamente como antes.
+   */
+  submessage?: string
   /** Tamaño del spinner: 'sm' | 'md' | 'lg' */
   size?: 'sm' | 'md' | 'lg'
   /** Si es true, bloquea toda la pantalla. Si es false, solo el contenedor padre */
@@ -16,6 +22,7 @@ interface LoadingOverlayProps {
 export function LoadingOverlay({ 
   show, 
   message = 'Cargando...', 
+  submessage,
   size = 'md',
   fullScreen = true,
   progress
@@ -48,6 +55,8 @@ export function LoadingOverlay({
         </div>
         
         {message && <p className="loading-message">{message}</p>}
+
+        {submessage && <p className="loading-submessage">{submessage}</p>}
         
         {progress !== undefined && (
           <div className="progress-container">

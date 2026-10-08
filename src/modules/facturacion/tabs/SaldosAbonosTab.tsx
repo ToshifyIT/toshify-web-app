@@ -35,7 +35,7 @@ import { format, startOfWeek, endOfWeek, parseISO, addWeeks, getISOWeek, getYear
 import { VerLogsButton } from '../../../components/ui/VerLogsButton'
 import { LoadingOverlay } from '../../../components/ui/LoadingOverlay'
 import type { SaldoConductor } from '../../../types/facturacion.types'
-import { insertControlSaldo } from '../../../services/controlSaldosService'
+import { aplicarMovimientoSaldo, insertControlSaldo } from '../../../services/controlSaldosService'
 import { formatNombreCompleto } from '../../../utils/conductorUtils'
 
 interface ConductorBasico {
@@ -712,17 +712,13 @@ export function SaldosAbonosTab() {
         .eq('conductor_id', formValues.conductorId)
         .single()
 
+      let saldoResultante = formValues.saldo
       if (saldoExistente) {
         // Actualizar saldo existente (sumar al saldo actual)
-        const nuevoSaldo = (saldoExistente.saldo_actual || 0) + formValues.saldo
-
-        const { error: errorUpdate } = await (supabase.from('saldos_conductores') as any)
-          .update({
-            saldo_actual: nuevoSaldo,
-            ultima_actualizacion: new Date().toISOString()
-          })
-          .eq('id', saldoExistente.id)
-        if (errorUpdate) throw errorUpdate
+        saldoResultante = await aplicarMovimientoSaldo({
+          saldoId: saldoExistente.id,
+          delta: formValues.saldo,
+        })
       } else {
         // Crear nuevo registro
 
@@ -754,9 +750,6 @@ export function SaldosAbonosTab() {
       })
 
       // Registrar movimiento en kardex (control_saldos)
-      const saldoResultante = saldoExistente
-        ? (saldoExistente.saldo_actual || 0) + formValues.saldo
-        : formValues.saldo
       const semIni = formValues.fraccionado ? formValues.semanaInicio : getWeekNumber(new Date().toISOString().split('T')[0])
       const anioIni = formValues.fraccionado ? formValues.anioInicio : new Date().getFullYear()
       await insertControlSaldo({
@@ -1173,13 +1166,8 @@ export function SaldosAbonosTab() {
 
       if (errorAbono) throw errorAbono
 
-      const nuevoSaldo = saldo.saldo_actual + montoFinal
-
-      const { error: errorUpdate } = await (supabase.from('saldos_conductores') as any)
-        .update({ saldo_actual: nuevoSaldo, ultima_actualizacion: new Date().toISOString() })
-        .eq('id', saldo.id)
-
-      if (errorUpdate) throw errorUpdate
+      // Se calcula sobre el saldo real de la BD (no el de pantalla)
+      const nuevoSaldo = await aplicarMovimientoSaldo({ saldoId: saldo.id, delta: montoFinal })
 
       // Registrar movimiento en kardex (control_saldos)
       await insertControlSaldo({
@@ -1283,21 +1271,14 @@ export function SaldosAbonosTab() {
 
       if (errorAbono) throw errorAbono
 
-      const nuevoSaldo = saldo.saldo_actual + formValues.monto
+      // Se calcula sobre el saldo real de la BD (no el de pantalla) para no pisar
+      // movimientos registrados desde otra pestana/usuario.
       // Si el nuevo saldo >= 0 (sin deuda), resetear dias_mora a 0
-      const updateData: Record<string, unknown> = {
-        saldo_actual: nuevoSaldo,
-        ultima_actualizacion: new Date().toISOString()
-      }
-      if (nuevoSaldo >= 0) {
-        updateData.dias_mora = 0
-      }
-
-      const { error: errorUpdate } = await (supabase.from('saldos_conductores') as any)
-        .update(updateData)
-        .eq('id', saldo.id)
-
-      if (errorUpdate) throw errorUpdate
+      const nuevoSaldo = await aplicarMovimientoSaldo({
+        saldoId: saldo.id,
+        delta: formValues.monto,
+        camposExtra: (saldoResultante) => (saldoResultante >= 0 ? { dias_mora: 0 } : {}),
+      })
 
       // Registrar movimiento en kardex (control_saldos)
       const semPago = getWeekNumber(new Date().toISOString().split('T')[0])

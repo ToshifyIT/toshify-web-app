@@ -18,11 +18,10 @@ import { Acordeon, CheckRow, Chip, GrupoTitulo, Hint } from './ui'
 import { IconoEntidad } from './iconos'
 import { getLeadEstadoColor } from '../../../leads/leadEstadoColors'
 import {
-  ANTECEDENTES_OPCIONES,
   ASIGNACION_OPCIONES,
   COMPANERO_OPCIONES,
   REQUISITOS,
-  TIENE_LICENCIA_OPCIONES,
+  REQUISITOS_LEAD,
   TURNOS,
   ZONAS,
   resumenRangoCreacion,
@@ -117,6 +116,15 @@ export function FiltrosSidebar({
   // sentido mientras no se haya acotado a países distintos de Argentina.
   const mostrarZonaOperativa =
     filtros.paises.size === 0 || filtros.paises.has('Argentina')
+
+  // Requisitos de lead: cada uno es un checkbox de "solo los que tienen".
+  // Por debajo son los sets `tieneLicencia` y `antecedentes`, de los que esta
+  // vista solo usa el valor 'si'.
+  const requisitoLeadActivo = (campo: 'tieneLicencia' | 'antecedentes') =>
+    filtros[campo].has('si')
+  const requisitosLeadActivos = REQUISITOS_LEAD.filter((r) =>
+    requisitoLeadActivo(r.campo)
+  ).length
 
   const verConductores = filtros.segmento !== 'leads'
   const verLeads = filtros.segmento !== 'conductores'
@@ -452,49 +460,34 @@ export function FiltrosSidebar({
               </Hint>
             </Acordeon>
 
-            {/* Reemplaza al viejo bloque "Requisitos" de leads, que tenía un
-                único checkbox ("Licencia vigente") calculado desde la fecha de
-                vencimiento. Acá se pregunta por el dato que el operador
-                realmente carga: la columna `licencia`, Sí/No. El otro requisito
-                ("Fuera de zona restringida") nunca aplicó a leads, porque los
-                de zona restringida no entran al módulo (ver fetchLeadsMapa). */}
+            {/* Requisitos del lead. Antes eran dos acordeones separados
+                ("Tiene licencia" con Sí/No y "Antecedentes penales" con
+                No/Sí/Sin dato). Se unificaron en un solo bloque de dos
+                checkboxes de "sólo los que tienen", que es como el operador
+                piensa un requisito. El estado por debajo no cambió: siguen
+                siendo los sets `tieneLicencia` y `antecedentes`, y los matchers
+                del módulo quedaron igual. */}
             <Acordeon
-              titulo="Tiene licencia"
-              resumen={resumen(filtros.tieneLicencia, 'Todos')}
+              titulo="Requisitos"
+              resumen={requisitosLeadActivos === 0 ? 'Todos' : `${requisitosLeadActivos} activo${requisitosLeadActivos > 1 ? 's' : ''}`}
             >
-              {TIENE_LICENCIA_OPCIONES.map((o) => (
+              {REQUISITOS_LEAD.map((r) => (
                 <CheckRow
-                  key={o.value}
-                  label={o.label}
-                  checked={filtros.tieneLicencia.has(o.value)}
+                  key={r.campo}
+                  label={r.label}
+                  checked={requisitoLeadActivo(r.campo)}
                   onChange={() =>
-                    onChange({ tieneLicencia: alternar(filtros.tieneLicencia, o.value) })
+                    onChange({
+                      [r.campo]: requisitoLeadActivo(r.campo)
+                        ? new Set<string>()
+                        : new Set<string>(['si']),
+                    })
                   }
                 />
               ))}
               <Hint>
-                Sin selección = todos. Los leads a los que todavía no se les cargó el
-                dato sólo aparecen así.
-              </Hint>
-            </Acordeon>
-
-            <Acordeon
-              titulo="Antecedentes penales"
-              resumen={resumen(filtros.antecedentes, 'Todos')}
-            >
-              {ANTECEDENTES_OPCIONES.map((a) => (
-                <CheckRow
-                  key={a.value}
-                  label={a.label}
-                  checked={filtros.antecedentes.has(a.value)}
-                  onChange={() =>
-                    onChange({ antecedentes: alternar(filtros.antecedentes, a.value) })
-                  }
-                />
-              ))}
-              <Hint>
-                Sin selección = todos. “Sin dato” son los leads a los que todavía no se
-                les cargó el resultado.
+                Tildado = sólo los que tienen. Sin tildar no filtra: aparecen los que
+                tienen, los que no, y los que todavía no tienen el dato cargado.
               </Hint>
             </Acordeon>
           </div>

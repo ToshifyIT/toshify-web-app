@@ -30,7 +30,10 @@ import { formatPreferencia, getPreferenciaBadge, PROGRAMACION_ESTADO_LABELS } fr
 import { DISTANCE_MATRIX_HABILITADO, GOOGLE_MAPS_API_KEY, GOOGLE_MAPS_SCRIPT_URL } from '../../../../lib/googleMaps'
 import { useGruposFlota } from '../../../../hooks/useGruposFlota'
 import { cargarConceptosTarifa, getEtiquetaTarifa, type MapaConceptosTarifa } from '../../tarifaConceptos'
-import { enRangoDiasART } from '../../../../utils/fechaArgentina'
+import { enRangoDiasART, fechaISOART } from '../../../../utils/fechaArgentina'
+import { repartirTurnosDelPar } from '../../../../types/programacionPrecarga.types'
+import type { PrecargaParMapa, PersonaPrecargaPar } from '../../../../types/programacionPrecarga.types'
+import { vehiculosActivosDeConductores, type VehiculoActivoDeConductor } from '../vehiculoActivoService'
 import { calcularMinutosEntre, type Coordenada } from '../distanciaParService'
 
 /**
@@ -145,13 +148,67 @@ type EditData = {
   [key: string]: any
 }
 
+/**
+ * Boton para alternar entre "solo el par del mapa" y la lista completa.
+ *
+ * Vive en el scope del MODULO, no dentro del render del wizard: un componente
+ * declarado adentro cambia de identidad en cada render y React lo desmonta y
+ * lo vuelve a montar, lo que entre otras cosas hace perder el foco.
+ */
+function ToggleSoloDelPar({ soloDelPar, onToggle }: { soloDelPar: boolean; onToggle: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onToggle}
+      style={{ padding: '2px 8px', fontSize: '10px', fontWeight: 600, background: 'transparent', color: 'var(--text-secondary)', border: '1px solid var(--border-primary)', borderRadius: '6px', cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}
+    >
+      {soloDelPar ? 'Ver todos' : 'Ver solo el par'}
+    </button>
+  )
+}
+
+/** Hora de la cita cuando la programacion entra desde el mapa. */
+const HORA_PRECARGA_MAPA = '09:00'
+
+/**
+ * Fecha de MANIANA en Argentina, en formato YYYY-MM-DD.
+ *
+ * No se usa `new Date().toISOString()` directo porque eso es UTC: entre las
+ * 21:00 y las 00:00 de Argentina ya devuelve el dia siguiente, y "maniana" se
+ * correria un dia. `fechaISOART` resuelve el dia argentino real y recien ahi
+ * se le suma 1.
+ */
+function fechaManianaART(): string {
+  const partes = (fechaISOART(new Date().toISOString()) || '').split('-').map(Number)
+  if (partes.length !== 3 || partes.some(n => Number.isNaN(n))) {
+    // Fallback defensivo: si el formateador fallara, al menos no rompe el alta.
+    const d = new Date()
+    d.setDate(d.getDate() + 1)
+    return d.toISOString().split('T')[0]
+  }
+  const [anio, mes, dia] = partes
+  const dt = new Date(Date.UTC(anio, mes - 1, dia))
+  dt.setUTCDate(dt.getUTCDate() + 1)
+  return dt.toISOString().split('T')[0]
+}
+
 interface Props {
   onClose: () => void
   onSuccess: () => void
   editData?: EditData | null
+  /**
+   * Par sugerido que llega desde "Distribucion en mapa v2" al tocar
+   * "Programar entrega". Cuando viene:
+   *  - la sede ya esta resuelta por contexto y el paso 0 se saltea,
+   *  - el paso 1 ofrece SOLO Turno y Cambio de Vehiculo,
+   *  - los dos turnos quedan ocupados por el par,
+   *  - la cita arranca en maniana a las 09:00 de Argentina.
+   * Es solo precarga: todo se puede cambiar a mano antes de guardar.
+   */
+  precarga?: PrecargaParMapa | null
 }
 
-export function ProgramacionAssignmentWizardV2({ onClose, onSuccess, editData }: Props) {
+export function ProgramacionAssignmentWizardV2({ onClose, onSuccess, editData, precarga }: Props) {
   const { user, profile } = useAuth()
   const { sedeActualId, aplicarFiltroSede, sedeUsuario, sedes } = useSede()
   const { grupos: gruposFlota } = useGruposFlota()
@@ -179,7 +236,24 @@ export function ProgramacionAssignmentWizardV2({ onClose, onSuccess, editData }:
     })()
     return () => { cancelado = true }
   }, [editData?.id])
-  const [step, setStep] = useState(0)
+  // Con un par del mapa la sede ya viene del contexto, asi que el paso 0
+  // (Sede) se saltea. Si no hubiera sede activa se entra igual por el 0.
+  const sedeDeContexto = sedeActualId || sedeUsuario?.id || ''
+  const esPrecargaMapa = !!precarga && !editData
+  const [step, setStep] = useState(() => (esPrecargaMapa && sedeDeContexto ? 1 : 0))
+  /**
+   * Turnos que ocupo el par del mapa.
+   *
+   * `loadConductoresDelVehiculo` lo consulta para NO pisarlos con los
+   * ocupantes del vehiculo elegido: el par que el operador vino a programar
+   * tiene prioridad sobre el ocupante actual del auto.
+   */
+  const slotsDelMapaRef = useRef<{ diurno: boolean; nocturno: boolean }>({ diurno: false, nocturno: false })
+  /** Vehiculos con asignacion activa de cada miembro del par (solo en Cambio). */
+  const [vehiculosDelPar, setVehiculosDelPar] = useState<Array<{ persona: PersonaPrecargaPar; vehiculo: VehiculoActivoDeConductor }>>([])
+  const [cargandoVehiculosPar, setCargandoVehiculosPar] = useState(false)
+  /** true si el operador dio vuelta la sugerencia de diurno/nocturno. */
+  const [parInvertido, setParInvertido] = useState(false)
   const [vehicles, setVehicles] = useState<Vehicle[]>([])
   // Conceptos de alquiler: alimentan las etiquetas del selector de Tarifa.
   const [conceptosTarifa, setConceptosTarifa] = useState<MapaConceptosTarifa>({})
@@ -190,6 +264,14 @@ export function ProgramacionAssignmentWizardV2({ onClose, onSuccess, editData }:
   const [loadingMensaje, setLoadingMensaje] = useState('Cargando...')
   const isSubmittingRef = useRef(false)
   const [loadingVehicles, setLoadingVehicles] = useState(true)
+  /**
+   * Motivo por el que fallo la carga de vehiculos, si fallo.
+   *
+   * Antes el catch se tragaba el error y la lista quedaba vacia: en pantalla
+   * se leia "No hay vehiculos disponibles", que es indistinguible de una sede
+   * sin autos. Con esto el problema real queda a la vista.
+   */
+  const [errorVehiculos, setErrorVehiculos] = useState<string | null>(null)
   const [loadingConductores, setLoadingConductores] = useState(true)
   const [vehicleSearch, setVehicleSearch] = useState('')
   const [vehicleAvailabilityFilter, setVehicleAvailabilityFilter] = useState<string>('')
@@ -343,8 +425,10 @@ export function ProgramacionAssignmentWizardV2({ onClose, onSuccess, editData }:
     lead_diurno_id: '',
     lead_nocturno_id: '',
     lead_cargo_id: '',
-    fecha_cita: new Date().toISOString().split('T')[0],
-    hora_cita: '10:00',
+    // Desde el mapa la cita arranca en maniana 09:00 (hora de Argentina).
+    // Dando de alta a mano se mantiene el default historico: hoy 10:00.
+    fecha_cita: (precarga && !editData) ? fechaManianaART() : new Date().toISOString().split('T')[0],
+    hora_cita: (precarga && !editData) ? HORA_PRECARGA_MAPA : '10:00',
     // Campos A CARGO
     tipo_candidato_cargo: '',
     tipo_asignacion_cargo: '',
@@ -373,6 +457,24 @@ export function ProgramacionAssignmentWizardV2({ onClose, onSuccess, editData }:
     observaciones: ''
     }
   })
+
+  /**
+   * La sede puede no estar resuelta al montar: en una PESTANIA NUEVA el
+   * SedeContext todavia esta cargando cuando el wizard aparece, asi que
+   * `sede_id` arranca vacio y el wizard se queda en el paso 0.
+   *
+   * Cuando la sede llega, se completa y se salta al paso 1, que es lo que la
+   * precarga del mapa daba por hecho. Corre UNA sola vez: si despues el
+   * operador vuelve al paso 0 y elige otra sede, no se la pisa.
+   */
+  const sedeAutocompletadaRef = useRef(false)
+  useEffect(() => {
+    if (!esPrecargaMapa || sedeAutocompletadaRef.current) return
+    if (formData.sede_id || !sedeDeContexto) return
+    sedeAutocompletadaRef.current = true
+    setFormData(prev => ({ ...prev, sede_id: sedeDeContexto }))
+    setStep(prev => (prev === 0 ? 1 : prev))
+  }, [esPrecargaMapa, sedeDeContexto])
 
   // Conceptos de alquiler para las etiquetas del selector de Tarifa (una sola vez).
   useEffect(() => {
@@ -503,8 +605,11 @@ export function ProgramacionAssignmentWizardV2({ onClose, onSuccess, editData }:
         })
 
         setVehicles(vehiculosFinales)
-      } catch {
-        // silently ignored
+        setErrorVehiculos(null)
+      } catch (err) {
+        console.error('[ProgramacionV2] No se pudieron cargar los vehiculos:', err)
+        setVehicles([])
+        setErrorVehiculos(err instanceof Error ? err.message : 'Error desconocido')
       } finally {
         setLoadingVehicles(false)
       }
@@ -954,6 +1059,168 @@ export function ProgramacionAssignmentWizardV2({ onClose, onSuccess, editData }:
     }
   }
 
+  /**
+   * Pone al par del mapa en los dos turnos.
+   *
+   * Un miembro que es LEAD deja `conductor_<turno>_id` vacio y llena
+   * `lead_<turno>_id`, igual que el drag & drop del paso 3. Un CONDUCTOR llena
+   * el id y limpia el lead. Nombre, DNI y zona vienen en el payload, asi que
+   * no hay que esperar a que terminen de cargar las listas del paso 3.
+   */
+  const aplicarParASlots = useCallback((par: PrecargaParMapa, invertir: boolean) => {
+    const reparto = repartirTurnosDelPar(par.a, par.b)
+    const diurno = invertir ? reparto.nocturno : reparto.diurno
+    const nocturno = invertir ? reparto.diurno : reparto.nocturno
+    const minutos: number | '' = typeof par.tiempoMinutos === 'number' ? par.tiempoMinutos : ''
+    // Un LEAD nunca pasa por `autoDetectarTipos` (esa funcion mira historial en
+    // `conductores`), asi que sus defaults de asignacion y documento se fijan
+    // aca, igual que hace `asignarLeadASlot` con el drag & drop del paso 3.
+    const defLead = getDefaultsPorCandidato('lead')
+
+    setFormData(prev => ({
+      ...prev,
+      conductor_diurno_id: diurno.tipo === 'conductor' ? diurno.id : '',
+      conductor_diurno_nombre: diurno.nombre,
+      conductor_diurno_dni: diurno.dni || '',
+      lead_diurno_id: diurno.tipo === 'lead' ? diurno.id : '',
+      tipo_candidato_diurno: diurno.tipo === 'lead' ? 'lead' : '',
+      tipo_asignacion_diurno: diurno.tipo === 'lead' ? defLead.asignacion : '',
+      documento_diurno: diurno.tipo === 'lead' ? defLead.documento : '',
+      zona_diurno: diurno.zona || prev.zona_diurno,
+      distancia_diurno: minutos,
+
+      conductor_nocturno_id: nocturno.tipo === 'conductor' ? nocturno.id : '',
+      conductor_nocturno_nombre: nocturno.nombre,
+      conductor_nocturno_dni: nocturno.dni || '',
+      lead_nocturno_id: nocturno.tipo === 'lead' ? nocturno.id : '',
+      tipo_candidato_nocturno: nocturno.tipo === 'lead' ? 'lead' : '',
+      tipo_asignacion_nocturno: nocturno.tipo === 'lead' ? defLead.asignacion : '',
+      documento_nocturno: nocturno.tipo === 'lead' ? defLead.documento : '',
+      zona_nocturno: nocturno.zona || prev.zona_nocturno,
+      distancia_nocturno: minutos,
+    }))
+    slotsDelMapaRef.current = { diurno: true, nocturno: true }
+  }, [])
+
+  /**
+   * Un lead nunca tiene vehiculo asignado. Si los DOS miembros del par son
+   * leads, un "Cambio de Vehiculo" no tiene vehiculo de origen posible, asi
+   * que esa opcion se deshabilita con el motivo a la vista.
+   */
+  const cambioImposiblePorLeads = !!precarga && precarga.a.tipo === 'lead' && precarga.b.tipo === 'lead'
+
+  /**
+   * Con un par traido del mapa, las dos columnas del paso 3 se acotan a esas
+   * dos personas: el operador ya eligio con quienes quiere armar la
+   * programacion, mostrarle los 8000 leads restantes solo agrega ruido.
+   * El toggle "Ver todos" abre las listas completas por si hay que cambiar a
+   * alguien sin salir del wizard.
+   */
+  const [soloDelPar, setSoloDelPar] = useState(true)
+  const idsDelPar = useMemo(
+    () => new Set(precarga ? [precarga.a.id, precarga.b.id] : []),
+    [precarga]
+  )
+  const limitarAlPar = esPrecargaMapa && soloDelPar
+
+  /** Como quedaria el reparto de turnos del par, con el invertido aplicado. */
+  const previewPar = useMemo(() => {
+    if (!precarga) return null
+    const r = repartirTurnosDelPar(precarga.a, precarga.b)
+    return parInvertido ? { diurno: r.nocturno, nocturno: r.diurno } : r
+  }, [precarga, parInvertido])
+
+  /**
+   * Toma uno de los vehiculos del par y lo pone como vehiculo A CAMBIAR
+   * (origen) o como DESTINO. Reusa exactamente la misma logica que las dos
+   * columnas del paso 2, incluido el propietario, para que elegirlo por el
+   * atajo y elegirlo de la lista den el mismo resultado.
+   *
+   * Nunca deja el mismo auto en los dos roles: si ya estaba en el otro, ese
+   * otro se limpia.
+   */
+  const usarVehiculoDelPar = useCallback((vehiculoId: string, rol: 'origen' | 'destino') => {
+    const vehicle = vehicles.find(v => v.id === vehiculoId)
+    if (!vehicle) {
+      Swal.fire({
+        icon: 'warning',
+        title: 'Vehiculo fuera de la lista',
+        text: 'Ese vehiculo no aparece en la sede seleccionada. Cambia la sede o eligelo de las listas de abajo.',
+        confirmButtonColor: '#3085d6',
+      })
+      return
+    }
+    setFormData(prev => {
+      if (rol === 'origen') {
+        const base = {
+          ...prev,
+          vehiculo_id: vehicle.id,
+          vehiculo_patente: vehicle.patente,
+          vehiculo_modelo: `${vehicle.marca} ${vehicle.modelo}`,
+          vehiculo_color: vehicle.color || '',
+        }
+        return prev.vehiculo_cambio_id === vehicle.id
+          ? { ...base, vehiculo_cambio_id: '', vehiculo_cambio_patente: '', vehiculo_cambio_modelo: '' }
+          : base
+      }
+      const base = {
+        ...prev,
+        vehiculo_cambio_id: vehicle.id,
+        vehiculo_cambio_patente: vehicle.patente,
+        vehiculo_cambio_modelo: `${vehicle.marca} ${vehicle.modelo}`,
+        propietario: resolverPropietario(vehicle, prev.propietario),
+      }
+      return prev.vehiculo_id === vehicle.id
+        ? { ...base, vehiculo_id: '', vehiculo_patente: '', vehiculo_modelo: '', vehiculo_color: '' }
+        : base
+    })
+  }, [vehicles])
+
+  /**
+   * Paso 1 cuando la programacion viene del mapa: solo Turno o Cambio de
+   * Vehiculo. Deja el par en los turnos y, en Cambio, resuelve contra la BD
+   * que vehiculo tiene hoy cada uno para poder ofrecerlos como origen o
+   * destino en el paso 2.
+   */
+  const elegirTipoDesdeMapa = useCallback(async (tipo: 'turno' | 'cambio') => {
+    if (!precarga) return
+    setFormData(prev => ({
+      ...prev,
+      // En Cambio la modalidad NO se fija aca: la deduce el paso 2 a partir
+      // de la asignacion activa del vehiculo de origen (comportamiento actual).
+      modalidad: tipo === 'turno' ? 'turno' : '',
+      devolucion_vehiculo: false,
+      cambio_vehiculo: tipo === 'cambio',
+      vehiculo_id: '',
+      vehiculo_patente: '',
+      vehiculo_modelo: '',
+      vehiculo_color: '',
+      vehiculo_cambio_id: '',
+      vehiculo_cambio_patente: '',
+      vehiculo_cambio_modelo: '',
+    }))
+    aplicarParASlots(precarga, parInvertido)
+
+    if (tipo === 'cambio') {
+      setCargandoVehiculosPar(true)
+      try {
+        const soloConductores = [precarga.a, precarga.b].filter(pe => pe.tipo === 'conductor')
+        const mapa = await vehiculosActivosDeConductores(soloConductores.map(pe => pe.id))
+        setVehiculosDelPar(
+          soloConductores
+            .map(persona => {
+              const vehiculo = mapa.get(persona.id)
+              return vehiculo ? { persona, vehiculo } : null
+            })
+            .filter((x): x is { persona: PersonaPrecargaPar; vehiculo: VehiculoActivoDeConductor } => !!x)
+        )
+      } finally {
+        setCargandoVehiculosPar(false)
+      }
+    }
+    setStep(2)
+  }, [precarga, parInvertido, aplicarParASlots])
+
   const handleNext = async () => {
     // Step 1: Validate modalidad (devolución y cambio_vehiculo no requieren modalidad previa, se detecta del vehículo)
     if (step === 1 && !formData.modalidad && !formData.devolucion_vehiculo && !formData.cambio_vehiculo) {
@@ -1136,6 +1403,11 @@ export function ProgramacionAssignmentWizardV2({ onClose, onSuccess, editData }:
 
       if (asignacionData) {
         const asigData = asignacionData as any
+        // Conflictos entre el par que vino del mapa y los ocupantes actuales
+        // del vehiculo. Se juntan para avisarlos de una sola vez al final, en
+        // vez de resolverlos en silencio pisando uno u otro.
+        const conflictos: string[] = []
+        const slotsDelMapa = slotsDelMapaRef.current
         // Si es devolución o cambio de vehículo, solo traer conductores activos (no los dados de baja/completados)
         const conductoresAsigRaw = asigData.asignaciones_conductores || []
         const conductoresAsig = (formData.devolucion_vehiculo || formData.cambio_vehiculo)
@@ -1173,6 +1445,13 @@ export function ProgramacionAssignmentWizardV2({ onClose, onSuccess, editData }:
                 conductor_dni: conductorCargo.numero_dni || ''
               }
             }
+            // El par del mapa son dos personas para turnos; este vehiculo esta
+            // "a cargo" de una sola. No se puede acomodar solo: se avisa.
+            if (slotsDelMapa.diurno || slotsDelMapa.nocturno) {
+              conflictos.push(
+                `Este vehiculo esta asignado A CARGO${conductorCargo ? ` a <b>${conductorCargo.nombres} ${conductorCargo.apellidos}</b>` : ''}, no por turnos. El par que trajiste del mapa no entra en esta modalidad.`
+              )
+            }
           } else {
             // Filtrar solo conductores activos/asignados para pre-llenar (ignorar completados/cancelados)
             const conductoresActivos = conductoresAsig.filter((c: any) =>
@@ -1181,20 +1460,48 @@ export function ProgramacionAssignmentWizardV2({ onClose, onSuccess, editData }:
             const diurnoData = conductoresActivos.find((c: any) => c.horario === 'diurno')
             const nocturnoData = conductoresActivos.find((c: any) => c.horario === 'nocturno')
 
+            // Regla de prioridad: si el turno ya lo ocupo el par que vino del
+            // mapa, el ocupante del vehiculo NO lo pisa. Si es otra persona se
+            // junta como conflicto para avisarlo; si es la misma, no hay nada
+            // que decir. Un turno que el mapa dejo vacio se llena como siempre.
             if (diurnoData?.conductores) {
-              updates.conductor_diurno_id = diurnoData.conductores.id
-              updates.conductor_diurno_nombre = `${diurnoData.conductores.nombres} ${diurnoData.conductores.apellidos}`
-              updates.conductor_diurno_dni = diurnoData.conductores.numero_dni || ''
+              const ocupante = `${diurnoData.conductores.nombres} ${diurnoData.conductores.apellidos}`
+              if (slotsDelMapa.diurno) {
+                if (diurnoData.conductores.id !== formData.conductor_diurno_id) {
+                  conflictos.push(`<b>Diurno</b>: el vehiculo lo tiene <b>${ocupante}</b>, y vos trajiste a <b>${formData.conductor_diurno_nombre || 'otra persona'}</b>. Se mantuvo el del mapa.`)
+                }
+              } else {
+                updates.conductor_diurno_id = diurnoData.conductores.id
+                updates.conductor_diurno_nombre = ocupante
+                updates.conductor_diurno_dni = diurnoData.conductores.numero_dni || ''
+              }
             }
             if (nocturnoData?.conductores) {
-              updates.conductor_nocturno_id = nocturnoData.conductores.id
-              updates.conductor_nocturno_nombre = `${nocturnoData.conductores.nombres} ${nocturnoData.conductores.apellidos}`
-              updates.conductor_nocturno_dni = nocturnoData.conductores.numero_dni || ''
+              const ocupante = `${nocturnoData.conductores.nombres} ${nocturnoData.conductores.apellidos}`
+              if (slotsDelMapa.nocturno) {
+                if (nocturnoData.conductores.id !== formData.conductor_nocturno_id) {
+                  conflictos.push(`<b>Nocturno</b>: el vehiculo lo tiene <b>${ocupante}</b>, y vos trajiste a <b>${formData.conductor_nocturno_nombre || 'otra persona'}</b>. Se mantuvo el del mapa.`)
+                }
+              } else {
+                updates.conductor_nocturno_id = nocturnoData.conductores.id
+                updates.conductor_nocturno_nombre = ocupante
+                updates.conductor_nocturno_dni = nocturnoData.conductores.numero_dni || ''
+              }
             }
           }
 
           if (Object.keys(updates).length > 0) {
             setFormData(prev => ({ ...prev, ...updates }))
+          }
+
+          if (conflictos.length > 0) {
+            await Swal.fire({
+              icon: 'info',
+              title: 'El vehiculo ya tiene gente asignada',
+              html: `${conflictos.join('<br><br>')}<br><br>Revisa el paso de Conductores / Leads antes de continuar.`,
+              confirmButtonText: 'Entendido',
+              confirmButtonColor: '#3085d6',
+            })
           }
         }
         // Si la modalidad NO coincide, los conductores del vehículo ya están en conductoresDelVehiculoActual
@@ -1229,17 +1536,26 @@ export function ProgramacionAssignmentWizardV2({ onClose, onSuccess, editData }:
   // Para modo A CARGO
   const handleSelectConductorCargo = (conductorId: string) => {
     const conductor = conductores.find(c => c.id === conductorId)
-    if (conductor) {
-      setFormData({
-        ...formData,
+    if (!conductor) return
+    setFormData(prev => {
+      const updates: any = {
+        ...prev,
         conductor_id: conductorId,
         conductor_nombre: `${conductor.nombres} ${conductor.apellidos}`,
         conductor_dni: conductor.numero_dni || '',
         lead_cargo_id: '',
         zona_cargo: conductor.zona || '',
         distancia_cargo: 0,
-      })
-    }
+      }
+      // Mismo criterio que en los turnos: al cambiar de persona se limpian los
+      // campos derivados para que se vuelvan a resolver.
+      if (prev.conductor_id !== conductorId || prev.lead_cargo_id) {
+        updates.tipo_candidato_cargo = ''
+        updates.tipo_asignacion_cargo = ''
+        updates.documento_cargo = ''
+      }
+      return updates
+    })
   }
 
   // Para modo TURNO - Diurno
@@ -1256,6 +1572,16 @@ export function ProgramacionAssignmentWizardV2({ onClose, onSuccess, editData }:
           // convivir los dos ids en el mismo turno.
           lead_diurno_id: '',
           zona_diurno: conductor.zona || '',
+        }
+        // Si el turno cambia de persona, los campos derivados de la anterior
+        // dejan de valer. Se vacian para que `autoDetectarTipos` los vuelva a
+        // resolver al entrar a Detalles. Sin esto, un LEAD que ocupaba el turno
+        // dejaba `tipo_candidato` en 'lead' y el conductor que lo reemplazaba
+        // lo heredaba (autoDetectarTipos solo completa lo que esta vacio).
+        if (prev.conductor_diurno_id !== conductorId || prev.lead_diurno_id) {
+          updates.tipo_candidato_diurno = ''
+          updates.tipo_asignacion_diurno = ''
+          updates.documento_diurno = ''
         }
         // Si viene de un par y el compañero ya está asignado como nocturno, auto-rellenar distancia
         if (pairTiempo && pairPartnerId && prev.conductor_nocturno_id === pairPartnerId) {
@@ -1288,6 +1614,16 @@ export function ProgramacionAssignmentWizardV2({ onClose, onSuccess, editData }:
           lead_nocturno_id: '',
           zona_nocturno: conductor.zona || '',
         }
+        // Si el turno cambia de persona, los campos derivados de la anterior
+        // dejan de valer. Se vacian para que `autoDetectarTipos` los vuelva a
+        // resolver al entrar a Detalles. Sin esto, un LEAD que ocupaba el turno
+        // dejaba `tipo_candidato` en 'lead' y el conductor que lo reemplazaba
+        // lo heredaba (autoDetectarTipos solo completa lo que esta vacio).
+        if (prev.conductor_nocturno_id !== conductorId || prev.lead_nocturno_id) {
+          updates.tipo_candidato_nocturno = ''
+          updates.tipo_asignacion_nocturno = ''
+          updates.documento_nocturno = ''
+        }
         // Si viene de un par y el compañero ya está asignado como diurno, auto-rellenar distancia
         if (pairTiempo && pairPartnerId && prev.conductor_diurno_id === pairPartnerId) {
           updates.distancia_diurno = pairTiempo
@@ -1308,6 +1644,11 @@ export function ProgramacionAssignmentWizardV2({ onClose, onSuccess, editData }:
 
   // Remover conductor de turno
   const handleRemoveConductorTurno = (tipo: 'diurno' | 'nocturno' | 'cargo') => {
+    // Vaciar el turno a mano cancela la prioridad del par del mapa sobre el:
+    // a partir de aca el ocupante del vehiculo lo puede volver a llenar.
+    if (tipo === 'diurno' || tipo === 'nocturno') {
+      slotsDelMapaRef.current = { ...slotsDelMapaRef.current, [tipo]: false }
+    }
     if (tipo === 'diurno') {
       setFormData({
         ...formData,
@@ -1317,6 +1658,11 @@ export function ProgramacionAssignmentWizardV2({ onClose, onSuccess, editData }:
         lead_diurno_id: '',
         zona_diurno: '',
         distancia_diurno: '',
+        // Un turno vacio no puede conservar el tipo de candidato ni el
+        // documento de quien lo ocupaba: quedarian guardados sin persona.
+        tipo_candidato_diurno: '',
+        tipo_asignacion_diurno: '',
+        documento_diurno: '',
       })
     } else if (tipo === 'nocturno') {
       setFormData({
@@ -1327,6 +1673,11 @@ export function ProgramacionAssignmentWizardV2({ onClose, onSuccess, editData }:
         lead_nocturno_id: '',
         zona_nocturno: '',
         distancia_nocturno: '',
+        // Un turno vacio no puede conservar el tipo de candidato ni el
+        // documento de quien lo ocupaba: quedarian guardados sin persona.
+        tipo_candidato_nocturno: '',
+        tipo_asignacion_nocturno: '',
+        documento_nocturno: '',
       })
     } else {
       setFormData({
@@ -1337,6 +1688,9 @@ export function ProgramacionAssignmentWizardV2({ onClose, onSuccess, editData }:
         lead_cargo_id: '',
         zona_cargo: '',
         distancia_cargo: '',
+        tipo_candidato_cargo: '',
+        tipo_asignacion_cargo: '',
+        documento_cargo: '',
       })
     }
   }
@@ -1369,6 +1723,43 @@ export function ProgramacionAssignmentWizardV2({ onClose, onSuccess, editData }:
     return 'nuevo'
   }
 
+  /**
+   * Ajusta tipo de asignacion y documento cuando quien ocupa el turno YA tiene
+   * una asignacion activa. Lo que pasa con el vehiculo manda sobre el default
+   * que sale del tipo de candidato.
+   *
+   *  - Viene del OTRO turno  -> "Cambio de turno". El documento no se toca:
+   *    sigue saliendo del tipo de candidato.
+   *  - Sigue en el MISMO turno -> "Asignacion de compañero" y documento N/A:
+   *    no cambia de auto ni de turno, solo se le suma un compañero, y eso no
+   *    genera documento nuevo.
+   *
+   * Dos casos en los que no se toca nada, a proposito:
+   *  - Una asignacion "a cargo" marca los dos turnos a la vez: no hay un turno
+   *    del que venga, asi que no se puede decidir.
+   *  - Un LEAD no esta en la lista de conductores, asi que nunca entra aca.
+   */
+  const ajustarDefaultsPorAsignacionActiva = (
+    personaId: string,
+    slot: 'diurno' | 'nocturno',
+    defaults: { asignacion: TipoAsignacion; documento: TipoDocumento }
+  ): { asignacion: TipoAsignacion; documento: TipoDocumento } => {
+    const c = conductores.find(x => x.id === personaId) as any
+    if (!c?.tieneAsignacionActiva) return defaults
+    const tieneDiurna = !!c.tieneAsignacionDiurna
+    const tieneNocturna = !!c.tieneAsignacionNocturna
+    if (tieneDiurna && tieneNocturna) return defaults
+    const vieneDelOtroTurno = slot === 'diurno' ? tieneNocturna : tieneDiurna
+    if (vieneDelOtroTurno) {
+      // Anexo fijo: el turno es uno de los datos que entran al anexo, asi que
+      // no depende del tipo de candidato. Antes se heredaba de ahi y salia
+      // bien de rebote (un conductor con asignacion activa se detecta
+      // "antiguo", cuyo documento es anexo), pero no estaba escrito.
+      return { asignacion: 'cambio_turno', documento: 'anexo' }
+    }
+    return { asignacion: 'asignacion_companero', documento: 'na' }
+  }
+
   // Obtener defaults de tipo_asignacion y documento según tipo de candidato
   function getDefaultsPorCandidato(tipo: TipoCandidatoV2): { asignacion: TipoAsignacion; documento: TipoDocumento } {
     switch (tipo) {
@@ -1379,9 +1770,9 @@ export function ProgramacionAssignmentWizardV2({ onClose, onSuccess, editData }:
       case 'reingreso':
         return { asignacion: 'entrega_auto', documento: 'carta_oferta' }
       case 'lead':
-        // El lead entra como companero de un conductor ya asignado, pero firma
-        // carta oferta: es su primer documento con la empresa.
-        return { asignacion: 'asignacion_companero', documento: 'carta_oferta' }
+        // Un lead nunca tuvo vehiculo: siempre es una entrega de auto. Firma
+        // carta oferta porque es su primer documento con la empresa.
+        return { asignacion: 'entrega_auto', documento: 'carta_oferta' }
     }
   }
 
@@ -1412,9 +1803,9 @@ export function ProgramacionAssignmentWizardV2({ onClose, onSuccess, editData }:
           const tipo = await detectarTipoCandidato(formData.conductor_diurno_id)
           updates.tipo_candidato_diurno = tipo
           if (!isDevolucionOCambio) {
-            const defaults = getDefaultsPorCandidato(tipo)
-            updates.tipo_asignacion_diurno = defaults.asignacion
-            updates.documento_diurno = defaults.documento
+            const ajustado = ajustarDefaultsPorAsignacionActiva(formData.conductor_diurno_id, 'diurno', getDefaultsPorCandidato(tipo))
+            updates.tipo_asignacion_diurno = ajustado.asignacion
+            updates.documento_diurno = ajustado.documento
           }
           changed = true
         }
@@ -1422,9 +1813,9 @@ export function ProgramacionAssignmentWizardV2({ onClose, onSuccess, editData }:
           const tipo = await detectarTipoCandidato(formData.conductor_nocturno_id)
           updates.tipo_candidato_nocturno = tipo
           if (!isDevolucionOCambio) {
-            const defaults = getDefaultsPorCandidato(tipo)
-            updates.tipo_asignacion_nocturno = defaults.asignacion
-            updates.documento_nocturno = defaults.documento
+            const ajustado = ajustarDefaultsPorAsignacionActiva(formData.conductor_nocturno_id, 'nocturno', getDefaultsPorCandidato(tipo))
+            updates.tipo_asignacion_nocturno = ajustado.asignacion
+            updates.documento_nocturno = ajustado.documento
           }
           changed = true
         }
@@ -1706,7 +2097,7 @@ export function ProgramacionAssignmentWizardV2({ onClose, onSuccess, editData }:
 
       if (formData.modalidad === 'a_cargo') {
         // A CARGO - usar campos legacy con un solo set de datos
-        saveData.conductor_id = formData.conductor_id
+        saveData.conductor_id = formData.conductor_id || null
         saveData.conductor_nombre = formData.conductor_nombre
         saveData.conductor_dni = formData.conductor_dni
         saveData.tipo_candidato = formData.tipo_candidato_cargo || null
@@ -1920,6 +2311,21 @@ export function ProgramacionAssignmentWizardV2({ onClose, onSuccess, editData }:
     [filteredVehicles, isEditMode, formData.vehiculo_cambio_id, formData.vehiculo_id]
   )
 
+  /**
+   * Aviso "Asignacion activa" bajo el nombre de quien ocupa un turno.
+   *
+   * Solo aplica a CONDUCTORES: un lead todavia no puede tener asignacion.
+   * El dato sale de la lista ya cargada (`tieneAsignacionActiva`), asi que no
+   * agrega ninguna consulta. Si el conductor no esta en esa lista (por ejemplo
+   * porque es de otra sede), la tarjeta se arma con un objeto minimo que no
+   * trae el flag: ahi no se muestra nada, antes que afirmar lo que no se sabe.
+   */
+  const avisoAsignacionActiva = (c: Conductor | undefined, esLead: boolean) => {
+    if (!c || esLead) return null
+    if (!(c as any).tieneAsignacionActiva) return null
+    return <p className="conductor-asignacion-activa">Asignacion activa</p>
+  }
+
   const conductorDiurno = conductores.find(c => c.id === formData.conductor_diurno_id) ||
     ((formData.conductor_diurno_id || formData.lead_diurno_id) && formData.conductor_diurno_nombre ? {
       id: formData.conductor_diurno_id || formData.lead_diurno_id,
@@ -1977,6 +2383,9 @@ export function ProgramacionAssignmentWizardV2({ onClose, onSuccess, editData }:
     const defaults = getDefaultsPorCandidato('lead')
 
     setFormData((prev) => {
+      const reemplazaAOtraPersonaDiurno = !!prev.conductor_diurno_id || (!!prev.lead_diurno_id && prev.lead_diurno_id !== lead.id)
+      const reemplazaAOtraPersonaNocturno = !!prev.conductor_nocturno_id || (!!prev.lead_nocturno_id && prev.lead_nocturno_id !== lead.id)
+      const reemplazaAOtraPersonaCargo = !!prev.conductor_id || (!!prev.lead_cargo_id && prev.lead_cargo_id !== lead.id)
       if (slot === 'diurno') {
         return {
           ...prev,
@@ -1985,8 +2394,10 @@ export function ProgramacionAssignmentWizardV2({ onClose, onSuccess, editData }:
           conductor_diurno_dni: dni,
           lead_diurno_id: lead.id,
           tipo_candidato_diurno: 'lead',
-          tipo_asignacion_diurno: prev.tipo_asignacion_diurno || defaults.asignacion,
-          documento_diurno: prev.documento_diurno || defaults.documento,
+          // Caso espejo: si el turno lo ocupaba un CONDUCTOR, su tipo de
+          // asignacion y su documento no se heredan al lead que entra.
+          tipo_asignacion_diurno: reemplazaAOtraPersonaDiurno ? defaults.asignacion : (prev.tipo_asignacion_diurno || defaults.asignacion),
+          documento_diurno: reemplazaAOtraPersonaDiurno ? defaults.documento : (prev.documento_diurno || defaults.documento),
           zona_diurno: prev.zona_diurno || lead.zona || '',
         }
       }
@@ -1998,8 +2409,10 @@ export function ProgramacionAssignmentWizardV2({ onClose, onSuccess, editData }:
           conductor_nocturno_dni: dni,
           lead_nocturno_id: lead.id,
           tipo_candidato_nocturno: 'lead',
-          tipo_asignacion_nocturno: prev.tipo_asignacion_nocturno || defaults.asignacion,
-          documento_nocturno: prev.documento_nocturno || defaults.documento,
+          // Caso espejo: si el turno lo ocupaba un CONDUCTOR, su tipo de
+          // asignacion y su documento no se heredan al lead que entra.
+          tipo_asignacion_nocturno: reemplazaAOtraPersonaNocturno ? defaults.asignacion : (prev.tipo_asignacion_nocturno || defaults.asignacion),
+          documento_nocturno: reemplazaAOtraPersonaNocturno ? defaults.documento : (prev.documento_nocturno || defaults.documento),
           zona_nocturno: prev.zona_nocturno || lead.zona || '',
         }
       }
@@ -2011,8 +2424,8 @@ export function ProgramacionAssignmentWizardV2({ onClose, onSuccess, editData }:
         lead_cargo_id: lead.id,
         tipo_candidato_cargo: 'lead',
         // En modalidad A Cargo "asignacion_companero" no aplica.
-        tipo_asignacion_cargo: prev.tipo_asignacion_cargo || 'entrega_auto',
-        documento_cargo: prev.documento_cargo || defaults.documento,
+        tipo_asignacion_cargo: reemplazaAOtraPersonaCargo ? 'entrega_auto' : (prev.tipo_asignacion_cargo || 'entrega_auto'),
+        documento_cargo: reemplazaAOtraPersonaCargo ? defaults.documento : (prev.documento_cargo || defaults.documento),
         zona_cargo: prev.zona_cargo || lead.zona || '',
       }
     })
@@ -2122,9 +2535,34 @@ export function ProgramacionAssignmentWizardV2({ onClose, onSuccess, editData }:
     handleSelectConductorNocturno(nocturno.id, undefined, diurno.id)
   }
 
+  /**
+   * Documento que le corresponde a cada operacion.
+   *
+   * El documento depende de LA OPERACION, no del tipo de candidato:
+   *  - Cambio de turno y cambio de auto -> Anexo: el turno y la patente son
+   *    datos que entran al anexo.
+   *  - Asignacion de compañero y devolucion -> N/A: no generan documento.
+   *  - Entrega de auto -> Carta oferta: es el primer documento de la persona.
+   *
+   * Las operaciones "a cargo" no estan en estas reglas: no se tocan.
+   */
+  const DOCUMENTO_POR_OPERACION: Partial<Record<TipoAsignacion, TipoDocumento>> = {
+    cambio_turno: 'anexo',
+    cambio_auto: 'anexo',
+    asignacion_companero: 'na',
+    devolucion_vehiculo: 'na',
+    entrega_auto: 'carta_oferta',
+  }
+
+  /**
+   * Cambiar la operacion a mano acomoda el documento, para que elegirla a mano
+   * y que la calcule el sistema den el mismo resultado. Antes solo lo hacia
+   * para devolucion: elegir "Cambio de turno" dejaba el documento anterior.
+   */
   const handleTipoAsignacionChange = (field: 'tipo_asignacion_cargo' | 'tipo_asignacion_diurno' | 'tipo_asignacion_nocturno', docField: 'documento_cargo' | 'documento_diurno' | 'documento_nocturno') => (e: React.ChangeEvent<HTMLSelectElement>) => {
     const val = e.target.value as TipoAsignacion
-    setFormData({ ...formData, [field]: val, ...(val === 'devolucion_vehiculo' ? { [docField]: 'na' as TipoDocumento } : {}) })
+    const doc = DOCUMENTO_POR_OPERACION[val]
+    setFormData({ ...formData, [field]: val, ...(doc ? { [docField]: doc } : {}) })
   }
 
   // Ray casting - verifica si un punto está dentro de un polígono
@@ -2166,6 +2604,9 @@ export function ProgramacionAssignmentWizardV2({ onClose, onSuccess, editData }:
       .filter(c => {
         // Excluir conductores ya seleccionados en los slots
         if (c.id === formData.conductor_diurno_id || c.id === formData.conductor_nocturno_id || c.id === formData.conductor_id) return false
+
+        // Par traido del mapa: la lista se acota a esas dos personas.
+        if (limitarAlPar && !idsDelPar.has(c.id)) return false
 
         const matchesSearch = !searchLower ||
           c.nombres.toLowerCase().includes(searchLower) ||
@@ -2219,7 +2660,7 @@ export function ProgramacionAssignmentWizardV2({ onClose, onSuccess, editData }:
         if (a.tieneAsignacionActiva && !b.tieneAsignacionActiva) return 1
         return a.apellidos.localeCompare(b.apellidos)
       })
-  }, [conductores, conductorSearch, conductorStatusFilter, conductorTurnoFilter, conductorCreadoDesde, conductorCreadoHasta, formData.conductor_diurno_id, formData.conductor_nocturno_id, formData.conductor_id, conductoresDelVehiculoActual])
+  }, [conductores, conductorSearch, conductorStatusFilter, conductorTurnoFilter, conductorCreadoDesde, conductorCreadoHasta, formData.conductor_diurno_id, formData.conductor_nocturno_id, formData.conductor_id, conductoresDelVehiculoActual, limitarAlPar, idsDelPar])
 
   /** Nombre mostrable del lead, con los mismos fallbacks que el modulo Leads. */
   const nombreLead = (l: LeadProgramacion) =>
@@ -2253,6 +2694,9 @@ export function ProgramacionAssignmentWizardV2({ onClose, onSuccess, editData }:
         return false
       }
 
+      // Par traido del mapa: la lista se acota a esas dos personas.
+      if (limitarAlPar && !idsDelPar.has(l.id)) return false
+
       if (searchLower) {
         const coincide =
           nombreLead(l).toLowerCase().includes(searchLower) ||
@@ -2268,7 +2712,7 @@ export function ProgramacionAssignmentWizardV2({ onClose, onSuccess, editData }:
 
       return enRangoDiasART(l.created_at, leadCreadoDesde, leadCreadoHasta)
     })
-  }, [leads, leadSearch, leadEstadoFilter, leadTurnoFilter, leadCreadoDesde, leadCreadoHasta, formData.lead_diurno_id, formData.lead_nocturno_id, formData.lead_cargo_id])
+  }, [leads, leadSearch, leadEstadoFilter, leadTurnoFilter, leadCreadoDesde, leadCreadoHasta, formData.lead_diurno_id, formData.lead_nocturno_id, formData.lead_cargo_id, limitarAlPar, idsDelPar])
 
   return (
     <>
@@ -2710,11 +3154,21 @@ export function ProgramacionAssignmentWizardV2({ onClose, onSuccess, editData }:
           gap: 12px;
           min-width: 0;
           max-height: 420px;
+          /* El alto de la fila lo marcan las listas de la izquierda. Cuando
+             quedan cortas (por ejemplo acotadas al par del mapa), ese alto no
+             alcanzaba para las dos tarjetas y el overflow hidden las recortaba
+             al medio. Con esto el stack nunca baja de lo que necesita. */
+          min-height: fit-content;
         }
 
         .turnos-stack .conductores-column {
-          flex: 1 1 0;
-          min-height: 0;
+          /* basis auto + min-height fit-content: puede crecer para repartir el
+             alto sobrante, pero no encogerse por debajo de su contenido.
+             El valor en px queda primero como respaldo por si el navegador no
+             resuelve fit-content en min-height. */
+          flex: 1 1 auto;
+          min-height: 164px;
+          min-height: fit-content;
           max-height: none;
         }
 
@@ -2848,6 +3302,7 @@ export function ProgramacionAssignmentWizardV2({ onClose, onSuccess, editData }:
         }
 
         .drop-zone {
+          flex: 1 1 auto;
           min-height: 80px;
           border: 2px dashed #D1D5DB;
           border-radius: 8px;
@@ -2863,10 +3318,15 @@ export function ProgramacionAssignmentWizardV2({ onClose, onSuccess, editData }:
           background: rgba(230, 57, 70, 0.05);
         }
 
+        /* Con el slot ocupado, el unico marco es el de la tarjeta: el borde
+           verde de la zona encima del borde de la tarjeta se veia como un
+           marco doble, y peor con un LEAD (tarjeta violeta dentro de un marco
+           verde). Se conserva el ancho del borde para que no salte el layout. */
         .drop-zone.has-conductor {
           border-style: solid;
-          border-color: #10B981;
-          background: var(--modal-bg);
+          border-color: transparent;
+          background: transparent;
+          padding: 0;
         }
 
         .drop-zone-empty {
@@ -2890,6 +3350,27 @@ export function ProgramacionAssignmentWizardV2({ onClose, onSuccess, editData }:
            distinga de un conductor real de un vistazo. */
         .assigned-conductor-card.es-lead {
           border-color: #8B5CF6;
+        }
+
+        /* Aviso discreto bajo el DNI cuando la persona ya tiene un vehiculo. */
+        .conductor-asignacion-activa {
+          display: inline-flex;
+          align-items: center;
+          gap: 4px;
+          margin: 3px 0 0 0;
+          font-size: clamp(8px, 0.7vw, 10px);
+          font-weight: 600;
+          color: #B45309;
+          letter-spacing: 0.02em;
+        }
+
+        .conductor-asignacion-activa::before {
+          content: '';
+          width: 5px;
+          height: 5px;
+          border-radius: 50%;
+          background: #F59E0B;
+          flex-shrink: 0;
         }
 
         .badge-lead {
@@ -3253,6 +3734,12 @@ export function ProgramacionAssignmentWizardV2({ onClose, onSuccess, editData }:
           border-color: rgba(255, 255, 255, 0.15) !important;
           color: var(--text-tertiary);
         }
+        [data-theme="dark"] .drop-zone.has-conductor {
+          border-color: transparent !important;
+        }
+        [data-theme="dark"] .conductor-asignacion-activa {
+          color: #FCD34D;
+        }
       `}</style>
 
       <div className="wizard-overlay" onClick={onClose}>
@@ -3354,8 +3841,78 @@ export function ProgramacionAssignmentWizardV2({ onClose, onSuccess, editData }:
               </div>
             )}
 
+            {/* Step 1 cuando el par viene del mapa: solo Turno o Cambio */}
+            {step === 1 && esPrecargaMapa && precarga && previewPar && (
+              <div>
+                <div className="step-description">
+                  <h3>Paso 1: Que tipo de programacion es?</h3>
+                  <p>El par vino de Distribucion en mapa. Elegi el tipo y el resto ya queda cargado.</p>
+                </div>
+
+                {/* Resumen del par */}
+                <div style={{ maxWidth: '640px', margin: '0 auto 20px auto', border: '1px solid var(--border-primary)', borderRadius: '10px', overflow: 'hidden' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', padding: '8px 12px', background: 'var(--bg-secondary, rgba(148,163,184,0.12))' }}>
+                    <span style={{ fontSize: '12px', fontWeight: 700, color: 'var(--text-primary)' }}>Par sugerido</span>
+                    {typeof precarga.tiempoMinutos === 'number' && (
+                      <span style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>{precarga.tiempoMinutos} min entre ambos</span>
+                    )}
+                  </div>
+                  {([
+                    { icono: <Sun size={16} />, etiqueta: 'Diurno', persona: previewPar.diurno },
+                    { icono: <Moon size={16} />, etiqueta: 'Nocturno', persona: previewPar.nocturno },
+                  ]).map(({ icono, etiqueta, persona }) => (
+                    <div key={etiqueta} style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '10px 12px', borderTop: '1px solid var(--border-primary)' }}>
+                      <span style={{ display: 'flex', alignItems: 'center', gap: '6px', minWidth: '92px', fontSize: '12px', fontWeight: 700, color: 'var(--text-secondary)' }}>
+                        {icono}{etiqueta}
+                      </span>
+                      <span style={{ flex: 1, minWidth: 0, fontSize: '13px', fontWeight: 600, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {persona.nombre}
+                      </span>
+                      <span style={{ fontSize: '10px', fontWeight: 700, padding: '2px 8px', borderRadius: '999px', background: persona.tipo === 'lead' ? 'rgba(139,92,246,0.18)' : 'rgba(16,185,129,0.18)', color: persona.tipo === 'lead' ? '#7C3AED' : '#047857' }}>
+                        {persona.tipo === 'lead' ? 'Lead' : 'Conductor'}
+                      </span>
+                      {persona.patenteAsignacion && (
+                        <span style={{ fontSize: '11px', color: 'var(--text-tertiary)' }}>{persona.patenteAsignacion}</span>
+                      )}
+                    </div>
+                  ))}
+                  <div style={{ padding: '8px 12px', borderTop: '1px solid var(--border-primary)', textAlign: 'right' }}>
+                    <button
+                      type="button"
+                      onClick={() => setParInvertido(v => !v)}
+                      style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '6px 12px', border: '1px solid var(--border-primary)', borderRadius: '8px', background: 'transparent', color: 'var(--text-secondary)', fontSize: '12px', fontFamily: 'inherit', cursor: 'pointer' }}
+                    >
+                      <ArrowLeftRight size={14} /> Invertir turnos
+                    </button>
+                  </div>
+                </div>
+
+                <div className="modality-grid">
+                  <div className="modality-card" onClick={() => elegirTipoDesdeMapa('turno')} style={{ padding: '20px 16px' }}>
+                    <div className="modality-icon"><Calendar size={36} /></div>
+                    <h4 className="modality-title">Turno</h4>
+                    <p className="modality-description">Los dos comparten un vehiculo: Diurno y Nocturno</p>
+                  </div>
+
+                  <div
+                    className="modality-card"
+                    onClick={() => { if (!cambioImposiblePorLeads) elegirTipoDesdeMapa('cambio') }}
+                    style={{ padding: '20px 16px', opacity: cambioImposiblePorLeads ? 0.5 : 1, cursor: cambioImposiblePorLeads ? 'not-allowed' : 'pointer' }}
+                  >
+                    <div className="modality-icon"><ArrowLeftRight size={36} /></div>
+                    <h4 className="modality-title">Cambio de Vehiculo</h4>
+                    <p className="modality-description">
+                      {cambioImposiblePorLeads
+                        ? 'No disponible: los dos son leads y un lead no tiene vehiculo asignado'
+                        : 'Cambiar el vehiculo que alguno de los dos tiene hoy'}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
+
             {/* Step 1: Tipo */}
-            {step === 1 && (
+            {step === 1 && !esPrecargaMapa && (
               <div>
                 <div className="step-description">
                   <h3>Paso 1: Selecciona el Tipo</h3>
@@ -3544,7 +4101,11 @@ export function ProgramacionAssignmentWizardV2({ onClose, onSuccess, editData }:
                     </div>
                   ) : filteredVehicles.length === 0 ? (
                     <div className="empty-state">
-                      {vehicleSearch || vehicleAvailabilityFilter || vehicleGncFilter ? 'No se encontraron vehiculos con ese criterio' : 'No hay vehiculos disponibles'}
+                      {errorVehiculos
+                        ? `No se pudieron cargar los vehiculos: ${errorVehiculos}`
+                        : vehicleSearch || vehicleAvailabilityFilter || vehicleGncFilter
+                          ? 'No se encontraron vehiculos con ese criterio'
+                          : 'No hay vehiculos disponibles'}
                     </div>
                   ) : (
                     filteredVehicles.map((vehicle) => {
@@ -3618,6 +4179,63 @@ export function ProgramacionAssignmentWizardV2({ onClose, onSuccess, editData }:
                   <h3>Paso 2: Selecciona los Vehículos</h3>
                   <p>Selecciona el vehículo actual y el vehículo por el que se va a cambiar</p>
                 </div>
+
+                {/* Atajo: vehiculos que hoy tienen las personas del par.
+                    No fuerza nada: el operador decide si cada uno es el que se
+                    cambia o el destino, y las listas completas siguen abajo. */}
+                {esPrecargaMapa && (cargandoVehiculosPar || vehiculosDelPar.length > 0) && (
+                  <div style={{ maxWidth: '900px', margin: '0 auto 20px auto', border: '1px solid #F59E0B', borderRadius: '10px', overflow: 'hidden' }}>
+                    <div style={{ padding: '8px 12px', background: 'rgba(251, 191, 36, 0.15)' }}>
+                      <h4 style={{ margin: 0, fontSize: '12px', fontWeight: 700, color: 'var(--text-primary)' }}>Vehículos del par</h4>
+                      <p style={{ margin: '2px 0 0', fontSize: '10px', color: 'var(--text-secondary)' }}>
+                        Tienen asignación activa. Elegí si cada uno es el que se cambia o el destino, o ignoralos y elegí de las listas de abajo.
+                      </p>
+                    </div>
+
+                    {cargandoVehiculosPar ? (
+                      <div style={{ padding: '16px', textAlign: 'center', fontSize: '11px', color: 'var(--text-tertiary)' }}>Buscando vehículos del par...</div>
+                    ) : vehiculosDelPar.map(({ persona, vehiculo }) => {
+                      const enLista = vehicles.find(v => v.id === vehiculo.vehiculoId)
+                      const badge = enLista ? getVehicleBadge(enLista) : null
+                      const esOrigen = formData.vehiculo_id === vehiculo.vehiculoId
+                      const esDestino = formData.vehiculo_cambio_id === vehiculo.vehiculoId
+                      return (
+                        <div key={vehiculo.vehiculoId} style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '8px', padding: '10px 12px', borderTop: '1px solid var(--border-primary)' }}>
+                          <div style={{ flex: '1 1 220px', minWidth: 0 }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                              <span style={{ fontSize: '13px', fontWeight: 700, color: 'var(--text-primary)' }}>{vehiculo.patente || enLista?.patente || 'Sin patente'}</span>
+                              <span style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>{vehiculo.modelo || (enLista ? `${enLista.marca} ${enLista.modelo}` : '')}</span>
+                              {badge ? (
+                                <span style={{ fontSize: '9px', fontWeight: 700, padding: '2px 6px', borderRadius: '999px', background: badge.badgeBg, color: badge.badgeColor }}>{badge.badgeText}</span>
+                              ) : (
+                                <span style={{ fontSize: '9px', fontWeight: 700, padding: '2px 6px', borderRadius: '999px', background: '#94A3B8', color: 'white' }}>Fuera de esta sede</span>
+                              )}
+                            </div>
+                            <div style={{ fontSize: '10px', color: 'var(--text-tertiary)', marginTop: '2px' }}>
+                              Asignado a {persona.nombre}
+                              {vehiculo.horarioConductor ? ` · ${vehiculo.horarioConductor === 'todo_dia' ? 'A cargo' : vehiculo.horarioConductor}` : ''}
+                              {badge?.detalleText ? ` · ${badge.detalleText}` : ''}
+                            </div>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => usarVehiculoDelPar(vehiculo.vehiculoId, 'origen')}
+                            style={{ padding: '6px 10px', borderRadius: '8px', fontSize: '11px', fontFamily: 'inherit', cursor: 'pointer', border: esOrigen ? '2px solid #F59E0B' : '1px solid var(--border-primary)', background: esOrigen ? 'rgba(251, 191, 36, 0.2)' : 'transparent', color: 'var(--text-primary)', fontWeight: esOrigen ? 700 : 500 }}
+                          >
+                            {esOrigen ? '✓ Vehículo a cambiar' : 'Usar como vehículo a cambiar'}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => usarVehiculoDelPar(vehiculo.vehiculoId, 'destino')}
+                            style={{ padding: '6px 10px', borderRadius: '8px', fontSize: '11px', fontFamily: 'inherit', cursor: 'pointer', border: esDestino ? '2px solid #10B981' : '1px solid var(--border-primary)', background: esDestino ? 'rgba(16, 185, 129, 0.2)' : 'transparent', color: 'var(--text-primary)', fontWeight: esDestino ? 700 : 500 }}
+                          >
+                            {esDestino ? '✓ Destino' : 'Usar como destino'}
+                          </button>
+                        </div>
+                      )
+                    })}
+                  </div>
+                )}
 
                 {/* Buscador y Filtro */}
                 <div style={{ marginBottom: '20px', maxWidth: '900px', margin: '0 auto 20px auto', display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
@@ -3884,9 +4502,12 @@ export function ProgramacionAssignmentWizardV2({ onClose, onSuccess, editData }:
                   <div className="conductores-column">
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px', paddingBottom: '8px', borderBottom: '2px solid var(--border-primary)' }}>
                       <h4 style={{ margin: 0, border: 'none', paddingBottom: 0 }}>Leads</h4>
-                      <span style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>
-                        {loadingLeads ? '' : `${filteredLeads.length} de ${leads.length}`}
-                      </span>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <span style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>
+                          {loadingLeads ? '' : limitarAlPar ? `${filteredLeads.length} del par` : `${filteredLeads.length} de ${leads.length}`}
+                        </span>
+                        {esPrecargaMapa && <ToggleSoloDelPar soloDelPar={soloDelPar} onToggle={() => setSoloDelPar(v => !v)} />}
+                      </div>
                     </div>
 
                     {/* Filtros propios de leads */}
@@ -3948,7 +4569,9 @@ export function ProgramacionAssignmentWizardV2({ onClose, onSuccess, editData }:
                         </div>
                       ) : filteredLeads.length === 0 ? (
                         <div className="empty-state" style={{ padding: '16px' }}>
-                          {leads.length === 0 ? 'Sin leads' : 'Sin resultados'}
+                          {limitarAlPar
+                            ? 'Los leads del par ya estan asignados. Toca "Ver todos" si necesitas otro.'
+                            : leads.length === 0 ? 'Sin leads' : 'Sin resultados'}
                         </div>
                       ) : (
                         filteredLeads.map((lead) => {
@@ -3992,7 +4615,10 @@ export function ProgramacionAssignmentWizardV2({ onClose, onSuccess, editData }:
                   {/* ── Columna 2: CONDUCTORES ──────────────────────────────── */}
                   <div className="conductores-column">
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px', paddingBottom: '8px', borderBottom: '2px solid var(--border-primary)' }}>
-                      <h4 style={{ margin: 0, border: 'none', paddingBottom: 0 }}>Conductores</h4>
+                      <h4 style={{ margin: 0, border: 'none', paddingBottom: 0, display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        Conductores
+                        {esPrecargaMapa && <ToggleSoloDelPar soloDelPar={soloDelPar} onToggle={() => setSoloDelPar(v => !v)} />}
+                      </h4>
                        {isTurnoMode && (
                         <div style={{ display: 'flex', gap: '4px' }}>
                           <button
@@ -4237,7 +4863,9 @@ export function ProgramacionAssignmentWizardV2({ onClose, onSuccess, editData }:
                         )
                       ) : filteredConductores.length === 0 ? (
                         <div className="empty-state" style={{ padding: '16px' }}>
-                          {conductorSearch ? 'Sin resultados' : 'Sin conductores'}
+                          {limitarAlPar
+                            ? 'Los conductores del par ya estan asignados. Toca "Ver todos" si necesitas otro.'
+                            : conductorSearch ? 'Sin resultados' : 'Sin conductores'}
                         </div>
                       ) : (
                         filteredConductores.map((conductor) => {
@@ -4349,6 +4977,7 @@ export function ProgramacionAssignmentWizardV2({ onClose, onSuccess, editData }:
                                 <p className="conductor-license">
                                   DNI: {conductorDiurno.numero_dni || '-'}
                                 </p>
+                                {avisoAsignacionActiva(conductorDiurno, !!formData.lead_diurno_id)}
                               </div>
                               <button
                                 className="remove-btn"
@@ -4390,6 +5019,7 @@ export function ProgramacionAssignmentWizardV2({ onClose, onSuccess, editData }:
                                 <p className="conductor-license">
                                   DNI: {conductorNocturno.numero_dni || '-'}
                                 </p>
+                                {avisoAsignacionActiva(conductorNocturno, !!formData.lead_nocturno_id)}
                               </div>
                               <button
                                 className="remove-btn"
@@ -4436,6 +5066,7 @@ export function ProgramacionAssignmentWizardV2({ onClose, onSuccess, editData }:
                               <p className="conductor-license">
                                 DNI: {conductorCargo.numero_dni || '-'}
                               </p>
+                                {avisoAsignacionActiva(conductorCargo, !!formData.lead_cargo_id)}
                             </div>
                             <button
                               className="remove-btn"
@@ -4645,8 +5276,8 @@ export function ProgramacionAssignmentWizardV2({ onClose, onSuccess, editData }:
                             onChange={(e) => {
                               const tipo = e.target.value as TipoCandidatoV2
                               if (tipo && !formData.devolucion_vehiculo && !formData.cambio_vehiculo) {
-                                const defaults = getDefaultsPorCandidato(tipo)
-                                setFormData({ ...formData, tipo_candidato_diurno: tipo, tipo_asignacion_diurno: defaults.asignacion, documento_diurno: defaults.documento })
+                                const ajustado = ajustarDefaultsPorAsignacionActiva(formData.conductor_diurno_id, 'diurno', getDefaultsPorCandidato(tipo))
+                                setFormData({ ...formData, tipo_candidato_diurno: tipo, tipo_asignacion_diurno: ajustado.asignacion, documento_diurno: ajustado.documento })
                               } else {
                                 setFormData({ ...formData, tipo_candidato_diurno: tipo })
                               }
@@ -4756,8 +5387,8 @@ export function ProgramacionAssignmentWizardV2({ onClose, onSuccess, editData }:
                             onChange={(e) => {
                               const tipo = e.target.value as TipoCandidatoV2
                               if (tipo && !formData.devolucion_vehiculo && !formData.cambio_vehiculo) {
-                                const defaults = getDefaultsPorCandidato(tipo)
-                                setFormData({ ...formData, tipo_candidato_nocturno: tipo, tipo_asignacion_nocturno: defaults.asignacion, documento_nocturno: defaults.documento })
+                                const ajustado = ajustarDefaultsPorAsignacionActiva(formData.conductor_nocturno_id, 'nocturno', getDefaultsPorCandidato(tipo))
+                                setFormData({ ...formData, tipo_candidato_nocturno: tipo, tipo_asignacion_nocturno: ajustado.asignacion, documento_nocturno: ajustado.documento })
                               } else {
                                 setFormData({ ...formData, tipo_candidato_nocturno: tipo })
                               }

@@ -355,15 +355,23 @@ export function AsignacionesModule() {
     setControlAsignacion(asig)
     setControlVehiculoKmNotFound(false)
 
-    // Prefill del kilometraje desde la tabla vehiculos (kilometraje_actual)
+    // Prefill desde la tabla vehiculos: kilometraje (kilometraje_actual) y
+    // observaciones (notas del vehiculo, como sugerencia editable). Las
+    // observaciones ya no se llenan al generar el contrato: llegan al
+    // documento solo con lo que el usuario confirma aca.
     let kmPrefill = ''
+    let observacionesPrefill = ''
     if (asig.vehiculo_id) {
       try {
         const { data: vehData, error: vehError } = await supabase
           .from('vehiculos')
-          .select('kilometraje_actual')
+          .select('kilometraje_actual, notas')
           .eq('id', asig.vehiculo_id)
           .single()
+        const notasVehiculo = (vehData as { notas: string | null } | null)?.notas
+        if (!vehError && typeof notasVehiculo === 'string' && notasVehiculo.trim()) {
+          observacionesPrefill = notasVehiculo.trim()
+        }
         const kmActual = (vehData as { kilometraje_actual: number | null } | null)?.kilometraje_actual
         if (!vehError && typeof kmActual === 'number' && kmActual > 0) {
           kmPrefill = String(kmActual)
@@ -377,7 +385,7 @@ export function AsignacionesModule() {
       setControlVehiculoKmNotFound(true)
     }
 
-    setControlForm({ km: kmPrefill, ltnafta: '', observations: '', cristal_status: '', carter: '', tires: '', others_docs: '', other_accesory: '', make_chains: '', status_chains: '', tensioners_chains: '', others_kit: '' })
+    setControlForm({ km: kmPrefill, ltnafta: '', observations: observacionesPrefill, cristal_status: '', carter: '', tires: '', others_docs: '', other_accesory: '', make_chains: '', status_chains: '', tensioners_chains: '', others_kit: '' })
     // Obtener un conductor para consultar si la plantilla es Bariloche
     const isAutoCargo = asig.horario === 'todo_dia'
     let conductorId = ''
@@ -500,18 +508,41 @@ export function AsignacionesModule() {
       }
 
       // Enviar control para cada conductor
+      // Conductores cuyo documento no tenia {{OBSERVATIONS}}: el control se
+      // completa igual (KM y nafta quedan), pero las observaciones no estan
+      // en el PDF y hay que avisarlo.
+      const sinObservaciones: string[] = []
       for (const conductor of conductoresAsig) {
         const result = await completeControl({
           conductor_id: conductor.id,
           ...payload,
         })
         if (!result.success) throw new Error(result.error || `Error al generar control para ${conductor.nombre}`)
+        if (result.warnings?.includes('observations_placeholder_not_found')) {
+          sinObservaciones.push(conductor.nombre)
+        }
       }
 
       setShowControlModal(false)
-      showSuccess(cantConductores > 1
-        ? `Control completado y ${cantConductores} PDFs generados correctamente`
-        : 'Control completado y PDF generado correctamente')
+      if (sinObservaciones.length > 0) {
+        await Swal.fire({
+          icon: 'warning',
+          title: 'Control completado con observaciones pendientes',
+          html: `
+            <div style="text-align:left;font-size:13px">
+              <p style="margin:0 0 8px 0">El control se completó y se generó el PDF, pero las <b>observaciones no se incluyeron</b> en el documento de:</p>
+              <ul style="margin:0 0 0 18px;padding:0">${sinObservaciones.map(n => `<li><b>${n}</b></li>`).join('')}</ul>
+              <p style="margin-top:10px;color:#6b7280;font-size:12px">El documento no tiene el campo de observaciones. Puede haberse generado antes de este cambio o la plantilla no incluye el campo.</p>
+            </div>
+          `,
+          confirmButtonText: 'Entendido',
+          confirmButtonColor: 'var(--color-primary)',
+        })
+      } else {
+        showSuccess(cantConductores > 1
+          ? `Control completado y ${cantConductores} PDFs generados correctamente`
+          : 'Control completado y PDF generado correctamente')
+      }
       loadAsignaciones()
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Error desconocido'
@@ -770,7 +801,7 @@ export function AsignacionesModule() {
             vehiculos (patente, marca, modelo, gnc),
             asignaciones_conductores (
               id, conductor_id, estado, horario, confirmado, fecha_confirmacion, documento, tipo_tarifa, fecha_inicio, fecha_fin,
-              conductores (nombres, apellidos, numero_licencia, estado_id, cochera_propia, contacto_emergencia, telefono_emergencia, parentesco_emergencia, conductores_estados(codigo))
+              conductores (nombres, apellidos, numero_licencia, estado_id, drive_contract_folder_url, cochera_propia, contacto_emergencia, telefono_emergencia, parentesco_emergencia, conductores_estados(codigo))
             )
           `))
           .order('fecha_programada', { ascending: false, nullsFirst: false })
@@ -1071,6 +1102,29 @@ export function AsignacionesModule() {
     document.addEventListener('keydown', onEscape)
     return () => document.removeEventListener('keydown', onEscape)
   }, [showHistorialCond, showControlModal, controlSaving, showConfirmModal, showCancelModal, showRegularizarModal, showViewModal])
+
+  /**
+   * La asignacion tiene algun conductor SIN carpeta de contratos en Drive.
+   *
+   * Es la misma condicion que muestra "Sin carpeta" en el detalle: el conductor
+   * no tiene `drive_contract_folder_url`, o sea que el documento no llego a
+   * generarse y la programacion hay que rehacerla.
+   *
+   * Tres recortes, a proposito:
+   *  - Documento 'NA' / 'N/A': no se espera carpeta, no se marca.
+   *  - Asignaciones canceladas: ya no hay nada que regenerar.
+   *  - Alcanza con que UNO de los dos turnos no tenga carpeta: la entrega no
+   *    se puede hacer a medias.
+   */
+  const asignacionSinCarpeta = (a: any): boolean => {
+    if (!a || a.estado === 'cancelada') return false
+    const ocupantes = a.asignaciones_conductores || []
+    return ocupantes.some((ac: any) => {
+      if (!ac?.conductor_id) return false
+      if (ac.documento === 'NA' || ac.documento === 'N/A') return false
+      return !(ac.conductores as any)?.drive_contract_folder_url
+    })
+  }
 
   // Cargar drive_contract_folder_url (carpeta de contratos) directo de conductores
   // cuando se abre el modal de detalle de la asignación
@@ -2074,14 +2128,23 @@ export function AsignacionesModule() {
         if (selectedAsignacion?.motivoDetalle?.cambioVehiculo && selectedAsignacion?.motivoDetalle?.vehiculoCambioId) {
           const vehiculoViejoId = selectedAsignacion.motivoDetalle!.vehiculoCambioId
 
-          // Consultar si el vehículo viejo todavía tiene asignaciones activas
-          const { count: asignacionesActivas } = await supabase
-            .from('asignaciones_conductores')
-            .select('id', { count: 'exact', head: true })
+          // Consultar si el vehículo viejo todavía tiene asignaciones activas con conductores activos.
+          // FIX 2026-10-06: antes consultaba asignaciones_conductores.vehiculo_id (columna que no
+          // existe) y estado 'activo' (el activo real es 'asignado'); el count siempre salía vacío
+          // y el vehículo viejo pasaba a PKG_ON_BASE aunque siguiera en uso.
+          const { data: asigViejasActivas, error: errViejo } = await (supabase as any)
+            .from('asignaciones')
+            .select('id, asignaciones_conductores(estado)')
             .eq('vehiculo_id', vehiculoViejoId)
-            .eq('estado', 'activo')
+            .in('estado', ['activa', 'activo'])
+          const viejoSigueEnUso = ((asigViejasActivas as any[]) || []).some((a: any) =>
+            (a.asignaciones_conductores || []).some((ac: any) => ac.estado === 'asignado' || ac.estado === 'activo')
+          )
+          if (errViejo) {
+            avisos.push('No se pudo verificar si el vehículo anterior sigue en uso; su estado no se modificó.')
+          }
 
-          if ((asignacionesActivas || 0) === 0) {
+          if (!errViejo && !viejoSigueEnUso) {
             // Sin asignaciones activas → ponerlo como disponible
             const { data: estadoPkgOn } = await supabase
               .from('vehiculos_estados')
@@ -3561,6 +3624,7 @@ export function AsignacionesModule() {
       {/* DataTable */}
       <DataTable
         data={expandedAsignaciones}
+        getRowClassName={(a: any) => (asignacionSinCarpeta(a) ? 'asig-row-sin-carpeta' : undefined)}
         columns={columns}
         loading={loading}
         error={error}
@@ -4121,8 +4185,21 @@ export function AsignacionesModule() {
                                   </>
                                 ) : (
                                   <>
-                                    <FolderOpen size={22} style={{ color: '#9CA3AF', marginBottom: '6px' }} />
-                                    <span style={{ fontSize: '12px', color: '#9CA3AF', fontWeight: 500, textAlign: 'center' }}>Sin carpeta</span>
+                                    <FolderOpen size={22} style={{ color: '#DC2626', marginBottom: '6px' }} />
+                                    <span style={{ fontSize: '12px', color: '#DC2626', fontWeight: 700, textAlign: 'center' }}>Sin carpeta</span>
+                                    <span
+                                      style={{
+                                        marginTop: '6px',
+                                        maxWidth: '190px',
+                                        fontSize: '11px',
+                                        lineHeight: 1.35,
+                                        color: '#B91C1C',
+                                        fontWeight: 600,
+                                        textAlign: 'center',
+                                      }}
+                                    >
+                                      No se generó el documento, por favor volver a generar la programación
+                                    </span>
                                   </>
                                 )}
                               </div>
