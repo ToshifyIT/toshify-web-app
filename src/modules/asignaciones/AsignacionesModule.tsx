@@ -698,6 +698,26 @@ export function AsignacionesModule() {
     // Solo contamos asignaciones que se entregaron/activaron esta semana (lunes a domingo)
     const conductoresCartaOfertaSet = new Set<string>()
     const conductoresAnexoSet = new Set<string>()
+    // Mismo conteo, separado por turno del conductor (D / N / A cargo)
+    const turnoDe = (h: string | null | undefined): 'D' | 'N' | 'C' => {
+      const v = (h || '').toLowerCase().trim()
+      if (v === 'diurno' || v === 'd') return 'D'
+      if (v === 'nocturno' || v === 'n') return 'N'
+      return 'C'
+    }
+    // Un conductor cuenta en UN solo turno (el de su asignación más reciente de la
+    // semana), así D + N + C coincide siempre con el total de conductores únicos.
+    const cartaOfertaTurnoPorConductor = new Map<string, { turno: 'D' | 'N' | 'C'; fecha: string }>()
+    const anexoTurnoPorConductor = new Map<string, { turno: 'D' | 'N' | 'C'; fecha: string }>()
+    const registrarTurno = (
+      mapa: Map<string, { turno: 'D' | 'N' | 'C'; fecha: string }>,
+      conductorId: string,
+      turno: 'D' | 'N' | 'C',
+      fecha: string
+    ) => {
+      const previo = mapa.get(conductorId)
+      if (!previo || fecha > previo.fecha) mapa.set(conductorId, { turno, fecha })
+    }
 
     for (const a of asignaciones) {
       // Solo contar asignaciones activas o programadas
@@ -717,15 +737,24 @@ export function AsignacionesModule() {
         
         if (c.documento === 'CARTA_OFERTA' && c.conductor_id) {
           conductoresCartaOfertaSet.add(c.conductor_id)
+          registrarTurno(cartaOfertaTurnoPorConductor, c.conductor_id, turnoDe(c.horario), fechaRef || '')
         }
         if (c.documento === 'ANEXO' && c.conductor_id) {
           conductoresAnexoSet.add(c.conductor_id)
+          registrarTurno(anexoTurnoPorConductor, c.conductor_id, turnoDe(c.horario), fechaRef || '')
         }
       }
     }
 
     const asignacionesCartaOferta = conductoresCartaOfertaSet.size
     const asignacionesAnexo = conductoresAnexoSet.size
+    const contarTurnos = (mapa: Map<string, { turno: 'D' | 'N' | 'C'; fecha: string }>) => {
+      const r = { D: 0, N: 0, C: 0 }
+      for (const { turno } of mapa.values()) r[turno]++
+      return r
+    }
+    const cartaOfertaPorTurno = contarTurnos(cartaOfertaTurnoPorConductor)
+    const anexoPorTurno = contarTurnos(anexoTurnoPorConductor)
 
     return {
       totalVehiculos,
@@ -745,6 +774,12 @@ export function AsignacionesModule() {
       entregasCanceladasSemana,
       conductoresCartaOferta: asignacionesCartaOferta,
       conductoresAnexo: asignacionesAnexo,
+      cartaOfertaD: cartaOfertaPorTurno.D,
+      cartaOfertaN: cartaOfertaPorTurno.N,
+      cartaOfertaCargo: cartaOfertaPorTurno.C,
+      anexoD: anexoPorTurno.D,
+      anexoN: anexoPorTurno.N,
+      anexoCargo: anexoPorTurno.C,
       // Datos de la semana para filtros
       lunesSemanaStr,
       domingoSemanaStr
@@ -3520,7 +3555,7 @@ export function AsignacionesModule() {
         <div className="asig-stats-grid" style={{ marginTop: '12px' }}>
           <div
             className={`stat-card stat-card-clickable ${activeStatCard === 'cartaOferta' ? 'stat-card-active' : ''}`}
-            title="Conductores nuevos que firmaron Carta Oferta (conteo por conductor único)"
+            title={`Conductores nuevos que firmaron Carta Oferta (conteo por conductor único) - Diurnos: ${calculatedStats.cartaOfertaD} | Nocturnos: ${calculatedStats.cartaOfertaN} | A cargo: ${calculatedStats.cartaOfertaCargo}`}
             onClick={() => handleStatCardClick('cartaOferta')}
           >
             <UserPlus size={18} className="stat-icon" />
@@ -3528,16 +3563,48 @@ export function AsignacionesModule() {
               <span className="stat-value">{calculatedStats.conductoresCartaOferta}</span>
               <span className="stat-label">Cond. Nuevos</span>
             </div>
+            <div className="asig-turnos-desglose">
+              <span className="asig-turnos-desglose-item">
+                <span className="asig-turno-label asig-label-diurno">D</span>
+                {calculatedStats.cartaOfertaD}
+              </span>
+              <span className="asig-turnos-desglose-item">
+                <span className="asig-turno-label asig-label-nocturno">N</span>
+                {calculatedStats.cartaOfertaN}
+              </span>
+              {calculatedStats.cartaOfertaCargo > 0 && (
+                <span className="asig-turnos-desglose-item" title="A cargo">
+                  <span className="asig-turno-label asig-label-cargo">C</span>
+                  {calculatedStats.cartaOfertaCargo}
+                </span>
+              )}
+            </div>
           </div>
           <div
             className={`stat-card stat-card-clickable ${activeStatCard === 'anexo' ? 'stat-card-active' : ''}`}
-            title="Conductores antiguos con Anexo por cambio de vehículo (conteo por conductor único)"
+            title={`Conductores antiguos con Anexo por cambio de vehículo (conteo por conductor único) - Diurnos: ${calculatedStats.anexoD} | Nocturnos: ${calculatedStats.anexoN} | A cargo: ${calculatedStats.anexoCargo}`}
             onClick={() => handleStatCardClick('anexo')}
           >
             <UserCheck size={18} className="stat-icon" />
             <div className="stat-content">
               <span className="stat-value">{calculatedStats.conductoresAnexo}</span>
               <span className="stat-label">Cond. Anexo</span>
+            </div>
+            <div className="asig-turnos-desglose">
+              <span className="asig-turnos-desglose-item">
+                <span className="asig-turno-label asig-label-diurno">D</span>
+                {calculatedStats.anexoD}
+              </span>
+              <span className="asig-turnos-desglose-item">
+                <span className="asig-turno-label asig-label-nocturno">N</span>
+                {calculatedStats.anexoN}
+              </span>
+              {calculatedStats.anexoCargo > 0 && (
+                <span className="asig-turnos-desglose-item" title="A cargo">
+                  <span className="asig-turno-label asig-label-cargo">C</span>
+                  {calculatedStats.anexoCargo}
+                </span>
+              )}
             </div>
           </div>
           <div

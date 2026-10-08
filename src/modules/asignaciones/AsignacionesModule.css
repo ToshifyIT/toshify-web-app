@@ -2538,3 +2538,9 @@ input[type="date"].asig-status-select {
 [data-theme="dark"] .dt-table tbody tr.asig-row-sin-carpeta:hover > td.dt-sticky-col-left {
   background: rgba(220, 38, 38, 0.24);
 }
+
+/* A cargo (C) - Violeta, mismo tono que el badge "A CARGO" de la tabla */
+.asig-turno-label.asig-label-cargo {
+  background: var(--badge-purple-bg);
+  color: var(--badge-purple-text);
+}

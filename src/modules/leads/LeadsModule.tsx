@@ -301,6 +301,24 @@ function esContactadoSellium(l: Lead): boolean {
   return l.estado_de_lead === 'Contactado Sellium' || esFuenteSellium(l)
 }
 
+/** Rango por defecto del filtro de creación: hoy y el mismo día del mes anterior
+ *  (si ese día no existe, el último día de ese mes). Fechas 'YYYY-MM-DD' en ART. */
+function rangoUltimoMesART(): { desde: string; hasta: string } {
+  const hasta = fechaISOART(new Date().toISOString()) as string
+  const [anio, mes, dia] = hasta.split('-').map(Number)
+  const anioDesde = mes === 1 ? anio - 1 : anio
+  const mesDesde = mes === 1 ? 12 : mes - 1
+  const ultimoDiaMes = new Date(Date.UTC(anioDesde, mesDesde, 0)).getUTCDate()
+  const diaDesde = Math.min(dia, ultimoDiaMes)
+  const desde = `${anioDesde}-${String(mesDesde).padStart(2, '0')}-${String(diaDesde).padStart(2, '0')}`
+  return { desde, hasta }
+}
+
+/** Tarjeta "Aptos": solo los que pasaron la inducción (entrevista). */
+function esAptoInduccion(l: Lead): boolean {
+  return l.estado_de_lead === 'Apto Inducción' || l.estado_de_lead === 'Apto Induccion'
+}
+
 /** Tarjeta "Intercom": todo lo que no es Damaro ni Sellium. */
 function esFuenteIntercom(l: Lead): boolean {
   return (l.fuente_de_lead || '').toLowerCase() !== 'damaro' && !esFuenteSellium(l)
@@ -605,8 +623,10 @@ export function LeadsModule() {
   const [estadoFilter, setEstadoFilter] = useState<string[]>([])
   const [openFilterId, setOpenFilterId] = useState<string | null>(null)
   // Rango de fecha de creación (YYYY-MM-DD, inclusivo en ambos extremos).
-  const [creacionDesde, setCreacionDesde] = useState<string | null>(null)
-  const [creacionHasta, setCreacionHasta] = useState<string | null>(null)
+  // Por defecto: leads creados en el último mes (hace un mes → hoy, día ART).
+  // "Limpiar todos" o quitar el chip vuelve a mostrar todo el histórico.
+  const [creacionDesde, setCreacionDesde] = useState<string | null>(() => rangoUltimoMesART().desde)
+  const [creacionHasta, setCreacionHasta] = useState<string | null>(() => rangoUltimoMesART().hasta)
 
   // Stat card filter
   const [activeStatCard, setActiveStatCard] = useState<string | null>(null)
@@ -636,6 +656,22 @@ export function LeadsModule() {
     'Documentos enviados', 'Documentos pendientes', 'Auto del pueblo', 'No le interesa', 'No cumple edad',
     'Convocatoria Inducción', 'Apto Inducción', 'Descartado',
   ] as const
+
+  // Estados que ya no se usan en el proceso actual (Hireflix ya no existe; la carga
+  // de Sellium asigna "Inicio conversación" y no informa "Acepta oferta").
+  // Se ocultan del filtro de la columna Estado y de los desplegables para cambiar
+  // el estado (tabla y formulario): los leads que ya los tienen conservan su
+  // estado como dato histórico y siguen visibles en la tabla.
+  // "Zona aprobada" tampoco se filtra como estado: la zona la determina el sistema
+  // por coordenadas (tag "Zona Aprobada" / "Zona Restringida" y su tarjeta).
+  const ESTADOS_OCULTOS_FILTRO = new Set<string>([
+    'Contactado Sellium', 'Acepta oferta',
+    'Pendiente - Hireflix', 'Apto - Hireflix', 'No Apto - Hireflix', 'Ayuda - Hireflix',
+    'Zona aprobada',
+    // Se muestra como "Descartado" (ver displayEstadoLead): para elegirlo a mano se usa Descartado.
+    'No cumple edad',
+  ])
+  const ESTADOS_FILTRO = ESTADOS_LEAD.filter(e => !ESTADOS_OCULTOS_FILTRO.has(e))
 
   /** Pipeline de progresion de estados: indice mayor = mas avanzado.
    *  calcularEstadoLead y la carga masiva Sellium solo pueden AVANZAR, nunca retroceder.
@@ -1433,6 +1469,16 @@ export function LeadsModule() {
     [...new Set(leads.map(l => l.zona).filter(Boolean))].sort() as string[]
   , [leads])
 
+  // Guías existentes (entrevistador_asignado), sin duplicados por mayúsculas/espacios.
+  const uniqueGuias = useMemo(() => {
+    const porClave = new Map<string, string>()
+    for (const l of leads) {
+      const g = (l.entrevistador_asignado || '').trim()
+      if (g && !porClave.has(g.toLowerCase())) porClave.set(g.toLowerCase(), g)
+    }
+    return [...porClave.values()].sort((a, b) => a.localeCompare(b, 'es'))
+  }, [leads])
+
   const uniqueTurnos = useMemo(() =>
     [...new Set(leads.map(l => normalizarTurno(l.turno)).filter(v => v !== '-'))].sort() as string[]
   , [leads])
@@ -1456,7 +1502,7 @@ export function LeadsModule() {
     switch (activeStatCard) {
       case 'inicio': return l.estado_de_lead === 'Inicio conversación'
       case 'contactadoSellium': return esContactadoSellium(l)
-      case 'aptos': return l.estado_de_lead === 'Apto - Hireflix'
+      case 'aptos': return esAptoInduccion(l)
       case 'noAptos': return l.estado_de_lead === 'No Apto - Hireflix'
       case 'convocatoria': return l.estado_de_lead === 'Convocatoria Inducción' || l.estado_de_lead === 'Convocatoria Induccion'
       case 'zonaSegura': return l.latitud != null && l.longitud != null && !leadsEnZona.has(l.id)
@@ -1535,7 +1581,7 @@ export function LeadsModule() {
     const sinTarjeta = leadsMetricas ?? leadsBase
     const total = base.length
     const contactadoSellium = base.filter(esContactadoSellium).length
-    const aptos = base.filter(l => l.estado_de_lead === 'Apto - Hireflix').length
+    const aptos = base.filter(esAptoInduccion).length
     const noAptos = base.filter(l => l.estado_de_lead === 'No Apto - Hireflix').length
     const conCoordenadas = base.filter(l => l.latitud != null && l.longitud != null)
     const enZonaRestringida = conCoordenadas.filter(l => leadsEnZona.has(l.id)).length
@@ -2671,7 +2717,7 @@ export function LeadsModule() {
       header: () => (
         <ExcelColumnFilter
           label="Estado"
-          options={[...ESTADOS_LEAD]}
+          options={[...ESTADOS_FILTRO]}
           selectedValues={estadoFilter}
           onSelectionChange={setEstadoFilter}
           filterId="lead_estado"
@@ -2698,7 +2744,7 @@ export function LeadsModule() {
             isOpen={isOpen}
             canEdit={canEdit}
             onToggle={(id) => setEstadoDropdownId(isOpen ? null : id)}
-            estados={ESTADOS_LEAD as unknown as string[]}
+            estados={ESTADOS_FILTRO as unknown as string[]}
             onChangeEstado={handleChangeEstadoInline}
             onClose={() => setEstadoDropdownId(null)}
           />
@@ -2853,21 +2899,61 @@ export function LeadsModule() {
       id: 'entrevistador',
       accessorFn: (row) => row.entrevistador_asignado || '-',
       header: 'Guia',
-      cell: ({ row }) => {
-        const v = row.original.entrevistador_asignado || '-'
-        return <span style={{ fontSize: '11px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', display: 'block', maxWidth: '100px' }} title={v}>{v}</span>
-      },
-      size: 110,
+      cell: ({ row }) => (
+        <GuiaDropdownCell
+          leadId={row.original.id}
+          value={row.original.entrevistador_asignado}
+          guias={uniqueGuias}
+          isOpen={sinoDropdownKey === `${row.original.id}::entrevistador_asignado`}
+          canEdit={canEdit}
+          onToggle={(k) => setSinoDropdownKey(sinoDropdownKey === k ? null : k)}
+          onChange={handleInlineUpdate}
+          onClose={() => setSinoDropdownKey(null)}
+        />
+      ),
+      size: 120,
       enableSorting: true,
     },
     /* Columna Fase oculta */
     /* Columna Hireflix oculta */
     {
-      id: 'exp_manejo',
+      // Antes se titulaba "Exp. Manejo" pero muestra experiencia_previa (Sí/No),
+      // igual que "Experiencia Previa" en el detalle del lead.
+      id: 'exp_previa',
       accessorFn: (row) => row.experiencia_previa || '-',
-      header: 'Exp. Manejo',
-      cell: ({ row }) => <span style={{ fontSize: '11px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', display: 'block', maxWidth: '80px' }} title={row.original.experiencia_previa || ''}>{row.original.experiencia_previa || '-'}</span>,
+      header: 'Exp. Previa',
+      cell: ({ row }) => (
+        <SiNoDropdownCell
+          leadId={row.original.id}
+          field="experiencia_previa"
+          value={row.original.experiencia_previa}
+          isOpen={sinoDropdownKey === `${row.original.id}::experiencia_previa`}
+          canEdit={canEdit}
+          onToggle={(k) => setSinoDropdownKey(sinoDropdownKey === k ? null : k)}
+          onChange={handleInlineUpdate}
+          onClose={() => setSinoDropdownKey(null)}
+        />
+      ),
       size: 85,
+      enableSorting: true,
+    },
+    {
+      // Texto libre ("Experiencia Manejo" en el detalle del lead).
+      id: 'exp_manejo',
+      accessorFn: (row) => row.experiencia_manejo || '-',
+      header: 'Exp. Manejo',
+      cell: ({ row }) => {
+        const txt = (row.original.experiencia_manejo || '').trim()
+        return (
+          <span
+            title={txt || undefined}
+            style={{ fontSize: '11px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', display: 'block', maxWidth: '180px' }}
+          >
+            {txt ? txt.replace(/\s+/g, ' ') : '-'}
+          </span>
+        )
+      },
+      size: 180,
       enableSorting: true,
     },
     /* Columna D1 oculta */
@@ -2943,6 +3029,26 @@ export function LeadsModule() {
         />
       ),
       size: 70,
+      enableSorting: true,
+    },
+    {
+      // Solo lectura: el texto puede ser largo y multilínea (y contiene la alerta de
+      // recontacto), así que se edita desde el formulario, no inline.
+      id: 'observaciones',
+      accessorFn: (row) => row.observaciones || '-',
+      header: 'Observaciones',
+      cell: ({ row }) => {
+        const obs = (row.original.observaciones || '').trim()
+        return (
+          <span
+            title={obs || undefined}
+            style={{ fontSize: '11px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', display: 'block', maxWidth: '220px' }}
+          >
+            {obs ? obs.replace(/\s+/g, ' ') : '-'}
+          </span>
+        )
+      },
+      size: 220,
       enableSorting: true,
     },
     /* Columna Monotributo oculta */
@@ -3050,7 +3156,7 @@ export function LeadsModule() {
       },
     }))
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [uniqueNombres, nombreFilter, estadoFilter, uniqueDisponibilidades, disponibilidadFilter, uniqueZonas, zonaFilter, uniqueTurnos, turnoFilter, creacionDesde, creacionHasta, openFilterId, canEdit, canDelete, leadsEnZona, estadoDropdownId, sinoDropdownKey, esAdmin, seleccionCoords])
+  }, [uniqueNomes, nombreFilter, estadoFilter, uniqueDisponibilidades, disponibilidadFilter, uniqueZonas, zonaFilter, uniqueTurnos, turnoFilter, creacionDesde, creacionHasta, openFilterId, canEdit, canDelete, leadsEnZona, estadoDropdownId, sinoDropdownKey, esAdmin, seleccionCoords])
 
   // ---------- EXTERNAL FILTERS (chips) ----------
   const hasActiveFilters = nombreFilter.length > 0 || estadoFilter.length > 0 ||
@@ -3139,6 +3245,7 @@ export function LeadsModule() {
           <div
             className={`stat-card stat-card-clickable ${activeStatCard === 'aptos' ? 'stat-card-active' : ''}`}
             onClick={() => handleStatClick('aptos')}
+            title="Leads en estado Apto Inducción (aprobaron la inducción)"
           >
             <CheckCircle size={18} className="stat-icon" style={{ color: '#16a34a' }} />
             <div className="stat-content">
@@ -3372,6 +3479,8 @@ export function LeadsModule() {
                 tiposLicencia={tiposLicencia}
                 estadosCiviles={estadosCiviles}
                 nacionalidades={nacionalidades}
+                guias={uniqueGuias}
+                estados={ESTADOS_FILTRO as unknown as string[]}
               />
             </div>
           </div>
@@ -3401,6 +3510,8 @@ export function LeadsModule() {
                 tiposLicencia={tiposLicencia}
                 estadosCiviles={estadosCiviles}
                 nacionalidades={nacionalidades}
+                guias={uniqueGuias}
+                estados={ESTADOS_FILTRO as unknown as string[]}
               />
             </div>
           </div>
@@ -3578,8 +3689,13 @@ function SiNoDropdownCell({ leadId, field, value, isOpen, canEdit, onToggle, onC
   const dropdownRef = useRef<HTMLDivElement>(null)
   const [pos, setPos] = useState({ top: 0, left: 0 })
   const dropdownKey = `${leadId}::${String(field)}`
-  const display = value || '-'
-  const color = value === 'Si' ? '#16a34a' : value === 'No' ? '#dc2626' : '#9ca3af'
+  // "Sí", "SI", "si" -> "Si" (algunas fuentes guardan con tilde o en mayúsculas)
+  const norm = (() => {
+    const v = (value || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().toLowerCase()
+    return v === 'si' ? 'Si' : v === 'no' ? 'No' : null
+  })()
+  const display = norm || value || '-'
+  const color = norm === 'Si' ? '#16a34a' : norm === 'No' ? '#dc2626' : '#9ca3af'
 
   useLayoutEffect(() => {
     if (!isOpen || !cellRef.current) return
@@ -3623,7 +3739,7 @@ function SiNoDropdownCell({ leadId, field, value, isOpen, canEdit, onToggle, onC
           cursor: canEdit ? 'pointer' : 'default',
           padding: '2px 8px',
           borderRadius: '4px',
-          background: value === 'Si' ? '#DCFCE7' : value === 'No' ? '#FEE2E2' : 'transparent',
+          background: norm === 'Si' ? '#DCFCE7' : norm === 'No' ? '#FEE2E2' : 'transparent',
           border: canEdit ? '1px dashed #d1d5db' : 'none',
         }}
         onClick={canEdit ? (e) => { e.stopPropagation(); onToggle(dropdownKey) } : undefined}
@@ -3657,14 +3773,14 @@ function SiNoDropdownCell({ leadId, field, value, isOpen, canEdit, onToggle, onC
                 width: '100%',
                 padding: '8px 14px',
                 border: 'none',
-                background: opt.val === value ? '#F3F4F6' : 'transparent',
+                background: opt.val === norm ? '#F3F4F6' : 'transparent',
                 cursor: 'pointer',
                 fontSize: '13px',
-                fontWeight: opt.val === value ? 600 : 400,
+                fontWeight: opt.val === norm ? 600 : 400,
                 textAlign: 'left',
               }}
               onMouseEnter={e => (e.currentTarget.style.background = '#F3F4F6')}
-              onMouseLeave={e => (e.currentTarget.style.background = opt.val === value ? '#F3F4F6' : 'transparent')}
+              onMouseLeave={e => (e.currentTarget.style.background = opt.val === norm ? '#F3F4F6' : 'transparent')}
               onClick={(e) => {
                 e.stopPropagation()
                 if (opt.val !== value) onChange(leadId, field, opt.val)
@@ -3672,6 +3788,133 @@ function SiNoDropdownCell({ leadId, field, value, isOpen, canEdit, onToggle, onC
               }}
             >
               <span style={{ width: 8, height: 8, borderRadius: '50%', background: opt.dot, flexShrink: 0 }} />
+              {opt.label}
+            </button>
+          ))}
+        </div>,
+        document.body
+      )}
+    </span>
+  )
+}
+
+// =====================================================
+// GUIA DROPDOWN CELL (mismo patrón que SiNoDropdownCell)
+// =====================================================
+
+interface GuiaDropdownCellProps {
+  leadId: string
+  value: string | null | undefined
+  guias: string[]
+  isOpen: boolean
+  canEdit: boolean
+  onToggle: (key: string) => void
+  onChange: (leadId: string, field: keyof Lead, value: string) => void
+  onClose: () => void
+}
+
+function GuiaDropdownCell({ leadId, value, guias, isOpen, canEdit, onToggle, onChange, onClose }: GuiaDropdownCellProps) {
+  const cellRef = useRef<HTMLSpanElement>(null)
+  const dropdownRef = useRef<HTMLDivElement>(null)
+  const [pos, setPos] = useState({ top: 0, left: 0 })
+  const dropdownKey = `${leadId}::entrevistador_asignado`
+  const actual = (value || '').trim()
+  const MAX_H = 260
+
+  useLayoutEffect(() => {
+    if (!isOpen || !cellRef.current) return
+    const rect = cellRef.current.getBoundingClientRect()
+    const alto = Math.min(MAX_H, (guias.length + 1) * 36 + 8)
+    const vh = window.innerHeight
+    let top = rect.bottom + 4
+    if (top + alto > vh - 8) top = rect.top - alto - 4
+    if (top < 8) top = 8
+    setPos({ top, left: rect.left })
+  }, [isOpen, guias.length])
+
+  useEffect(() => {
+    if (!isOpen) return
+    const handler = (e: MouseEvent) => {
+      const t = e.target as HTMLElement
+      if (dropdownRef.current && !dropdownRef.current.contains(t) && cellRef.current && !cellRef.current.contains(t)) {
+        onClose()
+      }
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [isOpen, onClose])
+
+  // '' = sin guía (se guarda null)
+  const opciones: { val: string; label: string }[] = [
+    { val: '', label: 'Sin asignar' },
+    ...guias.map(g => ({ val: g, label: g })),
+  ]
+  const esActual = (v: string) => v.toLowerCase() === actual.toLowerCase()
+
+  return (
+    <span style={{ display: 'inline-block', maxWidth: '110px' }}>
+      <span
+        ref={cellRef}
+        title={actual || undefined}
+        style={{
+          display: 'inline-flex',
+          alignItems: 'center',
+          gap: '3px',
+          maxWidth: '110px',
+          fontSize: '11px',
+          color: actual ? 'var(--text-primary)' : '#9ca3af',
+          cursor: canEdit ? 'pointer' : 'default',
+          padding: '2px 8px',
+          borderRadius: '4px',
+          border: canEdit ? '1px dashed #d1d5db' : 'none',
+        }}
+        onClick={canEdit ? (e) => { e.stopPropagation(); onToggle(dropdownKey) } : undefined}
+      >
+        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{actual || '-'}</span>
+        {canEdit && <svg width="10" height="10" viewBox="0 0 10 10" style={{ opacity: 0.4, flexShrink: 0 }}><path d="M2.5 4L5 6.5L7.5 4" stroke="currentColor" strokeWidth="1.5" fill="none" strokeLinecap="round" strokeLinejoin="round"/></svg>}
+      </span>
+      {isOpen && canEdit && createPortal(
+        <div
+          ref={dropdownRef}
+          style={{
+            position: 'fixed',
+            top: pos.top,
+            left: pos.left,
+            zIndex: 99999,
+            background: '#fff',
+            borderRadius: '8px',
+            boxShadow: '0 4px 20px rgba(0,0,0,.15)',
+            padding: '4px 0',
+            minWidth: '160px',
+            maxHeight: MAX_H,
+            overflowY: 'auto',
+          }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          {opciones.map(opt => (
+            <button
+              key={opt.val || '__sin_guia__'}
+              style={{
+                display: 'block',
+                width: '100%',
+                padding: '8px 14px',
+                border: 'none',
+                background: esActual(opt.val) ? '#F3F4F6' : 'transparent',
+                cursor: 'pointer',
+                fontSize: '13px',
+                fontWeight: esActual(opt.val) ? 600 : 400,
+                color: opt.val ? 'inherit' : '#9ca3af',
+                textAlign: 'left',
+                whiteSpace: 'nowrap',
+              }}
+              onMouseEnter={e => (e.currentTarget.style.background = '#F3F4F6')}
+              onMouseLeave={e => (e.currentTarget.style.background = esActual(opt.val) ? '#F3F4F6' : 'transparent')}
+              onClick={(e) => {
+                e.stopPropagation()
+                if (!esActual(opt.val)) onChange(leadId, 'entrevistador_asignado', opt.val)
+                onClose()
+              }}
+            >
               {opt.label}
             </button>
           ))}
