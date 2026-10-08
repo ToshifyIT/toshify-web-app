@@ -3156,7 +3156,7 @@ export function LeadsModule() {
       },
     }))
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [uniqueNomes, nombreFilter, estadoFilter, uniqueDisponibilidades, disponibilidadFilter, uniqueZonas, zonaFilter, uniqueTurnos, turnoFilter, creacionDesde, creacionHasta, openFilterId, canEdit, canDelete, leadsEnZona, estadoDropdownId, sinoDropdownKey, esAdmin, seleccionCoords])
+  }, [uniqueNombres, nombreFilter, estadoFilter, uniqueDisponibilidades, disponibilidadFilter, uniqueZonas, zonaFilter, uniqueTurnos, turnoFilter, creacionDesde, creacionHasta, openFilterId, canEdit, canDelete, leadsEnZona, estadoDropdownId, sinoDropdownKey, esAdmin, seleccionCoords, uniqueGuias])
 
   // ---------- EXTERNAL FILTERS (chips) ----------
   const hasActiveFilters = nombreFilter.length > 0 || estadoFilter.length > 0 ||
