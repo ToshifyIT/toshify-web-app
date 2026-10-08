@@ -1063,3 +1063,33 @@
     width: 100%;
   }
 }
+
+/* =====================================================
+   MODAL DETALLES DEL CONDUCTOR - nombre fijo en la cabecera
+   ===================================================== */
+
+.cond-detalle-header-titulo {
+  flex: 1;
+  min-width: 0;
+  text-align: center;
+}
+
+.cond-detalle-header-titulo h2 {
+  margin: 0;
+}
+
+.cond-detalle-header-nombre {
+  margin-top: 4px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--color-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cond-detalle-header-dni {
+  margin-left: 8px;
+  font-weight: 500;
+  color: var(--text-secondary);
+}

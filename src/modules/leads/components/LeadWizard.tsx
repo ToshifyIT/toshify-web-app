@@ -25,6 +25,10 @@ interface LeadWizardProps {
   // que usa el form de conductor, para que lo elegido aca se vea identico alla.
   estadosCiviles?: CatalogoItem[]
   nacionalidades?: CatalogoItem[]
+  /** Guías que ya existen en los leads (valores de entrevistador_asignado). */
+  guias?: string[]
+  /** Estados de lead que se pueden elegir (misma lista que el cambio de estado en la tabla). */
+  estados?: string[]
 }
 
 const STEPS = [
@@ -50,7 +54,7 @@ function calcularEdad(fechaNac: string): number | undefined {
   return edad >= 0 ? edad : undefined
 }
 
-export function LeadWizard({ formData, setFormData, onSave, onCancel, saving = false, errors = {}, categoriasLicencia = [], estadosCiviles = [], nacionalidades = [] }: LeadWizardProps) {
+export function LeadWizard({ formData, setFormData, onSave, onCancel, saving = false, errors = {}, categoriasLicencia = [], estadosCiviles = [], nacionalidades = [], guias = [], estados = [] }: LeadWizardProps) {
   const [currentStep, setCurrentStep] = useState(1)
   const { sedes } = useSede()
 
@@ -598,18 +602,13 @@ export function LeadWizard({ formData, setFormData, onSave, onCancel, saving = f
                 <label>Estado de Lead</label>
                 <select value={formData.estado_de_lead || ''} onChange={e => updateField('estado_de_lead', e.target.value)}>
                   <option value="">Seleccionar</option>
-                  <option value="Inicio conversación">Inicio conversación</option>
-                  <option value="Contactado Sellium">Contactado Sellium</option>
-                  <option value="Acepta oferta">Acepta oferta</option>
-                  <option value="Apto - Hireflix">Apto - Hireflix</option>
-                  <option value="No Apto - Hireflix">No Apto - Hireflix</option>
-                  <option value="Ayuda - Hireflix">Ayuda - Hireflix</option>
-                  <option value="Documentos enviados">Documentos enviados</option>
-                  <option value="Auto del pueblo">Auto del pueblo</option>
-                  <option value="No le interesa">No le interesa</option>
-                  <option value="No cumple edad">No cumple edad</option>
-                  <option value="Convocatoria Inducción">Convocatoria Inducción</option>
-                  <option value="Descartado">Descartado</option>
+                  {/* Si el lead tiene un estado que ya no se ofrece (histórico), se conserva como opción */}
+                  {formData.estado_de_lead && !estados.includes(formData.estado_de_lead) && (
+                    <option value={formData.estado_de_lead}>{formData.estado_de_lead}</option>
+                  )}
+                  {estados.map(e => (
+                    <option key={e} value={e}>{e}</option>
+                  ))}
                 </select>
               </div>
               <div className="lead-wizard-field">
@@ -630,11 +629,20 @@ export function LeadWizard({ formData, setFormData, onSave, onCancel, saving = f
             <div className="lead-wizard-form-group">
               <div className="lead-wizard-field">
                 <label>Guia</label>
-                <input
-                  type="text"
+                <select
                   value={formData.entrevistador_asignado || ''}
                   onChange={e => updateField('entrevistador_asignado', e.target.value)}
-                />
+                >
+                  <option value="">Seleccionar</option>
+                  {/* Si el lead tiene un guía que no está en la lista, se conserva como opción */}
+                  {formData.entrevistador_asignado &&
+                    !guias.some(g => g.toLowerCase() === formData.entrevistador_asignado.trim().toLowerCase()) && (
+                      <option value={formData.entrevistador_asignado}>{formData.entrevistador_asignado}</option>
+                    )}
+                  {guias.map(g => (
+                    <option key={g} value={g}>{g}</option>
+                  ))}
+                </select>
               </div>
               <div className="lead-wizard-field">
                 <label>Entrevista IA</label>

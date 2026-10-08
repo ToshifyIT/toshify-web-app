@@ -738,6 +738,15 @@ export function DataTable<T>({
     if (!wrapper) return;
     const ro = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(recalc) : null;
     ro?.observe(wrapper);
+    // Observar también las celdas de cabecera de las columnas fijas: su ancho puede
+    // cambiar sin que cambie el wrapper (filtros, orden, contenido más ancho). Si el
+    // `left` queda desactualizado, position:sticky desplaza la columna y la monta
+    // sobre la siguiente.
+    const headerRow = wrapper.querySelector('thead tr');
+    if (headerRow) {
+      const cells = Array.from(headerRow.children) as HTMLElement[];
+      for (let i = 0; i < stickyLeftCount && i < cells.length; i++) ro?.observe(cells[i]);
+    }
     return () => ro?.disconnect();
   }, [stickyLeftCount, data]);
 
