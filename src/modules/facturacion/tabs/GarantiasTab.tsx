@@ -23,6 +23,7 @@ import {
   Receipt,
   ArrowUpCircle,
   RotateCcw,
+  Scale,
   Download,
   Upload,
   HelpCircle,
@@ -38,6 +39,9 @@ import { recalcGarantiasForSede } from '../../../services/garantiasService'
 import { formatNombreCompleto } from '../../../utils/conductorUtils'
 import { getKardexGarantia, getFacturacionGarantiaConductor, type ControlGarantiaRow } from '../../../services/controlGarantiasService'
 import { X as XIcon } from 'lucide-react'
+import { aplicarMovimientoSaldo, insertControlSaldo } from '../../../services/controlSaldosService'
+import { analizarRegimenToshipass, garantiaRetenida, referenciaDevolucionCambioTarifa, esDevolucionCambioTarifa, referenciaVisible } from '../utils/toshipass'
+import { cargarConceptosTarifa } from '../../onboarding/tarifaConceptos'
 
 interface ConductorBasico {
   id: string
@@ -51,6 +55,9 @@ interface DevolucionGarantiaRow {
   referencia: string | null
   created_at: string
   created_by_name: string | null
+  fecha_devolucion?: string | null
+  /** Semana de facturación en la que cae la devolución (ej: "S41 2026"), si se encontró. */
+  semana_facturacion?: string | null
 }
 
 interface EdicionGarantiaRow {
@@ -143,14 +150,29 @@ function subEstadoDevolucion(g: any, saldos: Map<string, number>, override?: num
   return neto < 0 ? 'debe' : 'debemos'
 }
 
+// Cambio de tarifa (antigua → nueva, ej. ENE-26 → OCT-26): el estado es siempre "DEVOLUCIÓN" con el resultado
+// de garantía pagada + saldo actual (negativo → todavía debe; positivo → queda a su favor).
+// Es SOLO informativo: la garantía no se descuenta de la deuda en Facturación, Saldos ni
+// Mi espacio; se resuelve aparte (decisión 2026-10-09).
+interface InfoCambioTarifa {
+  /** Fecha (yyyy-MM-dd) del paso a tarifa nueva. */
+  desde: string
+}
+
+function netoCambioTarifa(g: any, saldos: Map<string, number>): number {
+  return Math.round((garantiaRetenida(g) + (saldos.get(g?.conductor_id) ?? 0)) * 100) / 100
+}
+
 // Estado tal cual lo muestra la columna "Estado" de la tabla, para los Excel:
 // mismo orden de prioridad que el badge. `monto` es el numero que aparece debajo
 // del badge (solo en DEBE / EN DEVOLUCIÓN); vacio en el resto.
 function estadoGarantiaParaExport(
   g: any,
   saldos: Map<string, number>,
-  override?: number
+  override?: number,
+  cambioTarifa?: InfoCambioTarifa
 ): { estado: string; monto: number | '' } {
+  if (cambioTarifa) return { estado: 'DEVOLUCIÓN (cambio de tarifa)', monto: netoCambioTarifa(g, saldos) }
   if (esGarantiaDevuelta(g, override)) return { estado: 'Devuelto', monto: '' }
   if (garantiaNoAplica(g, override)) return { estado: 'N/A', monto: '' }
   const etiquetas: Record<string, string> = {
@@ -181,6 +203,9 @@ function calcularDiasBaja(g: any): number {
   while (cur <= hoy) { const d = cur.getDay(); if (d !== 0 && d !== 6) dias++; cur.setDate(cur.getDate() + 1) }
   return dias
 }
+
+/** Botón "Editar" de la columna Acciones: oculto por pedido (2026-10-09). true = mostrar. */
+const MOSTRAR_BOTON_EDITAR = false
 
 // Dias de baja a partir del cual la garantia ya deberia estar devuelta.
 const DIAS_BAJA_PARA_DEVOLVER = 120
@@ -223,6 +248,11 @@ export function GarantiasTab() {
   // Saldo de cuenta corriente por conductor_id, tal como lo muestra la pestaña
   // Saldos (saldos_conductores.saldo_actual). Negativo = deuda.
   const [saldosPorConductor, setSaldosPorConductor] = useState<Map<string, number>>(new Map())
+  // Conductores que pasaron de tarifa antigua a nueva (desde el corte de Toshipass)
+  const [cambiosTarifa, setCambiosTarifa] = useState<Map<string, InfoCambioTarifa>>(new Map())
+  // Etiquetas de las tarifas (ej. "ENE-26" / "OCT-26"): salen de la descripción de los
+  // conceptos de alquiler, así un cambio de nombre no requiere tocar código.
+  const [etiquetasTarifa, setEtiquetasTarifa] = useState<{ antigua: string; nueva: string }>({ antigua: 'Antigua', nueva: 'Nueva' })
   const [todosLosPagos, setTodosLosPagos] = useState<PagoGarantiaRow[]>([])
   const [loading, setLoading] = useState(true)
 
@@ -266,7 +296,7 @@ export function GarantiasTab() {
     semanasFacturacion: { semana: number; anio: number; subtotalGarantia: number; fecha: string; estado: string; fechaCierre: string | null }[]
     devoluciones: DevolucionGarantiaRow[]
     ediciones: EdicionGarantiaRow[]
-    tab: 'movimientos' | 'devoluciones' | 'ediciones'
+    tab: 'movimientos' | 'devoluciones' | 'devolucion_garantia' | 'ediciones'
   }>({ open: false, garantia: null, rows: [], loading: false, search: '', semanaFilter: '', tipoFilter: '', semanasFacturacion: [], devoluciones: [], ediciones: [], tab: 'movimientos' })
   // Tooltip flotante (posición fixed) para el aviso de semana no cerrada en el kardex.
   // Se usa fixed para que no lo recorte el contenedor con scroll de la tabla.
@@ -286,14 +316,30 @@ export function GarantiasTab() {
 
   async function cargarDevoluciones(garantiaId: string): Promise<DevolucionGarantiaRow[]> {
     const { data, error } = await (supabase.from('garantias_devoluciones') as any)
-      .select('id, monto, referencia, created_at, created_by_name')
+      .select('id, monto, referencia, created_at, created_by_name, fecha_devolucion')
       .eq('garantia_id', garantiaId)
       .order('created_at', { ascending: true })
     if (error) {
       console.error('Error cargando devoluciones:', error.message)
       return []
     }
-    return (data || []) as DevolucionGarantiaRow[]
+    const filas = (data || []) as DevolucionGarantiaRow[]
+    if (filas.length === 0) return filas
+
+    // Semana de facturación de cada devolución: el período que contiene su fecha (hora
+    // Argentina). Es la semana en la que la facturación la descuenta (P028).
+    const fmtArg = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Argentina/Buenos_Aires', year: 'numeric', month: '2-digit', day: '2-digit' })
+    const fechaDe = (f: DevolucionGarantiaRow) => fmtArg.format(new Date(f.fecha_devolucion || f.created_at))
+    const fechas = filas.map(fechaDe).sort()
+    const { data: periodos } = await (supabase.from('periodos_facturacion') as any)
+      .select('semana, anio, fecha_inicio, fecha_fin')
+      .lte('fecha_inicio', fechas[fechas.length - 1])
+      .gte('fecha_fin', fechas[0])
+    return filas.map(f => {
+      const fecha = fechaDe(f)
+      const p = ((periodos || []) as any[]).find(x => x.fecha_inicio <= fecha && fecha <= x.fecha_fin)
+      return { ...f, semana_facturacion: p ? `S${p.semana} ${p.anio}` : null }
+    })
   }
 
   async function abrirKardex(garantia: GarantiaConductor) {
@@ -539,12 +585,42 @@ export function GarantiasTab() {
         console.warn('[garantias] No se pudieron cargar los saldos:', errorSaldos.message)
         setSaldosPorConductor(new Map())
       } else {
+        // Conductores ACTIVOS: en Garantías no se muestra su saldo ni se resta de la garantía
+        // (columna Saldo Actual, resultado de DEVOLUCIÓN, modal de devolución y Excel).
+        // Solo se netea la garantía contra la deuda de los conductores que no están activos.
+        const conductoresActivos = new Set(
+          garantiasConEstado
+            .filter((g: any) => (g.estado_conductor || 'ACTIVO') === 'ACTIVO')
+            .map((g: any) => g.conductor_id)
+        )
         const mapaSaldos = new Map<string, number>()
         for (const fila of (saldosData || []) as any[]) {
-          if (fila.conductor_id) mapaSaldos.set(fila.conductor_id, Number(fila.saldo_actual) || 0)
+          if (fila.conductor_id && !conductoresActivos.has(fila.conductor_id)) {
+            mapaSaldos.set(fila.conductor_id, Number(fila.saldo_actual) || 0)
+          }
         }
         setSaldosPorConductor(mapaSaldos)
       }
+
+      // Cambios de tarifa (antigua → nueva): bloque aislado, si falla no afecta la carga.
+      ;(async () => {
+        try {
+          const conceptosTarifa = await cargarConceptosTarifa()
+          setEtiquetasTarifa({
+            antigua: conceptosTarifa.P001?.periodo || 'Antigua',
+            nueva: conceptosTarifa.P021?.periodo || 'Nueva',
+          })
+          const ids = garantiasConEstado.map((g: any) => g.conductor_id).filter(Boolean) as string[]
+          const regimen = await analizarRegimenToshipass(ids)
+          const cambioIds = [...regimen].filter(([, r]) => r.esCambioTarifa).map(([id]) => id)
+          const mapa = new Map<string, InfoCambioTarifa>()
+          for (const id of cambioIds) mapa.set(id, { desde: regimen.get(id)!.desde })
+          setCambiosTarifa(mapa)
+        } catch (err) {
+          console.warn('[garantias] No se pudieron cargar los cambios de tarifa:', err)
+          setCambiosTarifa(new Map())
+        }
+      })()
 
       // Calcular cuotas reales y última semana — bloque aislado con su propio try/catch
       // para que un fallo aquí no afecte la carga principal ni viceversa.
@@ -1151,21 +1227,129 @@ export function GarantiasTab() {
     }
   }
 
-  async function registrarDevolucion(garantia: GarantiaConductor) {
-    const devuelto = (garantia as any).monto_devuelto || 0
-    // Mismo monto que muestra la columna Pagado (incluye el recalculo del kardex),
-    // para que el modal no proponga un pendiente distinto al de la tabla.
-    const montoReal = montoPagadoGarantia(garantia, garantiasOverrides.get(garantia.id))
-    const pendienteDevolver = Math.round((montoReal - devuelto) * 100) / 100
-    const porcentajeDevuelto = montoReal > 0 ? Math.round((devuelto / montoReal) * 100) : 0
+  // "Actualizar saldo" (conductores de BAJA en estado DEBE): la garantía que todavía
+  // retenemos se aplica contra la deuda. Queda registrado en los dos lados:
+  //   - Garantías: devolución por el monto retenido (la garantía queda devuelta), así no
+  //     se vuelve a netear ni se puede aplicar dos veces.
+  //   - Saldos: movimiento "Devolución Garantía" que reduce la deuda (saldo + garantía).
+  // Primero la devolución (marca de aplicada): si después falla el saldo, se avisa para
+  // corregirlo a mano, pero nunca se acredita la garantía dos veces.
+  async function actualizarSaldoConGarantia(garantia: GarantiaConductor) {
+    const override = garantiasOverrides.get(garantia.id)
+    const devuelto = Number((garantia as any).monto_devuelto) || 0
+    const retenida = Math.round((montoPagadoGarantia(garantia, override) - devuelto) * 100) / 100
+    const saldoActual = saldosPorConductor.get(garantia.conductor_id)
+    if (retenida <= 0 || saldoActual === undefined) return
+    const saldoResultante = Math.round((saldoActual + retenida) * 100) / 100
 
-    const { value: formValues } = await Swal.fire({
-      title: '<span style="font-size: 16px; font-weight: 600;">Registrar Devolución de Garantía</span>',
+    const confirmacion = await Swal.fire({
+      title: '<span style="font-size: 16px; font-weight: 600;">Actualizar saldo</span>',
       html: `
         <div style="text-align: left; font-size: 13px;">
           <div style="background: #FEF2F2; padding: 12px; border-radius: 8px; margin-bottom: 14px; border: 1px solid #FECACA;">
             <div style="font-weight: 600; color: #111827; font-size: 14px;">${garantia.conductor_nombre}</div>
             <span style="background: #ff0033; color: white; padding: 1px 8px; border-radius: 4px; font-size: 11px; font-weight: 600;">BAJA</span>
+          </div>
+          <div style="background: #F9FAFB; padding: 12px; border-radius: 8px; margin-bottom: 12px; border: 1px solid #E5E7EB; line-height: 1.9;">
+            <div style="display: flex; justify-content: space-between;"><span>Saldo actual (deuda)</span><b style="color: #dc2626;">${formatCurrency(saldoActual)}</b></div>
+            <div style="display: flex; justify-content: space-between;"><span>+ Garantía retenida</span><b style="color: #16a34a;">+${formatCurrency(retenida)}</b></div>
+            <div style="display: flex; justify-content: space-between; border-top: 1px solid #E5E7EB; margin-top: 4px; padding-top: 4px;"><span>Saldo resultante</span><b style="color: ${saldoResultante < 0 ? '#dc2626' : '#16a34a'};">${formatCurrency(saldoResultante)}</b></div>
+          </div>
+          <div style="font-size: 11px; color: #6B7280; line-height: 1.5;">
+            Se registra en <b>Saldos</b> el movimiento "Devolución Garantía" y la garantía queda como devuelta (aplicada a la deuda).
+          </div>
+        </div>`,
+      showCancelButton: true,
+      confirmButtonText: 'Actualizar saldo',
+      cancelButtonText: 'Cancelar',
+      confirmButtonColor: '#2563eb',
+      width: 400,
+    })
+    if (!confirmacion.isConfirmed) return
+
+    try {
+      // 1. Garantía: devolución por el monto retenido (aplicada a la deuda)
+      const { error: errorDev } = await (supabase.from('garantias_devoluciones') as any).insert({
+        garantia_id: garantia.id,
+        conductor_id: garantia.conductor_id,
+        monto: retenida,
+        referencia: 'Garantía aplicada a la deuda (Actualizar saldo)',
+        created_by_name: profile?.full_name || null,
+      })
+      if (errorDev) throw errorDev
+      const { error: errorGar } = await (supabase.from('garantias_conductores') as any)
+        .update({ monto_devuelto: Math.round((devuelto + retenida) * 100) / 100, updated_at: new Date().toISOString() })
+        .eq('id', garantia.id)
+      if (errorGar) throw errorGar
+
+      // 2. Saldos: sumar la garantía sobre el saldo REAL de la base (no el de pantalla)
+      let nuevoSaldo: number
+      try {
+        const { data: filaSaldo, error: errorSaldo } = await (supabase.from('saldos_conductores') as any)
+          .select('id').eq('conductor_id', garantia.conductor_id).single()
+        if (errorSaldo || !filaSaldo) throw errorSaldo || new Error('El conductor no tiene registro de saldo')
+        nuevoSaldo = await aplicarMovimientoSaldo({ saldoId: filaSaldo.id, delta: retenida })
+
+        // Semana: el período de facturación que contiene la fecha de hoy (hora Argentina)
+        const hoyArg = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Argentina/Buenos_Aires', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date())
+        const { data: per } = await (supabase.from('periodos_facturacion') as any)
+          .select('semana, anio').lte('fecha_inicio', hoyArg).gte('fecha_fin', hoyArg).limit(1)
+        const semana = per?.[0]?.semana ?? Number(format(parseISO(hoyArg), 'I'))
+        const anio = per?.[0]?.anio ?? Number(hoyArg.slice(0, 4))
+        await insertControlSaldo({
+          conductorId: garantia.conductor_id,
+          semana,
+          anio,
+          tipoMovimiento: 'devolucion_garantia',
+          montoMovimiento: retenida,
+          saldoPendiente: nuevoSaldo,
+          referencia: 'Devolución Garantía (aplicada a la deuda)',
+          userName: profile?.full_name || undefined,
+        })
+      } catch (errorSaldos: any) {
+        Swal.fire('Atención', `La garantía quedó aplicada, pero no se pudo actualizar el saldo: ${errorSaldos?.message || 'error desconocido'}. Corregilo desde Saldos (Editar saldo).`, 'warning')
+        cargarGarantias()
+        return
+      }
+
+      showSuccess('Saldo actualizado', `Nuevo saldo de ${garantia.conductor_nombre}: ${formatCurrency(nuevoSaldo)}`)
+      cargarGarantias()
+    } catch (error: any) {
+      Swal.fire('Error', error.message || 'No se pudo actualizar el saldo', 'error')
+    }
+  }
+
+  // `cambioTarifa`: devolución por cambio de tarifa (ENE-26 → OCT-26). No se paga en
+  // efectivo: queda marcada y la facturación de la semana en curso la descuenta como
+  // P028 "Devolución de Garantía" (ver utils/toshipass.ts).
+  async function registrarDevolucion(garantia: GarantiaConductor, opciones?: { cambioTarifa?: boolean }) {
+    const esCambioTarifa = opciones?.cambioTarifa === true
+    const devuelto = (garantia as any).monto_devuelto || 0
+    // Mismo monto que muestra la columna Pagado (incluye el recalculo del kardex),
+    // para que el modal no proponga un pendiente distinto al de la tabla.
+    const montoReal = montoPagadoGarantia(garantia, garantiasOverrides.get(garantia.id))
+    const garantiaRetenidaModal = Math.round((montoReal - devuelto) * 100) / 100
+    const porcentajeDevuelto = montoReal > 0 ? Math.round((devuelto / montoReal) * 100) : 0
+    // Lo que hay que devolver es el MISMO neto que muestra la columna Estado: la garantía
+    // retenida menos la deuda del conductor (saldo actual). Si debe, no hay nada que
+    // devolver. Sin registro de saldo, se usa la garantía retenida (comportamiento anterior).
+    const saldoConductor = saldosPorConductor.get(garantia.conductor_id)
+    const netoModal = netoDevolucion(garantia, saldosPorConductor, garantiasOverrides.get(garantia.id))
+    const pendienteDevolver = netoModal === null
+      ? garantiaRetenidaModal
+      : Math.max(0, Math.min(garantiaRetenidaModal, Math.round(netoModal * 100) / 100))
+    const deudaDescontada = saldoConductor !== undefined && saldoConductor < 0
+      ? Math.min(garantiaRetenidaModal, Math.abs(saldoConductor))
+      : 0
+    const estadoConductorModal = String((garantia as any).estado_conductor || 'ACTIVO')
+
+    const { value: formValues } = await Swal.fire({
+      title: `<span style="font-size: 16px; font-weight: 600;">${esCambioTarifa ? 'Devolución de Garantía' : 'Registrar Devolución de Garantía'}</span>`,
+      html: `
+        <div style="text-align: left; font-size: 13px;">
+          <div style="background: #FEF2F2; padding: 12px; border-radius: 8px; margin-bottom: 14px; border: 1px solid #FECACA;">
+            <div style="font-weight: 600; color: #111827; font-size: 14px;">${garantia.conductor_nombre}</div>
+            <span style="background: ${estadoConductorModal === 'BAJA' ? '#ff0033' : '#16a34a'}; color: white; padding: 1px 8px; border-radius: 4px; font-size: 11px; font-weight: 600;">${estadoConductorModal}</span>
           </div>
           <div style="background: #F9FAFB; padding: 12px; border-radius: 8px; margin-bottom: 14px; border: 1px solid #E5E7EB;">
             <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
@@ -1186,7 +1370,17 @@ export function GarantiasTab() {
           <div style="background: #EFF6FF; padding: 10px 12px; border-radius: 8px; margin-bottom: 14px; border: 1px solid #BFDBFE;">
             <div style="font-size: 11px; color: #6B7280;">Pendiente de devolver</div>
             <div style="font-size: 18px; font-weight: 700; color: #2563eb;">${formatCurrency(pendienteDevolver)}</div>
+            ${deudaDescontada > 0 ? `
+            <div style="font-size: 11px; color: #6B7280; margin-top: 6px; line-height: 1.5;">
+              Garantía retenida ${formatCurrency(garantiaRetenidaModal)}<br>
+              − Deuda del conductor ${formatCurrency(deudaDescontada)}
+            </div>` : ''}
+            ${pendienteDevolver <= 0 ? '<div style="font-size: 11px; color: #dc2626; margin-top: 6px;">El conductor debe más que la garantía retenida: no hay monto a devolver.</div>' : ''}
           </div>
+          ${esCambioTarifa ? `
+          <div style="background: #ECFDF5; padding: 8px 12px; border-radius: 8px; margin-bottom: 14px; border: 1px solid #A7F3D0; font-size: 11px; color: #047857; line-height: 1.5;">
+            Cambio de tarifa: el monto se descuenta del total a pagar en la facturación de la semana en curso, como <b>P028 - Devolución de Garantía</b>.
+          </div>` : ''}
           <div style="margin-bottom: 12px;">
             <label style="display: block; font-size: 12px; color: #374151; margin-bottom: 4px;">Monto a devolver:</label>
             <input id="swal-monto-dev" type="number" step="0.01" min="0" class="swal2-input" style="font-size: 14px; margin: 0; width: 100%;" value="${pendienteDevolver.toFixed(2)}">
@@ -1231,7 +1425,9 @@ export function GarantiasTab() {
           garantia_id: garantia.id,
           conductor_id: garantia.conductor_id,
           monto: formValues.monto,
-          referencia: formValues.referencia || null,
+          referencia: esCambioTarifa
+            ? referenciaDevolucionCambioTarifa(formValues.referencia)
+            : (formValues.referencia || null),
           created_by_name: profile?.full_name || null
         })
       if (errorDev) throw errorDev
@@ -1416,7 +1612,7 @@ export function GarantiasTab() {
       'Saldo Actual': saldosPorConductor.get(g.conductor_id) ?? '',
       // Mismo estado y monto que la columna "Estado" de la tabla
       ...(() => {
-        const e = estadoGarantiaParaExport(g, saldosPorConductor, garantiasOverrides.get(g.id))
+        const e = estadoGarantiaParaExport(g, saldosPorConductor, garantiasOverrides.get(g.id), cambiosTarifa.get(g.conductor_id))
         return { 'Estado': e.estado, 'Monto Estado': e.monto }
       })(),
       ...(contactos.get(normalizarDni(g.conductor_dni)) || CONTACTO_VACIO),
@@ -1487,7 +1683,7 @@ export function GarantiasTab() {
       'Saldo Actual': saldosPorConductor.get(g.conductor_id) ?? '',
       // Mismo estado y monto que la columna "Estado" de la tabla
       ...(() => {
-        const e = estadoGarantiaParaExport(g, saldosPorConductor, garantiasOverrides.get(g.id))
+        const e = estadoGarantiaParaExport(g, saldosPorConductor, garantiasOverrides.get(g.id), cambiosTarifa.get(g.conductor_id))
         return { 'Estado': e.estado, 'Monto Estado': e.monto }
       })(),
       ...(contactos.get(normalizarDni(g.conductor_dni)) || CONTACTO_VACIO),
@@ -1977,6 +2173,22 @@ export function GarantiasTab() {
       }
     },
     {
+      id: 'cambio_tarifa',
+      header: 'Cambio Tarifa',
+      accessorFn: (row) => cambiosTarifa.get(row.conductor_id)?.desde || '',
+      cell: ({ row }) => {
+        const ct = cambiosTarifa.get(row.original.conductor_id)
+        if (!ct) return <span style={{ color: 'var(--text-tertiary)', fontSize: '11px' }}>-</span>
+        return (
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: '2px' }}
+            title={`Pasó de tarifa ${etiquetasTarifa.antigua} a ${etiquetasTarifa.nueva}: desde esa semana paga Toshipass en lugar de garantía`}>
+            <span className="fact-badge fact-badge-blue" style={{ fontSize: '10px', whiteSpace: 'nowrap' }}>{etiquetasTarifa.antigua} → {etiquetasTarifa.nueva}</span>
+            <span style={{ fontSize: '10px', color: 'var(--text-tertiary)' }}>desde {ct.desde.split('-').reverse().join('/')}</span>
+          </div>
+        )
+      }
+    },
+    {
       id: 'dias_desde_baja',
       header: 'Días Baja',
       accessorFn: (row) => calcularDiasBaja(row),
@@ -2150,6 +2362,21 @@ export function GarantiasTab() {
       ),
       cell: ({ row }) => {
         const estado = row.original.estado
+        // Cambio de tarifa: siempre "DEVOLUCIÓN" con el resultado de pagado + saldo actual
+        const ct = cambiosTarifa.get(row.original.conductor_id)
+        if (ct) {
+          const neto = netoCambioTarifa(row.original, saldosPorConductor)
+          const aFavor = neto >= 0
+          return (
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: '2px' }}
+              title="Cambio de tarifa: garantía pagada + saldo actual. Informativo: no se descuenta de la deuda">
+              <span className="fact-badge fact-badge-blue">DEVOLUCIÓN</span>
+              <span style={{ fontSize: '10px', color: aFavor ? '#2563eb' : '#dc2626', fontWeight: 600 }}>
+                {aFavor ? '+' : '-'}{formatCurrency(Math.abs(neto))}
+              </span>
+            </div>
+          )
+        }
         // Devuelta: prevalece sobre "no aplica" (su saldo es 0 justamente porque se devolvio).
         if (esGarantiaDevuelta(row.original, garantiasOverrides.get(row.original.id))) {
           return <span className="fact-badge fact-badge-green">Devuelto</span>
@@ -2226,19 +2453,43 @@ export function GarantiasTab() {
       header: 'Acciones',
       cell: ({ row }) => {
         const esDevolucion = row.original.estado === 'en_devolucion'
-        const pendienteDevolver = esDevolucion && !esGarantiaDevuelta(row.original, garantiasOverrides.get(row.original.id))
+        // Solo si hay algo para devolver: en "DEBE" (la deuda supera la garantía) y en
+        // "DEVUELTO" por neteo (garantía = deuda) el botón no aparece.
+        const subEstado = subEstadoDevolucion(row.original, saldosPorConductor, garantiasOverrides.get(row.original.id))
+        const pendienteDevolver = esDevolucion
+          && !esGarantiaDevuelta(row.original, garantiasOverrides.get(row.original.id))
+          && subEstado !== 'debe' && subEstado !== 'neto_saldado'
+        // BAJA en estado DEBE con garantía retenida: botón "Actualizar saldo" (aplica la
+        // garantía contra la deuda en Saldos).
+        const puedeActualizarSaldo = (row.original as any).estado_conductor === 'BAJA'
+          && subEstado === 'debe'
+          && garantiaRetenida(row.original) > 0.01
+        // Cambio de tarifa con resultado POSITIVO (le debemos): botón "Devolución de garantía".
+        // Tope: la garantía todavía retenida (lo ya devuelto no se puede volver a devolver).
+        const pendienteCambioTarifa = cambiosTarifa.has(row.original.conductor_id)
+          && Math.min(garantiaRetenida(row.original), netoCambioTarifa(row.original, saldosPorConductor)) > 0.01
         return (
           <div className="fact-table-actions">
             <button className="fact-table-btn fact-table-btn-view" onClick={() => abrirKardex(row.original)} data-tooltip="Ver kardex de garantía">
               <Eye size={14} />
             </button>
             {/* Pago manual oculto: la garantía se cobra via saldo pendiente */}
+            {puedeActualizarSaldo && (isAdmin() || isAdministrativo()) && (
+              <button className="fact-table-btn" onClick={() => actualizarSaldoConGarantia(row.original)} data-tooltip="Actualizar saldo" style={{ color: '#2563eb' }}>
+                <Scale size={14} />
+              </button>
+            )}
+            {pendienteCambioTarifa && (isAdmin() || isAdministrativo()) && (
+              <button className="fact-table-btn" onClick={() => registrarDevolucion(row.original, { cambioTarifa: true })} data-tooltip="Devolución de garantía" style={{ color: '#059669' }}>
+                <RotateCcw size={14} />
+              </button>
+            )}
             {pendienteDevolver && (isAdmin() || isAdministrativo()) && (
               <button className="fact-table-btn" onClick={() => registrarDevolucion(row.original)} data-tooltip="Registrar devolución" style={{ color: '#2563eb' }}>
                 <RotateCcw size={14} />
               </button>
             )}
-            {(isAdmin() || isAdministrativo()) && (
+            {MOSTRAR_BOTON_EDITAR && (isAdmin() || isAdministrativo()) && (
               <button className="fact-table-btn fact-table-btn-edit" onClick={() => editarGarantia(row.original)} data-tooltip="Editar">
                 <Edit3 size={14} />
               </button>
@@ -2255,7 +2506,7 @@ export function GarantiasTab() {
     // Los handlers (editar/eliminar/registrar devolucion) se recrean en cada render:
     // incluirlos rearmaria las columnas siempre y romperia el memo.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  ], [conductorFilter, conductorSearch, conductoresFiltrados, estadoFilter, openColumnFilter, ultimaSemanaMap, cuotasRealesMap, garantiasOverrides, saldosPorConductor])
+  ], [conductorFilter, conductorSearch, conductoresFiltrados, estadoFilter, openColumnFilter, ultimaSemanaMap, cuotasRealesMap, garantiasOverrides, saldosPorConductor, cambiosTarifa, etiquetasTarifa])
 
   // ========== COLUMNAS TABLA MOVIMIENTOS ==========
 
@@ -2936,6 +3187,15 @@ export function GarantiasTab() {
         const totalRealPagado = totalSumaConsolidadas > 0 ? totalSumaConsolidadas : facturado
         const excedente = totalRealPagado - total
         const tieneExcedente = excedente > 1
+        // Pendiente de devolución: lo que todavía falta devolver. Mismo cálculo que el modal
+        // de devolución: garantía retenida (pagado − devuelto); en conductores que no están
+        // activos, descontando además su deuda (para los activos no se usa el saldo).
+        const totalDevueltoModal = kardexModal.devoluciones.reduce((sum, d) => sum + (Number(d.monto) || 0), 0)
+        const retenidaModal = Math.max(0, Math.round((totalRealPagado - totalDevueltoModal) * 100) / 100)
+        const netoModalDetalle = kardexModal.garantia ? netoDevolucion(kardexModal.garantia, saldosPorConductor, totalRealPagado) : null
+        const pendienteDevolucion = netoModalDetalle === null
+          ? retenidaModal
+          : Math.max(0, Math.min(retenidaModal, Math.round(netoModalDetalle * 100) / 100))
 
         // Filtrar filas consolidadas
         const filtroEstado = (kardexModal.tipoFilter || '').toLowerCase()
@@ -3013,6 +3273,14 @@ export function GarantiasTab() {
                       </div>
                     </div>
                   )}
+                  {totalDevueltoModal > 0 && (
+                    <div style={{ flex: 1, minWidth: '120px' }}>
+                      <div style={{ fontSize: '10px', textTransform: 'uppercase', color: 'var(--text-secondary)', fontWeight: 600, letterSpacing: '0.3px' }}>Pendiente devolución</div>
+                      <div style={{ fontSize: '15px', fontWeight: 700, fontFamily: 'monospace', color: pendienteDevolucion > 0 ? '#d97706' : 'var(--text-secondary)', marginTop: '2px' }}>
+                        {formatCurrency(pendienteDevolucion)}
+                      </div>
+                    </div>
+                  )}
                   {tieneExcedente && (
                     <div style={{ flex: 1, minWidth: '120px' }}>
                       <div style={{ fontSize: '10px', textTransform: 'uppercase', color: 'var(--text-secondary)', fontWeight: 600, letterSpacing: '0.3px' }}>Excedente</div>
@@ -3027,7 +3295,11 @@ export function GarantiasTab() {
                 <div style={{ display: 'flex', gap: '2px', marginBottom: '12px', background: 'var(--bg-secondary)', borderRadius: '6px', padding: '3px' }}>
                   {([
                     { value: 'movimientos' as const, label: `Movimientos (${kardexModal.rows.length})` },
-                    { value: 'devoluciones' as const, label: `Devoluciones (${kardexModal.devoluciones.length})` },
+                    // Dos secciones independientes: devoluciones comunes (efectivo, transferencia,
+                    // otros pendientes con el conductor) y devolución de garantía por cambio de
+                    // tarifa, que se descuenta en facturación (P028).
+                    { value: 'devoluciones' as const, label: `Devoluciones (${kardexModal.devoluciones.filter(d => !esDevolucionCambioTarifa(d.referencia)).length})` },
+                    { value: 'devolucion_garantia' as const, label: `Devolución garantía (${kardexModal.devoluciones.filter(d => esDevolucionCambioTarifa(d.referencia)).length})` },
                     { value: 'ediciones' as const, label: `Historial de Ediciones (${kardexModal.ediciones.length})` },
                   ]).map(t => (
                     <button
@@ -3230,16 +3502,20 @@ export function GarantiasTab() {
                 ))}
 
                 {/* ===== Pestana Devoluciones ===== */}
-                {kardexModal.tab === 'devoluciones' && (
-                  kardexModal.devoluciones.length === 0 ? (
+                {(kardexModal.tab === 'devoluciones' || kardexModal.tab === 'devolucion_garantia') && (() => {
+                  const esSeccionGarantia = kardexModal.tab === 'devolucion_garantia'
+                  const lista = kardexModal.devoluciones.filter(d => esDevolucionCambioTarifa(d.referencia) === esSeccionGarantia)
+                  return lista.length === 0 ? (
                     <div style={{ padding: '30px 0', textAlign: 'center', color: 'var(--text-secondary)', fontSize: '12px' }}>
-                      Esta garantia no tiene devoluciones registradas
+                      {esSeccionGarantia
+                        ? 'Este conductor no tiene devoluciones de garantía por cambio de tarifa'
+                        : 'Esta garantia no tiene devoluciones registradas'}
                     </div>
                   ) : (
                     <>
                       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', marginBottom: '6px' }}>
                         <span style={{ fontSize: '11px', fontWeight: 700, color: '#2563eb', fontFamily: 'monospace' }}>
-                          Total devuelto: {formatCurrency(kardexModal.devoluciones.reduce((sum, d) => sum + (Number(d.monto) || 0), 0))}
+                          Total devuelto: {formatCurrency(lista.reduce((sum, d) => sum + (Number(d.monto) || 0), 0))}
                         </span>
                       </div>
                       <div style={{ maxHeight: '400px', overflowY: 'auto', border: '1px solid var(--border-primary)', borderRadius: '6px' }}>
@@ -3247,22 +3523,32 @@ export function GarantiasTab() {
                           <thead>
                             <tr style={{ background: 'var(--bg-secondary)', position: 'sticky', top: 0, zIndex: 1 }}>
                               <th style={{ padding: '8px 12px', textAlign: 'left', fontSize: '10px', textTransform: 'uppercase', letterSpacing: '0.3px', color: 'var(--text-secondary)', fontWeight: 600, borderBottom: '1px solid var(--border-primary)' }}>Fecha</th>
+                              <th style={{ padding: '8px 12px', textAlign: 'left', fontSize: '10px', textTransform: 'uppercase', letterSpacing: '0.3px', color: 'var(--text-secondary)', fontWeight: 600, borderBottom: '1px solid var(--border-primary)' }} title="Semana de facturación en la que cae la devolución">Semana</th>
                               <th style={{ padding: '8px 12px', textAlign: 'right', fontSize: '10px', textTransform: 'uppercase', letterSpacing: '0.3px', color: 'var(--text-secondary)', fontWeight: 600, borderBottom: '1px solid var(--border-primary)' }}>Monto</th>
                               <th style={{ padding: '8px 12px', textAlign: 'left', fontSize: '10px', textTransform: 'uppercase', letterSpacing: '0.3px', color: 'var(--text-secondary)', fontWeight: 600, borderBottom: '1px solid var(--border-primary)' }}>Referencia</th>
                               <th style={{ padding: '8px 12px', textAlign: 'left', fontSize: '10px', textTransform: 'uppercase', letterSpacing: '0.3px', color: 'var(--text-secondary)', fontWeight: 600, borderBottom: '1px solid var(--border-primary)' }}>Registrado por</th>
                             </tr>
                           </thead>
                           <tbody>
-                            {kardexModal.devoluciones.map(d => (
+                            {lista.map(d => (
                               <tr key={d.id} style={{ borderBottom: '1px solid var(--border-primary)' }}>
                                 <td style={{ padding: '10px 12px', fontFamily: 'monospace', fontSize: '11px', whiteSpace: 'nowrap' }}>
                                   {formatDate(d.created_at)}
+                                </td>
+                                <td style={{ padding: '10px 12px', fontFamily: 'monospace', fontSize: '11px', fontWeight: 700, whiteSpace: 'nowrap' }}>
+                                  {d.semana_facturacion || '-'}
                                 </td>
                                 <td style={{ padding: '10px 12px', textAlign: 'right', fontFamily: 'monospace', fontWeight: 700, color: '#2563eb' }}>
                                   {formatCurrency(Number(d.monto) || 0)}
                                 </td>
                                 <td style={{ padding: '10px 12px', color: 'var(--text-secondary)' }}>
-                                  {d.referencia || '-'}
+                                  {esDevolucionCambioTarifa(d.referencia) && (
+                                    <span style={{ display: 'inline-block', marginRight: '6px', padding: '1px 6px', borderRadius: '4px', fontSize: '10px', fontWeight: 600, background: 'rgba(16,185,129,0.12)', color: '#059669' }}
+                                      title="Se descuenta del total a pagar en la facturación de esa semana (P028)">
+                                      Descontada en facturación
+                                    </span>
+                                  )}
+                                  {referenciaVisible(d.referencia) || '-'}
                                 </td>
                                 <td style={{ padding: '10px 12px', color: 'var(--text-secondary)' }}>
                                   {d.created_by_name || 'Sin registrar'}
@@ -3273,11 +3559,11 @@ export function GarantiasTab() {
                         </table>
                       </div>
                       <div style={{ marginTop: '8px', fontSize: '10px', color: 'var(--text-tertiary)' }}>
-                        {kardexModal.devoluciones.length} devolucion{kardexModal.devoluciones.length === 1 ? '' : 'es'} registrada{kardexModal.devoluciones.length === 1 ? '' : 's'}
+                        {lista.length} devolucion{lista.length === 1 ? '' : 'es'} registrada{lista.length === 1 ? '' : 's'}
                       </div>
                     </>
                   )
-                )}
+                })()}
 
                 {/* Historial de ediciones: mismos datos que mostraba el boton de la fila. */}
                 {kardexModal.tab === 'ediciones' && (

@@ -1148,7 +1148,7 @@ export function AsignacionesModule() {
 
   // Etiqueta del chip de Tarifa de un conductor dentro de la asignacion abierta.
   // Devuelve el periodo y el monto semanal del concepto que le corresponde
-  // ("AGO-26 ($ 349.000)"), o la etiqueta generica si el concepto no esta cargado.
+  // ("OCT-26 ($ 349.000)"), o la etiqueta generica si el concepto no esta cargado.
   const getTarifaConductor = (ac: any) => {
     const tarifa = (ac?.tipo_tarifa || viewAsignacion?.tipo_tarifa || 'antigua') as 'antigua' | 'nueva'
     const modalidad: ModalidadTarifa =
@@ -3025,6 +3025,7 @@ export function AsignacionesModule() {
       entrega_auto_cargo: 'Entrega a cargo',
       cambio_turno: 'Cambio de turno',
       devolucion_vehiculo: 'Devolución',
+      actualizacion_carta_oferta: 'Actualización carta oferta',
     }
     Swal.fire({
       title: labels[motivo] || motivo,
@@ -3092,6 +3093,7 @@ export function AsignacionesModule() {
           entrega_auto_cargo: 'Entrega a cargo',
           cambio_turno: 'Cambio de turno',
           devolucion_vehiculo: 'Devolución',
+          actualizacion_carta_oferta: 'Actualización carta oferta',
         }
         return row.motivo ? (labels[row.motivo] || row.motivo) : '-'
       },
@@ -3106,6 +3108,7 @@ export function AsignacionesModule() {
           entrega_auto_cargo: 'Entrega a cargo',
           cambio_turno: 'Cambio de turno',
           devolucion_vehiculo: 'Devolución',
+          actualizacion_carta_oferta: 'Actualización carta oferta',
         }
         const detalle = row.original.motivoDetalle
         const tieneDetalle = detalle && (detalle.observaciones || detalle.programadoPor)
