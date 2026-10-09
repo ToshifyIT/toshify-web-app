@@ -12,6 +12,8 @@ export type TipoAsignacion =
   | 'entrega_auto_cargo'
   | 'cambio_turno'
   | 'devolucion_vehiculo'
+  // Conductor con asignación en tarifa antigua que pasa a la tarifa nueva: firma carta oferta.
+  | 'actualizacion_carta_oferta'
 
 // Tipos de candidato
 export type TipoCandidato = 'nuevo' | 'antiguo' | 'reingreso'
@@ -284,7 +286,8 @@ export const TIPO_ASIGNACION_LABELS: Record<TipoAsignacion, string> = {
   asignacion_auto_cargo: 'Asignación auto a cargo',
   entrega_auto_cargo: 'Entrega auto a cargo',
   cambio_turno: 'Cambio de turno',
-  devolucion_vehiculo: 'Devolución de Vehículo'
+  devolucion_vehiculo: 'Devolución de Vehículo',
+  actualizacion_carta_oferta: 'Actualización carta oferta'
 }
 
 export const TIPO_TARIFA_LABELS: Record<TipoTarifa, string> = {

@@ -201,6 +201,7 @@ const ETIQUETAS: Record<string, string> = {
   patente: 'Patente',
   fuente_pauta: 'Fuente pauta (canal)',
   id_fuente: 'Id fuente (link)',
+  entrevistador_asignado: 'Guía',
   observaciones: 'Observaciones',
   fuente_de_lead: 'Fuente',
   fecha_carga: 'Fecha carga',

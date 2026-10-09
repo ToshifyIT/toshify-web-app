@@ -1123,7 +1123,7 @@ export function DistribucionMapaV2Module() {
             }
           />
           <MenuFiltro
-            titulo="Ciudad"
+            titulo="Localidad"
             opciones={ubicacionesDisponibles.ciudades}
             seleccion={filtros.ciudades}
             onChange={(ciudades) => setFiltros((f) => ({ ...f, ciudades }))}
@@ -1137,7 +1137,7 @@ export function DistribucionMapaV2Module() {
               type="button"
               onClick={completarUbicaciones}
               disabled={!!resolviendoCeldas}
-              title="Resuelve país y ciudad de las zonas que faltan y las guarda para siempre. Se hace una sola vez por zona."
+              title="Resuelve país y localidad de las zonas que faltan y las guarda para siempre. Se hace una sola vez por zona."
               style={{
                 display: 'inline-flex',
                 alignItems: 'center',
