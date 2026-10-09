@@ -4,6 +4,7 @@ import { Check, ChevronLeft, ChevronRight } from 'lucide-react'
 import { AddressAutocomplete } from '../../../components/ui/AddressAutocomplete'
 import { useSede } from '../../../contexts/SedeContext'
 import type { LeadFormData } from '../../../types/leads.types'
+import { normalizarCelularAR, validarCelularAR } from '../../../utils/validacionesCampos'
 
 interface CatalogoItem {
   id: string
@@ -120,6 +121,25 @@ export function LeadWizard({ formData, setFormData, onSave, onCancel, saving = f
   function updateField(field: keyof LeadFormData, value: any) {
     setFormData(prev => ({ ...prev, [field]: value }))
   }
+
+  // Al salir del campo, el celular se lleva al formato +549 + area + numero.
+  // Si no se puede interpretar se deja como esta y se marca el error.
+  const [telefonosTocados, setTelefonosTocados] = useState<Set<'phone' | 'whatsapp_number'>>(new Set())
+  function normalizarTelefonoAlSalir(field: 'phone' | 'whatsapp_number') {
+    setTelefonosTocados(prev => new Set(prev).add(field))
+    const normalizado = normalizarCelularAR(formData[field])
+    if (!normalizado || normalizado === formData[field]) return
+    setFormData(prev => {
+      const next = { ...prev, [field]: normalizado }
+      // Mantener el WhatsApp sincronizado si venia copiando al telefono
+      if (field === 'phone' && (!prev.whatsapp_number || prev.whatsapp_number === prev.phone)) {
+        next.whatsapp_number = normalizado
+      }
+      return next
+    })
+  }
+  const errorTelefono = errors.phone || (telefonosTocados.has('phone') ? validarCelularAR(formData.phone) : null)
+  const errorWhatsapp = errors.whatsapp_number || (telefonosTocados.has('whatsapp_number') ? validarCelularAR(formData.whatsapp_number) : null)
 
   function handleNext() {
     if (currentStep < STEPS.length) {
@@ -275,7 +295,7 @@ export function LeadWizard({ formData, setFormData, onSave, onCancel, saving = f
                 <label>Teléfono <span className="required">*</span></label>
                 <input
                   type="text"
-                  className={errors.phone ? 'field-error' : ''}
+                  className={errorTelefono ? 'field-error' : ''}
                   value={formData.phone || ''}
                   onChange={e => {
                     const val = e.target.value
@@ -285,18 +305,22 @@ export function LeadWizard({ formData, setFormData, onSave, onCancel, saving = f
                       updateField('whatsapp_number', val)
                     }
                   }}
-                  placeholder="Ej: 11-1234-5678"
+                  onBlur={() => normalizarTelefonoAlSalir('phone')}
+                  placeholder="Ej: 11 1234-5678 o +54 9 11 1234-5678"
                 />
-                {errors.phone && <span className="error-text">{errors.phone}</span>}
+                {errorTelefono && <span className="error-text">{errorTelefono}</span>}
               </div>
               <div className="lead-wizard-field">
                 <label>WhatsApp</label>
                 <input
                   type="text"
+                  className={errorWhatsapp ? 'field-error' : ''}
                   value={formData.whatsapp_number || ''}
                   onChange={e => updateField('whatsapp_number', e.target.value)}
-                  placeholder="Ej: 5491112345678"
+                  onBlur={() => normalizarTelefonoAlSalir('whatsapp_number')}
+                  placeholder="Ej: +5491112345678"
                 />
+                {errorWhatsapp && <span className="error-text">{errorWhatsapp}</span>}
               </div>
             </div>
             <div className="lead-wizard-form-group">
@@ -326,10 +350,13 @@ export function LeadWizard({ formData, setFormData, onSave, onCancel, saving = f
                 <label>Dirección <span className="required">*</span></label>
                 <AddressAutocomplete
                   value={formData.direccion || ''}
+                  lat={formData.latitud ?? null}
+                  lng={formData.longitud ?? null}
                   onChange={(address, lat, lng, zona) => {
                     updateField('direccion', address)
-                    if (lat !== undefined) updateField('latitud', lat)
-                    if (lng !== undefined) updateField('longitud', lng)
+                    // Sin coordenadas se vacían: no arrastrar el punto de la dirección anterior
+                    updateField('latitud', lat)
+                    updateField('longitud', lng)
                     if (zona) updateField('zona', zona)
                   }}
                   placeholder="Buscar dirección..."

@@ -6,7 +6,7 @@ import { Fragment, useState, useEffect } from 'react'
 import { X } from 'lucide-react'
 import { formatCurrency } from '../../../types/facturacion.types'
 import { cargarDetalleSemana, type SemanaDetalle, type FacturacionSemana } from './conductorDetalleService'
-import { CODIGOS_ALQUILER } from '../../../utils/facturacionIva'
+import { etiquetaIvaLinea } from '../../../utils/facturacionIva'
 import './SemanaDetalleModal.css'
 
 function fmt(s: string | null): string {
@@ -22,6 +22,7 @@ const TIPO_APORTE_LABEL: Record<string, string> = {
   pago: 'Pago',
   pago_cuota: 'Pago Cuota',
   ajuste_manual: 'Ajuste',
+  devolucion_garantia: 'Devolución Garantía',
 }
 
 function fmtPagoFecha(s: string | null): string {
@@ -57,11 +58,8 @@ export function SemanaDetalleModal({
   // modulo de Facturacion. El subtotal suma los BRUTOS (`total`), asi
   // Subtotal - Descuentos + Saldo anterior cierra contra total_a_pagar.
   const subtotalCargos = Math.round(cargos.reduce((s, c) => s + c.total, 0) * 100) / 100
-  const ivaAlquiler = detalle?.ivaAlquiler || 0
-  const ivaOtros = detalle?.ivaOtros || 0
-  // El renglon de IVA de alquiler va justo debajo de la ultima linea de alquiler.
-  // Si la semana no tiene alquiler, va al final de la lista.
-  const idxUltimoAlquiler = cargos.reduce((idx, c, i) => (CODIGOS_ALQUILER.includes(c.codigo) ? i : idx), -1)
+  // Cada producto con IVA lleva su propio renglon de IVA justo debajo, con referencia al
+  // concepto (ej: "IVA 21% · P001 - Alquiler Turno Diurno"), igual que en Facturacion.
   const filaIva = (etiqueta: string, valor: number) => (
     <div className="csem-row"><span className="csem-dot" />{etiqueta}<span className="csem-amt">{formatCurrency(valor)}</span></div>
   )
@@ -116,11 +114,9 @@ export function SemanaDetalleModal({
                 {cargos.map((c, i) => (
                   <Fragment key={`c${i}`}>
                     <div className="csem-row"><span className="csem-dot" />{c.nombre}{c.cantidad > 1 ? ` x${c.cantidad}` : ''}<span className="csem-amt">{formatCurrency(c.neto)}</span></div>
-                    {i === idxUltimoAlquiler && ivaAlquiler > 0 && filaIva('IVA de alquiler', ivaAlquiler)}
+                    {c.total - c.neto > 0.005 && filaIva(etiquetaIvaLinea(c.ivaPorcentaje, `${c.codigo} - ${c.nombre}`), Math.round((c.total - c.neto) * 100) / 100)}
                   </Fragment>
                 ))}
-                {idxUltimoAlquiler === -1 && ivaAlquiler > 0 && filaIva('IVA de alquiler', ivaAlquiler)}
-                {ivaOtros > 0 && filaIva('IVA', ivaOtros)}
               </div>
               <div className="csem-subtotal"><span>Subtotal Cargos</span><span>{formatCurrency(subtotalCargos)}</span></div>
 

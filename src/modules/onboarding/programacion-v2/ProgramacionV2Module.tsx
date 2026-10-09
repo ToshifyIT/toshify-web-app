@@ -60,7 +60,8 @@ const TIPO_ASIGNACION_LABELS: Record<string, string> = {
   asignacion_auto_cargo: 'Asig. auto a cargo',
   entrega_auto_cargo: 'Entrega auto a cargo',
   cambio_turno: 'Cambio de turno',
-  devolucion_vehiculo: 'Devolución vehículo'
+  devolucion_vehiculo: 'Devolución vehículo',
+  actualizacion_carta_oferta: 'Actualización carta oferta'
 }
 
 // Labels para mensajes de agenda
@@ -2258,6 +2259,9 @@ export function ProgramacionV2Module() {
     handleUpdateField(progId, tipoField, value || null)
     if (value === 'devolucion_vehiculo') {
       handleUpdateField(progId, docField, 'na')
+    } else if (value === 'actualizacion_carta_oferta') {
+      // Paso de tarifa antigua a nueva: firma carta oferta
+      handleUpdateField(progId, docField, 'carta_oferta')
     }
   }
 
@@ -2413,6 +2417,7 @@ export function ProgramacionV2Module() {
                   <option value="asignacion_companero">Asig. compañero</option>
                   <option value="cambio_auto">Cambio auto</option>
                   <option value="cambio_turno">Cambio turno</option>
+                  <option value="actualizacion_carta_oferta">Act. carta oferta</option>
                   <option value="devolucion_vehiculo">Devolución</option>
                 </select>
               </div>
@@ -2429,6 +2434,7 @@ export function ProgramacionV2Module() {
                   <option value="asignacion_companero">Asig. compañero</option>
                   <option value="cambio_auto">Cambio auto</option>
                   <option value="cambio_turno">Cambio turno</option>
+                  <option value="actualizacion_carta_oferta">Act. carta oferta</option>
                   <option value="devolucion_vehiculo">Devolución</option>
                 </select>
               </div>
@@ -2449,6 +2455,7 @@ export function ProgramacionV2Module() {
             <option value="asignacion_companero">Asignación compañero</option>
             <option value="cambio_auto">Cambio de auto</option>
             <option value="cambio_turno">Cambio de turno</option>
+            <option value="actualizacion_carta_oferta">Actualización carta oferta</option>
             <option value="devolucion_vehiculo">Devolución vehículo</option>
           </select>
         )
@@ -2845,6 +2852,7 @@ export function ProgramacionV2Module() {
           cambio_auto: 'Cambio aut.',
           cambio_turno: 'Cambio turno',
           devolucion_vehiculo: 'Devolución',
+          actualizacion_carta_oferta: 'Act. carta oferta',
           asignacion_auto_cargo: 'Asig. cargo',
           entrega_auto_cargo: 'Entrega cargo'
         }
@@ -3482,6 +3490,7 @@ export function ProgramacionV2Module() {
                           <option value="asignacion_companero">Asignación compañero</option>
                           <option value="cambio_auto">Cambio de auto</option>
                           <option value="cambio_turno">Cambio de turno</option>
+                          <option value="actualizacion_carta_oferta">Actualización carta oferta</option>
                           <option value="devolucion_vehiculo">Devolución vehículo</option>
                         </select>
                       </div>
@@ -3619,6 +3628,7 @@ export function ProgramacionV2Module() {
                           <option value="asignacion_companero">Asignación compañero</option>
                           <option value="cambio_auto">Cambio de auto</option>
                           <option value="cambio_turno">Cambio de turno</option>
+                          <option value="actualizacion_carta_oferta">Actualización carta oferta</option>
                           <option value="devolucion_vehiculo">Devolución vehículo</option>
                         </select>
                       </div>

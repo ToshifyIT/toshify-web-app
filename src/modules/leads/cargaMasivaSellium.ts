@@ -25,6 +25,9 @@
  *   tiene valor no se toca (estado, fuente y observaciones incluidos). Excepción:
  *   created_at, que siempre toma la "Fecha de creación" del Excel.
  * - Leads NUEVOS: fuente SELLIUM, created_at y fecha_carga = "Fecha de creación" del Excel.
+ * - Guía (2026-10-07): "Propietario del contacto" → entrevistador_asignado, solo si es
+ *   Ali, Eunice o Carla (por primer nombre). Otro propietario: no se carga. En leads
+ *   existentes sigue la regla general (solo si la Guía está vacía).
  * - Se ignoran: Interés, Mayor de 21, Equipo asignado, Requires Human Intervention,
  *   Last Lead Interaction, Última modificación por, Última actividad,
  *   Anuncio de origen (pauta), Asignación, Valoración.
@@ -94,7 +97,25 @@ const COL = {
   vehKm: 'km del auto',
   vehPatente: 'patente',
   link: 'link del anuncio (pauta)',
+  propietario: 'propietario del contacto',
 } as const
+
+/**
+ * Guías que se toman de "Propietario del contacto" (pedido 2026-10-07). Clave: primer
+ * nombre normalizado; valor: cómo se guarda en entrevistador_asignado (columna Guía),
+ * igual que lo vienen cargando a mano. Cualquier otro propietario se ignora.
+ */
+const GUIAS_POR_PROPIETARIO: Record<string, string> = {
+  ali: 'Ali',
+  eunice: 'Eunice',
+  carla: 'Carla',
+}
+
+/** "Ali Verenzuela" → "Ali"; "Juan Manuel Garrido" → null. */
+export function guiaDesdePropietario(propietario: string | null): string | null {
+  const primerNombre = normalizarTexto(propietario || '').split(/\s+/)[0]
+  return GUIAS_POR_PROPIETARIO[primerNombre] ?? null
+}
 
 /** Columnas exclusivas que identifican el formato (no existen en Original ni Damaro). */
 export function esFormatoSellium(headers: string[]): boolean {
@@ -363,6 +384,8 @@ export function mapearFilasSellium(filas: Fila[], headers: string[]): FilaSelliu
     // fuente_pauta = canal (Facebook/Instagram/TikTok/Estado); id_fuente = link del anuncio (cambio 2026-09-30).
     poner('fuente_pauta', derivarCanalPauta(link))
     poner('id_fuente', link)
+    // Guía: solo Ali, Eunice y Carla; el resto de propietarios queda en blanco.
+    poner('entrevistador_asignado', guiaDesdePropietario(t(COL.propietario)))
 
     const casillas: FilaSellium['casillas'] = {}
     if (casilla(leer(fila, COL.aceptaOferta))) casillas.acepta_oferta = true

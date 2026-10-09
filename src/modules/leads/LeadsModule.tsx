@@ -2,6 +2,7 @@
 import { useState, useEffect, useMemo, useCallback, useRef, useLayoutEffect } from 'react'
 import { fechaISOART } from '../../utils/fechaArgentina'
 import { inferZona } from '../../utils/zonaUtils'
+import { normalizarCelularAR, validarCelularAR } from '../../utils/validacionesCampos'
 import {
   buscarConductorExistente,
   convertirLeadAConductor,
@@ -1634,10 +1635,38 @@ export function LeadsModule() {
     }
   }
 
+  /**
+   * Valida y normaliza los celulares antes de guardar (+549 + area + numero).
+   * Al editar solo se exige el formato si el numero cambio: un lead viejo con
+   * el telefono mal cargado no tiene que trabar la edicion de otros campos.
+   * Devuelve false (y marca el error) si alguno es invalido.
+   */
+  function prepararTelefonos(fields: Record<string, unknown>, original: Lead | null): boolean {
+    const errores: Record<string, string> = {}
+    for (const campo of ['phone', 'whatsapp_number'] as const) {
+      const valor = String(fields[campo] ?? '').trim()
+      if (!valor) continue
+      if (original && valor === (original[campo] || '').trim()) continue
+      const normalizado = normalizarCelularAR(valor)
+      if (normalizado) fields[campo] = normalizado
+      else errores[campo] = validarCelularAR(valor) || 'Celular invalido'
+    }
+    setEditErrors(errores)
+    if (Object.keys(errores).length === 0) return true
+    const etiquetas: Record<string, string> = { phone: 'Teléfono', whatsapp_number: 'WhatsApp' }
+    Swal.fire(
+      'Celular inválido',
+      Object.entries(errores).map(([campo, msg]) => `${etiquetas[campo]}: ${msg}`).join('<br>'),
+      'warning'
+    )
+    return false
+  }
+
   async function handleSaveCreate() {
+    const fields = formDataToDbFields(formData)
+    if (!prepararTelefonos(fields, null)) return
     setSaving(true)
     try {
-      const fields = formDataToDbFields(formData)
       // Asignar sede actual (UUID) al crear
       if (sedeActual?.id) {
         fields.sede_id = sedeActual.id
@@ -1660,9 +1689,10 @@ export function LeadsModule() {
 
   async function handleSaveEdit() {
     if (!selectedLead) return
+    const fields = formDataToDbFields(formData)
+    if (!prepararTelefonos(fields, selectedLead)) return
     setSaving(true)
     try {
-      const fields = formDataToDbFields(formData)
       // Resolver sede_id si el campo sede texto cambió
       const textoSede = (formData.sede || '').trim().toLowerCase()
       if (textoSede && sedes.length > 0) {

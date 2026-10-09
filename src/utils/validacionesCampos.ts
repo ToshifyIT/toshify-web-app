@@ -73,6 +73,68 @@ export function validarTelefono(valor: string | null | undefined): string | null
   return null
 }
 
+/** Codigo de area + numero de un telefono argentino (ej: 11 + 8 digitos, 3484 + 6). */
+const LARGO_NACIONAL_AR = 10
+
+/** Quita el 15 que se intercala despues del codigo de area (11-15-xxxx, 351-15-xxx, 2944-15-xx). */
+function quitar15(d: string): string {
+  if (/^[23]\d{3}15\d+/.test(d)) return d.slice(0, 4) + d.slice(6)
+  if (/^[23]\d{2}15\d+/.test(d)) return d.slice(0, 3) + d.slice(5)
+  if (/^1115\d+/.test(d)) return '11' + d.slice(4)
+  return d
+}
+
+/**
+ * Celular en el formato en que se guarda: `+549` + codigo de area + numero
+ * (mismo criterio que la carga masiva de leads). Acepta como lo tipea la gente:
+ * "11 1234-5678", "011 15 1234-5678", "+54 11 1234 5678", "+54 9 3484 310602".
+ *
+ *  - +54: si no viene se asume Argentina.
+ *  - 9: es el prefijo de celular para WhatsApp; si falta, se agrega.
+ *  - Codigo de area: 11 (AMBA) u otro (28xx, 351, 3484...). Area + numero
+ *    tienen que sumar 10 digitos.
+ *
+ * Un numero con codigo de OTRO pais (+598, +55...) se respeta tal cual.
+ * Devuelve null si no se puede interpretar como un celular valido.
+ */
+export function normalizarCelularAR(valor: string | null | undefined): string | null {
+  // Al copiar un numero desde WhatsApp vienen marcas invisibles de direccion de texto
+  const v = (valor || '').replace(/[​-‏‪-‮⁦-⁩﻿]/g, '').trim()
+  if (!v || /[^\d+()\-.\s]/.test(v)) return null
+
+  let d = soloDigitos(v)
+  let internacional = v.startsWith('+')
+  if (d.startsWith('00')) {
+    d = d.slice(2)
+    internacional = true
+  } else if (d.startsWith('054') && d.length >= 13) {
+    // "+054 9 11..." / "054 11...": un 0 de mas delante del codigo de pais
+    d = d.slice(1)
+  }
+
+  // Codigo de otro pais (ningun codigo de pais empieza con 0: un "+0..." es un tipeo)
+  if (internacional && !d.startsWith('54') && !d.startsWith('0')) {
+    return d.length >= 8 && d.length <= 15 ? `+${d}` : null
+  }
+
+  if (d.startsWith('54') && d.length >= 12) d = d.slice(2)
+  if (d.startsWith('9') && d.length === LARGO_NACIONAL_AR + 1) d = d.slice(1)
+  if (d.startsWith('0')) d = d.slice(1)
+  if (d.length === LARGO_NACIONAL_AR + 2) d = quitar15(d)
+
+  // Los codigos de area argentinos empiezan con 1, 2 o 3
+  if (d.length !== LARGO_NACIONAL_AR || !/^[123]/.test(d)) return null
+  return `+549${d}`
+}
+
+/** Celular argentino (o con codigo de otro pais). Ver normalizarCelularAR. */
+export function validarCelularAR(valor: string | null | undefined): string | null {
+  const v = (valor || '').trim()
+  if (!v) return null
+  if (normalizarCelularAR(v)) return null
+  return 'Celular invalido: debe tener codigo de area y numero (ej: 11 1234-5678 o +54 9 11 1234-5678)'
+}
+
 /** Fecha 'YYYY-MM-DD' real (rechaza 31/02 y similares). */
 function esFechaValida(iso: string): boolean {
   const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso)
