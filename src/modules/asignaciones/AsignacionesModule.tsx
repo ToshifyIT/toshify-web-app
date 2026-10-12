@@ -336,6 +336,9 @@ export function AsignacionesModule() {
   const [controlSaving, setControlSaving] = useState(false)
   const [isControlBariloche, setIsControlBariloche] = useState(false)
   const [controlVehiculoKmNotFound, setControlVehiculoKmNotFound] = useState(false)
+  // Plantilla OCT-26 en cambio de vehículo: patente del vehículo devuelto (solo
+  // lectura, sale de la programación). null = no aplica y la sección no se muestra.
+  const [controlDevueltoPatente, setControlDevueltoPatente] = useState<string | null>(null)
   const [controlForm, setControlForm] = useState({
     km: '',
     ltnafta: '',
@@ -349,11 +352,49 @@ export function AsignacionesModule() {
     status_chains: '',
     tensioners_chains: '',
     others_kit: '',
+    km_change: '',
   })
+
+  /**
+   * Vehículo devuelto de la asignación, si corresponde completarlo: algún
+   * documento OCT-26 (plantilla Toshipass) de la programación origen es de un
+   * cambio de vehículo. Mismo criterio que esCambioDeVehiculo en server.js.
+   */
+  async function cargarVehiculoDevuelto(asignacionId: string): Promise<{ patente: string; km: number | null } | null> {
+    const { data: prog } = await (supabase.from('programaciones_onboarding') as any)
+      .select('id, tipo_asignacion, tipo_asignacion_diurno, tipo_asignacion_nocturno, vehiculo_cambio_id')
+      .eq('asignacion_id', asignacionId)
+      .limit(1)
+      .maybeSingle()
+    if (!prog?.vehiculo_cambio_id) return null
+
+    const { data: docs } = await supabase
+      .from('documentos_generados')
+      .select('turno')
+      .eq('programacion_id', prog.id)
+      .eq('plantilla_usada', 'cartaOfertaToshipass')
+      .not('google_doc_id', 'is', null)
+    const tipoDeDoc = (turno: string | null) =>
+      (turno === 'diurno' && prog.tipo_asignacion_diurno)
+      || (turno === 'nocturno' && prog.tipo_asignacion_nocturno)
+      || prog.tipo_asignacion
+    const esCambio = ((docs || []) as Array<{ turno: string | null }>)
+      .some(d => tipoDeDoc(d.turno) === 'cambio_auto')
+    if (!esCambio) return null
+
+    const { data: veh } = await supabase
+      .from('vehiculos')
+      .select('patente, kilometraje_actual')
+      .eq('id', prog.vehiculo_cambio_id)
+      .single()
+    const v = veh as { patente: string | null; kilometraje_actual: number | null } | null
+    return { patente: (v?.patente || '').toUpperCase(), km: v?.kilometraje_actual ?? null }
+  }
 
   async function openControlModal(asig: ExpandedAsignacion) {
     setControlAsignacion(asig)
     setControlVehiculoKmNotFound(false)
+    setControlDevueltoPatente(null)
 
     // Prefill desde la tabla vehiculos: kilometraje (kilometraje_actual) y
     // observaciones (notas del vehiculo, como sugerencia editable). Las
@@ -385,7 +426,19 @@ export function AsignacionesModule() {
       setControlVehiculoKmNotFound(true)
     }
 
-    setControlForm({ km: kmPrefill, ltnafta: '', observations: observacionesPrefill, cristal_status: '', carter: '', tires: '', others_docs: '', other_accesory: '', make_chains: '', status_chains: '', tensioners_chains: '', others_kit: '' })
+    // Vehículo devuelto (OCT-26, cambio de vehículo): km precargado con el del sistema
+    let kmDevueltoPrefill = ''
+    try {
+      const devuelto = await cargarVehiculoDevuelto(asig.id)
+      if (devuelto) {
+        setControlDevueltoPatente(devuelto.patente || '-')
+        if (typeof devuelto.km === 'number' && devuelto.km > 0) kmDevueltoPrefill = String(devuelto.km)
+      }
+    } catch (err) {
+      console.error('No se pudo resolver el vehículo devuelto:', err)
+    }
+
+    setControlForm({ km: kmPrefill, ltnafta: '', observations: observacionesPrefill, cristal_status: '', carter: '', tires: '', others_docs: '', other_accesory: '', make_chains: '', status_chains: '', tensioners_chains: '', others_kit: '', km_change: kmDevueltoPrefill })
     // Obtener un conductor para consultar si la plantilla es Bariloche
     const isAutoCargo = asig.horario === 'todo_dia'
     let conductorId = ''
@@ -446,7 +499,8 @@ export function AsignacionesModule() {
     const camposBariloche = isControlBariloche
       ? [controlForm.cristal_status, controlForm.carter, controlForm.tires, controlForm.others_docs, controlForm.other_accesory, controlForm.make_chains, controlForm.status_chains, controlForm.tensioners_chains, controlForm.others_kit]
       : []
-    const todosLosCampos = [...camposBase, ...camposBariloche]
+    const camposDevuelto = controlDevueltoPatente !== null ? [controlForm.km_change] : []
+    const todosLosCampos = [...camposBase, ...camposBariloche, ...camposDevuelto]
     if (todosLosCampos.some(c => !c.trim())) {
       Swal.fire('Campos requeridos', 'Todos los campos son obligatorios. En caso de no tener el dato, ingresa N/A o Sin observación.', 'warning')
       return
@@ -505,6 +559,7 @@ export function AsignacionesModule() {
         status_chains: isControlBariloche ? (controlForm.status_chains.trim() || null) : null,
         tensioners_chains: isControlBariloche ? (controlForm.tensioners_chains.trim() || null) : null,
         others_kit: isControlBariloche ? (controlForm.others_kit.trim() || null) : null,
+        km_change: controlDevueltoPatente !== null ? controlForm.km_change.trim() : null,
       }
 
       // Enviar control para cada conductor
@@ -4724,6 +4779,25 @@ export function AsignacionesModule() {
                     <input type="text" placeholder="Ej: 30" value={controlForm.ltnafta} onChange={(e) => setControlForm(p => ({ ...p, ltnafta: e.target.value }))} disabled={controlSaving} style={inputStyle} />
                   </div>
                 </div>
+
+                {/* Vehículo devuelto: solo plantilla OCT-26 en cambio de vehículo */}
+                {controlDevueltoPatente !== null && (
+                  <>
+                    <div style={{ ...sectionTitleStyle, marginTop: '16px' }}>
+                      <FileText size={14} /> Vehículo devuelto
+                    </div>
+                    <div style={{ display: 'grid', gridTemplateColumns: window.innerWidth < 640 ? '1fr' : '1fr 1fr', gap: '12px' }}>
+                      <div>
+                        <label style={labelStyle}>Patente</label>
+                        <input type="text" value={controlDevueltoPatente} readOnly disabled style={inputStyle} />
+                      </div>
+                      <div>
+                        <label style={labelStyle}>Kilometraje <span style={{ color: '#dc2626' }}>*</span></label>
+                        <input type="text" placeholder="Ej: 45.000" value={controlForm.km_change} onChange={(e) => setControlForm(p => ({ ...p, km_change: e.target.value }))} disabled={controlSaving} style={inputStyle} />
+                      </div>
+                    </div>
+                  </>
+                )}
 
                 <div style={{ marginTop: '12px', marginBottom: isControlBariloche ? '16px' : '0' }}>
                   <label style={labelStyle}>Observaciones <span style={{ color: '#dc2626' }}>*</span></label>

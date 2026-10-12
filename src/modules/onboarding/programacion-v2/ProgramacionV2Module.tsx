@@ -191,6 +191,15 @@ const tipoCandidatoAGuardar = (
 }
 
 const SEDE_BUENOS_AIRES_ID = '80587298-b799-4a98-87a9-2f74890da443'
+
+/**
+ * Número de póliza válido para la plantilla OCT-26: solo dígitos (admite espacios,
+ * guiones, puntos y barras). Mismo criterio que esNumeroPoliza de server.js.
+ * Hay vehículos con el nombre de la aseguradora ("Sancor") cargado en este campo.
+ */
+function esNumeroPoliza(valor: string): boolean {
+  return /^[\d\s\-./]+$/.test(valor) && /\d/.test(valor)
+}
 const KAREN_ATENDEDOR_ID = '503e3df5-5d5e-4c27-b90c-93128a670673'
 
 // Resuelve un atendedor activo desde la tabla visitas_atendedores.
@@ -1704,13 +1713,23 @@ export function ProgramacionV2Module() {
     {
       const camposFaltantes: string[] = []
 
+      // Documento con tarifa nueva (OCT-26): usa la plantilla Toshipass, que
+      // imprime los datos de la póliza, así que esos datos pasan a ser obligatorios.
+      const generaDoc = (doc?: string | null) => !!doc && doc !== 'na'
+      const usaTarifaNueva = prog.modalidad === 'a_cargo'
+        ? generaDoc(prog.tipo_documento) && tarifaProg.tipo_tarifa === 'nueva'
+        : (generaDoc(prog.documento_diurno)
+            && (tarifaProg.tipo_tarifa_diurno || tarifaProg.tipo_tarifa) === 'nueva')
+          || (generaDoc(prog.documento_nocturno)
+            && (tarifaProg.tipo_tarifa_nocturno || tarifaProg.tipo_tarifa) === 'nueva')
+
       // 1) Validar vehículo
       if (prog.vehiculo_entregar_id) {
         const { data: veh } = await supabase
           .from('vehiculos')
-          .select('numero_motor, numero_chasis, marca, modelo, anio, color, titular, cobertura, gnc')
+          .select('numero_motor, numero_chasis, marca, modelo, anio, color, titular, cobertura, gnc, seguro_numero, seguro_vigencia')
           .eq('id', prog.vehiculo_entregar_id)
-          .single() as { data: { numero_motor: string | null; numero_chasis: string | null; marca: string | null; modelo: string | null; anio: number | null; color: string | null; titular: string | null; cobertura: string | null; gnc: boolean | null } | null }
+          .single() as { data: { numero_motor: string | null; numero_chasis: string | null; marca: string | null; modelo: string | null; anio: number | null; color: string | null; titular: string | null; cobertura: string | null; gnc: boolean | null; seguro_numero: string | null; seguro_vigencia: string | null } | null }
 
         if (veh) {
           vehiculoTieneGnc = veh.gnc === true
@@ -1722,6 +1741,15 @@ export function ProgramacionV2Module() {
           if (!veh.color?.trim()) camposFaltantes.push('Vehículo → Color')
           if (!veh.titular?.trim()) camposFaltantes.push('Vehículo → Titular')
           if (!veh.cobertura?.trim()) camposFaltantes.push('Vehículo → Cobertura')
+          if (usaTarifaNueva) {
+            const poliza = (veh.seguro_numero || '').trim()
+            if (!poliza) {
+              camposFaltantes.push('Vehículo → Número de Póliza')
+            } else if (!esNumeroPoliza(poliza)) {
+              camposFaltantes.push(`Vehículo → Número de Póliza: "${poliza}" no es un número, revisarlo`)
+            }
+            if (!veh.seguro_vigencia) camposFaltantes.push('Vehículo → Vigencia Seguro')
+          }
         }
       }
 
@@ -2186,6 +2214,12 @@ export function ProgramacionV2Module() {
           tipo_tarifa_nocturno: (prog.modalidad === 'turno' && enviarNocturno)
             ? (tarifaProg.tipo_tarifa_nocturno || tarifaProg.tipo_tarifa || 'antigua')
             : null,
+          // Plantilla OCT-26: "Tipo de acta" y vehículo devuelto (en un cambio de
+          // auto la BD guarda vehiculo_cambio = el que se devuelve).
+          tipo_asignacion: prog.tipo_asignacion || null,
+          tipo_asignacion_diurno: prog.tipo_asignacion_diurno || prog.tipo_asignacion || null,
+          tipo_asignacion_nocturno: prog.tipo_asignacion_nocturno || prog.tipo_asignacion || null,
+          vehiculo_devuelto_id: prog.vehiculo_cambio_id || null,
           modalidad: (prog.modalidad || 'turno') as 'turno' | 'a_cargo',
           sede_id: prog.sede_id || sedeActualId || sedeUsuario?.id || null,
           programacion_id: prog.id,
