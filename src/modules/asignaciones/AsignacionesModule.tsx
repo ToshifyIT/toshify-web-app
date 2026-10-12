@@ -1965,7 +1965,10 @@ export function AsignacionesModule() {
         }
       })
       const tieneCompaneros = companeroIds.size > 0
+      
 
+
+      //Esto es una prueba
       // Hasta activar, cada paso revisa su resultado: si falla (p. ej. corte de
       // red) se frena acá y se avisa, en vez de seguir con datos vacíos.
       exigirOk(
