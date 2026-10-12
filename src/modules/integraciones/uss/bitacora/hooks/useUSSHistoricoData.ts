@@ -15,6 +15,7 @@ import {
   wialonBitacoraService,
   type BitacoraRegistroTransformado,
 } from '../../../../../services/wialonBitacoraService';
+import { agruparMarcacionesPorDia } from '../utils/marcacionesPorDia';
 
 // Zona horaria Argentina
 const TIMEZONE_ARGENTINA = 'America/Argentina/Buenos_Aires';
@@ -121,7 +122,7 @@ function transformarMarcacion(reg: BitacoraRegistroTransformado): Marcacion {
  *  lo usa la version de prueba (/integraciones/gps/bitacora_vprueba). */
 export function useUSSHistoricoData(
   sedeId?: string | null,
-  opciones?: { tablaGeotab?: string; soloGeotab?: boolean }
+  opciones?: { tablaGeotab?: string; tablaGeotabHistorico?: string; soloGeotab?: boolean }
 ) {
   const [dateRange, setDateRange] = useState<USSHistoricoDateRange>(() => {
     // Default: Semana actual completa (lunes a domingo) en zona ART.
@@ -206,7 +207,7 @@ export function useUSSHistoricoData(
       // Cargar Histórico + Marcaciones + límites km EN PARALELO (OPT-03bis).
       // parametros_sistema no depende de los otros dos resultados: sacarlo de la cascada
       // ahorra una ida-vuelta a EU (~530ms).
-      const [paginatedResult, bitacoraResult, limiteParamsRes] = await Promise.all([
+      const [paginatedResult, bitacoraResult, limiteParamsRes, viajesGeotab] = await Promise.all([
         ussHistoricoService.getRegistros(dateRange.startDate, dateRange.endDate, {
           limit: pageSize,
           offset,
@@ -218,6 +219,11 @@ export function useUSSHistoricoData(
           .from('parametros_sistema')
           .select('clave, valor')
           .in('clave', ['limite_km_semanal_turno', 'limite_km_semanal_a_cargo']),
+        // Viajes crudos de Geotab: con ellos las cards se rearman en 1 fila por dia
+        wialonBitacoraService.getViajesGeotab(dateRange.startDate, dateRange.endDate, {
+          sedeId,
+          tabla: opciones?.tablaGeotabHistorico,
+        }),
       ]);
 
       setRegistros(paginatedResult.data);
@@ -228,7 +234,7 @@ export function useUSSHistoricoData(
       // (KM_MINIMO_VISIBLE en ussHistoricoService / get_historico_combinado) y que el
       // drawer de trips. No afecta el acumulado semanal de km, que se calcula aparte
       // sobre la base y al que estos turnos aportan 0.
-      const marcacionesTransformadas = bitacoraResult.data
+      let marcacionesTransformadas = bitacoraResult.data
         .map(transformarMarcacion)
         .filter(m => m.estado !== 'Sin Actividad')
         .filter(m => (Number(m.kmTotal) || 0) >= KM_MINIMO_VISIBLE);
@@ -355,6 +361,12 @@ export function useUSSHistoricoData(
       }
       // ===== FIN ALERTA LIMITE KM =====
 
+      // GEOTAB: 1 fila por conductor por dia (7 por semana), armada desde los viajes
+      // crudos. Va despues del acumulado semanal para que cada fila lo herede.
+      marcacionesTransformadas = agruparMarcacionesPorDia(
+        marcacionesTransformadas, viajesGeotab, dateRange.startDate, dateRange.endDate,
+      );
+
       // Lookup DNIs + horario asignado en batch
       const conductorIds = [...new Set(marcacionesTransformadas.map(m => m.conductorId).filter(Boolean))] as string[];
       if (conductorIds.length > 0) {
@@ -380,7 +392,8 @@ export function useUSSHistoricoData(
     } finally {
       setLoading(false);
     }
-  }, [dateRange, page, pageSize, filterPatente, sedeId, opciones?.soloGeotab, opciones?.tablaGeotab]);
+  }, [dateRange, page, pageSize, filterPatente, sedeId, opciones?.soloGeotab, opciones?.tablaGeotab,
+      opciones?.tablaGeotabHistorico]);
 
   // Cargar al montar y cuando cambian parámetros
   const isFirstRender = useRef(true);
