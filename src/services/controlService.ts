@@ -18,6 +18,8 @@ export interface ControlCompletionRequest {
   status_chains?: string | null
   tensioners_chains?: string | null
   others_kit?: string | null
+  /** Plantilla OCT-26 en cambio de vehículo: km del vehículo devuelto ({{KM_CHANGE}}). */
+  km_change?: string | null
 }
 
 export interface ControlCompletionResponse {

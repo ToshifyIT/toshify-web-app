@@ -782,6 +782,9 @@ const CONTRACT_CONFIG = {
     cartaOfertaPedidosYa: '1Zo6INIVFjdZWhuOF8F91iEjAWkIBg61lcxMCxcoRRQY',
     cartaOfertaAutoCargoBariloche: '1hAVB6eQ6LcCE_7YfB9llQLdGXN7EByHLvy0lG5YRQ5I',
     actualizacionAutoCargoBariloche: '1b2XCDQ2CYZJbQBYWuBfU3wV_MVqnPt7c36RxKuTqhMU',
+    // Tarifa nueva (OCT-26 / Toshipass): una sola plantilla para todo documento
+    // con tarifa nueva (Carta Oferta y Anexo, Turno y A cargo, cualquier sede).
+    cartaOfertaToshipass: '1HX7OzmSlbVz8zu-MI_D3P0EwRIyMt1sycnktSztsYRM',
     // Plantillas de prueba (TB)
     cartaOfertaTurnoTB: '1rjSKaYDUqls9T-NQU22CvR6TDfhCeX_rSlPREXh8CRQ',
     actualizacionTurnoTB: '1xSfKu0QzyOUBiP3tSBoQkm79pFK1b9XVr0-JNlNdOoo',
@@ -857,16 +860,75 @@ function getTemplateId(templateKey) {
   return CONTRACT_CONFIG.templates[templateKey]
 }
 
+const TEMPLATE_TARIFA_NUEVA = 'cartaOfertaToshipass'
+
 /**
- * Determina qué plantilla usar según tipo_documento + modalidad + sede
+ * {{TYPE_OF_MINUTES}} (Anexo II, "Tipo de acta") segun el tipo de asignacion
+ * elegido en Programacion.
  */
-function resolveTemplateKey(tipoDocumento, modalidad, sedeCode) {
+const TIPO_ACTA_POR_ASIGNACION = {
+  entrega_auto: 'Entrega inicial',
+  entrega_auto_cargo: 'Entrega inicial',
+  asignacion_auto_cargo: 'Entrega inicial',
+  asignacion_companero: 'Entrega inicial',
+  cambio_auto: 'Cambio de vehículo',
+  cambio_turno: 'Cambio de turno o modalidad',
+  actualizacion_carta_oferta: 'Nuevo contrato (mismo vehículo)'
+}
+
+/**
+ * Documento OCT-26 de un cambio de vehiculo: lleva los datos del vehiculo
+ * devuelto ({{PLATE_CHANGE}} / {{KM_CHANGE}}), que se completan en Completar Control.
+ * Mismo criterio en generate-contract y complete-control.
+ */
+function esCambioDeVehiculo(tipoAsignacion, vehiculoDevueltoId) {
+  return tipoAsignacion === 'cambio_auto' && !!vehiculoDevueltoId
+}
+
+/** Numero de poliza valido: solo digitos (admite espacios, guiones, puntos y barras). */
+function esNumeroPoliza(valor) {
+  const v = String(valor || '').trim()
+  return /^[\d\s\-./]+$/.test(v) && /\d/.test(v)
+}
+
+/** 'YYYY-MM-DD' -> 'DD/MM/YYYY' sin pasar por Date (evita el corrimiento de zona horaria). */
+function formatFechaSolo(fecha) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(fecha || ''))
+  return m ? `${m[3]}/${m[2]}/${m[1]}` : ''
+}
+
+/**
+ * Proximo correlativo de documentos con tarifa nueva del conductor (000001, 000002...).
+ * Cada conductor tiene su propia secuencia y solo cuentan los documentos OCT-26.
+ */
+async function siguienteCorrelativo(conductorId) {
+  const supabaseUrl = process.env.VITE_SUPABASE_URL
+  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+  const headers = { 'apikey': serviceKey, 'Authorization': `Bearer ${serviceKey}` }
+  const res = await fetch(
+    `${supabaseUrl}/rest/v1/documentos_generados?conductor_id=eq.${conductorId}&correlativo=not.is.null&select=correlativo&order=correlativo.desc&limit=1`,
+    { headers }
+  )
+  if (!res.ok) throw new Error(`No se pudo calcular el correlativo del documento: ${await res.text()}`)
+  const data = await res.json()
+  return (Number(data?.[0]?.correlativo) || 0) + 1
+}
+
+/**
+ * Determina qué plantilla usar según tipo_documento + modalidad + sede (+ tarifa)
+ */
+function resolveTemplateKey(tipoDocumento, modalidad, sedeCode, tipoTarifa) {
   if (tipoDocumento === 'na') return null
 
   const isBariloche = sedeCode && sedeCode.toUpperCase() === 'BRC'
 
   // Bariloche no tiene modalidad turno, no generar contrato
   if (isBariloche && modalidad === 'turno') return null
+
+  // Tarifa nueva (OCT-26): todo documento sale de la plantilla Toshipass
+  if (tipoTarifa === 'nueva' && (tipoDocumento === 'carta_oferta' || tipoDocumento === 'anexo')) {
+    return TEMPLATE_TARIFA_NUEVA
+  }
 
   if (tipoDocumento === 'carta_oferta') {
     if (isBariloche) return 'cartaOfertaAutoCargoBariloche'
@@ -992,7 +1054,7 @@ async function fetchVehiculoData(vehiculoId) {
   const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
 
   const res = await fetch(
-    `${supabaseUrl}/rest/v1/vehiculos?id=eq.${vehiculoId}&select=patente,marca,modelo,color,anio,numero_motor,numero_chasis,kilometraje_actual,gnc,cobertura,notas`,
+    `${supabaseUrl}/rest/v1/vehiculos?id=eq.${vehiculoId}&select=patente,marca,modelo,color,anio,numero_motor,numero_chasis,kilometraje_actual,gnc,cobertura,seguro_numero,seguro_vigencia,notas`,
     {
       headers: {
         'apikey': serviceKey,
@@ -1207,10 +1269,26 @@ async function fetchAmountFromConceptos(turno, modalidad, gnc, tipoTarifa) {
  * Retorna { googleDocUrl, pdfUrl, folderUrl, folderId }
  */
 async function generateContractForConductor({
-  drive, conductor, vehiculo, templateKey, turno, sedeCode, modalidad, propietario, tipoTarifa
+  drive, conductor, vehiculo, templateKey, turno, sedeCode, modalidad, propietario, tipoTarifa,
+  tipoDocumento, tipoAsignacion, vehiculoDevueltoId
 }) {
   const templateId = getTemplateId(templateKey)
   if (!templateId) throw new Error(`Template no encontrada para key: ${templateKey}`)
+  const esTarifaNueva = templateKey === TEMPLATE_TARIFA_NUEVA
+
+  // Plantilla OCT-26: la poliza es obligatoria y el numero tiene que ser numerico
+  // (Programacion ya lo valida antes de enviar; esto cubre cualquier otro camino).
+  if (esTarifaNueva) {
+    const faltan = []
+    if (!vehiculo.cobertura?.trim()) faltan.push('Cobertura')
+    if (!esNumeroPoliza(vehiculo.seguro_numero)) faltan.push('Número de Póliza (debe ser numérico)')
+    if (!formatFechaSolo(vehiculo.seguro_vigencia)) faltan.push('Vigencia Seguro')
+    if (faltan.length > 0) {
+      throw new Error(`Revisar datos del seguro del vehículo ${vehiculo.patente}: ${faltan.join(', ')}`)
+    }
+  }
+  // Correlativo por conductor, solo documentos OCT-26
+  const correlativo = esTarifaNueva ? await siguienteCorrelativo(conductor.id) : null
 
   console.log(`[Contract] Generando ${templateKey} para ${conductor.nombres} ${conductor.apellidos}`)
 
@@ -1259,6 +1337,19 @@ async function generateContractForConductor({
   addIfPresent('AMOUNT', amount)
   addIfPresent('AMMOUNT', amount)
   addIfPresent('COVERAGE', vehiculo.cobertura?.toUpperCase())
+  if (esTarifaNueva) {
+    addIfPresent('NUM_COVERAGE', String(vehiculo.seguro_numero).trim())
+    addIfPresent('VALIDITY_COVERAGE', formatFechaSolo(vehiculo.seguro_vigencia))
+    addIfPresent('VERSION', String(correlativo).padStart(6, '0'))
+    addIfPresent('TYPE_OF_MINUTES', TIPO_ACTA_POR_ASIGNACION[tipoAsignacion] || 'Entrega inicial')
+    // Vehiculo devuelto: en un cambio de vehiculo {{PLATE_CHANGE}} / {{KM_CHANGE}}
+    // quedan pendientes y se completan en /api/complete-control con el km real de
+    // la entrega. Si no es cambio de vehiculo van directamente como N/A.
+    if (!esCambioDeVehiculo(tipoAsignacion, vehiculoDevueltoId)) {
+      addIfPresent('PLATE_CHANGE', 'N/A')
+      addIfPresent('KM_CHANGE', 'N/A')
+    }
+  }
   addIfPresent('MODE', modalidad === 'a_cargo' ? 'A CARGO' : (turno === 'nocturno' ? 'NOCTURNO' : 'DIURNO'))
   // {{OBSERVATIONS}} NO se llena al generar el contrato: se completa en
   // /api/complete-control con lo que el usuario confirma en el modal
@@ -1314,7 +1405,9 @@ async function generateContractForConductor({
   //   Carta Oferta - A Cargo - NOMBRE
   //   Carta Oferta - Turno - Diurno - NOMBRE
   //   Actualizacion Carta Oferta - Auto a Cargo Bariloche - NOMBRE
-  const tipoLabel = templateKey.includes('cartaOferta') ? 'Carta Oferta' : 'Actualizacion Carta Oferta'
+  const tipoLabel = esTarifaNueva
+    ? `${tipoDocumento === 'anexo' ? 'Actualizacion Carta Oferta' : 'Carta Oferta'} OCT-26 N° ${String(correlativo).padStart(6, '0')}`
+    : templateKey.includes('cartaOferta') ? 'Carta Oferta' : 'Actualizacion Carta Oferta'
   const sedeLabel = sedeCode?.toUpperCase() === 'BRC' ? ' Bariloche' : ''
   const isAutoCargo = modalidad === 'a_cargo'
   const modalidadLabel = isAutoCargo ? `Auto a Cargo${sedeLabel}` : `Turno${sedeLabel}`
@@ -1347,6 +1440,7 @@ async function generateContractForConductor({
   console.log(`[Contract] OK: ${fileName} → doc: ${googleDoc.data.id}`)
 
   return {
+    correlativo,
     googleDocUrl: googleDoc.data.webViewLink,
     googleDocId: googleDoc.data.id,
     pdfUrl: null,
@@ -1369,6 +1463,10 @@ app.post('/api/generate-contract', async (req, res) => {
       tipo_tarifa,           // 'antigua' | 'nueva' (modo a_cargo)
       tipo_tarifa_diurno,    // 'antigua' | 'nueva' (modo turno)
       tipo_tarifa_nocturno,  // 'antigua' | 'nueva' (modo turno)
+      tipo_asignacion,          // tipo de asignacion de Programacion (modo a_cargo)
+      tipo_asignacion_diurno,   // (modo turno)
+      tipo_asignacion_nocturno, // (modo turno)
+      vehiculo_devuelto_id,     // vehiculo que se devuelve en un cambio de auto
       modalidad,           // 'turno' | 'a_cargo'
       sede_id,
       programacion_id,     // UUID de la programación creada
@@ -1390,12 +1488,15 @@ app.post('/api/generate-contract', async (req, res) => {
     if (modalidad === 'a_cargo' && conductor_id) {
       // Modo A CARGO: un solo conductor
       if (tipo_documento && tipo_documento !== 'na') {
-        const templateKey = resolveTemplateKey(tipo_documento, 'a_cargo', sedeCode)
+        const templateKey = resolveTemplateKey(tipo_documento, 'a_cargo', sedeCode, tipo_tarifa || 'antigua')
         if (templateKey) {
           const conductor = await fetchConductorData(conductor_id)
           const result = await generateContractForConductor({
             drive, conductor, vehiculo, templateKey, turno: null, sedeCode, modalidad: 'a_cargo', propietario,
-            tipoTarifa: tipo_tarifa || 'antigua'
+            tipoTarifa: tipo_tarifa || 'antigua',
+            tipoDocumento: tipo_documento,
+            tipoAsignacion: tipo_asignacion,
+            vehiculoDevueltoId: vehiculo_devuelto_id
           })
 
           await saveDocumentoGenerado({
@@ -1403,6 +1504,7 @@ app.post('/api/generate-contract', async (req, res) => {
             conductor_id,
             tipo_documento,
             plantilla_usada: templateKey,
+            ...(result.correlativo ? { correlativo: result.correlativo } : {}),
             turno: null,
             url_docx: result.googleDocUrl,
             url_pdf: result.pdfUrl,
@@ -1426,18 +1528,23 @@ app.post('/api/generate-contract', async (req, res) => {
     } else if (modalidad === 'turno') {
       // Modo TURNO: hasta 2 conductores
       const turnoConfigs = [
-        { id: conductor_diurno_id, doc: documento_diurno, turno: 'diurno', tarifa: tipo_tarifa_diurno || tipo_tarifa || 'antigua' },
-        { id: conductor_nocturno_id, doc: documento_nocturno, turno: 'nocturno', tarifa: tipo_tarifa_nocturno || tipo_tarifa || 'antigua' }
+        { id: conductor_diurno_id, doc: documento_diurno, turno: 'diurno', tarifa: tipo_tarifa_diurno || tipo_tarifa || 'antigua',
+          tipoAsignacion: tipo_asignacion_diurno || tipo_asignacion },
+        { id: conductor_nocturno_id, doc: documento_nocturno, turno: 'nocturno', tarifa: tipo_tarifa_nocturno || tipo_tarifa || 'antigua',
+          tipoAsignacion: tipo_asignacion_nocturno || tipo_asignacion }
       ]
 
       for (const cfg of turnoConfigs) {
         if (cfg.id && cfg.doc && cfg.doc !== 'na') {
-          const templateKey = resolveTemplateKey(cfg.doc, 'turno', sedeCode)
+          const templateKey = resolveTemplateKey(cfg.doc, 'turno', sedeCode, cfg.tarifa)
           if (templateKey) {
             const conductor = await fetchConductorData(cfg.id)
             const result = await generateContractForConductor({
               drive, conductor, vehiculo, templateKey, turno: cfg.turno, sedeCode, modalidad: 'turno', propietario,
-              tipoTarifa: cfg.tarifa
+              tipoTarifa: cfg.tarifa,
+              tipoDocumento: cfg.doc,
+              tipoAsignacion: cfg.tipoAsignacion,
+              vehiculoDevueltoId: vehiculo_devuelto_id
             })
 
             await saveDocumentoGenerado({
@@ -1445,6 +1552,7 @@ app.post('/api/generate-contract', async (req, res) => {
               conductor_id: cfg.id,
               tipo_documento: cfg.doc,
               plantilla_usada: templateKey,
+              ...(result.correlativo ? { correlativo: result.correlativo } : {}),
               turno: cfg.turno,
               url_docx: result.googleDocUrl,
               url_pdf: result.pdfUrl,
@@ -1515,7 +1623,9 @@ app.post('/api/complete-control', async (req, res) => {
       make_chains,
       status_chains,
       tensioners_chains,
-      others_kit
+      others_kit,
+      // Plantilla OCT-26, solo en cambio de vehiculo: km del vehiculo devuelto
+      km_change
     } = req.body
 
     if (!conductor_id) {
@@ -1551,11 +1661,12 @@ app.post('/api/complete-control', async (req, res) => {
     // 1.b — Buscar la programación origen vía la FK inversa (programaciones_onboarding.asignacion_id).
     // OJO: `asignaciones` NO tiene columna `programacion_id`. La relación es solo desde la programación.
     const progQuery = await fetch(
-      `${supabaseUrl}/rest/v1/programaciones_onboarding?asignacion_id=eq.${asignacion_id}&select=id&limit=1`,
+      `${supabaseUrl}/rest/v1/programaciones_onboarding?asignacion_id=eq.${asignacion_id}&select=id,tipo_asignacion,tipo_asignacion_diurno,tipo_asignacion_nocturno,vehiculo_cambio_id&limit=1`,
       { headers: authHeaders }
     )
     const progData = await progQuery.json()
-    const progId = (Array.isArray(progData) && progData[0]?.id) || null
+    const progRow = (Array.isArray(progData) && progData[0]) || null
+    const progId = progRow?.id || null
     if (!progId) {
       return res.status(404).json({ error: 'La asignación no tiene programación origen registrada. No se puede determinar el contrato correspondiente.' })
     }
@@ -1585,6 +1696,30 @@ app.post('/api/complete-control', async (req, res) => {
       { find: '{{LTNAFTA}}', replace: ltnafta },
       { find: '{{OBSERVATIONS}}', replace: observations || '-' }
     ]
+
+    // Plantilla OCT-26: vehiculo devuelto. La patente sale de la programacion (no
+    // se edita); el km lo carga el usuario en el modal. Si no es cambio de
+    // vehiculo el documento ya salio con N/A y estos reemplazos no encuentran nada.
+    if (plantillaUsada === TEMPLATE_TARIFA_NUEVA) {
+      const tipoAsig = (docRecord.turno === 'diurno' && progRow.tipo_asignacion_diurno)
+        || (docRecord.turno === 'nocturno' && progRow.tipo_asignacion_nocturno)
+        || progRow.tipo_asignacion
+      if (esCambioDeVehiculo(tipoAsig, progRow.vehiculo_cambio_id)) {
+        if (!String(km_change || '').trim()) {
+          return res.status(400).json({ error: 'Falta el kilometraje del vehículo devuelto' })
+        }
+        const devuelto = await fetchVehiculoData(progRow.vehiculo_cambio_id)
+        replacements.push(
+          { find: '{{PLATE_CHANGE}}', replace: String(devuelto.patente || 'N/A').toUpperCase() },
+          { find: '{{KM_CHANGE}}', replace: `${String(km_change).trim()} KM` }
+        )
+      } else {
+        replacements.push(
+          { find: '{{PLATE_CHANGE}}', replace: 'N/A' },
+          { find: '{{KM_CHANGE}}', replace: 'N/A' }
+        )
+      }
+    }
 
     // Campos adicionales para Bariloche
     const isBariloche = plantillaUsada && plantillaUsada.toLowerCase().includes('bariloche')

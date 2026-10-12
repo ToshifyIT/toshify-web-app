@@ -39,6 +39,12 @@ export interface ContractGenerationRequest {
   /** Tarifa por turno: en modalidad turno cada conductor puede tener la suya. */
   tipo_tarifa_diurno?: string | null
   tipo_tarifa_nocturno?: string | null
+  /** Tipo de asignación de Programación: define el "Tipo de acta" de la plantilla OCT-26. */
+  tipo_asignacion?: string | null
+  tipo_asignacion_diurno?: string | null
+  tipo_asignacion_nocturno?: string | null
+  /** Vehículo que el conductor devuelve en un cambio de auto (plantilla OCT-26). */
+  vehiculo_devuelto_id?: string | null
   // Común
   vehiculo_id: string
   modalidad: 'turno' | 'a_cargo'
