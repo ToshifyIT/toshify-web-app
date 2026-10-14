@@ -767,6 +767,290 @@ app.post('/api/admin/toggle-function', async (req, res) => {
 })
 
 // =====================================================
+// GESTION DE USUARIOS (Administracion > Gestion de Usuarios)
+// =====================================================
+//
+// Alta por invitacion: el admin carga nombre, email y rol; Supabase Auth manda el
+// correo "Invite user" (SMTP propio, remitente noreply@toshify.com.ar) y el usuario
+// define su contraseña en /reset-password. El admin nunca ve ni escribe la clave.
+//
+// Desactivar = is_active false en user_profiles + ban en Auth: el usuario no
+// puede volver a iniciar sesion ni refrescar el token.
+
+/** Ban "permanente" de GoTrue (100 años). 'none' lo levanta. */
+const BAN_USUARIO_INACTIVO = '876000h'
+
+function supabaseAdminConfig() {
+  const url = process.env.VITE_SUPABASE_URL
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY
+  if (!url || !key) return null
+  return {
+    url,
+    headers: { apikey: key, Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
+  }
+}
+
+/**
+ * Valida que el request venga de un usuario con rol admin.
+ * Devuelve { cfg, adminId } o responde el error y devuelve null.
+ */
+async function requireAdmin(req, res) {
+  const cfg = supabaseAdminConfig()
+  if (!cfg) {
+    res.status(500).json({ error: 'Configuracion del servidor incompleta' })
+    return null
+  }
+  const authHeader = req.headers.authorization
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    res.status(401).json({ error: 'No autorizado' })
+    return null
+  }
+  const userRes = await fetch(`${cfg.url}/auth/v1/user`, {
+    headers: { Authorization: authHeader, apikey: cfg.headers.apikey },
+  })
+  if (!userRes.ok) {
+    res.status(401).json({ error: 'Sesion invalida, volve a iniciar sesion' })
+    return null
+  }
+  const user = await userRes.json()
+  const profileRes = await fetch(
+    `${cfg.url}/rest/v1/user_profiles?id=eq.${user.id}&select=is_active,roles(name)`,
+    { headers: cfg.headers }
+  )
+  const profiles = profileRes.ok ? await profileRes.json() : []
+  if (profiles[0]?.roles?.name !== 'admin' || profiles[0]?.is_active === false) {
+    res.status(403).json({ error: 'Solo un administrador puede gestionar usuarios' })
+    return null
+  }
+  return { cfg, adminId: user.id }
+}
+
+/** Origin del frontend para armar el link del correo (Supabase lo valida contra su allow-list). */
+function origenApp(origin) {
+  return typeof origin === 'string' && /^https?:\/\/[a-zA-Z0-9.-]+(:\d+)?$/.test(origin)
+    ? origin
+    : 'https://app.toshify.com.ar'
+}
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
+async function leerErrorGotrue(resp) {
+  const body = await resp.json().catch(() => ({}))
+  return body.msg || body.message || body.error_description || body.error || `HTTP ${resp.status}`
+}
+
+/** Manda el correo de invitacion (usuario nuevo o que todavia no confirmo). */
+async function enviarInvitacion(cfg, email, fullName, origin) {
+  const redirect = encodeURIComponent(`${origenApp(origin)}/reset-password`)
+  return fetch(`${cfg.url}/auth/v1/invite?redirect_to=${redirect}`, {
+    method: 'POST',
+    headers: cfg.headers,
+    body: JSON.stringify({ email, data: { full_name: fullName } }),
+  })
+}
+
+/** Manda el correo de restablecer contraseña (Supabase "Reset password"). */
+async function enviarRecuperacion(cfg, email, origin) {
+  const redirect = encodeURIComponent(`${origenApp(origin)}/reset-password`)
+  return fetch(`${cfg.url}/auth/v1/recover?redirect_to=${redirect}`, {
+    method: 'POST',
+    headers: cfg.headers,
+    body: JSON.stringify({ email }),
+  })
+}
+
+async function obtenerUsuarioAuth(cfg, userId) {
+  const r = await fetch(`${cfg.url}/auth/v1/admin/users/${userId}`, { headers: cfg.headers })
+  if (!r.ok) return null
+  return r.json()
+}
+
+// Estado de Auth de todos los usuarios: si ya activaron la cuenta y si estan bloqueados.
+app.get('/api/admin/users/auth-status', async (req, res) => {
+  try {
+    const ctx = await requireAdmin(req, res)
+    if (!ctx) return
+    const estado = {}
+    for (let page = 1; page <= 20; page++) {
+      const r = await fetch(`${ctx.cfg.url}/auth/v1/admin/users?per_page=200&page=${page}`, {
+        headers: ctx.cfg.headers,
+      })
+      if (!r.ok) throw new Error(await leerErrorGotrue(r))
+      const { users = [] } = await r.json()
+      for (const u of users) {
+        estado[u.id] = {
+          last_sign_in_at: u.last_sign_in_at || null,
+          invited_at: u.invited_at || null,
+          banned: !!u.banned_until && new Date(u.banned_until) > new Date(),
+        }
+      }
+      if (users.length < 200) break
+    }
+    res.json({ success: true, usuarios: estado })
+  } catch (error) {
+    console.error('[usuarios] auth-status:', error)
+    res.status(500).json({ error: 'No se pudo leer el estado de los usuarios' })
+  }
+})
+
+// Alta de usuario por invitacion
+app.post('/api/admin/users/invite', async (req, res) => {
+  try {
+    const ctx = await requireAdmin(req, res)
+    if (!ctx) return
+    const { cfg } = ctx
+    const email = String(req.body?.email || '').trim().toLowerCase()
+    const fullName = String(req.body?.fullName || '').trim()
+    const roleId = req.body?.roleId || null
+    const sedeId = req.body?.sedeId || null
+
+    if (!fullName) return res.status(400).json({ error: 'El nombre es obligatorio' })
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email)) {
+      return res.status(400).json({ error: 'El email no tiene un formato valido' })
+    }
+    if ((roleId && !UUID_RE.test(roleId)) || (sedeId && !UUID_RE.test(sedeId))) {
+      return res.status(400).json({ error: 'Rol o sede invalidos' })
+    }
+
+    const existeRes = await fetch(
+      `${cfg.url}/rest/v1/user_profiles?email=ilike.${encodeURIComponent(email)}&select=id`,
+      { headers: cfg.headers }
+    )
+    const existentes = existeRes.ok ? await existeRes.json() : []
+    if (existentes.length > 0) {
+      return res.status(409).json({ error: 'Ya existe un usuario con ese email' })
+    }
+
+    const inviteRes = await enviarInvitacion(cfg, email, fullName, req.body?.origin)
+    if (!inviteRes.ok) {
+      const msg = await leerErrorGotrue(inviteRes)
+      const yaRegistrado = /already|registered|exists/i.test(msg)
+      return res.status(yaRegistrado ? 409 : 502).json({
+        error: yaRegistrado
+          ? 'Ese email ya tiene una cuenta en Auth (sin perfil en Toshify). Revisarlo con sistemas.'
+          : `No se pudo enviar la invitacion: ${msg}`,
+      })
+    }
+    const authUser = await inviteRes.json()
+
+    // Perfil de Toshify. No se fuerza el cambio de contraseña: la define el propio
+    // usuario al aceptar la invitacion.
+    const perfil = {
+      id: authUser.id,
+      email,
+      full_name: fullName,
+      role_id: roleId,
+      sede_id: sedeId,
+      is_active: true,
+      must_change_password: false,
+    }
+    const profileRes = await fetch(`${cfg.url}/rest/v1/user_profiles?on_conflict=id`, {
+      method: 'POST',
+      headers: { ...cfg.headers, Prefer: 'resolution=merge-duplicates,return=minimal' },
+      body: JSON.stringify(perfil),
+    })
+    if (!profileRes.ok) {
+      // Sin perfil el usuario no sirve: se deshace el alta en Auth.
+      const detalle = await profileRes.text()
+      await fetch(`${cfg.url}/auth/v1/admin/users/${authUser.id}`, {
+        method: 'DELETE',
+        headers: cfg.headers,
+      }).catch(() => {})
+      console.error('[usuarios] invite: perfil no creado:', detalle)
+      return res.status(500).json({ error: 'No se pudo crear el perfil del usuario' })
+    }
+
+    res.json({ success: true, id: authUser.id })
+  } catch (error) {
+    console.error('[usuarios] invite:', error)
+    res.status(500).json({ error: 'Error interno al crear el usuario' })
+  }
+})
+
+// Reenviar acceso: invitacion si nunca activo la cuenta, si no, correo de restablecer contraseña.
+app.post('/api/admin/users/send-access', async (req, res) => {
+  try {
+    const ctx = await requireAdmin(req, res)
+    if (!ctx) return
+    const { cfg } = ctx
+    const userId = req.body?.userId
+    if (!UUID_RE.test(String(userId || ''))) return res.status(400).json({ error: 'Usuario invalido' })
+
+    const authUser = await obtenerUsuarioAuth(cfg, userId)
+    if (!authUser?.email) return res.status(404).json({ error: 'El usuario no existe en Auth' })
+    if (authUser.banned_until && new Date(authUser.banned_until) > new Date()) {
+      return res.status(400).json({ error: 'El usuario esta desactivado. Activalo antes de enviarle acceso.' })
+    }
+
+    // Usuarios invitados que todavia no confirmaron: se reenvia la invitacion.
+    // Los ya confirmados (incluidos los creados con contraseña) reciben el de restablecer.
+    const pendienteInvitacion = !authUser.email_confirmed_at && !authUser.last_sign_in_at
+    const resp = pendienteInvitacion
+      ? await enviarInvitacion(cfg, authUser.email, authUser.user_metadata?.full_name, req.body?.origin)
+      : await enviarRecuperacion(cfg, authUser.email, req.body?.origin)
+
+    if (!resp.ok) {
+      const msg = await leerErrorGotrue(resp)
+      const limite = resp.status === 429 || /rate|seconds|security purposes/i.test(msg)
+      return res.status(limite ? 429 : 502).json({
+        error: limite
+          ? 'Ya se envio un correo hace poco a este usuario. Espera un minuto y volve a intentar.'
+          : `No se pudo enviar el correo: ${msg}`,
+      })
+    }
+    res.json({ success: true, tipo: pendienteInvitacion ? 'invitacion' : 'recuperacion', email: authUser.email })
+  } catch (error) {
+    console.error('[usuarios] send-access:', error)
+    res.status(500).json({ error: 'Error interno al enviar el correo' })
+  }
+})
+
+// Activar / desactivar: perfil + ban en Auth
+app.post('/api/admin/users/set-active', async (req, res) => {
+  try {
+    const ctx = await requireAdmin(req, res)
+    if (!ctx) return
+    const { cfg, adminId } = ctx
+    const { userId, isActive } = req.body || {}
+    if (!UUID_RE.test(String(userId || '')) || typeof isActive !== 'boolean') {
+      return res.status(400).json({ error: 'Parametros invalidos' })
+    }
+    if (!isActive && userId === adminId) {
+      return res.status(400).json({ error: 'No podes desactivar tu propio usuario' })
+    }
+
+    const banRes = await fetch(`${cfg.url}/auth/v1/admin/users/${userId}`, {
+      method: 'PUT',
+      headers: cfg.headers,
+      body: JSON.stringify({ ban_duration: isActive ? 'none' : BAN_USUARIO_INACTIVO }),
+    })
+    if (!banRes.ok) {
+      return res.status(502).json({ error: `No se pudo actualizar el acceso: ${await leerErrorGotrue(banRes)}` })
+    }
+
+    const profileRes = await fetch(`${cfg.url}/rest/v1/user_profiles?id=eq.${userId}`, {
+      method: 'PATCH',
+      headers: { ...cfg.headers, Prefer: 'return=minimal' },
+      body: JSON.stringify({ is_active: isActive, updated_at: new Date().toISOString() }),
+    })
+    if (!profileRes.ok) {
+      // Se vuelve el ban atras para no dejar Auth y perfil desalineados.
+      await fetch(`${cfg.url}/auth/v1/admin/users/${userId}`, {
+        method: 'PUT',
+        headers: cfg.headers,
+        body: JSON.stringify({ ban_duration: isActive ? BAN_USUARIO_INACTIVO : 'none' }),
+      }).catch(() => {})
+      return res.status(500).json({ error: 'No se pudo actualizar el estado del usuario' })
+    }
+
+    res.json({ success: true })
+  } catch (error) {
+    console.error('[usuarios] set-active:', error)
+    res.status(500).json({ error: 'Error interno al cambiar el estado' })
+  }
+})
+
+// =====================================================
 // CONTRACT GENERATION
 // =====================================================
 

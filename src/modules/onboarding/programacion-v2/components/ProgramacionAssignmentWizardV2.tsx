@@ -1769,6 +1769,20 @@ export function ProgramacionAssignmentWizardV2({ onClose, onSuccess, editData, p
   }
 
   // Obtener defaults de tipo_asignacion y documento según tipo de candidato
+  /**
+   * En un cambio de vehículo el tipo de asignación queda fijo en "Cambio de auto",
+   * salvo que el conductor se marque como Nuevo: ahí puede ser una entrega de auto.
+   * En devolución queda siempre fijo.
+   */
+  const asignacionBloqueada = (tipoCandidato: TipoCandidatoV2 | '') =>
+    formData.devolucion_vehiculo || (formData.cambio_vehiculo && tipoCandidato !== 'nuevo')
+
+  /** Cambio de vehículo: al pasar a Nuevo sugiere Entrega de auto; al salir de Nuevo vuelve a Cambio de auto. */
+  const asignacionPorCandidatoEnCambio = (tipo: TipoCandidatoV2 | ''): { asignacion: TipoAsignacion; documento: TipoDocumento } =>
+    tipo === 'nuevo'
+      ? { asignacion: 'entrega_auto', documento: 'carta_oferta' }
+      : { asignacion: 'cambio_auto', documento: 'anexo' }
+
   function getDefaultsPorCandidato(tipo: TipoCandidatoV2): { asignacion: TipoAsignacion; documento: TipoDocumento } {
     switch (tipo) {
       case 'nuevo':
@@ -2836,7 +2850,9 @@ export function ProgramacionAssignmentWizardV2({ onClose, onSuccess, editData, p
 
         .wizard-stepper {
           display: flex;
-          align-items: center;
+          /* flex-start + conector a media altura del circulo: los pasos con resumen
+             debajo son mas altos y con center los circulos quedaban desalineados */
+          align-items: flex-start;
           justify-content: center;
           padding: 20px 24px;
           border-bottom: 1px solid var(--border-primary);
@@ -2899,12 +2915,25 @@ export function ProgramacionAssignmentWizardV2({ onClose, onSuccess, editData, p
           color: #10B981;
         }
 
+        /* Lo elegido en el paso, debajo de la etiqueta: chico y discreto */
+        .step-resumen {
+          margin-top: -3px;
+          max-width: 150px;
+          font-size: clamp(9px, 0.75vw, 10.5px);
+          font-weight: 500;
+          color: var(--text-secondary);
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          text-align: center;
+        }
+
         .step-connector {
           width: 80px;
           height: 2px;
           background: var(--border-primary);
           margin: 0 12px;
-          margin-bottom: 28px;
+          margin-top: calc(clamp(32px, 3vw, 40px) / 2 - 1px);
           border-radius: 2px;
           transition: all 0.3s ease;
         }
@@ -3797,6 +3826,28 @@ export function ProgramacionAssignmentWizardV2({ onClose, onSuccess, editData, p
           </div>
 
           {/* Stepper */}
+          {(() => {
+            // Resumen de lo elegido en cada paso, debajo de su etiqueta (vacio = no se muestra)
+            const nombreCorto = (n: string) => n.trim().split(/\s+/).slice(0, 2).join(' ')
+            const resumenSede = sedes.find(s => s.id === formData.sede_id)?.nombre || ''
+            const resumenTipo = formData.devolucion_vehiculo ? 'Devolución'
+              : formData.cambio_vehiculo ? 'Cambio de vehículo'
+              : formData.modalidad === 'turno' ? 'Turno'
+              : formData.modalidad === 'a_cargo' ? 'A cargo' : ''
+            // En cambio de vehiculo el form usa vehiculo = el que devuelve, vehiculo_cambio = el nuevo
+            const resumenVehiculo = formData.cambio_vehiculo && formData.vehiculo_cambio_patente
+              ? `${formData.vehiculo_patente} → ${formData.vehiculo_cambio_patente}`
+              : formData.vehiculo_patente || ''
+            const resumenConductores = formData.modalidad === 'a_cargo'
+              ? nombreCorto(formData.conductor_nombre || '')
+              : [
+                  formData.conductor_diurno_nombre ? `D: ${nombreCorto(formData.conductor_diurno_nombre)}` : '',
+                  formData.conductor_nocturno_nombre ? `N: ${nombreCorto(formData.conductor_nocturno_nombre)}` : '',
+                ].filter(Boolean).join(' · ')
+            const resumen = (texto: string) => texto
+              ? <span className="step-resumen" title={texto}>{texto}</span>
+              : null
+            return (
           <div className="wizard-stepper">
             <div className="step-item">
               <div className={`step-circle ${step >= 0 ? 'active' : ''} ${step > 0 ? 'completed' : ''}`}>
@@ -3805,6 +3856,7 @@ export function ProgramacionAssignmentWizardV2({ onClose, onSuccess, editData, p
               <span className={`step-label ${step >= 0 ? 'active' : ''} ${step > 0 ? 'completed' : ''}`}>
                 Sede
               </span>
+              {resumen(resumenSede)}
             </div>
 
             <div className={`step-connector ${step > 0 ? 'completed' : ''}`} />
@@ -3816,6 +3868,7 @@ export function ProgramacionAssignmentWizardV2({ onClose, onSuccess, editData, p
               <span className={`step-label ${step >= 1 ? 'active' : ''} ${step > 1 ? 'completed' : ''}`}>
                 Tipo
               </span>
+              {resumen(resumenTipo)}
             </div>
 
             <div className={`step-connector ${step > 1 ? 'completed' : ''}`} />
@@ -3827,6 +3880,7 @@ export function ProgramacionAssignmentWizardV2({ onClose, onSuccess, editData, p
               <span className={`step-label ${step >= 2 ? 'active' : ''} ${step > 2 ? 'completed' : ''}`}>
                 Vehiculo
               </span>
+              {resumen(resumenVehiculo)}
             </div>
 
             <div className={`step-connector ${step > 2 ? 'completed' : ''}`} />
@@ -3838,6 +3892,7 @@ export function ProgramacionAssignmentWizardV2({ onClose, onSuccess, editData, p
               <span className={`step-label ${step >= 3 ? 'active' : ''} ${step > 3 ? 'completed' : ''}`}>
                 Conductores / Leads
               </span>
+              {resumen(resumenConductores)}
             </div>
 
             <div className={`step-connector ${step > 3 ? 'completed' : ''}`} />
@@ -3847,6 +3902,8 @@ export function ProgramacionAssignmentWizardV2({ onClose, onSuccess, editData, p
               <span className={`step-label ${step >= 4 ? 'active' : ''}`}>Detalles</span>
             </div>
           </div>
+            )
+          })()}
 
           {/* Content */}
           <div className="wizard-content">
@@ -5210,6 +5267,9 @@ export function ProgramacionAssignmentWizardV2({ onClose, onSuccess, editData, p
                               if (tipo && !formData.devolucion_vehiculo && !formData.cambio_vehiculo) {
                                 const defaults = getDefaultsPorCandidato(tipo)
                                 setFormData({ ...formData, tipo_candidato_cargo: tipo, tipo_asignacion_cargo: defaults.asignacion, documento_cargo: defaults.documento })
+                              } else if (formData.cambio_vehiculo) {
+                                const enCambio = asignacionPorCandidatoEnCambio(tipo)
+                                setFormData({ ...formData, tipo_candidato_cargo: tipo, tipo_asignacion_cargo: enCambio.asignacion, documento_cargo: enCambio.documento })
                               } else {
                                 setFormData({ ...formData, tipo_candidato_cargo: tipo })
                               }
@@ -5227,7 +5287,7 @@ export function ProgramacionAssignmentWizardV2({ onClose, onSuccess, editData, p
                           <select
                             value={formData.tipo_asignacion_cargo}
                             onChange={handleTipoAsignacionChange('tipo_asignacion_cargo', 'documento_cargo')}
-                            disabled={formData.devolucion_vehiculo || formData.cambio_vehiculo}
+                            disabled={asignacionBloqueada(formData.tipo_candidato_cargo)}
                           >
                             <option value="">Seleccionar...</option>
                             <option value="entrega_auto">Entrega de auto</option>
@@ -5320,6 +5380,9 @@ export function ProgramacionAssignmentWizardV2({ onClose, onSuccess, editData, p
                               if (tipo && !formData.devolucion_vehiculo && !formData.cambio_vehiculo) {
                                 const ajustado = ajustarDefaultsPorAsignacionActiva(formData.conductor_diurno_id, 'diurno', getDefaultsPorCandidato(tipo))
                                 setFormData({ ...formData, tipo_candidato_diurno: tipo, tipo_asignacion_diurno: ajustado.asignacion, documento_diurno: ajustado.documento })
+                              } else if (formData.cambio_vehiculo) {
+                                const enCambio = asignacionPorCandidatoEnCambio(tipo)
+                                setFormData({ ...formData, tipo_candidato_diurno: tipo, tipo_asignacion_diurno: enCambio.asignacion, documento_diurno: enCambio.documento })
                               } else {
                                 setFormData({ ...formData, tipo_candidato_diurno: tipo })
                               }
@@ -5337,7 +5400,7 @@ export function ProgramacionAssignmentWizardV2({ onClose, onSuccess, editData, p
                           <select
                             value={formData.tipo_asignacion_diurno}
                             onChange={handleTipoAsignacionChange('tipo_asignacion_diurno', 'documento_diurno')}
-                            disabled={formData.devolucion_vehiculo || formData.cambio_vehiculo}
+                            disabled={asignacionBloqueada(formData.tipo_candidato_diurno)}
                           >
                             <option value="">Seleccionar...</option>
                             <option value="entrega_auto">Entrega de auto</option>
@@ -5432,6 +5495,9 @@ export function ProgramacionAssignmentWizardV2({ onClose, onSuccess, editData, p
                               if (tipo && !formData.devolucion_vehiculo && !formData.cambio_vehiculo) {
                                 const ajustado = ajustarDefaultsPorAsignacionActiva(formData.conductor_nocturno_id, 'nocturno', getDefaultsPorCandidato(tipo))
                                 setFormData({ ...formData, tipo_candidato_nocturno: tipo, tipo_asignacion_nocturno: ajustado.asignacion, documento_nocturno: ajustado.documento })
+                              } else if (formData.cambio_vehiculo) {
+                                const enCambio = asignacionPorCandidatoEnCambio(tipo)
+                                setFormData({ ...formData, tipo_candidato_nocturno: tipo, tipo_asignacion_nocturno: enCambio.asignacion, documento_nocturno: enCambio.documento })
                               } else {
                                 setFormData({ ...formData, tipo_candidato_nocturno: tipo })
                               }
@@ -5452,7 +5518,7 @@ export function ProgramacionAssignmentWizardV2({ onClose, onSuccess, editData, p
                               const val = e.target.value as TipoAsignacion
                               setFormData({ ...formData, tipo_asignacion_nocturno: val, ...(val === 'devolucion_vehiculo' ? { documento_nocturno: 'na' as TipoDocumento } : {}) })
                             }}
-                            disabled={formData.devolucion_vehiculo || formData.cambio_vehiculo}
+                            disabled={asignacionBloqueada(formData.tipo_candidato_nocturno)}
                           >
                             <option value="">Seleccionar...</option>
                             <option value="entrega_auto">Entrega de auto</option>
