@@ -153,7 +153,7 @@ async function fetchProgramaciones(): Promise<any[]> {
   try {
     const res = await supabase
       .from('programaciones_onboarding')
-      .select('asignacion_id, tipo_asignacion, observaciones, created_by_name, vehiculo_cambio_id, vehiculo_cambio_patente, vehiculo_cambio_modelo')
+      .select('asignacion_id, tipo_asignacion, observaciones, created_by_name, vehiculo_cambio_id, vehiculo_cambio_patente, vehiculo_cambio_modelo, conductor_id, conductor_diurno_id, conductor_nocturno_id, tipo_asignacion_diurno, tipo_asignacion_nocturno, documentos_generados(conductor_id, google_doc_id)')
       .not('asignacion_id', 'is', null)
     if (res.error) throw res.error
     return res.data || []
@@ -174,8 +174,72 @@ function ultimoConductorPorFecha(arr: any[]): any {
     String(b?.fecha_inicio || b?.fecha_fin || '') >= String(a?.fecha_inicio || a?.fecha_fin || '') ? b : a)
 }
 
+/**
+ * Desde esta fecha cada documento del wizard queda registrado en
+ * `documentos_generados`. Las asignaciones anteriores no tienen ese registro,
+ * así que no se les puede exigir.
+ */
+const INICIO_REGISTRO_DOCUMENTOS = '2026-04-20'
+
+/**
+ * El conductor no tiene el documento (carta oferta / anexo) de la programación
+ * que originó esta asignación. Que tenga carpeta en Drive no alcanza: la
+ * carpeta puede venir de una programación anterior y el documento de esta no
+ * haberse generado. Sin programación vinculada no hay contra qué comparar.
+ */
+function conductorSinDocumento(a: any, conductorId: string | null | undefined): boolean {
+  const conDocumento: string[] | null = a?._conductoresConDocumento ?? null
+  if (!conDocumento || !conductorId) return false
+  if (String(a.created_at || '') < INICIO_REGISTRO_DOCUMENTOS) return false
+  return !conDocumento.includes(conductorId)
+}
+
+const TIPO_ASIGNACION_LABELS: Record<string, string> = {
+  entrega_auto: 'Entrega de auto',
+  asignacion_companero: 'Asig. compañero',
+  cambio_auto: 'Cambio de auto',
+  asignacion_auto_cargo: 'Asig. auto a cargo',
+  entrega_auto_cargo: 'Entrega a cargo',
+  cambio_turno: 'Cambio de turno',
+  devolucion_vehiculo: 'Devolución',
+  actualizacion_carta_oferta: 'Actualización carta oferta',
+}
+
+/**
+ * En un cambio de vehículo, el tipo de asignación del conductor que se sumó y
+ * NO cambió de auto (por ejemplo, una entrega de auto). Null si el conductor
+ * sí hizo el cambio o si la asignación no viene de un cambio de vehículo.
+ */
+function tipoAsignacionFueraDelCambio(a: any, conductorId: string | null | undefined): string | null {
+  if (!a?.motivoDetalle?.cambioVehiculo || !conductorId) return null
+  const tipo: string | undefined = a._tipoAsignacionPorConductor?.[conductorId]
+  if (!tipo || tipo === 'cambio_auto') return null
+  return TIPO_ASIGNACION_LABELS[tipo] || tipo
+}
+
 // Helper: mapear motivos de programación a asignaciones
 function buildAsignacionesConMotivo(asignaciones: any[], programaciones: any[]) {
+  // Conductores con documento generado, juntando todas las programaciones de la
+  // asignación. Solo se arma si la consulta trajo `documentos_generados`.
+  const documentosMap = new Map<string, Set<string>>()
+  // Tipo de asignación de cada conductor según su turno en la programación
+  const tiposMap = new Map<string, Record<string, string>>()
+  for (const p of programaciones) {
+    if (!p.asignacion_id) continue
+    const tipos = tiposMap.get(p.asignacion_id) || {}
+    if (p.conductor_diurno_id && p.tipo_asignacion_diurno) tipos[p.conductor_diurno_id] = p.tipo_asignacion_diurno
+    if (p.conductor_nocturno_id && p.tipo_asignacion_nocturno) tipos[p.conductor_nocturno_id] = p.tipo_asignacion_nocturno
+    if (p.conductor_id && p.tipo_asignacion) tipos[p.conductor_id] = p.tipo_asignacion
+    tiposMap.set(p.asignacion_id, tipos)
+  }
+  for (const p of programaciones) {
+    if (!p.asignacion_id || !Array.isArray(p.documentos_generados)) continue
+    const conDoc = documentosMap.get(p.asignacion_id) || new Set<string>()
+    for (const d of p.documentos_generados) {
+      if (d?.conductor_id && d?.google_doc_id) conDoc.add(d.conductor_id)
+    }
+    documentosMap.set(p.asignacion_id, conDoc)
+  }
   const motivosMap = new Map<string, { tipo: string; observaciones?: string; programadoPor?: string; cambioVehiculo?: boolean; vehiculoCambioPatente?: string; vehiculoCambioModelo?: string; vehiculoCambioId?: string }>()
   for (const p of programaciones) {
     if (p.asignacion_id && p.tipo_asignacion) {
@@ -184,8 +248,11 @@ function buildAsignacionesConMotivo(asignaciones: any[], programaciones: any[]) 
   }
   return asignaciones.map((a: any) => {
     const prog = motivosMap.get(a.id)
+    const conDoc = documentosMap.get(a.id)
     return {
       ...a,
+      _conductoresConDocumento: conDoc ? [...conDoc] : null,
+      _tipoAsignacionPorConductor: tiposMap.get(a.id) || null,
       motivo: prog?.tipo || null,
       motivoDetalle: prog ? { observaciones: prog.observaciones, programadoPor: prog.programadoPor, cambioVehiculo: prog.cambioVehiculo, vehiculoCambioPatente: prog.vehiculoCambioPatente, vehiculoCambioModelo: prog.vehiculoCambioModelo, vehiculoCambioId: prog.vehiculoCambioId } : null,
     }
@@ -1124,11 +1191,11 @@ export function AsignacionesModule() {
   }, [showHistorialCond, showControlModal, controlSaving, showConfirmModal, showCancelModal, showRegularizarModal, showViewModal])
 
   /**
-   * La asignacion tiene algun conductor SIN carpeta de contratos en Drive.
+   * La asignacion tiene algun conductor SIN carpeta de contratos en Drive o
+   * SIN el documento de su programacion (ver `conductorSinDocumento`).
    *
-   * Es la misma condicion que muestra "Sin carpeta" en el detalle: el conductor
-   * no tiene `drive_contract_folder_url`, o sea que el documento no llego a
-   * generarse y la programacion hay que rehacerla.
+   * Es la misma condicion que muestra la alerta roja en el detalle: el
+   * documento no llego a generarse y la programacion hay que rehacerla.
    *
    * Tres recortes, a proposito:
    *  - Documento 'NA' / 'N/A': no se espera carpeta, no se marca.
@@ -1142,7 +1209,7 @@ export function AsignacionesModule() {
     return ocupantes.some((ac: any) => {
       if (!ac?.conductor_id) return false
       if (ac.documento === 'NA' || ac.documento === 'N/A') return false
-      return !(ac.conductores as any)?.drive_contract_folder_url
+      return !(ac.conductores as any)?.drive_contract_folder_url || conductorSinDocumento(a, ac.conductor_id)
     })
   }
 
@@ -3223,7 +3290,17 @@ export function AsignacionesModule() {
                 </span>
               )
             }
-            return <span className="asig-conductor-compacto">{conductorCargo.nombre}</span>
+            const tipoFueraCargo = tipoAsignacionFueraDelCambio(row.original, conductorCargo.id)
+            return (
+              <span className="asig-conductor-compacto">
+                {conductorCargo.nombre}
+                {tipoFueraCargo && (
+                  <span className="asig-tipo-fuera-cambio" title="Este conductor no fue parte del cambio de vehículo">
+                    · {tipoFueraCargo}
+                  </span>
+                )}
+              </span>
+            )
           }
           return <span className="asig-sin-conductor">Sin asignar</span>
         }
@@ -3241,6 +3318,11 @@ export function AsignacionesModule() {
             >
               <span className="asig-turno-label asig-label-diurno">D</span>
               {diurno ? diurno.nombre : 'Vacante'}
+              {diurno && tipoAsignacionFueraDelCambio(row.original, diurno.id) && (
+                <span className="asig-tipo-fuera-cambio" title="Este conductor no fue parte del cambio de vehículo">
+                  · {tipoAsignacionFueraDelCambio(row.original, diurno.id)}
+                </span>
+              )}
             </span>
             <span 
               className={nocturno ? 'asig-conductor-turno asig-turno-nocturno' : 'asig-turno-vacante asig-turno-nocturno'}
@@ -3249,6 +3331,11 @@ export function AsignacionesModule() {
             >
               <span className="asig-turno-label asig-label-nocturno">N</span>
               {nocturno ? nocturno.nombre : 'Vacante'}
+              {nocturno && tipoAsignacionFueraDelCambio(row.original, nocturno.id) && (
+                <span className="asig-tipo-fuera-cambio" title="Este conductor no fue parte del cambio de vehículo">
+                  · {tipoAsignacionFueraDelCambio(row.original, nocturno.id)}
+                </span>
+              )}
             </span>
           </div>
         )
@@ -3924,6 +4011,12 @@ export function AsignacionesModule() {
                         if (docTipo === 'NA' || docTipo === 'N/A') return null
                         const cId = viewAsignacion.asignaciones_conductores?.[0]?.conductor_id
                         const driveUrl = (cId && viewDriveUrls[cId]) || (viewAsignacion.asignaciones_conductores?.[0]?.conductores as any)?.drive_contract_folder_url
+                        if (driveUrl && conductorSinDocumento(viewAsignacion, cId)) return (
+                          <div style={{ marginTop: '4px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                            <FolderOpen size={13} style={{ color: '#DC2626' }} />
+                            <span style={{ fontSize: '12px', color: '#B91C1C', fontWeight: 600 }}>No se generó el documento, por favor volver a generar la programación</span>
+                          </div>
+                        )
                         if (!driveUrl) return (
                           <div style={{ marginTop: '4px', display: 'flex', alignItems: 'center', gap: '4px' }}>
                             <FolderOpen size={13} style={{ color: '#9CA3AF' }} />
@@ -4081,6 +4174,8 @@ export function AsignacionesModule() {
                           return lista
                         })().map((ac) => {
                           const driveUrl = viewDriveUrls[ac.conductor_id] || (ac.conductores as any)?.drive_contract_folder_url
+                          // Tiene carpeta (de una programación anterior) pero no el documento de esta
+                          const sinDocumento = !!driveUrl && conductorSinDocumento(viewAsignacion, ac.conductor_id)
                           const showDrive = ac.documento !== 'NA' && ac.documento !== 'N/A'
                           return (
                           <div key={ac.id} className="asig-conductor-card" style={{ display: 'flex', gap: '16px', alignItems: 'stretch' }}>
@@ -4093,6 +4188,12 @@ export function AsignacionesModule() {
                                 )}
                               </p>
                               <p className="asig-conductor-card-info">Licencia: {ac.conductores?.numero_licencia || '-'}</p>
+                              {tipoAsignacionFueraDelCambio(viewAsignacion, ac.conductor_id) && (
+                                <p className="asig-conductor-card-info" style={{ color: 'var(--text-tertiary)' }} title="Este conductor no fue parte del cambio de vehículo">
+                                  Asignación: <strong style={{ color: 'var(--text-secondary)' }}>{tipoAsignacionFueraDelCambio(viewAsignacion, ac.conductor_id)}</strong>
+                                  <span style={{ fontStyle: 'italic' }}> · no participó del cambio de vehículo</span>
+                                </p>
+                              )}
                               {ac.horario !== 'todo_dia' && (
                                 <p className="asig-conductor-card-info">Turno: <strong>{ac.horario}</strong></p>
                               )}
@@ -4165,7 +4266,28 @@ export function AsignacionesModule() {
                             {/* Documentos en Drive */}
                             {showDrive && (
                               <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', minWidth: '130px', padding: '10px 14px', background: 'var(--bg-secondary)', borderRadius: '8px', border: '1px solid var(--border-primary)' }}>
-                                {driveUrl ? (
+                                {sinDocumento ? (
+                                  <>
+                                    <FolderOpen size={22} style={{ color: '#DC2626', marginBottom: '6px', cursor: 'pointer' }} onClick={() => window.open(driveUrl, '_blank')} />
+                                    <span style={{ fontSize: '12px', color: '#DC2626', fontWeight: 700, textAlign: 'center' }}>Sin documento</span>
+                                    <span
+                                      style={{
+                                        marginTop: '6px',
+                                        maxWidth: '190px',
+                                        fontSize: '11px',
+                                        lineHeight: 1.35,
+                                        color: '#B91C1C',
+                                        fontWeight: 600,
+                                        textAlign: 'center',
+                                      }}
+                                    >
+                                      No se generó el documento, por favor volver a generar la programación
+                                    </span>
+                                    <a href={driveUrl} target="_blank" rel="noopener noreferrer" style={{ marginTop: '6px', fontSize: '10px', color: 'var(--text-tertiary)', textDecoration: 'none' }}>
+                                      Abrir carpeta
+                                    </a>
+                                  </>
+                                ) : driveUrl ? (
                                   <>
                                     <FolderOpen size={22} style={{ color: '#2563EB', marginBottom: '6px', cursor: 'pointer' }} onClick={() => window.open(driveUrl, '_blank')} />
                                     <a href={driveUrl} target="_blank" rel="noopener noreferrer" style={{ fontSize: '12px', color: '#2563EB', textDecoration: 'none', fontWeight: 600, textAlign: 'center', lineHeight: '1.3' }}>
