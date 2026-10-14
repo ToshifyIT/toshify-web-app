@@ -3,7 +3,7 @@ import { useState, useEffect } from 'react'
 import type { FormEvent } from 'react'
 import { useAuth } from '../contexts/AuthContext'
 import { useNavigate } from 'react-router-dom'
-import { tomarErrorAuth } from '../lib/authRedirectError'
+import { tomarErrorAuth, MENSAJE_USUARIO_INACTIVO } from '../lib/authRedirectError'
 import { supabase } from '../lib/supabase'
 import Swal from 'sweetalert2'
 import logoToshify from '../assets/logo-toshify.png'
@@ -42,6 +42,9 @@ export function LoginPage() {
       if (error) {
         if (error.message.includes('Invalid login')) {
           setError('Credenciales incorrectas. Verificá tu email y contraseña.')
+        } else if (/banned/i.test(error.message)) {
+          // Usuario desactivado en Gestion de Usuarios (ban en Supabase Auth)
+          setError(MENSAJE_USUARIO_INACTIVO)
         } else {
           setError(error.message)
         }

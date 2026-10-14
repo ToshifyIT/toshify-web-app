@@ -24,7 +24,8 @@ function RecoveryRedirect({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     // Detectar si Supabase redirigió con type=recovery en el hash
     const hash = window.location.hash
-    if (hash && hash.includes('type=recovery') && location.pathname === '/') {
+    // type=invite: correo de bienvenida de un usuario nuevo (crea su contraseña ahi)
+    if (hash && /type=(recovery|invite)/.test(hash) && location.pathname === '/') {
       // Redirigir a /reset-password manteniendo el hash
       navigate('/reset-password' + hash, { replace: true })
     }

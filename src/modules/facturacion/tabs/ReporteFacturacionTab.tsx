@@ -10491,14 +10491,16 @@ export function ReporteFacturacionTab() {
           const tickets = tieneDetalles ? (descMap['P004'] || 0) : src.reduce((s, f) => s + (f.monto_tickets_favor || 0), 0)
           const pubCabify = tieneDetalles ? (descMap['P011'] || 0) : 0
           const pubTablet = tieneDetalles ? (descMap['P012'] || 0) : 0
+          const devGarantia = tieneDetalles ? (descMap[CODIGO_DEVOLUCION_GARANTIA] || 0) : 0
           const descTotal = src.reduce((s, f) => s + (f.subtotal_descuentos || 0), 0)
-          const conocidos = tickets + pubCabify + pubTablet
+          const conocidos = tickets + pubCabify + pubTablet + devGarantia
           const otrosDesc = Math.max(0, descTotal - conocidos)
           // Nuevo modal: hero verde + items destacados + nota
           const items: { codigo: string; nombre: string; subtitulo: string; monto: number }[] = []
           if (tickets > 0) items.push({ codigo: 'P004', nombre: 'Descuentos a favor', subtitulo: 'Tickets, ajustes manuales', monto: tickets })
           if (pubCabify > 0) items.push({ codigo: 'P011', nombre: 'Publicidad Cabify', subtitulo: 'Ingreso por publicidad', monto: pubCabify })
           if (pubTablet > 0) items.push({ codigo: 'P012', nombre: 'Publicidad Tablet', subtitulo: 'Ingreso por publicidad', monto: pubTablet })
+          if (devGarantia > 0) items.push({ codigo: CODIGO_DEVOLUCION_GARANTIA, nombre: 'Devolución de garantía', subtitulo: 'Cambio de tarifa', monto: devGarantia })
           if (otrosDesc > 0) items.push({ codigo: '—', nombre: 'Otros descuentos', subtitulo: 'Sin clasificar', monto: otrosDesc })
           const itemsHtml = items.map(it => `
             <div style="display:flex;justify-content:space-between;align-items:center;padding:12px 14px;background:rgba(34,197,94,0.08);border-radius:8px;border-left:3px solid #16a34a;">
