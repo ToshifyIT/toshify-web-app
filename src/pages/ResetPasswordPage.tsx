@@ -8,8 +8,17 @@ import Swal from 'sweetalert2'
 // Tipo de enlace del correo: 'invite' (bienvenida de un usuario nuevo) o 'recovery'
 // (restablecer contraseña). Se lee al cargar el modulo porque supabase-js procesa el
 // #hash de la URL y lo borra apenas inicializa la sesion.
-const TIPO_ENLACE = new URLSearchParams(window.location.hash.replace(/^#/, '')).get('type')
+const HASH_INICIAL = new URLSearchParams(window.location.hash.replace(/^#/, ''))
+const TIPO_ENLACE = HASH_INICIAL.get('type')
 const ES_INVITACION = TIPO_ENLACE === 'invite' || TIPO_ENLACE === 'signup'
+
+/**
+ * La pantalla solo sirve si se llego desde un enlace del correo (trae el token en
+ * el #hash). Sin esto, cualquiera con una sesion abierta que entrara a
+ * /reset-password cambiaria SU contraseña (ej: el admin que acaba de crear el usuario).
+ */
+const VIENE_DE_CORREO = !!HASH_INICIAL.get('access_token')
+  && (ES_INVITACION || TIPO_ENLACE === 'recovery')
 
 /** Mismas reglas que el alta de usuarios y el cambio forzado de contraseña. */
 function erroresPassword(password: string): string[] {
@@ -37,8 +46,9 @@ export function ResetPasswordPage() {
     const checkSession = async () => {
       const { data: { session } } = await supabase.auth.getSession()
 
-      // Si hay sesión, el usuario puede cambiar su contraseña
-      if (session) {
+      // Sesion creada por el enlace del correo (supabase-js reemplaza cualquier
+      // sesion previa del navegador por la del usuario del enlace)
+      if (session && VIENE_DE_CORREO) {
         setIsValidSession(true)
       } else {
         setIsValidSession(false)
@@ -51,7 +61,7 @@ export function ResetPasswordPage() {
       if (event === 'PASSWORD_RECOVERY') {
         setIsValidSession(true)
         setCheckingSession(false)
-      } else if (session) {
+      } else if (session && VIENE_DE_CORREO) {
         setIsValidSession(true)
         setCheckingSession(false)
       }
@@ -95,8 +105,13 @@ export function ResetPasswordPage() {
         )
       } else {
         // Si tenia pendiente el cambio forzado (contraseña temporal), ya quedo resuelto.
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        await (supabase.rpc as any)('mark_password_changed').catch(() => {})
+        // La contraseña ya se guardo: si esto falla no se le muestra error al usuario.
+        // (el builder de supabase.rpc solo implementa then(), no tiene .catch())
+        try {
+          await (supabase.rpc as any)('mark_password_changed')
+        } catch (rpcError) {
+          console.error('No se pudo marcar el cambio de contraseña:', rpcError)
+        }
 
         await Swal.fire({
           icon: 'success',
