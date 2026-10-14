@@ -726,6 +726,15 @@ input[type="date"].asig-status-select {
   min-width: 0;
 }
 
+/* Cambio de vehículo: tipo de asignación del conductor que se sumó sin cambiar de auto */
+.asig-tipo-fuera-cambio {
+  margin-left: 4px;
+  font-size: 11px;
+  font-style: italic;
+  font-weight: 400;
+  color: var(--text-tertiary);
+}
+
 .asig-turno-label {
   display: inline-flex;
   align-items: center;
